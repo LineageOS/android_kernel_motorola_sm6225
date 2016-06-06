@@ -3762,7 +3762,7 @@ int wm_halo_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcontrol,
 		if (ret != 0)
 			goto err;
 
-		if (wm_adsp_fw[dsp->fw].num_caps != 0) {
+		if (dsp->firmwares[dsp->fw].num_caps != 0) {
 			ret = wm_adsp_buffer_init(dsp);
 			if (ret < 0)
 				goto err;
@@ -3789,7 +3789,7 @@ int wm_halo_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcontrol,
 
 		wm_halo_clear_stream_arb(dsp);
 
-		if (wm_adsp_fw[dsp->fw].num_caps != 0)
+		if (dsp->firmwares[dsp->fw].num_caps != 0)
 			wm_adsp_buffer_free(dsp);
 
 		mutex_unlock(&dsp->pwr_lock);
@@ -4516,7 +4516,7 @@ static int wm_adsp_buffer_init(struct wm_adsp *dsp)
 		goto err_buffer2;
 	}
 
-	buf->regions = kcalloc(wm_adsp_fw[dsp->fw].caps->num_regions,
+	buf->regions = kcalloc(dsp->firmwares[dsp->fw].caps->num_regions,
 			       sizeof(*buf->regions), GFP_KERNEL);
 	if (!buf->regions) {
 		ret = -ENOMEM;
@@ -4723,7 +4723,7 @@ int wm_adsp_compr_handle_irq(struct wm_adsp *dsp, int channel)
 		goto out;
 	}
 
-	if (wm_adsp_fw[dsp->fw].voice_trigger && buf->irq_count == 2)
+	if (dsp->firmwares[dsp->fw].voice_trigger && buf->irq_count == 2)
 		ret = WM_ADSP_COMPR_VOICE_TRIGGER;
 
 out_notify:
