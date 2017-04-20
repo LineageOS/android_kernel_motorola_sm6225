@@ -2697,6 +2697,13 @@ cppflags-$(CONFIG_QCA_WIFI_FTM) += -DQCA_WIFI_FTM
 cppflags-$(CONFIG_NL80211_TESTMODE) += -DQCA_WIFI_FTM_NL80211
 cppflags-$(CONFIG_LINUX_QCMBR) += -DLINUX_QCMBR -DQCA_WIFI_FTM_IOCTL
 
+# WLAN_WHITE_LIST - WLAN Radiated Power Test
+# For user software build, wlan driver needs to allow the factory
+# commnds only for Tx_opcode and NART commands based off 12M doc
+ifeq ($(TARGET_BUILD_VARIANT),user)
+CDEFINES += -DWLAN_WHITE_LIST
+endif
+
 #Enable Checksum Offload support
 cppflags-$(CONFIG_CHECKSUM_OFFLOAD) += -DCHECKSUM_OFFLOAD
 
