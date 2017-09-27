@@ -202,6 +202,12 @@ static int cs35l36_main_amp_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
+		if (!cs35l36->pdata.extern_boost)
+			regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
+						CS35L36_BST_EN_MASK,
+						CS35L36_BST_EN <<
+						CS35L36_BST_EN_SHIFT);
+
 		regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL1,
 					CS35L36_GLOBAL_EN_MASK,
 					1 << CS35L36_GLOBAL_EN_SHIFT);
@@ -218,6 +224,12 @@ static int cs35l36_main_amp_event(struct snd_soc_dapm_widget *w,
 					0 << CS35L36_AMP_MUTE_SHIFT);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
+		if (!cs35l36->pdata.extern_boost)
+			regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
+						CS35L36_BST_EN_MASK,
+						CS35L36_BST_DIS_VP <<
+						CS35L36_BST_EN_SHIFT);
+
 		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_RX1_SEL,
 					CS35L36_PCM_RX_SEL_MASK,
 					CS35L36_PCM_RX_SEL_ZERO);
