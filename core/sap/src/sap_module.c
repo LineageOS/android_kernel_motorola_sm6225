@@ -797,6 +797,9 @@ QDF_STATUS wlansap_start_bss(struct sap_context *sap_ctx,
 		  pmac->sap.SapDfsInfo.sap_ch_switch_mode,
 		  pmac->sap.SapDfsInfo.reduced_beacon_interval);
 
+	//BEGIN MOT a19110 IKSWO-8490 Comment out initialisation of
+	//acl list. We use driver ioctl to set it
+#if 0
 	/* Copy MAC filtering settings to sap context */
 	sap_ctx->eSapMacAddrAclMode = config->SapMacaddr_acl;
 	qdf_mem_copy(sap_ctx->acceptMacList, config->accept_mac,
@@ -807,7 +810,10 @@ QDF_STATUS wlansap_start_bss(struct sap_context *sap_ctx,
 		     sizeof(config->deny_mac));
 	sap_ctx->nDenyMac = config->num_deny_mac;
 	sap_sort_mac_list(sap_ctx->denyMacList, sap_ctx->nDenyMac);
-	sap_ctx->beacon_tx_rate = config->beacon_tx_rate;
+#endif
+        //END IKSWO-8490
+        sap_ctx->beacon_tx_rate = config->beacon_tx_rate;
+
 
 	/* Fill in the event structure for FSM */
 	sap_event.event = eSAP_HDD_START_INFRA_BSS;
