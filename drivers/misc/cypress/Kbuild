@@ -1,0 +1,13 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+EXTRA_CFLAGS += -DCY8C40xx_FAMILY
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../sensors/Module.symvers
+
+cyttsp_sar-y := ProgrammingSteps.o \
+			SWD_PacketLayer.o \
+			SWD_UpperPacketLayer.o \
+			DataFetch.o \
+			cyttsp_sar_mmi.o
+obj-m += cyttsp_sar.o
