@@ -1098,7 +1098,7 @@ unsigned char VerifyFlash(struct hssp_data *d)
 		rowAddress = FLASH_ROW_BYTE_SIZE_HEX_FILE * rowCount;
 
 		/* Extract 128-byte row from the hex-file from address:
-		   “rowCount” into buffer - “rowData”. */
+		   "rowCount" into buffer - "rowData". */
 		HEX_ReadRowData(&d->inf, rowCount, &rowData[0]);
 
 		/* Read row from chip */
@@ -1258,7 +1258,7 @@ unsigned char VerifyProtectionSettings(struct hssp_data *d)
 		rowProtectionFlashData[i + 3] = (protectionData >> 24) & 0xFF;
 	}
 
-	/* Compare hex and silicon’s data */
+	/* Compare hex and silicon's data */
 	for (i = 0; i < rowProtectionByteSize; i++) {
 
 		if (rowProtectionData[i] != rowProtectionFlashData[i]) {
@@ -1283,7 +1283,7 @@ unsigned char VerifyProtectionSettings(struct hssp_data *d)
 	else if (chipProtectionData_Chip == CHIP_PROT_OPEN)
 		chipProtectionData_Chip = CHIP_PROT_VIRGIN;
 
-	/* Compare hex’s and silicon’s chip protection data */
+	/* Compare hex's and silicon's chip protection data */
 	if (chipProtectionData_Chip != chipProtectionData_Hex) {
 		/* Set the verification error bit for Flash protection data
 		   mismatch and return failure */
@@ -1397,9 +1397,6 @@ void ExitProgrammingMode(void)
 	SetXresLow();
 	DelayHundredUs();
 	SetXresHigh();
-
-	/* Make XRES High-Z after generating the reset pulse */
-	SetXresHizInput();
 }
 
 /* [] END OF FILE */
