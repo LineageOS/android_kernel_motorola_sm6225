@@ -851,6 +851,12 @@ static void capsense_update_work(struct work_struct *w)
 {
 	struct cycapsense_ctrl_data *data =
 		container_of(w, struct cycapsense_ctrl_data, work);
+	struct i2c_client *client = to_i2c_client(data->dev);
+
+	if(data->cmd == HSSP_CMD_NONE)
+		return;
+
+	disable_irq(client->irq);
 
 	switch (data->cmd) {
 	case HSSP_CMD_RESET:
@@ -864,6 +870,8 @@ static void capsense_update_work(struct work_struct *w)
 		break;
 	}
 	data->cmd = HSSP_CMD_NONE;
+
+	enable_irq(client->irq);
 }
 
 int cycapsense_reset(void)
@@ -1152,7 +1160,7 @@ static int cyttsp_sar_probe(struct i2c_client *client,
 	error = cyttsp_sar_parse_dt(&client->dev, pdata);
 	if (error)
 		return error;
-	client->irq = pdata->irq_gpio;
+	client->irq = gpio_to_irq(pdata->irq_gpio);
 
 
 	cyttsp_reg_setup_init(client);
@@ -1220,13 +1228,13 @@ static int cyttsp_sar_probe(struct i2c_client *client,
 
 	}
 
-	error = request_threaded_irq(gpio_to_irq(client->irq), NULL, cyttsp_sar_interrupt,
+	error = request_threaded_irq(client->irq, NULL, cyttsp_sar_interrupt,
 			IRQF_TRIGGER_FALLING | IRQF_ONESHOT, client->dev.driver->name, data);
 
 
-	dev_err(&client->dev, "registering irq %d\n", gpio_to_irq(client->irq));
+	dev_err(&client->dev, "registering irq %d\n", client->irq);
 	if (error) {
-		dev_err(&client->dev, "Error %d registering irq %d\n", error, gpio_to_irq(client->irq));
+		dev_err(&client->dev, "Error %d registering irq %d\n", error, client->irq);
 		goto err_unreg_input;
 	}
 
@@ -1315,6 +1323,7 @@ static int cyttsp_sar_remove(struct i2c_client *client)
 	free_irq(client->irq, data);
 	for (i = 0; i < 4; i++) {
 		input_unregister_device(data->input_dev[i]);
+		sensors_classdev_unregister(&sensors_capsensor_cdev[i]);
 	}
 	if (gpio_is_valid(pdata->irq_gpio))
 		gpio_free(pdata->irq_gpio);
@@ -1324,6 +1333,8 @@ static int cyttsp_sar_remove(struct i2c_client *client)
 		regulator_disable(data->regulator_avdd);
 	if (data->regulator_vddio)
 		regulator_disable(data->regulator_vddio);
+
+	class_unregister(&capsense_class);
 
 	kfree(data);
 	data = NULL;
