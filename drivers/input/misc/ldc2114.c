@@ -816,11 +816,16 @@ static void ldc2114_irq_work(struct work_struct *work)
 	struct ldc2114_data *ldc =
 		container_of(dw, struct ldc2114_data, irq_work);
 	struct ldc2114_raw data;
+	uint8_t status_reg;
 
 	while (1) {
 		int ret, s, i, status;
 
 		down(&ldc->semaphore);
+
+		ret = ldc2114_read_reg8(ldc->dev, LDC2114_STATUS, &status_reg);
+		if (status_reg & ~(LDC2114_REG_STATUS_CHIP_READY))
+			dev_info(ldc->dev, "STATUS bits 0x%x\n", status_reg);
 
 		ret = ldc2114_read_bulk(ldc->dev, LDC2114_OUT, &data, sizeof(data));
 #if 0
