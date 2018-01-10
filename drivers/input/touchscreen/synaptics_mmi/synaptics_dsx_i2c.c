@@ -7237,7 +7237,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	if (!IS_ERR(rmi4_data->vdd_quirk)) {
 		retval = regulator_enable(rmi4_data->vdd_quirk);
 		if (retval) {
-			regulator_put(rmi4_data->vdd_quirk);
 			dev_err(&client->dev, "Failed to enable vdd-quirk\n");
 			goto err_vdd_quirk;
 		}
@@ -7395,16 +7394,12 @@ err_sysfs:
 #endif
 
 err_query_device:
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+	if (!IS_ERR(rmi4_data->vdd_quirk))
 		regulator_disable(rmi4_data->vdd_quirk);
-		regulator_put(rmi4_data->vdd_quirk);
-	}
 
 err_vdd_quirk:
-	if (platform_data->regulator_en) {
+	if (platform_data->regulator_en)
 		regulator_disable(rmi4_data->regulator);
-		regulator_put(rmi4_data->regulator);
-	}
 
 err_touch_vdd:
 	synaptics_rmi4_cleanup(rmi4_data);
@@ -7466,15 +7461,11 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	else
 		input_free_device(rmi4_data->input_dev);
 
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+	if (!IS_ERR(rmi4_data->vdd_quirk))
 		regulator_disable(rmi4_data->vdd_quirk);
-		regulator_put(rmi4_data->vdd_quirk);
-	}
 
-	if (rmi4_data->board->regulator_en) {
+	if (rmi4_data->board->regulator_en)
 		regulator_disable(rmi4_data->regulator);
-		regulator_put(rmi4_data->regulator);
-	}
 
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
