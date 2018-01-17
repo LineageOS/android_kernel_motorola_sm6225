@@ -133,13 +133,35 @@ KBUILD_OPTIONS += WLAN_CFG_OVERRIDE="$(WLAN_CFG_OVERRIDE_$(LOCAL_DEV_NAME))"
 endif
 
 ##########################################################
-# Copy the unstrip file  to  out symbols folders
+# Copy the unstrip file and corresponding elf file to  out symbols folders
 WLAN_SYMBOLS_OUT     := $(TARGET_OUT_UNSTRIPPED)/$(LOCAL_PATH)
 UNSTRIPPED_MODULE    := $(WLAN_CHIPSET)_$(LOCAL_DEV_NAME).ko.unstripped
 UNSTRIPPED_FILE_PATH := $(TARGET_OUT_INTERMEDIATES)/$(LOCAL_PATH)/$(UNSTRIPPED_MODULE)
 
 INSTALL_WLAN_UNSTRIPPED_MODULE := mkdir -p $(WLAN_SYMBOLS_OUT); \
-   cp -rf $(UNSTRIPPED_FILE_PATH) $(WLAN_SYMBOLS_OUT)
+   cp -rf $(UNSTRIPPED_FILE_PATH) $(WLAN_SYMBOLS_OUT);
+
+ifneq ($(filter msm8998 sdm845 sdm670 sdm710, $(TARGET_BOARD_PLATFORM)),)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/wlan_proc/build/ms/WLAN_MERGED.elf
+else ifneq ($(filter sdm660, $(TARGET_BOARD_PLATFORM)),)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.1.0.1/wlan_proc/build/ms/WLAN_MERGED.elf
+else ifneq ($(filter sm6150, $(TARGET_BOARD_PLATFORM)),)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.0.1/wlan_proc/build/ms/*.elf
+else ifneq ($(filter trinket, $(TARGET_BOARD_PLATFORM)),)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.0.2/wlan_proc/build/ms/WLAN_MERGED.elf
+else ifneq ($(filter lito, $(TARGET_BOARD_PLATFORM)),)
+    ifeq ($(WLAN_FW_ALT_VER), 5)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.2.5/wlan_proc/build/ms/Msaipan_WLAN_MERGED.elf
+    else
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.2.1/wlan_proc/build/ms/Msaipan_WLAN_MERGED.elf
+    endif
+else ifneq ($(filter bengal, $(TARGET_BOARD_PLATFORM)),)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.2.4/wlan_proc/build/ms/WLAN_MERGED.elf
+endif
+
+ifneq ($(WLAN_ELF_FILE_PATH),)
+   INSTALL_WLAN_UNSTRIPPED_MODULE += cp -rf $(WLAN_ELF_FILE_PATH) $(WLAN_SYMBOLS_OUT)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE              := $(WLAN_CHIPSET)_$(LOCAL_DEV_NAME).ko
