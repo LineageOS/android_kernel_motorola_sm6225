@@ -506,7 +506,7 @@ unsigned char ChecksumAPI(struct hssp_data *d, unsigned short checksumRow,
  *
  ******************************************************************************/
 
-#define DEVICE_ACQUIRE_TIMEOUT_ALTERNATE_METHOD  40
+#define DEVICE_ACQUIRE_TIMEOUT_ALTERNATE_METHOD  400
 
 unsigned char DeviceAcquire(void)
 {
@@ -526,6 +526,10 @@ unsigned char DeviceAcquire(void)
 
 	SetSwdioCmosOutput();
 	SetSwdioLow();
+
+	SetXresLow();
+	DelayHundredUs();
+	SetXresHigh();
 
 	/* Execute SWD connect sequence.
 		100 ms time out below is worst case time out value */

@@ -76,14 +76,14 @@ extern struct cycapsense_ctrl_data *ctrl_data;
 static inline void hssp_set_clk_gpio(int gpio, int offset, int value)
 {
 	if (ctrl_data->hssp_d.raw_mode) {
-		writel_relaxed_no_log(value ? 2 : 0, (GPIO_IN_OUT(offset) + HSSP_CLK_GROUP_OFF));
+		writel_relaxed(value ? 2 : 0, (GPIO_IN_OUT(offset) + HSSP_CLK_GROUP_OFF));
 	} else
 		gpio_set_value(gpio, value);
 }
 static inline void hssp_set_dat_gpio(int gpio, int offset, int value)
 {
 	if (ctrl_data->hssp_d.raw_mode) {
-		writel_relaxed_no_log(value ? 2 : 0, (GPIO_IN_OUT(offset) + HSSP_DAT_GROUP_OFF));
+		writel_relaxed(value ? 2 : 0, (GPIO_IN_OUT(offset) + HSSP_DAT_GROUP_OFF));
 	} else
 		gpio_set_value(gpio, value);
 }
