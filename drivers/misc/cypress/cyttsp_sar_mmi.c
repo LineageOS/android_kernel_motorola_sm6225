@@ -232,6 +232,11 @@ static int cyttsp_sar_parse_dt(struct device *dev,
 			dev_info(dev, "GPIO offset (0x%x, 0x%x)  enabled\n",
 					ctrl_data->hssp_d.c_group_offset,
 					ctrl_data->hssp_d.d_group_offset);
+
+			dev_info(dev, "clk gpio address is %08X\n",
+				addr + ctrl_data->hssp_d.c_group_offset + (0x1000 * gpios[CLK_GPIO]));
+			dev_info(dev, "dat gpio address is %08X\n",
+				addr + ctrl_data->hssp_d.d_group_offset + (0x1000 * gpios[DAT_GPIO]));
 		} else {
 			ctrl_data->hssp_d.raw_mode = 0;
 			dev_info(dev, "Raw GPIO RW enabled but regs are not defined.Switch to normal mode\n");
@@ -309,7 +314,7 @@ static irqreturn_t cyttsp_sar_interrupt(int irq, void *dev_id)
 		0x00003000,
 		0x0000C000  };
 
-	dev_info(&data->client->dev, "cypress irq handler!\n");
+	dev_dbg(&data->client->dev, "cypress irq handler!\n");
 
 	if (data->enable) {
 		ret = cyttsp_i2c_read_block(&data->client->dev, CYTTSP_REG_INTERRUPT_PEDNING, 3, &temp[0]);
@@ -379,62 +384,77 @@ static void cycapsense_hssp_notify(int status)
 
 int cycapsense_hssp_dnld(struct hssp_data *d)
 {
+	int ret = SUCCESS;
 	cycapsense_hssp_notify(HSSP_START);
 
 	if (d->inf.data == NULL || d->inf.s_data == NULL) {
 		pr_err("%s: Invalid input arguments\n", __func__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto end;
 	}
 
 	if (DeviceAcquire() == FAILURE) {
 		pr_err("%s: Device Acquire failed\n", __func__);
-		return -EIO;
+		if (DeviceAcquire() == FAILURE) {
+			pr_err("%s: Device Acquire failed again\n", __func__);
+			ret = -EIO;
+			goto end;
+		}
 	}
 
 	if (VerifySiliconId(d) == FAILURE) {
 		pr_err("%s: Verify Selicon ID failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (EraseAllFlash(d) == FAILURE) {
 		pr_err("%s: Flash Erase failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (ChecksumPrivileged(d) == FAILURE) {
 		pr_err("%s: Checksum Privileged failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (ProgramFlash(d) == FAILURE) {
 		pr_err("%s: Program Flash failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (VerifyFlash(d) == FAILURE) {
 		pr_err("%s: Verify Flash failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (ProgramProtectionSettings(d) == FAILURE) {
 		pr_err("%s: Program Protection failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (VerifyProtectionSettings(d) == FAILURE) {
 		pr_err("%s: Verify Protection failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
 	if (VerifyChecksum(d) == FAILURE) {
 		pr_err("%s: Verify Checksum failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
 
+end:
 	ExitProgrammingMode();
 	msleep(1000);
 	cycapsense_hssp_notify(HSSP_STOP);
-	return SUCCESS;
+	return ret;
 }
 
 const unsigned char ascii2bin[] = {
@@ -645,22 +665,30 @@ int __cycapsense_reset(struct cycapsense_ctrl_data *data)
 
 static int cycapsense_hssp_erase(struct hssp_data *d)
 {
+	int ret = SUCCESS;
 	cycapsense_hssp_notify(HSSP_START);
 
 	device_lock(ctrl_data->dev);
 	if (DeviceAcquire() == FAILURE) {
 		pr_err("%s: Device Acquire failed\n", __func__);
-		return -EIO;
+		if (DeviceAcquire() == FAILURE) {
+			pr_err("%s: Device Acquire failed again\n", __func__);
+			ret = -EIO;
+			goto end;
+		}
 	}
 
 	if (EraseAllFlash(d) == FAILURE) {
 		pr_err("%s: Flash Erase failed\n", __func__);
-		return -EIO;
+		ret = -EIO;
+		goto end;
 	}
-	device_unlock(ctrl_data->dev);
+
+	pr_info("%s: Flash Erase successful\n", __func__);
+end:
 	d->chip_cs = 0;
-	pr_err("%s: Flash Erase successful\n", __func__);
-	return SUCCESS;
+	device_unlock(ctrl_data->dev);
+	return ret;
 }
 
 
@@ -672,12 +700,15 @@ static int cycapsense_hssp_verify_swrev(struct hssp_data *d)
 
 	if (DeviceAcquire() == FAILURE) {
 		pr_err("%s: Device Acquire failed\n", __func__);
-		ret = -EIO;
-		goto end;
+		if (DeviceAcquire() == FAILURE) {
+			pr_err("%s: Device Acquire failed again\n", __func__);
+			ret = -EIO;
+			goto end;
+		}
 	}
 
 	if (VerifySiliconId(d) == FAILURE) {
-		pr_err("%s: Verify Selicon ID failed\n", __func__);
+		pr_err("%s: Verify Silicon ID failed\n", __func__);
 		ret = -EIO;
 		goto end;
 	}
@@ -976,9 +1007,11 @@ static ssize_t cycapsense_enable_store(struct class *class,
 		data->enable = true;
 	} else if (!strncmp(buf, "0", 1)) {
 		LOG_INFO("disable cap sensor\n");
-
-		input_report_abs(input, ABS_DISTANCE, -1);
-		input_sync(input);
+		for (i = 0; i < pdata->nsars; i++) {
+			input = data->input_dev[i];
+			input_report_abs(input, ABS_DISTANCE, -1);
+			input_sync(input);
+		}
 		data->enable = false;
 
 	} else {
@@ -1162,7 +1195,6 @@ static int cyttsp_sar_probe(struct i2c_client *client,
 		return error;
 	client->irq = gpio_to_irq(pdata->irq_gpio);
 
-
 	cyttsp_reg_setup_init(client);
 	pdata->pi2c_reg = cyttsp_i2c_reg_setup;
 	pdata->i2c_reg_num = ARRAY_SIZE(cyttsp_i2c_reg_setup);
@@ -1321,9 +1353,9 @@ static int cyttsp_sar_remove(struct i2c_client *client)
 	int i;
 
 	free_irq(client->irq, data);
-	for (i = 0; i < 4; i++) {
-		input_unregister_device(data->input_dev[i]);
+	for (i = 0; i < pdata->nsars; i++) {
 		sensors_classdev_unregister(&sensors_capsensor_cdev[i]);
+		input_unregister_device(data->input_dev[i]);
 	}
 	if (gpio_is_valid(pdata->irq_gpio))
 		gpio_free(pdata->irq_gpio);
@@ -1383,7 +1415,7 @@ static void __exit cyttsp_sar_exit(void)
 	i2c_del_driver(&cyttsp_sar_driver);
 }
 
-late_initcall(cyttsp_sar_init);
+module_init(cyttsp_sar_init);
 module_exit(cyttsp_sar_exit);
 
 /* Module information */
