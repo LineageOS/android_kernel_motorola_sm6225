@@ -63,6 +63,8 @@ struct  cs35l36_private {
 	int extclk_cfg;
 	int fll_igain;
 	int sclk;
+	int chip_version;
+	int rev_id;
 	int rt_dig_vol;
 	bool pdm_mode;
 	bool pcm_mode;
@@ -72,7 +74,6 @@ struct  cs35l36_private {
 	struct completion global_pdn_done;
 	char *fw_data;
 	int fw_size;
-	int rev_id;
 };
 
 struct cs35l36_pll_sysclk_config {
@@ -920,51 +921,6 @@ static int cs35l36_boost_inductor(struct cs35l36_private *cs35l36, int inductor)
 	return 0;
 }
 
-/*
- * Rev B0 has 2 versions
- * L36 is 10V
- * L37 is 12V
- * If L36 we need to clamp some values for safety
- * after probe has setup dt values. We want to make
- * sure we dont miss any values set in probe
- */
-static int cs35l36_revb_bstlimit(struct cs35l36_private *cs35l36)
-{
-	int ret = 0;
-	u32 l37_id_reg;
-
-	ret = regmap_read(cs35l36->regmap, CS35L36_OTP_MEM30, &l37_id_reg);
-	if (ret < 0) {
-		dev_err(cs35l36->dev, "Failed to read otp_id Register %d\n", ret);
-		return ret;
-	}
-
-	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37) {
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_OVERVOLT_CTRL,
-					CS35L36_BST_OVP_THLD_MASK,
-					CS35L36_BST_OVP_THLD_11V);
-		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-					CS35L36_TEST_UNLOCK1);
-		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-					CS35L36_TEST_UNLOCK2);
-		regmap_update_bits(cs35l36->regmap, CS35L36_BST_ANA2_TEST,
-					CS35L36_BST_OVP_TRIM_MASK,
-					CS35L36_BST_OVP_TRIM_11V <<
-					CS35L36_BST_OVP_TRIM_SHIFT);
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL2,
-					CS35L36_BST_CTRL_LIM_MASK,
-					1 << CS35L36_BST_CTRL_LIM_SHIFT);
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL1,
-					CS35L35_BSTCVRT_CTL_MASK,
-					CS35L36_BST_CTRL_10V_CLAMP);
-		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-					CS35L36_TEST_LOCK1);
-		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-					CS35L36_TEST_LOCK2);
-	}
-	return 0;
-}
-
 static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 {
 	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
@@ -1051,6 +1007,41 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 		regmap_update_bits(cs35l36->regmap, CS35L36_DTEMP_WARN_THLD,
 					CS35L36_TEMP_THLD_MASK,
 					cs35l36->pdata.temp_warn_thld);
+
+
+	/*
+	 * Rev B0 has 2 versions
+	 * L36 is 10V
+	 * L37 is 12V
+	 * If L36 we need to clamp some values for safety
+	 * after probe has setup dt values. We want to make
+	 * sure we dont miss any values set in probe
+	 */
+	if (cs35l36->chip_version == CS35L36_10V_L36) {
+		regmap_update_bits(cs35l36->regmap,
+				CS35L36_BSTCVRT_OVERVOLT_CTRL,
+				CS35L36_BST_OVP_THLD_MASK,
+				CS35L36_BST_OVP_THLD_11V);
+		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+				CS35L36_TEST_UNLOCK1);
+		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+				CS35L36_TEST_UNLOCK2);
+		regmap_update_bits(cs35l36->regmap, CS35L36_BST_ANA2_TEST,
+				CS35L36_BST_OVP_TRIM_MASK,
+				CS35L36_BST_OVP_TRIM_11V <<
+				CS35L36_BST_OVP_TRIM_SHIFT);
+		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL2,
+				CS35L36_BST_CTRL_LIM_MASK,
+				1 << CS35L36_BST_CTRL_LIM_SHIFT);
+		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL1,
+				CS35L35_BSTCVRT_CTL_MASK,
+				CS35L36_BST_CTRL_10V_CLAMP);
+		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+				CS35L36_TEST_LOCK1);
+		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+				CS35L36_TEST_LOCK2);
+	}
+
 
 	return 0;
 }
@@ -1470,7 +1461,7 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 
 	int i;
 	int ret;
-	u32 reg_id, reg_revid;
+	u32 reg_id, reg_revid, l37_id_reg;
 	int irq_pol = IRQF_TRIGGER_HIGH;
 
 	cs35l36 = devm_kzalloc(dev, sizeof(struct cs35l36_private), GFP_KERNEL);
@@ -1548,7 +1539,7 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 	}
 
 	if (reg_id != CS35L36_CHIP_ID) {
-		dev_err(dev, "CS35L36 Device ID (%X). Expected ID %X\n",
+		dev_err(dev, "Device ID (%X). Expected ID %X\n",
 			reg_id, CS35L36_CHIP_ID);
 		ret = -ENODEV;
 		goto err;
@@ -1561,6 +1552,18 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 	}
 
 	cs35l36->rev_id = reg_revid >> 8;
+
+	ret = regmap_read(cs35l36->regmap, CS35L36_OTP_MEM30, &l37_id_reg);
+	if (ret < 0) {
+		dev_err(&i2c_client->dev, "Failed to read otp_id Register %d\n",
+			ret);
+		return ret;
+	}
+
+	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37)
+		cs35l36->chip_version = CS35L36_12V_L37;
+	else
+		cs35l36->chip_version = CS35L36_10V_L36;
 
 	ret = cs35l36_pac(cs35l36);
 	if (ret < 0) {
@@ -1626,8 +1629,8 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 			CS35L36_INT3_MASK_DEFAULT);
 
 	dev_info(&i2c_client->dev,
-			"Cirrus Logic CS35L36 (%x), Revision: %02X\n", reg_id,
-			reg_revid >> 8);
+			"Cirrus Logic CS35L%d, Revision: %02X\n",
+			cs35l36->chip_version, reg_revid >> 8);
 
 	ret =  snd_soc_register_codec(dev, &soc_codec_dev_cs35l36, cs35l36_dai,
 					ARRAY_SIZE(cs35l36_dai));

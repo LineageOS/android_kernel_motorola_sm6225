@@ -387,8 +387,10 @@
 #define CS35L36_SOFT_RESET		0x5AAA
 #define CS35L36_MCU_BOOT_COMPLETE	0x02
 
-#define CS35L36_OTP_REV_MASK           0x00FF0000
-#define CS35L36_OTP_REV_L37            0xCC
+#define CS35L36_OTP_REV_MASK            0x00FF0000
+#define CS35L36_OTP_REV_L37             0xCC
+#define CS35L36_12V_L37                 37
+#define CS35L36_10V_L36                 36
 
 #define CS35L36_OSC_FREQ_TRIM_MASK	0x070
 #define CS35L36_OSC_TRIM_DONE		0x08
