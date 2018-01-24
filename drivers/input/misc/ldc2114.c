@@ -26,10 +26,15 @@
 #include <linux/gpio.h>
 #include <linux/memory.h>
 #include <linux/input.h>
+#include <linux/reboot.h>
 
 #include "ldc2114_cdev.h"
 
 #define LDC2114_DRIVER_NAME		"ldc2114"
+
+#define LDC2114_SHORT_DELAY	50
+#define LDC2114_LONG_DELAY	(LDC2114_SHORT_DELAY * 10)
+#define LDC2114_MAX_RETRIES	10
 
 #define MAX_KEYS 4
 #define irq_to_gpio(irq) ((irq) - gpio_to_irq(0))
@@ -215,6 +220,15 @@ static const struct reg_field ldc2114_reg_fields[] = {
 
 #define SENSITIVITY_GAIN	0x3c
 
+struct ldc2114_cfg_data {
+	uint8_t address, value;
+};
+
+struct ldc2114_config {
+	int size;
+	struct ldc2114_cfg_data data[0];
+};
+
 static const uint8_t CONFIG_ADDR_DATA[] = {
 	LDC2114_EN,				0xff, /* enable 4 buttons */
 	LDC2114_NP_SCAN_RATE,	0x01, /* normal-power scan rate */
@@ -251,6 +265,7 @@ struct ldc2114_data {
 	atomic_t poll_work_running;
 	struct semaphore semaphore;
 	int intb_gpio;
+	int lpwm_gpio;
 	int signal_gpio;
 	int intb_polarity;
 	int irq;
@@ -263,6 +278,10 @@ struct ldc2114_data {
 	struct delayed_work irq_work;
 	struct input_dev *input;
 	struct notifier_block poll_nb;
+	struct notifier_block reboot_nb;
+	unsigned int verno;
+	struct ldc2114_config *normal;
+	struct ldc2114_config *lpm;
 };
 
 struct ldc2114_attr {
@@ -388,6 +407,20 @@ static LDC2114_ATTR(ftf1, F_FTF1_2_FTF1);
 static LDC2114_ATTR(ftf2, F_FTF1_2_FTF2);
 static LDC2114_ATTR(ftf3, F_FTF3_FTF3);
 
+static ssize_t ldc2114_verno_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct ldc2114_data *ldc = i2c_get_clientdata(client);
+
+	return sprintf(buf, "%u\n", ldc->verno);
+}
+
+static struct ldc2114_attr ldc2114_attr_verno = {
+	.dev_attr = __ATTR(verno, S_IRUGO, ldc2114_verno_show, NULL),
+	.field = 0,
+};
+
 static struct attribute *ldc2114_attributes[] = {
 	&ldc2114_attr_timout.dev_attr.attr,
 	&ldc2114_attr_lc_wd.dev_attr.attr,
@@ -458,6 +491,7 @@ static struct attribute *ldc2114_attributes[] = {
 	&ldc2114_attr_ftf1.dev_attr.attr,
 	&ldc2114_attr_ftf2.dev_attr.attr,
 	&ldc2114_attr_ftf3.dev_attr.attr,
+	&ldc2114_attr_verno.dev_attr.attr,
 	NULL
 };
 
@@ -749,9 +783,19 @@ static int ldc2114_input_device(struct ldc2114_data *ldc)
 	return ret;
 }
 
-static void inline ldc2114_toggle(struct ldc2114_data *ldc)
+#if defined(LDC2114_POLL_DEBUG) || defined(LDC2114_CFG_DEBUG)
+static void ldc2114_toggle_gpio(struct ldc2114_data *ldc,
+						int gpio)
 {
-	gpio_set_value(ldc->signal_gpio, !gpio_get_value(ldc->signal_gpio));
+	int value = gpio_get_value(gpio);
+	dev_dbg(ldc->dev, "toggle gpio %d from state %d\n", gpio, value);
+	gpio_set_value(gpio, !value);
+#else
+static void inline ldc2114_toggle_gpio(struct ldc2114_data *ldc,
+						int gpio)
+{
+	gpio_set_value(gpio, !gpio_get_value(gpio));
+#endif
 }
 
 static int ldc2114_poll(struct ldc2114_data *ldc,
@@ -786,6 +830,27 @@ static int ldc2114_poll(struct ldc2114_data *ldc,
 	return 0;
 }
 
+#ifdef LDC2114_POLL_DEBUG
+#define NANO_SEC	1000000000
+#define SEC_TO_MSEC	1000
+#define NANO_TO_MSEC	1000000
+
+static inline unsigned long long timediff_ms(struct timespec start,
+						struct timespec end)
+{
+	struct timespec temp;
+
+	if ((end.tv_nsec - start.tv_nsec) < 0) {
+		temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+		temp.tv_nsec = NANO_SEC + end.tv_nsec - start.tv_nsec;
+	} else {
+		temp.tv_sec = end.tv_sec - start.tv_sec;
+		temp.tv_nsec = end.tv_nsec - start.tv_nsec;
+	}
+	return (temp.tv_sec * SEC_TO_MSEC) + (temp.tv_nsec / NANO_TO_MSEC);
+}
+#endif
+
 static void ldc2114_polling_work(struct work_struct *work)
 {
 	struct delayed_work *dw =
@@ -809,6 +874,11 @@ static void ldc2114_polling_work(struct work_struct *work)
 					msecs_to_jiffies(ldc->poll_interval));
 }
 
+#ifdef LDC2114_POLL_DEBUG
+ktime_t start_polling_tm;
+int polling_counter;
+#endif
+
 static void ldc2114_irq_work(struct work_struct *work)
 {
 	struct delayed_work *dw =
@@ -828,11 +898,6 @@ static void ldc2114_irq_work(struct work_struct *work)
 			dev_info(ldc->dev, "STATUS bits 0x%x\n", status_reg);
 
 		ret = ldc2114_read_bulk(ldc->dev, LDC2114_OUT, &data, sizeof(data));
-#if 0
-		dev_dbg(ldc->dev, "DATA_0=%d, DATA_1=%d, DATA_2=%d, DATA_3=%d\n",
-				comp2_12b(&data.values[0]), comp2_12b(&data.values[1]),
-				comp2_12b(&data.values[2]), comp2_12b(&data.values[3]));
-#endif
 		if (data.out != output_bits) {
 			output_bits = data.out;
 			dev_dbg(ldc->dev, "OUTPUT bits 0x%x\n", output_bits);
@@ -855,9 +920,19 @@ static void ldc2114_irq_work(struct work_struct *work)
 		}
 
 		if (atomic_read(&ldc->irq_work_running)) {
+#ifdef LDC2114_POLL_DEBUG
+			polling_counter++;
+#endif
 			usleep_range(OUT_POLL_WAIT_LOW, OUT_POLL_WAIT_HIGH);
 			up(&ldc->semaphore);
 		} else {
+#ifdef LDC2114_POLL_DEBUG
+			dev_info(ldc->dev, "polled %d times within %llums\n",
+					polling_counter,
+					timediff_ms(ktime_to_timespec(start_polling_tm),
+								ktime_to_timespec(ktime_get())));
+			polling_counter = 0;
+#endif
 			/* TODO: make sure we never miss release :) */
 			/* Work around missed release */
 			for (i = 0, s = 0; i < MAX_KEYS; i++) {
@@ -892,6 +967,9 @@ static irqreturn_t ldc2114_irq(int irq, void *data)
 		dev_dbg(ldc->dev, "starting work...\n");
 		atomic_set(&ldc->irq_work_running, 1);
 		up(&ldc->semaphore);
+#ifdef LDC2114_POLL_DEBUG
+		start_polling_tm = ktime_get();
+#endif
 	} else if (stop_irq_work) {
 		dev_dbg(ldc->dev, "stopping work...\n");
 		atomic_set(&ldc->irq_work_running, 0);
@@ -899,7 +977,7 @@ static irqreturn_t ldc2114_irq(int irq, void *data)
 		return IRQ_HANDLED;
 
 	if (gpio_is_valid(ldc->signal_gpio))
-		ldc2114_toggle(ldc);
+		ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
 
 	return IRQ_HANDLED;
 }
@@ -911,20 +989,91 @@ static const struct of_device_id ldc2114_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ldc2114_of_match);
 
+static struct ldc2114_config *read_config_data(struct ldc2114_data *ldc,
+				struct device_node *parent, const char *suffix)
+{
+	struct ldc2114_config *config = NULL;
+	struct device_node *node;
+	u32 length = 0;
+	const char *data;
+	char node_name[64];
+	int npairs, i;
+
+	scnprintf(node_name, 63, "config-%s", suffix);
+	node = of_find_node_by_name(parent, node_name);
+	if (!node)
+		return NULL;
+
+	data = of_get_property(node, "config-data", &length);
+	if (!data) {
+#ifdef LDC2114_CFG_DEBUG
+		dev_info(ldc->dev, "(config-%s) prop config-data not found\n", suffix);
+#endif
+		goto out;
+	}
+
+	npairs = length / 2;
+#ifdef LDC2114_CFG_DEBUG
+	dev_info(ldc->dev, "(config-%s) array size %d\n", suffix, npairs);
+#endif
+	config = devm_kzalloc(ldc->dev, sizeof(struct ldc2114_config) +
+				sizeof(struct ldc2114_cfg_data) * npairs, GFP_KERNEL);
+	if (!config)
+		goto out;
+
+	for (i = 0; i < npairs; i++) {
+		config->data[i].address = (uint8_t)*data++;
+		config->data[i].value = (uint8_t)*data++;
+#ifdef LDC2114_CFG_DEBUG
+		dev_info(ldc->dev, "[%d] addr=0x%02x, val=0x%02x\n",
+				i, config->data[i].address, config->data[i].value);
+#endif
+	}
+
+	config->size = npairs;
+
+out:
+	of_node_put(node);
+
+	return config;
+}
+
 static int ldc2114_of_init(struct i2c_client *client)
 {
 	int ret;
 	struct ldc2114_data *ldc = i2c_get_clientdata(client);
 	struct device_node *np = client->dev.of_node;
+	struct device_node *config;
 
 	ret = of_get_gpio(np, 0);
+	if (ret < 0) {
+		dev_err(ldc->dev, "failed to get lwpm-gpio: %d\n", ret);
+		return ret;
+	}
+
+	ldc->lpwm_gpio = ret;
+	ret = devm_gpio_request(ldc->dev,
+					ldc->lpwm_gpio, LDC2114_DRIVER_NAME "_lpwm");
+	if (ret) {
+		dev_err(ldc->dev, "failed to request lpwm-gpio %d\n", ldc->lpwm_gpio);
+		return ret;
+	}
+
+	ret = of_get_gpio(np, 1);
 	if (ret < 0)
 		ldc->signal_gpio = -EINVAL;
 	else {
 		ldc->signal_gpio = ret;
 		dev_info(ldc->dev, "using gpio %d as a signal\n", ldc->signal_gpio);
-		gpio_direction_output(ldc->signal_gpio, !gpio_get_value(ldc->signal_gpio));
+		/* start with low */
+		gpio_direction_output(ldc->signal_gpio, 0);
+		/* then toggle */
+		ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
 	}
+
+	/* Init LWPM gpio into LOW, since this is default power off state */
+	/* Then toggle its state as part of apply configuration procedure */
+	gpio_direction_output(ldc->lpwm_gpio, 0);
 
 	ret = of_irq_get(np, 0);
 	if (ret < 0) {
@@ -937,7 +1086,7 @@ static int ldc2114_of_init(struct i2c_client *client)
 	ret = devm_gpio_request(ldc->dev,
 					ldc->intb_gpio, LDC2114_DRIVER_NAME "_irq");
 	if (ret) {
-		dev_err(ldc->dev, "failed to request gpio %u\n", ldc->intb_gpio);
+		dev_err(ldc->dev, "failed to request gpio %d\n", ldc->intb_gpio);
 		return ret;
 	}
 
@@ -947,6 +1096,25 @@ static int ldc2114_of_init(struct i2c_client *client)
 		dev_err(ldc->dev, "failed to read keymap\n");
 		return -EINVAL;
 	}
+
+	config = of_find_node_by_name(np, "configs");
+	if (!config) {
+		dev_info(ldc->dev, "does not support configs\n");
+		return 0;
+	}
+
+	of_property_read_u32(config, "config-ver", &ldc->verno);
+	dev_info(ldc->dev, "dt config Rev.%u\n", ldc->verno);
+
+	ldc->normal = read_config_data(ldc, config, "normal");
+	if (ldc->normal)
+		dev_info(ldc->dev, "has normal config\n");
+
+	ldc->lpm = read_config_data(ldc, config, "lpm");
+	if (ldc->lpm)
+		dev_info(ldc->dev, "has lpm config\n");
+
+	of_node_put(config);
 
 	return 0;
 }
@@ -958,54 +1126,75 @@ static inline void ldc2114_of_init(struct i2c_client *client)
 
 #define EXITIF_ERR(cmd) { \
 			ret = cmd; \
-			if (ret) \
+			if (ret) { \
+				dev_dbg(ldc->dev, "ret=%d; exiting...\n", ret); \
 				return ret; \
+			} \
 		}
+
+static int ldc2114_apply_config(struct ldc2114_data *ldc, struct ldc2114_config *cfg)
+{
+	bool partial_fail = false;
+	int i, ret;
+
+	/* now it's time to toggle LWPM pin */
+	ldc2114_toggle_gpio(ldc, ldc->lpwm_gpio);
+
+	if (!cfg || !cfg->size)
+		return 0;
+
+	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
+					LDC2114_REG_STATUS_CHIP_READY));
+	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_CONFIG_MODE,
+					LDC2114_REG_STATUS_RDY_TO_WRITE));
+
+	for (i = 0; i < cfg->size; i++) {
+		ret = ldc2114_write_reg8(ldc->dev,
+						cfg->data[i].address, cfg->data[i].value);
+		if (ret) {
+			partial_fail = true;
+			dev_err(ldc->dev, "config failed at i=%d\n", i);
+			break;
+		}
+	}
+
+	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_NONE,
+					LDC2114_REG_STATUS_CHIP_READY));
+
+	return partial_fail ? -1 : 0;
+}
 
 static int ldc2114_initialize(struct ldc2114_data *ldc)
 {
 	struct ldc2114_16bit version;
 	uint8_t value;
-	bool full_reset_done = false;
-	int i, ret;
+	int ret, attempts = 0;
 
-	EXITIF_ERR(ldc2114_read_reg8(ldc->dev, LDC2114_STATUS, &value));
+do_again:
 
-	if (!(value & LDC2114_REG_STATUS_CHIP_READY)) {
-		dev_info(ldc->dev, "invalid status; resetting...\n");
-		EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
-					LDC2114_REG_STATUS_CHIP_READY));
-		full_reset_done = true;
+	while (gpio_get_value(ldc->intb_gpio) == 0) {
+		if (gpio_is_valid(ldc->signal_gpio))
+			ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+
+		usleep_range(OUT_POLL_WAIT_LOW, OUT_POLL_WAIT_HIGH);
+
+		if (gpio_is_valid(ldc->signal_gpio))
+			ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
 	}
 
-	EXITIF_ERR(ldc2114_read_reg8(ldc->dev, LDC2114_GAIN0, &value));
-	if (SENSITIVITY_GAIN != value) {
-		dev_info(ldc->dev, "invalid configuration\n");
-
-		if (!full_reset_done)
-			EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
-						LDC2114_REG_STATUS_CHIP_READY));
-
-		EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_CONFIG_MODE,
-					LDC2114_REG_STATUS_RDY_TO_WRITE));
-
-    	for (i = 0; i < ARRAY_SIZE(CONFIG_ADDR_DATA); i += 2) {
-	        ret = ldc2114_write_reg8(ldc->dev,
-					CONFIG_ADDR_DATA[i], CONFIG_ADDR_DATA[i+1]);
-	        if (ret < 0) {
-	            dev_err(ldc->dev, "config failed: i=%d\n", i);
-	            return -EIO;
-	        }
-	    }
-
-		EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_NONE,
-						LDC2114_REG_STATUS_CHIP_READY));
-		dev_info(ldc->dev, "applied fixup\n");
+	ret = ldc2114_apply_config(ldc, ldc->normal);
+	if (ret) {
+		if (++attempts > LDC2114_MAX_RETRIES) {
+			dev_err(ldc->dev, "failed NORMAL config %d times\n", attempts);
+			return -EIO;
+		}
+		goto do_again;
 	}
 
 	EXITIF_ERR(ldc2114_read_bulk(ldc->dev, LDC2114_DEVICE_ID_LSB,
 				&version, sizeof(version)));
-	dev_info(ldc->dev, "TI " LDC2114_DRIVER_NAME " 0x%x\n", (version.lsb | (version.msb << 8)));
+	dev_info(ldc->dev, "TI " LDC2114_DRIVER_NAME " 0x%x\n",
+				(version.lsb | (version.msb << 8)));
 
 	EXITIF_ERR(ldc2114_read_reg8(ldc->dev, LDC2114_INTPOL, &value));
 	ldc->intb_polarity = value & BIT(3) ? 1 : 0;
@@ -1033,7 +1222,52 @@ static int ldc2114_poll_enable_cb(struct notifier_block *n,
 		dev_dbg(ldc->dev, "polling resumed\n");
 	}
 
-	return 0;	
+	return 0;
+}
+
+static int ldc2114_reboot_cb(struct notifier_block *nb,
+					unsigned long event, void *unused)
+{
+	struct ldc2114_data *ldc =
+		container_of(nb, struct ldc2114_data, reboot_nb);
+	int ret, attempts;
+	static int runaway;
+
+	if (runaway)
+		goto out;
+
+	runaway++;
+	attempts = 0;
+
+	/* Stop polling work if it's running */
+	if (ldc->data_polling)
+		cancel_delayed_work_sync(&ldc->polling_work);
+
+do_again:
+
+	if (ldc->irq_enabled) {
+		/* wait until active touch is cleared */
+		while (atomic_read(&ldc->irq_work_running) == 1) {
+			if (gpio_is_valid(ldc->signal_gpio))
+				ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+
+			usleep_range(OUT_POLL_WAIT_LOW, OUT_POLL_WAIT_HIGH);
+
+			if (gpio_is_valid(ldc->signal_gpio))
+				ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+		}
+		disable_irq(ldc->irq);
+	}
+
+	ret = ldc2114_apply_config(ldc, ldc->lpm);
+	if (ret) {
+		if (++attempts <= LDC2114_MAX_RETRIES)
+			goto do_again;
+		dev_err(ldc->dev, "failed LPM config %d times\n", attempts);
+	}
+
+out:
+	return NOTIFY_DONE;
 }
 
 static int ldc2114_probe(struct i2c_client *client,
@@ -1125,6 +1359,13 @@ static int ldc2114_probe(struct i2c_client *client,
 	ret = sysfs_create_group(&ldc->dev->kobj, &ldc2114_attr_group);
 	if (ret)
 		dev_err(ldc->dev, "Unable to create sysfs group: %d\n", ret);
+
+	ldc->reboot_nb.notifier_call = ldc2114_reboot_cb;
+	ldc->reboot_nb.next = NULL;
+	ldc->reboot_nb.priority = 1;
+	ret = register_reboot_notifier(&ldc->reboot_nb);
+	if (ret)
+		dev_err(ldc->dev, "register for reboot failed: %d\n", ret);
 
 	return 0;
 }

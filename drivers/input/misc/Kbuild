@@ -5,7 +5,8 @@ EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include -I$(TOP)/motorola/kerne
 ldc2114_keys-objs := ldc2114.o
 
 ifeq ($(TARGET_BUILD_VARIANT),userdebug)
-    EXTRA_CFLAGS += -DLDC2114_CHARDEV
+    # Following line is in control of extra debug
+    EXTRA_CFLAGS += -DLDC2114_CHARDEV -DLDC2114_POLL_DEBUG -DLDC2114_CFG_DEBUG
     ldc2114_keys-objs += ldc2114-cdev.o
 endif
 
