@@ -1565,12 +1565,6 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 	else
 		cs35l36->chip_version = CS35L36_10V_L36;
 
-	ret = cs35l36_pac(cs35l36);
-	if (ret < 0) {
-		dev_err(dev, "Failed to Trim OTP %d\n", ret);
-		goto err;
-	}
-
 	if (pdata->irq_config.is_present)
 		irq_pol = cs35l36_irq_gpio_config(cs35l36);
 
@@ -1591,6 +1585,11 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 		}
 	}
 	if (cs35l36->rev_id == CS35L36_REV_B0) {
+		ret = cs35l36_pac(cs35l36);
+		if (ret < 0) {
+			dev_err(dev, "Failed to Trim OTP %d\n", ret);
+			goto err;
+		}
 		ret = regmap_register_patch(cs35l36->regmap,
 					cs35l36_revb0_errata_patch,
 					ARRAY_SIZE(cs35l36_revb0_errata_patch));
