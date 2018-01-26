@@ -388,7 +388,7 @@
 #define CS35L36_MCU_BOOT_COMPLETE	0x02
 
 #define CS35L36_OTP_REV_MASK            0x00FF0000
-#define CS35L36_OTP_REV_L37             0xCC
+#define CS35L36_OTP_REV_L37             0x00CC0000
 #define CS35L36_12V_L37                 37
 #define CS35L36_10V_L36                 36
 
