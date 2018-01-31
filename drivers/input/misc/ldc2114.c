@@ -248,6 +248,7 @@ struct ldc2114_data {
 	int irq;
 	int failures;
 	bool irq_enabled;
+	bool btn_enabled;
 	bool data_polling;
 	unsigned int poll_interval;
 	unsigned int button_map[MAX_KEYS];
@@ -1069,10 +1070,10 @@ static int ldc2114_of_init(struct i2c_client *client)
 
 	ret = of_property_read_u32_array(np, "ldc2114,button-map",
 						ldc->button_map, 4);
-	if (ret) {
-		dev_err(ldc->dev, "failed to read keymap\n");
-		return -EINVAL;
-	}
+	if (ret)
+		dev_warn(ldc->dev, "failed to read keymap\n");
+	else
+		ldc->btn_enabled = true;
 
 	config = of_find_node_by_name(np, "configs");
 	if (!config) {
@@ -1109,43 +1110,17 @@ static inline void ldc2114_of_init(struct i2c_client *client)
 			} \
 		}
 
+#define JUMPIF_ERR(cmd) { \
+			ret = cmd; \
+			if (ret) \
+				goto err_check; \
+		}
+
 static int ldc2114_apply_config(struct ldc2114_data *ldc, struct ldc2114_config *cfg)
 {
 	bool partial_fail = false;
-	int i, ret;
-
-	/* now it's time to toggle LWPM pin */
-	ldc2114_toggle_gpio(ldc, ldc->lpwm_gpio);
-
-	if (!cfg || !cfg->size)
-		return 0;
-
-	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
-					LDC2114_REG_STATUS_CHIP_READY));
-	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_CONFIG_MODE,
-					LDC2114_REG_STATUS_RDY_TO_WRITE));
-
-	for (i = 0; i < cfg->size; i++) {
-		ret = ldc2114_write_reg8(ldc->dev,
-						cfg->data[i].address, cfg->data[i].value);
-		if (ret) {
-			partial_fail = true;
-			dev_err(ldc->dev, "config failed at i=%d\n", i);
-			break;
-		}
-	}
-
-	EXITIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_NONE,
-					LDC2114_REG_STATUS_CHIP_READY));
-
-	return partial_fail ? -1 : 0;
-}
-
-static int ldc2114_initialize(struct ldc2114_data *ldc)
-{
-	struct ldc2114_16bit version;
-	uint8_t value;
-	int ret, attempts = 0;
+	bool toggled = false;
+	int i, ret, attempts = 0;
 
 do_again:
 
@@ -1159,13 +1134,57 @@ do_again:
 			ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
 	}
 
+	if (!toggled) {
+		/* now it's time to toggle LWPM pin, but only toggle it once */
+		ldc2114_toggle_gpio(ldc, ldc->lpwm_gpio);
+		toggled = true;
+	}
+
+	if (!cfg || !cfg->size)
+		return 0;
+
+	JUMPIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
+					LDC2114_REG_STATUS_CHIP_READY));
+	JUMPIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_CONFIG_MODE,
+					LDC2114_REG_STATUS_RDY_TO_WRITE));
+
+	for (i = 0; i < cfg->size; i++) {
+		ret = ldc2114_write_reg8(ldc->dev,
+						cfg->data[i].address, cfg->data[i].value);
+		if (ret) {
+			partial_fail = true;
+			dev_err(ldc->dev, "config failed at i=%d\n", i);
+			break;
+		}
+	}
+
+	JUMPIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_NONE,
+					LDC2114_REG_STATUS_CHIP_READY));
+err_check:
+
+	if (ret || partial_fail) {
+		/* In unlikely case when all LDC2114_MAX_RETRIES failed, */
+		/* we just bail out and return an error. LPWM gpio will  */
+		/* be toggled anyway. And then we either fail probe or   */
+		/* leave IC in unknown state. Not much we can do here    */
+		if (++attempts > LDC2114_MAX_RETRIES)
+			return -EAGAIN;
+		goto do_again;
+	}
+
+	return 0;
+}
+
+static int ldc2114_initialize(struct ldc2114_data *ldc)
+{
+	struct ldc2114_16bit version;
+	uint8_t value;
+	int ret;
+
 	ret = ldc2114_apply_config(ldc, ldc->normal);
 	if (ret) {
-		if (++attempts > LDC2114_MAX_RETRIES) {
-			dev_err(ldc->dev, "failed NORMAL config %d times\n", attempts);
-			return -EIO;
-		}
-		goto do_again;
+		dev_err(ldc->dev, "failed to apply NORMAL config\n");
+		return -EIO;
 	}
 
 	EXITIF_ERR(ldc2114_read_bulk(ldc->dev, LDC2114_DEVICE_ID_LSB,
@@ -1180,7 +1199,7 @@ do_again:
 	dev_info(ldc->dev, "IRQ %d (gpio%d)\n",
 				ldc->irq, irq_to_gpio(ldc->irq));
 
-	return ldc2114_input_device(ldc);
+	return 0;
 }
 
 static int ldc2114_poll_enable_cb(struct notifier_block *n,
@@ -1207,20 +1226,17 @@ static int ldc2114_reboot_cb(struct notifier_block *nb,
 {
 	struct ldc2114_data *ldc =
 		container_of(nb, struct ldc2114_data, reboot_nb);
-	int ret, attempts;
+	int ret;
 	static int runaway;
 
 	if (runaway)
 		goto out;
 
 	runaway++;
-	attempts = 0;
 
 	/* Stop polling work if it's running */
 	if (ldc->data_polling)
 		cancel_delayed_work_sync(&ldc->polling_work);
-
-do_again:
 
 	if (ldc->irq_enabled) {
 		/* wait until active touch is cleared */
@@ -1237,11 +1253,9 @@ do_again:
 	}
 
 	ret = ldc2114_apply_config(ldc, ldc->lpm);
-	if (ret) {
-		if (++attempts <= LDC2114_MAX_RETRIES)
-			goto do_again;
-		dev_err(ldc->dev, "failed LPM config %d times\n", attempts);
-	}
+	if (ret)
+		/* In case of error there is not much we can do, so just log an error */
+		dev_err(ldc->dev, "failed to apply LPM config\n");
 
 out:
 	return NOTIFY_DONE;
@@ -1303,22 +1317,27 @@ static int ldc2114_probe(struct i2c_client *client,
 	}
 
 	sema_init(&ldc->semaphore, 0);
-	/*
-	 * Even though we setup edge triggered irq handler, genirq still
-	 * checks for ONESHOT safety if no primary handler provided
-	*/
-	ret = devm_request_threaded_irq(ldc->dev, ldc->irq, NULL, ldc2114_irq,
-				IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-				LDC2114_DRIVER_NAME, ldc);
-	if (ret) {
-		dev_err(ldc->dev, "Failed to register irq handler: %d\n", ret);
-		return ret;
-	}
 
-	ldc->irq_enabled = true;
-	INIT_DELAYED_WORK(&ldc->irq_work, ldc2114_irq_work);
-	schedule_delayed_work(&ldc->irq_work,
-				msecs_to_jiffies(LDC2114_SCHED_WAIT));
+	if (ldc->btn_enabled) {
+		/*
+		 * Even though we setup edge triggered irq handler, genirq still
+		 * checks for ONESHOT safety if no primary handler provided
+		*/
+		ret = devm_request_threaded_irq(ldc->dev, ldc->irq, NULL, ldc2114_irq,
+					IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					LDC2114_DRIVER_NAME, ldc);
+		if (ret) {
+			dev_err(ldc->dev, "Failed to register irq handler: %d\n", ret);
+			return ret;
+		}
+
+		ldc->irq_enabled = true;
+		INIT_DELAYED_WORK(&ldc->irq_work, ldc2114_irq_work);
+		schedule_delayed_work(&ldc->irq_work,
+					msecs_to_jiffies(LDC2114_SCHED_WAIT));
+
+		ldc2114_input_device(ldc);
+	}
 
 	ldc->data_polling = true;
 	ldc->poll_interval = 250;
