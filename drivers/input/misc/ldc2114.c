@@ -218,8 +218,6 @@ static const struct reg_field ldc2114_reg_fields[] = {
 	[F_FTF3_FTF3]               = REG_FIELD(LDC2114_FTF3,           0, 1),
 };
 
-#define SENSITIVITY_GAIN	0x3c
-
 struct ldc2114_cfg_data {
 	uint8_t address, value;
 };
@@ -227,27 +225,6 @@ struct ldc2114_cfg_data {
 struct ldc2114_config {
 	int size;
 	struct ldc2114_cfg_data data[0];
-};
-
-static const uint8_t CONFIG_ADDR_DATA[] = {
-	LDC2114_EN,				0xff, /* enable 4 buttons */
-	LDC2114_NP_SCAN_RATE,	0x01, /* normal-power scan rate */
-	LDC2114_LP_SCAN_RATE,	0x01,
-	LDC2114_GAIN0,			SENSITIVITY_GAIN,
-	LDC2114_GAIN1,			SENSITIVITY_GAIN,
-	LDC2114_GAIN2,			SENSITIVITY_GAIN,
-	LDC2114_GAIN3,			SENSITIVITY_GAIN,
-	LDC2114_NP_BASE_INC,	0x03,
-	LDC2114_LP_BASE_INC,	0x03,
-	LDC2114_MAXWIN,			0xf0,
-	LDC2114_LC_DIVIDER,		0x03,
-	LDC2114_SENSOR0_CONFIG,	0x59,
-	LDC2114_SENSOR1_CONFIG,	0x59,
-	LDC2114_SENSOR2_CONFIG,	0x59,
-	LDC2114_SENSOR3_CONFIG,	0x59,
-	LDC2114_FTF0,			0x00,
-	LDC2114_FTF1_2,			0x00,
-	LDC2114_FTF3,			0x00,
 };
 
 /**
@@ -875,8 +852,8 @@ static void ldc2114_polling_work(struct work_struct *work)
 }
 
 #ifdef LDC2114_POLL_DEBUG
-ktime_t start_polling_tm;
-int polling_counter;
+static ktime_t start_polling_tm;
+static int polling_counter;
 #endif
 
 static void ldc2114_irq_work(struct work_struct *work)
