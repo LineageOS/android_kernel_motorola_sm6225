@@ -963,8 +963,9 @@ static irqreturn_t ldc2114_irq(int irq, void *data)
 #ifdef CONFIG_OF
 static const struct of_device_id ldc2114_of_match[] = {
 	{ .compatible = "ti,ldc2114", },
-	{ /* sentinel */ }
+	{},
 };
+
 MODULE_DEVICE_TABLE(of, ldc2114_of_match);
 
 static struct ldc2114_config *read_config_data(struct ldc2114_data *ldc,
@@ -1385,25 +1386,41 @@ static int ldc2114_remove(struct i2c_client *client)
 
 	sysfs_remove_group(&client->dev.kobj, &ldc2114_attr_group);
 
+	unregister_reboot_notifier(&ldc->reboot_nb);
+
 	return 0;
 }
 
 static const struct i2c_device_id ldc2114_ids[] = {
 	{ "ldc2114", 0 },
-	{ /* sentinel */ }
+	{},
 };
 MODULE_DEVICE_TABLE(i2c, ldc2114_ids);
 
 static struct i2c_driver ldc2114_i2c_driver = {
 	.driver = {
 		.name = LDC2114_DRIVER_NAME,
+#ifdef CONFIG_OF
 		.of_match_table = of_match_ptr(ldc2114_of_match),
+#endif
 	},
 	.probe = ldc2114_probe,
 	.remove = ldc2114_remove,
 	.id_table = ldc2114_ids,
 };
-module_i2c_driver(ldc2114_i2c_driver);
+
+static int __init ldc2114_init(void)
+{
+	return i2c_add_driver(&ldc2114_i2c_driver);
+}
+
+static void __exit ldc2114_exit(void)
+{
+	i2c_del_driver(&ldc2114_i2c_driver);
+}
+
+module_init(ldc2114_init);
+module_exit(ldc2114_exit);
 
 MODULE_AUTHOR("Andrew F. Davis <afd@ti.com>");
 MODULE_DESCRIPTION("TI LDC2114 Metal Touch Inductance-to-Digital Converter");

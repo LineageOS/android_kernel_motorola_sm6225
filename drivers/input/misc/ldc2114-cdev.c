@@ -314,8 +314,9 @@ void ldc2114_cdev_remove(void)
 	if (!cxt)
 		return;
 
-	unregister_chrdev(cxt->major, DRVNAME);
+	device_destroy(cxt->class, MKDEV(cxt->major, 0));
 	class_destroy(cxt->class);
+	unregister_chrdev(cxt->major, DRVNAME);
 	platform_device_unregister(cxt->pdev);
 	kfree(cxt);
 }
