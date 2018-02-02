@@ -503,6 +503,7 @@ int cycapsense_hssp_parse_hex(struct hssp_data *d, const u8 *src, int len)
 		pr_err("%s: Error kzalloc (%d).\n", __func__,
 				P4000_METADATA_SIZE);
 		kfree(d->inf.data);
+		kfree(d->inf.s_data);
 		return -ENOMEM;
 	}
 	dst = d->inf.data; /*data always first in PSoC HEX*/
@@ -783,6 +784,10 @@ fw_upd_end:
 	if (inf->s_data != NULL) {
 		kfree(inf->s_data);
 		inf->s_data = NULL;
+	}
+	if (inf->m_data != NULL) {
+		kfree(inf->m_data);
+		inf->m_data = NULL;
 	}
 	if (fw != NULL)
 		release_firmware(fw);
@@ -1353,6 +1358,9 @@ static int cyttsp_sar_remove(struct i2c_client *client)
 	int i;
 
 	free_irq(client->irq, data);
+	if(ctrl_data)
+		cancel_work_sync(&ctrl_data->work);
+
 	for (i = 0; i < pdata->nsars; i++) {
 		sensors_classdev_unregister(&sensors_capsensor_cdev[i]);
 		input_unregister_device(data->input_dev[i]);
