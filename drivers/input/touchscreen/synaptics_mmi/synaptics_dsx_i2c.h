@@ -456,7 +456,6 @@ struct temp_buffer {
  * @flash_enabled: allow flashing once transition to active state is complete
  * @ic_on: touch ic power state
  * @fingers_on_2d: flag to indicate presence of fingers in 2d area
- * @wait: wait queue for touch data polling in interrupt thread
  * @number_irq: total number of remembered interrupt times
  * @last_irq: last interrup time's number (index of the location of interrupt)
  * @irq_info:  information about last few interrupt times
@@ -504,7 +503,6 @@ struct synaptics_rmi4_data {
 	bool fingers_on_2d;
 	bool input_registered;
 	bool in_bootloader;
-	wait_queue_head_t wait;
 	int (*i2c_read)(struct synaptics_rmi4_data *pdata, unsigned short addr,
 			unsigned char *data, unsigned short length);
 	int (*i2c_write)(struct synaptics_rmi4_data *pdata, unsigned short addr,

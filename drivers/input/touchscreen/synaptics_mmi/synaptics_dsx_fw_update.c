@@ -4445,6 +4445,8 @@ static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 	if (!fwu)
 		goto exit;
 
+	wakeup_source_trash(&fwu->flash_wake_src);
+
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		sysfs_remove_file(SYSFS_KOBJ, &attrs[attr_count].attr);
 	}
@@ -4452,7 +4454,8 @@ static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS_MMI
 	sysfs_remove_bin_file(SYSFS_KOBJ, &dev_attr_data);
 #endif
-	kfree(fwu->read_config_buf);
+	if (fwu->read_config_buf_size)
+		kfree(fwu->read_config_buf);
 	kfree(fwu->image_name);
 	kfree(fwu);
 	fwu = NULL;

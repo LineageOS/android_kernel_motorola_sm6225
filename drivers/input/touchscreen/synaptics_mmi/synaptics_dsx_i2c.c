@@ -6619,6 +6619,14 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		if (exp_fhandler->func_init == NULL) {
 			if (exp_fhandler->inserted == true) {
 				exp_fhandler->func_remove(rmi4_data);
+
+				/* need to restore status function on F34 removal */
+				if (exp_fhandler->fn_type == RMI_FW_UPDATER &&
+					exp_fhandler->func_status == rmi4_data->get_status) {
+					rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
+					pr_info("using default status retrieval function\n");
+				}
+
 				list_del(&exp_fhandler->link);
 				kfree(exp_fhandler);
 			}
@@ -6770,10 +6778,9 @@ void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
 	} else {
 		list_for_each_entry(exp_fhandler, &exp_fn_ctrl.fn_list, link) {
 			if (exp_fhandler->func_init == func_init) {
-				exp_fhandler->inserted = false;
+				/* leave inserted flag ON to run */
+				/* remove function in detection work */
 				exp_fhandler->func_init = NULL;
-				exp_fhandler->func_attn = NULL;
-				exp_fhandler->func_status = NULL;
 				goto exit;
 			}
 		}
@@ -7261,7 +7268,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 		goto err_query_device;
 	}
 
-	init_waitqueue_head(&rmi4_data->wait);
 	INIT_WORK(&rmi4_data->resume_work, synaptics_dsx_queued_resume);
 
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
@@ -7434,7 +7440,9 @@ err_mem_free:
  */
 static int synaptics_rmi4_remove(struct i2c_client *client)
 {
+	struct pinctrl *pinctrl;
 	int attr_count;
+	const struct synaptics_dsx_platform_data *platform_data;
 	struct synaptics_rmi4_data *rmi4_data = i2c_get_clientdata(client);
 
 	if (exp_fn_ctrl.inited) {
@@ -7447,8 +7455,6 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 		return 0;
 
 	atomic_set(&rmi4_data->touch_stopped, 1);
-	wake_up(&rmi4_data->wait);
-
 	synaptics_rmi4_irq_enable(rmi4_data, false);
 
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
@@ -7488,6 +7494,19 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 		ps_notifier_unregister(rmi4_data);
 	if (rmi4_data->is_fps_registered)
 		FPS_unregister_notifier(&rmi4_data->fps_notif, 0xBEEF);
+
+	unregister_reboot_notifier(&rmi4_data->rmi_reboot);
+
+	platform_data = rmi4_data->board;
+	if (platform_data->gpio_config)
+		gpio_free(platform_data->irq_gpio);
+	if (gpio_is_valid(platform_data->reset_gpio))
+		gpio_free(platform_data->reset_gpio);
+
+	pinctrl = devm_pinctrl_get_select_default(&rmi4_data->i2c_client->dev);
+	if (IS_ERR(pinctrl))
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: pinctrl default failed\n", __func__);
 
 	kfree(rmi4_data);
 	return 0;
