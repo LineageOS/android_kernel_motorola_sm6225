@@ -737,6 +737,10 @@ static void rmidev_remove_device(struct synaptics_rmi4_data *rmi4_data)
 	if (!rmidev)
 		return;
 
+	gpio_unexport(rmi4_data->board->irq_gpio);
+
+	sysfs_remove_link(&rmi4_data->i2c_client->dev.kobj, "attn");
+
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++)
 		sysfs_remove_file(rmidev->sysfs_dir, &attrs[attr_count].attr);
 
