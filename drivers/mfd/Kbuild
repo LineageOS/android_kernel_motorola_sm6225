@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -DCONFIG_MFD_CS47L90
+
+cirrus_madera-core-objs = madera-core.o madera-spi.o madera-core.o madera-spi.o cs47l90-tables.o
+obj-m += cirrus_madera-core.o
