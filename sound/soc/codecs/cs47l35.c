@@ -1899,7 +1899,7 @@ static int cs47l35_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	for (i = 0; i < CS47L35_NUM_ADSP; i++)
-		wm_adsp2_codec_probe(&cs47l35->core.adsp[i], codec, false);
+		wm_adsp2_codec_probe(&cs47l35->core.adsp[i], codec);
 #if IS_ENABLED(CONFIG_SND_SOC_AOV_TRIGGER)
 	aov_trigger_register_notifier(codec);
 #endif

@@ -2822,7 +2822,7 @@ static int cs47l90_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	for (i = 0; i < CS47L90_NUM_ADSP; i++) {
-		wm_adsp2_codec_probe(&cs47l90->core.adsp[i], codec, false);
+		wm_adsp2_codec_probe(&cs47l90->core.adsp[i], codec);
 
 		ret = madera_init_bus_error_irq(codec, i,
 						cs47l90_dsp_bus_error);
