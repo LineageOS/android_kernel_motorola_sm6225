@@ -1221,7 +1221,7 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 
 	ret = of_property_read_u32(np, "cirrus,boost-ctl-millivolt", &val);
 	if (ret >= 0) {
-		if (val < 2550 || val > 10000) {
+		if (val < 2550 || val > 12000) {
 			dev_err(&i2c_client->dev,
 				"Invalid Boost Voltage %d mV\n", val);
 			return -EINVAL;
@@ -1255,6 +1255,9 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 
 	pdata->dcm_mode = of_property_read_bool(np,
 					"cirrus,dcm-mode-enable");
+
+	pdata->high_volt = of_property_read_bool(np,
+					"cirrus,version-12v-l37");
 
 	pdata->amp_gain_zc = of_property_read_bool(np,
 					"cirrus,amp-gain-zc");
@@ -1550,10 +1553,14 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 		return ret;
 	}
 
-	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37)
-		cs35l36->chip_version = CS35L36_12V_L37;
-	else
-		cs35l36->chip_version = CS35L36_10V_L36;
+	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37) {
+			cs35l36->chip_version = CS35L36_12V_L37;
+	} else {
+		if (cs35l36->pdata.high_volt)
+			cs35l36->chip_version = CS35L36_12V_L37;
+		else
+			cs35l36->chip_version = CS35L36_10V_L36;
+	}
 
 	if (pdata->irq_config.is_present)
 		irq_pol = cs35l36_irq_gpio_config(cs35l36);
