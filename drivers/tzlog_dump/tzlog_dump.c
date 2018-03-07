@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  *
  */
-#include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -30,6 +29,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/cma.h>
 #include <soc/qcom/memory_dump.h>
+#include <soc/qcom/mmi_boot_info.h>
+#include <linux/mmi_annotate.h>
 
 /* Check memory_dump.h to verify this is not going over the max or
  * conflicting with another entry. Also must match BL
@@ -122,9 +123,15 @@ struct tz_dump_platform_data {
 };
 
 static struct tzdbg_t *tzdbg_data;
-static struct proc_dir_entry *tzdbg_procfs_file;
 
-static void tzlog_dump_show_boot_info(struct seq_file *f)
+#define MSMDBG(fmt, args...) mmi_annotate(fmt, ##args)
+
+#define MSMWDTD_IFWDOG(fmt, args...) do { \
+	if (bi_powerup_reason() == PU_REASON_WDOG_AP_RESET) \
+		MSMDBG(fmt, ##args); \
+} while (0)
+
+static void tzlog_dump_show_boot_info(void)
 {
 	int cpu;
 	int power_collapsed;
@@ -133,15 +140,15 @@ static void tzlog_dump_show_boot_info(struct seq_file *f)
 	ptr = (struct tzdbg_boot_info_t *)
 			((u8 *)tzdbg_data + tzdbg_data->boot_info_off);
 
-	seq_printf(f, "\n--- TZ Power Collapse Counters\n");
-	seq_printf(f, "     | WarmEntry : WarmExit : TermEntry :");
-	seq_printf(f, " TermExit : PsciEntry : PsciExit : JumpAddr |\n");
+	MSMWDTD_IFWDOG("\n--- TZ Power Collapse Counters\n");
+	MSMWDTD_IFWDOG("     | WarmEntry : WarmExit : TermEntry :");
+	MSMWDTD_IFWDOG(" TermExit : PsciEntry : PsciExit : JumpAddr |\n");
 	for (cpu = 0; cpu < tzdbg_data->cpu_count; cpu++) {
 		power_collapsed = ptr->wb_entry_cnt +
 				ptr->pc_exit_cnt - ptr->pc_entry_cnt;
 		if (cpu)
 			power_collapsed--;
-		seq_printf(f, "CPU%d |  %8x : %8x : %8x : %8x : %8x : %8x :      "
+		MSMWDTD_IFWDOG("CPU%d |  %8x : %8x : %8x : %8x : %8x : %8x :      "
 			"%llx | %sPC\n",
 			cpu,
 			ptr->wb_entry_cnt,
@@ -156,7 +163,7 @@ static void tzlog_dump_show_boot_info(struct seq_file *f)
 	}
 }
 
-static void tzlog_dump_show_log(struct seq_file *f)
+static void tzlog_dump_show_log(void)
 {
 	struct tzdbg_log_t *log_ptr;
 	const char *log_buf, *p, *start;
@@ -167,57 +174,38 @@ static void tzlog_dump_show_log(struct seq_file *f)
 
 	if (log_ptr->log_pos.offset >= tzdbg_data->ring_len)
 		return;
-	seq_printf(f, "--- TZ Log start ---\n");
+	MSMWDTD_IFWDOG("--- TZ Log start ---\n");
 	if (log_ptr->log_pos.wrap) {
 		for (start = log_buf + log_ptr->log_pos.offset, p = start;
 				p < (log_buf + tzdbg_data->ring_len); p++) {
 			if (isprint(*p))
-				seq_printf(f, "%c", *p);
+				MSMWDTD_IFWDOG("%c", *p);
 			else if ((p > start) && isprint(*(p-1)))
-				seq_printf(f, "\n");
+				MSMWDTD_IFWDOG("\n");
 		}
 	}
 	for (start = log_buf, p = start;
 			p < (log_buf + log_ptr->log_pos.offset); p++) {
 		if (isprint(*p))
-			seq_printf(f, "%c", *p);
+			MSMWDTD_IFWDOG("%c", *p);
 		else if ((p > start) && isprint(*(p-1)))
-			seq_printf(f, "\n");
+			MSMWDTD_IFWDOG("\n");
 	}
-	seq_printf(f, "\n--- TZ Log end ---\n");
+	MSMWDTD_IFWDOG("\n--- TZ Log end ---\n");
 }
 
-static int tzlog_dump_seq_show(struct seq_file *f, void *ptr)
+static int tzlog_dump_annotate(void)
 {
 	if (!tzdbg_data ||
 		tzdbg_data->magic_num != TZBSP_MAGIC_NUMBER) {
-		seq_printf(f, "No valid backup\n");
+		MSMWDTD_IFWDOG("No valid backup\n");
 		return 0;
 	}
 
-	tzlog_dump_show_boot_info(f);
-	tzlog_dump_show_log(f);
+	tzlog_dump_show_boot_info();
+	tzlog_dump_show_log();
 
 	return 0;
-}
-
-static int tzlog_dump_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, tzlog_dump_seq_show, inode->i_private);
-}
-
-static const struct file_operations tzlog_dump_operations = {
-	.open		= tzlog_dump_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
-static void tzlog_dump_procfs_init(void)
-{
-	/* /proc/driver/tzlog_dump */
-	tzdbg_procfs_file = proc_create("driver/tzlog_dump",
-		0444, NULL, &tzlog_dump_operations);
 }
 
 static void tzlog_dump_table_register(struct device *dev,
@@ -301,15 +289,13 @@ static int tzlog_dump_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	tzlog_dump_procfs_init();
+	tzlog_dump_annotate();
 err:
 	return err;
 }
 
 static int tzlog_dump_remove(struct platform_device *pdev)
 {
-	if (tzdbg_procfs_file)
-		remove_proc_entry("driver/tzlog_dump", NULL);
 	return 0;
 }
 
