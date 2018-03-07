@@ -14,6 +14,7 @@
 
 #include <linux/module.h>
 #include <soc/qcom/smsm.h>
+#include <linux/mmi_annotate.h>
 #include "mmi_info.h"
 
 #define SMEM_SDRAM_INFO SMEM_ID_VENDOR1
@@ -158,6 +159,14 @@ int mmi_ram_info_init(void)
 
 		/* extract size */
 		sysfsram_ramsize = smem_ddr_info->ramsize;
+
+		mmi_annotate_persist(
+			"RAM: %s, %s, %u MB, MR5:0x%02X, MR6:0x%02X, "
+			"MR7:0x%02X, MR8:0x%02X\n",
+			vname, tname, smem_ddr_info->ramsize,
+			smem_ddr_info->mr5, smem_ddr_info->mr6,
+			smem_ddr_info->mr7, smem_ddr_info->mr8);
+
 	} else {
 		/* complain, but do not fail if SMEM was not allocated */
 		/* defaults will be reported */
