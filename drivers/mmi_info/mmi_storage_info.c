@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include <linux/mmi_annotate.h>
 #include "mmi_info.h"
 
 struct mmi_storage_info *info;
@@ -89,6 +90,14 @@ int mmi_storage_info_init(void)
 	of_node_put(n);
 
 	pr_info("mmi_storage_info :%s: %s %s %s FV=%s\n",
+		info->type,
+		info->size,
+		info->card_manufacturer,
+		info->product_name,
+		info->firmware_version);
+
+	mmi_annotate_persist(
+		"%s: %s %s %s FV=%s\n",
 		info->type,
 		info->size,
 		info->card_manufacturer,
