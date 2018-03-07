@@ -14,6 +14,7 @@
 
 #include <linux/module.h>
 #include <soc/qcom/socinfo.h>
+#include <linux/mmi_annotate.h>
 #include "mmi_info.h"
 
 static ssize_t version_show(struct kobject *kobj,
@@ -56,10 +57,25 @@ static struct attribute_group soc_info_properties_attr_group = {
 
 static struct kobject *soc_info_properties_kobj;
 
+static void annotate_soc_info(void)
+{
+	mmi_annotate_persist("socinfo: id=%u, ", socinfo_get_id());
+	mmi_annotate_persist("ver=%u.%u, ",
+			SOCINFO_VERSION_MAJOR(socinfo_get_version()),
+			SOCINFO_VERSION_MINOR(socinfo_get_version()));
+	mmi_annotate_persist("raw_id=%u, ", socinfo_get_raw_id());
+	mmi_annotate_persist("raw_ver=%u, ", socinfo_get_raw_version());
+	mmi_annotate_persist("hw_plat=%u, ", socinfo_get_platform_type());
+	mmi_annotate_persist("hw_plat_ver=%u, ", socinfo_get_platform_version());
+	mmi_annotate_persist("hw_plat_subtype=%u\n", socinfo_get_platform_subtype());
+}
+
 int mmi_soc_info_init(void)
 {
 	int ret = 0;
 	int status = 0;
+
+	annotate_soc_info();
 
 	soc_info_properties_kobj = kobject_create_and_add("soc", NULL);
 	if (soc_info_properties_kobj)

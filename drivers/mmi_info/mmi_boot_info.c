@@ -29,6 +29,7 @@
 #include <asm/setup.h>
 #include <linux/seq_file.h>
 #include <soc/qcom/mmi_boot_info.h>
+#include <linux/mmi_annotate.h>
 #include "mmi_info.h"
 
 /*
@@ -283,12 +284,30 @@ static const struct file_operations bootinfo_proc_fops = {
 
 int mmi_boot_info_init(void)
 {
+	int i;
+
 	of_blsig();
 	mmi_bootarg_setup();
 
 	/* /proc/bootinfo */
 	proc_bootinfo = proc_create("bootinfo",
 		0444, NULL, &bootinfo_proc_fops);
+
+	/* Add to dont panic dump */
+	for (i = 0; i < bl_build_sig_count; i++) {
+		bl_build_sigs[i].item[MAX_BLD_SIG_ITEM - 1] = 0;
+		bl_build_sigs[i].value[MAX_BLD_SIG_VALUE - 1] = 0;
+		mmi_annotate_persist(bl_build_sigs[i].item);
+		mmi_annotate_persist("=");
+		mmi_annotate_persist(bl_build_sigs[i].value);
+		mmi_annotate_persist("\n");
+	}
+	mmi_annotate_persist("MBM_VERSION: 0x%08x\n", bi_mbm_version());
+	mmi_annotate_persist("SERIAL: 0x%llx\n", bi_serial());
+	mmi_annotate_persist("HW_REV: 0x%04x\n", bi_hwrev());
+	mmi_annotate_persist("BOOT_SEQ: 0x%08x\n", bi_boot_seq());
+	mmi_annotate("POWERUPREASON: 0x%08x\n", bi_powerup_reason());
+	mmi_annotate("Last boot reason: %s\n\n", bi_bootreason());
 
 	return 0;
 }
