@@ -1,0 +1,6 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+moto_f_usbnet-objs += f_usbnet.o
+obj-m += moto_f_usbnet.o
