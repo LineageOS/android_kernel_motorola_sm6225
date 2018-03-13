@@ -1622,7 +1622,7 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 	default:
 		ret = snprintf(name, SNDRV_CTL_ELEM_ID_NAME_MAXLEN,
 				"DSP%d%c %.12s %x", dsp->num, *region_name,
-				wm_adsp_fw_enum[dsp->num - 1].texts[dsp->fw],
+				dsp->fw_enum.texts[dsp->fw],
 				alg_region->alg);
 
 		/* Truncate the subname from the start if it is too long */
@@ -1651,7 +1651,7 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 	ctl = kzalloc(sizeof(*ctl), GFP_KERNEL);
 	if (!ctl)
 		return -ENOMEM;
-	ctl->fw_name = wm_adsp_fw_enum[dsp->num - 1].texts[dsp->fw];
+	ctl->fw_name = dsp->fw_enum.texts[dsp->fw];
 	ctl->alg_region = *alg_region;
 	ctl->name = kmemdup(name, strlen(name) + 1, GFP_KERNEL);
 	if (!ctl->name) {
@@ -2264,7 +2264,7 @@ static void wm_adsp_ctl_fixup_base(struct wm_adsp *dsp,
 	list_for_each_entry(ctl, &dsp->ctl_list, list) {
 		const char *fw_name;
 
-		fw_name = wm_adsp_fw_enum[dsp->num - 1].texts[dsp->fw];
+		fw_name = dsp->fw_enum.texts[dsp->fw];
 
 		if (ctl->fw_name == fw_name &&
 		    alg_region->alg == ctl->alg_region.alg &&
@@ -3834,9 +3834,7 @@ int wm_adsp2_codec_probe(struct wm_adsp *dsp, struct snd_soc_codec *codec,
 					 &wm_adsp_ao_fw_controls[dsp->num - 1],
 					 1);
 	else
-		ret = snd_soc_add_codec_controls(codec,
-					 &wm_adsp_fw_controls[dsp->num - 1],
-					 1);
+		ret = snd_soc_add_codec_controls(codec, &dsp->fw_ctrl, 1);
 
 	return ret;
 }
@@ -3961,8 +3959,11 @@ static int wm_adsp_of_parse_firmware(struct wm_adsp *dsp,
 		i++;
 	}
 
-	wm_adsp_fw_enum[dsp->num - 1].items = dsp->num_firmwares;
-	wm_adsp_fw_enum[dsp->num - 1].texts = ctl_names;
+	dsp->fw_enum.items = dsp->num_firmwares;
+	dsp->fw_enum.texts = ctl_names;
+
+	dsp->fw_ctrl = wm_adsp_fw_controls[dsp->num - 1];
+	dsp->fw_ctrl.private_value = (unsigned long)(&dsp->fw_enum);
 
 	return dsp->num_firmwares;
 }
@@ -4032,6 +4033,8 @@ int wm_adsp2_init(struct wm_adsp *dsp)
 	mutex_init(&dsp->pwr_lock);
 
 	if (!dsp->dev->of_node || wm_adsp_of_parse_adsp(dsp) <= 0) {
+		dsp->fw_enum = wm_adsp_fw_enum[dsp->num - 1];
+		dsp->fw_ctrl = wm_adsp_fw_controls[dsp->num - 1];
 		dsp->num_firmwares = ARRAY_SIZE(wm_adsp_fw);
 		dsp->firmwares = wm_adsp_fw;
 	}
@@ -4055,6 +4058,8 @@ int wm_halo_init(struct wm_adsp *dsp, struct mutex *rate_lock)
 				     GFP_KERNEL);
 
 	if (!dsp->dev->of_node || wm_adsp_of_parse_adsp(dsp) <= 0) {
+		dsp->fw_enum = wm_adsp_fw_enum[dsp->num - 1];
+		dsp->fw_ctrl = wm_adsp_fw_controls[dsp->num - 1];
 		dsp->num_firmwares = ARRAY_SIZE(wm_adsp_fw);
 		dsp->firmwares = wm_adsp_fw;
 	}
