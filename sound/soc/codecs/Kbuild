@@ -6,6 +6,9 @@ EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
 cirrus_madera-objs = madera.o madera-slimbus.o wm_adsp.o
 obj-m += cirrus_madera.o
 
+cirrus_cs35l35-objs = cs35l35.o
+obj-m += cirrus_cs35l35.o
+
 cirrus_cs35l36-objs = cs35l36.o cs35l36-tables.o
 obj-m += cirrus_cs35l36.o
 
