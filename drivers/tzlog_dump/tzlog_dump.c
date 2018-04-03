@@ -190,8 +190,7 @@ static void tzlog_dump_show_log(struct seq_file *f)
 static int tzlog_dump_seq_show(struct seq_file *f, void *ptr)
 {
 	if (!tzdbg_data ||
-		tzdbg_data->magic_num != TZBSP_MAGIC_NUMBER ||
-		tzdbg_data->version != TZBSP_VERSION) {
+		tzdbg_data->magic_num != TZBSP_MAGIC_NUMBER) {
 		seq_printf(f, "No valid backup\n");
 		return 0;
 	}
