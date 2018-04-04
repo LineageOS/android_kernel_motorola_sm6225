@@ -512,6 +512,10 @@ MADERA_RATE_ENUM("ISRC2 FSL", madera_isrc_fsl[1]),
 MADERA_RATE_ENUM("ISRC1 FSH", madera_isrc_fsh[0]),
 MADERA_RATE_ENUM("ISRC2 FSH", madera_isrc_fsh[1]),
 
+WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
+WM_ADSP2_PRELOAD_SWITCH("DSP2", 2),
+WM_ADSP2_PRELOAD_SWITCH("DSP3", 3),
+
 MADERA_MIXER_CONTROLS("DSP1L", MADERA_DSP1LMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP1R", MADERA_DSP1RMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP2L", MADERA_DSP2LMIX_INPUT_1_SOURCE),
@@ -1895,7 +1899,7 @@ static int cs47l35_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	for (i = 0; i < CS47L35_NUM_ADSP; i++)
-		wm_adsp2_codec_probe(&cs47l35->core.adsp[i], codec);
+		wm_adsp2_codec_probe(&cs47l35->core.adsp[i], codec, false);
 #if IS_ENABLED(CONFIG_SND_SOC_AOV_TRIGGER)
 	aov_trigger_register_notifier(codec);
 #endif
@@ -2019,8 +2023,7 @@ static int cs47l35_probe(struct platform_device *pdev)
 		cs47l35->core.adsp[i].num_mems
 			= ARRAY_SIZE(cs47l35_dsp1_regions);
 
-		ret = wm_adsp2_init(&cs47l35->core.adsp[i],
-				    &cs47l35->core.adsp_fw_lock);
+		ret = wm_adsp2_init(&cs47l35->core.adsp[i]);
 		if (ret != 0) {
 			for (--i; i >= 0; --i)
 				wm_adsp2_remove(&cs47l35->core.adsp[i]);
