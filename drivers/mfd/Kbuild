@@ -10,3 +10,7 @@ cirrus_madera-core-objs = madera-core.o madera-spi.o madera-core.o madera-spi.o 
 endif
 
 obj-m += cirrus_madera-core.o
+
+EXTRA_CFLAGS += -DCONFIG_MFD_CS35L41_I2C
+cirrus_cs35l41-mfd-objs = cs35l41-core.o cs35l41-i2c.o cs35l41-tables.o
+obj-m += cirrus_cs35l41-mfd.o

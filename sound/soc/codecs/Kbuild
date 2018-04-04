@@ -28,6 +28,9 @@ obj-m += cirrus_cs35l36.o
 cirrus_cs47l35-objs =  cs47l35.o
 obj-m += cirrus_cs47l35.o
 
+cirrus_cs35l41-objs =  cs35l41.o
+obj-m += cirrus_cs35l41.o
+
 cirrus_cs47l90-objs =  cs47l90.o
 obj-m += cirrus_cs47l90.o
 
