@@ -656,6 +656,14 @@ MADERA_RATE_ENUM("ASRC1 Rate 2", madera_asrc1_rate[1]),
 MADERA_RATE_ENUM("ASRC2 Rate 1", madera_asrc2_rate[0]),
 MADERA_RATE_ENUM("ASRC2 Rate 2", madera_asrc2_rate[1]),
 
+WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
+WM_ADSP2_PRELOAD_SWITCH("DSP2", 2),
+WM_ADSP2_PRELOAD_SWITCH("DSP3", 3),
+WM_ADSP2_PRELOAD_SWITCH("DSP4", 4),
+WM_ADSP2_PRELOAD_SWITCH("DSP5", 5),
+WM_ADSP2_PRELOAD_SWITCH("DSP6", 6),
+WM_ADSP2_PRELOAD_SWITCH("DSP7", 7),
+
 MADERA_MIXER_CONTROLS("DSP1L", MADERA_DSP1LMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP1R", MADERA_DSP1RMIX_INPUT_1_SOURCE),
 MADERA_MIXER_CONTROLS("DSP2L", MADERA_DSP2LMIX_INPUT_1_SOURCE),
@@ -2814,7 +2822,7 @@ static int cs47l90_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	for (i = 0; i < CS47L90_NUM_ADSP; i++) {
-		wm_adsp2_codec_probe(&cs47l90->core.adsp[i], codec);
+		wm_adsp2_codec_probe(&cs47l90->core.adsp[i], codec, false);
 
 		ret = madera_init_bus_error_irq(codec, i,
 						cs47l90_dsp_bus_error);
@@ -2960,8 +2968,7 @@ static int cs47l90_probe(struct platform_device *pdev)
 
 		cs47l90->core.adsp[i].lock_regions = WM_ADSP2_REGION_1_9;
 
-		ret = wm_adsp2_init(&cs47l90->core.adsp[i],
-				    &cs47l90->core.adsp_fw_lock);
+		ret = wm_adsp2_init(&cs47l90->core.adsp[i]);
 		if (ret != 0) {
 			for (--i; i >= 0; --i)
 				wm_adsp2_remove(&cs47l90->core.adsp[i]);
