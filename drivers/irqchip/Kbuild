@@ -1,8 +1,13 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-EXTRA_CFLAGS += -DCONFIG_MADERA_IRQ_CS47L90
 
+ifeq ($(CONFIG_ARCH_SDM450), y)
+EXTRA_CFLAGS += -DCONFIG_MADERA_IRQ_CS47L35
+cirrus_irq-madera-objs = irq-madera.o irq-madera-cs47l35.o
+else
+EXTRA_CFLAGS += -DCONFIG_MADERA_IRQ_CS47L90
 cirrus_irq-madera-objs = irq-madera.o irq-madera-cs47l90.o
+endif
 
 obj-m += cirrus_irq-madera.o
