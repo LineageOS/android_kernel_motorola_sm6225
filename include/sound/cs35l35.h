@@ -24,6 +24,7 @@ struct classh_cfg {
 	 *
 	 * Section 4.3 of the datasheet
 	 */
+	/* Internal ClassH Algorithm  */
 	bool classh_bst_override;
 	bool classh_algo_enable;
 	int classh_bst_max_limit;
@@ -57,7 +58,6 @@ struct monitor_cfg {
 	u8 imon_dpth;
 	u8 imon_loc;
 	u8 imon_frm;
-	u8 imon_scale;
 	u8 vmon_dpth;
 	u8 vmon_loc;
 	u8 vmon_frm;
@@ -81,14 +81,10 @@ struct cs35l35_platform_data {
 	bool stereo;
 	/* serial port drive strength */
 	int sp_drv_str;
-	/* serial port drive in unused slots */
-	int sp_drv_unused;
 	/* Boost Power Down with FET */
 	bool bst_pdn_fet_on;
 	/* Boost Voltage : used if ClassH Algo Enabled */
 	int bst_vctl;
-	/* Boost Converter Peak Current CTRL */
-	int bst_ipk;
 	/* Amp Gain Zero Cross */
 	bool gain_zc;
 	/* Audio Input Location */
@@ -97,10 +93,6 @@ struct cs35l35_platform_data {
 	int adv_channel;
 	/* Shared Boost for stereo */
 	bool shared_bst;
-	/* Specifies this amp is using an external boost supply */
-	bool ext_bst;
-	/* Inductor Value */
-	int boost_ind;
 	/* ClassH Algorithm */
 	struct classh_cfg classh_algo;
 	/* Monitor Config */

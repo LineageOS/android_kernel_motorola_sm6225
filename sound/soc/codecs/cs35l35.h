@@ -111,7 +111,7 @@
 
 #define CS35L35_AUDIN_DEPTH_MASK	0x03
 #define CS35L35_AUDIN_DEPTH_SHIFT	0
-#define CS35L35_ADVIN_DEPTH_MASK	0x0C
+#define CS35L35_ADVIN_DEPTH_MASK	0x12
 #define CS35L35_ADVIN_DEPTH_SHIFT	2
 #define CS35L35_SDIN_DEPTH_8		0x01
 #define CS35L35_SDIN_DEPTH_16		0x02
@@ -138,7 +138,7 @@
 #define CS35L35_VBSTMON_DEPTH_SHIFT	0
 #define CS35L35_VPMON_DEPTH_MASK	0x0C
 #define CS35L35_VPMON_DEPTH_SHIFT	2
-#define CS35L35_VPBRSTAT_DEPTH_MASK	0x30
+#define CS35L35_VPBRSTAT_DEPTH_MASK	0x18
 #define CS35L35_VPBRSTAT_DEPTH_SHIFT	4
 #define CS35L35_ZEROFILL_DEPTH_MASK	0x03
 #define CS35L35_ZEROFILL_DEPTH_SHIFT	0x00
@@ -148,15 +148,13 @@
 #define CS35L35_MON_FRM_MASK		0x80
 #define CS35L35_MON_FRM_SHIFT		7
 
-#define CS35L35_IMON_SCALE_MASK		0xF8
-#define CS35L35_IMON_SCALE_SHIFT	3
-
 #define CS35L35_MS_MASK			0x80
 #define CS35L35_MS_SHIFT		7
 #define CS35L35_SPMODE_MASK		0x40
 #define CS35L35_SP_DRV_MASK		0x10
 #define CS35L35_SP_DRV_SHIFT		4
 #define CS35L35_CLK_CTL2_MASK		0xFF
+#define CS35L35_CLK_DIV_MASK		0x3
 #define CS35L35_PDM_MODE_MASK		0x40
 #define CS35L35_PDM_MODE_SHIFT		6
 #define CS35L35_CLK_SOURCE_MASK		0x03
@@ -186,25 +184,10 @@
 
 #define CS35L35_BST_CTL_MASK		0x7F
 #define CS35L35_BST_CTL_SHIFT		0
-#define CS35L35_BST_IPK_MASK		0x1F
-#define CS35L35_BST_IPK_SHIFT		0
 #define CS35L35_AMP_MUTE_MASK		0x20
 #define CS35L35_AMP_MUTE_SHIFT		5
 #define CS35L35_AMP_GAIN_ZC_MASK	0x10
 #define CS35L35_AMP_GAIN_ZC_SHIFT	4
-
-#define CS35L35_AMP_DIGSFT_MASK		0x02
-#define CS35L35_AMP_DIGSFT_SHIFT	1
-
-/* CS35L35_SP_FMT_CTL3 */
-#define CS35L35_SP_I2S_DRV_MASK		0x03
-#define CS35L35_SP_I2S_DRV_SHIFT	0
-
-/* Boost Converter Config */
-#define CS35L35_BST_CONV_COEFF_MASK	0xFF
-#define CS35L35_BST_CONV_SLOPE_MASK	0xFF
-#define CS35L35_BST_CONV_LBST_MASK	0x03
-#define CS35L35_BST_CONV_SWFREQ_MASK	0xF0
 
 /* Class H Algorithm Control */
 #define CS35L35_CH_STEREO_MASK		0x40
@@ -273,32 +256,30 @@
 #define CS35L35_VMON_OVFL		0x08
 #define CS35L35_IMON_OVFL		0x04
 
-/* Mulit-Device Sync */
-#define CS35L35_SYNC_EN_MASK		0x01
-#define CS35L35_SYNC_MS_MASK		0x20
-#define CS35L35_SYNC_MS_SHIFT		5
-#define CS35L35_SYNC_MS_CTRL_MASK	0x10
-#define CS35L35_SYNC_MS_CTRL_SHIFT	4
-#define CS35L35_SYNC_CLK_SEL_MASK	0x02
-#define CS35L35_SYNC_CLK_SEL_SHIFT	1
-
-
 #define CS35L35_FORMATS (SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S16_LE | \
-			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
+			SNDRV_PCM_FMTBIT_S24_LE)
 
 struct  cs35l35_private {
-	struct device *dev;
+	struct i2c_client *i2c_client;
+	struct snd_soc_codec *codec;
 	struct cs35l35_platform_data pdata;
 	struct regmap *regmap;
 	struct regulator_bulk_data supplies[2];
 	int num_supplies;
 	int sysclk;
 	int sclk;
+	int mclk_pll;
+	int mclk_div;
+	int mclk_sp_base;
+	bool tdm_mode;
 	bool pdm_mode;
-	bool i2s_mode;
+	bool i2s_enabled;
 	bool slave_mode;
+	bool pdm_mclk_switch;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
+	/* GPIO for INT */
+	struct gpio_desc *irq_gpio;
 	struct completion pdn_done;
 };
 
