@@ -3437,13 +3437,12 @@
 #define MADERA_HP_POLL_WIDTH				     1
 
 /* (0x029C)  Headphone_Detect_2 */
-#define MADERA_HP_DONE					0x0080
-#define MADERA_HP_DONE_MASK				0x0080
-#define MADERA_HP_DONE_SHIFT				     7
+#define MADERA_HP_DONE_MASK				0x8000
+#define MADERA_HP_DONE_SHIFT				    15
 #define MADERA_HP_DONE_WIDTH				     1
-#define MADERA_HP_LVL_MASK				0x007F
+#define MADERA_HP_LVL_MASK				0x7FFF
 #define MADERA_HP_LVL_SHIFT				     0
-#define MADERA_HP_LVL_WIDTH				     7
+#define MADERA_HP_LVL_WIDTH				    15
 
 #define MADERA_HP_DONE_B				0x8000
 #define MADERA_HP_DONE_B_MASK				0x8000
