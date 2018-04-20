@@ -1,7 +1,9 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include/uapi
+EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER -DCONFIG_SND_SOC_OPALUM
 
 cirrus_madera-objs = madera.o madera-slimbus.o wm_adsp.o
 obj-m += cirrus_madera.o
@@ -17,5 +19,8 @@ obj-m += cirrus_cs47l35.o
 
 cirrus_cs47l90-objs =  cs47l90.o
 obj-m += cirrus_cs47l90.o
+
+cirrus_ospl-objs =  ospl2xx.o
+obj-m += cirrus_ospl.o
 
 obj-m += aov_trigger.o
