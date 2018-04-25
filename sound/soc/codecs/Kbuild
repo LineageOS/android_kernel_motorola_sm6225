@@ -1,8 +1,19 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+HAVE_AUDIO_KERNEL = $(shell test -d $(TOP)/vendor/qcom/opensource/audio-kernel && echo 1)
+
+ifeq ($(HAVE_AUDIO_KERNEL),1)
+$(info audio kernel path exist)
 EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include
 EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include/uapi
+else
+$(info audio kernel path not exist, include techpack audio header)
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
+endif
+
 EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER -DCONFIG_SND_SOC_OPALUM
 
 cirrus_madera-objs = madera.o madera-slimbus.o wm_adsp.o
