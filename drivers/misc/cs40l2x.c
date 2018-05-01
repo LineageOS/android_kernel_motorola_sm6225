@@ -193,6 +193,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	char *pbq_str_alloc, *pbq_str, *pbq_str_tok;
 	char *pbq_seg_alloc, *pbq_seg, *pbq_seg_tok;
+	size_t pbq_seg_len;
 	unsigned int pbq_depth = 0;
 	unsigned int val;
 	int ret;
@@ -213,21 +214,21 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 	cs40l2x->pbq_repeat = 0;
 
 	pbq_str = pbq_str_alloc;
-	strcpy(pbq_str, buf);
+	strlcpy(pbq_str, buf, count);
 
 	pbq_str_tok = strsep(&pbq_str, ",");
 
 	while (pbq_str_tok) {
-		if (strlen(strim(pbq_str_tok)) > CS40L2X_PBQ_SEG_LEN_MAX) {
+		pbq_seg = pbq_seg_alloc;
+		pbq_seg_len = strlcpy(pbq_seg, strim(pbq_str_tok),
+				CS40L2X_PBQ_SEG_LEN_MAX + 1);
+		if (pbq_seg_len > CS40L2X_PBQ_SEG_LEN_MAX) {
 			ret = -E2BIG;
 			goto err_mutex;
 		}
 
-		pbq_seg = pbq_seg_alloc;
-		strcpy(pbq_seg, strim(pbq_str_tok));
-
 		/* waveform specifier */
-		if (strchr(pbq_seg, '.')) {
+		if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '.')) {
 			/* index */
 			pbq_seg_tok = strsep(&pbq_seg, ".");
 
@@ -257,7 +258,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 			cs40l2x->pbq_pairs[pbq_depth++].mag = val;
 
 		/* repetition specifier */
-		} else if (strchr(pbq_seg, '!')) {
+		} else if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '!')) {
 			if (cs40l2x->pbq_repeat) {
 				ret = -EINVAL;
 				goto err_mutex;
@@ -276,7 +277,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 			cs40l2x->pbq_repeat = val;
 
 		/* loop specifier */
-		} else if (strchr(pbq_seg, '~')) {
+		} else if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '~')) {
 			if (cs40l2x->pbq_repeat) {
 				ret = -EINVAL;
 				goto err_mutex;
