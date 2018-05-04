@@ -7,6 +7,12 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := tps61280.ko
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/AndroidKernelModule.mk
+
 # include $(CLEAR_VARS)
 # LOCAL_MODULE := cs40l20-tables.ko
 # LOCAL_MODULE_TAGS := optional

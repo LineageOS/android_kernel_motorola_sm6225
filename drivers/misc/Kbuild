@@ -4,4 +4,5 @@ EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
 
 cirrus_cs40l20-objs = cs40l20.o cs40l20-tables.o
 obj-m += cirrus_cs40l20.o
+obj-m += tps61280.o
 
