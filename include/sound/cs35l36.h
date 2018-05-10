@@ -11,10 +11,6 @@
 #ifndef __CS35L36_H
 #define __CS35L36_H
 
-struct classh_cfg {
-
-};
-
 /* INT/GPIO pin configuration */
 struct irq_cfg {
 	bool is_present;
@@ -28,17 +24,25 @@ struct irq_cfg {
 struct cs35l36_platform_data {
 	bool sclk_frc;
 	bool lrclk_frc;
-	bool right_channel;
+	bool multi_amp_mode;
 	bool dcm_mode;
 	int ldm_mode_sel;
 	bool amp_gain_zc;
+	bool amp_pcm_inv;
 	bool pdm_ldm_exit;
 	bool pdm_ldm_enter;
-	bool high_volt;
+	bool imon_pol_inv;
+	bool vmon_pol_inv;
 	int boost_ind;
 	int bst_vctl;
 	int bst_vctl_sel;
 	int bst_ipk;
+	int vpr_en;
+	int vpr_thrld;
+	int vpr_atk_vol;
+	int vpr_atk_rate;
+	int vpr_wait;
+	int vpr_rel_rate;
 	bool extern_boost;
 	int temp_warn_thld;
 	struct irq_cfg irq_config;

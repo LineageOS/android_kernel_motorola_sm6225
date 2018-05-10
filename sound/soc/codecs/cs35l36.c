@@ -10,6 +10,7 @@
  * published by the Free Software Foundation.
  *
  */
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/version.h>
@@ -45,6 +46,7 @@
  */
 #define CS35L36_VALID_PDATA 0x80000000
 
+
 static const char * const cs35l36_supplies[] = {
 	"VA",
 	"VP",
@@ -56,7 +58,6 @@ struct  cs35l36_private {
 	struct regmap *regmap;
 	struct regulator_bulk_data supplies[2];
 	int num_supplies;
-	void *control_data;
 	int clksrc;
 	int prev_clksrc;
 	int extclk_freq;
@@ -65,15 +66,9 @@ struct  cs35l36_private {
 	int sclk;
 	int chip_version;
 	int rev_id;
-	int rt_dig_vol;
-	bool pdm_mode;
-	bool pcm_mode;
 	struct gpio_desc *reset_gpio;
-	struct gpio_desc *irq_gpio;
 	struct completion global_pup_done;
 	struct completion global_pdn_done;
-	char *fw_data;
-	int fw_size;
 };
 
 struct cs35l36_pll_sysclk_config {
@@ -151,8 +146,6 @@ static const struct cs35l36_pll_sysclk_config cs35l36_pll_sysclk[] = {
 
 static DECLARE_TLV_DB_SCALE(dig_vol_tlv, -10200, 25, 0);
 static DECLARE_TLV_DB_SCALE(amp_gain_tlv, 0, 1, 1);
-static DECLARE_TLV_DB_SCALE(pdm_aud_threshold_tlv, -16200, 6, 0);
-static DECLARE_TLV_DB_SCALE(pdm_ultra_threshold_tlv, -9000, 6, 0);
 
 static const char * const cs35l36_pcm_sftramp_text[] =  {
 	"Off", ".5ms", "1ms", "2ms", "4ms", "8ms", "15ms", "30ms"};
@@ -161,36 +154,12 @@ static SOC_ENUM_SINGLE_DECL(pcm_sft_ramp,
 			    CS35L36_AMP_DIG_VOL_CTRL, 0,
 			    cs35l36_pcm_sftramp_text);
 
-static const char * const cs35l36_pdm_sftrampup_text[] =  {
-	"Off", ".5ms", "1ms", "2ms", "4ms", "8ms", "15ms", "30ms"};
-
-static SOC_ENUM_SINGLE_DECL(pdm_sft_ramp_up,
-			    CS35L36_AMP_PDM_RATE_CTRL, 0,
-			    cs35l36_pdm_sftrampup_text);
-
-static const char * const cs35l36_pdm_sftrampdn_text[] =  {
-	"Off", ".5ms", "1ms", "2ms", "4ms", "8ms", "15ms", "30ms"};
-
-static SOC_ENUM_SINGLE_DECL(pdm_sft_ramp_dn,
-			    CS35L36_AMP_PDM_RATE_CTRL, 3,
-			    cs35l36_pdm_sftrampdn_text);
-
 static const struct snd_kcontrol_new cs35l36_aud_controls[] = {
 	SOC_SINGLE_SX_TLV("Digital PCM Volume", CS35L36_AMP_DIG_VOL_CTRL,
 		      3, 0x4D0, 0x390, dig_vol_tlv),
-	SOC_SINGLE_SX_TLV("Digital PDM Volume", CS35L36_AMP_PDM_VOLUME,
-		      0, 0x4D0, 0x390, dig_vol_tlv),
 	SOC_SINGLE_TLV("AMP PCM Gain", CS35L36_AMP_GAIN_CTRL, 5, 0x13, 0,
 			amp_gain_tlv),
-	SOC_SINGLE_TLV("AMP PDM Gain", CS35L36_AMP_GAIN_CTRL, 0, 0x13, 0,
-			amp_gain_tlv),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
-	SOC_ENUM("PDM Soft Ramp Up", pdm_sft_ramp_up),
-	SOC_ENUM("PDM Soft Ramp Down", pdm_sft_ramp_dn),
-	SOC_SINGLE_TLV("PDM Audio Threshold", CS35L36_AMP_NG_CTRL, 6, 0x0F, 0,
-			pdm_aud_threshold_tlv),
-	SOC_SINGLE_TLV("PDM Ultrasonic Threshold", CS35L36_AMP_NG_CTRL,
-			0, 0x0F, 0, pdm_ultra_threshold_tlv),
 };
 
 static int cs35l36_main_amp_event(struct snd_soc_dapm_widget *w,
@@ -207,6 +176,7 @@ static int cs35l36_main_amp_event(struct snd_soc_dapm_widget *w,
 					CS35L36_GLOBAL_EN_MASK,
 					1 << CS35L36_GLOBAL_EN_SHIFT);
 		usleep_range(2000, 2100);
+
 		regmap_read(cs35l36->regmap, CS35L36_INT4_RAW_STATUS, &reg);
 		if (reg & CS35L36_PLL_UNLOCK_MASK)
 			dev_crit(cs35l36->dev, "PLL Unlocked\n");
@@ -244,39 +214,50 @@ static int cs35l36_boost_event(struct snd_soc_dapm_widget *w,
 	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
 
 	switch (event) {
-		case SND_SOC_DAPM_POST_PMU:
-			if (!cs35l36->pdata.extern_boost)
-				regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
+	case SND_SOC_DAPM_POST_PMU:
+		if (!cs35l36->pdata.extern_boost)
+			regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
 						CS35L36_BST_EN_MASK,
 						CS35L36_BST_EN <<
 						CS35L36_BST_EN_SHIFT);
-			break;
-		case SND_SOC_DAPM_POST_PMD:
-			if (!cs35l36->pdata.extern_boost)
-				regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		if (!cs35l36->pdata.extern_boost)
+			regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL2,
 						CS35L36_BST_EN_MASK,
 						CS35L36_BST_DIS_VP <<
 						CS35L36_BST_EN_SHIFT);
-			break;
-		default:
-			dev_dbg(codec->dev, "Invalid event = 0x%x\n", event);
+		break;
+	default:
+		dev_dbg(codec->dev, "Invalid event = 0x%x\n", event);
 	}
 	return 0;
 }
+static const char * const cs35l36_chan_text[] = {
+	"RX1",
+	"RX2",
+};
+
+static SOC_ENUM_SINGLE_DECL(chansel_enum, CS35L36_ASP_RX1_SLOT, 0,
+		cs35l36_chan_text);
+
+static const struct snd_kcontrol_new cs35l36_chan_mux[] = {
+	SOC_DAPM_ENUM("Input Mux", chansel_enum),
+};
+
+static const char * const cs35l36_boost_text[] = {
+	"On",
+	"Off",
+};
+
+static SOC_ENUM_SINGLE_DECL(boost_enum, SND_SOC_NOPM, 0,
+		cs35l36_boost_text);
+
+static const struct snd_kcontrol_new cs35l36_boost_mux[] = {
+	SOC_DAPM_ENUM("Boost Enable", boost_enum),
+};
 
 static const struct snd_kcontrol_new amp_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx1_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx2_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx3_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx4_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx5_enable_ctrl =
-		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
-static const struct snd_kcontrol_new tx6_enable_ctrl =
 		SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
 
 static const char * const asp_tx_src_text[] = {
@@ -290,7 +271,7 @@ static const unsigned int asp_tx_src_values[] = {
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx1_src_enum,
 				CS35L36_ASP_TX1_SEL, 0,
-				CS35L36_ASP_TX1_EN_MASK,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
@@ -298,8 +279,8 @@ static const struct snd_kcontrol_new asp_tx1_src =
 	SOC_DAPM_ENUM("ASPTX1SRC", asp_tx1_src_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx2_src_enum,
-				CS35L36_ASP_TX2_SEL, 1,
-				CS35L36_ASP_TX2_EN_MASK,
+				CS35L36_ASP_TX2_SEL, 0,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
@@ -307,8 +288,8 @@ static const struct snd_kcontrol_new asp_tx2_src =
 	SOC_DAPM_ENUM("ASPTX2SRC", asp_tx2_src_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx3_src_enum,
-				CS35L36_ASP_TX3_SEL, 2,
-				CS35L36_ASP_TX3_EN_MASK,
+				CS35L36_ASP_TX3_SEL, 0,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
@@ -316,8 +297,8 @@ static const struct snd_kcontrol_new asp_tx3_src =
 	SOC_DAPM_ENUM("ASPTX3SRC", asp_tx3_src_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx4_src_enum,
-				CS35L36_ASP_TX4_SEL, 3,
-				CS35L36_ASP_TX4_EN_MASK,
+				CS35L36_ASP_TX4_SEL, 0,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
@@ -325,40 +306,27 @@ static const struct snd_kcontrol_new asp_tx4_src =
 	SOC_DAPM_ENUM("ASPTX4SRC", asp_tx4_src_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx5_src_enum,
-				CS35L36_ASP_TX5_SEL, 4,
-				CS35L36_ASP_TX5_EN_MASK,
+				CS35L36_ASP_TX5_SEL, 0,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
 static const struct snd_kcontrol_new asp_tx5_src =
-	SOC_DAPM_ENUM("ASPTX6SRC", asp_tx5_src_enum);
+	SOC_DAPM_ENUM("ASPTX5SRC", asp_tx5_src_enum);
 
 static SOC_VALUE_ENUM_SINGLE_DECL(asp_tx6_src_enum,
-				CS35L36_ASP_TX6_SEL, 5,
-				CS35L36_ASP_TX6_EN_MASK,
+				CS35L36_ASP_TX6_SEL, 0,
+				CS35L36_APS_TX_SEL_MASK,
 				asp_tx_src_text,
 				asp_tx_src_values);
 
 static const struct snd_kcontrol_new asp_tx6_src =
 	SOC_DAPM_ENUM("ASPTX6SRC", asp_tx6_src_enum);
 
-static const char * const cs35l36_boost_text[] = {
-	"On",
-	"Off",
-};
-
-static SOC_ENUM_SINGLE_DECL(boost_enum, SND_SOC_NOPM, 0,
-	cs35l36_boost_text);
-
-static const struct snd_kcontrol_new cs35l36_boost_mux[] = {
-	SOC_DAPM_ENUM("Boost Enable", boost_enum),
-};
-
-
 static const struct snd_soc_dapm_widget cs35l36_dapm_widgets[] = {
 
-	SND_SOC_DAPM_AIF_IN("SDIN", NULL, 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_IN("PDMIN", NULL, 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_MUX("Channel Mux", SND_SOC_NOPM, 0, 0, cs35l36_chan_mux),
+	SND_SOC_DAPM_AIF_IN("SDIN", NULL, 0, CS35L36_ASP_RX_TX_EN, 16, 0),
 
 	SND_SOC_DAPM_OUT_DRV_E("Main AMP", CS35L36_PWR_CTRL2, 0, 0, NULL, 0,
 		cs35l36_main_amp_event, SND_SOC_DAPM_POST_PMD |
@@ -366,11 +334,10 @@ static const struct snd_soc_dapm_widget cs35l36_dapm_widgets[] = {
 
 	SND_SOC_DAPM_OUTPUT("SPK"),
 	SND_SOC_DAPM_SWITCH("AMP Enable", SND_SOC_NOPM, 0, 1, &amp_enable_ctrl),
-
 	SND_SOC_DAPM_MIXER("CLASS H", CS35L36_PWR_CTRL3, 4, 0, NULL, 0),
 	SND_SOC_DAPM_MUX_E("BOOST Mux", SND_SOC_NOPM, 0, 0, cs35l36_boost_mux,
 		cs35l36_boost_event, SND_SOC_DAPM_POST_PMD |
-		SND_SOC_DAPM_POST_PMU),
+				SND_SOC_DAPM_POST_PMU),
 
 	SND_SOC_DAPM_AIF_OUT("ASPTX1", NULL, 0, CS35L36_ASP_RX_TX_EN, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX2", NULL, 1, CS35L36_ASP_RX_TX_EN, 1, 0),
@@ -378,13 +345,6 @@ static const struct snd_soc_dapm_widget cs35l36_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_OUT("ASPTX4", NULL, 3, CS35L36_ASP_RX_TX_EN, 3, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX5", NULL, 4, CS35L36_ASP_RX_TX_EN, 4, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX6", NULL, 5, CS35L36_ASP_RX_TX_EN, 5, 0),
-
-	SND_SOC_DAPM_SWITCH("ASPTX1EN", SND_SOC_NOPM, 0, 1, &tx1_enable_ctrl),
-	SND_SOC_DAPM_SWITCH("ASPTX2EN", SND_SOC_NOPM, 0, 1, &tx2_enable_ctrl),
-	SND_SOC_DAPM_SWITCH("ASPTX3EN", SND_SOC_NOPM, 0, 1, &tx3_enable_ctrl),
-	SND_SOC_DAPM_SWITCH("ASPTX4EN", SND_SOC_NOPM, 0, 1, &tx4_enable_ctrl),
-	SND_SOC_DAPM_SWITCH("ASPTX5EN", SND_SOC_NOPM, 0, 1, &tx5_enable_ctrl),
-	SND_SOC_DAPM_SWITCH("ASPTX6EN", SND_SOC_NOPM, 0, 1, &tx6_enable_ctrl),
 
 	SND_SOC_DAPM_MUX("ASPTX1SRC", SND_SOC_NOPM, 0, 0, &asp_tx1_src),
 	SND_SOC_DAPM_MUX("ASPTX2SRC", SND_SOC_NOPM, 0, 0, &asp_tx2_src),
@@ -440,19 +400,12 @@ static const struct snd_soc_dapm_route cs35l36_audio_map[] = {
 	{"ASPTX6SRC", "VBSTMON", "VBSTMON ADC"},
 	{"ASPTX6SRC", "VPMON", "VPMON ADC"},
 
-	{"ASPTX1EN", "Switch", "ASPTX1SRC"},
-	{"ASPTX2EN", "Switch", "ASPTX2SRC"},
-	{"ASPTX3EN", "Switch", "ASPTX3SRC"},
-	{"ASPTX4EN", "Switch", "ASPTX4SRC"},
-	{"ASPTX5EN", "Switch", "ASPTX5SRC"},
-	{"ASPTX6EN", "Switch", "ASPTX6SRC"},
-
-	{"ASPTX1", NULL, "ASPTX1EN"},
-	{"ASPTX2", NULL, "ASPTX2EN"},
-	{"ASPTX3", NULL, "ASPTX3EN"},
-	{"ASPTX4", NULL, "ASPTX4EN"},
-	{"ASPTX5", NULL, "ASPTX5EN"},
-	{"ASPTX6", NULL, "ASPTX6EN"},
+	{"ASPTX1", NULL, "ASPTX1SRC"},
+	{"ASPTX2", NULL, "ASPTX2SRC"},
+	{"ASPTX3", NULL, "ASPTX3SRC"},
+	{"ASPTX4", NULL, "ASPTX4SRC"},
+	{"ASPTX5", NULL, "ASPTX5SRC"},
+	{"ASPTX6", NULL, "ASPTX6SRC"},
 
 	{"AMP Capture", NULL, "ASPTX1"},
 	{"AMP Capture", NULL, "ASPTX2"},
@@ -463,14 +416,12 @@ static const struct snd_soc_dapm_route cs35l36_audio_map[] = {
 
 	{"AMP Enable", "Switch", "AMP Playback"},
 	{"SDIN", NULL, "AMP Enable"},
+	{"Channel Mux", "RX1", "SDIN"},
+	{"Channel Mux", "RX2", "SDIN"},
 	{"BOOST Mux", "On", "SDIN"},
 	{"CLASS H", NULL, "BOOST Mux"},
 	{"Main AMP", NULL, "SDIN"},
 	{"Main AMP", NULL, "CLASS H"},
-	{"SPK", NULL, "Main AMP"},
-
-	{"PDMIN", NULL, "PDM Playback"},
-	{"Main AMP", NULL, "PDMIN"},
 	{"SPK", NULL, "Main AMP"},
 };
 
@@ -478,7 +429,7 @@ static int cs35l36_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct cs35l36_private *cs35l36 =
 			snd_soc_codec_get_drvdata(codec_dai->codec);
-	unsigned int asp_fmt = 0, lrclk_fmt, sclk_fmt, slave_mode;
+	unsigned int asp_fmt, lrclk_fmt, sclk_fmt, slave_mode;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
@@ -500,17 +451,9 @@ static int cs35l36_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_DSP_A:
 		asp_fmt = 0;
-		cs35l36->pcm_mode = true;
-		cs35l36->pdm_mode = false;
 		break;
 	case SND_SOC_DAIFMT_I2S:
 		asp_fmt = 2;
-		cs35l36->pcm_mode = true;
-		cs35l36->pdm_mode = false;
-		break;
-	case SND_SOC_DAIFMT_PDM:
-		cs35l36->pcm_mode = false;
-		cs35l36->pdm_mode = true;
 		break;
 	default:
 		return -EINVAL;
@@ -522,8 +465,6 @@ static int cs35l36_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		sclk_fmt = 0;
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
-		if (asp_fmt == 0)
-			asp_fmt = 4;
 		lrclk_fmt = 0;
 		sclk_fmt = 1;
 		break;
@@ -546,134 +487,9 @@ static int cs35l36_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 				CS35L36_SCLK_INV_MASK,
 				sclk_fmt << CS35L36_SCLK_INV_SHIFT);
 
-	if (cs35l36->pdm_mode) {
-		regmap_update_bits(cs35l36->regmap, CS35L36_DAC_MSM_CFG,
-					CS35L36_PDM_MODE_MASK,
-					CS35L36_PDM_MODE_MASK);
-	} else {
-		regmap_update_bits(cs35l36->regmap, CS35L36_DAC_MSM_CFG,
-					CS35L36_PDM_MODE_MASK, 0);
-		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FORMAT,
-					CS35L36_ASP_FMT_MASK, asp_fmt);
-	}
+	regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FORMAT,
+				CS35L36_ASP_FMT_MASK, asp_fmt);
 
-	return 0;
-}
-
-struct cs35l36_global_fs_config {
-	int rate;
-	int fs_cfg;
-};
-
-static struct cs35l36_global_fs_config cs35l36_fs_rates[] = {
-	{12000, 0x01},
-	{24000, 0x02},
-	{48000, 0x03},
-	{96000, 0x04},
-	{192000, 0x05},
-	{384000, 0x06},
-	{11025, 0x09},
-	{22050, 0x0A},
-	{44100, 0x0B},
-	{88200, 0x0C},
-	{176400, 0x0D},
-	{8000, 0x11},
-	{16000, 0x12},
-	{32000, 0x13},
-};
-
-static int cs35l36_pcm_hw_params(struct snd_pcm_substream *substream,
-				 struct snd_pcm_hw_params *params,
-				 struct snd_soc_dai *dai)
-{
-	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(dai->codec);
-	int i;
-	unsigned int global_fs = params_rate(params);
-	unsigned int asp_width;
-
-	for (i = 0; i < ARRAY_SIZE(cs35l36_fs_rates); i++) {
-		if (global_fs == cs35l36_fs_rates[i].rate)
-			regmap_update_bits(cs35l36->regmap,
-					CS35L36_GLOBAL_CLK_CTRL,
-					CS35L36_GLOBAL_FS_MASK,
-					cs35l36_fs_rates[i].fs_cfg <<
-					CS35L36_GLOBAL_FS_SHIFT);
-	}
-
-	switch (params_width(params)) {
-	case 16:
-		asp_width = CS35L36_ASP_WIDTH_16;
-		break;
-	case 24:
-		asp_width = CS35L36_ASP_WIDTH_24;
-		break;
-	case 32:
-		asp_width = CS35L36_ASP_WIDTH_32;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FRAME_CTRL,
-				CS35L36_ASP_RX_WIDTH_MASK,
-				asp_width << CS35L36_ASP_RX_WIDTH_SHIFT);
-
-		if (cs35l36->pcm_mode) {
-			if (cs35l36->pdata.right_channel)
-				regmap_update_bits(cs35l36->regmap,
-						CS35L36_ASP_RX1_SLOT,
-						CS35L36_ASP_RX1_SLOT_MASK, 1);
-			else
-				regmap_update_bits(cs35l36->regmap,
-						CS35L36_ASP_RX1_SLOT,
-						CS35L36_ASP_RX1_SLOT_MASK, 0);
-		}
-		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_RX_TX_EN,
-					CS35L36_ASP_RX1_EN_MASK,
-					CS35L36_ASP_RX1_EN_MASK);
-	} else {
-		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FRAME_CTRL,
-				CS35L36_ASP_TX_WIDTH_MASK,
-				asp_width << CS35L36_ASP_TX_WIDTH_SHIFT);
-	}
-
-	return 0;
-}
-
-static int cs35l36_dai_set_sysclk(struct snd_soc_dai *dai,
-				int clk_id, unsigned int freq, int dir)
-{
-	struct snd_soc_codec *codec = dai->codec;
-	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
-	int fs1_val = 0;
-	int fs2_val = 0;
-
-	/* Need the SCLK Frequency regardless of sysclk source */
-	cs35l36->sclk = freq;
-
-	if (cs35l36->sclk > 6000000) {
-		fs1_val = 3 * 4 + 4;
-		fs2_val = 8 * 4 + 4;
-	}
-
-	if (cs35l36->sclk <= 6000000) {
-		fs1_val = 3 * ((24000000 + cs35l36->sclk - 1) / cs35l36->sclk) + 4;
-		fs2_val = 5 * ((24000000 + cs35l36->sclk - 1) / cs35l36->sclk) + 4;
-	}
-	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-			CS35L36_TEST_UNLOCK1);
-	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-			CS35L36_TEST_UNLOCK2);
-	regmap_update_bits(cs35l36->regmap, CS35L36_TST_FS_MON0,
-		CS35L36_FS1_WINDOW_MASK, fs1_val);
-	regmap_update_bits(cs35l36->regmap, CS35L36_TST_FS_MON0,
-		CS35L36_FS2_WINDOW_MASK, fs2_val <<
-		CS35L36_FS2_WINDOW_SHIFT);
-	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-			CS35L36_TEST_LOCK1);
-	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-			CS35L36_TEST_LOCK2);
 	return 0;
 }
 
@@ -688,72 +504,8 @@ static int cs35l36_get_clk_config(struct cs35l36_private *cs35l36, int freq)
 			return i;
 		}
 	}
-
 	return -EINVAL;
 }
-
-static const unsigned int cs35l36_src_rates[] = {
-	8000, 12000, 11025, 16000, 22050, 24000, 32000,
-	44100, 48000, 88200, 96000, 176400, 192000, 384000
-};
-
-static const struct snd_pcm_hw_constraint_list cs35l36_constraints = {
-	.count  = ARRAY_SIZE(cs35l36_src_rates),
-	.list   = cs35l36_src_rates,
-};
-
-static int cs35l36_pcm_startup(struct snd_pcm_substream *substream,
-			       struct snd_soc_dai *dai)
-{
-	if (!substream->runtime)
-		return 0;
-
-	snd_pcm_hw_constraint_list(substream->runtime, 0,
-				SNDRV_PCM_HW_PARAM_RATE, &cs35l36_constraints);
-	return 0;
-}
-
-static const struct snd_soc_dai_ops cs35l36_ops = {
-	.startup = cs35l36_pcm_startup,
-	.set_fmt = cs35l36_set_dai_fmt,
-	.hw_params = cs35l36_pcm_hw_params,
-	.set_sysclk = cs35l36_dai_set_sysclk,
-};
-
-static struct snd_soc_dai_driver cs35l36_dai[] = {
-	{
-		.name = "cs35l36-pcm",
-		.id = 0,
-		.playback = {
-			.stream_name = "AMP Playback",
-			.channels_min = 1,
-			.channels_max = 8,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = CS35L36_RX_FORMATS,
-		},
-		.capture = {
-			.stream_name = "AMP Capture",
-			.channels_min = 1,
-			.channels_max = 8,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = CS35L36_TX_FORMATS,
-		},
-		.ops = &cs35l36_ops,
-		.symmetric_rates = 1,
-	},
-	{
-		.name = "cs35l36-pdm",
-		.id = 1,
-		.playback = {
-			.stream_name = "PDM Playback",
-			.channels_min = 1,
-			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = CS35L36_RX_FORMATS,
-		},
-		.ops = &cs35l36_ops,
-	},
-};
 
 static int cs35l36_codec_set_sysclk(struct snd_soc_codec *codec,
 				int clk_id, int source, unsigned int freq,
@@ -764,6 +516,8 @@ static int cs35l36_codec_set_sysclk(struct snd_soc_codec *codec,
 	cs35l36->extclk_freq = freq;
 
 	cs35l36->prev_clksrc = cs35l36->clksrc;
+
+	dev_dbg(cs35l36->dev, "Set CODEC sysclk to %d\n", freq);
 
 	switch (clk_id) {
 	case 0:
@@ -831,7 +585,7 @@ static int cs35l36_codec_set_sysclk(struct snd_soc_codec *codec,
 				CS35L36_TEST_LOCK2);
 	}
 
-	if (cs35l36->pdm_mode) {
+	if (cs35l36->clksrc == CS35L36_PLLSRC_PDMCLK) {
 		if (cs35l36->pdata.ldm_mode_sel) {
 			if (cs35l36->prev_clksrc != CS35L36_PLLSRC_PDMCLK)
 				regmap_update_bits(cs35l36->regmap,
@@ -874,6 +628,184 @@ static int cs35l36_codec_set_sysclk(struct snd_soc_codec *codec,
 	return 0;
 }
 
+static int cs35l36_dai_set_sysclk(struct snd_soc_dai *dai,
+				int clk_id, unsigned int freq, int dir)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
+	int fs1_val = 0;
+	int fs2_val = 0;
+
+	/* Need the SCLK Frequency regardless of sysclk source */
+	cs35l36->sclk = freq;
+
+	dev_dbg(cs35l36->dev, "Set DAI sysclk %d\n", freq);
+	if (cs35l36->sclk > 6000000) {
+		fs1_val = 3 * 4 + 4;
+		fs2_val = 8 * 4 + 4;
+	}
+
+	if (cs35l36->sclk <= 6000000) {
+		fs1_val = 3 * ((24000000 + cs35l36->sclk - 1) / cs35l36->sclk) + 4;
+		fs2_val = 5 * ((24000000 + cs35l36->sclk - 1) / cs35l36->sclk) + 4;
+	}
+	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+			CS35L36_TEST_UNLOCK1);
+	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+			CS35L36_TEST_UNLOCK2);
+	regmap_update_bits(cs35l36->regmap, CS35L36_TST_FS_MON0,
+		CS35L36_FS1_WINDOW_MASK, fs1_val);
+	regmap_update_bits(cs35l36->regmap, CS35L36_TST_FS_MON0,
+		CS35L36_FS2_WINDOW_MASK, fs2_val <<
+		CS35L36_FS2_WINDOW_SHIFT);
+	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+			CS35L36_TEST_LOCK1);
+	regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
+			CS35L36_TEST_LOCK2);
+	return 0;
+}
+
+struct cs35l36_global_fs_config {
+	int rate;
+	int fs_cfg;
+};
+
+static const struct cs35l36_global_fs_config cs35l36_fs_rates[] = {
+	{12000, 0x01},
+	{24000, 0x02},
+	{48000, 0x03},
+	{96000, 0x04},
+	{192000, 0x05},
+	{384000, 0x06},
+	{11025, 0x09},
+	{22050, 0x0A},
+	{44100, 0x0B},
+	{88200, 0x0C},
+	{176400, 0x0D},
+	{8000, 0x11},
+	{16000, 0x12},
+	{32000, 0x13},
+};
+
+static int cs35l36_pcm_hw_params(struct snd_pcm_substream *substream,
+				 struct snd_pcm_hw_params *params,
+				 struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
+	int i, ret = 0;
+	unsigned int global_fs = params_rate(params);
+	unsigned int asp_width;
+	int sclk_rate = params_rate(params) * params_width(params)
+			* params_channels(params);
+
+	if ((cs35l36->clksrc == CS35L36_PLLSRC_SCLK) &&
+		(cs35l36->sclk != sclk_rate)) {
+		dev_dbg(cs35l36->dev, "Reset sclk rate to %d from %d\n",
+			sclk_rate, cs35l36->sclk);
+		dev_dbg(cs35l36->dev, "rate %d width %d channels %d\n", params_rate(params),
+			params_width(params), params_channels(params));
+		ret = cs35l36_codec_set_sysclk(codec, CS35L36_PLLSRC_SCLK, 0,
+			sclk_rate, 0);
+		if (ret != 0) {
+			dev_err(cs35l36->dev, "Can't set codec sysclk %d\n", ret);
+			return ret;
+		}
+		ret = cs35l36_dai_set_sysclk(dai,
+				CS35L36_PLLSRC_SCLK, sclk_rate, 0);
+		if (ret != 0) {
+			dev_err(cs35l36->dev, "Can't set dai sysclk %d\n", ret);
+			return ret;
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(cs35l36_fs_rates); i++) {
+		if (global_fs == cs35l36_fs_rates[i].rate)
+			regmap_update_bits(cs35l36->regmap,
+					CS35L36_GLOBAL_CLK_CTRL,
+					CS35L36_GLOBAL_FS_MASK,
+					cs35l36_fs_rates[i].fs_cfg <<
+					CS35L36_GLOBAL_FS_SHIFT);
+	}
+
+	switch (params_width(params)) {
+	case 16:
+		asp_width = CS35L36_ASP_WIDTH_16;
+		break;
+	case 24:
+		asp_width = CS35L36_ASP_WIDTH_24;
+		break;
+	case 32:
+		asp_width = CS35L36_ASP_WIDTH_32;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FRAME_CTRL,
+				CS35L36_ASP_RX_WIDTH_MASK,
+				asp_width << CS35L36_ASP_RX_WIDTH_SHIFT);
+	} else {
+		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_FRAME_CTRL,
+				CS35L36_ASP_TX_WIDTH_MASK,
+				asp_width << CS35L36_ASP_TX_WIDTH_SHIFT);
+	}
+
+	return ret;
+}
+
+static const unsigned int cs35l36_src_rates[] = {
+	8000, 12000, 11025, 16000, 22050, 24000, 32000,
+	44100, 48000, 88200, 96000, 176400, 192000, 384000
+};
+
+static const struct snd_pcm_hw_constraint_list cs35l36_constraints = {
+	.count  = ARRAY_SIZE(cs35l36_src_rates),
+	.list   = cs35l36_src_rates,
+};
+
+static int cs35l36_pcm_startup(struct snd_pcm_substream *substream,
+			       struct snd_soc_dai *dai)
+{
+	if (!substream->runtime)
+		return 0;
+
+	snd_pcm_hw_constraint_list(substream->runtime, 0,
+				SNDRV_PCM_HW_PARAM_RATE, &cs35l36_constraints);
+	return 0;
+}
+
+static const struct snd_soc_dai_ops cs35l36_ops = {
+	.startup = cs35l36_pcm_startup,
+	.set_fmt = cs35l36_set_dai_fmt,
+	.hw_params = cs35l36_pcm_hw_params,
+	.set_sysclk = cs35l36_dai_set_sysclk,
+};
+
+static struct snd_soc_dai_driver cs35l36_dai[] = {
+	{
+		.name = "cs35l36-pcm",
+		.id = 0,
+		.playback = {
+			.stream_name = "AMP Playback",
+			.channels_min = 1,
+			.channels_max = 8,
+			.rates = SNDRV_PCM_RATE_KNOT,
+			.formats = CS35L36_RX_FORMATS,
+		},
+		.capture = {
+			.stream_name = "AMP Capture",
+			.channels_min = 1,
+			.channels_max = 8,
+			.rates = SNDRV_PCM_RATE_KNOT,
+			.formats = CS35L36_TX_FORMATS,
+		},
+		.ops = &cs35l36_ops,
+		.symmetric_rates = 1,
+	},
+};
+
 static int cs35l36_boost_inductor(struct cs35l36_private *cs35l36, int inductor)
 {
 	regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_COEFF,
@@ -899,20 +831,6 @@ static int cs35l36_boost_inductor(struct cs35l36_private *cs35l36, int inductor)
 		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_SLOPE_LBST,
 					CS35L36_BSTCVRT_LBSTVAL_MASK, 0x01);
 		break;
-	case 1500: /* 1.5uH */
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_SLOPE_LBST,
-					CS35L36_BSTCVRT_SLOPE_MASK,
-					0x3B << CS35L36_BSTCVRT_SLOPE_SHIFT);
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_SLOPE_LBST,
-					CS35L36_BSTCVRT_LBSTVAL_MASK, 0x02);
-		break;
-	case 2200: /* 2.2uH */
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_SLOPE_LBST,
-					CS35L36_BSTCVRT_SLOPE_MASK,
-					0x28 << CS35L36_BSTCVRT_SLOPE_SHIFT);
-		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_SLOPE_LBST,
-					CS35L36_BSTCVRT_LBSTVAL_MASK, 0x03);
-		break;
 	default:
 		dev_err(cs35l36->dev, "%s Invalid Inductor Value %d uH\n",
 			__func__, inductor);
@@ -924,6 +842,7 @@ static int cs35l36_boost_inductor(struct cs35l36_private *cs35l36, int inductor)
 static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 {
 	struct cs35l36_private *cs35l36 = snd_soc_codec_get_drvdata(codec);
+	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
 	int ret = 0;
 
 	if (cs35l36->pdata.sclk_frc)
@@ -970,10 +889,20 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 					CS35L36_AMP_ZC_MASK,
 					CS35L36_AMP_ZC_MASK);
 
+	if (cs35l36->pdata.amp_pcm_inv)
+		regmap_update_bits(cs35l36->regmap, CS35L36_AMP_DIG_VOL_CTRL,
+					CS35L36_AMP_PCM_INV_MASK,
+					CS35L36_AMP_PCM_INV_MASK);
+
 	if (cs35l36->pdata.ldm_mode_sel)
 		regmap_update_bits(cs35l36->regmap, CS35L36_NG_CFG,
 					CS35L36_NG_AMP_EN_MASK,
 					CS35L36_NG_AMP_EN_MASK);
+
+	if (cs35l36->pdata.multi_amp_mode)
+		regmap_update_bits(cs35l36->regmap, CS35L36_ASP_TX_PIN_CTRL,
+					CS35L36_ASP_TX_HIZ_MASK,
+					CS35L36_ASP_TX_HIZ_MASK);
 
 	if (cs35l36->pdata.pdm_ldm_enter)
 		regmap_update_bits(cs35l36->regmap, CS35L36_DAC_MSM_CFG,
@@ -984,6 +913,14 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 		regmap_update_bits(cs35l36->regmap, CS35L36_DAC_MSM_CFG,
 					CS35L36_PDM_LDM_EXIT_MASK,
 					CS35L36_PDM_LDM_EXIT_MASK);
+
+	if (cs35l36->pdata.imon_pol_inv)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VI_SPKMON_FILT,
+					CS35L36_IMON_POL_MASK, 0);
+
+	if (cs35l36->pdata.vmon_pol_inv)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VI_SPKMON_FILT,
+					CS35L36_VMON_POL_MASK, 0);
 
 	if (cs35l36->pdata.bst_vctl)
 		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL1,
@@ -1008,6 +945,39 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 					CS35L36_TEMP_THLD_MASK,
 					cs35l36->pdata.temp_warn_thld);
 
+	if (cs35l36->pdata.vpr_en)
+		regmap_update_bits(cs35l36->regmap, CS35L36_PWR_CTRL3,
+					CS35L36_VPBR_EN_MASK,
+					cs35l36->pdata.vpr_en << CS35L36_VPBR_EN_SHIFT);
+
+	if (0xFFFF != cs35l36->pdata.vpr_thrld)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VPBR_CFG,
+					CS35L36_VPBR_THLD_MASK,
+					cs35l36->pdata.vpr_thrld << CS35L36_VPBR_THLD_SHIFT);
+
+	if (0xFFFF != cs35l36->pdata.vpr_atk_vol)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VPBR_CFG,
+					CS35L36_VPBR_ATK_VOL_MASK,
+					cs35l36->pdata.vpr_atk_vol
+					<< CS35L36_VPBR_ATK_VOL_SHIFT);
+
+	if (0xFFFF != cs35l36->pdata.vpr_atk_rate)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VPBR_CFG,
+					CS35L36_VPBR_ATK_RATE_MASK,
+					cs35l36->pdata.vpr_atk_rate
+					<< CS35L36_VPBR_ATK_RATE_SHIFT);
+
+	if (0xFFFF != cs35l36->pdata.vpr_wait)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VPBR_CFG,
+					CS35L36_VPBR_WAIT_MASK,
+					cs35l36->pdata.vpr_wait
+					<< CS35L36_VPBR_WAIT_SHIFT);
+
+	if (0xFFFF != cs35l36->pdata.vpr_rel_rate)
+		regmap_update_bits(cs35l36->regmap, CS35L36_VPBR_CFG,
+					CS35L36_VPBR_REL_RATE_MASK,
+					cs35l36->pdata.vpr_rel_rate
+					<< CS35L36_VPBR_REL_RATE_SHIFT);
 
 	/*
 	 * Rev B0 has 2 versions
@@ -1025,22 +995,39 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
 				CS35L36_TEST_UNLOCK1);
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-				CS35L36_TEST_UNLOCK2);
+					CS35L36_TEST_UNLOCK2);
 		regmap_update_bits(cs35l36->regmap, CS35L36_BST_ANA2_TEST,
-				CS35L36_BST_OVP_TRIM_MASK,
-				CS35L36_BST_OVP_TRIM_11V <<
-				CS35L36_BST_OVP_TRIM_SHIFT);
+					CS35L36_BST_OVP_TRIM_MASK,
+					CS35L36_BST_OVP_TRIM_11V <<
+					CS35L36_BST_OVP_TRIM_SHIFT);
 		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL2,
-				CS35L36_BST_CTRL_LIM_MASK,
-				1 << CS35L36_BST_CTRL_LIM_SHIFT);
+					CS35L36_BST_CTRL_LIM_MASK,
+					1 << CS35L36_BST_CTRL_LIM_SHIFT);
 		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL1,
-				CS35L35_BSTCVRT_CTL_MASK,
-				CS35L36_BST_CTRL_10V_CLAMP);
+					CS35L35_BSTCVRT_CTL_MASK,
+					CS35L36_BST_CTRL_10V_CLAMP);
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-				CS35L36_TEST_LOCK1);
+					CS35L36_TEST_LOCK1);
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
-				CS35L36_TEST_LOCK2);
+					CS35L36_TEST_LOCK2);
 	}
+	snd_soc_dapm_ignore_suspend(dapm, "SDIN");
+	snd_soc_dapm_ignore_suspend(dapm, "SDOUT");
+	snd_soc_dapm_ignore_suspend(dapm, "SPK");
+	snd_soc_dapm_ignore_suspend(dapm, "VP");
+	snd_soc_dapm_ignore_suspend(dapm, "VBST");
+	snd_soc_dapm_ignore_suspend(dapm, "AMP Enable");
+	snd_soc_dapm_ignore_suspend(dapm, "VSENSE");
+	snd_soc_dapm_ignore_suspend(dapm, "Main AMP");
+
+	/*
+	 * RevA and B require the disabling of
+	 * SYNC_GLOBAL_OVR when GLOBAL_EN = 0.
+	 * Just turn it off from default
+	 */
+	regmap_update_bits(cs35l36->regmap, CS35L36_CTRL_OVRRIDE,
+				CS35L36_SYNC_GLOBAL_OVR_MASK,
+				0 << CS35L36_SYNC_GLOBAL_OVR_SHIFT);
 
 
 	return 0;
@@ -1078,13 +1065,22 @@ static irqreturn_t cs35l36_irq(int irq, void *data)
 	struct cs35l36_private *cs35l36 = data;
 	unsigned int status[4];
 	unsigned int masks[4];
+	int ret = 0;
 
 	/* ack the irq by reading all status registers */
-	regmap_bulk_read(cs35l36->regmap, CS35L36_INT1_STATUS,
+	ret = regmap_bulk_read(cs35l36->regmap, CS35L36_INT1_STATUS,
 				status, ARRAY_SIZE(status));
+	if (ret < 0) {
+		dev_crit(cs35l36->dev, "IRQ status read error: %d\n", ret);
+		return IRQ_NONE;
+	}
 
-	regmap_bulk_read(cs35l36->regmap, CS35L36_INT1_MASK,
+	ret = regmap_bulk_read(cs35l36->regmap, CS35L36_INT1_MASK,
 				masks, ARRAY_SIZE(masks));
+	if (ret < 0) {
+		dev_crit(cs35l36->dev, "IRQ masks read error: %d\n", ret);
+		return IRQ_NONE;
+	}
 
 	/* Check to see if unmasked bits are active */
 	if (!(status[0] & ~masks[0]) && !(status[1] & ~masks[1]) &&
@@ -1244,8 +1240,8 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 		pdata->bst_ipk = (val - 1600) / 50;
 	}
 
-	pdata->right_channel = of_property_read_bool(np,
-					"cirrus,right-channel-amp");
+	pdata->multi_amp_mode = of_property_read_bool(np,
+					"cirrus,multi-amp-mode");
 
 	pdata->sclk_frc = of_property_read_bool(np,
 					"cirrus,sclk-force-output");
@@ -1256,11 +1252,11 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 	pdata->dcm_mode = of_property_read_bool(np,
 					"cirrus,dcm-mode-enable");
 
-	pdata->high_volt = of_property_read_bool(np,
-					"cirrus,version-12v-l37");
-
 	pdata->amp_gain_zc = of_property_read_bool(np,
 					"cirrus,amp-gain-zc");
+
+	pdata->amp_pcm_inv = of_property_read_bool(np,
+					"cirrus,amp-pcm-inv");
 
 	ret = of_property_read_u32(np, "cirrus,ldm-mode-select", &val);
 	if (!ret)
@@ -1271,6 +1267,12 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 
 	pdata->pdm_ldm_enter = of_property_read_bool(np,
 					"cirrus,pdm-ldm-enter");
+
+	pdata->imon_pol_inv = of_property_read_bool(np,
+					"cirrus,imon-pol-inv");
+
+	pdata->vmon_pol_inv = of_property_read_bool(np,
+					"cirrus,vmon-pol-inv");
 
 	if (of_property_read_u32(np, "cirrus,temp-warn-threshold", &val) >= 0)
 		pdata->temp_warn_thld = val | CS35L36_VALID_PDATA;
@@ -1302,6 +1304,60 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 					&val) >= 0)
 			irq_gpio_config->irq_src_sel = val;
 	}
+	pdata->vpr_thrld = 0xFFFF;
+	pdata->vpr_atk_vol = 0xFFFF;
+	pdata->vpr_atk_rate = 0xFFFF;
+	pdata->vpr_wait = 0xFFFF;
+	pdata->vpr_rel_rate = 0xFFFF;
+	ret = of_property_read_u32(np, "cirrus,vpr-en", &val);
+	if (ret >= 0) {
+		pdata->vpr_en = val;
+	}
+	ret = of_property_read_u32(np, "cirrus,vpr-thrld", &val);
+	if (ret >= 0) {
+		if (val < 0x2 || val > 0x1f) {
+			dev_err(&i2c_client->dev,
+				"Invalid VP Threshold Voltage %d mV\n", val);
+			return -EINVAL;
+		}
+		pdata->vpr_thrld = val;
+	}
+	ret = of_property_read_u32(np, "cirrus,vpr-atk-vol", &val);
+	if (ret >= 0) {
+		if (val < 0 || val > 7) {
+			dev_err(&i2c_client->dev,
+				"Invalid Brownout Attack Volume\n");
+			return -EINVAL;
+		}
+		pdata->vpr_atk_vol = val;
+	}
+	ret = of_property_read_u32(np, "cirrus,vpr-atk-rate", &val);
+	if (ret >= 0) {
+		if (val < 0 || val > 7) {
+			dev_err(&i2c_client->dev,
+				"Invalid Brownout Attack Rate\n");
+			return -EINVAL;
+		}
+		pdata->vpr_atk_rate = val;
+	}
+	ret = of_property_read_u32(np, "cirrus,vpr-wait", &val);
+	if (ret >= 0) {
+		if (val < 0 || val > 3) {
+			dev_err(&i2c_client->dev,
+				"Invalid Brownout Wait Time\n");
+			return -EINVAL;
+		}
+		pdata->vpr_wait = val;
+	}
+	ret = of_property_read_u32(np, "cirrus,vpr-rel-rate", &val);
+	if (ret >= 0) {
+		if (val < 0 || val > 7) {
+			dev_err(&i2c_client->dev,
+				"Invalid Brownout Release Rate\n");
+			return -EINVAL;
+		}
+		pdata->vpr_rel_rate = val;
+	}
 	of_node_put(irq_gpio);
 
 	return 0;
@@ -1309,34 +1365,65 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 
 static int cs35l36_pac(struct cs35l36_private *cs35l36)
 {
+	int ret, count;
+	unsigned int val;
 	if (cs35l36->rev_id == CS35L36_REV_B0) {
+		/*
+		 * Magic code for internal PAC
+		 */
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
 				CS35L36_TEST_UNLOCK1);
 		regmap_write(cs35l36->regmap, CS35L36_TESTKEY_CTRL,
 				CS35L36_TEST_UNLOCK2);
 
-		regmap_write(cs35l36->regmap, CS35L36_INT4_MASK,
-				0x00FEFFFF);
-		regmap_write(cs35l36->regmap, CS35L36_PAD_INTERFACE,
-				0x0000003B);
+		usleep_range(9500, 10500);
 
-		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1, 0x00000000);
-		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3, 0x00000001);
+		regmap_write(cs35l36->regmap, CS35L36_INT4_MASK,
+				CS35L36_MCU_CONFIG_UNMASK);
+
+		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1,
+				CS35L36_PAC_RESET);
+		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3,
+				CS35L36_PAC_MEM_ACCESS);
 		regmap_write(cs35l36->regmap, CS35L36_PAC_PMEM_WORD0,
 				CS35L36_B0_PAC_PATCH);
 
-		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3, 0x00000000);
-		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1, 0x00000001);
-		mdelay(200);
+		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3,
+				CS35L36_PAC_MEM_ACCESS_CLR);
+		regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1,
+				CS35L36_PAC_ENABLE_MASK);
+
+		usleep_range(9500, 10500);
+
+		ret = regmap_read(cs35l36->regmap, CS35L36_INT4_STATUS, &val);
+		if (ret < 0) {
+			dev_err(cs35l36->dev, "Failed to read int4_status %d\n",
+				ret);
+			return ret;
+		}
+
+		count = 0;
+		while (!(val & CS35L36_MCU_CONFIG_CLR)) {
+			usleep_range(100, 200);
+			count++;
+
+			ret = regmap_read(cs35l36->regmap, CS35L36_INT4_STATUS,
+					  &val);
+			if (ret < 0) {
+				dev_err(cs35l36->dev, "Failed to read int4_status %d\n",
+					ret);
+				return ret;
+			}
+
+			if (count >= 100)
+				return -EINVAL;
+		}
 
 		regmap_write(cs35l36->regmap, CS35L36_INT4_MASK,
-				0x00FFFFFF);
-		mdelay(200);
+				CS35L36_MCU_CONFIG_MASK);
 
 		regmap_write(cs35l36->regmap, CS35L36_INT4_STATUS,
-			     0x00010000);
-		regmap_write(cs35l36->regmap, CS35L36_PAD_INTERFACE,
-				0x0000003A);
+				CS35L36_MCU_CONFIG_CLR);
 		regmap_update_bits(cs35l36->regmap, CS35L36_PAC_CTL1,
 					CS35L36_PAC_ENABLE_MASK, 0);
 
@@ -1445,6 +1532,24 @@ static const struct reg_sequence cs35l36_revb0_errata_patch[] = {
 	{ CS35L36_TESTKEY_CTRL, CS35L36_TEST_LOCK2 },
 };
 
+static void cs35l36_aou_low_power(struct cs35l36_private *cs35l36)
+{
+	/* Reset PAC */
+	regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1, CS35L36_PAC_RESET_MASK);
+	usleep_range(200, 250);
+	regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1, 0);
+
+	regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3, CS35L36_PAC_MEM_ACCESS);
+
+	regmap_bulk_write(cs35l36->regmap, CS35L36_PAC_PMEM_WORD0,
+			cs35l36_aou_low_power_patch,
+			ARRAY_SIZE(cs35l36_aou_low_power_patch));
+
+	regmap_write(cs35l36->regmap, CS35L36_PAC_CTL3, 0);
+	regmap_write(cs35l36->regmap, CS35L36_PAC_CTL1,
+		CS35L36_PAC_ENABLE_MASK);
+}
+
 static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 			      const struct i2c_device_id *id)
 {
@@ -1522,7 +1627,7 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 	if (cs35l36->reset_gpio)
 		gpiod_set_value_cansleep(cs35l36->reset_gpio, 1);
 
-	usleep_range(2000, 2100);
+	msleep(300);
 
 	/* initialize codec */
 	ret = regmap_read(cs35l36->regmap, CS35L36_SW_RESET, &reg_id);
@@ -1553,58 +1658,57 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 		return ret;
 	}
 
-	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37) {
-			cs35l36->chip_version = CS35L36_12V_L37;
-	} else {
-		if (cs35l36->pdata.high_volt)
-			cs35l36->chip_version = CS35L36_12V_L37;
-		else
-			cs35l36->chip_version = CS35L36_10V_L36;
-	}
+	if ((l37_id_reg & CS35L36_OTP_REV_MASK) == CS35L36_OTP_REV_L37)
+		cs35l36->chip_version = CS35L36_12V_L37;
+	else
+		cs35l36->chip_version = CS35L36_10V_L36;
 
 	if (pdata->irq_config.is_present)
 		irq_pol = cs35l36_irq_gpio_config(cs35l36);
 
-	if (cs35l36->rev_id == CS35L36_REV_A0) {
+	switch (cs35l36->rev_id) {
+	case CS35L36_REV_A0:
 		ret = regmap_register_patch(cs35l36->regmap,
-					cs35l36_reva0_errata_patch,
-					ARRAY_SIZE(cs35l36_reva0_errata_patch));
+				cs35l36_reva0_errata_patch,
+				ARRAY_SIZE(cs35l36_reva0_errata_patch));
 		if (ret < 0) {
-			dev_err(dev, "Failed to apply A0 errata patch %d\n", ret);
+			dev_err(dev, "Failed to apply A0 errata patch %d\n",
+					ret);
 			goto err;
 		}
 		ret = regmap_register_patch(cs35l36->regmap,
 					cs35l36_pac_int_patch,
 					ARRAY_SIZE(cs35l36_pac_int_patch));
 		if (ret < 0) {
-			dev_err(dev, "Failed to apply A0PAC errata patch %d\n", ret);
+			dev_err(dev, "Failed to apply A0PAC errata patch %d\n",
+					ret);
 			goto err;
 		}
-	} else if (cs35l36->rev_id == CS35L36_REV_B0) {
+		break;
+	case CS35L36_REV_B0:
 		ret = cs35l36_pac(cs35l36);
 		if (ret < 0) {
 			dev_err(dev, "Failed to Trim OTP %d\n", ret);
 			goto err;
 		}
+
 		ret = regmap_register_patch(cs35l36->regmap,
 					cs35l36_revb0_errata_patch,
 					ARRAY_SIZE(cs35l36_revb0_errata_patch));
 		if (ret < 0) {
-			dev_err(dev, "Failed to apply B0 errata patch %d\n", ret);
+			dev_err(dev, "Failed to apply B0 errata patch %d\n",
+					ret);
 			goto err;
 		}
+		cs35l36_aou_low_power(cs35l36);
+		break;
 	}
 
-	cs35l36->irq_gpio = devm_gpiod_get_optional(&i2c_client->dev,
-		"irq", GPIOD_IN);
-	if (IS_ERR(cs35l36->irq_gpio))
-		return PTR_ERR(cs35l36->irq_gpio);
-
-	ret = devm_request_threaded_irq(&i2c_client->dev,
-					gpiod_to_irq(cs35l36->irq_gpio),
-					NULL, cs35l36_irq,
-					 irq_pol | IRQF_ONESHOT, /* IRQF_TRIGGER_LOW */
+	ret = devm_request_threaded_irq(dev, i2c_client->irq, NULL, cs35l36_irq,
+					IRQF_ONESHOT |
+					irq_pol,
 					"cs35l36", cs35l36);
+
 	if (ret != 0) {
 		dev_err(dev, "Failed to request IRQ: %d\n", ret);
 		goto err;
