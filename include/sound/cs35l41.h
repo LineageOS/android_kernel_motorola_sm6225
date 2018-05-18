@@ -1,7 +1,7 @@
 /*
  * linux/sound/cs35l41.h -- Platform data for CS35L41
  *
- * Copyright (c) 2016 Cirrus Logic Inc.
+ * Copyright (c) 2018 Cirrus Logic Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -22,7 +22,7 @@ struct classh_cfg {
 	int classh_wk_fet_thld;
 };
 
-struct cs35l41_irq_cfg {
+struct irq_cfg {
 	bool is_present;
 	bool irq_pol_inv;
 	bool irq_out_en;
@@ -34,25 +34,46 @@ struct cs35l41_platform_data {
 	bool lrclk_frc;
 	bool right_channel;
 	bool amp_gain_zc;
-	bool dsp_ng_enable;
+	bool ng_enable;
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
+	int bst_cap;
 	int temp_warn_thld;
-	int dsp_ng_pcm_thld;
-	int dsp_ng_delay;
+	int ng_pcm_thld;
+	int ng_delay;
 	int dout_hiz;
-	unsigned int hw_ng_sel;
-	unsigned int hw_ng_delay;
-	unsigned int hw_ng_thld;
-	unsigned int fixed_rate;
-	unsigned int fixed_width;
-	unsigned int fixed_wl;
-	bool fixed_params;
-	const char * dsp_part_name;
-	struct cs35l41_irq_cfg irq_config1;
-	struct cs35l41_irq_cfg irq_config2;
+	struct irq_cfg irq_config1;
+	struct irq_cfg irq_config2;
 	struct classh_cfg classh_config;
 };
+
+struct cs35l41_private {
+	struct wm_adsp dsp; /* needs to be first member */
+	struct snd_soc_codec *codec;
+	struct cs35l41_platform_data pdata;
+	struct device *dev;
+	struct regmap *regmap;
+	struct regulator_bulk_data supplies[2];
+	int num_supplies;
+	int irq;
+	int clksrc;
+	int extclk_freq;
+	int extclk_cfg;
+	int sclk;
+	bool tdm_mode;
+	bool i2s_mode;
+	bool swire_mode;
+	bool halo_booted;
+	bool bus_spi;
+	struct mutex rate_lock;
+	/* GPIO for /RST */
+	struct gpio_desc *reset_gpio;
+	struct completion global_pup_done;
+	struct completion global_pdn_done;
+};
+
+int cs35l41_probe(struct cs35l41_private *cs35l41,
+				struct cs35l41_platform_data *pdata);
 
 #endif /* __CS35L41_H */

@@ -1,7 +1,7 @@
 /*
- * cs35l41.h -- CS35L41 definitions
+ * cs35l41.h -- CS35L41 ALSA SoC audio driver
  *
- * Copyright 2016 Cirrus Logic, Inc.
+ * Copyright 2018 Cirrus Logic, Inc.
  *
  * Author: Brian Austin <brian.austin@cirrus.com>
  *         David Rhodes <david.rhodes@cirrus.com>
@@ -536,6 +536,7 @@
 #define CS35L41_MAX_CACHE_REG		0x0000006F
 #define CS35L41_OTP_SIZE_WORDS		32
 #define CS35L41_NUM_OTP_ELEM		100
+#define CS35L41_NUM_OTP_MAPS		4
 
 #define CS35L41_VALID_PDATA		0x80000000
 
@@ -560,8 +561,17 @@
 #define CS35L41_BST_CTL_SEL_REG		0x00
 #define CS35L41_BST_CTL_SEL_CLASSH	0x01
 #define CS35L41_BST_IPK_MASK		0x7F
+#define CS35L41_BST_IPK_SHIFT		0
 #define CS35L41_BST_LIM_MASK		0x4
 #define CS35L41_BST_LIM_SHIFT		2
+#define CS35L41_BST_K1_MASK		0x000000FF
+#define CS35L41_BST_K1_SHIFT		0
+#define CS35L41_BST_K2_MASK		0x0000FF00
+#define CS35L41_BST_K2_SHIFT		8
+#define CS35L41_BST_SLOPE_MASK		0x0000FF00
+#define CS35L41_BST_SLOPE_SHIFT		8
+#define CS35L41_BST_LBST_VAL_MASK	0x00000003
+#define CS35L41_BST_LBST_VAL_SHIFT	0
 
 #define CS35L41_TEMP_THLD_MASK		0x03
 #define CS35L41_VMON_IMON_VOL_MASK	0x07FF07FF
@@ -579,19 +589,12 @@
 #define CS35L41_CH_WKFET_THLD_MASK	0x0F00
 #define CS35L41_CH_WKFET_THLD_SHIFT	8
 
-#define CS35L41_HW_NG_SEL_MASK		0x3F00
-#define CS35L41_HW_NG_SEL_SHIFT		8
-#define CS35L41_HW_NG_DLY_MASK		0x0070
-#define CS35L41_HW_NG_DLY_SHIFT		4
-#define CS35L41_HW_NG_THLD_MASK		0x0007
-#define CS35L41_HW_NG_THLD_SHIFT	0
-
-#define CS35L41_DSP_NG_ENABLE_MASK	0x00010000
-#define CS35L41_DSP_NG_ENABLE_SHIFT	16
-#define CS35L41_DSP_NG_THLD_MASK	0x7
-#define CS35L41_DSP_NG_THLD_SHIFT	0
-#define CS35L41_DSP_NG_DELAY_MASK	0x0F00
-#define CS35L41_DSP_NG_DELAY_SHIFT	8
+#define CS35L41_NG_ENABLE_MASK		0x00010000
+#define CS35L41_NG_ENABLE_SHIFT		16
+#define CS35L41_NG_THLD_MASK		0x7
+#define CS35L41_NG_THLD_SHIFT		0
+#define CS35L41_NG_DELAY_MASK		0x0F00
+#define CS35L41_NG_DELAY_SHIFT		8
 
 #define CS35L41_ASP_FMT_MASK		0x0700
 #define CS35L41_ASP_FMT_SHIFT		8
@@ -655,11 +658,6 @@
 #define CS35L36_PUP_DONE_IRQ_UNMASK	0x5F
 #define CS35L36_PUP_DONE_IRQ_MASK	0xBF
 
-#define CS35L41_AMP_VOL_PCM_SHIFT	0x03
-#define CS35L41_AMP_VOL_PCM_MASK	0x7FF
-#define CS35L41_AMP_VOL_PCM_DEFAULT	0x0000
-#define CS35L41_AMP_VOL_PCM_MUTE	0x0400
-
 #define CS35L41_AMP_SHORT_ERR		0x80000000
 #define CS35L41_BST_SHORT_ERR		0x0100
 #define CS35L41_TEMP_WARN		0x8000
@@ -667,7 +665,8 @@
 #define CS35L41_BST_OVP_ERR		0x40
 #define CS35L41_BST_DCM_UVP_ERR		0x80
 #define CS35L41_OTP_BOOT_DONE		0x02
-#define CS35L41_PLL_UNLOCK			0x10
+#define CS35L41_PLL_UNLOCK		0x10
+#define CS35L41_OTP_BOOT_ERR		0x80000000
 
 #define CS35L41_AMP_SHORT_ERR_RLS	0x02
 #define CS35L41_BST_SHORT_ERR_RLS	0x04
@@ -699,6 +698,8 @@
 #define CS35L41_DSP_N_TX_RATES		8
 #define CS35L41_HALO_CORE_RESET		0x00000200
 
+#define CS35L41_SPI_MAX_FREQ_OTP	4000000
+
 #define CS35L41_RX_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
 #define CS35L41_TX_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE \
 				| SNDRV_PCM_FMTBIT_S32_LE)
@@ -706,25 +707,23 @@
 bool cs35l41_readable_reg(struct device *dev, unsigned int reg);
 bool cs35l41_volatile_reg(struct device *dev, unsigned int reg);
 
-struct otp_packed_element_t {
+struct cs35l41_otp_packed_element_t {
 	u32 reg;
 	u8 shift;
 	u8 size;
 };
 
-struct otp_map_element_t {
+struct cs35l41_otp_map_element_t {
 	u32 id;
 	u32 num_elements;
-	const struct otp_packed_element_t *map;
+	const struct cs35l41_otp_packed_element_t *map;
+	u32 bit_offset;
+	u32 word_offset;
 };
 
 extern const struct reg_default cs35l41_reg[CS35L41_MAX_CACHE_REG];
-extern const struct otp_map_element_t otp_map_map[3];
-
-#define CS35L41_OTP_HDR_MASK_1	0xFFFFFFFE
-#define CS35L41_OTP_HDR_MASK_2	0x0000FFFF
-#define CS35L41_OTP_HDR_VAL_1	0x00001500
-#define CS35L41_OTP_HDR_VAL_2	0x00000300
+extern const struct cs35l41_otp_map_element_t
+				cs35l41_otp_map_map[CS35L41_NUM_OTP_MAPS];
 
 #define CS35L41_CSPL_CMD_NONE			0
 #define CS35L41_CSPL_CMD_MUTE			1
@@ -735,6 +734,5 @@ extern const struct otp_map_element_t otp_map_map[3];
 #define CS35L41_CSPL_COMMAND			0x02800210
 #define CS35L41_CSPL_CAL_STRUCT_ADDR		0x02800224
 #define CS35L41_AMB_TEMP_DEFAULT		25
-
 
 #endif /*__CS35L41_H__*/
