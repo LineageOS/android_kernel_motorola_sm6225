@@ -3,12 +3,35 @@ CS35L41 Speaker Amplifier
 Required properties:
 
   - compatible : "cirrus,cs35l41"
+                 "cirrus,cs35l40"
 
   - reg : the SPI chip select line for the device
 
   - VA-supply, VP-supply : power supplies for the device,
     as covered in
     Documentation/devicetree/bindings/regulator/regulator.txt.
+
+
+  Boost hardware configuration:
+
+      These three properties should be used together to specify the external
+      component configuration of the part. See section 4.3.6 of the datasheet
+      for details regarding how these values are used to configure the
+      digital boost converter's control loop.
+
+      - cirrus,boost-peak-milliamp : Boost-converter peak current limit in mA.
+      Configures the peak current by monitoring the current through the boost FET.
+      Range starts at 1600 mA and goes to a maximum of 4500 mA with increments
+      of 50 mA.
+      (Default) 4.50 Amps
+
+      - cirrus,boost-ind-nanohenry : Boost inductor value, expressed in nH. Valid
+      values include 1000, 1200, 1500 and 2200.
+
+      - cirrus,boost-cap-microfarad : Total equivalent boost capacitance on the VBST
+      and VAMP pins, derated at 11 volts DC. The value must be rounded to the
+      nearest integer and expressed in uF.
+
 
 Optional properties:
   - cirrus,sclk-force-output : Audio serial port SCLK force
@@ -30,12 +53,6 @@ Optional properties:
   11000 mV with increments of 50 mV.
   (Default) VP
 
-  - cirrus,boost-peak-milliamp : Boost-converter peak current limit in mA.
-  Configures the peak current by monitoring the current through the boost FET.
-  Range starts at 1600 mA and goes to a maximum of 4500 mA with increments
-  of 50 mA.
-  (Default) 4.50 Amps
-
   - cirrus,amp-gain-zc : Boolean to determine whether to use the amplifier
   gain-change zero-crossing feature. If the feature is enabled, any
   user-controlled amplifier gain change will occur on a zero-crossing point.
@@ -49,7 +66,6 @@ Optional properties:
   2 = (Default) Logic 0 during unused slots, but Hi-Z while all transmit channels disabled
   3 = Hi-Z during unused slots and while all transmit channels disabled
 
-
   - cirrus,temp-warn-threshold : Amplifier overtemperature warning threshold.
   Configures the threshold at which the overtemperature warning condition occurs.
   When the threshold is met, the ovetemperature warning attenuation is applied
@@ -61,46 +77,10 @@ Optional properties:
   2 = 125C (Default)
   3 = 135C
 
-  - cirrus,hw-noise-gate-select : Hardware Noise Gate feature. Each bit selects
-  a different block for detection.
-
-  000000 - All noise gating functionality disbled
-  xxxxx1 - Amplifier noise gating detection enabled
-  xxxx1x - Boost converter DCM detection enabled
-  xxx1xx - VMON low power mode detection enabled
-  xx1xxx - IMON low power mode detection enabled
-  x1xxxx - VP brownout prevention detection enabled
-  1xxxxx - VBST brownout prevention detection enabled
-
-  - cirrus,hw-noise-gate-delay : Time that the incoming audio signal must be
-  below the noise gate threshold prior to entering a noise gated state
-
-  0 = 5 ms
-  1 = 10 ms
-  2 = 25 ms
-  3 = 50 ms (default)
-  4 = 100 ms
-  5 = 250 ms
-  6 = 500 ms
-  7 = 1 s
-
-  - cirrus,hw-noise-gate-threshold : Threshold of audio signal input which the
-  noise gate considers the input audio to be at a low enough level to be
-  valid to enter a noise gating state of operation.
-
-  0 = 0.654 mVpk
-  1 = 0.328 mVpk
-  2 = 0.164 mVpk
-  3 = 0.082 mVpk (default)
-  4 = 0.041 mVpk
-  5 = 0.021 mVpk
-  6 = 0.010 mVpk
-  7 = True zero data (no LSB dither)
-
-  - cirrus,dsp-noise-gate-enable : DSP Noise Gate feature. If present, noise
+  - cirrus,noise-gate-enable : DSP Noise Gate feature. If present, noise
   gate feature will be enabled.
 
-  - cirrus,dsp-noise-gate-threshold : Threshold of audio signal input which the
+  - cirrus,noise-gate-threshold : Threshold of audio signal input which the
   noise gate considers the input audio to be at a low enough level to be
   valid to enter a noise gating state of operation.
 
@@ -113,7 +93,7 @@ Optional properties:
   6 = -102 dBFS
   7 = -108 dBFS
 
-  - cirrus,dsp-noise-gate-delay : Time that the incoming audio signal must be
+  - cirrus,noise-gate-delay : Time that the incoming audio signal must be
   below the noise gate threshold prior to entering a noise gated state
 
   0 = 5 ms
@@ -211,17 +191,8 @@ cs35l41: cs35l41@2 {
 	reg = <2>;
 	VA-supply = <&dummy_vreg>;
 	VP-supply = <&dummy_vreg>;
+
+	cirrus,boost-peak-milliamp = <4500>;
+	cirrus,boost-ind-nanohenry = <1000>;
+	cirrus,boost-cap-microfarad = <15>;
 };
-
-Optional Fixed HW Params sub-node:
-
-The cs35l41 node can have a single "cirrus,fixed-hw-params" sub-node for
-setting the HW params to a fixed rate, width, and word-length.
-
-Example:
-
-  cirrus,fixed-hw-params {
-    cirrus,fixed-rate = <48000>;
-    cirrus,fixed-width = <16>;
-    cirrus,fixed-wl = <16>;
-  };

@@ -1,7 +1,7 @@
 /*
  * cs35l41-tables.c -- CS35L41 ALSA SoC audio driver
  *
- * Copyright 2016 Cirrus Logic, Inc.
+ * Copyright 2018 Cirrus Logic, Inc.
  *
  * Author: Brian Austin <brian.austin@cirrus.com>
  *         David Rhodes <david.rhodes@cirrus.com>
@@ -12,7 +12,7 @@
  *
  */
 
-#include <linux/mfd/cs35l41/registers.h>
+#include "cs35l41.h"
 
 const struct reg_default cs35l41_reg[CS35L41_MAX_CACHE_REG] = {
 	{CS35L41_TEST_KEY_CTL,			0x00000000},
@@ -665,13 +665,15 @@ bool cs35l41_volatile_reg(struct device *dev, unsigned int reg)
 	case CS35L41_DSP1_YMEM_UNPACK24_0 ... CS35L41_DSP1_YMEM_UNPACK24_2045:
 	case CS35L41_DSP1_PMEM_0 ... CS35L41_DSP1_PMEM_5114:
 	case CS35L41_DSP1_CCM_CORE_CTRL ... CS35L41_DSP1_WDT_STATUS:
+	case CS35L41_OTP_MEM0 ... CS35L41_OTP_MEM31:
 		return true;
 	default:
 		return false;
 	}
 }
 
-static const struct otp_packed_element_t otp_map_1[CS35L41_NUM_OTP_ELEM] = {
+static const struct cs35l41_otp_packed_element_t
+					otp_map_1[CS35L41_NUM_OTP_ELEM] = {
 	/* addr         shift   size */
 	{0x00002030,	0,	4}, /*TRIM_OSC_FREQ_TRIM*/
 	{0x00002030,	7,	1}, /*TRIM_OSC_TRIM_DONE*/
@@ -774,7 +776,8 @@ static const struct otp_packed_element_t otp_map_1[CS35L41_NUM_OTP_ELEM] = {
 	{0x00017044,	0,	24}, /*LOT_NUMBER*/
 };
 
-static const struct otp_packed_element_t otp_map_2[CS35L41_NUM_OTP_ELEM] = {
+static const struct cs35l41_otp_packed_element_t
+					otp_map_2[CS35L41_NUM_OTP_ELEM] = {
 	/* addr         shift   size */
 	{0x00002030,	0,	4}, /*TRIM_OSC_FREQ_TRIM*/
 	{0x00002030,	7,	1}, /*TRIM_OSC_TRIM_DONE*/
@@ -877,20 +880,34 @@ static const struct otp_packed_element_t otp_map_2[CS35L41_NUM_OTP_ELEM] = {
 	{0x00017044,	0,	24}, /*LOT_NUMBER*/
 };
 
-const struct otp_map_element_t otp_map_map[3] = {
+const struct cs35l41_otp_map_element_t
+				cs35l41_otp_map_map[CS35L41_NUM_OTP_MAPS] = {
 	{
 		.id = 0x01,
 		.map = otp_map_1,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 	{
 		.id = 0x02,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 	{
 		.id = 0x03,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
+	},
+	{
+		.id = 0x06,
+		.map = otp_map_2,
+		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 };
