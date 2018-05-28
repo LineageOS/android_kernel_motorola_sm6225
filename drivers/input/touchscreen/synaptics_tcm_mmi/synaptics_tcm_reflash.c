@@ -58,7 +58,7 @@
 
 #define DISP_CONFIG_ID "DISPLAY"
 
-#define FB_READY_COUNT 2
+#define FB_READY_COUNT 1
 
 #define FB_READY_WAIT_MS 100
 
