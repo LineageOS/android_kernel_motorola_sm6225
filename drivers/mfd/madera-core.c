@@ -296,18 +296,6 @@ static int madera_runtime_resume(struct device *dev)
 	if (ret)
 		goto err;
 
-	mutex_lock(&madera->reg_setting_lock);
-	regmap_write(madera->regmap, 0x80, 0x3);
-	ret = regcache_sync_region(madera->regmap, MADERA_HP_CHARGE_PUMP_8,
-				   MADERA_HP_CHARGE_PUMP_8);
-	regmap_write(madera->regmap, 0x80, 0x0);
-	mutex_unlock(&madera->reg_setting_lock);
-
-	if (ret) {
-		dev_err(madera->dev, "Failed to restore keyed cache\n");
-		goto err;
-	}
-
 	ret = regcache_sync(madera->regmap);
 	if (ret) {
 		dev_err(madera->dev,
