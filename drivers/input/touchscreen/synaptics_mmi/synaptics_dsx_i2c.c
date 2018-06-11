@@ -6851,6 +6851,7 @@ static int rmi_reboot(struct notifier_block *nb,
 		container_of(nb, struct synaptics_rmi4_data, rmi_reboot);
 	const struct synaptics_dsx_platform_data *platform_data =
 			rmi4_data->board;
+	struct regulator *reg_ptr;
 	int state = STATE_INVALID;
 
 	if (likely(rmi4_data))
@@ -6858,6 +6859,9 @@ static int rmi_reboot(struct notifier_block *nb,
 
 	if (STATE_INVALID == state)
 		goto out;
+
+	/* At this point, we're all good with clean-up works */
+	synaptics_dsx_set_state_safe(rmi4_data, STATE_INVALID);
 
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
@@ -6867,27 +6871,27 @@ static int rmi_reboot(struct notifier_block *nb,
 	fb_unregister_client(&rmi4_data->panel_nb);
 #endif
 	if (rmi4_data->irq_enabled) {
+		rmi4_data->irq_enabled = false;
 		disable_irq(rmi4_data->irq);
 		free_irq(rmi4_data->irq, rmi4_data);
-		rmi4_data->irq_enabled = false;
 	}
 	dev_info(&rmi4_data->i2c_client->dev, "touch shutdown\n");
 
 	if (!IS_ERR(rmi4_data->vdd_quirk)) {
-		regulator_force_disable(rmi4_data->vdd_quirk);
-		regulator_put(rmi4_data->vdd_quirk);
+		reg_ptr = rmi4_data->vdd_quirk;
+		rmi4_data->vdd_quirk = ERR_PTR(-ENODEV);
+		regulator_force_disable(reg_ptr);
+		regulator_put(reg_ptr);
 	}
 
-	if (platform_data->regulator_en) {
+	if (platform_data->regulator_en && !IS_ERR(rmi4_data->regulator)) {
+		reg_ptr = rmi4_data->regulator;
+		rmi4_data->regulator = ERR_PTR(-ENODEV);
 		pr_debug("touch reboot - disable regulators\n");
-		regulator_force_disable(rmi4_data->regulator);
-		regulator_put(rmi4_data->regulator);
+		regulator_force_disable(reg_ptr);
+		regulator_put(reg_ptr);
 		msleep(1000);
 	}
-
-	/* At this point, we're all good with clean-up works */
-	synaptics_dsx_set_state_safe(rmi4_data, STATE_INVALID);
-
 out:
 	return NOTIFY_DONE;
 }
