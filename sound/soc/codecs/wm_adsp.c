@@ -3461,6 +3461,8 @@ int wm_adsp2_preloader_put(struct snd_kcontrol *kcontrol,
 		(struct soc_mixer_control *)kcontrol->private_value;
 	char preload[32];
 
+	if (!dsp->suffix)
+		dsp->suffix = "";
 	if (codec->component.name_prefix)
 		snprintf(preload, ARRAY_SIZE(preload), "%s DSP%u%s Preload",
 			codec->component.name_prefix, mc->shift, dsp->suffix);
