@@ -813,7 +813,7 @@ static ssize_t reg_dump_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
 {
-    u16 i = 0;
+	u16 i = 0;
 	u8 reg_value = 0;
 	u16 register_number = 0;
 	//u16 offset_value = 0;
@@ -828,14 +828,70 @@ static ssize_t reg_dump_show(struct class *class,
 		return (p-buf);
 	}
 
-    register_number = sizeof(sx9325_i2c_reg_setup)/sizeof(smtc_reg_data_t);
+	read_register(this, SX932x_IRQSTAT_REG, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "IRQSTAT(0x%02x)=0x%02x\n",
+			SX932x_IRQSTAT_REG, reg_value);
 
-    for (i = 0; i < register_number; i++)
-    {
-       read_register(this, sx9325_i2c_reg_setup[i].reg, &reg_value);
-	   p += snprintf(p, PAGE_SIZE, "ENABLE(0x%02x)=0x%02x\n",
-			sx9325_i2c_reg_setup[i].reg, sx9325_i2c_reg_setup[i].val);
+	read_register(this, SX932x_STAT0_REG, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "STAT0(0x%02x)=0x%02x\n",
+			SX932x_STAT0_REG, reg_value);
+
+	read_register(this, SX932x_STAT1_REG, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "STAT1(0x%02x)=0x%02x\n",
+			SX932x_STAT1_REG, reg_value);
+
+	read_register(this, SX932x_STAT2_REG, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "STAT2(0x%02x)=0x%02x\n",
+			SX932x_STAT2_REG, reg_value);
+
+	read_register(this, SX932x_STAT3_REG, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "STAT3(0x%02x)=0x%02x\n",
+			SX932x_STAT3_REG, reg_value);
+
+	register_number = sizeof(sx9325_i2c_reg_setup)/sizeof(smtc_reg_data_t);
+
+	for (i = 0; i < register_number; i++)
+	{
+		read_register(this, sx9325_i2c_reg_setup[i].reg, &reg_value);
+		p += snprintf(p, PAGE_SIZE, "ENABLE(0x%02x)=0x%02x\n",
+			sx9325_i2c_reg_setup[i].reg, reg_value);
 	}
+
+	read_register(this, SX932x_CPSRD, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "CPSRD(0x%02x)=0x%02x\n",
+			SX932x_CPSRD, reg_value);
+
+	read_register(this, SX932x_USEMSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "USEMSB(0x%02x)=0x%02x\n",
+			SX932x_USEMSB, reg_value);
+
+	read_register(this, SX932x_USELSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "USELSB(0x%02x)=0x%02x\n",
+			SX932x_USELSB, reg_value);
+
+	read_register(this, SX932x_AVGMSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "AVGMSB(0x%02x)=0x%02x\n",
+			SX932x_AVGMSB, reg_value);
+
+	read_register(this, SX932x_AVGLSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "AVGLSB(0x%02x)=0x%02x\n",
+			SX932x_AVGLSB, reg_value);
+
+	read_register(this, SX932x_DIFFMSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "DIFFMSB(0x%02x)=0x%02x\n",
+			SX932x_DIFFMSB, reg_value);
+
+	read_register(this, SX932x_DIFFLSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "DIFFLSB(0x%02x)=0x%02x\n",
+			SX932x_DIFFLSB, reg_value);
+
+	read_register(this, SX932x_OFFSETMSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "OFFSETMSB(0x%02x)=0x%02x\n",
+			SX932x_OFFSETMSB, reg_value);
+
+	read_register(this, SX932x_OFFSETLSB, &reg_value);
+	p += snprintf(p, PAGE_SIZE, "OFFSETLSB(0x%02x)=0x%02x\n",
+			SX932x_OFFSETLSB, reg_value);
 
 	reg_value = gpio_get_value(this->board->irq_gpio);
 	p += snprintf(p, PAGE_SIZE, "NIRQ=%d\n", reg_value);
