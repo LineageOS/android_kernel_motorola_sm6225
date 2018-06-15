@@ -16,6 +16,17 @@ endif
 
 EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER -DCONFIG_SND_SOC_OPALUM
 
+ifeq ($(KDIR),)
+PLMA_HOSTSW_DIR=$(realpath -f $(srctree)/$(src))
+else
+PLMA_HOSTSW_DIR=$(realpath -f $(src))
+endif
+GIT_VERSION=$(shell cd $(PLMA_HOSTSW_DIR); git describe --tags --dirty --match "v[0-9]*.[0-9]*.[0-9]*")
+EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
+# debugging support (also enables trace_printk)
+EXTRA_CFLAGS += -DDEBUG -DTFA9874_NONDSP_STEREO
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/sound/soc/codecs/inc
+EXTRA_CFLAGS += -Werror
 cirrus_madera-objs = madera.o madera-slimbus.o
 obj-m += cirrus_madera.o
 
@@ -47,3 +58,12 @@ ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
 else
    cirrus_cs35l41-objs += cs35l41-i2c.o
 endif
+snd_soc_tfa9874-objs += tfa98xx.o
+snd_soc_tfa9874-objs += tfa_container.o
+snd_soc_tfa9874-objs += tfa_dsp.o
+snd_soc_tfa9874-objs += tfa_init.o
+ifdef TFA_DEBUG
+EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
+snd_soc_tfa9874-objs += tfa_debug.o
+endif
+obj-m += snd_soc_tfa9874.o
