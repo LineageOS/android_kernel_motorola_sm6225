@@ -36,6 +36,7 @@
 #include <linux/sched.h>
 #include <linux/completion.h>
 #include <linux/workqueue.h>
+#include <linux/version.h>
 
 #define MAX_UTAG_SIZE 1024
 #define MAX_UTAG_NAME 32
@@ -143,6 +144,19 @@ struct ctrl {
 	struct utag *head;
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+{
+	loff_t pos = 0;
+	return kernel_read(file, addr, count, &pos);
+}
+#else
+static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+{
+	return kernel_read(file, 0, addr, count);
+}
+#endif
+
 static int build_utags_directory(struct ctrl *ctrl);
 static void clear_utags_directory(struct ctrl *ctrl);
 
@@ -220,7 +234,7 @@ static int read_head(struct blkdev *cb, struct utag *htag)
 		return -EINVAL;
 	}
 
-	bytes = kernel_read(cb->filep, 0, (void *) &buf, UTAG_MIN_TAG_SIZE);
+	bytes = kernel_read_stub(cb->filep, (void *) &buf, UTAG_MIN_TAG_SIZE);
 	if ((int) UTAG_MIN_TAG_SIZE > bytes) {
 		pr_err("ERR file (%s) read failed ret %d\n", cb->name, bytes);
 		return -EIO;
@@ -912,7 +926,7 @@ static struct utag *load_utags(struct blkdev *cb)
 	if (!data)
 		return NULL;
 
-	ret_bytes = kernel_read(cb->filep, 0, data, bytes);
+	ret_bytes = kernel_read_stub(cb->filep, data, bytes);
 	if (bytes != ret_bytes) {
 		pr_err("(%s) read failed ret %d\n", cb->name, ret_bytes);
 		goto free_data;
