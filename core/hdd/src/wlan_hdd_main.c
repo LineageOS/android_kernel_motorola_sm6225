@@ -12591,7 +12591,7 @@ static int hdd_initialize_mac_address(struct hdd_context *hdd_ctx)
 
 	status = hdd_update_mac_serial(hdd_ctx);
 	if (QDF_IS_STATUS_SUCCESS(status))
-		return;
+		return 0;
 #endif
 
 	hdd_info("using default MAC address");

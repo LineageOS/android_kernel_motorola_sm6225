@@ -118,8 +118,9 @@ QDF_STATUS hdd_update_mac_serial(struct hdd_context *hdd_ctx)
         qdf_status = QDF_STATUS_E_FAILURE;
         goto config_exit;
     }
-    qdf_mem_copy(&hdd_ctx->config->intfMacAddr[0].bytes[0],
+    qdf_mem_copy(&pHddCtx->derived_mac_addr[0].bytes,
                        (uint8_t *)computedMac, QDF_MAC_ADDR_SIZE);
+    pHddCtx->num_derived_addr++;
 
 config_exit:
     qdf_mem_free(computedMac);
@@ -138,9 +139,9 @@ QDF_STATUS hdd_generate_random_mac_from_serialno(char *serialNo, int serialnoLen
     hashBuf = (char*)qdf_mem_malloc(16);
 
     /*Motorola OUI*/
-    macAddr[0] = 0xA4;
-    macAddr[1] = 0x07;
-    macAddr[2] = 0xd6;
+    macAddr[0] = 0x38;
+    macAddr[1] = 0x80;
+    macAddr[2] = 0xDF;
 
     md5 = crypto_alloc_shash("md5", 0, 0);
     if (IS_ERR(md5)) {
@@ -557,8 +558,9 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
     macTable[0].name = "Intf0MacAddress";
     macTable[0].value = &buffer_temp[0];
     update_mac_from_string(hdd_ctx, &macTable[0], MACADDRESSUSED);
+    pHddCtx->num_provisioned_addr = MACADDRESSUSED;
     qdf_mem_copy(&customMacAddr,
-             &hdd_ctx->config->intfMacAddr[0].bytes[0],
+	     &pHddCtx->provisioned_mac_addr[0].bytes[0],
              sizeof(tSirMacAddr));
 	sme_set_custom_mac_addr(customMacAddr);
 
