@@ -2879,7 +2879,7 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 		else
 			tfa98xx->cstream = 1;
 
-		switch(tfa98xx_controls)
+		switch(tfa98xx_controls);
 
 		/* Start DSP */
 		if (tfa98xx->dsp_init != TFA98XX_DSP_INIT_PENDING)
