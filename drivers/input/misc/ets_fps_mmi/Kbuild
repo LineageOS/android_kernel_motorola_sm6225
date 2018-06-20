@@ -1,0 +1,9 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/misc/ets_fps_mmi
+
+ets_fps_mmi-y += ets_fps.o ets_navi_input.o
+
+obj-m += ets_fps_mmi.o
+
