@@ -148,6 +148,53 @@ const struct of_device_id madera_of_match[] = {
 EXPORT_SYMBOL_GPL(madera_of_match);
 #endif
 
+/*
+ * Routine to enable clock.
+ * this routine can be extended to select from multiple
+ * sources based on clk_src_name.
+ */
+static int madera_clock_select(struct madera *madera)
+{
+	int r = 0;
+
+	madera->m_clk = clk_get(madera->dev, "cdc_mclk2");
+
+	if (madera->m_clk == NULL)
+		goto err_clk;
+
+	if (madera->clk_run == false)
+		r = clk_prepare_enable(madera->m_clk);
+
+	if (r)
+		goto err_clk;
+
+	madera->clk_run = true;
+
+	return r;
+
+err_clk:
+	dev_err(madera->dev, "Error enabling Ref Clock\n");
+	r = -1;
+	return r;
+}
+
+/*
+ * Routine to disable clocks
+ */
+static int madera_clock_deselect(struct madera *madera)
+{
+	int r = -1;
+
+	if (madera->m_clk != NULL) {
+		if (madera->clk_run == true) {
+			clk_disable_unprepare(madera->m_clk);
+			madera->clk_run = false;
+		}
+		return 0;
+	}
+	return r;
+}
+
 static int madera_poll_reg(struct madera *madera,
 			   int timeout, unsigned int reg,
 			   unsigned int mask, unsigned int target)
@@ -724,6 +771,8 @@ int madera_dev_init(struct madera *madera)
 		goto err_devs;
 	}
 
+	madera_clock_select(madera);
+
 	/**
 	 * Don't use devres here because the only device we have to get
 	 * against is the MFD device and DCVDD will likely be supplied by
@@ -734,7 +783,7 @@ int madera_dev_init(struct madera *madera)
 	if (IS_ERR(madera->dcvdd)) {
 		ret = PTR_ERR(madera->dcvdd);
 		dev_err(dev, "Failed to request DCVDD: %d\n", ret);
-		goto err_devs;
+		goto err_ref_clk;
 	}
 
 	madera->dcvdd_notifier.notifier_call = madera_dcvdd_notify;
@@ -931,6 +980,8 @@ err_notifier:
 	regulator_unregister_notifier(madera->dcvdd, &madera->dcvdd_notifier);
 err_dcvdd:
 	regulator_put(madera->dcvdd);
+err_ref_clk:
+	madera_clock_deselect(madera);
 err_devs:
 	mfd_remove_devices(dev);
 	return ret;
@@ -950,6 +1001,7 @@ int madera_dev_exit(struct madera *madera)
 
 	regulator_bulk_disable(madera->num_core_supplies,
 			       madera->core_supplies);
+	madera_clock_deselect(madera);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(madera_dev_exit);
