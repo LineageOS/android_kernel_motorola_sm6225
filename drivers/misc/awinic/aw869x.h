@@ -43,9 +43,9 @@
 #define AW869X_RTP_I2C_SINGLE_MAX_NUM       512
 
 #define HAPTIC_MAX_TIMEOUT                  10000
-/*
+
 #define AW869X_HAPTIC_VBAT_MONITOR
-*/
+
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
 #define SYS_BAT_DEV "/sys/class/power_supply/battery/voltage_now"
 #define AW869X_SYS_VBAT_REFERENCE           4200000
