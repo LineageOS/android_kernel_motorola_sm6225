@@ -259,15 +259,15 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	},
 	{
 		.reg = SX932x_AFE_PH0_REG,	 //0x28
-		.val = 0x04,	   // CS2:HZ CS1:Input CS0 :HZ
+		.val = 0x01,//0x04,	   // CS2:HZ CS1:Input CS0 :HZ
 	},
 	{
 		.reg = SX932x_AFE_PH1_REG,	   //0x29
-		.val = 0x10,	   // CS2:Input CS1:HZ Shield CS0 :HZ
+		.val = 0x04,//0x10,	   // CS2:Input CS1:HZ Shield CS0 :HZ
 	},
 	{
 		.reg = SX932x_AFE_PH2_REG,	 //0x2A
-		.val = 0x1B,	   //CS2:HZ CS1:HZ CS0 :HZ
+		.val = 0x10,//0x1B,	   //CS2:HZ CS1:HZ CS0 :HZ
 	},
 	{
 		.reg = SX932x_AFE_PH3_REG,	 //0x2B
@@ -325,7 +325,7 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	},
 	{
 		.reg = SX932x_ADV_CTRL2_REG,
-		.val = 0x00,
+		.val = 0x00,//0x10,
 	},
 	{
 		.reg = SX932x_ADV_CTRL3_REG,
