@@ -134,10 +134,9 @@ struct max17042_chip {
 	struct mutex check_temp_lock;
 	int    init_complete;
 	bool batt_undervoltage;
-#ifdef CONFIG_BATTERY_MAX17042_DEBUGFS
 	struct dentry *debugfs_root;
 	u8 debugfs_addr;
-#endif
+
 	struct power_supply *batt_psy;
 	int temp_state;
 	int hotspot_temp;
@@ -1865,7 +1864,6 @@ max17042_get_pdata(struct device *dev)
 }
 #endif
 
-#ifdef CONFIG_BATTERY_MAX17042_DEBUGFS
 static int max17042_debugfs_read_addr(void *data, u64 *val)
 {
 	struct max17042_chip *chip = (struct max17042_chip *)data;
@@ -1886,11 +1884,13 @@ static int max17042_debugfs_read_data(void *data, u64 *val)
 {
 	struct max17042_chip *chip = (struct max17042_chip *)data;
 	struct regmap *map = chip->regmap;
-	int ret = regmap_read(map, chip->debugfs_addr, val);
+	int rd;
+	int ret = regmap_read(map, chip->debugfs_addr, &rd);
 
 	if (ret < 0)
 		return ret;
 
+	*val = rd;
 	return 0;
 }
 
@@ -1925,7 +1925,6 @@ err_debugfs:
 	chip->debugfs_root = NULL;
 	return -ENOMEM;
 }
-#endif
 
 #define MAX_TAPER_RETRY 5
 static void iterm_work(struct work_struct *work)
@@ -2410,13 +2409,12 @@ static int max17042_probe(struct i2c_client *client,
 		chip->init_complete = 1;
 	}
 
-#ifdef CONFIG_BATTERY_MAX17042_DEBUGFS
 	ret = max17042_debugfs_create(chip);
 	if (ret) {
 		dev_err(&client->dev, "cannot create debugfs\n");
 		return ret;
 	}
-#endif
+
 	wakeup_source_init(&chip->max17042_wake_source.source,
 			   "max17042_wake");
 	INIT_DELAYED_WORK(&chip->iterm_work,
@@ -2436,9 +2434,8 @@ static int max17042_remove(struct i2c_client *client)
 	cancel_work_sync(&chip->check_temp_work);
 	mutex_destroy(&chip->check_temp_lock);
 
-#ifdef CONFIG_BATTERY_MAX17042_DEBUGFS
 	debugfs_remove_recursive(chip->debugfs_root);
-#endif
+
 	gpio_free_array(chip->pdata->gpio_list, chip->pdata->num_gpio_list);
 
 	wakeup_source_trash(&chip->max17042_wake_source.source);
