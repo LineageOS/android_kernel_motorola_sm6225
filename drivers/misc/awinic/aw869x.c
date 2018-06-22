@@ -28,6 +28,7 @@
 #include <linux/miscdevice.h>
 #include <asm/uaccess.h>
 #include <linux/syscalls.h>
+#include <linux/power_supply.h>
 #include "aw869x.h"
 #include "aw869x_reg.h"
 
@@ -39,7 +40,7 @@
 #define AW869X_I2C_NAME "aw869x_haptic"
 #define AW869X_HAPTIC_NAME "aw869x_haptic"
 
-#define AW869X_VERSION "v1.3.0"
+#define AW869X_VERSION "v1.3.1"
 
 
 //#define AWINIC_I2C_REGMAP
@@ -653,6 +654,7 @@ static unsigned char aw869x_haptic_rtp_get_fifo_aei(struct aw869x *aw869x)
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
 static int aw869x_get_sys_battery_info(char *dev)
 {
+#ifdef AWINIC_GET_BATTERY_INFO
     int fd;
     int eCheck;
     int nReadSize;
@@ -676,6 +678,20 @@ static int aw869x_get_sys_battery_info(char *dev)
         return eCheck;
     else
         return 0;
+#else
+	struct power_supply *batt_psy;
+        union power_supply_propval prop = {0, };
+        int rc;
+
+	batt_psy = power_supply_get_by_name("battery");
+        rc = power_supply_get_property(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+                        &prop);
+        if (rc < 0) {
+                pr_err("Error in getting charging status, rc=%d\n", rc);
+		return 0;
+        }
+	return prop.intval;
+#endif
 }
 #endif
 
@@ -1074,20 +1090,45 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 
     mutex_lock(&aw869x->lock);
     
-    pr_info("%s enter\n", __func__);
-    
+	pr_info("%s enter, value=%d\n", __func__, value);
+
     aw869x_haptic_stop(aw869x);
 
     if (value > 0) {
-        __pm_stay_awake(&aw869x->ws);
-    
-        //aw869x_haptic_set_repeat_seq(aw869x, 0);
-        aw869x_haptic_play_que_seq(aw869x, value);
-/*
-        value = (value>HAPTIC_MAX_TIMEOUT)? HAPTIC_MAX_TIMEOUT:value;
-        hrtimer_start(&aw869x->timer, 
-            ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
-*/
+	if (value < 100) {
+		aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 48K PWM
+		aw869x_haptic_set_bst_vol(aw869x, 0x5d);
+		aw869x_haptic_set_gain(aw869x, 0x20);
+		aw869x->seq = 0x01000000;
+		aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
+		//aw869x_haptic_set_repeat_seq(aw869x, 0);
+		//aw869x->index = 0x01;
+		aw869x_haptic_play_que_seq(aw869x, 0x01);
+	/*
+		value = (value>HAPTIC_MAX_TIMEOUT)? HAPTIC_MAX_TIMEOUT:value;
+		hrtimer_start(&aw869x->timer, 
+		ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
+	*/
+	} else {
+		aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 12K PWM
+		aw869x_haptic_set_bst_vol(aw869x, 0x01);
+		aw869x_haptic_set_gain(aw869x, 0x0e);
+		aw869x->duration = value;
+		/* wav index config */
+		aw869x->index = 0x02;
+		aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
+
+		/* run ms timer */
+		hrtimer_cancel(&aw869x->timer);
+		aw869x->state = 0x01;
+		if (aw869x->state)
+		{
+		hrtimer_start(&aw869x->timer,
+			ktime_set(aw869x->duration / 1000, (value % 1000) * 1000000),
+			HRTIMER_MODE_REL);
+		}
+		schedule_work(&aw869x->vibrator_work);
+	}
     }
 
     mutex_unlock(&aw869x->lock);
@@ -1114,12 +1155,25 @@ static void awinic_hap_brightness_set(struct led_classdev *cdev,
 
     aw869x_haptic_stop(aw869x);
     if (aw869x->amplitude > 0) {
-        __pm_stay_awake(&aw869x->ws);
+        //wake_lock(&aw869x->wklock);
+        mutex_lock(&aw869x->lock);
         aw869x_haptic_play_que_seq(aw869x, aw869x->amplitude);
         mutex_unlock(&aw869x->lock);
     }
 }
 #endif
+
+static ssize_t aw869x_state_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t aw869x_state_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+	return count;
+}
 
 static ssize_t aw869x_duration_show(struct device *dev,
         struct device_attribute *attr, char *buf)
@@ -1582,6 +1636,7 @@ static ssize_t aw869x_ram_update_store(struct device *dev, struct device_attribu
     return count;
 }
 
+static DEVICE_ATTR(state, S_IWUSR | S_IRUGO, aw869x_state_show, aw869x_state_store);
 static DEVICE_ATTR(duration, S_IWUSR | S_IRUGO, aw869x_duration_show, aw869x_duration_store);
 static DEVICE_ATTR(activate, S_IWUSR | S_IRUGO, aw869x_activate_show, aw869x_activate_store);
 static DEVICE_ATTR(index, S_IWUSR | S_IRUGO, aw869x_index_show, aw869x_index_store);
@@ -1594,6 +1649,7 @@ static DEVICE_ATTR(rtp, S_IWUSR | S_IRUGO, aw869x_rtp_show, aw869x_rtp_store);
 static DEVICE_ATTR(ram_update, S_IWUSR | S_IRUGO, aw869x_ram_update_show, aw869x_ram_update_store);
 
 static struct attribute *aw869x_vibrator_attributes[] = {
+    &dev_attr_state.attr,
     &dev_attr_duration.attr,
     &dev_attr_activate.attr,
     &dev_attr_index.attr,
@@ -1660,7 +1716,7 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
         aw869x->seq |= (reg_val<<((AW869X_SEQUENCER_SIZE-i-1)*8));
     }
 #ifdef TIMED_OUTPUT
-    aw869x->to_dev.name = "vibrator_aw869x";
+    aw869x->to_dev.name = "vibrator";
     aw869x->to_dev.get_time = vibrator_get_time;
     aw869x->to_dev.enable = vibrator_enable;
 
@@ -1676,7 +1732,7 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
         return ret;
     }
 #else
-    aw869x->cdev.name = "vibrator_aw869x";
+    aw869x->cdev.name = "vibrator";
     aw869x->cdev.brightness_get = awinic_hap_brightness_get;
     aw869x->cdev.brightness_set = awinic_hap_brightness_set;
     
