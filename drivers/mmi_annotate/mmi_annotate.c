@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  *
  */
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
