@@ -13,11 +13,20 @@
  */
 
 #include <linux/module.h>
-#include <soc/qcom/smsm.h>
+#include <linux/version.h>
 #include <linux/mmi_annotate.h>
 #include "mmi_info.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+#include <linux/soc/qcom/smem.h>
+/* Match to
+ * vendor/qcom/nonhlos/boot_images/QcomPkg/SDMPkg/Include/smem_type.h
+ */
+#define SMEM_SDRAM_INFO 135
+#else
+#include <soc/qcom/smsm.h>
 #define SMEM_SDRAM_INFO SMEM_ID_VENDOR1
+#endif
 
 static struct {
 	unsigned int mr5;
@@ -133,10 +142,20 @@ int mmi_ram_info_init(void)
 		"Reserved"
 	};
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	ssize_t ddr_info_size;
+	smem_ddr_info = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+		SMEM_SDRAM_INFO,
+		&ddr_info_size);
+
+	if (smem_ddr_info != NULL &&
+		sizeof(*smem_ddr_info) == ddr_info_size) {
+#else
 	smem_ddr_info = smem_alloc(SMEM_SDRAM_INFO, sizeof(*smem_ddr_info), 0,
 			SMEM_ANY_HOST_FLAG);
 
 	if (smem_ddr_info != NULL) {
+#endif
 		/* identify vendor */
 		vid = smem_ddr_info->mr5 & 0xFF;
 		if (vid < ARRAY_SIZE(vendors))

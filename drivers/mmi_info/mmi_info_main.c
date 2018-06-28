@@ -92,7 +92,6 @@ static int __init mmi_hw_info_init(void)
 {
 	mmi_of_populate_setup();
 	mmi_storage_info_init();
-	mmi_soc_info_init();
 	mmi_ram_info_init();
 	mmi_unit_info_init();
 	mmi_boot_info_init();
@@ -102,7 +101,6 @@ static int __init mmi_hw_info_init(void)
 static void mmi_hw_info_exit(void)
 {
 	mmi_storage_info_exit();
-	mmi_soc_info_exit();
 	mmi_ram_info_exit();
 	mmi_unit_info_exit();
 	mmi_boot_info_exit();
