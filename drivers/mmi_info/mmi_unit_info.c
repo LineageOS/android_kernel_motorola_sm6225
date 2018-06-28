@@ -13,9 +13,9 @@
  */
 
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/seq_file.h>
 #include <asm/setup.h>
-#include <soc/qcom/smem.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <asm/system_misc.h>
@@ -23,6 +23,16 @@
 
 #ifndef CONFIG_ARM64
 #include <asm/mach/arch.h>
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+#include <linux/soc/qcom/smem.h>
+/* Match to
+ * vendor/qcom/nonhlos/boot_images/QcomPkg/SDMPkg/Include/smem_type.h
+ */
+#define SMEM_ID_VENDOR0 134
+#else
+#include <soc/qcom/smem.h>
 #endif
 
 #define SMEM_KERNEL_RESERVE SMEM_ID_VENDOR0
@@ -83,6 +93,9 @@ static int mmi_unit_smem_setup(void)
 {
 	int ret = 0;
 	struct mmi_unit_info *mui_copy;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	ssize_t mui_size;
+#endif
 
 	#define SMEM_KERNEL_RESERVE_SIZE 1024
 	mui_copy = kzalloc(SMEM_KERNEL_RESERVE_SIZE, GFP_KERNEL);
@@ -125,10 +138,21 @@ static int mmi_unit_smem_setup(void)
 		mui_copy->baseband, mui_copy->carrier,
 		mui_copy->powerup_reason);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	if(!qcom_smem_alloc(QCOM_SMEM_HOST_ANY,
+		SMEM_KERNEL_RESERVE,
+		SMEM_KERNEL_RESERVE_SIZE))
+		mui = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+			SMEM_KERNEL_RESERVE,
+			&mui_size);
+
+	if (!mui || mui_size != SMEM_KERNEL_RESERVE_SIZE) {
+#else
 	mui = (struct mmi_unit_info *) smem_alloc(SMEM_KERNEL_RESERVE,
 		SMEM_KERNEL_RESERVE_SIZE, 0, SMEM_ANY_HOST_FLAG);
 
 	if (!mui) {
+#endif
 		pr_err("%s: failed to allocate mmi_unit_info in SMEM\n",
 			__func__);
 		ret = 1;
