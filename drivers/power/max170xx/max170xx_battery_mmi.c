@@ -1332,7 +1332,7 @@ struct max17042_config_data default_mmi_config = {
 	/* A/D measurement */
 	.tgain = 0xE71C,	/* 0x2C */
 	.toff = 0x251A,		/* 0x2D */
-	.cgain = 0x4000,	/* 0x2E */
+	.cgain = 0x7FFF,	/* 0x2E */
 	.coff = 0x0000,		/* 0x2F */
 
 	/* Alert / Status */
