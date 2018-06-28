@@ -2,7 +2,6 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
 
-mmi_info-objs += mmi_soc_info.o
 mmi_info-objs += mmi_storage_info.o
 mmi_info-objs += mmi_ram_info.o
 mmi_info-objs += mmi_unit_info.o
