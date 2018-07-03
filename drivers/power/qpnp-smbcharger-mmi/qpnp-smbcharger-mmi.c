@@ -11,11 +11,14 @@
  */
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
+#include <linux/reboot.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pmic-voter.h>
 #include <linux/regmap.h>
 #include <linux/of.h>
+#include <linux/workqueue.h>
 
 #define CHGR_BASE	0x1000
 #define DCDC_BASE	0x1100
@@ -64,7 +67,9 @@ struct smb_mmi_charger {
 	struct power_supply	*usb_psy;
 	struct power_supply	*bms_psy;
 	struct power_supply	*main_psy;
+	struct power_supply	*pc_port_psy;
 	struct notifier_block	mmi_psy_notifier;
+	struct delayed_work	heartbeat_work;
 
 	struct votable 		*chg_dis_votable;
 	struct votable		*fcc_votable;
@@ -78,6 +83,7 @@ struct smb_mmi_charger {
 	int			lower_limit_capacity;
 	int			max_chrg_temp;
 	int			last_iusb_ua;
+	bool			factory_kill_armed;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -853,6 +859,120 @@ static int smb_mmi_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static int factory_kill_disable;
+module_param(factory_kill_disable, int, 0644);
+static void mmi_heartbeat_work(struct work_struct *work)
+{
+	struct smb_mmi_charger *chip = container_of(work,
+						struct smb_mmi_charger,
+						heartbeat_work.work);
+	int hb_resch_time;
+	union power_supply_propval pval;
+	int rc;
+
+	if (chip->factory_mode)
+		hb_resch_time = 1000;
+	else
+		hb_resch_time = 60000;
+
+	if (chip->factory_mode) {
+		rc = power_supply_get_property(chip->pc_port_psy,
+					       POWER_SUPPLY_PROP_ONLINE,
+					       &pval);
+		if (rc < 0)
+			goto sch_hb;
+
+		if (pval.intval) {
+			pr_debug("SMBMMI: Factory Kill Armed\n");
+			chip->factory_kill_armed = true;
+		} else if (chip->factory_kill_armed && !factory_kill_disable) {
+			pr_err("SMBMMI:Factory kill power off\n");
+			kernel_power_off();
+		} else
+			chip->factory_kill_armed = false;
+	}
+
+sch_hb:
+	schedule_delayed_work(&chip->heartbeat_work,
+			      msecs_to_jiffies(hb_resch_time));
+
+}
+static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
+				 void *v)
+{
+	struct smb_mmi_charger *chip = container_of(nb,
+				struct smb_mmi_charger, mmi_psy_notifier);
+	struct power_supply *psy = v;
+
+	if (!chip) {
+		pr_err("called before chip valid!\n");
+		return NOTIFY_DONE;
+	}
+
+	if (val != PSY_EVENT_PROP_CHANGED)
+		return NOTIFY_OK;
+
+	if (chip->factory_mode &&
+	    psy &&
+	    (strcmp(psy->desc->name, "usb") == 0)) {
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(0));
+	}
+
+	return NOTIFY_OK;
+}
+
+static int smbchg_reboot(struct notifier_block *nb,
+			 unsigned long event, void *unused)
+{
+	struct smb_mmi_charger *chg = container_of(nb, struct smb_mmi_charger,
+						smb_reboot);
+	union power_supply_propval val;
+	int rc;
+
+	pr_err("SMBMMI: Reboot/POFF\n");
+	if (!chg) {
+		pr_err("called before chip valid!\n");
+		return NOTIFY_DONE;
+	}
+
+	if (chg->factory_mode) {
+		switch (event) {
+		case SYS_POWER_OFF:
+			/* Disable Factory Kill */
+			factory_kill_disable = true;
+			/* Disable Charging */
+			smblib_masked_write_mmi(chg, CHARGING_ENABLE_CMD_REG,
+						CHARGING_ENABLE_CMD_BIT,
+						0);
+
+			/* Suspend USB and DC */
+			smblib_set_usb_suspend(chg, true);
+			rc = power_supply_get_property(chg->pc_port_psy,
+						 POWER_SUPPLY_PROP_ONLINE,
+						 &val);
+			while (rc >= 0 && val.intval) {
+				msleep(100);
+				rc = power_supply_get_property(
+						chg->pc_port_psy,
+						 POWER_SUPPLY_PROP_ONLINE,
+						 &val);
+				pr_err("Wait for VBUS to decay\n");
+			}
+
+			pr_err("VBUS UV wait 1 sec!\n");
+			/* Delay 1 sec to allow more VBUS decay */
+			msleep(1000);
+			break;
+		default:
+			break;
+		}
+	}
+
+	return NOTIFY_DONE;
+}
+
 static const struct power_supply_desc mmi_psy_desc = {
 	.name		= "mmi_battery",
 	.type		= POWER_SUPPLY_TYPE_BATTERY,
@@ -865,7 +985,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
 	int rc = 0;
-	//union power_supply_propval val;
+	union power_supply_propval val;
 	struct power_supply_config psy_cfg = {};
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
@@ -883,6 +1003,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
+
 	chip->mmi_psy = devm_power_supply_register(chip->dev, &mmi_psy_desc,
 						   &psy_cfg);
 	if (IS_ERR(chip->mmi_psy)) {
@@ -894,6 +1016,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->bms_psy = power_supply_get_by_name("bms");
 	chip->usb_psy = power_supply_get_by_name("usb");
 	chip->main_psy = power_supply_get_by_name("main");
+	chip->pc_port_psy = power_supply_get_by_name("pc_port");
 
 	chip->chg_dis_votable = find_votable("CHG_DISABLE");
 	if (IS_ERR(chip->chg_dis_votable))
@@ -932,6 +1055,12 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (rc)
 		dev_err(chip->dev, "couldn't create factory_charge_upper\n");
 
+	/* Register the notifier for the psy updates*/
+	chip->mmi_psy_notifier.notifier_call = mmi_psy_notifier_call;
+	rc = power_supply_reg_notifier(&chip->mmi_psy_notifier);
+	if (rc)
+		pr_err("SMBMMI: failed to reg notifier: %d\n", rc);
+
 	if (chip->factory_mode) {
 		dev_err(chip->dev, "Entering Factory Mode SMB!\n");
 		rc = smblib_masked_write_mmi(chip, USBIN_ICL_OPTIONS_REG,
@@ -950,6 +1079,20 @@ static int smb_mmi_probe(struct platform_device *pdev)
 					     0xFF, 0x00);
 		if (rc < 0)
 			pr_err("Couldn't set USBIN_AICL_OPTIONS rc=%d\n", rc);
+
+		chip->smb_reboot.notifier_call = smbchg_reboot;
+		chip->smb_reboot.next = NULL;
+		chip->smb_reboot.priority = 1;
+		rc = register_reboot_notifier(&chip->smb_reboot);
+		if (rc)
+			pr_err("SMBMMI: register for reboot failed\n");
+		rc = power_supply_get_property(chip->pc_port_psy,
+					       POWER_SUPPLY_PROP_ONLINE,
+					       &val);
+		if (rc >= 0 && val.intval) {
+			pr_err("SMBMMI: Factory Kill Armed\n");
+			chip->factory_kill_armed = true;
+		}
 
 		if(chip->chg_dis_votable) {
 			pmic_vote_force_val_set(chip->chg_dis_votable, 1);
