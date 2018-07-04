@@ -38,12 +38,6 @@ LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := cirrus_ospl.ko
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/AndroidKernelModule.mk
-
-include $(CLEAR_VARS)
 LOCAL_MODULE := aov_trigger.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)

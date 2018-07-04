@@ -14,7 +14,7 @@ EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include
 EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
 endif
 
-EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER -DCONFIG_SND_SOC_OPALUM
+EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
 
 ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
@@ -48,9 +48,6 @@ obj-m += cirrus_cs47l35.o
 
 cirrus_cs47l90-objs =  cs47l90.o
 obj-m += cirrus_cs47l90.o
-
-cirrus_ospl-objs =  ospl2xx.o
-obj-m += cirrus_ospl.o
 
 obj-m += aov_trigger.o
 
