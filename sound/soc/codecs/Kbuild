@@ -15,7 +15,10 @@ EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
 endif
 
 EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER -DCONFIG_SND_SOC_OPALUM
+
+ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
+endif
 
 ifeq ($(KDIR),)
 PLMA_HOSTSW_DIR=$(realpath -f $(srctree)/$(src))
