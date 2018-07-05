@@ -19,6 +19,8 @@
 ** =============================================================================
 */
 
+#ifdef CONFIG_SND_SOC_TAS2560
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
@@ -198,3 +200,4 @@ module_exit(tas_calib_exit);
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DSP Driver To Control SmartAmp Algorithm");
+#endif /* CONFIG_SND_SOC_TAS2560 */
