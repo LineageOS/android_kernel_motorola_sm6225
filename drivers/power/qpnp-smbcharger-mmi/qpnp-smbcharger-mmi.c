@@ -861,6 +861,7 @@ static int smb_mmi_get_property(struct power_supply *psy,
 
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
+#define TWO_VOLT 2000000
 static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct smb_mmi_charger *chip = container_of(work,
@@ -868,7 +869,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 						heartbeat_work.work);
 	int hb_resch_time;
 	union power_supply_propval pval;
-	int rc;
+	int rc, usb_suspend, usbin_uv;
 
 	if (chip->factory_mode)
 		hb_resch_time = 1000;
@@ -876,13 +877,27 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		hb_resch_time = 60000;
 
 	if (chip->factory_mode) {
+		rc = smblib_get_usb_suspend(chip, &usb_suspend);
+		if (rc < 0)
+			goto sch_hb;
+
+		rc = power_supply_get_property(chip->usb_psy,
+					       POWER_SUPPLY_PROP_VOLTAGE_NOW,
+					       &pval);
+		if (rc < 0)
+			goto sch_hb;
+		else
+			usbin_uv = pval.intval;
+
 		rc = power_supply_get_property(chip->pc_port_psy,
 					       POWER_SUPPLY_PROP_ONLINE,
 					       &pval);
 		if (rc < 0)
 			goto sch_hb;
 
-		if (pval.intval) {
+
+
+		if (pval.intval || (usb_suspend && (usbin_uv > TWO_VOLT))) {
 			pr_debug("SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
@@ -949,14 +964,14 @@ static int smbchg_reboot(struct notifier_block *nb,
 
 			/* Suspend USB and DC */
 			smblib_set_usb_suspend(chg, true);
-			rc = power_supply_get_property(chg->pc_port_psy,
-						 POWER_SUPPLY_PROP_ONLINE,
+			rc = power_supply_get_property(chg->usb_psy,
+						 POWER_SUPPLY_PROP_VOLTAGE_NOW,
 						 &val);
-			while (rc >= 0 && val.intval) {
+			while ((rc >= 0) && (val.intval > TWO_VOLT)) {
 				msleep(100);
 				rc = power_supply_get_property(
-						chg->pc_port_psy,
-						 POWER_SUPPLY_PROP_ONLINE,
+						chg->usb_psy,
+						 POWER_SUPPLY_PROP_VOLTAGE_NOW,
 						 &val);
 				pr_err("Wait for VBUS to decay\n");
 			}
