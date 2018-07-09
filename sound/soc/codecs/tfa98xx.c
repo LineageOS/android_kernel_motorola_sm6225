@@ -124,8 +124,11 @@ static const struct tfa98xx_rate rate_to_fssel[] = {
 	{ 48000, 8 },
 };
 
+#ifdef TFA9874_NONDSP_STEREO
 static atomic_t g_bypass;
 static atomic_t g_Tx_enable;
+extern int send_tfa_cal_set_bypass(void *buf, int cmd_size);
+extern int send_tfa_cal_set_tx_enable(void *buf, int cmd_size);
 
 /*************bypass control***************/
 static int tfa987x_algo_get_status(struct snd_kcontrol *kcontrol,
@@ -135,9 +138,6 @@ static int tfa987x_algo_get_status(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = atomic_read(&g_bypass);
 	return ret;
 }
-
-extern int send_tfa_cal_set_bypass(void *buf, int cmd_size);
-extern int send_tfa_cal_set_tx_enable(void *buf, int cmd_size);
 
 static int tfa987x_algo_set_status(struct snd_kcontrol *kcontrol,
 					   struct snd_ctl_elem_value *ucontrol)
@@ -191,6 +191,7 @@ const struct snd_kcontrol_new tfa987x_algo_filter_mixer_controls[] = {
 	SOC_ENUM_EXT("TFA987X_ALGO_STATUS", tfa987x_algo_enum[0], tfa987x_algo_get_status, tfa987x_algo_set_status),
 	SOC_ENUM_EXT("TFA987X_TX_ENABLE", tfa987x_tx_enum[0], tfa987x_algo_get_tx_status, tfa987x_algo_set_tx_enable)
 };
+#endif
 static inline char *tfa_cont_profile_name(struct tfa98xx *tfa98xx, int prof_idx)
 {
 	if (tfa98xx->tfa->cnt == NULL)
@@ -1739,9 +1740,10 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	ret = snd_soc_add_codec_controls(tfa98xx->codec,
 		tfa98xx_controls, mix_index);
 
+#ifdef TFA9874_NONDSP_STEREO
 	ret = snd_soc_add_codec_controls(tfa98xx->codec,
 		tfa987x_algo_filter_mixer_controls, ARRAY_SIZE(tfa987x_algo_filter_mixer_controls));
-
+#endif
 	return ret;
 }
 
@@ -2829,8 +2831,10 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(&tfa98xx->i2c->dev, "%s: state: %d\n", __func__, mute);
+#ifdef TFA9874_NONDSP_STEREO	
 	atomic_set(&g_bypass, 0);
 	atomic_set(&g_Tx_enable, 0);
+#endif	
 	if (no_start) {
 		pr_debug("no_start parameter set no tfa_dev_start or tfa_dev_stop, returning\n");
 		return 0;
@@ -2867,13 +2871,13 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 			tfa98xx->pstream = 1;
 
 			tfa98xx_adsp_send_calib_values(tfa98xx);
-
+		} else {
+			tfa98xx->cstream = 1;
                 	/* Start DSP */
                 	if ((tfa98xx->flags & TFA98XX_FLAG_CHIP_SELECTED) &&
 			   (tfa98xx->dsp_init != TFA98XX_DSP_INIT_PENDING))
                         	queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->init_work, 0);
-		}else
-			tfa98xx->cstream = 1;
+		}
 #else
 			tfa98xx->pstream = 1;
 		else
@@ -2920,10 +2924,12 @@ static struct snd_soc_dai_driver tfa98xx_dai[] = {
 		 },
 		.ops = &tfa98xx_dai_ops,
 		.symmetric_rates = 1,
-//#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
-//		.symmetric_channels = 1,
-//		.symmetric_samplebits = 1,
-//#endif
+#if 0
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
+		.symmetric_channels = 1,
+		.symmetric_samplebits = 1,
+#endif
+#endif
 	},
 };
 
@@ -2946,7 +2952,6 @@ static int tfa98xx_probe(struct snd_soc_codec *codec)
 
 	tfa98xx->codec = codec;
 
-	printk("codec name=%s",codec->component.name);
 	ret = tfa98xx_load_container(tfa98xx);
 	pr_debug("Container loading requested: %d\n", ret);
 
@@ -3362,7 +3367,6 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = snd_soc_register_codec(&i2c->dev,
 				&soc_codec_dev_tfa98xx, dai,
 				ARRAY_SIZE(tfa98xx_dai));
-	printk("codec dainame=%s\n", dai->name);
 
 	if (ret < 0) {
 		dev_err(&i2c->dev, "Failed to register TFA98xx: %d\n", ret);
@@ -3488,7 +3492,7 @@ static int __init tfa98xx_i2c_init(void)
 {
 	int ret = 0;
 
-	printk("tfa98XX driver version %s\n", TFA98XX_VERSION);
+	pr_info("TFA98XX driver version %s\n", TFA98XX_VERSION);
 
 	/* Enable debug traces */
 	tfa98xx_kmsg_regs = trace_level & 2;
@@ -3507,10 +3511,6 @@ static int __init tfa98xx_i2c_init(void)
 	}
 
 	ret = i2c_add_driver(&tfa98xx_i2c_driver);
-	if(ret) {
-		pr_info("%s: tfa98XX i2c_driver add failed! \n", __func__);
-	}
-	printk("tfa98xx_i2c_init: TFA98XX i2c_driver add success! \n");
 
 	return ret;
 }
