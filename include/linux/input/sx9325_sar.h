@@ -197,7 +197,7 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 //Interrupt and config
 	{
 		.reg = SX932x_IRQ_ENABLE_REG,	//0x05
-		.val = 0x70,					// Enavle Close and Far -> enable compensation interrupt
+		.val = 0x64,					// Enavle Close and Far -> enable compensation interrupt
 	},
 	{
 		.reg = SX932x_IRQCFG0_REG,		//0x06
@@ -214,7 +214,7 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	//--------General control
 	{
 		.reg = SX932x_CTRL0_REG,	//0x10
-		.val = 0x16,	   // Scanperiod : 100ms(10110)
+		.val = 0x09,	   // Scanperiod : 100ms(10110)
 	},
 	{
 		.reg = SX932x_I2CADDR_REG,	 //0x14
@@ -284,11 +284,11 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	//--------PROX control
 	{
 		.reg = SX932x_PROX_CTRL0_REG,  //0x30
-		.val = 0x09,	   // Digital Gain(ph0/1) : off(001) Digital Filter(ph0/1) : 1-1/2(001)
+		.val = 0x13,	   // Digital Gain(ph0/1) : off(001) Digital Filter(ph0/1) : 1-1/2(001)
 	},
 	{
 		.reg = SX932x_PROX_CTRL1_REG,  //0x31
-		.val = 0x09,	   // Digital Gain(ph2/3) : off(001) Digital Filter(ph2/3) : 1-1/2(001)
+		.val = 0x0a,	   // Digital Gain(ph2/3) : off(001) Digital Filter(ph2/3) : 1-1/2(001)
 	},
 	{
 		.reg = SX932x_PROX_CTRL2_REG,  //0x32
@@ -300,19 +300,19 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	},
 	{
 		.reg = SX932x_PROX_CTRL4_REG,  //0x34
-		.val = 0x0C,	   //AVGFREEZEDIS : on(0) ,AVGNEGFILT :1-1/2(001) ,AVGPOSFILT : 1-1/256(100)
+		.val = 0x0a,	   //AVGFREEZEDIS : on(0) ,AVGNEGFILT :1-1/2(001) ,AVGPOSFILT : 1-1/256(100)
 	},
 	{
 		.reg = SX932x_PROX_CTRL5_REG,  //0x35
-		.val = 0x00,	   //FARCOND: PROXDIFF < (THRESH.HYST), HYST : None, CLOSEDEB : off ,FARDEB : off
+		.val = 0x0a,	   //FARCOND: PROXDIFF < (THRESH.HYST), HYST : None, CLOSEDEB : off ,FARDEB : off
 	},
 	{
 		.reg = SX932x_PROX_CTRL6_REG,  //0x36
-		.val = 0x1B,	   // Prox Theshold(ph0/1) : 200
+		.val = 0x1e,	   // Prox Theshold(ph0/1) : 200
 	},
 	{
 		.reg = SX932x_PROX_CTRL7_REG,  //0x37
-		.val = 0x1B,	   // Prox Theshold(ph2/3) : 200
+		.val = 0x15,	   // Prox Theshold(ph2/3) : 200
 	},
 	//--------Advanced control (defult)
 	{
@@ -325,15 +325,15 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	},
 	{
 		.reg = SX932x_ADV_CTRL2_REG,
-		.val = 0x00,//0x10,
+		.val = 0x18,//0x10,
 	},
 	{
 		.reg = SX932x_ADV_CTRL3_REG,
-		.val = 0x00,
+		.val = 0x2a,
 	},
 	{
 		.reg = SX932x_ADV_CTRL4_REG,
-		.val = 0x00,
+		.val = 0x02,
 	},
 	{
 		.reg = SX932x_ADV_CTRL5_REG,
@@ -357,7 +357,7 @@ static struct smtc_reg_data sx9325_i2c_reg_setup[] = {
 	},
 	{
 		.reg = SX932x_ADV_CTRL10_REG,
-		.val = 0x00,
+		.val = 0x11,
 	},
 	{
 		.reg = SX932x_ADV_CTRL11_REG,
