@@ -12,7 +12,7 @@
 #define DEBUG
 #define DRIVER_NAME "sx9325"
 #define USE_SENSORS_CLASS
-//#define USE_KERNEL_SUSPEND
+#define USE_KERNEL_SUSPEND
 
 #define MAX_WRITE_ARRAY_SIZE 32
 #include <linux/module.h>
@@ -1107,7 +1107,7 @@ static int sx9325_probe(struct i2c_client *client,
 		if (MAX_NUM_STATUS_BITS >= 8) {
 			this->statusFunc[0] = 0; /* TXEN_STAT */
 			this->statusFunc[1] = 0; /* UNUSED */
-			this->statusFunc[2] = 0; /* UNUSED */
+			this->statusFunc[2] = touchProcess; /* BODY/TABLE */
 			this->statusFunc[3] = read_rawData; /* CONV_STAT */
 			this->statusFunc[4] = 0; /* COMP_STAT */
 			this->statusFunc[5] = touchProcess; /* RELEASE_STAT */
@@ -1381,16 +1381,18 @@ static int sx9325_remove(struct i2c_client *client)
 #if defined(USE_KERNEL_SUSPEND)
 /*====================================================*/
 /***** Kernel Suspend *****/
-static int sx9325_suspend(struct i2c_client *client, pm_message_t mesg)
+static int sx9325_suspend(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	psx93XX_t this = i2c_get_clientdata(client);
 
 	sx93XX_suspend(this);
 	return 0;
 }
 /***** Kernel Resume *****/
-static int sx9325_resume(struct i2c_client *client)
+static int sx9325_resume(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	psx93XX_t this = i2c_get_clientdata(client);
 
 	sx93XX_resume(this);
@@ -1407,6 +1409,13 @@ static const struct of_device_id synaptics_rmi4_match_tbl[] = {
 MODULE_DEVICE_TABLE(of, synaptics_rmi4_match_tbl);
 #endif
 
+#if defined(USE_KERNEL_SUSPEND)
+static const struct dev_pm_ops sx9325_pm_ops = {
+	.suspend        = sx9325_suspend,
+	.resume         = sx9325_resume,
+};
+#endif
+
 static struct i2c_device_id sx9325_idtable[] = {
 	{ DRIVER_NAME, 0 },
 	{ }
@@ -1416,15 +1425,14 @@ MODULE_DEVICE_TABLE(i2c, sx9325_idtable);
 static struct i2c_driver sx9325_driver = {
 	.driver = {
 		.owner  = THIS_MODULE,
-		.name   = DRIVER_NAME
+		.name   = DRIVER_NAME,
+#if defined(USE_KERNEL_SUSPEND)
+		.pm     = &sx9325_pm_ops,
+#endif
 	},
 	.id_table = sx9325_idtable,
 	.probe	  = sx9325_probe,
 	.remove	  = sx9325_remove,
-#if defined(USE_KERNEL_SUSPEND)
-	.suspend  = sx9325_suspend,
-	.resume   = sx9325_resume,
-#endif
 };
 static int __init sx9325_init(void)
 {
