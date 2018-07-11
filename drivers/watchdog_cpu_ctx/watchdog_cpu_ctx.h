@@ -193,7 +193,6 @@ struct msm_wdog_cpuctx {
 
 #define PHYS_PFN_OFFSET	(PHYS_OFFSET >> PAGE_SHIFT)
 
-#define KASLR_PHYS_ADDR 0x146bf6d0
 #define KASLR_MAGIC_NUM 0xdead4ead
 #define KASLR_REGION_LEN 32
 

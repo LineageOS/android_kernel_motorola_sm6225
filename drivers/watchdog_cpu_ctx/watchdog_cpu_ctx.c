@@ -55,6 +55,8 @@
  */
 #define MSM_DUMP_DATA_WDOG_CPU_CTX 0x200
 
+#define KASLR_OFFSET_PROP "qcom,msm-imem-kaslr_offset"
+
 struct platform_data {
 	phys_addr_t	mem_address;
 	size_t		mem_size;
@@ -126,8 +128,16 @@ static unsigned long get_kaslr_offset(void)
 	unsigned kaslr_magic_num;
 	unsigned kaslr_offset_low = 0;
 	unsigned kaslr_offset_high = 0;
+	struct device_node *np;
 
-	kaslr_addr = ioremap(KASLR_PHYS_ADDR, KASLR_REGION_LEN);
+	np = of_find_compatible_node(NULL, NULL, KASLR_OFFSET_PROP);
+	if (!np) {
+		pr_err("Unable to find %s node\n", KASLR_OFFSET_PROP);
+		goto out;
+	} else {
+		kaslr_addr = of_iomap(np, 0);
+	}
+
 	if(!kaslr_addr)
 		goto out;
 
