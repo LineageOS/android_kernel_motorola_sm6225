@@ -1059,8 +1059,8 @@ static int aw869x_haptic_init(struct aw869x *aw869x)
     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
             AW869X_BIT_SYSCTRL_WORK_MODE_MASK, AW869X_BIT_SYSCTRL_STANDBY);
     aw869x_i2c_write(aw869x, AW869X_REG_ANACTRL, 0x01);
-    //aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x41);      // 24K PWM
-
+    //aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+    //        AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_24KB);
     return ret;
 }
 
@@ -1096,8 +1096,10 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 
     if (value > 0) {
 	if (value < 100) {
-		aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 48K PWM
-		aw869x_haptic_set_bst_vol(aw869x, 0x5d);
+		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
+		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
+		aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
 		aw869x_haptic_set_gain(aw869x, 0x20);
 		aw869x->seq = 0x01000000;
 		aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
@@ -1110,8 +1112,9 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 		ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 	*/
 	} else {
-		aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 12K PWM
-		aw869x_haptic_set_bst_vol(aw869x, 0x01);
+		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
+		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_6P25V);
 		aw869x_haptic_set_gain(aw869x, 0x0e);
 		aw869x->duration = value;
 		/* wav index config */
