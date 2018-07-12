@@ -36,6 +36,10 @@
 #include <soc/qcom/mmi_boot_info.h>
 #include "watchdog_cpu_ctx.h"
 
+#ifndef TASK_STATE_TO_CHAR_STR
+#define TASK_STATE_TO_CHAR_STR "RSDTtXZxKWPNn"
+#endif
+
 #define MSMDBG(fmt, args...) mmi_annotate(fmt, ##args)
 
 #define MSMWDT_ERR(fmt, args...) do { \
@@ -259,18 +263,19 @@ static void msm_wdt_show_thread_saved_pc(struct task_struct *p)
 }
 
 static int msm_wdt_unwind_frame_aa64(struct stackframe *frame,
-				unsigned long stack)
+				unsigned long stack,
+				unsigned long *sp)
 {
 	unsigned long high, low;
 	unsigned long fp = frame->fp;
 
-	low  = frame->sp;
+	low  = *sp;
 	high = ALIGN(low, THREAD_SIZE) - 0x20;
 
 	if (fp < low || fp > high || fp & 0xf)
 		return -EINVAL;
 
-	frame->sp = fp + 0x10;
+	*sp = (unsigned long)(fp + 0x10);
 	frame->fp = (*(unsigned long *)(fp) & (THREAD_SIZE - 1)) + stack;
 	frame->pc = *(unsigned long *)(fp + 8);
 
@@ -363,6 +368,7 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 			unsigned long stack)
 {
 	struct stackframe frame;
+	unsigned long sp;
 	int offset;
 	char sym_buf[KSYM_NAME_LEN];
 	struct sysdbg_cpu_ctxt_regs *regs = &sysdbg_ctx->cpu_regs;
@@ -375,7 +381,7 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 
 	if ((regs->sp_el1 & ~(THREAD_SIZE - 1)) == addr) {
 		frame.fp = (regs->x29 & (THREAD_SIZE - 1)) + stack;
-		frame.sp = (regs->sp_el1 & (THREAD_SIZE - 1)) + stack;
+		sp = (regs->sp_el1 & (THREAD_SIZE - 1)) + stack;
 		frame.pc = regs->pc;
 	}
 	else {
@@ -383,7 +389,7 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 		return;
 	}
 
-	offset = (frame.sp - stack - 128) & ~(128 - 1);
+	offset = (sp - stack - 128) & ~(128 - 1);
 	msm_wdt_show_raw_mem(stack, 96, addr, "thread_info");
 	msm_wdt_show_raw_mem(stack + offset, THREAD_SIZE - offset,
 			addr + offset, "stack");
@@ -406,7 +412,7 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 			frame.pc - kaslr_offset + cur_kaslr_offset);
 		MSMWDTD("[<%016lx>] %s\n", where, sym_buf);
 
-		urc = msm_wdt_unwind_frame_aa64(&frame, stack);
+		urc = msm_wdt_unwind_frame_aa64(&frame, stack, &sp);
 		if (urc < 0)
 			break;
 	}
