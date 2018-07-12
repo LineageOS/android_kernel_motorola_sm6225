@@ -413,6 +413,7 @@ struct syna_tcm_hcd {
 	struct mutex identify_mutex;
 	struct delayed_work polling_work;
 	struct workqueue_struct *polling_workqueue;
+	struct work_struct resume_work;
 	struct task_struct *notifier_thread;
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;

@@ -3000,6 +3000,28 @@ static int syna_tcm_early_suspend(struct device *dev)
 	return 0;
 }
 
+static void syna_tcm_queued_resume(struct work_struct *w)
+{
+	struct syna_tcm_hcd *tcm_hcd =
+		container_of(w, struct syna_tcm_hcd, resume_work);
+	syna_tcm_resume(&(tcm_hcd->pdev->dev));
+}
+
+static inline int syna_tcm_display_off(struct device *dev)
+{
+	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
+	cancel_work_sync(&tcm_hcd->resume_work);
+	return syna_tcm_suspend(dev);
+}
+
+static inline int syna_tcm_display_on(struct device *dev)
+{
+	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
+	pr_debug("queue resume\n");
+	queue_work(system_wq, &tcm_hcd->resume_work);
+	return 0;
+}
+
 static int syna_tcm_fb_notifier_cb(struct notifier_block *nb,
 		unsigned long action, void *data)
 {
@@ -3018,10 +3040,10 @@ static int syna_tcm_fb_notifier_cb(struct notifier_block *nb,
 			retval = syna_tcm_early_suspend(&tcm_hcd->pdev->dev);
 		else if (action == FB_EVENT_BLANK) {
 			if (*transition == FB_BLANK_POWERDOWN) {
-				retval = syna_tcm_suspend(&tcm_hcd->pdev->dev);
+				retval = syna_tcm_display_off(&tcm_hcd->pdev->dev);
 				tcm_hcd->fb_ready = 0;
 			} else if (*transition == FB_BLANK_UNBLANK) {
-				retval = syna_tcm_resume(&tcm_hcd->pdev->dev);
+				retval = syna_tcm_display_on(&tcm_hcd->pdev->dev);
 				tcm_hcd->fb_ready++;
 			}
 		}
@@ -3197,6 +3219,7 @@ static int syna_tcm_probe(struct platform_device *pdev)
 		}
 	}
 
+	INIT_WORK(&tcm_hcd->resume_work, syna_tcm_queued_resume);
 #ifdef CONFIG_FB
 	tcm_hcd->fb_notifier.notifier_call = syna_tcm_fb_notifier_cb;
 	retval = fb_register_client(&tcm_hcd->fb_notifier);
