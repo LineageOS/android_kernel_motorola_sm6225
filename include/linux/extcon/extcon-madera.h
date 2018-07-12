@@ -70,7 +70,7 @@ struct madera_extcon {
 	struct regulator *micvdd;
 	struct input_dev *input;
 	struct extcon_dev *edev;
-	struct gpio_desc *micd_pol_gpio;
+	struct gpio_desc *micd_pol_gpio[2];
 
 	u16 last_jackdet;
 	int hp_tuning_level;
