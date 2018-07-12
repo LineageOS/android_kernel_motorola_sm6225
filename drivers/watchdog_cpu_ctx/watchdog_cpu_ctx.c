@@ -612,7 +612,7 @@ static int watchdog_cpu_ctx_probe(struct platform_device *pdev)
 	pdata->mem_size = resource_size(&res);
 	pdata->mem_address = res.start;
 
-	dev_info(dev, "size %lx", pdata->mem_size);
+	dev_info(dev, "size %zx", pdata->mem_size);
 	dev_info(dev, "addr %lx", (unsigned long)pdata->mem_address);
 	dev_info(dev, "size per cpu is %lx", WDOG_CPUCTX_SIZE_PERCPU);
 

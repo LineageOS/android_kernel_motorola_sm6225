@@ -128,11 +128,11 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 	pdata->mem_size = resource_size(&res);
 	pdata->mem_address = res.start;
 
-	dev_info(dev, "size %lx", pdata->mem_size);
+	dev_info(dev, "size %zx", pdata->mem_size);
 	dev_info(dev, "addr %lx", (unsigned long)pdata->mem_address);
 
 	if (pdata->mem_size < sizeof(struct persist_data_t)) {
-		dev_err(dev, "Mem size too small %zx/%lu\n",
+		dev_err(dev, "Mem size too small %zx/%zd\n",
 				pdata->mem_size, sizeof(struct persist_data_t));
 		err = -ENOMEM;
 		goto err;
