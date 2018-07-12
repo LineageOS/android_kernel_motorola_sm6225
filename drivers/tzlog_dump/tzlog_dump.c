@@ -267,7 +267,7 @@ static int tzlog_dump_probe(struct platform_device *pdev)
 	pdata->mem_size = resource_size(&res);
 	pdata->mem_address = res.start;
 
-	dev_info(dev, "tzlog_dump_size %lx", pdata->mem_size);
+	dev_info(dev, "tzlog_dump_size %zx", pdata->mem_size);
 	dev_info(dev, "tzlog_dump_addr %lx", (unsigned long)pdata->mem_address);
 
 	if (pdata->mem_size < TZBSP_DIAG_SIZE) {
