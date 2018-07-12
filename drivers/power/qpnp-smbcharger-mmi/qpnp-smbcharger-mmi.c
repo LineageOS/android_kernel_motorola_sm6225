@@ -16,9 +16,14 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pmic-voter.h>
+#include <linux/qpnp/qpnp-revid.h>
 #include <linux/regmap.h>
 #include <linux/of.h>
 #include <linux/workqueue.h>
+
+#ifndef PM8150B_SUBTYPE
+#define PM8150B_SUBTYPE PM855B_SUBTYPE
+#endif
 
 #define CHGR_BASE	0x1000
 #define DCDC_BASE	0x1100
@@ -51,12 +56,15 @@ struct smb_mmi_params {
 	struct smb_mmi_chg_param	fcc;
 	struct smb_mmi_chg_param	fv;
 	struct smb_mmi_chg_param	usb_icl;
+	struct smb_mmi_chg_param	dc_icl;
 };
 
 struct smb_mmi_charger {
 	struct device		*dev;
 	struct regmap 		*regmap;
 	struct smb_mmi_params	param;
+	char			*name;
+	int			smb_version;
 
 	bool			factory_mode;
 	int			demo_mode;
@@ -89,6 +97,7 @@ struct smb_mmi_charger {
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
 #define CHGR_FLOAT_VOLTAGE_CFG_REG		(CHGR_BASE + 0x70)
 #define USBIN_CURRENT_LIMIT_CFG_REG		(USBIN_BASE + 0x70)
+#define DCIN_CURRENT_LIMIT_CFG_REG		(DCIN_BASE + 0x70)
 static struct smb_mmi_params smb5_pm8150b_params = {
 	.fcc			= {
 		.name   = "fast charge current",
@@ -110,6 +119,77 @@ static struct smb_mmi_params smb5_pm8150b_params = {
 		.min_u  = 0,
 		.max_u  = 5000000,
 		.step_u = 50000,
+	},
+	.dc_icl		= {
+		.name   = "dc input current limit",
+		/* TODO: For now USBIN seems to be the way to set this */
+		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 5000000,
+		.step_u = 50000,
+	},
+};
+
+static struct smb_mmi_params smb5_pmi632_params = {
+	.fcc			= {
+		.name   = "fast charge current",
+		.reg    = CHGR_FAST_CHARGE_CURRENT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 3000000,
+		.step_u = 50000,
+	},
+	.fv			= {
+		.name   = "float voltage",
+		.reg    = CHGR_FLOAT_VOLTAGE_CFG_REG,
+		.min_u  = 3600000,
+		.max_u  = 4800000,
+		.step_u = 10000,
+	},
+	.usb_icl		= {
+		.name   = "usb input current limit",
+		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 3000000,
+		.step_u = 50000,
+	},
+	.dc_icl		= {
+		.name   = "dc input current limit",
+		/* TODO: For now USBIN seems to be the way to set this */
+		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 3000000,
+		.step_u = 50000,
+	},
+};
+
+static struct smb_mmi_params smb2_pm660_params = {
+	.fcc			= {
+		.name	= "fast charge current",
+		.reg	= CHGR_FAST_CHARGE_CURRENT_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 4500000,
+		.step_u	= 25000,
+	},
+	.fv			= {
+		.name	= "float voltage",
+		.reg	= CHGR_FLOAT_VOLTAGE_CFG_REG,
+		.min_u	= 3487500,
+		.max_u	= 4920000,
+		.step_u	= 7500,
+	},
+	.usb_icl		= {
+		.name	= "usb input current limit",
+		.reg	= USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 4800000,
+		.step_u	= 25000,
+	},
+	.dc_icl			= {
+		.name	= "dc input current limit",
+		.reg	= DCIN_CURRENT_LIMIT_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 6000000,
+		.step_u	= 25000,
 	},
 };
 
@@ -702,8 +782,7 @@ static ssize_t force_chg_idc_store(struct device *dev,
 		return -ENODEV;
 	}
 	dc_curr *= 1000; /* Convert to uA */
-	/* TODO: For now USBIN seems to be the way to set this */
-	r = smblib_set_charge_param(mmi_chip, &mmi_chip->param.usb_icl, dc_curr);
+	r = smblib_set_charge_param(mmi_chip, &mmi_chip->param.dc_icl, dc_curr);
 	if (r < 0) {
 		pr_err("Factory Couldn't set dc icl = %d rc=%d\n",
 		       (int)dc_curr, (int)r);
@@ -728,8 +807,7 @@ static ssize_t force_chg_idc_show(struct device *dev,
 		goto end;
 	}
 
-	/* TODO: For now USBIN seems to be the way to set this */
-	r = smblib_get_charge_param(mmi_chip, &mmi_chip->param.usb_icl, &state);
+	r = smblib_get_charge_param(mmi_chip, &mmi_chip->param.dc_icl, &state);
 	if (r < 0) {
 		pr_err("Factory Couldn't get dc_icl rc=%d\n", (int)r);
 		return r;
@@ -748,13 +826,15 @@ static DEVICE_ATTR(force_chg_idc, 0664,
 #define PRE_CHARGE_CONV_MV 50
 #define PRE_CHARGE_MAX 7
 #define PRE_CHARGE_MIN 100
+#define PRE_CHARGE_SMB2_CONV_MV 25
+#define PRE_CHARGE_SMB2_MAX 0x3F
 static ssize_t force_chg_itrick_store(struct device *dev,
 				      struct device_attribute *attr,
 				      const char *buf, size_t count)
 {
 	unsigned long r;
 	unsigned long chg_current;
-	u8 value;
+	u8 value, mask;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
 
@@ -769,20 +849,39 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	if (chg_current < PRE_CHARGE_MIN)
-		chg_current = 0;
-	else
-		chg_current -= PRE_CHARGE_MIN;
+	switch (mmi_chip->smb_version) {
+	case PM8150B_SUBTYPE:
+	case PMI632_SUBTYPE:
+		mask = PRE_CHARGE_CURRENT_SETTING_MASK;
+		if (chg_current < PRE_CHARGE_MIN)
+			chg_current = 0;
+		else
+			chg_current -= PRE_CHARGE_MIN;
 
-	chg_current /= PRE_CHARGE_CONV_MV;
+		chg_current /= PRE_CHARGE_CONV_MV;
 
-	if (chg_current > PRE_CHARGE_MAX)
-		value = PRE_CHARGE_MAX;
-	else
-		value = (u8)chg_current;
+		if (chg_current > PRE_CHARGE_MAX)
+			value = PRE_CHARGE_MAX;
+		else
+			value = (u8)chg_current;
+		break;
+	case PM660_SUBTYPE:
+		mask = PRE_CHARGE_SMB2_MAX;
+		chg_current /= PRE_CHARGE_SMB2_CONV_MV;
+
+		if (chg_current > PRE_CHARGE_SMB2_MAX)
+			value = PRE_CHARGE_SMB2_MAX;
+		else
+			value = (u8)chg_current;
+		break;
+	default:
+		pr_err("SMBMMI:Set ITRICK PMIC subtype %d not supported\n",
+		       mmi_chip->smb_version);
+		return -EINVAL;
+	}
 
 	r = smblib_masked_write_mmi(mmi_chip, PRE_CHARGE_CURRENT_CFG_REG,
-				    PRE_CHARGE_CURRENT_SETTING_MASK,
+				    mask,
 				    value);
 	if (r < 0) {
 		pr_err("Factory Couldn't set ITRICK %d  mV rc=%d\n",
@@ -816,10 +915,21 @@ static ssize_t force_chg_itrick_show(struct device *dev,
 		goto end;
 	}
 
-	value &= PRE_CHARGE_CURRENT_SETTING_MASK;
-
-	state = (value * PRE_CHARGE_CONV_MV) + PRE_CHARGE_MIN;
-
+	switch (mmi_chip->smb_version) {
+	case PM8150B_SUBTYPE:
+	case PMI632_SUBTYPE:
+		value &= PRE_CHARGE_CURRENT_SETTING_MASK;
+		state = (value * PRE_CHARGE_CONV_MV) + PRE_CHARGE_MIN;
+		break;
+	case PM660_SUBTYPE:
+		value &= PRE_CHARGE_SMB2_MAX;
+		state = value * PRE_CHARGE_SMB2_CONV_MV;
+		break;
+	default:
+		pr_err("SMBMMI:Get ITRICK PMIC subtype %d not supported\n",
+		       mmi_chip->smb_version);
+		return -EINVAL;
+	}
 end:
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
 }
@@ -996,6 +1106,55 @@ static const struct power_supply_desc mmi_psy_desc = {
 	.num_properties	= ARRAY_SIZE(smb_mmi_battery_props),
 };
 
+static int smb_mmi_chg_config_init(struct smb_mmi_charger *chip)
+{
+	struct pmic_revid_data *pmic_rev_id;
+	struct device_node *revid_dev_node;
+
+	revid_dev_node = of_parse_phandle(chip->dev->of_node,
+					  "qcom,pmic-revid", 0);
+	if (!revid_dev_node) {
+		pr_err("Missing qcom,pmic-revid property\n");
+		return -EINVAL;
+	}
+
+	pmic_rev_id = get_revid_data(revid_dev_node);
+	if (IS_ERR_OR_NULL(pmic_rev_id)) {
+		/*
+		 * the revid peripheral must be registered, any failure
+		 * here only indicates that the rev-id module has not
+		 * probed yet.
+		 */
+		return -EPROBE_DEFER;
+	}
+
+	switch (pmic_rev_id->pmic_subtype) {
+	case PM8150B_SUBTYPE:
+		chip->smb_version = PM8150B_SUBTYPE;
+		chip->name = "pm8150b_charger";
+		chip->param = smb5_pm8150b_params;
+		break;
+	case PMI632_SUBTYPE:
+		chip->smb_version = PMI632_SUBTYPE;
+		chip->name = "pmi632_charger";
+		chip->param = smb5_pmi632_params;
+		break;
+	case PM660_SUBTYPE:
+		chip->smb_version = PM660_SUBTYPE;
+		chip->name = "pm660_charger";
+		chip->param = smb2_pm660_params;
+		break;
+	default:
+		pr_err("PMIC subtype %d not supported\n",
+				pmic_rev_id->pmic_subtype);
+		return -EINVAL;
+	}
+
+	pr_err("SMBMMI: PMIC %d is %s\n", chip->smb_version, chip->name);
+
+	return 0;
+}
+
 static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
@@ -1008,9 +1167,10 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	chip->dev = &pdev->dev;
-	chip->param = smb5_pm8150b_params;
 	psy_cfg.drv_data = chip;
 	platform_set_drvdata(pdev, chip);
+
+	smb_mmi_chg_config_init(chip);
 
 	chip->regmap = dev_get_regmap(chip->dev->parent, NULL);
 	if (!chip->regmap) {
@@ -1122,9 +1282,17 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			pmic_vote_force_active_set(chip->fv_votable, 1);
 		}
 		if(chip->usb_icl_votable) {
-			pmic_vote_force_val_set(chip->usb_icl_votable, 3000000);
+			pmic_vote_force_val_set(chip->usb_icl_votable,
+						3000000);
 			pmic_vote_force_active_set(chip->usb_icl_votable, 1);
 		}
+
+		/* Some Cables need a more forced approach */
+		rc = smblib_set_charge_param(chip, &chip->param.usb_icl,
+					     3000000);
+		if (rc < 0)
+			pr_err("Factory Couldn't set usb icl = 3000 rc=%d\n",
+			       (int)rc);
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_usb_suspend);
