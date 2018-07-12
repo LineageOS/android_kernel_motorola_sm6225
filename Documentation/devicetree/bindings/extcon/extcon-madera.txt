@@ -18,8 +18,12 @@ Optional properties:
     First cell is the value for the SW1_MODE
     Second cell is the value for the SW2_MODE (cs47l90, cs47l91)
 
-  - cirrus,micd-pol-gpios : GPIO specifier for the GPIO controlling the headset
+  - cirrus,micd-pol-gpio : GPIO specifier for the GPIO controlling the headset
     polarity if one exists. One cell for each child node.
+
+  - cirrus,micd-pol-alt-gpio : GPIO specifier for second GPIO controlling the headset
+    polarity if one exist. If 2 alt gpio is configured, its value will be set opposite
+    to the first GPIO.
 
 Child node mandatory properties:
   - reg : output number this configuration applies to, must be 1

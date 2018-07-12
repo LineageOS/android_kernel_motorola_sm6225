@@ -946,9 +946,12 @@ static void madera_extcon_set_mode(struct madera_extcon *info, int mode)
 		info->micd_modes[mode].bias, info->micd_modes[mode].gpio,
 		info->micd_modes[mode].hp_gnd);
 
-	if (info->micd_pol_gpio > 0)
-		gpiod_set_value_cansleep(info->micd_pol_gpio,
-					 info->micd_modes[mode].gpio);
+	if (info->micd_pol_gpio[0] > 0)
+		gpiod_set_value_cansleep(info->micd_pol_gpio[0],
+					info->micd_modes[mode].gpio);
+	if (info->micd_pol_gpio[1] > 0)
+		gpiod_set_value_cansleep(info->micd_pol_gpio[1],
+					!info->micd_modes[mode].gpio);
 
 	switch (madera->type) {
 	case CS47L35:
@@ -2455,15 +2458,20 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 	madera_extcon_get_hpd_pins(info, node, pdata);
 	madera_extcon_get_micd_configs(info, node, pdata);
 
-	info->micd_pol_gpio = devm_get_gpiod_from_child(madera->dev,
+	info->micd_pol_gpio[0] = devm_get_gpiod_from_child(madera->dev,
 							"cirrus,micd-pol",
 							node);
-	if (IS_ERR(info->micd_pol_gpio)) {
+	if (IS_ERR(info->micd_pol_gpio[0])) {
 		dev_warn(info->dev,
 			 "Malformed cirrus,micd-pol-gpios ignored: %ld\n",
-			 PTR_ERR(info->micd_pol_gpio));
-		info->micd_pol_gpio = 0;
+			 PTR_ERR(info->micd_pol_gpio[0]));
+		info->micd_pol_gpio[0] = 0;
 	}
+	info->micd_pol_gpio[1] = devm_get_gpiod_from_child(madera->dev,
+							"cirrus,micd-pol-alt",
+							node);
+	if (IS_ERR(info->micd_pol_gpio[1]))
+		info->micd_pol_gpio[1] = 0;
 }
 
 static int madera_extcon_get_device_pdata(struct madera_extcon *info)
@@ -2531,11 +2539,15 @@ static void madera_extcon_dump_config(struct madera_extcon *info)
 		MADERA_EXTCON_PDATA_DUMP(micd_open_circuit_declare, "%u");
 		MADERA_EXTCON_PDATA_DUMP(micd_software_compare, "%u");
 
-		if (info->micd_pol_gpio > 0)
+		if (info->micd_pol_gpio[0] > 0)
 			dev_dbg(info->dev, "micd_pol_gpio: %d\n",
-				desc_to_gpio(info->micd_pol_gpio));
+				desc_to_gpio(info->micd_pol_gpio[0]));
 		else
 			dev_dbg(info->dev, "micd_pol_gpio: 0\n");
+
+		if (info->micd_pol_gpio[1] > 0)
+			dev_dbg(info->dev, "micd_pol_gpio-alt: %d\n",
+				desc_to_gpio(info->micd_pol_gpio[1]));
 
 		dev_dbg(info->dev, "\tmicd_ranges {\n");
 		for (j = 0; j < info->num_micd_ranges; ++j)
@@ -2881,7 +2893,8 @@ static int madera_extcon_probe(struct platform_device *pdev)
 			return ret;
 		}
 
-		info->micd_pol_gpio = gpio_to_desc(pdata->micd_pol_gpio);
+		info->micd_pol_gpio[0] = gpio_to_desc(pdata->micd_pol_gpio);
+		info->micd_pol_gpio[1] = 0;
 	} else {
 		ret = madera_extcon_get_device_pdata(info);
 		if (ret < 0)
