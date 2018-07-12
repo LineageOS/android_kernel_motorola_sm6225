@@ -227,21 +227,19 @@ static int madera_wait_for_boot(struct madera *madera)
 	unsigned int val;
 
 	/* ensure chid can read correctly, then check boot done bit */
-	if (madera->type == CS47L35) {
-		for (i = 0; i < timeout; i++) {
-			ret = regmap_read(madera->regmap, MADERA_SOFTWARE_RESET, &val);
-			if (ret != 0) {
-				dev_err(madera->dev, "Failed to read chip id, ret %d\n", ret);
-				continue;
-			}
-			if (val == CS47L35_SILICON_ID)
-				break;
-
-			usleep_range(1000, 1010);
+	for (i = 0; i < timeout; i++) {
+		ret = regmap_read(madera->regmap, MADERA_SOFTWARE_RESET, &val);
+		if (ret != 0) {
+			dev_err(madera->dev, "Failed to read chip id, ret %d\n", ret);
+			continue;
 		}
-		if (i >= timeout)
-			return -ETIMEDOUT;
+		if (val == CS47L35_SILICON_ID || val == CS47L90_SILICON_ID)
+			break;
+
+		usleep_range(1000, 1010);
 	}
+	if (i >= timeout)
+		return -ETIMEDOUT;
 	/*
 	 * We can't use an interrupt as we need to runtime resume to do so,
 	 * we won't race with the interrupt handler as it'll be blocked on
