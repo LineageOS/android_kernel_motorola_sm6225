@@ -755,7 +755,8 @@ static void rtp_work_routine(struct work_struct *work)
     struct aw869x *aw869x = container_of(work, struct aw869x, rtp_work);
 
     aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_RTP_MODE);
-    aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 12K PWM
+    aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+           AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL,
             AW869X_BIT_SYSCTRL_WORK_MODE_MASK, AW869X_BIT_SYSCTRL_ACTIVE);
     msleep(2);
