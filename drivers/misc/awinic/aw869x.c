@@ -1072,35 +1072,17 @@ static int aw869x_haptic_init(struct aw869x *aw869x)
  * vibrator
  *
  *****************************************************/
-#ifdef TIMED_OUTPUT
-static int vibrator_get_time(struct timed_output_dev *dev)
+static void aw869x_vibrate(struct aw869x *aw869x, int value)
 {
-    struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
-
-    if (hrtimer_active(&aw869x->timer)) {
-        ktime_t r = hrtimer_get_remaining(&aw869x->timer);
-        return ktime_to_ms(r);
-    }
-
-    return 0;
-}
-
-static void vibrator_enable( struct timed_output_dev *dev, int value)
-{
-    struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
-
     mutex_lock(&aw869x->lock);
-    
-	pr_info("%s enter, value=%d\n", __func__, value);
 
     aw869x_haptic_stop(aw869x);
-
     if (value > 0) {
 	if (value < 100) {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
 		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
-		aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
+		//aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
 		aw869x_haptic_set_gain(aw869x, 0x20);
 		aw869x->seq = 0x01000000;
 		aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
@@ -1136,7 +1118,27 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
     }
 
     mutex_unlock(&aw869x->lock);
+}
 
+#ifdef TIMED_OUTPUT
+static int vibrator_get_time(struct timed_output_dev *dev)
+{
+    struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
+
+    if (hrtimer_active(&aw869x->timer)) {
+        ktime_t r = hrtimer_get_remaining(&aw869x->timer);
+        return ktime_to_ms(r);
+    }
+
+    return 0;
+}
+
+static void vibrator_enable( struct timed_output_dev *dev, int value)
+{
+    struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
+
+    pr_info("%s enter, value=%d\n", __func__, value);
+    aw869x_vibrate(aw869x, value);
     pr_info("%s exit\n", __func__);
 }
 
@@ -1265,22 +1267,12 @@ static ssize_t aw869x_activate_store(struct device *dev,
 
     pr_info("%s: value=%d\n", __FUNCTION__, val);
 
-    mutex_lock(&aw869x->lock);
-    hrtimer_cancel(&aw869x->timer);
-
     aw869x->state = val;
 
     if (aw869x->state)
-    {
-        /* clip value to max */
-        val = aw869x->duration;
-        /* run ms timer */
-        hrtimer_start(&aw869x->timer,
-                  ktime_set(val / 1000, (val % 1000) * 1000000),
-                  HRTIMER_MODE_REL);
-    }
-    mutex_unlock(&aw869x->lock);
-    schedule_work(&aw869x->vibrator_work);
+        aw869x_vibrate(aw869x, aw869x->duration);
+    else
+        aw869x_vibrate(aw869x, 0);
 
     return count;
 }
@@ -1695,7 +1687,6 @@ static void vibrator_work_routine(struct work_struct *work)
     if(aw869x->state) {
         //aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
         aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_RAM_MODE);
-        aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x01);      // 48K PWM
         aw869x_haptic_set_repeat_seq(aw869x, 1);
         aw869x_haptic_start(aw869x);
     } else {
