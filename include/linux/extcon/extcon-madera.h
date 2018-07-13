@@ -71,6 +71,7 @@ struct madera_extcon {
 	struct input_dev *input;
 	struct extcon_dev *edev;
 	struct gpio_desc *micd_pol_gpio[2];
+	struct gpio_desc *usbc_det_gpio[2];
 
 	u16 last_jackdet;
 	int hp_tuning_level;
@@ -104,6 +105,10 @@ struct madera_extcon {
 	struct delayed_work state_timeout_work;
 
 	struct madera_micd_bias micd_bias;
+	bool usbc_headset_support;
+	bool usbc_connected;
+	struct notifier_block psy_nb;
+	struct power_supply *usb_psy;
 };
 
 enum madera_accdet_mode {
