@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
@@ -2365,6 +2366,51 @@ static void madera_extcon_get_hpd_pins(struct madera_extcon *info,
 			pdata->hpd_pins[i] = madera_default_hpd_pins[i];
 }
 
+static bool madera_extcon_usbc_audio_connected(struct madera_extcon *info)
+{
+	union power_supply_propval prop = {0,};
+	int ret;
+
+	if (!info->usb_psy)
+		return false;
+
+	ret = power_supply_get_property(info->usb_psy,
+			POWER_SUPPLY_PROP_TYPEC_MODE, &prop);
+	if (ret < 0)
+		dev_err(info->dev, "Unable to get USB Type\n");
+	return (prop.intval == POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER);
+}
+
+static void madera_handle_usbc_audio(struct madera_extcon *info, bool connected)
+{
+	dev_err(info->dev, "Type-C Audio Adapter %sconnected\n",
+					connected ? "" : "dis");
+	if (info->usbc_det_gpio[0] > 0 && info->usbc_det_gpio[1] > 0) {
+		gpiod_set_value(info->usbc_det_gpio[0], connected);
+		gpiod_set_value(info->usbc_det_gpio[1], connected);
+	}
+
+	info->usbc_connected = connected;
+}
+
+static int madera_psy_notifier(struct notifier_block *nb, unsigned long evt, void *ptr)
+{
+	struct madera_extcon *info = container_of(nb, struct madera_extcon, psy_nb);
+	struct power_supply *psy = ptr;
+	bool usbc_audio_connected = false;
+
+	if (evt != PSY_EVENT_PROP_CHANGED || strcmp(psy->desc->name, "usb") ||
+		(psy->desc->type != POWER_SUPPLY_TYPE_USB &&
+		psy->desc->type != POWER_SUPPLY_TYPE_USB_PD))
+		return 0;
+
+	usbc_audio_connected = madera_extcon_usbc_audio_connected(info);
+	if (info->usbc_connected == usbc_audio_connected)
+		return NOTIFY_OK;
+	madera_handle_usbc_audio(info, usbc_audio_connected);
+	return NOTIFY_OK;
+}
+
 static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 					      struct fwnode_handle *node)
 {
@@ -2472,6 +2518,24 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 							node);
 	if (IS_ERR(info->micd_pol_gpio[1]))
 		info->micd_pol_gpio[1] = 0;
+
+	info->usbc_headset_support  = fwnode_property_present(node,
+						    "cirrus,usbc-headset");
+	if (info->usbc_headset_support) {
+		info->usbc_connected = false;
+		info->usbc_det_gpio[0] = devm_get_gpiod_from_child(madera->dev,
+								"cirrus,usbsel",
+								node);
+		if (IS_ERR(info->usbc_det_gpio[0]))
+			info->usbc_det_gpio[0] = 0;
+
+		info->usbc_det_gpio[1] = devm_get_gpiod_from_child(madera->dev,
+								"cirrus,hsdet",
+								node);
+		if (IS_ERR(info->usbc_det_gpio[1]))
+			info->usbc_det_gpio[1] = 0;
+
+	}
 }
 
 static int madera_extcon_get_device_pdata(struct madera_extcon *info)
@@ -3145,6 +3209,13 @@ static int madera_extcon_probe(struct platform_device *pdev)
 
 	madera_extcon_dump_config(info);
 
+	if (info->usbc_headset_support) {
+		info->psy_nb.notifier_call = madera_psy_notifier;
+		power_supply_reg_notifier(&info->psy_nb);
+		info->usb_psy = power_supply_get_by_name("usb");
+		madera_handle_usbc_audio(info, madera_extcon_usbc_audio_connected(info));
+	}
+
 	return 0;
 
 err_fall_wake:
@@ -3176,6 +3247,12 @@ static int madera_extcon_remove(struct platform_device *pdev)
 
 	regmap_update_bits(madera->regmap, MADERA_MICD_CLAMP_CONTROL,
 			   MADERA_MICD_CLAMP_MODE_MASK, 0);
+
+	if (info->usbc_headset_support) {
+		power_supply_unreg_notifier(&info->psy_nb);
+		if (info->usb_psy)
+			power_supply_put(info->usb_psy);
+	}
 
 	if (info->pdata->jd_use_jd2) {
 		jack_irq_rise = MADERA_IRQ_MICD_CLAMP_RISE;
