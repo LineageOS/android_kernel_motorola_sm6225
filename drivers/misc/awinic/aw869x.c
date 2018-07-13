@@ -755,7 +755,8 @@ static void rtp_work_routine(struct work_struct *work)
     struct aw869x *aw869x = container_of(work, struct aw869x, rtp_work);
 
     aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_RTP_MODE);
-    aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
+    aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x61);      // 12K PWM
+    aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL,
             AW869X_BIT_SYSCTRL_WORK_MODE_MASK, AW869X_BIT_SYSCTRL_ACTIVE);
     msleep(2);
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
@@ -1215,6 +1216,8 @@ static ssize_t aw869x_duration_store(struct device *dev,
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
         return rc;
+
+    pr_info("%s: value=%d\n", __FUNCTION__, val);
 
     /* setting 0 on duration is NOP for now */
     if (val <= 0)
@@ -1692,6 +1695,7 @@ static void vibrator_work_routine(struct work_struct *work)
     if(aw869x->state) {
         //aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
         aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_RAM_MODE);
+        aw869x_i2c_write(aw869x, AW869X_REG_PWMDBG, 0x01);      // 48K PWM
         aw869x_haptic_set_repeat_seq(aw869x, 1);
         aw869x_haptic_start(aw869x);
     } else {
