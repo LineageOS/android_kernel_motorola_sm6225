@@ -35,23 +35,20 @@ struct mmi_uart_hdr_t {
 #define POWER_STATUS          0x0003
 #define POWER_CONTROL         0x0004
 #define BOOT_MODE             0x0007
-/* Test commands */
-/*#define DISABLE_RESET         0x000A
-#define ENABLE_RESET          0x000B
-#define GPIO_REQUEST          0x000C*/
 
 enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
 struct boot_mode_t {
-    uint8_t boot_mode;
-    uint8_t ap_guid[16];        // ro.mot.build.guid
-    uint8_t ap_fw_ver_str[256]; // ro.build.fingerprint
-};
+	uint8_t  boot_mode;          // androidboot.mode
+	uint32_t hwid;               // androidboot.hwrev
+	uint8_t  ap_guid[16];        // ro.mot.build.guid
+	uint8_t  ap_fw_ver_str[256]; // ro.build.fingerprint
+} __packed;
 
 enum { VBUS_IN = 0, VBUS_IN_SPLIT, VBUS_OUT, DC_IN };
 struct power_control_t {
-    uint8_t   flow;
-    uint32_t  voltage_uv;
-    int32_t   current_ua;
+	uint8_t   flow;
+	uint32_t  voltage_uv;
+	int32_t   current_ua;
 };
 
 struct power_status_t {
@@ -70,10 +67,5 @@ struct power_status_t {
 	uint32_t      mod_output_current; /* uA */
 	uint32_t      mod_input_current; /* uA */
 };
-
-/*struct gpio_request_t {
-	uint8_t msm_gpio_num;
-	bool    on;
-};*/
 
 #endif /* MODD_MUC_PROTOCOL_H */
