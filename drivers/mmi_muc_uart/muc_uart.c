@@ -23,6 +23,7 @@
 #include <linux/pm.h>
 #include <linux/timer.h>
 #include <linux/mutex.h>
+#include <soc/qcom/mmi_boot_info.h>
 #include "mmi_uart.h"
 #include "mmi_tty.h"
 #include "muc_protocol.h"
@@ -426,6 +427,8 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 
 	memset(&bootmode, 0x00, sizeof(struct boot_mode_t));
 
+	bootmode.hwid = bi_hwrev();
+
 	if(strncmp(param_bootmode, "mot-factory", strlen("mot-factory")) == 0) {
 		bootmode.boot_mode = FACTORY;
 	} else if(strncmp(param_bootmode, "qcom", strlen("qcom")) == 0) {
@@ -439,6 +442,8 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 
 	pr_info("muc_uart_send_bootmode sending AP bootmode %u\n",
 		bootmode.boot_mode);
+	pr_info("muc_uart_send_bootmode sending AP hwid 0x%x\n",
+		bootmode.hwid);
 
 	return muc_uart_queue_send(mm_data,
 		BOOT_MODE,
@@ -486,17 +491,11 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 	uint8_t *payload,
 	size_t payload_len)
 {
-	/* TODO should this whole block be covered by the mutex,
-	 * ... if I get a message, I  should ack it before the next
-	 * request from the queue goes out.
-	 */
-	pr_info("muc_uart_handle_message: got msg of type %d.\n", hdr->cmd);
+	pr_info("muc_uart_handle_message: got msg of type %x.\n", hdr->cmd);
 	switch (hdr->cmd) {
 		case UART_SLEEP_REQ: {
 			/* TODO always ack for now. */
-			mutex_lock(&tx_lock);
 			muc_uart_send(mm_data, UART_SLEEP_ACK, NULL, 0);
-			mutex_unlock(&tx_lock);
 			schedule_delayed_work(&mm_data->sleep_work, msecs_to_jiffies(0));
 			break;
 		}
@@ -513,18 +512,14 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 		case PACKETBUS_PROT_MSG: {
 			if (!mmi_tty_push_to_us(MMI_TTY_DEFAULT_IDX,
 				payload, payload_len)) {
-				mutex_lock(&tx_lock);
 				muc_uart_send(mm_data,
 					PACKETBUS_PROT_MSG|MSG_ACK_MASK,
 					NULL, 0);
-				mutex_unlock(&tx_lock);
 			} else {
 				pr_err("muc_uart_handle_message: Couldn't pass packet to us!");
-				mutex_lock(&tx_lock);
 				muc_uart_send(mm_data,
 					PACKETBUS_PROT_MSG|MSG_NACK_MASK,
 					NULL, 0);
-				mutex_unlock(&tx_lock);
 			}
 			break;
 		}
@@ -546,9 +541,14 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			if(payload_len == sizeof(struct power_control_t))
 				muc_uart_set_power_control(
 					(struct power_control_t *)payload);
-			mutex_lock(&tx_lock);
 			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
-			mutex_unlock(&tx_lock);
+			break;
+		}
+		case BOOT_MODE: {
+			if(muc_uart_send_bootmode(mm_data) >= 0)
+				muc_uart_send(mm_data, BOOT_MODE|MSG_ACK_MASK, NULL, 0);
+			else
+				muc_uart_send(mm_data, BOOT_MODE|MSG_NACK_MASK, NULL, 0);
 			break;
 		}
 		default: {
@@ -559,9 +559,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			else {
 				pr_err("muc_uart_handle_message: Unhandled type %d!",
 					hdr->cmd);
-				mutex_lock(&tx_lock);
 				muc_uart_send(mm_data, hdr->cmd|MSG_NACK_MASK, NULL, 0);
-				mutex_unlock(&tx_lock);
 			}
 		}
 	}
@@ -634,10 +632,16 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 		print_hex_dump_debug("muc_uart rx: ", DUMP_PREFIX_OFFSET, 16, 1,
 			data, content_size, true);
 
+		/* TODO it still might be possible for a message to go
+		 * out of the queue before we handle the response to a
+		 * request.
+		 */
+		mutex_lock(&tx_lock);
 		muc_uart_handle_message(mm_data,
 			hdr,
 			data + sizeof(*hdr),
 			content_size - sizeof(*hdr));
+		mutex_unlock(&tx_lock);
 	}
 
 	return segment_size;

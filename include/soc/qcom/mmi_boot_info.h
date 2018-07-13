@@ -77,5 +77,6 @@ const char *bi_bootreason(void);
 u32  bi_mbm_version(void);
 const char *bi_bootmode(void);
 u32 bi_boot_seq(void);
+u32 bi_hwrev(void);
 
 #endif

@@ -215,10 +215,11 @@ static void of_blsig(void)
  * boot info elements
  */
 
-static u32 bi_hwrev(void)
+u32 bi_hwrev(void)
 {
 	return mmi_chosen_data.system_rev;
 }
+EXPORT_SYMBOL(bi_hwrev);
 
 #define EMIT_HWREV() \
 		EMIT_BOOTINFO("HW_REV", "0x%04x", hwrev)
