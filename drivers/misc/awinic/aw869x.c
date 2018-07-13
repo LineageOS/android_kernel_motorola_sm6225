@@ -686,6 +686,7 @@ static int aw869x_get_sys_battery_info(char *dev)
 	batt_psy = power_supply_get_by_name("battery");
         rc = power_supply_get_property(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
                         &prop);
+	power_supply_put(batt_psy);
         if (rc < 0) {
                 pr_err("Error in getting charging status, rc=%d\n", rc);
 		return 0;
