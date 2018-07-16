@@ -1,0 +1,8 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+fpc1020_mmi-y += fpc1020_tee.o
+
+obj-m += fpc1020_mmi.o
+
