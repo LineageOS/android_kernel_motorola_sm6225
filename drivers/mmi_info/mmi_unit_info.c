@@ -21,10 +21,6 @@
 #include <asm/system_misc.h>
 #include "mmi_info.h"
 
-#ifndef CONFIG_ARM64
-#include <asm/mach/arch.h>
-#endif
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
 #include <linux/soc/qcom/smem.h>
 /* Match to
@@ -110,11 +106,7 @@ static int mmi_unit_smem_setup(void)
 	mui_copy->system_rev = mmi_chosen_data.system_rev;
 	mui_copy->system_serial_low = mmi_chosen_data.system_serial_low;
 	mui_copy->system_serial_high = mmi_chosen_data.system_serial_high;
-#ifndef CONFIG_ARM64
-	strlcpy(mui_copy->machine, machine_desc->name, MACHINE_MAX_LEN);
-#else
 	strlcpy(mui_copy->machine, "", MACHINE_MAX_LEN);
-#endif
 	strlcpy(mui_copy->barcode, serialno, BARCODE_MAX_LEN);
 	strlcpy(mui_copy->baseband, mmi_chosen_data.baseband, BASEBAND_MAX_LEN);
 	strlcpy(mui_copy->carrier, carrier, CARRIER_MAX_LEN);
