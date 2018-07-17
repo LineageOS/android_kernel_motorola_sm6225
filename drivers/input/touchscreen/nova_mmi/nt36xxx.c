@@ -39,6 +39,7 @@
 #include <linux/wakelock.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
+#include <linux/pinctrl/consumer.h>
 
 #if defined(CONFIG_HQ_DEV_INFO)
 #include <linux/dev_info.h>
@@ -1299,6 +1300,7 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 #if ((TOUCH_KEY_NUM > 0) || WAKEUP_GESTURE)
 	int32_t retry = 0;
 #endif
+	struct pinctrl *pinctrl;
 
 	NVT_LOG("start\n");
 
@@ -1317,6 +1319,12 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 	if (ret) {
 		NVT_ERR("gpio config error!\n");
 		goto err_gpio_config_failed;
+	}
+
+	pinctrl = devm_pinctrl_get_select(&client->dev, "active");
+	if (IS_ERR(pinctrl)) {
+		long int error = PTR_ERR(pinctrl);
+		NVT_LOG("pinctrl failed err %ld\n", error);
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
