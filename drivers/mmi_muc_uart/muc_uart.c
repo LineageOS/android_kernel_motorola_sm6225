@@ -72,6 +72,8 @@ struct mod_muc_data_t {
 	struct delayed_work idle_work;
 	struct delayed_work attach_work;
 	struct delayed_work write_work;
+
+	struct power_supply *phone_psy;
 };
 
 /* How long until we move on without an ack */
@@ -187,6 +189,10 @@ static void muc_uart_attach_work(struct work_struct *w)
 
 	if (mm_data) {
 		gpio_state = gpio_get_value(mm_data->mod_attached_gpio);
+
+		if (atomic_read(&mm_data->mod_attached) == gpio_state)
+			return;
+
 		atomic_set(&mm_data->mod_attached, gpio_state);
 
 		env = kzalloc(sizeof(*env), GFP_KERNEL);
@@ -202,6 +208,9 @@ static void muc_uart_attach_work(struct work_struct *w)
 			KOBJ_CHANGE,
 			env->envp);
 		kfree(env);
+
+		/* also make sure to notify the drivers of the attach/detach */
+		power_supply_changed(mm_data->phone_psy);
 	}
 }
 
@@ -807,16 +816,46 @@ f_end:
 	return error;
 }
 
+static enum power_supply_property muc_uart_ps_props[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+};
+
+static int muc_uart_get_property(struct power_supply *psy,
+				 enum power_supply_property psp,
+				 union power_supply_propval *val)
+{
+	struct mod_muc_data_t *mm_data = power_supply_get_drvdata(psy);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+		val->intval = atomic_read(&mm_data->mod_attached);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static const struct power_supply_desc phone_psy_desc = {
+	.name		= "phone",
+	.type		= POWER_SUPPLY_TYPE_USB,
+	.get_property	= muc_uart_get_property,
+	.properties	= muc_uart_ps_props,
+	.num_properties	= ARRAY_SIZE(muc_uart_ps_props),
+};
+
 static int muc_uart_probe(struct platform_device *pdev)
 {
 	struct device_node *np = (&pdev->dev)->of_node;
 	struct mod_muc_data_t *mm_data;
+	struct power_supply_config psy_cfg = {};
 
 	mm_data = devm_kzalloc(&pdev->dev, sizeof(*mm_data), GFP_KERNEL);
 	if (!mm_data)
 		return -ENOMEM;
 	mm_data->pdev = pdev;
 	platform_set_drvdata(pdev, mm_data);
+	psy_cfg.drv_data = mm_data;
 
 	pr_info("muc_uart_probe: probe start\n");
 
@@ -899,6 +938,14 @@ static int muc_uart_probe(struct platform_device *pdev)
 		(UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE),
 		pdev))
 		goto err3;
+
+	mm_data->phone_psy = devm_power_supply_register(&pdev->dev,
+							&phone_psy_desc,
+							&psy_cfg);
+	if (IS_ERR(mm_data->phone_psy)) {
+		dev_err(&pdev->dev, "failed: phone power supply register\n");
+		goto err3;
+	}
 
 	kobject_uevent(&pdev->dev.kobj, KOBJ_ADD);
 	schedule_delayed_work(&mm_data->attach_work, msecs_to_jiffies(0));
