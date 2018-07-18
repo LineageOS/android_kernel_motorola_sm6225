@@ -1767,7 +1767,11 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
     ts->rst_gpio = pdata->gpio_reset;
 #endif
 
-    himax_gpio_power_config(ts->client, pdata);
+    if (himax_gpio_power_config(ts->client, pdata) < 0)
+    {
+        I(" GPIO and power config failed\n");
+        goto err_gpio_power_config_failed;
+    }
 
 #ifndef CONFIG_OF
     if (pdata->power)
@@ -2099,6 +2103,7 @@ err_ic_package_failed:
 err_power_failed:
 #endif
 
+err_gpio_power_config_failed:
 err_alloc_dt_pdata_failed:
     kfree(hx_touch_data);
 err_alloc_touch_data_failed:
