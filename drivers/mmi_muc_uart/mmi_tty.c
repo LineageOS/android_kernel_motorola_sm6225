@@ -99,6 +99,12 @@ static int mmi_tty_write(struct tty_struct *tty,
 	struct mmi_tty_data *tty_data = tty->driver_data;
 	int ret;
 
+	/* If multiple users are trying to open/close/write to
+	 * the same device the kernel panics sometimes.
+	 */
+	if (!tty_data)
+		return -ENODEV;
+
 	pr_debug("muc_uart tty: Writing %d bytes.\n", len);
 	ret = (*mmi_tty_rx_cb)(tty_data->pdev,
 		tty->index,
