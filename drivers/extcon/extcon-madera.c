@@ -517,7 +517,7 @@ inline void madera_extcon_report(struct madera_extcon *info,
 {
 	int ret;
 
-	dev_dbg(info->dev, "Extcon report: %d is %s\n",
+	dev_info(info->dev, "Extcon report: %d is %s\n",
 		which, attached ? "attached" : "removed");
 
 	ret = extcon_set_state_sync(info->edev, which, attached);
@@ -1076,7 +1076,7 @@ static int madera_micd_read(struct madera_extcon *info)
 			return ret;
 		}
 
-		dev_dbg(info->dev, "MICDET: 0x%x\n", val);
+		dev_info(info->dev, "MICDET: 0x%x\n", val);
 
 		if (!(val & MADERA_MICD_VALID)) {
 			dev_warn(info->dev,
@@ -1313,7 +1313,7 @@ static int madera_hpdet_read(struct madera_extcon *info)
 	}
 
 done:
-	dev_dbg(info->dev, "HP impedance %d.%02d ohms\n",
+	dev_info(info->dev, "HP impedance %d.%02d ohms\n",
 		ohms_x100 / 100, ohms_x100 % 100);
 
 	return (int)ohms_x100;
@@ -1794,7 +1794,7 @@ static int madera_micd_button_process(struct madera_extcon *info, int val)
 	int i, key;
 
 	if (val < MADERA_MICROPHONE_MIN_OHM) {
-		dev_dbg(info->dev, "Mic button detected\n");
+		dev_info(info->dev, "Mic button detected\n");
 
 		for (i = 0; i < info->num_micd_ranges; i++)
 			input_report_key(info->input,
@@ -1803,7 +1803,7 @@ static int madera_micd_button_process(struct madera_extcon *info, int val)
 		for (i = 0; i < info->num_micd_ranges; i++) {
 			if (val <= info->micd_ranges[i].max) {
 				key = info->micd_ranges[i].key;
-				dev_dbg(info->dev, "Key %d down\n", key);
+				dev_info(info->dev, "Key %d down\n", key);
 				input_report_key(info->input, key, 1);
 				input_sync(info->input);
 				break;
@@ -1814,7 +1814,7 @@ static int madera_micd_button_process(struct madera_extcon *info, int val)
 			dev_warn(info->dev,
 				 "Button level %u out of range\n", val);
 	} else {
-		dev_dbg(info->dev, "Mic button released\n");
+		dev_info(info->dev, "Mic button released\n");
 
 		for (i = 0; i < info->num_micd_ranges; i++)
 			input_report_key(info->input,
@@ -1976,7 +1976,7 @@ static int madera_jack_present(struct madera_extcon *info,
 		return ret;
 	}
 
-	dev_dbg(info->dev, "IRQ1_RAW_STATUS_7=0x%x\n", val);
+	dev_info(info->dev, "IRQ1_RAW_STATUS_7=0x%x\n", val);
 
 	if (info->pdata->jd_use_jd2) {
 		val &= MADERA_MICD_CLAMP_RISE_STS1;
@@ -2084,7 +2084,7 @@ static void madera_micd_handler(struct work_struct *work)
 	if (ret == -EAGAIN)
 		goto out;
 
-	dev_dbg(info->dev, "Mic impedance %d ohms\n", ret);
+	dev_info(info->dev, "Mic impedance %d ohms\n", ret);
 
 	madera_jds_reading(info, madera_ohm_to_hohm((unsigned int)ret));
 
@@ -2185,7 +2185,7 @@ static irqreturn_t madera_jackdet(int irq, void *data)
 	bool cancelled_state;
 	int i, present;
 
-	dev_dbg(info->dev, "jackdet IRQ");
+	dev_info(info->dev, "jackdet IRQ");
 
 	cancelled_state = madera_jds_cancel_timeout(info);
 
