@@ -493,13 +493,6 @@ int himax_gpio_power_config(struct i2c_client *client,struct himax_i2c_platform_
             E("%s: request reset pin failed\n", __func__);
             return error;
         }
-        error = gpio_direction_output(pdata->gpio_reset, 0);
-        if (error)
-        {
-            E("unable to set direction for gpio [%d]\n",
-              pdata->gpio_reset);
-            return error;
-        }
     }
 #endif
     if (pdata->gpio_3v3_en >= 0)
@@ -508,7 +501,7 @@ int himax_gpio_power_config(struct i2c_client *client,struct himax_i2c_platform_
         if (error < 0)
         {
             E("%s: request 3v3_en pin failed\n", __func__);
-            return error;
+            goto err_3v3_en_request;
         }
         gpio_direction_output(pdata->gpio_3v3_en, 1);
         I("3v3_en pin =%d\n", gpio_get_value(pdata->gpio_3v3_en));
@@ -520,36 +513,56 @@ int himax_gpio_power_config(struct i2c_client *client,struct himax_i2c_platform_
         if (error)
         {
             E("unable to request gpio [%d]\n",pdata->gpio_irq);
-            return error;
+            goto err_irq_request;
         }
         error = gpio_direction_input(pdata->gpio_irq);
         if (error)
         {
             E("unable to set direction for gpio [%d]\n",pdata->gpio_irq);
-            return error;
+            goto err_irq_set_direction;
         }
         client->irq = gpio_to_irq(pdata->gpio_irq);
     }
     else
     {
         E("irq gpio not provided\n");
-        return error;
+        goto err_irq_request;
     }
-    msleep(20);
 
 #ifdef HX_RST_PIN_FUNC
     if (pdata->gpio_reset >= 0)
     {
+        error = gpio_direction_output(pdata->gpio_reset, 0);
+        if (error)
+        {
+            E("unable to set direction for gpio [%d]\n",
+              pdata->gpio_reset);
+            goto err_rst_set_value;
+        }
+        msleep(20);
         error = gpio_direction_output(pdata->gpio_reset, 1);
         if (error)
         {
             E("unable to set direction for gpio [%d]\n",
               pdata->gpio_reset);
-            return error;
+            goto err_rst_set_value;
         }
     }
 #endif
+    return 0;
 
+#ifdef HX_RST_PIN_FUNC
+err_rst_set_value:
+#endif
+err_irq_set_direction:
+    if (gpio_is_valid(pdata->gpio_irq))
+        gpio_free(pdata->gpio_irq);
+err_irq_request:
+    if (gpio_is_valid(pdata->gpio_3v3_en))
+        gpio_free(pdata->gpio_3v3_en);
+err_3v3_en_request:
+    if (gpio_is_valid(pdata->gpio_reset))
+        gpio_free(pdata->gpio_reset);
     return error;
 }
 
