@@ -42,6 +42,13 @@
 #define MUC_UART_SEND_SLEEP_ON_IDLE 1
 #define MUC_UART_IDLE_TIME 5000 /* ms */
 
+/* When a sleep request on occurs either to or from the muc, sending
+ * is blocked.  If the sleep request never finishes for some reason
+ * we will be stuck forever.  Use this value for a timer to clear
+ * the request eventually to try to maybe recover or panic.
+ */
+#define MUC_UART_SLEEP_REQ_TIMEOUT 5000 /* ms */
+
 struct write_data {
 	struct list_head list;
 	uint16_t cmd;
@@ -62,6 +69,7 @@ struct mod_muc_data_t {
 	atomic_t waiting_for_ack;
 	struct timer_list idle_timer;
 	struct timer_list ack_timer;
+	struct timer_list sleep_req_timer;
 	atomic_t mod_attached;
 	struct workqueue_struct *write_wq;
 	struct write_data *write_data_q;
@@ -72,8 +80,8 @@ struct mod_muc_data_t {
 	struct delayed_work idle_work;
 	struct delayed_work attach_work;
 	struct delayed_work write_work;
-
 	struct power_supply *phone_psy;
+	atomic_t sleep_req_pending;
 };
 
 /* How long until we move on without an ack */
@@ -132,7 +140,10 @@ static inline void set_wait_for_ack(struct mod_muc_data_t *mm_data,
 	int cmd)
 {
 	if (mm_data)
-		if (!(cmd & MSG_ACK_MASK || cmd & MSG_NACK_MASK)) {
+		if (!(cmd & MSG_ACK_MASK ||
+			cmd & MSG_NACK_MASK ||
+			cmd == UART_SLEEP_REQ ||
+			cmd == UART_SLEEP_REJ)) {
 			atomic_set(&mm_data->waiting_for_ack, 1);
 			mod_timer(&mm_data->ack_timer, jiffies +
 				msecs_to_jiffies(MUC_UART_ACK_TIME));
@@ -150,7 +161,7 @@ static inline void clear_wait_for_ack(struct mod_muc_data_t *mm_data)
 		atomic_add_unless(&mm_data->write_credits, 1, 100);
 		pr_info("muc_uart clear_wait_for_ack, num credits: %d\n",
 			atomic_read(&mm_data->write_credits));
-		cancel_delayed_work_sync(&mm_data->write_work);
+		cancel_delayed_work(&mm_data->write_work);
 		queue_delayed_work(mm_data->write_wq,
 				&mm_data->write_work,
 				msecs_to_jiffies(0));
@@ -223,6 +234,39 @@ static irqreturn_t muc_uart_attach_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static inline void set_sleep_req_pending(struct mod_muc_data_t *mm_data)
+{
+	atomic_set(&mm_data->sleep_req_pending, 1);
+	mod_timer(&mm_data->sleep_req_timer, jiffies +
+		msecs_to_jiffies(MUC_UART_SLEEP_REQ_TIMEOUT));
+}
+
+static inline void clear_sleep_req_pending(struct mod_muc_data_t *mm_data)
+{
+	del_timer(&mm_data->sleep_req_timer);
+	atomic_set(&mm_data->sleep_req_pending, 0);
+}
+
+static int muc_uart_sync_wake(struct mod_muc_data_t *mm_data)
+{
+	if (!mm_data->uart_pm_state) {
+		mmi_uart_do_pm(mm_data->uart_data, true);
+		mm_data->uart_pm_state = 1;
+	}
+
+	gpio_direction_output(mm_data->wake_out_gpio, 0);
+
+	/* Only toggle the line if the muc isn't awake */
+	if (gpio_get_value(mm_data->wake_in_gpio)) {
+		gpio_set_value(mm_data->wake_out_gpio, 1);
+		gpio_set_value(mm_data->wake_out_gpio, 0);
+		return 1;
+	}
+
+	/* Return 0 if the muc was already awake */
+	return 0;
+}
+
 static int muc_uart_send(struct mod_muc_data_t *mm_data,
 	uint16_t cmd,
 	uint8_t *payload,
@@ -242,11 +286,17 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 		return -E2BIG;
 	}
 
-	/* If we are waiting for an ack */
-	if (atomic_read(&mm_data->waiting_for_ack)) {
+	/* If we are waiting on a sleep req */
+	if (atomic_read(&mm_data->sleep_req_pending)) {
 		mmi_uart_report_tx_err(mm_data->uart_data);
 		return -EALREADY;
 	}
+
+	/* If sending a sleep req, block further sends until
+	 * we get a rej or go to sleep
+	 */
+	if (cmd == UART_SLEEP_REQ)
+		set_sleep_req_pending(mm_data);
 
 	/* If someone else is sending */
 	if (mmi_uart_set_tx_busy(mm_data->uart_data)) {
@@ -255,21 +305,11 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 	}
 
 	/* If powered off, try to wake. */
-	if (!mm_data->uart_pm_state) {
-		if (in_interrupt()) {
-			mmi_uart_clear_tx_busy(mm_data->uart_data);
-			schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(0));
-			mmi_uart_report_tx_err(mm_data->uart_data);
-			return -EAGAIN;
-		} else {
-			mmi_uart_do_pm(mm_data->uart_data, true);
-			mm_data->uart_pm_state = 1;
-		}
+	if (muc_uart_sync_wake(mm_data)) {
+		mmi_uart_clear_tx_busy(mm_data->uart_data);
+		mmi_uart_report_tx_err(mm_data->uart_data);
+		return -EAGAIN;
 	}
-
-	/* Rising edge to wake muc */
-	gpio_set_value(mm_data->wake_out_gpio, 0);
-	gpio_set_value(mm_data->wake_out_gpio, 1);
 
 	reset_idle_timer(mm_data);
 
@@ -277,6 +317,7 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 		payload_length + sizeof(calc_crc);
 	pkt = kmalloc(pkt_size, GFP_ATOMIC);
 	if (!pkt) {
+		mmi_uart_clear_tx_busy(mm_data->uart_data);
 		mmi_uart_report_tx_err(mm_data->uart_data);
 		return -ENOMEM;
 	}
@@ -291,7 +332,7 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 	*(uint16_t *)(pkt + pkt_size - sizeof(calc_crc)) =
 		cpu_to_le16(calc_crc);
 
-	pr_info("muc_uart sending message\n");
+	pr_info("muc_uart sending message type 0x%x\n", cmd);
 	time_uart_start = ktime_get();
 	ret = mmi_uart_send(mm_data->uart_data, pkt, pkt_size);
 	kfree(pkt);
@@ -303,6 +344,11 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 	if (ret == 0) {
 		set_wait_for_ack(mm_data, cmd);
 		return payload_length;
+	} else {
+		/* Just in case we failed to send and we were
+		 * going to sleep
+		 */
+		clear_sleep_req_pending(mm_data);
 	}
 
 	time_send_end = ktime_get();
@@ -322,6 +368,7 @@ static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	if (payload_len > UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE)
 		return -E2BIG;
 
+	/* TODO this should probably panic */
 	if (atomic_dec_if_positive(&mm_data->write_credits) < 0)
 		pr_err("muc_uart_queue_send: out of credits! "
 			"queue size is: %d\n", mm_data->write_q_size);
@@ -333,6 +380,7 @@ static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	}
 
 	write_data->payload = kmalloc(payload_len, GFP_ATOMIC);
+	/* TODO this should probably panic */
 	if (WARN_ON(!write_data->payload)) {
 		atomic_inc(&mm_data->write_credits);
 		kfree(write_data);
@@ -401,6 +449,11 @@ static void muc_uart_send_work(struct work_struct *w)
 		return;
 	}
 
+	/* Wake the muc up here if it isn't already awake
+	 * Send will wake it too, but hopefully this will
+	 * reduce the chances it returns an error.
+	 */
+	muc_uart_sync_wake(mm_data);
 	mutex_lock(&tx_lock);
 	ret = muc_uart_send(mm_data,
 		write_data->cmd,
@@ -423,7 +476,7 @@ static void muc_uart_send_work(struct work_struct *w)
 		cancel_delayed_work(&mm_data->write_work);
 		queue_delayed_work(mm_data->write_wq,
 				&mm_data->write_work,
-				msecs_to_jiffies(100));
+				msecs_to_jiffies(10));
 	} else {
 		kfree(write_data->payload);
 		kfree(write_data);
@@ -438,11 +491,11 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 
 	bootmode.hwid = bi_hwrev();
 
-	if(strncmp(param_bootmode, "mot-factory", strlen("mot-factory")) == 0) {
+	if (strncmp(param_bootmode, "mot-factory", strlen("mot-factory")) == 0) {
 		bootmode.boot_mode = FACTORY;
-	} else if(strncmp(param_bootmode, "qcom", strlen("qcom")) == 0) {
+	} else if (strncmp(param_bootmode, "qcom", strlen("qcom")) == 0) {
 		bootmode.boot_mode = QCOM;
-	} else if(strncmp(param_bootmode, "bp-tools", strlen("bp-tools")) == 0) {
+	} else if (strncmp(param_bootmode, "bp-tools", strlen("bp-tools")) == 0) {
 		bootmode.boot_mode = BP_TOOLS;
 	} else {
 		/* TODO defaults to normal.  Should we have unknown/other? */
@@ -500,21 +553,25 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 	uint8_t *payload,
 	size_t payload_len)
 {
+	unsigned long flags;
+
 	pr_info("muc_uart_handle_message: got msg of type %x.\n", hdr->cmd);
 	switch (hdr->cmd) {
 		case UART_SLEEP_REQ: {
-			/* TODO always ack for now. */
-			muc_uart_send(mm_data, UART_SLEEP_ACK, NULL, 0);
-			schedule_delayed_work(&mm_data->sleep_work, msecs_to_jiffies(0));
+			spin_lock_irqsave(&write_q_lock, flags);
+			if (mm_data->write_data_q)
+				muc_uart_send(mm_data,
+					UART_SLEEP_REJ,
+					NULL, 0);
+			else {
+				set_sleep_req_pending(mm_data);
+				schedule_delayed_work(&mm_data->sleep_work, msecs_to_jiffies(0));
+			}
+			spin_unlock_irqrestore(&write_q_lock, flags);
 			break;
 		}
-		case UART_SLEEP_ACK: {
-			clear_wait_for_ack(mm_data);
-			schedule_delayed_work(&mm_data->sleep_work, msecs_to_jiffies(0));
-			break;
-		}
-		case UART_SLEEP_NACK: {
-			clear_wait_for_ack(mm_data);
+		case UART_SLEEP_REJ: {
+			clear_sleep_req_pending(mm_data);
 			reset_idle_timer(mm_data);
 			break;
 		}
@@ -547,14 +604,14 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 		}*/
 		case POWER_CONTROL: {
 			/* TODO nack if size is wrong ? */
-			if(payload_len == sizeof(struct power_control_t))
+			if (payload_len == sizeof(struct power_control_t))
 				muc_uart_set_power_control(
 					(struct power_control_t *)payload);
 			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
 			break;
 		}
 		case BOOT_MODE: {
-			if(muc_uart_send_bootmode(mm_data) >= 0)
+			if (muc_uart_send_bootmode(mm_data) >= 0)
 				muc_uart_send(mm_data, BOOT_MODE|MSG_ACK_MASK, NULL, 0);
 			else
 				muc_uart_send(mm_data, BOOT_MODE|MSG_NACK_MASK, NULL, 0);
@@ -677,10 +734,9 @@ static void muc_uart_sleep_work(struct work_struct *w)
 			mm_data->uart_pm_state = 0;
 		}
 #endif
-
-		if (gpio_get_value(mm_data->wake_out_gpio))
-			gpio_set_value(mm_data->wake_out_gpio, 0);
-
+		/* Set to high Z / float */
+		gpio_direction_input(mm_data->wake_out_gpio);
+		clear_sleep_req_pending(mm_data);
 		mmi_uart_clear_tx_busy(mm_data->uart_data);
 	}
 }
@@ -692,7 +748,6 @@ static void muc_uart_wake_work(struct work_struct *w)
 	struct mod_muc_data_t *mm_data =
 		container_of(w, struct mod_muc_data_t, wake_work.work);
 
-	disable_irq(mm_data->wake_irq);
 	cancel_delayed_work_sync(&mm_data->sleep_work);
 	atomic_set(&mm_data->suspend_ok, 0);
 
@@ -703,16 +758,7 @@ static void muc_uart_wake_work(struct work_struct *w)
 		schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(500));
 	else {
 		pr_info("muc_uart_wake_work: on.\n");
-		if (!mm_data->uart_pm_state) {
-			mmi_uart_do_pm(mm_data->uart_data, true);
-			mm_data->uart_pm_state = 1;
-		}
-
-		/* Rising edge to wake muc */
-		gpio_set_value(mm_data->wake_out_gpio, 0);
-		gpio_set_value(mm_data->wake_out_gpio, 1);
-
-		enable_irq(mm_data->wake_irq);
+		muc_uart_sync_wake(mm_data);
 		mmi_uart_clear_tx_busy(mm_data->uart_data);
 
 		/* Send boot mode on initial wake */
@@ -727,18 +773,37 @@ static irqreturn_t muc_uart_wake_irq_handler(int irq, void *data)
 {
 	struct mod_muc_data_t *mm_data = (struct mod_muc_data_t *)data;
 
-	cancel_delayed_work(&mm_data->wake_work);
-	schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(0));
+	/* 0->1 irq is to sleep, 1->0 irq is to wake */
+	if (gpio_get_value(mm_data->wake_in_gpio)) {
+		if (atomic_read(&mm_data->sleep_req_pending)) {
+			cancel_delayed_work(&mm_data->sleep_work);
+			schedule_delayed_work(&mm_data->sleep_work,
+				msecs_to_jiffies(0));
+		}
+	} else {
+		cancel_delayed_work(&mm_data->wake_work);
+		schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(0));
+	}
+
 	return IRQ_HANDLED;
 }
 
 static void muc_uart_idle_work(struct work_struct *w)
 {
+	unsigned long flags;
 	struct mod_muc_data_t *mm_data =
 		container_of(w, struct mod_muc_data_t, idle_work.work);
 
-	if (muc_uart_queue_send(mm_data, UART_SLEEP_REQ, NULL, 0) < 0)
-		schedule_delayed_work(&mm_data->idle_work, msecs_to_jiffies(1000));
+	if (!atomic_read(&mm_data->sleep_req_pending)) {
+		mutex_lock(&tx_lock);
+		spin_lock_irqsave(&write_q_lock, flags);
+		if(!mm_data->write_data_q &&
+			muc_uart_send(mm_data, UART_SLEEP_REQ, NULL, 0) < 0)
+			schedule_delayed_work(&mm_data->idle_work,
+				msecs_to_jiffies(1000));
+		spin_unlock_irqrestore(&write_q_lock, flags);
+		mutex_unlock(&tx_lock);
+	}
 
 	reset_idle_timer(mm_data);
 }
@@ -763,6 +828,18 @@ static void muc_uart_ack_cb(unsigned long timer_data)
 		queue_delayed_work(mm_data->write_wq,
 				&mm_data->write_work,
 				msecs_to_jiffies(0));
+	}
+}
+
+static void muc_uart_sleep_req_cb(unsigned long timer_data)
+{
+	struct mod_muc_data_t *mm_data =
+		(struct mod_muc_data_t *)timer_data;
+
+	/* TODO this should probably panic */
+	if (mm_data) {
+		if(atomic_read(&mm_data->sleep_req_pending))
+			atomic_set(&mm_data->sleep_req_pending, 0);
 	}
 }
 
@@ -880,6 +957,9 @@ static int muc_uart_probe(struct platform_device *pdev)
 	setup_timer(&mm_data->ack_timer,
 		muc_uart_ack_cb,
 		(unsigned long)mm_data);
+	setup_timer(&mm_data->sleep_req_timer,
+		muc_uart_sleep_req_cb,
+		(unsigned long)mm_data);
 
 	mm_data->wake_out_gpio = of_get_gpio(np, 0);
 	if (mm_data->wake_out_gpio >= 0) {
@@ -903,7 +983,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	if (devm_request_irq(&pdev->dev,
 		mm_data->wake_irq,
 		muc_uart_wake_irq_handler,
-		IRQF_TRIGGER_RISING,
+		IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 		pdev->dev.driver->name,
 		mm_data))
 		goto err2;
@@ -978,6 +1058,7 @@ static int muc_uart_remove(struct platform_device *pdev)
 
 	del_timer(&mm_data->idle_timer);
 	del_timer(&mm_data->ack_timer);
+	del_timer(&mm_data->sleep_req_timer);
 	cancel_delayed_work_sync(&mm_data->wake_work);
 	cancel_delayed_work_sync(&mm_data->sleep_work);
 	cancel_delayed_work_sync(&mm_data->idle_work);

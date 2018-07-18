@@ -28,9 +28,8 @@ struct mmi_uart_hdr_t {
 #define MSG_NACK_MASK	 0x4000
 
 /* Msg ID's */
+#define UART_SLEEP_REJ        0x0000
 #define UART_SLEEP_REQ        0x0001
-#define UART_SLEEP_ACK        (UART_SLEEP_REQ|MSG_ACK_MASK)
-#define UART_SLEEP_NACK       (UART_SLEEP_REQ|MSG_NACK_MASK)
 #define PACKETBUS_PROT_MSG    0x0002
 #define POWER_STATUS          0x0003
 #define POWER_CONTROL         0x0004
