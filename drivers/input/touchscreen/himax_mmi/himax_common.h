@@ -79,7 +79,7 @@ void himax_touch_proc_deinit(void);
 #define HX_RST_PIN_FUNC
 #define HX_RESUME_SEND_CMD
 #define HX_ESD_RECOVERY
-//#define HX_AUTO_UPDATE_FW
+#define HX_AUTO_UPDATE_FW
 //#define HX_CHIP_STATUS_MONITOR		/*for ESD 2nd solution,it does not support incell,default off*/
 //#define HX_SMART_WAKEUP
 //#define HX_GESTURE_TRACK
