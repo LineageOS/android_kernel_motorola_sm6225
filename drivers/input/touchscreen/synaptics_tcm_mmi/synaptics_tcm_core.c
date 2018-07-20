@@ -3197,6 +3197,11 @@ static int syna_tcm_early_suspend(struct device *dev)
 
 	mutex_unlock(&mod_pool.mutex);
 
+
+#ifndef WAKEUP_GESTURE
+	tcm_hcd->enable_irq(tcm_hcd, false, true);
+#endif
+
 	return 0;
 }
 
