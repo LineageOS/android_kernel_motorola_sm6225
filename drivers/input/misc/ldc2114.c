@@ -871,6 +871,29 @@ static ktime_t start_polling_tm;
 static int polling_counter;
 #endif
 
+static void ldc2114_input_report(struct ldc2114_data *ldc,
+		int output_bits)
+{
+	int s, i, status;
+
+	for (i = 0, s = 0; i < MAX_KEYS; i++) {
+		status = (output_bits >> i) & 1;
+		if (status == buttons[i])
+			continue;
+		buttons[i] = status;
+		input_report_key(ldc->input, ldc->button_map[i], status);
+		s++;
+		dev_dbg(ldc->dev, "sent key code = %d(%d)\n",
+				ldc->button_map[i], status);
+	}
+
+	if (s) { /* only send sync if there were keys reported */
+		input_sync(ldc->input);
+		dev_dbg(ldc->dev, "sent SYNC\n");
+	}
+
+}
+
 static void ldc2114_irq_work(struct work_struct *work)
 {
 	struct delayed_work *dw =
@@ -881,7 +904,7 @@ static void ldc2114_irq_work(struct work_struct *work)
 	uint8_t status_reg;
 
 	while (1) {
-		int ret, s, i, status;
+		int ret;
 
 		down(&ldc->semaphore);
 
@@ -889,26 +912,16 @@ static void ldc2114_irq_work(struct work_struct *work)
 		if (status_reg & ~(LDC2114_REG_STATUS_CHIP_READY))
 			dev_info(ldc->dev, "STATUS bits 0x%x\n", status_reg);
 
-		ret = ldc2114_read_bulk(ldc->dev, LDC2114_OUT, &data, sizeof(data));
-		if (data.out != output_bits) {
-			output_bits = data.out;
-			dev_dbg(ldc->dev, "OUTPUT bits 0x%x\n", output_bits);
-		}
+		if (status_reg & LDC2114_REG_STATUS_OUT) {
+			ret = ldc2114_read_bulk(ldc->dev,
+									LDC2114_OUT, &data, sizeof(data));
+			if (data.out != output_bits) {
+				output_bits = data.out;
+				dev_dbg(ldc->dev, "OUTPUT bits 0x%x\n", output_bits);
+			}
 
-		for (i = 0, s = 0; i < MAX_KEYS; i++) {
-			status = (output_bits >> i) & 1;
-			if (status == buttons[i])
-				continue;
-			buttons[i] = status;
-			input_report_key(ldc->input, ldc->button_map[i], status);
-			s++;
-			dev_dbg(ldc->dev, "sent key code = %d(%d)\n",
-						ldc->button_map[i], status);
-		}
-
-		if (s) { /* only send sync if there were keys reported */
-			input_sync(ldc->input);
-			dev_dbg(ldc->dev, "sent SYNC\n");
+			if (ldc->btn_enabled)
+				ldc2114_input_report(ldc, output_bits);
 		}
 
 		if (atomic_read(&ldc->irq_work_running)) {
@@ -927,17 +940,8 @@ static void ldc2114_irq_work(struct work_struct *work)
 #endif
 			/* TODO: make sure we never miss release :) */
 			/* Work around missed release */
-			for (i = 0, s = 0; i < MAX_KEYS; i++) {
-				if (!buttons[i])
-					continue;
-				input_report_key(ldc->input, ldc->button_map[i], 0);
-				s++;
-			}
-
-			if (s) {
-				input_sync(ldc->input);
-				dev_warn(ldc->dev, "missed release for %d key(s)\n", s);
-			}
+			if (ldc->btn_enabled)
+				ldc2114_input_report(ldc, 0);
 
 			memset(buttons, 0, sizeof(buttons));
 		}
@@ -1120,6 +1124,8 @@ static inline void ldc2114_of_init(struct i2c_client *client)
 static void inline ldc2114_config_init(struct ldc2114_data *ldc,
 				struct ldc2114_config *cfg, int delay_ms)
 {
+	dev_dbg(ldc->dev, "config_init entered\n");
+
 	ldc->config.active = cfg;
 	ldc->config.delay_ms = delay_ms;
 	ldc->config.attempts = 0;
@@ -1151,6 +1157,8 @@ static void ldc2114_config_work(struct work_struct *work)
 	bool is_ready = ldc->config.active && ldc->config.active->size;
 	int i, ret;
 
+	dev_dbg(ldc->dev, "config_work entered; is_ready=%d\n", is_ready);
+
 	if (is_ready && !ldc->not_connected &&
 		(gpio_get_value(ldc->intb_gpio) == 0)) {
 
@@ -1163,13 +1171,13 @@ static void ldc2114_config_work(struct work_struct *work)
 		/* now it's time to toggle LWPM pin, but only toggle it once */
 		ldc2114_toggle_gpio(ldc, ldc->lpwm_gpio);
 		ldc->config.toggled = true;
-#ifdef LDC2114_CFG_DEBUG
 		dev_info(ldc->dev, "LWPM toggled\n");
-#endif
 	}
 
-	if (!is_ready)
-		return;
+	if (!is_ready) {
+		dev_dbg(ldc->dev, "nothing to apply\n");
+		goto done;
+	}
 
 	JUMPIF_ERR(ldc2114_reset(ldc->dev, LDC2114_REG_RESET_FULL,
 					LDC2114_REG_STATUS_CHIP_READY));
@@ -1278,8 +1286,8 @@ error_workaround:
 
 	ldc2114_config_init(ldc, ldc->config.normal, LDC2114_LONG_DELAY);
 
-	queue_delayed_work(ldc->wq, &ldc->config_work,
-			msecs_to_jiffies(ldc->config.delay_ms));
+	queue_delayed_work(ldc->wq, &ldc->config_work, 0);
+
 	return 0;
 }
 
@@ -1294,8 +1302,7 @@ static int ldc2114_poll_enable_cb(struct notifier_block *n,
 	dev_info(ldc->dev, "polling state changed to %d\n", state);
 
 	if (state) {
-		queue_delayed_work(ldc->wq, &ldc->polling_work,
-				msecs_to_jiffies(0));
+		queue_delayed_work(ldc->wq, &ldc->polling_work, 0);
 		dev_dbg(ldc->dev, "polling resumed\n");
 	}
 
@@ -1404,7 +1411,7 @@ static int ldc2114_probe(struct i2c_client *client,
 
 	sema_init(&ldc->semaphore, 0);
 
-	if (ldc->btn_enabled) {
+	if (!ldc->not_connected) {
 		/*
 		 * Even though we setup edge triggered irq handler, genirq still
 		 * checks for ONESHOT safety if no primary handler provided
@@ -1421,9 +1428,10 @@ static int ldc2114_probe(struct i2c_client *client,
 		INIT_DELAYED_WORK(&ldc->irq_work, ldc2114_irq_work);
 		queue_delayed_work(ldc->wq, &ldc->irq_work,
 					msecs_to_jiffies(LDC2114_SHORT_DELAY));
-
-		ldc2114_input_device(ldc);
 	}
+
+	if (ldc->btn_enabled)
+		ldc2114_input_device(ldc);
 
 	ldc->data_polling = true;
 	ldc->poll_interval = 250;
