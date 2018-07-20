@@ -3219,6 +3219,13 @@ static inline int syna_tcm_display_off(struct device *dev)
 	return syna_tcm_suspend(dev);
 }
 
+static inline int syna_tcm_display_early_off(struct device *dev)
+{
+	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
+	cancel_work_sync(&tcm_hcd->resume_work);
+	return syna_tcm_early_suspend(dev);
+}
+
 static inline int syna_tcm_display_on(struct device *dev)
 {
 	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
@@ -3242,7 +3249,7 @@ static int syna_tcm_fb_notifier_cb(struct notifier_block *nb,
 		transition = evdata->data;
 		if (action == FB_EARLY_EVENT_BLANK &&
 				*transition == FB_BLANK_POWERDOWN)
-			retval = syna_tcm_early_suspend(&tcm_hcd->pdev->dev);
+			retval = syna_tcm_display_early_off(&tcm_hcd->pdev->dev);
 		else if (action == FB_EVENT_BLANK) {
 			if (*transition == FB_BLANK_POWERDOWN) {
 				retval = syna_tcm_display_off(&tcm_hcd->pdev->dev);
