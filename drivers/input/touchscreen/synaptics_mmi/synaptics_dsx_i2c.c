@@ -1744,6 +1744,11 @@ static struct synaptics_dsx_platform_data *
 		pr_notice("pm qos latency is %d\n",
 			rmi4_data->pm_qos_latency);
 
+	retval = of_property_read_u32(np, "synaptics,control-dsi",
+		&rmi4_data->ctrl_dsi);
+	if (!retval)
+		pr_notice("control DSI %d\n", rmi4_data->ctrl_dsi);
+
 	return pdata;
 }
 #else
@@ -7563,6 +7568,9 @@ static int synaptics_dsx_panel_cb(struct notifier_block *nb,
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(nb, struct synaptics_rmi4_data, panel_nb);
 
+	if (!evdata || (evdata->id != rmi4_data->ctrl_dsi))
+		return 0;
+
 	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
 			evdata && evdata->data && rmi4_data) {
 		int *blank = evdata->data;
@@ -7589,9 +7597,12 @@ static int synaptics_dsx_panel_cb(struct notifier_block *nb,
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(nb, struct synaptics_rmi4_data, panel_nb);
 
+	if (!evdata || !evdata->info ||
+		(evdata->info->node != rmi4_data->ctrl_dsi))
+		return 0;
+
 	if ((event == FB_EARLY_EVENT_BLANK || event == FB_EVENT_BLANK) &&
-			evdata && evdata->info && evdata->info->node == 0 &&
-			evdata->data && rmi4_data) {
+			evdata && evdata->data && rmi4_data) {
 		int *blank = evdata->data;
 		pr_debug("fb notification: event = %lu blank = %d\n", event, *blank);
 		/* entering suspend upon early blank event */

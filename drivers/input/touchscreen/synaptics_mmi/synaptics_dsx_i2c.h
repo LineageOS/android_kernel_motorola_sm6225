@@ -494,6 +494,7 @@ struct synaptics_rmi4_data {
 	unsigned int active_fn_intr_mask;
 	int state;
 	int irq;
+	int ctrl_dsi;
 	int sensor_max_x;
 	int sensor_max_y;
 	bool irq_enabled;
