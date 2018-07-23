@@ -40,6 +40,8 @@
 
 #define RESET_ON_RESUME_DELAY_MS 20
 
+#define RESET_IF_RESUME_FAILED
+
 #define PREDICTIVE_READING
 
 #define MIN_READ_LENGTH 9
@@ -3072,14 +3074,22 @@ static int syna_tcm_resume(struct device *dev)
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to exit deep sleep\n");
+#ifdef RESET_IF_RESUME_FAILED
+		goto try_resume_again;
+#else
 		goto exit;
+#endif
 	}
 
 	retval = syna_tcm_rezero(tcm_hcd);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to rezero\n");
+#ifdef RESET_IF_RESUME_FAILED
+		goto try_resume_again;
+#else
 		goto exit;
+#endif
 	}
 
 	goto mod_resume;
@@ -3120,6 +3130,15 @@ exit:
 	tcm_hcd->in_suspend = false;
 
 	return retval;
+
+#ifdef RESET_IF_RESUME_FAILED
+try_resume_again:
+	LOGN(tcm_hcd->pdev->dev.parent,
+		"Resume failed, reset IC and try again\n");
+	tcm_hcd->reset(tcm_hcd, true, true);
+	queue_work(system_wq, &tcm_hcd->resume_work);
+	return 0;
+#endif
 }
 
 static int syna_tcm_suspend(struct device *dev)
