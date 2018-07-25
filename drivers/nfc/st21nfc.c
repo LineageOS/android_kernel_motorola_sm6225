@@ -37,6 +37,7 @@
 #include <linux/spinlock.h>
 #include <linux/st21nfc.h>
 #include <linux/of_gpio.h>
+#include <linux/clk.h>
 
 
 #define MAX_BUFFER_SIZE 260
@@ -59,6 +60,7 @@ struct st21nfc_platform {
 	unsigned int irq_gpio;
 	unsigned int reset_gpio;
 	unsigned int ena_gpio;
+	unsigned int clkreq_gpio;
 	unsigned int polarity_mode;
 };
 
@@ -72,7 +74,61 @@ struct st21nfc_dev {
 	bool irq_enabled;
 	struct st21nfc_platform platform_data;
 	spinlock_t irq_enabled_lock;
+	/* CLK control */
+	bool			clk_run;
+	struct	clk		*s_clk;
 };
+
+/*
+ * Routine to enable clock.
+ * this routine can be extended to select from multiple
+ * sources based on clk_src_name.
+ */
+static int st_clock_select(struct st21nfc_dev *st21nfc_dev)
+{
+	int r = 0;
+
+	st21nfc_dev->s_clk = clk_get(&st21nfc_dev->platform_data.client->dev, "nfc_ref_clk");
+
+	/* if NULL we assume external crystal and dont fail */
+	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
+		return 0;
+
+	if (st21nfc_dev->clk_run == false)
+		r = clk_prepare_enable(st21nfc_dev->s_clk);
+
+	if (r)
+		goto err_clk;
+
+	st21nfc_dev->clk_run = true;
+
+	return r;
+
+err_clk:
+	r = -1;
+	return r;
+}
+
+/*
+ * Routine to disable clocks
+ */
+static int st_clock_deselect(struct st21nfc_dev *st21nfc_dev)
+{
+	int r = -1;
+
+	/* if NULL we assume external crystal and dont fail */
+	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
+		return 0;
+
+	if ((st21nfc_dev->s_clk != NULL) && !IS_ERR(st21nfc_dev->s_clk)) {
+		if (st21nfc_dev->clk_run == true) {
+			clk_disable_unprepare(st21nfc_dev->s_clk);
+			st21nfc_dev->clk_run = false;
+		}
+		return 0;
+	}
+	return r;
+}
 
 static int st21nfc_loc_set_polaritymode(struct st21nfc_dev *st21nfc_dev,
 					int mode)
@@ -125,8 +181,7 @@ static void st21nfc_disable_irq(struct st21nfc_dev *st21nfc_dev)
 
 	spin_lock_irqsave(&st21nfc_dev->irq_enabled_lock, flags);
 	if (st21nfc_dev->irq_enabled) {
-		pr_debug("%s : IRQ %d\n", __func__,
-				st21nfc_dev->platform_data.client->irq);
+		pr_debug("%s : IRQ %d\n", __func__, st21nfc_dev->platform_data.client->irq);
 		disable_irq_nosync(st21nfc_dev->platform_data.client->irq);
 		st21nfc_dev->irq_enabled = false;
 	}
@@ -136,7 +191,6 @@ static void st21nfc_disable_irq(struct st21nfc_dev *st21nfc_dev)
 static irqreturn_t st21nfc_dev_irq_handler(int irq, void *dev_id)
 {
 	struct st21nfc_dev *st21nfc_dev = dev_id;
-
 	pr_debug("%s : enter\n", __func__);
 	st21nfc_disable_irq(st21nfc_dev);
 
@@ -219,17 +273,15 @@ static int st21nfc_dev_open(struct inode *inode, struct file *filp)
 	if (device_open) {
 		ret = -EBUSY;
 		pr_err("%s : device already opened ret= %d\n", __func__, ret);
-		} else {
-	device_open = true;
-	st21nfc_dev = container_of(filp->private_data,
-						       struct st21nfc_dev,
-						       st21nfc_device);
+	} else {
+		device_open = true;
+		st21nfc_dev = container_of(filp->private_data,
+							       struct st21nfc_dev,
+							       st21nfc_device);
 
-	pr_debug("%s : device_open = %d", __func__, device_open);
-	pr_debug("%s : %d,%d ", __func__, imajor(inode), iminor(inode));
-
-	pr_debug("%s: st21nfc_dev ptr %p\n", __func__, st21nfc_dev);
-
+		pr_debug("%s : device_open = %d", __func__, device_open);
+		pr_debug("%s : %d,%d ", __func__, imajor(inode), iminor(inode));
+		pr_debug("%s: st21nfc_dev ptr %p\n", __func__, st21nfc_dev);
 	}
 	return ret;
 }
@@ -252,7 +304,7 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 
 	int ret = 0;
 
-	pr_debug("%s cmd=%d", __func__, cmd);
+	pr_info("%s cmd=%d", __func__, cmd);
 
 	switch (cmd) {
 
@@ -271,18 +323,14 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 		pr_info("%s Double Pulse Request\n", __func__);
 		if (st21nfc_dev->platform_data.reset_gpio != 0) {
 			/* pulse low for 20 millisecs */
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				0);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 0);
 			msleep(20);
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				1);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 1);
 			msleep(10);
 			/* pulse low for 20 millisecs */
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				0);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 0);
 			msleep(20);
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				1);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 1);
 			pr_info("%s done Double Pulse Request\n", __func__);
 		}
 		break;
@@ -294,42 +342,34 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 		 * Warning: depending on gpio_get_value implementation,
 		 * it can returns a value different than 1 in case of high level
 		 */
-		if (ret > 0)
+		if (ret > 0) {
 			ret = 1;
-		else
+		} else {
 			ret = 0;
-
+		}
 		pr_debug("%s get gpio result %d\n", __func__, ret);
 		break;
-
 	case ST21NFC_GET_POLARITY:
 		ret = st21nfc_dev->platform_data.polarity_mode;
 		pr_debug("%s get polarity %d\n", __func__, ret);
 		break;
-
 	case ST21NFC_RECOVERY:
 		/* For ST21NFCD usage only */
 		pr_info("%s Recovery Request\n", __func__);
 		if (st21nfc_dev->platform_data.reset_gpio != 0) {
 			/* pulse low for 20 millisecs */
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				0);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 0);
 			msleep(10);
-			/* during the reset, force IRQ OUT as DH output
-			 *instead of input in normal usage
-			 */
-			ret = gpio_direction_output(
-					st21nfc_dev->platform_data.irq_gpio,	1);
+			/* during the reset, force IRQ OUT as DH output instead of input in normal usage */
+			ret = gpio_direction_output(st21nfc_dev->platform_data.irq_gpio, 1);
 			if (ret) {
-				pr_err("%s : gpio_direction_output failed\n",
-					__FILE__);
+				pr_err("%s : gpio_direction_output failed\n", __FILE__);
 				ret = -ENODEV;
 				break;
 			}
 			gpio_set_value(st21nfc_dev->platform_data.irq_gpio, 1);
 			msleep(10);
-			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
-				1);
+			gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 1);
 			pr_info("%s done Pulse Request\n", __func__);
 		}
 		msleep(20);
@@ -406,10 +446,9 @@ static ssize_t st21nfc_show_i2c_addr(struct device *dev,
 	struct i2c_client *client = to_i2c_client(dev);
 
 	if (client != NULL)
-		return snprintf(buf, sizeof(unsigned short),
-				"0x%.2x\n", client->addr);
+		return sprintf(buf, "0x%.2x\n", client->addr);
 	return 0;
-}
+}				/* st21nfc_show_i2c_addr() */
 
 static ssize_t st21nfc_change_i2c_addr(struct device *dev,
 				       struct device_attribute *attr,
@@ -428,13 +467,13 @@ static ssize_t st21nfc_change_i2c_addr(struct device *dev,
 		return -EINVAL;
 	}
 	return 0;
-}
+}				/* st21nfc_change_i2c_addr() */
 
 static ssize_t st21nfc_version(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, strlen(DRIVER_VERSION),  "%s\n", DRIVER_VERSION);
-}
+	return sprintf(buf, "%s\n", DRIVER_VERSION);
+}				/* st21nfc_version */
 
 static DEVICE_ATTR(i2c_addr, S_IRUGO | S_IWUSR, st21nfc_show_i2c_addr,
 		   st21nfc_change_i2c_addr);
@@ -459,8 +498,7 @@ static int nfc_parse_dt(struct device *dev, struct st21nfc_platform_data *pdata)
 
 	np = of_find_compatible_node(NULL, NULL, "st,st21nfc");
 	if (IS_ERR_OR_NULL(np)) {
-		pr_err("[dsc]%s: cannot find compatible node \"%s\"",
-			__func__, "st,st21nfc");
+		pr_err("[dsc]%s: cannot find compatible node \"%s\"", __func__, "st,st21nfc");
 		return -ENODEV;
 	}
 
@@ -475,9 +513,14 @@ static int nfc_parse_dt(struct device *dev, struct st21nfc_platform_data *pdata)
 		return -EINVAL;
 	}
 
+	pdata->clkreq_gpio = of_get_named_gpio(np, "st,clkreq_gpio", 0);
+	if ((!gpio_is_valid(pdata->clkreq_gpio))) {
+		pr_err("[dsc]%s: [OPTIONAL] fail to get clkreq_gpio\n", __func__);
+	}
+
 	pdata->polarity_mode = IRQF_TRIGGER_RISING;
-	pr_debug("[dsc]%s : get reset_gpio[%d], irq_gpio[%d],polarity_mode[%d]\n",
-		__func__, pdata->reset_gpio, pdata->irq_gpio, pdata->polarity_mode);
+	pr_err("[dsc]%s : get reset_gpio[%d], irq_gpio[%d], polarity_mode[%d]\n",
+	       __func__, pdata->reset_gpio, pdata->irq_gpio, pdata->polarity_mode);
 	return r;
 }
 #else
@@ -486,6 +529,7 @@ static int nfc_parse_dt(struct device *dev, struct st21nfc_platform_data *pdata)
 	return 0;
 }
 #endif
+
 
 static int st21nfc_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -506,18 +550,18 @@ static int st21nfc_probe(struct i2c_client *client,
 		}
 		pr_info("%s : Parse st21nfc DTS\n", __func__);
 		ret = nfc_parse_dt(&client->dev, platform_data);
-		if (ret)
+		if (ret) {
 			return ret;
+		}
 	} else {
 		platform_data = client->dev.platform_data;
 		pr_info("%s : No st21nfc DTS\n", __func__);
 	}
-
-	if (!platform_data)
+	if (!platform_data) {
 		return -EINVAL;
-
-	dev_dbg(&client->dev, "nfc-nci probe: %s, inside nfc-nci flags = %x\n",
-		__func__, client->flags);
+	}
+	dev_dbg(&client->dev,"nfc-nci probe: %s, inside nfc-nci flags = %x\n",
+			__func__, client->flags);
 
 	if (platform_data == NULL) {
 		dev_err(&client->dev, "nfc-nci probe: failed\n");
@@ -544,6 +588,7 @@ static int st21nfc_probe(struct i2c_client *client,
 
 	/* store for later use */
 	st21nfc_dev->platform_data.irq_gpio = platform_data->irq_gpio;
+	st21nfc_dev->platform_data.clkreq_gpio = platform_data->clkreq_gpio;
 	st21nfc_dev->platform_data.ena_gpio = platform_data->ena_gpio;
 	st21nfc_dev->platform_data.reset_gpio = platform_data->reset_gpio;
 	st21nfc_dev->platform_data.polarity_mode = platform_data->polarity_mode;
@@ -562,6 +607,19 @@ static int st21nfc_probe(struct i2c_client *client,
 		ret = -ENODEV;
 		goto err_free_buffer;
 	}
+
+	ret = gpio_request(platform_data->clkreq_gpio, "clkreq_gpio");
+	if (ret) {
+		pr_err("%s : [OPTIONAL] gpio_request failed\n", __FILE__);
+		ret = 0;
+	} else {
+		ret = gpio_direction_input(platform_data->clkreq_gpio);
+		if (ret) {
+			pr_err("%s : [OPTIONAL] gpio_direction_input failed\n", __FILE__);
+			ret = 0;
+		}
+	}
+
 
 	/* initialize irqIsAttached variable */
 	irqIsAttached = false;
@@ -595,6 +653,7 @@ static int st21nfc_probe(struct i2c_client *client,
 	init_waitqueue_head(&st21nfc_dev->read_wq);
 	mutex_init(&st21nfc_dev->platform_data.read_mutex);
 	spin_lock_init(&st21nfc_dev->irq_enabled_lock);
+	pr_debug("%s : debug irq_gpio = %d, client-irq =  %d\n", __func__, platform_data->irq_gpio, client->irq);
 	st21nfc_dev->st21nfc_device.minor = MISC_DYNAMIC_MINOR;
 	st21nfc_dev->st21nfc_device.name = "st21nfc";
 	st21nfc_dev->st21nfc_device.fops = &st21nfc_dev_fops;
@@ -612,8 +671,13 @@ static int st21nfc_probe(struct i2c_client *client,
 		goto err_request_irq_failed;
 	}
 	st21nfc_disable_irq(st21nfc_dev);
-	pr_info("%s:successfully\n", __func__);
 
+	ret = st_clock_select(st21nfc_dev);
+	if (ret < 0) {
+		pr_err("%s : st_clock_select failed\n", __FILE__);
+		goto err_request_irq_failed;
+	}
+	pr_info("%s: done successfully\n", __func__);
 	return 0;
 
 err_request_irq_failed:
@@ -634,6 +698,7 @@ static int st21nfc_remove(struct i2c_client *client)
 	struct st21nfc_dev *st21nfc_dev;
 
 	st21nfc_dev = i2c_get_clientdata(client);
+	st_clock_deselect(st21nfc_dev);
 	free_irq(client->irq, st21nfc_dev);
 	misc_deregister(&st21nfc_dev->st21nfc_device);
 	mutex_destroy(&st21nfc_dev->platform_data.read_mutex);
@@ -650,7 +715,7 @@ static const struct i2c_device_id st21nfc_id[] = {
 	{}
 };
 
-static const struct of_device_id st21nfc_of_match[] = {
+static struct of_device_id st21nfc_of_match[] = {
 	{ .compatible = "st,st21nfc",},
 	{}
 };
