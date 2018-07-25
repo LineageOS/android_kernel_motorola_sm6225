@@ -34,6 +34,7 @@ struct mmi_uart_hdr_t {
 #define POWER_STATUS          0x0003
 #define POWER_CONTROL         0x0004
 #define BOOT_MODE             0x0007
+#define MUC_FW_VERSION        0x0008
 
 enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
 struct boot_mode_t {

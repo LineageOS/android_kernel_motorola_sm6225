@@ -49,11 +49,15 @@
  */
 #define MUC_UART_SLEEP_REQ_TIMEOUT 5000 /* ms */
 
+/* How many times to try to send a message before giving up */
+#define MUC_UART_RETRY_COUNT 10
+
 struct write_data {
 	struct list_head list;
 	uint16_t cmd;
 	uint8_t *payload;
 	size_t payload_length;
+	uint8_t retries;
 };
 
 struct mod_muc_data_t {
@@ -92,9 +96,13 @@ static DEFINE_SPINLOCK(write_q_lock);
 /* Share tx between acks and send queue */
 DEFINE_MUTEX(tx_lock);
 
-static char *param_bootmode = "NA";
-module_param(param_bootmode, charp, S_IRUSR);
-MODULE_PARM_DESC(param_bootmode, "ro.bootmode");
+static char *param_guid = "";
+module_param(param_guid, charp, S_IRUSR);
+MODULE_PARM_DESC(param_guid, "ro.mot.build.guid");
+
+static char *param_vers = "";
+module_param(param_vers, charp, S_IRUSR);
+MODULE_PARM_DESC(param_vers, "ro.build.fingerprint");
 
 static ktime_t time_send_start;
 static ktime_t time_send_end;
@@ -259,6 +267,7 @@ static int muc_uart_sync_wake(struct mod_muc_data_t *mm_data)
 	/* Only toggle the line if the muc isn't awake */
 	if (gpio_get_value(mm_data->wake_in_gpio)) {
 		gpio_set_value(mm_data->wake_out_gpio, 1);
+		mdelay(1);
 		gpio_set_value(mm_data->wake_out_gpio, 0);
 		return 1;
 	}
@@ -390,6 +399,7 @@ static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	INIT_LIST_HEAD(&write_data->list);
 	write_data->payload_length = payload_len;
 	write_data->cmd = cmd;
+	write_data->retries = MUC_UART_RETRY_COUNT;
 	memcpy(write_data->payload, payload, payload_len);
 
 	spin_lock_irqsave(&write_q_lock, flags);
@@ -463,6 +473,15 @@ static void muc_uart_send_work(struct work_struct *w)
 
 	if (ret < 0) {
 		pr_err("muc_uart_send_work failed to send: %d\n", ret);
+		if (write_data->retries) {
+			write_data->retries--;
+			if (!write_data->retries) {
+				pr_err("muc_uart_send_work failed to send message.\n");
+				atomic_add_unless(&mm_data->write_credits, 1, 100);
+				goto destroy_msg;
+			}
+		}
+
 		/* Put back on top of queue to try later*/
 		INIT_LIST_HEAD(&write_data->list);
 		spin_lock_irqsave(&write_q_lock, flags);
@@ -477,10 +496,13 @@ static void muc_uart_send_work(struct work_struct *w)
 		queue_delayed_work(mm_data->write_wq,
 				&mm_data->write_work,
 				msecs_to_jiffies(10));
-	} else {
-		kfree(write_data->payload);
-		kfree(write_data);
-	}
+	} else
+		goto destroy_msg;
+
+	return;
+destroy_msg:
+	kfree(write_data->payload);
+	kfree(write_data);
 }
 
 static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
@@ -491,11 +513,18 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 
 	bootmode.hwid = bi_hwrev();
 
-	if (strncmp(param_bootmode, "mot-factory", strlen("mot-factory")) == 0) {
+	strncpy(bootmode.ap_guid,
+		param_guid,
+		sizeof(bootmode.ap_guid));
+	strncpy(bootmode.ap_fw_ver_str,
+		param_vers,
+		sizeof(bootmode.ap_fw_ver_str));
+
+	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		bootmode.boot_mode = FACTORY;
-	} else if (strncmp(param_bootmode, "qcom", strlen("qcom")) == 0) {
+	} else if (strncmp(bi_bootmode(), "qcom", strlen("qcom")) == 0) {
 		bootmode.boot_mode = QCOM;
-	} else if (strncmp(param_bootmode, "bp-tools", strlen("bp-tools")) == 0) {
+	} else if (strncmp(bi_bootmode(), "bp-tools", strlen("bp-tools")) == 0) {
 		bootmode.boot_mode = BP_TOOLS;
 	} else {
 		/* TODO defaults to normal.  Should we have unknown/other? */
@@ -506,6 +535,10 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		bootmode.boot_mode);
 	pr_info("muc_uart_send_bootmode sending AP hwid 0x%x\n",
 		bootmode.hwid);
+	pr_info("muc_uart_send_bootmode (%zd) sending AP guid %s\n",
+		sizeof(bootmode.ap_guid), bootmode.ap_guid);
+	pr_info("muc_uart_send_bootmode (%zd) sending AP vers %s\n",
+		sizeof(bootmode.ap_fw_ver_str), bootmode.ap_fw_ver_str);
 
 	return muc_uart_queue_send(mm_data,
 		BOOT_MODE,
@@ -615,6 +648,16 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 				muc_uart_send(mm_data, BOOT_MODE|MSG_ACK_MASK, NULL, 0);
 			else
 				muc_uart_send(mm_data, BOOT_MODE|MSG_NACK_MASK, NULL, 0);
+			break;
+		}
+		case MUC_FW_VERSION: {
+			if (payload_len) {
+				muc_uart_send(mm_data, MUC_FW_VERSION|MSG_ACK_MASK, NULL, 0);
+				pr_info("muc_uart_handle_message: muc_fw_ver: %.*s\n",
+					(int)payload_len,
+					(char *)payload);
+			} else
+				muc_uart_send(mm_data, MUC_FW_VERSION|MSG_NACK_MASK, NULL, 0);
 			break;
 		}
 		default: {
@@ -1099,7 +1142,8 @@ static struct platform_driver muc_uart_driver = {
 
 int muc_uart_init(void)
 {
-	pr_info("muc_uart_init, bootmode: %s\n", param_bootmode);
+	pr_info("muc_uart_init, guid: %s\n", param_guid);
+	pr_info("muc_uart_init, vers: %s\n", param_vers);
 	return platform_driver_register(&muc_uart_driver);
 }
 
