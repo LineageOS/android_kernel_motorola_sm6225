@@ -59,6 +59,10 @@ ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
 else
    cirrus_cs35l41-objs += cs35l41-i2c.o
 endif
+
+cirrus_playback-objs = msm-cirrus-playback.o
+obj-m += cirrus_playback.o
+
 snd_soc_tfa9874-objs += tfa98xx.o
 snd_soc_tfa9874-objs += tfa_container.o
 snd_soc_tfa9874-objs += tfa_dsp.o
