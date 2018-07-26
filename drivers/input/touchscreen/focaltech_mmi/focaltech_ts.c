@@ -1323,7 +1323,7 @@ static int ft_ts_stop(struct device *dev)
 	input_mt_report_pointer_emulation(data->input_dev, false);
 	input_sync(data->input_dev);
 
-	if (gpio_is_valid(data->pdata->reset_gpio)) {
+	if (gpio_is_valid(data->pdata->reset_gpio) || (data->pdata->force_send_sleep == true)) {
 		txbuf[0] = FT_REG_PMODE;
 		txbuf[1] = FT_PMODE_HIBERNATE;
 		ft_i2c_write(data->client, txbuf, sizeof(txbuf));
@@ -3191,6 +3191,11 @@ static int ft_parse_dt(struct device *dev,
 	if (of_property_read_bool(np, "focaltech,fw-update-mmi")) {
 		pr_notice("using mmi firmware update\n");
 		pdata->fw_update_mmi = true;
+	}
+
+	if (of_property_read_bool(np, "focaltech,force-send-sleep")) {
+		pr_notice("using mmi force send sleep cmd\n");
+		pdata->force_send_sleep = true;
 	}
 
 	if (of_property_read_bool(np, "focaltech,x-flip")) {
