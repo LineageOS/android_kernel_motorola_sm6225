@@ -1077,19 +1077,50 @@ static int aw869x_haptic_init(struct aw869x *aw869x)
  * vibrator
  *
  *****************************************************/
+static void aw869x_rtp_play(struct aw869x *aw869x, int value)
+{
+	aw869x_haptic_stop(aw869x);
+	aw869x_haptic_set_rtp_aei(aw869x, false);
+	aw869x_interrupt_clear(aw869x);
+#if 0
+#ifdef AW869X_HAPTIC_VBAT_MONITOR
+	aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BYPASS_MODE);
+#endif
+#else
+	aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8V);
+#endif
+	if(value) {
+		if(aw869x->rtp_init) {
+			schedule_work(&aw869x->rtp_work);
+		} else {
+			pr_err("%s: aw869x rtp init = %d, init error\n", __func__, aw869x->rtp_init);
+		}
+	}
+}
+
 static void aw869x_vibrate(struct aw869x *aw869x, int value)
 {
     mutex_lock(&aw869x->lock);
 
     aw869x_haptic_stop(aw869x);
-    if (value > 0) {
-	if (value < 100) {
+    pr_info("%s: value=%d, aw869x->seq=0x%08x\n", __FUNCTION__, value, aw869x->seq);
+    if (value > 0 || aw869x->seq != 0) {
+	if (((aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF) >= 10) {
+		aw869x_rtp_play(aw869x, 1);
+		aw869x->seq = 0;
+	} else if (value < 100 || aw869x->seq != 0) {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
+#ifdef AW869X_HAPTIC_VBAT_MONITOR
+		aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BOOST_MODE);
+#endif
 		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
 		//aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
 		aw869x_haptic_set_gain(aw869x, 0x20);
-		aw869x->seq = 0x01000000;
+
+		if (aw869x->seq == 0)
+			aw869x->seq = 0x01000000;
+
 		aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
 		//aw869x_haptic_set_repeat_seq(aw869x, 0);
 		//aw869x->index = 0x01;
@@ -1099,6 +1130,7 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 		hrtimer_start(&aw869x->timer, 
 		ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 	*/
+		aw869x->seq = 0;
 	} else {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
@@ -1173,6 +1205,18 @@ static void awinic_hap_brightness_set(struct led_classdev *cdev,
     }
 }
 #endif
+
+static ssize_t aw869x_extra_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t aw869x_extra_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+	return count;
+}
 
 static ssize_t aw869x_state_show(struct device *dev,
         struct device_attribute *attr, char *buf)
@@ -1585,19 +1629,8 @@ static ssize_t aw869x_rtp_store(struct device *dev, struct device_attribute *att
     if (rc < 0)
         return rc;
 
-    aw869x_haptic_stop(aw869x);
-    aw869x_haptic_set_rtp_aei(aw869x, false);
-    aw869x_interrupt_clear(aw869x);
-#ifdef AW869X_HAPTIC_VBAT_MONITOR
-    aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BYPASS_MODE);
-#endif
-    if(val) {
-        if(aw869x->rtp_init) {
-            schedule_work(&aw869x->rtp_work);
-        } else {
-            pr_err("%s: aw869x rtp init = %d, init error\n", __func__, aw869x->rtp_init);
-        }
-    }
+    aw869x_rtp_play(aw869x, val);
+
     return count;
 }
 
@@ -1639,6 +1672,7 @@ static ssize_t aw869x_ram_update_store(struct device *dev, struct device_attribu
     return count;
 }
 
+static DEVICE_ATTR(extra, S_IWUSR | S_IRUGO, aw869x_extra_show, aw869x_extra_store);
 static DEVICE_ATTR(state, S_IWUSR | S_IRUGO, aw869x_state_show, aw869x_state_store);
 static DEVICE_ATTR(duration, S_IWUSR | S_IRUGO, aw869x_duration_show, aw869x_duration_store);
 static DEVICE_ATTR(activate, S_IWUSR | S_IRUGO, aw869x_activate_show, aw869x_activate_store);
@@ -1652,6 +1686,7 @@ static DEVICE_ATTR(rtp, S_IWUSR | S_IRUGO, aw869x_rtp_show, aw869x_rtp_store);
 static DEVICE_ATTR(ram_update, S_IWUSR | S_IRUGO, aw869x_ram_update_show, aw869x_ram_update_store);
 
 static struct attribute *aw869x_vibrator_attributes[] = {
+    &dev_attr_extra.attr,
     &dev_attr_state.attr,
     &dev_attr_duration.attr,
     &dev_attr_activate.attr,
