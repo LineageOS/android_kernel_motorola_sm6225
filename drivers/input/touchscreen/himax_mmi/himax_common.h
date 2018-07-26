@@ -153,6 +153,8 @@ void himax_touch_proc_deinit(void);
 #define HX_REPORT_COORD	1
 #define HX_REPORT_SMWP_EVENT	2
 
+#define HX_FILENAME_SIZE	80
+
 #ifdef HX_FIX_TOUCH_INFO
 enum fix_touch_info
 {
@@ -234,7 +236,9 @@ struct himax_report_data
 struct himax_ts_data
 {
     bool suspended;
+    bool force_update;
     atomic_t suspend_mode;
+    atomic_t flash_mode;
     uint8_t x_channel;
     uint8_t y_channel;
     uint8_t useScreenRes;

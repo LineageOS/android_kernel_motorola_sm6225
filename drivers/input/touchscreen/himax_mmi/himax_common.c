@@ -1705,6 +1705,327 @@ static void himax_ts_diag_work_func(struct work_struct *work)
 }
 #endif
 
+static const char* himax_ic_type_to_string(void) {
+	switch(IC_TYPE) {
+	case HX_83112A_SERIES_PWON: return "hx83112a";
+	default: return "hxxxxxx";
+	}
+}
+
+static int himax_fw_updater(struct himax_ts_data *ts, const char *fileName) {
+	const struct firmware *fw = NULL;
+	int fw_type = 0;
+	int result;
+
+	himax_int_enable(ts->client->irq, 0);
+#ifdef HX_CHIP_STATUS_MONITOR
+	g_chip_monitor_data->HX_CHIP_POLLING_COUNT = 0;
+	g_chip_monitor_data->HX_CHIP_MONITOR_EN = 0;
+	cancel_delayed_work_sync(&ts->himax_chip_monitor);
+#endif
+
+	result = request_firmware(&fw, fileName, ts->dev);
+	if (result < 0) {
+		I("fail to request_firmware fwpath: %s (ret:%d)\n", fileName, result);
+		return result;
+	}
+	I("%s: FW image: %02X, %02X, %02X, %02X\n",
+		__func__, fw->data[0], fw->data[1], fw->data[2], fw->data[3]);
+
+        fw_type = (fw->size)/1024;
+	I("Now FW size is : %dk\n",fw_type);
+	switch(fw_type) {
+	case 32:
+		result = fts_ctpm_fw_upgrade_with_sys_fs_32k(ts->client,
+			(unsigned char *)fw->data, fw->size, false);
+		if (result == 0)
+			E("%s: TP upgrade error, line: %d\n", __func__, __LINE__);
+		else
+			I("%s: TP upgrade OK, line: %d\n", __func__, __LINE__);
+		break;
+	case 60:
+		result = fts_ctpm_fw_upgrade_with_sys_fs_60k(ts->client,
+			(unsigned char *)fw->data, fw->size, false);
+		if (result == 0)
+			E("%s: TP upgrade error, line: %d\n", __func__, __LINE__);
+		else
+			I("%s: TP upgrade OK, line: %d\n", __func__, __LINE__);
+		break;
+	case 64:
+		result = fts_ctpm_fw_upgrade_with_sys_fs_64k(ts->client,
+			(unsigned char *)fw->data, fw->size, false);
+		if (result == 0)
+			E("%s: TP upgrade error, line: %d\n", __func__, __LINE__);
+		else
+			I("%s: TP upgrade OK, line: %d\n", __func__, __LINE__);
+		break;
+	case 124:
+		result = fts_ctpm_fw_upgrade_with_sys_fs_124k(ts->client,
+			(unsigned char *)fw->data, fw->size, false);
+		if (result == 0)
+			E("%s: TP upgrade error, line: %d\n", __func__, __LINE__);
+		else
+			I("%s: TP upgrade OK, line: %d\n", __func__, __LINE__);
+		break;
+	case 128:
+		result = fts_ctpm_fw_upgrade_with_sys_fs_128k(ts->client,
+			(unsigned char *)fw->data, fw->size, false);
+		if (result == 0)
+			E("%s: TP upgrade error, line: %d\n", __func__, __LINE__);
+		else
+			I("%s: TP upgrade OK, line: %d\n", __func__, __LINE__);
+		break;
+	default:
+		E("%s: Flash command fail: %d\n", __func__, __LINE__);
+		break;
+	}
+	release_firmware(fw);
+	himax_read_FW_ver(ts->client);
+	himax_touch_information(ts->client);
+
+#ifdef HX_RST_PIN_FUNC
+	himax_ic_reset(true,false);
+#else
+	himax_sense_on(ts->client,0);
+#endif
+	himax_int_enable(ts->client->irq,1);
+
+#ifdef HX_CHIP_STATUS_MONITOR
+	g_chip_monitor_data->HX_CHIP_POLLING_COUNT = 0;
+	g_chip_monitor_data->HX_CHIP_MONITOR_EN = 1;
+	queue_delayed_work(ts->himax_chip_monitor_wq,
+		&ts->himax_chip_monitor,
+		g_chip_monitor_data->HX_POLLING_TIMES*HZ);
+#endif
+	return (result <= 0)? -1: 0;
+}
+
+static ssize_t himax_sysfs_poweron_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = i2c_get_clientdata(to_i2c_client(dev));
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+		((atomic_read(&ts->suspend_mode) == 1) ? 0 : 1));
+}
+
+static ssize_t himax_sysfs_flashprog_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = i2c_get_clientdata(to_i2c_client(dev));
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&ts->flash_mode));
+}
+
+static ssize_t himax_sysfs_productinfo_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%s\n", himax_ic_type_to_string());
+}
+
+static ssize_t himax_sysfs_buildid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%X-%02X%02X\n",
+		ic_data->vendor_fw_ver,
+		ic_data->vendor_touch_cfg_ver,
+		ic_data->vendor_display_cfg_ver);
+}
+
+static ssize_t himax_sysfs_force_reflash_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input;
+	struct himax_ts_data *ts = i2c_get_clientdata(to_i2c_client(dev));
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	if (input != 1)
+		return -EINVAL;
+
+	ts->force_update = true;
+
+	return count;
+}
+
+static ssize_t himax_sysfs_do_reflash_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int retval;
+	char prefix[HX_FILENAME_SIZE] = "himax";
+	char template[HX_FILENAME_SIZE];
+	char filename[HX_FILENAME_SIZE];
+	struct himax_ts_data *ts = i2c_get_clientdata(to_i2c_client(dev));
+
+	if (count > HX_FILENAME_SIZE) {
+		E("%s: FW filename is too long\n", __func__);
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	if (!ts->force_update) {
+		if (strncmp(buf, prefix,
+			strnlen(prefix, sizeof(prefix)))) {
+			E("%s: FW does not belong to Himax\n", __func__);
+			retval = -EINVAL;
+			goto exit;
+		}
+
+		snprintf(template, sizeof(template), "-%s-",
+						himax_ic_type_to_string());
+		if (!strnstr(buf + strnlen(prefix, sizeof(prefix)), template,
+			count)) {
+			E("%s: FW does not belong to %s\n",
+				__func__,
+				himax_ic_type_to_string());
+			retval = -EINVAL;
+			goto exit;
+		}
+	}
+
+	strlcpy(filename, buf, count);
+	D("%s: FW filename: %s\n", __func__, filename);
+
+	atomic_set(&ts->flash_mode, 1);
+	retval = himax_fw_updater(ts, filename);
+	atomic_set(&ts->flash_mode, 0);
+	if (retval < 0) {
+		E("%s: Failed to do reflash\n", __func__);
+		goto exit;
+	}
+
+	retval = count;
+
+exit:
+	ts->force_update = false;
+	return retval;
+}
+
+static struct device_attribute attrs[] = {
+	__ATTR(poweron, S_IRUSR | S_IRGRP,
+			himax_sysfs_poweron_show,
+			NULL),
+	__ATTR(productinfo, S_IRUGO,
+			himax_sysfs_productinfo_show,
+			NULL),
+	__ATTR(buildid, S_IRUGO,
+			himax_sysfs_buildid_show,
+			NULL),
+	__ATTR(flashprog, S_IRUSR | S_IRGRP,
+			himax_sysfs_flashprog_show,
+			NULL),
+	__ATTR(doreflash, S_IWUSR | S_IWGRP,
+			NULL,
+			himax_sysfs_do_reflash_store),
+	__ATTR(forcereflash, S_IWUSR | S_IWGRP,
+			NULL,
+			himax_sysfs_force_reflash_store),
+};
+
+#include <linux/major.h>
+#include <linux/kdev_t.h>
+
+/* Attribute: path (RO) */
+static ssize_t path_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = dev_get_drvdata(dev);
+	ssize_t blen;
+	const char *path;
+
+	if (!ts) {
+		pr_err("cannot get himax_ts_data pointer\n");
+		return (ssize_t)0;
+	}
+	path = kobject_get_path(&ts->client->dev.kobj, GFP_KERNEL);
+	blen = scnprintf(buf, PAGE_SIZE, "%s", path ? path : "na");
+	kfree(path);
+	return blen;
+}
+
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "himax");
+}
+
+static struct device_attribute touchscreen_attributes[] = {
+	__ATTR_RO(path),
+	__ATTR_RO(vendor),
+	__ATTR_NULL
+};
+
+#define TSDEV_MINOR_BASE 128
+#define TSDEV_MINOR_MAX 32
+
+static int himax_sysfs_touchscreen(
+	struct himax_ts_data *ts, bool create)
+{
+	struct device_attribute *attrs = touchscreen_attributes;
+	int i, error = 0;
+	static struct class *touchscreen_class;
+	static struct device *ts_class_dev;
+	static int minor;
+
+	if (create) {
+		minor = input_get_new_minor(ts->client->addr,
+						1, false);
+		if (minor < 0)
+			minor = input_get_new_minor(TSDEV_MINOR_BASE,
+					TSDEV_MINOR_MAX, true);
+		pr_info("assigned minor %d\n", minor);
+
+		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
+		if (IS_ERR(touchscreen_class)) {
+			error = PTR_ERR(touchscreen_class);
+			touchscreen_class = NULL;
+			return error;
+		}
+
+		ts_class_dev = device_create(touchscreen_class, NULL,
+				MKDEV(INPUT_MAJOR, minor),
+				ts, himax_ic_type_to_string());
+		if (IS_ERR(ts_class_dev)) {
+			error = PTR_ERR(ts_class_dev);
+			ts_class_dev = NULL;
+			return error;
+		}
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i) {
+			error = device_create_file(ts_class_dev, &attrs[i]);
+			if (error)
+				break;
+		}
+
+		if (error)
+			goto device_destroy;
+	} else {
+		if (!touchscreen_class || !ts_class_dev)
+			return -ENODEV;
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i)
+			device_remove_file(ts_class_dev, &attrs[i]);
+
+		device_unregister(ts_class_dev);
+		class_unregister(touchscreen_class);
+	}
+
+	return 0;
+
+device_destroy:
+	for (--i; i >= 0; --i)
+		device_remove_file(ts_class_dev, &attrs[i]);
+	device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));
+	ts_class_dev = NULL;
+	class_unregister(touchscreen_class);
+	pr_err("error creating touchscreen class\n");
+
+	return -ENODEV;
+}
+
+
 int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 #ifdef HX_AUTO_UPDATE_FW
@@ -1713,6 +2034,7 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
     int ret = 0, err = 0;
     struct himax_ts_data *ts;
     struct himax_i2c_platform_data *pdata;
+    int attr_count;
 
     //Check I2C functionality
     if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -2015,6 +2337,18 @@ FW_force_upgrade:
     himax_touch_proc_init();
 #endif
 
+    for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
+        ret = sysfs_create_file(&ts->client->dev.kobj,
+            &attrs[attr_count].attr);
+        if (ret < 0) {
+            dev_err(&client->dev,
+                "%s: Failed to create sysfs attributes\n", __func__);
+            goto err_sysfs;
+        }
+    }
+
+    himax_sysfs_touchscreen(ts, true);
+
 #if defined( HX_USB_DETECT_CALLBACK)
     if (ts->cable_config)
         cable_detect_register_notifier(&himax_cable_status_handler);
@@ -2034,6 +2368,11 @@ FW_force_upgrade:
     return 0;
 
 err_register_interrupt_failed:
+err_sysfs:
+    for (attr_count--; attr_count >= 0; attr_count--) {
+        sysfs_remove_file(&ts->client->dev.kobj,
+            &attrs[attr_count].attr);
+    }
 #if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
     himax_touch_proc_deinit();
 #endif
@@ -2124,6 +2463,7 @@ err_check_functionality_failed:
 int himax_chip_common_remove(struct i2c_client *client)
 {
     struct himax_ts_data *ts = i2c_get_clientdata(client);
+    int attr_count;
 
 if (!ts->use_irq)
 {
@@ -2131,6 +2471,11 @@ if (!ts->use_irq)
 	destroy_workqueue(ts->himax_wq);
 }
 
+	himax_sysfs_touchscreen(ts, false);
+	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
+		sysfs_remove_file(&ts->client->dev.kobj,
+				&attrs[attr_count].attr);
+	}
 #if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
 	  himax_touch_proc_deinit();
 #endif
