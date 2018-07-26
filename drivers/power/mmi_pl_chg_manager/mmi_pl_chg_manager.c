@@ -64,7 +64,8 @@
 #define TYPEC_MIDDLE_CURRENT_UA		2000000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
 #define FLASH_CHARGER_PPS_MIN_VOLT	8000000
-#define FLASH_CHARGER_PPS_NORM_VOLT	9000000
+#define FLASH_CHARGER_PPS_VOLT		9000000
+#define FLASH_CHARGER_PPS_NORM_VOLT	9500000
 #define FLASH_CHARGER_PPS_MAX_VOLT	10000000
 
 #define	BAT_OVP_FAULT_SHIFT			8
@@ -175,6 +176,7 @@ struct sys_config {
 	u32 flashc_volt_down_steps;
 	u32 flashc_min_vbat_start;
 	u32	pmic_curr_lp_lmt;
+	u32	batt_ovp_lmt;
 };
 
 struct flashc_info {
@@ -746,7 +748,7 @@ static void mmi_pl_pm_move_state(struct mmi_pl_chg_manager *chip, pm_sm_state_t 
 #define FG_ESR_PULSE_MAX_TIMEOUT 20000
 #define FG_ESR_DECREMENT_UA		200000
 #define HEARTBEAT_lOOP_WAIT_MS 5000
-#define HEARTBEAT_PPS_TUNNING_MS 200
+#define HEARTBEAT_PPS_TUNNING_MS 50
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANNEL -1
 #define FLASHC_TAPPER_COUNT 5
@@ -769,6 +771,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 	int flashc_cv_max_volt = 0;
 	int flashc_cv_taper_curr = 0;
 	int pluse_curr = 0;
+	int chrg_step_max = 0;
 	enum mmi_chrg_step	chrg_step;
 	struct mmi_pl_temp_zone *zone;
 	bool zone_change = false;
@@ -850,7 +853,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 	if (!chip->pmic_handle.vbus_pres) {
 		chip->sm_state = PM_STATE_DISCONNECT;
 	} else if (chip->sm_state == PM_STATE_DISCONNECT
-			|| zone_change) {
+			|| zone_change
+			|| chip->sm_state == PM_STATE_ENTRY) {
 		mmi_pl_pm_get_usb_icl(chip);
 		mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
 
@@ -888,6 +892,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		chrg_step = STEP_NORMAL;
 		flashc_cc_max_curr = zone->fcc_norm_ua;
 		flashc_cv_max_volt = zone->norm_uv;
+		flashc_cv_taper_curr = zone->fcc_norm_ua;
 	} else if (vbat_volt > zone->super_uv && zone->high_uv > 0) {
 		chrg_step = STEP_HIGH;
 		flashc_cc_max_curr = zone->fcc_high_ua;
@@ -906,6 +911,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			flashc_cv_taper_curr = zone->fcc_super_ua;
 	}
 
+	chrg_step_max = max(chrg_step,chip->pres_chrg_step);
 	if (flashc_cc_max_curr >
 		chip->pps_current_max * 2 - chip->sys_configs.pmic_curr_lp_lmt)
 		flashc_cc_max_curr =
@@ -916,10 +922,12 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 	mmi_pl_dbg(chip, PR_MOTO,
 				" chrg_step %d, chip->pre_chrg_step %d, "
+				"chrg_step_max %d, "
 				"chip->flashc_cc_max_curr_pre %d, "
 				"chip->flashc_cv_max_volt_pre %d, "
 				"chip->flashc_cv_taper_curr_pre %d\n",
 				chrg_step, chip->pres_chrg_step,
+				chrg_step_max,
 				chip->flashc_cc_max_curr_pre,
 				chip->flashc_cv_max_volt_pre,
 				chip->flashc_cv_taper_curr_pre);
@@ -966,7 +974,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 						chip->flashc_cc_max_curr_pre);
 			mmi_pl_pm_move_state(chip, PM_STATE_SW_ENTRY);
 		} else if (chip->flashc_cc_max_curr_pre >
-					chip->pmic_step_curr) {
+					chip->pmic_step_curr
+				&& chip->pres_chrg_step < STEP_NORMAL) {
 			mmi_pl_dbg(chip, PR_MOTO,
 						"battery volt %d , flashc max curr %d,"
 						"start flash charging\n",
@@ -998,6 +1007,12 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			chip->pmic_ichg_limited = false;
 		}
 
+		mmi_pl_err(chip, "recovery and rerun usb AICL, rc=%d\n", rc);
+		mmi_pl_pm_pmic_enable(chip, false);
+		msleep(100);
+		mmi_pl_pm_pmic_enable(chip, true);
+		mmi_pl_pm_check_pmic_enable(chip);
+
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 
 			if (chip->mmi_pdo_info[i].type ==
@@ -1026,48 +1041,9 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		if (chip->pd_pps_support
 			&& (vbat_volt
 				> chip->sys_configs.flashc_min_vbat_start)
-			&& vbat_volt < chip->flashc_cv_max_volt_pre - 50000
-				&& chip->flashc_cc_max_curr_pre >
-					TYPEC_MIDDLE_CURRENT_UA) {
-
-			usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
-			mmi_pl_dbg(chip, PR_MOTO, "check all effective pdo info\n");
-			for (i = 0; i < PD_MAX_PDO_NUM; i++) {
-
-				if (chip->mmi_pdo_info[i].type ==
-						PD_SRC_PDO_TYPE_AUGMENTED
-					&& chip->mmi_pdo_info[i].uv_max
-						>= FLASH_CHARGER_PPS_MIN_VOLT
-					&& chip->mmi_pdo_info[i].ua
-						>= TYPEC_MIDDLE_CURRENT_UA) {
-					chip->mmi_pps_pdo_idx =
-						chip->mmi_pdo_info[i].pdo_pos;
-					mmi_pl_dbg(chip, PR_MOTO,
-						"pd charger support pps, pdo %d,"
-						"volt %d, curr %d \n",
-						chip->mmi_pps_pdo_idx,
-						chip->mmi_pdo_info[i].uv_max,
-						chip->mmi_pdo_info[i].ua);
-					chip->pd_pps_support = true;
-
-					if (chip->mmi_pdo_info[i].uv_max
-							> FLASH_CHARGER_PPS_MAX_VOLT) {
-						chip->pps_voltage_max
-							= FLASH_CHARGER_PPS_MAX_VOLT;
-					} else
-						chip->pps_voltage_max
-							= chip->mmi_pdo_info[i].uv_max;
-
-					if (chip->mmi_pdo_info[i].ua
-							> TYPEC_HIGH_CURRENT_UA) {
-						chip->pps_current_max
-							= TYPEC_HIGH_CURRENT_UA;
-					} else
-						chip->pps_current_max
-							= chip->mmi_pdo_info[i].ua;
-					break;
-				}
-			}
+			&& chip->flashc_cc_max_curr_pre >
+					chip->pmic_step_curr
+			&& chrg_step_max < STEP_NORMAL) {
 
 			mmi_pl_dbg(chip, PR_MOTO,
 						"battery volt %d, start flash charger\n",
@@ -1095,9 +1071,49 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			chip->pmic_ichg_limited = true;
 		}
 
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+		mmi_pl_dbg(chip, PR_MOTO, "check all effective pdo info\n");
+		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
+
+			if (chip->mmi_pdo_info[i].type ==
+					PD_SRC_PDO_TYPE_AUGMENTED
+				&& chip->mmi_pdo_info[i].uv_max
+					>= FLASH_CHARGER_PPS_MIN_VOLT
+				&& chip->mmi_pdo_info[i].ua
+					>= TYPEC_MIDDLE_CURRENT_UA) {
+				chip->mmi_pps_pdo_idx =
+					chip->mmi_pdo_info[i].pdo_pos;
+				mmi_pl_dbg(chip, PR_MOTO,
+					"pd charger support pps, pdo %d,"
+					"volt %d, curr %d \n",
+					chip->mmi_pps_pdo_idx,
+					chip->mmi_pdo_info[i].uv_max,
+					chip->mmi_pdo_info[i].ua);
+				chip->pd_pps_support = true;
+
+				if (chip->mmi_pdo_info[i].uv_max
+						> FLASH_CHARGER_PPS_MAX_VOLT) {
+					chip->pps_voltage_max
+						= FLASH_CHARGER_PPS_MAX_VOLT;
+				} else
+					chip->pps_voltage_max
+						= chip->mmi_pdo_info[i].uv_max;
+
+				if (chip->mmi_pdo_info[i].ua
+						> TYPEC_HIGH_CURRENT_UA) {
+					chip->pps_current_max
+						= TYPEC_HIGH_CURRENT_UA;
+				} else
+					chip->pps_current_max
+						= chip->mmi_pdo_info[i].ua;
+				break;
+			}
+		}
+
 		request_volt = (2 * vbat_volt) % 20000;
 		request_volt = 2 * vbat_volt - request_volt
 						+ chip->sys_configs.flashc_volt_hysteresis;
+		request_volt = min(request_volt,FLASH_CHARGER_PPS_VOLT);
 
 		if (chip->pps_current_max > TYPEC_MIDDLE_CURRENT_UA)
 			request_curr = TYPEC_MIDDLE_CURRENT_UA;
@@ -1127,18 +1143,54 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 								"increase pps current\n");
 		if ((chip->request_current +
 			chip->sys_configs.flashc_curr_up_steps)
-			< chip->pps_current_max) {
+			< chip->pps_current_max
+			&& chip->pmic_handle.vbat_volt <
+				chip->flashc_cv_max_volt_pre
+			&& ibat_curr < chip->flashc_cc_max_curr_pre) {
 			chip->request_current +=
 				chip->sys_configs.flashc_curr_up_steps;
 			mmi_pl_dbg(chip, PR_MOTO, "increase pps current %d\n",
 							chip->request_current);
 			heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
 		} else {
-			chip->request_current = chip->pps_current_max;
+
 			chip->pps_increase_volt = true;
 			mmi_pl_pm_move_state(chip,
 					PM_STATE_FLASHC_TUNNING_VOLT);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+
+			if (chrg_step !=chip->pres_chrg_step) {
+				if (vbat_volt > zone->high_uv && zone->norm_uv > 0) {
+					chip->pres_chrg_step = STEP_NORMAL;
+					chip->flashc_cc_max_curr_pre = zone->fcc_norm_ua;
+					chip->flashc_cv_taper_curr_pre = zone->fcc_norm_ua;
+					chip->flashc_cv_max_volt_pre = zone->norm_uv;
+				} else if (vbat_volt > zone->super_uv && zone->high_uv > 0) {
+					chip->pres_chrg_step = STEP_HIGH;
+					chip->flashc_cc_max_curr_pre = zone->fcc_high_ua;
+					chip->flashc_cv_max_volt_pre = zone->high_uv;
+					if (zone->fcc_norm_ua > 0)
+						chip->flashc_cv_taper_curr_pre =
+							zone->fcc_norm_ua;
+					else
+						chip->flashc_cv_taper_curr_pre =
+							zone->fcc_high_ua;
+
+				} else {
+					chip->pres_chrg_step = STEP_SUPER;
+					chip->flashc_cc_max_curr_pre = zone->fcc_super_ua;
+					chip->flashc_cv_max_volt_pre = zone->super_uv;
+					if (zone->fcc_high_ua > 0)
+						chip->flashc_cv_taper_curr_pre = zone->fcc_high_ua;
+					else
+						chip->flashc_cv_taper_curr_pre = zone->fcc_super_ua;
+				}
+
+				chip->flashc_cc_max_curr_pre =
+			 	min(chip->flashc_cc_max_curr_pre, chip->pps_current_max * 2);
+				mmi_pl_dbg(chip, PR_MOTO,
+						"update flashc parameters for float voltage\n");
+			}
 		}
 
 		if (!chip->flashc_handle.charge_enabled) {
@@ -1178,7 +1230,9 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		if (chip->pps_increase_volt
 			&& ibat_curr < chip->flashc_cc_max_curr_pre
 			&& chip->request_volt <
-				chip->pps_voltage_max - 200000) {
+				chip->pps_voltage_max - 200000
+			&& chip->pmic_handle.vbat_volt <
+				chip->flashc_cv_max_volt_pre) {
 			chip->request_volt +=
 					chip->sys_configs.flashc_volt_up_steps;
 			mmi_pl_dbg(chip, PR_MOTO,
@@ -1236,22 +1290,30 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 					PPS_SELECT_PDO_RETRY_COUNT) {
 
 			if ((chip->request_volt + chip->sys_configs.flashc_volt_up_steps)
-				> FLASH_CHARGER_PPS_NORM_VOLT)
-
+				> FLASH_CHARGER_PPS_NORM_VOLT) {
 				chip->request_current -=
 						chip->sys_configs.flashc_curr_down_steps;
 				chip->request_volt +=
 						mmi_calculate_delta_volt(chip->request_volt,
 							chip->request_current,
 							chip->sys_configs.flashc_curr_down_steps);
-				chip->flashc_cc_tunning_cnt = 0;
-				mmi_pl_dbg(chip, PR_MOTO, "need increase pps voltage,"
-							"decrease pps current"
-							"to keep CC charger power,"
-							"request volt %d, "
-							"request curr %d\n",
-							chip->request_volt,
-							chip->request_current);
+				mmi_pl_dbg(chip, PR_MOTO, "request_curr decrease to %dmA, "
+								"request_volt increase to %d\n",
+								chip->request_current,
+								chip->request_volt);
+			} else {
+				mmi_pl_dbg(chip, PR_MOTO, "request_volt reduce %dmv\n",
+							chip->sys_configs.flashc_volt_up_steps);
+				chip->request_volt += chip->sys_configs.flashc_volt_up_steps;
+			}
+			chip->flashc_cc_tunning_cnt = 0;
+			mmi_pl_dbg(chip, PR_MOTO, "need increase pps voltage,"
+						"decrease pps current"
+						"to keep CC charger power,"
+						"request volt %d, "
+						"request curr %d\n",
+						chip->request_volt,
+						chip->request_current);
 		} else if (ibat_curr <
 					chip->flashc_cc_max_curr_pre
 				&& chip->request_volt < chip->pps_voltage_max) {
@@ -1314,14 +1376,14 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		} else
 			chip->pps_select_pdo_retry_cont = 0;
 
-		if (vbat_volt > chip->flashc_cv_max_volt_pre + 50000
+		if (vbat_volt > chip->flashc_cv_max_volt_pre + 20000
 			&& chip->flashc_taper_delta_volt > 20000) {
 			chip->request_volt -= chip->flashc_taper_delta_volt;
 			mmi_pl_dbg(chip, PR_MOTO, "For keeping flashc constant voltage step,"
 						"decrease pps voltage %d ,delta volta %d \n",
 						chip->request_volt, chip->flashc_taper_delta_volt);
 		} else if (chip->pmic_handle.vbat_volt
-				< chip->flashc_cv_max_volt_pre - 30000) {
+				< chip->flashc_cv_max_volt_pre - 20000) {
 			chip->flashc_taper_delta_volt -=  20000;
 			chip->request_volt += 20000;
 			mmi_pl_dbg(chip, PR_MOTO, "For keeping flashc constant voltage step,"
@@ -1337,7 +1399,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		if (ibat_curr <= chip->flashc_cv_taper_curr_pre) {
 			if (chip->flashc_taper_cnt > FLASHC_TAPPER_COUNT) {
 				if (chrg_step != chip->pres_chrg_step
-					&& flashc_cc_max_curr > chip->pmic_step_curr) {
+					&& flashc_cc_max_curr < chip->flashc_cc_max_curr_pre) {
 					chip->pres_chrg_step = chrg_step;
 					chip->flashc_cc_max_curr_pre = flashc_cc_max_curr;
 					chip->flashc_cv_max_volt_pre = flashc_cv_max_volt;
@@ -1349,7 +1411,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 					mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CC_LOOP);
 					heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
-				} else {
+				} else if (ibat_curr < chip->pmic_step_curr) {
 					mmi_pl_dbg(chip, PR_MOTO,
 								"Ready to quit flashc CV charger, "
 								"chrg step %d ,"
@@ -1407,8 +1469,13 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			mmi_pl_dbg(chip, PR_MOTO,
 					"decrease pps voltage %d\n", chip->request_volt);
 			heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
-		} else
+		} else {
+			mmi_pl_pm_pmic_enable(chip, false);
+			msleep(100);
+			mmi_pl_pm_pmic_enable(chip, true);
+			mmi_pl_pm_check_pmic_enable(chip);			
 			mmi_pl_pm_move_state(chip, PM_STATE_SW_LOOP);
+		}
 
 		break;
 	case PM_STATE_STOP_CHARGE:
@@ -1448,6 +1515,13 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 schedule:
 
+	if(vbat_volt > chip->sys_configs.batt_ovp_lmt) {
+		chip->request_volt -= chip->sys_configs.flashc_volt_down_steps;
+		mmi_pl_dbg(chip, PR_MOTO, "trigger batt OVP, reduce volt %d, "
+				"request volt %d\n",
+				chip->sys_configs.flashc_volt_down_steps,
+				chip->request_volt);
+	}
 	chip->target_volt = min(chip->request_volt, chip->pps_voltage_max);
 	chip->target_curr = min(chip->request_current, chip->pps_current_max);
 
@@ -1472,7 +1546,8 @@ schedule:
 				chip->mmi_pps_pdo_idx,
 				chip->target_volt, chip->target_curr);
 
-	if (chip->flashc_handle.charge_enabled) {
+	if (chip->flashc_handle.charge_enabled
+		&& chrg_step_max < STEP_NORMAL) {
 		if (chip->fg_esr_pulse_timeout >=
 			FG_ESR_PULSE_MAX_TIMEOUT) {
 			pluse_curr = chip->flashc_handle.ibus_curr % 50000;
@@ -1494,6 +1569,17 @@ schedule:
 		}
 		chip->fg_esr_pulse_timeout +=
 			heartbeat_dely_ms;
+
+		if(chip->sm_state == PM_STATE_ENTRY) {
+			usbpd_select_pdo(chip->pd_handle,
+					chip->mmi_pps_pdo_idx,
+					SWITCH_CHARGER_PPS_VOLT,
+					TYPEC_HIGH_CURRENT_UA);
+			msleep(1000);
+			mmi_pl_dbg(chip, PR_MOTO,
+				"reset 5V/3A,clear up float voltage\n");
+		}
+
 	}
 
 	if (heartbeat_dely_ms >= 0) {
@@ -1668,6 +1754,7 @@ static void psy_changed_work_func(struct work_struct *work)
 
 #define DEFAULT_FLASHC_BATT_VOLT_LMT		4200000
 #define DEFAULT_FLASHC_BATT_CURR_LP_LMT		5500000
+#define DEFAULT_BATT_OVP_LMT		4475000
 #define DEFAULT_PMIC_CURR_LP_LMT		500000
 #define DEFAULT_PMIC_STEP_VOLT		4400000
 #define DEFAULT_PMIC_STEP_CURR		2000000
@@ -1684,6 +1771,13 @@ static int mmi_pl_chg_manager_parse_dt(struct mmi_pl_chg_manager *chip)
 	struct device_node *node = chip->dev->of_node;
 	int rc;
 	int byte_len, i;
+
+	rc = of_property_read_u32(node,
+				"mmi,batt-ovp-lmt",
+				&chip->sys_configs.batt_ovp_lmt);
+	if (rc < 0)
+		chip->sys_configs.batt_ovp_lmt =
+				DEFAULT_BATT_OVP_LMT;
 
 	rc = of_property_read_u32(node,
 				"mmi,pmic-curr-lp-lmt",
