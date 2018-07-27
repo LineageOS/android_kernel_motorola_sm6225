@@ -2223,6 +2223,9 @@ static irqreturn_t madera_jackdet(int irq, void *data)
 		info->have_mic = false;
 		info->jack_flips = 0;
 
+		if (info->pdata->init_mic_delay_ms)
+			msleep(info->pdata->init_mic_delay_ms);
+
 		if (info->pdata->custom_jd)
 			madera_jds_set_state(info, info->pdata->custom_jd);
 		else if (info->pdata->micd_software_compare)
@@ -2449,6 +2452,9 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 	pdata = &madera->pdata.accdet[i];
 	pdata->enabled = true;	/* implied by presence of properties node */
 	pdata->output = out_num;
+
+	fwnode_property_read_u32(node, "cirrus,init-mic-delay-ms",
+				 &pdata->init_mic_delay_ms);
 
 	fwnode_property_read_u32(node, "cirrus,micd-detect-debounce-ms",
 				 &pdata->micd_detect_debounce_ms);

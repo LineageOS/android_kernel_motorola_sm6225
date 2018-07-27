@@ -29,6 +29,9 @@ Child node mandatory properties:
   - reg : output number this configuration applies to, must be 1
 
 Child node optional properties:
+  - cirrus,init-mic-delay-ms : Additional delay to wait headset plug in totally
+    delay specified in milliseconds
+
   - cirrus,micd-detect-debounce-ms : Additional software microphone detection
     debounce specified in milliseconds
 

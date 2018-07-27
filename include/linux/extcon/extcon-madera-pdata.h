@@ -92,6 +92,9 @@ struct madera_accdet_pdata {
 	 */
 	u32 hpdet_channel;
 
+	/* Extra delay time to wait the headset plug in totally (milliseconds) */
+	u32 init_mic_delay_ms;
+
 	/** Extra debounce timeout during initial mic detect (milliseconds) */
 	u32 micd_detect_debounce_ms;
 
