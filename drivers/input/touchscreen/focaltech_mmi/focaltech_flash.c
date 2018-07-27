@@ -1624,19 +1624,16 @@ static bool fts_lic_need_upgrade(struct i2c_client *client)
 	ret = fts_lic_get_vid_in_host(&vid_in_host);
 	if (ret < 0) {
 		FTS_ERROR("[UPGRADE]vendor id in host invalid\n");
-		return false;
 	}
 
 	ret = fts_lic_get_vid_in_tp(client, &vid_in_tp);
 	if (ret < 0) {
 		FTS_ERROR("[UPGRADE]vendor id in tp invalid\n");
-		return false;
 	}
 
 	FTS_DEBUG("[UPGRADE]vid in tp:%x, host:%x\n", vid_in_tp, vid_in_host);
 	if (vid_in_tp != vid_in_host) {
 		FTS_INFO("[UPGRADE]vendor id in tp&host are different, no upgrade lic\n");
-		return false;
 	}
 
 	ret = fts_lic_get_ver_in_host(&initcode_ver_in_host);
