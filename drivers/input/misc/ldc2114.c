@@ -241,6 +241,7 @@ struct ldc2114_cfg_info {
 	int attempts;
 	int delay_ms;
 	bool toggled;
+	bool reschedulable;
 	struct completion done;
 };
 
@@ -790,6 +791,22 @@ static void inline ldc2114_toggle_gpio(struct ldc2114_data *ldc,
 #endif
 }
 
+static void ldc2114_toggle(struct ldc2114_data *ldc,
+						int gpio, int times)
+{
+	int i = 0;
+
+	if (!times || times < 0)
+		times = 1;
+
+	while(1) {
+		ldc2114_toggle_gpio(ldc, gpio);
+		if (i++ == times)
+			break;
+		usleep_range(WAIT_USEC_LOW, WAIT_USEC_HIGH);
+	}
+}
+
 static int ldc2114_poll(struct ldc2114_data *ldc,
 						struct ldc2114_raw *data)
 {
@@ -1062,10 +1079,16 @@ static int ldc2114_of_init(struct i2c_client *client)
 	else {
 		ldc->signal_gpio = ret;
 		dev_info(ldc->dev, "using gpio %d as a signal\n", ldc->signal_gpio);
-		/* start with low */
-		gpio_direction_output(ldc->signal_gpio, 0);
-		/* then toggle */
-		ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+
+		ret = devm_gpio_request(ldc->dev,
+						ldc->signal_gpio, LDC2114_DRIVER_NAME "_signal");
+		if (ret) {
+			dev_err(ldc->dev, "failed to request signal-gpio %d\n", ldc->signal_gpio);
+			return ret;
+		}
+
+		/* start high */
+		gpio_direction_output(ldc->signal_gpio, 1);
 	}
 
 	/* Init LWPM gpio into LOW, since this is default power off state */
@@ -1122,7 +1145,7 @@ static inline void ldc2114_of_init(struct i2c_client *client)
 #endif
 
 static void inline ldc2114_config_init(struct ldc2114_data *ldc,
-				struct ldc2114_config *cfg, int delay_ms)
+				struct ldc2114_config *cfg, int delay_ms, bool resched)
 {
 	dev_dbg(ldc->dev, "config_init entered\n");
 
@@ -1130,6 +1153,7 @@ static void inline ldc2114_config_init(struct ldc2114_data *ldc,
 	ldc->config.delay_ms = delay_ms;
 	ldc->config.attempts = 0;
 	ldc->config.toggled = false;
+	ldc->config.reschedulable = resched;
 	reinit_completion(&ldc->config.done);
 }
 
@@ -1159,19 +1183,19 @@ static void ldc2114_config_work(struct work_struct *work)
 
 	dev_dbg(ldc->dev, "config_work entered; is_ready=%d\n", is_ready);
 
-	if (is_ready && !ldc->not_connected &&
-		(gpio_get_value(ldc->intb_gpio) == 0)) {
-
-		if (gpio_is_valid(ldc->signal_gpio))
-			ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+	if (!ldc->not_connected &&
+		ldc->config.reschedulable &&
+		(gpio_get_value(ldc->intb_gpio) == 0))
 		goto reschedule_me;
-	}
 
 	if (!ldc->config.toggled) {
 		/* now it's time to toggle LWPM pin, but only toggle it once */
 		ldc2114_toggle_gpio(ldc, ldc->lpwm_gpio);
 		ldc->config.toggled = true;
 		dev_info(ldc->dev, "LWPM toggled\n");
+
+		if (gpio_is_valid(ldc->signal_gpio))
+			ldc2114_toggle(ldc, ldc->signal_gpio, 2);
 	}
 
 	if (!is_ready) {
@@ -1233,6 +1257,9 @@ done:
 				gpio_get_value(ldc->intb_gpio), value);
 	}
 #endif
+
+	if (gpio_is_valid(ldc->signal_gpio))
+		ldc2114_toggle(ldc, ldc->signal_gpio, 2);
 }
 
 static int ldc2114_initialize(struct ldc2114_data *ldc)
@@ -1284,7 +1311,7 @@ error_workaround:
 	dev_info(ldc->dev, "IRQ %d (gpio%d)\n",
 				ldc->irq, irq_to_gpio(ldc->irq));
 
-	ldc2114_config_init(ldc, ldc->config.normal, LDC2114_LONG_DELAY);
+	ldc2114_config_init(ldc, ldc->config.normal, LDC2114_LONG_DELAY, true);
 
 	queue_delayed_work(ldc->wq, &ldc->config_work, 0);
 
@@ -1298,6 +1325,9 @@ static int ldc2114_poll_enable_cb(struct notifier_block *n,
 		container_of(n, struct ldc2114_data, poll_nb);
 	int state = test_bit(0, &val) ? 1 : 0;
 
+	if (!ldc->data_polling)
+		return 0;
+
 	atomic_set(&ldc->poll_work_running, state);
 	dev_info(ldc->dev, "polling state changed to %d\n", state);
 
@@ -1308,6 +1338,10 @@ static int ldc2114_poll_enable_cb(struct notifier_block *n,
 
 	return 0;
 }
+
+#include <linux/ratelimit.h>
+
+static DEFINE_RATELIMIT_STATE(ldc2114_rl, HZ, 5);
 
 static int ldc2114_reboot_cb(struct notifier_block *nb,
 					unsigned long event, void *unused)
@@ -1321,7 +1355,7 @@ static int ldc2114_reboot_cb(struct notifier_block *nb,
 
 	runaway++;
 
-	ldc2114_config_init(ldc, ldc->config.lpm, LDC2114_SHORT_DELAY);
+	ldc2114_config_init(ldc, ldc->config.lpm, LDC2114_SHORT_DELAY, false);
 
 	/* Stop polling work if it's running */
 	if (ldc->data_polling)
@@ -1330,22 +1364,23 @@ static int ldc2114_reboot_cb(struct notifier_block *nb,
 	if (ldc->irq_enabled) {
 		/* wait until active touch is cleared */
 		while (atomic_read(&ldc->irq_work_running) == 1) {
-			if (gpio_is_valid(ldc->signal_gpio))
-				ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
+
+			if (!__ratelimit(&ldc2114_rl))
+				dev_warn(ldc->dev, "irq still busy\n");
 
 			usleep_range(WAIT_USEC_LOW, WAIT_USEC_HIGH);
-
-			if (gpio_is_valid(ldc->signal_gpio))
-				ldc2114_toggle_gpio(ldc, ldc->signal_gpio);
 		}
+
 		disable_irq(ldc->irq);
+
+		if (gpio_is_valid(ldc->signal_gpio))
+			ldc2114_toggle(ldc, ldc->signal_gpio, 2);
 	}
 
-	queue_delayed_work(ldc->wq, &ldc->config_work,
-				msecs_to_jiffies(ldc->config.delay_ms));
-
-	wait_for_completion(&ldc->config.done);
-
+	ldc2114_config_work(&ldc->config_work.work);
+	/* set low at the end */
+	if (gpio_is_valid(ldc->signal_gpio))
+		gpio_set_value(ldc->signal_gpio, 0);
 out:
 	return NOTIFY_DONE;
 }
@@ -1433,18 +1468,19 @@ static int ldc2114_probe(struct i2c_client *client,
 	if (ldc->btn_enabled)
 		ldc2114_input_device(ldc);
 
-	ldc->data_polling = true;
-	ldc->poll_interval = 250;
-	INIT_DELAYED_WORK(&ldc->polling_work, ldc2114_polling_work);
-
 	ret = ldc2114_cdev_init();
 	if (ret < 0 && ret != -ENODEV)
 		dev_warn(ldc->dev, "Error registering chardev: %d\n", ret);
+	else {
+		ldc->data_polling = true;
+		ldc->poll_interval = 250;
+		INIT_DELAYED_WORK(&ldc->polling_work, ldc2114_polling_work);
 
-	ldc->poll_nb.notifier_call = ldc2114_poll_enable_cb;
-	ret = ldc2114_register_client(&ldc->poll_nb);
-	if (ret < 0)
-		dev_warn(ldc->dev, "Unable to register notifier: %d\n", ret);
+		ldc->poll_nb.notifier_call = ldc2114_poll_enable_cb;
+		ret = ldc2114_register_client(&ldc->poll_nb);
+		if (ret < 0)
+			dev_warn(ldc->dev, "Unable to register notifier: %d\n", ret);
+	}
 
 	ret = sysfs_create_group(&ldc->dev->kobj, &ldc2114_attr_group);
 	if (ret)
