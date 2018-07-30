@@ -110,7 +110,6 @@ int core_i2c_write(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 		goto out;
 	}
 	if (protocol->major >= 5 && protocol->mid >= 4) {
-		ipio_info("core_fr->actual_fw_mode=%d,pBuf[0]=%x", core_fr->actual_fw_mode, pBuf[0]);
 		if (core_fr->actual_fw_mode == protocol->test_mode && pBuf[0] == 0xF1) {
 			check_sum = core_fr_calc_checksum(pBuf, nSize);
 			memcpy(txbuf, pBuf, nSize);

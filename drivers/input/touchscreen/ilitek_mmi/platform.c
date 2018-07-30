@@ -803,6 +803,25 @@ static int Ili_parse_dt(struct device *dev,
 
 
 /*
+ * The function will check the flash data is correct.
+ */
+void flash_data_check(void)
+{
+	int ret = NO_NEED_UPDATE;
+	ret = tddi_check_fw_upgrade();
+	if (ret == NEED_UPDATE || ret == CHECK_FW_FAIL) {
+		core_config->firmware_ver[1] = 0;
+		core_config->firmware_ver[2] = 0;
+		core_config->firmware_ver[3] = 0;
+		core_config->firmware_ver[4] = 0;
+		ipio_err(" flash data is not correct\n");
+	} else {
+
+		ipio_info(" flash data is correct\n");
+	}
+}
+
+/*
  * The probe func would be called after an i2c device was detected by kernel.
  *
  * It will still return zero even if it couldn't get a touch ic info.
@@ -963,6 +982,11 @@ static int ilitek_platform_probe(struct spi_device *spi)
 		ipio_err("Failed to raed chip id %d,%d\n", ret, (-ENODEV));
 		goto read_tp_info_err;
 	}
+
+	/*
+	*  Check flash data is correct.
+	*/
+	flash_data_check();
 
 	/* If it defines boot upgrade, input register will be done inside boot
 	 * function.
