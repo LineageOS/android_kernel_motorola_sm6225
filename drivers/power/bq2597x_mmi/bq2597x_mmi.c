@@ -1122,6 +1122,26 @@ static int bq2597x_set_sense_resistor(struct bq2597x *bq, int r_mohm)
 	return ret;
 }
 
+static int bq2597x_set_ucp_threshold(struct bq2597x *bq, int curr_ma)
+{
+	int ret;
+	u8 val;
+
+	if (curr_ma == 300)
+		val = BQ2597X_IBUS_UCP_RISE_300MA;
+	else if (curr_ma == 500)
+		val = BQ2597X_IBUS_UCP_RISE_500MA;
+	else
+		val = BQ2597X_IBUS_UCP_RISE_300MA;
+
+	val <<= BQ2597X_IBUS_UCP_RISE_TH_SHIFT;
+
+	ret = bq2597x_update_bits(bq, BQ2597X_REG_2B,
+				BQ2597X_IBUS_UCP_RISE_TH_MASK,
+				val);
+	return ret;
+}
+
 static int bq2597x_enable_regulation(struct bq2597x *bq, bool enable)
 {
 	int ret;
@@ -1609,8 +1629,9 @@ static int bq2597x_init_device(struct bq2597x *bq)
 {
 	bq2597x_enable_wdt(bq, false);
 
-	bq2597x_set_ss_timeout(bq, 50);
+	bq2597x_set_ss_timeout(bq, 1500);
 	bq2597x_set_sense_resistor(bq, bq->cfg->sense_r_mohm);
+	bq2597x_set_ucp_threshold(bq, 300);
 
 	bq2597x_init_protection(bq);
 	bq2597x_init_adc(bq);
