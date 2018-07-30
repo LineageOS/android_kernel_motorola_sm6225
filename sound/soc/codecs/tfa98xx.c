@@ -1548,32 +1548,35 @@ static int tfa98xx_set_stereo_ctl(struct snd_kcontrol *kcontrol,
 	int selector;
 
 	selector = ucontrol->value.integer.value[0];
-	
+
         mutex_lock(&tfa98xx_mutex);
         list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
-		
+
 		if (selector == CHIP_SELECTOR_LEFT) {
-			if (tfa98xx->i2c->addr == CHIP_LEFT_ADDR) 
+			if (tfa98xx->i2c->addr == CHIP_LEFT_ADDR)
 				tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
-			else 
-				tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED; 
+			else
+				tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;
 		}
 		else if (selector == CHIP_SELECTOR_RIGHT) {
                         if (tfa98xx->i2c->addr == CHIP_RIGHT_ADDR)
                                 tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
                         else
-                                tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;			
+                                tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;
 		}
 		else if (selector == CHIP_SELECTOR_RCV) {
 			if (tfa98xx->i2c->addr == CHIP_RCV_ADDR) {
                                 tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
 				tfa98xx->profile = 1;
+				tfa98xx_mixer_profile = 1;
 			}
                         else
                                 tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;
 		}
 		else {
 			tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
+			tfa98xx->profile = 0;
+			tfa98xx_mixer_profile = 0;
 		}
 	}
         mutex_unlock(&tfa98xx_mutex);
@@ -1587,7 +1590,7 @@ static int tfa98xx_get_stereo_ctl(struct snd_kcontrol *kcontrol,
         struct tfa98xx *tfa98xx;
 
         mutex_lock(&tfa98xx_mutex);
-	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {  
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
         	ucontrol->value.integer.value[0] = tfa98xx->flags;
 	}
 	mutex_unlock(&tfa98xx_mutex);
@@ -1617,7 +1620,6 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	if (tfa98xx->flags & TFA98XX_FLAG_CALIBRATION_CTL)
 		nr_controls += 1; /* calibration */
 
-	
 #ifdef TFA9874_NONDSP_STEREO
 	nr_controls += 1;  /* for TFA_CHIP_SELECTOR */
 #endif
@@ -2770,11 +2772,11 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 	int value = 0, nr, dsp_cal_value = 0;
 
 	/* If calibration is set to once we load from MTP, else send zero's */
-	if (TFA_GET_BF(tfa, MTPEX) == 1 && tfa98xx->i2c->addr == 0x34) 
+	if (TFA_GET_BF(tfa, MTPEX) == 1 && tfa98xx->i2c->addr == 0x34)
 	{
 		value = tfa_dev_mtp_get(tfa, TFA_MTP_RE25);
 		dsp_cal_value = (value * 65536) / 1000;
-		
+
 		nr = 4;
 		/* We have to copy it for both channels. Even when mono! */
 		bytes[nr++] = (uint8_t)((dsp_cal_value >> 16) & 0xff);
@@ -2784,15 +2786,15 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x\n", __func__, dsp_cal_value);
 
 		/* Receiver RDC */
-		if (value > 20000) 
+		if (value > 20000)
 			bytes[0] |= 0x01;
 	}
-	
-	if (TFA_GET_BF(tfa, MTPEX) == 1 && tfa98xx->i2c->addr == 0x35) 
+
+	if (TFA_GET_BF(tfa, MTPEX) == 1 && tfa98xx->i2c->addr == 0x35)
 	{
 		value = tfa_dev_mtp_get(tfa, TFA_MTP_RE25);
 		dsp_cal_value = (value * 65536) / 1000;
-		
+
 		nr = 7;
 		/* We have to copy it for both channels. Even when mono! */
 		bytes[nr++] = (uint8_t)((dsp_cal_value >> 16) & 0xff);
@@ -2802,11 +2804,11 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x\n", __func__, dsp_cal_value);
 
 		/* Speaker RDC */
-		if (value > 4000) 
+		if (value > 4000)
 			bytes[0] |= 0x10;
 	}
 
-	if (bytes[0] == 0x11) 
+	if (bytes[0] == 0x11)
 	{
 		nr = 1;
 		bytes[nr++] = 0x00;
@@ -2815,7 +2817,7 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 
 		dev_err(&tfa98xx->i2c->dev, "%s: send_tfa_cal_in_band \n", __func__);
 
-		ret = send_tfa_cal_in_band(&bytes[1], sizeof(bytes) - 1); 
+		ret = send_tfa_cal_in_band(&bytes[1], sizeof(bytes) - 1);
 
 		bytes[0] = 0;
 	}
@@ -2831,10 +2833,10 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(&tfa98xx->i2c->dev, "%s: state: %d\n", __func__, mute);
-#ifdef TFA9874_NONDSP_STEREO	
+#ifdef TFA9874_NONDSP_STEREO
 	atomic_set(&g_bypass, 0);
 	atomic_set(&g_Tx_enable, 0);
-#endif	
+#endif
 	if (no_start) {
 		pr_debug("no_start parameter set no tfa_dev_start or tfa_dev_stop, returning\n");
 		return 0;
