@@ -38,10 +38,10 @@ struct mmi_uart_hdr_t {
 
 enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
 struct boot_mode_t {
-	uint8_t  boot_mode;          // androidboot.mode
-	uint32_t hwid;               // androidboot.hwrev
-	uint8_t  ap_guid[16];        // ro.mot.build.guid
-	uint8_t  ap_fw_ver_str[256]; // ro.build.fingerprint
+	uint8_t  boot_mode;          /* androidboot.mode */
+	uint32_t hwid;               /* androidboot.hwrev */
+	uint8_t  ap_guid[16];        /* ro.mot.build.guid */
+	uint8_t  ap_fw_ver_str[256]; /* ro.build.fingerprint */
 } __packed;
 
 enum { VBUS_IN = 0, VBUS_IN_SPLIT, VBUS_OUT, DC_IN };
@@ -49,23 +49,23 @@ struct power_control_t {
 	uint8_t   flow;
 	uint32_t  voltage_uv;
 	int32_t   current_ua;
-};
+} __packed;
 
 struct power_status_t {
-	bool	      reverse_boost; /* PMI855 Output Enabled? */
-	bool          dc_in; /* DC IN Enabled */
-	bool          charging; /* Battery Charging? */
-	bool          charger; /* MOD USBC Attached? */
-	int16_t       battery_temp; /* Degrees Celsius */
-	uint16_t      battery_capacity; /* % */
-	uint16_t      battery_max_capacity; /* uAhr */
-	uint32_t      battery_voltage; /* uV */
-	int32_t       battery_current; /* uA */
-	uint32_t      battery_max_voltage; /* uV */
-	uint32_t      mod_output_voltage; /* uV */
-	uint32_t      mod_input_voltage; /* uV */
-	uint32_t      mod_output_current; /* uA */
-	uint32_t      mod_input_current; /* uA */
-};
+	bool          reverse_boost;        /* PMI855 Output Enabled. */
+	bool          dc_in;                /* DC IN Enabled. */
+	bool          charging;             /* Battery Charging. */
+	bool          charger;              /* MOD USBC Attached. */
+	int16_t       battery_temp;         /* Degrees Celsius */
+	uint16_t      battery_capacity;     /* % Capacity */
+	uint16_t      battery_max_capacity; /* mAhr */
+	uint32_t      battery_voltage;      /* uV */
+	int32_t       battery_current;      /* uA */
+	uint32_t      battery_max_voltage;  /* uV */
+	uint32_t      mod_output_voltage;   /* uV */
+	uint32_t      mod_input_voltage;    /* uV */
+	uint32_t      mod_output_current;   /* uA */
+	uint32_t      mod_input_current;    /* uA */
+} __packed;
 
 #endif /* MODD_MUC_PROTOCOL_H */
