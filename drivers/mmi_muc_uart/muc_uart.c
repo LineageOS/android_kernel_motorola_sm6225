@@ -84,8 +84,13 @@ struct mod_muc_data_t {
 	struct delayed_work idle_work;
 	struct delayed_work attach_work;
 	struct delayed_work write_work;
+	struct work_struct ps_notify_work;
 	struct power_supply *phone_psy;
+	struct power_supply *batt_psy;
+	struct power_supply *bms_psy;
+	struct power_supply *usb_psy;
 	atomic_t sleep_req_pending;
+	struct notifier_block ps_nb;
 };
 
 /* How long until we move on without an ack */
@@ -559,9 +564,127 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		sizeof(struct boot_mode_t));
 }
 
+static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
+{
+	struct power_status_t pstatus;
+	union power_supply_propval pval = {0};
+
+	if(!mm_data->batt_psy ||
+		!mm_data->bms_psy ||
+		!mm_data->usb_psy)
+		return -1;
+
+	memset(&pstatus, 0x00, sizeof(struct power_status_t));
+
+	if (!power_supply_get_property(mm_data->usb_psy,
+		POWER_SUPPLY_PROP_PRESENT, &pval))
+		pstatus.charger = pval.intval ? 1 : 0;
+
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_TEMP, &pval))
+		/* Div by 10 to convert from deciDegC to DegC */
+		pstatus.battery_temp = (int16_t)(pval.intval / 10);
+
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_CAPACITY, &pval))
+		pstatus.battery_capacity =
+			pval.intval > 0 ? (uint16_t)pval.intval : 0;
+
+	if (!power_supply_get_property(mm_data->bms_psy,
+		POWER_SUPPLY_PROP_CHARGE_FULL, &pval))
+		/* Div by 1000 to convert from uah to mah */
+		pstatus.battery_max_capacity =
+			pval.intval > 0 ? (uint16_t)(pval.intval / 1000) : 0;
+
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval))
+		pstatus.battery_voltage =
+			pval.intval > 0 ? (uint32_t)pval.intval : 0;
+
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_CURRENT_NOW, &pval))
+		pstatus.battery_current = (int32_t)pval.intval;
+
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_MAX, &pval))
+		pstatus.battery_max_voltage =
+			pval.intval > 0 ? (uint32_t)pval.intval : 0;
+
+	/* TODO charging set to charger not correct. */
+	pstatus.charging = pstatus.charger;
+
+	/* TODO */
+	/* pstatus.reverse_boost;
+	 * pstatus.mod_output_voltage;
+	 * pstatus.mod_input_voltage;
+	 * pstatus.mod_output_current;
+	 * pstatus.mod_input_current;
+	 */
+
+	pr_info("muc_uart reverse_boost %d\n",
+		pstatus.reverse_boost);
+	pr_info("muc_uart charging %d\n",
+		pstatus.charging);
+	pr_info("muc_uart charger %d\n",
+		pstatus.charger);
+	pr_info("muc_uart battery_temp %hd degC\n",
+		pstatus.battery_temp);
+	pr_info("muc_uart battery_voltage %u uV\n",
+		pstatus.battery_voltage);
+	pr_info("muc_uart battery_current %d uA\n",
+		pstatus.battery_current);
+	pr_info("muc_uart battery_max_voltage %u uV\n",
+		pstatus.battery_max_voltage);
+	pr_info("muc_uart battery_capacity %hu percent\n",
+		pstatus.battery_capacity);
+	pr_info("muc_uart battery_max_capacity %hu mAhr\n",
+		pstatus.battery_max_capacity);
+	pr_info("muc_uart mod_output_voltage %u uV\n",
+		pstatus.mod_output_voltage);
+	pr_info("muc_uart mod_input_voltage %u uV\n",
+		pstatus.mod_input_voltage);
+	pr_info("muc_uart mod_output_current %u uA\n",
+		pstatus.mod_output_current);
+	pr_info("muc_uart mod_input_current %u uA\n",
+		pstatus.mod_input_current);
+
+	return muc_uart_queue_send(mm_data,
+		POWER_STATUS,
+		(uint8_t *)&pstatus,
+		sizeof(struct power_status_t));
+}
+
 static void muc_uart_set_power_control(struct power_control_t *pwrctl)
 {
 	/* TODO handle power control */
+}
+
+static void muc_uart_ps_notifier_work(struct work_struct *w)
+{
+	struct mod_muc_data_t *mm_data =
+		container_of(w, struct mod_muc_data_t, ps_notify_work);
+
+	muc_uart_send_power_status(mm_data);
+}
+
+static int muc_uart_ps_notifier_cb(struct notifier_block *nb,
+			       unsigned long event,
+			       void *v)
+{
+	struct mod_muc_data_t *mm_data = container_of(nb,
+		struct mod_muc_data_t, ps_nb);
+	struct power_supply *psy = v;
+
+	if (!psy ||
+		event != PSY_EVENT_PROP_CHANGED ||
+		(strcmp(psy->desc->name, "usb") != 0 &&
+		strcmp(psy->desc->name, "bms") != 0 &&
+		strcmp(psy->desc->name, "battery") != 0))
+		return NOTIFY_OK;
+
+	schedule_work(&mm_data->ps_notify_work);
+
+	return NOTIFY_OK;
 }
 
 static int muc_uart_tty_rx_cb(struct platform_device *pdev,
@@ -643,11 +766,13 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			clear_wait_for_ack(mm_data);
 			break;
 		}
-		/* TODO power status will be sent, not received... probably? */
-		/*case POWER_STATUS: {
-			muc_uart_send_power_status();
+		case POWER_STATUS: {
+			if (muc_uart_send_power_status(mm_data) >= 0)
+				muc_uart_send(mm_data, POWER_STATUS|MSG_ACK_MASK, NULL, 0);
+			else
+				muc_uart_send(mm_data, POWER_STATUS|MSG_NACK_MASK, NULL, 0);
 			break;
-		}*/
+		}
 		case POWER_CONTROL: {
 			/* TODO nack if size is wrong ? */
 			if (payload_len == sizeof(struct power_control_t))
@@ -1003,6 +1128,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mm_data->idle_work, muc_uart_idle_work);
 	INIT_DELAYED_WORK(&mm_data->attach_work, muc_uart_attach_work);
 	INIT_DELAYED_WORK(&mm_data->write_work, muc_uart_send_work);
+	INIT_WORK(&mm_data->ps_notify_work, muc_uart_ps_notifier_work);
 
 	/* Create workqueue for the write work */
 	mm_data->write_wq = alloc_workqueue("muc_uart_write", WQ_UNBOUND, 1);
@@ -1089,6 +1215,15 @@ static int muc_uart_probe(struct platform_device *pdev)
 		goto err3;
 	}
 
+	mm_data->batt_psy = power_supply_get_by_name("battery");
+	mm_data->bms_psy = power_supply_get_by_name("bms");
+	mm_data->usb_psy = power_supply_get_by_name("usb");
+
+	mm_data->ps_nb.notifier_call = muc_uart_ps_notifier_cb;
+	if (power_supply_reg_notifier(&mm_data->ps_nb))
+		dev_err(&pdev->dev,
+			"couldn't register ps notifier\n");
+
 	kobject_uevent(&pdev->dev.kobj, KOBJ_ADD);
 	schedule_delayed_work(&mm_data->attach_work, msecs_to_jiffies(0));
 
@@ -1118,6 +1253,9 @@ static int muc_uart_remove(struct platform_device *pdev)
 	if (gpio_is_valid(mm_data->mod_attached_gpio))
 		gpio_free(mm_data->mod_attached_gpio);
 
+	power_supply_put(mm_data->batt_psy);
+	power_supply_put(mm_data->bms_psy);
+	power_supply_put(mm_data->usb_psy);
 	del_timer(&mm_data->idle_timer);
 	del_timer(&mm_data->ack_timer);
 	del_timer(&mm_data->sleep_req_timer);
@@ -1126,6 +1264,7 @@ static int muc_uart_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&mm_data->idle_work);
 	cancel_delayed_work_sync(&mm_data->attach_work);
 	cancel_delayed_work_sync(&mm_data->write_work);
+	cancel_work_sync(&mm_data->ps_notify_work);
 	destroy_workqueue(mm_data->write_wq);
 	mmi_uart_exit(mm_data->uart_data);
 	mmi_tty_exit();
