@@ -35,6 +35,9 @@
 #endif
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 #include <linux/mmi_panel_notifier.h>
+#elif defined(CONFIG_DRM)
+#include <linux/notifier.h>
+#include <linux/msm_drm_notify.h>
 #elif defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -474,7 +477,7 @@ struct synaptics_rmi4_data {
 	struct mutex state_mutex;
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 	struct mmi_notifier panel_nb;
-#elif defined(CONFIG_FB)
+#elif (defined(CONFIG_FB) || defined(CONFIG_DRM))
 	struct notifier_block panel_nb;
 #endif
 	atomic_t panel_off_flag;
