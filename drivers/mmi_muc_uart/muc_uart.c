@@ -255,13 +255,8 @@ static inline void clear_sleep_req_pending(struct mod_muc_data_t *mm_data)
 	atomic_set(&mm_data->sleep_req_pending, 0);
 }
 
-static int muc_uart_sync_wake(struct mod_muc_data_t *mm_data)
+static int muc_uart_wake_muc(struct mod_muc_data_t *mm_data)
 {
-	if (!mm_data->uart_pm_state) {
-		mmi_uart_do_pm(mm_data->uart_data, true);
-		mm_data->uart_pm_state = 1;
-	}
-
 	gpio_direction_output(mm_data->wake_out_gpio, 0);
 
 	/* Only toggle the line if the muc isn't awake */
@@ -269,6 +264,7 @@ static int muc_uart_sync_wake(struct mod_muc_data_t *mm_data)
 		gpio_set_value(mm_data->wake_out_gpio, 1);
 		mdelay(1);
 		gpio_set_value(mm_data->wake_out_gpio, 0);
+		mdelay(1);
 		return 1;
 	}
 
@@ -313,8 +309,16 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 		return -EBUSY;
 	}
 
-	/* If powered off, try to wake. */
-	if (muc_uart_sync_wake(mm_data)) {
+	/* If we are in low power mode that needs to change
+	 * else just try to wake the muc
+	 */
+	if (!mm_data->uart_pm_state) {
+		cancel_delayed_work(&mm_data->wake_work);
+		schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(0));
+		mmi_uart_clear_tx_busy(mm_data->uart_data);
+		mmi_uart_report_tx_err(mm_data->uart_data);
+		return -EAGAIN;
+	} else if (muc_uart_wake_muc(mm_data)) {
 		mmi_uart_clear_tx_busy(mm_data->uart_data);
 		mmi_uart_report_tx_err(mm_data->uart_data);
 		return -EAGAIN;
@@ -462,8 +466,17 @@ static void muc_uart_send_work(struct work_struct *w)
 	/* Wake the muc up here if it isn't already awake
 	 * Send will wake it too, but hopefully this will
 	 * reduce the chances it returns an error.
+	 *
+	 * Also wake up the uart if it is in low power mode.
 	 */
-	muc_uart_sync_wake(mm_data);
+	mmi_uart_set_tx_busy(mm_data->uart_data);
+	if (!mm_data->uart_pm_state) {
+		mmi_uart_do_pm(mm_data->uart_data, true);
+		mm_data->uart_pm_state = 1;
+	}
+	mmi_uart_clear_tx_busy(mm_data->uart_data);
+	muc_uart_wake_muc(mm_data);
+
 	mutex_lock(&tx_lock);
 	ret = muc_uart_send(mm_data,
 		write_data->cmd,
@@ -801,7 +814,13 @@ static void muc_uart_wake_work(struct work_struct *w)
 		schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(500));
 	else {
 		pr_info("muc_uart_wake_work: on.\n");
-		muc_uart_sync_wake(mm_data);
+
+		if (!mm_data->uart_pm_state) {
+			mmi_uart_do_pm(mm_data->uart_data, true);
+			mm_data->uart_pm_state = 1;
+		}
+
+		muc_uart_wake_muc(mm_data);
 		mmi_uart_clear_tx_busy(mm_data->uart_data);
 
 		/* Send boot mode on initial wake */
