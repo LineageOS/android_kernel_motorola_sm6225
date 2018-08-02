@@ -27,7 +27,7 @@ extern void himax_ic_reset(uint8_t loadconfig,uint8_t int_off);
 #if defined(HX_AUTO_UPDATE_FW)
 unsigned char i_CTPM_FW[]=
 {
-#include "HX83112A_BOE6D24_PD04C01_CIDFF01_D01_C00_0719.i"
+#include "HX83100_Firmware_Version_FF23.i"
 };
 #endif
 
