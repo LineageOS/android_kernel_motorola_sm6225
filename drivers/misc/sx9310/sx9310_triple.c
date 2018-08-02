@@ -1024,10 +1024,20 @@ static void ps_notify_callback_work(struct work_struct *work)
 	input_top = pDevice->pbuttonInformation->input_top;
 	input_bottom = pDevice->pbuttonInformation->input_bottom;
 
-	LOG_INFO("Usb insert,going to force calibrate\n");
-	ret = write_register(this, SX9310_IRQSTAT_REG, 0xff);
-	if (ret < 0)
-		LOG_ERR(" Usb insert,calibrate cap sensor failed\n");
+        /* lenovo-sw wunan3 2018-08-01 porting IKSWO-111359: input: update sx9310 calibrate method begin */
+	mutex_lock(&this->mutex);
+	if (mEnabled) {
+		LOG_INFO("Usb insert,going to force calibrate\n");
+		ret = write_register(this, SX9310_CPS_CTRL0_REG, 0x20);
+		if (ret < 0)
+			LOG_ERR(" Usb insert,disable cap sensor failed\n");
+		msleep(60);
+		ret = write_register(this, SX9310_CPS_CTRL0_REG, 0x2f);
+		if (ret < 0)
+			LOG_ERR(" Usb insert,enabel cap sensor failed\n");
+	}
+	mutex_unlock(&this->mutex);
+        /* lenovo-sw wunan3 2018-08-01 porting IKSWO-111359: input: update sx9310 calibrate method end */
 
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
