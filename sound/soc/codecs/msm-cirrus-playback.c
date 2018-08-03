@@ -831,6 +831,7 @@ static long crus_se_ioctl(struct file *f,
 	return crus_se_shared_ioctl(f, cmd, (void __user *)arg);
 }
 
+#ifdef CONFIG_COMPAT
 static long crus_se_compat_ioctl(struct file *f,
 		unsigned int cmd, unsigned long arg)
 {
@@ -852,6 +853,9 @@ static long crus_se_compat_ioctl(struct file *f,
 
 	return crus_se_shared_ioctl(f, cmd64, compat_ptr(arg));
 }
+#else
+#define crus_se_compat_ioctl NULL
+#endif
 
 static int crus_se_open(struct inode *inode, struct file *f)
 {
