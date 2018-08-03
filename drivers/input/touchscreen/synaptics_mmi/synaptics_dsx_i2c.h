@@ -29,15 +29,16 @@
 #include <linux/ktime.h>
 #include <linux/semaphore.h>
 #include <linux/pm_qos.h>
+#include <linux/notifier.h>
+#include <linux/fb.h>
 #if defined(USB_CHARGER_DETECTION)
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #endif
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 #include <linux/mmi_panel_notifier.h>
-#elif defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
+#elif defined(CONFIG_DRM)
+#include <linux/msm_drm_notify.h>
 #endif
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38))
