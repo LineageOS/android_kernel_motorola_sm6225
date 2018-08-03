@@ -15,8 +15,8 @@
  * more details.
  *
  */
-#ifndef _LINUX_NVT_TOUCH_H
-#define	_LINUX_NVT_TOUCH_H
+#ifndef		_LINUX_NVT_TOUCH_H
+#define		_LINUX_NVT_TOUCH_H
 
 #include <linux/i2c.h>
 #include <linux/input.h>
@@ -25,12 +25,19 @@
 #include <linux/earlysuspend.h>
 #endif
 
-#define NVT_DEBUG 1
+#include "nt36xxx_mem_map.h"
 
+#define NVT_DEBUG 0
+
+/*---GPIO number---*/
 #define NVTTOUCH_INT_PIN 943
 
+
+/*---INT trigger mode---*/
 #define INT_TRIGGER_TYPE IRQ_TYPE_EDGE_RISING
 
+
+/*---I2C driver info.---*/
 #define NVT_I2C_NAME "NVT-ts"
 #define I2C_BLDR_Address 0x01
 #define I2C_FW_Address 0x01
@@ -39,12 +46,15 @@
 #if NVT_DEBUG
 #define NVT_LOG(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 #else
-#define NVT_LOG(fmt, args...)    pr_info("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
+#define NVT_LOG(fmt, args...)    pr_debug("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 #endif
 #define NVT_ERR(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 
+/*---Input device info.---*/
 #define NVT_TS_NAME "NVTCapacitiveTouchScreen"
 
+
+/*---Touch info.---*/
 #define TOUCH_DEFAULT_MAX_WIDTH 1080
 #define TOUCH_DEFAULT_MAX_HEIGHT 2246
 #define TOUCH_MAX_FINGER_NUM 10
@@ -54,6 +64,7 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 #endif
 #define TOUCH_FORCE_NUM 1000
 
+/*---Customerized func.---*/
 #define NVT_TOUCH_PROC 1
 #define NVT_TOUCH_EXT_PROC 1
 #define NVT_TOUCH_FW 1
@@ -69,32 +80,6 @@ extern const uint16_t gesture_key_array[];
 /* ---ESD Protect.--- */
 #define NVT_TOUCH_ESD_PROTECT 1
 #define NVT_TOUCH_ESD_CHECK_PERIOD 2000	/* ms */
-
-struct nvt_ts_mem_map {
-	uint32_t EVENT_BUF_ADDR;
-	uint32_t RAW_PIPE0_ADDR;
-	uint32_t RAW_PIPE0_Q_ADDR;
-	uint32_t RAW_PIPE1_ADDR;
-	uint32_t RAW_PIPE1_Q_ADDR;
-	uint32_t BASELINE_ADDR;
-	uint32_t BASELINE_Q_ADDR;
-	uint32_t BASELINE_BTN_ADDR;
-	uint32_t BASELINE_BTN_Q_ADDR;
-	uint32_t DIFF_PIPE0_ADDR;
-	uint32_t DIFF_PIPE0_Q_ADDR;
-	uint32_t DIFF_PIPE1_ADDR;
-	uint32_t DIFF_PIPE1_Q_ADDR;
-	uint32_t RAW_BTN_PIPE0_ADDR;
-	uint32_t RAW_BTN_PIPE0_Q_ADDR;
-	uint32_t RAW_BTN_PIPE1_ADDR;
-	uint32_t RAW_BTN_PIPE1_Q_ADDR;
-	uint32_t DIFF_BTN_PIPE0_ADDR;
-	uint32_t DIFF_BTN_PIPE0_Q_ADDR;
-	uint32_t DIFF_BTN_PIPE1_ADDR;
-	uint32_t DIFF_BTN_PIPE1_Q_ADDR;
-	uint32_t READ_FLASH_CHECKSUM_ADDR;
-	uint32_t RW_FLASH_DATA_ADDR;
-};
 
 struct nvt_ts_data {
 	struct i2c_client *client;
@@ -145,9 +130,9 @@ struct nvt_flash_data{
 #endif
 
 typedef enum {
-	RESET_STATE_INIT = 0xA0,
-	RESET_STATE_REK,
-	RESET_STATE_REK_FINISH,
+	RESET_STATE_INIT = 0xA0,/* IC reset*/
+	RESET_STATE_REK,		/* ReK baseline*/
+	RESET_STATE_REK_FINISH,	/* baseline is ready*/
 	RESET_STATE_NORMAL_RUN,
 	RESET_STATE_MAX  = 0xAF
 } RST_COMPLETE_STATE;
@@ -178,8 +163,10 @@ typedef enum {
 } MP_TEST_RESULT;
 #endif
 
+/*---extern structures---*/
 extern struct nvt_ts_data *ts;
 
+/*---extern functions---*/
 extern int32_t CTP_I2C_READ(struct i2c_client *client, uint16_t address, uint8_t *buf, uint16_t len);
 extern int32_t CTP_I2C_WRITE(struct i2c_client *client, uint16_t address, uint8_t *buf, uint16_t len);
 extern void nvt_bootloader_reset(void);
@@ -188,9 +175,9 @@ extern int32_t nvt_check_fw_reset_state(RST_COMPLETE_STATE check_reset_state);
 extern int32_t nvt_get_fw_info(void);
 extern int32_t nvt_clear_fw_status(void);
 extern int32_t nvt_check_fw_status(void);
-
 #if NVT_TOUCH_ESD_PROTECT
 extern void nvt_esd_check_enable(uint8_t enable);
-#endif
+#endif /* #if NVT_TOUCH_ESD_PROTECT */
+extern void nvt_stop_crc_reboot(void);
 
 #endif /* _LINUX_NVT_TOUCH_H */
