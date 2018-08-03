@@ -36,6 +36,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/input/mt.h>
 #include <linux/input/synaptics_dsx_mmi.h>
+#include <linux/msm_drm_notify.h>
 
 #include "synaptics_dsx_i2c.h"
 #include "synaptics_dsx_dropbox.h"
