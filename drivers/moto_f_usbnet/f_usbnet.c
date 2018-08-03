@@ -349,6 +349,16 @@ static int usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned len;
 	int rc;
 
+	/*usbnet might be disabled before ip link down
+	* free the skb in this case
+	*/
+	if (NULL == context->bulk_in) {
+		dev_kfree_skb_any(skb);
+		USBNETDBG(context,
+			 "%s:bulk_in end point is disabled\n", __func__);
+		return 0;
+	}
+
 	req = usb_get_xmit_request(STOP_QUEUE, dev);
 
 	if (!req) {
