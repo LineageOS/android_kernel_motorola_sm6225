@@ -2220,7 +2220,7 @@ static const struct regmap_config max17042_regmap_config = {
 
 static const struct power_supply_desc max17042_psy_desc = {
 	.name		= "max170xx_battery",
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= max17042_get_property,
 	.set_property	= max17042_set_property,
 	.property_is_writeable	= max17042_is_writeable,
@@ -2230,7 +2230,7 @@ static const struct power_supply_desc max17042_psy_desc = {
 
 static const struct power_supply_desc max17042_main_psy_desc = {
 	.name		= "max17_main_battery",
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= max17042_get_property,
 	.set_property	= max17042_set_property,
 	.property_is_writeable	= max17042_is_writeable,
@@ -2240,7 +2240,7 @@ static const struct power_supply_desc max17042_main_psy_desc = {
 
 static const struct power_supply_desc max17042_flip_psy_desc = {
 	.name		= "max17_flip_battery",
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= max17042_get_property,
 	.set_property	= max17042_set_property,
 	.property_is_writeable	= max17042_is_writeable,
@@ -2250,7 +2250,7 @@ static const struct power_supply_desc max17042_flip_psy_desc = {
 
 static const struct power_supply_desc max17042_no_current_sense_psy_desc = {
 	.name		= "max170xx_battery",
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= max17042_get_property,
 	.set_property	= max17042_set_property,
 	.property_is_writeable	= max17042_is_writeable,
