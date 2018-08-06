@@ -1100,7 +1100,7 @@ static int smbchg_reboot(struct notifier_block *nb,
 
 static const struct power_supply_desc mmi_psy_desc = {
 	.name		= "mmi_battery",
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= smb_mmi_get_property,
 	.properties	= smb_mmi_battery_props,
 	.num_properties	= ARRAY_SIZE(smb_mmi_battery_props),
