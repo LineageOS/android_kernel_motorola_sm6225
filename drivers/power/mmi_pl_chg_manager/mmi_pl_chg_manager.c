@@ -745,10 +745,12 @@ static void mmi_pl_pm_move_state(struct mmi_pl_chg_manager *chip, pm_sm_state_t 
 	chip->sm_state = state;
 }
 
-#define FG_ESR_PULSE_MAX_TIMEOUT 20000
-#define FG_ESR_DECREMENT_UA		200000
+#define FG_ESR_PULSE_MAX_TIMEOUT 60000
+#define FG_ESR_DECREMENT_UA		300000
+#define FG_ESR_DECREMENT_UV		300000
 #define HEARTBEAT_lOOP_WAIT_MS 5000
 #define HEARTBEAT_PPS_TUNNING_MS 50
+#define HEARTBEAT_SHORT_DELAY_MS 500
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANNEL -1
 #define FLASHC_TAPPER_COUNT 5
@@ -771,6 +773,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 	int flashc_cv_max_volt = 0;
 	int flashc_cv_taper_curr = 0;
 	int pluse_curr = 0;
+	int pluse_volt = 0;
 	int chrg_step_max = 0;
 	enum mmi_chrg_step	chrg_step;
 	struct mmi_pl_temp_zone *zone;
@@ -1136,14 +1139,14 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_TUNNING_CURR);
-		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 		break;
 	case PM_STATE_FLASHC_TUNNING_CURR:
 		mmi_pl_dbg(chip, PR_MOTO, "flashc charger ready 2 step,"
 								"increase pps current\n");
 		if ((chip->request_current +
 			chip->sys_configs.flashc_curr_up_steps)
-			< chip->pps_current_max
+			<= chip->pps_current_max
 			&& chip->pmic_handle.vbat_volt <
 				chip->flashc_cv_max_volt_pre
 			&& ibat_curr < chip->flashc_cc_max_curr_pre) {
@@ -1233,10 +1236,20 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 				chip->pps_voltage_max - 200000
 			&& chip->pmic_handle.vbat_volt <
 				chip->flashc_cv_max_volt_pre) {
-			chip->request_volt +=
+
+			if ((chip->request_current +
+				chip->sys_configs.flashc_curr_up_steps)
+				< chip->pps_current_max) {
+				chip->request_current +=
+				chip->sys_configs.flashc_curr_up_steps;
+				mmi_pl_dbg(chip, PR_MOTO,
+					"increase pps current %d\n", chip->request_current);
+			} else {
+				chip->request_volt +=
 					chip->sys_configs.flashc_volt_up_steps;
-			mmi_pl_dbg(chip, PR_MOTO,
-					"increase pps voltage %d\n", chip->request_volt);
+				mmi_pl_dbg(chip, PR_MOTO,
+						"increase pps voltage %d\n", chip->request_volt);
+			}
 			heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
 		} else if (!chip->pps_increase_volt
 				&& ibat_curr > chip->flashc_cc_max_curr_pre
@@ -1302,9 +1315,18 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 								chip->request_current,
 								chip->request_volt);
 			} else {
-				mmi_pl_dbg(chip, PR_MOTO, "request_volt reduce %dmv\n",
+				if ((chip->request_current +
+					chip->sys_configs.flashc_curr_up_steps)
+					< chip->pps_current_max) {
+					chip->request_current +=
+					chip->sys_configs.flashc_curr_up_steps;
+					mmi_pl_dbg(chip, PR_MOTO,
+						"increase pps current %d\n", chip->request_current);
+				} else {
+					chip->request_volt += chip->sys_configs.flashc_volt_up_steps;
+					mmi_pl_dbg(chip, PR_MOTO, "request_volt increase %dmv\n",
 							chip->sys_configs.flashc_volt_up_steps);
-				chip->request_volt += chip->sys_configs.flashc_volt_up_steps;
+					}
 			}
 			chip->flashc_cc_tunning_cnt = 0;
 			mmi_pl_dbg(chip, PR_MOTO, "need increase pps voltage,"
@@ -1547,18 +1569,39 @@ schedule:
 				chip->target_volt, chip->target_curr);
 
 	if (chip->flashc_handle.charge_enabled
-		&& chrg_step_max < STEP_NORMAL) {
+		&& chip->pres_chrg_step < STEP_NORMAL) {
 		if (chip->fg_esr_pulse_timeout >=
 			FG_ESR_PULSE_MAX_TIMEOUT) {
 			pluse_curr = chip->flashc_handle.ibus_curr % 50000;
 			pluse_curr = chip->flashc_handle.ibus_curr - pluse_curr;
-			usbpd_select_pdo(chip->pd_handle,
-					chip->mmi_pps_pdo_idx,
-					chip->target_volt,
-					pluse_curr- FG_ESR_DECREMENT_UA);
-			mmi_pl_dbg(chip, PR_MOTO, "kick a ESR pulse, pps ibus curr %d\n",
+
+
+			pluse_volt = chip->flashc_handle.vbus_volt % 20000;
+			pluse_volt = chip->flashc_handle.vbus_volt - pluse_volt;
+
+			if (chip->sm_state == PM_STATE_FLASHC_CV_LOOP) {
+
+				usbpd_select_pdo(chip->pd_handle,
+						chip->mmi_pps_pdo_idx,
+						pluse_volt - FG_ESR_DECREMENT_UV,
 						pluse_curr - FG_ESR_DECREMENT_UA);
-			msleep(1500);
+				mmi_pl_dbg(chip, PR_MOTO, "kick a ESR pulse, "
+						"pps vbus volt %d "
+						"pps ibus curr %d\n",
+						pluse_volt - FG_ESR_DECREMENT_UV,
+						pluse_curr - FG_ESR_DECREMENT_UA);
+				
+			} else {
+				usbpd_select_pdo(chip->pd_handle,
+						chip->mmi_pps_pdo_idx,
+						chip->target_volt,
+						pluse_curr - FG_ESR_DECREMENT_UA);
+				mmi_pl_dbg(chip, PR_MOTO, "kick a ESR pulse, "
+						"pps ibus curr %d\n",
+						pluse_curr - FG_ESR_DECREMENT_UA);
+				}
+
+			msleep(5000);
 			usbpd_select_pdo(chip->pd_handle,
 					chip->mmi_pps_pdo_idx,
 					chip->target_volt,
