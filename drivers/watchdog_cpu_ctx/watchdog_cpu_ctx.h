@@ -73,7 +73,7 @@ struct msm_wdog_copy {
 	uint64_t size;
 } __packed __aligned(4);
 
-struct sysdbg_cpu_ctxt_regs {
+struct sysdbg_cpu64_ctxt_regs {
 	uint64_t x0;
 	uint64_t x1;
 	uint64_t x2;
@@ -123,10 +123,179 @@ struct sysdbg_cpu_ctxt_regs {
 	uint64_t __reserved4;
 };
 
+struct sysdbg_cpu32_ctxt_regs {
+	union {
+		uint32_t r0;
+		uint64_t x0;
+	};
+	union {
+		uint32_t r1;
+		uint64_t x1;
+	};
+	union {
+		uint32_t r2;
+		uint64_t x2;
+	};
+	union {
+		uint32_t r3;
+		uint64_t x3;
+	};
+	union {
+		uint32_t r4;
+		uint64_t x4;
+	};
+	union {
+		uint32_t r5;
+		uint64_t x5;
+	};
+	union {
+		uint32_t r6;
+		uint64_t x6;
+	};
+	union {
+		uint32_t r7;
+		uint64_t x7;
+	};
+	union {
+		uint32_t r8;
+		uint64_t x8;
+	};
+	union {
+		uint32_t r9;
+		uint64_t x9;
+	};
+	union {
+		uint32_t r10;
+		uint64_t x10;
+	};
+	union {
+		uint32_t r11;
+		uint64_t x11;
+	};
+	union {
+		uint32_t r12;
+		uint64_t x12;
+	};
+	union {
+		uint32_t r13_usr;
+		uint64_t x13;
+	};
+	union {
+		uint32_t r14_usr;
+		uint64_t x14;
+	};
+	union {
+		uint32_t r13_hyp;
+		uint64_t x15;
+	};
+	union {
+		uint32_t r14_irq;
+		uint64_t x16;
+	};
+	union {
+		uint32_t r13_irq;
+		uint64_t x17;
+	};
+	union {
+		uint32_t r14_svc;
+		uint64_t x18;
+	};
+	union {
+		uint32_t r13_svc;
+		uint64_t x19;
+	};
+	union {
+		uint32_t r14_abt;
+		uint64_t x20;
+	};
+	union {
+		uint32_t r13_abt;
+		uint64_t x21;
+	};
+	union {
+		uint32_t r14_und;
+		uint64_t x22;
+	};
+	union {
+		uint32_t r13_und;
+		uint64_t x23;
+	};
+	union {
+		uint32_t r8_fiq;
+		uint64_t x24;
+	};
+	union {
+		uint32_t r9_fiq;
+		uint64_t x25;
+	};
+	union {
+		uint32_t r10_fiq;
+		uint64_t x26;
+	};
+	union {
+		uint32_t r11_fiq;
+		uint64_t x27;
+	};
+	union {
+		uint32_t r12_fiq;
+		uint64_t x28;
+	};
+	union {
+		uint32_t r13_fiq;
+		uint64_t x29;
+	};
+	union {
+		uint32_t r14_fiq;
+		uint64_t x30;
+	};
+	union {
+		uint32_t pc;
+		uint64_t x31;
+	};
+	union {
+		uint32_t r13_mon;
+		uint64_t x32;
+	};
+	union {
+		uint32_t r14_mon;
+		uint64_t x33;
+	};
+	union {
+		uint32_t r14_hyp;
+		uint64_t x34;
+	};
+	union {
+		uint32_t _reserved;
+		uint64_t x35;
+	};
+	union {
+		uint32_t __reserved1;
+		uint64_t x36;
+	};
+	union {
+		uint32_t __reserved2;
+		uint64_t x37;
+	};
+	union {
+		uint32_t __reserved3;
+		uint64_t x38;
+	};
+	union {
+		uint32_t __reserved4;
+		uint64_t x39;
+	};
+};
+
+
+union sysdbg_cpu_ctxt_regs_type {
+	struct sysdbg_cpu32_ctxt_regs	cpu32_ctxt;
+	struct sysdbg_cpu64_ctxt_regs	cpu64_ctxt;
+};
+
 struct sysdbgCPUCtxtType {
 	uint32_t status[4];
-	struct sysdbg_cpu_ctxt_regs cpu_regs;
-	struct sysdbg_cpu_ctxt_regs __reserved3; /* Secure - Not used */
+	union sysdbg_cpu_ctxt_regs_type cpu_regs;
+	union sysdbg_cpu_ctxt_regs_type __reserved3; /* Secure - Not used */
 };
 
 union sysdbg_cpuctx {
@@ -154,9 +323,7 @@ struct msm_wdog_cpuctx_header {
 
 struct msm_wdog_lnx_info {
 	uint32_t tsk_size;
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0)
 	uint32_t ti_tsk_offset;
-#endif
 	uint32_t aa64;
 	uint32_t lpae;
 	uint64_t text_paddr;
@@ -190,8 +357,6 @@ struct msm_wdog_cpuctx {
 
 #define WDOG_CPUCTX_SIZE_PERCPU	(sizeof(struct msm_wdog_cpuctx))
 #define WDOG_CPUCTX_SIZE	(num_present_cpus() * WDOG_CPUCTX_SIZE_PERCPU)
-
-#define PHYS_PFN_OFFSET	(PHYS_OFFSET >> PAGE_SHIFT)
 
 #define KASLR_MAGIC_NUM 0xdead4ead
 #define KASLR_REGION_LEN 32
