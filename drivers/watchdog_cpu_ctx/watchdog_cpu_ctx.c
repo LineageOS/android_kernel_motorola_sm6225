@@ -29,6 +29,7 @@
 #include <asm/memory.h>
 #include <asm/sections.h>
 #include <asm/pgtable.h>
+#include <asm/cputype.h>
 #include <linux/kallsyms.h>
 #include <linux/io.h>
 #include <linux/mm_types.h>
@@ -99,6 +100,7 @@ const struct msm_wdog_cpuctx_header mwc_header[] = {
 	},
 };
 
+#if defined(CONFIG_ARM64)
 static int aa64_pa_max(void)
 {
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0)
@@ -158,6 +160,59 @@ out:
 		(unsigned long)kaslr_offset_low);
 }
 
+static void msm_wdog_ctx_lnx_arch(struct msm_wdog_lnx_info *lnx)
+{
+	lnx->va_bits = VA_BITS;
+	lnx->pa_bits = aa64_pa_max();
+	lnx->kaslr_offset = get_kaslr_offset();
+}
+
+#elif defined(CONFIG_ARM)
+
+struct wdog_frame_struct {
+	unsigned long addr;
+	unsigned long stack;
+};
+
+#if defined(CONFIG_ARM_LPAE)
+static int armv7_pa_max(void)
+{
+	int cached_mem_size = (read_cpuid_ext(CPUID_EXT_MMFR3) >> 24) & 0xf;
+
+	switch (cached_mem_size) {
+	case 0x0:
+		return 32;
+	case 0x1:
+		return 36;
+	case 0x2:
+		return 40;
+	default:
+		pr_err("PAMax: Unknown mem size: %#x\n", cached_mem_size);
+		break;
+	}
+	return 32;
+}
+#else
+static int armv7_pa_max(void)
+{
+	int supersection = (read_cpuid_ext(CPUID_EXT_MMFR3) >> 28) & 0xf;
+
+	if ((supersection == 0x0) && IS_ENABLED(CONFIG_PHYS_ADDR_T_64BIT))
+		return 40;
+	else
+		return 32;
+}
+#endif /* CONFIG_ARM_LPAE */
+
+static void msm_wdog_ctx_lnx_arch(struct msm_wdog_lnx_info *lnx)
+{
+	lnx->va_bits = 32;
+	lnx->pa_bits = armv7_pa_max();
+	lnx->aa32_pxn = ((read_cpuid_ext(CPUID_EXT_MMFR0) & 0xf) >= 0x4);
+	lnx->kaslr_offset = 0;
+}
+#endif
+
 static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
 {
 	/* Since this is a module we cannot link to these symbols
@@ -174,19 +229,19 @@ static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
 		init_mm = (struct mm_struct *)init_mm_addr;
 	}
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0) || IS_ENABLED(CONFIG_ARM)
 	lnx->ti_tsk_offset = offsetof(struct thread_info, task);
+#else
+	lnx->ti_tsk_offset = 0;
 #endif
 	lnx->tsk_size = sizeof(struct task_struct);
-	lnx->aa64 = 1;
-	lnx->lpae = 0;
+	lnx->aa64 = IS_ENABLED(CONFIG_ARM64);
+	lnx->lpae = IS_ENABLED(CONFIG_ARM_LPAE);
 	lnx->text_paddr = _text_addr ? virt_to_phys((void *)_text_addr) : 0;
 	lnx->pgd_paddr = init_mm ? virt_to_phys(init_mm->pgd) : 0;
 	lnx->page_shift = PAGE_SHIFT;
 	lnx->thread_size = THREAD_SIZE;
-	lnx->va_bits = VA_BITS;
-	lnx->pa_bits = aa64_pa_max();
-	lnx->kaslr_offset = get_kaslr_offset();
+	msm_wdog_ctx_lnx_arch(lnx);
 }
 
 static void msm_wdog_ctx_header_init(struct msm_wdog_cpuctx *ctxi)
@@ -218,15 +273,22 @@ static void msm_wdog_ctx_reset(struct msm_wdog_cpuctx *ctx, size_t ctx_size)
 
 		if(!ctxi->lnx.text_paddr ||
 			!ctxi->lnx.pgd_paddr ||
-			!ctxi->lnx.kaslr_offset)
+			(IS_ENABLED(CONFIG_ARM64) && !ctxi->lnx.kaslr_offset))
 			ctxi->info.syms_avail = 0;
 	}
 }
 
+#if defined(CONFIG_ARM64)
 static inline int virt_is_valid(unsigned long addr)
 {
 	return (addr >= VA_START);
 }
+#else
+static inline int virt_is_valid(unsigned long addr)
+{
+	return virt_addr_valid(addr);
+}
+#endif
 
 static int msm_wdog_cpu_regs_version_unknown(uint32_t version)
 {
@@ -239,47 +301,6 @@ static int msm_wdog_ctx_header_check(struct msm_wdog_cpuctx *ctxi)
 {
 	struct msm_wdog_cpuctx_header *header = &ctxi->header[0];
 	return memcmp(header, mwc_header, sizeof(mwc_header));
-}
-
-static void msm_wdog_show_sc_status(uint32_t sc_status)
-{
-	if (sc_status & SC_STATUS_DBI)
-		MSMWDTD("SDI: Secure watchdog bite. ");
-	if (sc_status & SC_STATUS_CTX_BY_TZ)
-		MSMWDTD("TZ: Non-secure watchdog bite. ");
-	MSMWDTD("%sS ", (sc_status & SC_STATUS_NS) ?  "N" : " ");
-	if (sc_status & SC_STATUS_WDT)
-		MSMWDTD("WDT ");
-	if (sc_status & SC_STATUS_SGI)
-		MSMWDTD("SGI ");
-	if (sc_status & SC_STATUS_WARM_BOOT)
-		MSMWDTD("WARM_BOOT ");
-	MSMWDTD("\n");
-}
-
-static void msm_wdt_show_thread_saved_pc(struct task_struct *p)
-{
-	MSMWDTD(" %016lx ", (unsigned long)p->thread.cpu_context.pc);
-}
-
-static int msm_wdt_unwind_frame_aa64(struct stackframe *frame,
-				unsigned long stack,
-				unsigned long *sp)
-{
-	unsigned long high, low;
-	unsigned long fp = frame->fp;
-
-	low  = *sp;
-	high = ALIGN(low, THREAD_SIZE) - 0x20;
-
-	if (fp < low || fp > high || fp & 0xf)
-		return -EINVAL;
-
-	*sp = (unsigned long)(fp + 0x10);
-	frame->fp = (*(unsigned long *)(fp) & (THREAD_SIZE - 1)) + stack;
-	frame->pc = *(unsigned long *)(fp + 8);
-
-	return 0;
 }
 
 static void msm_wdt_show_raw_mem(unsigned long addr, int nbytes,
@@ -322,9 +343,70 @@ static void msm_wdt_show_raw_mem(unsigned long addr, int nbytes,
 	}
 }
 
+static void msm_wdog_show_sc_status(uint32_t sc_status)
+{
+	if (sc_status & SC_STATUS_DBI)
+		MSMWDTD("SDI: Secure watchdog bite. ");
+	if (sc_status & SC_STATUS_CTX_BY_TZ)
+		MSMWDTD("TZ: Non-secure watchdog bite. ");
+	MSMWDTD("%sS ", (sc_status & SC_STATUS_NS) ?  "N" : " ");
+	if (sc_status & SC_STATUS_WDT)
+		MSMWDTD("WDT ");
+	if (sc_status & SC_STATUS_SGI)
+		MSMWDTD("SGI ");
+	if (sc_status & SC_STATUS_WARM_BOOT)
+		MSMWDTD("WARM_BOOT ");
+	MSMWDTD("\n");
+}
+
+static void msm_wdt_show_thread_saved_pc(struct task_struct *p,
+				struct thread_info *ti);
+static void msm_wdt_show_task(struct task_struct *p, struct thread_info *ti)
+{
+	unsigned state;
+	const char *stat_nam = TASK_STATE_TO_CHAR_STR;
+
+	state = p->state ? __ffs(p->state) + 1 : 0;
+	MSMWDTD("%-15.15s %c", p->comm,
+		state < strlen(stat_nam) - 1 ? stat_nam[state] : '?');
+	if (state == TASK_RUNNING)
+		MSMWDTD(" running  ");
+	else
+		msm_wdt_show_thread_saved_pc(p, ti);
+	MSMWDTD("pid %6d tgid %6d 0x%08lx\n", task_pid_nr(p), task_tgid_nr(p),
+			(unsigned long)ti->flags);
+}
+
+#if defined(CONFIG_ARM64)
+static void msm_wdt_show_thread_saved_pc(struct task_struct *p,
+				struct thread_info *ti)
+{
+	MSMWDTD(" %016lx ", (unsigned long)p->thread.cpu_context.pc);
+}
+
+static int msm_wdt_unwind_frame_aa64(struct stackframe *frame,
+				unsigned long stack,
+				unsigned long *sp)
+{
+	unsigned long high, low;
+	unsigned long fp = frame->fp;
+
+	low  = *sp;
+	high = ALIGN(low, THREAD_SIZE) - 0x20;
+
+	if (fp < low || fp > high || fp & 0xf)
+		return -EINVAL;
+
+	*sp = (unsigned long)(fp + 0x10);
+	frame->fp = (*(unsigned long *)(fp) & (THREAD_SIZE - 1)) + stack;
+	frame->pc = *(unsigned long *)(fp + 8);
+
+	return 0;
+}
+
 static void msm_wdt_show_regs(struct sysdbgCPUCtxtType *sysdbg_ctx)
 {
-	struct sysdbg_cpu_ctxt_regs *regs = &sysdbg_ctx->cpu_regs;
+	struct sysdbg_cpu64_ctxt_regs *regs = &sysdbg_ctx->cpu_regs.cpu64_ctxt;
 	uint64_t *gp_reg;
 	int i;
 
@@ -347,22 +429,6 @@ static void msm_wdt_show_regs(struct sysdbgCPUCtxtType *sysdbg_ctx)
 	MSMWDTD("EL0: sp : %016llx\n", regs->sp_el0);
 }
 
-static void msm_wdt_show_task(struct task_struct *p, struct thread_info *ti)
-{
-	unsigned state;
-	const char *stat_nam = TASK_STATE_TO_CHAR_STR;
-
-	state = p->state ? __ffs(p->state) + 1 : 0;
-	MSMWDTD("%-15.15s %c", p->comm,
-		state < strlen(stat_nam) - 1 ? stat_nam[state] : '?');
-	if (state == TASK_RUNNING)
-		MSMWDTD(" running  ");
-	else
-		msm_wdt_show_thread_saved_pc(p);
-	MSMWDTD("pid %6d tgid %6d 0x%08lx\n", task_pid_nr(p), task_tgid_nr(p),
-			(unsigned long)ti->flags);
-}
-
 static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 			unsigned long addr, unsigned long kaslr_offset,
 			unsigned long stack)
@@ -371,7 +437,7 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 	unsigned long sp;
 	int offset;
 	char sym_buf[KSYM_NAME_LEN];
-	struct sysdbg_cpu_ctxt_regs *regs = &sysdbg_ctx->cpu_regs;
+	struct sysdbg_cpu64_ctxt_regs *regs = &sysdbg_ctx->cpu_regs.cpu64_ctxt;
 	unsigned long cur_kaslr_offset = get_kaslr_offset();
 
 	if (!virt_is_valid(addr)) {
@@ -417,6 +483,120 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 			break;
 	}
 }
+
+#elif defined(CONFIG_ARM)
+
+static int __in_irqentry_text(unsigned long ptr)
+{
+	unsigned long _irqentry_text_start_addr = kallsyms_lookup_name("__irqentry_text_start");
+	unsigned long __irqentry_text_end_addr = kallsyms_lookup_name("__irqentry_text_end");
+	return ptr >= (unsigned long)&_irqentry_text_start_addr &&
+	       ptr < (unsigned long)&__irqentry_text_end_addr;
+}
+
+static int in_exception_text(unsigned long ptr)
+{
+	unsigned long _exception_text_start_addr = kallsyms_lookup_name("__exception_text_start");
+	unsigned long _exception_text_end_addr = kallsyms_lookup_name("__exception_text_end");
+	int in;
+	in = ptr >= (unsigned long)&_exception_text_start_addr &&
+	     ptr < (unsigned long)&_exception_text_end_addr;
+
+	return in ? : __in_irqentry_text(ptr);
+}
+
+static int msm_wdt_stackframe(struct stackframe *frame, void *data)
+{
+	unsigned long where = frame->pc;
+	struct wdog_frame_struct * frame_data = (struct wdog_frame_struct *)data;
+
+	MSMWDTD("[<%08lx>] (%pS) from [<%08lx>] (%pS)\n", where,
+		(void *)where, frame->pc, (void *)frame->pc);
+	if (in_exception_text(where)) {
+		struct pt_regs *excep_regs =
+				(struct pt_regs *)(frame->sp);
+		if ((excep_regs->ARM_sp & ~(THREAD_SIZE - 1)) == frame_data->addr) {
+			excep_regs->ARM_sp -= frame_data->addr;
+			excep_regs->ARM_sp += frame_data->stack;
+		}
+	}
+	return 0;
+}
+
+static void msm_wdt_show_thread_saved_pc(struct task_struct *p,
+				struct thread_info *ti)
+{
+	MSMWDTD(" %08lx ", (unsigned long)ti->cpu_context.pc);
+}
+
+static void msm_wdt_show_regs(struct sysdbgCPUCtxtType *sysdbg_ctx)
+{
+	struct sysdbg_cpu32_ctxt_regs *regs = &sysdbg_ctx->cpu_regs.cpu32_ctxt;
+	unsigned long _stext_addr = kallsyms_lookup_name("_stext");
+	unsigned long _etext_addr = kallsyms_lookup_name("_etext");
+
+	if ((regs->pc >= _stext_addr) &&
+				(regs->pc <= _etext_addr))
+		MSMWDTD("PC is at %pS <%08x>\n",
+			(void *)(unsigned long)regs->pc, (uint32_t)regs->pc);
+	else
+		MSMWDTD("PC is at %08x\n", (uint32_t)regs->pc);
+	MSMWDTD("\tr12: %08x  r11: %08x  r10: %08x  r9 : %08x  r8 : %08x\n",
+			regs->r12, regs->r11, regs->r10, regs->r9, regs->r8);
+	MSMWDTD("\tr7 : %08x  r6 : %08x  r5 : %08x  r4 : %08x\n",
+			regs->r7, regs->r6, regs->r5, regs->r4);
+	MSMWDTD("\tr3 : %08x  r2 : %08x  r1 : %08x  r0 : %08x\n",
+			regs->r3, regs->r2, regs->r1, regs->r0);
+	MSMWDTD("USR:\tr13: %08x  r14: %08x\n", regs->r13_usr, regs->r14_usr);
+	MSMWDTD("HYP:\tr13: %08x  r14: %08x\n", regs->r13_hyp, regs->r14_hyp);
+	MSMWDTD("IRQ:\tr13: %08x  r14: %08x\n", regs->r13_irq, regs->r14_irq);
+	MSMWDTD("SVC:\tr13: %08x  r14: %08x\n", regs->r13_svc, regs->r14_svc);
+	MSMWDTD("ABT:\tr13: %08x  r14: %08x\n", regs->r13_abt, regs->r14_abt);
+	MSMWDTD("UND:\tr13: %08x  r14: %08x\n", regs->r13_und, regs->r14_und);
+	MSMWDTD("MON:\tr13: %08x  r14: %08x\n", regs->r13_mon, regs->r14_mon);
+	MSMWDTD("FIQ:\tr13: %08x  r14: %08x\n", regs->r13_fiq, regs->r14_fiq);
+	MSMWDTD("\tr12: %08x  r11: %08x  r10: %08x  r9 : %08x  r8 : %08x\n",
+			regs->r12_fiq, regs->r11_fiq, regs->r10_fiq,
+			regs->r9_fiq, regs->r8_fiq);
+}
+
+static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
+			unsigned long addr, unsigned long kaslr_offset,
+			unsigned long stack)
+{
+	struct stackframe frame;
+	int offset;
+	struct wdog_frame_struct frame_data;
+	struct sysdbg_cpu32_ctxt_regs *regs = &sysdbg_ctx->cpu_regs.cpu32_ctxt;
+
+	if (!virt_is_valid(addr)) {
+		MSMWDTD("%08lx is not valid kernel address.\n", addr);
+		return;
+	}
+
+	frame_data.addr = addr;
+	frame_data.stack = stack;
+
+	if ((regs->r13_svc & ~(THREAD_SIZE - 1)) == addr) {
+		frame.fp = (regs->r11 & (THREAD_SIZE - 1)) + stack;
+		frame.sp = (regs->r13_svc & (THREAD_SIZE - 1)) + stack;
+		frame.lr = regs->r14_svc;
+		frame.pc = regs->pc;
+	} else {
+		struct thread_info *ti = (struct thread_info *)stack;
+
+		frame.fp = ti->cpu_context.fp - addr + stack;
+		frame.sp = ti->cpu_context.sp - addr + stack;
+		frame.lr = 0;
+		frame.pc = ti->cpu_context.pc;
+	}
+	offset = (frame.sp - stack - 128) & ~(128 - 1);
+	msm_wdt_show_raw_mem(stack, 96, addr, "thread_info");
+	msm_wdt_show_raw_mem(stack + offset, THREAD_SIZE - offset,
+			addr + offset, "stack");
+	walk_stackframe(&frame, &msm_wdt_stackframe, &frame_data);
+}
+#endif
 
 static void msm_wdog_ctx_print(struct msm_wdog_cpuctx *ctx,
 				phys_addr_t paddr, size_t ctx_size)
@@ -542,7 +722,7 @@ static void msm_wdog_ctx_print(struct msm_wdog_cpuctx *ctx,
 
 		MSMWDTD("\nCPU%d\n", cpu);
 		if(stat->ret != ERR_TASK_INVAL) {
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,9,0) || !IS_ENABLED(CONFIG_THREAD_INFO_IN_TASK)
 			msm_wdt_show_task(&ctxi->task,
 				(struct thread_info *)ctxi->stack);
 #else
@@ -620,11 +800,11 @@ static int watchdog_cpu_ctx_probe(struct platform_device *pdev)
 
 	dev_info(dev, "size %zx", pdata->mem_size);
 	dev_info(dev, "addr %lx", (unsigned long)pdata->mem_address);
-	dev_info(dev, "size per cpu is %lx", WDOG_CPUCTX_SIZE_PERCPU);
+	dev_info(dev, "size per cpu is %lx", (unsigned long)WDOG_CPUCTX_SIZE_PERCPU);
 
 	if (pdata->mem_size < WDOG_CPUCTX_SIZE) {
 		dev_err(dev, "Mem size too small %zx/%lu\n",
-				pdata->mem_size, WDOG_CPUCTX_SIZE);
+				pdata->mem_size, (unsigned long)WDOG_CPUCTX_SIZE);
 		err = -ENOMEM;
 		goto err;
 	}
