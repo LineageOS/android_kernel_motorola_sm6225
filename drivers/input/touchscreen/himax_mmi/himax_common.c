@@ -150,6 +150,7 @@ int himax_report_data_init(void);
 extern bool hx83112_chip_detect (void);
 extern int himax_dev_set(struct himax_ts_data *ts);
 extern int himax_input_register_device(struct input_dev *input_dev);
+extern char *hx_self_test_file_name;
 
 int g_ts_dbg = 0;
 
@@ -199,6 +200,45 @@ static int himax_palm_detect(uint8_t *buf)
 }
 #endif
 
+static ssize_t himax_self_test_write(struct file *file, const char *buff,
+									size_t len, loff_t *pos)
+{
+	int i = 0;
+	char buf[80] = {0};
+
+	if (len >= 80) {
+		I("%s: no command exceeds 80 chars.\n", __func__);
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buf, buff, len)) {
+		return -EFAULT;
+	}
+
+	if (hx_self_test_file_name == NULL) {
+		E("file name is NULL\n");
+		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
+		snprintf(hx_self_test_file_name, 15, "hx_criteria.csv");
+	}
+
+	for (i = 0; i < 80; i++) {
+		if (buf[i] == ',' || buf[i] == '\n') {
+			memset(hx_self_test_file_name, 0x0, 80);
+			memcpy(hx_self_test_file_name, buf, i);
+			I("%s: Get name from Customer\n", __func__);
+			break;
+		}
+	}
+	if (i == 80) {
+		memset(hx_self_test_file_name, 0x0, 80);
+		snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
+		I("%s: Use default name\n", __func__);
+		}
+	I("file name = %s\n", hx_self_test_file_name);
+
+	return len;
+}
+
 static ssize_t himax_self_test_read(struct file *file, char *buf,
 									size_t len, loff_t *pos)
 {
@@ -240,6 +280,7 @@ static ssize_t himax_self_test_read(struct file *file, char *buf,
 static struct file_operations himax_proc_self_test_ops = {
 	.owner = THIS_MODULE,
 	.read = himax_self_test_read,
+	.write = himax_self_test_write,
 };
 
 static void *himax_self_raw_seq_start(struct seq_file *s, loff_t *pos)

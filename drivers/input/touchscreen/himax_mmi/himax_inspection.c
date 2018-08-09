@@ -1,5 +1,7 @@
 #include "himax_inspection.h"
 
+char *hx_self_test_file_name = NULL;
+
 extern struct himax_core_fp g_core_fp;
 extern struct himax_ts_data *private_ts;
 extern struct himax_ic_data *ic_data;
@@ -1021,7 +1023,6 @@ static int himax_parse_criteria_file(void)
 {
 	int err = HX_INSPECT_OK;
 	const struct firmware *file_entry = NULL;
-	char *file_name = "hx_criteria.csv";
 	char **result;
 	int i = 0;
 
@@ -1033,10 +1034,17 @@ static int himax_parse_criteria_file(void)
 	int file_size = 0;
 
 	I("%s,Entering \n", __func__);
-	I("file name = %s\n", file_name);
+	if (hx_self_test_file_name == NULL) {
+		E("file name is NULL\n");
+		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
+		snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
+		I("%s: Use default name\n", __func__);
+	}
+
+	I("file name = %s\n", hx_self_test_file_name);
 
 	/* default path is /system/etc/firmware */
-	err = request_firmware(&file_entry, file_name, private_ts->dev);
+	err = request_firmware(&file_entry, hx_self_test_file_name, private_ts->dev);
 	if (err < 0) {
 		E("%s,fail in line%d error code=%d\n", __func__, __LINE__, err);
 		err = HX_INSPECT_EFILE;
