@@ -683,20 +683,26 @@ int fb_notifier_callback(struct notifier_block *self,
 	    container_of(self, struct himax_ts_data, fb_notif);
 	I(" %s\n", __func__);
 
-	if (evdata && evdata->data && event == FB_EVENT_BLANK && ts &&
-	    ts->client) {
+	if (evdata && evdata->data && ts && ts->client) {
 		blank = evdata->data;
-
-		switch (*blank) {
-		case FB_BLANK_UNBLANK:
-			himax_common_resume(&ts->client->dev);
-			break;
-		case FB_BLANK_POWERDOWN:
-		case FB_BLANK_HSYNC_SUSPEND:
-		case FB_BLANK_VSYNC_SUSPEND:
-		case FB_BLANK_NORMAL:
-			himax_common_suspend(&ts->client->dev);
-			break;
+		if (event == FB_EARLY_EVENT_BLANK) {
+			switch (*blank) {
+			case FB_BLANK_POWERDOWN:
+				himax_common_suspend(&ts->client->dev);
+				break;
+			}
+		} else if (event == FB_EVENT_BLANK) {
+			switch (*blank) {
+			case FB_BLANK_UNBLANK:
+				himax_common_resume(&ts->client->dev);
+				break;
+			case FB_BLANK_POWERDOWN:
+			case FB_BLANK_HSYNC_SUSPEND:
+			case FB_BLANK_VSYNC_SUSPEND:
+			case FB_BLANK_NORMAL:
+				himax_common_suspend(&ts->client->dev);
+				break;
+			}
 		}
 	}
 
