@@ -1301,7 +1301,8 @@ error_workaround:
 
 	EXITIF_ERR(ldc2114_read_bulk(ldc->dev, LDC2114_DEVICE_ID_LSB,
 				&version, sizeof(version)));
-	dev_info(ldc->dev, "TI " LDC2114_DRIVER_NAME " 0x%x\n",
+	dev_info(ldc->dev, "TI LDC%d 0x%x\n",
+				2114 - version.lsb * 2,
 				(version.lsb | (version.msb << 8)));
 
 	EXITIF_ERR(ldc2114_read_reg8(ldc->dev, LDC2114_INTPOL, &value));
