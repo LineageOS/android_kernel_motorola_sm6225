@@ -1737,6 +1737,11 @@ static struct synaptics_dsx_platform_data *
 		rmi4_data->purge_enabled = true;
 	}
 
+	if (of_property_read_bool(np, "synaptics,splash-screen-mode")) {
+		pr_notice("splash screen mode\n");
+		rmi4_data->splash_screen_mode = true;
+	}
+
 	retval = of_property_read_u32(np, "synaptics,pm-qos-latency",
 		&rmi4_data->pm_qos_latency);
 	if (!retval)
@@ -6715,6 +6720,10 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				rmi4_data->in_bootloader = true;
 				pr_info("Product: %s is in bootloader mode\n",
 					rmi->product_id_string);
+			} else if (rmi4_data->splash_screen_mode) {
+				/* Temporary work around DRM framework not following */
+				/* full power up sequence in case of splash screen */
+				synaptics_dsx_sensor_ready_state(rmi4_data, false);
 			}
 			/* replace default status retrieval function */
 			rmi4_data->get_status = exp_fhandler->func_status;
