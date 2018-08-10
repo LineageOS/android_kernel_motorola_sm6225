@@ -1049,8 +1049,8 @@ static int check_utag_range(char *tag, struct utag *head, char *data,
 		return -EIO;
 	}
 
-	if (count >= check) {
-		pr_err("data for [%s] is not allowed %zu > %zu\n", tag, count, check);
+	if (count > (check+1)) {
+		pr_err("data for [%s] is not allowed %zu > %zu\n", tag, count, check+1);
 		return -EIO;
 	}
 
