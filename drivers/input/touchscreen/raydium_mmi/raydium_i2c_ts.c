@@ -1545,6 +1545,9 @@ static int raydium_fw_upgrade(struct i2c_client * client, unsigned char type, un
     unsigned int irq_value;
     struct raydium_ts_data *ts = (struct raydium_ts_data *)i2c_get_clientdata(client);
 
+	if (!gpio_is_valid(ts->rst))
+		return -ENOSYS;
+
     //##### wait for boot-loader start #####
     pr_debug("[touch]type is %d\n", type);
     //#set main state as burning mode, normal init state
@@ -4339,7 +4342,7 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
                     pr_debug("[touch] disable depth : %u\n", raydium_ts->irq_desc->depth);
                     disable_irq_nosync(raydium_ts->irq);
                     raydium_ts->irq_enabled = false;
-					pr_debug("[touch]FB_BLANK_POWERDOWN disable irq\n");
+					pr_debug("[touch]BLANK_POWERDOWN disable irq\n");
                 } else
                 {
                     /* Clear interrupts*/
@@ -4445,6 +4448,10 @@ static int raydium_fw_update_check(struct raydium_ts_data *raydium_ts)
 
     raydium_ts->fw_version = fw_version;
 
+    /* TODO: re-enable FW check */
+    pr_warn("skip fw image version check\n");
+    return 0;
+
     image_version = (RadFWImage[0xF21] << 24) | (RadFWImage[0xF22] << 16) | (RadFWImage[0xF23] << 8) | RadFWImage[0xF24];
     pr_info("[touch]Raydium Image FW version is 0x%x\n", image_version);
 
@@ -4546,10 +4553,7 @@ static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 		pr_debug("[touch]workqueue is empty!\n");
 
 	if (ts->is_close != 1)
-	{
-		pr_debug("[touch]Already in close state\n");
 		raydium_irq_control(ts, ENABLE);
-	}
 
 #ifdef GESTURE_EN
     if (device_may_wakeup(&ts->client->dev))
@@ -4732,15 +4736,18 @@ static int drm_notifier_callback(struct notifier_block *self,
 	struct raydium_ts_data *raydium_ts =
         container_of(self, struct raydium_ts_data, panel_cb);
 
-	if (!evdata || (evdata->id != raydium_ts->pdata->ctrl_dsi))
+	if (!evdata || (evdata->id != raydium_ts->pdata->ctrl_dsi)) {
+		pr_debug("[touch]drm notification: id(%d) != ctrl_dsi(%d)\n",
+				evdata->id, raydium_ts->pdata->ctrl_dsi);
 		return 0;
+	}
 
 	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
 		evdata && evdata->data && raydium_ts) {
 		int *blank = evdata->data;
 
  		raydium_ts->blank = (*blank);
-		pr_debug("drm notification: event = %lu blank = %d\n", event, *blank);
+		pr_debug("[touch]drm notification: event = %lu blank = %d\n", event, *blank);
 		/* entering suspend upon early blank event */
 		/* to ensure shared power supply is still on */
 		/* for in-cell design touch solutions */
@@ -4932,8 +4939,7 @@ static int raydium_parse_dt(struct device *dev, struct raydium_ts_platform_data 
     pdata->reset_gpio = of_get_named_gpio(np, "raydium,reset-gpio", 0);
     if (pdata->reset_gpio < 0)
     {
-        pr_err("[touch]parse dt reset_gpio fail.\n");
-        return pdata->reset_gpio;
+        pr_info("[touch]parse dt no reset_gpio; assume in-cell\n");
     }
 
     pdata->irq_gpio = of_get_named_gpio(np, "raydium,irq-gpio", 0);
@@ -4949,8 +4955,7 @@ static int raydium_parse_dt(struct device *dev, struct raydium_ts_platform_data 
         pdata->hard_rst_dly = temp_val;
     } else
     {
-        pr_err("[touch]parse dt hard-reset-delay-ms fail, return:%d.\n", rc);
-        return rc;
+        pr_info("[touch]parse dt no hard-reset-delay-ms\n");
     }
 
     rc = of_property_read_u32(np, "raydium,soft-reset-delay-ms", &temp_val);
@@ -4959,8 +4964,7 @@ static int raydium_parse_dt(struct device *dev, struct raydium_ts_platform_data 
         pdata->soft_rst_dly = temp_val;
     } else
     {
-        pr_err("[touch]parse dt soft-reset-delay-ms fail, return:%d.\n", rc);
-        return rc;
+        pr_info("[touch]parse dt no soft-reset-delay-ms\n");
     }
 
     rc = of_property_read_u32(np, "raydium,num-max-touches", &temp_val);
@@ -5025,6 +5029,8 @@ static void raydium_input_set(struct input_dev *input_dev, struct raydium_ts_dat
 
 }
 
+extern bool dsi_display_is_panel_enable(int id);
+
 static int raydium_ts_probe(struct i2c_client *client,
             const struct i2c_device_id *id)
 {
@@ -5069,11 +5075,9 @@ static int raydium_ts_probe(struct i2c_client *client,
     mutex_init(&raydium_ts->lock);
 
     i2c_set_clientdata(client, raydium_ts);
-    raydium_ts->irq = client->irq;
     raydium_ts->irq_enabled = true;
     raydium_ts->irq_wake = false;
 
-    //raydium_ts->irq = pdata->irq_gpio;
     raydium_ts->rst = pdata->reset_gpio;
     raydium_ts->client = client;
     raydium_ts->pdata = pdata;
@@ -5128,8 +5132,6 @@ static int raydium_ts_probe(struct i2c_client *client,
         goto err_gpio_req;
     }
 
-    msleep(raydium_ts->pdata->soft_rst_dly);//modify dtsi to 360
-
     //print touch i2c ready
     ret = raydium_check_i2c_ready(raydium_ts);
     if (ret < 0)
@@ -5148,7 +5150,6 @@ static int raydium_ts_probe(struct i2c_client *client,
         goto exit_input_dev_alloc_failed;
     }
 
-    raydium_ts->input_dev = input_dev;
     raydium_input_set(input_dev, raydium_ts);
 
     ret = input_register_device(input_dev);
@@ -5159,6 +5160,7 @@ static int raydium_ts_probe(struct i2c_client *client,
                     dev_name(&client->dev));
         goto exit_input_register_device_failed;
     }
+    raydium_ts->input_dev = input_dev;
 
 #ifdef GESTURE_EN
     input_set_capability(input_dev, EV_KEY, KEY_SLEEP);
@@ -5184,7 +5186,7 @@ static int raydium_ts_probe(struct i2c_client *client,
     pr_debug("[touch]pdata irq : %d \n", raydium_ts->pdata->irq_gpio);//13
     pr_debug("[touch]client irq : %d, pdata flags : %d \n", client->irq, pdata->irqflags);//108
 
-    ret = request_threaded_irq(gpio_to_irq(raydium_ts->pdata->irq_gpio), NULL, raydium_ts_interrupt,
+    ret = request_threaded_irq(gpio_to_irq(pdata->irq_gpio), NULL, raydium_ts_interrupt,
                     pdata->irqflags | IRQF_TRIGGER_LOW | IRQF_ONESHOT | IRQF_NO_SUSPEND, client->dev.driver->name,
                     raydium_ts);
     if (ret < 0)
@@ -5193,7 +5195,8 @@ static int raydium_ts_probe(struct i2c_client *client,
         goto exit_irq_request_failed;
     }
 
-
+	client->irq = gpio_to_irq(pdata->irq_gpio);
+    raydium_ts->irq = client->irq;
     raydium_ts->irq_desc = irq_to_desc(client->irq);
 
     //disable_irq then enable_irq for avoid Unbalanced enable for IRQ warning
@@ -5213,6 +5216,10 @@ static int raydium_ts_probe(struct i2c_client *client,
     return 0;
 
 exit_irq_request_failed:
+#ifdef CONFIG_RM_SYSFS_DEBUG
+    raydium_release_sysfs(client);
+#endif //end of CONFIG_RM_SYSFS_DEBUG
+
 #if defined(CONFIG_DRM) || defined(CONFIG_FB)
     raydium_unregister_notifier(raydium_ts);
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -5220,20 +5227,23 @@ exit_irq_request_failed:
 #endif //end of CONFIG_FB
 
     cancel_work_sync(&raydium_ts->work);
-    input_unregister_device(input_dev);
+    input_unregister_device(raydium_ts->input_dev);
 
 exit_input_register_device_failed:
-    input_free_device(input_dev);
+    if (!raydium_ts->input_dev)
+        input_free_device(input_dev);
 
 exit_input_dev_alloc_failed:
 exit_check_i2c:
     if (gpio_is_valid(pdata->reset_gpio))
     {
         gpio_free(pdata->reset_gpio);
+	pdata->reset_gpio = 0;
     }
     if (gpio_is_valid(pdata->irq_gpio))
     {
         gpio_free(pdata->irq_gpio);
+	pdata->irq_gpio = 0;
     }
 err_gpio_req:
 #ifdef MSM_NEW_VER
@@ -5258,6 +5268,7 @@ err_gpio_req:
 
 pwr_deinit:
     raydium_power_init(raydium_ts, false);
+    raydium_ts->vcc_i2c = ERR_PTR(-ENODEV);
 
 exit_regulator_failed:
     i2c_set_clientdata(client, NULL);
@@ -5271,22 +5282,26 @@ exit_check_functionality_failed:
 static int raydium_ts_remove(struct i2c_client *client)
 {
     struct raydium_ts_data *raydium_ts;
+
     raydium_ts = i2c_get_clientdata(client);
+    if (!raydium_ts)
+	return 0;
 
 #if (defined(CONFIG_DRM) || defined(CONFIG_FB))
     raydium_unregister_notifier(raydium_ts);
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&raydium_ts->early_suspend);
 #endif //end of CONFIG_FB
-    input_unregister_device(raydium_ts->input_dev);
-    input_free_device(raydium_ts->input_dev);
-    gpio_free(raydium_ts->rst);
+
+    if (raydium_ts->input_dev)
+        input_unregister_device(raydium_ts->input_dev);
 
 #ifdef CONFIG_RM_SYSFS_DEBUG
     raydium_release_sysfs(client);
 #endif //end of CONFIG_RM_SYSFS_DEBUG
 
-    free_irq(client->irq, raydium_ts);
+    if (raydium_ts->irq)
+        free_irq(raydium_ts->irq, raydium_ts);
 
     if (gpio_is_valid(raydium_ts->pdata->reset_gpio))
     {
@@ -5296,10 +5311,11 @@ static int raydium_ts_remove(struct i2c_client *client)
     {
         gpio_free(raydium_ts->pdata->irq_gpio);
     }
-    raydium_power_on(raydium_ts, false);
-    raydium_power_init(raydium_ts, false);
 
-    kfree(raydium_ts);
+    if (!IS_ERR(raydium_ts->vcc_i2c)) {
+        raydium_power_on(raydium_ts, false);
+        raydium_power_init(raydium_ts, false);
+    }
 
     i2c_set_clientdata(client, NULL);
     return 0;
