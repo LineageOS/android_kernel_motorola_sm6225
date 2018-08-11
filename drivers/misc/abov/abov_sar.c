@@ -1211,6 +1211,7 @@ static int _abov_fw_update(struct i2c_client *client, const u8 *image, u32 size)
 	unsigned short address;
 	unsigned char addrH, addrL;
 	unsigned char data[32] = {0, };
+	pabovXX_t this = abov_sar_ptr;
 
 	LOG_INFO("%s: call in\r\n", __func__);
 
@@ -1270,6 +1271,8 @@ static int _abov_fw_update(struct i2c_client *client, const u8 *image, u32 size)
 		ret = -1;
 	}
 	SLEEP(100);
+
+	hw_init(this);
 
 	return ret;
 }
