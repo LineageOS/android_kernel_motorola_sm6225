@@ -51,6 +51,9 @@
 #if NVT_TOUCH_ESD_PROTECT
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
+#if defined(CONFIG_CHARGER_NOTIFY)
+#include <linux/power_supply.h>
+#endif
 
 #if NVT_TOUCH_ESD_PROTECT
 static struct delayed_work nvt_esd_check_work;
@@ -88,6 +91,13 @@ static int fb_notifier_callback(struct notifier_block *self, unsigned long event
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
+#endif
+#if defined(CONFIG_CHARGER_NOTIFY)
+static int charger_notifier_callback(struct notifier_block *nb,
+		unsigned long val, void *v);
+int32_t nvt_set_charger(uint8_t charger_on_off);
+static void nvt_charger_notify_work(struct work_struct *work);
+int usb_detect_flag = 0;
 #endif
 
 #if TOUCH_KEY_NUM > 0
@@ -1426,12 +1436,37 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 #endif
 
 	bTouchIsAwake = 1;
+#if defined(CONFIG_CHARGER_NOTIFY)
+	ts->usb_connected = 0;
+	ts->nvt_charger_notify_wq = create_singlethread_workqueue("nvt_charger_notify_wq");
+	if (!ts->nvt_charger_notify_wq) {
+		NVT_ERR(" allocate nvt_charger_notify_wq failed\n");
+		goto err_charger_notify_wq_failed;
+	}
+	INIT_WORK(&ts->charger_notify_work, nvt_charger_notify_work);
+
+	ts->charger_notif.notifier_call = charger_notifier_callback;
+	ret = power_supply_reg_notifier(&ts->charger_notif);
+	if (ret) {
+		NVT_ERR("Unable to register charger_notifier: %d\n",ret);
+		goto err_register_charger_notify_failed;
+	}
+#endif
+
 	NVT_LOG("exit %s normal end\n", __func__);
 
 	enable_irq(client->irq);
 
 	return 0;
 
+#if defined(CONFIG_CHARGER_NOTIFY)
+err_register_charger_notify_failed:
+	if (ts->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ts->charger_notif);
+	destroy_workqueue(ts->nvt_charger_notify_wq);
+	ts->nvt_charger_notify_wq = NULL;
+err_charger_notify_wq_failed:
+#endif
 #if defined(CONFIG_FB)
 err_register_fb_notif_failed:
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -1482,6 +1517,12 @@ static int32_t nvt_ts_remove(struct i2c_client *client)
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts->early_suspend);
+#endif
+#if defined(CONFIG_CHARGER_NOTIFY)
+	if (ts->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ts->charger_notif);
+
+	destroy_workqueue(ts->nvt_charger_notify_wq);
 #endif
 
 #if NVT_TOUCH_FW
@@ -1595,6 +1636,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 		return 0;
 	}
 
+	msleep(10);
 	mutex_lock(&ts->lock);
 
 	NVT_LOG("start\n");
@@ -1615,6 +1657,9 @@ static int32_t nvt_ts_resume(struct device *dev)
 	queue_delayed_work(nvt_esd_check_wq, &nvt_esd_check_work,
 			msecs_to_jiffies(NVT_TOUCH_ESD_CHECK_PERIOD));
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
+#if defined(CONFIG_CHARGER_NOTIFY)
+	queue_work(ts->nvt_charger_notify_wq, &ts->charger_notify_work);
+#endif
 
 	bTouchIsAwake = 1;
 #if NVT_TOUCH_FW
@@ -1675,6 +1720,106 @@ return:
 static void nvt_ts_late_resume(struct early_suspend *h)
 {
 	nvt_ts_resume(ts->client);
+}
+#endif
+
+#if defined(CONFIG_CHARGER_NOTIFY)
+int32_t nvt_set_charger(uint8_t charger_on_off)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	NVT_LOG("set charger: %d\n", charger_on_off);
+
+	msleep(20);
+	//---set xdata index to EVENT BUF ADDR---
+	buf[0] = 0xFF;
+	buf[1] = (ts->mmap->EVENT_BUF_ADDR >> 16) & 0xFF;
+	buf[2] = (ts->mmap->EVENT_BUF_ADDR >> 8) & 0xFF;
+
+	ret = CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 3);
+	if (ret < 0) {
+		NVT_ERR("Set event buffer index fail!\n");
+		goto nvt_set_charger_out;
+	}
+
+	if (charger_on_off == USB_DETECT_IN) {
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = CMD_CHARGER_ON;
+		ret = CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+		if (ret < 0) {
+			NVT_ERR("Write set charger command fail!\n");
+			goto nvt_set_charger_out;
+		}
+	} else if (charger_on_off == USB_DETECT_OUT) {
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = CMD_CHARGER_OFF;
+		ret = CTP_I2C_WRITE(ts->client, I2C_FW_Address, buf, 2);
+		if (ret < 0) {
+			NVT_ERR("Write set charger command fail!\n");
+			goto nvt_set_charger_out;
+		}
+	} else {
+		NVT_ERR("Invalid charger parameter!\n");
+		ret = -EINVAL;
+	}
+
+nvt_set_charger_out:
+
+	return ret;
+}
+
+static void nvt_charger_notify_work(struct work_struct *work)
+{
+	if (NULL == work) {
+		NVT_ERR("%s:  parameter work are null!\n", __func__);
+		return;
+	}
+	NVT_LOG("enter\n");
+	if (USB_DETECT_IN == usb_detect_flag) {
+		nvt_set_charger(USB_DETECT_IN);
+	} else if (USB_DETECT_OUT == usb_detect_flag) {
+		nvt_set_charger(USB_DETECT_OUT);
+	}else{
+		NVT_LOG("Charger flag:%d not currently required!\n",usb_detect_flag);
+	}
+}
+
+static int charger_notifier_callback(struct notifier_block *nb,
+		unsigned long val, void *v)
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	struct nvt_ts_data *ts = container_of(nb, struct nvt_ts_data, charger_notif);
+	union power_supply_propval prop;
+
+	psy= power_supply_get_by_name("usb");
+	if (!psy){
+		return -EINVAL;
+		NVT_ERR("Couldn't get usbpsy\n");
+	}
+	if (!strcmp(psy->desc->name, "usb")){
+		if (psy && ts && val == POWER_SUPPLY_PROP_STATUS) {
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,&prop);
+			if (ret < 0) {
+				NVT_ERR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+				return ret;
+			}else{
+				usb_detect_flag = prop.intval;
+				if(usb_detect_flag != ts->usb_connected) {
+					 if (USB_DETECT_IN == usb_detect_flag) {
+						  ts->usb_connected = USB_DETECT_IN;
+					 }else{
+						  ts->usb_connected = USB_DETECT_OUT;
+					 }
+					 if (bTouchIsAwake){
+						 queue_work(ts->nvt_charger_notify_wq, &ts->charger_notify_work);
+					}
+				}
+			}
+		}
+	}
+	return 0;
 }
 #endif
 
