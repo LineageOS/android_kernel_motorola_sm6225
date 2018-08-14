@@ -88,6 +88,14 @@ extern const uint16_t gesture_key_array[];
 #define NVT_TOUCH_ESD_PROTECT 1
 #define NVT_TOUCH_ESD_CHECK_PERIOD 2000	/* ms */
 
+#define CONFIG_CHARGER_NOTIFY
+#if defined(CONFIG_CHARGER_NOTIFY)
+	#define USB_DETECT_IN 1
+	#define USB_DETECT_OUT	0
+	#define CMD_CHARGER_ON	(0x53)
+	#define CMD_CHARGER_OFF (0x51)
+#endif
+
 struct nvt_ts_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
@@ -121,6 +129,12 @@ struct nvt_ts_data {
 	uint8_t suspended;
 	uint8_t force_reflash;
 	uint8_t loading_fw;
+#endif
+#if defined(CONFIG_CHARGER_NOTIFY)
+	struct notifier_block charger_notif;
+	uint8_t usb_connected;
+	struct workqueue_struct *nvt_charger_notify_wq;
+	struct work_struct charger_notify_work;
 #endif
 };
 
