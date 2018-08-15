@@ -220,12 +220,12 @@ static int tas2560_algo_get_set(u8 *user_data, uint32_t param_id,
 
 	switch (get_set) {
 	case TAS2560_ALGO_SET_PARAM:
-		pr_err("TAS2560_ALGO:%s set param\n", __func__);
+		pr_debug("TAS2560_ALGO:%s set param\n", __func__);
 		ret = tas2560_algo_afe_set_param(param_id, module_id,
 			(struct afe_tas2560_algo_set_config_t *)user_data);
 		break;
 	case TAS2560_ALGO_GET_PARAM:
-		pr_err("TAS2560_ALGO:%s get param\n", __func__);
+		pr_debug("TAS2560_ALGO:%s get param\n", __func__);
 		tas2560_algo_payload = NULL;
 		tas2560_algo_afe_set_callback(tas2560_algo_afe_callback);
 		ret = tas2560_algo_afe_get_param(param_id, module_id);
