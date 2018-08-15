@@ -74,7 +74,7 @@ struct aw869x *g_aw869x;
  *
  ******************************************************/
 static void aw869x_interrupt_clear(struct aw869x *aw869x);
-
+static void aw869x_vibrate(struct aw869x *aw869x, int value);
 
  /******************************************************
  *
@@ -211,6 +211,9 @@ static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
 
     aw869x->rtp_init = 1;
     pr_info("%s: rtp update complete\n", __func__);
+
+    /* Vibrate for 1 second as TI drv2624's auto-calibration does */
+    aw869x_vibrate(aw869x, 1000);
 }
 
 static int aw869x_rtp_update(struct aw869x *aw869x)
