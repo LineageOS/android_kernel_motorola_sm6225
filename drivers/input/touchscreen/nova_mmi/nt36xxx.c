@@ -420,8 +420,8 @@ info_retry:
 		ts->fw_ver = 0;
 		ts->x_num = 18;
 		ts->y_num = 32;
-		ts->abs_x_max = TOUCH_DEFAULT_MAX_WIDTH;
-		ts->abs_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
+		ts->abs_x_max = ts->def_x_max;
+		ts->abs_y_max = ts->def_y_max;
 		ts->max_button_num = TOUCH_KEY_NUM;
 
 		if(retry_count < 3) {
@@ -724,18 +724,56 @@ return:
 	n.a.
 *******************************************************/
 #ifdef CONFIG_OF
+static int nvt_get_dt_def_coords(struct device *dev, char *name)
+{
+	u32 coords[TOUCH_COORDS_ARR_SIZE];
+	struct property *prop;
+	struct device_node *np = dev->of_node;
+	int coords_size, rc;
+
+	prop = of_find_property(np, name, NULL);
+	if (!prop)
+		return -EINVAL;
+	if (!prop->value)
+		return -ENODATA;
+
+	coords_size = prop->length / sizeof(u32);
+	if (coords_size != TOUCH_COORDS_ARR_SIZE) {
+		dev_err(dev, "invalid %s\n", name);
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u32_array(np, name, coords, coords_size);
+	if (rc && (rc != -EINVAL)) {
+		NVT_LOG("Unable to read novatek,def-max-resolution\n");
+		return rc;
+	}
+
+	ts->def_x_max = coords[0];
+	ts->def_y_max = coords[1];
+	return rc;
+}
+
 static void nvt_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
-
+	int rc;
 	ts->irq_gpio = of_get_named_gpio_flags(np, "novatek,irq-gpio", 0, &ts->irq_flags);
 	NVT_LOG("novatek,irq-gpio=%d\n", ts->irq_gpio);
 
+	rc = nvt_get_dt_def_coords(dev, "novatek,def-max-resolution");
+	if (rc) {
+		ts->def_x_max = TOUCH_DEFAULT_MAX_WIDTH;
+		ts->def_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
+	}
+	NVT_LOG("novatek,def-max-resolution=%d,%d\n", ts->def_x_max, ts->def_y_max);
 }
 #else
 static void nvt_parse_dt(struct device *dev)
 {
 	ts->irq_gpio = NVTTOUCH_INT_PIN;
+	ts->def_x_max = TOUCH_DEFAULT_MAX_WIDTH;
+	ts->def_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
 }
 #endif
 
