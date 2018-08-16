@@ -7417,8 +7417,12 @@ err_sysfs:
 #endif
 
 err_query_device:
-	if (!IS_ERR(rmi4_data->vdd_quirk))
-		regulator_disable(rmi4_data->vdd_quirk);
+	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+		if (rmi4_data->splash_screen_mode)
+			dev_warn(&client->dev, "leaving vdd_quirk enabled\n");
+		else
+			regulator_disable(rmi4_data->vdd_quirk);
+	}
 
 err_vdd_quirk:
 	if (platform_data->regulator_en)
