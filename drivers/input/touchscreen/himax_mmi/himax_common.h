@@ -145,6 +145,7 @@
 #define PALM_REPORT 1
 #define NOT_REPORT -1
 #endif
+#define IC_HX83102	102
 
 enum HX_TS_PATH {
 	HX_REPORT_COORD = 1,
@@ -213,6 +214,7 @@ struct himax_ic_data {
 	int HX_RX_NUM_2;
 	int HX_TX_NUM_2;
 #endif
+	int ic_type_val;
 };
 
 struct himax_virtual_key {
