@@ -147,6 +147,7 @@ static void himax_ts_late_resume(struct early_suspend *h);
 
 int himax_report_data_init(void);
 
+extern bool hx83102_chip_detect (void);
 extern bool hx83112_chip_detect (void);
 extern int himax_dev_set(struct himax_ts_data *ts);
 extern int himax_input_register_device(struct input_dev *input_dev);
@@ -2099,8 +2100,14 @@ static void himax_fb_register(struct work_struct *work)
 #endif
 
 static const char *himax_ic_type_to_string (void) {
+
 	switch (private_ts->chip_cell_type) {
-	case CHIP_IS_IN_CELL: return "hx83112a";
+	case CHIP_IS_IN_CELL:
+		if (IC_HX83102 == ic_data->ic_type_val) {
+			return "hx83102";
+		} else {
+			return "hx83112a";
+		}
 	default: return "hxxxxxx";
 	}
 }
@@ -2462,7 +2469,14 @@ int himax_chip_common_init(void)
 
 #endif
 
-	hx83112_chip_detect();
+	if (IC_HX83102 == ic_data->ic_type_val) {
+		I("[%s][%d]:is hx83102_chip_detect\n", __func__, __LINE__);
+		hx83102_chip_detect();
+	} else {
+		I("[%s][%d]:is hx83112_chip_detect\n", __func__, __LINE__);
+		hx83112_chip_detect();
+	}
+
 	if (g_core_fp.fp_chip_init != NULL) {
 		g_core_fp.fp_chip_init();
 	} else {

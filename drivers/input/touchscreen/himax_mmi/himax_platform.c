@@ -106,6 +106,7 @@ int himax_parse_dt(struct himax_ts_data *ts,
 	struct property *prop;
 	struct device_node *dt = private_ts->client->dev.of_node;
 	u32 data = 0;
+	int ic_type_data = 0;
 	prop = of_find_property(dt, "himax,panel-coords", NULL);
 
 	if (prop) {
@@ -141,7 +142,18 @@ int himax_parse_dt(struct himax_ts_data *ts,
 	pdata->screenWidth  = coords[1];
 	pdata->screenHeight = coords[3];
 	I(" DT-%s:display-coords = (%d, %d)\n", __func__, pdata->screenWidth,
-	  pdata->screenHeight);
+		pdata->screenHeight);
+
+	rc = of_property_read_u32(dt, "himax,ic-type", &ic_type_data);
+
+	if (rc && (rc != -EINVAL)) {
+		D("[%s][%d]:Fail to read himax,ic-type %d\n", __func__, __LINE__, rc);
+		ic_data->ic_type_val = 0;
+	} else {
+		I("[%s][%d]:Read driver IC type = %d, return %d\n", __func__, __LINE__, ic_type_data, rc);
+		ic_data->ic_type_val = ic_type_data;
+	}
+
 	pdata->gpio_irq = of_get_named_gpio(dt, "himax,irq-gpio", 0);
 
 	if (!gpio_is_valid(pdata->gpio_irq)) {
@@ -522,7 +534,7 @@ int himax_gpio_power_config(struct himax_i2c_platform_data *pdata)
 		E("irq gpio not provided\n");
 		goto err_irq_request;
 	}
-	
+
 #ifdef HX_RST_PIN_FUNC
 
 	if (pdata->gpio_reset >= 0) {
