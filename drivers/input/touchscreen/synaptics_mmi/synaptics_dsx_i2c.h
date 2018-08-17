@@ -345,6 +345,7 @@ enum exp_fn {
 	RMI_F54,
 	RMI_FW_UPDATER,
 	RMI_CTRL_ACCESS_BLK,
+	RMI_DRM_WORKAROUND,
 	RMI_LAST,
 };
 
@@ -467,7 +468,7 @@ struct temp_buffer {
 struct synaptics_rmi4_data {
 	struct i2c_client *i2c_client;
 	struct input_dev *input_dev;
-	const struct synaptics_dsx_platform_data *board;
+	struct synaptics_dsx_platform_data *board;
 	struct synaptics_rmi4_device_info rmi4_mod_info;
 	struct regulator *regulator;
 	struct regulator *vdd_quirk;
