@@ -115,6 +115,9 @@ int irq_can_set_affinity(unsigned int irq)
 static int fps_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data);
 
+extern bool dsi_display_is_panel_enable(int id);
+static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data);
+
 static void synaptics_dsx_free_patch(
 		struct synaptics_dsx_patch *patch);
 static struct synaptics_dsx_patch *
@@ -2464,8 +2467,8 @@ static int synaptics_dsx_ic_reset(
 {
 	int retval;
 	unsigned long start = jiffies;
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
+	struct synaptics_dsx_platform_data
+			*platform_data = rmi4_data->board;
 	bool has_rst_pin = gpio_is_valid(platform_data->reset_gpio);
 	bool need_to_free_irq = true;
 
@@ -5123,8 +5126,8 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval = 0;
 	unsigned char intr_status;
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
+	struct synaptics_dsx_platform_data
+			*platform_data = rmi4_data->board;
 
 	if (enable) {
 		if (rmi4_data->irq_enabled)
@@ -5588,7 +5591,7 @@ static int synaptics_rmi4_cap_button_map(
 {
 	unsigned char ii;
 	struct synaptics_rmi4_f1a_handle *f1a = fhandler->data;
-	const struct synaptics_dsx_platform_data *pdata = rmi4_data->board;
+	struct synaptics_dsx_platform_data *pdata = rmi4_data->board;
 
 	if (!pdata->cap_button_map) {
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -6586,7 +6589,17 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 {
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
 	struct synaptics_rmi4_data *rmi4_data;
+	/* DRM status of primary panel */
+	bool panel_ready = dsi_display_is_panel_enable(0);
 	int state, error;
+
+	if (!panel_ready) {
+		pr_debug("panel not ready; re-scheduling...\n");
+		queue_delayed_work(exp_fn_ctrl.det_workqueue,
+				&exp_fn_ctrl.det_work,
+				msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+		return;
+	}
 
 	mutex_lock(&exp_fn_ctrl_mutex);
 	rmi4_data = exp_fn_ctrl.rmi4_data_ptr;
@@ -6634,6 +6647,12 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 					exp_fhandler->func_status == rmi4_data->get_status) {
 					rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
 					pr_info("using default status retrieval function\n");
+				}
+
+				if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
+					/* enable interrupt handling after F34 init complete */
+					atomic_set(&rmi4_data->touch_stopped, 0);
+					synaptics_dsx_sensor_ready_state(rmi4_data, false);
 				}
 
 				list_del(&exp_fhandler->link);
@@ -6720,14 +6739,23 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				rmi4_data->in_bootloader = true;
 				pr_info("Product: %s is in bootloader mode\n",
 					rmi->product_id_string);
-			} else if (rmi4_data->splash_screen_mode) {
-				/* Temporary work around DRM framework not following */
-				/* full power up sequence in case of splash screen */
-				synaptics_dsx_sensor_ready_state(rmi4_data, false);
 			}
 			/* replace default status retrieval function */
 			rmi4_data->get_status = exp_fhandler->func_status;
 			pr_info("using F34 status retrieval function\n");
+		}
+
+		if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
+			error = synaptics_rmi4_hw_init(rmi4_data);
+			if (error) {
+				pr_err("hw init failed\n");
+				/* TODO: probably remove driver??? */
+			}
+			exp_fhandler->func_init = NULL;
+			pr_debug("removing DRM workaround\n");
+			queue_delayed_work(exp_fn_ctrl.det_workqueue,
+					&exp_fn_ctrl.det_work,
+					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
 		}
 	}
 
@@ -6862,8 +6890,8 @@ static int rmi_reboot(struct notifier_block *nb,
 {
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(nb, struct synaptics_rmi4_data, rmi_reboot);
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
+	struct synaptics_dsx_platform_data
+			*platform_data = rmi4_data->board;
 	struct regulator *reg_ptr;
 	int state = STATE_INVALID;
 
@@ -7116,6 +7144,258 @@ device_destroy:
 	return -ENODEV;
 }
 
+static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval = 0, attr_count;
+	struct pinctrl *pinctrl;
+	struct synaptics_dsx_platform_data
+				*platform_data = rmi4_data->board;
+
+	pinctrl = devm_pinctrl_get_select(&rmi4_data->i2c_client->dev,
+		"active");
+	if (IS_ERR(pinctrl)) {
+		long int error = PTR_ERR(pinctrl);
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: pinctrl failed err %ld\n", __func__, error);
+		goto err_mem_free;
+	}
+
+	if (platform_data->gpio_config)
+		retval = platform_data->gpio_config(platform_data, true);
+	else if (gpio_is_valid(platform_data->reset_gpio)) {
+		retval = gpio_request(platform_data->reset_gpio,
+						RESET_GPIO_NAME);
+		if (!retval)
+			retval = gpio_direction_output(
+						platform_data->reset_gpio, 1);
+	}
+	if (retval < 0) {
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Failed to configure GPIO\n",
+				__func__);
+		goto err_mem_free;
+	}
+
+	retval = synaptics_dsx_alloc_input(rmi4_data);
+	if (retval < 0) {
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Failed to allocate input device\n",
+				__func__);
+		goto err_gpio_free;
+	}
+
+	rmi4_data->regulator = devm_regulator_get(
+				&rmi4_data->i2c_client->dev, "touch_vdd");
+	if (IS_ERR(rmi4_data->regulator)) {
+		retval = PTR_ERR(rmi4_data->regulator);
+		if (PTR_ERR(rmi4_data->regulator) == -EPROBE_DEFER)
+			goto err_gpio_free;
+
+		dev_warn(&rmi4_data->i2c_client->dev,
+				"%s: Failed to get regulator\n",
+				__func__);
+		goto err_gpio_free;
+	} else {
+		retval = regulator_enable(rmi4_data->regulator);
+		if (retval) {
+			dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Error %d enabling touch-vdd regulator\n",
+				__func__, retval);
+			goto err_touch_vdd;
+		}
+		platform_data->regulator_en = true;
+	}
+
+	rmi4_data->vdd_quirk = devm_regulator_get(
+				&rmi4_data->i2c_client->dev, "vdd_quirk");
+	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+		retval = regulator_enable(rmi4_data->vdd_quirk);
+		if (retval) {
+			dev_err(&rmi4_data->i2c_client->dev, "Failed to enable vdd-quirk\n");
+			goto err_vdd_quirk;
+		}
+	} else {
+		retval = PTR_ERR(rmi4_data->regulator);
+		if (retval == -EPROBE_DEFER)
+			goto err_vdd_quirk;
+	}
+
+	retval = synaptics_dsx_ic_reset(rmi4_data, RMI4_HW_RESET);
+	if (retval > 0)
+		pr_debug("successful reset took %dms\n", retval);
+	else
+		dev_warn(&rmi4_data->i2c_client->dev, "%s: timed out waiting for idle\n",
+			__func__);
+
+	retval = synaptics_rmi4_query_device(rmi4_data);
+	if (retval < 0) {
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Failed to query device\n",
+				__func__);
+		goto err_query_device;
+	}
+
+	INIT_WORK(&rmi4_data->resume_work, synaptics_dsx_queued_resume);
+
+#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
+	rmi4_data->panel_nb.pre_display_off = synaptics_rmi4_suspend;
+	rmi4_data->panel_nb.display_on = synaptics_rmi4_resume;
+	rmi4_data->panel_nb.dev = &client->dev;
+	if (!mmi_panel_register_notifier(&rmi4_data->panel_nb))
+		pr_info("registered MMI panel notifier\n");
+	else
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Unable to register MMI notifier\n",
+				__func__);
+#elif defined(CONFIG_DRM)
+	rmi4_data->panel_nb.notifier_call = synaptics_dsx_panel_cb;
+	if (!msm_drm_register_client(&rmi4_data->panel_nb))
+		pr_debug("registered DRM notifier\n");
+	else
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Unable to register DRM notifier\n",
+				__func__);
+#elif defined(CONFIG_FB)
+	rmi4_data->panel_nb.notifier_call = synaptics_dsx_panel_cb;
+	if (!fb_register_client(&rmi4_data->panel_nb))
+		pr_debug("registered FB notifier\n");
+	else
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Unable to register FB notifier\n",
+				__func__);
+#endif
+
+	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
+		retval = sysfs_create_file(&rmi4_data->i2c_client->dev.kobj,
+				&attrs[attr_count].attr);
+		if (retval < 0) {
+			dev_err(&rmi4_data->i2c_client->dev,
+					"%s: Failed to create sysfs attributes\n",
+					__func__);
+			goto err_sysfs;
+		}
+	}
+
+	rmi4_data->pm_qos_irq.irq = rmi4_data->irq;
+	synaptics_dsx_sensor_ready_state(rmi4_data, true);
+
+	rmi4_data->rmi_reboot.notifier_call = rmi_reboot;
+	rmi4_data->rmi_reboot.next = NULL;
+	rmi4_data->rmi_reboot.priority = 1;
+	retval = register_reboot_notifier(&rmi4_data->rmi_reboot);
+	if (retval)
+		dev_err(&rmi4_data->i2c_client->dev, "register for reboot failed\n");
+
+#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
+	if (rmi4_data->folio_detection_enabled) {
+		/* register notifier at the end of probe to */
+		/* avoid unnecessary reset in STANDBY state */
+		rmi4_data->folio_notif.notifier_call = folio_notifier_callback;
+		dev_dbg(&rmi4_data->i2c_client->dev, "registering folio notifier\n");
+		retval = mmi_hall_register_notifier(&rmi4_data->folio_notif,
+					MMI_HALL_FOLIO, true);
+		if (retval) {
+			dev_err(&rmi4_data->i2c_client->dev,
+				"Error registering folio_notifier: %d\n",
+				retval);
+			/* inability to register folio notifications handler */
+			/* is not fatal, thus reset return value to success */
+			retval = 0;
+		}
+	}
+#endif
+	synaptics_dsx_sysfs_touchscreen(rmi4_data, true);
+
+	if (rmi4_data->charger_detection_enabled)
+		ps_notifier_register(rmi4_data);
+
+	if (rmi4_data->fps_detection_enabled) {
+		rmi4_data->fps_notif.notifier_call = fps_notifier_callback;
+		dev_dbg(&rmi4_data->i2c_client->dev, "registering FPS notifier\n");
+		retval = FPS_register_notifier(
+				&rmi4_data->fps_notif, 0xBEEF, false);
+		if (retval) {
+			if (exp_fn_ctrl.det_workqueue)
+				queue_delayed_work(exp_fn_ctrl.det_workqueue,
+					&exp_fn_ctrl.det_work,
+					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+			dev_err(&rmi4_data->i2c_client->dev,
+				"Failed to register fps_notifier: %d\n",
+				retval);
+			retval = 0;
+		} else
+			rmi4_data->is_fps_registered = true;
+	}
+
+	synaptics_dsx_pm_qos(rmi4_data, PM_ADD, false);
+
+	/* init reporting semaphore and set expected # of fingers to 1 */
+	sema_init(&rmi4_data->rctrl.ctrl_sema, 1);
+	rmi4_data->rctrl.expected = 1;
+
+	return retval;
+
+err_sysfs:
+	for (attr_count--; attr_count >= 0; attr_count--) {
+		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
+				&attrs[attr_count].attr);
+	}
+
+#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
+	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
+#elif defined(CONFIG_DRM)
+	msm_drm_unregister_client(&rmi4_data->panel_nb);
+#elif defined(CONFIG_FB)
+	fb_unregister_client(&rmi4_data->panel_nb);
+#endif
+
+err_query_device:
+	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+		if (rmi4_data->splash_screen_mode)
+			dev_warn(&rmi4_data->i2c_client->dev, "leaving vdd_quirk enabled\n");
+		else
+			regulator_disable(rmi4_data->vdd_quirk);
+	}
+
+err_vdd_quirk:
+	if (platform_data->regulator_en)
+		regulator_disable(rmi4_data->regulator);
+
+err_touch_vdd:
+	synaptics_rmi4_cleanup(rmi4_data);
+	if (rmi4_data->input_registered)
+		input_unregister_device(rmi4_data->input_dev);
+	else
+		input_free_device(rmi4_data->input_dev);
+
+err_gpio_free:
+	if (platform_data->gpio_config)
+		gpio_free(platform_data->irq_gpio);
+	if (gpio_is_valid(platform_data->reset_gpio)) {
+		gpio_set_value(platform_data->reset_gpio, 0);
+		gpio_free(platform_data->reset_gpio);
+	}
+
+err_mem_free:
+	kfree(rmi4_data);
+
+
+	return retval;
+}
+
+static int dummy_init(struct synaptics_rmi4_data *rmi4_data)
+{
+	struct synaptics_rmi4_data *ptr = rmi4_data;
+	ptr = ptr;
+	return 0;
+}
+
+static void dummy_remove(struct synaptics_rmi4_data *rmi4_data)
+{
+	struct synaptics_rmi4_data *ptr = rmi4_data;
+	ptr = ptr;
+}
+
  /**
  * synaptics_rmi4_probe()
  *
@@ -7131,10 +7411,7 @@ device_destroy:
 static int synaptics_rmi4_probe(struct i2c_client *client,
 		const struct i2c_device_id *dev_id)
 {
-	int retval = 0, attr_count;
-	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data;
-	struct synaptics_rmi4_device_info *rmi;
 	struct synaptics_dsx_platform_data *platform_data;
 
 	if (!i2c_check_functionality(client->adapter,
@@ -7176,8 +7453,7 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-	rmi = &(rmi4_data->rmi4_mod_info);
-
+	rmi4_data->state = STATE_INVALID;
 	rmi4_data->current_page = MASK_8BIT;
 	rmi4_data->board = platform_data;
 	rmi4_data->irq_enabled = false;
@@ -7195,125 +7471,14 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 	rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
 
-	mutex_init(&(rmi4_data->rmi4_io_ctrl_mutex));
-	mutex_init(&(rmi4_data->state_mutex));
-
-	pinctrl = devm_pinctrl_get_select(&rmi4_data->i2c_client->dev,
-		"active");
-	if (IS_ERR(pinctrl)) {
-		long int error = PTR_ERR(pinctrl);
-		dev_err(&rmi4_data->i2c_client->dev,
-			"%s: pinctrl failed err %ld\n", __func__, error);
-		goto err_mem_free;
-	}
-
-	if (platform_data->gpio_config)
-		retval = platform_data->gpio_config(platform_data, true);
-	else if (gpio_is_valid(platform_data->reset_gpio)) {
-		retval = gpio_request(platform_data->reset_gpio,
-						RESET_GPIO_NAME);
-		if (!retval)
-			retval = gpio_direction_output(
-						platform_data->reset_gpio, 1);
-	}
-	if (retval < 0) {
-		dev_err(&client->dev,
-				"%s: Failed to configure GPIO\n",
-				__func__);
-		goto err_mem_free;
-	}
-
 	/* get irq number initialized before calling reset */
 	rmi4_data->irq = gpio_to_irq(platform_data->irq_gpio);
 
 	i2c_set_clientdata(client, rmi4_data);
 
-	retval = synaptics_dsx_alloc_input(rmi4_data);
-	if (retval < 0) {
-		dev_err(&client->dev,
-				"%s: Failed to allocate input device\n",
-				__func__);
-		goto err_gpio_free;
-	}
+	mutex_init(&(rmi4_data->rmi4_io_ctrl_mutex));
+	mutex_init(&(rmi4_data->state_mutex));
 
-	rmi4_data->regulator = devm_regulator_get(&client->dev, "touch_vdd");
-	if (IS_ERR(rmi4_data->regulator)) {
-		retval = PTR_ERR(rmi4_data->regulator);
-		if (PTR_ERR(rmi4_data->regulator) == -EPROBE_DEFER)
-			goto err_gpio_free;
-
-		dev_warn(&client->dev,
-				"%s: Failed to get regulator\n",
-				__func__);
-		goto err_gpio_free;
-	} else {
-		retval = regulator_enable(rmi4_data->regulator);
-		if (retval) {
-			dev_err(&client->dev,
-				"%s: Error %d enabling touch-vdd regulator\n",
-				__func__, retval);
-			goto err_touch_vdd;
-		}
-		platform_data->regulator_en = true;
-	}
-
-	rmi4_data->vdd_quirk = devm_regulator_get(&client->dev, "vdd_quirk");
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
-		retval = regulator_enable(rmi4_data->vdd_quirk);
-		if (retval) {
-			dev_err(&client->dev, "Failed to enable vdd-quirk\n");
-			goto err_vdd_quirk;
-		}
-	} else {
-		retval = PTR_ERR(rmi4_data->regulator);
-		if (retval == -EPROBE_DEFER)
-			goto err_vdd_quirk;
-	}
-
-	retval = synaptics_dsx_ic_reset(rmi4_data, RMI4_HW_RESET);
-	if (retval > 0)
-		pr_debug("successful reset took %dms\n", retval);
-	else
-		dev_warn(&rmi4_data->i2c_client->dev, "%s: timed out waiting for idle\n",
-			__func__);
-
-	retval = synaptics_rmi4_query_device(rmi4_data);
-	if (retval < 0) {
-		dev_err(&client->dev,
-				"%s: Failed to query device\n",
-				__func__);
-		goto err_query_device;
-	}
-
-	INIT_WORK(&rmi4_data->resume_work, synaptics_dsx_queued_resume);
-
-#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
-	rmi4_data->panel_nb.pre_display_off = synaptics_rmi4_suspend;
-	rmi4_data->panel_nb.display_on = synaptics_rmi4_resume;
-	rmi4_data->panel_nb.dev = &client->dev;
-	if (!mmi_panel_register_notifier(&rmi4_data->panel_nb))
-		pr_info("registered MMI panel notifier\n");
-	else
-		dev_err(&client->dev,
-				"%s: Unable to register MMI notifier\n",
-				__func__);
-#elif defined(CONFIG_DRM)
-	rmi4_data->panel_nb.notifier_call = synaptics_dsx_panel_cb;
-	if (!msm_drm_register_client(&rmi4_data->panel_nb))
-		pr_debug("registered DRM notifier\n");
-	else
-		dev_err(&client->dev,
-				"%s: Unable to register DRM notifier\n",
-				__func__);
-#elif defined(CONFIG_FB)
-	rmi4_data->panel_nb.notifier_call = synaptics_dsx_panel_cb;
-	if (!fb_register_client(&rmi4_data->panel_nb))
-		pr_debug("registered FB notifier\n");
-	else
-		dev_err(&client->dev,
-				"%s: Unable to register FB notifier\n",
-				__func__);
-#endif
 	mutex_lock(&exp_fn_ctrl_mutex);
 	if (!exp_fn_ctrl.inited) {
 		mutex_init(&exp_fn_ctrl.list_mutex);
@@ -7326,127 +7491,19 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 			synaptics_rmi4_detection_work);
 		exp_fn_ctrl.inited = true;
 	}
-	mutex_unlock(&exp_fn_ctrl_mutex);
 
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		retval = sysfs_create_file(&rmi4_data->i2c_client->dev.kobj,
-				&attrs[attr_count].attr);
-		if (retval < 0) {
-			dev_err(&client->dev,
-					"%s: Failed to create sysfs attributes\n",
-					__func__);
-			goto err_sysfs;
-		}
-	}
-
-	rmi4_data->pm_qos_irq.irq = rmi4_data->irq;
-	synaptics_dsx_sensor_ready_state(rmi4_data, true);
-
-	rmi4_data->rmi_reboot.notifier_call = rmi_reboot;
-	rmi4_data->rmi_reboot.next = NULL;
-	rmi4_data->rmi_reboot.priority = 1;
-	retval = register_reboot_notifier(&rmi4_data->rmi_reboot);
-	if (retval)
-		dev_err(&client->dev, "register for reboot failed\n");
-
-	mutex_lock(&exp_fn_ctrl_mutex);
 	exp_fn_ctrl.rmi4_data_ptr = rmi4_data;
 	mutex_unlock(&exp_fn_ctrl_mutex);
 
-#ifdef CONFIG_MMI_HALL_NOTIFICATIONS
-	if (rmi4_data->folio_detection_enabled) {
-		/* register notifier at the end of probe to */
-		/* avoid unnecessary reset in STANDBY state */
-		rmi4_data->folio_notif.notifier_call = folio_notifier_callback;
-		dev_dbg(&client->dev, "registering folio notifier\n");
-		retval = mmi_hall_register_notifier(&rmi4_data->folio_notif,
-					MMI_HALL_FOLIO, true);
-		if (retval) {
-			dev_err(&client->dev,
-				"Error registering folio_notifier: %d\n",
-				retval);
-			/* inability to register folio notifications handler */
-			/* is not fatal, thus reset return value to success */
-			retval = 0;
-		}
-	}
-#endif
-	synaptics_dsx_sysfs_touchscreen(rmi4_data, true);
+	if (!rmi4_data->splash_screen_mode)
+		return synaptics_rmi4_hw_init(rmi4_data);
 
-	if (rmi4_data->charger_detection_enabled)
-		ps_notifier_register(rmi4_data);
+	pr_debug("delay hw init until DRM reports panel is ready\n");
+	synaptics_dsx_sensor_state(rmi4_data, STATE_UNKNOWN);
+	synaptics_rmi4_new_function(RMI_DRM_WORKAROUND, true,
+			dummy_init, dummy_remove, NULL, NULL, IC_MODE_ANY);
 
-	if (rmi4_data->fps_detection_enabled) {
-		rmi4_data->fps_notif.notifier_call = fps_notifier_callback;
-		dev_dbg(&client->dev, "registering FPS notifier\n");
-		retval = FPS_register_notifier(
-				&rmi4_data->fps_notif, 0xBEEF, false);
-		if (retval) {
-			if (exp_fn_ctrl.det_workqueue)
-				queue_delayed_work(exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work,
-					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-			dev_err(&client->dev,
-				"Failed to register fps_notifier: %d\n",
-				retval);
-			retval = 0;
-		} else
-			rmi4_data->is_fps_registered = true;
-	}
-
-	synaptics_dsx_pm_qos(rmi4_data, PM_ADD, false);
-
-	/* init reporting semaphore and set expected # of fingers to 1 */
-	sema_init(&rmi4_data->rctrl.ctrl_sema, 1);
-	rmi4_data->rctrl.expected = 1;
-
-	return retval;
-
-err_sysfs:
-	for (attr_count--; attr_count >= 0; attr_count--) {
-		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
-				&attrs[attr_count].attr);
-	}
-
-#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
-	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
-#elif defined(CONFIG_DRM)
-	msm_drm_unregister_client(&rmi4_data->panel_nb);
-#elif defined(CONFIG_FB)
-	fb_unregister_client(&rmi4_data->panel_nb);
-#endif
-
-err_query_device:
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
-		if (rmi4_data->splash_screen_mode)
-			dev_warn(&client->dev, "leaving vdd_quirk enabled\n");
-		else
-			regulator_disable(rmi4_data->vdd_quirk);
-	}
-
-err_vdd_quirk:
-	if (platform_data->regulator_en)
-		regulator_disable(rmi4_data->regulator);
-
-err_touch_vdd:
-	synaptics_rmi4_cleanup(rmi4_data);
-	if (rmi4_data->input_registered)
-		input_unregister_device(rmi4_data->input_dev);
-	else
-		input_free_device(rmi4_data->input_dev);
-
-err_gpio_free:
-	if (platform_data->gpio_config)
-		gpio_free(platform_data->irq_gpio);
-	if (gpio_is_valid(platform_data->reset_gpio)) {
-		gpio_set_value(platform_data->reset_gpio, 0);
-		gpio_free(platform_data->reset_gpio);
-	}
-
-err_mem_free:
-	kfree(rmi4_data);
-
-	return retval;
+	return 0;
 }
 
  /**
@@ -7463,7 +7520,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 {
 	struct pinctrl *pinctrl;
 	int attr_count;
-	const struct synaptics_dsx_platform_data *platform_data;
+	struct synaptics_dsx_platform_data *platform_data;
 	struct synaptics_rmi4_data *rmi4_data = i2c_get_clientdata(client);
 
 	if (exp_fn_ctrl.inited) {
@@ -7580,8 +7637,11 @@ static int synaptics_dsx_panel_cb(struct notifier_block *nb,
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(nb, struct synaptics_rmi4_data, panel_nb);
 
-	if (!evdata || (evdata->id != rmi4_data->ctrl_dsi))
+	if (!evdata || (evdata->id != rmi4_data->ctrl_dsi)) {
+		pr_debug("drm notification: id(%d) != ctrl_dsi(%d)\n",
+				evdata->id, rmi4_data->ctrl_dsi);
 		return 0;
+	}
 
 	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
 			evdata && evdata->data && rmi4_data) {
@@ -7702,8 +7762,8 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
-	const struct synaptics_dsx_platform_data *platform_data =
-			rmi4_data->board;
+	struct synaptics_dsx_platform_data
+			*platform_data = rmi4_data->board;
 	static char ud_stats[PAGE_SIZE];
 
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 0, 1) == 1)
@@ -7768,8 +7828,8 @@ static int synaptics_rmi4_resume(struct device *dev)
 	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
-	const struct synaptics_dsx_platform_data *platform_data =
-					rmi4_data->board;
+	struct synaptics_dsx_platform_data
+			*platform_data = rmi4_data->board;
 
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 1, 0) == 0)
 		return 0;
