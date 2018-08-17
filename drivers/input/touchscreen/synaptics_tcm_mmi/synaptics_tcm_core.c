@@ -3049,7 +3049,7 @@ static int syna_tcm_resume(struct device *dev)
 	tcm_hcd->enable_irq(tcm_hcd, true, NULL);
 
 #ifdef PM_SKIP_SLEEP
-	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in resume\n");
+	LOGI(tcm_hcd->pdev->dev.parent, "skip sleep in resume\n");
 	retval = 0;
 	goto exit;
 #endif
@@ -3158,7 +3158,7 @@ static int syna_tcm_suspend(struct device *dev)
 		return 0;
 
 #ifdef PM_SKIP_SLEEP
-	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in suspend\n");
+	LOGI(tcm_hcd->pdev->dev.parent, "skip sleep in suspend\n");
 	goto suspend_disable_irq;
 #endif
 
@@ -3208,7 +3208,7 @@ static int syna_tcm_early_suspend(struct device *dev)
 	}
 
 #ifdef PM_SKIP_SLEEP
-	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in early resume\n");
+	LOGI(tcm_hcd->pdev->dev.parent, "skip sleep in early resume\n");
 	goto early_suspend_disable_irq;
 #endif
 
