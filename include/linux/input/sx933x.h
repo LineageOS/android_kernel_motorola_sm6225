@@ -690,6 +690,11 @@ struct sx933x_platform_data
 	bool cap_vdd_en;
 	struct smtc_reg_data *pi2c_reg;
 	int irq_gpio;
+#ifdef CONFIG_CAPSENSE_USB_CAL
+	struct work_struct ps_notify_work;
+	struct notifier_block ps_notif;
+	bool ps_is_present;
+#endif
 	pbuttonInformation_t pbuttonInformation;
 
 	int (*get_is_nirq_low)(void);
