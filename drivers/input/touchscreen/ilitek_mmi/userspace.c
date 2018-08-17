@@ -1705,7 +1705,7 @@ int ilitek_proc_init(void)
 
 	for (; i < ARRAY_SIZE(proc_table); i++) {
 		proc_table[i].node =
-		    proc_create(proc_table[i].name, 0666, proc_dir_ilitek,
+		    proc_create(proc_table[i].name, 0444, proc_dir_ilitek,
 				proc_table[i].fops);
 
 		if (proc_table[i].node == NULL) {
