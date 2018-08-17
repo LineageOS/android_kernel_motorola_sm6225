@@ -116,7 +116,7 @@ enum print_reason {
 	PR_MOTO         = BIT(7),
 };
 
-static int __debug_mask = PR_MOTO | PR_INTERRUPT;
+static int __debug_mask = PR_INTERRUPT;
 module_param_named(
 	debug_mask, __debug_mask, int, S_IRUSR | S_IWUSR
 );
@@ -269,6 +269,7 @@ struct mmi_pl_chg_manager {
 	int			flashc_cc_tunning_cnt;
 	int			pps_select_pdo_retry_cont;
 	bool			vbus_present;
+	bool			force_pmic_chg;
 	bool			pd_pps_support;
 	bool			pd_pps_mitigation;
 	bool			flashc_alarm;
@@ -1046,7 +1047,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 				> chip->sys_configs.flashc_min_vbat_start)
 			&& chip->flashc_cc_max_curr_pre >
 					chip->pmic_step_curr
-			&& chrg_step_max < STEP_NORMAL) {
+			&& chrg_step_max < STEP_NORMAL
+			&& !chip->force_pmic_chg) {
 
 			mmi_pl_dbg(chip, PR_MOTO,
 						"battery volt %d, start flash charger\n",
@@ -1547,7 +1549,8 @@ schedule:
 	chip->target_volt = min(chip->request_volt, chip->pps_voltage_max);
 	chip->target_curr = min(chip->request_current, chip->pps_current_max);
 
-	if (chip->thermal_mitigation_level > 0) {
+	if (chip->thermal_mitigation_level > 0
+		&& chip->thermal_mitigation_level < chip->num_thermal_zones - 1) {
 		chip->target_volt = min(chip->target_volt,
 		chip->thermal_mitigation_zones[chip->thermal_mitigation_level].power_voltage);
 		chip->target_curr = min(chip->target_curr,
@@ -1558,6 +1561,31 @@ schedule:
 					chip->thermal_mitigation_level,
 		chip->thermal_mitigation_zones[chip->thermal_mitigation_level].power_voltage,
 		chip->thermal_mitigation_zones[chip->thermal_mitigation_level].power_current);
+
+		if (chip->force_pmic_chg) {
+			chip->force_pmic_chg = false;
+			mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
+			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+			mmi_pl_dbg(chip, PR_MOTO, "thermal level is %d ,"
+					"cannel force pmic chg, recovery parallel chg !\n",
+					chip->thermal_mitigation_level);
+		}
+	} else if (chip->thermal_mitigation_level == chip->num_thermal_zones -1
+	&& !chip->force_pmic_chg) {
+		chip->force_pmic_chg = true;
+		mmi_pl_pm_move_state(chip, PM_STATE_SW_ENTRY);
+		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+		mmi_pl_dbg(chip, PR_MOTO, "thermal level is %d ,"
+				"force to only pmic chg !\n",
+				chip->thermal_mitigation_level);
+	} else if (chip->thermal_mitigation_level == 0
+	&& chip->force_pmic_chg) {
+		chip->force_pmic_chg = false;
+		mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
+		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+		mmi_pl_dbg(chip, PR_MOTO, "thermal level is %d ,"
+				"cannel force pmic chg, recovery parallel chg !\n",
+				chip->thermal_mitigation_level);
 	}
 
 	mmi_pl_dbg(chip, PR_MOTO, "sm work select power: "
@@ -1590,7 +1618,7 @@ schedule:
 						"pps ibus curr %d\n",
 						pluse_volt - FG_ESR_DECREMENT_UV,
 						pluse_curr - FG_ESR_DECREMENT_UA);
-				
+
 			} else {
 				usbpd_select_pdo(chip->pd_handle,
 						chip->mmi_pps_pdo_idx,
@@ -1746,7 +1774,7 @@ static void psy_changed_work_func(struct work_struct *work)
 				&& chip->mmi_pdo_info[i].uv_max >= FLASH_CHARGER_PPS_MIN_VOLT
 				&& chip->mmi_pdo_info[i].ua >= TYPEC_MIDDLE_CURRENT_UA) {
 					chip->mmi_pps_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
-					mmi_pl_dbg(chip, PR_MOTO,
+					mmi_pl_dbg(chip, PR_INTERRUPT,
 							"pd charger support pps, pdo %d, "
 							"volt %d, curr %d \n",
 							chip->mmi_pps_pdo_idx,
@@ -1773,7 +1801,7 @@ static void psy_changed_work_func(struct work_struct *work)
 		}
 	}
 
-	mmi_pl_dbg(chip, PR_MOTO, "vbus present %d, pd pps support %d, "
+	mmi_pl_dbg(chip, PR_INTERRUPT, "vbus present %d, pd pps support %d, "
 					"pps max voltage %d, pps max curr %d\n",
 					chip->vbus_present,
 					chip->pd_pps_support,
@@ -1782,7 +1810,7 @@ static void psy_changed_work_func(struct work_struct *work)
 
 	mmi_pl_pm_check_flashc_enable(chip);
 	mmi_pl_pm_check_pmic_enable(chip);
-	mmi_pl_dbg(chip, PR_MOTO, "flashc enable %d, pmic enable %d\n",
+	mmi_pl_dbg(chip, PR_INTERRUPT, "flashc enable %d, pmic enable %d\n",
 					chip->flashc_handle.charge_enabled,
 					chip->pmic_handle.charge_enabled);
 
