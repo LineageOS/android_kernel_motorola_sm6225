@@ -89,6 +89,7 @@ struct mod_muc_data_t {
 	struct power_supply *batt_psy;
 	struct power_supply *bms_psy;
 	struct power_supply *usb_psy;
+	struct power_supply *mmi_psy;
 	atomic_t sleep_req_pending;
 	struct notifier_block ps_nb;
 };
@@ -580,6 +581,12 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 		POWER_SUPPLY_PROP_PRESENT, &pval))
 		pstatus.charger = pval.intval ? 1 : 0;
 
+	if (pstatus.charger &&
+	    !power_supply_get_property(mm_data->usb_psy,
+		POWER_SUPPLY_PROP_TYPEC_MODE, &pval) &&
+		(pval.intval == POWER_SUPPLY_TYPEC_NONE))
+		pstatus.charger = 0;
+
 	if (!power_supply_get_property(mm_data->batt_psy,
 		POWER_SUPPLY_PROP_TEMP, &pval))
 		/* Div by 10 to convert from deciDegC to DegC */
@@ -613,40 +620,47 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 	/* TODO charging set to charger not correct. */
 	pstatus.charging = pstatus.charger;
 
+	if (!power_supply_get_property(mm_data->usb_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_MAX, &pval))
+		pstatus.mod_input_voltage =
+			pval.intval > 0 ? (uint32_t)pval.intval : 0;
+	if (!power_supply_get_property(mm_data->usb_psy,
+		POWER_SUPPLY_PROP_HW_CURRENT_MAX, &pval))
+		pstatus.mod_input_current =
+			pval.intval > 0 ? (uint32_t)pval.intval : 0;
+
 	/* TODO */
 	/* pstatus.reverse_boost;
-	 * pstatus.mod_output_voltage;
-	 * pstatus.mod_input_voltage;
 	 * pstatus.mod_output_current;
 	 * pstatus.mod_input_current;
 	 */
 
-	pr_info("muc_uart reverse_boost %d\n",
-		pstatus.reverse_boost);
-	pr_info("muc_uart charging %d\n",
-		pstatus.charging);
-	pr_info("muc_uart charger %d\n",
-		pstatus.charger);
-	pr_info("muc_uart battery_temp %hd degC\n",
-		pstatus.battery_temp);
-	pr_info("muc_uart battery_voltage %u uV\n",
-		pstatus.battery_voltage);
-	pr_info("muc_uart battery_current %d uA\n",
-		pstatus.battery_current);
-	pr_info("muc_uart battery_max_voltage %u uV\n",
-		pstatus.battery_max_voltage);
-	pr_info("muc_uart battery_capacity %hu percent\n",
-		pstatus.battery_capacity);
-	pr_info("muc_uart battery_max_capacity %hu mAhr\n",
-		pstatus.battery_max_capacity);
-	pr_info("muc_uart mod_output_voltage %u uV\n",
-		pstatus.mod_output_voltage);
-	pr_info("muc_uart mod_input_voltage %u uV\n",
-		pstatus.mod_input_voltage);
-	pr_info("muc_uart mod_output_current %u uA\n",
-		pstatus.mod_output_current);
-	pr_info("muc_uart mod_input_current %u uA\n",
-		pstatus.mod_input_current);
+	pr_debug("muc_uart reverse_boost %d\n",
+		 pstatus.reverse_boost);
+	pr_debug("muc_uart charging %d\n",
+		 pstatus.charging);
+	pr_debug("muc_uart charger %d\n",
+		 pstatus.charger);
+	pr_debug("muc_uart battery_temp %hd degC\n",
+		 pstatus.battery_temp);
+	pr_debug("muc_uart battery_voltage %u uV\n",
+		 pstatus.battery_voltage);
+	pr_debug("muc_uart battery_current %d uA\n",
+		 pstatus.battery_current);
+	pr_debug("muc_uart battery_max_voltage %u uV\n",
+		 pstatus.battery_max_voltage);
+	pr_debug("muc_uart battery_capacity %hu percent\n",
+		 pstatus.battery_capacity);
+	pr_debug("muc_uart battery_max_capacity %hu mAhr\n",
+		 pstatus.battery_max_capacity);
+	pr_debug("muc_uart mod_output_voltage %u uV\n",
+		 pstatus.mod_output_voltage);
+	pr_debug("muc_uart mod_input_voltage %u uV\n",
+		 pstatus.mod_input_voltage);
+	pr_debug("muc_uart mod_output_current %u uA\n",
+		 pstatus.mod_output_current);
+	pr_debug("muc_uart mod_input_current %u uA\n",
+		 pstatus.mod_input_current);
 
 	return muc_uart_queue_send(mm_data,
 		POWER_STATUS,
@@ -654,9 +668,34 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 		sizeof(struct power_status_t));
 }
 
-static void muc_uart_set_power_control(struct power_control_t *pwrctl)
+static const char *pctrl_names[] = {
+	"VBUS_IN",
+	"VBUS_IN_SPLIT", 
+	"VBUS_OUT",
+	"DC_IN",
+};
+
+static void muc_uart_set_power_control(struct mod_muc_data_t *mm_data,
+				       struct power_control_t *pwrctl)
 {
-	/* TODO handle power control */
+	union power_supply_propval pval = {0};
+
+	if (!mm_data || !pwrctl || !mm_data->mmi_psy) {
+		pr_err("muc_uart No pwrctrl\n");
+		return;
+	}
+
+	pr_info("muc_uart power control flow %s, voltage %u, current %u\n",
+		pctrl_names[pwrctl->flow],
+		pwrctl->voltage_uv,
+		pwrctl->current_ua);
+
+	if ((pwrctl->flow == VBUS_IN) || (pwrctl->flow == VBUS_IN_SPLIT)) {
+		pval.intval = pwrctl->current_ua;
+		power_supply_set_property(mm_data->mmi_psy,
+					  POWER_SUPPLY_PROP_CURRENT_MAX,
+					  &pval);
+	}
 }
 
 static void muc_uart_ps_notifier_work(struct work_struct *w)
@@ -776,7 +815,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 		case POWER_CONTROL: {
 			/* TODO nack if size is wrong ? */
 			if (payload_len == sizeof(struct power_control_t))
-				muc_uart_set_power_control(
+				muc_uart_set_power_control(mm_data,
 					(struct power_control_t *)payload);
 			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
 			break;
@@ -1218,6 +1257,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	mm_data->batt_psy = power_supply_get_by_name("battery");
 	mm_data->bms_psy = power_supply_get_by_name("bms");
 	mm_data->usb_psy = power_supply_get_by_name("usb");
+	mm_data->mmi_psy = power_supply_get_by_name("mmi_battery");
 
 	mm_data->ps_nb.notifier_call = muc_uart_ps_notifier_cb;
 	if (power_supply_reg_notifier(&mm_data->ps_nb))
@@ -1256,6 +1296,7 @@ static int muc_uart_remove(struct platform_device *pdev)
 	power_supply_put(mm_data->batt_psy);
 	power_supply_put(mm_data->bms_psy);
 	power_supply_put(mm_data->usb_psy);
+	power_supply_put(mm_data->mmi_psy);
 	del_timer(&mm_data->idle_timer);
 	del_timer(&mm_data->ack_timer);
 	del_timer(&mm_data->sleep_req_timer);
