@@ -42,6 +42,8 @@
 
 #define RESET_IF_RESUME_FAILED
 
+#define PM_SKIP_SLEEP
+
 #define PREDICTIVE_READING
 
 #define MIN_READ_LENGTH 9
@@ -3046,6 +3048,12 @@ static int syna_tcm_resume(struct device *dev)
 
 	tcm_hcd->enable_irq(tcm_hcd, true, NULL);
 
+#ifdef PM_SKIP_SLEEP
+	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in resume\n");
+	retval = 0;
+	goto exit;
+#endif
+
 	if (tcm_hcd->host_download_mode) {
 		retval = syna_tcm_wait_hdl(tcm_hcd);
 		if (retval < 0) {
@@ -3149,6 +3157,11 @@ static int syna_tcm_suspend(struct device *dev)
 	if (tcm_hcd->in_suspend)
 		return 0;
 
+#ifdef PM_SKIP_SLEEP
+	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in suspend\n");
+	goto suspend_disable_irq;
+#endif
+
 	mutex_lock(&mod_pool.mutex);
 
 	if (!list_empty(&mod_pool.list)) {
@@ -3163,6 +3176,7 @@ static int syna_tcm_suspend(struct device *dev)
 	mutex_unlock(&mod_pool.mutex);
 
 #ifndef WAKEUP_GESTURE
+suspend_disable_irq:
 	tcm_hcd->enable_irq(tcm_hcd, false, true);
 #endif
 
@@ -3178,7 +3192,6 @@ static int syna_tcm_early_suspend(struct device *dev)
 #ifndef WAKEUP_GESTURE
 	int retval;
 #endif
-
 	struct syna_tcm_module_handler *mod_handler;
 	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
 
@@ -3194,6 +3207,11 @@ static int syna_tcm_early_suspend(struct device *dev)
 		return 0;
 	}
 
+#ifdef PM_SKIP_SLEEP
+	LOGI(tcm_hcd->pdev->dev.parent,("skip sleep in early resume\n");
+	goto early_suspend_disable_irq;
+#endif
+
 #ifndef WAKEUP_GESTURE
 	retval = tcm_hcd->sleep(tcm_hcd, true);
 	if (retval < 0) {
@@ -3202,7 +3220,6 @@ static int syna_tcm_early_suspend(struct device *dev)
 		return retval;
 	}
 #endif
-
 	mutex_lock(&mod_pool.mutex);
 
 	if (!list_empty(&mod_pool.list)) {
@@ -3216,8 +3233,8 @@ static int syna_tcm_early_suspend(struct device *dev)
 
 	mutex_unlock(&mod_pool.mutex);
 
-
 #ifndef WAKEUP_GESTURE
+early_suspend_disable_irq:
 	tcm_hcd->enable_irq(tcm_hcd, false, true);
 #endif
 
