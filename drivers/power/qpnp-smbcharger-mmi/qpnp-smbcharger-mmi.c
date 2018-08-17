@@ -33,11 +33,14 @@
 #define TYPEC_BASE	0X1500
 #define MISC_BASE	0x1600
 
+#define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
+#define USBIN_ICL_OVERRIDE_BIT			BIT(0)
 #define USBIN_ICL_OPTIONS_REG			(USBIN_BASE + 0x66)
 #define USBIN_MODE_CHG_BIT			BIT(0)
 #define USBIN_LOAD_CFG_REG			(USBIN_BASE + 0x65)
 #define ICL_OVERRIDE_AFTER_APSD_BIT		BIT(4)
 #define USBIN_AICL_OPTIONS_CFG_REG		(USBIN_BASE + 0x80)
+#define LEGACY_CABLE_CFG_REG			(TYPEC_BASE + 0x5A)
 
 struct smb_mmi_chg_param {
 	const char	*name;
@@ -953,6 +956,7 @@ static bool mmi_factory_check(void)
 
 static enum power_supply_property smb_mmi_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 };
 
 static int smb_mmi_get_property(struct power_supply *psy,
@@ -963,10 +967,45 @@ static int smb_mmi_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = 1;
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = -EINVAL;
+		break;
 	default:
 		return -EINVAL;
 	}
 	return 0;
+}
+
+static int smb_mmi_set_property(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    const union power_supply_propval *val)
+{
+	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
+	int rc = 0;
+	int override = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (val->intval) {
+			rc = power_supply_set_property(chip->usb_psy,
+					       POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
+					       val);
+			rc = power_supply_set_property(chip->main_psy,
+					       POWER_SUPPLY_PROP_CURRENT_MAX,
+					       val);
+			override = USBIN_ICL_OVERRIDE_BIT;
+		}
+		pr_warn("SMBMMI: Request for ICL to %d uA\n", val->intval);
+		rc = smblib_masked_write_mmi(chip, USBIN_CMD_ICL_OVERRIDE_REG,
+					     USBIN_ICL_OVERRIDE_BIT,
+					     override);
+
+		break;
+	default:
+		rc = -EINVAL;
+	}
+
+	return rc;
 }
 
 static int factory_kill_disable;
@@ -1102,6 +1141,7 @@ static const struct power_supply_desc mmi_psy_desc = {
 	.name		= "mmi_battery",
 	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= smb_mmi_get_property,
+	.set_property	= smb_mmi_set_property,
 	.properties	= smb_mmi_battery_props,
 	.num_properties	= ARRAY_SIZE(smb_mmi_battery_props),
 };
@@ -1205,6 +1245,11 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->usb_icl_votable = find_votable("USB_ICL");
 	if (IS_ERR(chip->usb_icl_votable))
 		chip->usb_icl_votable = NULL;
+
+	if (chip->smb_version == PM8150B_SUBTYPE)
+		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
+					    0xFF, 0))
+			pr_err("Could Not set Legacy Cable CFG\n");
 
 	chip->factory_mode = mmi_factory_check();
 
