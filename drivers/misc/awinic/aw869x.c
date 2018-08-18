@@ -1100,20 +1100,18 @@ static void aw869x_rtp_play(struct aw869x *aw869x, int value)
 
 static void aw869x_vibrate(struct aw869x *aw869x, int value)
 {
+    int seq;
     mutex_lock(&aw869x->lock);
 
     aw869x_haptic_stop(aw869x);
-    pr_info("%s: value=%d, aw869x->seq=0x%08x\n", __FUNCTION__, value, aw869x->seq);
-    if (value > 0 || aw869x->seq != 0) {
-	if (((aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF) >= 10) {
+    seq = (aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF;
+    pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
+    if (value > 0 || seq > 2) {
+	if (seq >= 12)
 		aw869x_rtp_play(aw869x, 1);
-		aw869x->seq = 0;
-	} else if (value < 100 || aw869x->seq != 0) {
+	else if (value < 100 || seq > 2) {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
-#ifdef AW869X_HAPTIC_VBAT_MONITOR
-		aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BOOST_MODE);
-#endif
 		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
 		//aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
 		aw869x_haptic_set_gain(aw869x, 0x20);
@@ -1130,7 +1128,6 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 		hrtimer_start(&aw869x->timer, 
 		ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 	*/
-		aw869x->seq = 0;
 	} else {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
@@ -1152,6 +1149,9 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 		}
 		schedule_work(&aw869x->vibrator_work);
 	}
+	/* Restore to default short waveform */
+	if (seq > 2)
+		aw869x->seq = 0;
     }
 
     mutex_unlock(&aw869x->lock);
