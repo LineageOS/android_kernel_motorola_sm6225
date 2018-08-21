@@ -65,6 +65,7 @@ uint8_t esd_retry_max = 5;
 
 #if NVT_TOUCH_EXT_PROC
 extern int32_t nvt_extra_proc_init(void);
+extern void nvt_extra_proc_remove(void);
 #endif
 
 #if NVT_TOUCH_FW
@@ -74,6 +75,7 @@ extern int32_t nvt_fw_sysfs_deinit(void);
 
 #if NVT_TOUCH_MP
 extern int32_t nvt_mp_proc_init(void);
+extern void nvt_mp_proc_remove(void);
 #endif
 
 struct nvt_ts_data *ts;
@@ -604,6 +606,15 @@ static int32_t nvt_flash_proc_init(void)
 	return 0;
 }
 #endif
+
+static void nvt_flash_proc_remove(void)
+{
+	if (NVT_proc_entry != NULL) {
+		remove_proc_entry(DEVICE_NAME, NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  DEVICE_NAME);
+	}
+}
 
 #if WAKEUP_GESTURE
 #define GESTURE_WORD_C          12
@@ -1481,7 +1492,6 @@ return:
 *******************************************************/
 static int32_t nvt_ts_remove(struct i2c_client *client)
 {
-
 #if defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
@@ -1498,6 +1508,20 @@ static int32_t nvt_ts_remove(struct i2c_client *client)
 	NVT_LOG("Removing driver...\n");
 
 	free_irq(client->irq, ts);
+	if (gpio_is_valid(ts->irq_gpio)) {
+		gpio_free(ts->irq_gpio);
+	}
+
+#if NVT_TOUCH_PROC
+	nvt_flash_proc_remove();
+#endif
+#if NVT_TOUCH_MP
+	nvt_mp_proc_remove();
+#endif
+#if NVT_TOUCH_EXT_PROC
+	nvt_extra_proc_remove();
+#endif
+
 	input_unregister_device(ts->input_dev);
 	i2c_set_clientdata(client, NULL);
 	kfree(ts);
@@ -1773,8 +1797,11 @@ static void __exit nvt_driver_exit(void)
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
-	if (nvt_esd_check_wq)
+	if (nvt_esd_check_wq) {
+		cancel_delayed_work_sync(&nvt_esd_check_work);
+		flush_workqueue(nvt_esd_check_wq);
 		destroy_workqueue(nvt_esd_check_wq);
+	}
 #endif
 
 }
