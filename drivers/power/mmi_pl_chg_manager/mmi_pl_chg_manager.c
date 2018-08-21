@@ -979,7 +979,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			mmi_pl_pm_move_state(chip, PM_STATE_SW_ENTRY);
 		} else if (chip->flashc_cc_max_curr_pre >
 					chip->pmic_step_curr
-				&& chip->pres_chrg_step < STEP_NORMAL) {
+				&& chip->pres_chrg_step < STEP_NORMAL
+				&& !chip->force_pmic_chg) {
 			mmi_pl_dbg(chip, PR_MOTO,
 						"battery volt %d , flashc max curr %d,"
 						"start flash charging\n",
@@ -1700,6 +1701,7 @@ static void cancel_sm(struct mmi_pl_chg_manager *chip, int ms)
 	chip->target_volt = 0;
 	chip->pps_current_max = 0;
 	chip->pps_voltage_max = 0;
+	chip->force_pmic_chg = false;
 	memset(chip->mmi_pdo_info, 0,
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
 }
