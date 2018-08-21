@@ -1952,29 +1952,32 @@ return:
 *******************************************************/
 int32_t nvt_mp_proc_init(void)
 {
+	int32_t ret = 0;
 	NVT_proc_selftest_entry = proc_create("nvt_selftest", 0444, NULL, &nvt_selftest_fops);
 	if (NVT_proc_selftest_entry == NULL) {
 		NVT_ERR("create /proc/nvt_selftest Failed!\n");
-		return -1;
+		ret = -1;
 	} else {
 		if (nvt_mp_buffer_init()) {
 			NVT_ERR("Allocate mp memory failed\n");
-			return -1;
+			ret = -1;
 		} else {
 			NVT_LOG("create /proc/nvt_selftest Succeeded!\n");
 		}
-		return 0;
+		ret = 0;
 	}
 #if NVT_TOUCH_MP_LENOVO
+	if (ret == 0) {
 	NVT_proc_selftest_read_data = proc_create("nvt_read_data", 0444, NULL, &nvt_read_data_fops);
 	if (NVT_proc_selftest_read_data == NULL) {
 		NVT_ERR("create /proc/nvt_read_data Failed!\n");
-		return -1;
+		ret = -1;
 	} else {
 		NVT_LOG("create /proc/nvt_read_data Succeeded!\n");
 	}
+}
 #endif
-	return 0;
+	return ret;
 }
 
 void nvt_mp_proc_remove(void)
