@@ -1964,7 +1964,6 @@ int32_t nvt_mp_proc_init(void)
 		} else {
 			NVT_LOG("create /proc/nvt_selftest Succeeded!\n");
 		}
-		ret = 0;
 	}
 #if NVT_TOUCH_MP_LENOVO
 	if (ret == 0) {
