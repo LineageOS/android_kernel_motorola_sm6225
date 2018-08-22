@@ -1361,6 +1361,23 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 		}
 	}
 
+#if defined(CONFIG_CHARGER_NOTIFY)
+	ts->usb_connected = 0;
+	ts->nvt_charger_notify_wq = create_singlethread_workqueue("nvt_charger_notify_wq");
+	if (!ts->nvt_charger_notify_wq) {
+		NVT_ERR(" allocate nvt_charger_notify_wq failed\n");
+		goto err_charger_notify_wq_failed;
+	}
+	INIT_WORK(&ts->charger_notify_work, nvt_charger_notify_work);
+
+	ts->charger_notif.notifier_call = charger_notifier_callback;
+	ret = power_supply_reg_notifier(&ts->charger_notif);
+	if (ret) {
+		NVT_ERR("Unable to register charger_notifier: %d\n",ret);
+		goto err_register_charger_notify_failed;
+	}
+#endif
+
 #if BOOT_UPDATE_FIRMWARE
 	nvt_fwu_wq = create_singlethread_workqueue("nvt_fwu_wq");
 	if (!nvt_fwu_wq) {
@@ -1436,22 +1453,6 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 #endif
 
 	bTouchIsAwake = 1;
-#if defined(CONFIG_CHARGER_NOTIFY)
-	ts->usb_connected = 0;
-	ts->nvt_charger_notify_wq = create_singlethread_workqueue("nvt_charger_notify_wq");
-	if (!ts->nvt_charger_notify_wq) {
-		NVT_ERR(" allocate nvt_charger_notify_wq failed\n");
-		goto err_charger_notify_wq_failed;
-	}
-	INIT_WORK(&ts->charger_notify_work, nvt_charger_notify_work);
-
-	ts->charger_notif.notifier_call = charger_notifier_callback;
-	ret = power_supply_reg_notifier(&ts->charger_notif);
-	if (ret) {
-		NVT_ERR("Unable to register charger_notifier: %d\n",ret);
-		goto err_register_charger_notify_failed;
-	}
-#endif
 
 	NVT_LOG("exit %s normal end\n", __func__);
 
@@ -1459,14 +1460,6 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 
 	return 0;
 
-#if defined(CONFIG_CHARGER_NOTIFY)
-err_register_charger_notify_failed:
-	if (ts->charger_notif.notifier_call)
-		power_supply_unreg_notifier(&ts->charger_notif);
-	destroy_workqueue(ts->nvt_charger_notify_wq);
-	ts->nvt_charger_notify_wq = NULL;
-err_charger_notify_wq_failed:
-#endif
 #if defined(CONFIG_FB)
 err_register_fb_notif_failed:
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -1477,6 +1470,14 @@ err_init_NVT_ts:
 #endif
 #if BOOT_UPDATE_FIRMWARE
 	err_create_nvt_fwu_wq_failed:
+#endif
+#if defined(CONFIG_CHARGER_NOTIFY)
+err_register_charger_notify_failed:
+	if (ts->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ts->charger_notif);
+	destroy_workqueue(ts->nvt_charger_notify_wq);
+	ts->nvt_charger_notify_wq = NULL;
+err_charger_notify_wq_failed:
 #endif
 	free_irq(client->irq, ts);
 err_int_request_failed:
@@ -1777,9 +1778,19 @@ static void nvt_charger_notify_work(struct work_struct *work)
 	}
 	NVT_LOG("enter\n");
 	if (USB_DETECT_IN == usb_detect_flag) {
+		if (mutex_lock_interruptible(&ts->lock)) {
+			NVT_ERR("Failed to lock in mutex_lock_interruptible(&ts->lock).\n");
+			return;
+		}
 		nvt_set_charger(USB_DETECT_IN);
+		mutex_unlock(&ts->lock);
 	} else if (USB_DETECT_OUT == usb_detect_flag) {
+		if (mutex_lock_interruptible(&ts->lock)) {
+			NVT_ERR("Failed to lock in mutex_lock_interruptible(&ts->lock).\n");
+			return;
+		}
 		nvt_set_charger(USB_DETECT_OUT);
+		mutex_unlock(&ts->lock);
 	}else{
 		NVT_LOG("Charger flag:%d not currently required!\n",usb_detect_flag);
 	}
