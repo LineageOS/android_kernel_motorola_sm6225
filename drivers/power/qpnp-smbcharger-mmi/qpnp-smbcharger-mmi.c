@@ -92,6 +92,8 @@ struct smb_mmi_charger {
 	struct power_supply	*bms_psy;
 	struct power_supply	*main_psy;
 	struct power_supply	*pc_port_psy;
+	struct power_supply	*max_main_psy;
+	struct power_supply	*max_flip_psy;
 	struct notifier_block	mmi_psy_notifier;
 	struct delayed_work	heartbeat_work;
 
@@ -1032,11 +1034,76 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int hb_resch_time;
 	union power_supply_propval pval;
 	int rc, usb_suspend, usbin_uv;
+	int batt_cap = 0;
+	int main_cap = 0;
+	int main_cap_full = 0;
+	int flip_cap = 0;
+	int flip_cap_full = 0;
+	int report_cap;
+
+	pr_err("SMBMMI: Heartbeat!\n");
 
 	if (chip->factory_mode)
 		hb_resch_time = 1000;
 	else
 		hb_resch_time = 60000;
+
+	if (chip->max_main_psy && chip->max_flip_psy) {
+		rc = power_supply_get_property(chip->max_main_psy,
+					       POWER_SUPPLY_PROP_CAPACITY,
+					       &pval);
+		if (rc < 0)
+			pr_err("SMBMMI: Couldn't get maxim main capacity\n");
+		else
+			main_cap = pval.intval;
+
+		rc = power_supply_get_property(chip->max_main_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+					&pval);
+		if (rc < 0)
+			pr_err("SMBMMI: Couldn't get maxim main chrg full\n");
+		else
+			main_cap_full = pval.intval;
+
+		rc = power_supply_get_property(chip->max_flip_psy,
+					       POWER_SUPPLY_PROP_CAPACITY,
+					       &pval);
+		if (rc < 0)
+			pr_err("SMBMMI: Couldn't get maxim flip capacity\n");
+		else
+			flip_cap = pval.intval;
+
+		rc = power_supply_get_property(chip->max_flip_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+					&pval);
+		if (rc < 0)
+			pr_err("SMBMMI: Couldn't get maxim flip chrg full\n");
+		else
+			flip_cap_full = pval.intval;
+
+		report_cap = main_cap * main_cap_full;
+		report_cap += flip_cap * flip_cap_full;
+		report_cap /= main_cap_full + flip_cap_full;
+
+		rc = power_supply_get_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CAPACITY,
+					&pval);
+		if (rc < 0)
+			pr_err("SMBMMI: Couldn't set batt psy capacity\n");
+		else
+			batt_cap = pval.intval;
+
+		if (batt_cap != report_cap) {
+			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
+				report_cap);
+			pval.intval = report_cap;
+			rc = power_supply_set_property(chip->batt_psy,
+						POWER_SUPPLY_PROP_CAPACITY,
+						&pval);
+			if (rc < 0)
+				pr_err("SMBMMI: Couldn't set batt psy cap\n");
+		}
+	}
 
 	if (chip->factory_mode) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
@@ -1214,6 +1281,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	int rc = 0;
 	union power_supply_propval val;
 	struct power_supply_config psy_cfg = {};
+	const char *max_main_name, *max_flip_name;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -1245,6 +1313,15 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->usb_psy = power_supply_get_by_name("usb");
 	chip->main_psy = power_supply_get_by_name("main");
 	chip->pc_port_psy = power_supply_get_by_name("pc_port");
+	/* parse the dc power supply configuration */
+	rc = of_property_read_string(pdev->dev.of_node,
+				     "mmi,max-main-psy", &max_main_name);
+	rc |= of_property_read_string(pdev->dev.of_node,
+				      "mmi,max-flip-psy", &max_flip_name);
+	if (!rc && max_main_name && max_flip_name) {
+		chip->max_main_psy = power_supply_get_by_name(max_main_name);
+		chip->max_flip_psy = power_supply_get_by_name(max_flip_name);
+	}
 
 	chip->chg_dis_votable = find_votable("CHG_DISABLE");
 	if (IS_ERR(chip->chg_dis_votable))
@@ -1408,6 +1485,10 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	}
 
+	cancel_delayed_work(&chip->heartbeat_work);
+	schedule_delayed_work(&chip->heartbeat_work,
+			      msecs_to_jiffies(0));
+
 	pr_info("QPNP SMB MMI probed successfully!\n");
 
 	return rc;
@@ -1415,6 +1496,23 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 static void smb_mmi_shutdown(struct platform_device *pdev)
 {
+	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
+
+	if (chip->batt_psy)
+		power_supply_put(chip->batt_psy);
+	if (chip->bms_psy)
+		power_supply_put(chip->bms_psy);
+	if (chip->usb_psy)
+		power_supply_put(chip->usb_psy);
+	if (chip->main_psy)
+		power_supply_put(chip->main_psy);
+	if (chip->pc_port_psy)
+		power_supply_put(chip->pc_port_psy);
+	if (chip->max_main_psy)
+		power_supply_put(chip->max_main_psy);
+	if (chip->max_flip_psy)
+		power_supply_put(chip->max_flip_psy);
+
 	return;
 }
 
