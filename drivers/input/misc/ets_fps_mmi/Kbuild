@@ -3,6 +3,10 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/misc/ets_fps_mmi
 
+ifneq ($(filter m y,$(CONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON
+endif
+
 ets_fps_mmi-y += ets_fps.o ets_navi_input.o
 
 obj-m += ets_fps_mmi.o
