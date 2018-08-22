@@ -7,6 +7,10 @@ else
 ETS_FPS_MMI_MODULE_PATH := $(KERNEL_MODULES_OUT)
 endif
 
+ifeq ($(FPS_NAVI_ENABLE),true)
+	KERNEL_CFLAGS += CONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := ets_fps_mmi.ko
 LOCAL_MODULE_TAGS := optional
