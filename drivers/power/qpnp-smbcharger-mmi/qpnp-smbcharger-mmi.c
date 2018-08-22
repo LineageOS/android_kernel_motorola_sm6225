@@ -41,6 +41,19 @@
 #define ICL_OVERRIDE_AFTER_APSD_BIT		BIT(4)
 #define USBIN_AICL_OPTIONS_CFG_REG		(USBIN_BASE + 0x80)
 #define LEGACY_CABLE_CFG_REG			(TYPEC_BASE + 0x5A)
+#define USBIN_ADAPTER_ALLOW_CFG_REG		(USBIN_BASE + 0x60)
+#define USBIN_ADAPTER_ALLOW_MASK		GENMASK(3, 0)
+enum {
+	USBIN_ADAPTER_ALLOW_5V		= 0,
+	USBIN_ADAPTER_ALLOW_9V		= 2,
+	USBIN_ADAPTER_ALLOW_5V_OR_9V	= 3,
+	USBIN_ADAPTER_ALLOW_12V		= 4,
+	USBIN_ADAPTER_ALLOW_5V_OR_12V	= 5,
+	USBIN_ADAPTER_ALLOW_9V_TO_12V	= 6,
+	USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V = 7,
+	USBIN_ADAPTER_ALLOW_5V_TO_9V	= 8,
+	USBIN_ADAPTER_ALLOW_5V_TO_12V	= 12,
+};
 
 struct smb_mmi_chg_param {
 	const char	*name;
@@ -1250,6 +1263,13 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
 					    0xFF, 0))
 			pr_err("Could Not set Legacy Cable CFG\n");
+
+	if ((chip->smb_version == PM8150B_SUBTYPE) ||
+	    (chip->smb_version == PM660_SUBTYPE))
+		if (smblib_masked_write_mmi(chip, USBIN_ADAPTER_ALLOW_CFG_REG,
+					    USBIN_ADAPTER_ALLOW_MASK,
+					    USBIN_ADAPTER_ALLOW_5V_TO_9V))
+			pr_err("Could Not set USB Adapter CFG\n");
 
 	chip->factory_mode = mmi_factory_check();
 
