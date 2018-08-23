@@ -224,6 +224,7 @@ int fts_pram_ecc_cal(struct i2c_client *client, u32 saddr, u32 len);
 int fts_pram_start(struct i2c_client *client);
 
 int fts_fwupg_do_upgrade(const char *fwname);
+int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver);
 
 int fts_extra_init(struct i2c_client *client, struct input_dev *input_dev, struct ft_ts_platform_data *pdata);
 int fts_extra_exit(void);
