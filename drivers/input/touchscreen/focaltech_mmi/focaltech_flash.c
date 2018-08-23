@@ -1565,7 +1565,7 @@ static int fts_lic_get_vid_in_host(u16 *vid)
 	return 0;
 }
 
-static int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver)
+int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver)
 {
 	int ret = 0;
 
