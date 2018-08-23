@@ -876,6 +876,13 @@ static void ft_update_fw_id(struct ft_ts_data *data)
 		data->fw_id[0], data->fw_id[1]);
 }
 
+static void ft_clear_fw_id(struct ft_ts_data *data)
+{
+	data->fw_id[0] = 0;
+	data->fw_id[1] = 0;
+	data->fw_ver[0] = 0;
+}
+
 static void ft_ud_fix_mismatch(struct ft_ts_data *data)
 {
 	int i;
@@ -3330,6 +3337,7 @@ static int ft_ts_probe(struct i2c_client *client,
 	struct dentry *temp;
 	u8 reg_value = 0;
 	u8 reg_addr;
+	u8 lic_ver = 0;
 	int err, retval, attr_count;
 
 	if (client->dev.of_node) {
@@ -3623,6 +3631,20 @@ static int ft_ts_probe(struct i2c_client *client,
 	ft_update_fw_ver(data);
 	ft_update_fw_vendor_id(data);
 	ft_update_fw_id(data);
+
+	if (pdata->family_id == FT8006U_ID) {
+		fts_lic_get_ver_in_tp(client, &lic_ver);
+		/*
+		* If display initial code isn't written fully, then this value should be
+		* a negative value with signed(e.g. 0xFF), therefore need to clear the buildid
+		* info then this will cause script update the touch firmware again.
+		*/
+		dev_info(&client->dev, "Display init code ver:%d\n",
+			(s8)lic_ver);
+		if ((s8)lic_ver < 0) {
+			ft_clear_fw_id(data);
+		}
+	}
 
 #if defined(CONFIG_FB)
 	INIT_WORK(&data->fb_notify_work, fb_notify_resume_work);
