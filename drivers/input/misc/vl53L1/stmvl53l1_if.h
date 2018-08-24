@@ -57,7 +57,7 @@
  * @li stmvl53l1_ranging1
  * @li stmvl53l1_ranging2
  */
-#define VL53L1_MISC_DEV_NAME		"stmvl53l1_ranging"
+#define VL53L1_MISC_DEV_NAME		"laser"
 /**
  * register data use for simple/single ranging data @ref VL53L1_IOCTL_GETDATAS
  *
@@ -204,6 +204,18 @@ enum __stmv53l1_parameter_name_e {
 	 * @li 0 Xtalk values has not been changed.
 	 * @li 1 Xtalk values has been changed.
 	 */
+
+	VL53L1_CAMERAMODE_PAR = 23,
+	/*!< VL53L1_CAMERAMODE_PAR
+	* valid camera mode value :
+	* @li 0 device is out of camera mode.
+	* @li 1 device is in camera mode.
+	*/
+
+	VL53L1_HWREV_PAR = 24,
+	/*!< VL53L1_HWREV_PAR
+	* This is a read only parameter. It will return HW revision number
+	*/
 };
 #define stmv53l1_parameter_name_e enum __stmv53l1_parameter_name_e
 
@@ -663,6 +675,35 @@ int smtvl53l1_stop(int fd){
  */
 #define VL53L1_IOCTL_AUTONOMOUS_CONFIG\
 	_IOWR('p', 0x14, struct stmvl53l1_autonomous_config_t)
+
+/**
+ * suspend ranging (no argument)
+
+ * @note  sysfs and ioctl control are assumed mutual exclusive use
+ * control from ioctl execute action with no consideration of sysfs path.
+ *
+ * @return
+ * @li 0 on success
+ * @li -EBUSY if it was already
+ * @li other specific error code shall be >0
+ *
+ * c example userland :
+ @code
+int smtvl53l1_stop(int fd){
+	int rc;
+	rc= ioctl(fd, VL53L1_IOCTL_SUSPEND,NULL);
+	if( rc ){
+		if( errno == EBUSY ){
+			ioctl_warn("already suspended");
+			return errno;
+		}
+		ioctl_error("%d %s", rc,strerror(errno));
+	}
+	return rc;
+}
+@endcode
+ */
+#define VL53L1_IOCTL_SUSPEND		   _IO('p', 0x15)
 
 /** @} */ /* ioctl group */
 #endif /* STMVL53L1_IF_H */
