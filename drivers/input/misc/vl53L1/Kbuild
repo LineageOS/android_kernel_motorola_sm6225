@@ -2,19 +2,21 @@
 # Kbuild for the vl53L1 drivers.
 #
 
-ccflags-y	+= -I$(src)/inc -I$(src)/ipp -I$(src)
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1/inc -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1/ipp -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1
 
 # define this environment variable if you want to compile driver for an old
 # kernel
 ifdef OLD_NETLINK_API
-ccflags-y	+= -DOLD_NETLINK_API
+EXTRA_CFLAGS	+= -DOLD_NETLINK_API
 endif
 
 ifdef VL53L1_LOG_ENABLE
-ccflags-y	+= -DVL53L1_LOG_ENABLE
+EXTRA_CFLAGS	+= -DVL53L1_LOG_ENABLE
 endif
 
-obj-$(CONFIG_STMVL53L1)	+= stmvl53l1.o
+obj-m	+= stmvl53l1.o
 stmvl53l1-objs		:= stmvl53l1_module.o stmvl53l1_module-i2c.o
 stmvl53l1-objs		+= stmvl53l1_i2c.o stmvl53l1_ipp_nl.o stmvl53l1_log.o
 stmvl53l1-objs		+= src/vl53l1_api.o src/vl53l1_api_core.o

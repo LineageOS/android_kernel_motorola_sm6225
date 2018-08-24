@@ -58,7 +58,7 @@
  * Configure the Netlink-id use
  */
 #ifndef STMVL531_CFG_NETLINK_USER
-#define STMVL531_CFG_NETLINK_USER 29
+#define STMVL531_CFG_NETLINK_USER 23
 #endif
 
 #define STMVL53L1_MAX_CCI_XFER_SZ	256
@@ -122,7 +122,7 @@ extern int stmvl53l1_enable_debug;
 #endif
 
 #define vl53l1_info(str, args...) \
-	pr_info("%s: " str "\n", __func__, ##args)
+	pr_info("%s: " str, __func__, ##args)
 
 #define vl53l1_errmsg(str, args...) \
 	pr_err("%s: " str, __func__, ##args)
@@ -186,6 +186,7 @@ struct stmvl53l1_waiters {
 struct stmvl53l1_data {
 	int id;			/*!< multiple device id 0 based*/
 	char name[64];		/*!< misc device name */
+	int32_t hw_rev;		/*!< hardware revision number*/
 
 	VL53L1_DevData_t stdev;	/*!<embed ST VL53L0 Dev data as "stdev" */
 
@@ -222,6 +223,8 @@ struct stmvl53l1_data {
 	int crosstalk_enable;	/*!< is crosstalk compensation is enable */
 	int output_mode;	/*!< output mode of the device */
 	bool force_device_on_en;/*!< keep device active when stopped */
+	int sar_mode; /*!< is sar mode enable/disabled */
+	int cam_mode; /*!< is camera mode enable/disabled */
 	VL53L1_Error last_error;/*!< last device internal error */
 	int offset_correction_mode;/*!< offset correction mode to apply */
 	FixPoint1616_t dmax_reflectance;/*!< reflectance use for dmax calc */
@@ -237,6 +240,11 @@ struct stmvl53l1_data {
 
 	/* Calibration parameters */
 	bool is_calibrating;	/*!< active during calibration phases */
+	uint16_t xtalk_offset; /*!< crosstalk compensation plane offset kcps */
+	int16_t xtalk_x; /*!< crosstalk compensation x plane gradient kcps */
+	int16_t xtalk_y; /*!< crosstalk compensation y plane gradient kcps */
+	int16_t inner_offset; /*!< inner offset mm */
+	int16_t outer_offset; /*!< outer offset mm */
 
 	/* Range Data and stat */
 	struct range_t {
@@ -288,6 +296,11 @@ struct stmvl53l1_data {
 	uint32_t auto_pollingTimeInMs;
 	VL53L1_DetectionConfig_t auto_config;
 
+	/* autonomous config for camera */
+	uint32_t auto_pollingTimeInMs_cam;
+	VL53L1_DetectionConfig_t auto_config_cam;
+
+	int sysfs_base;
 	/* Debug */
 	struct ipp_data_t ipp;
 #if IPP_LOG_TIMING
@@ -330,6 +343,7 @@ void stmvl53l1_pm_suspend_stop(struct stmvl53l1_data *data);
 #endif
 int stmvl53l1_intr_handler(struct stmvl53l1_data *data);
 
+int stmvl53l1_sysfs_laser(struct stmvl53l1_data *data, bool create);
 
 /**
  * request ipp to abort or stop
