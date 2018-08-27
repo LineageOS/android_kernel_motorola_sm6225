@@ -941,11 +941,19 @@ static void ps_notify_callback_work(struct work_struct *work)
 	input_top = pDevice->pbuttonInformation->input_top;
 	input_bottom = pDevice->pbuttonInformation->input_bottom;
 
-	LOG_INFO("Usb insert,going to force calibrate\n");
-	ret = write_register(this, SX932x_STAT2_REG, 0x0f);
-	if (ret < 0)
-		LOG_ERR(" Usb insert,calibrate cap sensor failed\n");
-
+	mutex_lock(&this->mutex);
+	if (mEnabled) {
+		LOG_INFO("Usb insert,going to force calibrate\n");
+		ret = write_register(this, SX932x_CTRL1_REG, 0x00);
+		if (ret < 0)
+			LOG_ERR(" Usb insert,calibrate cap sensor failed\n");
+		msleep(100);
+		ret = write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0);
+		if (ret < 0)
+			LOG_ERR(" Usb insert,enabel cap sensor failed\n");
+	}
+	mutex_unlock(&this->mutex);
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
 	input_report_abs(input_bottom, ABS_DISTANCE, 0);
@@ -1618,15 +1626,29 @@ static void sx93XX_worker_func(struct work_struct *work)
 void sx93XX_suspend(psx93XX_t this)
 {
 	if (this) {
-		LOG_INFO("sx9325 suspend: disable irq!\n");
+		write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0&0xdf);
+		if (sx9325_debug_enable)
+			LOG_INFO("sx9325 suspend: disable irq!\n");
 		disable_irq(this->irq);
 	}
 }
 void sx93XX_resume(psx93XX_t this)
 {
 	if (this) {
-		LOG_INFO("sx9325 resume: enable irq!\n");
+		if (sx9325_debug_enable)
+			LOG_INFO("sx9325 resume: enable irq!\n");
+#ifdef USE_THREADED_IRQ
+		mutex_lock(&this->mutex);
+		/* Just in case need to reset any uncaught interrupts */
+		sx93XX_process_interrupt(this, 0);
+		mutex_unlock(&this->mutex);
+#else
+		sx93XX_schedule_work(this, 0);
+#endif
 		enable_irq(this->irq);
+		write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0|0x20);
 	}
 }
 
