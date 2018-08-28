@@ -310,6 +310,7 @@ int mmi_boot_info_init(void)
 	mmi_annotate("POWERUPREASON: 0x%08x\n", bi_powerup_reason());
 	mmi_annotate("Last boot reason: %s\n\n", bi_bootreason());
 
+	pr_info("BOOT_SEQ: 0x%08x\n", bi_boot_seq());
 	return 0;
 }
 
