@@ -110,6 +110,7 @@ struct smb_mmi_charger {
 	int			max_chrg_temp;
 	int			last_iusb_ua;
 	bool			factory_kill_armed;
+	int			gen_log_rate_s;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -972,18 +973,24 @@ static bool mmi_factory_check(void)
 static enum power_supply_property smb_mmi_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_UPDATE_NOW,
 };
 
 static int smb_mmi_get_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val)
 {
+	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_UPDATE_NOW:
+		val->intval = chip->gen_log_rate_s;
 		break;
 	default:
 		return -EINVAL;
@@ -1015,6 +1022,10 @@ static int smb_mmi_set_property(struct power_supply *psy,
 					     USBIN_ICL_OVERRIDE_BIT,
 					     override);
 
+		break;
+	case POWER_SUPPLY_PROP_UPDATE_NOW:
+		chip->gen_log_rate_s = val->intval;
+		power_supply_changed(psy);
 		break;
 	default:
 		rc = -EINVAL;
