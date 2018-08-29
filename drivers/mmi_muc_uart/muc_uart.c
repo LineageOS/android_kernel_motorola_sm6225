@@ -617,8 +617,10 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 		pstatus.battery_max_voltage =
 			pval.intval > 0 ? (uint32_t)pval.intval : 0;
 
-	/* TODO charging set to charger not correct. */
-	pstatus.charging = pstatus.charger;
+	if (!power_supply_get_property(mm_data->batt_psy,
+		POWER_SUPPLY_PROP_STATUS, &pval))
+		pstatus.charging =
+			(pval.intval == POWER_SUPPLY_STATUS_CHARGING);
 
 	if (!power_supply_get_property(mm_data->usb_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_MAX, &pval))
