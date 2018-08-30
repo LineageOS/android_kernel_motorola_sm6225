@@ -171,6 +171,11 @@ uint8_t HX_PROC_SEND_FLAG;
 	struct proc_dir_entry *himax_proc_GESTURE_file = NULL;
 	uint8_t HX_SMWP_EN = 0;
 #endif
+#ifdef HX_EDGE_LIMIT
+	#define HIMAX_PROC_EDGE_LIMIT_FILE "edge_en"
+	struct proc_dir_entry *himax_proc_edge_limit_file = NULL;
+#endif
+
 #if defined(HX_SMART_WAKEUP) || defined(CONFIG_TOUCHSCREEN_HIMAX_INSPECT)
 bool FAKE_POWER_KEY_SEND = true;
 #endif
@@ -512,6 +517,68 @@ static struct file_operations himax_proc_Gesture_ops = {
 };
 #endif
 
+#ifdef HX_EDGE_LIMIT
+static ssize_t himax_edge_limit_read(struct file *file, char *buf,
+							   size_t len, loff_t *pos)
+{
+	size_t count = 0;
+	struct himax_ts_data *ts = private_ts;
+	char *temp_buf;
+
+	if (!HX_PROC_SEND_FLAG) {
+		temp_buf = kzalloc(len, GFP_KERNEL);
+		count = snprintf(temp_buf, PAGE_SIZE, "%d\n", ts->edge_limit_enable);
+
+		if (copy_to_user(buf, temp_buf, len))
+			I("%s,here:%d\n", __func__, __LINE__);
+
+		kfree(temp_buf);
+		HX_PROC_SEND_FLAG = 1;
+	} else {
+		HX_PROC_SEND_FLAG = 0;
+	}
+
+	return count;
+}
+
+static ssize_t himax_edge_limit_write(struct file *file, const char *buff,
+								size_t len, loff_t *pos)
+{
+	struct himax_ts_data *ts = private_ts;
+	char buf[80] = {0};
+
+	if (len >= 80) {
+		I("%s: no command exceeds 80 chars.\n", __func__);
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buf, buff, len)) {
+		return -EFAULT;
+	}
+
+	if (buf[0] == '0')
+		ts->edge_limit_enable = 0;
+	else if (buf[0] == '1')
+		ts->edge_limit_enable = 1;/*Portrait*/
+	else if (buf[0] == '2')
+		ts->edge_limit_enable = 2;/*Landscape-Right*/
+	else if (buf[0] == '3')
+		ts->edge_limit_enable = 3;/*Landscape-Left*/
+	else
+		return -EINVAL;
+
+	g_core_fp.fp_set_edge_limit_enable(ts->edge_limit_enable, ts->suspended);
+	I("%s: edge_limit_enable = %d.\n", __func__, ts->edge_limit_enable);
+	return len;
+}
+
+static struct file_operations himax_proc_edge_limit_ops = {
+	.owner = THIS_MODULE,
+	.read = himax_edge_limit_read,
+	.write = himax_edge_limit_write,
+};
+#endif
+
 #ifdef CONFIG_TOUCHSCREEN_HIMAX_INSPECT
 extern void (*fp_himax_self_test_init)(void);
 #endif
@@ -569,7 +636,21 @@ int himax_common_proc_init(void)
 		goto fail_5;
 	}
 #endif
+#ifdef HX_EDGE_LIMIT
+	himax_proc_edge_limit_file = proc_create(HIMAX_PROC_EDGE_LIMIT_FILE, (S_IWUSR | S_IRUGO | S_IWUGO),
+									   himax_touch_proc_dir, &himax_proc_edge_limit_ops);
+
+	if (himax_proc_edge_limit_file == NULL) {
+		E(" %s: proc edge limit file create failed!\n", __func__);
+		goto fail_6;
+	}
+#endif
+
 	return 0;
+#ifdef HX_EDGE_LIMIT
+	remove_proc_entry(HIMAX_PROC_EDGE_LIMIT_FILE, himax_touch_proc_dir);
+fail_6:
+#endif
 #ifdef HX_SMART_WAKEUP
 	remove_proc_entry(HIMAX_PROC_GESTURE_FILE, himax_touch_proc_dir);
 fail_5:
@@ -591,6 +672,9 @@ void himax_common_proc_deinit(void)
 {
 	remove_proc_entry(HIMAX_PROC_SELF_TEST_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_SELF_TEST_RAW_FILE, himax_touch_proc_dir);
+#ifdef HX_EDGE_LIMIT
+	remove_proc_entry(HIMAX_PROC_EDGE_LIMIT_FILE, himax_touch_proc_dir);
+#endif
 #ifdef HX_SMART_WAKEUP
 	remove_proc_entry(HIMAX_PROC_GESTURE_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_SMWP_FILE, himax_touch_proc_dir);
