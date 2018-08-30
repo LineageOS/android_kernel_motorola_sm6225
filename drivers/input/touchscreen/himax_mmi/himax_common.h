@@ -50,7 +50,7 @@
 	#include <linux/of_gpio.h>
 #endif
 
-#define HIMAX_DRIVER_VER "1.2.2.50_moto_05"
+#define HIMAX_DRIVER_VER "1.2.2.50_moto_06"
 
 #define FLASH_DUMP_FILE "/sdcard/HX_Flash_Dump.bin"
 
@@ -75,6 +75,7 @@
 /*#define HX_FIX_TOUCH_INFO*/	/* if open, you need to change the touch info in the fix_touch_info*/
 /*#define HX_ZERO_FLASH*/
 /*#define CONFIG_CHIP_DTCFG*/
+#define HX_EDGE_LIMIT
 /*#undef CONFIG_FB*/ /* Enable it if driver go into suspend/resume twice */
 
 /*#define HX_EN_SEL_BUTTON*/		       	/* Support Self Virtual key		,default is close*/
@@ -357,6 +358,11 @@ struct himax_ts_data {
 	uint8_t SMWP_enable;
 	uint8_t gesture_cust_en[26];
 	struct wake_lock ts_SMWP_wake_lock;
+#endif
+
+#ifdef HX_EDGE_LIMIT
+	uint8_t edge_limit_enable;
+	uint8_t edge_limit_en[8];
 #endif
 
 #ifdef HX_HIGH_SENSE
