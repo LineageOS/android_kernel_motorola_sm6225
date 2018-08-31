@@ -1,0 +1,13 @@
+KERNEL_SOURCE_PATH ?= kernel/msm-4.9
+
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_utils
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_cpas/include
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_io
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_utils
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_sensor_module/cam_cci
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_req_mgr
+EXTRA_CFLAGS += -I$(TOP)/$(KERNEL_SOURCE_PATH)/drivers/media/platform/msm/camera/cam_smmu
+
+obj-m	+= cci_intf.o
