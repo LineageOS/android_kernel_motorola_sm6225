@@ -35,8 +35,10 @@
 #include "core/gesture.h"
 
 #define USER_STR_BUFF   2000
+#define USER_DUG_BUFF_LEN	4096
 #define ILITEK_IOCTL_MAGIC  100
 #define ILITEK_IOCTL_MAXNR  21
+#define UPGRADE_RETRY_TIMES	3
 
 #define ILITEK_IOCTL_I2C_WRITE_DATA         _IOWR(ILITEK_IOCTL_MAGIC, 0, uint8_t*)
 #define ILITEK_IOCTL_I2C_SET_WRITE_LENGTH   _IOWR(ILITEK_IOCTL_MAGIC, 1, int)
@@ -228,12 +230,12 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp,
 
 	mutex_lock(&ipd->ilitek_debug_mutex);
 
-	tmpbuf = vmalloc(4096);	/* buf size if even */
+	tmpbuf = vmalloc(USER_DUG_BUFF_LEN);	/* buf size if even */
 	if (ERR_ALLOC_MEM(tmpbuf)) {
 		ipio_err("buffer vmalloc error\n");
 		send_data_len +=
 		    snprintf(tmpbufback + send_data_len,
-		     (strlen(tmpbufback)-send_data_len),
+		     (sizeof(tmpbufback)-send_data_len),
 			    "buffer vmalloc error\n");
 		ret = copy_to_user(buff, tmpbufback, send_data_len);	/*ipd->debug_buf[0] */
 	} else {
@@ -264,16 +266,16 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp,
 					 need_read_data_len);
 				send_data_len +=
 				    snprintf(tmpbuf + send_data_len,
-				     (strlen(tmpbuf)-send_data_len),
+				     (USER_DUG_BUFF_LEN-send_data_len),
 					    "parse data err data len = %d\n",
 					    need_read_data_len);
 			} else {
 				for (i = 0 ; i < need_read_data_len ; i++) {
 					send_data_len +=
 					    snprintf(tmpbuf + send_data_len,
-					     (strlen(tmpbuf)-send_data_len),
+					     (USER_DUG_BUFF_LEN-send_data_len),
 						"%02X", ipd->debug_buf[0][i]);
-					if (send_data_len >= 4096) {
+					if (send_data_len >= USER_DUG_BUFF_LEN) {
 						ipio_err
 						    ("send_data_len = %d set 4096 i = %d\n",
 						     send_data_len, i);
@@ -283,7 +285,7 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp,
 				}
 			}
 			send_data_len += snprintf(tmpbuf + send_data_len,
-			     (strlen(tmpbuf)-send_data_len), "\n\n");
+			     (USER_DUG_BUFF_LEN-send_data_len), "\n\n");
 
 			if (p == 5 || size == 4096 || size == 2048) {
 				ipd->debug_data_frame--;
@@ -299,7 +301,7 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp,
 		} else {
 			ipio_err("no data send\n");
 			send_data_len += snprintf(tmpbuf + send_data_len,
-			 (strlen(tmpbuf)-send_data_len), "no data send\n");
+			 (USER_DUG_BUFF_LEN-send_data_len), "no data send\n");
 		}
 
 		/* Preparing to send data to user */
@@ -327,7 +329,7 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp,
 		vfree(tmpbuf);
 		tmpbuf = NULL;
 	}
-
+	ipio_debug(DEBUG_NETLINK, "send len:%d\n", send_data_len);
 	mutex_unlock(&ipd->ilitek_debug_mutex);
 	mutex_unlock(&ipd->ilitek_debug_read_mutex);
 	return send_data_len;
@@ -1800,6 +1802,7 @@ static DEVICE_ATTR(flashprog, 0444, drv_flash_prog_show, NULL);
 static ssize_t do_reflash_store(struct device *pDevice, struct device_attribute *pAttr, const char *pBuf, size_t nSize)
 {
 	int ret;
+	int retry = 0;
 	char prefix[128] = "ILITEK";
 	const char *chip_name = ipd->TP_IC_TYPE;
 
@@ -1841,8 +1844,18 @@ static ssize_t do_reflash_store(struct device *pDevice, struct device_attribute 
 
 	if (ipd->isEnablePollCheckPower)
 		cancel_delayed_work_sync(&ipd->check_power_status_work);
-
-	ret = core_firmware_upgrade(g_user_buf, false);
+	for (retry = 1; retry <= UPGRADE_RETRY_TIMES; retry++) {
+		ret = core_firmware_upgrade(g_user_buf, false);
+		if (ret < 0) {
+			msleep(100);
+			/* We do have to reset chip in order to move new code from flash to iram. */
+			ipio_info("Upgrade fail Doing Soft Reset res = %d retry = %d\n", ret, retry);
+			core_config_ic_reset();
+		}
+		else {
+			break;
+		}
+	}
 
 	ilitek_platform_enable_irq();
 

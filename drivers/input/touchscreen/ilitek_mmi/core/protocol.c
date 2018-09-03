@@ -344,8 +344,16 @@ void core_protocol_func_control(int key, int ctrl)
 		ipio_info("Found func's name: %s, key = %d\n", tmp->name, key);
 
 		/* last element is used to control this func */
-		if (tmp->key != 9)
-			tmp->cmd[tmp->len - 1] = ctrl;
+		if (tmp->key != 9) {
+			if (tmp->key == 1 && ctrl == 0) {
+				ipio_info("TP enter deep sleep in\n");
+				tmp->cmd[tmp->len - 1] = 0x03;
+			} else {
+				tmp->cmd[tmp->len - 1] = ctrl;
+			}
+		}
+		ipio_info("Found func's name: %s, key = %d cmd: 0x%02X 0x%02X 0x%02X\n",\
+			tmp->name, key, tmp->cmd[0], tmp->cmd[1], tmp->cmd[2]);
 
 		core_write(core_config->slave_i2c_addr, tmp->cmd, tmp->len);
 		return;

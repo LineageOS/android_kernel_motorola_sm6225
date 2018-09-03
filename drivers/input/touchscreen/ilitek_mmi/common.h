@@ -243,7 +243,7 @@ enum ili9881_types {
 /* #define BATTERY_CHECK */
 
 /*suspend TP power off*/
-#define SUSPEND_TP_POWER_OFF
+//#define SUSPEND_TP_POWER_OFF
 
 static inline void ipio_kfree(void **mem)
 {

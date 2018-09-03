@@ -33,6 +33,8 @@
 
 struct core_i2c_data *core_i2c;
 
+#define I2C_RETRY_TIMES	3
+
 #ifdef I2C_DMA
 static unsigned char *ilitek_dma_va;
 static dma_addr_t ilitek_dma_pa;
@@ -78,6 +80,7 @@ int core_i2c_write(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 	int res = 0;
 	uint8_t check_sum = 0;
 	uint8_t *txbuf = NULL;
+	int retry = 0;
 
 	struct i2c_msg msgs[] = {
 		{
@@ -118,18 +121,25 @@ int core_i2c_write(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 			msgs[0].len = nSize + 1;
 		}
 	}
+	for (retry = 1; retry <= 3; retry++) {
+		if (i2c_transfer(core_i2c->client->adapter, msgs, 1) < 0) {
+			if (core_config->do_ic_reset) {
+				/* ignore i2c error if doing ic reset */
+				res = 0;
+			} else {
+				res = -EIO;
+				ipio_err("I2C Write Error, res = %d retry = %d\n", res, retry);
+				mdelay(20);
+				if (retry == I2C_RETRY_TIMES)
+					goto out;
 
-	if (i2c_transfer(core_i2c->client->adapter, msgs, 1) < 0) {
-		if (core_config->do_ic_reset) {
-			/* ignore i2c error if doing ic reset */
+			}
+		}
+		else {
 			res = 0;
-		} else {
-			res = -EIO;
-			ipio_err("I2C Write Error, res = %d\n", res);
-			goto out;
+			break;
 		}
 	}
-
 out:
 	ipio_kfree((void **)&txbuf);
 	return res;
@@ -139,6 +149,7 @@ EXPORT_SYMBOL(core_i2c_write);
 int core_i2c_read(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 {
 	int res = 0;
+	int retry = 0;
 
 	struct i2c_msg msgs[] = {
 		{
@@ -160,11 +171,18 @@ int core_i2c_read(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 		msgs[0].buf = pBuf;
 	}
 #endif /* I2C_DMA */
-
-	if (i2c_transfer(core_i2c->client->adapter, msgs, 1) < 0) {
-		res = -EIO;
-		ipio_err("I2C Read Error, res = %d\n", res);
-		goto out;
+	for (retry = 1; retry <= I2C_RETRY_TIMES; retry++) {
+		if (i2c_transfer(core_i2c->client->adapter, msgs, 1) < 0) {
+			res = -EIO;
+			ipio_err("I2C Read Error, res = %d retry = %d\n", res, retry);
+			mdelay(20);
+			if (retry == I2C_RETRY_TIMES)
+				goto out;
+		}
+		else {
+			res = 0;
+			break;
+		}
 	}
 #ifdef I2C_DMA
 	if (nSize > 8)
