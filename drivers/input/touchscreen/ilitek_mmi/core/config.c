@@ -472,15 +472,6 @@ void core_config_ic_resume(void)
 		mdelay(10);
 		core_config_ic_reset();
 	}
-	/* sleep out */
-	core_config_sleep_ctrl(true);
-
-	/* check system busy */
-	if (core_config_check_cdc_busy(50, 10) < 0)
-		ipio_err("Check busy is timout !\n");
-
-	/* sense start for TP */
-	core_config_sense_ctrl(true);
 
 	core_fr_mode_control(&protocol->demo_mode);
 
