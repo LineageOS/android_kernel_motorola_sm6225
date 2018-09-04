@@ -23,9 +23,11 @@
 #include <linux/pm.h>
 #include <linux/timer.h>
 #include <linux/mutex.h>
+#include <linux/uaccess.h>
 #include <soc/qcom/mmi_boot_info.h>
+#include "muc_uart.h"
 #include "mmi_uart.h"
-#include "mmi_tty.h"
+#include "mmi_char.h"
 #include "muc_protocol.h"
 
 #define DRIVERNAME	"muc_uart"
@@ -60,6 +62,12 @@ struct write_data {
 	uint8_t retries;
 };
 
+struct read_data {
+	struct list_head list;
+	size_t payload_length;
+	uint8_t *payload;
+};
+
 struct mod_muc_data_t {
 	struct platform_device *pdev;
 	void *uart_data;
@@ -80,6 +88,9 @@ struct mod_muc_data_t {
 	struct workqueue_struct *write_wq;
 	struct write_data *write_data_q;
 	int write_q_size;
+	struct read_data *read_data_q;
+	int read_q_size;
+	wait_queue_head_t *read_wq;
 	atomic_t write_credits;
 	struct delayed_work wake_work;
 	struct delayed_work sleep_work;
@@ -100,6 +111,7 @@ struct mod_muc_data_t {
 #define MUC_UART_ACK_TIME 500
 #define WRITE_CREDIT_INIT 100
 static DEFINE_SPINLOCK(write_q_lock);
+static DEFINE_SPINLOCK(read_q_lock);
 
 /* Share tx between acks and send queue */
 DEFINE_MUTEX(tx_lock);
@@ -378,10 +390,11 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 }
 
 /* Any message that needs an ack goes on the queue */
-static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
+static int __muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	uint16_t cmd,
 	uint8_t *payload,
-	size_t payload_len)
+	size_t payload_len,
+	bool payload_persistant)
 {
 	struct write_data *write_data;
 	unsigned long flags;
@@ -400,19 +413,22 @@ static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 		return -ENOMEM;
 	}
 
-	write_data->payload = kmalloc(payload_len, GFP_ATOMIC);
-	/* TODO this should probably panic */
-	if (WARN_ON(!write_data->payload)) {
-		atomic_inc(&mm_data->write_credits);
-		kfree(write_data);
-		return -ENOMEM;
-	}
+	if(!payload_persistant) {
+		write_data->payload = kmalloc(payload_len, GFP_ATOMIC);
+		/* TODO this should probably panic */
+		if (WARN_ON(!write_data->payload)) {
+			atomic_inc(&mm_data->write_credits);
+			kfree(write_data);
+			return -ENOMEM;
+		}
+		memcpy(write_data->payload, payload, payload_len);
+	} else
+		write_data->payload = payload;
 
 	INIT_LIST_HEAD(&write_data->list);
 	write_data->payload_length = payload_len;
 	write_data->cmd = cmd;
 	write_data->retries = MUC_UART_RETRY_COUNT;
-	memcpy(write_data->payload, payload, payload_len);
 
 	spin_lock_irqsave(&write_q_lock, flags);
 	if (!mm_data->write_data_q)
@@ -433,6 +449,15 @@ static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	}
 
 	return payload_len;
+}
+
+static int muc_uart_queue_send(struct mod_muc_data_t *mm_data,
+	uint16_t cmd,
+	uint8_t *payload,
+	size_t payload_len)
+{
+	return __muc_uart_queue_send(mm_data, cmd, payload,
+		payload_len, false);
 }
 
 static void muc_uart_send_work(struct work_struct *w)
@@ -730,34 +755,138 @@ static int muc_uart_ps_notifier_cb(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int muc_uart_tty_rx_cb(struct platform_device *pdev,
-	int idx,
-	uint8_t *payload,
-	size_t payload_length)
+int muc_uart_pb_register_wq(struct platform_device *pdev,
+	wait_queue_head_t *read_wq)
 {
 	struct mod_muc_data_t *mm_data =
 		platform_get_drvdata(pdev);
 
-	pr_info("muc_uart_send_packetbus: send from %d msg size %zd.\n",
-		idx,
-		payload_length);
+	/* Only allow the first one who registered */
+	if(mm_data->read_wq)
+		return 1;
 
-	/* TODO idx 1 is for debug */
-	if (idx == MMI_TTY_DEBUG_IDX) {
-		if (!mmi_tty_push_to_us(MMI_TTY_DEFAULT_IDX,
-			payload, payload_length))
-			return payload_length;
-		else
-			return -EAGAIN;
-	} else {
-		mmi_tty_push_to_us(MMI_TTY_DEBUG_IDX,
-			payload, payload_length);
-		time_send_start = ktime_get();
-		return muc_uart_queue_send(mm_data,
-			PACKETBUS_PROT_MSG,
-			payload,
-			payload_length);
+	mm_data->read_wq = read_wq;
+	return 0;
+}
+
+int muc_uart_pb_get_q(struct platform_device *pdev,
+	char __user *buf,
+	size_t *count)
+{
+	struct mod_muc_data_t *mm_data =
+		platform_get_drvdata(pdev);
+
+	unsigned long flags;
+	struct read_data *pb_msg = NULL;
+
+	spin_lock_irqsave(&read_q_lock, flags);
+	if (mm_data->read_data_q) {
+		pb_msg = mm_data->read_data_q;
+		if(list_is_last(&pb_msg->list,
+			&mm_data->read_data_q->list))
+			mm_data->read_data_q = NULL;
+		else {
+			mm_data->read_data_q =
+				list_next_entry(pb_msg, list);
+			list_del(&pb_msg->list);
+		}
+		mm_data->read_q_size--;
 	}
+	spin_unlock_irqrestore(&read_q_lock, flags);
+
+	if(!pb_msg)
+		return -ENOMSG;
+
+	if(pb_msg->payload_length > *count)
+		return -ENOSPC;
+
+	if(copy_to_user(buf, pb_msg->payload, pb_msg->payload_length))
+		return -EFAULT;
+
+	*count = pb_msg->payload_length;
+
+	kfree(pb_msg->payload);
+	kfree(pb_msg);
+
+	return 0;
+}
+
+int muc_uart_pb_get_q_size(struct platform_device *pdev)
+{
+	struct mod_muc_data_t *mm_data =
+		platform_get_drvdata(pdev);
+
+	return mm_data->read_q_size;
+}
+
+static int muc_uart_pb_put_q(struct mod_muc_data_t *mm_data,
+	size_t payload_length,
+	uint8_t *payload)
+{
+	unsigned long flags;
+	struct read_data *pb_msg;
+
+	if(!payload_length)
+		return 1;
+
+	/* TODO should this list have a size limit?
+	 * otherwise a crash of the consumer could
+	 * potentially crash the kernel ...
+	 */
+
+	/* Set up the message */
+	pb_msg = kmalloc(sizeof(struct read_data), GFP_KERNEL);
+	if (!pb_msg)
+		return -ENOMEM;
+
+	pb_msg->payload = kmalloc(payload_length, GFP_KERNEL);
+	if (!pb_msg->payload) {
+		kfree(pb_msg);
+		return -ENOMEM;
+	}
+
+	INIT_LIST_HEAD(&pb_msg->list);
+	pb_msg->payload_length = payload_length;
+	memcpy(pb_msg->payload, payload, payload_length);
+
+	spin_lock_irqsave(&read_q_lock, flags);
+	if (!mm_data->read_data_q)
+		mm_data->read_data_q = pb_msg;
+	else
+		list_add_tail(&pb_msg->list,
+			&mm_data->read_data_q->list);
+	mm_data->read_q_size++;
+	spin_unlock_irqrestore(&read_q_lock, flags);
+
+	/* Wake up any process waiting on a message */
+	if(mm_data->read_wq)
+		wake_up(mm_data->read_wq);
+
+	return 0;
+}
+
+int muc_uart_pb_write(struct platform_device *pdev,
+	const char __user *buf,
+	size_t count)
+{
+	uint8_t *payload;
+	struct mod_muc_data_t *mm_data =
+		platform_get_drvdata(pdev);
+
+	pr_info("muc_uart_send_packetbus: send pb msg size %zd.\n",
+		count);
+
+	/* Payload is freed after send work is done */
+	payload = kmalloc(count, GFP_KERNEL);
+	if (!payload)
+		return -ENOMEM;
+
+	if (copy_from_user(payload, buf, count))
+		return -EFAULT;
+
+	time_send_start = ktime_get();
+	return __muc_uart_queue_send(mm_data, PACKETBUS_PROT_MSG,
+		payload,count, true);
 }
 
 static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
@@ -788,13 +917,14 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			break;
 		}
 		case PACKETBUS_PROT_MSG: {
-			if (!mmi_tty_push_to_us(MMI_TTY_DEFAULT_IDX,
-				payload, payload_len)) {
+			if (!muc_uart_pb_put_q(mm_data,
+				payload_len,
+				payload)) {
 				muc_uart_send(mm_data,
 					PACKETBUS_PROT_MSG|MSG_ACK_MASK,
 					NULL, 0);
 			} else {
-				pr_err("muc_uart_handle_message: Couldn't pass packet to us!");
+				pr_err("muc_uart_handle_message: Couldn't add packet to pb q!");
 				muc_uart_send(mm_data,
 					PACKETBUS_PROT_MSG|MSG_NACK_MASK,
 					NULL, 0);
@@ -1261,9 +1391,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 		pdev))
 		goto err2;
 
-	if (mmi_tty_init(muc_uart_tty_rx_cb,
-		(UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE),
-		pdev))
+	if (mmi_char_init(UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE, pdev))
 		goto err3;
 
 	mm_data->phone_psy = devm_power_supply_register(&pdev->dev,
@@ -1328,7 +1456,7 @@ static int muc_uart_remove(struct platform_device *pdev)
 	cancel_work_sync(&mm_data->ps_notify_work);
 	destroy_workqueue(mm_data->write_wq);
 	mmi_uart_exit(mm_data->uart_data);
-	mmi_tty_exit();
+	mmi_char_exit();
 	sysfs_remove_groups(&pdev->dev.kobj, muc_uart_groups);
 	kobject_uevent(&pdev->dev.kobj, KOBJ_REMOVE);
 	platform_set_drvdata(pdev, NULL);
