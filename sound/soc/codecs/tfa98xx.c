@@ -57,6 +57,11 @@
 
 #define TF98XX_MAX_DSP_START_TRY_COUNT	10
 
+#define TFA98XX_SYS_CTRL               0x02
+#define TFA98XX_SYS_CTRL_INPLEV_MASK   0xFFEF /* bit4: INPLEV: 0 = 0dB, 1 = -6dB */
+#define TFA98XX_GAIN_ATT               0x61
+#define TFA98XX_GAIN_ATT_TDMSPKG_MASK  0xFC3F /* bit9:6 TDMSPKG: 0000 = 21dB,..., 1111 = 5.9dB */
+
 /* data accessible by all instances */
 static struct kmem_cache *tfa98xx_cache = NULL;  /* Memory pool used for DSP messages */
 /* Mutex protected data */
@@ -1597,9 +1602,108 @@ static int tfa98xx_get_stereo_ctl(struct snd_kcontrol *kcontrol,
 
         return 0;
 }
-
 #endif
 
+static int tfa98xx_info_volume_ctl(struct snd_kcontrol *kcontrol,
+                                struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0xFF;
+	return 0;
+}
+
+static int tfa98xx_set_volume_ctl(struct snd_kcontrol *kcontrol,
+                               struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx;
+	int volume, value1, value2, ret;
+
+	volume = (int)ucontrol->value.integer.value[0]/8;
+	mutex_lock(&tfa98xx_mutex);
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		ret = regmap_read(tfa98xx->regmap, TFA98XX_SYS_CTRL, &value1);
+		if (ret == 0) {
+			ret = regmap_read(tfa98xx->regmap, TFA98XX_GAIN_ATT, &value2);
+		}
+		if (ret < 0) {
+			pr_err("%s, failed to read register: %d\n", __func__, ret);
+			return Tfa98xx_Error_Fail;
+		}
+
+		if (volume > 25) {
+			value1 = (value1 & TFA98XX_SYS_CTRL_INPLEV_MASK) | (1 << 4);
+			value2 = (value2 & TFA98XX_GAIN_ATT_TDMSPKG_MASK) | ((volume-16) << 6);
+		} else if (volume < 16) {
+			value1 = (value1 & TFA98XX_SYS_CTRL_INPLEV_MASK) | (0 << 4);
+			value2 = (value2 & TFA98XX_GAIN_ATT_TDMSPKG_MASK) | (volume << 6);
+		}
+		ret = regmap_write(tfa98xx->regmap, TFA98XX_SYS_CTRL, value1);
+		if (ret == 0) {
+			ret = regmap_write(tfa98xx->regmap, TFA98XX_GAIN_ATT, value2);
+		}
+		if (ret < 0) {
+			pr_err("%s, failed to write register: %d\n", __func__, ret);
+			return Tfa98xx_Error_Fail;
+		}
+	}
+	mutex_unlock(&tfa98xx_mutex);
+	return 1;
+}
+
+static int tfa98xx_get_volume_ctl(struct snd_kcontrol *kcontrol,
+                               struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx;
+	int volume, value1, value2, ret;
+
+	mutex_lock(&tfa98xx_mutex);
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		ret = regmap_read(tfa98xx->regmap, TFA98XX_SYS_CTRL, &value1);
+		if (ret == 0) {
+			ret = regmap_read(tfa98xx->regmap, TFA98XX_GAIN_ATT, &value2);
+		}
+		if (ret < 0) {
+			pr_err("%s, failed to read register: %d\n", __func__, ret);
+			return Tfa98xx_Error_Fail;
+		}
+		value1 = (value1 & ~(TFA98XX_SYS_CTRL_INPLEV_MASK)) >> 4;
+		value2 = (value2 & ~(TFA98XX_GAIN_ATT_TDMSPKG_MASK)) >> 6;
+		if (value1 == 1)
+			volume = (value2 + 16) * 8;
+		else
+			volume = value2 * 8;
+
+		ucontrol->value.integer.value[0] = volume;
+	}
+	mutex_unlock(&tfa98xx_mutex);
+	return 0;
+}
+
+static int tfa98xx_info_mode_ctl(struct snd_kcontrol *kcontrol,
+                                struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 3;
+	return 0;
+}
+
+static int tfa98xx_set_mode_ctl(struct snd_kcontrol *kcontrol,
+                               struct snd_ctl_elem_value *ucontrol)
+{
+	return 1;
+}
+
+static int tfa98xx_get_mode_ctl(struct snd_kcontrol *kcontrol,
+                               struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
 
 static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 {
@@ -1738,6 +1842,20 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
         tfa98xx_controls[mix_index].put = tfa98xx_set_stereo_ctl;
         mix_index++;
 #endif
+
+    tfa98xx_controls[mix_index].name = "NXP Volume";
+    tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+    tfa98xx_controls[mix_index].info = tfa98xx_info_volume_ctl;
+    tfa98xx_controls[mix_index].get = tfa98xx_get_volume_ctl;
+    tfa98xx_controls[mix_index].put = tfa98xx_set_volume_ctl;
+    mix_index++;
+
+    tfa98xx_controls[mix_index].name = "NXP Mode";
+    tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+    tfa98xx_controls[mix_index].info = tfa98xx_info_mode_ctl;
+    tfa98xx_controls[mix_index].get = tfa98xx_get_mode_ctl;
+    tfa98xx_controls[mix_index].put = tfa98xx_set_mode_ctl;
+    mix_index++;
 
 	ret = snd_soc_add_codec_controls(tfa98xx->codec,
 		tfa98xx_controls, mix_index);
@@ -1938,15 +2056,10 @@ retry:
 		}
 		return Tfa98xx_Error_Fail;
 	}
-	if (1)
+	if (tfa98xx_ftrace_regs)
 		dev_err(&tfa98xx->i2c->dev, "  WR reg=0x%02x, val=0x%04x %s\n",
 		        subaddress, value,
 		        ret<0? "Error!!" : "");
-
-	if (tfa98xx_ftrace_regs)
-		tfa98xx_trace_printk("\tWR     reg=0x%02x, val=0x%04x %s\n",
-		                     subaddress, value,
-		                     ret<0? "Error!!" : "");
 	return error;
 }
 
@@ -1983,14 +2096,10 @@ retry:
 	}
 	*val = value & 0xffff;
 
-	if (1)
+	if (tfa98xx_ftrace_regs)
 		dev_err(&tfa98xx->i2c->dev, "RD   reg=0x%02x, val=0x%04x %s\n",
 		        subaddress, *val,
 		        ret<0? "Error!!" : "");
-	if (tfa98xx_ftrace_regs)
-		tfa98xx_trace_printk("\tRD     reg=0x%02x, val=0x%04x %s\n",
-		                    subaddress, *val,
-		                    ret<0? "Error!!" : "");
 
 	return error;
 }
@@ -3399,7 +3508,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	tfa98xx_device_count++;
 	list_add(&tfa98xx->list, &tfa98xx_device_list);
 	mutex_unlock(&tfa98xx_mutex);
-
+	
 	return 0;
 }
 
