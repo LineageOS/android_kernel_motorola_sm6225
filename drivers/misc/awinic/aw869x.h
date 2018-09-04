@@ -44,7 +44,7 @@
 
 #define HAPTIC_MAX_TIMEOUT                  10000
 
-#define AW869X_HAPTIC_VBAT_MONITOR
+//#define AW869X_HAPTIC_VBAT_MONITOR
 
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
 #define SYS_BAT_DEV "/sys/class/power_supply/battery/voltage_now"
