@@ -66,8 +66,6 @@ struct mod_muc_data_t {
 	int wake_out_gpio;
 	int wake_in_gpio;
 	int wake_irq;
-	int muc_1_gpio;
-	int muc_2_gpio;
 	int mod_attached_gpio;
 	int mod_attached_irq;
 	int uart_pm_state;
@@ -1224,22 +1222,6 @@ static int muc_uart_probe(struct platform_device *pdev)
 		mm_data->mod_attached_irq =
 			gpio_to_irq(mm_data->mod_attached_gpio);
 	else
-		goto err2;
-
-	mm_data->muc_1_gpio = of_get_gpio(np, 3);
-	if (mm_data->muc_1_gpio >= 0) {
-		if (muc_uart_config_gpio(&pdev->dev,
-			mm_data->muc_1_gpio, "muc_1", 1, 0))
-			goto err1;
-	} else
-		goto err2;
-
-	mm_data->muc_2_gpio = of_get_gpio(np, 4);
-	if (mm_data->muc_2_gpio >= 0) {
-		if (muc_uart_config_gpio(&pdev->dev,
-			mm_data->muc_2_gpio, "muc_2", 1, 1))
-			goto err1;
-	} else
 		goto err2;
 
 	if (devm_request_irq(&pdev->dev,
