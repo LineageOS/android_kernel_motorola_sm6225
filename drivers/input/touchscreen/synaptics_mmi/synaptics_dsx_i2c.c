@@ -115,7 +115,7 @@ int irq_can_set_affinity(unsigned int irq)
 static int fps_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data);
 
-extern bool dsi_display_is_panel_enable(int id);
+extern bool dsi_display_is_panel_enable(int id, int *probe_status);
 static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data);
 
 static void synaptics_dsx_free_patch(
@@ -6589,9 +6589,9 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 {
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
 	struct synaptics_rmi4_data *rmi4_data;
+	int state, error, probe_status;
 	/* DRM status of primary panel */
-	bool panel_ready = dsi_display_is_panel_enable(0);
-	int state, error;
+	bool panel_ready = dsi_display_is_panel_enable(0, &probe_status);
 
 	if (!panel_ready) {
 		pr_debug("panel not ready; re-scheduling...\n");
