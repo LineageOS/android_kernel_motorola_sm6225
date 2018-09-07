@@ -170,6 +170,7 @@ enum mmi_chrg_step {
 
 struct sys_config {
 	u32 flashc_volt_hysteresis;
+	u32 flashc_curr_hysteresis;
 	u32 flashc_volt_up_steps;
 	u32 flashc_curr_up_steps;
 	u32 flashc_curr_down_steps;
@@ -749,6 +750,7 @@ static void mmi_pl_pm_move_state(struct mmi_pl_chg_manager *chip, pm_sm_state_t 
 #define FG_ESR_PULSE_MAX_TIMEOUT 60000
 #define FG_ESR_DECREMENT_UA		300000
 #define FG_ESR_DECREMENT_UV		300000
+#define FLASHC_CV_DECREMENT_UV	100000
 #define HEARTBEAT_lOOP_WAIT_MS 5000
 #define HEARTBEAT_PPS_TUNNING_MS 50
 #define HEARTBEAT_SHORT_DELAY_MS 500
@@ -1234,7 +1236,11 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			chip->pps_select_pdo_retry_cont = 0;
 
 		if (chip->pps_increase_volt
-			&& ibat_curr < chip->flashc_cc_max_curr_pre
+			&& ibat_curr <
+			((chip->pres_chrg_step == STEP_SUPER) ?
+			chip->flashc_cc_max_curr_pre +
+			chip->sys_configs.flashc_curr_hysteresis :
+			chip->flashc_cc_max_curr_pre)
 			&& chip->request_volt <
 				chip->pps_voltage_max - 200000
 			&& chip->pmic_handle.vbat_volt <
@@ -1355,7 +1361,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 				mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CV_LOOP);
 				chip->flashc_taper_cnt = 0;
 				chip->flashc_taper_delta_volt =
-						chip->sys_configs.flashc_volt_down_steps;
+						FLASHC_CV_DECREMENT_UV;
 				heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 			} else {
 				chip->flashc_taper_cnt++;
@@ -1401,9 +1407,10 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		} else
 			chip->pps_select_pdo_retry_cont = 0;
 
-		if (vbat_volt > chip->flashc_cv_max_volt_pre + 20000
-			&& chip->flashc_taper_delta_volt > 20000) {
-			chip->request_volt -= chip->flashc_taper_delta_volt;
+		if (vbat_volt > chip->flashc_cv_max_volt_pre + 20000) {
+			if (chip->flashc_taper_delta_volt > 20000)
+				chip->request_volt -= chip->flashc_taper_delta_volt;
+			else chip->request_volt -= 20000;
 			mmi_pl_dbg(chip, PR_MOTO, "For keeping flashc constant voltage step,"
 						"decrease pps voltage %d ,delta volta %d \n",
 						chip->request_volt, chip->flashc_taper_delta_volt);
@@ -1421,22 +1428,10 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 					chip->request_volt, chip->request_current);
 		}
 
-		if (ibat_curr <= chip->flashc_cv_taper_curr_pre) {
+		if (ibat_curr <= chip->flashc_cv_taper_curr_pre ||
+			ibat_curr < chip->pmic_step_curr) {
 			if (chip->flashc_taper_cnt > FLASHC_TAPPER_COUNT) {
-				if (chrg_step != chip->pres_chrg_step
-					&& flashc_cc_max_curr < chip->flashc_cc_max_curr_pre) {
-					chip->pres_chrg_step = chrg_step;
-					chip->flashc_cc_max_curr_pre = flashc_cc_max_curr;
-					chip->flashc_cv_max_volt_pre = flashc_cv_max_volt;
-					chip->flashc_cv_taper_curr_pre = flashc_cv_taper_curr;
-
-					mmi_pl_dbg(chip, PR_MOTO,
-							"Start jump to the next charger step %d \n",
-							chip->pres_chrg_step);
-
-					mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CC_LOOP);
-					heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
-				} else if (ibat_curr < chip->pmic_step_curr) {
+				if (ibat_curr < chip->pmic_step_curr) {
 					mmi_pl_dbg(chip, PR_MOTO,
 								"Ready to quit flashc CV charger, "
 								"chrg step %d ,"
@@ -1453,6 +1448,19 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 								chip->pmic_step_volt,
 								chip->pmic_step_curr);
 					mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_QUIT_1);
+				} else if (chrg_step != chip->pres_chrg_step
+					&& flashc_cc_max_curr < chip->flashc_cc_max_curr_pre) {
+					chip->pres_chrg_step = chrg_step;
+					chip->flashc_cc_max_curr_pre = flashc_cc_max_curr;
+					chip->flashc_cv_max_volt_pre = flashc_cv_max_volt;
+					chip->flashc_cv_taper_curr_pre = flashc_cv_taper_curr;
+
+					mmi_pl_dbg(chip, PR_MOTO,
+							"Start jump to the next charger step %d \n",
+							chip->pres_chrg_step);
+
+					mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CC_LOOP);
+					heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 				}
 				chip->flashc_taper_cnt = 0;
 			} else {
@@ -1833,6 +1841,7 @@ static void psy_changed_work_func(struct work_struct *work)
 #define DEFAULT_PMIC_STEP_CURR		2000000
 #define DEFAULT_FLASHC_TAPER_CURR_LMT		2000000
 #define DEFAULT_FLASHC_VOLT_HYSTERESIS		100000
+#define DEFAULT_FLASHC_CURR_HYSTERESIS		300000
 #define DEFAULT_FLASHC_VOLT_UP_STEPS			100000
 #define DEFAULT_FLASHC_CURR_UP_STEPS			100000
 #define DEFAULT_FLASHC_VOLT_DOWN_STEPS		100000
@@ -1879,6 +1888,13 @@ static int mmi_pl_chg_manager_parse_dt(struct mmi_pl_chg_manager *chip)
 	if (rc < 0)
 		chip->sys_configs.flashc_volt_hysteresis =
 				DEFAULT_FLASHC_VOLT_HYSTERESIS;
+
+	rc = of_property_read_u32(node,
+				"mmi,flashc-curr-hysteresis",
+				&chip->sys_configs.flashc_curr_hysteresis);
+	if (rc < 0)
+		chip->sys_configs.flashc_curr_hysteresis =
+				DEFAULT_FLASHC_CURR_HYSTERESIS;
 
 	rc = of_property_read_u32(node,
 				"mmi,flashc-volt-up-steps",
