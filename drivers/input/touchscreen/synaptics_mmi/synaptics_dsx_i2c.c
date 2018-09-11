@@ -115,7 +115,7 @@ int irq_can_set_affinity(unsigned int irq)
 static int fps_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data);
 
-extern bool dsi_display_is_panel_enable(int id, int *probe_status);
+extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data);
 
 static void synaptics_dsx_free_patch(
@@ -131,6 +131,7 @@ static int control_access_block_update_dynamic(
 		struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_query_device(
 		struct synaptics_rmi4_data *rmi4_data);
+static int synaptics_rmi4_remove(struct i2c_client *client);
 
 /* F12 packet register description */
 static struct {
@@ -6589,25 +6590,22 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 {
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
 	struct synaptics_rmi4_data *rmi4_data;
+	struct i2c_client *client;
 	int state, error, probe_status;
+	char *pname = NULL;
+	bool terminate = false;
 	/* DRM status of primary panel */
-	bool panel_ready = dsi_display_is_panel_enable(0, &probe_status);
-
-	if (!panel_ready) {
-		pr_debug("panel not ready; re-scheduling...\n");
-		queue_delayed_work(exp_fn_ctrl.det_workqueue,
-				&exp_fn_ctrl.det_work,
-				msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-		return;
-	}
+	bool panel_ready = dsi_display_is_panel_enable(0, &probe_status, &pname);
 
 	mutex_lock(&exp_fn_ctrl_mutex);
 	rmi4_data = exp_fn_ctrl.rmi4_data_ptr;
 	mutex_unlock(&exp_fn_ctrl_mutex);
 
-	if (rmi4_data == NULL) {
-		if (exp_fn_ctrl.det_workqueue)
-			queue_delayed_work(exp_fn_ctrl.det_workqueue,
+	pr_debug("panel: rdy=%d, probed=%d, name=%s\n", panel_ready, probe_status, pname ? pname : "none");
+
+	if (!panel_ready || (rmi4_data == NULL)) {
+		pr_debug("re-scheduling...\n");
+		queue_delayed_work(exp_fn_ctrl.det_workqueue,
 				&exp_fn_ctrl.det_work,
 				msecs_to_jiffies(EXP_FN_DET_INTERVAL));
 		return;
@@ -6630,6 +6628,15 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		}
 	}
 
+	/* rmi4_data is not NULL at this point, so store i2c client pointer */
+	client = rmi4_data->i2c_client;
+
+	/* check if primary panel is not a dummy one */
+	if (pname && strstr(pname, "dummy")) {
+		pr_info("dummy panel detected; terminating...\n");
+		terminate = true;
+	}
+
 	mutex_lock(&exp_fn_ctrl.list_mutex);
 	if (list_empty(&exp_fn_ctrl.fn_list))
 		goto release_mutex;
@@ -6638,6 +6645,10 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				next_list_entry,
 				&exp_fn_ctrl.fn_list,
 				link) {
+		/* terminate all handlers */
+		if (terminate)
+			exp_fhandler->func_init = NULL;
+
 		if (exp_fhandler->func_init == NULL) {
 			if (exp_fhandler->inserted == true) {
 				exp_fhandler->func_remove(rmi4_data);
@@ -6650,9 +6661,14 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				}
 
 				if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
-					/* enable interrupt handling after F34 init complete */
-					atomic_set(&rmi4_data->touch_stopped, 0);
-					synaptics_dsx_sensor_ready_state(rmi4_data, false);
+					if (terminate) {
+						synaptics_rmi4_remove(client);
+						pr_info("removed\n");
+					} else {
+						/* enable interrupt on handler's removal */
+						atomic_set(&rmi4_data->touch_stopped, 0);
+						synaptics_dsx_sensor_ready_state(rmi4_data, false);
+					}
 				}
 
 				list_del(&exp_fhandler->link);
@@ -6748,8 +6764,11 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
 			error = synaptics_rmi4_hw_init(rmi4_data);
 			if (error) {
+				/* not dummy panel found, but touch hw init failed, */
+				/* thus we need to terminate further processing */
+				exp_fn_ctrl.rmi4_data_ptr = rmi4_data = NULL;
 				pr_err("hw init failed\n");
-				/* TODO: probably remove driver??? */
+				terminate = true;
 			}
 			exp_fhandler->func_init = NULL;
 			pr_debug("removing DRM workaround\n");
@@ -7378,7 +7397,7 @@ err_gpio_free:
 
 err_mem_free:
 	kfree(rmi4_data);
-
+	i2c_set_clientdata(rmi4_data->i2c_client, NULL);
 
 	return retval;
 }
@@ -7527,6 +7546,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 		cancel_delayed_work_sync(&exp_fn_ctrl.det_work);
 		flush_workqueue(exp_fn_ctrl.det_workqueue);
 		destroy_workqueue(exp_fn_ctrl.det_workqueue);
+		exp_fn_ctrl.rmi4_data_ptr = NULL;
 	}
 
 	if (rmi4_data == NULL)
@@ -7587,6 +7607,8 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 			"%s: pinctrl default failed\n", __func__);
 
 	kfree(rmi4_data);
+	i2c_set_clientdata(client, NULL);
+
 	return 0;
 }
 

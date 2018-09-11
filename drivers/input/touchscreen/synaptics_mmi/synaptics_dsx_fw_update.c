@@ -4334,6 +4334,13 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 		return 0;
 	}
 
+	if (!rmi4_data) {
+		dev_info(LOGDEV,
+				"%s: RMI4 data is NULL\n",
+				__func__);
+		return 0;
+	}
+
 	fwu = kzalloc(sizeof(*fwu), GFP_KERNEL);
 	if (!fwu) {
 		dev_err(LOGDEV,
