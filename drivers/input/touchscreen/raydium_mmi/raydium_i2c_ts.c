@@ -5153,7 +5153,7 @@ exit_check_i2c:
 	return ret;
 }
 
-extern bool dsi_display_is_panel_enable(int id, int *probe_status);
+extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 
 static void raydium_ready_handler(struct work_struct *work)
 {
@@ -5163,7 +5163,9 @@ static void raydium_ready_handler(struct work_struct *work)
 			container_of(dw, struct raydium_ts_data, ready_work);
 	int ret, probe_status;
 	/* CLI display ID is 1 */
-	bool status = dsi_display_is_panel_enable(1, &probe_status);
+	/* 3rd parameter is NULL now, but we might need to start */
+	/* retrieving it later if found necessary */
+	bool status = dsi_display_is_panel_enable(1, &probe_status, NULL);
 
 	if (!status && probe_status == -ENODEV) {
 		dev_err(&raydium_ts->client->dev, "[touch]touch ic not present\n");
