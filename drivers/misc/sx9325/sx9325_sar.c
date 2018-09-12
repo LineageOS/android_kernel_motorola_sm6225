@@ -55,11 +55,12 @@
 
 #define LOG_DBG(fmt, args...)	pr_debug(LOG_TAG fmt, ##args)
 #define LOG_ERR(fmt, args...)	pr_err(LOG_TAG fmt, ##args)
-
-static int sx9325_debug_enable = 1;
-//module_param_named(
-//        debug_enable, sx9325_debug_enable, int, S_IRUSR | S_IWUSR
-//);
+/* lenovo-sw wunan3 IKSWP-12537	New log structure for SAR sensor begin */
+static int sx9325_debug_enable;
+module_param_named(
+        debug_enable, sx9325_debug_enable, int, S_IRUSR | S_IWUSR
+);
+/* lenovo-sw wunan3 IKSWP-12537	New log structure for SAR sensor end */
 
 static int last_val;
 static int mEnabled;
@@ -269,32 +270,42 @@ static int read_regStat(psx93XX_t this)
 
 static void read_rawData(psx93XX_t this)
 {
-	u8 msb = 0, lsb = 0;
-	unsigned int ii;
+        /* lenovo-sw wunan3 IKSWP-12537	New log structure for SAR sensor begin */
+	u8 msb=0, lsb=0;
+	u8 csx;
+	s32 useful;
+	s32 average;
+	s32 diff;
+	u16 offset;
+	if(this){
+		for(csx =0; csx<USE_CHANNEL_NUM; csx++){
+                        write_register(this,SX932x_CPSRD,csx);//here to check the CS1, also can read other channel		
+                        read_register(this,SX932x_USEMSB,&msb);
+                        read_register(this,SX932x_USELSB,&lsb);
+                        useful = (s32)((msb << 8) | lsb);
 
-	if (this) {
-		for (ii = 0; ii < USE_CHANNEL_NUM; ii++) {
-			/* here to check the CSx */
-			write_register(this, SX932x_CPSRD, ii);
-			msleep(100);
-			read_register(this, SX932x_USEMSB, &msb);
-			read_register(this, SX932x_USELSB, &lsb);
-			LOG_INFO("sx9325 cs%d USEFUL msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX932x_AVGMSB, &msb);
-			read_register(this, SX932x_AVGLSB, &lsb);
-			LOG_INFO("sx9325 cs%d AVERAGE msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX932x_DIFFMSB, &msb);
-			read_register(this, SX932x_DIFFLSB, &lsb);
-			LOG_INFO("sx9325 cs%d DIFF msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX932x_OFFSETMSB, &msb);
-			read_register(this, SX932x_OFFSETLSB, &lsb);
-			LOG_INFO("sx9325 cs%d OFFSET msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-		}
-	}
+                        read_register(this,SX932x_AVGMSB,&msb);
+                        read_register(this,SX932x_AVGLSB,&lsb);
+                        average = (s32)((msb << 8) | lsb);
+
+                        read_register(this,SX932x_DIFFMSB,&msb);
+                        read_register(this,SX932x_DIFFLSB,&lsb);
+                        diff = (s32)((msb << 8) | lsb);
+
+                        read_register(this,SX932x_OFFSETMSB,&msb);
+                        read_register(this,SX932x_OFFSETLSB,&lsb);
+                        offset = (u16)((msb << 8) | lsb);
+                        if (useful > 32767)
+                            useful -= 65536;
+			if (average > 32767)
+                            average -= 65536;
+			if (diff > 32767)
+                            diff -= 65536;
+                        if (sx9325_debug_enable)
+                            LOG_DBG("sx9325 [CS: %d] Useful = %d Average = %d, DIFF = %d Offset = %d \n",csx,useful,average,diff,offset);
+                }
+        }
+        /* lenovo-sw wunan3 IKSWP-12537	New log structure for SAR sensor end */
 }
 
 /**
