@@ -1,7 +1,7 @@
 /*
  * aw869x.c   aw869x haptic module
  *
- * Version: v1.3.0
+ * Version: v1.4.0
  *
  * Copyright (c) 2017 AWINIC Technology CO., LTD
  *
@@ -40,7 +40,7 @@
 #define AW869X_I2C_NAME "aw869x_haptic"
 #define AW869X_HAPTIC_NAME "aw869x_haptic"
 
-#define AW869X_VERSION "v1.3.1"
+#define AW869X_VERSION "v1.4.0"
 
 
 //#define AWINIC_I2C_REGMAP
@@ -54,16 +54,62 @@
 #define AW869X_MAX_DSP_START_TRY_COUNT    10
 
 
-
+//#define AW869X_REPEAT_RTP_PLAYING
 #define AW869X_MAX_FIRMWARE_LOAD_CNT 20
-
+#define AW869X_SEQ_NO_RTP_BASE 102
 /******************************************************
  *
  * variable
  *
  ******************************************************/
+#define AW869X_RTP_NAME_MAX        64
 static char *aw869x_ram_name = "aw869x_haptic.bin";
-static char *aw869x_rtp_name = "aw869x_rtp.bin";
+static char aw869x_rtp_name[][AW869X_RTP_NAME_MAX] = {
+    {"aw869x_rtp.bin"},
+    {"aw869x_rtp_Argo_Navis.bin"},
+    {"aw869x_rtp_Attentive.bin"},
+    {"aw869x_rtp_Awake.bin"},
+    {"aw869x_rtp_Bird_Loop.bin"},
+    {"aw869x_rtp_Brilliant_Times.bin"},
+    {"aw869x_rtp_Chimey_Phone.bin"},
+    {"aw869x_rtp_Complex.bin"},
+    {"aw869x_rtp_Crazy_Dream.bin"},
+    {"aw869x_rtp_Curve_Ball_Blend.bin"},
+    {"aw869x_rtp_Digital_Phone.bin"},
+    {"aw869x_rtp_Electrovision.bin"},
+    {"aw869x_rtp_Ether_Shake.bin"},
+    {"aw869x_rtp_Fateful_Words.bin"},
+    {"aw869x_rtp_Flutey_Phone.bin"},
+    {"aw869x_rtp_Future_Funk.bin"},
+    {"aw869x_rtp_Future_Hi_Tech.bin"},
+    {"aw869x_rtp_Girtab.bin"},
+    {"aw869x_rtp_Hello.bin"},
+    {"aw869x_rtp_Hexagon.bin"},
+    {"aw869x_rtp_Hydra.bin"},
+    {"aw869x_rtp_Insert_Coin.bin"},
+    {"aw869x_rtp_Jumping_Dots.bin"},
+    {"aw869x_rtp_Keys.bin"},
+    {"aw869x_rtp_Loopy.bin"},
+    {"aw869x_rtp_Loopy_Lounge.bin"},
+    {"aw869x_rtp_Modular.bin"},
+    {"aw869x_rtp_Momentum.bin"},
+    {"aw869x_rtp_Morning.bin"},
+    {"aw869x_rtp_Moto.bin"},
+    {"aw869x_rtp_Natural.bin"},
+    {"aw869x_rtp_New_Player.bin"},
+    {"aw869x_rtp_Onward.bin"},
+    {"aw869x_rtp_Organ_Dub.bin"},
+    {"aw869x_rtp_Overclocked.bin"},
+    {"aw869x_rtp_Pegasus.bin"},
+    {"aw869x_rtp_Pyxis.bin"},
+    {"aw869x_rtp_Regrade.bin"},
+    {"aw869x_rtp_Scarabaeus.bin"},
+    {"aw869x_rtp_Sceptrum.bin"},
+    {"aw869x_rtp_Simple.bin"},
+    {"aw869x_rtp_Solarium.bin"},
+    {"aw869x_rtp_Sparse.bin"},
+    {"aw869x_rtp_Terrabytes.bin"},
+};
 
 struct aw869x_container *aw869x_rtp;
 struct aw869x *g_aw869x;
@@ -189,12 +235,12 @@ static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
     pr_info("%s enter\n", __func__);
 
     if (!cont) {
-        pr_err("%s: failed to read %s\n", __func__, aw869x_rtp_name);
+        pr_err("%s: failed to read %s\n", __func__, aw869x_rtp_name[aw869x->rtp_file_num]);
         release_firmware(cont);
         return;
     }
 
-    pr_info("%s: loaded %s - size: %zu\n", __func__, aw869x_rtp_name,
+    pr_info("%s: loaded %s - size: %zu\n", __func__, aw869x_rtp_name[aw869x->rtp_file_num],
                     cont ? cont->size : 0);
 
     /* aw869x rtp update */
@@ -221,7 +267,7 @@ static int aw869x_rtp_update(struct aw869x *aw869x)
     pr_info("%s enter\n", __func__);
 
     return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-                aw869x_rtp_name, aw869x->dev, GFP_KERNEL,
+                aw869x_rtp_name[aw869x->rtp_file_num], aw869x->dev, GFP_KERNEL,
                 aw869x, aw869x_rtp_loaded);
 }
 
@@ -230,7 +276,7 @@ static int aw869x_rtp_update(struct aw869x *aw869x)
         struct aw869x_container *aw869x_cont)
 {
     int i = 0;
-    unsigned int shift;
+    unsigned int shift = 0;
 
     pr_info("%s enter\n", __func__);
 
@@ -296,7 +342,7 @@ static void aw869x_ram_loaded(const struct firmware *cont, void *context)
 {
     struct aw869x *aw869x = context;
     struct aw869x_container *aw869x_fw;
-    int i;
+    int i = 0;
     unsigned short check_sum = 0;
 
     pr_info("%s enter\n", __func__);
@@ -360,7 +406,7 @@ static int aw869x_ram_update(struct aw869x *aw869x)
 }
 
 #ifdef AWINIC_RAM_UPDATE_DELAY
-static enum hrtimer_restart ram_timer_func(struct hrtimer *timer)
+static enum hrtimer_restart aw869x_ram_timer_func(struct hrtimer *timer)
 {
     struct aw869x *aw869x = container_of(timer, struct aw869x, ram_timer);
 
@@ -371,7 +417,7 @@ static enum hrtimer_restart ram_timer_func(struct hrtimer *timer)
     return HRTIMER_NORESTART;
 }
 
-static void ram_work_routine(struct work_struct *work)
+static void aw869x_ram_work_routine(struct work_struct *work)
 {
     struct aw869x *aw869x = container_of(work, struct aw869x, ram_work);
 
@@ -388,8 +434,8 @@ static int aw869x_ram_init(struct aw869x *aw869x)
     int ram_timer_val = 5000;
 
     hrtimer_init(&aw869x->ram_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-    aw869x->ram_timer.function = ram_timer_func;
-    INIT_WORK(&aw869x->ram_work, ram_work_routine);
+    aw869x->ram_timer.function = aw869x_ram_timer_func;
+    INIT_WORK(&aw869x->ram_work, aw869x_ram_work_routine);
     hrtimer_start(&aw869x->ram_timer, 
             ktime_set(ram_timer_val/1000, (ram_timer_val%1000)*1000000), 
             HRTIMER_MODE_REL);
@@ -410,20 +456,20 @@ static int aw869x_haptic_play_mode(struct aw869x *aw869x, unsigned char play_mod
 {
     switch(play_mode) {
         case AW869X_HAPTIC_STANDBY_MODE:
-			aw869x->play_mode = AW869X_HAPTIC_STANDBY_MODE;
+            aw869x->play_mode = AW869X_HAPTIC_STANDBY_MODE;
             break;
         case AW869X_HAPTIC_RAM_MODE:
-			aw869x->play_mode = AW869X_HAPTIC_RAM_MODE;
+            aw869x->play_mode = AW869X_HAPTIC_RAM_MODE;
             aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
                     AW869X_BIT_SYSCTRL_PLAY_MODE_MASK, AW869X_BIT_SYSCTRL_PLAY_MODE_RAM);
             break;
         case AW869X_HAPTIC_RTP_MODE:
-			aw869x->play_mode = AW869X_HAPTIC_RTP_MODE;
+            aw869x->play_mode = AW869X_HAPTIC_RTP_MODE;
             aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
                     AW869X_BIT_SYSCTRL_PLAY_MODE_MASK, AW869X_BIT_SYSCTRL_PLAY_MODE_RTP);
             break;
         case AW869X_HAPTIC_TRIG_MODE:
-			aw869x->play_mode = AW869X_HAPTIC_TRIG_MODE;
+            aw869x->play_mode = AW869X_HAPTIC_TRIG_MODE;
             aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
                     AW869X_BIT_SYSCTRL_PLAY_MODE_MASK, AW869X_BIT_SYSCTRL_PLAY_MODE_RAM);
             break;
@@ -477,7 +523,7 @@ static int aw869x_haptic_set_repeat_que_seq(struct aw869x *aw869x, unsigned char
 
 static int aw869x_haptic_set_que_seq(struct aw869x *aw869x, unsigned int seq)
 {
-    unsigned char i;
+    unsigned char i = 0;
     struct aw869x_que_seq que_seq;
 
     for(i=0; i<AW869X_SEQUENCER_SIZE; i++) {
@@ -493,7 +539,7 @@ static int aw869x_haptic_set_que_seq(struct aw869x *aw869x, unsigned int seq)
 
 static int aw869x_haptic_set_que_loop(struct aw869x *aw869x, unsigned int loop)
 {
-    unsigned char i;
+    unsigned char i = 0;
     unsigned char tmp[2] = {0, 0 };
 
     tmp[0] |= (loop>>(24-4))&0xF0;
@@ -512,7 +558,7 @@ static int aw869x_haptic_set_que_loop(struct aw869x *aw869x, unsigned int loop)
 static int aw869x_set_que_seq(struct aw869x *aw869x, unsigned long arg)
 {
     int ret = 0;
-    unsigned char i;
+    unsigned char i = 0;
     struct aw869x_que_seq que_seq;
 
     if (copy_from_user(&que_seq,
@@ -530,7 +576,7 @@ static int aw869x_set_seq_loop(struct aw869x *aw869x, unsigned long arg)
 {
     struct aw869x_seq_loop seq_loop;
     int ret = 0;
-    unsigned char i;
+    unsigned char i = 0;
     unsigned char loop[2] = {0, 0 };
 
     if (copy_from_user(&seq_loop, 
@@ -657,12 +703,13 @@ static unsigned char aw869x_haptic_rtp_get_fifo_aei(struct aw869x *aw869x)
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
 static int aw869x_get_sys_battery_info(char *dev)
 {
-#ifdef AWINIC_GET_BATTERY_INFO
+#ifdef AWINIC_GET_BATTERY_READ_NODE
     int fd;
     int eCheck;
     int nReadSize;
     char buf[64],*pvalue;
     mm_segment_t oldfs;
+
     oldfs = get_fs();
     set_fs(KERNEL_DS);
     fd = sys_open(dev, O_RDONLY, 0);
@@ -671,29 +718,33 @@ static int aw869x_get_sys_battery_info(char *dev)
         set_fs(oldfs);
         return fd;
     }
+
     nReadSize = sys_read(fd, buf, sizeof(buf) - 1);
     pr_debug("%s: nReadSize:%d\n", __func__, nReadSize);
+
     eCheck = simple_strtoul(buf,&pvalue,10);
     pr_debug("%s: eCheck = %d\n",eCheck);
+
     set_fs(oldfs);
     sys_close(fd);
+
     if (eCheck > 0)
         return eCheck;
     else
         return 0;
 #else
-	struct power_supply *batt_psy;
-        union power_supply_propval prop = {0, };
-        int rc;
+    struct power_supply *batt_psy;
+    union power_supply_propval prop = {0, };
+    int rc = -1;
 
-	batt_psy = power_supply_get_by_name("battery");
-        rc = power_supply_get_property(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+    batt_psy = power_supply_get_by_name("battery");
+    rc = power_supply_get_property(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
                         &prop);
 	power_supply_put(batt_psy);
-        if (rc < 0) {
-                pr_err("Error in getting charging status, rc=%d\n", rc);
-		return 0;
-        }
+    if (rc < 0) {
+        pr_err("Error in getting charging status, rc=%d\n", rc);
+        return 0;
+    }
 	return prop.intval;
 #endif
 }
@@ -701,7 +752,7 @@ static int aw869x_get_sys_battery_info(char *dev)
 
 static unsigned char aw869x_haptic_rtp_get_fifo_afi(struct aw869x *aw869x)
 {
-    unsigned char ret;
+    unsigned char ret = 0;
     unsigned char reg_val = 0;
 
     aw869x_i2c_read(aw869x, AW869X_REG_SYSINT, &reg_val);
@@ -713,7 +764,7 @@ static unsigned char aw869x_haptic_rtp_get_fifo_afi(struct aw869x *aw869x)
 
 static int aw869x_haptic_rtp_init(struct aw869x *aw869x)
 {
-    unsigned int buf_len;
+    unsigned int buf_len = 0;
 
     pr_info("%s enter\n", __func__);
 
@@ -749,15 +800,46 @@ static int aw869x_haptic_rtp_init(struct aw869x *aw869x)
     return 0;
 }
 
-static void rtp_work_routine(struct work_struct *work)
+static void aw869x_rtp_work_routine(struct work_struct *work)
 {
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
-    int i;
-    unsigned int tmp;
-    unsigned int vbat;
+    int i = 0;
+    int tmp = 0;
+    unsigned int vbat = 0;
 #endif
+    const struct firmware *rtp_file;
+    int ret = -1;
     struct aw869x *aw869x = container_of(work, struct aw869x, rtp_work);
 
+    pr_info("%s enter\n", __func__);
+
+    /* fw loaded */
+    ret = request_firmware(&rtp_file,
+            aw869x_rtp_name[aw869x->rtp_file_num],
+            aw869x->dev);
+    if(ret < 0)
+    {
+        pr_err("%s: failed to read %s\n", __func__,
+                aw869x_rtp_name[aw869x->rtp_file_num]);
+        return ;
+    }
+    aw869x->rtp_init = 0;
+    kfree(aw869x_rtp);
+    aw869x_rtp = kzalloc(rtp_file->size+sizeof(int), GFP_KERNEL);
+    if (!aw869x_rtp) {
+        release_firmware(rtp_file);
+        pr_err("%s: error allocating memory\n", __func__);
+        return;
+    }
+    aw869x_rtp->len = rtp_file->size;
+    pr_info("%s: rtp file [%s] size = %d\n", __func__,
+            aw869x_rtp_name[aw869x->rtp_file_num], aw869x_rtp->len);
+    memcpy(aw869x_rtp->data, rtp_file->data, rtp_file->size);
+    release_firmware(rtp_file);
+
+    aw869x->rtp_init = 1;
+
+    /* rtp mode config */
     aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_RTP_MODE);
     aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
            AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
@@ -769,7 +851,7 @@ static void rtp_work_routine(struct work_struct *work)
     pr_info("%s: get sys battery = %d\n", __func__, vbat);
     if((vbat > AW869X_SYS_VBAT_MIN) && (vbat < AW869X_SYS_VBAT_MAX)) {
         for(i=0; i<aw869x_rtp->len; i++) {
-            tmp = aw869x_rtp->data[i];
+            tmp = (int)aw869x_rtp->data[i];
             tmp = tmp*AW869X_SYS_VBAT_REFERENCE/vbat;
             aw869x_rtp->data[i] = (unsigned char)tmp;
         }
@@ -1089,12 +1171,13 @@ static void aw869x_rtp_play(struct aw869x *aw869x, int value)
 #else
 	aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8V);
 #endif
-	if(value) {
-		if(aw869x->rtp_init) {
+	if(value < (sizeof(aw869x_rtp_name)/AW869X_RTP_NAME_MAX)) {
+		aw869x->rtp_file_num = value;
+		if(value) {
 			schedule_work(&aw869x->rtp_work);
-		} else {
-			pr_err("%s: aw869x rtp init = %d, init error\n", __func__, aw869x->rtp_init);
 		}
+	} else {
+		pr_err("%s: rtp_file_num 0x%02x over max value \n", __func__, aw869x->rtp_file_num);
 	}
 }
 
@@ -1107,8 +1190,8 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
     seq = (aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF;
     pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
     if (value > 0 || seq > 2) {
-	if (seq >= 12)
-		aw869x_rtp_play(aw869x, 1);
+	if (seq >= AW869X_SEQ_NO_RTP_BASE)
+		aw869x_rtp_play(aw869x, seq- AW869X_SEQ_NO_RTP_BASE);
 	else if (value < 100 || seq > 2) {
 		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
 			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
@@ -1158,7 +1241,7 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 }
 
 #ifdef TIMED_OUTPUT
-static int vibrator_get_time(struct timed_output_dev *dev)
+static int aw869x_vibrator_get_time(struct timed_output_dev *dev)
 {
     struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
 
@@ -1170,7 +1253,7 @@ static int vibrator_get_time(struct timed_output_dev *dev)
     return 0;
 }
 
-static void vibrator_enable( struct timed_output_dev *dev, int value)
+static void aw869x_vibrator_enable( struct timed_output_dev *dev, int value)
 {
     struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
 
@@ -1180,7 +1263,7 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 }
 
 #else
-static enum led_brightness awinic_hap_brightness_get(struct led_classdev *cdev)
+static enum led_brightness aw869x_haptic_brightness_get(struct led_classdev *cdev)
 {
     struct aw869x *aw869x =
         container_of(cdev, struct aw869x, cdev);
@@ -1188,7 +1271,7 @@ static enum led_brightness awinic_hap_brightness_get(struct led_classdev *cdev)
     return aw869x->amplitude;
 }
 
-static void awinic_hap_brightness_set(struct led_classdev *cdev,
+static void aw869x_haptic_brightness_set(struct led_classdev *cdev,
                 enum led_brightness level)
 {
     struct aw869x *aw869x =
@@ -1196,13 +1279,15 @@ static void awinic_hap_brightness_set(struct led_classdev *cdev,
 
     aw869x->amplitude = level;
 
+    mutex_lock(&aw869x->lock);
+
     aw869x_haptic_stop(aw869x);
     if (aw869x->amplitude > 0) {
-        //wake_lock(&aw869x->wklock);
-        mutex_lock(&aw869x->lock);
         aw869x_haptic_play_que_seq(aw869x, aw869x->amplitude);
-        mutex_unlock(&aw869x->lock);
     }
+
+    mutex_unlock(&aw869x->lock);
+
 }
 #endif
 
@@ -1221,7 +1306,15 @@ static ssize_t aw869x_extra_store(struct device *dev,
 static ssize_t aw869x_state_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
-	return 0;
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+
+    return snprintf(buf, PAGE_SIZE, "%d\n", aw869x->state);
 }
 
 static ssize_t aw869x_state_store(struct device *dev,
@@ -1261,8 +1354,8 @@ static ssize_t aw869x_duration_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1304,8 +1397,8 @@ static ssize_t aw869x_activate_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1353,8 +1446,8 @@ static ssize_t aw869x_index_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1393,8 +1486,8 @@ static ssize_t aw869x_vmax_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1433,8 +1526,8 @@ static ssize_t aw869x_gain_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1460,7 +1553,7 @@ static ssize_t aw869x_seq_show(struct device *dev,
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
     size_t count = 0;
-    unsigned char i;
+    unsigned char i = 0;
     unsigned char reg_val = 0;
 
     aw869x->seq = 0;
@@ -1483,8 +1576,8 @@ static ssize_t aw869x_seq_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1510,10 +1603,10 @@ static ssize_t aw869x_loop_show(struct device *dev,
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
     size_t count = 0;
-    unsigned char i;
+    unsigned char i = 0;
     unsigned char reg_val = 0;
     unsigned char tmp[2];
-    unsigned char loop_tmp;
+    unsigned char loop_tmp = 0;
 
     aw869x->loop = 0;
     for(i=0; i<AW869X_SEQUENCER_LOOP_SIZE; i++) {
@@ -1540,8 +1633,8 @@ static ssize_t aw869x_loop_store(struct device *dev,
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1622,8 +1715,8 @@ static ssize_t aw869x_rtp_store(struct device *dev, struct device_attribute *att
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1659,8 +1752,8 @@ static ssize_t aw869x_ram_update_store(struct device *dev, struct device_attribu
     struct led_classdev *cdev = dev_get_drvdata(dev);
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
-    unsigned int val;
-    int rc;
+    unsigned int val = 0;
+    int rc = 0;
 
     rc = kstrtouint(buf, 0, &val);
     if (rc < 0)
@@ -1705,7 +1798,7 @@ static struct attribute_group aw869x_vibrator_attribute_group = {
     .attrs = aw869x_vibrator_attributes
 };
 
-static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
+static enum hrtimer_restart aw869x_vibrator_timer_func(struct hrtimer *timer)
 {
     struct aw869x *aw869x = container_of(timer, struct aw869x, timer);
 
@@ -1716,7 +1809,7 @@ static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
     return HRTIMER_NORESTART;
 }
 
-static void vibrator_work_routine(struct work_struct *work)
+static void aw869x_vibrator_work_routine(struct work_struct *work)
 {
     struct aw869x *aw869x = container_of(work, struct aw869x, vibrator_work);
 
@@ -1738,7 +1831,7 @@ static void vibrator_work_routine(struct work_struct *work)
 static int aw869x_vibrator_init(struct aw869x *aw869x)
 {
     int ret = 0;
-    unsigned char i;
+    unsigned char i = 0;
     unsigned char reg_val = 0;
 
     pr_info("%s enter\n", __func__);
@@ -1755,8 +1848,8 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
     }
 #ifdef TIMED_OUTPUT
     aw869x->to_dev.name = "vibrator";
-    aw869x->to_dev.get_time = vibrator_get_time;
-    aw869x->to_dev.enable = vibrator_enable;
+    aw869x->to_dev.get_time = aw869x_vibrator_get_time;
+    aw869x->to_dev.enable = aw869x_vibrator_enable;
 
     ret = timed_output_dev_register(&(aw869x->to_dev));
     if ( ret < 0){
@@ -1771,8 +1864,8 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
     }
 #else
     aw869x->cdev.name = "vibrator";
-    aw869x->cdev.brightness_get = awinic_hap_brightness_get;
-    aw869x->cdev.brightness_set = awinic_hap_brightness_set;
+    aw869x->cdev.brightness_get = aw869x_haptic_brightness_get;
+    aw869x->cdev.brightness_set = aw869x_haptic_brightness_set;
     
     ret = devm_led_classdev_register(&aw869x->i2c->dev, &aw869x->cdev);
     if (ret < 0){
@@ -1787,10 +1880,10 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
      }
 #endif
     hrtimer_init(&aw869x->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-    aw869x->timer.function = vibrator_timer_func;
-    INIT_WORK(&aw869x->vibrator_work, vibrator_work_routine);
+    aw869x->timer.function = aw869x_vibrator_timer_func;
+    INIT_WORK(&aw869x->vibrator_work, aw869x_vibrator_work_routine);
 
-    INIT_WORK(&aw869x->rtp_work, rtp_work_routine);
+    INIT_WORK(&aw869x->rtp_work, aw869x_rtp_work_routine);
 
     wakeup_source_prepare(&aw869x->ws, "vibrator");
     mutex_init(&aw869x->lock);
@@ -1871,7 +1964,7 @@ static irqreturn_t aw869x_irq(int irq, void *data)
 {
     struct aw869x *aw869x = data;
     unsigned char reg_val = 0;
-    unsigned int buf_len;
+    unsigned int buf_len = 0;
 
     pr_info("%s enter\n", __func__);
 
@@ -1910,8 +2003,12 @@ static irqreturn_t aw869x_irq(int irq, void *data)
                     pr_info("%s: rtp update complete\n", __func__);
                     aw869x_haptic_set_rtp_aei(aw869x, false);
                     aw869x->rtp_cnt = 0;
+                    aw869x->rtp_init = 0;
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
                     aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BOOST_MODE);
+#endif
+#ifdef AW869X_REPEAT_RTP_PLAYING
+                    aw869x_rtp_play(aw869x, aw869x->rtp_file_num);
 #endif
                     break;
                 }
@@ -1963,7 +2060,7 @@ static int aw869x_parse_dt(struct device *dev, struct aw869x *aw869x,
     return 0;
 }
 
-int aw869x_hw_reset(struct aw869x *aw869x)
+static int aw869x_hw_reset(struct aw869x *aw869x)
 {
     pr_info("%s enter\n", __func__);
 
@@ -1984,7 +2081,7 @@ int aw869x_hw_reset(struct aw869x *aw869x)
  * check chip id
  *
  *****************************************************/
-int aw869x_read_chipid(struct aw869x *aw869x)
+static int aw869x_read_chipid(struct aw869x *aw869x)
 {
     int ret = -1;
     unsigned char cnt = 0;
@@ -2118,8 +2215,8 @@ static int aw869x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
 {
     struct aw869x *aw869x;
     struct device_node *np = i2c->dev.of_node;
-    int irq_flags;
-    int ret;
+    int irq_flags = 0;
+    int ret = -1;
 
     pr_info("%s enter\n", __func__);
 

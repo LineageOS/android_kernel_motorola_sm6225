@@ -288,7 +288,7 @@ const unsigned char aw869x_reg_access[AW869X_REG_MAX]={
 // PWMDBG
 #define AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK      (~(3<<5))
 #define AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB      (3<<5)
-#define AW869X_BIT_PWMDBG_PWMCLK_MODE_21KB      (2<<5)
+#define AW869X_BIT_PWMDBG_PWMCLK_MODE_24KB      (2<<5)
 #define AW869X_BIT_PWMDBG_PWMCLK_MODE_48KB      (0<<5)
 
 #endif
