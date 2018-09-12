@@ -270,32 +270,40 @@ static int read_regStat(psx93XX_t this)
 
 static void read_rawData(psx93XX_t this)
 {
-	u8 msb = 0, lsb = 0;
-	unsigned int ii;
+	u8 msb=0, lsb=0;
+	u8 csx;
+	s32 useful;
+	s32 average;
+	s32 diff;
+	u16 offset;
+	if(this){
+		for(csx =0; csx<USE_CHANNEL_NUM; csx++){
+                        write_register(this,SX9310_CPSRD,csx);//here to check the CS1, also can read other channel		
+                        read_register(this,SX9310_USEMSB,&msb);
+                        read_register(this,SX9310_USELSB,&lsb);
+                        useful = (s32)((msb << 8) | lsb);
 
-	if (this) {
-		for (ii = 0; ii < USE_CHANNEL_NUM; ii++) {
-			/* here to check the CSx */
-			write_register(this, SX9310_CPSRD, ii);
-			msleep(100);
-			read_register(this, SX9310_USEMSB, &msb);
-			read_register(this, SX9310_USELSB, &lsb);
-			LOG_INFO("sx9310 cs%d USEFUL msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX9310_AVGMSB, &msb);
-			read_register(this, SX9310_AVGLSB, &lsb);
-			LOG_INFO("sx9310 cs%d AVERAGE msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX9310_DIFFMSB, &msb);
-			read_register(this, SX9310_DIFFLSB, &lsb);
-			LOG_INFO("sx9310 cs%d DIFF msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-			read_register(this, SX9310_OFFSETMSB, &msb);
-			read_register(this, SX9310_OFFSETLSB, &lsb);
-			LOG_INFO("sx9310 cs%d OFFSET msb = 0x%x, lsb = 0x%x\n",
-					ii, msb, lsb);
-		}
-	}
+                        read_register(this,SX9310_AVGMSB,&msb);
+                        read_register(this,SX9310_AVGLSB,&lsb);
+                        average = (s32)((msb << 8) | lsb);
+
+                        read_register(this,SX9310_DIFFMSB,&msb);
+                        read_register(this,SX9310_DIFFLSB,&lsb);
+                        diff = (s32)((msb << 8) | lsb);
+
+                        read_register(this,SX9310_OFFSETMSB,&msb);
+                        read_register(this,SX9310_OFFSETLSB,&lsb);
+                        offset = (u16)((msb << 8) | lsb);
+                        if (useful > 32767)
+                            useful -= 65536;
+                        if (average > 32767)
+                            average -= 65536;
+                        if (diff > 4095)
+                            diff -= 8192;
+                        if (sx9310_debug_enable)
+                            LOG_DBG("sx9310 [CS: %d] Useful = %d Average = %d, DIFF = %d Offset = %d \n",csx,useful,average,diff,offset);
+                }
+       }
 }
 
 /**
