@@ -47,11 +47,13 @@
 //#define AW869X_HAPTIC_VBAT_MONITOR
 
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
+//#define AWINIC_GET_BATTERY_READ_NODE
 #define SYS_BAT_DEV "/sys/class/power_supply/battery/voltage_now"
 #define AW869X_SYS_VBAT_REFERENCE           4200000
 #define AW869X_SYS_VBAT_MIN                 3000000
 #define AW869X_SYS_VBAT_MAX                 4500000
 #endif
+
 enum aw869x_flags {
     AW869X_FLAG_NONR = 0,
     AW869X_FLAG_SKIP_INTERRUPTS = 1,
@@ -136,6 +138,7 @@ struct aw869x {
     unsigned char chipid;
 
     unsigned int rtp_cnt;
+    unsigned int rtp_file_num;
 
     unsigned char rtp_init;
     unsigned char ram_init;
