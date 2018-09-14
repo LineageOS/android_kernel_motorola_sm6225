@@ -1463,7 +1463,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		LOG_DBG("platform data is required!\n");
 		return -EINVAL;
 	}
-#if 0
+
 	pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
 	if (IS_ERR(pplatData->cap_vdd)) {
 		if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
@@ -1485,6 +1485,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				regulator_is_enabled(pplatData->cap_vdd) ?
 				"on" : "off");
 	}
+#if 0
 
 	pplatData->cap_svdd = regulator_get(&client->dev, "cap_svdd");
 	if (!IS_ERR(pplatData->cap_svdd)) {
@@ -1766,10 +1767,11 @@ err_svdd_error:
 	LOG_DBG("%s svdd defer.\n", __func__);
 	regulator_disable(pplatData->cap_vdd);
 	regulator_put(pplatData->cap_vdd);
+#endif
 
 err_vdd_defer:
 	LOG_DBG("%s free pplatData.\n", __func__);
-#endif
+
 
 	kfree(pplatData);
 	return ret;
@@ -1800,12 +1802,12 @@ static int abov_remove(struct i2c_client *client)
 			regulator_disable(this->board->cap_svdd);
 			regulator_put(this->board->cap_svdd);
 		}
+#endif
 
 		if (this->board->cap_vdd_en) {
 			regulator_disable(this->board->cap_vdd);
 			regulator_put(this->board->cap_vdd);
 		}
-#endif
 #ifdef USE_SENSORS_CLASS
 		sensors_classdev_unregister(&sensors_capsensor_top_cdev);
 		sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
