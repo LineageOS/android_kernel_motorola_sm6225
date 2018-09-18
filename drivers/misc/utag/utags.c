@@ -770,7 +770,7 @@ static struct utag *thaw_tags(size_t block_size, void *buf)
 		}
 
 		if (cur->size != 0) {
-			cur->payload = kzalloc(cur->size, GFP_KERNEL);
+			cur->payload = kzalloc(cur->size + 1, GFP_KERNEL);
 			if (!cur->payload)
 				goto err_free;
 			memcpy(cur->payload, frozen->payload, cur->size);
@@ -1061,7 +1061,7 @@ static int check_utag_range(char *tag, struct utag *head, char *data,
 	}
 
 	/* make local copy of .range payload to tokenize */
-	buf = ptr = kzalloc(range->size, GFP_KERNEL);
+	buf = ptr = kzalloc(range->size + 1, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
@@ -1106,7 +1106,7 @@ static int replace_first_utag(struct utag *head, char *name,
 		return -EIO;
 	}
 
-	utag->payload = kzalloc(size, GFP_KERNEL);
+	utag->payload = kzalloc(size + 1, GFP_KERNEL);
 	if (!utag->payload) {
 		utag->payload = oldpayload;
 		return -EIO;
