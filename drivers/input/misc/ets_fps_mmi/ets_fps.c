@@ -263,13 +263,6 @@ int Interrupt_Init(struct etspi_data *etspi, int int_mode, int detect_period, in
 
 	int err = 0;
 	int status = 0;
-	static unsigned long jt;
-
-	pr_debug("etspi: --  %s mode = %d period = %d threshold = %d\n",\
-		__func__, int_mode, detect_period, detect_threshold);
-	pr_debug("etspi: --  %s request_irq_done = %d gpio_irq = %d  pin = %d\n",\
-		__func__, request_irq_done, gpio_irq, etspi->irqPin);
-
 
 	fps_ints.detect_period = detect_period;
 	fps_ints.detect_threshold = detect_threshold;
@@ -332,8 +325,7 @@ int Interrupt_Init(struct etspi_data *etspi, int int_mode, int detect_period, in
 		fps_ints.drdy_irq_flag = DRDY_IRQ_ENABLE;
 		enable_irq_wake(gpio_irq);
 		enable_irq(gpio_irq);
-		if (printk_timed_ratelimit(&jt, 500))
-			DEBUG_PRINT("etspi: Interrupt_Init: %s irq/done:%d %d mode:%d\
+		DEBUG_PRINT("etspi: Interrupt_Init: %s irq/done:%d %d mode:%d\
 			period:%d \threshold:%d \n", __func__, gpio_irq, request_irq_done,\
 			int_mode, detect_period, detect_threshold);
 	}
@@ -354,7 +346,7 @@ done:
 
 int Interrupt_Free(struct etspi_data *etspi)
 {
-	pr_debug("etspi: %s\n", __func__);
+	DEBUG_PRINT("etspi: %s\n", __func__);
 	fps_ints.finger_on = 0;
 
 	if (fps_ints.drdy_irq_flag == DRDY_IRQ_ENABLE) {
@@ -461,19 +453,20 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	memset(&data, 0, sizeof(data));
 
-	pr_debug("etspi: %s\n", __func__);
+	pr_debug("etspi: %s, cmd=%d \n", __func__, cmd);
 
 	etspi = filp->private_data;
 
 	switch (cmd) {
 	case INT_TRIGGER_INIT:
+		DEBUG_PRINT("etspi:fp_ioctl >>> fp Trigger function init\n");
 		if (copy_from_user(&data, (int __user *)arg, sizeof(data))) {
 			retval = -EFAULT;
+			pr_err("etspi:INT_TRIGGER_INIT failed,%s,%d\n", __func__, __LINE__);
 			goto done;
 		}
-		pr_debug("etspi:fp_ioctl >>> fp Trigger function init\n");
 		retval = Interrupt_Init(etspi, data.int_mode, data.detect_period, data.detect_threshold);
-		pr_debug("etspi:fp_ioctl trigger init = %x\n", retval);
+		DEBUG_PRINT("etspi:fp_ioctl trigger init = %x\n", retval);
 	break;
 
 	case FP_SENSOR_RESET:
@@ -481,9 +474,9 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		etspi_reset(etspi);
 		goto done;
 	case INT_TRIGGER_CLOSE:
-		pr_debug("etspi:fp_ioctl <<< fp Trigger function close\n");
+		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function close\n");
 		retval = Interrupt_Free(etspi);
-		pr_debug("etspi:fp_ioctl trigger close = %x\n", retval);
+		DEBUG_PRINT("etspi:fp_ioctl trigger close = %x\n", retval);
 		goto done;
 	case INT_TRIGGER_ABORT:
 		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function abort\n");
