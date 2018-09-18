@@ -115,7 +115,6 @@ int irq_can_set_affinity(unsigned int irq)
 static int fps_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data);
 
-extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data);
 
 static void synaptics_dsx_free_patch(
@@ -2107,6 +2106,9 @@ static void synaptics_dsx_release_all(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_dsx_panel_cb(struct notifier_block *nb,
 		unsigned long event, void *data);
 #endif
+#if defined(CONFIG_DRM)
+extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
+#endif
 
 static int synaptics_rmi4_suspend(struct device *dev);
 
@@ -2383,6 +2385,7 @@ struct synaptics_exp_fn_ctrl {
 	struct delayed_work det_work;
 	struct workqueue_struct *det_workqueue;
 	struct synaptics_rmi4_data *rmi4_data_ptr;
+	struct i2c_client *i2c_client;
 };
 
 DEFINE_MUTEX(exp_fn_ctrl_mutex);
@@ -6590,67 +6593,86 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 {
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
 	struct synaptics_rmi4_data *rmi4_data;
-	struct i2c_client *client;
 	int state, error, probe_status;
-	char *pname = NULL;
+	bool all_inserted = true;
 	bool terminate = false;
+	bool panel_ready = true;
+	char *pname = NULL;
+
+#if defined(CONFIG_DRM)
 	/* DRM status of primary panel */
-	bool panel_ready = dsi_display_is_panel_enable(0, &probe_status, &pname);
-
-	mutex_lock(&exp_fn_ctrl_mutex);
-	rmi4_data = exp_fn_ctrl.rmi4_data_ptr;
-	mutex_unlock(&exp_fn_ctrl_mutex);
-
-	pr_debug("panel: rdy=%d, probed=%d, name=%s\n", panel_ready, probe_status, pname ? pname : "none");
-
-	if (!panel_ready || (rmi4_data == NULL)) {
-		pr_debug("re-scheduling...\n");
-		queue_delayed_work(exp_fn_ctrl.det_workqueue,
-				&exp_fn_ctrl.det_work,
-				msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-		return;
-	}
-
-	if (rmi4_data->fps_detection_enabled &&
-		!rmi4_data->is_fps_registered) {
-		error = FPS_register_notifier(
-				&rmi4_data->fps_notif, 0xBEEF, false);
-		if (error) {
-			if (exp_fn_ctrl.det_workqueue)
-				queue_delayed_work(
-					exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work,
-					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-			pr_err("Failed to register fps_notifier\n");
-		} else {
-			rmi4_data->is_fps_registered = true;
-			pr_debug("registered FPS notifier\n");
-		}
-	}
-
-	/* rmi4_data is not NULL at this point, so store i2c client pointer */
-	client = rmi4_data->i2c_client;
-
+	panel_ready = dsi_display_is_panel_enable(0, &probe_status, &pname);
+	pr_debug("drm: probe=%d, enable=%d, panel'%s'\n", probe_status, panel_ready, pname);
 	/* check if primary panel is not a dummy one */
 	if (pname && strstr(pname, "dummy")) {
 		pr_info("dummy panel detected; terminating...\n");
 		terminate = true;
+	}
+#endif
+	mutex_lock(&exp_fn_ctrl_mutex);
+	rmi4_data = exp_fn_ctrl.rmi4_data_ptr;
+	mutex_unlock(&exp_fn_ctrl_mutex);
+
+	if (rmi4_data == NULL) {
+		/* 1) rmi4_data being NULL is a valid case */
+		/* 2) pname is NULL in all cases except DRM */
+		if (pname && panel_ready) {
+			terminate = true;
+			pr_debug("set terminate flag\n");
+		} else
+			goto exit_reschedule;
+	} else {
+		if (!panel_ready)
+			goto exit_reschedule;
+
+		if (rmi4_data->fps_detection_enabled &&
+			!rmi4_data->is_fps_registered) {
+			error = FPS_register_notifier(
+					&rmi4_data->fps_notif, 0xBEEF, false);
+			if (error) {
+				if (exp_fn_ctrl.det_workqueue)
+					queue_delayed_work(
+						exp_fn_ctrl.det_workqueue,
+						&exp_fn_ctrl.det_work,
+						msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+				pr_err("Failed to register fps_notifier\n");
+			} else {
+				rmi4_data->is_fps_registered = true;
+				pr_debug("registered FPS notifier\n");
+			}
+		}
 	}
 
 	mutex_lock(&exp_fn_ctrl.list_mutex);
 	if (list_empty(&exp_fn_ctrl.fn_list))
 		goto release_mutex;
 
+	/* F34 resets touch IC and might interfere with */
+	/* reporting touch events. Need to ensure it was */
+	/* successfully inserted before enabling interrupts */
+	list_for_each_entry(exp_fhandler,
+				&exp_fn_ctrl.fn_list,
+				link) {
+		if (!exp_fhandler->inserted) {
+			all_inserted = false;
+			pr_debug("not all inserted; keep waiting...\n");
+			break;
+		}
+	}
+
 	list_for_each_entry_safe(exp_fhandler,
 				next_list_entry,
 				&exp_fn_ctrl.fn_list,
 				link) {
 		/* terminate all handlers */
-		if (terminate)
+		if (terminate) {
+			pr_debug("terminating the rest of handler: %d\n", exp_fhandler->fn_type);
 			exp_fhandler->func_init = NULL;
+		}
 
 		if (exp_fhandler->func_init == NULL) {
 			if (exp_fhandler->inserted == true) {
+				pr_debug("calling remove func for handler: %d\n", exp_fhandler->fn_type);
 				exp_fhandler->func_remove(rmi4_data);
 
 				/* need to restore status function on F34 removal */
@@ -6662,12 +6684,19 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 				if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
 					if (terminate) {
-						synaptics_rmi4_remove(client);
-						pr_info("removed\n");
-					} else {
+						synaptics_rmi4_remove(exp_fn_ctrl.i2c_client);
+						pr_info("driver removed\n");
+					} else if (all_inserted) {
 						/* enable interrupt on handler's removal */
 						atomic_set(&rmi4_data->touch_stopped, 0);
 						synaptics_dsx_sensor_ready_state(rmi4_data, false);
+						pr_info("drm panel ready\n");
+					} else {
+						queue_delayed_work(exp_fn_ctrl.det_workqueue,
+								&exp_fn_ctrl.det_work,
+								msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+						pr_debug("keep drm fhandler\n");
+						continue;
 					}
 				}
 
@@ -6764,17 +6793,17 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
 			error = synaptics_rmi4_hw_init(rmi4_data);
 			if (error) {
+				pr_info("hw init failed\n");
 				/* not dummy panel found, but touch hw init failed, */
 				/* thus we need to terminate further processing */
 				exp_fn_ctrl.rmi4_data_ptr = rmi4_data = NULL;
-				pr_err("hw init failed\n");
 				terminate = true;
 			}
 			exp_fhandler->func_init = NULL;
 			pr_debug("removing DRM workaround\n");
 			queue_delayed_work(exp_fn_ctrl.det_workqueue,
 					&exp_fn_ctrl.det_work,
-					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+					msecs_to_jiffies(5000));
 		}
 	}
 
@@ -6782,6 +6811,12 @@ release_mutex:
 	mutex_unlock(&exp_fn_ctrl.list_mutex);
 
 	return;
+
+exit_reschedule:
+	pr_debug("re-scheduling...\n");
+	queue_delayed_work(exp_fn_ctrl.det_workqueue,
+			&exp_fn_ctrl.det_work,
+			msecs_to_jiffies(EXP_FN_DET_INTERVAL));
 }
 
 /**
@@ -7396,8 +7431,8 @@ err_gpio_free:
 	}
 
 err_mem_free:
-	kfree(rmi4_data);
 	i2c_set_clientdata(rmi4_data->i2c_client, NULL);
+	kfree(rmi4_data);
 
 	return retval;
 }
@@ -7512,6 +7547,7 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	}
 
 	exp_fn_ctrl.rmi4_data_ptr = rmi4_data;
+	exp_fn_ctrl.i2c_client = client;
 	mutex_unlock(&exp_fn_ctrl_mutex);
 
 	if (!rmi4_data->splash_screen_mode)
