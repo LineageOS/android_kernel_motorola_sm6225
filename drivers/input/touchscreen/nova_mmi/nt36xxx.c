@@ -330,8 +330,6 @@ int32_t nvt_check_fw_reset_state(RST_COMPLETE_STATE check_reset_state)
 	int32_t retry = 0;
 	NVT_LOG("enter-%s\n", __func__);
 	while (1) {
-		msleep(10);
-
 		/*---read reset state---*/
 		buf[0] = EVENT_MAP_RESET_COMPLETE;
 		buf[1] = 0x00;
@@ -348,6 +346,7 @@ int32_t nvt_check_fw_reset_state(RST_COMPLETE_STATE check_reset_state)
 			ret = -1;
 			break;
 		}
+		msleep(10);
 	}
 
 	return ret;
@@ -1196,6 +1195,13 @@ static int8_t nvt_ts_check_chip_ver_trim(void)
 #endif
 				ts->mmap = trim_id_table[list].mmap;
 				ts->carrier_system = trim_id_table[list].carrier_system;
+				if (list == 1) /* NT36672A */
+					/*
+					This kind of IC dose not need trigger
+					reset in resume.
+					Because TP core is reset with LCD.
+					*/
+					ts->skip_reset_in_resume = true;
 				ret = 0;
 				goto out;
 			} else {
@@ -1626,14 +1632,16 @@ static int32_t nvt_ts_resume(struct device *dev)
 		return 0;
 	}
 
-	msleep(10);
+	if (!ts->skip_reset_in_resume)
+		msleep(10);
 
 	mutex_lock(&ts->lock);
 
 	NVT_LOG("start\n");
 
 	/* please make sure display reset(RESX) sequence and mipi dsi cmds sent before this*/
-	nvt_bootloader_reset();
+	if (!ts->skip_reset_in_resume)
+		nvt_bootloader_reset();
 	res = nvt_check_fw_reset_state(RESET_STATE_REK);
 
 	NVT_LOG("enter-%s-----res=%d\n", __func__, res);
@@ -1648,7 +1656,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 #endif
 	bTouchIsAwake = 1;
 #if NVT_TOUCH_FW
-		ts->suspended = 0;
+	ts->suspended = 0;
 #endif
 
 	mutex_unlock(&ts->lock);
