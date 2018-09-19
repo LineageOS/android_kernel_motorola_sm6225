@@ -112,6 +112,7 @@ struct nvt_ts_data {
 	const struct nvt_ts_mem_map *mmap;
 	uint8_t carrier_system;
 	uint16_t nvt_pid;
+	bool skip_reset_in_resume;
 #if NVT_TOUCH_FW
 	int8_t product_id[10];
 	uint8_t suspended;
