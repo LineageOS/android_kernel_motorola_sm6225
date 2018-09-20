@@ -1467,7 +1467,7 @@ module_exit(sx9325_exit);
 
 MODULE_AUTHOR("Semtech Corp. (http://www.semtech.com/)");
 MODULE_DESCRIPTION("SX9325 Capacitive Touch Controller Driver");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.1");
 
 #ifdef USE_THREADED_IRQ
