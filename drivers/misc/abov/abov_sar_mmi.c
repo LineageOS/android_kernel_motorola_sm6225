@@ -1888,7 +1888,7 @@ module_exit(abov_exit);
 
 MODULE_AUTHOR("ABOV Corp.");
 MODULE_DESCRIPTION("ABOV Capacitive Touch Controller Driver");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.1");
 
 #ifdef USE_THREADED_IRQ
