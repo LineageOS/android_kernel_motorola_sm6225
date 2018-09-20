@@ -955,10 +955,10 @@ static void ps_notify_callback_work(struct work_struct *work)
 	mutex_lock(&this->mutex);
 	if (mEnabled) {
 		LOG_INFO("Usb insert,going to force calibrate\n");
-		ret = write_register(this, SX932x_CTRL1_REG, 0x00);
+		ret = write_register(this, SX932x_CTRL1_REG, 0x20);
 		if (ret < 0)
 			LOG_ERR(" Usb insert,calibrate cap sensor failed\n");
-		msleep(100);
+		msleep(1000);
 		ret = write_register(this, SX932x_CTRL1_REG,
 				this->board->cust_prox_ctrl0);
 		if (ret < 0)
