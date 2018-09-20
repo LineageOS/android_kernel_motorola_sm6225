@@ -271,6 +271,7 @@ struct mmi_pl_chg_manager {
 	int			pps_select_pdo_retry_cont;
 	bool			vbus_present;
 	bool			force_pmic_chg;
+	bool			enter_sw_loop;
 	bool			pd_pps_support;
 	bool			pd_pps_mitigation;
 	bool			flashc_alarm;
@@ -756,7 +757,7 @@ static void mmi_pl_pm_move_state(struct mmi_pl_chg_manager *chip, pm_sm_state_t 
 #define HEARTBEAT_SHORT_DELAY_MS 500
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANNEL -1
-#define FLASHC_TAPPER_COUNT 5
+#define FLASHC_TAPPER_COUNT 3
 #define PPS_SELECT_PDO_RETRY_COUNT 3
 #define FLASHC_ALARM_RECOVERY_COUNT 5
 #define FLASHC_FAULT_RECOVERY_COUNT 10
@@ -1051,7 +1052,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			&& chip->flashc_cc_max_curr_pre >
 					chip->pmic_step_curr
 			&& chrg_step_max < STEP_NORMAL
-			&& !chip->force_pmic_chg) {
+			&& !chip->force_pmic_chg
+			&& !chip->enter_sw_loop) {
 
 			mmi_pl_dbg(chip, PR_MOTO,
 						"battery volt %d, start flash charger\n",
@@ -1308,7 +1310,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 		 if (ibat_curr < chip->flashc_cc_max_curr_pre
 				&& chip->request_volt < chip->pps_voltage_max
-				&& chip->flashc_cc_tunning_cnt >
+				&& chip->flashc_cc_tunning_cnt >=
 					PPS_SELECT_PDO_RETRY_COUNT) {
 
 			if ((chip->request_volt + chip->sys_configs.flashc_volt_up_steps)
@@ -1430,7 +1432,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 		if (ibat_curr <= chip->flashc_cv_taper_curr_pre ||
 			ibat_curr < chip->pmic_step_curr) {
-			if (chip->flashc_taper_cnt > FLASHC_TAPPER_COUNT) {
+			if (chip->flashc_taper_cnt >= FLASHC_TAPPER_COUNT) {
 				if (ibat_curr < chip->pmic_step_curr) {
 					mmi_pl_dbg(chip, PR_MOTO,
 								"Ready to quit flashc CV charger, "
@@ -1506,8 +1508,11 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			mmi_pl_pm_pmic_enable(chip, false);
 			msleep(100);
 			mmi_pl_pm_pmic_enable(chip, true);
-			mmi_pl_pm_check_pmic_enable(chip);			
+			mmi_pl_pm_check_pmic_enable(chip);
 			mmi_pl_pm_move_state(chip, PM_STATE_SW_LOOP);
+			chip->enter_sw_loop = true;
+			mmi_pl_dbg(chip, PR_MOTO,
+					"enter pmic charge loop\n");
 		}
 
 		break;
@@ -1710,6 +1715,7 @@ static void cancel_sm(struct mmi_pl_chg_manager *chip, int ms)
 	chip->pps_current_max = 0;
 	chip->pps_voltage_max = 0;
 	chip->force_pmic_chg = false;
+	chip->enter_sw_loop = false;
 	memset(chip->mmi_pdo_info, 0,
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
 }
