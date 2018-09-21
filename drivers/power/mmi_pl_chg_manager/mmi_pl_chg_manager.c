@@ -2164,6 +2164,12 @@ static void create_sysfs_entries(struct mmi_pl_chg_manager *chip)
 		mmi_pl_err(chip, "Couldn't create factory_pmic_enable\n");
 }
 
+static void remove_sysfs_entries(struct mmi_pl_chg_manager *chip)
+{
+	device_remove_file(chip->dev, &dev_attr_flashc_vbat);
+	device_remove_file(chip->dev, &dev_attr_factory_flashc_enable);
+	device_remove_file(chip->dev, &dev_attr_factory_pmic_enable);
+}
 
 static enum power_supply_property mmi_pl_pm_props[] = {
 	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
@@ -2386,6 +2392,12 @@ cleanup:
 static int mmi_pl_chg_manager_remove(struct platform_device *pdev)
 {
 	struct mmi_pl_chg_manager *chip =  platform_get_drvdata(pdev);
+
+	remove_sysfs_entries(chip);
+	cancel_delayed_work_sync(&chip->mmi_pl_sm_work);
+
+	power_supply_unreg_notifier(&chip->psy_nb);
+	power_supply_unregister(chip->mmi_pl_pm_psy );
 
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);
