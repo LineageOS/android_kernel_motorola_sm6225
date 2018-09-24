@@ -103,6 +103,7 @@ struct mod_muc_data_t {
 	struct power_supply *bms_psy;
 	struct power_supply *usb_psy;
 	struct power_supply *mmi_psy;
+	struct power_supply *dc_psy;
 	atomic_t sleep_req_pending;
 	struct notifier_block ps_nb;
 };
@@ -599,7 +600,8 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 
 	if(!mm_data->batt_psy ||
 		!mm_data->bms_psy ||
-		!mm_data->usb_psy)
+		!mm_data->usb_psy ||
+		!mm_data->dc_psy)
 		return -1;
 
 	memset(&pstatus, 0x00, sizeof(struct power_status_t));
@@ -657,6 +659,10 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 		POWER_SUPPLY_PROP_HW_CURRENT_MAX, &pval))
 		pstatus.mod_input_current =
 			pval.intval > 0 ? (uint32_t)pval.intval : 0;
+
+	if (!power_supply_get_property(mm_data->dc_psy,
+		POWER_SUPPLY_PROP_PRESENT, &pval))
+		pstatus.dc_in = pval.intval ? 1 : 0;
 
 	/* TODO */
 	/* pstatus.reverse_boost;
@@ -1406,6 +1412,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	mm_data->bms_psy = power_supply_get_by_name("bms");
 	mm_data->usb_psy = power_supply_get_by_name("usb");
 	mm_data->mmi_psy = power_supply_get_by_name("mmi_battery");
+	mm_data->dc_psy = power_supply_get_by_name("dc");
 
 	mm_data->ps_nb.notifier_call = muc_uart_ps_notifier_cb;
 	if (power_supply_reg_notifier(&mm_data->ps_nb))
@@ -1445,6 +1452,7 @@ static int muc_uart_remove(struct platform_device *pdev)
 	power_supply_put(mm_data->bms_psy);
 	power_supply_put(mm_data->usb_psy);
 	power_supply_put(mm_data->mmi_psy);
+	power_supply_put(mm_data->dc_psy);
 	del_timer(&mm_data->idle_timer);
 	del_timer(&mm_data->ack_timer);
 	del_timer(&mm_data->sleep_req_timer);
