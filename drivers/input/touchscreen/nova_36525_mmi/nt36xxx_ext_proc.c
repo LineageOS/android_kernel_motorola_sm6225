@@ -691,4 +691,31 @@ int32_t nvt_extra_proc_init(void)
 
 	return 0;
 }
+
+void nvt_extra_proc_remove(void)
+{
+	if (NVT_proc_fw_version_entry != NULL) {
+		remove_proc_entry(NVT_FW_VERSION, NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  NVT_FW_VERSION);
+	}
+
+	if (NVT_proc_baseline_entry != NULL) {
+		remove_proc_entry(NVT_BASELINE, NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  NVT_BASELINE);
+	}
+
+	if (NVT_proc_raw_entry != NULL) {
+		remove_proc_entry(NVT_RAW, NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  NVT_RAW);
+	}
+
+	if (NVT_proc_diff_entry != NULL) {
+		remove_proc_entry(NVT_DIFF, NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  NVT_DIFF);
+	}
+}
 #endif

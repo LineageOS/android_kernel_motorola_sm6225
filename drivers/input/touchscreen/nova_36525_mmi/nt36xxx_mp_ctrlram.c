@@ -1898,4 +1898,19 @@ int32_t nvt_mp_proc_init(void)
 	return ret;
 }
 
+void nvt_mp_proc_remove(void)
+{
+	if (NVT_proc_selftest_entry != NULL) {
+		remove_proc_entry("nvt_selftest", NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  "nvt_selftest");
+	}
+#if NVT_TOUCH_MP_LENOVO
+	if (NVT_proc_selftest_read_data != NULL) {
+		remove_proc_entry("nvt_read_data", NULL);
+		NVT_LOG("Removed %s under /proc\n",
+			  "nvt_read_data");
+	}
+#endif
+}
 #endif /* #if NVT_TOUCH_MP */
