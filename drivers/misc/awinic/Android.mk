@@ -11,4 +11,8 @@ else
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 endif
 
+ifeq ($(PRODUCT_HAS_AWINIC_HAPTIC),true)
+	KERNEL_CFLAGS += CONFIG_INPUT_AWINIC_HAPTIC=y
+endif
+
 include $(DLKM_DIR)/AndroidKernelModule.mk
