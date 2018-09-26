@@ -1610,6 +1610,7 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 static int drv2624_remove(struct i2c_client *client)
 {
 	struct drv2624_data *ctrl = i2c_get_clientdata(client);
+	int i = 0;
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioNRST))
 		gpio_free(ctrl->msPlatData.mnGpioNRST);
@@ -1617,8 +1618,15 @@ static int drv2624_remove(struct i2c_client *client)
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioINT))
 		gpio_free(ctrl->msPlatData.mnGpioINT);
 
-	misc_deregister(&drv2624_misc);
+	free_irq(client->irq, ctrl);
+	cancel_work_sync(&ctrl->vibrator_work);
 	drv2624_class_vibrator(ctrl, false);
+	wake_lock_destroy(&ctrl->wklock);
+	misc_deregister(&drv2624_misc);
+	for (i = 0; i < ARRAY_SIZE(drv2624_led_classdev_attrs); i++)
+		sysfs_remove_file(&ctrl->cdev.dev->kobj,
+				&drv2624_led_classdev_attrs[i].attr);
+	devm_led_classdev_unregister(ctrl->dev, &(ctrl->cdev));
 
 	return 0;
 }
