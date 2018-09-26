@@ -278,7 +278,7 @@ static void read_rawData(psx93XX_t this)
 	s32 diff;
 	u16 offset;
 	if(this){
-		for(csx =0; csx<USE_CHANNEL_NUM; csx++){
+		for(csx =0; csx<DEBUG_CHANNEL_NUM; csx++){
                         write_register(this,SX932x_CPSRD,csx);//here to check the CS1, also can read other channel		
                         read_register(this,SX932x_USEMSB,&msb);
                         read_register(this,SX932x_USELSB,&lsb);
