@@ -128,6 +128,9 @@
 /* useful channel number */
 #define USE_CHANNEL_NUM 3
 
+/* channel number need to debug */
+#define DEBUG_CHANNEL_NUM 4
+
 /* default settings */
 /* Channel enable: CS0:1,CS1:2,CS2:4,COMB:8
  * Defines the Active scan period :
