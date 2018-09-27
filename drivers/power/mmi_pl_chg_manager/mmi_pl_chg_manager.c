@@ -367,11 +367,9 @@ static void mmi_update_flashc_status(struct mmi_pl_chg_manager *chip)
 	int rc;
 	union power_supply_propval prop = {0,};
 
-	if (!chip->flashc_psy) {
-		chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
-		if (!chip->flashc_psy)
-			return;
-	}
+	chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
+	if (!chip->flashc_psy)
+		return;
 
 	rc = power_supply_get_property(chip->flashc_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
@@ -437,6 +435,7 @@ static void mmi_update_flashc_status(struct mmi_pl_chg_manager *chip)
 		chip->flashc_handle.die_therm_fault =
 				!!(prop.intval & DIE_THERM_FAULT_MASK);
 	}
+	power_supply_put(chip->flashc_psy);
 
 	mmi_pl_dbg(chip, PR_MOTO, "flash charger IC : ---- status update ---\n");
 	mmi_pl_dbg(chip, PR_MOTO, "vbat_volt %d \n",
@@ -499,19 +498,19 @@ static int mmi_pl_pm_flashc_enable(struct mmi_pl_chg_manager *chip, bool enable)
 	int rc;
 	union power_supply_propval prop = {0,};
 
-	if (!chip->flashc_psy) {
-		chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
-		if (!chip->flashc_psy)
-			return -ENODEV;
-	}
+	chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
+	if (!chip->flashc_psy)
+		return -ENODEV;
 
 	prop.intval = enable;
 	rc = power_supply_set_property(chip->flashc_psy,
 				POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
 	if (rc < 0) {
 		mmi_pl_err(chip, "Couldn't disable flashc charging, rc=%d\n", rc);
+		power_supply_put(chip->flashc_psy);
 		return rc;
 	}
+	power_supply_put(chip->flashc_psy);
 
 	return rc;
 }
@@ -521,12 +520,10 @@ static int mmi_pl_pm_check_flashc_enable(struct mmi_pl_chg_manager *chip)
 	int rc;
 	union power_supply_propval prop = {0,};
 
+	chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
 	if (!chip->flashc_psy) {
-		chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
-		if (!chip->flashc_psy) {
-			chip->flashc_handle.charge_enabled = false;
-			return -ENODEV;
-		}
+		chip->flashc_handle.charge_enabled = false;
+		return -ENODEV;
 	}
 
 	rc = power_supply_get_property(chip->flashc_psy,
@@ -535,6 +532,8 @@ static int mmi_pl_pm_check_flashc_enable(struct mmi_pl_chg_manager *chip)
 		chip->flashc_handle.charge_enabled = !!prop.intval;
 	} else
 		chip->flashc_handle.charge_enabled = false;
+
+	power_supply_put(chip->flashc_psy);
 
 	return rc;
 }
@@ -2051,16 +2050,18 @@ static ssize_t flashc_vbat_show(struct device *dev,
 	union power_supply_propval prop = {0,};
 	struct mmi_pl_chg_manager *chip = dev_get_drvdata(dev);
 
-	if (!chip->flashc_psy) {
-		chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
-		if (!chip->flashc_psy)
-			return rc;
-	}
+	chip->flashc_psy = power_supply_get_by_name(chip->flashc_name);
+	if (!chip->flashc_psy)
+		return rc;
 
 	rc = power_supply_get_property(chip->flashc_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
-	if (rc)
+	if (rc) {
+		power_supply_put(chip->flashc_psy);
 		return rc;
+	}
+
+	power_supply_put(chip->flashc_psy);
 
 	return scnprintf(buf, FLASHC_SHOW_MAX_SIZE, "%d\n", prop.intval*1000);
 }
