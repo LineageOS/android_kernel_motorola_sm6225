@@ -1790,7 +1790,11 @@ static int abov_remove(struct i2c_client *client)
 	pabovXX_t this = i2c_get_clientdata(client);
 
 	pDevice = this->pDevice;
+	pplatData = client->dev.platform_data;
 	if (this && pDevice) {
+		power_supply_unreg_notifier(&this->ps_notif);
+		cancel_work_sync(&this->fw_update_work.worker);
+		cancel_work_sync(&this->ps_notify_work);
 #ifdef USE_SENSORS_CLASS
 		sensors_classdev_unregister(&sensors_capsensor_top_cdev);
 		sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
@@ -1803,17 +1807,14 @@ static int abov_remove(struct i2c_client *client)
 			regulator_put(this->board->cap_svdd);
 		}
 #endif
-
+		if (gpio_is_valid(pplatData ->irq_gpio))
+			gpio_free(pplatData ->irq_gpio);
 		if (this->board->cap_vdd_en) {
 			regulator_disable(this->board->cap_vdd);
 			regulator_put(this->board->cap_vdd);
 		}
-#ifdef USE_SENSORS_CLASS
-		sensors_classdev_unregister(&sensors_capsensor_top_cdev);
-		sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
-#endif
 		sysfs_remove_group(&client->dev.kobj, &abov_attr_group);
-		pplatData = client->dev.platform_data;
+		class_unregister(&capsense_class);
 		if (pplatData && pplatData->exit_platform_hw)
 			pplatData->exit_platform_hw();
 		kfree(this->pDevice);
