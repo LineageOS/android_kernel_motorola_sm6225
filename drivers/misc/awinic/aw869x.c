@@ -486,6 +486,11 @@ static int aw869x_haptic_stop(struct aw869x *aw869x)
     aw869x_haptic_play_mode(aw869x, AW869X_HAPTIC_STANDBY_MODE);
     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
             AW869X_BIT_SYSCTRL_WORK_MODE_MASK, AW869X_BIT_SYSCTRL_STANDBY);
+    msleep(1);
+    /* RAMINIT Disable */
+    aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL,
+        AW869X_BIT_SYSCTRL_RAMINIT_MASK, AW869X_BIT_SYSCTRL_RAMINIT_OFF);
+    /* RAMINIT Disable End */
     return 0;
 }
 
@@ -493,7 +498,12 @@ static int aw869x_haptic_start(struct aw869x *aw869x)
 {
     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
             AW869X_BIT_SYSCTRL_WORK_MODE_MASK, AW869X_BIT_SYSCTRL_ACTIVE);
-    aw869x_i2c_write(aw869x, AW869X_REG_PROC_CTRL, 
+    /* RAMINIT Enable */
+    aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL,
+            AW869X_BIT_SYSCTRL_RAMINIT_MASK, AW869X_BIT_SYSCTRL_RAMINIT_EN);
+    /* RAMINIT Enable End */
+    aw869x_interrupt_clear(aw869x);
+    aw869x_i2c_write(aw869x, AW869X_REG_PROC_CTRL,
             AW869X_BIT_PROC_CTRL_GO);
     return 0;
 }
