@@ -54,7 +54,11 @@ struct navi_cmd_struct cmd_list;
  *               Don't care properties.
  */
 
+#ifdef CONFIG_INPUT_EGISTEC_FPS_NAVI_VERTICAL
+#define ENABLE_SWIPE_UP_DOWN	ENABLE
+#else
 #define ENABLE_SWIPE_UP_DOWN	DISABLE
+#endif
 #ifdef CONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON
 #define ENABLE_SWIPE_LEFT_RIGHT	ENABLE
 #else
