@@ -2537,12 +2537,42 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 								node);
 		if (IS_ERR(info->usbc_det_gpio[0]))
 			info->usbc_det_gpio[0] = 0;
+		else {
+			ret = gpio_export(desc_to_gpio(info->usbc_det_gpio[0]),
+					false);
+			if (ret < 0) {
+				dev_err(info->dev,
+					"Failed to export usbsel gpio\n");
+			} else {
+				ret = gpio_export_link(info->dev,
+						"usbsel",
+						desc_to_gpio(info->usbc_det_gpio[0]));
+				if (ret < 0)
+					dev_err(info->dev,
+						"Failed to create usbsel symlink\n");
+			}
+		}
 
 		info->usbc_det_gpio[1] = devm_get_gpiod_from_child(madera->dev,
 								"cirrus,hsdet",
 								node);
 		if (IS_ERR(info->usbc_det_gpio[1]))
 			info->usbc_det_gpio[1] = 0;
+		else {
+			ret = gpio_export(desc_to_gpio(info->usbc_det_gpio[1]),
+					false);
+			if (ret < 0) {
+				dev_err(info->dev,
+					"Failed to export hsdet gpio\n");
+			} else {
+				ret = gpio_export_link(info->dev,
+						"hsdet",
+						desc_to_gpio(info->usbc_det_gpio[1]));
+				if (ret < 0)
+					dev_err(info->dev,
+						"Failed to create hsdet symlink\n");
+			}
+		}
 
 	}
 }
