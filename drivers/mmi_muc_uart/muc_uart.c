@@ -24,11 +24,41 @@
 #include <linux/timer.h>
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
+#include <linux/ipc_logging.h>
 #include <soc/qcom/mmi_boot_info.h>
 #include "muc_uart.h"
 #include "mmi_uart.h"
 #include "mmi_char.h"
 #include "muc_protocol.h"
+
+#ifdef CONFIG_IPC_LOGGING
+void *muc_ipc_log;
+#define MUC_IPC_LOG_PAGES 50
+#define MUC_DBG(msg, ...)					\
+	do {								\
+		if (muc_ipc_log) {	\
+			ipc_log_string(muc_ipc_log,			\
+				"[%s] " msg, __func__, ##__VA_ARGS__);	\
+		}							\
+	} while (0)
+#define MUC_ERR(msg, ...) \
+	do {								\
+		MUC_DBG(msg, ##__VA_ARGS__); \
+		pr_err("muc_uart: [%s] "msg, __func__, ##__VA_ARGS__); \
+	} while (0)
+#define MUC_LOG(msg, ...) \
+	do {								\
+		MUC_DBG(msg, ##__VA_ARGS__); \
+		pr_info("muc_uart: [%s] "msg, __func__, ##__VA_ARGS__); \
+	} while (0)
+#else
+#define MUC_DBG(msg, ...) \
+	pr_info("muc_uart: [%s] "msg, __func__, ##__VA_ARGS__)
+#define MUC_ERR(msg, ...) \
+	pr_err("muc_uart: [%s] "msg, __func__, ##__VA_ARGS__)
+#define MUC_LOG(msg, ...) \
+	pr_info("muc_uart: [%s] "msg, __func__, ##__VA_ARGS__)
+#endif
 
 #define DRIVERNAME	"muc_uart"
 
@@ -109,7 +139,7 @@ struct mod_muc_data_t {
 };
 
 /* How long until we move on without an ack */
-#define MUC_UART_ACK_TIME 500
+#define MUC_UART_ACK_TIME 2000
 #define WRITE_CREDIT_INIT 100
 static DEFINE_SPINLOCK(write_q_lock);
 static DEFINE_SPINLOCK(read_q_lock);
@@ -124,34 +154,6 @@ MODULE_PARM_DESC(param_guid, "ro.mot.build.guid");
 static char *param_vers = "";
 module_param(param_vers, charp, S_IRUSR);
 MODULE_PARM_DESC(param_vers, "ro.build.fingerprint");
-
-static ktime_t time_send_start;
-static ktime_t time_send_end;
-static ktime_t time_uart_start;
-static ktime_t time_uart_end;
-static ktime_t time_ack_rxed;
-static ktime_t time_rxed;
-static ktime_t time_next_send;
-
-static void print_times(void)
-{
-	/* TTY to ACK */
-    printk("mmi_uart time: TTY to ACK: %lld\n",
-		(long long)ktime_to_ns(ktime_sub(time_ack_rxed,
-		time_send_start)));
-	/* UART TX */
-	printk("mmi_uart time: UART Tx: %lld\n",
-		(long long)ktime_to_ns(ktime_sub(time_uart_end,
-		time_uart_start)));
-	/* TIME to Rx */
-	printk("mmi_uart time: Time to Rx: %lld\n",
-		(long long)ktime_to_ns(ktime_sub(time_rxed,
-		time_uart_end)));
-	/* TIME FOR ACK */
-	printk("mmi_uart time: Time for ACK: %lld\n",
-		(long long)ktime_to_ns(ktime_sub(time_ack_rxed,
-		time_uart_end)));
-}
 
 #if MUC_UART_SEND_SLEEP_ON_IDLE
 static inline void reset_idle_timer(struct mod_muc_data_t *mm_data)
@@ -182,13 +184,10 @@ static inline void set_wait_for_ack(struct mod_muc_data_t *mm_data,
 static inline void clear_wait_for_ack(struct mod_muc_data_t *mm_data)
 {
 	if (mm_data) {
-		pr_info("muc_uart processed an ack\n");
-		time_ack_rxed = ktime_get();
-		print_times();
 		del_timer(&mm_data->ack_timer);
 		atomic_set(&mm_data->waiting_for_ack, 0);
 		atomic_add_unless(&mm_data->write_credits, 1, 100);
-		pr_info("muc_uart clear_wait_for_ack, num credits: %d\n",
+		MUC_DBG("got an ack, num credits: %d\n",
 			atomic_read(&mm_data->write_credits));
 		cancel_delayed_work(&mm_data->write_work);
 		queue_delayed_work(mm_data->write_wq,
@@ -366,12 +365,8 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 	*(uint16_t *)(pkt + pkt_size - sizeof(calc_crc)) =
 		cpu_to_le16(calc_crc);
 
-	pr_info("muc_uart sending message type 0x%x\n", cmd);
-	time_uart_start = ktime_get();
 	ret = mmi_uart_send(mm_data->uart_data, pkt, pkt_size);
 	kfree(pkt);
-	time_uart_end = ktime_get();
-	pr_info("muc_uart message sent\n");
 
 	mmi_uart_clear_tx_busy(mm_data->uart_data);
 
@@ -384,8 +379,6 @@ static int muc_uart_send(struct mod_muc_data_t *mm_data,
 		 */
 		clear_sleep_req_pending(mm_data);
 	}
-
-	time_send_end = ktime_get();
 
 	return ret;
 }
@@ -405,7 +398,7 @@ static int __muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 
 	/* TODO this should probably panic */
 	if (atomic_dec_if_positive(&mm_data->write_credits) < 0)
-		pr_err("muc_uart_queue_send: out of credits! "
+		MUC_ERR("out of credits! "
 			"queue size is: %d\n", mm_data->write_q_size);
 
 	write_data = kmalloc(sizeof(*write_data), GFP_ATOMIC);
@@ -440,8 +433,6 @@ static int __muc_uart_queue_send(struct mod_muc_data_t *mm_data,
 	mm_data->write_q_size++;
 	spin_unlock_irqrestore(&write_q_lock, flags);
 
-	pr_info("muc_uart added message to queue\n");
-
 	if (!atomic_read(&mm_data->waiting_for_ack)) {
 		cancel_delayed_work(&mm_data->write_work);
 		queue_delayed_work(mm_data->write_wq,
@@ -469,13 +460,13 @@ static void muc_uart_send_work(struct work_struct *w)
 	unsigned long flags;
 	int ret;
 
-	time_next_send = ktime_get();
-
-	pr_info("muc_uart_send_work, num credits: %d\n",
-		atomic_read(&mm_data->write_credits));
-
-	if (atomic_read(&mm_data->waiting_for_ack))
+	if (atomic_read(&mm_data->waiting_for_ack)) {
+		MUC_DBG("waiting for an ack...");
 		return;
+	}
+
+	MUC_DBG("num credits remaining: %d\n",
+		atomic_read(&mm_data->write_credits));
 
 	spin_lock_irqsave(&write_q_lock, flags);
 	if (mm_data->write_data_q) {
@@ -493,7 +484,6 @@ static void muc_uart_send_work(struct work_struct *w)
 	spin_unlock_irqrestore(&write_q_lock, flags);
 
 	if (!write_data) {
-		pr_info("muc_uart muc_uart_send_work, q empty!\n");
 		return;
 	}
 
@@ -519,11 +509,11 @@ static void muc_uart_send_work(struct work_struct *w)
 	mutex_unlock(&tx_lock);
 
 	if (ret < 0) {
-		pr_err("muc_uart_send_work failed to send: %d\n", ret);
+		MUC_DBG("failed to send: %d\n", ret);
 		if (write_data->retries) {
 			write_data->retries--;
 			if (!write_data->retries) {
-				pr_err("muc_uart_send_work failed to send message.\n");
+				MUC_ERR("failed to send message %d\n", ret);
 				atomic_add_unless(&mm_data->write_credits, 1, 100);
 				goto destroy_msg;
 			}
@@ -578,13 +568,13 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		bootmode.boot_mode = NORMAL;
 	}
 
-	pr_info("muc_uart_send_bootmode sending AP bootmode %u\n",
+	MUC_DBG("sending AP bootmode %u\n",
 		bootmode.boot_mode);
-	pr_info("muc_uart_send_bootmode sending AP hwid 0x%x\n",
+	MUC_DBG("sending AP hwid 0x%x\n",
 		bootmode.hwid);
-	pr_info("muc_uart_send_bootmode (%zd) sending AP guid %s\n",
+	MUC_DBG("(%zd) sending AP guid %s\n",
 		sizeof(bootmode.ap_guid), bootmode.ap_guid);
-	pr_info("muc_uart_send_bootmode (%zd) sending AP vers %s\n",
+	MUC_DBG("(%zd) sending AP vers %s\n",
 		sizeof(bootmode.ap_fw_ver_str), bootmode.ap_fw_ver_str);
 
 	return muc_uart_queue_send(mm_data,
@@ -716,11 +706,11 @@ static void muc_uart_set_power_control(struct mod_muc_data_t *mm_data,
 	union power_supply_propval pval = {0};
 
 	if (!mm_data || !pwrctl || !mm_data->mmi_psy) {
-		pr_err("muc_uart No pwrctrl\n");
+		MUC_ERR("No pwrctrl\n");
 		return;
 	}
 
-	pr_info("muc_uart power control flow %s, voltage %u, current %u\n",
+	MUC_DBG("flow %s, voltage %u, current %u\n",
 		pctrl_names[pwrctl->flow],
 		pwrctl->voltage_uv,
 		pwrctl->current_ua);
@@ -879,9 +869,6 @@ int muc_uart_pb_write(struct platform_device *pdev,
 	struct mod_muc_data_t *mm_data =
 		platform_get_drvdata(pdev);
 
-	pr_info("muc_uart_send_packetbus: send pb msg size %zd.\n",
-		count);
-
 	/* Payload is freed after send work is done */
 	payload = kmalloc(count, GFP_KERNEL);
 	if (!payload)
@@ -890,7 +877,6 @@ int muc_uart_pb_write(struct platform_device *pdev,
 	if (copy_from_user(payload, buf, count))
 		return -EFAULT;
 
-	time_send_start = ktime_get();
 	return __muc_uart_queue_send(mm_data, PACKETBUS_PROT_MSG,
 		payload,count, true);
 }
@@ -902,7 +888,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 {
 	unsigned long flags;
 
-	pr_info("muc_uart_handle_message: got msg of type %x.\n", hdr->cmd);
+	MUC_DBG("rxed msg of type 0x%x.\n", hdr->cmd);
 	switch (hdr->cmd) {
 		case UART_SLEEP_REQ: {
 			spin_lock_irqsave(&write_q_lock, flags);
@@ -930,7 +916,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 					PACKETBUS_PROT_MSG|MSG_ACK_MASK,
 					NULL, 0);
 			} else {
-				pr_err("muc_uart_handle_message: Couldn't add packet to pb q!");
+				MUC_ERR("Couldn't add packet to pb q!\n");
 				muc_uart_send(mm_data,
 					PACKETBUS_PROT_MSG|MSG_NACK_MASK,
 					NULL, 0);
@@ -970,7 +956,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 		case MUC_FW_VERSION: {
 			if (payload_len) {
 				muc_uart_send(mm_data, MUC_FW_VERSION|MSG_ACK_MASK, NULL, 0);
-				pr_info("muc_uart_handle_message: muc_fw_ver: %.*s\n",
+				MUC_LOG("muc_fw_ver: %.*s\n",
 					(int)payload_len,
 					(char *)payload);
 			} else
@@ -983,8 +969,7 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			else if (hdr->cmd & MSG_NACK_MASK)
 				clear_wait_for_ack(mm_data);
 			else {
-				pr_err("muc_uart_handle_message: Unhandled type %d!",
-					hdr->cmd);
+				MUC_ERR("Unhandled type %d\n", hdr->cmd);
 				muc_uart_send(mm_data, hdr->cmd|MSG_NACK_MASK, NULL, 0);
 			}
 		}
@@ -1003,9 +988,6 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 	struct mod_muc_data_t *mm_data =
 		platform_get_drvdata(pdev);
 
-	pr_info("muc_uart received message\n");
-	time_rxed = ktime_get();
-
 	reset_idle_timer(mm_data);
 
 	/* Need at least a header to start */
@@ -1019,15 +1001,15 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 	/* Validate the payload size */
 	if (le16_to_cpu(hdr->payload_length) >
 		UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE) {
-		pr_err("%s: invalid len %zd\n", __func__, segment_size);
+		MUC_ERR("invalid len %zd\n", segment_size);
 		mmi_uart_report_rx_len_err(mm_data->uart_data);
 		return len;
 	}
 
 	/* Verify the magic number */
 	if (le16_to_cpu(hdr->magic) != MSG_MAGIC) {
-		pr_err("%s: invalid magic %x\n",
-			__func__, le16_to_cpu(hdr->magic));
+		MUC_ERR("invalid magic %x\n",
+			le16_to_cpu(hdr->magic));
 		mmi_uart_report_rx_mag_err(mm_data->uart_data);
 		return len;
 	}
@@ -1046,11 +1028,10 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 		print_hex_dump_debug("muc_uart rx (CRC error): ",
 			DUMP_PREFIX_OFFSET,
 			16, 1, data, content_size, true);
-		pr_err("%s: CRC mismatch, received: 0x%x, "
-			"calculated: 0x%x\n", __func__,
-			le16_to_cpu(rcvd_crc), calc_crc);
+		MUC_ERR("CRC mismatch, received: 0x%x, "
+			"calculated: 0x%x\n", le16_to_cpu(rcvd_crc), calc_crc);
 	} else {
-		pr_info("muc_uart rx: cmd=%x, magic=%x, "
+		MUC_DBG("cmd=%x, magic=%x, "
 			"payload_length=%x, len=%zd\n",
 			hdr->cmd, hdr->magic, hdr->payload_length,
 			content_size);
@@ -1087,7 +1068,7 @@ static void muc_uart_sleep_work(struct work_struct *w)
 		mmi_uart_set_tx_busy(mm_data->uart_data))
 		schedule_delayed_work(&mm_data->sleep_work, msecs_to_jiffies(500));
 	else {
-		pr_info("muc_uart_sleep_work: off.\n");
+		MUC_DBG("off.\n");
 #if MUC_UART_DISABLE_ON_SLEEP
 		if (mm_data->uart_pm_state) {
 			mmi_uart_do_pm(mm_data->uart_data, false);
@@ -1117,7 +1098,7 @@ static void muc_uart_wake_work(struct work_struct *w)
 		mmi_uart_set_tx_busy(mm_data->uart_data))
 		schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(500));
 	else {
-		pr_info("muc_uart_wake_work: on.\n");
+		MUC_DBG("on.\n");
 
 		if (!mm_data->uart_pm_state) {
 			mmi_uart_do_pm(mm_data->uart_data, true);
@@ -1217,13 +1198,11 @@ static int muc_uart_register_cb(struct platform_device *pdev,
 	if (!mm_data)
 		return 1;
 
-	pr_info("muc_uart_register_cb: register cb\n");
-
 	mm_data->uart_data = uart_data;
 	mmi_uart_open(uart_data);
 	schedule_delayed_work(&mm_data->wake_work, msecs_to_jiffies(0));
 
-	pr_info("muc_uart_register_cb: register ok\n");
+	MUC_LOG("register ok\n");
 
 	return 0;
 }
@@ -1300,7 +1279,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, mm_data);
 	psy_cfg.drv_data = mm_data;
 
-	pr_info("muc_uart_probe: probe start\n");
+	MUC_LOG("probe start\n");
 
 	INIT_DELAYED_WORK(&mm_data->wake_work, muc_uart_wake_work);
 	INIT_DELAYED_WORK(&mm_data->sleep_work, muc_uart_sleep_work);
@@ -1342,10 +1321,6 @@ static int muc_uart_probe(struct platform_device *pdev)
 			gpio_to_irq(mm_data->wake_in_gpio);
 	else
 		goto err2;
-
-	pr_info("muc_uart_probe: set gpio %d to irq %d.\n",
-		mm_data->wake_in_gpio,
-		mm_data->wake_irq);
 
 	if (devm_request_irq(&pdev->dev,
 		mm_data->wake_irq,
@@ -1422,7 +1397,13 @@ static int muc_uart_probe(struct platform_device *pdev)
 	kobject_uevent(&pdev->dev.kobj, KOBJ_ADD);
 	schedule_delayed_work(&mm_data->attach_work, msecs_to_jiffies(0));
 
-	pr_info("muc_uart_probe: probe done\n");
+	MUC_LOG("probe done\n");
+
+#ifdef CONFIG_IPC_LOGGING
+	muc_ipc_log = ipc_log_context_create(MUC_IPC_LOG_PAGES, "muc_uart", 0);
+	if (!muc_ipc_log)
+		MUC_ERR("Failed to create IPC logging context\n");
+#endif
 
 	return 0;
 err3:
@@ -1497,8 +1478,8 @@ static struct platform_driver muc_uart_driver = {
 
 int muc_uart_init(void)
 {
-	pr_info("muc_uart_init, guid: %s\n", param_guid);
-	pr_info("muc_uart_init, vers: %s\n", param_vers);
+	MUC_LOG("guid: %s\n", param_guid);
+	MUC_LOG("vers: %s\n", param_vers);
 	return platform_driver_register(&muc_uart_driver);
 }
 
