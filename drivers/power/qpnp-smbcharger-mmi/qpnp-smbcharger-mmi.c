@@ -55,6 +55,11 @@ enum {
 	USBIN_ADAPTER_ALLOW_5V_TO_12V	= 12,
 };
 
+#define REV_BST_THRESH 4700
+#define REV_BST_DROP 150
+#define REV_BST_MA -10
+#define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
+
 struct smb_mmi_chg_param {
 	const char	*name;
 	u16		reg;
@@ -1034,6 +1039,45 @@ static int smb_mmi_set_property(struct power_supply *psy,
 	return rc;
 }
 
+static int get_prop_batt_voltage_now(struct smb_mmi_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
+	return rc;
+}
+
+static int get_prop_batt_current_now(struct smb_mmi_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CURRENT_NOW, val);
+	return rc;
+}
+
+static int get_prop_usb_voltage_now(struct smb_mmi_charger *chg,
+				    union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->usb_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->usb_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
+	return rc;
+}
+
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
@@ -1044,13 +1088,17 @@ static void mmi_heartbeat_work(struct work_struct *work)
 						heartbeat_work.work);
 	int hb_resch_time;
 	union power_supply_propval pval;
-	int rc, usb_suspend, usbin_uv;
+	int rc, usb_suspend;
 	int batt_cap = 0;
 	int main_cap = 0;
 	int main_cap_full = 0;
 	int flip_cap = 0;
 	int flip_cap_full = 0;
 	int report_cap;
+	static int prev_vbus_mv = -1;
+	int batt_mv;
+	int batt_ma;
+	int usb_mv;
 
 	pr_err("SMBMMI: Heartbeat!\n");
 
@@ -1058,6 +1106,30 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		hb_resch_time = 1000;
 	else
 		hb_resch_time = 60000;
+
+	rc = get_prop_batt_voltage_now(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Batt Voltage rc = %d\n", rc);
+		goto sch_hb;
+	} else
+		batt_mv = pval.intval / 1000;
+
+	rc = get_prop_batt_current_now(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Batt Current rc = %d\n", rc);
+		goto sch_hb;
+	} else
+		batt_ma = pval.intval / 1000;
+
+	rc = get_prop_usb_voltage_now(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting USB Voltage rc = %d\n", rc);
+		goto sch_hb;
+	} else
+		usb_mv = pval.intval / 1000;
+
+	if (prev_vbus_mv == -1)
+		prev_vbus_mv = usb_mv;
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		rc = power_supply_get_property(chip->max_main_psy,
@@ -1116,18 +1188,33 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		}
 	}
 
+	if ((batt_mv >= usb_mv) && ((usb_mv*1000) > TWO_VOLT))  {
+		if (((usb_mv < REV_BST_THRESH) &&
+		    ((prev_vbus_mv - REV_BST_DROP) > usb_mv)) ||
+		    (batt_ma > REV_BST_MA)) {
+			pr_err("Reverse Boosted: Clear, USB Suspend\n");
+			if (chip->factory_mode)
+				smblib_set_usb_suspend(chip, true);
+			else
+				vote(chip->usb_icl_votable, BOOST_BACK_VOTER,
+				     true, 0);
+			msleep(50);
+			if (chip->factory_mode)
+				smblib_set_usb_suspend(chip, false);
+			else
+				vote(chip->usb_icl_votable, BOOST_BACK_VOTER,
+				     false, 0);
+		} else {
+			pr_err("Reverse Boosted: USB %d mV PUSB %d mV\n",
+				   usb_mv, prev_vbus_mv);
+		}
+	}
+	prev_vbus_mv = usb_mv;
+
 	if (chip->factory_mode) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
 		if (rc < 0)
 			goto sch_hb;
-
-		rc = power_supply_get_property(chip->usb_psy,
-					       POWER_SUPPLY_PROP_VOLTAGE_NOW,
-					       &pval);
-		if (rc < 0)
-			goto sch_hb;
-		else
-			usbin_uv = pval.intval;
 
 		rc = power_supply_get_property(chip->pc_port_psy,
 					       POWER_SUPPLY_PROP_ONLINE,
@@ -1135,9 +1222,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
-
-
-		if (pval.intval || (usb_suspend && (usbin_uv > TWO_VOLT))) {
+		if (pval.intval ||
+		    (usb_suspend && ((usb_mv*1000) > TWO_VOLT))) {
 			pr_debug("SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
