@@ -321,17 +321,8 @@ static ssize_t drv2624_store_activate(struct device *dev,
 	if (value != 0 && value != 1)
 		return count;
 
-	if (value) {
-		hrtimer_cancel(&ctrl->timer);
-		cancel_work_sync(&ctrl->vibrator_work);
-		schedule_work(&ctrl->vibrator_work);
-	} else {
+	if (value == 0)
 		drv2624_stop(ctrl);
-		if (ret < 0) {
-			pr_err("Error in disabling module, rc=%d\n", ret);
-			return ret;
-		}
-	}
 
 	return count;
 }
