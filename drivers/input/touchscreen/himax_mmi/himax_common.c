@@ -2779,12 +2779,15 @@ void himax_chip_common_deinit(void)
 	himax_debug_remove();
 #endif
 
-	remove_proc_entry(HIMAX_PROC_TOUCH_FOLDER, NULL);
 	himax_common_proc_deinit();
+	remove_proc_entry(HIMAX_PROC_TOUCH_FOLDER, NULL);
 
 	if (!ts->use_irq) {
 		hrtimer_cancel(&ts->timer);
 		destroy_workqueue(ts->himax_wq);
+	} else {
+		himax_int_enable(0);
+		free_irq(private_ts->client->irq, ts);
 	}
 
 	himax_sysfs_touchscreen(ts, false);
