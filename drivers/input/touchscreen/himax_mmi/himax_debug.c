@@ -2612,6 +2612,7 @@ void himax_touch_proc_deinit(void)
 	remove_proc_entry(HIMAX_PROC_DD_DEBUG_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_REGISTER_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_DIAG_FILE, himax_touch_proc_dir);
+	remove_proc_entry(HIMAX_PROC_DIAG_ARR_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_RESET_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_LAYOUT_FILE, himax_touch_proc_dir);
 	remove_proc_entry(HIMAX_PROC_INT_EN_FILE, himax_touch_proc_dir);
