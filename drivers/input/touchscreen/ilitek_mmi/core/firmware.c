@@ -92,7 +92,7 @@ struct flash_block_info {
 };
 
 struct flash_sector *g_flash_sector;
-struct flash_block_info g_flash_block_info[4];
+struct flash_block_info g_flash_block_info[6];
 struct core_firmware_data *core_firmware;
 
 static uint32_t HexToDec(char *pHex, int32_t nLength)
@@ -1205,8 +1205,8 @@ static int convert_hex_array(void)
 					g_flash_block_info[i].end_addr =
 					    (g_flash_block_info[i].end_addr << 8) | CTPM_FW[bindex + j];
 			}
-			start_addr = g_flash_block_info[i].start_addr;
-			end_addr = g_flash_block_info[i].end_addr;
+			start_addr = g_flash_block_info[i].start_addr & 0xffffff;
+			end_addr = g_flash_block_info[i].end_addr & 0xffffff;
 			g_flash_block_info[i].hex_crc = (CTPM_FW[64 + end_addr - 3] << 24) + (CTPM_FW[64 + end_addr - 2] << 16)
 			+ (CTPM_FW[64 + end_addr - 1] << 8) + CTPM_FW[64 + (end_addr)];
 			g_flash_block_info[i].block_crc = tddi_check_data(start_addr, end_addr - start_addr - crc_byte_len + 1);
