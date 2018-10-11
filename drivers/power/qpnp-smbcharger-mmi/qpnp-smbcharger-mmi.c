@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <linux/alarmtimer.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
@@ -33,6 +34,11 @@
 #define TYPEC_BASE	0X1500
 #define MISC_BASE	0x1600
 
+#define BATTERY_CHARGER_STATUS_1_REG		(CHGR_BASE + 0x06)
+#define BATTERY_CHARGER_STATUS_MASK		(GENMASK(2, 0))
+
+#define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
+#define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
 #define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
 #define USBIN_ICL_OVERRIDE_BIT			BIT(0)
 #define USBIN_ICL_OPTIONS_REG			(USBIN_BASE + 0x66)
@@ -59,6 +65,83 @@ enum {
 #define REV_BST_DROP 150
 #define REV_BST_MA -10
 #define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
+#define MMI_HB_VOTER			"MMI_HB_VOTER"
+#define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
+#define HYST_STEP_MV 50
+#define DEMO_MODE_HYS_SOC 5
+#define DEMO_MODE_VOLTAGE 4000
+#define WARM_TEMP 45
+#define COOL_TEMP 0
+
+enum {
+	TRICKLE_CHARGE = 0,
+	PRE_CHARGE,
+	FAST_CHARGE,
+	FULLON_CHARGE,
+	TAPER_CHARGE,
+	TERMINATE_CHARGE,
+	INHIBIT_CHARGE,
+	DISABLE_CHARGE,
+};
+
+enum {
+	INHIBIT_CHARGE_V5 = 0,
+	TRICKLE_CHARGE_V5,
+	PRE_CHARGE_V5,
+	FAST_CHARGE_V5,
+	FULLON_CHARGE_V5,
+	TAPER_CHARGE_V5,
+	TERMINATE_CHARGE_V5,
+	PAUSE_CHARGE_V5,
+	DISABLE_CHARGE_V5,
+};
+
+struct mmi_temp_zone {
+	int		temp_c;
+	int		norm_mv;
+	int		fcc_max_ma;
+	int		fcc_norm_ma;
+};
+
+#define MAX_NUM_STEPS 10
+enum mmi_temp_zones {
+	ZONE_FIRST = 0,
+	/* states 0-9 are reserved for zones */
+	ZONE_LAST = MAX_NUM_STEPS + ZONE_FIRST - 1,
+	ZONE_HOT,
+	ZONE_COLD,
+	ZONE_NONE = 0xFF,
+};
+
+enum mmi_chrg_step {
+	STEP_MAX,
+	STEP_NORM,
+	STEP_FULL,
+	STEP_FLOAT,
+	STEP_DEMO,
+	STEP_STOP,
+	STEP_NONE = 0xFF,
+};
+
+static char *stepchg_str[] = {
+	[STEP_MAX]		= "MAX",
+	[STEP_NORM]		= "NORMAL",
+	[STEP_FULL]		= "FULL",
+	[STEP_FLOAT]		= "FLOAT",
+	[STEP_DEMO]		= "DEMO",
+	[STEP_STOP]		= "STOP",
+	[STEP_NONE]		= "NONE",
+};
+
+struct smb_mmi_chg_status {
+	int batt_mv;
+	int batt_ma;
+	int batt_soc;
+	int batt_temp;
+	int usb_mv;
+	int charger_present;
+	int vbus_present;
+};
 
 struct smb_mmi_chg_param {
 	const char	*name;
@@ -116,6 +199,21 @@ struct smb_mmi_charger {
 	int			last_iusb_ua;
 	bool			factory_kill_armed;
 	int			gen_log_rate_s;
+
+	/* Charge Profile */
+	int			num_temp_zones;
+	struct mmi_temp_zone	*temp_zones;
+	enum mmi_temp_zones	pres_temp_zone;
+	enum mmi_chrg_step	pres_chrg_step;
+	int			chrg_taper_cnt;
+	int			batt_health;
+	int			base_fv_mv;
+	int			chrg_iterm;
+	int			vfloat_comp_mv;
+	struct wakeup_source	smb_mmi_hb_wake_source;
+	struct alarm		heartbeat_alarm;
+	bool			suspended;
+	bool			awake;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1039,28 +1137,120 @@ static int smb_mmi_set_property(struct power_supply *psy,
 	return rc;
 }
 
+#define MIN_TEMP_C -20
+#define MAX_TEMP_C 60
+#define MIN_MAX_TEMP_C 47
+#define HYSTERISIS_DEGC 2
+static bool mmi_find_temp_zone(struct smb_mmi_charger *chip, int temp_c)
+{
+	int prev_zone, num_zones;
+	struct mmi_temp_zone *zones;
+	int hotter_t, hotter_fcc;
+	int colder_t, colder_fcc;
+	int i;
+	int max_temp;
+
+	if (!chip) {
+		pr_debug("called before chip valid!\n");
+		return false;
+	}
+
+	zones = chip->temp_zones;
+	num_zones = chip->num_temp_zones;
+	prev_zone = chip->pres_temp_zone;
+
+	if (chip->max_chrg_temp >= MIN_MAX_TEMP_C)
+		max_temp = chip->max_chrg_temp;
+	else
+		max_temp = zones[num_zones - 1].temp_c;
+
+	if (prev_zone == ZONE_NONE) {
+		for (i = num_zones - 1; i >= 0; i--) {
+			if (temp_c >= zones[i].temp_c) {
+				if (i == num_zones - 1)
+					chip->pres_temp_zone = ZONE_HOT;
+				else
+					chip->pres_temp_zone = i + 1;
+				return true;
+			}
+		}
+		chip->pres_temp_zone = ZONE_COLD;
+		return true;
+	}
+
+	if (prev_zone == ZONE_COLD) {
+		if (temp_c >= MIN_TEMP_C + HYSTERISIS_DEGC)
+			chip->pres_temp_zone = ZONE_FIRST;
+	} else if (prev_zone == ZONE_HOT) {
+		if (temp_c <=  max_temp - HYSTERISIS_DEGC)
+			chip->pres_temp_zone = num_zones - 1;
+	} else {
+		if (prev_zone == ZONE_FIRST) {
+			hotter_fcc = zones[prev_zone + 1].fcc_max_ma;
+			colder_fcc = 0;
+			hotter_t = zones[prev_zone].temp_c;
+			colder_t = MIN_TEMP_C;
+		} else if (prev_zone == num_zones - 1) {
+			hotter_fcc = 0;
+			colder_fcc = zones[prev_zone - 1].fcc_max_ma;
+			hotter_t = zones[prev_zone].temp_c;
+			colder_t = zones[prev_zone - 1].temp_c;
+		} else {
+			hotter_fcc = zones[prev_zone + 1].fcc_max_ma;
+			colder_fcc = zones[prev_zone - 1].fcc_max_ma;
+			hotter_t = zones[prev_zone].temp_c;
+			colder_t = zones[prev_zone - 1].temp_c;
+		}
+
+		if (zones[prev_zone].fcc_max_ma < hotter_fcc)
+			hotter_t += HYSTERISIS_DEGC;
+
+		if (zones[prev_zone].fcc_max_ma < colder_fcc)
+			colder_t -= HYSTERISIS_DEGC;
+
+		if (temp_c < MIN_TEMP_C)
+			chip->pres_temp_zone = ZONE_COLD;
+		else if (temp_c >= max_temp)
+			chip->pres_temp_zone = ZONE_HOT;
+		else if (temp_c >= hotter_t)
+			chip->pres_temp_zone++;
+		else if (temp_c < colder_t)
+			chip->pres_temp_zone--;
+	}
+
+	if (prev_zone != chip->pres_temp_zone) {
+		pr_debug("Entered Temp Zone %d!\n",
+			   chip->pres_temp_zone);
+		return true;
+	}
+
+	return false;
+}
+
 static int get_prop_batt_voltage_now(struct smb_mmi_charger *chg,
+				     struct power_supply *psy,
 				     union power_supply_propval *val)
 {
 	int rc;
 
-	if (!chg->bms_psy)
+	if (!psy)
 		return -EINVAL;
 
-	rc = power_supply_get_property(chg->bms_psy,
+	rc = power_supply_get_property(psy,
 				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
 	return rc;
 }
 
 static int get_prop_batt_current_now(struct smb_mmi_charger *chg,
+				     struct power_supply *psy,
 				     union power_supply_propval *val)
 {
 	int rc;
 
-	if (!chg->bms_psy)
+	if (!psy)
 		return -EINVAL;
 
-	rc = power_supply_get_property(chg->bms_psy,
+	rc = power_supply_get_property(psy,
 				       POWER_SUPPLY_PROP_CURRENT_NOW, val);
 	return rc;
 }
@@ -1078,9 +1268,360 @@ static int get_prop_usb_voltage_now(struct smb_mmi_charger *chg,
 	return rc;
 }
 
+static int get_prop_batt_temp(struct smb_mmi_charger *chg,
+			      struct power_supply *psy,
+			      union power_supply_propval *val)
+{
+	int rc;
+
+	if (!psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(psy,
+				       POWER_SUPPLY_PROP_TEMP, val);
+	return rc;
+}
+
+static int get_prop_batt_capacity(struct smb_mmi_charger *chg,
+				  struct power_supply *psy,
+				  union power_supply_propval *val)
+{
+	int rc = -EINVAL;
+
+	if (psy)
+		rc = power_supply_get_property(psy,
+				POWER_SUPPLY_PROP_CAPACITY, val);
+	return rc;
+}
+
+static int get_prop_usb_present(struct smb_mmi_charger *chg,
+				union power_supply_propval *val)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read_mmi(chg, USBIN_INT_RT_STS, &stat);
+	if (rc < 0) {
+		pr_err("Couldn't read USBIN_RT_STS rc=%d\n", rc);
+		return rc;
+	}
+
+	val->intval = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
+
+	return 0;
+}
+
+static int get_prop_charger_present(struct smb_mmi_charger *chg,
+				    union power_supply_propval *val)
+{
+	int rc = -EINVAL;
+
+	val->intval = 0;
+
+	if (chg->usb_psy)
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_TYPEC_MODE, val);
+	if (rc < 0) {
+		pr_err("Couldn't read TypeC Mode rc=%d\n", rc);
+		return rc;
+	}
+
+	switch (val->intval) {
+	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		val->intval = 1;
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
+#define TAPER_COUNT 2
+#define TAPER_DROP_MA 100
+static bool mmi_has_current_tapered(struct smb_mmi_charger *chip,
+				    int batt_ma, int taper_ma)
+{
+	bool change_state = false;
+	int allowed_fcc, target_ma;
+
+	if (!chip) {
+		pr_debug("called before chip valid!\n");
+		return false;
+	}
+
+	allowed_fcc = get_effective_result(chip->fcc_votable) / 1000;
+
+	if (allowed_fcc >= taper_ma)
+		target_ma = taper_ma;
+	else
+		target_ma = allowed_fcc - TAPER_DROP_MA;
+
+	if (batt_ma < 0) {
+		batt_ma *= -1;
+		if (batt_ma <= target_ma)
+			if (chip->chrg_taper_cnt >= TAPER_COUNT) {
+				change_state = true;
+				chip->chrg_taper_cnt = 0;
+			} else
+				chip->chrg_taper_cnt++;
+		else
+			chip->chrg_taper_cnt = 0;
+	} else {
+		if (chip->chrg_taper_cnt >= TAPER_COUNT) {
+			change_state = true;
+			chip->chrg_taper_cnt = 0;
+		} else
+			chip->chrg_taper_cnt++;
+	}
+
+	return change_state;
+}
+
+bool mmi_charge_halted(struct smb_mmi_charger *chg)
+{
+	u8 stat;
+	int rc;
+	bool flag = false;
+
+	rc = smblib_read_mmi(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
+	if (rc < 0) {
+		pr_err("Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+			rc);
+		return flag;
+	}
+	stat = stat & BATTERY_CHARGER_STATUS_MASK;
+
+	if (chg->smb_version == PM8150B_SUBTYPE) {
+		switch (stat) {
+		case TERMINATE_CHARGE_V5:
+		case INHIBIT_CHARGE_V5:
+			flag = true;
+			break;
+		default:
+			break;
+		}
+	} else {
+		switch (stat) {
+		case TERMINATE_CHARGE:
+		case INHIBIT_CHARGE:
+			flag = true;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return flag;
+}
+
+static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
+						      ktime_t now)
+{
+	struct smb_mmi_charger *chip = container_of(alarm,
+						    struct smb_mmi_charger,
+						    heartbeat_alarm);
+
+	pr_err("SMBMMI: HB alarm fired\n");
+
+	__pm_stay_awake(&chip->smb_mmi_hb_wake_source);
+	cancel_delayed_work(&chip->heartbeat_work);
+	/* Delay by 500 ms to allow devices to resume. */
+	schedule_delayed_work(&chip->heartbeat_work,
+			      msecs_to_jiffies(500));
+
+	return ALARMTIMER_NORESTART;
+}
+
+static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
+				struct smb_mmi_chg_status *stat)
+{
+	int target_fcc;
+	int target_fv;
+	int max_fv_mv;
+	struct mmi_temp_zone *zone;
+
+	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
+		" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
+		stat->batt_mv,
+		stat->batt_ma,
+		stat->batt_soc,
+		stat->batt_temp,
+		stat->usb_mv,
+		stat->charger_present,
+		stat->vbus_present);
+
+	if (!chip->temp_zones) {
+		pr_debug("SMBMMI: Skipping SM since No Temp Zone Defined!\n");
+		return;
+	}
+
+	if (chip->base_fv_mv == 0) {
+		chip->base_fv_mv = get_effective_result(chip->fv_votable);
+		chip->base_fv_mv /= 1000;
+		vote(chip->fv_votable,
+		     BATT_PROFILE_VOTER, false, 0);
+	}
+	max_fv_mv = chip->base_fv_mv;
+
+	mmi_find_temp_zone(chip, stat->batt_temp);
+	zone = &chip->temp_zones[chip->pres_temp_zone];
+
+	if (!stat->charger_present) {
+		chip->pres_chrg_step = STEP_NONE;
+	} else if ((chip->pres_temp_zone == ZONE_HOT) ||
+		   (chip->pres_temp_zone == ZONE_COLD)) {
+		chip->pres_chrg_step = STEP_STOP;
+	} else if (chip->demo_mode) {
+		/* TODO: Ignore Demo Mode for now */
+	} else if ((chip->pres_chrg_step == STEP_NONE) ||
+		   (chip->pres_chrg_step == STEP_STOP)) {
+		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
+			if (zone->fcc_norm_ma)
+				chip->pres_chrg_step = STEP_NORM;
+			else
+				chip->pres_chrg_step = STEP_STOP;
+		} else
+			chip->pres_chrg_step = STEP_MAX;
+	} else if (chip->pres_chrg_step == STEP_MAX) {
+		if (!zone->norm_mv) {
+			/* No Step in this Zone */
+			chip->chrg_taper_cnt = 0;
+			if ((stat->batt_mv + HYST_STEP_MV) >= max_fv_mv)
+				chip->pres_chrg_step = STEP_NORM;
+			else
+				chip->pres_chrg_step = STEP_MAX;
+		} else if ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv) {
+			chip->chrg_taper_cnt = 0;
+			chip->pres_chrg_step = STEP_MAX;
+		} else if (!zone->fcc_norm_ma)
+			chip->pres_chrg_step = STEP_FLOAT;
+		else if (mmi_has_current_tapered(chip, stat->batt_ma,
+						 zone->fcc_norm_ma)) {
+			chip->chrg_taper_cnt = 0;
+
+			if (mmi_charge_halted(chip)) {
+				vote(chip->chg_dis_votable,
+				     MMI_HB_VOTER, true, 0);
+				pr_err("SMBMMI: Charge Halt..Toggle\n");
+				msleep(50);
+			}
+
+			chip->pres_chrg_step = STEP_NORM;
+		}
+	} else if (chip->pres_chrg_step == STEP_NORM) {
+		if (!zone->fcc_norm_ma)
+			chip->pres_chrg_step = STEP_STOP;
+		else if ((stat->batt_soc < 100) ||
+			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
+			chip->chrg_taper_cnt = 0;
+			chip->pres_chrg_step = STEP_NORM;
+		} else if (mmi_has_current_tapered(chip, stat->batt_ma,
+						   chip->chrg_iterm)) {
+				chip->pres_chrg_step = STEP_FULL;
+		}
+	} else if (chip->pres_chrg_step == STEP_FULL) {
+		if (stat->batt_soc <= 99) {
+			chip->chrg_taper_cnt = 0;
+			chip->pres_chrg_step = STEP_NORM;
+		}
+	} else if (chip->pres_chrg_step == STEP_FLOAT) {
+		if ((zone->fcc_norm_ma) ||
+		    ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv))
+			chip->pres_chrg_step = STEP_MAX;
+	}
+
+	/* Take State actions */
+	switch (chip->pres_chrg_step) {
+	case STEP_FLOAT:
+	case STEP_MAX:
+		if (!zone->norm_mv)
+			target_fv = max_fv_mv;
+		else
+			target_fv = zone->norm_mv;
+		target_fcc = zone->fcc_max_ma;
+		break;
+	case STEP_FULL:
+		target_fv = max_fv_mv;
+		target_fcc = -EINVAL;
+		break;
+	case STEP_NORM:
+		target_fv = max_fv_mv + chip->vfloat_comp_mv;
+		target_fcc = zone->fcc_norm_ma;
+		break;
+	case STEP_NONE:
+		target_fv = max_fv_mv;
+		target_fcc = zone->fcc_norm_ma;
+		break;
+	case STEP_STOP:
+		target_fv = max_fv_mv;
+		target_fcc = -EINVAL;
+		break;
+	case STEP_DEMO:
+		target_fv = DEMO_MODE_VOLTAGE;
+		target_fcc = zone->fcc_max_ma;
+		break;
+	default:
+		break;
+	}
+
+	/* Votes for State */
+	vote(chip->fv_votable, MMI_HB_VOTER, true, target_fv * 1000);
+
+	vote(chip->chg_dis_votable, MMI_HB_VOTER,
+	     (target_fcc < 0), 0);
+
+	vote(chip->fcc_votable, MMI_HB_VOTER,
+	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
+
+	if (chip->pres_temp_zone == ZONE_HOT) {
+		chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+	} else if (chip->pres_temp_zone == ZONE_COLD) {
+		chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+	} else if (stat->batt_temp >= WARM_TEMP) {
+		if (chip->pres_chrg_step == STEP_STOP)
+			chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		else
+			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	} else if (stat->batt_temp <= COOL_TEMP) {
+		if (chip->pres_chrg_step == STEP_STOP)
+			chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+		else
+			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	} else
+		chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+
+	pr_info("SMBMMI: Step State = %s, Temp Zone %d, Health %d\n",
+		stepchg_str[(int)chip->pres_chrg_step],
+		chip->pres_temp_zone,
+		chip->batt_health);
+	pr_info("SMBMMI: IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
+		get_effective_result(chip->fv_votable),
+		get_effective_result(chip->chg_dis_votable),
+		get_effective_result(chip->fcc_votable),
+		get_effective_result(chip->usb_icl_votable));
+}
+
+static void smb_mmi_awake_vote(struct smb_mmi_charger *chip, bool awake)
+{
+	if (awake == chip->awake)
+		return;
+
+	chip->awake = awake;
+	if (awake)
+		pm_stay_awake(chip->dev);
+	else
+		pm_relax(chip->dev);
+}
+
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
+#define SMBCHG_HEARTBEAT_INTERVAL_NS	70000000000
+#define HEARTBEAT_DELAY_MS 60000
+#define HEARTBEAT_FACTORY_MS 1000
 static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct smb_mmi_charger *chip = container_of(work,
@@ -1096,40 +1637,76 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int flip_cap_full = 0;
 	int report_cap;
 	static int prev_vbus_mv = -1;
-	int batt_mv;
-	int batt_ma;
-	int usb_mv;
+	struct smb_mmi_chg_status chg_stat;
 
-	pr_err("SMBMMI: Heartbeat!\n");
+	/* Have not been resumed so wait another 100 ms */
+	if (chip->suspended) {
+		pr_err("SMBMMI: HB running before Resume\n");
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(100));
+		return;
+	}
 
+	smb_mmi_awake_vote(chip, true);
+	alarm_try_to_cancel(&chip->heartbeat_alarm);
+
+	pr_debug("SMBMMI: Heartbeat!\n");
 	if (chip->factory_mode)
-		hb_resch_time = 1000;
+		hb_resch_time = HEARTBEAT_FACTORY_MS;
 	else
-		hb_resch_time = 60000;
+		hb_resch_time = HEARTBEAT_DELAY_MS;
 
-	rc = get_prop_batt_voltage_now(chip, &pval);
+	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
 		pr_err("Error getting Batt Voltage rc = %d\n", rc);
 		goto sch_hb;
 	} else
-		batt_mv = pval.intval / 1000;
+		chg_stat.batt_mv = pval.intval / 1000;
 
-	rc = get_prop_batt_current_now(chip, &pval);
+	rc = get_prop_batt_current_now(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
 		pr_err("Error getting Batt Current rc = %d\n", rc);
 		goto sch_hb;
 	} else
-		batt_ma = pval.intval / 1000;
+		chg_stat.batt_ma = pval.intval / 1000;
 
 	rc = get_prop_usb_voltage_now(chip, &pval);
 	if (rc < 0) {
 		pr_err("Error getting USB Voltage rc = %d\n", rc);
 		goto sch_hb;
 	} else
-		usb_mv = pval.intval / 1000;
+		chg_stat.usb_mv = pval.intval / 1000;
 
 	if (prev_vbus_mv == -1)
-		prev_vbus_mv = usb_mv;
+		prev_vbus_mv = chg_stat.usb_mv;
+
+	rc = get_prop_batt_capacity(chip, chip->bms_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Batt Capacity rc = %d\n", rc);
+		return;
+	} else
+		chg_stat.batt_soc = pval.intval;
+
+	rc = get_prop_batt_temp(chip, chip->bms_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Batt Temperature rc = %d\n", rc);
+		return;
+	} else
+		chg_stat.batt_temp = pval.intval / 10;
+
+	rc = get_prop_usb_present(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting USB Present rc = %d\n", rc);
+		return;
+	} else
+		chg_stat.vbus_present = pval.intval;
+
+	rc = get_prop_charger_present(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Charger Present rc = %d\n", rc);
+		return;
+	} else
+		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		rc = power_supply_get_property(chip->max_main_psy,
@@ -1186,12 +1763,16 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			if (rc < 0)
 				pr_err("SMBMMI: Couldn't set batt psy cap\n");
 		}
+	} else {
+		/* Fall here for Basic Step and Thermal Charging */
+		mmi_basic_charge_sm(chip, &chg_stat);
 	}
 
-	if ((batt_mv >= usb_mv) && ((usb_mv*1000) > TWO_VOLT))  {
-		if (((usb_mv < REV_BST_THRESH) &&
-		    ((prev_vbus_mv - REV_BST_DROP) > usb_mv)) ||
-		    (batt_ma > REV_BST_MA)) {
+	if ((chg_stat.batt_mv >= chg_stat.usb_mv) &&
+	    ((chg_stat.usb_mv*1000) > TWO_VOLT)) {
+		if (((chg_stat.usb_mv < REV_BST_THRESH) &&
+		    ((prev_vbus_mv - REV_BST_DROP) > chg_stat.usb_mv)) ||
+		    (chg_stat.batt_ma > REV_BST_MA)) {
 			pr_err("Reverse Boosted: Clear, USB Suspend\n");
 			if (chip->factory_mode)
 				smblib_set_usb_suspend(chip, true);
@@ -1206,10 +1787,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 				     false, 0);
 		} else {
 			pr_err("Reverse Boosted: USB %d mV PUSB %d mV\n",
-				   usb_mv, prev_vbus_mv);
+				   chg_stat.usb_mv, prev_vbus_mv);
 		}
 	}
-	prev_vbus_mv = usb_mv;
+	prev_vbus_mv = chg_stat.usb_mv;
 
 	if (chip->factory_mode) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
@@ -1223,7 +1804,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			goto sch_hb;
 
 		if (pval.intval ||
-		    (usb_suspend && ((usb_mv*1000) > TWO_VOLT))) {
+		    (usb_suspend && ((chg_stat.usb_mv*1000) > TWO_VOLT))) {
 			pr_debug("SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
@@ -1237,7 +1818,15 @@ sch_hb:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
 
+	alarm_start_relative(&chip->heartbeat_alarm,
+			     ns_to_ktime(SMBCHG_HEARTBEAT_INTERVAL_NS));
+
+	if (!chg_stat.charger_present)
+		smb_mmi_awake_vote(chip, false);
+
+	__pm_relax(&chip->smb_mmi_hb_wake_source);
 }
+
 static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 				 void *v)
 {
@@ -1253,8 +1842,7 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 	if (val != PSY_EVENT_PROP_CHANGED)
 		return NOTIFY_OK;
 
-	if (chip->factory_mode &&
-	    psy &&
+	if (psy &&
 	    (strcmp(psy->desc->name, "usb") == 0)) {
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
@@ -1323,6 +1911,70 @@ static const struct power_supply_desc mmi_psy_desc = {
 	.num_properties	= ARRAY_SIZE(smb_mmi_battery_props),
 };
 
+static int parse_mmi_dt(struct smb_mmi_charger *chg)
+{
+	struct device_node *node = chg->dev->of_node;
+	int rc = 0;
+	int byte_len;
+	int i;
+
+	if (!node) {
+		pr_err("mmi dtree info. missing\n");
+		return -ENODEV;
+	}
+
+
+	if (of_find_property(node, "qcom,mmi-temp-zones", &byte_len)) {
+		if ((byte_len / sizeof(u32)) % 4) {
+			pr_err("DT error wrong mmi temp zones\n");
+			return -ENODEV;
+		}
+
+		chg->temp_zones = (struct mmi_temp_zone *)
+			devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
+
+		if (chg->temp_zones == NULL)
+			return -ENOMEM;
+
+		chg->num_temp_zones =
+			byte_len / sizeof(struct mmi_temp_zone);
+
+		rc = of_property_read_u32_array(node,
+				"qcom,mmi-temp-zones",
+				(u32 *)chg->temp_zones,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			return rc;
+		}
+
+		pr_err("mmi temp zones: Num: %d\n", chg->num_temp_zones);
+		for (i = 0; i < chg->num_temp_zones; i++) {
+			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+				"Step Volt %d mV, Full Rate %d mA, " \
+				"Taper Rate %d mA\n", i,
+				chg->temp_zones[i].temp_c,
+				chg->temp_zones[i].norm_mv,
+				chg->temp_zones[i].fcc_max_ma,
+				chg->temp_zones[i].fcc_norm_ma);
+		}
+		chg->pres_temp_zone = ZONE_NONE;
+	}
+
+	rc = of_property_read_u32(node, "qcom,iterm-ma",
+				  &chg->chrg_iterm);
+	if (rc)
+		chg->chrg_iterm = 150;
+
+	rc = of_property_read_u32(node, "qcom,vfloat-comp-uv",
+				  &chg->vfloat_comp_mv);
+	if (rc)
+		chg->vfloat_comp_mv = 0;
+	chg->vfloat_comp_mv /= 1000;
+
+	return rc;
+}
+
 static int smb_mmi_chg_config_init(struct smb_mmi_charger *chip)
 {
 	struct pmic_revid_data *pmic_rev_id;
@@ -1387,6 +2039,9 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->dev = &pdev->dev;
 	psy_cfg.drv_data = chip;
 	platform_set_drvdata(pdev, chip);
+	chip->suspended = false;
+	chip->awake = false;
+	device_init_wakeup(chip->dev, true);
 
 	smb_mmi_chg_config_init(chip);
 
@@ -1396,7 +2051,13 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	parse_mmi_dt(chip);
+
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
+	wakeup_source_init(&chip->smb_mmi_hb_wake_source,
+			   "smb_mmi_hb_wake");
+	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
+		   mmi_heartbeat_alarm_cb);
 
 	chip->mmi_psy = devm_power_supply_register(chip->dev, &mmi_psy_desc,
 						   &psy_cfg);
@@ -1610,22 +2271,34 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 	if (chip->max_flip_psy)
 		power_supply_put(chip->max_flip_psy);
 
+	wakeup_source_trash(&chip->smb_mmi_hb_wake_source);
+
 	return;
 }
 
 #ifdef CONFIG_PM_SLEEP
 static int smb_mmi_suspend(struct device *device)
 {
+	struct platform_device *pdev = to_platform_device(device);
+	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
+
+	chip->suspended = true;
+
 	return 0;
 }
 
 static int smb_mmi_resume(struct device *device)
 {
+	struct platform_device *pdev = to_platform_device(device);
+	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
+
+	chip->suspended = false;
+
 	return 0;
 }
 #else
-#define smb2_suspend NULL
-#define smb2_resume NULL
+#define smb_mmi_suspend NULL
+#define smb_mmi_resume NULL
 #endif
 
 static const struct dev_pm_ops smb_mmi_dev_pm_ops = {
