@@ -155,6 +155,10 @@ static char *param_vers = "";
 module_param(param_vers, charp, S_IRUSR);
 MODULE_PARM_DESC(param_vers, "ro.build.fingerprint");
 
+static char *param_mucfw = "";
+module_param(param_mucfw, charp, S_IRUSR);
+MODULE_PARM_DESC(param_mucfw, "ro.mot.build.version.mod.nuttx");
+
 #if MUC_UART_SEND_SLEEP_ON_IDLE
 static inline void reset_idle_timer(struct mod_muc_data_t *mm_data)
 {
@@ -545,6 +549,8 @@ destroy_msg:
 static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 {
 	struct boot_mode_t bootmode;
+	uint32_t mucfw_major;
+	uint32_t mucfw_minor;
 
 	memset(&bootmode, 0x00, sizeof(struct boot_mode_t));
 
@@ -556,6 +562,16 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 	strncpy(bootmode.ap_fw_ver_str,
 		param_vers,
 		sizeof(bootmode.ap_fw_ver_str));
+
+	/* Format mucfw vers from "MAJOR.MINOR_DESCRIPTION"
+	 * to uint32_t in format MAJOR<<16|MINOR
+	 */
+	if (sscanf(param_mucfw, "%d.%d%*s", &mucfw_major, &mucfw_minor) != 2) {
+		mucfw_major = 0;
+		mucfw_minor = 0;
+	}
+
+	bootmode.muc_fw_vers = (mucfw_major << 16) | mucfw_minor;
 
 	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		bootmode.boot_mode = FACTORY;
@@ -576,6 +592,8 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		sizeof(bootmode.ap_guid), bootmode.ap_guid);
 	MUC_DBG("(%zd) sending AP vers %s\n",
 		sizeof(bootmode.ap_fw_ver_str), bootmode.ap_fw_ver_str);
+	MUC_DBG("sending MUC fw vers 0x%08x\n",
+		bootmode.muc_fw_vers);
 
 	return muc_uart_queue_send(mm_data,
 		BOOT_MODE,
@@ -1480,6 +1498,7 @@ int muc_uart_init(void)
 {
 	MUC_LOG("guid: %s\n", param_guid);
 	MUC_LOG("vers: %s\n", param_vers);
+	MUC_LOG("mucfw: %s\n", param_mucfw);
 	return platform_driver_register(&muc_uart_driver);
 }
 

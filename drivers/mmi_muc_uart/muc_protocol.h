@@ -42,6 +42,7 @@ struct boot_mode_t {
 	uint32_t hwid;               /* androidboot.hwrev */
 	uint8_t  ap_guid[16];        /* ro.mot.build.guid */
 	uint8_t  ap_fw_ver_str[256]; /* ro.build.fingerprint */
+	uint32_t muc_fw_vers;        /* ro.mot.build.version.mod.nuttx */
 } __packed;
 
 enum { VBUS_IN = 0, VBUS_IN_SPLIT, VBUS_OUT, DC_IN };
