@@ -2073,7 +2073,7 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 	if (client->dev.of_node) {
 		ret = bq2597x_parse_dt(bq, &client->dev);
 		if (ret)
-			goto free_mem;
+			goto free_regulator;
 	}
 
 	if (regulator_count_voltages(bq->vdd_i2c_vreg) > 0) {
@@ -2082,37 +2082,37 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 		if (ret) {
 			pr_err("Failed to set vreg voltage, rc=%d\n",
 						ret);
-			goto free_mem;
+			goto free_regulator;
 		}
 	}
 	ret = regulator_enable(bq->vdd_i2c_vreg);
 	if (ret) {
 		pr_err("Failed to enable vdd vreg, rc=%d\n", ret);
-		goto free_mem;;
+		goto disable_regator;;
 	}
 
 	ret = bq2597x_detect_device(bq);
 	if (ret) {
 		pr_err("No bq2597x device found!\n");
-		goto free_mem;
+		goto disable_regator;
 	}
 
 	ret = bq2597x_init_device(bq);
 	if (ret) {
 		pr_err("Failed to init device\n");
-		goto free_mem;
+		goto disable_regator;
 	}
 
 	ret = bq2597x_psy_register(bq);
 	if (ret) {
 		pr_err("Failed to register psy\n");
-		goto free_mem;
+		goto free_regulator;
 	}
 
 	bq->irq_pinctrl =
 		pinctrl_get_select(bq->dev, "bq_int_default");
 	if (!bq->irq_pinctrl) {
-		pr_err("lxuser Couldn't set pinctrl bq_int_default\n");
+		pr_err("Couldn't set pinctrl bq_int_default\n");
 		goto free_psy;
 	}
 
@@ -2120,25 +2120,8 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 			      bq->irq_gpio.flags,
 			      bq->irq_gpio.label);
 	if (ret) {
-		pr_err("failed to request -irq  GPIO, ret %d, gpio %d, lable %s\n",
+		pr_err("failed to request irq  GPIO, ret %d, gpio %d, lable %s\n",
 				ret, bq->irq_gpio.gpio, bq->irq_gpio.label);
-		goto free_psy;
-	}
-
-	ret = gpio_export(bq->irq_gpio.gpio, 1);
-	if (ret) {
-		pr_err("Failed to export irq GPIO %s: %d\n",
-			   bq->irq_gpio.label,
-			   bq->irq_gpio.gpio);
-		goto free_psy;
-	}
-
-	ret = gpio_export_link(bq->dev, bq->irq_gpio.label,
-			      bq->irq_gpio.gpio);
-	if (ret) {
-		pr_err("Failed to wls otg gpio link GPIO %s: %d\n",
-			   bq->irq_gpio.label,
-			   bq->irq_gpio.gpio);
 		goto free_psy;
 	}
 
@@ -2150,7 +2133,7 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 		if (ret < 0) {
 			pr_err("request irq for irq=%d failed, ret =%d\n",
 							client->irq, ret);
-			goto free_psy;
+			goto free_gpio;
 		}
 		enable_irq_wake(client->irq);
 	}
@@ -2160,20 +2143,26 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 	ret = sysfs_create_group(&bq->dev->kobj, &bq2597x_attr_group);
 	if (ret) {
 		pr_err("failed to register sysfs. err: %d\n", ret);
-		goto free_psy;
+		goto free_irq;
 	}
 
 	determine_initial_status(bq);
 
-	pr_info("bq2597x probe successfully, Part Num:%d\n!",
+	pr_info("bq2597x probe successfully-, Part Num:%d\n!",
 				bq->part_no);
-
 	g_chip = bq;
-
 	return 0;
 
+free_irq:
+	devm_free_irq(&client->dev,client->irq,bq);
+free_gpio:
+	gpio_free(bq->irq_gpio.gpio);
 free_psy:
 	power_supply_unregister(bq->fc2_psy);
+disable_regator:
+	regulator_disable(bq->vdd_i2c_vreg);
+free_regulator:
+	devm_regulator_put(bq->vdd_i2c_vreg);
 free_mem:
 	devm_kfree(bq->dev, bq);
 	return ret;
@@ -2235,9 +2224,11 @@ static int bq2597x_charger_remove(struct i2c_client *client)
 {
 	struct bq2597x *bq = i2c_get_clientdata(client);
 
-
 	bq2597x_enable_adc(bq, false);
 
+	devm_regulator_put(bq->vdd_i2c_vreg);
+	devm_free_irq(&client->dev,client->irq,bq);
+	gpio_free(bq->irq_gpio.gpio);
 	power_supply_unregister(bq->fc2_psy);
 
 	mutex_destroy(&bq->charging_disable_lock);
