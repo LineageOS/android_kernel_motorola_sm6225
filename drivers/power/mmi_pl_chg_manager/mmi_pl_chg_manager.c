@@ -345,6 +345,11 @@ static void mmi_update_pmic_status(struct mmi_pl_chg_manager *chip)
 	if (!rc)
 		chip->pmic_handle.vbus_pres = !!prop.intval;
 
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, &prop);
+	if (!rc)
+		chip->pmic_handle.charge_enabled= !!prop.intval;
+
 	mmi_pl_dbg(chip, PR_MOTO, "main chargr IC : ----- status update ----\n");
 	mmi_pl_dbg(chip, PR_MOTO, "vbat_volt %d \n",
 		chip->pmic_handle.vbat_volt);
@@ -358,6 +363,9 @@ static void mmi_update_pmic_status(struct mmi_pl_chg_manager *chip)
 		chip->pmic_handle.bat_temp);
 	mmi_pl_dbg(chip, PR_MOTO, "vbus_pres %d \n",
 		chip->pmic_handle.vbus_pres);
+	mmi_pl_dbg(chip, PR_MOTO, "charge_enabled %d \n",
+		chip->pmic_handle.charge_enabled);
+
 
 }
 
@@ -852,7 +860,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 					zone->norm_uv, zone->fcc_norm_ua);
 
 	if (chip->pres_temp_zone == ZONE_HOT
-		|| chip->pres_temp_zone == ZONE_COLD) {
+		|| chip->pres_temp_zone == ZONE_COLD
+		|| !chip->pmic_handle.charge_enabled) {
 		mmi_pl_pm_move_state(chip, PM_STATE_STOP_CHARGE);
 	}
 
@@ -1540,7 +1549,9 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 			chip->flashc_fault = false;
 		} else if (chip->pres_temp_zone != ZONE_HOT
-				&& chip->pres_temp_zone != ZONE_COLD) {
+				&& chip->pres_temp_zone != ZONE_COLD
+				&& !flashc_fault_now
+				&& chip->pmic_handle.charge_enabled) {
 			mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		}
