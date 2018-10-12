@@ -1564,6 +1564,8 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		target_fcc = zone->fcc_max_ma;
 		break;
 	default:
+		target_fv = max_fv_mv;
+		target_fcc = zone->fcc_norm_ma;
 		break;
 	}
 
@@ -1656,6 +1658,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	else
 		hb_resch_time = HEARTBEAT_DELAY_MS;
 
+	chg_stat.charger_present = false;
 	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
 		pr_err("Error getting Batt Voltage rc = %d\n", rc);
