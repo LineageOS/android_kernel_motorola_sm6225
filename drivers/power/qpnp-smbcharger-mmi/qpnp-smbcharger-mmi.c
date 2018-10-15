@@ -1766,7 +1766,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			if (rc < 0)
 				pr_err("SMBMMI: Couldn't set batt psy cap\n");
 		}
-	} else {
+	} else if (!chip->factory_mode) {
 		/* Fall here for Basic Step and Thermal Charging */
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
