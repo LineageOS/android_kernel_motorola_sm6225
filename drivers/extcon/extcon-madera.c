@@ -2539,7 +2539,7 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 			info->usbc_det_gpio[0] = 0;
 		else {
 			ret = gpio_export(desc_to_gpio(info->usbc_det_gpio[0]),
-					false);
+					true);
 			if (ret < 0) {
 				dev_err(info->dev,
 					"Failed to export usbsel gpio\n");
@@ -2560,7 +2560,7 @@ static void madera_extcon_process_accdet_node(struct madera_extcon *info,
 			info->usbc_det_gpio[1] = 0;
 		else {
 			ret = gpio_export(desc_to_gpio(info->usbc_det_gpio[1]),
-					false);
+					true);
 			if (ret < 0) {
 				dev_err(info->dev,
 					"Failed to export hsdet gpio\n");
