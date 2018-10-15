@@ -21,6 +21,17 @@ struct mmi_uart_hdr_t {
 } __packed;
 /*  Followed by CRC16 (Poly8005) */
 
+struct mmi_uart_fw_t {
+	uint16_t port_id;
+	uint16_t sn;
+	uint8_t payload[];
+} __packed;
+
+struct mmi_uart_pb_hdr_t {
+	uint16_t port_id;
+	uint16_t cmd;
+} __packed;
+
 #define MSG_MAGIC 0xA1A1
 #define MSG_META_DATA_SIZE (sizeof(struct mmi_uart_hdr_t) + sizeof(uint16_t))
 
@@ -41,6 +52,14 @@ struct mmi_uart_hdr_t {
 #define MUC_GPIO_1            35
 #define MOD_ATTACH_GPIO       36
 #define FORCE_USB_BOOT_GPIO   136
+
+/* Packetbus update command */
+#define PACKETBUS_PORT_MUC_FW 0x0007
+#define BOLT_MSG_GET_MUC_FW   0x0000
+
+/* TODO put in dev tree? */
+#define MUC_FIRMWARE_NAME "muc_firmware.zip"
+#define MUC_FW_PAYLOAD_SIZE 1022
 
 enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
 struct boot_mode_t {

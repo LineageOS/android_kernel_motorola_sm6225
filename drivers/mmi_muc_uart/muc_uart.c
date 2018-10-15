@@ -25,6 +25,7 @@
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
 #include <linux/ipc_logging.h>
+#include <linux/firmware.h>
 #include <soc/qcom/mmi_boot_info.h>
 #include "muc_uart.h"
 #include "mmi_uart.h"
@@ -887,6 +888,108 @@ static int muc_uart_pb_put_q(struct mod_muc_data_t *mm_data,
 	return 0;
 }
 
+static int muc_uart_send_firmware(struct mod_muc_data_t *mm_data)
+{
+	struct mmi_uart_fw_t *fw_pkt;
+	const struct firmware *fw = NULL;
+	int fw_data_remaining;
+	int fw_data_offset = 0;
+	uint16_t fw_pkt_sn = 1;
+	uint16_t fw_pkt_len;
+	uint16_t fw_payload_len;
+
+	MUC_LOG("Updating muc firmware\n");
+
+	if (request_firmware(&fw, MUC_FIRMWARE_NAME, &mm_data->pdev->dev)) {
+		MUC_ERR("Unable to locate firmware %s!\n", MUC_FIRMWARE_NAME);
+		goto err;
+	}
+
+	MUC_LOG("Firmware size is %zd bytes\n", fw->size);
+	MUC_LOG("Queuing %zd messages for upload\n",
+		(fw->size % MUC_FW_PAYLOAD_SIZE) > 0 ?
+		(fw->size / MUC_FW_PAYLOAD_SIZE) + 2 :
+		(fw->size / MUC_FW_PAYLOAD_SIZE) + 1);
+
+	fw_pkt = kmalloc(sizeof(struct mmi_uart_fw_t) +
+		MUC_FW_PAYLOAD_SIZE, GFP_KERNEL);
+	if (!fw_pkt) {
+		MUC_ERR("Unable allocate firmware packet\n");
+		goto err_mem;
+	}
+
+	fw_pkt->port_id = PACKETBUS_PORT_MUC_FW;
+	fw_data_remaining = fw->size;
+
+	while (fw_data_remaining > 0) {
+		if (fw_data_remaining >= MUC_FW_PAYLOAD_SIZE)
+			fw_payload_len = MUC_FW_PAYLOAD_SIZE;
+		else
+			fw_payload_len = fw_data_remaining;
+
+		memcpy(fw_pkt->payload,
+			fw->data + fw_data_offset,
+			fw_payload_len);
+
+		fw_pkt_len = sizeof(struct mmi_uart_fw_t) + fw_payload_len;
+		fw_pkt->sn = fw_pkt_sn++;
+
+		if (muc_uart_queue_send(mm_data,
+			PACKETBUS_PROT_MSG,
+			(uint8_t *)fw_pkt,
+			fw_pkt_len) != fw_pkt_len)
+			goto err_pkt;
+
+		fw_data_offset += fw_payload_len;
+		fw_data_remaining -= fw_payload_len;
+	}
+
+	/* Last packet empty payload to indicate EOF */
+	fw_pkt_len = sizeof(struct mmi_uart_fw_t);
+	fw_pkt->sn = fw_pkt_sn;
+
+	if (muc_uart_queue_send(mm_data,
+		PACKETBUS_PROT_MSG,
+		(uint8_t *)fw_pkt,
+		fw_pkt_len) != fw_pkt_len)
+		goto err_pkt;
+
+	kfree(fw_pkt);
+	release_firmware(fw);
+
+	return 0;
+err_pkt:
+	kfree(fw_pkt);
+err_mem:
+	release_firmware(fw);
+err:
+	return 1;
+}
+
+static int muc_uart_check_update(struct mod_muc_data_t *mm_data,
+	size_t payload_len,
+	uint8_t *payload)
+{
+	struct mmi_uart_pb_hdr_t *pb_hdr;
+
+	/* Check if this message was for us instead of userspace */
+	if (payload_len < sizeof(struct mmi_uart_pb_hdr_t))
+		return 1;
+
+	pb_hdr = (struct mmi_uart_pb_hdr_t *)payload;
+
+	if (pb_hdr->port_id != PACKETBUS_PORT_MUC_FW)
+		return 1;
+
+	if (pb_hdr->cmd != BOLT_MSG_GET_MUC_FW)
+		return 1;
+
+	if (muc_uart_send_firmware(mm_data))
+		MUC_ERR("Failed to send firmware to muc\n");
+
+	return 0;
+}
+
 int muc_uart_pb_write(struct platform_device *pdev,
 	const char __user *buf,
 	size_t count)
@@ -951,7 +1054,10 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			break;
 		}
 		case PACKETBUS_PROT_MSG: {
-			if (!muc_uart_pb_put_q(mm_data,
+			if (!muc_uart_check_update(mm_data,
+				payload_len,
+				payload) ||
+				!muc_uart_pb_put_q(mm_data,
 				payload_len,
 				payload)) {
 				muc_uart_send(mm_data,
