@@ -2258,6 +2258,7 @@ static const struct power_supply_desc max17042_no_current_sense_psy_desc = {
 	.num_properties	= ARRAY_SIZE(max17042_battery_props) - 2,
 };
 
+#define MAX_CGAIN 0x7FFF
 static int max17042_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -2311,6 +2312,14 @@ static int max17042_probe(struct i2c_client *client,
 
 	if (chip->pdata->r_sns == 0)
 		chip->pdata->r_sns = MAX17042_DEFAULT_SNS_RESISTOR;
+
+	if (chip->pdata->config_data->cgain == MAX_CGAIN) {
+		dev_err(&client->dev, "RSNS is %d uOhm\n",
+			chip->pdata->r_sns);
+		chip->pdata->r_sns *= 2;
+		dev_err(&client->dev, "MAX CGAIN RSNS now %d uOhm\n",
+			chip->pdata->r_sns);
+	}
 
 	chip->fctr_uah_bit = 5000 / (chip->pdata->r_sns / 1000);
 
