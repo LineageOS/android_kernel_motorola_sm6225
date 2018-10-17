@@ -1682,7 +1682,7 @@ static int netlink_init(void)
 	_gNetLinkSkb = netlink_kernel_create(&init_net, NETLINK_USER, &cfg);
 #endif
 
-	ipio_info("Initialise Netlink and create its socket\n");
+	ipio_debug(DEBUG_BOOT,"Initialise Netlink and create its socket\n");
 
 	if (!_gNetLinkSkb) {
 		ipio_err("Failed to create nelink socket\n");
@@ -1717,7 +1717,7 @@ int ilitek_proc_init(void)
 			res = -ENODEV;
 		} else {
 			proc_table[i].isCreated = true;
-			ipio_info("Succeed to create %s under /proc\n",
+			ipio_debug(DEBUG_BOOT,"Succeed to create %s under /proc\n",
 				  proc_table[i].name);
 		}
 	}

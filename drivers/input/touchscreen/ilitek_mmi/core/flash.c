@@ -139,7 +139,7 @@ void core_flash_init(uint16_t mid, uint16_t did)
 {
     int i = 0;
 
-    ipio_info("M_ID = %x, DEV_ID = %x", mid, did);
+    ipio_debug(DEBUG_FIRMWARE,"M_ID = %x, DEV_ID = %x", mid, did);
 
     flashtab = kzalloc(sizeof(ft), GFP_KERNEL);
     if (ERR_ALLOC_MEM(flashtab)) {
@@ -149,7 +149,7 @@ void core_flash_init(uint16_t mid, uint16_t did)
 
     for (; i < ARRAY_SIZE(ft); i++) {
 	if (mid == ft[i].mid && did == ft[i].dev_id) {
-	    ipio_info("Find them in flash table\n");
+	   ipio_debug(DEBUG_FIRMWARE,"Find them in flash table\n");
 
 	    flashtab->mid = mid;
 	    flashtab->dev_id = did;
@@ -171,10 +171,10 @@ void core_flash_init(uint16_t mid, uint16_t did)
 	flashtab->block = (64 * K);
     }
 
-    ipio_info("Max Memory size = %d\n", flashtab->mem_size);
-    ipio_info("Per program page = %d\n", flashtab->program_page);
-    ipio_info("Sector size = %d\n", flashtab->sector);
-    ipio_info("Block size = %d\n", flashtab->block);
+    ipio_debug(DEBUG_FIRMWARE,"Max Memory size = %d\n", flashtab->mem_size);
+    ipio_debug(DEBUG_FIRMWARE,"Per program page = %d\n", flashtab->program_page);
+    ipio_debug(DEBUG_FIRMWARE,"Sector size = %d\n", flashtab->sector);
+    ipio_debug(DEBUG_FIRMWARE,"Block size = %d\n", flashtab->block);
 }
 EXPORT_SYMBOL(core_flash_init);
 

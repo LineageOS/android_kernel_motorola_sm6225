@@ -232,7 +232,7 @@ static int ilitek_platform_notifier_fb(struct notifier_block *self,
 	int *blank;
 	struct fb_event *evdata = data;
 
-	ipio_info("Notifier's event = %ld\n", event);
+	ipio_debug(DEBUG_BOOT, "Notifier's event = %ld\n", event);
 
 	/*
 	 *  FB_EVENT_BLANK(0x09): A hardware display blank change occurred.
@@ -250,7 +250,7 @@ static int ilitek_platform_notifier_fb(struct notifier_block *self,
 				core_config_ic_suspend();
 		} else if ((*blank == FB_BLANK_UNBLANK
 			 || *blank == FB_BLANK_NORMAL) && event == FB_EVENT_BLANK){
-			ipio_info("TP Resuem\n");
+			ipio_info("TP Resume\n");
 
 			if (!core_firmware->isUpgrading)
 				core_config_ic_resume();
@@ -328,7 +328,7 @@ static int ilitek_platform_reg_power_check(void)
 static int ilitek_platform_reg_suspend(void)
 {
 	int res = 0;
-	ipio_info("Register suspend/resume callback function\n");
+	ipio_debug(DEBUG_BOOT,"Register suspend/resume callback function\n");
 #ifdef CONFIG_FB
 	ipd->notifier_fb.notifier_call = ilitek_platform_notifier_fb;
 	res = fb_register_client(&ipd->notifier_fb);
@@ -537,8 +537,8 @@ static int ilitek_platform_gpio(void)
 	    of_get_named_gpio_flags(dev_node, DTS_RESET_GPIO, 0, &flag);
 #endif /* CONFIG_OF */
 
-	ipio_info("GPIO INT: %d\n", ipd->int_gpio);
-	ipio_info("GPIO RESET: %d\n", ipd->reset_gpio);
+	ipio_debug(DEBUG_BOOT,"GPIO INT: %d\n", ipd->int_gpio);
+	ipio_debug(DEBUG_BOOT,"GPIO RESET: %d\n", ipd->reset_gpio);
 
 	if (!gpio_is_valid(ipd->int_gpio)) {
 		ipio_err("Invalid INT gpio: %d\n", ipd->int_gpio);
@@ -615,7 +615,7 @@ static void ilitek_platform_core_remove(void)
  */
 static int ilitek_platform_core_init(void)
 {
-	ipio_info("Initialise core's components\n");
+	ipio_debug(DEBUG_BOOT,"Initialise core's components\n");
 
 	if (core_config_init() < 0 || core_protocol_init() < 0 ||
 	    core_firmware_init() < 0 || core_fr_init() < 0 ||
@@ -703,7 +703,7 @@ static int Ili_parse_dt(struct device *dev,
 		return rc;
 	}
 
-    ipio_err("pdata->TP_IC_TYPE = %s\n", pdata->TP_IC_TYPE);
+    ipio_debug(DEBUG_BOOT,"pdata->TP_IC_TYPE = %s\n", pdata->TP_IC_TYPE);
 
 	prop = of_find_property(np, "ilitek,display-coords", NULL);
 	if (!prop)
@@ -728,36 +728,36 @@ static int Ili_parse_dt(struct device *dev,
 	pdata->x_max = coords[2];
 	pdata->y_max = coords[3];
 
-	ipio_info("x_min = %d,y_min = %d,x_max = %d,y_max = %d,coords_size = %d\n ",
+	ipio_debug(DEBUG_BOOT,"x_min = %d,y_min = %d,x_max = %d,y_max = %d,coords_size = %d\n ",
 		ipd->x_min, ipd->y_min, ipd->x_max, ipd->y_max, coords_size);
 
 	pdata->MT_B_TYPE = of_property_read_bool(np,
 						"ilitek,mt_b_type");
 	if (pdata->MT_B_TYPE)
-		ipio_info("pdata->MT_B_TYPE ture ");
+		ipio_debug(DEBUG_BOOT,"pdata->MT_B_TYPE ture ");
 	else
-		ipio_info("pdata->MT_B_TYPE false ");
+		ipio_debug(DEBUG_BOOT,"pdata->MT_B_TYPE false ");
 
 	pdata->REGULATOR_POWER_ON = of_property_read_bool(np,
 						"ilitek,regulator_power_on");
 	if (pdata->REGULATOR_POWER_ON)
-		ipio_info("pdata->REGULATOR_POWER_ON ture ");
+		ipio_debug(DEBUG_BOOT,"pdata->REGULATOR_POWER_ON ture ");
 	else
-		ipio_info("pdata->REGULATOR_POWER_ON false ");
+		ipio_debug(DEBUG_BOOT,"pdata->REGULATOR_POWER_ON false ");
 
 	pdata->BATTERY_CHECK = of_property_read_bool(np,
 						"ilitek,battery_check");
 	if (pdata->BATTERY_CHECK)
-		ipio_info("pdata->BATTERY_CHECK ture ");
+		ipio_debug(DEBUG_BOOT,"pdata->BATTERY_CHECK ture ");
 	else
-		ipio_info("pdata->BATTERY_CHECK false ");
+		ipio_debug(DEBUG_BOOT,"pdata->BATTERY_CHECK false ");
 
 	pdata->ENABLE_BATTERY_CHECK = of_property_read_bool(np,
 						"ilitek,enable_battery_check");
 	if (pdata->ENABLE_BATTERY_CHECK)
-		ipio_info("pdata->ENABLE_BATTERY_CHECK ture ");
+		ipio_debug(DEBUG_BOOT,"pdata->ENABLE_BATTERY_CHECK ture ");
 	else
-		ipio_info("pdata->ENABLE_BATTERY_CHECK false ");
+		ipio_debug(DEBUG_BOOT,"pdata->ENABLE_BATTERY_CHECK false ");
 
 	if (of_property_read_bool(np, "ilitek,x_flip")) {
 		pr_notice("using flipped X axis\n");
@@ -854,7 +854,7 @@ static int ilitek_platform_probe(struct spi_device *spi)
 	}
 
 	/* Set i2c slave addr if it's not configured */
-	ipio_info("I2C Slave address = 0x%x\n", client->addr);
+	ipio_debug(DEBUG_BOOT,"I2C Slave address = 0x%x\n", client->addr);
 	if (client->addr != ILI7807_SLAVE_ADDR
 	    || client->addr != ILI9881_SLAVE_ADDR) {
 		client->addr = ILI9881_SLAVE_ADDR;
@@ -884,9 +884,9 @@ static int ilitek_platform_probe(struct spi_device *spi)
 	ipd->isEnablePollCheckPower = false;
 	ipd->vpower_reg_nb = false;
 
-	ipio_info("Driver Version : %s\n", DRIVER_VERSION);
-	ipio_info("Driver for Touch IC :  %x\n", ipd->chip_id);
-	ipio_info("Driver interface :  %s\n",
+	ipio_debug(DEBUG_BOOT,"Driver Version : %s\n", DRIVER_VERSION);
+	ipio_debug(DEBUG_BOOT,"Driver for Touch IC :  %x\n", ipd->chip_id);
+	ipio_debug(DEBUG_BOOT,"Driver interface :  %s\n",
 		  (INTERFACE == I2C_INTERFACE) ? "I2C" : "SPI");
 
 	/*
@@ -1116,7 +1116,7 @@ static int __init ilitek_platform_init(void)
 	ipio_info("TP driver init\n");
 
 #if (INTERFACE == I2C_INTERFACE)
-	ipio_info("TP driver add i2c interface\n");
+	ipio_debug(DEBUG_BOOT,"TP driver add i2c interface\n");
 	res = i2c_add_driver(&tp_i2c_driver);
 	if (res < 0) {
 		ipio_err("Failed to add i2c driver\n");
@@ -1124,7 +1124,7 @@ static int __init ilitek_platform_init(void)
 		return -ENODEV;
 	}
 #else
-	ipio_info("TP driver add spi interface\n");
+	ipio_debug(DEBUG_BOOT,"TP driver add spi interface\n");
 	res = spi_register_driver(&tp_spi_driver);
 	if (res < 0) {
 		ipio_err("Failed to add ilitek driver\n");
