@@ -341,7 +341,7 @@ void core_protocol_func_control(int key, int ctrl)
 	struct DataItem *tmp = search_func(key);
 
 	if (tmp != NULL) {
-		ipio_info("Found func's name: %s, key = %d\n", tmp->name, key);
+		ipio_debug(DEBUG_BOOT,"Found func's name: %s, key = %d\n", tmp->name, key);
 
 		/* last element is used to control this func */
 		if (tmp->key != 9) {
@@ -379,7 +379,7 @@ int core_protocol_update_ver(uint8_t major, uint8_t mid, uint8_t minor)
 			protocol->major = major;
 			protocol->mid = mid;
 			protocol->minor = minor;
-			ipio_info("protocol: major = %d, mid = %d, minor = %d\n",
+			ipio_debug(DEBUG_CONFIG, "protocol: major = %d, mid = %d, minor = %d\n",
 				 protocol->major, protocol->mid, protocol->minor);
 
 			if (protocol->major == 0x5)

@@ -834,15 +834,15 @@ int core_config_get_tp_info(void)
 
 	core_config->tp_info->nMaxKeyButtonNum = 5;
 
-	ipio_info("minX = %d, minY = %d, maxX = %d, maxY = %d\n",
+	ipio_debug(DEBUG_BOOT,"minX = %d, minY = %d, maxX = %d, maxY = %d\n",
 		 core_config->tp_info->nMinX, core_config->tp_info->nMinY,
 		 core_config->tp_info->nMaxX, core_config->tp_info->nMaxY);
-	ipio_info("xchannel = %d, ychannel = %d, self_tx = %d, self_rx = %d\n",
+	ipio_debug(DEBUG_BOOT,"xchannel = %d, ychannel = %d, self_tx = %d, self_rx = %d\n",
 		 core_config->tp_info->nXChannelNum,
 		  core_config->tp_info->nYChannelNum,
 		 core_config->tp_info->self_tx_channel_num,
 		  core_config->tp_info->self_rx_channel_num);
-	ipio_info("side_touch_type = %d, max_touch_num= %d, touch_key_num = %d, max_key_num = %d\n",
+	ipio_debug(DEBUG_BOOT,"side_touch_type = %d, max_touch_num= %d, touch_key_num = %d, max_key_num = %d\n",
 		 core_config->tp_info->side_touch_type,
 		  core_config->tp_info->nMaxTouchNum,
 		 core_config->tp_info->nKeyCount,
@@ -893,7 +893,7 @@ int core_config_get_protocol_ver(void)
 	for (; i < protocol->pro_ver_len - 1; i++)
 		core_config->protocol_ver[i] = g_read_buf[i + 1];
 
-	ipio_info("Procotol Version = %d.%d.%d\n",
+	ipio_debug(DEBUG_BOOT,"Procotol Version = %d.%d.%d\n",
 		 core_config->protocol_ver[0], core_config->protocol_ver[1],
 		  core_config->protocol_ver[2]);
 
@@ -953,7 +953,7 @@ int core_config_get_core_ver(void)
 		core_config->core_ver[i] = g_read_buf[i + 1];
 
 	/* in protocol v5, ignore the first btye because of a header. */
-	ipio_info("Core Version = %d.%d.%d.%d\n",
+	ipio_debug(DEBUG_BOOT,"Core Version = %d.%d.%d.%d\n",
 		 core_config->core_ver[1], core_config->core_ver[2],
 		 core_config->core_ver[3], core_config->core_ver[4]);
 
@@ -1003,11 +1003,11 @@ int core_config_get_fw_ver(void)
 		core_config->firmware_ver[i] = g_read_buf[i];
 
 	if (protocol->mid >= 0x3) {
-		ipio_info("Firmware Version = %d.%d.%d.%d\n",
+		ipio_debug(DEBUG_BOOT,"Firmware Version = %d.%d.%d.%d\n",
 		 core_config->firmware_ver[1], core_config->firmware_ver[2],
 		  core_config->firmware_ver[3], core_config->firmware_ver[4]);
 	} else {
-		ipio_info("Firmware Version = %d.%d.%d\n",
+		ipio_debug(DEBUG_BOOT,"Firmware Version = %d.%d.%d\n",
 			core_config->firmware_ver[1],
 			 core_config->firmware_ver[2],
 			  core_config->firmware_ver[3]);

@@ -498,7 +498,7 @@ static int tddi_read_flash(uint32_t start, uint32_t end, uint8_t *data, int dlen
 		core_config_ice_mode_write(0x041008, 0xFF, 1);	/* Dummy */
 
 		data[cont] = core_config_read_write_onebyte(0x41010);
-		ipio_info("data[%d] = %x\n", cont, data[cont]);
+		ipio_debug(DEBUG_BOOT,"data[%d] = %x\n", cont, data[cont]);
 		cont++;
 	}
 
