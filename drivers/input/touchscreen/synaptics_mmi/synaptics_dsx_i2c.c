@@ -2350,9 +2350,6 @@ static struct device_attribute attrs[] = {
 	__ATTR(ic_ver, S_IRUGO,
 			synaptics_rmi4_ic_ver_show,
 			synaptics_rmi4_store_error),
-	__ATTR(poweron, S_IRUSR | S_IRGRP,
-			synaptics_rmi4_poweron_show,
-			synaptics_rmi4_store_error),
 	__ATTR(mod, (S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_mod_show,
 			synaptics_rmi4_mod_store),
@@ -2377,6 +2374,9 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_test_irq_data_contig_store),
 #endif
 };
+
+static DEVICE_ATTR(poweron, S_IRUSR | S_IRGRP,
+			synaptics_rmi4_poweron_show, synaptics_rmi4_store_error);
 
 struct synaptics_exp_fn_ctrl {
 	bool inited;
@@ -6687,9 +6687,12 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 						synaptics_rmi4_remove(exp_fn_ctrl.i2c_client);
 						pr_info("driver removed\n");
 					} else if (all_inserted) {
+						synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
+#if 0
 						/* enable interrupt on handler's removal */
 						atomic_set(&rmi4_data->touch_stopped, 0);
 						synaptics_dsx_sensor_ready_state(rmi4_data, false);
+#endif
 						pr_info("drm panel ready\n");
 					} else {
 						queue_delayed_work(exp_fn_ctrl.det_workqueue,
@@ -7395,6 +7398,8 @@ err_sysfs:
 				&attrs[attr_count].attr);
 	}
 
+	device_remove_file(&rmi4_data->i2c_client->dev, &dev_attr_poweron);
+
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
 #elif defined(CONFIG_DRM)
@@ -7465,6 +7470,7 @@ static void dummy_remove(struct synaptics_rmi4_data *rmi4_data)
 static int synaptics_rmi4_probe(struct i2c_client *client,
 		const struct i2c_device_id *dev_id)
 {
+	int rc;
 	struct synaptics_rmi4_data *rmi4_data;
 	struct synaptics_dsx_platform_data *platform_data;
 
@@ -7550,6 +7556,15 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	exp_fn_ctrl.i2c_client = client;
 	mutex_unlock(&exp_fn_ctrl_mutex);
 
+	rc = device_create_file(&client->dev, &dev_attr_poweron);
+	if (rc < 0) {
+		dev_err(&client->dev,
+				"%s: Cannot create poweron\n",
+				__func__);
+		kfree(rmi4_data);
+		return rc;
+	}
+
 	if (!rmi4_data->splash_screen_mode)
 		return synaptics_rmi4_hw_init(rmi4_data);
 
@@ -7595,6 +7610,8 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
 				&attrs[attr_count].attr);
 	}
+
+	device_remove_file(&rmi4_data->i2c_client->dev, &dev_attr_poweron);
 
 	if (rmi4_data->input_registered)
 		input_unregister_device(rmi4_data->input_dev);
