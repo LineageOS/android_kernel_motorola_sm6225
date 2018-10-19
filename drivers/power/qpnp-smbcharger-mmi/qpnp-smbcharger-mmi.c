@@ -2033,6 +2033,7 @@ static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
 #define SMBCHG_HEARTBEAT_INTERVAL_NS	70000000000
+#define MONOTONIC_SOC 2 /* 2 percent */
 static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct smb_mmi_charger *chip = container_of(work,
@@ -2165,7 +2166,11 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		else
 			batt_cap = pval.intval;
 
-		if (batt_cap != report_cap) {
+		if ((report_cap != batt_cap) &&
+		    (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
+		    (report_cap >= (batt_cap - MONOTONIC_SOC)) &&
+		    !(report_cap < 0) &&
+		    !(report_cap > 100)) {
 			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
 				report_cap);
 			pval.intval = report_cap;
