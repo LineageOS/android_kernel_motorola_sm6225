@@ -78,6 +78,8 @@ struct st21nfc_dev {
 	/* CLK control */
 	bool			clk_run;
 	struct	clk		*s_clk;
+	u8 *read_buf;
+	u8 *write_buf;
 };
 
 /*
@@ -207,11 +209,14 @@ static ssize_t st21nfc_dev_read(struct file *filp, char __user *buf,
 	struct st21nfc_dev *st21nfc_dev = container_of(filp->private_data,
 						       struct st21nfc_dev,
 						       st21nfc_device);
-	char tmp[MAX_BUFFER_SIZE];
+	char *tmp = NULL;
 	int ret;
 
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
+
+	tmp = st21nfc_dev->read_buf;
+	memset(tmp, 0x00, count);
 
 	pr_debug("reading %zu bytes.\n", count);
 
@@ -240,7 +245,7 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 				 size_t count, loff_t *offset)
 {
 	struct st21nfc_dev *st21nfc_dev;
-	char tmp[MAX_BUFFER_SIZE];
+	char *tmp = NULL;
 	int ret = count;
 
 	st21nfc_dev = container_of(filp->private_data,
@@ -249,6 +254,9 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
+
+	tmp = st21nfc_dev->write_buf;
+	memset(tmp, 0x00, count);
 
 	if (copy_from_user(tmp, buf, count)) {
 		pr_err("failed to copy from user space\n");
@@ -263,6 +271,7 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 		// pr_err("i2c_master_send returned %d\n", ret);
 		ret = -EIO;
 	}
+
 	return ret;
 }
 
@@ -590,32 +599,51 @@ static int st21nfc_probe(struct i2c_client *client,
 	st21nfc_dev->platform_data.polarity_mode = platform_data->polarity_mode;
 	st21nfc_dev->platform_data.client = client;
 
+	st21nfc_dev->read_buf = kmalloc(MAX_BUFFER_SIZE, GFP_ATOMIC);
+	if (!st21nfc_dev->read_buf ) {
+		dev_err(&client->dev,
+			"failed to allocate memory for st21nfc_dev->read_buf\n");
+		ret = -ENOMEM;
+		goto err_free_dev;
+	}
+
+	st21nfc_dev->write_buf = kmalloc(MAX_BUFFER_SIZE, GFP_ATOMIC);
+	if (!st21nfc_dev->write_buf) {
+		dev_err(&client->dev,
+			"failed to allocate memory for st21nfc_dev->write_buf\n");
+		ret = -ENOMEM;
+		goto err_free_read_buffer;
+	}
+
 	ret = gpio_request(platform_data->irq_gpio, "irq_gpio");
 	if (ret) {
 		pr_err("gpio_request failed\n");
 		ret = -ENODEV;
-		goto err_free_buffer;
+		goto err_free_write_buffer;
 	}
 
 	ret = gpio_direction_input(platform_data->irq_gpio);
 	if (ret) {
 		pr_err("gpio_direction_input failed\n");
 		ret = -ENODEV;
-		goto err_free_buffer;
+		goto err_free_write_buffer;
 	}
 
-	ret = gpio_request(platform_data->clkreq_gpio, "clkreq_gpio");
-	if (ret) {
-		pr_err("[OPTIONAL] gpio_request failed\n");
-		ret = 0;
-	} else {
-		ret = gpio_direction_input(platform_data->clkreq_gpio);
+	if (gpio_is_valid(platform_data->clkreq_gpio)) {
+		ret = gpio_request(platform_data->clkreq_gpio, "clkreq_gpio");
 		if (ret) {
-			pr_err("[OPTIONAL] gpio_direction_input failed\n");
-			ret = 0;
+			pr_err("[OPTIONAL] gpio_request failed\n");
+			ret = -ENODEV;
+			goto err_free_write_buffer;
+		} else {
+			ret = gpio_direction_input(platform_data->clkreq_gpio);
+			if (ret) {
+				pr_err("[OPTIONAL] gpio_direction_input failed\n");
+				ret = -ENODEV;
+				goto err_clkreq_gpio;
+			}
 		}
 	}
-
 
 	/* initialize irqIsAttached variable */
 	irqIsAttached = false;
@@ -629,13 +657,13 @@ static int st21nfc_probe(struct i2c_client *client,
 		if (ret) {
 			pr_err("reset gpio_request failed\n");
 			ret = -ENODEV;
-			goto err_free_buffer;
+			goto err_clkreq_gpio;
 		}
 		ret = gpio_direction_output(platform_data->reset_gpio, 1);
 		if (ret) {
 			pr_err("reset gpio_direction_output failed\n");
 			ret = -ENODEV;
-			goto err_free_buffer;
+			goto err_reset_gpio;
 		}
 		/* low active */
 		gpio_set_value(st21nfc_dev->platform_data.reset_gpio, 1);
@@ -679,7 +707,17 @@ err_request_irq_failed:
 	misc_deregister(&st21nfc_dev->st21nfc_device);
 err_misc_register:
 	mutex_destroy(&st21nfc_dev->platform_data.read_mutex);
-err_free_buffer:
+err_reset_gpio:
+	if (gpio_is_valid(platform_data->reset_gpio))
+		gpio_free(platform_data->reset_gpio);
+err_clkreq_gpio:
+	if (gpio_is_valid(platform_data->clkreq_gpio))
+		gpio_free(platform_data->clkreq_gpio);
+err_free_write_buffer:
+	kfree(st21nfc_dev->write_buf);
+err_free_read_buffer:
+	kfree(st21nfc_dev->read_buf);
+err_free_dev:
 	kfree(st21nfc_dev);
 err_exit:
 	gpio_free(platform_data->irq_gpio);
@@ -697,9 +735,15 @@ static int st21nfc_remove(struct i2c_client *client)
 	free_irq(client->irq, st21nfc_dev);
 	misc_deregister(&st21nfc_dev->st21nfc_device);
 	mutex_destroy(&st21nfc_dev->platform_data.read_mutex);
+	if (gpio_is_valid(st21nfc_dev->platform_data.reset_gpio))
+		gpio_free(st21nfc_dev->platform_data.reset_gpio);
+	if (gpio_is_valid(st21nfc_dev->platform_data.clkreq_gpio))
+		gpio_free(st21nfc_dev->platform_data.clkreq_gpio);
 	gpio_free(st21nfc_dev->platform_data.irq_gpio);
 	if (st21nfc_dev->platform_data.ena_gpio != 0)
 		gpio_free(st21nfc_dev->platform_data.ena_gpio);
+	kfree(st21nfc_dev->write_buf);
+	kfree(st21nfc_dev->read_buf);
 	kfree(st21nfc_dev);
 
 	return 0;
