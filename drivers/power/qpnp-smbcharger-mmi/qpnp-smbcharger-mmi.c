@@ -73,6 +73,10 @@ enum {
 #define WARM_TEMP 45
 #define COOL_TEMP 0
 
+#define HEARTBEAT_DELAY_MS 60000
+#define HEARTBEAT_DUAL_DELAY_MS 10000
+#define HEARTBEAT_FACTORY_MS 1000
+
 enum {
 	TRICKLE_CHARGE = 0,
 	PRE_CHARGE,
@@ -111,6 +115,12 @@ enum mmi_temp_zones {
 	ZONE_HOT,
 	ZONE_COLD,
 	ZONE_NONE = 0xFF,
+};
+
+enum {
+	BASE_BATT = 0,
+	MAIN_BATT,
+	FLIP_BATT,
 };
 
 enum mmi_chrg_step {
@@ -163,6 +173,19 @@ struct smb_mmi_params {
 	struct smb_mmi_chg_param	dc_icl;
 };
 
+struct mmi_sm_params {
+	int			num_temp_zones;
+	struct mmi_temp_zone	*temp_zones;
+	enum mmi_temp_zones	pres_temp_zone;
+	enum mmi_chrg_step	pres_chrg_step;
+	int			chrg_taper_cnt;
+	int			batt_health;
+	int			chrg_iterm;
+	int			target_fcc;
+	int			target_fv;
+	int			ocp[MAX_NUM_STEPS];
+};
+
 struct smb_mmi_charger {
 	struct device		*dev;
 	struct regmap 		*regmap;
@@ -201,14 +224,8 @@ struct smb_mmi_charger {
 	int			gen_log_rate_s;
 
 	/* Charge Profile */
-	int			num_temp_zones;
-	struct mmi_temp_zone	*temp_zones;
-	enum mmi_temp_zones	pres_temp_zone;
-	enum mmi_chrg_step	pres_chrg_step;
-	int			chrg_taper_cnt;
-	int			batt_health;
+	struct mmi_sm_params	sm_param[3];
 	int			base_fv_mv;
-	int			chrg_iterm;
 	int			vfloat_comp_mv;
 	struct wakeup_source	smb_mmi_hb_wake_source;
 	struct alarm		heartbeat_alarm;
@@ -1141,7 +1158,9 @@ static int smb_mmi_set_property(struct power_supply *psy,
 #define MAX_TEMP_C 60
 #define MIN_MAX_TEMP_C 47
 #define HYSTERISIS_DEGC 2
-static bool mmi_find_temp_zone(struct smb_mmi_charger *chip, int temp_c)
+static bool mmi_find_temp_zone(struct smb_mmi_charger *chg,
+			       struct mmi_sm_params *chip,
+			       int temp_c)
 {
 	int prev_zone, num_zones;
 	struct mmi_temp_zone *zones;
@@ -1150,8 +1169,8 @@ static bool mmi_find_temp_zone(struct smb_mmi_charger *chip, int temp_c)
 	int i;
 	int max_temp;
 
-	if (!chip) {
-		pr_debug("called before chip valid!\n");
+	if (!chg) {
+		pr_debug("called before chg valid!\n");
 		return false;
 	}
 
@@ -1159,8 +1178,8 @@ static bool mmi_find_temp_zone(struct smb_mmi_charger *chip, int temp_c)
 	num_zones = chip->num_temp_zones;
 	prev_zone = chip->pres_temp_zone;
 
-	if (chip->max_chrg_temp >= MIN_MAX_TEMP_C)
-		max_temp = chip->max_chrg_temp;
+	if (chg->max_chrg_temp >= MIN_MAX_TEMP_C)
+		max_temp = chg->max_chrg_temp;
 	else
 		max_temp = zones[num_zones - 1].temp_c;
 
@@ -1341,18 +1360,19 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 
 #define TAPER_COUNT 2
 #define TAPER_DROP_MA 100
-static bool mmi_has_current_tapered(struct smb_mmi_charger *chip,
+static bool mmi_has_current_tapered(struct smb_mmi_charger *chg,
+				    struct mmi_sm_params *chip,
 				    int batt_ma, int taper_ma)
 {
 	bool change_state = false;
 	int allowed_fcc, target_ma;
 
-	if (!chip) {
+	if (!chg) {
 		pr_debug("called before chip valid!\n");
 		return false;
 	}
 
-	allowed_fcc = get_effective_result(chip->fcc_votable) / 1000;
+	allowed_fcc = get_effective_result(chg->fcc_votable) / 1000;
 
 	if (allowed_fcc >= taper_ma)
 		target_ma = taper_ma;
@@ -1435,46 +1455,41 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 	return ALARMTIMER_NORESTART;
 }
 
-static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
-				struct smb_mmi_chg_status *stat)
+static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
+			      struct smb_mmi_chg_status *stat,
+			      int batt)
 {
-	int target_fcc;
-	int target_fv;
 	int max_fv_mv;
+	int i;
 	struct mmi_temp_zone *zone;
-
-	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
-		" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
-		stat->batt_mv,
-		stat->batt_ma,
-		stat->batt_soc,
-		stat->batt_temp,
-		stat->usb_mv,
-		stat->charger_present,
-		stat->vbus_present);
+	struct mmi_sm_params *chip = &chg->sm_param[batt];
+	int start_tz = chip->pres_temp_zone;
+	int start_step = chip->pres_chrg_step;
 
 	if (!chip->temp_zones) {
-		pr_debug("SMBMMI: Skipping SM since No Temp Zone Defined!\n");
-		return;
+		pr_debug("SMBMMI: No Temp Zone Defined for batt %d!\n", batt);
+		return -ENODEV;
 	}
 
-	if (chip->base_fv_mv == 0) {
-		chip->base_fv_mv = get_effective_result(chip->fv_votable);
-		chip->base_fv_mv /= 1000;
-		vote(chip->fv_votable,
+	if (chg->base_fv_mv == 0) {
+		chg->base_fv_mv = get_effective_result(chg->fv_votable);
+		chg->base_fv_mv /= 1000;
+		vote(chg->fv_votable,
 		     BATT_PROFILE_VOTER, false, 0);
 	}
-	max_fv_mv = chip->base_fv_mv;
+	max_fv_mv = chg->base_fv_mv;
 
-	mmi_find_temp_zone(chip, stat->batt_temp);
+	mmi_find_temp_zone(chg, chip, stat->batt_temp);
 	zone = &chip->temp_zones[chip->pres_temp_zone];
 
 	if (!stat->charger_present) {
 		chip->pres_chrg_step = STEP_NONE;
+		for (i = 0; i < MAX_NUM_STEPS; i++)
+			chip->ocp[i] = 0;
 	} else if ((chip->pres_temp_zone == ZONE_HOT) ||
 		   (chip->pres_temp_zone == ZONE_COLD)) {
 		chip->pres_chrg_step = STEP_STOP;
-	} else if (chip->demo_mode) {
+	} else if (chg->demo_mode) {
 		/* TODO: Ignore Demo Mode for now */
 	} else if ((chip->pres_chrg_step == STEP_NONE) ||
 		   (chip->pres_chrg_step == STEP_STOP)) {
@@ -1498,17 +1513,11 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			chip->pres_chrg_step = STEP_MAX;
 		} else if (!zone->fcc_norm_ma)
 			chip->pres_chrg_step = STEP_FLOAT;
-		else if (mmi_has_current_tapered(chip, stat->batt_ma,
+		else if (mmi_has_current_tapered(chg, chip, stat->batt_ma,
 						 zone->fcc_norm_ma)) {
 			chip->chrg_taper_cnt = 0;
-
-			if (mmi_charge_halted(chip)) {
-				vote(chip->chg_dis_votable,
-				     MMI_HB_VOTER, true, 0);
-				pr_err("SMBMMI: Charge Halt..Toggle\n");
-				msleep(50);
-			}
-
+			for (i = 0; i < MAX_NUM_STEPS; i++)
+				chip->ocp[i] = 0;
 			chip->pres_chrg_step = STEP_NORM;
 		}
 	} else if (chip->pres_chrg_step == STEP_NORM) {
@@ -1518,7 +1527,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
 			chip->chrg_taper_cnt = 0;
 			chip->pres_chrg_step = STEP_NORM;
-		} else if (mmi_has_current_tapered(chip, stat->batt_ma,
+		} else if (mmi_has_current_tapered(chg, chip, stat->batt_ma,
 						   chip->chrg_iterm)) {
 				chip->pres_chrg_step = STEP_FULL;
 		}
@@ -1535,6 +1544,408 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 
 	/* Take State actions */
 	switch (chip->pres_chrg_step) {
+	case STEP_FLOAT:
+	case STEP_MAX:
+		if (!zone->norm_mv)
+			chip->target_fv = max_fv_mv;
+		else
+			chip->target_fv = zone->norm_mv;
+		chip->target_fcc = zone->fcc_max_ma;
+		break;
+	case STEP_FULL:
+		chip->target_fv = max_fv_mv;
+		chip->target_fcc = -EINVAL;
+		break;
+	case STEP_NORM:
+		chip->target_fv = max_fv_mv + chg->vfloat_comp_mv;
+		chip->target_fcc = zone->fcc_norm_ma;
+		break;
+	case STEP_NONE:
+		chip->target_fv = max_fv_mv;
+		chip->target_fcc = zone->fcc_norm_ma;
+		break;
+	case STEP_STOP:
+		chip->target_fv = max_fv_mv;
+		chip->target_fcc = -EINVAL;
+		break;
+	case STEP_DEMO:
+		chip->target_fv = DEMO_MODE_VOLTAGE;
+		chip->target_fcc = zone->fcc_max_ma;
+		break;
+	default:
+		chip->target_fv = max_fv_mv;
+		chip->target_fcc = zone->fcc_norm_ma;
+		break;
+	}
+
+	if (chip->pres_temp_zone == ZONE_HOT) {
+		chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+	} else if (chip->pres_temp_zone == ZONE_COLD) {
+		chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+	} else if (stat->batt_temp >= WARM_TEMP) {
+		if (chip->pres_chrg_step == STEP_STOP)
+			chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		else
+			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	} else if (stat->batt_temp <= COOL_TEMP) {
+		if (chip->pres_chrg_step == STEP_STOP)
+			chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+		else
+			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	} else
+		chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+
+	if ((start_tz != chip->pres_temp_zone) ||
+	    (start_step != chip->pres_chrg_step)) {
+		pr_info("SMB_MMI:"
+			"Batt %d: batt_mv = %d, batt_ma %d, batt_soc %d,"
+			" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
+			batt,
+			stat->batt_mv,
+			stat->batt_ma,
+			stat->batt_soc,
+			stat->batt_temp,
+			stat->usb_mv,
+			stat->charger_present,
+			stat->vbus_present);
+		pr_info("SMBMMI:"
+			"Batt %d Step State = %s, Temp Zone %d, Health %d\n",
+			batt,
+			stepchg_str[(int)chip->pres_chrg_step],
+			chip->pres_temp_zone,
+			chip->batt_health);
+		return 1;
+	} else {
+		pr_debug("SMB_MMI:"
+			 "Batt %d: batt_mv = %d, batt_ma %d, batt_soc %d,"
+			 " batt_temp %d, usb_mv %d, cp %d, vp %d\n",
+			 batt,
+			 stat->batt_mv,
+			 stat->batt_ma,
+			 stat->batt_soc,
+			 stat->batt_temp,
+			 stat->usb_mv,
+			 stat->charger_present,
+			 stat->vbus_present);
+		pr_debug("SMBMMI:"
+			 "Batt %d Step State = %s, Temp Zone %d, Health %d\n",
+			 batt,
+			 stepchg_str[(int)chip->pres_chrg_step],
+			 chip->pres_temp_zone,
+			 chip->batt_health);
+	}
+
+	return 0;
+}
+
+static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
+				    struct smb_mmi_chg_status *stat)
+{
+	int rc;
+	int target_fcc;
+	int target_fv;
+	int effective_fv;
+	int effective_fcc;
+	int ocp;
+	int sm_update;
+	int sched_time = HEARTBEAT_DUAL_DELAY_MS;
+	struct smb_mmi_chg_status chg_stat_main, chg_stat_flip;
+	union power_supply_propval pval;
+	struct mmi_sm_params *main_p = &chg->sm_param[MAIN_BATT];
+	struct mmi_sm_params *flip_p = &chg->sm_param[FLIP_BATT];
+
+	chg_stat_main.charger_present = stat->charger_present;
+	chg_stat_flip.charger_present = stat->charger_present;
+	chg_stat_main.vbus_present = stat->vbus_present;
+	chg_stat_flip.vbus_present = stat->vbus_present;
+	chg_stat_main.usb_mv = stat->usb_mv;
+	chg_stat_flip.usb_mv = stat->usb_mv;
+
+	rc = get_prop_batt_voltage_now(chg, chg->max_main_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Main Batt Voltage rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_main.batt_mv = pval.intval / 1000;
+
+	rc = get_prop_batt_voltage_now(chg, chg->max_flip_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Flip Batt Voltage rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_flip.batt_mv = pval.intval / 1000;
+
+	rc = get_prop_batt_current_now(chg, chg->max_main_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Main Batt Current rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_main.batt_ma = (pval.intval / 1000) * -1;
+
+	rc = get_prop_batt_current_now(chg, chg->max_flip_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Flip Batt Current rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_flip.batt_ma = (pval.intval / 1000) * -1;
+
+	rc = get_prop_batt_capacity(chg, chg->max_main_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Main Batt Capacity rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_main.batt_soc = pval.intval;
+
+	rc = get_prop_batt_capacity(chg, chg->max_flip_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Flip Batt Capacity rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_flip.batt_soc = pval.intval;
+
+	rc = get_prop_batt_temp(chg, chg->max_main_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Main Batt Temperature rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_main.batt_temp = pval.intval / 10;
+
+	rc = get_prop_batt_temp(chg, chg->max_flip_psy, &pval);
+	if (rc < 0) {
+		pr_err("Error getting Flip Batt Temperature rc = %d\n", rc);
+		return sched_time;
+	} else
+		chg_stat_flip.batt_temp = pval.intval / 10;
+
+	sm_update = mmi_dual_charge_sm(chg, &chg_stat_main, MAIN_BATT);
+	if (sm_update < 0)
+		return sched_time;
+
+	sm_update = mmi_dual_charge_sm(chg, &chg_stat_flip, FLIP_BATT);
+	if (sm_update < 0)
+		return sched_time;
+
+	effective_fv = get_effective_result(chg->fv_votable) / 1000;
+	effective_fcc = get_effective_result(chg->fcc_votable);
+
+	/* Check for Charge None */
+	if ((main_p->pres_chrg_step == STEP_NONE) ||
+	    (flip_p->pres_chrg_step == STEP_NONE)) {
+		target_fcc = main_p->target_fcc;
+		target_fv = chg->base_fv_mv;
+		sched_time = HEARTBEAT_DELAY_MS;
+		goto vote_now;
+	/* Check for Charge FULL from each */
+	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
+		   (flip_p->pres_chrg_step == STEP_FULL)) {
+		target_fcc = -EINVAL;
+		target_fv = chg->base_fv_mv;
+		sched_time = HEARTBEAT_DELAY_MS;
+		goto vote_now;
+	/* Align FULL between batteries */
+	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
+		   ((flip_p->pres_chrg_step == STEP_MAX) ||
+		    (flip_p->pres_chrg_step == STEP_NORM)) &&
+		   (chg_stat_flip.batt_soc >= 100) &&
+		   ((chg_stat_flip.batt_mv + HYST_STEP_MV) >=
+		    chg->base_fv_mv)) {
+		target_fcc = -EINVAL;
+		target_fv = chg->base_fv_mv;
+		flip_p->pres_chrg_step = STEP_FULL;
+		pr_info("SMBMMI: Align Flip to Main FULL\n");
+		goto vote_now;
+	} else if ((flip_p->pres_chrg_step == STEP_FULL) &&
+		   ((main_p->pres_chrg_step == STEP_MAX) ||
+		    (main_p->pres_chrg_step == STEP_NORM)) &&
+		   (chg_stat_main.batt_soc >= 100) &&
+		   ((chg_stat_main.batt_mv + HYST_STEP_MV) >=
+		    chg->base_fv_mv)) {
+		target_fcc = -EINVAL;
+		target_fv = chg->base_fv_mv;
+		main_p->pres_chrg_step = STEP_FULL;
+		pr_info("SMBMMI: Align Main to Flip FULL\n");
+		goto vote_now;
+	/* Check for Charge Disable from each */
+	} else if ((main_p->target_fcc < 0) ||
+		   (flip_p->target_fcc < 0)) {
+		target_fcc = -EINVAL;
+		target_fv = chg->base_fv_mv;
+		goto vote_now;
+	}
+
+	if (main_p->target_fv < flip_p->target_fv)
+		target_fv = main_p->target_fv;
+	else
+		target_fv = flip_p->target_fv;
+
+	if (chg_stat_main.batt_ma < 0) {
+		chg_stat_main.batt_ma *= -1;
+		if (chg_stat_main.batt_ma > main_p->target_fcc) {
+			ocp = chg_stat_main.batt_ma - main_p->target_fcc;
+			main_p->ocp[main_p->pres_temp_zone] += ocp;
+			pr_info("SMBMMI: Main Exceed by %d mA\n",
+				main_p->ocp[main_p->pres_temp_zone]);
+		}
+	}
+
+	if (chg_stat_flip.batt_ma < 0) {
+		chg_stat_flip.batt_ma *= -1;
+		if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
+			ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
+			flip_p->ocp[flip_p->pres_temp_zone] += ocp;
+			pr_info("SMBMMI: Flip Exceed by %d mA\n",
+				flip_p->ocp[flip_p->pres_temp_zone]);
+		}
+	}
+
+	target_fcc = main_p->target_fcc + flip_p->target_fcc;
+	target_fcc -= main_p->ocp[main_p->pres_temp_zone];
+	target_fcc -= flip_p->ocp[flip_p->pres_temp_zone];
+	if (target_fcc < main_p->target_fcc) {
+		pr_info("SMBMMI: Target FCC adjust too much\n");
+		target_fcc = main_p->target_fcc;
+	}
+
+	if (((main_p->pres_chrg_step == STEP_MAX) ||
+	     (flip_p->pres_chrg_step == STEP_MAX) ||
+	     (main_p->pres_chrg_step == STEP_NORM) ||
+	     (flip_p->pres_chrg_step == STEP_NORM)) &&
+	    mmi_charge_halted(chg)) {
+		vote(chg->chg_dis_votable,
+		     MMI_HB_VOTER, true, 0);
+		pr_err("SMBMMI: Charge Halt..Toggle\n");
+		msleep(50);
+	}
+
+vote_now:
+	/* Votes for State */
+	vote(chg->fv_votable, MMI_HB_VOTER, true, target_fv * 1000);
+
+	vote(chg->chg_dis_votable, MMI_HB_VOTER,
+	     (target_fcc < 0), 0);
+
+	vote(chg->fcc_votable, MMI_HB_VOTER,
+	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
+
+	if (sm_update)
+		pr_info("SMBMMI:"
+			"IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
+			effective_fv,
+			get_effective_result(chg->chg_dis_votable),
+			effective_fcc,
+			get_effective_result(chg->usb_icl_votable));
+	else
+		pr_debug("SMBMMI:"
+			"IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
+			effective_fv,
+			get_effective_result(chg->chg_dis_votable),
+			effective_fcc,
+			get_effective_result(chg->usb_icl_votable));
+
+	return sched_time;
+}
+
+static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
+				struct smb_mmi_chg_status *stat)
+{
+	int target_fcc;
+	int target_fv;
+	int max_fv_mv;
+	struct mmi_temp_zone *zone;
+	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
+
+	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
+		" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
+		stat->batt_mv,
+		stat->batt_ma,
+		stat->batt_soc,
+		stat->batt_temp,
+		stat->usb_mv,
+		stat->charger_present,
+		stat->vbus_present);
+
+	if (!prm->temp_zones) {
+		pr_debug("SMBMMI: Skipping SM since No Temp Zone Defined!\n");
+		return;
+	}
+
+	if (chip->base_fv_mv == 0) {
+		chip->base_fv_mv = get_effective_result(chip->fv_votable);
+		chip->base_fv_mv /= 1000;
+		vote(chip->fv_votable,
+		     BATT_PROFILE_VOTER, false, 0);
+	}
+	max_fv_mv = chip->base_fv_mv;
+
+	mmi_find_temp_zone(chip, prm, stat->batt_temp);
+	zone = &prm->temp_zones[prm->pres_temp_zone];
+
+	if (!stat->charger_present) {
+		prm->pres_chrg_step = STEP_NONE;
+	} else if ((prm->pres_temp_zone == ZONE_HOT) ||
+		   (prm->pres_temp_zone == ZONE_COLD)) {
+		prm->pres_chrg_step = STEP_STOP;
+	} else if (chip->demo_mode) {
+		/* TODO: Ignore Demo Mode for now */
+	} else if ((prm->pres_chrg_step == STEP_NONE) ||
+		   (prm->pres_chrg_step == STEP_STOP)) {
+		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
+			if (zone->fcc_norm_ma)
+				prm->pres_chrg_step = STEP_NORM;
+			else
+				prm->pres_chrg_step = STEP_STOP;
+		} else
+			prm->pres_chrg_step = STEP_MAX;
+	} else if (prm->pres_chrg_step == STEP_MAX) {
+		if (!zone->norm_mv) {
+			/* No Step in this Zone */
+			prm->chrg_taper_cnt = 0;
+			if ((stat->batt_mv + HYST_STEP_MV) >= max_fv_mv)
+				prm->pres_chrg_step = STEP_NORM;
+			else
+				prm->pres_chrg_step = STEP_MAX;
+		} else if ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv) {
+			prm->chrg_taper_cnt = 0;
+			prm->pres_chrg_step = STEP_MAX;
+		} else if (!zone->fcc_norm_ma)
+			prm->pres_chrg_step = STEP_FLOAT;
+		else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+						 zone->fcc_norm_ma)) {
+			prm->chrg_taper_cnt = 0;
+
+			if (mmi_charge_halted(chip)) {
+				vote(chip->chg_dis_votable,
+				     MMI_HB_VOTER, true, 0);
+				pr_err("SMBMMI: Charge Halt..Toggle\n");
+				msleep(50);
+			}
+
+			prm->pres_chrg_step = STEP_NORM;
+		}
+	} else if (prm->pres_chrg_step == STEP_NORM) {
+		if (!zone->fcc_norm_ma)
+			prm->pres_chrg_step = STEP_STOP;
+		else if ((stat->batt_soc < 100) ||
+			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
+			prm->chrg_taper_cnt = 0;
+			prm->pres_chrg_step = STEP_NORM;
+		} else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+						   prm->chrg_iterm)) {
+				prm->pres_chrg_step = STEP_FULL;
+		}
+	} else if (prm->pres_chrg_step == STEP_FULL) {
+		if (stat->batt_soc <= 99) {
+			prm->chrg_taper_cnt = 0;
+			prm->pres_chrg_step = STEP_NORM;
+		}
+	} else if (prm->pres_chrg_step == STEP_FLOAT) {
+		if ((zone->fcc_norm_ma) ||
+		    ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv))
+			prm->pres_chrg_step = STEP_MAX;
+	}
+
+	/* Take State actions */
+	switch (prm->pres_chrg_step) {
 	case STEP_FLOAT:
 	case STEP_MAX:
 		if (!zone->norm_mv)
@@ -1578,27 +1989,27 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	vote(chip->fcc_votable, MMI_HB_VOTER,
 	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
 
-	if (chip->pres_temp_zone == ZONE_HOT) {
-		chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
-	} else if (chip->pres_temp_zone == ZONE_COLD) {
-		chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+	if (prm->pres_temp_zone == ZONE_HOT) {
+		prm->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+	} else if (prm->pres_temp_zone == ZONE_COLD) {
+		prm->batt_health = POWER_SUPPLY_HEALTH_COLD;
 	} else if (stat->batt_temp >= WARM_TEMP) {
-		if (chip->pres_chrg_step == STEP_STOP)
-			chip->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		if (prm->pres_chrg_step == STEP_STOP)
+			prm->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
 		else
-			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+			prm->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 	} else if (stat->batt_temp <= COOL_TEMP) {
-		if (chip->pres_chrg_step == STEP_STOP)
-			chip->batt_health = POWER_SUPPLY_HEALTH_COLD;
+		if (prm->pres_chrg_step == STEP_STOP)
+			prm->batt_health = POWER_SUPPLY_HEALTH_COLD;
 		else
-			chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+			prm->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 	} else
-		chip->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+		prm->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 
 	pr_info("SMBMMI: Step State = %s, Temp Zone %d, Health %d\n",
-		stepchg_str[(int)chip->pres_chrg_step],
-		chip->pres_temp_zone,
-		chip->batt_health);
+		stepchg_str[(int)prm->pres_chrg_step],
+		prm->pres_temp_zone,
+		prm->batt_health);
 	pr_info("SMBMMI: IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 		get_effective_result(chip->fv_votable),
 		get_effective_result(chip->chg_dis_votable),
@@ -1622,8 +2033,6 @@ static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
 #define SMBCHG_HEARTBEAT_INTERVAL_NS	70000000000
-#define HEARTBEAT_DELAY_MS 60000
-#define HEARTBEAT_FACTORY_MS 1000
 static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct smb_mmi_charger *chip = container_of(work,
@@ -1766,6 +2175,9 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			if (rc < 0)
 				pr_err("SMBMMI: Couldn't set batt psy cap\n");
 		}
+
+		/* Dual Step and Thermal Charging */
+		hb_resch_time = mmi_dual_charge_control(chip, &chg_stat);
 	} else if (!chip->factory_mode) {
 		/* Fall here for Basic Step and Thermal Charging */
 		mmi_basic_charge_sm(chip, &chg_stat);
@@ -1920,60 +2332,163 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	int rc = 0;
 	int byte_len;
 	int i;
+	struct mmi_sm_params *chip;
 
 	if (!node) {
 		pr_err("mmi dtree info. missing\n");
 		return -ENODEV;
 	}
 
-
+	chip = &chg->sm_param[BASE_BATT];
 	if (of_find_property(node, "qcom,mmi-temp-zones", &byte_len)) {
 		if ((byte_len / sizeof(u32)) % 4) {
 			pr_err("DT error wrong mmi temp zones\n");
 			return -ENODEV;
 		}
 
-		chg->temp_zones = (struct mmi_temp_zone *)
+		chip->temp_zones = (struct mmi_temp_zone *)
 			devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
 
-		if (chg->temp_zones == NULL)
+		if (chip->temp_zones == NULL)
 			return -ENOMEM;
 
-		chg->num_temp_zones =
+		chip->num_temp_zones =
 			byte_len / sizeof(struct mmi_temp_zone);
 
 		rc = of_property_read_u32_array(node,
 				"qcom,mmi-temp-zones",
-				(u32 *)chg->temp_zones,
+				(u32 *)chip->temp_zones,
 				byte_len / sizeof(u32));
 		if (rc < 0) {
 			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
 			return rc;
 		}
 
-		pr_err("mmi temp zones: Num: %d\n", chg->num_temp_zones);
-		for (i = 0; i < chg->num_temp_zones; i++) {
+		pr_err("mmi temp zones: Num: %d\n", chip->num_temp_zones);
+		for (i = 0; i < chip->num_temp_zones; i++) {
 			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
 				"Step Volt %d mV, Full Rate %d mA, " \
 				"Taper Rate %d mA\n", i,
-				chg->temp_zones[i].temp_c,
-				chg->temp_zones[i].norm_mv,
-				chg->temp_zones[i].fcc_max_ma,
-				chg->temp_zones[i].fcc_norm_ma);
+				chip->temp_zones[i].temp_c,
+				chip->temp_zones[i].norm_mv,
+				chip->temp_zones[i].fcc_max_ma,
+				chip->temp_zones[i].fcc_norm_ma);
 		}
-		chg->pres_temp_zone = ZONE_NONE;
+		chip->pres_temp_zone = ZONE_NONE;
 	}
 
 	rc = of_property_read_u32(node, "qcom,iterm-ma",
-				  &chg->chrg_iterm);
+				  &chip->chrg_iterm);
 	if (rc)
-		chg->chrg_iterm = 150;
+		chip->chrg_iterm = 150;
 
 	rc = of_property_read_u32(node, "qcom,vfloat-comp-uv",
 				  &chg->vfloat_comp_mv);
 	if (rc)
 		chg->vfloat_comp_mv = 0;
 	chg->vfloat_comp_mv /= 1000;
+
+	return rc;
+}
+
+static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
+{
+	struct device_node *node = chg->dev->of_node;
+	int rc = 0;
+	int byte_len;
+	int i;
+	struct mmi_sm_params *chip;
+
+	if (!node) {
+		pr_err("mmi dtree info. missing\n");
+		return -ENODEV;
+	}
+
+	chip = &chg->sm_param[MAIN_BATT];
+	if (of_find_property(node, "qcom,mmi-temp-zones-main", &byte_len)) {
+		if ((byte_len / sizeof(u32)) % 4) {
+			pr_err("DT error wrong mmi temp zones\n");
+			return -ENODEV;
+		}
+
+		chip->temp_zones = (struct mmi_temp_zone *)
+			devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
+
+		if (chip->temp_zones == NULL)
+			return -ENOMEM;
+
+		chip->num_temp_zones =
+			byte_len / sizeof(struct mmi_temp_zone);
+
+		rc = of_property_read_u32_array(node,
+				"qcom,mmi-temp-zones-main",
+				(u32 *)chip->temp_zones,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			return rc;
+		}
+
+		pr_err("mmi temp zones main: Num: %d\n", chip->num_temp_zones);
+		for (i = 0; i < chip->num_temp_zones; i++) {
+			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+				"Step Volt %d mV, Full Rate %d mA, " \
+				"Taper Rate %d mA\n", i,
+				chip->temp_zones[i].temp_c,
+				chip->temp_zones[i].norm_mv,
+				chip->temp_zones[i].fcc_max_ma,
+				chip->temp_zones[i].fcc_norm_ma);
+		}
+		chip->pres_temp_zone = ZONE_NONE;
+	}
+
+	rc = of_property_read_u32(node, "qcom,iterm-ma-main",
+				  &chip->chrg_iterm);
+	if (rc)
+		chip->chrg_iterm = 150;
+
+	chip = &chg->sm_param[FLIP_BATT];
+	if (of_find_property(node, "qcom,mmi-temp-zones-flip", &byte_len)) {
+		if ((byte_len / sizeof(u32)) % 4) {
+			pr_err("DT error wrong mmi temp zones\n");
+			return -ENODEV;
+		}
+
+		chip->temp_zones = (struct mmi_temp_zone *)
+			devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
+
+		if (chip->temp_zones == NULL)
+			return -ENOMEM;
+
+		chip->num_temp_zones =
+			byte_len / sizeof(struct mmi_temp_zone);
+
+		rc = of_property_read_u32_array(node,
+				"qcom,mmi-temp-zones-flip",
+				(u32 *)chip->temp_zones,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			return rc;
+		}
+
+		pr_err("mmi temp zones main: Num: %d\n", chip->num_temp_zones);
+		for (i = 0; i < chip->num_temp_zones; i++) {
+			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+				"Step Volt %d mV, Full Rate %d mA, " \
+				"Taper Rate %d mA\n", i,
+				chip->temp_zones[i].temp_c,
+				chip->temp_zones[i].norm_mv,
+				chip->temp_zones[i].fcc_max_ma,
+				chip->temp_zones[i].fcc_norm_ma);
+		}
+		chip->pres_temp_zone = ZONE_NONE;
+	}
+
+	rc = of_property_read_u32(node, "qcom,iterm-ma-flip",
+				  &chip->chrg_iterm);
+	if (rc)
+		chip->chrg_iterm = 150;
 
 	return rc;
 }
@@ -2082,6 +2597,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (!rc && max_main_name && max_flip_name) {
 		chip->max_main_psy = power_supply_get_by_name(max_main_name);
 		chip->max_flip_psy = power_supply_get_by_name(max_flip_name);
+		parse_mmi_dual_dt(chip);
 	}
 
 	chip->chg_dis_votable = find_votable("CHG_DISABLE");
