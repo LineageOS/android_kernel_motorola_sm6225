@@ -3021,6 +3021,8 @@ cppflags-$(CONFIG_WLAN_HANG_EVENT) += -DHIF_BUS_LOG_INFO
 cppflags-$(CONFIG_WLAN_HANG_EVENT) += -DDP_SUPPORT_RECOVERY_NOTIFY
 #endof dummy flags
 
+cppflags-y += -DMOTO_UTAGS_MAC
+
 ccflags-$(CONFIG_ENABLE_SIZE_OPTIMIZE) += -Os
 
 # DFS component
