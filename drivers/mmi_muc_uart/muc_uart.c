@@ -1036,6 +1036,7 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 	uint8_t *data,
 	size_t len)
 {
+	int i;
 	size_t content_size;
 	size_t segment_size;
 	struct mmi_uart_hdr_t *hdr;
@@ -1051,6 +1052,29 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 		return 0;
 
 	hdr = (struct mmi_uart_hdr_t *)data;
+
+	/* Verify the magic number */
+	if (le16_to_cpu(hdr->magic) != MSG_MAGIC) {
+		MUC_ERR("invalid magic %x\n",
+			le16_to_cpu(hdr->magic));
+		mmi_uart_report_rx_mag_err(mm_data->uart_data);
+
+		/* Look through the rest of the data we have,
+		 * and try to find a magic number, then throw out
+		 * the bytes in front of it by returning the count
+		 * before it.  This function will be re-entered
+		 * and the magic number should now be in front.
+		 */
+		for(i = 1; i < (len - 1); i++) {
+			if (le16_to_cpu(*(uint16_t *)(data + i)) == MSG_MAGIC) {
+				MUC_LOG("Found valid data at offset %d\n", i);
+				return i;
+			}
+		}
+
+		return i;
+	}
+
 	segment_size = le16_to_cpu(hdr->payload_length)
 		+ sizeof(*hdr) + sizeof(calc_crc);
 
@@ -1059,15 +1083,7 @@ static size_t muc_uart_rx_cb(struct platform_device *pdev,
 		UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE) {
 		MUC_ERR("invalid len %zd\n", segment_size);
 		mmi_uart_report_rx_len_err(mm_data->uart_data);
-		return len;
-	}
-
-	/* Verify the magic number */
-	if (le16_to_cpu(hdr->magic) != MSG_MAGIC) {
-		MUC_ERR("invalid magic %x\n",
-			le16_to_cpu(hdr->magic));
-		mmi_uart_report_rx_mag_err(mm_data->uart_data);
-		return len;
+		return sizeof(*hdr);
 	}
 
 	/* Need the whole message to continue */
