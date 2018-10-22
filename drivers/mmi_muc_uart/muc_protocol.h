@@ -35,6 +35,12 @@ struct mmi_uart_hdr_t {
 #define POWER_CONTROL         0x0004
 #define BOOT_MODE             0x0007
 #define MUC_FW_VERSION        0x0008
+#define MUC_SET_GPIO          0x0009
+
+/* MUC gpios */
+#define MUC_GPIO_1            35
+#define MOD_ATTACH_GPIO       36
+#define FORCE_USB_BOOT_GPIO   136
 
 enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
 struct boot_mode_t {
