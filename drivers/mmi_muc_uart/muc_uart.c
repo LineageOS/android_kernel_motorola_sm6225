@@ -159,6 +159,9 @@ static char *param_mucfw = "";
 module_param(param_mucfw, charp, S_IRUSR);
 MODULE_PARM_DESC(param_mucfw, "ro.mot.build.version.mod.nuttx");
 
+static int muc_uart_config_gpio(struct device *dev,
+		int gpio, char *name, int dir_out, int out_val);
+
 #if MUC_UART_SEND_SLEEP_ON_IDLE
 static inline void reset_idle_timer(struct mod_muc_data_t *mm_data)
 {
@@ -899,6 +902,22 @@ int muc_uart_pb_write(struct platform_device *pdev,
 		payload,count, true);
 }
 
+static int muc_uart_set_gpio(struct device *dev, int value)
+{
+	/* payload: 1 byte, output value */
+	pr_info("muc_uart_set_gpio out value:%d\n", value);
+
+	muc_uart_config_gpio(dev, MOD_ATTACH_GPIO, "mod_attach", 1, value);
+	gpio_set_value(MOD_ATTACH_GPIO, value);
+
+	gpio_set_value(MUC_GPIO_1, value);
+
+	muc_uart_config_gpio(dev, FORCE_USB_BOOT_GPIO, "force_usb_boot", 1, value);
+	gpio_set_value(FORCE_USB_BOOT_GPIO, value);
+
+	return 0;
+}
+
 static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 	struct mmi_uart_hdr_t *hdr,
 	uint8_t *payload,
@@ -979,6 +998,20 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 					(char *)payload);
 			} else
 				muc_uart_send(mm_data, MUC_FW_VERSION|MSG_NACK_MASK, NULL, 0);
+			break;
+		}
+		case MUC_SET_GPIO: {
+			if (payload_len != 1) {
+				pr_info("muc_set_gpio invalid payload_len: %d\n", (int)payload_len);
+				muc_uart_send(mm_data, MUC_SET_GPIO|MSG_NACK_MASK, NULL, 0);
+				break;
+			}
+
+			if (muc_uart_set_gpio(&mm_data->pdev->dev, (int)payload[0]) == 0) {
+				muc_uart_send(mm_data, MUC_SET_GPIO|MSG_ACK_MASK, NULL, 0);
+			} else {
+				muc_uart_send(mm_data, MUC_SET_GPIO|MSG_NACK_MASK, NULL, 0);
+			}
 			break;
 		}
 		default: {
