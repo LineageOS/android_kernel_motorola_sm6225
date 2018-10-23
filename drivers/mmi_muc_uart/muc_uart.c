@@ -604,6 +604,7 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		sizeof(struct boot_mode_t));
 }
 
+#define VBUS_PRESENT_UV 2000000
 static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 {
 	struct power_status_t pstatus;
@@ -674,6 +675,10 @@ static int muc_uart_send_power_status(struct mod_muc_data_t *mm_data)
 	if (!power_supply_get_property(mm_data->dc_psy,
 		POWER_SUPPLY_PROP_PRESENT, &pval))
 		pstatus.dc_in = pval.intval ? 1 : 0;
+
+	if (!power_supply_get_property(mm_data->usb_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval))
+		pstatus.vbus = (pval.intval >= VBUS_PRESENT_UV) ? 1 : 0;
 
 	/* TODO */
 	/* pstatus.reverse_boost;
