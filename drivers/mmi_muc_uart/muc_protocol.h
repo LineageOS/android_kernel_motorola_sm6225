@@ -63,6 +63,7 @@ struct power_status_t {
 	bool          dc_in;                /* DC IN Enabled. */
 	bool          charging;             /* Battery Charging. */
 	bool          charger;              /* MOD USBC Attached. */
+	bool          vbus;                 /* VBUS Present */
 	int16_t       battery_temp;         /* Degrees Celsius */
 	uint16_t      battery_capacity;     /* % Capacity */
 	uint16_t      battery_max_capacity; /* mAhr */
