@@ -56,8 +56,8 @@ static char _Buffer[128];
 #define S_PROX   1
 #define S_BODY   2
 
-#define ABOV_DEBUG 1
-#define LOG_TAG "ABOV"
+#define ABOV_DEBUG 0
+#define LOG_TAG "ABOV "
 
 #if ABOV_DEBUG
 #define LOG_INFO(fmt, args...)    pr_info(LOG_TAG fmt, ##args)
@@ -136,7 +136,7 @@ static int write_register(pabovXX_t this, u8 address, u8 value)
 	}
 	if (returnValue < 0) {
 		ForcetoTouched(this);
-		LOG_DBG("Write_register-ForcetoTouched()\n");
+		LOG_ERR("Write_register-ForcetoTouched()\n");
 	}
 	return returnValue;
 }
@@ -167,7 +167,7 @@ static int read_register(pabovXX_t this, u8 address, u8 *value)
 		}
 	}
 	ForcetoTouched(this);
-	LOG_INFO("read_register-ForcetoTouched()\n");
+	LOG_ERR("read_register-ForcetoTouched()\n");
 	return -ENOMEM;
 }
 
@@ -299,7 +299,7 @@ static void hw_init(pabovXX_t this)
 			i++;
 		}
 	} else {
-		LOG_DBG("ERROR! platform data 0x%p\n", pDevice->hw);
+		LOG_ERR("ERROR! platform data 0x%p\n", pDevice->hw);
 		/* Force to touched if error */
 		ForcetoTouched(this);
 		LOG_INFO("Hardware_init-ForcetoTouched()\n");
@@ -386,14 +386,14 @@ static void touchProcess(pabovXX_t this)
 		numberOfButtons = pDevice->pbuttonInformation->buttonSize;
 
 		if (unlikely((buttons == NULL) || (input_top == NULL) || (input_bottom == NULL))) {
-			LOG_DBG("ERROR!! buttons or input NULL!!!\n");
+			LOG_ERR("ERROR!! buttons or input NULL!!!\n");
 			return;
 		}
 
 		for (counter = 0; counter < numberOfButtons; counter++) {
 			pCurrentButton = &buttons[counter];
 			if (pCurrentButton == NULL) {
-				LOG_DBG("ERR!current button index: %d NULL!\n",
+				LOG_ERR("ERR!current button index: %d NULL!\n",
 						counter);
 				return; /* ERRORR!!!! */
 			}
@@ -501,7 +501,7 @@ static int abov_get_nirq_state(unsigned irq_gpio)
 	if (irq_gpio) {
 		return !gpio_get_value(irq_gpio);
 	} else {
-		LOG_INFO("abov irq_gpio is not set.");
+		LOG_ERR("abov irq_gpio is not set.");
 		return -EINVAL;
 	}
 }
@@ -526,7 +526,7 @@ static void abov_reg_setup_init(struct i2c_client *client)
 
 	ret = of_property_read_u32(np, "reg_array_len", &data_array_len);
 	if (ret < 0) {
-		LOG_DBG("data_array_len read error");
+		LOG_ERR("data_array_len read error");
 		return;
 	}
 	data_array = kmalloc(data_array_len * 2 * sizeof(u32), GFP_KERNEL);
@@ -534,14 +534,14 @@ static void abov_reg_setup_init(struct i2c_client *client)
 			data_array,
 			data_array_len*2);
 	if (ret < 0) {
-		LOG_DBG("data_array_val read error");
+		LOG_ERR("data_array_val read error");
 		return;
 	}
 	for (i = 0; i < ARRAY_SIZE(abov_i2c_reg_setup); i++) {
 		for (j = 0; j < data_array_len*2; j += 2) {
 			if (data_array[j] == abov_i2c_reg_setup[i].reg) {
 				abov_i2c_reg_setup[i].val = data_array[j+1];
-				LOG_DBG("read dtsi 0x%02x:0x%02x set reg\n",
+				LOG_INFO("read dtsi 0x%02x:0x%02x set reg\n",
 					data_array[j], data_array[j+1]);
 			}
 		}
@@ -579,7 +579,7 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 
 	ret = of_property_read_string(np, "label", &pplatData->fw_name);
 	if (ret < 0) {
-		LOG_DBG("firmware name read error!\n");
+		LOG_ERR("firmware name read error!\n");
 		return;
 	}
 }
@@ -641,7 +641,7 @@ static ssize_t capsense_reset_store(struct class *class,
 	if (!strncmp(buf, "1", 1))
 		ret = write_register(this, ABOV_RECALI_REG, 0x01);
 	if (ret < 0)
-		LOG_DBG(" headset insert,calibrate cap sensor failed\n");
+		LOG_ERR(" headset insert,calibrate cap sensor failed\n");
 
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
@@ -825,11 +825,11 @@ static ssize_t reg_dump_store(struct class *class,
 	} else if (strcmp("calibrate\n", buf) == 0) {
 		write_register(this, ABOV_RECALI_REG, 0x01);
 	} else if (sscanf(buf, "%x,%x,%x", &reg, &val, &opt) == 3) {
-		LOG_INFO("%s, read reg = 0x%02x\n", __func__, *(u8 *)&reg);
+		LOG_DBG("%s, read reg = 0x%02x\n", __func__, *(u8 *)&reg);
 		this->read_reg = *((u8 *)&reg);
 		this->read_flag = 1;
 	} else if (sscanf(buf, "%x,%x", &reg, &val) == 2) {
-		LOG_INFO("%s,reg = 0x%02x, val = 0x%02x\n",
+		LOG_DBG("%s,reg = 0x%02x, val = 0x%02x\n",
 				__func__, *(u8 *)&reg, *(u8 *)&val);
 		write_register(this, *((u8 *)&reg), *((u8 *)&val));
 	}
@@ -856,10 +856,10 @@ static void ps_notify_callback_work(struct work_struct *work)
 	input_top = pDevice->pbuttonInformation->input_top;
 	input_bottom = pDevice->pbuttonInformation->input_bottom;
 
-	LOG_INFO("Usb insert,going to force calibrate\n");
+	LOG_DBG("Usb insert,going to force calibrate\n");
 	ret = write_register(this, ABOV_RECALI_REG, 0x01);
 	if (ret < 0)
-		LOG_DBG(" Usb insert,calibrate cap sensor failed\n");
+		LOG_ERR(" Usb insert,calibrate cap sensor failed\n");
 
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
@@ -902,7 +902,7 @@ static int ps_notify_callback(struct notifier_block *self,
 		LOG_INFO("ps notification: event = %lu\n", event);
 		retval = ps_get_state(psy, &present);
 		if (retval) {
-			LOG_DBG("psy get property failed\n");
+			LOG_ERR("psy get property failed\n");
 			return retval;
 		}
 
@@ -1044,7 +1044,7 @@ retry:
 	buf[1] = 0xAA;
 	ret = i2c_master_send(client, buf, 2);
 	if (ret < 0) {
-		LOG_INFO("write fail(retry:%d)\n", retry_count);
+		LOG_ERR("write fail(retry:%d)\n", retry_count);
 		if (retry_count-- > 0) {
 			goto retry;
 		}
@@ -1081,7 +1081,7 @@ static int i2c_adapter_read_raw(struct i2c_client *client, u8 *data, u8 len)
 		LOG_INFO("TRAN : succ - addr:%#x ... len:%d data:%s\n", client->addr, msg.len, toString(msg.buf, msg.len));
 		return 0;
 	} else {
-		LOG_INFO("TRAN : fail - addr:%#x len:%d \n", client->addr, msg.len);
+		LOG_ERR("TRAN : fail - addr:%#x len:%d \n", client->addr, msg.len);
 		return -EIO;
 	}
 }
@@ -1252,7 +1252,7 @@ static int _abov_fw_update(struct i2c_client *client, const u8 *image, u32 size)
 		memcpy(data, &image[ii * 32], 32);
 		ret = abov_tk_fw_write(client, &addrH, &addrL, data);
 		if (ret < 0) {
-			LOG_INFO("fw_write.. ii = 0x%x err\r\n", ii);
+			LOG_ERR("fw_write.. ii = 0x%x err\r\n", ii);
 			return ret;
 		}
 
@@ -1266,7 +1266,7 @@ static int _abov_fw_update(struct i2c_client *client, const u8 *image, u32 size)
 		LOG_INFO("checksum successful. checksum_h:%x=%x && checksum_l:%x=%x\n",
 			checksum_h, checksum_h_bin, checksum_l, checksum_l_bin);
 	} else {
-		LOG_INFO("checksum error. checksum_h:%x=%x && checksum_l:%x=%x\n",
+		LOG_ERR("checksum error. checksum_h:%x=%x && checksum_l:%x=%x\n",
 			checksum_h, checksum_h_bin, checksum_l, checksum_l_bin);
 		ret = -1;
 	}
@@ -1293,7 +1293,7 @@ static int abov_fw_update(bool force)
 	strlcat(fw_name, ".BIN", NAME_MAX);
 	rc = request_firmware(&fw, fw_name, this->pdev);
 	if (rc < 0) {
-		LOG_INFO("Request firmware failed - %s (%d)\n",
+		LOG_ERR("Request firmware failed - %s (%d)\n",
 				this->board->fw_name, rc);
 		return rc;
 	}
@@ -1322,7 +1322,7 @@ static int abov_fw_update(bool force)
 		for (update_loop = 0; update_loop < 10; update_loop++) {
 			rc = _abov_fw_update(client, &fw->data[32], fw->size-32);
 			if (rc < 0)
-				LOG_INFO("retry : %d times!\n", update_loop);
+				LOG_ERR("retry : %d times!\n", update_loop);
 			else
 				break;
 			SLEEP(400);
@@ -1456,11 +1456,11 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct input_dev *input_bottom = NULL;
 	struct power_supply *psy = NULL;
 
-	LOG_INFO("abov_probe()\n");
+	LOG_DBG("abov_probe()\n");
 
 	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
 	if (!pplatData) {
-		LOG_DBG("platform data is required!\n");
+		LOG_ERR("platform data is required!\n");
 		return -EINVAL;
 	}
 
@@ -1470,13 +1470,13 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			ret = PTR_ERR(pplatData->cap_vdd);
 			goto err_vdd_defer;
 		}
-		LOG_INFO("%s: Failed to get regulator\n", __func__);
+		LOG_ERR("%s: Failed to get regulator\n", __func__);
 	} else {
 		ret = regulator_enable(pplatData->cap_vdd);
 
 		if (ret) {
 			regulator_put(pplatData->cap_vdd);
-			LOG_DBG("%s: Error %d enable regulator\n",
+			LOG_ERR("%s: Error %d enable regulator\n",
 					__func__, ret);
 			goto err_vdd_defer;
 		}
@@ -1622,49 +1622,49 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 		ret = class_register(&capsense_class);
 		if (ret < 0) {
-			LOG_DBG("Create fsys class failed (%d)\n", ret);
+			LOG_ERR("Create fsys class failed (%d)\n", ret);
 			goto err_class_register;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_reset);
 		if (ret < 0) {
-			LOG_DBG("Create reset file failed (%d)\n", ret);
+			LOG_ERR("Create reset file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_soft_reset);
 		if (ret < 0) {
-			LOG_DBG("Create soft reset file failed (%d)\n", ret);
+			LOG_ERR("Create soft reset file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_enable);
 		if (ret < 0) {
-			LOG_DBG("Create enable file failed (%d)\n", ret);
+			LOG_ERR("Create enable file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_reg);
 		if (ret < 0) {
-			LOG_DBG("Create reg file failed (%d)\n", ret);
+			LOG_ERR("Create reg file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_update_fw);
 		if (ret < 0) {
-			LOG_DBG("Create update_fw file failed (%d)\n", ret);
+			LOG_ERR("Create update_fw file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_force_update_fw);
 		if (ret < 0) {
-			LOG_DBG("Create update_fw file failed (%d)\n", ret);
+			LOG_ERR("Create update_fw file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 
 		ret = class_create_file(&capsense_class, &class_attr_fw_download_status);
 		if (ret < 0) {
-			LOG_DBG("Create fw dl status file failed (%d)\n", ret);
+			LOG_ERR("Create fw dl status file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 #ifdef USE_SENSORS_CLASS
@@ -1672,14 +1672,14 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		sensors_capsensor_top_cdev.sensors_poll_delay = NULL;
 		ret = sensors_classdev_register(&input_top->dev, &sensors_capsensor_top_cdev);
 		if (ret < 0) {
-			LOG_DBG("create top cap sensor_class  file failed (%d)\n", ret);
+			LOG_ERR("create top cap sensor_class  file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
 		sensors_capsensor_bottom_cdev.sensors_enable = capsensor_set_enable;
 		sensors_capsensor_bottom_cdev.sensors_poll_delay = NULL;
 		ret = sensors_classdev_register(&input_bottom->dev, &sensors_capsensor_bottom_cdev);
 		if (ret < 0) {
-			LOG_DBG("create bottom cap sensor_class file failed (%d)\n", ret);
+			LOG_ERR("create bottom cap sensor_class file failed (%d)\n", ret);
 			goto err_bottom_classdev;
 		}
 #endif
@@ -1693,7 +1693,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		this->ps_notif.notifier_call = ps_notify_callback;
 		ret = power_supply_reg_notifier(&this->ps_notif);
 		if (ret) {
-			LOG_DBG(
+			LOG_ERR(
 				"Unable to register ps_notifier: %d\n", ret);
 			goto free_ps_notifier;
 		}
@@ -1702,7 +1702,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		if (psy) {
 			ret = ps_get_state(psy, &this->ps_is_present);
 			if (ret) {
-				LOG_DBG(
+				LOG_ERR(
 					"psy get property failed rc=%d\n",
 					ret);
 				goto free_ps_notifier;
@@ -1715,50 +1715,51 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		INIT_WORK(&this->fw_update_work.worker, capsense_update_work);
 		schedule_work(&this->fw_update_work.worker);
 
+		LOG_DBG("abov_probe() SUCCESS\n");
 		return  0;
 	}
 	ret =  -ENOMEM;
 	goto err_this_device;
 
 free_ps_notifier:
-	LOG_DBG("%s unregister bottom classdev and ps_notif.\n", __func__);
+	LOG_ERR("%s unregister bottom classdev and ps_notif.\n", __func__);
 	power_supply_unreg_notifier(&this->ps_notif);
 	sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
 
 err_bottom_classdev:
-	LOG_DBG("%s unregister top classdev.\n", __func__);
+	LOG_ERR("%s unregister top classdev.\n", __func__);
 	sensors_classdev_unregister(&sensors_capsensor_top_cdev);
 
 err_class_creat:
-	LOG_DBG("%s unregister capsense class.\n", __func__);
+	LOG_ERR("%s unregister capsense class.\n", __func__);
 	class_unregister(&capsense_class);
 
 err_class_register:
-	LOG_DBG("%s unregister bottom device.\n", __func__);
+	LOG_ERR("%s unregister bottom device.\n", __func__);
 	input_unregister_device(input_bottom);
 
 err_bottom_register:
-	LOG_DBG("%s input free bottom device.\n", __func__);
+	LOG_ERR("%s input free bottom device.\n", __func__);
 	input_free_device(input_bottom);
 
 err_bottom_alloc:
-	LOG_DBG("%s unregister top device.\n", __func__);
+	LOG_ERR("%s unregister top device.\n", __func__);
 	input_unregister_device(input_top);
 
 err_top_register:
-	LOG_DBG("%s input free top device.\n", __func__);
+	LOG_ERR("%s input free top device.\n", __func__);
 	input_free_device(input_top);
 
 err_top_alloc:
-	LOG_DBG("%s input free pDevice.\n", __func__);
+	LOG_ERR("%s input free pDevice.\n", __func__);
 	kfree(this->pDevice);
 
 err_pDevice:
-	LOG_DBG("%s free device this.\n", __func__);
+	LOG_ERR("%s free device this.\n", __func__);
 	kfree(this);
 
 err_this_device:
-	LOG_DBG("%s device this defer.\n", __func__);
+	LOG_ERR("%s device this defer.\n", __func__);
 #if 0
 	regulator_disable(pplatData->cap_svdd);
 	regulator_put(pplatData->cap_svdd);
@@ -1770,7 +1771,7 @@ err_svdd_error:
 #endif
 
 err_vdd_defer:
-	LOG_DBG("%s free pplatData.\n", __func__);
+	LOG_ERR("%s free pplatData.\n", __func__);
 
 
 	kfree(pplatData);
@@ -1925,7 +1926,7 @@ static void abovXX_worker_func(struct work_struct *work)
 	if (work) {
 		this = container_of(work, abovXX_t, dworker.work);
 		if (!this) {
-			LOG_DBG("abovXX_worker_func, NULL abovXX_t\n");
+			LOG_ERR("abovXX_worker_func, NULL abovXX_t\n");
 			return;
 		}
 		if ((!this->get_nirq_low) || (!this->get_nirq_low(this->board->irq_gpio))) {
@@ -1933,7 +1934,7 @@ static void abovXX_worker_func(struct work_struct *work)
 			abovXX_process_interrupt(this, 0);
 		}
 	} else {
-		LOG_INFO("abovXX_worker_func, NULL work_struct\n");
+		LOG_ERR("abovXX_worker_func, NULL work_struct\n");
 	}
 }
 static irqreturn_t abovXX_interrupt_thread(int irq, void *data)
@@ -1967,7 +1968,7 @@ static void abovXX_schedule_work(pabovXX_t this, unsigned long delay)
 		schedule_delayed_work(&this->dworker, delay);
 		spin_unlock_irqrestore(&this->lock, flags);
 	} else
-		LOG_DBG("abovXX_schedule_work, NULL pabovXX_t\n");
+		LOG_ERR("abovXX_schedule_work, NULL pabovXX_t\n");
 }
 
 static irqreturn_t abovXX_irq(int irq, void *pvoid)
@@ -1998,7 +1999,7 @@ static void abovXX_worker_func(struct work_struct *work)
 		this = container_of(work, abovXX_t, dworker.work);
 
 		if (!this) {
-			LOG_INFO("abovXX_worker_func, NULL abovXX_t\n");
+			LOG_ERR("abovXX_worker_func, NULL abovXX_t\n");
 			return;
 		}
 		if (unlikely(this->useIrqTimer)) {
@@ -2022,7 +2023,7 @@ static void abovXX_worker_func(struct work_struct *work)
 			abovXX_schedule_work(this, msecs_to_jiffies(this->irqTimeout));
 		}
 	} else {
-		LOG_INFO("abovXX_worker_func, NULL work_struct\n");
+		LOG_ERR("abovXX_worker_func, NULL work_struct\n");
 	}
 }
 #endif
@@ -2073,7 +2074,7 @@ int abovXX_sar_init(pabovXX_t this)
 				this->pdev->driver->name, this);
 #endif
 		if (err) {
-			LOG_DBG("irq %d busy?\n", this->irq);
+			LOG_ERR("irq %d busy?\n", this->irq);
 			return err;
 		}
 #ifdef USE_THREADED_IRQ
