@@ -36,6 +36,7 @@
 
 #define BATTERY_CHARGER_STATUS_1_REG		(CHGR_BASE + 0x06)
 #define BATTERY_CHARGER_STATUS_MASK		(GENMASK(2, 0))
+#define PM8150B_JEITA_EN_CFG_REG		(CHGR_BASE + 0x90)
 
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
@@ -2554,6 +2555,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	union power_supply_propval val;
 	struct power_supply_config psy_cfg = {};
 	const char *max_main_name, *max_flip_name;
+	union power_supply_propval pval;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -2618,10 +2620,21 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (IS_ERR(chip->usb_icl_votable))
 		chip->usb_icl_votable = NULL;
 
-	if (chip->smb_version == PM8150B_SUBTYPE)
+	if (chip->smb_version == PM8150B_SUBTYPE) {
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
 					    0xFF, 0))
-			pr_err("Could Not set Legacy Cable CFG\n");
+			pr_err("SMBMMI: Could Not set Legacy Cable CFG\n");
+
+		/* Ensure SW JEITA is DISABLED */
+		pval.intval = 0;
+		power_supply_set_property(chip->batt_psy,
+					  POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
+					  &pval);
+		/* Ensure HW JEITA is DISABLED */
+		if (smblib_masked_write_mmi(chip, PM8150B_JEITA_EN_CFG_REG,
+					    0xFF, 0x00))
+			pr_err("SMBMMI: Could Not Disable JEITA CFG\n");
+	}
 
 	if ((chip->smb_version == PM8150B_SUBTYPE) ||
 	    (chip->smb_version == PM660_SUBTYPE))
