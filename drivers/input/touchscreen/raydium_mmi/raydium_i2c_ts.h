@@ -129,7 +129,7 @@
 #define CONFIG_RM_SYSFS_DEBUG
 
 /* Gesture switch */
-#define GESTURE_EN
+//#define GESTURE_EN
 
 #define MSM_NEW_VER
 

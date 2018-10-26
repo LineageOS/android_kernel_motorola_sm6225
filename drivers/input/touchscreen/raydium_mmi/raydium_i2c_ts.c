@@ -4050,6 +4050,7 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
     unsigned char buf[MAX_REPORT_PAKAGE_SIZE];
     unsigned char tp_status[MAX_TCH_STATUS_PAKAGE_SIZE];
     int ret = 0;
+    bool do_sync = false;
     unsigned char i, j, offset = 0;
     unsigned char u8_seq_no = 0, u8_points_amount, u8_point_id;
     signed short s16_x, s16_y, s16_pressure, s16_wx, s16_wy;
@@ -4179,6 +4180,7 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
                 gst_slot_status[i].occupied_pt_id = 0xFF;
                 gst_slot_status[i].pt_report_offset = 0;
                 gst_slot_status[i].need_update = 0;
+                do_sync = true;
             }
         }
         //Assign new one to non-occupied slot
@@ -4222,11 +4224,14 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
                 input_report_abs(data->input_dev, ABS_MT_TOUCH_MAJOR, max(s16_wx, s16_wy));
                 input_report_abs(data->input_dev, ABS_MT_TOUCH_MINOR, min(s16_wx, s16_wy));
                 //pr_debug("[touch]x:%d, y:%d\n", s16_x,s16_y);
+                do_sync = true;
             }
         }
 
-        input_mt_sync_frame(data->input_dev);
-        input_sync(data->input_dev);
+        if (do_sync) {
+            input_mt_sync_frame(data->input_dev);
+            input_sync(data->input_dev);
+        }
 
         /*
         printk("Raydium Slot status #: %d %d ; %d %d ; %d %d ; %d %d\n",
@@ -4539,6 +4544,7 @@ static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
     #endif
 
     ts->is_suspend = 1;
+    pr_info("state change ACTIVE -> SUSPEND\n");
 }
 static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 {
@@ -4572,6 +4578,7 @@ static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 #endif
 
     ts->is_suspend = 0;
+    pr_info("state change SUSPEND -> ACTIVE\n");
 }
 
 static int raydium_ts_suspend(struct device *dev)
@@ -5004,10 +5011,13 @@ static void raydium_input_set(struct input_dev *input_dev, struct raydium_ts_dat
     input_dev->close = raydium_ts_close;
     input_set_drvdata(input_dev, ts);
 
-    __set_bit(EV_KEY, input_dev->evbit);
-    __set_bit(EV_ABS, input_dev->evbit);
-    __set_bit(BTN_TOUCH, input_dev->keybit);
-    __set_bit(INPUT_PROP_DIRECT, input_dev->propbit);
+#ifdef GESTURE_EN
+    set_bit(EV_KEY, input_dev->evbit);
+#endif
+    set_bit(EV_SYN, input_dev->evbit);
+    set_bit(EV_ABS, input_dev->evbit);
+//    set_bit(BTN_TOUCH, input_dev->keybit);
+    set_bit(INPUT_PROP_DIRECT, input_dev->propbit);
 
     /* Multitouch input params setup */
     input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0, ts->x_max, 0, 0);
@@ -5016,8 +5026,7 @@ static void raydium_input_set(struct input_dev *input_dev, struct raydium_ts_dat
     input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, WIDTH_MAX, 0, 0);
     input_set_abs_params(input_dev, ABS_MT_TOUCH_MINOR, 0, WIDTH_MAX, 0, 0);
 
-    ret = input_mt_init_slots(input_dev, MAX_TOUCH_NUM,
-                                INPUT_MT_DIRECT | INPUT_MT_DROP_UNUSED);
+    ret = input_mt_init_slots(input_dev, MAX_TOUCH_NUM, 0);
     if (ret)
     {
         dev_err(&ts->client->dev, "[touch]failed to initialize MT slots: %d\n", ret);
