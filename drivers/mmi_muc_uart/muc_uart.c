@@ -1184,6 +1184,14 @@ static void muc_uart_wake_work(struct work_struct *w)
 		if (!booted) {
 			if (muc_uart_send_bootmode(mm_data) >= 0);
 				booted = true;
+		/* Else if there was something in the queue when
+		 * we went to sleep start sending it
+		 */
+		} else {
+			cancel_delayed_work(&mm_data->write_work);
+			queue_delayed_work(mm_data->write_wq,
+					&mm_data->write_work,
+					msecs_to_jiffies(0));
 		}
 	}
 }
@@ -1402,6 +1410,10 @@ static int muc_uart_probe(struct platform_device *pdev)
 		mm_data))
 		goto err2;
 
+	/* Let wake irq take us out of suspend */
+	if (irq_set_irq_wake(mm_data->wake_irq, 1))
+		MUC_ERR("Failed to set wake irq as wake source");
+
 	mm_data->mod_attached_gpio = of_get_gpio(np, 2);
 	if (mm_data->mod_attached_gpio >= 0)
 		mm_data->mod_attached_irq =
@@ -1432,6 +1444,10 @@ static int muc_uart_probe(struct platform_device *pdev)
 		pdev->dev.driver->name,
 		mm_data))
 		goto err2;
+
+	/* Let attach irq take us out of suspend */
+	if (irq_set_irq_wake(mm_data->mod_attached_irq, 1))
+		MUC_ERR("Failed to set attach irq as wake source");
 
 	if (sysfs_create_groups(&pdev->dev.kobj, muc_uart_groups)) {
 		dev_err(&pdev->dev, "Failed to create sysfs attributes\n");
@@ -1491,6 +1507,9 @@ err:
 static int muc_uart_remove(struct platform_device *pdev)
 {
 	struct mod_muc_data_t *mm_data = platform_get_drvdata(pdev);
+
+	irq_set_irq_wake(mm_data->wake_irq, 0);
+	irq_set_irq_wake(mm_data->mod_attached_irq, 0);
 
 	if (gpio_is_valid(mm_data->wake_in_gpio))
 		gpio_free(mm_data->wake_in_gpio);
