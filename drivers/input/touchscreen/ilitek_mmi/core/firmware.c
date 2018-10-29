@@ -1431,10 +1431,10 @@ static int convert_hex_file(uint8_t *pBuf, uint32_t nSize, bool isIRAM)
 			nExAddr = nExAddr >> 12;
 		}
 
-		if (nType == 0xAE) {
+		if (nType == 0xAE || nType == 0xAF) {
 			core_firmware->hasBlockInfo = true;
 			/* insert block info extracted from hex */
-			if (block < 4) {
+			if (block < FW_BLOCK_INFO_NUM) {
 				g_flash_block_info[block].start_addr = HexToDec(&pBuf[i + 9], 6);
 				g_flash_block_info[block].end_addr = HexToDec(&pBuf[i + 9 + 6], 6);
 				ipio_debug(DEBUG_FIRMWARE, "Block[%d]: start_addr = %x, end = %x\n",
