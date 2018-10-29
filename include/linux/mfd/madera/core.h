@@ -17,7 +17,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/mfd/madera/pdata.h>
 #include <linux/irqchip/irq-madera.h>
-#include <linux/clk.h>
 
 enum madera_type {
 	CS47L35 = 1,
@@ -73,8 +72,6 @@ struct madera {
 	struct mutex reg_setting_lock;
 
 	struct blocking_notifier_head notifier;
-	struct  clk   *m_clk;
-	bool    clk_run;
 };
 
 extern int madera_of_read_uint_array(struct madera *madera, const char *prop,
