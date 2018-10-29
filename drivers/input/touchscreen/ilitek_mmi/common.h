@@ -173,6 +173,7 @@ extern uint32_t ipio_chip_list[2];
 #define DLM_HEX_ADDRESS			0x10000
 #define MP_HEX_ADDRESS			0x13000
 #define SPI_UPGRADE_LEN			2048
+#define FW_BLOCK_INFO_NUM		6
 #define UPDATE_RETRY_COUNT		3
 
 /* ILI7807 Series */
