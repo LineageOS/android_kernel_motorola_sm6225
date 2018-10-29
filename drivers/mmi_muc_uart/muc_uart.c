@@ -79,10 +79,10 @@ void *muc_ipc_log;
  * we will be stuck forever.  Use this value for a timer to clear
  * the request eventually to try to maybe recover or panic.
  */
-#define MUC_UART_SLEEP_REQ_TIMEOUT 5000 /* ms */
+#define MUC_UART_SLEEP_REQ_TIMEOUT 500 /* ms */
 
 /* How many times to try to send a message before giving up */
-#define MUC_UART_RETRY_COUNT 10
+#define MUC_UART_RETRY_COUNT 100
 
 struct write_data {
 	struct list_head list;
