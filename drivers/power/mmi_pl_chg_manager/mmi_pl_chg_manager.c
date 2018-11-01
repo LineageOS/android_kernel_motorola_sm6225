@@ -414,7 +414,7 @@ static void mmi_update_flashc_status(struct mmi_pl_chg_manager *chip)
 		chip->flashc_handle.charge_enabled = !!prop.intval;
 
 	rc = power_supply_get_property(chip->flashc_psy,
-				POWER_SUPPLY_PROP_STATUS, &prop);
+				POWER_SUPPLY_PROP_CHARGE_NOW_ERROR, &prop);
 	if (!rc) {
 		chip->flashc_handle.bat_ovp_alarm =
 				!!(prop.intval & BAT_OVP_ALARM_MASK);
