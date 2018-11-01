@@ -83,6 +83,12 @@ enum aw869x_haptic_bst_mode {
     AW869X_HAPTIC_BOOST_MODE = 1,
 };
 
+enum aw869x_haptic_mode{
+	HAPTIC_NONE	= 0x00,
+	HAPTIC_SHORT	= 0x01,
+	HAPTIC_LONG	= 0x02,
+	HAPTIC_RTP	= 0x03,
+};
 
 /*********************************************************
  *
@@ -124,15 +130,20 @@ struct aw869x {
 
     int reset_gpio;
     int irq_gpio;
+    int haptic_context_gpio;
     int state;
     int duration;
     int amplitude;
     int index;
     int vmax;
     int gain;
+    int gain_debug;
     int seq;
     int loop;
 
+    enum aw869x_haptic_mode  haptic_mode;
+    bool factory_mode;
+    bool debugfs_debug;
     unsigned char hwen_flag;
     unsigned char flags;
     unsigned char chipid;

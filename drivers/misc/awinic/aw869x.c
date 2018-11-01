@@ -1191,61 +1191,116 @@ static void aw869x_rtp_play(struct aw869x *aw869x, int value)
 	}
 }
 
+static void aw869x_haptic_context(struct aw869x *aw869x, enum aw869x_haptic_mode cmd)
+{
+	int t_top = 0;
+	if (!gpio_is_valid(aw869x->haptic_context_gpio)) {
+		pr_info("%s haptic context gpio is invalid \n", __func__);
+		return;
+	}
+
+	t_top = gpio_get_value(aw869x->haptic_context_gpio);
+	if (t_top) {
+		switch (cmd) {
+		case HAPTIC_RTP:
+			aw869x->gain = 0x20;
+			break;
+		case HAPTIC_SHORT:
+			aw869x->gain = 0x20;
+			break;
+		case HAPTIC_LONG:
+			aw869x->gain = 0x06;
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static void aw869x_vibrate(struct aw869x *aw869x, int value)
 {
-    int seq;
-    mutex_lock(&aw869x->lock);
+	int seq;
+	mutex_lock(&aw869x->lock);
 
-    aw869x_haptic_stop(aw869x);
-    seq = (aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF;
-    pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
-    if (value > 0 || seq > 2) {
-	if (seq >= AW869X_SEQ_NO_RTP_BASE)
-		aw869x_rtp_play(aw869x, seq- AW869X_SEQ_NO_RTP_BASE);
-	else if (value < 100 || seq > 2) {
-		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
-			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
-		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
-		//aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
-		aw869x_haptic_set_gain(aw869x, 0x20);
+	aw869x_haptic_stop(aw869x);
+	seq = (aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF;
+	pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
 
-		if (aw869x->seq == 0)
-			aw869x->seq = 0x01000000;
+	if (value > 0 || seq > 2) {
 
-		aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
-		//aw869x_haptic_set_repeat_seq(aw869x, 0);
-		//aw869x->index = 0x01;
-		aw869x_haptic_play_que_seq(aw869x, 0x01);
-	/*
-		value = (value>HAPTIC_MAX_TIMEOUT)? HAPTIC_MAX_TIMEOUT:value;
-		hrtimer_start(&aw869x->timer, 
-		ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
-	*/
-	} else {
-		aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
-			AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK, AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
-		aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_6P25V);
-		aw869x_haptic_set_gain(aw869x, 0x0e);
-		aw869x->duration = value;
-		/* wav index config */
-		aw869x->index = 0x02;
-		aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
-
-		/* run ms timer */
-		hrtimer_cancel(&aw869x->timer);
-		aw869x->state = 0x01;
-		if (aw869x->state)
-		{
-		hrtimer_start(&aw869x->timer,
-			ktime_set(aw869x->duration / 1000, (value % 1000) * 1000000),
-			HRTIMER_MODE_REL);
+		if (seq >= AW869X_SEQ_NO_RTP_BASE) {
+			aw869x->haptic_mode = HAPTIC_RTP;
+			aw869x->gain = 0x20;
+		} else if (value < 100 || seq > 2) {
+			aw869x->haptic_mode = HAPTIC_SHORT;
+			aw869x->gain = 0x20;
+		} else {
+			aw869x->haptic_mode = HAPTIC_LONG;
+			aw869x->gain = 0x0e;
 		}
-		schedule_work(&aw869x->vibrator_work);
+
+		if(!aw869x->factory_mode)
+			aw869x_haptic_context(aw869x,aw869x->haptic_mode);
+
+		if (aw869x->debugfs_debug)
+			aw869x_haptic_set_gain(aw869x, aw869x->gain_debug);
+		else
+			aw869x_haptic_set_gain(aw869x, aw869x->gain);
+
+		switch (aw869x->haptic_mode) {
+		case HAPTIC_RTP:
+			aw869x_rtp_play(aw869x, seq - AW869X_SEQ_NO_RTP_BASE);
+			break;
+		case HAPTIC_SHORT:
+			aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+				AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK,
+				AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
+			aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_8P75V);
+			//aw869x_haptic_set_peak_cur(aw869x, AW869X_BIT_BSTCFG_PEAKCUR_3P5A);
+
+			if (aw869x->seq == 0)
+				aw869x->seq = 0x01000000;
+
+			aw869x_haptic_set_que_seq(aw869x, aw869x->seq);
+			//aw869x_haptic_set_repeat_seq(aw869x, 0);
+			//aw869x->index = 0x01;
+			aw869x_haptic_play_que_seq(aw869x, 0x01);
+		/*
+			value = (value>HAPTIC_MAX_TIMEOUT)? HAPTIC_MAX_TIMEOUT:value;
+			hrtimer_start(&aw869x->timer,
+			ns_to_ktime((u64)value * NSEC_PER_MSEC), HRTIMER_MODE_REL);
+		*/
+			break;
+		case HAPTIC_LONG:
+			aw869x_i2c_write_bits(aw869x, AW869X_REG_PWMDBG,
+				AW869X_BIT_PWMDBG_PWMCLK_MODE_MASK,
+				AW869X_BIT_PWMDBG_PWMCLK_MODE_12KB);
+			aw869x_haptic_set_bst_vol(aw869x, AW869X_BIT_BSTCFG_BSTVOL_6P25V);
+
+			aw869x->duration = value;
+			/* wav index config */
+			aw869x->index = 0x02;
+			aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
+
+			/* run ms timer */
+			hrtimer_cancel(&aw869x->timer);
+			aw869x->state = 0x01;
+			if (aw869x->state)
+			{
+			hrtimer_start(&aw869x->timer,
+				ktime_set(aw869x->duration / 1000, (value % 1000) * 1000000),
+				HRTIMER_MODE_REL);
+			}
+			schedule_work(&aw869x->vibrator_work);
+			break;
+		default:
+			break;
+		}
+
+		/* Restore to default short waveform */
+		if (seq > 2)
+			aw869x->seq = 0;
 	}
-	/* Restore to default short waveform */
-	if (seq > 2)
-		aw869x->seq = 0;
-    }
 
     mutex_unlock(&aw869x->lock);
 }
@@ -1523,7 +1578,7 @@ static ssize_t aw869x_gain_show(struct device *dev,
     struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
 #endif
 
-    return snprintf(buf, PAGE_SIZE, "%d\n", aw869x->gain);
+    return snprintf(buf, PAGE_SIZE, "%d\n", aw869x->gain_debug);
 }
 
 static ssize_t aw869x_gain_store(struct device *dev,
@@ -1546,8 +1601,12 @@ static ssize_t aw869x_gain_store(struct device *dev,
     pr_info("%s: value=%d\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
-    aw869x->gain = val;
-    aw869x_haptic_set_gain(aw869x, (unsigned char)aw869x->gain);
+	if (val > 0)
+		aw869x->debugfs_debug = true;
+	else
+		aw869x->debugfs_debug = false;
+    aw869x->gain_debug = val;
+    aw869x_haptic_set_gain(aw869x, (unsigned char)aw869x->gain_debug);
     mutex_unlock(&aw869x->lock);
     return count;
 }
@@ -2225,6 +2284,13 @@ static int aw869x_parse_dt(struct device *dev, struct aw869x *aw869x,
         dev_info(dev, "%s: irq gpio provided ok.\n", __func__);
     }
 
+    aw869x->haptic_context_gpio = of_get_named_gpio(np, "haptic-context-gpio", 0);
+    if (aw869x->haptic_context_gpio < 0) {
+        dev_err(dev, "%s: no haptic context gpio provided.\n", __func__);
+    } else {
+        dev_info(dev, "%s: haptic context gpio provided ok.\n", __func__);
+    }
+
     return 0;
 }
 
@@ -2374,6 +2440,19 @@ static struct attribute_group aw869x_attribute_group = {
 };
 
 
+static bool mmi_factory_check(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory = false;
+
+	if (np)
+		factory = of_property_read_bool(np, "mmi,factory-cable");
+
+	of_node_put(np);
+
+	return factory;
+}
+
 /******************************************************
  *
  * i2c driver
@@ -2477,6 +2556,8 @@ static int aw869x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
     }
 
     g_aw869x = aw869x;
+
+    aw869x->factory_mode = mmi_factory_check();
 
     aw869x_vibrator_init(aw869x);
 
