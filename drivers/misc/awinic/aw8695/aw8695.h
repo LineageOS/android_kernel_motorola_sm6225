@@ -311,8 +311,12 @@ struct aw8695 {
 	int reset_gpio;
 	int irq_gpio;
 	int haptic_context_gpio;
+	int long_gain_normal;
+	int long_gain_reduced;
 
 	enum aw8695_haptic_mode  haptic_mode;
+	bool factory_mode;
+	bool debugfs_debug;
 	atomic_t reduce_pwr;
 	unsigned char hwen_flag;
 	unsigned char flags;
@@ -330,7 +334,7 @@ struct aw8695 {
 	int index;
 	int vmax;
 	int gain;
-
+	int gain_debug;
 	unsigned char seq[AW8695_SEQUENCER_SIZE];
 	unsigned char loop[AW8695_SEQUENCER_SIZE];
 

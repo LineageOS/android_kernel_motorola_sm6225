@@ -1800,7 +1800,6 @@ static void aw8695_rtp_play(struct aw8695 *aw8695, int value)
 	}
 }
 
-#if 0
 static void aw8695_haptic_context(struct aw8695 *aw8695, enum aw8695_haptic_mode cmd)
 {
 	int t_top = 0;
@@ -1819,14 +1818,13 @@ static void aw8695_haptic_context(struct aw8695 *aw8695, enum aw8695_haptic_mode
 			aw8695->gain = 0x20;
 			break;
 		case HAPTIC_LONG:
-			aw8695->gain = 0x06;
+			aw8695->gain = aw8695->long_gain_reduced;
 			break;
 		default:
 			break;
 		}
 	}
 }
-#endif
 
 static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 {
@@ -1841,11 +1839,20 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 
 		if (seq >= AW8695_SEQ_NO_RTP_BASE) {
 			aw8695->haptic_mode = HAPTIC_RTP;
+			aw8695->gain = 0x20;
 		} else if (value < 100 || seq > 2) {
 			aw8695->haptic_mode = HAPTIC_SHORT;
+			aw8695->gain = 0x20;
 		} else {
 			aw8695->haptic_mode = HAPTIC_LONG;
+			aw8695->gain = aw8695->long_gain_normal;
 		}
+		if(!aw8695->factory_mode)
+			aw8695_haptic_context(aw8695,aw8695->haptic_mode);
+		if (aw8695->debugfs_debug)
+			aw8695_haptic_set_gain(aw8695, aw8695->gain_debug);
+		else
+			aw8695_haptic_set_gain(aw8695, aw8695->gain);
 
 		switch (aw8695->haptic_mode) {
 
@@ -2194,7 +2201,7 @@ static ssize_t aw8695_gain_show(struct device *dev,
 	struct led_classdev *cdev = dev_get_drvdata(dev);
 	struct aw8695 *aw8695 = container_of(cdev, struct aw8695, cdev);
 #endif
-	return snprintf(buf, PAGE_SIZE, "0x%02x\n", aw8695->gain);
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n", aw8695->gain_debug);
 }
 
 static ssize_t aw8695_gain_store(struct device *dev,
@@ -2217,8 +2224,12 @@ static ssize_t aw8695_gain_store(struct device *dev,
 	pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
 	mutex_lock(&aw8695->lock);
-	aw8695->gain = val;
-	aw8695_haptic_set_gain(aw8695, aw8695->gain);
+	if (val > 0)
+		aw8695->debugfs_debug = true;
+	else
+		aw8695->debugfs_debug = false;
+	aw8695->gain_debug = val;
+	aw8695_haptic_set_gain(aw8695, aw8695->gain_debug);
 	mutex_unlock(&aw8695->lock);
 	return count;
 }
@@ -3340,6 +3351,8 @@ static irqreturn_t aw8695_irq(int irq, void *data)
 static int aw8695_parse_dt(struct device *dev, struct aw8695 *aw8695,
 			   struct device_node *np)
 {
+	int rc;
+
 	aw8695->reset_gpio = of_get_named_gpio(np, "reset-gpio", 0);
 	if (aw8695->reset_gpio < 0) {
 		dev_err(dev, "%s: no reset gpio provided, will not HW reset device\n", __func__);
@@ -3354,6 +3367,26 @@ static int aw8695_parse_dt(struct device *dev, struct aw8695 *aw8695,
 		dev_info(dev, "%s: irq gpio provided ok.\n", __func__);
 	}
 
+	aw8695->haptic_context_gpio = of_get_named_gpio(np, "haptic-context-gpio", 0);
+	if (aw8695->haptic_context_gpio < 0) {
+		dev_err(dev, "%s: no haptic context gpio provided.\n", __func__);
+	} else {
+		dev_info(dev, "%s: haptic context gpio provided ok.\n", __func__);
+	}
+
+	rc = of_property_read_s32(np, "long-gain-normal", &aw8695->long_gain_normal);
+	if (rc) {
+		aw8695->long_gain_normal = 0x0e;
+		dev_err(dev, "%s: no normal gain value for long vibrating provided.\n", __func__);
+	}
+	dev_info(dev, "%s: normal gain value for long vibrating is 0x%02x.\n", __func__, aw8695->long_gain_normal);
+
+	rc = of_property_read_s32(np, "long-gain-reduced", &aw8695->long_gain_reduced);
+	if (rc) {
+		aw8695->long_gain_reduced = 0x06;
+		dev_err(dev, "%s: no reduced gain value for long vibrating provided.\n", __func__);
+	}
+	dev_info(dev, "%s: reduced gain value for long vibrating is 0x%02x.\n", __func__, aw8695->long_gain_reduced);
 	return 0;
 }
 
@@ -3504,6 +3537,15 @@ static struct attribute_group aw8695_attribute_group = {
 	.attrs = aw8695_attributes
 };
 
+static bool mmi_factory_check(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory = false;
+	if (np)
+		factory = of_property_read_bool(np, "mmi,factory-cable");
+	of_node_put(np);
+	return factory;
+}
 
 /******************************************************
  *
@@ -3601,6 +3643,7 @@ static int aw8695_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
 
 	g_aw8695 = aw8695;
 
+	aw8695->factory_mode = mmi_factory_check();
 	aw8695_vibrator_init(aw8695);
 
 	aw8695_haptic_init(aw8695);
