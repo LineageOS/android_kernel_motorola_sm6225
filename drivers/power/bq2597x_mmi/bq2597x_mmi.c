@@ -1704,13 +1704,13 @@ static const struct attribute_group bq2597x_attr_group = {
 };
 
 static enum power_supply_property bq2597x_charger_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CHARGE_NOW_ERROR,
 };
 
 static void bq2597x_check_alarm_status(struct bq2597x *bq);
@@ -1760,7 +1760,7 @@ static int bq2597x_charger_get_property(struct power_supply *psy,
 
 		val->intval = bq->ibus_curr;
 		break;
-	case POWER_SUPPLY_PROP_STATUS:
+	case POWER_SUPPLY_PROP_CHARGE_NOW_ERROR:
 		bq2597x_check_alarm_status(bq);
 		bq2597x_check_fault_status(bq);
 		val->intval = ((bq->bat_ovp_alarm << BAT_OVP_ALARM_SHIFT)
