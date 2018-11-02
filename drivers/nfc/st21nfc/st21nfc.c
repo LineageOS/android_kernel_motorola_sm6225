@@ -617,14 +617,14 @@ static int st21nfc_probe(struct i2c_client *client,
 
 	ret = gpio_request(platform_data->irq_gpio, "irq_gpio");
 	if (ret) {
-		pr_err("gpio_request failed\n");
+		pr_err("irq gpio_request failed\n");
 		ret = -ENODEV;
 		goto err_free_write_buffer;
 	}
 
 	ret = gpio_direction_input(platform_data->irq_gpio);
 	if (ret) {
-		pr_err("gpio_direction_input failed\n");
+		pr_err("irq gpio_direction_input failed\n");
 		ret = -ENODEV;
 		goto err_free_write_buffer;
 	}
@@ -632,17 +632,19 @@ static int st21nfc_probe(struct i2c_client *client,
 	if (gpio_is_valid(platform_data->clkreq_gpio)) {
 		ret = gpio_request(platform_data->clkreq_gpio, "clkreq_gpio");
 		if (ret) {
-			pr_err("[OPTIONAL] gpio_request failed\n");
+			pr_err("clkreq gpio_request  failed\n");
 			ret = -ENODEV;
 			goto err_free_write_buffer;
 		} else {
 			ret = gpio_direction_input(platform_data->clkreq_gpio);
 			if (ret) {
-				pr_err("[OPTIONAL] gpio_direction_input failed\n");
+				pr_err("clkreq gpio_direction_input failed\n");
 				ret = -ENODEV;
 				goto err_clkreq_gpio;
 			}
 		}
+	} else {
+		pr_warn("clkreq gpio not provided. Ext xtal expected\n");
 	}
 
 	/* initialize irqIsAttached variable */
