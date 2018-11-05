@@ -144,6 +144,33 @@ int str2hex(char *str)
 
 EXPORT_SYMBOL(str2hex);
 
+static ssize_t ilitek_proc_fw_pc_counter_read(struct file *pFile, char __user *buf, size_t nCount, loff_t *pos)
+{
+	uint32_t pc;
+
+	if (*pos != 0)
+		return 0;
+
+	memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
+
+	mutex_lock(&ipd->plat_mutex);
+
+	pc = core_config_read_pc_counter();
+
+	mutex_unlock(&ipd->plat_mutex);
+
+	nCount = snprintf(g_user_buf, PAGE_SIZE, "pc counter = 0x%x\n", pc);
+
+	pc = copy_to_user(buf, g_user_buf, nCount);
+	if (pc < 0) {
+		ipio_err("Failed to copy data to user space");
+	}
+
+	*pos += nCount;
+
+	return nCount;
+}
+
 static ssize_t ilitek_proc_debug_switch_read(struct file *pFile,
 					     char __user *buff, size_t nCount,
 					     loff_t *pPos)
@@ -1564,6 +1591,10 @@ struct file_operations proc_debug_message_switch_fops = {
 	.read = ilitek_proc_debug_switch_read,
 };
 
+struct file_operations proc_fw_pc_counter_fops = {
+	.read = ilitek_proc_fw_pc_counter_read,
+};
+
 /**
  * This struct lists all file nodes will be created under /proc filesystem.
  *
@@ -1593,6 +1624,7 @@ proc_node_t proc_table[] = {
 	{"oppo_mp_lcm_off", NULL, &proc_oppo_mp_lcm_off_fops, false},
 	{"debug_message", NULL, &proc_debug_message_fops, false},
 	{"debug_message_switch", NULL, &proc_debug_message_switch_fops, false},
+	{"fw_pc_counter", NULL, &proc_fw_pc_counter_fops, false},
 };
 
 #define NETLINK_USER 21

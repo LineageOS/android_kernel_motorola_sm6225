@@ -204,6 +204,7 @@ enum ili9881_types {
 #define ILI9881_ICE_MODE_ADDR	0x181062
 #define ILI9881_PID_ADDR		0x4009C
 #define ILI9881_WDT_ADDR		0x5100C
+#define ILI9881_PC_COUNTER_ADDR	0x44008
 
 /*
  * Other settings
