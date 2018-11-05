@@ -118,6 +118,27 @@ static uint32_t check_chip_id(uint32_t pid_data)
 	return 0;
 }
 
+uint32_t core_config_read_pc_counter(void)
+{
+	uint32_t pc_cnt = 0x0;
+
+	if (!core_config->icemodeenable) {
+		if (core_config_ice_mode_enable() < 0)
+			ipio_err("Failed to enter ice mode\n");
+	}
+
+	/* Read fw status if it was hanging on a unknown status */
+	pc_cnt = core_config_ice_mode_read(ILI9881_PC_COUNTER_ADDR);
+	ipio_info("pc counter = 0x%x\n", pc_cnt);
+
+	if (core_config->icemodeenable) {
+		if (core_config_ice_mode_disable() < 0)
+			ipio_err("Failed to disable ice mode\n");
+	}
+	return pc_cnt;
+}
+EXPORT_SYMBOL(core_config_read_pc_counter);
+
 /*
  * Read & Write one byte in ICE Mode.
  */
