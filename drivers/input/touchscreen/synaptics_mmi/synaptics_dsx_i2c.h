@@ -430,6 +430,14 @@ struct temp_buffer {
 	unsigned short buf_size;
 };
 
+struct synaptics_exp_fn_ctrl {
+	bool inited;
+	struct mutex ctrl_mutex;
+	struct mutex list_mutex;
+	struct list_head fn_list;
+	struct delayed_work det_work;
+};
+
 /*
  * struct synaptics_rmi4_data - rmi4 device instance data
  * @i2c_client: pointer to associated i2c client
@@ -497,6 +505,7 @@ struct synaptics_rmi4_data {
 	int state;
 	int irq;
 	int ctrl_dsi;
+	const char *bound_display;
 	int sensor_max_x;
 	int sensor_max_y;
 	bool irq_enabled;
@@ -563,6 +572,14 @@ struct synaptics_rmi4_data {
 	int test_irq_delay_ms;
 	int test_irq_data_contig;
 #endif
+
+	struct synaptics_exp_fn_ctrl exp_fn_ctrl;
+	struct list_head node;
+	struct semaphore reset_semaphore;
+	bool terminating;
+	int instance;
+	char *irq_name;
+	char *reset_name;
 };
 
 static inline ssize_t synaptics_rmi4_show_error(struct device *dev,
@@ -630,7 +647,8 @@ struct synaptics_rmi4_exp_fn_ptr {
 	int (*enable)(struct synaptics_rmi4_data *rmi4_data, bool enable);
 };
 
-void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
+void synaptics_rmi4_new_function(struct synaptics_rmi4_data *rmi4_data,
+		enum exp_fn fn_type, bool insert,
 		int (*func_init)(struct synaptics_rmi4_data *rmi4_data),
 		void (*func_remove)(struct synaptics_rmi4_data *rmi4_data),
 		void (*func_attn)(struct synaptics_rmi4_data *rmi4_data,
