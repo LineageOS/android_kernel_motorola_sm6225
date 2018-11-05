@@ -4310,7 +4310,7 @@ reset_and_exit:
 }
 #endif
 
-static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
+void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 		unsigned char intr_mask)
 {
 	if (!fwu)
@@ -4322,7 +4322,7 @@ static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
-static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
+int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval, attr_count;
 	struct pdt_properties pdt_props;
@@ -4444,8 +4444,9 @@ exit_free_fwu:
 exit:
 	return retval;
 }
+EXPORT_SYMBOL(synaptics_rmi4_fwu_init);
 
-static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
+void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 {
 	int attr_count;
 
@@ -4472,8 +4473,9 @@ exit:
 
 	return;
 }
+EXPORT_SYMBOL(synaptics_rmi4_fwu_remove);
 
-static int synaptics_rmi4_fwu_flash_status(
+int synaptics_rmi4_fwu_flash_status(
 	struct synaptics_rmi4_data *rmi4_data)
 {
 	int istatus = 0, retval;
@@ -4496,31 +4498,39 @@ static int synaptics_rmi4_fwu_flash_status(
 
 	return istatus;
 }
+EXPORT_SYMBOL(synaptics_rmi4_fwu_flash_status);
 
 static int __init rmi4_fw_update_module_init(void)
 {
-	synaptics_rmi4_new_function(RMI_FW_UPDATER, true,
-		synaptics_rmi4_fwu_init,
-		synaptics_rmi4_fwu_remove,
-		synaptics_rmi4_fwu_attn,
-		synaptics_rmi4_fwu_flash_status,
-		IC_MODE_ANY);
-
+#if 0
+	struct synaptics_rmi4_data *next = NULL;
+	while ((next = synaptics_driver_getdata(next)) != NULL) {
+		synaptics_rmi4_new_function(next, RMI_FW_UPDATER, true,
+			synaptics_rmi4_fwu_init,
+			synaptics_rmi4_fwu_remove,
+			synaptics_rmi4_fwu_attn,
+			synaptics_rmi4_fwu_flash_status,
+			IC_MODE_ANY);
+	}
+#endif
 	return 0;
 }
 
 static void __exit rmi4_fw_update_module_exit(void)
 {
-	init_completion(&fwu_remove_complete);
-	synaptics_rmi4_new_function(RMI_FW_UPDATER, false,
-		synaptics_rmi4_fwu_init,
-		synaptics_rmi4_fwu_remove,
-		synaptics_rmi4_fwu_attn,
-		synaptics_rmi4_fwu_flash_status,
-		IC_MODE_ANY);
-
-	wait_for_completion(&fwu_remove_complete);
-
+#if 0
+	struct synaptics_rmi4_data *next = NULL;
+	while ((next = synaptics_driver_getdata(next)) != NULL) {
+		init_completion(&fwu_remove_complete);
+		synaptics_rmi4_new_function(RMI_FW_UPDATER, false,
+			synaptics_rmi4_fwu_init,
+			synaptics_rmi4_fwu_remove,
+			synaptics_rmi4_fwu_attn,
+			synaptics_rmi4_fwu_flash_status,
+			IC_MODE_ANY);
+		wait_for_completion(&fwu_remove_complete);
+	}
+#endif
 	return;
 }
 

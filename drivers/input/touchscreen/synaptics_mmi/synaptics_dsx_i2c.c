@@ -41,8 +41,56 @@
 #include "synaptics_dsx_dropbox.h"
 #include "synaptics_dsx_control_access_block.h"
 
+extern int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data);
+extern void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data);
+extern int synaptics_rmi4_fwu_flash_status(struct synaptics_rmi4_data *rmi4_data);
+
+static int drv_instance_counter;
+static DEFINE_MUTEX(instances_mutex);
+static LIST_HEAD(drv_instances_list);
+static struct workqueue_struct *det_workqueue;
+
+struct synaptics_rmi4_data *synaptics_driver_getdata(
+		struct synaptics_rmi4_data *prev)
+{
+	struct synaptics_rmi4_data *next;
+	mutex_lock(&instances_mutex);
+	if (!prev)
+		next = list_first_entry(&drv_instances_list, struct synaptics_rmi4_data, node);
+	else
+		next = list_next_entry(prev, node);
+	mutex_unlock(&instances_mutex);
+	return next;
+}
+EXPORT_SYMBOL(synaptics_driver_getdata);
+
+static char *INSTANTIATED(char *string)
+{
+	char instance[64];
+	snprintf(instance, sizeof(instance), "%s.%d",
+			string, drv_instance_counter);
+	return kstrdup(instance, GFP_KERNEL);
+}
+
+static char *INSTANCE_RMI(char *string,
+		struct synaptics_rmi4_data *rmi4_data)
+{
+	char instance[64];
+	snprintf(instance, sizeof(instance), "%s.%d",
+			string, rmi4_data->instance);
+	return kstrdup(instance, GFP_KERNEL);
+}
+
+static char *INSTANCE_DBG(char *string)
+{
+	static char name_with_instance[64];
+	snprintf(name_with_instance, sizeof(name_with_instance), "%s.%d",
+			string, drv_instance_counter);
+	return name_with_instance;
+}
+
 #define DRIVER_NAME "synaptics_mmi"
-#define INPUT_PHYS_NAME "synaptics_dsx_i2c/input0"
+#define INPUT_PHYS_NAME "synaptics_dsx_i2c/input"
 #define TYPE_B_PROTOCOL
 
 #define RMI4_WAIT_READY 0
@@ -1376,35 +1424,35 @@ static int synaptics_dsx_gpio_config(
 
 	if (enable) {
 		if (!gpio_is_valid(pdata->irq_gpio)) {
-			pr_err("invalid %s\n", IRQ_GPIO_NAME);
+			pr_err("invalid %s\n", INSTANCE_DBG(IRQ_GPIO_NAME));
 			retval = -EINVAL;
 		}
-		retval = gpio_request(pdata->irq_gpio, IRQ_GPIO_NAME);
+		retval = gpio_request(pdata->irq_gpio, INSTANTIATED(IRQ_GPIO_NAME));
 		if (retval) {
 			pr_err("unable to request %s [%d]: rc=%d\n",
-				IRQ_GPIO_NAME, pdata->irq_gpio, retval);
+				INSTANCE_DBG(IRQ_GPIO_NAME), pdata->irq_gpio, retval);
 			goto err_gpio;
 		}
 		retval = gpio_direction_input(pdata->irq_gpio);
 		if (retval) {
 			pr_err("unable to set %s [%d] dir: rc=%d\n",
-				IRQ_GPIO_NAME, pdata->irq_gpio, retval);
+				INSTANCE_DBG(IRQ_GPIO_NAME), pdata->irq_gpio, retval);
 			goto err_gpio;
 		}
 
 		if (!gpio_is_valid(pdata->reset_gpio))
 			return retval;
 
-		retval = gpio_request(pdata->reset_gpio, RESET_GPIO_NAME);
+		retval = gpio_request(pdata->reset_gpio, INSTANTIATED(RESET_GPIO_NAME));
 		if (retval) {
 			pr_err("unable to request %s [%d]: rc=%d\n",
-				RESET_GPIO_NAME, pdata->reset_gpio, retval);
+				INSTANCE_DBG(RESET_GPIO_NAME), pdata->reset_gpio, retval);
 			goto err_gpio;
 		}
 		retval = gpio_direction_output(pdata->reset_gpio, 1);
 		if (retval) {
 			pr_err("unable to set %s [%d] dir: rc=%d\n",
-				RESET_GPIO_NAME, pdata->reset_gpio, retval);
+				INSTANCE_DBG(RESET_GPIO_NAME), pdata->reset_gpio, retval);
 			goto err_gpio;
 		}
 	} else {
@@ -1755,6 +1803,11 @@ static struct synaptics_dsx_platform_data *
 		&rmi4_data->ctrl_dsi);
 	if (!retval)
 		pr_notice("control DSI %d\n", rmi4_data->ctrl_dsi);
+
+	retval = of_property_read_string(np, "synaptics,bound-display",
+		&rmi4_data->bound_display);
+	if (!retval)
+		pr_notice("bound to display '%s'\n", rmi4_data->bound_display);
 
 	return pdata;
 }
@@ -2378,24 +2431,10 @@ static struct device_attribute attrs[] = {
 static DEVICE_ATTR(poweron, S_IRUSR | S_IRGRP,
 			synaptics_rmi4_poweron_show, synaptics_rmi4_store_error);
 
-struct synaptics_exp_fn_ctrl {
-	bool inited;
-	struct mutex list_mutex;
-	struct list_head fn_list;
-	struct delayed_work det_work;
-	struct workqueue_struct *det_workqueue;
-	struct synaptics_rmi4_data *rmi4_data_ptr;
-	struct i2c_client *i2c_client;
-};
-
-DEFINE_MUTEX(exp_fn_ctrl_mutex);
-static struct synaptics_exp_fn_ctrl exp_fn_ctrl;
-static struct semaphore reset_semaphore;
-
 static irqreturn_t synaptics_dsx_reset_irq(int irq, void *data)
 {
-	struct semaphore *sema = data;
-	up(sema);
+	struct synaptics_rmi4_data *rmi4_data = data;
+	up(&rmi4_data->reset_semaphore);
 	return IRQ_HANDLED;
 }
 
@@ -2476,7 +2515,7 @@ static int synaptics_dsx_ic_reset(
 	bool has_rst_pin = gpio_is_valid(platform_data->reset_gpio);
 	bool need_to_free_irq = true;
 
-	sema_init(&reset_semaphore, 0);
+	sema_init(&rmi4_data->reset_semaphore, 0);
 
 	if (has_rst_pin && (reset == RMI4_HW_RESET)) {
 		gpio_set_value(platform_data->reset_gpio, 0);
@@ -2488,8 +2527,8 @@ static int synaptics_dsx_ic_reset(
 	}
 
 	retval = request_irq(rmi4_data->irq, synaptics_dsx_reset_irq,
-			IRQF_TRIGGER_RISING, "synaptics_reset",
-			&reset_semaphore);
+			IRQF_TRIGGER_RISING, rmi4_data->reset_name,
+			rmi4_data);
 	if (retval < 0) {
 		need_to_free_irq = false;
 		dev_warn(&rmi4_data->i2c_client->dev,
@@ -2500,19 +2539,24 @@ static int synaptics_dsx_ic_reset(
 	if (has_rst_pin && (reset == RMI4_HW_RESET))
 		gpio_set_value(platform_data->reset_gpio, 1);
 
-	retval = down_timeout(&reset_semaphore, msecs_to_jiffies(100));
+	retval = down_timeout(&rmi4_data->reset_semaphore, msecs_to_jiffies(100));
 	if (retval) {
 		dev_err(&rmi4_data->i2c_client->dev,
-				"timed out waiting for reset to complete\n");
+				"%s: timed out waiting for reset to complete\n", __func__);
 		retval = -ETIMEDOUT;
 	} else {
+		dev_dbg(&rmi4_data->i2c_client->dev,
+				"%s: IRQ GPIO=%d after HW reset is %d\n",
+				__func__, platform_data->irq_gpio,
+				gpio_get_value(platform_data->irq_gpio));
+
 		retval = (int)jiffies_to_msecs(jiffies-start);
 		/* insert delay to ensure 1st i2c bus access succeeds */
 		udelay(1000);
 	}
 
 	if (need_to_free_irq)
-		free_irq(rmi4_data->irq, &reset_semaphore);
+		free_irq(rmi4_data->irq, rmi4_data);
 
 	/* perform SW reset if HW reset failed */
 	if (need_to_free_irq && reset != RMI4_SW_RESET && retval == -ETIMEDOUT)
@@ -2527,8 +2571,8 @@ static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 	if (IS_ERR_OR_NULL(rmi4_data->input_dev))
 		return PTR_ERR(rmi4_data->input_dev);
 
-	rmi4_data->input_dev->name = DRIVER_NAME;
-	rmi4_data->input_dev->phys = INPUT_PHYS_NAME;
+	rmi4_data->input_dev->name = INSTANTIATED(DRIVER_NAME);
+	rmi4_data->input_dev->phys = INSTANTIATED(INPUT_PHYS_NAME);
 	rmi4_data->input_dev->id.bustype = BUS_I2C;
 	rmi4_data->input_dev->dev.parent = &rmi4_data->i2c_client->dev;
 
@@ -2537,7 +2581,7 @@ static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(EV_KEY, rmi4_data->input_dev->evbit);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_POWER);
 
-	pr_debug("allocated input device\n");
+	pr_debug("allocated input device '%s'\n", INSTANCE_DBG(INPUT_PHYS_NAME));
 
 	return 0;
 }
@@ -5072,10 +5116,10 @@ static int synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 	 * is not handled by currently active internal functions.
 	 */
 	if (intr_status_mask & (~rmi4_data->active_fn_intr_mask)) {
-		mutex_lock(&exp_fn_ctrl.list_mutex);
-		if (!list_empty(&exp_fn_ctrl.fn_list)) {
+		mutex_lock(&rmi4_data->exp_fn_ctrl.list_mutex);
+		if (!list_empty(&rmi4_data->exp_fn_ctrl.fn_list)) {
 			list_for_each_entry(exp_fhandler,
-					&exp_fn_ctrl.fn_list, link) {
+					&rmi4_data->exp_fn_ctrl.fn_list, link) {
 				if (exp_fhandler->inserted &&
 					(exp_fhandler->func_attn != NULL))
 					exp_fhandler->func_attn(
@@ -5083,7 +5127,7 @@ static int synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 						rmi4_data->touch_data[0]);
 			}
 		}
-		mutex_unlock(&exp_fn_ctrl.list_mutex);
+		mutex_unlock(&rmi4_data->exp_fn_ctrl.list_mutex);
 	}
 
 	return touch_count;
@@ -5102,6 +5146,9 @@ static int synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 {
 	struct synaptics_rmi4_data *rmi4_data = data;
+
+	dev_dbg(&rmi4_data->i2c_client->dev,
+			"%s: IRQ=%d; rmi4_data ptr = %p\n", __func__, irq, rmi4_data);
 
 #if defined(CONFIG_DYNAMIC_DEBUG) || defined(DEBUG)
 	if (rmi4_data->test_irq_delay_ms) {
@@ -5147,7 +5194,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 
 		retval = request_threaded_irq(rmi4_data->irq, NULL,
 				synaptics_rmi4_irq, platform_data->irq_flags,
-				DRIVER_NAME, rmi4_data);
+				rmi4_data->irq_name, rmi4_data);
 		if (retval < 0) {
 			dev_err(&rmi4_data->i2c_client->dev,
 					"%s: Failed to create irq thread\n",
@@ -5156,7 +5203,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 		}
 
 		dev_dbg(&rmi4_data->i2c_client->dev,
-				"%s: Started irq thread\n", __func__);
+				"%s: IRQ=%d: Started irq thread\n", __func__, rmi4_data->irq);
 
 		rmi4_data->irq_enabled = true;
 	} else {
@@ -6453,9 +6500,9 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data)
 		}
 
 		/* kick off detection work after touch ic changes its mode */
-		if (exp_fn_ctrl.det_workqueue)
-			queue_delayed_work(exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work, 0);
+		if (det_workqueue)
+			queue_delayed_work(det_workqueue,
+					&rmi4_data->exp_fn_ctrl.det_work, 0);
 	}
 
 	return 0;
@@ -6591,8 +6638,14 @@ static int control_access_block_update_dynamic(
 */
 static void synaptics_rmi4_detection_work(struct work_struct *work)
 {
+	struct delayed_work *dw =
+			container_of(work, struct delayed_work, work);
+	struct synaptics_exp_fn_ctrl *exp_fn_ctrl =
+			container_of(dw, struct synaptics_exp_fn_ctrl, det_work);
+	struct synaptics_rmi4_data *rmi4_data =
+			container_of(exp_fn_ctrl, struct synaptics_rmi4_data, exp_fn_ctrl);
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
-	struct synaptics_rmi4_data *rmi4_data;
+	struct device *dev = &rmi4_data->i2c_client->dev;
 	int state, error, probe_status;
 	bool all_inserted = true;
 	bool terminate = false;
@@ -6601,39 +6654,35 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 #if defined(CONFIG_DRM)
 	/* DRM status of primary panel */
-	panel_ready = dsi_display_is_panel_enable(0, &probe_status, &pname);
-	pr_debug("drm: probe=%d, enable=%d, panel'%s'\n", probe_status, panel_ready, pname);
+	panel_ready = dsi_display_is_panel_enable(rmi4_data->ctrl_dsi, &probe_status, &pname);
+	dev_dbg(dev, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
+			__func__, probe_status, panel_ready, pname);
 	/* check if primary panel is not a dummy one */
 	if (pname && strstr(pname, "dummy")) {
-		pr_info("dummy panel detected; terminating...\n");
+		dev_info(dev, "%s: dummy panel detected; terminating...\n", __func__);
 		terminate = true;
 	}
 #endif
-	mutex_lock(&exp_fn_ctrl_mutex);
-	rmi4_data = exp_fn_ctrl.rmi4_data_ptr;
-	mutex_unlock(&exp_fn_ctrl_mutex);
-
-	if (rmi4_data == NULL) {
-		/* 1) rmi4_data being NULL is a valid case */
-		/* 2) pname is NULL in all cases except DRM */
-		if (pname && panel_ready) {
-			terminate = true;
-			pr_debug("set terminate flag\n");
-		} else
-			goto exit_reschedule;
-	} else {
+	/* pname only gets initialized by DRM */
+	/* it implies RMI_DRM_WORKAROUND handler running */
+	if (pname) {
 		if (!panel_ready)
 			goto exit_reschedule;
 
+		if (rmi4_data->terminating) {
+			/* hw init failed on previous step, thus
+			 * continue shutting things down */
+			terminate = true;
+			pr_debug("set terminate flag\n");
+		}
+	} else {
 		if (rmi4_data->fps_detection_enabled &&
 			!rmi4_data->is_fps_registered) {
 			error = FPS_register_notifier(
 					&rmi4_data->fps_notif, 0xBEEF, false);
 			if (error) {
-				if (exp_fn_ctrl.det_workqueue)
-					queue_delayed_work(
-						exp_fn_ctrl.det_workqueue,
-						&exp_fn_ctrl.det_work,
+				queue_delayed_work(det_workqueue,
+						&exp_fn_ctrl->det_work,
 						msecs_to_jiffies(EXP_FN_DET_INTERVAL));
 				pr_err("Failed to register fps_notifier\n");
 			} else {
@@ -6643,62 +6692,66 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		}
 	}
 
-	mutex_lock(&exp_fn_ctrl.list_mutex);
-	if (list_empty(&exp_fn_ctrl.fn_list))
+	mutex_lock(&exp_fn_ctrl->list_mutex);
+	if (list_empty(&exp_fn_ctrl->fn_list))
 		goto release_mutex;
 
 	/* F34 resets touch IC and might interfere with */
 	/* reporting touch events. Need to ensure it was */
 	/* successfully inserted before enabling interrupts */
 	list_for_each_entry(exp_fhandler,
-				&exp_fn_ctrl.fn_list,
+				&exp_fn_ctrl->fn_list,
 				link) {
 		if (!exp_fhandler->inserted) {
 			all_inserted = false;
-			pr_debug("not all inserted; keep waiting...\n");
+			dev_dbg(dev, "%s: not all inserted; keep waiting...\n", __func__);
 			break;
 		}
 	}
 
 	list_for_each_entry_safe(exp_fhandler,
 				next_list_entry,
-				&exp_fn_ctrl.fn_list,
+				&exp_fn_ctrl->fn_list,
 				link) {
 		/* terminate all handlers */
 		if (terminate) {
-			pr_debug("terminating the rest of handler: %d\n", exp_fhandler->fn_type);
+			dev_dbg(dev, "%s: terminating the rest of handler: %d\n",
+					__func__, exp_fhandler->fn_type);
 			exp_fhandler->func_init = NULL;
 		}
 
 		if (exp_fhandler->func_init == NULL) {
 			if (exp_fhandler->inserted == true) {
-				pr_debug("calling remove func for handler: %d\n", exp_fhandler->fn_type);
+				dev_dbg(dev, "%s: calling remove func for handler: %d\n",
+						__func__, exp_fhandler->fn_type);
 				exp_fhandler->func_remove(rmi4_data);
 
 				/* need to restore status function on F34 removal */
 				if (exp_fhandler->fn_type == RMI_FW_UPDATER &&
 					exp_fhandler->func_status == rmi4_data->get_status) {
 					rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
-					pr_info("using default status retrieval function\n");
+					dev_info(dev,
+							"%s: using default status retrieval function\n",
+							__func__);
 				}
 
 				if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
 					if (terminate) {
-						synaptics_rmi4_remove(exp_fn_ctrl.i2c_client);
-						pr_info("driver removed\n");
+						cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
+						flush_workqueue(det_workqueue);
+
+						i2c_set_clientdata(rmi4_data->i2c_client, NULL);
+						kfree(rmi4_data);
+
+						dev_info(dev, "%s: driver removed\n", __func__);
 					} else if (all_inserted) {
 						synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
-#if 0
-						/* enable interrupt on handler's removal */
-						atomic_set(&rmi4_data->touch_stopped, 0);
-						synaptics_dsx_sensor_ready_state(rmi4_data, false);
-#endif
-						pr_info("drm panel ready\n");
+						dev_info(dev, "%s: drm panel ready\n", __func__);
 					} else {
-						queue_delayed_work(exp_fn_ctrl.det_workqueue,
-								&exp_fn_ctrl.det_work,
+						queue_delayed_work(det_workqueue,
+								&exp_fn_ctrl->det_work,
 								msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-						pr_debug("keep drm fhandler\n");
+						dev_dbg(dev, "%s: keep drm fhandler\n", __func__);
 						continue;
 					}
 				}
@@ -6790,36 +6843,58 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			}
 			/* replace default status retrieval function */
 			rmi4_data->get_status = exp_fhandler->func_status;
-			pr_info("using F34 status retrieval function\n");
+			dev_info(dev, "%s: using F34 status retrieval function\n", __func__);
 		}
 
 		if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
 			error = synaptics_rmi4_hw_init(rmi4_data);
 			if (error) {
-				pr_info("hw init failed\n");
+				dev_dbg(dev, "%s: hw init failed\n", __func__);
 				/* not dummy panel found, but touch hw init failed, */
 				/* thus we need to terminate further processing */
-				exp_fn_ctrl.rmi4_data_ptr = rmi4_data = NULL;
-				terminate = true;
+				rmi4_data->terminating = true;
 			}
 			exp_fhandler->func_init = NULL;
-			pr_debug("removing DRM workaround\n");
-			queue_delayed_work(exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work,
+			dev_dbg(dev, "%s: removing DRM workaround\n", __func__);
+			/* allowing sufficient time for F34 to complete */
+			queue_delayed_work(det_workqueue,
+					&exp_fn_ctrl->det_work,
 					msecs_to_jiffies(5000));
 		}
 	}
 
 release_mutex:
-	mutex_unlock(&exp_fn_ctrl.list_mutex);
+	mutex_unlock(&exp_fn_ctrl->list_mutex);
 
 	return;
 
 exit_reschedule:
 	pr_debug("re-scheduling...\n");
-	queue_delayed_work(exp_fn_ctrl.det_workqueue,
-			&exp_fn_ctrl.det_work,
+	queue_delayed_work(det_workqueue,
+			&exp_fn_ctrl->det_work,
 			msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+}
+
+static int synaptics_exp_fn_ctrl_init(
+				struct synaptics_rmi4_data *rmi4_data)
+{
+	struct device *dev = &rmi4_data->i2c_client->dev;
+
+	mutex_init(&rmi4_data->exp_fn_ctrl.ctrl_mutex);
+	mutex_init(&rmi4_data->exp_fn_ctrl.list_mutex);
+	INIT_LIST_HEAD(&rmi4_data->exp_fn_ctrl.fn_list);
+	if (!det_workqueue) {
+		det_workqueue = create_singlethread_workqueue("rmi_det_workqueue");
+		if (!det_workqueue) {
+			dev_err(dev, "%s: unable to create a workqueue\n", __func__);
+			return -ENODEV;
+		}
+	}
+
+	INIT_DELAYED_WORK(&rmi4_data->exp_fn_ctrl.det_work, synaptics_rmi4_detection_work);
+	rmi4_data->exp_fn_ctrl.inited = true;
+
+	return 0;
 }
 
 /**
@@ -6834,7 +6909,9 @@ exit_reschedule:
 * can be inserted or removed dynamically at module init and exit times,
 * respectively.
 */
-void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
+void synaptics_rmi4_new_function(
+		struct synaptics_rmi4_data *rmi4_data,
+		enum exp_fn fn_type, bool insert,
 		int (*func_init)(struct synaptics_rmi4_data *rmi4_data),
 		void (*func_remove)(struct synaptics_rmi4_data *rmi4_data),
 		void (*func_attn)(struct synaptics_rmi4_data *rmi4_data,
@@ -6844,21 +6921,7 @@ void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
 {
 	struct synaptics_rmi4_exp_fn *exp_fhandler;
 
-	mutex_lock(&exp_fn_ctrl_mutex);
-	if (!exp_fn_ctrl.inited) {
-		mutex_init(&exp_fn_ctrl.list_mutex);
-		INIT_LIST_HEAD(&exp_fn_ctrl.fn_list);
-		exp_fn_ctrl.det_workqueue =
-			create_singlethread_workqueue("rmi_det_workqueue");
-		if (IS_ERR_OR_NULL(exp_fn_ctrl.det_workqueue))
-			pr_err("unable to create a workqueue\n");
-		INIT_DELAYED_WORK(&exp_fn_ctrl.det_work,
-			synaptics_rmi4_detection_work);
-		exp_fn_ctrl.inited = true;
-	}
-	mutex_unlock(&exp_fn_ctrl_mutex);
-
-	mutex_lock(&exp_fn_ctrl.list_mutex);
+	mutex_lock(&rmi4_data->exp_fn_ctrl.list_mutex);
 	if (insert) {
 		exp_fhandler = kzalloc(sizeof(*exp_fhandler), GFP_KERNEL);
 		if (!exp_fhandler) {
@@ -6872,9 +6935,9 @@ void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
 		exp_fhandler->func_remove = func_remove;
 		exp_fhandler->inserted = false;
 		exp_fhandler->mode = mode;
-		list_add_tail(&exp_fhandler->link, &exp_fn_ctrl.fn_list);
+		list_add_tail(&exp_fhandler->link, &rmi4_data->exp_fn_ctrl.fn_list);
 	} else {
-		list_for_each_entry(exp_fhandler, &exp_fn_ctrl.fn_list, link) {
+		list_for_each_entry(exp_fhandler, &rmi4_data->exp_fn_ctrl.fn_list, link) {
 			if (exp_fhandler->func_init == func_init) {
 				/* leave inserted flag ON to run */
 				/* remove function in detection work */
@@ -6885,10 +6948,10 @@ void synaptics_rmi4_new_function(enum exp_fn fn_type, bool insert,
 	}
 
 exit:
-	mutex_unlock(&exp_fn_ctrl.list_mutex);
-	if (exp_fn_ctrl.det_workqueue)
-		queue_delayed_work(exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work, 0);
+	mutex_unlock(&rmi4_data->exp_fn_ctrl.list_mutex);
+	if (det_workqueue)
+		queue_delayed_work(det_workqueue,
+					&rmi4_data->exp_fn_ctrl.det_work, 0);
 	return;
 }
 EXPORT_SYMBOL(synaptics_rmi4_new_function);
@@ -7214,7 +7277,7 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 		long int error = PTR_ERR(pinctrl);
 		dev_err(&rmi4_data->i2c_client->dev,
 			"%s: pinctrl failed err %ld\n", __func__, error);
-		goto err_mem_free;
+		return (int)error;
 	}
 
 	if (platform_data->gpio_config)
@@ -7230,7 +7293,7 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to configure GPIO\n",
 				__func__);
-		goto err_mem_free;
+		return retval;
 	}
 
 	retval = synaptics_dsx_alloc_input(rmi4_data);
@@ -7279,7 +7342,8 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 
 	retval = synaptics_dsx_ic_reset(rmi4_data, RMI4_HW_RESET);
 	if (retval > 0)
-		pr_debug("successful reset took %dms\n", retval);
+		dev_dbg(&rmi4_data->i2c_client->dev, "%s: successful reset took %dms\n",
+			__func__, retval);
 	else
 		dev_warn(&rmi4_data->i2c_client->dev, "%s: timed out waiting for idle\n",
 			__func__);
@@ -7372,9 +7436,9 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 		retval = FPS_register_notifier(
 				&rmi4_data->fps_notif, 0xBEEF, false);
 		if (retval) {
-			if (exp_fn_ctrl.det_workqueue)
-				queue_delayed_work(exp_fn_ctrl.det_workqueue,
-					&exp_fn_ctrl.det_work,
+			if (det_workqueue)
+				queue_delayed_work(det_workqueue,
+					&rmi4_data->exp_fn_ctrl.det_work,
 					msecs_to_jiffies(EXP_FN_DET_INTERVAL));
 			dev_err(&rmi4_data->i2c_client->dev,
 				"Failed to register fps_notifier: %d\n",
@@ -7435,10 +7499,6 @@ err_gpio_free:
 		gpio_free(platform_data->reset_gpio);
 	}
 
-err_mem_free:
-	i2c_set_clientdata(rmi4_data->i2c_client, NULL);
-	kfree(rmi4_data);
-
 	return retval;
 }
 
@@ -7470,7 +7530,7 @@ static void dummy_remove(struct synaptics_rmi4_data *rmi4_data)
 static int synaptics_rmi4_probe(struct i2c_client *client,
 		const struct i2c_device_id *dev_id)
 {
-	int rc;
+	int rc = 0;
 	struct synaptics_rmi4_data *rmi4_data;
 	struct synaptics_dsx_platform_data *platform_data;
 
@@ -7489,6 +7549,7 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 				__func__);
 		return -ENOMEM;
 	}
+	dev_dbg(&client->dev, "%s: rmi4_data ptr = %p\n", __func__, rmi4_data);
 
 	/* assign pointer to client structure right away for further use */
 	rmi4_data->i2c_client = client;
@@ -7512,7 +7573,23 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 		kfree(rmi4_data);
 		return -EINVAL;
 	}
+#if defined(CONFIG_DRM)
+	if (rmi4_data->bound_display) {
+		int probe_status;
+		char *display_name = NULL;
 
+		dsi_display_is_panel_enable(rmi4_data->ctrl_dsi,
+					&probe_status, &display_name);
+		if (probe_status == -ENODEV ||
+			(display_name && strncmp(display_name, rmi4_data->bound_display,
+				strlen(rmi4_data->bound_display)))) {
+			dev_err(&client->dev,
+					"%s: display binding failed\n", __func__);
+			kfree(rmi4_data);
+            return -ENODEV;
+		}
+	}
+#endif
 	rmi4_data->state = STATE_INVALID;
 	rmi4_data->current_page = MASK_8BIT;
 	rmi4_data->board = platform_data;
@@ -7539,41 +7616,58 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	mutex_init(&(rmi4_data->rmi4_io_ctrl_mutex));
 	mutex_init(&(rmi4_data->state_mutex));
 
-	mutex_lock(&exp_fn_ctrl_mutex);
-	if (!exp_fn_ctrl.inited) {
-		mutex_init(&exp_fn_ctrl.list_mutex);
-		INIT_LIST_HEAD(&exp_fn_ctrl.fn_list);
-		exp_fn_ctrl.det_workqueue =
-			create_singlethread_workqueue("rmi_det_workqueue");
-		if (IS_ERR_OR_NULL(exp_fn_ctrl.det_workqueue))
-			pr_err("unable to create a workqueue\n");
-		INIT_DELAYED_WORK(&exp_fn_ctrl.det_work,
-			synaptics_rmi4_detection_work);
-		exp_fn_ctrl.inited = true;
+	rc = synaptics_exp_fn_ctrl_init(rmi4_data);
+	if (rc) {
+		dev_err(&client->dev,
+				"%s: Cannot alloc exp_fn_ctrl\n",
+				__func__);
+		goto free_and_exit;
 	}
-
-	exp_fn_ctrl.rmi4_data_ptr = rmi4_data;
-	exp_fn_ctrl.i2c_client = client;
-	mutex_unlock(&exp_fn_ctrl_mutex);
 
 	rc = device_create_file(&client->dev, &dev_attr_poweron);
 	if (rc < 0) {
 		dev_err(&client->dev,
 				"%s: Cannot create poweron\n",
 				__func__);
-		kfree(rmi4_data);
-		return rc;
+		goto free_and_exit;
 	}
 
-	if (!rmi4_data->splash_screen_mode)
-		return synaptics_rmi4_hw_init(rmi4_data);
+	/* add driver's instance to the list */
+	rmi4_data->instance = drv_instance_counter++;
+	mutex_lock(&instances_mutex);
+	list_add_tail(&rmi4_data->node, &drv_instances_list);
+	mutex_unlock(&instances_mutex);
+	rmi4_data->irq_name = INSTANCE_RMI(DRIVER_NAME, rmi4_data);
+	rmi4_data->reset_name = INSTANCE_RMI("synaptics_reset", rmi4_data);
 
-	pr_debug("delay hw init until DRM reports panel is ready\n");
+	if (!rmi4_data->splash_screen_mode) {
+		rc = synaptics_rmi4_hw_init(rmi4_data);
+		if (rc < 0) {
+			i2c_set_clientdata(rmi4_data->i2c_client, NULL);
+			goto free_and_exit;
+		}
+		return 0;
+	}
+
+	dev_dbg(&client->dev,
+			"%s: delay hw init until DRM reports panel is ready\n",
+			__func__);
 	synaptics_dsx_sensor_state(rmi4_data, STATE_UNKNOWN);
-	synaptics_rmi4_new_function(RMI_DRM_WORKAROUND, true,
+	synaptics_rmi4_new_function(rmi4_data, RMI_DRM_WORKAROUND, true,
 			dummy_init, dummy_remove, NULL, NULL, IC_MODE_ANY);
 
+	if (!rmi4_data->ctrl_dsi)
+		synaptics_rmi4_new_function(rmi4_data, RMI_FW_UPDATER, true,
+			synaptics_rmi4_fwu_init,
+			synaptics_rmi4_fwu_remove,
+			NULL,
+			synaptics_rmi4_fwu_flash_status, IC_MODE_ANY);
+
 	return 0;
+
+free_and_exit:
+	kfree(rmi4_data);
+	return rc;
 }
 
  /**
@@ -7593,15 +7687,13 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	struct synaptics_dsx_platform_data *platform_data;
 	struct synaptics_rmi4_data *rmi4_data = i2c_get_clientdata(client);
 
-	if (exp_fn_ctrl.inited) {
-		cancel_delayed_work_sync(&exp_fn_ctrl.det_work);
-		flush_workqueue(exp_fn_ctrl.det_workqueue);
-		destroy_workqueue(exp_fn_ctrl.det_workqueue);
-		exp_fn_ctrl.rmi4_data_ptr = NULL;
-	}
-
 	if (rmi4_data == NULL)
 		return 0;
+
+	if (rmi4_data->exp_fn_ctrl.inited) {
+		cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
+		flush_workqueue(det_workqueue);
+	}
 
 	atomic_set(&rmi4_data->touch_stopped, 1);
 	synaptics_rmi4_irq_enable(rmi4_data, false);
@@ -7658,6 +7750,10 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	if (IS_ERR(pinctrl))
 		dev_err(&rmi4_data->i2c_client->dev,
 			"%s: pinctrl default failed\n", __func__);
+
+	list_del(&rmi4_data->node);
+	if (list_empty(&drv_instances_list))
+		destroy_workqueue(det_workqueue);
 
 	kfree(rmi4_data);
 	i2c_set_clientdata(client, NULL);
