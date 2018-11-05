@@ -42,9 +42,9 @@
 #if SX933x_DEBUG
 #define LOG_INFO(fmt, args...)    pr_info(LOG_TAG fmt, ##args)
 #else
-#define LOG_INFO(fmt, args...)
+#define LOG_INFO(fmt, args...)    pr_debug(LOG_TAG fmt, ##args)
 #endif
-#define LOG_DBG(fmt, args...)   pr_info(LOG_TAG fmt, ##args) 
+#define LOG_DBG(fmt, args...)     pr_debug(LOG_TAG fmt, ##args)
 
 #define USE_DTS_REG
 
