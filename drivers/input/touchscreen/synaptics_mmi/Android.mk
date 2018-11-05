@@ -13,11 +13,11 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := synaptics_dsx_rmi_dev.ko
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/AndroidKernelModule.mk
+#include $(CLEAR_VARS)
+#LOCAL_MODULE := synaptics_dsx_rmi_dev.ko
+#LOCAL_MODULE_TAGS := optional
+#LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+#include $(DLKM_DIR)/AndroidKernelModule.mk
 
 #This requires F54 support, thus disable it for now
 #include $(CLEAR_VARS)

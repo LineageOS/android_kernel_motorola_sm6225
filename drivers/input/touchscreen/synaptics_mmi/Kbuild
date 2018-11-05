@@ -11,5 +11,5 @@ endif
 
 obj-m += synaptics_mmi.o
 obj-m += synaptics_dsx_fw_update.o
-obj-m += synaptics_dsx_rmi_dev.o
+#obj-m += synaptics_dsx_rmi_dev.o
 #obj-m += synaptics_dsx_test_reporting.o
