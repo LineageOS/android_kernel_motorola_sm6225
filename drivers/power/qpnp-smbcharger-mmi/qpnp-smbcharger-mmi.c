@@ -69,6 +69,7 @@ enum {
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
 #define HYST_STEP_MV 50
+#define HYST_STEP_FLIP_MV (HYST_STEP_MV*2)
 #define DEMO_MODE_HYS_SOC 5
 #define DEMO_MODE_VOLTAGE 4000
 #define WARM_TEMP 45
@@ -1458,7 +1459,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 
 static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			      struct smb_mmi_chg_status *stat,
-			      int batt)
+			      int batt, int fv_offset)
 {
 	int max_fv_mv;
 	int i;
@@ -1505,11 +1506,11 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		if (!zone->norm_mv) {
 			/* No Step in this Zone */
 			chip->chrg_taper_cnt = 0;
-			if ((stat->batt_mv + HYST_STEP_MV) >= max_fv_mv)
+			if ((stat->batt_mv + fv_offset) >= max_fv_mv)
 				chip->pres_chrg_step = STEP_NORM;
 			else
 				chip->pres_chrg_step = STEP_MAX;
-		} else if ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv) {
+		} else if ((stat->batt_mv + fv_offset) < zone->norm_mv) {
 			chip->chrg_taper_cnt = 0;
 			chip->pres_chrg_step = STEP_MAX;
 		} else if (!zone->fcc_norm_ma)
@@ -1525,7 +1526,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		if (!zone->fcc_norm_ma)
 			chip->pres_chrg_step = STEP_STOP;
 		else if ((stat->batt_soc < 100) ||
-			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
+			 (stat->batt_mv + fv_offset) < max_fv_mv) {
 			chip->chrg_taper_cnt = 0;
 			chip->pres_chrg_step = STEP_NORM;
 		} else if (mmi_has_current_tapered(chg, chip, stat->batt_ma,
@@ -1539,7 +1540,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		}
 	} else if (chip->pres_chrg_step == STEP_FLOAT) {
 		if ((zone->fcc_norm_ma) ||
-		    ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv))
+		    ((stat->batt_mv + fv_offset) < zone->norm_mv))
 			chip->pres_chrg_step = STEP_MAX;
 	}
 
@@ -1718,11 +1719,13 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	} else
 		chg_stat_flip.batt_temp = pval.intval / 10;
 
-	sm_update = mmi_dual_charge_sm(chg, &chg_stat_main, MAIN_BATT);
+	sm_update = mmi_dual_charge_sm(chg, &chg_stat_main,
+				       MAIN_BATT, HYST_STEP_MV);
 	if (sm_update < 0)
 		return sched_time;
 
-	sm_update = mmi_dual_charge_sm(chg, &chg_stat_flip, FLIP_BATT);
+	sm_update = mmi_dual_charge_sm(chg, &chg_stat_flip,
+				       FLIP_BATT, HYST_STEP_FLIP_MV);
 	if (sm_update < 0)
 		return sched_time;
 
