@@ -2966,8 +2966,11 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 		{
 			tfa98xx->pstream = 1;
 
-			tfa98xx_adsp_send_calib_values(tfa98xx);
-
+			if(0 == tfa98xx->profile) {
+			    tfa98xx_adsp_send_calib_values(tfa98xx);
+			} else {
+			    pr_debug("current profile:%d\n",tfa98xx->profile);
+			}
 			/* Start DSP */
 			if ((tfa98xx->flags & TFA98XX_FLAG_CHIP_SELECTED) &&
 			    (tfa98xx->dsp_init != TFA98XX_DSP_INIT_PENDING))
