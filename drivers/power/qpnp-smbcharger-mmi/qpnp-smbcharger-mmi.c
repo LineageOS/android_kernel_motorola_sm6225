@@ -233,6 +233,7 @@ struct smb_mmi_charger {
 	struct alarm		heartbeat_alarm;
 	bool			suspended;
 	bool			awake;
+	int 			last_reported_soc;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1750,23 +1751,21 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
 		   ((flip_p->pres_chrg_step == STEP_MAX) ||
 		    (flip_p->pres_chrg_step == STEP_NORM)) &&
-		   (chg_stat_flip.batt_soc >= 100) &&
-		   ((chg_stat_flip.batt_mv + HYST_STEP_MV) >=
+		   (chg_stat_flip.batt_soc >= 95) &&
+		   ((chg_stat_flip.batt_mv + HYST_STEP_FLIP_MV) >=
 		    chg->base_fv_mv)) {
-		target_fcc = -EINVAL;
-		target_fv = chg->base_fv_mv;
-		flip_p->pres_chrg_step = STEP_FULL;
+		target_fcc = flip_p->target_fcc;
+		target_fv = flip_p->target_fv;
 		pr_info("SMBMMI: Align Flip to Main FULL\n");
 		goto vote_now;
 	} else if ((flip_p->pres_chrg_step == STEP_FULL) &&
 		   ((main_p->pres_chrg_step == STEP_MAX) ||
 		    (main_p->pres_chrg_step == STEP_NORM)) &&
-		   (chg_stat_main.batt_soc >= 100) &&
+		   (chg_stat_main.batt_soc >= 95) &&
 		   ((chg_stat_main.batt_mv + HYST_STEP_MV) >=
 		    chg->base_fv_mv)) {
-		target_fcc = -EINVAL;
-		target_fv = chg->base_fv_mv;
-		main_p->pres_chrg_step = STEP_FULL;
+		target_fcc = main_p->target_fcc;
+		target_fv = main_p->target_fv;
 		pr_info("SMBMMI: Align Main to Flip FULL\n");
 		goto vote_now;
 	/* Check for Charge Disable from each */
@@ -2170,11 +2169,12 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		else
 			batt_cap = pval.intval;
 
-		if ((report_cap != batt_cap) &&
+		if (((report_cap != batt_cap) &&
 		    (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
 		    (report_cap >= (batt_cap - MONOTONIC_SOC)) &&
 		    !(report_cap < 0) &&
-		    !(report_cap > 100)) {
+		    !(report_cap > 100)) ||
+		    (chip->last_reported_soc == -1)) {
 			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
 				report_cap);
 			pval.intval = report_cap;
@@ -2183,6 +2183,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 						&pval);
 			if (rc < 0)
 				pr_err("SMBMMI: Couldn't set batt psy cap\n");
+			else
+				chip->last_reported_soc = report_cap;
 		}
 
 		/* Dual Step and Thermal Charging */
@@ -2594,6 +2596,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		return PTR_ERR(chip->mmi_psy);
 	}
 
+	chip->last_reported_soc = -1;
 	chip->batt_psy = power_supply_get_by_name("battery");
 	chip->bms_psy = power_supply_get_by_name("bms");
 	chip->usb_psy = power_supply_get_by_name("usb");
