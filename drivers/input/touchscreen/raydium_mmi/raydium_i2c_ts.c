@@ -102,6 +102,7 @@ struct raydium_ts_platform_data {
     u32 soft_rst_dly;
     u32 num_max_touches;
     u32 ctrl_dsi;
+	const char *bound_display;
 };
 
 struct raydium_ts_data {
@@ -4932,6 +4933,7 @@ static int raydium_parse_dt(struct device *dev, struct raydium_ts_platform_data 
 {
     struct device_node *np = dev->of_node;
     int rc = 0;
+    const char *display_name = NULL;
     u32 temp_val = 0;
 
     pdata->name = RAYDIUM_NAME;
@@ -4989,6 +4991,12 @@ static int raydium_parse_dt(struct device *dev, struct raydium_ts_platform_data 
     if (!rc)
     {
         pdata->ctrl_dsi = temp_val;
+    }
+
+    rc = of_property_read_string(np, "raydium,bound-display", &display_name);
+    if (!rc)
+    {
+        pdata->bound_display = display_name;
     }
 
     return 0;
@@ -5170,11 +5178,12 @@ static void raydium_ready_handler(struct work_struct *work)
 			container_of(work, struct delayed_work, work);
 	struct raydium_ts_data *raydium_ts =
 			container_of(dw, struct raydium_ts_data, ready_work);
+	struct raydium_ts_platform_data *pdata = raydium_ts->pdata;
 	int ret, probe_status;
 	/* CLI display ID is 1 */
 	/* 3rd parameter is NULL now, but we might need to start */
 	/* retrieving it later if found necessary */
-	bool status = dsi_display_is_panel_enable(1, &probe_status, NULL);
+	bool status = dsi_display_is_panel_enable(pdata->ctrl_dsi, &probe_status, NULL);
 
 	if (!status && probe_status == -ENODEV) {
 		dev_err(&raydium_ts->client->dev, "[touch]touch ic not present\n");
@@ -5225,6 +5234,21 @@ static int raydium_ts_probe(struct i2c_client *client,
     {
         pdata = client->dev.platform_data;
     }
+
+	/* Touch can be bound to display. If that's the case,
+	 * we need to check if control dsi associated with the
+	 * same display name and fail probe otherwise */
+	if (pdata->bound_display) {
+		int probe_status;
+		char *display_name = NULL;
+
+		dsi_display_is_panel_enable(pdata->ctrl_dsi, &probe_status, &display_name);
+		if (probe_status == -ENODEV || (display_name &&
+			strncmp(display_name, pdata->bound_display, strlen(pdata->bound_display)))) {
+			dev_err(&client->dev, "[touch]display binding failed\n");
+			return -ENODEV;
+		}
+	}
 
     if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
         return -ENODEV;
