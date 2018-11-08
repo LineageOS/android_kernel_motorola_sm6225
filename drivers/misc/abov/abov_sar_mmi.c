@@ -72,6 +72,7 @@ static int last_val;
 static int mEnabled;
 static int programming_done;
 static int fw_dl_status;
+static bool first_report = false;
 pabovXX_t abov_sar_ptr;
 
 /**
@@ -712,6 +713,14 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	pDevice = this->pDevice;
 	input_top = pDevice->pbuttonInformation->input_top;
 	input_bottom = pDevice->pbuttonInformation->input_bottom;
+
+	if(first_report == false) {
+		first_report = true;
+		input_report_abs(input_top, ABS_DISTANCE, -1);
+		input_sync(input_top);
+		input_report_abs(input_bottom, ABS_DISTANCE, -1);
+		input_sync(input_bottom);
+	}
 
 	if ((enable == 1) && (mEnabled == 0)) {
 		LOG_DBG("enable cap sensor\n");
