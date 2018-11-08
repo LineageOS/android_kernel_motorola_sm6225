@@ -1556,6 +1556,10 @@ int himax_parse_report_points(struct himax_ts_data *ts, int ts_path, int ts_stat
 
 
 	ts->old_finger = ts->pre_finger_mask;
+	if (ts->hx_point_num == 0) {
+		D("%s: hx_point_num = 0! \n", __func__);
+		return ts_status;
+	}
 	ts->pre_finger_mask = 0;
 	hx_touch_data->finger_num = hx_touch_data->hx_coord_buf[ts->coordInfoSize - 4] & 0x0F;
 	hx_touch_data->finger_on = 1;
@@ -1643,6 +1647,11 @@ static int himax_parse_report_data(struct himax_ts_data *ts, int ts_path, int ts
 #endif
 	p_point_num = ts->hx_point_num;
 
+	if (hx_touch_data->hx_coord_buf[HX_TOUCH_INFO_POINT_CNT] == 0xff)
+		ts->hx_point_num = 0;
+	else
+		ts->hx_point_num = hx_touch_data->hx_coord_buf[HX_TOUCH_INFO_POINT_CNT] & 0x0f;
+
 	switch (ts_path) {
 	case HX_REPORT_COORD:
 		ts_status = himax_parse_report_points(ts, ts_path, ts_status);
@@ -1681,6 +1690,9 @@ static void himax_report_all_leave_event(struct himax_ts_data *ts)
 	for (loop_i = 0; loop_i < ts->nFinger_support; loop_i++) {
 #ifndef	HX_PROTOCOL_A
 		input_mt_slot(ts->input_dev, loop_i);
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 #endif
 	}
@@ -1791,6 +1803,9 @@ static void himax_key_report_operation(int tp_key_index, struct himax_ts_data *t
 		vk_press = 0;
 #ifndef	HX_PROTOCOL_A
 		input_mt_slot(ts->input_dev, 0);
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 #else
 		input_mt_sync(ts->input_dev);
@@ -1886,10 +1901,11 @@ static void himax_finger_report(struct himax_ts_data *ts)
 #endif
 			input_report_key(ts->input_dev, BTN_TOUCH, g_target_report_data->finger_on);
 			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, g_target_report_data->w[i]);
-			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, i);
 #ifndef	HX_PROTOCOL_A
 			input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, g_target_report_data->w[i]);
 			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, g_target_report_data->w[i]);
+#else
+			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, i);
 #endif
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_X, g_target_report_data->x[i]);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, g_target_report_data->y[i]);
@@ -1902,6 +1918,9 @@ static void himax_finger_report(struct himax_ts_data *ts)
 
 		} else {
 			input_mt_slot(ts->input_dev, i);
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+			input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0);
+			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 		}
 	}
@@ -1941,8 +1960,11 @@ static void himax_finger_leave(struct himax_ts_data *ts)
 #endif
 
 	for (loop_i = 0; loop_i < ts->nFinger_support; loop_i++) {
-		if (((ts->old_finger >> loop_i) & 1) == 1) {
+		if (((ts->pre_finger_mask >> loop_i) & 1) == 1) {
 			input_mt_slot(ts->input_dev, loop_i);
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+			input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0);
+			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 		}
 	}
@@ -1991,12 +2013,6 @@ int himax_report_data(struct himax_ts_data *ts, int ts_path, int ts_status)
 		I("%s: Entering, ts_status=%d! \n", __func__, ts_status);
 
 	if (ts_path == HX_REPORT_COORD || ts_path == HX_REPORT_COORD_RAWDATA) {
-		if (hx_touch_data->hx_coord_buf[HX_TOUCH_INFO_POINT_CNT] == 0xff) {
-			ts->hx_point_num = 0;
-		} else {
-			ts->hx_point_num = hx_touch_data->hx_coord_buf[HX_TOUCH_INFO_POINT_CNT] & 0x0f;
-		}
-
 		/* Touch Point information */
 		himax_report_points(ts);
 
