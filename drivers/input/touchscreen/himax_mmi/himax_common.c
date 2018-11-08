@@ -1470,9 +1470,15 @@ static int himax_err_ctrl(struct himax_ts_data *ts, uint8_t *buf, int ts_path, i
 #endif
 
 	ts_status = himax_checksum_cal(ts, buf, ts_path, ts_status);
-	if (ts_status == HX_CHKSUM_FAIL)
+	if (ts_status == HX_CHKSUM_FAIL) {
 		goto CHK_FAIL;
-	goto END_FUNCTION;
+	} else {
+#ifdef HX_ESD_RECOVERY
+		/* continuous N times revord, not total N times */
+		g_zero_event_count = 0;
+#endif
+		goto END_FUNCTION;
+	}
 
 CHK_FAIL:
 #ifdef HX_ESD_RECOVERY
@@ -2899,6 +2905,11 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 	} else {
 		ts->suspended = false;
 	}
+
+#ifdef HX_ESD_RECOVERY
+	/* continuous N times record, not total N times. */
+	g_zero_event_count = 0;
+#endif
 
 	atomic_set(&ts->suspend_mode, 0);
 
