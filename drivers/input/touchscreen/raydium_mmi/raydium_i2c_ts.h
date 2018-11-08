@@ -133,9 +133,9 @@
 
 #define MSM_NEW_VER
 
-#define PINCTRL_STATE_ACTIVE     "pmx_ts_active"
-#define PINCTRL_STATE_SUSPEND    "pmx_ts_suspend"
-#define PINCTRL_STATE_RELEASE    "pmx_ts_release"
+#define PINCTRL_STATE_ACTIVE     "ts_sub_int_active"
+#define PINCTRL_STATE_SUSPEND    "ts_sub_int_suspend"
+#define PINCTRL_STATE_RELEASE    "ts_sub_int_release"
 
 #endif  /*__LINUX_RAYDIUM_H*/
 
