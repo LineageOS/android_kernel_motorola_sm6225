@@ -201,6 +201,7 @@ struct smb_mmi_charger {
 
 	struct power_supply	*mmi_psy;
 	struct power_supply	*batt_psy;
+	struct power_supply	*qcom_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*bms_psy;
 	struct power_supply	*main_psy;
@@ -234,6 +235,7 @@ struct smb_mmi_charger {
 	bool			suspended;
 	bool			awake;
 	int 			last_reported_soc;
+	int 			last_reported_status;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1746,6 +1748,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fcc = -EINVAL;
 		target_fv = chg->base_fv_mv;
 		sched_time = HEARTBEAT_DELAY_MS;
+		chg->last_reported_status = POWER_SUPPLY_STATUS_FULL;
 		goto vote_now;
 	/* Align FULL between batteries */
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
@@ -1776,6 +1779,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		goto vote_now;
 	}
 
+	chg->last_reported_status = -1;
 	if (main_p->target_fv < flip_p->target_fv)
 		target_fv = main_p->target_fv;
 	else
@@ -1956,30 +1960,37 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		else
 			target_fv = zone->norm_mv;
 		target_fcc = zone->fcc_max_ma;
+		chip->last_reported_status = -1;
 		break;
 	case STEP_FULL:
 		target_fv = max_fv_mv;
 		target_fcc = -EINVAL;
+		chip->last_reported_status = POWER_SUPPLY_STATUS_FULL;
 		break;
 	case STEP_NORM:
 		target_fv = max_fv_mv + chip->vfloat_comp_mv;
 		target_fcc = zone->fcc_norm_ma;
+		chip->last_reported_status = -1;
 		break;
 	case STEP_NONE:
 		target_fv = max_fv_mv;
 		target_fcc = zone->fcc_norm_ma;
+		chip->last_reported_status = -1;
 		break;
 	case STEP_STOP:
 		target_fv = max_fv_mv;
 		target_fcc = -EINVAL;
+		chip->last_reported_status = -1;
 		break;
 	case STEP_DEMO:
 		target_fv = DEMO_MODE_VOLTAGE;
 		target_fcc = zone->fcc_max_ma;
+		chip->last_reported_status = -1;
 		break;
 	default:
 		target_fv = max_fv_mv;
 		target_fcc = zone->fcc_norm_ma;
+		chip->last_reported_status = -1;
 		break;
 	}
 
@@ -2161,30 +2172,20 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		report_cap += flip_cap * flip_cap_full;
 		report_cap /= main_cap_full + flip_cap_full;
 
-		rc = power_supply_get_property(chip->batt_psy,
-					POWER_SUPPLY_PROP_CAPACITY,
-					&pval);
-		if (rc < 0)
-			pr_err("SMBMMI: Couldn't set batt psy capacity\n");
-		else
-			batt_cap = pval.intval;
+		if (report_cap < 0)
+			report_cap = 0;
+		else if (report_cap > 100)
+			report_cap = 100;
 
-		if (((report_cap != batt_cap) &&
-		    (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
-		    (report_cap >= (batt_cap - MONOTONIC_SOC)) &&
-		    !(report_cap < 0) &&
-		    !(report_cap > 100)) ||
-		    (chip->last_reported_soc == -1)) {
+		batt_cap = chip->last_reported_soc;
+
+		if ((batt_cap == -1) ||
+		    ((report_cap != batt_cap) &&
+		     (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
+		     (report_cap >= (batt_cap - MONOTONIC_SOC)))) {
 			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
 				report_cap);
-			pval.intval = report_cap;
-			rc = power_supply_set_property(chip->batt_psy,
-						POWER_SUPPLY_PROP_CAPACITY,
-						&pval);
-			if (rc < 0)
-				pr_err("SMBMMI: Couldn't set batt psy cap\n");
-			else
-				chip->last_reported_soc = report_cap;
+			chip->last_reported_soc = report_cap;
 		}
 
 		/* Dual Step and Thermal Charging */
@@ -2335,6 +2336,115 @@ static const struct power_supply_desc mmi_psy_desc = {
 	.set_property	= smb_mmi_set_property,
 	.properties	= smb_mmi_battery_props,
 	.num_properties	= ARRAY_SIZE(smb_mmi_battery_props),
+};
+
+static enum power_supply_property batt_props[] = {
+	POWER_SUPPLY_PROP_INPUT_SUSPEND,
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CHARGER_TEMP,
+	POWER_SUPPLY_PROP_CHARGER_TEMP_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_QNOVO,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
+	POWER_SUPPLY_PROP_CHARGE_DONE,
+	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
+	POWER_SUPPLY_PROP_SET_SHIP_MODE,
+	POWER_SUPPLY_PROP_DIE_HEALTH,
+	POWER_SUPPLY_PROP_RERUN_AICL,
+	POWER_SUPPLY_PROP_DP_DM,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+};
+
+static int batt_get_prop(struct power_supply *psy,
+			 enum power_supply_property psp,
+			 union power_supply_propval *val)
+{
+	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
+	int rc = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if (chip->last_reported_status == -1)
+			rc = power_supply_get_property(chip->qcom_psy,
+						       psp, val);
+		else
+			val->intval = chip->last_reported_status;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		if (chip->last_reported_soc == -1)
+			rc = power_supply_get_property(chip->qcom_psy,
+						       psp, val);
+		else
+			val->intval = chip->last_reported_soc;
+		break;
+	default:
+		rc = power_supply_get_property(chip->qcom_psy, psp, val);
+		break;
+	}
+
+	return rc;
+}
+
+static int batt_set_prop(struct power_supply *psy,
+			 enum power_supply_property prop,
+			 const union power_supply_propval *val)
+{
+	int rc = 0;
+	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
+
+	rc = power_supply_set_property(chip->qcom_psy, prop, val);
+
+	return rc;
+}
+
+static int batt_prop_is_writeable(struct power_supply *psy,
+				  enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+	case POWER_SUPPLY_PROP_CAPACITY:
+	case POWER_SUPPLY_PROP_PARALLEL_DISABLE:
+	case POWER_SUPPLY_PROP_DP_DM:
+	case POWER_SUPPLY_PROP_RERUN_AICL:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
+	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
+	case POWER_SUPPLY_PROP_DIE_HEALTH:
+		return 1;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static const struct power_supply_desc batt_psy_desc = {
+	.name		= "battery",
+	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.get_property	= batt_get_prop,
+	.set_property	= batt_set_prop,
+	.property_is_writeable = batt_prop_is_writeable,
+	.properties	= batt_props,
+	.num_properties	= ARRAY_SIZE(batt_props),
 };
 
 static int parse_mmi_dt(struct smb_mmi_charger *chg)
@@ -2597,7 +2707,22 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	chip->last_reported_soc = -1;
-	chip->batt_psy = power_supply_get_by_name("battery");
+	chip->last_reported_status = -1;
+	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
+	if (chip->qcom_psy) {
+		chip->batt_psy = devm_power_supply_register(chip->dev,
+							    &batt_psy_desc,
+							    &psy_cfg);
+		if (IS_ERR(chip->batt_psy)) {
+			dev_err(chip->dev,
+				"failed: batt power supply register\n");
+			return PTR_ERR(chip->batt_psy);
+		}
+	} else {
+		chip->qcom_psy = power_supply_get_by_name("battery");
+		chip->batt_psy = NULL;
+	}
+
 	chip->bms_psy = power_supply_get_by_name("bms");
 	chip->usb_psy = power_supply_get_by_name("usb");
 	chip->main_psy = power_supply_get_by_name("main");
@@ -2633,7 +2758,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 		/* Ensure SW JEITA is DISABLED */
 		pval.intval = 0;
-		power_supply_set_property(chip->batt_psy,
+		power_supply_set_property(chip->qcom_psy,
 					  POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
 					  &pval);
 		/* Ensure HW JEITA is DISABLED */
@@ -2799,8 +2924,13 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
 
+	if (chip->mmi_psy)
+		power_supply_unregister(chip->mmi_psy);
 	if (chip->batt_psy)
-		power_supply_put(chip->batt_psy);
+		power_supply_unregister(chip->batt_psy);
+
+	if (chip->qcom_psy)
+		power_supply_put(chip->qcom_psy);
 	if (chip->bms_psy)
 		power_supply_put(chip->bms_psy);
 	if (chip->usb_psy)
