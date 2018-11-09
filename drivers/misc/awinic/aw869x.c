@@ -232,7 +232,7 @@ static int aw869x_i2c_writes(struct aw869x *aw869x,
 static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
 {
     struct aw869x *aw869x = context;
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     if (!cont) {
         pr_err("%s: failed to read %s\n", __func__, aw869x_rtp_name[aw869x->rtp_file_num]);
@@ -240,7 +240,7 @@ static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
         return;
     }
 
-    pr_info("%s: loaded %s - size: %zu\n", __func__, aw869x_rtp_name[aw869x->rtp_file_num],
+    pr_debug("%s: loaded %s - size: %zu\n", __func__, aw869x_rtp_name[aw869x->rtp_file_num],
                     cont ? cont->size : 0);
 
     /* aw869x rtp update */
@@ -251,12 +251,12 @@ static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
         return;
     }
     aw869x_rtp->len = cont->size;
-    pr_info("%s: rtp size = %d\n", __func__, aw869x_rtp->len);
+    pr_debug("%s: rtp size = %d\n", __func__, aw869x_rtp->len);
     memcpy(aw869x_rtp->data, cont->data, cont->size);
     release_firmware(cont);
 
     aw869x->rtp_init = 1;
-    pr_info("%s: rtp update complete\n", __func__);
+    pr_debug("%s: rtp update complete\n", __func__);
 
     /* Vibrate for 1 second as TI drv2624's auto-calibration does */
     aw869x_vibrate(aw869x, 1000);
@@ -264,7 +264,7 @@ static void aw869x_rtp_loaded(const struct firmware *cont, void *context)
 
 static int aw869x_rtp_update(struct aw869x *aw869x)
 {
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
                 aw869x_rtp_name[aw869x->rtp_file_num], aw869x->dev, GFP_KERNEL,
@@ -278,7 +278,7 @@ static int aw869x_rtp_update(struct aw869x *aw869x)
     int i = 0;
     unsigned int shift = 0;
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     aw869x->ram.baseaddr_shift = 2;
     aw869x->ram.ram_shift = 4;
@@ -291,7 +291,7 @@ static int aw869x_rtp_update(struct aw869x *aw869x)
     shift = aw869x->ram.baseaddr_shift;
     aw869x->ram.base_addr = (unsigned int)((aw869x_cont->data[0+shift]<<8) | 
             (aw869x_cont->data[1+shift]));
-    pr_info("%s: base_addr=0x%4x\n", __func__, aw869x->ram.base_addr);
+    pr_debug("%s: base_addr=0x%4x\n", __func__, aw869x->ram.base_addr);
     
     aw869x_i2c_write(aw869x, AW869X_REG_BASE_ADDRH, aw869x_cont->data[0+shift]);
     aw869x_i2c_write(aw869x, AW869X_REG_BASE_ADDRL, aw869x_cont->data[1+shift]);
@@ -334,7 +334,7 @@ static int aw869x_rtp_update(struct aw869x *aw869x)
     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL, 
             AW869X_BIT_SYSCTRL_RAMINIT_MASK, AW869X_BIT_SYSCTRL_RAMINIT_OFF);
 
-    pr_info("%s exit\n", __func__);
+    pr_debug("%s exit\n", __func__);
 }
 
 
@@ -345,7 +345,7 @@ static void aw869x_ram_loaded(const struct firmware *cont, void *context)
     int i = 0;
     unsigned short check_sum = 0;
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     if (!cont) {
         pr_err("%s: failed to read %s\n", __func__, aw869x_ram_name);
@@ -353,7 +353,7 @@ static void aw869x_ram_loaded(const struct firmware *cont, void *context)
         return;
     }
 
-    pr_info("%s: loaded %s - size: %zu\n", __func__, aw869x_ram_name,
+    pr_debug("%s: loaded %s - size: %zu\n", __func__, aw869x_ram_name,
                     cont ? cont->size : 0);
 /*
     for(i=0; i<cont->size; i++) {
@@ -369,7 +369,7 @@ static void aw869x_ram_loaded(const struct firmware *cont, void *context)
         pr_err("%s: check sum err: check_sum=0x%04x\n", __func__, check_sum);
         return;
     } else {
-        pr_info("%s: check sum pass : 0x%04x\n", __func__, check_sum);
+        pr_debug("%s: check sum pass : 0x%04x\n", __func__, check_sum);
         aw869x->ram.check_sum = check_sum;
     }
 
@@ -391,7 +391,7 @@ static void aw869x_ram_loaded(const struct firmware *cont, void *context)
     kfree(aw869x_fw);
 
     aw869x->ram_init = 1;
-    pr_info("%s: fw update complete\n", __func__);
+    pr_debug("%s: fw update complete\n", __func__);
     
     aw869x_rtp_update(aw869x);
 }
@@ -776,13 +776,13 @@ static int aw869x_haptic_rtp_init(struct aw869x *aw869x)
 {
     unsigned int buf_len = 0;
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     aw869x->rtp_cnt = 0;
 
     while((!aw869x_haptic_rtp_get_fifo_afi(aw869x)) && 
             (aw869x->play_mode == AW869X_HAPTIC_RTP_MODE)) {
-        pr_info("%s rtp cnt = %d\n", __func__, aw869x->rtp_cnt);
+        pr_debug("%s rtp cnt = %d\n", __func__, aw869x->rtp_cnt);
         if((aw869x_rtp->len-aw869x->rtp_cnt) < (aw869x->ram.base_addr>>3)) {
             buf_len = aw869x_rtp->len-aw869x->rtp_cnt;
         } else {
@@ -792,7 +792,7 @@ static int aw869x_haptic_rtp_init(struct aw869x *aw869x)
                 &aw869x_rtp->data[aw869x->rtp_cnt], buf_len);
         aw869x->rtp_cnt += buf_len;
         if(aw869x->rtp_cnt == aw869x_rtp->len) {
-            pr_info("%s: rtp update complete\n", __func__);
+            pr_debug("%s: rtp update complete\n", __func__);
             aw869x->rtp_cnt = 0;
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
             aw869x_haptic_set_bst_mode(aw869x, AW869X_HAPTIC_BOOST_MODE);
@@ -805,7 +805,7 @@ static int aw869x_haptic_rtp_init(struct aw869x *aw869x)
         aw869x_haptic_set_rtp_aei(aw869x, true);
     }
 
-    pr_info("%s exit\n", __func__);
+    pr_debug("%s exit\n", __func__);
 
     return 0;
 }
@@ -821,7 +821,7 @@ static void aw869x_rtp_work_routine(struct work_struct *work)
     int ret = -1;
     struct aw869x *aw869x = container_of(work, struct aw869x, rtp_work);
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     /* fw loaded */
     ret = request_firmware(&rtp_file,
@@ -842,7 +842,7 @@ static void aw869x_rtp_work_routine(struct work_struct *work)
         return;
     }
     aw869x_rtp->len = rtp_file->size;
-    pr_info("%s: rtp file [%s] size = %d\n", __func__,
+    pr_debug("%s: rtp file [%s] size = %d\n", __func__,
             aw869x_rtp_name[aw869x->rtp_file_num], aw869x_rtp->len);
     memcpy(aw869x_rtp->data, rtp_file->data, rtp_file->size);
     release_firmware(rtp_file);
@@ -858,7 +858,7 @@ static void aw869x_rtp_work_routine(struct work_struct *work)
     msleep(2);
 #ifdef AW869X_HAPTIC_VBAT_MONITOR
     vbat = aw869x_get_sys_battery_info(SYS_BAT_DEV);
-    pr_info("%s: get sys battery = %d\n", __func__, vbat);
+    pr_debug("%s: get sys battery = %d\n", __func__, vbat);
     if((vbat > AW869X_SYS_VBAT_MIN) && (vbat < AW869X_SYS_VBAT_MAX)) {
         for(i=0; i<aw869x_rtp->len; i++) {
             tmp = (int)aw869x_rtp->data[i];
@@ -1195,7 +1195,7 @@ static void aw869x_haptic_context(struct aw869x *aw869x, enum aw869x_haptic_mode
 {
 	int t_top = 0;
 	if (!gpio_is_valid(aw869x->haptic_context_gpio)) {
-		pr_info("%s haptic context gpio is invalid \n", __func__);
+		pr_debug("%s haptic context gpio is invalid \n", __func__);
 		return;
 	}
 
@@ -1224,7 +1224,7 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 
 	aw869x_haptic_stop(aw869x);
 	seq = (aw869x->seq >> ((AW869X_SEQUENCER_SIZE - 1) * 8)) & 0xFF;
-	pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
+	pr_debug("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
 
 	if (value > 0 || seq > 2) {
 
@@ -1322,9 +1322,9 @@ static void aw869x_vibrator_enable( struct timed_output_dev *dev, int value)
 {
     struct aw869x *aw869x = container_of(dev, struct aw869x, to_dev);
 
-    pr_info("%s enter, value=%d\n", __func__, value);
+    pr_debug("%s enter, value=%d\n", __func__, value);
     aw869x_vibrate(aw869x, value);
-    pr_info("%s exit\n", __func__);
+    pr_debug("%s exit\n", __func__);
 }
 
 #else
@@ -1426,7 +1426,7 @@ static ssize_t aw869x_duration_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     /* setting 0 on duration is NOP for now */
     if (val <= 0)
@@ -1472,7 +1472,7 @@ static ssize_t aw869x_activate_store(struct device *dev,
     if (val != 0 && val != 1)
         return count;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     aw869x->state = val;
 
@@ -1518,7 +1518,7 @@ static ssize_t aw869x_index_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
     aw869x->index = val;
@@ -1558,7 +1558,7 @@ static ssize_t aw869x_vmax_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
     aw869x->vmax = val;
@@ -1598,7 +1598,7 @@ static ssize_t aw869x_gain_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
 	if (val > 0)
@@ -1652,7 +1652,7 @@ static ssize_t aw869x_seq_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%x\n", __FUNCTION__, val);
+    pr_debug("%s: value=%x\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
     aw869x->seq = val;
@@ -1709,7 +1709,7 @@ static ssize_t aw869x_loop_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%x\n", __FUNCTION__, val);
+    pr_debug("%s: value=%x\n", __FUNCTION__, val);
 
     mutex_lock(&aw869x->lock);
     aw869x->loop = val;
@@ -1970,7 +1970,7 @@ static ssize_t aw869x_reset_store(struct device *dev,
     if (rc < 0)
         return rc;
 
-    pr_info("%s: value=%d\n", __FUNCTION__, val);
+    pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
     if(1 == val) {
         aw869x_i2c_write(aw869x, AW869X_REG_ID, 0xAA);
@@ -2029,7 +2029,7 @@ static enum hrtimer_restart aw869x_vibrator_timer_func(struct hrtimer *timer)
 {
     struct aw869x *aw869x = container_of(timer, struct aw869x, timer);
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
     aw869x->state = 0;
     schedule_work(&aw869x->vibrator_work);
     
@@ -2040,7 +2040,7 @@ static void aw869x_vibrator_work_routine(struct work_struct *work)
 {
     struct aw869x *aw869x = container_of(work, struct aw869x, vibrator_work);
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     mutex_lock(&aw869x->lock);
     
@@ -2164,9 +2164,9 @@ static const struct regmap_config aw869x_regmap = {
 static void aw869x_interrupt_clear(struct aw869x *aw869x)
 {
     unsigned char reg_val = 0;
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
     aw869x_i2c_read(aw869x, AW869X_REG_SYSINT, &reg_val);
-    pr_info("%s: reg SYSINT=0x%x\n", __func__, reg_val);
+    pr_debug("%s: reg SYSINT=0x%x\n", __func__, reg_val);
 }
 
 static void aw869x_interrupt_setup(struct aw869x *aw869x)
@@ -2193,10 +2193,10 @@ static irqreturn_t aw869x_irq(int irq, void *data)
     unsigned char reg_val = 0;
     unsigned int buf_len = 0;
 
-    pr_info("%s enter\n", __func__);
+    pr_debug("%s enter\n", __func__);
 
     aw869x_i2c_read(aw869x, AW869X_REG_SYSINT, &reg_val);
-    pr_info("%s: reg SYSINT=0x%x\n", __func__, reg_val);
+    pr_debug("%s: reg SYSINT=0x%x\n", __func__, reg_val);
 
     if(reg_val & AW869X_BIT_SYSINT_UVLI) {
         pr_err("%s chip uvlo int error\n", __func__);
@@ -2208,15 +2208,15 @@ static irqreturn_t aw869x_irq(int irq, void *data)
         pr_err("%s chip over temperature int error\n", __func__);
     }
     if(reg_val & AW869X_BIT_SYSINT_DONEI) {
-        pr_info("%s chip playback done\n", __func__);
+        pr_debug("%s chip playback done\n", __func__);
     }
 
     if(reg_val & AW869X_BIT_SYSINT_FF_AEI) {
-        pr_info("%s: aw869x rtp fifo almost empty int\n", __func__);
+        pr_debug("%s: aw869x rtp fifo almost empty int\n", __func__);
         if(aw869x->rtp_init) {
             while((!aw869x_haptic_rtp_get_fifo_afi(aw869x)) && 
                     (aw869x->play_mode == AW869X_HAPTIC_RTP_MODE)) {
-                pr_info("%s: aw869x rtp mode fifo update, cnt=%d\n",
+                pr_debug("%s: aw869x rtp mode fifo update, cnt=%d\n",
                         __func__, aw869x->rtp_cnt);
                 if((aw869x_rtp->len-aw869x->rtp_cnt) < (aw869x->ram.base_addr>>3)) {
                     buf_len = aw869x_rtp->len-aw869x->rtp_cnt;
@@ -2227,7 +2227,7 @@ static irqreturn_t aw869x_irq(int irq, void *data)
                         &aw869x_rtp->data[aw869x->rtp_cnt], buf_len);
                 aw869x->rtp_cnt += buf_len;
                 if(aw869x->rtp_cnt == aw869x_rtp->len) {
-                    pr_info("%s: rtp update complete\n", __func__);
+                    pr_debug("%s: rtp update complete\n", __func__);
                     aw869x_haptic_set_rtp_aei(aw869x, false);
                     aw869x->rtp_cnt = 0;
                     aw869x->rtp_init = 0;
@@ -2246,7 +2246,7 @@ static irqreturn_t aw869x_irq(int irq, void *data)
     }
 
     if(reg_val & AW869X_BIT_SYSINT_FF_AFI) {
-        pr_info("%s: aw869x rtp mode fifo full empty\n", __func__);
+        pr_debug("%s: aw869x rtp mode fifo full empty\n", __func__);
     }
 
     if(aw869x->play_mode != AW869X_HAPTIC_RTP_MODE) {
@@ -2254,11 +2254,11 @@ static irqreturn_t aw869x_irq(int irq, void *data)
     }
 
     aw869x_i2c_read(aw869x, AW869X_REG_SYSINT, &reg_val);
-    pr_info("%s: reg SYSINT=0x%x\n", __func__, reg_val);
+    pr_debug("%s: reg SYSINT=0x%x\n", __func__, reg_val);
     aw869x_i2c_read(aw869x, AW869X_REG_SYSST, &reg_val);
-    pr_info("%s: reg SYSST=0x%x\n", __func__, reg_val);
+    pr_debug("%s: reg SYSST=0x%x\n", __func__, reg_val);
 
-    pr_info("%s exit\n", __func__);
+    pr_debug("%s exit\n", __func__);
 
     return IRQ_HANDLED;
 }
