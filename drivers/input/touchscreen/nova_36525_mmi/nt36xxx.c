@@ -1684,6 +1684,8 @@ static int32_t nvt_ts_resume(struct device *dev)
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
+	nvt_esd_check_enable(true);
+
 	queue_delayed_work(nvt_esd_check_wq, &nvt_esd_check_work,
 			msecs_to_jiffies(NVT_TOUCH_ESD_CHECK_PERIOD));
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
