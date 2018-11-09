@@ -126,6 +126,7 @@ int core_i2c_write(uint8_t nSlaveId, uint8_t *pBuf, uint16_t nSize)
 			if (core_config->do_ic_reset) {
 				/* ignore i2c error if doing ic reset */
 				res = 0;
+				break;
 			} else {
 				res = -EIO;
 				ipio_err("I2C Write Error, res = %d retry = %d\n", res, retry);
