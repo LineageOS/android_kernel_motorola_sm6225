@@ -188,6 +188,12 @@ struct mmi_sm_params {
 	int			ocp[MAX_NUM_STEPS];
 };
 
+enum charging_limit_modes {
+	CHARGING_LIMIT_OFF,
+	CHARGING_LIMIT_RUN,
+	CHARGING_LIMIT_UNKNOWN,
+};
+
 struct smb_mmi_charger {
 	struct device		*dev;
 	struct regmap 		*regmap;
@@ -218,7 +224,7 @@ struct smb_mmi_charger {
 
 	bool			enable_charging_limit;
 	bool			is_factory_image;
-	//enum charging_limit_modes	charging_limit_modes;
+	enum charging_limit_modes	charging_limit_modes;
 	int			upper_limit_capacity;
 	int			lower_limit_capacity;
 	int			max_chrg_temp;
@@ -1492,7 +1498,8 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		for (i = 0; i < MAX_NUM_STEPS; i++)
 			chip->ocp[i] = 0;
 	} else if ((chip->pres_temp_zone == ZONE_HOT) ||
-		   (chip->pres_temp_zone == ZONE_COLD)) {
+		   (chip->pres_temp_zone == ZONE_COLD) ||
+		   (chg->charging_limit_modes == CHARGING_LIMIT_RUN)) {
 		chip->pres_chrg_step = STEP_STOP;
 	} else if (chg->demo_mode) {
 		/* TODO: Ignore Demo Mode for now */
@@ -1890,7 +1897,8 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	if (!stat->charger_present) {
 		prm->pres_chrg_step = STEP_NONE;
 	} else if ((prm->pres_temp_zone == ZONE_HOT) ||
-		   (prm->pres_temp_zone == ZONE_COLD)) {
+		   (prm->pres_temp_zone == ZONE_COLD) ||
+		   (chip->charging_limit_modes == CHARGING_LIMIT_RUN)) {
 		prm->pres_chrg_step = STEP_STOP;
 	} else if (chip->demo_mode) {
 		/* TODO: Ignore Demo Mode for now */
@@ -2043,6 +2051,22 @@ static void smb_mmi_awake_vote(struct smb_mmi_charger *chip, bool awake)
 		pm_relax(chip->dev);
 }
 
+void update_charging_limit_modes(struct smb_mmi_charger *chip, int batt_soc)
+{
+	enum charging_limit_modes charging_limit_modes;
+
+	charging_limit_modes = chip->charging_limit_modes;
+	if ((charging_limit_modes != CHARGING_LIMIT_RUN)
+	    && (batt_soc >= chip->upper_limit_capacity))
+		charging_limit_modes = CHARGING_LIMIT_RUN;
+	else if ((charging_limit_modes != CHARGING_LIMIT_OFF)
+		   && (batt_soc <= chip->lower_limit_capacity))
+		charging_limit_modes = CHARGING_LIMIT_OFF;
+
+	if (charging_limit_modes != chip->charging_limit_modes)
+		chip->charging_limit_modes = charging_limit_modes;
+}
+
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
@@ -2062,6 +2086,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int flip_cap = 0;
 	int flip_cap_full = 0;
 	int report_cap;
+	int pc_online;
 	static int prev_vbus_mv = -1;
 	struct smb_mmi_chg_status chg_stat;
 
@@ -2114,6 +2139,9 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	} else
 		chg_stat.batt_soc = pval.intval;
 
+	if (chip->last_reported_soc != -1)
+		chg_stat.batt_soc = chip->last_reported_soc;
+
 	rc = get_prop_batt_temp(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
 		pr_err("Error getting Batt Temperature rc = %d\n", rc);
@@ -2134,6 +2162,12 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
+
+	if (chip->enable_charging_limit && chip->is_factory_image)
+		update_charging_limit_modes(chip, chg_stat.batt_soc);
+
+	if (chip->charging_limit_modes == CHARGING_LIMIT_RUN)
+		pr_warn("Factory Mode/Image so Limiting Charging!!!\n");
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		rc = power_supply_get_property(chip->max_main_psy,
@@ -2219,7 +2253,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 	prev_vbus_mv = chg_stat.usb_mv;
 
-	if (chip->factory_mode) {
+	if (chip->factory_mode || chip->is_factory_image) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
 		if (rc < 0)
 			goto sch_hb;
@@ -2230,7 +2264,16 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
-		if (pval.intval ||
+		pc_online = pval.intval;
+
+		rc = power_supply_get_property(chip->usb_psy,
+					       POWER_SUPPLY_PROP_ONLINE,
+					       &pval);
+		if (rc < 0)
+			goto sch_hb;
+
+		if (pc_online ||
+		    pval.intval ||
 		    (usb_suspend && ((chg_stat.usb_mv*1000) > TWO_VOLT))) {
 			pr_debug("SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
@@ -2509,6 +2552,19 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 		chg->vfloat_comp_mv = 0;
 	chg->vfloat_comp_mv /= 1000;
 
+	chg->enable_charging_limit =
+		of_property_read_bool(node, "qcom,enable-charging-limit");
+
+	rc = of_property_read_u32(node, "qcom,upper-limit-capacity",
+				  &chg->upper_limit_capacity);
+	if (rc)
+		chg->upper_limit_capacity = 100;
+
+	rc = of_property_read_u32(node, "qcom,lower-limit-capacity",
+				  &chg->lower_limit_capacity);
+	if (rc)
+		chg->lower_limit_capacity = 0;
+
 	return rc;
 }
 
@@ -2775,6 +2831,21 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			pr_err("Could Not set USB Adapter CFG\n");
 
 	chip->factory_mode = mmi_factory_check();
+	chip->is_factory_image = false;
+	chip->charging_limit_modes = CHARGING_LIMIT_UNKNOWN;
+
+	pval.intval = 0;
+	rc = power_supply_get_property(chip->usb_psy,
+				       POWER_SUPPLY_PROP_REAL_TYPE,
+				       &pval);
+	if (!rc &&
+	    chip->factory_mode &&
+	    (pval.intval != POWER_SUPPLY_TYPE_UNKNOWN) &&
+	    (pval.intval != POWER_SUPPLY_TYPE_USB) &&
+	    (pval.intval != POWER_SUPPLY_TYPE_USB_CDP)) {
+		dev_err(chip->dev, "Charger Present; Dis Factory Mode\n");
+		chip->factory_mode = false;
+	}
 
 	rc = device_create_file(chip->dev,
 				&dev_attr_force_demo_mode);
