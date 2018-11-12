@@ -817,7 +817,11 @@ static int ps_notify_callback(struct notifier_block *self,
 	bool present;
 	int retval;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	if (event == PSY_EVENT_PROP_CHANGED
+#else
 	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
+#endif
 			&& psy && psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "usb", sizeof("usb")) && data) {
 		LOG_INFO("ps notification: event = %lu\n", event);
