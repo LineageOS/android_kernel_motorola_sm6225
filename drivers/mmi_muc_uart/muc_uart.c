@@ -583,6 +583,8 @@ static int muc_uart_send_bootmode(struct mod_muc_data_t *mm_data)
 		bootmode.boot_mode = QCOM;
 	} else if (strncmp(bi_bootmode(), "bp-tools", strlen("bp-tools")) == 0) {
 		bootmode.boot_mode = BP_TOOLS;
+	} else if (strncmp(bi_bootmode(), "recovery", strlen("recovery")) == 0) {
+		bootmode.boot_mode = RECOVERY;
 	} else {
 		/* TODO defaults to normal.  Should we have unknown/other? */
 		bootmode.boot_mode = NORMAL;
