@@ -61,7 +61,7 @@ struct mmi_uart_pb_hdr_t {
 #define MUC_FIRMWARE_NAME "muc_firmware.zip"
 #define MUC_FW_PAYLOAD_SIZE 1022
 
-enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, };
+enum { NORMAL = 0, BP_TOOLS, FACTORY, QCOM, RECOVERY };
 struct boot_mode_t {
 	uint8_t  boot_mode;          /* androidboot.mode */
 	uint32_t hwid;               /* androidboot.hwrev */
