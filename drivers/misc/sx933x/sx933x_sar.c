@@ -734,7 +734,6 @@ static void sx933x_exit_platform_hw(struct i2c_client *client)
 static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
-	bool disableFlag = true;
 	int i = 0;
 	u32 temp = 0x0;
 
@@ -743,7 +742,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 			if (enable == 1) {
 				LOG_DBG("enable cap sensor : %s\n", sensors_cdev->name);
 				sx933x_i2c_read_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, &temp);
-				temp = temp | 0x0000001F;
+				temp = temp | (1 << psmtcButtons[i].offset);
 				LOG_INFO("set reg 0x%x val 0x%x\n", SX933X_GNRLCTRL2_REG, temp);
 				sx933x_i2c_write_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, temp);
 				psmtcButtons[i].enabled = true;
@@ -753,6 +752,9 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 				manual_offset_calibration(global_sx933x);
 			} else if (enable == 0) {
 				LOG_DBG("disable cap sensor : %s\n", sensors_cdev->name);
+				sx933x_i2c_read_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, &temp);
+				temp = temp & ~(1 << psmtcButtons[i].offset);
+				sx933x_i2c_write_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, temp);
 				psmtcButtons[i].enabled = false;
 				input_report_abs(psmtcButtons[i].input_dev, ABS_DISTANCE, -1);
 				input_sync(psmtcButtons[i].input_dev);
@@ -760,22 +762,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 				LOG_DBG("unknown enable symbol\n");
 			}
 		}
-	}
-
-	//if all chs disabled, then disable all
-	for (i = 0; i < ARRAY_SIZE(psmtcButtons); i++) {
-		if (psmtcButtons[i].enabled) {
-			disableFlag = false;
-			break;
-		}
-	}
-	if (disableFlag) {
-		LOG_DBG("disable all chs\n");
-		sx933x_i2c_read_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, &temp);
-		LOG_INFO("read reg 0x%x val 0x%x\n", SX933X_GNRLCTRL2_REG, temp);
-		temp = temp & 0xFFFFFFE0;
-		LOG_INFO("set reg 0x%x val 0x%x\n", SX933X_GNRLCTRL2_REG, temp);
-		sx933x_i2c_write_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, temp);
 	}
 	return 0;
 }
