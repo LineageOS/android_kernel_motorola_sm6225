@@ -840,6 +840,15 @@ static int ps_notify_callback(struct notifier_block *self,
 		schedule_work(&data->ps_notify_work);
 	}
 
+#ifdef CONFIG_CAPSENSE_ATTACH_CAL
+	if (event == PSY_EVENT_PROP_CHANGED
+			&& psy && psy->desc->get_property && psy->desc->name &&
+			!strncmp(psy->desc->name, "phone", sizeof("phone")) && data) {
+		LOG_INFO("phone ps notification: event = %lu\n", event);
+		schedule_work(&data->ps_notify_work);
+	}
+#endif
+
 	return 0;
 }
 #endif
