@@ -1913,6 +1913,7 @@ static DEVICE_ATTR(doreflash, 0220, NULL, do_reflash_store);
 
 static ssize_t drv_build_id_show(struct device *pDevice, struct device_attribute *pAttr, char *pBuf)
 {
+	core_config_get_fw_ver();
 	ipio_info ("*** %s() Fw Version = V%d.%d.%d.%d***\n", __func__, core_config->firmware_ver[1], core_config->firmware_ver[2], core_config->firmware_ver[3], core_config->firmware_ver[4]);
 
 	return scnprintf(pBuf, PAGE_SIZE, "%02x-%02x\n", core_config->firmware_ver[2], core_config->firmware_ver[3]);

@@ -1170,6 +1170,7 @@ static int convert_hex_array(void)
 	for (i = 0 ; i < ARRAY_SIZE(core_firmware->old_fw_ver); i++) {
 		if (core_firmware->old_fw_ver[i] != core_firmware->new_fw_ver[i]) {
 			ipio_info("FW version is different, preparing to upgrade FW\n");
+			boot_update_flag = true;
 			break;
 		}
 	}
