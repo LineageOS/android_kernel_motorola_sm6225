@@ -894,7 +894,7 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 
 	if (!mmi_chip) {
 		pr_err("chip not valid\n");
-		r = -ENODEV;
+		state = -ENODEV;
 		goto end;
 	}
 
@@ -953,7 +953,7 @@ static ssize_t force_chg_idc_show(struct device *dev,
 
 	if (!mmi_chip) {
 		pr_err("chip not valid\n");
-		r = -ENODEV;
+		state = -ENODEV;
 		goto end;
 	}
 
