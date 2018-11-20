@@ -438,6 +438,7 @@ void core_config_ic_suspend(void)
 #ifndef SUSPEND_TP_POWER_OFF
 	/* sense stop */
 	core_config_sense_ctrl(false);
+	msleep(100);
 
 	/* check system busy */
 	if (core_config_check_cdc_busy(50, 10) < 0)

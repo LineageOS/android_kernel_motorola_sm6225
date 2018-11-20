@@ -266,6 +266,9 @@ static void config_protocol_v5_cmd(void)
 	protocol->i2cuart_mode = P5_0_FIRMWARE_I2CUART_MODE;
 	protocol->gesture_mode = P5_0_FIRMWARE_GESTURE_MODE;
 
+	protocol->delta_data = P5_0_FIRMWARE_DELTA_DATA_MODE;
+	protocol->raw_data = P5_0_FIRMWARE_RAW_DATA_MODE;
+
 	protocol->demo_pid = P5_0_DEMO_PACKET_ID;
 	protocol->debug_pid = P5_0_DEBUG_PACKET_ID;
 	protocol->test_pid = P5_0_TEST_PACKET_ID;

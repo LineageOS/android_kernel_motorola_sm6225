@@ -698,6 +698,22 @@ void core_fr_handler(void)
 						mutex_unlock(&ipd->ilitek_debug_mutex);
 						wake_up(&(ipd->inq));
 					}
+
+					if(ipd->debug_data_start_flag && (ipd->debug_data_frame < 1024)) {
+						mutex_lock(&ipd->ilitek_debug_mutex);
+						memset(ipd->debug_buf[ipd->debug_data_frame], 0x00,
+								(uint8_t) sizeof(uint8_t) * 2048);
+						if (g_total_len > 2048) {
+							memcpy(ipd->debug_buf[ipd->debug_data_frame], tdata, 2048);
+						} else {
+							memcpy(ipd->debug_buf[ipd->debug_data_frame], tdata, g_total_len);
+						}
+
+						ipd->debug_data_frame ++;
+
+						mutex_unlock(&ipd->ilitek_debug_mutex);
+						wake_up(&(ipd->inq));
+					}
 					break;
 				}
 				i++;

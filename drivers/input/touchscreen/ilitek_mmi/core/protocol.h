@@ -50,6 +50,9 @@
 #define P5_0_FIRMWARE_I2CUART_MODE		0x03
 #define P5_0_FIRMWARE_GESTURE_MODE		0x04
 
+#define P5_0_FIRMWARE_DELTA_DATA_MODE		0x03
+#define P5_0_FIRMWARE_RAW_DATA_MODE		0x08
+
 #define P5_0_DEMO_PACKET_ID		        0x5A
 #define P5_0_DEBUG_PACKET_ID	        0xA7
 #define P5_0_TEST_PACKET_ID		        0xF2
@@ -109,6 +112,10 @@ struct protocol_cmd_list {
 	uint8_t test_mode;
 	uint8_t i2cuart_mode;
 	uint8_t gesture_mode;
+
+	/* debug mode type*/
+	uint8_t delta_data;
+	uint8_t raw_data;
 
 	/* Pakcet ID reported by FW */
 	uint8_t demo_pid;
