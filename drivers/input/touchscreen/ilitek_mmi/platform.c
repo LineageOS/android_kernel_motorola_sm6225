@@ -469,8 +469,10 @@ static int kthread_handler(void *arg)
 			ipio_debug(DEBUG_IRQ,
 				   "kthread: after->irq_trigger = %d\n",
 				   ipd->irq_trigger);
+			mutex_lock(&ipd->touch_mutex);
 			core_fr_handler();
 			ilitek_platform_enable_irq();
+			mutex_unlock(&ipd->touch_mutex);
 		}
 	} else {
 		ipio_err("Unknown EVENT\n");
@@ -913,6 +915,7 @@ static int ilitek_platform_probe(struct spi_device *spi)
 
 	mutex_init(&ipd->plat_mutex);
 	spin_lock_init(&ipd->plat_spinlock);
+	mutex_init(&ipd->touch_mutex);
 
 	/* Init members for debug */
 	mutex_init(&ipd->ilitek_debug_mutex);
@@ -920,6 +923,11 @@ static int ilitek_platform_probe(struct spi_device *spi)
 	init_waitqueue_head(&(ipd->inq));
 	ipd->debug_data_frame = 0;
 	ipd->debug_node_open = false;
+
+	ipd->raw_count = 1;
+	ipd->delta_count = 10;
+	ipd->bg_count = 0;
+	ipd->debug_data_start_flag = false;
 
 	if (ipd->REGULATOR_POWER_ON) {
 		ipd->vdd = regulator_get(&ipd->client->dev, vdd_name);

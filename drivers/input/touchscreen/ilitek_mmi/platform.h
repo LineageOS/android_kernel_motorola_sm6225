@@ -38,6 +38,7 @@ struct ilitek_platform_data {
 
 	struct mutex plat_mutex;
 	spinlock_t plat_spinlock;
+	struct mutex touch_mutex;
 
 	uint32_t chip_id;
 
@@ -81,6 +82,10 @@ struct ilitek_platform_data {
 	int debug_data_frame;
 	wait_queue_head_t inq;
 	unsigned char debug_buf[1024][2048];
+	int raw_count;
+	int delta_count;
+	int bg_count;
+	bool debug_data_start_flag;
 	struct mutex ilitek_debug_mutex;
 	struct mutex ilitek_debug_read_mutex;
 
