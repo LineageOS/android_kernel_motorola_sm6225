@@ -1835,7 +1835,7 @@ static ssize_t aw869x_ram_update_store(struct device *dev, struct device_attribu
 }
 
 #ifdef CONFIG_INPUT_AWINIC_HAPTIC
-static ssize_t aw869x_pwk_show(struct device *dev,
+static ssize_t aw869x_pwk_p_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
 #ifdef TIMED_OUTPUT
@@ -1851,7 +1851,7 @@ static ssize_t aw869x_pwk_show(struct device *dev,
     return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
 }
 
-static ssize_t aw869x_pwk_store(struct device *dev,
+static ssize_t aw869x_pwk_p_store(struct device *dev,
         struct device_attribute *attr, const char *buf, size_t count)
 {
 #ifdef TIMED_OUTPUT
@@ -1869,7 +1869,41 @@ static ssize_t aw869x_pwk_store(struct device *dev,
     return count;
 }
 
-static ssize_t aw869x_voldown_show(struct device *dev,
+static ssize_t aw869x_pwk_n_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned char reg_val = 0;
+    aw869x_i2c_read(aw869x, AW869X_REG_TRG1_WAV_N, &reg_val);
+
+    return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
+}
+
+static ssize_t aw869x_pwk_n_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned int databuf = 0;
+    if(1 == sscanf(buf, "%x", &databuf)) {
+        aw869x_i2c_write(aw869x, AW869X_REG_TRG1_WAV_N, (unsigned char)databuf);
+    }
+
+    return count;
+}
+
+static ssize_t aw869x_voldown_p_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
 #ifdef TIMED_OUTPUT
@@ -1885,7 +1919,7 @@ static ssize_t aw869x_voldown_show(struct device *dev,
     return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
 }
 
-static ssize_t aw869x_voldown_store(struct device *dev,
+static ssize_t aw869x_voldown_p_store(struct device *dev,
         struct device_attribute *attr, const char *buf, size_t count)
 {
 #ifdef TIMED_OUTPUT
@@ -1903,7 +1937,40 @@ static ssize_t aw869x_voldown_store(struct device *dev,
     return count;
 }
 
-static ssize_t aw869x_volup_show(struct device *dev,
+static ssize_t aw869x_voldown_n_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned char reg_val = 0;
+    aw869x_i2c_read(aw869x, AW869X_REG_TRG2_WAV_N, &reg_val);
+
+    return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
+}
+
+static ssize_t aw869x_voldown_n_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned int databuf = 0;
+    if(1 == sscanf(buf, "%x", &databuf)) {
+        aw869x_i2c_write(aw869x, AW869X_REG_TRG2_WAV_N, (unsigned char)databuf);
+    }
+
+    return count;
+}
+static ssize_t aw869x_volup_p_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
 #ifdef TIMED_OUTPUT
@@ -1919,7 +1986,7 @@ static ssize_t aw869x_volup_show(struct device *dev,
     return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
 }
 
-static ssize_t aw869x_volup_store(struct device *dev,
+static ssize_t aw869x_volup_p_store(struct device *dev,
         struct device_attribute *attr, const char *buf, size_t count)
 {
 #ifdef TIMED_OUTPUT
@@ -1937,6 +2004,39 @@ static ssize_t aw869x_volup_store(struct device *dev,
     return count;
 }
 
+static ssize_t aw869x_volup_n_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned char reg_val = 0;
+    aw869x_i2c_read(aw869x, AW869X_REG_TRG3_WAV_N, &reg_val);
+
+    return snprintf(buf, PAGE_SIZE, "%d\n", reg_val);
+}
+
+static ssize_t aw869x_volup_n_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+#ifdef TIMED_OUTPUT
+    struct timed_output_dev *to_dev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(to_dev, struct aw869x, to_dev);
+#else
+    struct led_classdev *cdev = dev_get_drvdata(dev);
+    struct aw869x *aw869x = container_of(cdev, struct aw869x, cdev);
+#endif
+    unsigned int databuf = 0;
+    if(1 == sscanf(buf, "%x", &databuf)) {
+        aw869x_i2c_write(aw869x, AW869X_REG_TRG3_WAV_N, (unsigned char)databuf);
+    }
+
+    return count;
+}
 static ssize_t aw869x_reset_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
@@ -1993,9 +2093,12 @@ static DEVICE_ATTR(register, S_IWUSR | S_IRUGO, aw869x_reg_show, aw869x_reg_stor
 static DEVICE_ATTR(rtp, S_IWUSR | S_IRUGO, aw869x_rtp_show, aw869x_rtp_store);
 static DEVICE_ATTR(ram_update, S_IWUSR | S_IRUGO, aw869x_ram_update_show, aw869x_ram_update_store);
 #ifdef CONFIG_INPUT_AWINIC_HAPTIC
-static DEVICE_ATTR(pwk, S_IWUSR | S_IRUGO, aw869x_pwk_show, aw869x_pwk_store);/* Power key for trig1(0x0d) */
-static DEVICE_ATTR(voldown, S_IWUSR | S_IRUGO, aw869x_voldown_show, aw869x_voldown_store);/* Vol down for trig2(0x0e) */
-static DEVICE_ATTR(volup, S_IWUSR | S_IRUGO, aw869x_volup_show, aw869x_volup_store);/* Vol up key for trig3(0x0f) */
+static DEVICE_ATTR(pwk_p, S_IWUSR | S_IRUGO, aw869x_pwk_p_show, aw869x_pwk_p_store);/* Power key for trig1(0x0d) */
+static DEVICE_ATTR(voldown_p, S_IWUSR | S_IRUGO, aw869x_voldown_p_show, aw869x_voldown_p_store);/* Vol down for trig2(0x0e) */
+static DEVICE_ATTR(volup_p, S_IWUSR | S_IRUGO, aw869x_volup_p_show, aw869x_volup_p_store);/* Vol up key for trig3(0x0f) */
+static DEVICE_ATTR(pwk_n, S_IWUSR | S_IRUGO, aw869x_pwk_n_show, aw869x_pwk_n_store);/* Power key for trig1_n(0x10) */
+static DEVICE_ATTR(voldown_n, S_IWUSR | S_IRUGO, aw869x_voldown_n_show, aw869x_voldown_n_store);/* Vol down for trig2_n(0x11) */
+static DEVICE_ATTR(volup_n, S_IWUSR | S_IRUGO, aw869x_volup_n_show, aw869x_volup_n_store);/* Vol up key for trig3_n(0x12) */
 static DEVICE_ATTR(reset, S_IWUSR | S_IRUGO, aw869x_reset_show, aw869x_reset_store);/* Reset device */
 #endif
 
@@ -2013,10 +2116,13 @@ static struct attribute *aw869x_vibrator_attributes[] = {
     &dev_attr_rtp.attr,
     &dev_attr_ram_update.attr,
 #ifdef CONFIG_INPUT_AWINIC_HAPTIC
-    &dev_attr_pwk.attr,
-    &dev_attr_voldown.attr,
-    &dev_attr_volup.attr,
+    &dev_attr_pwk_p.attr,
+    &dev_attr_voldown_p.attr,
+    &dev_attr_volup_p.attr,
     &dev_attr_reset.attr,
+    &dev_attr_pwk_n.attr,
+    &dev_attr_voldown_n.attr,
+    &dev_attr_volup_n.attr,
 #endif
     NULL
 };
