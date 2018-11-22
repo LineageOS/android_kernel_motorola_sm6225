@@ -127,8 +127,11 @@ static const struct tfa98xx_rate rate_to_fssel[] = {
 #ifdef TFA9874_NONDSP_STEREO
 static atomic_t g_bypass;
 static atomic_t g_Tx_enable;
+static atomic_t g_Gain;
+
 extern int send_tfa_cal_set_bypass(void *buf, int cmd_size);
 extern int send_tfa_cal_set_tx_enable(void *buf, int cmd_size);
+extern int send_tfa_cal_in_band(void *buf, int cmd_size);
 
 /*************bypass control***************/
 static int tfa987x_algo_get_status(struct snd_kcontrol *kcontrol,
@@ -1597,7 +1600,68 @@ static int tfa98xx_get_stereo_ctl(struct snd_kcontrol *kcontrol,
 
         return 0;
 }
+
+static int tfa98xx_algo_info_gain_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0xFF;
+	return 0;
+}
+
+static int tfa98xx_algo_set_gain_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int32_t ret = 0;
+	u8 buff[8] = {0}, nr = 1;
+
+	((int32_t *)buff)[0] = ucontrol->value.integer.value[0]&0xff;
+	atomic_set(&g_Gain, ((int32_t *)buff)[0]);
+
+	buff[nr++] = 0x04;    /* 0x04: channel: mono  */
+	buff[nr++] = 0x81;
+	buff[nr++] = 0x04;
+
+	buff[nr++] = 0x00;
+	buff[nr++] = 0x00;
+	buff[nr++] = buff[0]; /* 00:0dB, ff:-127.5dB, 0.5dB/scale */
+
+	ret = send_tfa_cal_in_band(&buff[1], nr - 1);
+	return ret;
+}
+
+static int tfa98xx_algo_get_gain_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int32_t ret = 0;
+	ucontrol->value.integer.value[0] = atomic_read(&g_Gain);
+	return ret;
+}
 #endif
+
+static int tfa98xx_info_mode_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 3;
+	return 0;
+}
+
+static int tfa98xx_set_mode_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	return 1;
+}
+
+static int tfa98xx_get_mode_ctl(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
 
 static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 {
@@ -1729,13 +1793,27 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	}
 
 #ifdef TFA9874_NONDSP_STEREO
-        tfa98xx_controls[mix_index].name = "TFA_CHIP_SELECTOR";
-        tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-        tfa98xx_controls[mix_index].info = tfa98xx_info_stereo_ctl;
-        tfa98xx_controls[mix_index].get = tfa98xx_get_stereo_ctl;
-        tfa98xx_controls[mix_index].put = tfa98xx_set_stereo_ctl;
-        mix_index++;
+	tfa98xx_controls[mix_index].name = "TFA_CHIP_SELECTOR";
+	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	tfa98xx_controls[mix_index].info = tfa98xx_info_stereo_ctl;
+	tfa98xx_controls[mix_index].get = tfa98xx_get_stereo_ctl;
+	tfa98xx_controls[mix_index].put = tfa98xx_set_stereo_ctl;
+	mix_index++;
+
+	tfa98xx_controls[mix_index].name = "NXP Volume";
+	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	tfa98xx_controls[mix_index].info = tfa98xx_algo_info_gain_ctl;
+	tfa98xx_controls[mix_index].get = tfa98xx_algo_get_gain_ctl;
+	tfa98xx_controls[mix_index].put = tfa98xx_algo_set_gain_ctl;
+	mix_index++;
 #endif
+
+	tfa98xx_controls[mix_index].name = "NXP Mode";
+	tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	tfa98xx_controls[mix_index].info = tfa98xx_info_mode_ctl;
+	tfa98xx_controls[mix_index].get = tfa98xx_get_mode_ctl;
+	tfa98xx_controls[mix_index].put = tfa98xx_set_mode_ctl;
+	mix_index++;
 
 	ret = snd_soc_add_codec_controls(tfa98xx->codec,
 		tfa98xx_controls, mix_index);
@@ -2750,7 +2828,6 @@ static int tfa98xx_hw_params(struct snd_pcm_substream *substream,
 }
 
 #ifdef TFA9874_NONDSP_STEREO
-extern int send_tfa_cal_in_band(void *buf, int cmd_size);
 static uint8_t bytes[3*3+1] = {0};
 #define MONO_I2C_ADDR (0x34)
 #define IMPEDANCE_VALUE (4000) /*or 20000*/
