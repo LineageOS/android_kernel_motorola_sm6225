@@ -290,6 +290,7 @@ static int tzlog_dump_probe(struct platform_device *pdev)
 	}
 
 	tzlog_dump_annotate();
+	memset_io(tzdbg_data, 0, pdata->mem_size);
 err:
 	return err;
 }
