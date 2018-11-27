@@ -106,6 +106,7 @@
 /*Set Profile(Music(0),Ringtone(1)...etc)*/
 #define TAS2560_ALGO_PROFILE			3819
 
+#define AFE_PARAM_ID_TAS2560_SPEAKER_ID		3820
 
 struct afe_tas2560_algo_params_t {
 	uint32_t  payload[TAS2560_ALGO_PAYLOAD_SIZE];
