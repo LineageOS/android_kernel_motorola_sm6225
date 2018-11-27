@@ -26,6 +26,8 @@ static struct mutex routing_lock;
 /*Port IDs to be read from dts*/
 static uint32_t tx_port_id = TAS2560_ALGO_TX_PORT_ID;
 static uint32_t rx_port_id = TAS2560_ALGO_RX_PORT_ID;
+/*SPK IDs to be read from dts*/
+static uint32_t spk_id = 0;
 /*Not much significance and can be removed in future*/
 static uint8_t calib_status;
 static int32_t force_algo_disable;
@@ -483,6 +485,13 @@ static int tas2560_algo_set_cal(struct snd_kcontrol *kcontrol,
 	ret = afe_tas2560_algo_ctrl(ptr, paramid, moduleid,
 			TAS2560_ALGO_SET_PARAM, sizeof(u32));
 	if (!ret) {
+		pr_err("TAS2560_ALGO:%s Sending Speaker ID : %d",__func__,spk_id);
+		paramid = TAS2560_ALGO_CALC_PIDX(0,
+				AFE_PARAM_ID_TAS2560_SPEAKER_ID, 1,SLAVE1);
+		((int32_t *)buff)[0] = spk_id;
+		ret = afe_tas2560_algo_ctrl(ptr, paramid, moduleid,
+			TAS2560_ALGO_SET_PARAM, sizeof(u32));
+
 		pr_err("TAS2560_ALGO:%s Sending Rx-Cfg", __func__);
 		paramid = AFE_PARAM_ID_TAS2560_ALGO_RX_CFG;
 		((int32_t *)buff)[0] = 1;
@@ -768,6 +777,12 @@ static int tas2560_algo_probe(struct platform_device *pdev)
 	mutex_init(&routing_lock);
 
 	ret = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
+
+	ret = of_property_read_u32(pdev->dev.of_node, "ti,spk_type_id", &spk_id);
+	if (ret < 0) {
+		pr_err("ti,spk_type_id read error,use default spk id.\n");
+	}
+	pr_err("TAS2560_ALGO:%s spk_id = 0x%x",__func__, spk_id);
 
 	num_entries = of_property_count_u32_elems(pdev->dev.of_node,
 		"ti,tas2560-port-id");

@@ -21,7 +21,7 @@
 
 #ifdef CONFIG_TAS2560_CODEC
 
-#define DEBUG
+/* #define DEBUG */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -158,7 +158,7 @@ static int tas2560_mute(struct snd_soc_dai *dai, int mute)
 	struct tas2560_priv *pTAS2560 = snd_soc_codec_get_drvdata(codec);
 
 	mutex_lock(&pTAS2560->codec_lock);
-	dev_dbg(pTAS2560->dev, "%s, %d\n", __func__, mute);
+	dev_info(pTAS2560->dev, "%s, %d\n", __func__, mute);
 	tas2560_enable(pTAS2560, !mute);
 	mutex_unlock(&pTAS2560->codec_lock);
 	return 0;

@@ -18,7 +18,7 @@
 **
 ** =============================================================================
 */
-#define DEBUG
+/* #define DEBUG */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -1019,7 +1019,7 @@ int tas2560_enable(struct tas2560_priv *pTAS2560, bool bEnable)
 
 	if (bEnable) {
 		if (!pTAS2560->mbPowerUp) {
-			dev_dbg(pTAS2560->dev, "%s power up\n", __func__);
+			dev_info(pTAS2560->dev, "%s power up\n", __func__);
 			pTAS2560->clearIRQ(pTAS2560);
 			nResult = tas2560_i2c_load_data(pTAS2560, p_tas2560_startup_data);
 			if (nResult < 0)
@@ -1035,7 +1035,7 @@ int tas2560_enable(struct tas2560_priv *pTAS2560, bool bEnable)
 		}
 	} else {
 		if (pTAS2560->mbPowerUp) {
-			dev_dbg(pTAS2560->dev, "%s power down\n", __func__);
+			dev_info(pTAS2560->dev, "%s power down\n", __func__);
 			if (hrtimer_active(&pTAS2560->mtimer))
 				hrtimer_cancel(&pTAS2560->mtimer);
 			pTAS2560->enableIRQ(pTAS2560, false);
