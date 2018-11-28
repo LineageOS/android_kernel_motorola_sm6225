@@ -55,6 +55,35 @@ static const struct i2c_device_id cs35l41_id_i2c[] = {
 
 MODULE_DEVICE_TABLE(i2c, cs35l41_id_i2c);
 
+static ssize_t gpio_status_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	u32 int_status = 0;
+	struct cs35l41_private *cs35l41 = dev_get_drvdata(dev);
+
+	if (cs35l41 != NULL)
+	{
+		regmap_read(cs35l41->regmap, CS35L41_GPIO_STATUS1, &int_status);
+		dev_err(cs35l41->dev, "gpio_status_show read regmap:%d\n", int_status);
+	}
+	else
+	{
+		dev_err(cs35l41->dev, "gpio_status_show cs35l41 not init\n");
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", int_status);
+}
+
+static DEVICE_ATTR(gpio_status, S_IRUGO, gpio_status_show, NULL);
+
+static struct attribute *gpio_status_attrs[] = {
+	&dev_attr_gpio_status.attr,
+	NULL,
+};
+
+static struct attribute_group gpio_status_attr_group = {
+	.attrs = gpio_status_attrs,
+};
+
 static int cs35l41_i2c_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -81,6 +110,10 @@ static int cs35l41_i2c_probe(struct i2c_client *client,
 			ret);
 		return ret;
 	}
+
+	ret = sysfs_create_group(&cs35l41->dev->kobj, &gpio_status_attr_group);
+	if (ret < 0)
+		dev_err(cs35l41->dev, "sysfs group creation failed, ret = %d\n", ret);
 
 	return cs35l41_probe(cs35l41, pdata);
 }
