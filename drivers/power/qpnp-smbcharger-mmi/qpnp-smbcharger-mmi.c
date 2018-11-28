@@ -2069,8 +2069,10 @@ void update_charging_limit_modes(struct smb_mmi_charger *chip, int batt_soc)
 
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
+static int suspend_wakeups;
+module_param(suspend_wakeups, int, 0644);
 #define TWO_VOLT 2000000
-#define SMBCHG_HEARTBEAT_INTERVAL_NS	70000000000
+#define SMBCHG_HEARTBEAT_INTRVAL_NS	70000000000
 #define MONOTONIC_SOC 2 /* 2 percent */
 static void mmi_heartbeat_work(struct work_struct *work)
 {
@@ -2287,9 +2289,9 @@ static void mmi_heartbeat_work(struct work_struct *work)
 sch_hb:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
-
-	alarm_start_relative(&chip->heartbeat_alarm,
-			     ns_to_ktime(SMBCHG_HEARTBEAT_INTERVAL_NS));
+	if (suspend_wakeups)
+		alarm_start_relative(&chip->heartbeat_alarm,
+				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
 
 	if (!chg_stat.charger_present)
 		smb_mmi_awake_vote(chip, false);
