@@ -41,6 +41,8 @@
 #include <linux/msm_drm_notify.h>
 #endif
 
+#include <linux/input/synaptics_dsx_mmi.h>
+
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38))
 #define KERNEL_ABOVE_2_6_38
 #endif
@@ -476,7 +478,7 @@ struct synaptics_exp_fn_ctrl {
 struct synaptics_rmi4_data {
 	struct i2c_client *i2c_client;
 	struct input_dev *input_dev;
-	struct synaptics_dsx_platform_data *board;
+	struct synaptics_dsx_platform_data board;
 	struct synaptics_rmi4_device_info rmi4_mod_info;
 	struct regulator *regulator;
 	struct regulator *vdd_quirk;

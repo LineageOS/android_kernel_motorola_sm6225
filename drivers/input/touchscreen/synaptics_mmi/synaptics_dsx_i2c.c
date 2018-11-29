@@ -35,7 +35,6 @@
 #include <linux/reboot.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/input/mt.h>
-#include <linux/input/synaptics_dsx_mmi.h>
 
 #include "synaptics_dsx_i2c.h"
 #include "synaptics_dsx_dropbox.h"
@@ -64,14 +63,6 @@ struct synaptics_rmi4_data *synaptics_driver_getdata(
 }
 EXPORT_SYMBOL(synaptics_driver_getdata);
 
-static char *INSTANTIATED(char *string)
-{
-	char instance[64];
-	snprintf(instance, sizeof(instance), "%s.%d",
-			string, drv_instance_counter);
-	return kstrdup(instance, GFP_KERNEL);
-}
-
 static char *INSTANCE_RMI(char *string,
 		struct synaptics_rmi4_data *rmi4_data)
 {
@@ -81,11 +72,12 @@ static char *INSTANCE_RMI(char *string,
 	return kstrdup(instance, GFP_KERNEL);
 }
 
-static char *INSTANCE_DBG(char *string)
+static char *INSTANCE_DBG(char *string,
+		struct synaptics_rmi4_data *rmi4_data)
 {
 	static char name_with_instance[64];
 	snprintf(name_with_instance, sizeof(name_with_instance), "%s.%d",
-			string, drv_instance_counter);
+			string, rmi4_data->instance);
 	return name_with_instance;
 }
 
@@ -1421,38 +1413,42 @@ static int synaptics_dsx_gpio_config(
 		struct synaptics_dsx_platform_data *pdata, bool enable)
 {
 	int retval = 0;
+	struct synaptics_rmi4_data *data =
+			container_of(pdata, struct synaptics_rmi4_data, board);
 
 	if (enable) {
 		if (!gpio_is_valid(pdata->irq_gpio)) {
-			pr_err("invalid %s\n", INSTANCE_DBG(IRQ_GPIO_NAME));
+			pr_err("invalid %s\n", INSTANCE_DBG(IRQ_GPIO_NAME, data));
 			retval = -EINVAL;
 		}
-		retval = gpio_request(pdata->irq_gpio, INSTANTIATED(IRQ_GPIO_NAME));
+		retval = gpio_request(pdata->irq_gpio,
+						INSTANCE_RMI(IRQ_GPIO_NAME, data));
 		if (retval) {
 			pr_err("unable to request %s [%d]: rc=%d\n",
-				INSTANCE_DBG(IRQ_GPIO_NAME), pdata->irq_gpio, retval);
+				INSTANCE_DBG(IRQ_GPIO_NAME, data), pdata->irq_gpio, retval);
 			goto err_gpio;
 		}
 		retval = gpio_direction_input(pdata->irq_gpio);
 		if (retval) {
 			pr_err("unable to set %s [%d] dir: rc=%d\n",
-				INSTANCE_DBG(IRQ_GPIO_NAME), pdata->irq_gpio, retval);
+				INSTANCE_DBG(IRQ_GPIO_NAME, data), pdata->irq_gpio, retval);
 			goto err_gpio;
 		}
 
 		if (!gpio_is_valid(pdata->reset_gpio))
 			return retval;
 
-		retval = gpio_request(pdata->reset_gpio, INSTANTIATED(RESET_GPIO_NAME));
+		retval = gpio_request(pdata->reset_gpio,
+						INSTANCE_RMI(RESET_GPIO_NAME, data));
 		if (retval) {
 			pr_err("unable to request %s [%d]: rc=%d\n",
-				INSTANCE_DBG(RESET_GPIO_NAME), pdata->reset_gpio, retval);
+				INSTANCE_DBG(RESET_GPIO_NAME, data), pdata->reset_gpio, retval);
 			goto err_gpio;
 		}
 		retval = gpio_direction_output(pdata->reset_gpio, 1);
 		if (retval) {
 			pr_err("unable to set %s [%d] dir: rc=%d\n",
-				INSTANCE_DBG(RESET_GPIO_NAME), pdata->reset_gpio, retval);
+				INSTANCE_DBG(RESET_GPIO_NAME, data), pdata->reset_gpio, retval);
 			goto err_gpio;
 		}
 	} else {
@@ -1673,13 +1669,12 @@ static int synaptics_dsx_dt_parse_modifiers(struct synaptics_rmi4_data *data)
 	return 0;
 }
 
-static struct synaptics_dsx_platform_data *
-		synaptics_dsx_of_init(struct i2c_client *client,
+static int synaptics_dsx_of_init(struct i2c_client *client,
 				struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
 	unsigned int key_codes[SYN_MAX_BUTTONS];
-	struct synaptics_dsx_platform_data *pdata;
+	struct synaptics_dsx_platform_data *pdata = &rmi4_data->board;
 	struct device_node *np = client->dev.of_node;
 	struct synaptics_dsx_cap_button_map *button_map = NULL;
 
@@ -1694,7 +1689,7 @@ static struct synaptics_dsx_platform_data *
 				sizeof(struct synaptics_dsx_patch), GFP_KERNEL);
 
 		if (!force_update_patch || !power_sleep_patch)
-			return NULL;
+			return -EINVAL;
 
 		force_update_patch->name = "force-update";
 		force_update_patch->cfg_num = 1;
@@ -1711,16 +1706,10 @@ static struct synaptics_dsx_platform_data *
 					&power_sleep_patch->cfg_head);
 	}
 
-	pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata) {
-		dev_err(&client->dev, "pdata allocation failure\n");
-		return NULL;
-	}
-
 	retval = of_get_gpio(np, 0);
 	if (retval < 0) {
 		dev_err(&client->dev, "get irq pin failure\n");
-		return NULL;
+		return -EINVAL;
 	}
 	pdata->irq_gpio = retval;
 
@@ -1729,7 +1718,7 @@ static struct synaptics_dsx_platform_data *
 		retval = of_get_gpio(np, 1);
 		if (retval < 0) {
 			dev_err(&client->dev, "get reset pin failure\n");
-			return NULL;
+			return -EINVAL;
 		}
 		pdata->reset_gpio = retval;
 	} else
@@ -1745,7 +1734,7 @@ static struct synaptics_dsx_platform_data *
 		button_map = kzalloc(sizeof(*button_map), GFP_KERNEL);
 		if (IS_ERR_OR_NULL(button_map)) {
 			dev_err(&client->dev, "button allocation failure\n");
-			return NULL;
+			return -EINVAL;
 		}
 
 		for (ii = 0; ii < SYN_MAX_BUTTONS; ii++)
@@ -1756,7 +1745,7 @@ static struct synaptics_dsx_platform_data *
 		if (IS_ERR_OR_NULL(button_codes)) {
 			dev_err(&client->dev, "button allocation failure\n");
 			kfree(button_map);
-			return NULL;
+			return -EINVAL;
 		}
 
 		for (ii = 0; ii < button_map->nbuttons; ii++)
@@ -1809,13 +1798,12 @@ static struct synaptics_dsx_platform_data *
 	if (!retval)
 		pr_notice("bound to display '%s'\n", rmi4_data->bound_display);
 
-	return pdata;
+	return 0;
 }
 #else
-static inline struct synaptics_dsx_platform_data *
-		synaptics_dsx_of_init(struct i2c_client *client)
+static inline int synaptics_dsx_of_init(struct i2c_client *client)
 {
-	return NULL;
+	return -EINVAL;
 }
 #endif
 
@@ -2511,7 +2499,7 @@ static int synaptics_dsx_ic_reset(
 	int retval;
 	unsigned long start = jiffies;
 	struct synaptics_dsx_platform_data
-			*platform_data = rmi4_data->board;
+			*platform_data = &rmi4_data->board;
 	bool has_rst_pin = gpio_is_valid(platform_data->reset_gpio);
 	bool need_to_free_irq = true;
 
@@ -2571,8 +2559,8 @@ static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 	if (IS_ERR_OR_NULL(rmi4_data->input_dev))
 		return PTR_ERR(rmi4_data->input_dev);
 
-	rmi4_data->input_dev->name = INSTANTIATED(DRIVER_NAME);
-	rmi4_data->input_dev->phys = INSTANTIATED(INPUT_PHYS_NAME);
+	rmi4_data->input_dev->name = INSTANCE_RMI(DRIVER_NAME, rmi4_data);
+	rmi4_data->input_dev->phys = INSTANCE_RMI(INPUT_PHYS_NAME, rmi4_data);
 	rmi4_data->input_dev->id.bustype = BUS_I2C;
 	rmi4_data->input_dev->dev.parent = &rmi4_data->i2c_client->dev;
 
@@ -2581,8 +2569,8 @@ static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(EV_KEY, rmi4_data->input_dev->evbit);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_POWER);
 
-	pr_debug("allocated input device '%s'\n", INSTANCE_DBG(INPUT_PHYS_NAME));
-
+	pr_debug("allocated input device '%s'\n",
+				INSTANCE_DBG(INPUT_PHYS_NAME, rmi4_data));
 	return 0;
 }
 
@@ -3263,7 +3251,7 @@ static ssize_t synaptics_rmi4_hw_irqstat_show(struct device *dev,
 {
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
-	switch (gpio_get_value(rmi4_data->board->irq_gpio)) {
+	switch (gpio_get_value(rmi4_data->board.irq_gpio)) {
 	case 0:
 		return scnprintf(buf, PAGE_SIZE, "Low\n");
 	case 1:
@@ -4510,9 +4498,9 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			p = w = finger_data->z;
 			id = finger;
 
-			if (rmi4_data->board->x_flip)
+			if (rmi4_data->board.x_flip)
 				x = rmi4_data->sensor_max_x - x;
-			if (rmi4_data->board->y_flip)
+			if (rmi4_data->board.y_flip)
 				y = rmi4_data->sensor_max_y - y;
 
 			if (rmi4_data->clipping_on && rmi4_data->clipa) {
@@ -4683,9 +4671,9 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			wy = (data[3] >> 4) & MASK_4BIT;
 			z = data[4];
 
-			if (rmi4_data->board->x_flip)
+			if (rmi4_data->board.x_flip)
 				x = rmi4_data->sensor_max_x - x;
-			if (rmi4_data->board->y_flip)
+			if (rmi4_data->board.y_flip)
 				y = rmi4_data->sensor_max_y - y;
 
 			if (rmi4_data->clipping_on && rmi4_data->clipa) {
@@ -5178,7 +5166,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 	int retval = 0;
 	unsigned char intr_status;
 	struct synaptics_dsx_platform_data
-			*platform_data = rmi4_data->board;
+			*platform_data = &rmi4_data->board;
 
 	if (enable) {
 		if (rmi4_data->irq_enabled)
@@ -5642,7 +5630,7 @@ static int synaptics_rmi4_cap_button_map(
 {
 	unsigned char ii;
 	struct synaptics_rmi4_f1a_handle *f1a = fhandler->data;
-	struct synaptics_dsx_platform_data *pdata = rmi4_data->board;
+	struct synaptics_dsx_platform_data *pdata = &rmi4_data->board;
 
 	if (!pdata->cap_button_map) {
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -7011,7 +6999,7 @@ static int rmi_reboot(struct notifier_block *nb,
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(nb, struct synaptics_rmi4_data, rmi_reboot);
 	struct synaptics_dsx_platform_data
-			*platform_data = rmi4_data->board;
+			*platform_data = &rmi4_data->board;
 	struct regulator *reg_ptr;
 	int state = STATE_INVALID;
 
@@ -7269,7 +7257,7 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 	int retval = 0, attr_count;
 	struct pinctrl *pinctrl;
 	struct synaptics_dsx_platform_data
-				*platform_data = rmi4_data->board;
+				*platform_data = &rmi4_data->board;
 
 	pinctrl = devm_pinctrl_get_select(&rmi4_data->i2c_client->dev,
 		"active");
@@ -7561,18 +7549,20 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	rmi4_data->test_irq_delay_ms = 0;
 	rmi4_data->test_irq_data_contig = 1; /* enforce test mode */
 #endif
-	if (client->dev.of_node)
-		platform_data = synaptics_dsx_of_init(client, rmi4_data);
-	else
-		platform_data = client->dev.platform_data;
+	if (client->dev.of_node) {
+		rc = synaptics_dsx_of_init(client, rmi4_data);
+		if (rc) {
+			dev_err(&client->dev,
+					"%s: No platform data found\n",
+					__func__);
+			kfree(rmi4_data);
+			return -EINVAL;
+		}
+	} else
+		rmi4_data->board = *(struct synaptics_dsx_platform_data *)
+					client->dev.platform_data;
+	platform_data = &rmi4_data->board;
 
-	if (!platform_data) {
-		dev_err(&client->dev,
-				"%s: No platform data found\n",
-				__func__);
-		kfree(rmi4_data);
-		return -EINVAL;
-	}
 #if defined(CONFIG_DRM)
 	if (rmi4_data->bound_display) {
 		int probe_status;
@@ -7592,7 +7582,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 #endif
 	rmi4_data->state = STATE_INVALID;
 	rmi4_data->current_page = MASK_8BIT;
-	rmi4_data->board = platform_data;
 	rmi4_data->irq_enabled = false;
 	atomic_set(&rmi4_data->touch_stopped, 1);
 	rmi4_data->ic_on = true;
@@ -7633,7 +7622,7 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	}
 
 	/* add driver's instance to the list */
-	rmi4_data->instance = drv_instance_counter++;
+	rmi4_data->instance = ++drv_instance_counter;
 	mutex_lock(&instances_mutex);
 	list_add_tail(&rmi4_data->node, &drv_instances_list);
 	mutex_unlock(&instances_mutex);
@@ -7713,7 +7702,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	if (!IS_ERR(rmi4_data->vdd_quirk))
 		regulator_disable(rmi4_data->vdd_quirk);
 
-	if (rmi4_data->board->regulator_en)
+	if (rmi4_data->board.regulator_en)
 		regulator_disable(rmi4_data->regulator);
 
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
@@ -7740,7 +7729,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 
 	unregister_reboot_notifier(&rmi4_data->rmi_reboot);
 
-	platform_data = rmi4_data->board;
+	platform_data = &rmi4_data->board;
 	if (platform_data->gpio_config)
 		gpio_free(platform_data->irq_gpio);
 	if (gpio_is_valid(platform_data->reset_gpio))
@@ -7934,7 +7923,7 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
 	struct synaptics_dsx_platform_data
-			*platform_data = rmi4_data->board;
+			*platform_data = &rmi4_data->board;
 	static char ud_stats[PAGE_SIZE];
 
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 0, 1) == 1)
@@ -8000,7 +7989,7 @@ static int synaptics_rmi4_resume(struct device *dev)
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
 	struct synaptics_dsx_platform_data
-			*platform_data = rmi4_data->board;
+			*platform_data = &rmi4_data->board;
 
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 1, 0) == 0)
 		return 0;
