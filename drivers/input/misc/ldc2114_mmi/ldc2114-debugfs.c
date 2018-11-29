@@ -1,6 +1,6 @@
-/* linux/drivers/input/misc/ldc2114-cdev.c
+/* linux/drivers/input/misc/ldc2114-debugfs.c
  *
- * LDC2114 chardev driver. Allows user space access to raw data.
+ * LDC2114 debugfs driver. Allows user space access to raw data.
  * Copyright (C) 2017 Motorola, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -12,50 +12,21 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#if defined(CONFIG_DEBUG_FS)
 
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/device.h>
 #include <linux/memory.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/spinlock.h>
-#include <linux/mutex.h>
-#include <linux/atomic.h>
-#include <linux/wait.h>
-#include <linux/platform_device.h>
 #include <linux/types.h>
-#include <linux/cdev.h>
 #include <linux/uaccess.h>
 
+#include "ldc2114.h"
+
 #define DRVNAME "ldc2114_raw"
-#define BUFFER_SIZE 256
-
-typedef struct data {
-	int d[4];
-} item_t;
-
-struct buffer {
-	struct mutex mutex;
-	int capacity;
-	unsigned long opened;
-	atomic_t start;
-	atomic_t end;
-	atomic_t active;
-	item_t **data;
-	wait_queue_head_t wait;
-};
-
-struct ldc2114_drv {
-	struct class *class;
-	struct cdev cdev;
-	struct platform_device *pdev;
-	dev_t devid;
-	int major;
-	struct buffer ds;
-	struct blocking_notifier_head nhead;
-};
-
-static struct ldc2114_drv *cxt;
 
 static int buffer_init(struct buffer *buffer, size_t capacity)
 {
@@ -84,8 +55,17 @@ static void inline buffer_destroy(struct buffer *buffer)
 {
 	int i;
 
+	mutex_lock(&buffer->mutex);
+	buffer->capacity = 0;
+	atomic_set(&buffer->start, 0);
+	atomic_set(&buffer->end, 0);
+	atomic_set(&buffer->active, 0);
+	/* wait for remaining msgs */
+	wait_event_interruptible(buffer->wait,
+			!atomic_read(&buffer->active));
 	for (i = 0; i < buffer->capacity; i++)
 		kfree(buffer->data[i]);
+	mutex_unlock(&buffer->mutex);
 	kfree(buffer->data);
 }
 
@@ -102,7 +82,7 @@ static void buffer_push(struct buffer *buffer,
 	cstart = atomic_read(&buffer->start);
 	cend = atomic_read(&buffer->end);
 
-	dev_dbg(&context->pdev->dev, "%s: writing at pos %d\n", __func__, cend);
+	dev_dbg(context->dev, "%s: writing at pos %d\n", __func__, cend);
 	memcpy(&buffer->data[cend], data, length);
 
 	cend = (cend + 1) % buffer->capacity;
@@ -116,7 +96,7 @@ static void buffer_push(struct buffer *buffer,
 		atomic_set(&buffer->start, cstart);
 	}
 
-	dev_dbg(&context->pdev->dev, "%s: next write=%d, read=%d\n",
+	dev_dbg(context->dev, "%s: next write=%d, read=%d\n",
 		__func__, cend, cstart);
 
 	mutex_unlock(&buffer->mutex);
@@ -141,14 +121,14 @@ static size_t buffer_pop(struct buffer *buffer, item_t *item)
 	cstart = atomic_read(&buffer->start);
 
 	memcpy(item, &buffer->data[cstart], sizeof(item_t));
-	dev_dbg(&context->pdev->dev, "%s: reading from pos %d\n",
+	dev_dbg(context->dev, "%s: reading from pos %d\n",
 			__func__, cstart);
 
 	count += sizeof(item_t);
 
 	cactive--;
 	cstart = (cstart + 1) % buffer->capacity;
-	dev_dbg(&context->pdev->dev, "%s: next read pos %d\n",
+	dev_dbg(context->dev, "%s: next read pos %d\n",
 			__func__, cstart);
 
 	atomic_set(&buffer->start, cstart);
@@ -162,28 +142,51 @@ static size_t buffer_pop(struct buffer *buffer, item_t *item)
 /*
  * External function called by polling work
  */
-int ldc2114_buffer(int d0, int d1, int d2, int d3)
+int ldc2114_buffer(struct ldc2114_data *ldc, int type, ...)
 {
+	struct ldc2114_drv *cxt = dev_get_drvdata(ldc->dev);
+	va_list vp;
 	item_t data;
-	int ret = 0;
+	int rc = 0;
 
-	if (cxt && test_bit(0, &cxt->ds.opened)) {
-		data.d[0] = d0;
-		data.d[1] = d1;
-		data.d[2] = d2;
-		data.d[3] = d3;
-		buffer_push(&cxt->ds, &data, sizeof(data));
-	} else
-		ret = -ENODEV;
+	if (!(cxt && test_bit(0, &cxt->ds.opened)))
+		return -ENODEV;
 
-	return ret;
+	va_start(vp, type);
+	data.type = type;
+	switch (type) {
+		case LDC2114_EV_DATA:
+			data.de = va_arg(vp, struct ldc2114_raw_ext);
+				break;
+		default:
+				rc = -EINVAL;
+				goto leave_now;
+	}
+	buffer_push(&cxt->ds, &data, sizeof(data));
+
+leave_now:
+	va_end(vp);
+
+	return rc;
+}
+
+static int inline comp2_12b(struct ldc2114_16bit *data)
+{
+	int result;
+	/* 12bits 2's compliment data */
+	if (data->msb & 0x8)
+		result = (data->lsb | (data->msb << 8) | 0xFFFFF000);
+	else
+		result = (data->lsb | (data->msb << 8));
+
+	return result;
 }
 
 static ssize_t ldc2114_read(struct file *file, char __user *buf,
 			    size_t count, loff_t *ppos)
 {
 	struct ldc2114_drv *context = file->private_data;
-	int ret;
+	int i, ret;
 	item_t data;
 	char out[128];
 
@@ -191,8 +194,18 @@ static ssize_t ldc2114_read(struct file *file, char __user *buf,
 	if (ret < 0)
 		return ret;
 
-	count = snprintf(out, sizeof(out), "%5d %5d %5d %5d\n",
-				data.d[0], data.d[1], data.d[2], data.d[3]);
+	switch(data.type) {
+		case LDC2114_EV_DATA:
+			count = snprintf(out, sizeof(out), "I:%d",
+						(data.de.status & LDC2114_REG_STATUS_OUT) != 0);
+			for (i = 0; i < MAX_KEYS; i++) {
+				count += snprintf(out+count, sizeof(out)-count, " [%d]:%d/%d",
+						i, (data.de.data.out & (1 << i)) != 0,
+						comp2_12b(&data.de.data.values[i]));
+			}
+			count += snprintf(out+count, sizeof(out)-count, "\n");
+				break;
+	}
 
 	if (copy_to_user(buf, out, count))
 		count = -EFAULT;
@@ -202,6 +215,7 @@ static ssize_t ldc2114_read(struct file *file, char __user *buf,
 
 static int ldc2114_open(struct inode *inode, struct file *file)
 {
+	struct ldc2114_drv *cxt = inode->i_private;
 	int ret;
 
 	if (!cxt)
@@ -218,8 +232,8 @@ static int ldc2114_open(struct inode *inode, struct file *file)
 		return -EBUSY;
 	}
 
+	dev_dbg(cxt->dev, "%s: allocated circular buffer\n", __func__);
 	blocking_notifier_call_chain(&cxt->nhead, cxt->ds.opened, NULL);
-	dev_dbg(&cxt->pdev->dev, "allocated circular buffer\n");
 
 	return nonseekable_open(inode, file);
 }
@@ -228,16 +242,17 @@ static int ldc2114_release(struct inode *inode, struct file *file)
 {
 	struct ldc2114_drv *context = file->private_data;
 
-	__clear_bit_unlock(0, &context->ds.opened);
+	clear_bit_unlock(0, &context->ds.opened);
+	dev_dbg(context->dev, "%s: opend flag %lu\n", __func__, context->ds.opened);
 	blocking_notifier_call_chain(&context->nhead, context->ds.opened, NULL);
 	buffer_destroy(&context->ds);
 
-	dev_dbg(&cxt->pdev->dev, "destroyed circular buffer\n");
+	dev_dbg(context->dev, "%s: destroyed circular buffer\n", __func__);
 
 	return 0;
 }
 
-const struct file_operations ldc2114_cdev_fops = {
+const struct file_operations ldc2114_debugfs_fops = {
 	.owner = THIS_MODULE,
 	.open = ldc2114_open,
 	.read = ldc2114_read,
@@ -245,79 +260,72 @@ const struct file_operations ldc2114_cdev_fops = {
 	.llseek = no_llseek,
 };
 
-int ldc2114_register_client(struct notifier_block *nb)
+int ldc2114_register_client(struct ldc2114_data *ldc, struct notifier_block *nb)
 {
+	struct ldc2114_drv *cxt = dev_get_drvdata(ldc->dev);
+
+	dev_dbg(ldc->dev, "cxt %p\n", cxt);
 	if (!cxt)
 		return -ENODEV;
+	dev_dbg(ldc->dev, "%s: registering notifier\n", __func__);
 
 	return blocking_notifier_chain_register(&cxt->nhead, nb);
 }
 
-int ldc2114_cdev_init(void)
+static char *INSTANCE(char *string, struct ldc2114_data *ldc)
 {
-	struct device *cd;
-	int rc;
+	char instance[64];
+	snprintf(instance, sizeof(instance), "%s.%d",
+			string, ldc->instance);
+	return kstrdup(instance, GFP_KERNEL);
+}
+
+static struct dentry *root_dir;
+
+int ldc2114_debugfs_init(struct ldc2114_data *ldc)
+{
+	struct ldc2114_drv *cxt;
+	int rc = 0;
+
+	if (!root_dir)
+		root_dir = debugfs_create_dir(DRVNAME, NULL);
+
+	if (!root_dir)
+		return -ENODEV;
 
 	cxt = kzalloc(sizeof(*cxt), GFP_KERNEL);
-	if (!cxt)
-		return -ENOMEM;
-
-	cxt->pdev = platform_device_alloc(DRVNAME, 0);
-	if (!cxt->pdev)
-		return -ENOMEM;
-
-	rc = platform_device_add(cxt->pdev);
-	if (rc)
-		goto undo_malloc;
-
-	rc = register_chrdev(0, DRVNAME, &ldc2114_cdev_fops);
-	if (rc < 0) {
-		dev_err(&cxt->pdev->dev, "error register chardev: %d\n", rc);
-		goto undo_platform_device_add;
+	if (!cxt) {
+		rc = -ENOMEM;
+		goto remove_dbg_root;
 	}
 
-	cxt->major = rc;
+	cxt->name = INSTANCE(DRVNAME, ldc);
+	cxt->dev = ldc->dev;
+	dev_set_drvdata(ldc->dev, cxt);
 
-	cxt->class = class_create(THIS_MODULE, DRVNAME "-dev");
-	if (IS_ERR(cxt->class)) {
-		rc = PTR_ERR(cxt->class);
-		dev_err(&cxt->pdev->dev, "error chrdev: %d\n", rc);
-		goto undo_register_chrdev;
-	}
-
-	cd = device_create(cxt->class, NULL, MKDEV(cxt->major, 0), NULL, DRVNAME);
-	if (IS_ERR(cd)) {
-		rc = PTR_ERR(cd);
-		dev_err(&cxt->pdev->dev, "error chrdev create: %d\n", rc);
-		goto undo_class_create;
-	}
+	cxt->dentry = debugfs_create_file(cxt->name,
+					0444, root_dir, cxt, &ldc2114_debugfs_fops);
+	dev_dbg(ldc->dev, "%s: debugfs file '%s' created\n", __func__, cxt->name);
 
  	BLOCKING_INIT_NOTIFIER_HEAD(&cxt->nhead);
 
 	return 0;
 
-undo_class_create:
-	class_destroy(cxt->class);
-undo_register_chrdev:
-	unregister_chrdev(cxt->major, DRVNAME);
-undo_platform_device_add:
-	platform_device_del(cxt->pdev);
-undo_malloc:
-	platform_device_put(cxt->pdev);
-	kfree(cxt);
+remove_dbg_root:
+	debugfs_remove(root_dir);
 
 	return rc;
 }
 
-void ldc2114_cdev_remove(void)
+void ldc2114_debugfs_remove(struct ldc2114_data *ldc)
 {
+	struct ldc2114_drv *cxt = dev_get_drvdata(ldc->dev);
+
 	if (!cxt)
 		return;
 
-	device_destroy(cxt->class, MKDEV(cxt->major, 0));
-	class_destroy(cxt->class);
-	unregister_chrdev(cxt->major, DRVNAME);
-	platform_device_unregister(cxt->pdev);
+	debugfs_remove(cxt->dentry);
 	kfree(cxt);
+	dev_set_drvdata(ldc->dev, NULL);
 }
-
+#endif
