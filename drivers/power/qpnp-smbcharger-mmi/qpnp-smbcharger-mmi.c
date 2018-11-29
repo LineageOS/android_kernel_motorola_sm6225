@@ -438,6 +438,8 @@ static DEVICE_ATTR(factory_charge_upper, 0444,
 		factory_charge_upper_show,
 		NULL);
 
+#define MMI_CHIP_MODE_LOWER_LIMIT 35
+#define MMI_CHIP_MODE_UPPER_LIMIT 80
 static ssize_t force_demo_mode_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
@@ -458,10 +460,11 @@ static ssize_t force_demo_mode_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	if ((mode >= 35) && (mode <= 80))
+	if ((mode >= MMI_CHIP_MODE_LOWER_LIMIT) &&
+	    (mode <= MMI_CHIP_MODE_UPPER_LIMIT))
 		mmi_chip->demo_mode = mode;
 	else
-		mmi_chip->demo_mode = 35;
+		mmi_chip->demo_mode = MMI_CHIP_MODE_LOWER_LIMIT;
 
 	return r ? r : count;
 }
@@ -491,6 +494,7 @@ static DEVICE_ATTR(force_demo_mode, 0644,
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
 #define MIN_MAX_TEMP_C 47
+#define HYSTERESIS_DEGC 2
 static ssize_t force_max_chrg_temp_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
@@ -1203,10 +1207,6 @@ static int smb_mmi_set_property(struct power_supply *psy,
 	return rc;
 }
 
-#define MIN_TEMP_C -20
-#define MAX_TEMP_C 60
-#define MIN_MAX_TEMP_C 47
-#define HYSTERISIS_DEGC 2
 static bool mmi_find_temp_zone(struct smb_mmi_charger *chg,
 			       struct mmi_sm_params *chip,
 			       int temp_c)
@@ -1247,10 +1247,10 @@ static bool mmi_find_temp_zone(struct smb_mmi_charger *chg,
 	}
 
 	if (prev_zone == ZONE_COLD) {
-		if (temp_c >= MIN_TEMP_C + HYSTERISIS_DEGC)
+		if (temp_c >= MIN_TEMP_C + HYSTERESIS_DEGC)
 			chip->pres_temp_zone = ZONE_FIRST;
 	} else if (prev_zone == ZONE_HOT) {
-		if (temp_c <=  max_temp - HYSTERISIS_DEGC)
+		if (temp_c <=  max_temp - HYSTERESIS_DEGC)
 			chip->pres_temp_zone = num_zones - 1;
 	} else {
 		if (prev_zone == ZONE_FIRST) {
@@ -1271,10 +1271,10 @@ static bool mmi_find_temp_zone(struct smb_mmi_charger *chg,
 		}
 
 		if (zones[prev_zone].fcc_max_ma < hotter_fcc)
-			hotter_t += HYSTERISIS_DEGC;
+			hotter_t += HYSTERESIS_DEGC;
 
 		if (zones[prev_zone].fcc_max_ma < colder_fcc)
-			colder_t -= HYSTERISIS_DEGC;
+			colder_t -= HYSTERESIS_DEGC;
 
 		if (temp_c < MIN_TEMP_C)
 			chip->pres_temp_zone = ZONE_COLD;
