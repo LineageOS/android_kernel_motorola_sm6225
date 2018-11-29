@@ -46,6 +46,7 @@
 
 #define MADERA_MICD_WRONG_POLARITY	30
 
+#define MADERA_HPDET_LINEOUT		500000 /* 5,000 ohms */
 #define MADERA_HPDET_MAX_OHM		10000
 #define MADERA_HPDET_MAX_HOHM		(MADERA_HPDET_MAX_OHM * 100)
 #define MADERA_HP_SHORT_IMPEDANCE_MIN	4
@@ -64,6 +65,7 @@
 static const unsigned int madera_cable[] = {
 	EXTCON_MECHANICAL,
 	EXTCON_JACK_HEADPHONE,
+	EXTCON_JACK_LINE_OUT,
 	EXTCON_JACK_MICROPHONE,
 	EXTCON_NONE,
 };
@@ -534,6 +536,11 @@ inline void madera_extcon_report(struct madera_extcon *info,
 		case EXTCON_JACK_HEADPHONE:
 			input_report_switch(info->input,
 					    SW_HEADPHONE_INSERT,
+					    attached);
+			break;
+		case EXTCON_JACK_LINE_OUT:
+			input_report_switch(info->input,
+					    SW_LINEOUT_INSERT,
 					    attached);
 			break;
 		case EXTCON_JACK_MICROPHONE:
@@ -1660,7 +1667,10 @@ int madera_hpdet_reading(struct madera_extcon *info, int val)
 
 	madera_set_headphone_imp(info, val);
 
-	madera_extcon_report(info, EXTCON_JACK_HEADPHONE, true);
+	if (val > MADERA_HPDET_LINEOUT)
+		madera_extcon_report(info, EXTCON_JACK_LINE_OUT, true);
+	else
+		madera_extcon_report(info, EXTCON_JACK_HEADPHONE, true);
 
 	if (info->have_mic)
 		madera_jds_set_state(info, &madera_micd_button);
@@ -3229,6 +3239,9 @@ static int madera_extcon_probe(struct platform_device *pdev)
 		input_set_capability(info->input,
 				     EV_SW,
 				     SW_HEADPHONE_INSERT);
+		input_set_capability(info->input,
+				     EV_SW,
+				     SW_LINEOUT_INSERT);
 		input_set_capability(info->input,
 				     EV_SW,
 				     SW_JACK_PHYSICAL_INSERT);
