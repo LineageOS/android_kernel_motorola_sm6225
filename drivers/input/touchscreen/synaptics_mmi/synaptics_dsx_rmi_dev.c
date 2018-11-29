@@ -26,7 +26,6 @@
 #include <linux/gpio.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
-#include <linux/input/synaptics_dsx_mmi.h>
 
 #include "synaptics_dsx_i2c.h"
 
