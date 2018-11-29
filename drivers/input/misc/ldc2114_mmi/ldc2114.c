@@ -14,13 +14,10 @@
  * General Public License for more details.
  */
 
-#include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/jiffies.h>
-#include <linux/semaphore.h>
-#include <linux/regmap.h>
 #include <linux/of_irq.h>
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
@@ -28,9 +25,13 @@
 #include <linux/input.h>
 #include <linux/reboot.h>
 
-#include "ldc2114_cdev.h"
+#include "ldc2114.h"
 
 #define LDC2114_DRIVER_NAME		"ldc2114"
+
+#define LDC2114_EV_DATA 1
+#define LDC2114_EV_IRQ 2
+#define LDC2114_EV_PRESS 3
 
 #define LDC2114_SHORT_DELAY	100
 #define LDC2114_LONG_DELAY	(LDC2114_SHORT_DELAY * 5)
@@ -43,7 +44,6 @@
 #define WAIT_USEC_LOW	(LDC2114_SHORT_DELAY * USEC_PER_MSEC)
 #define WAIT_USEC_HIGH	(WAIT_USEC_LOW + (WAIT_USEC_LOW >> 3))
 
-#define MAX_KEYS 4
 #define irq_to_gpio(irq) ((irq) - gpio_to_irq(0))
 
 /* LDC2114 registers */
@@ -87,71 +87,7 @@
 #define LDC2114_DEVICE_ID_LSB		0xFE
 #define LDC2114_DEVICE_ID_MSB 		0xFF
 
-enum ldc2114_fields {
-	/* Status */
-	F_STATUS_TIMEOUT, F_STATUS_LC_WD, F_STATUS_FSM_WD, F_STATUS_MAXOUT,
-	F_STATUS_RDY_TO_WRITE, F_STATUS_CHIP_READY, F_STATUS_OUT_STATUS,
-
-	/* Output */
-	F_OUT_OUT0, F_OUT_OUT1, F_OUT_OUT2, F_OUT_OUT3,
-
-	/* Reset */
-	F_RESET_STATE_RESET, F_RESET_FULL_RESET,
-
-	/* Enable */
-	F_EN_EN0, F_EN_EN1, F_EN_EN2, F_EN_EN3,
-	F_EN_LPEN0, F_EN_LPEN1, F_EN_LPEN2, F_EN_LPEN3,
-
-	/* Scan rate */
-	F_NP_SCAN_RATE_NPSR, F_LP_SCAN_RATE_LPSR,
-
-	/* Gain */
-	F_GAIN0_GAIN0, F_GAIN1_GAIN1, F_GAIN2_GAIN2, F_GAIN3_GAIN3,
-
-	/* Interrupt polarity */
-	F_INTPOL_INTPOL,
-
-	/* Base Increment */
-	F_LP_BASE_INC_LPBI, F_NP_BASE_INC_NPBI,
-
-	/* Max-win */
-	F_MAXWIN_MAXWIN0, F_MAXWIN_MAXWIN1, F_MAXWIN_MAXWIN2, F_MAXWIN_MAXWIN3,
-
-	/* Frequency divider */
-	F_LC_DIVIDER_LCDIV,
-
-	/* Hysteresis */
-	F_HYST_HYST,
-
-	/* Anti-twist */
-	F_TWIST_ANTITWST,
-
-	/* Anti-deform */
-	F_COMMON_DEFORM_ANTIDFRM0, F_COMMON_DEFORM_ANTIDFRM1,
-	F_COMMON_DEFORM_ANTIDFRM2, F_COMMON_DEFORM_ANTIDFRM3,
-
-	/* Anti-common */
-	F_COMMON_DEFORM_ANTICM0, F_COMMON_DEFORM_ANTICM1,
-	F_COMMON_DEFORM_ANTICM2, F_COMMON_DEFORM_ANTICM3,
-
-	/* Output Polarity */
-	F_OPOL_OPOL0, F_OPOL_OPOL1, F_OPOL_OPOL2, F_OPOL_OPOL3,
-
-	/* Counter Scale */
-	F_CNTSC_CNTSC0, F_CNTSC_CNTSC1, F_CNTSC_CNTSC2, F_CNTSC_CNTSC3,
-
-	/* Sensor configuration */
-	F_SENSOR0_CONFIG_SENCYC0, F_SENSOR0_CONFIG_FREQ0, F_SENSOR0_CONFIG_RP0,
-	F_SENSOR1_CONFIG_SENCYC1, F_SENSOR1_CONFIG_FREQ1, F_SENSOR1_CONFIG_RP1,
-	F_SENSOR2_CONFIG_SENCYC2, F_SENSOR2_CONFIG_FREQ2, F_SENSOR2_CONFIG_RP2,
-	F_SENSOR3_CONFIG_SENCYC3, F_SENSOR3_CONFIG_FREQ3, F_SENSOR3_CONFIG_RP3,
-
-	/* Fast Tracking Factor */
-	F_FTF0_FTF0, F_FTF1_2_FTF1, F_FTF1_2_FTF2, F_FTF3_FTF3,
-
-	/* sentinel */
-	F_MAX_FIELDS
-};
+static int drv_instance_counter;
 
 static const struct reg_field ldc2114_reg_fields[] = {
 	[F_STATUS_TIMEOUT]          = REG_FIELD(LDC2114_STATUS,         1, 1),
@@ -223,63 +159,6 @@ static const struct reg_field ldc2114_reg_fields[] = {
 	[F_FTF1_2_FTF1]             = REG_FIELD(LDC2114_FTF1_2,         4, 5),
 	[F_FTF1_2_FTF2]             = REG_FIELD(LDC2114_FTF1_2,         6, 7),
 	[F_FTF3_FTF3]               = REG_FIELD(LDC2114_FTF3,           0, 1),
-};
-
-struct ldc2114_cfg_data {
-	uint8_t address, value;
-};
-
-struct ldc2114_config {
-	int size;
-	struct ldc2114_cfg_data data[0];
-};
-
-struct ldc2114_cfg_info {
-	struct ldc2114_config *normal;
-	struct ldc2114_config *lpm;
-	struct ldc2114_config *active;
-	int attempts;
-	int delay_ms;
-	bool toggled;
-	bool reschedulable;
-	struct completion done;
-};
-
-/**
- * struct ldc2114_data - Instance data for LDC2114
- * @dev: Device structure
- * @regmap - Register map of the device
- * @fields: Register fields of the device
- * @irq: INTB line interrupt number
- */
-struct ldc2114_data {
-	struct device *dev;
-	struct regmap *regmap;
-	struct regmap_field *fields[F_MAX_FIELDS];
-	atomic_t irq_work_running;
-	atomic_t poll_work_running;
-	struct semaphore semaphore;
-	int intb_gpio;
-	int lpwm_gpio;
-	int signal_gpio;
-	int intb_polarity;
-	int irq;
-	int failures;
-	bool irq_enabled;
-	bool btn_enabled;
-	bool data_polling;
-	bool not_connected;
-	unsigned int poll_interval;
-	unsigned int button_map[MAX_KEYS];
-	struct delayed_work polling_work;
-	struct delayed_work irq_work;
-	struct delayed_work config_work;
-	struct input_dev *input;
-	struct notifier_block poll_nb;
-	struct notifier_block reboot_nb;
-	unsigned int verno;
-	struct ldc2114_cfg_info config;
-	struct workqueue_struct *wq;
 };
 
 struct ldc2114_attr {
@@ -710,46 +589,6 @@ static const struct regmap_config ldc2114_regmap_config = {
 	.volatile_table = &ldc2114_volatile_table,
 };
 
-#define LDC2114_REG_STATUS_OUT                  (0x80)
-#define LDC2114_REG_STATUS_CHIP_READY           (0x40)
-#define LDC2114_REG_STATUS_RDY_TO_WRITE         (0x20)
-#define LDC2114_REG_STATUS_MAXOUT               (0x10)
-#define LDC2114_REG_STATUS_FSM_WD               (0x08)
-#define LDC2114_REG_STATUS_LC_WD                (0x04)
-#define LDC2114_REG_STATUS_TIMEOUT              (0x02)
-#define LDC2114_REG_STATUS_INTEGRITY            (0x01)
-#define LDC2114_REG_STATUS_ERROR_MASK           (0x0f)
-#define LDC2114_REG_STATUS_ERROR_OTHERS         (0x1b) /* (ERROR_MASK & ~LC_WD) | MAX_OUT */
-
-#define LDC2114_REG_RESET_FULL                  (0x10)
-#define LDC2114_REG_RESET_CONFIG_MODE           (0x01)
-#define LDC2114_REG_RESET_NONE                  (0x00)
-
-struct ldc2114_16bit {
-	uint8_t lsb;
-	uint8_t msb;
-};
-
-struct ldc2114_raw {
-	uint8_t out;
-	struct ldc2114_16bit values[MAX_KEYS];
-};
-
-static int buttons[MAX_KEYS];
-static int output_bits;
-
-static int inline comp2_12b(struct ldc2114_16bit *data)
-{
-	int result;
-	/* 12bits 2's compliment data */
-	if (data->msb & 0x8)
-		result = (data->lsb | (data->msb << 8) | 0xFFFFF000);
-	else
-		result = (data->lsb | (data->msb << 8));
-
-	return result;
-}
-
 static int ldc2114_input_device(struct ldc2114_data *ldc)
 {
 	int i, ret;
@@ -807,16 +646,18 @@ static void ldc2114_toggle(struct ldc2114_data *ldc,
 	}
 }
 
-static int ldc2114_poll(struct ldc2114_data *ldc,
-						struct ldc2114_raw *data)
+static int ldc2114_poll(struct ldc2114_data *ldc, uint8_t *out)
 {
 	int ret;
+	struct ldc2114_raw_ext de;
 	static unsigned long executed;
 
 	if (ldc->failures >= CONFIG_LDC2114_MAX_FAILURES)
 		return -EFAULT;
 
-	ret = ldc2114_read_bulk(ldc->dev, LDC2114_OUT, data, sizeof(*data));
+	ret = ldc2114_read_bulk(ldc->dev, LDC2114_STATUS, &de, sizeof(de));
+	if (out)
+		*out = de.data.out;
 	if (ret) {
 		ldc->failures++;
 
@@ -826,15 +667,13 @@ static int ldc2114_poll(struct ldc2114_data *ldc,
 		}
 	} else {
 		ldc->failures = 0;
-		ret = ldc2114_buffer(
-				comp2_12b(&data->values[0]), comp2_12b(&data->values[1]),
-				comp2_12b(&data->values[2]), comp2_12b(&data->values[3]));
+		ret = ldc2114_buffer(ldc, LDC2114_EV_DATA, de);
 		if (ret)
 			dev_err(ldc->dev, "buffer is not ready\n");
 	}
 
 	if (!(executed++%10))
-		dev_err(ldc->dev, "polled %lu\n", executed);
+		dev_info(ldc->dev, "polled %lu\n", executed);
 
 	return 0;
 }
@@ -866,20 +705,12 @@ static void ldc2114_polling_work(struct work_struct *work)
 		container_of(work, struct delayed_work, work);
 	struct ldc2114_data *ldc =
 		container_of(dw, struct ldc2114_data, polling_work);
-	struct ldc2114_raw data;
 	int ret;
 
-	if (!ldc->irq_enabled) {
-		uint8_t status;
-
-		ret = ldc2114_read_reg8(ldc->dev, LDC2114_STATUS, &status);
-		dev_dbg(ldc->dev, "status = 0x%02x\n", status);
-	}
-
-	ret = ldc2114_poll(ldc, &data);
+	ret = ldc2114_poll(ldc, NULL);
 
 	if (atomic_read(&ldc->poll_work_running))
-		queue_delayed_work(ldc->wq, &ldc->polling_work,
+		schedule_delayed_work(&ldc->polling_work,
 					msecs_to_jiffies(ldc->poll_interval));
 }
 
@@ -895,13 +726,15 @@ static void ldc2114_input_report(struct ldc2114_data *ldc,
 
 	for (i = 0, s = 0; i < MAX_KEYS; i++) {
 		status = (output_bits >> i) & 1;
-		if (status == buttons[i])
+		if (status == ldc->buttons[i])
 			continue;
-		buttons[i] = status;
-		input_report_key(ldc->input, ldc->button_map[i], status);
-		s++;
-		dev_dbg(ldc->dev, "sent key code = %d(%d)\n",
-				ldc->button_map[i], status);
+		ldc->buttons[i] = status;
+		if (ldc->btn_enabled) {
+			input_report_key(ldc->input, ldc->button_map[i], status);
+			s++;
+			dev_dbg(ldc->dev, "sent key code = %d(%d)\n",
+					ldc->button_map[i], status);
+		}
 	}
 
 	if (s) { /* only send sync if there were keys reported */
@@ -932,13 +765,12 @@ static void ldc2114_irq_work(struct work_struct *work)
 		if (status_reg & LDC2114_REG_STATUS_OUT) {
 			ret = ldc2114_read_bulk(ldc->dev,
 									LDC2114_OUT, &data, sizeof(data));
-			if (data.out != output_bits) {
-				output_bits = data.out;
-				dev_dbg(ldc->dev, "OUTPUT bits 0x%x\n", output_bits);
+			if (data.out != ldc->output_bits) {
+				ldc->output_bits = data.out;
+				dev_dbg(ldc->dev, "OUTPUT bits 0x%x\n", ldc->output_bits);
 			}
 
-			if (ldc->btn_enabled)
-				ldc2114_input_report(ldc, output_bits);
+			ldc2114_input_report(ldc, ldc->output_bits);
 		}
 
 		if (atomic_read(&ldc->irq_work_running)) {
@@ -949,8 +781,8 @@ static void ldc2114_irq_work(struct work_struct *work)
 			up(&ldc->semaphore);
 		} else {
 #ifdef LDC2114_POLL_DEBUG
-			dev_info(ldc->dev, "polled %d times within %llums\n",
-					polling_counter,
+			dev_info(ldc->dev, "%s: polled %d times within %llums\n",
+					__func__, polling_counter,
 					timediff_ms(ktime_to_timespec(start_polling_tm),
 								ktime_to_timespec(ktime_get())));
 			polling_counter = 0;
@@ -960,7 +792,7 @@ static void ldc2114_irq_work(struct work_struct *work)
 			if (ldc->btn_enabled)
 				ldc2114_input_report(ldc, 0);
 
-			memset(buttons, 0, sizeof(buttons));
+			memset(ldc->buttons, 0, sizeof(ldc->buttons));
 		}
 	}
 }
@@ -1115,6 +947,11 @@ static int ldc2114_of_init(struct i2c_client *client)
 	if (!ret) {
 		ldc->btn_enabled = true;
 		dev_info(ldc->dev, "has keymap\n");
+	}
+
+	if (of_property_read_bool(np, "ldc2114,do-polling")) {
+		ldc->data_polling = true;
+		dev_info(ldc->dev,"supports data polling\n");
 	}
 
 	config_np = of_find_node_by_name(np, "configs");
@@ -1284,12 +1121,12 @@ error_workaround:
 	} else {
 		/* reading OUT helps with issues when INTB gets stuck due */
 		/* to internal issues between LDC2114 and Silego parts */
-		struct ldc2114_raw data;
+		uint8_t out;
 
-		ldc2114_poll(ldc, &data);
+		ldc2114_poll(ldc, &out);
 #ifdef LDC2114_CFG_DEBUG
 		dev_info(ldc->dev, "OUT 0x%02x, INTB %d\n",
-				data.out, gpio_get_value(ldc->intb_gpio));
+				out, gpio_get_value(ldc->intb_gpio));
 #endif
 		/* some errors require STATUS register to be read twice, */
 		/* thus do STATUS read again here if errors detected */
@@ -1326,16 +1163,16 @@ static int ldc2114_poll_enable_cb(struct notifier_block *n,
 		container_of(n, struct ldc2114_data, poll_nb);
 	int state = test_bit(0, &val) ? 1 : 0;
 
+	dev_info(ldc->dev, "polling flag %d; state=%d\n",
+			ldc->data_polling, state);
+
 	if (!ldc->data_polling)
 		return 0;
 
 	atomic_set(&ldc->poll_work_running, state);
-	dev_info(ldc->dev, "polling state changed to %d\n", state);
 
-	if (state) {
-		queue_delayed_work(ldc->wq, &ldc->polling_work, 0);
-		dev_dbg(ldc->dev, "polling resumed\n");
-	}
+	if (state)
+		schedule_work(&ldc->polling_work.work);
 
 	return 0;
 }
@@ -1406,6 +1243,7 @@ static int ldc2114_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, ldc);
 	ldc->dev = &client->dev;
 	ldc->irq = client->irq;
+	ldc->data_polling = true;
 
 	if (client->dev.of_node) {
 		ret = ldc2114_of_init(client);
@@ -1445,6 +1283,7 @@ static int ldc2114_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	ldc->instance = ++drv_instance_counter;
 	sema_init(&ldc->semaphore, 0);
 
 	if (!ldc->not_connected) {
@@ -1469,16 +1308,17 @@ static int ldc2114_probe(struct i2c_client *client,
 	if (ldc->btn_enabled)
 		ldc2114_input_device(ldc);
 
-	ret = ldc2114_cdev_init();
-	if (ret < 0 && ret != -ENODEV)
-		dev_warn(ldc->dev, "Error registering chardev: %d\n", ret);
-	else {
-		ldc->data_polling = true;
+	ret = ldc2114_debugfs_init(ldc);
+	if (ret < 0) {
+		ldc->data_polling = false;
+		if (ret != -ENODEV)
+			dev_warn(ldc->dev, "Error registering debugfs: %d\n", ret);
+	} else {
 		ldc->poll_interval = 250;
 		INIT_DELAYED_WORK(&ldc->polling_work, ldc2114_polling_work);
 
 		ldc->poll_nb.notifier_call = ldc2114_poll_enable_cb;
-		ret = ldc2114_register_client(&ldc->poll_nb);
+		ret = ldc2114_register_client(ldc, &ldc->poll_nb);
 		if (ret < 0)
 			dev_warn(ldc->dev, "Unable to register notifier: %d\n", ret);
 	}
@@ -1512,7 +1352,7 @@ static int ldc2114_remove(struct i2c_client *client)
 	if (ldc->input)
 		input_unregister_device(ldc->input);
 
-	ldc2114_cdev_remove();
+	ldc2114_debugfs_remove(ldc);
 
 	sysfs_remove_group(&client->dev.kobj, &ldc2114_attr_group);
 
