@@ -2289,7 +2289,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 sch_hb:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
-	if (suspend_wakeups)
+	if (suspend_wakeups || chg_stat.charger_present)
 		alarm_start_relative(&chip->heartbeat_alarm,
 				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
 
