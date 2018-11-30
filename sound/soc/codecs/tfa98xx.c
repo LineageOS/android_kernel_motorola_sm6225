@@ -1684,7 +1684,9 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 
 #ifdef TFA9874_NONDSP_STEREO
 	nr_controls += 1;  /* for TFA_CHIP_SELECTOR */
+	nr_controls += 1;  /* for NXP Volume */
 #endif
+	nr_controls += 1;  /* for NXP Mode */
 
 	/* allocate the tfa98xx_controls base on the nr of profiles */
 	nprof = tfa_cnt_get_dev_nprof(tfa98xx->tfa);
@@ -1695,7 +1697,7 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 
 	tfa98xx_controls = devm_kzalloc(tfa98xx->codec->dev,
 			nr_controls * sizeof(tfa98xx_controls[0]), GFP_KERNEL);
-	if (!tfa98xx_controls)
+	if (!tfa98xx_controls) 
 		return -ENOMEM;
 
 	/* Create a mixer item for selecting the active profile */
