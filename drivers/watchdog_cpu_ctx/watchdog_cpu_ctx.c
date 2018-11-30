@@ -455,8 +455,12 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 		return;
 	}
 
-	offset = (sp - stack - 128) & ~(128 - 1);
 	msm_wdt_show_raw_mem(stack, 96, addr, "thread_info");
+	offset = (sp - stack - 128) & ~(128 - 1);
+	if (offset < 0) {
+		MSMWDT_ERR("Unexpected offset: %d, sp_el1: 0x%llx\n", offset, regs->sp_el1);
+		return;
+	}
 	msm_wdt_show_raw_mem(stack + offset, THREAD_SIZE - offset,
 			addr + offset, "stack");
 
@@ -590,8 +594,12 @@ static void msm_wdt_unwind(struct sysdbgCPUCtxtType *sysdbg_ctx,
 		frame.lr = 0;
 		frame.pc = ti->cpu_context.pc;
 	}
-	offset = (frame.sp - stack - 128) & ~(128 - 1);
 	msm_wdt_show_raw_mem(stack, 96, addr, "thread_info");
+	offset = (frame.sp - stack - 128) & ~(128 - 1);
+	if (offset < 0) {
+		MSMWDT_ERR("Unexpected offset: %d, r13_svc: 0x%x\n", offset, regs->r13_svc);
+		return;
+	}
 	msm_wdt_show_raw_mem(stack + offset, THREAD_SIZE - offset,
 			addr + offset, "stack");
 	walk_stackframe(&frame, &msm_wdt_stackframe, &frame_data);
