@@ -19,6 +19,7 @@
 #include <linux/pmic-voter.h>
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <linux/of.h>
 #include <linux/workqueue.h>
 
@@ -242,6 +243,8 @@ struct smb_mmi_charger {
 	bool			awake;
 	int 			last_reported_soc;
 	int 			last_reported_status;
+	struct regulator	*vbus;
+	bool			vbus_enabled;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1105,6 +1108,7 @@ static enum power_supply_property smb_mmi_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
+	POWER_SUPPLY_PROP_USB_OTG,
 };
 
 static int smb_mmi_get_property(struct power_supply *psy,
@@ -1122,6 +1126,14 @@ static int smb_mmi_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		val->intval = chip->gen_log_rate_s;
+		break;
+	case POWER_SUPPLY_PROP_USB_OTG:
+		if (chip->vbus &&
+		    regulator_is_enabled(chip->vbus) &&
+		    chip->vbus_enabled)
+			val->intval = 1;
+		else
+			val->intval = 0;
 		break;
 	default:
 		return -EINVAL;
@@ -1157,6 +1169,32 @@ static int smb_mmi_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		chip->gen_log_rate_s = val->intval;
 		power_supply_changed(psy);
+		break;
+	case POWER_SUPPLY_PROP_USB_OTG:
+		if (!chip->vbus) {
+			chip->vbus = devm_regulator_get(chip->dev, "vbus");
+			if (IS_ERR(chip->vbus)) {
+				pr_err("SMBMMI: Unable to get vbus\n");
+				return -EINVAL;
+			}
+		}
+
+		if (val->intval) {
+			rc = regulator_enable(chip->vbus);
+			pr_info("SMBMMI: VBUS Enable\n");
+		} else if (chip->vbus_enabled) {
+			rc = regulator_disable(chip->vbus);
+			pr_info("SMBMMI: VBUS Disable\n");
+		}
+
+		if (rc)
+			pr_err("SMBMMI: Unable to %s vbus (%d)\n",
+			       val->intval ? "enable" : "disable", rc);
+		else if (val->intval)
+			chip->vbus_enabled = true;
+		else
+			chip->vbus_enabled = false;
+
 		break;
 	default:
 		rc = -EINVAL;
@@ -2164,6 +2202,16 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
+
+	if (chip->vbus_enabled && chip->vbus && chg_stat.charger_present) {
+		rc = regulator_disable(chip->vbus);
+		if (rc)
+			pr_err("SMBMMI: Unable to disable vbus (%d)\n", rc);
+		else {
+			chip->vbus_enabled = false;
+			pr_info("SMBMMI: VBUS Disable due to Charger\n");
+		}
+	}
 
 	if (chip->enable_charging_limit && chip->is_factory_image)
 		update_charging_limit_modes(chip, chg_stat.batt_soc);
