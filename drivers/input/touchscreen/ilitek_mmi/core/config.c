@@ -260,7 +260,7 @@ void core_config_ic_reset(void)
 		core_config->do_ic_reset = false;
 	}
 
-	msleep(300);
+	msleep(100);
 #endif
 }
 EXPORT_SYMBOL(core_config_ic_reset);
