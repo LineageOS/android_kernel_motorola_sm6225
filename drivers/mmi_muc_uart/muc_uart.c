@@ -744,6 +744,18 @@ static void muc_uart_set_power_control(struct mod_muc_data_t *mm_data,
 		pwrctl->voltage_uv,
 		pwrctl->current_ua);
 
+	if (pwrctl->flow == VBUS_OUT) {
+		pval.intval = 1;
+		power_supply_set_property(mm_data->mmi_psy,
+					  POWER_SUPPLY_PROP_USB_OTG,
+					  &pval);
+	} else {
+		pval.intval = 0;
+		power_supply_set_property(mm_data->mmi_psy,
+					  POWER_SUPPLY_PROP_USB_OTG,
+					  &pval);
+	}
+
 	if ((pwrctl->flow == VBUS_IN) || (pwrctl->flow == VBUS_IN_SPLIT)) {
 		pval.intval = pwrctl->current_ua;
 		power_supply_set_property(mm_data->mmi_psy,
