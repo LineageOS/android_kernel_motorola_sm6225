@@ -831,7 +831,15 @@ static int ps_notify_callback(struct notifier_block *self,
 			&& psy && psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "phone", sizeof("phone")) && data) {
 		LOG_INFO("phone ps notification: event = %lu\n", event);
-		schedule_work(&data->ps_notify_work);
+
+		retval = ps_get_state(psy, &present);
+		if (retval)
+			return retval;
+
+		if (data->phone_is_present != present) {
+			data->phone_is_present = present;
+			schedule_work(&data->ps_notify_work);
+		}
 	}
 #endif
 
