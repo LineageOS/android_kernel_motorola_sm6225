@@ -700,6 +700,9 @@ struct sx933x_platform_data
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;
 	bool ps_is_present;
+#ifdef CONFIG_CAPSENSE_ATTACH_CAL
+	bool phone_is_present;
+#endif
 #endif
 	pbuttonInformation_t pbuttonInformation;
 
