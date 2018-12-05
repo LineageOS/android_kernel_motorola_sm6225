@@ -116,6 +116,7 @@ struct mod_muc_data_t {
 	struct timer_list ack_timer;
 	struct timer_list sleep_req_timer;
 	atomic_t mod_attached;
+	atomic_t mod_online;
 	struct workqueue_struct *write_wq;
 	struct write_data *write_data_q;
 	int write_q_size;
@@ -1040,6 +1041,22 @@ static int muc_uart_set_gpio(struct device *dev, int value)
 	return 0;
 }
 
+static int muc_uart_handle_usb_ctrl(struct mod_muc_data_t *mm_data,
+	struct usb_control_t *usb_ctrl_pkt)
+{
+	if (!mm_data)
+		return 1;
+
+	if (usb_ctrl_pkt->cmd != USB_SECONDARY_DISABLE &&
+		usb_ctrl_pkt->cmd != USB_SECONDARY_ENABLE)
+		return 1;
+
+	atomic_set(&mm_data->mod_online, usb_ctrl_pkt->cmd);
+	power_supply_changed(mm_data->phone_psy);
+
+	return 0;
+}
+
 static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 	struct mmi_uart_hdr_t *hdr,
 	uint8_t *payload,
@@ -1137,6 +1154,14 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			} else {
 				muc_uart_send(mm_data, MUC_SET_GPIO|MSG_NACK_MASK, NULL, 0);
 			}
+			break;
+		}
+		case USB_CONTROL: {
+			/* TODO nack if size is wrong ? */
+			if (payload_len == sizeof(struct usb_control_t))
+				muc_uart_handle_usb_ctrl(mm_data,
+					(struct usb_control_t *)payload);
+			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
 			break;
 		}
 		default: {
@@ -1440,6 +1465,7 @@ f_end:
 
 static enum power_supply_property muc_uart_ps_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_ONLINE,
 };
 
 static int muc_uart_get_property(struct power_supply *psy,
@@ -1452,6 +1478,31 @@ static int muc_uart_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = atomic_read(&mm_data->mod_attached);
 		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = atomic_read(&mm_data->mod_online);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int muc_uart_set_property(struct power_supply *psy,
+				 enum power_supply_property psp,
+				 const union power_supply_propval *val)
+{
+	struct mod_muc_data_t *mm_data = power_supply_get_drvdata(psy);
+	struct usb_control_t usbctrl_pkt;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE: {
+		usbctrl_pkt.cmd = val->intval;
+		muc_uart_queue_send(mm_data,
+			USB_CONTROL,
+			(uint8_t *)&usbctrl_pkt,
+			sizeof(struct usb_control_t));
+		break;
+	}
 	default:
 		return -EINVAL;
 	}
@@ -1462,6 +1513,7 @@ static const struct power_supply_desc phone_psy_desc = {
 	.name		= "phone",
 	.type		= POWER_SUPPLY_TYPE_USB,
 	.get_property	= muc_uart_get_property,
+	.set_property   = muc_uart_set_property,
 	.properties	= muc_uart_ps_props,
 	.num_properties	= ARRAY_SIZE(muc_uart_ps_props),
 };
