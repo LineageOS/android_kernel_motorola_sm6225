@@ -44,6 +44,7 @@ struct mmi_uart_pb_hdr_t {
 #define PACKETBUS_PROT_MSG    0x0002
 #define POWER_STATUS          0x0003
 #define POWER_CONTROL         0x0004
+#define USB_CONTROL           0x0005
 #define BOOT_MODE             0x0007
 #define MUC_FW_VERSION        0x0008
 #define MUC_SET_GPIO          0x0009
@@ -75,6 +76,11 @@ struct power_control_t {
 	uint8_t   flow;
 	uint32_t  voltage_uv;
 	int32_t   current_ua;
+} __packed;
+
+enum { USB_SECONDARY_DISABLE = 0, USB_SECONDARY_ENABLE };
+struct usb_control_t {
+	uint8_t cmd;
 } __packed;
 
 struct power_status_t {
