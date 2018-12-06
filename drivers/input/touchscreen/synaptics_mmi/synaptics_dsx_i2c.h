@@ -28,6 +28,7 @@
 #include <linux/version.h>
 #include <linux/ktime.h>
 #include <linux/semaphore.h>
+#include <linux/completion.h>
 #include <linux/pm_qos.h>
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -347,7 +348,7 @@ enum exp_fn {
 	RMI_F54,
 	RMI_FW_UPDATER,
 	RMI_CTRL_ACCESS_BLK,
-	RMI_DRM_WORKAROUND,
+	RMI_DRM_FRAMEWORK,
 	RMI_LAST,
 };
 
@@ -582,6 +583,347 @@ struct synaptics_rmi4_data {
 	int instance;
 	char *irq_name;
 	char *reset_name;
+
+	void *fwu_data;
+};
+
+struct pdt_properties {
+	union {
+		struct {
+			unsigned char reserved_1:6;
+			unsigned char has_bsr:1;
+			unsigned char reserved_2:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct partition_table {
+	unsigned char partition_id:5;
+	unsigned char byte_0_reserved:3;
+	unsigned char byte_1_reserved;
+	unsigned char partition_length_7_0;
+	unsigned char partition_length_15_8;
+	unsigned char start_physical_address_7_0;
+	unsigned char start_physical_address_15_8;
+	unsigned char partition_properties_7_0;
+	unsigned char partition_properties_15_8;
+} __packed;
+
+struct f01_device_control {
+	union {
+		struct {
+			unsigned char sleep_mode:2;
+			unsigned char nosleep:1;
+			unsigned char reserved:2;
+			unsigned char charger_connected:1;
+			unsigned char report_rate:1;
+			unsigned char configured:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f34_v7_query_0 {
+	union {
+		struct {
+			unsigned char subpacket_1_size:3;
+			unsigned char has_config_id:1;
+			unsigned char f34_query0_b4:1;
+			unsigned char has_thqa:1;
+			unsigned char f34_query0_b6__7:2;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f34_v7_query_1_7 {
+	union {
+		struct {
+			/* query 1 */
+			unsigned char bl_minor_revision;
+			unsigned char bl_major_revision;
+
+			/* query 2 */
+			unsigned char bl_fw_id_7_0;
+			unsigned char bl_fw_id_15_8;
+			unsigned char bl_fw_id_23_16;
+			unsigned char bl_fw_id_31_24;
+
+			/* query 3 */
+			unsigned char minimum_write_size;
+			unsigned char block_size_7_0;
+			unsigned char block_size_15_8;
+			unsigned char flash_page_size_7_0;
+			unsigned char flash_page_size_15_8;
+
+			/* query 4 */
+			unsigned char adjustable_partition_area_size_7_0;
+			unsigned char adjustable_partition_area_size_15_8;
+
+			/* query 5 */
+			unsigned char flash_config_length_7_0;
+			unsigned char flash_config_length_15_8;
+
+			/* query 6 */
+			unsigned char payload_length_7_0;
+			unsigned char payload_length_15_8;
+
+			/* query 7 */
+			unsigned char f34_query7_b0:1;
+			unsigned char has_bootloader:1;
+			unsigned char has_device_config:1;
+			unsigned char has_flash_config:1;
+			unsigned char has_manufacturing_block:1;
+			unsigned char has_guest_serialization:1;
+			unsigned char has_global_parameters:1;
+			unsigned char has_core_code:1;
+			unsigned char has_core_config:1;
+			unsigned char has_guest_code:1;
+			unsigned char has_display_config:1;
+			unsigned char f34_query7_b11__15:5;
+			unsigned char f34_query7_b16__23;
+			unsigned char f34_query7_b24__31;
+		} __packed;
+		unsigned char data[21];
+	};
+};
+
+struct f34_v7_data_1_5 {
+	union {
+		struct {
+			unsigned char partition_id:5;
+			unsigned char f34_data1_b5__7:3;
+			unsigned char block_offset_7_0;
+			unsigned char block_offset_15_8;
+			unsigned char transfer_length_7_0;
+			unsigned char transfer_length_15_8;
+			unsigned char command;
+			unsigned char payload_0;
+			unsigned char payload_1;
+		} __packed;
+		unsigned char data[8];
+	};
+};
+
+struct f34_v5v6_flash_properties {
+	union {
+		struct {
+			unsigned char reg_map:1;
+			unsigned char unlocked:1;
+			unsigned char has_config_id:1;
+			unsigned char has_pm_config:1;
+			unsigned char has_bl_config:1;
+			unsigned char has_disp_config:1;
+			unsigned char has_ctrl1:1;
+			unsigned char has_query4:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f34_v5v6_flash_properties_2 {
+	union {
+		struct {
+			unsigned char has_guest_code:1;
+			unsigned char reserved:7;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct register_offset {
+	unsigned char properties;
+	unsigned char properties_2;
+	unsigned char block_size;
+	unsigned char block_count;
+	unsigned char gc_block_count;
+	unsigned char flash_status;
+	unsigned char partition_id;
+	unsigned char block_number;
+	unsigned char transfer_length;
+	unsigned char flash_cmd;
+	unsigned char payload;
+};
+
+struct block_count {
+	unsigned short ui_firmware;
+	unsigned short ui_config;
+	unsigned short dp_config;
+	unsigned short fl_config;
+	unsigned short pm_config;
+	unsigned short bl_config;
+	unsigned short lockdown;
+	unsigned short guest_code;
+};
+
+struct physical_address {
+	unsigned short ui_firmware;
+	unsigned short ui_config;
+	unsigned short dp_config;
+	unsigned short guest_code;
+};
+
+struct container_descriptor {
+	unsigned char content_checksum[4];
+	unsigned char container_id[2];
+	unsigned char minor_version;
+	unsigned char major_version;
+	unsigned char reserved_08;
+	unsigned char reserved_09;
+	unsigned char reserved_0a;
+	unsigned char reserved_0b;
+	unsigned char container_option_flags[4];
+	unsigned char content_options_length[4];
+	unsigned char content_options_address[4];
+	unsigned char content_length[4];
+	unsigned char content_address[4];
+};
+
+struct image_header_10 {
+	unsigned char checksum[4];
+	unsigned char reserved_04;
+	unsigned char reserved_05;
+	unsigned char minor_header_version;
+	unsigned char major_header_version;
+	unsigned char reserved_08;
+	unsigned char reserved_09;
+	unsigned char reserved_0a;
+	unsigned char reserved_0b;
+	unsigned char top_level_container_start_addr[4];
+};
+
+struct image_header_05_06 {
+	/* 0x00 - 0x0f */
+	unsigned char checksum[4];
+	unsigned char reserved_04;
+	unsigned char reserved_05;
+	unsigned char options_firmware_id:1;
+	unsigned char options_bootloader:1;
+	unsigned char options_guest_code:1;
+	unsigned char options_tddi:1;
+	unsigned char options_reserved:4;
+	unsigned char header_version;
+	unsigned char firmware_size[4];
+	unsigned char config_size[4];
+	/* 0x10 - 0x1f */
+	unsigned char product_id[PRODUCT_ID_SIZE];
+	unsigned char package_id[2];
+	unsigned char package_id_revision[2];
+	unsigned char product_info[PRODUCT_INFO_SIZE];
+	/* 0x20 - 0x2f */
+	unsigned char bootloader_addr[4];
+	unsigned char bootloader_size[4];
+	unsigned char ui_addr[4];
+	unsigned char ui_size[4];
+	/* 0x30 - 0x3f */
+	unsigned char ds_id[16];
+	/* 0x40 - 0x4f */
+	union {
+		struct {
+			unsigned char cstmr_product_id[PRODUCT_ID_SIZE];
+			unsigned char reserved_4a_4f[6];
+		};
+		struct {
+			unsigned char dsp_cfg_addr[4];
+			unsigned char dsp_cfg_size[4];
+			unsigned char reserved_48_4f[8];
+		};
+	};
+	/* 0x50 - 0x53 */
+	unsigned char firmware_id[4];
+};
+
+struct block_data {
+	unsigned int size;
+	const unsigned char *data;
+};
+
+struct image_metadata {
+	bool contains_firmware_id;
+	bool contains_bootloader;
+	bool contains_disp_config;
+	bool contains_guest_code;
+	bool contains_flash_config;
+	unsigned int firmware_id;
+	unsigned int checksum;
+	unsigned int bootloader_size;
+	unsigned int disp_config_offset;
+	unsigned char bl_version;
+	unsigned char product_id[PRODUCT_ID_SIZE + 1];
+	unsigned char cstmr_product_id[PRODUCT_ID_SIZE + 1];
+	struct block_data bootloader;
+	struct block_data ui_firmware;
+	struct block_data ui_config;
+	struct block_data dp_config;
+	struct block_data fl_config;
+	struct block_data bl_config;
+	struct block_data guest_code;
+	struct block_data lockdown;
+	struct block_count blkcount;
+	struct physical_address phyaddr;
+};
+
+enum bl_version {
+	BL_V5 = 5,
+	BL_V6 = 6,
+	BL_V7 = 7,
+	BL_V8 = 8,
+};
+
+struct synaptics_rmi4_fwu_handle {
+	enum bl_version bl_version;
+	bool initialized;
+	bool in_bl_mode;
+	bool in_ub_mode;
+	bool force_update;
+	bool do_lockdown;
+	bool has_guest_code;
+	bool new_partition_table;
+	unsigned int data_pos;
+	unsigned char *ext_data_source;
+	unsigned char *read_config_buf;
+	unsigned char intr_mask;
+	unsigned char command;
+	unsigned char bootloader_id[2];
+	unsigned char config_id[32];
+	unsigned char flash_status;
+	unsigned char partitions;
+	unsigned short block_size;
+	unsigned short config_size;
+	unsigned short config_area;
+	unsigned short config_block_count;
+	unsigned short flash_config_length;
+	unsigned short payload_length;
+	unsigned short partition_table_bytes;
+	unsigned short read_config_buf_size;
+	const unsigned char *config_data;
+	const unsigned char *image;
+	unsigned char *image_name;
+	unsigned int image_size;
+	struct image_metadata img;
+	struct register_offset off;
+	struct block_count blkcount;
+	struct physical_address phyaddr;
+	struct f34_v5v6_flash_properties flash_properties;
+	struct synaptics_rmi4_fn_desc f34_fd;
+	struct synaptics_rmi4_fn_desc f35_fd;
+	struct device *dev;
+	struct work_struct fwu_work;
+	bool irq_enabled;
+	struct semaphore irq_sema;
+	struct wakeup_source flash_wake_src;
+	struct completion remove_complete;
+};
+
+struct image_header {
+	unsigned int checksum;
+	unsigned int image_size;
+	unsigned int config_size;
+	unsigned char options;
+	unsigned char bootloader_version;
+	unsigned char product_id[SYNAPTICS_RMI4_PRODUCT_ID_SIZE + 1];
+	unsigned char product_info[SYNAPTICS_RMI4_PRODUCT_INFO_SIZE];
 };
 
 static inline ssize_t synaptics_rmi4_show_error(struct device *dev,
@@ -711,4 +1053,7 @@ extern int FPS_register_notifier(struct notifier_block *nb,
 				unsigned long stype, bool report);
 extern int FPS_unregister_notifier(struct notifier_block *nb,
 				unsigned long stype);
+
+struct synaptics_rmi4_data *synaptics_driver_getdata(
+		struct synaptics_rmi4_data *prev);
 #endif

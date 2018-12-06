@@ -40,10 +40,6 @@
 #include "synaptics_dsx_dropbox.h"
 #include "synaptics_dsx_control_access_block.h"
 
-extern int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data);
-extern void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data);
-extern int synaptics_rmi4_fwu_flash_status(struct synaptics_rmi4_data *rmi4_data);
-
 static int drv_instance_counter;
 static DEFINE_MUTEX(instances_mutex);
 static LIST_HEAD(drv_instances_list);
@@ -56,6 +52,8 @@ struct synaptics_rmi4_data *synaptics_driver_getdata(
 	mutex_lock(&instances_mutex);
 	if (!prev)
 		next = list_first_entry(&drv_instances_list, struct synaptics_rmi4_data, node);
+	else if (list_is_last(&prev->node, &drv_instances_list))
+		next = NULL;
 	else
 		next = list_next_entry(prev, node);
 	mutex_unlock(&instances_mutex);
@@ -6652,7 +6650,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 	}
 #endif
 	/* pname only gets initialized by DRM */
-	/* it implies RMI_DRM_WORKAROUND handler running */
+	/* it implies RMI_DRM_FRAMEWORK handler running */
 	if (pname) {
 		if (!panel_ready)
 			goto exit_reschedule;
@@ -6723,7 +6721,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 							__func__);
 				}
 
-				if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
+				if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
 					if (terminate) {
 						cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
 						flush_workqueue(det_workqueue);
@@ -6834,7 +6832,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			dev_info(dev, "%s: using F34 status retrieval function\n", __func__);
 		}
 
-		if (exp_fhandler->fn_type == RMI_DRM_WORKAROUND) {
+		if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
 			error = synaptics_rmi4_hw_init(rmi4_data);
 			if (error) {
 				dev_dbg(dev, "%s: hw init failed\n", __func__);
@@ -6843,7 +6841,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				rmi4_data->terminating = true;
 			}
 			exp_fhandler->func_init = NULL;
-			dev_dbg(dev, "%s: removing DRM workaround\n", __func__);
+			dev_dbg(dev, "%s: removing DRM\n", __func__);
 			/* allowing sufficient time for F34 to complete */
 			queue_delayed_work(det_workqueue,
 					&exp_fn_ctrl->det_work,
@@ -7642,16 +7640,8 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 			"%s: delay hw init until DRM reports panel is ready\n",
 			__func__);
 	synaptics_dsx_sensor_state(rmi4_data, STATE_UNKNOWN);
-	synaptics_rmi4_new_function(rmi4_data, RMI_DRM_WORKAROUND, true,
-			dummy_init, dummy_remove, NULL, NULL, IC_MODE_ANY);
-
-	if (!rmi4_data->ctrl_dsi)
-		synaptics_rmi4_new_function(rmi4_data, RMI_FW_UPDATER, true,
-			synaptics_rmi4_fwu_init,
-			synaptics_rmi4_fwu_remove,
-			NULL,
-			synaptics_rmi4_fwu_flash_status, IC_MODE_ANY);
-
+	synaptics_rmi4_new_function(rmi4_data, RMI_DRM_FRAMEWORK, true,
+				dummy_init, dummy_remove, NULL, NULL, IC_MODE_ANY);
 	return 0;
 
 free_and_exit:
