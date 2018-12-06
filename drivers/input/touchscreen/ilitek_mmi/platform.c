@@ -557,12 +557,25 @@ static int ilitek_platform_gpio(void)
 		res = gpio_request(ipd->reset_gpio, "ILITEK_TP_RESET");
 		if (res < 0) {
 			ipio_err("Request RESET GPIO failed, res = %d\n", res);
+			if (ipd->hardware_rst) {
+				goto out2;
+			} else {
 			return 0;
+			}
+		}
+	} else {
+		if (ipd->hardware_rst) {
+			ipio_err("Invalid RESET gpio: %d\n", ipd->reset_gpio);
+			return -EBADR;
 		}
 	}
 	gpio_direction_input(ipd->int_gpio);
 
 out:
+	return res;
+out2:
+	if (gpio_is_valid(ipd->int_gpio))
+		gpio_free(ipd->int_gpio);
 	return res;
 }
 
@@ -739,6 +752,13 @@ static int Ili_parse_dt(struct device *dev,
 		ipio_debug(DEBUG_BOOT,"pdata->MT_B_TYPE ture ");
 	else
 		ipio_debug(DEBUG_BOOT,"pdata->MT_B_TYPE false ");
+
+	pdata->hardware_rst = of_property_read_bool(np,
+						"ilitek,hardware_rst");
+	if (pdata->hardware_rst)
+		ipio_debug(DEBUG_BOOT,"pdata->hardware_rst ture ");
+	else
+		ipio_debug(DEBUG_BOOT,"pdata->hardware_rst false ");
 
 	pdata->REGULATOR_POWER_ON = of_property_read_bool(np,
 						"ilitek,regulator_power_on");
