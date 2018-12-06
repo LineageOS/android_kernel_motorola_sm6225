@@ -93,6 +93,7 @@ struct ilitek_platform_data {
 	bool suspended;
 
 	const char *TP_IC_TYPE;
+	bool hardware_rst;
 	bool MT_B_TYPE;
 	bool REGULATOR_POWER_ON;
 	bool BATTERY_CHECK;
