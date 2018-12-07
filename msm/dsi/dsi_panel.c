@@ -904,7 +904,20 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 {
 	int rc = 0;
 
-	pr_info("(%d)\n", param_info->value);
+	pr_info("Set HBM to (%d)\n", param_info->value);
+	rc = dsi_panel_send_param_cmd(panel, param_info);
+	if (rc < 0)
+		DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
+
+        return rc;
+};
+
+static int dsi_panel_set_acl(struct dsi_panel *panel,
+                        struct msm_param_info *param_info)
+{
+	int rc = 0;
+
+	pr_info("Set ACL to (%d)\n", param_info->value);
 	rc = dsi_panel_send_param_cmd(panel, param_info);
 	if (rc < 0)
 		DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
@@ -924,12 +937,17 @@ int dsi_panel_set_param(struct dsi_panel *panel,
 
 	DSI_DEBUG("%s+\n", __func__);
 
-	if (param_info->param_idx == PARAM_HBM_ID)
-		rc = dsi_panel_set_hbm(panel, param_info);
-	else {
-		DSI_ERR("%s: Invalid set_param type=%d\n",
-			__func__, param_info->param_idx);
-		rc = -EINVAL;
+	switch (param_info->param_idx) {
+		case PARAM_HBM_ID :
+			dsi_panel_set_hbm(panel, param_info);
+			break;
+		case PARAM_ACL_ID :
+			dsi_panel_set_acl(panel, param_info);
+			break;
+		default:
+			DSI_ERR("%s: Invalid set_param type=%d\n",
+				__func__, param_info->param_idx);
+			return -EINVAL;
 	}
 
 	return rc;
