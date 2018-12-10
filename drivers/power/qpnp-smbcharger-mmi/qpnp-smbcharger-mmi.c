@@ -80,6 +80,7 @@ enum {
 #define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
+#define DEMO_VOTER			"DEMO_VOTER"
 #define HYST_STEP_MV 50
 #define HYST_STEP_FLIP_MV (HYST_STEP_MV*2)
 #define DEMO_MODE_HYS_SOC 5
@@ -213,6 +214,7 @@ struct mmi_sm_params {
 	int			target_fcc;
 	int			target_fv;
 	int			ocp[MAX_NUM_STEPS];
+	int			demo_mode_prev_soc;
 };
 
 enum charging_limit_modes {
@@ -261,6 +263,7 @@ struct smb_mmi_charger {
 	int			last_iusb_ua;
 	bool			factory_kill_armed;
 	int			gen_log_rate_s;
+	bool			demo_mode_usb_suspend;
 
 	/* Charge Profile */
 	struct mmi_sm_params	sm_param[3];
@@ -1663,8 +1666,8 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		   (chip->pres_temp_zone == ZONE_COLD) ||
 		   (chg->charging_limit_modes == CHARGING_LIMIT_RUN)) {
 		chip->pres_chrg_step = STEP_STOP;
-	} else if (chg->demo_mode) {
-		/* TODO: Ignore Demo Mode for now */
+	} else if (chg->demo_mode) { /* Demo Mode */
+		chip->pres_chrg_step = STEP_DEMO;
 	} else if ((chip->pres_chrg_step == STEP_NONE) ||
 		   (chip->pres_chrg_step == STEP_STOP)) {
 		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
@@ -1822,11 +1825,14 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	int effective_fcc;
 	int ocp;
 	int sm_update;
+	bool voltage_full;
+	int i;
 	int sched_time = HEARTBEAT_DUAL_DELAY_MS;
 	struct smb_mmi_chg_status chg_stat_main, chg_stat_flip;
 	union power_supply_propval pval;
 	struct mmi_sm_params *main_p = &chg->sm_param[MAIN_BATT];
 	struct mmi_sm_params *flip_p = &chg->sm_param[FLIP_BATT];
+	static int demo_full_soc = 100;
 
 	chg_stat_main.charger_present = stat->charger_present;
 	chg_stat_flip.charger_present = stat->charger_present;
@@ -1911,6 +1917,47 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fcc = main_p->target_fcc;
 		target_fv = chg->base_fv_mv;
 		sched_time = HEARTBEAT_DELAY_MS;
+		goto vote_now;
+	/* Check for Charge Demo */
+	} else if ((main_p->pres_chrg_step == STEP_DEMO) ||
+	    (flip_p->pres_chrg_step == STEP_DEMO)) {
+		pr_info("SMBMMI: Battery in Demo Mode charging limited "
+			"%d%%\n", chg->demo_mode);
+
+		voltage_full = ((chg->demo_mode_usb_suspend == false) &&
+		    ((stat->batt_mv + HYST_STEP_MV) >= DEMO_MODE_VOLTAGE)
+		    && mmi_has_current_tapered(chg, main_p, stat->batt_ma,
+					       (main_p->chrg_iterm * 2)));
+
+		if ((chg->demo_mode_usb_suspend == false) &&
+		    ((chg->last_reported_soc >= chg->demo_mode) ||
+		     voltage_full)) {
+			demo_full_soc = chg->last_reported_soc;
+			vote(chg->usb_icl_votable, DEMO_VOTER, true, 0);
+			vote(chg->dc_suspend_votable, DEMO_VOTER, true, 1);
+			chg->demo_mode_usb_suspend = true;
+			main_p->chrg_taper_cnt = 0;
+			flip_p->chrg_taper_cnt = 0;
+			for (i = 0; i < MAX_NUM_STEPS; i++) {
+				main_p->ocp[i] = 0;
+				flip_p->ocp[i] = 0;
+			}
+		} else if (chg->demo_mode_usb_suspend == true &&
+			   (chg->last_reported_soc <=
+			    (demo_full_soc - DEMO_MODE_HYS_SOC))) {
+			vote(chg->usb_icl_votable, DEMO_VOTER, false, 0);
+			vote(chg->dc_suspend_votable, DEMO_VOTER, false, 0);
+			chg->demo_mode_usb_suspend = false;
+			main_p->chrg_taper_cnt = 0;
+			flip_p->chrg_taper_cnt = 0;
+			for (i = 0; i < MAX_NUM_STEPS; i++) {
+				main_p->ocp[i] = 0;
+				flip_p->ocp[i] = 0;
+			}
+		}
+
+		target_fv = DEMO_MODE_VOLTAGE;
+		target_fcc = main_p->target_fcc;
 		goto vote_now;
 	/* Check for Charge FULL from each */
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
@@ -2046,6 +2093,8 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	int max_fv_mv;
 	struct mmi_temp_zone *zone;
 	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
+	bool voltage_full;
+	static int demo_full_soc = 100;
 
 	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
 		" batt_temp %d, usb_mv %d, dc_mv %d, cp %d, vp %d dp %d\n",
@@ -2081,8 +2130,29 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		   (prm->pres_temp_zone == ZONE_COLD) ||
 		   (chip->charging_limit_modes == CHARGING_LIMIT_RUN)) {
 		prm->pres_chrg_step = STEP_STOP;
-	} else if (chip->demo_mode) {
-		/* TODO: Ignore Demo Mode for now */
+	} else if (chip->demo_mode) { /* Demo Mode */
+		prm->pres_chrg_step = STEP_DEMO;
+		pr_info("SMBMMI: Battery in Demo Mode charging limited "
+			"%d%%\n", chip->demo_mode);
+
+		voltage_full = ((chip->demo_mode_usb_suspend == false) &&
+		    ((stat->batt_mv + HYST_STEP_MV) >= DEMO_MODE_VOLTAGE)
+		    && mmi_has_current_tapered(chip, prm, stat->batt_ma,
+			prm->chrg_iterm));
+
+		if ((chip->demo_mode_usb_suspend == false) &&
+		    ((stat->batt_soc >= chip->demo_mode) || voltage_full)) {
+			demo_full_soc = stat->batt_soc;
+			vote(chip->usb_icl_votable, DEMO_VOTER, true, 0);
+			vote(chip->dc_suspend_votable, DEMO_VOTER, true, 0);
+			chip->demo_mode_usb_suspend = true;
+		} else if (chip->demo_mode_usb_suspend == true &&
+		    (stat->batt_soc <= (demo_full_soc - DEMO_MODE_HYS_SOC))) {
+			vote(chip->usb_icl_votable, DEMO_VOTER, false, 0);
+			vote(chip->dc_suspend_votable, DEMO_VOTER, false, 0);
+			chip->demo_mode_usb_suspend = false;
+			prm->chrg_taper_cnt = 0;
+		}
 	} else if ((prm->pres_chrg_step == STEP_NONE) ||
 		   (prm->pres_chrg_step == STEP_STOP)) {
 		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
@@ -2393,12 +2463,9 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	rc = get_prop_usb_voltage_now(chip, &pval);
 	if (rc < 0) {
-		if (rc == -ENODATA)
-			chg_stat.usb_mv = 0;
-		else {
+		chg_stat.usb_mv = 0;
+		if (rc != -ENODATA)
 			pr_err("Error getting USB Voltage rc = %d\n", rc);
-			goto sch_hb;
-		}
 	} else
 		chg_stat.usb_mv = pval.intval / 1000;
 
@@ -2407,12 +2474,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	rc = get_prop_dc_voltage_now(chip, &pval);
 	if (rc < 0) {
-		if (rc == -ENODATA)
-			chg_stat.dc_mv = 0;
-		else {
-			pr_err("Error getting DC Voltage rc = %d\n", rc);
-			goto sch_hb;
-		}
+		pr_debug("Error getting DC Voltage rc = %d\n", rc);
+		chg_stat.dc_mv = 0;
 	} else
 		chg_stat.dc_mv = pval.intval / 1000;
 
