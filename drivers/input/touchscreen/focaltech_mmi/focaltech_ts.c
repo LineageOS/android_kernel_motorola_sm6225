@@ -1158,23 +1158,31 @@ static int ft_power_init(struct ft_ts_data *data, bool on)
 
 reg_vcc_i2c_put:
 	regulator_put(data->vcc_i2c);
+	data->vcc_i2c = NULL;
 reg_vdd_set_vtg:
 	if (regulator_count_voltages(data->vdd) > 0)
 		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
 reg_vdd_put:
 	regulator_put(data->vdd);
+	data->vdd = NULL;
+
 	return rc;
 
 pwr_deinit:
-	if (regulator_count_voltages(data->vdd) > 0)
-		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vdd)) {
+		if (regulator_count_voltages(data->vdd) > 0)
+			regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
 
-	regulator_put(data->vdd);
+		regulator_put(data->vdd);
+	}
 
-	if (regulator_count_voltages(data->vcc_i2c) > 0)
-		regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vcc_i2c)) {
+		if (regulator_count_voltages(data->vcc_i2c) > 0)
+			regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
 
-	regulator_put(data->vcc_i2c);
+		regulator_put(data->vcc_i2c);
+	}
+
 	return 0;
 }
 
