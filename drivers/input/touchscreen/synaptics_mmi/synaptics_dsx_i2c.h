@@ -585,6 +585,7 @@ struct synaptics_rmi4_data {
 	char *reset_name;
 
 	void *fwu_data;
+	void *rmidev_data;
 };
 
 struct pdt_properties {
