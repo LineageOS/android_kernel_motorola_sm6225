@@ -42,7 +42,7 @@ static int cirrus_ff_load_conf_sel;
 static int cirrus_ff_delta_sel;
 static int cirrus_ff_chan_swap_sel;
 static int cirrus_ff_chan_swap_dur;
-static int cirrus_ff_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX;
+static int cirrus_ff_port;
 
 static int crus_se_usecase_dt_count;
 static const char *crus_se_usecase_dt_text[MAX_TUNING_CONFIGS];
@@ -683,6 +683,36 @@ static int msm_crus_chan_swap_dur_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_crus_se_rx_port(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	int crus_set = ucontrol->value.integer.value[0];
+
+	pr_debug("Starting Cirrus SE RX Port function call\n");
+
+	if ((crus_set < 0) || (crus_set > AFE_PORT_ID_INVALID)) {
+		pr_err("%s: ignore the value out of range (%d)\n",
+			__func__, crus_set);
+		return 0;
+	}
+
+	pr_debug("%s: Received %d, change AFE Rx port from %d to %d\n",
+		__func__, crus_set, cirrus_ff_port, crus_set);
+
+	cirrus_ff_port = crus_set;
+
+	return 0;
+}
+
+static int msm_crus_se_rx_port_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("Starting Cirrus SE RX Port Get function call\n");
+	ucontrol->value.integer.value[0] = cirrus_ff_port;
+
+	return 0;
+}
+
 static int msm_crus_se_usecase_index_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
@@ -739,6 +769,8 @@ static const struct snd_kcontrol_new crus_mixer_controls[] = {
 	SOC_SINGLE_EXT("Cirrus SE Channel Swap Duration", SND_SOC_NOPM, 0,
 	MAX_CHAN_SWAP_SAMPLES, 0, msm_crus_chan_swap_dur_get,
 	msm_crus_chan_swap_dur),
+	SOC_SINGLE_EXT("Cirrus SE Rx Port", SND_SOC_NOPM, 0,
+	AFE_PORT_ID_INVALID, 0, msm_crus_se_rx_port_get, msm_crus_se_rx_port),
 	SOC_SINGLE_MULTI_EXT("Cirrus SE Audio Index", SND_SOC_NOPM, 0,
 	0xFFFF, 0, 4, msm_crus_se_usecase_index_get, NULL),
 };
@@ -955,8 +987,10 @@ static int msm_cirrus_playback_probe(struct platform_device *pdev)
 					"afe-port-id", 0, &ff_port_id);
 	if (rc >= 0) {
 		cirrus_ff_port = ff_port_id;
-		pr_info("CRUS_SE: cirrus_ff_port = 0x%x", cirrus_ff_port);
+	} else {
+		cirrus_ff_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX;
 	}
+	pr_info("CRUS_SE: cirrus_ff_port = 0x%x", cirrus_ff_port);
 
 	return 0;
 }
