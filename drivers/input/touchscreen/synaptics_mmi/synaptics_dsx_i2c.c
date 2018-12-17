@@ -7191,7 +7191,6 @@ static int synaptics_dsx_sysfs_touchscreen(
 	struct device_attribute *attrs = touchscreen_attributes;
 	int i, error = 0;
 	static struct class *touchscreen_class;
-	static struct device *ts_class_dev;
 	static int minor;
 
 	if (create) {
@@ -7202,24 +7201,28 @@ static int synaptics_dsx_sysfs_touchscreen(
 					TSDEV_MINOR_MAX, true);
 		pr_info("assigned minor %d\n", minor);
 
-		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
-		if (IS_ERR(touchscreen_class)) {
-			error = PTR_ERR(touchscreen_class);
-			touchscreen_class = NULL;
+		if (!touchscreen_class) {
+			touchscreen_class = class_create(THIS_MODULE, "touchscreen");
+			if (IS_ERR(touchscreen_class)) {
+				error = PTR_ERR(touchscreen_class);
+				touchscreen_class = NULL;
+				return error;
+			}
+		}
+
+		rmi4_data->ts_class_dev = device_create(touchscreen_class,
+				NULL, MKDEV(INPUT_MAJOR, minor),
+				rmi4_data, rmi->product_id_string);
+		if (IS_ERR(rmi4_data->ts_class_dev)) {
+			error = PTR_ERR(rmi4_data->ts_class_dev);
+			rmi4_data->ts_class_dev = NULL;
 			return error;
 		}
 
-		ts_class_dev = device_create(touchscreen_class, NULL,
-				MKDEV(INPUT_MAJOR, minor),
-				rmi4_data, rmi->product_id_string);
-		if (IS_ERR(ts_class_dev)) {
-			error = PTR_ERR(ts_class_dev);
-			ts_class_dev = NULL;
-			return error;
-		}
+		dev_set_drvdata(rmi4_data->ts_class_dev, rmi4_data);
 
 		for (i = 0; attrs[i].attr.name != NULL; ++i) {
-			error = device_create_file(ts_class_dev, &attrs[i]);
+			error = device_create_file(rmi4_data->ts_class_dev, &attrs[i]);
 			if (error)
 				break;
 		}
@@ -7227,23 +7230,25 @@ static int synaptics_dsx_sysfs_touchscreen(
 		if (error)
 			goto device_destroy;
 	} else {
-		if (!touchscreen_class || !ts_class_dev)
+		if (!touchscreen_class || !rmi4_data->ts_class_dev)
 			return -ENODEV;
 
-		for (i = 0; attrs[i].attr.name != NULL; ++i)
-			device_remove_file(ts_class_dev, &attrs[i]);
+		dev_set_drvdata(rmi4_data->ts_class_dev, NULL);
 
-		device_unregister(ts_class_dev);
-		class_unregister(touchscreen_class);
+		for (i = 0; attrs[i].attr.name != NULL; ++i)
+			device_remove_file(rmi4_data->ts_class_dev, &attrs[i]);
+
+		device_unregister(rmi4_data->ts_class_dev);
+		rmi4_data->ts_class_dev = NULL;
 	}
 
 	return 0;
 
 device_destroy:
 	for (--i; i >= 0; --i)
-		device_remove_file(ts_class_dev, &attrs[i]);
+		device_remove_file(rmi4_data->ts_class_dev, &attrs[i]);
 	device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));
-	ts_class_dev = NULL;
+	rmi4_data->ts_class_dev = NULL;
 	class_unregister(touchscreen_class);
 	pr_err("error creating touchscreen class\n");
 
