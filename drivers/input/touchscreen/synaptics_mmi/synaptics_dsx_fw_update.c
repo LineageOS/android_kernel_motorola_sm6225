@@ -1363,7 +1363,9 @@ static int fwu_read_f34_v7_queries(
 		/* need to add 2 extra characters, thus make sure they fit */
 		for (i = 0; i < SYNAPTICS_RMI4_PRODUCT_ID_SIZE-2; i++)
 			if (rmi->product_id_string[i] == 0) {
-				s = &rmi->product_id_string[i];
+				if (!(rmi->product_id_string[i-1] == '7' &&
+					rmi->product_id_string[i-2] == 'v'))
+					s = &rmi->product_id_string[i];
 				break;
 			}
 
