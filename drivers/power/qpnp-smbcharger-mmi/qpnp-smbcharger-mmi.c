@@ -2344,6 +2344,11 @@ sch_hb:
 	if (!chg_stat.charger_present)
 		smb_mmi_awake_vote(chip, false);
 
+	if (chip->batt_psy)
+		power_supply_changed(chip->batt_psy);
+	else if (chip->qcom_psy)
+		power_supply_changed(chip->qcom_psy);
+
 	__pm_relax(&chip->smb_mmi_hb_wake_source);
 }
 
