@@ -2452,6 +2452,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
@@ -2469,7 +2470,6 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
-	POWER_SUPPLY_PROP_FORCE_RECHARGE,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 };
 
@@ -2497,6 +2497,12 @@ static int batt_get_prop(struct power_supply *psy,
 		break;
 	default:
 		rc = power_supply_get_property(chip->qcom_psy, psp, val);
+		if (rc < 0) {
+			pr_debug("Get Unknown prop %d rc = %d\n", psp, rc);
+			/* soft fail so uevents are not blocked */
+			rc = 0;
+			val->intval = -EINVAL;
+		}
 		break;
 	}
 
