@@ -197,6 +197,9 @@ struct synaptics_rmi4_device_info {
 	struct list_head support_fn_list;
 };
 
+#define TOUCH_UD_BUFF 20
+#define BUTTON_UD_BUFF 10
+
 struct touch_up_down {
 	int mismatch;
 	unsigned char up_down;
@@ -587,6 +590,9 @@ struct synaptics_rmi4_data {
 
 	void *fwu_data;
 	void *rmidev_data;
+
+	struct touch_area_stats touch_ud_stats;
+	struct touch_area_stats button_ud_stats;
 };
 
 struct pdt_properties {
