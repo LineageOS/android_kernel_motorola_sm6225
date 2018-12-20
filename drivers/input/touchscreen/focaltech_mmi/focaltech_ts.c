@@ -3512,7 +3512,7 @@ static int ft_ts_probe(struct i2c_client *client,
 		goto input_register_device_err;
 	}
 
-	if (pdata->family_id == FT8006U_ID) {
+	if ((pdata->family_id == FT8006U_ID) || (pdata->family_id == FT5422U_ID)) {
 		fts_extra_init(client, input_dev, pdata);
 	}
 
@@ -3851,7 +3851,7 @@ static int ft_ts_remove(struct i2c_client *client)
 
 	ft_gpio_configure(data, false);
 
-	if (data->pdata->family_id == FT8006U_ID) {
+	if ((data->pdata->family_id == FT8006U_ID) || (data->pdata->family_id == FT5422U_ID)) {
 		fts_extra_exit();
 	}
 
