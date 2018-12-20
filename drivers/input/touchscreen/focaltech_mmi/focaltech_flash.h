@@ -171,6 +171,7 @@ struct upgrade_func {
 	bool hid_supported;
 	bool pramboot_supported;
 	bool fts_8006u;
+	bool fts_5422u;
 	u8 *pramboot;
 	u32 pb_length;
 	int (*init)(void);
@@ -202,6 +203,8 @@ struct upgrade_fw {
 extern struct fts_upgrade *fwupgrade;
 extern struct upgrade_func upgrade_func_ft8006;
 extern struct upgrade_func upgrade_func_ft8006u;
+extern struct upgrade_func upgrade_func_ft5422u;
+extern struct ft_chip_t ft5422u_fct;
 
 /*****************************************************************************
 * Static function prototypes

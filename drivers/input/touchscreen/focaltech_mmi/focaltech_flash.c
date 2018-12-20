@@ -376,7 +376,7 @@ int fts_ctpm_auto_upgrade(struct i2c_client *client,
 		ft5x46_set_chip_id(&fts_chip_type_curr);
 	}
 
-	if (pdata->family_id == FT8006U_ID) {
+	if ((pdata->family_id == FT8006U_ID) || (pdata->family_id == FT5422U_ID)) {
 		return fts_fwupg_do_upgrade(fw_name);
 	}
 
@@ -1995,6 +1995,11 @@ int fts_extra_init(struct i2c_client *client, struct input_dev *input_dev, struc
 		fts_data->ic_info.ids = ft8006u_fct;
 		fts_data->ic_info.is_incell = true;
 		fts_data->ic_info.hid_supported = false;
-	}
+	} else if (FT5422U_ID == type) {
+		fwupgrade->func = &upgrade_func_ft5422u;
+		fts_data->ic_info.ids = ft5422u_fct;
+		fts_data->ic_info.is_incell = false;
+		fts_data->ic_info.hid_supported = true;
+        }
 	return 0;
 }
