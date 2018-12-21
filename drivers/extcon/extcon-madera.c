@@ -1667,7 +1667,7 @@ int madera_hpdet_reading(struct madera_extcon *info, int val)
 
 	madera_set_headphone_imp(info, val);
 
-	if (val > MADERA_HPDET_LINEOUT)
+	if (!info->have_mic && val > MADERA_HPDET_LINEOUT)
 		madera_extcon_report(info, EXTCON_JACK_LINE_OUT, true);
 	else
 		madera_extcon_report(info, EXTCON_JACK_HEADPHONE, true);
