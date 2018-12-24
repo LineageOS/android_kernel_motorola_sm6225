@@ -108,7 +108,7 @@
 #define IBAT_REG_STATUS_MASK		(1 << VBAT_REG_STATUS_SHIFT)
 
 #define FLASHC_SHOW_MAX_SIZE 32
-#define PPS_RET_HISTORY_SIZE	6
+#define PPS_RET_HISTORY_SIZE	8
 
 enum print_reason {
 	PR_INTERRUPT    = BIT(0),
@@ -166,6 +166,12 @@ enum mmi_chrg_step {
 	STEP_HIGH,
 	STEP_NORMAL,
 	STEP_NUM,
+};
+
+enum mmi_pd_pps_result {
+	NO_ERROR,
+	BLANCE_POWER,
+	RESET_POWER,
 };
 
 struct sys_config {
@@ -779,10 +785,63 @@ static bool mmi_get_pps_result_history(struct mmi_pl_chg_manager *chip)
 	for (i = 0; i < PPS_RET_HISTORY_SIZE; i++)
 		result += chip->pps_result_history[i];
 
-	if (result >= PPS_RET_HISTORY_SIZE / 2)
-		return true;
+	if (result >= PPS_RET_HISTORY_SIZE)
+		return RESET_POWER;
+	else if (result >= PPS_RET_HISTORY_SIZE / 2)
+		return BLANCE_POWER;
 	else
-		return false;
+		return NO_ERROR;
+}
+
+static void kick_sm(struct mmi_pl_chg_manager *chip, int ms)
+{
+	if (!delayed_work_pending(&chip->mmi_pl_sm_work)) {
+
+		mmi_pl_dbg(chip, PR_INTERRUPT,
+					"lunch flash charge state machine\n");
+		schedule_delayed_work(&chip->mmi_pl_sm_work,
+				msecs_to_jiffies(ms));
+	} else
+		mmi_pl_dbg(chip, PR_INTERRUPT,
+					"flash charge state machine already existed\n");
+}
+
+static void cancel_sm(struct mmi_pl_chg_manager *chip)
+{
+	mmi_pl_dbg(chip, PR_INTERRUPT, "flush and cancel flash charge sm\n");
+	flush_delayed_work(&chip->mmi_pl_sm_work);
+	cancel_delayed_work(&chip->mmi_pl_sm_work);
+}
+
+static void clear_chg_manager(struct mmi_pl_chg_manager *chip)
+{
+	mmi_pl_dbg(chip, PR_INTERRUPT, "clear pl chg manager!\n");
+
+	if (chip->flashc_handle.charge_enabled) {
+		mmi_pl_err(chip, "disable flashc charge\n");
+		mmi_pl_pm_flashc_enable(chip, false);
+		mmi_pl_pm_check_flashc_enable(chip);
+	}
+
+	if (chip->pmic_ichg_limited) {
+		mmi_pl_dbg(chip, PR_MOTO, "recovery ichg lmt\n");
+		mmi_pl_pm_pmic_ichg_lmt(chip, chip->pmic_ichg_val);
+		chip->pmic_ichg_limited = false;
+	}
+
+	mmi_update_pmic_status(chip);
+	mmi_update_flashc_status(chip);
+	chip->sm_state  = PM_STATE_DISCONNECT;
+	chip->request_volt = 0;
+	chip->request_current = 0;
+	chip->target_curr = 0;
+	chip->target_volt = 0;
+	chip->pps_current_max = 0;
+	chip->pps_voltage_max = 0;
+	chip->force_pmic_chg = false;
+	chip->enter_sw_loop = false;
+	memset(chip->mmi_pdo_info, 0,
+			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
 }
 
 #define FG_ESR_PULSE_MAX_TIMEOUT 60000
@@ -1260,10 +1319,12 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 		if (chip->pps_result < 0) {
 			mmi_pl_err(chip, "last select pdo failed\n");
-			if (mmi_get_pps_result_history(chip)) {
+			if (mmi_get_pps_result_history(chip) != NO_ERROR) {
 				mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CC_LOOP);
-				mmi_pl_err(chip, "select pdo failed much times, direct access to cc loop\n");
+				mmi_pl_err(chip, "direct access to cc loop,"
+								"because of too many pdo failed\n");
 			}
+
 			chip->request_volt = chip->request_volt_pre;
 			goto schedule;
 		}
@@ -1350,11 +1411,21 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 		if (chip->pps_result < 0) {
 			mmi_pl_err(chip, "last select pdo failed\n");
-			if (mmi_get_pps_result_history(chip)) {
+			chip->pps_result = mmi_get_pps_result_history(chip);
+			switch (chip->pps_result) {
+			case BLANCE_POWER:
 				chip->pps_power_balance = true;
 				mmi_pl_err(chip, "enable pps power blance\n");
+				break;
+			case RESET_POWER:
+				mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
+				mmi_pl_err(chip, "hard reset charge policy to recovery power,"
+								"too many pdo failed\n");
+				break;
+			default:
+				break;
 			}
-			
+
 			chip->request_volt = chip->request_volt_pre;
 			if (ibat_curr < chip->flashc_cc_max_curr_pre
 				&& chip->request_volt < chip->pps_voltage_max)
@@ -1444,12 +1515,23 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 
 		if (chip->pps_result < 0) {
 			mmi_pl_err(chip, "last select pdo failed\n");
-			if (mmi_get_pps_result_history(chip)) {
+			chip->pps_result = mmi_get_pps_result_history(chip);
+			switch (chip->pps_result) {
+			case BLANCE_POWER:
 				chip->request_current -=
 						chip->sys_configs.flashc_curr_down_steps;
-				mmi_pl_err(chip, "select pdo failed much times, decrease pps curr %d uA\n",
-							chip->sys_configs.flashc_curr_down_steps);
+				mmi_pl_err(chip, "decrease pps curr %d uA for balnce power\n",
+							chip->sys_configs.flashc_curr_down_steps);				
+				break;
+			case RESET_POWER:
+				mmi_pl_pm_move_state(chip, PM_STATE_ENTRY);
+				mmi_pl_err(chip, "hard reset charge policy to recovery power,"
+								"too many pdo failed\n");
+				break;
+			default:
+				break;
 			}
+
 			chip->request_volt = chip->request_volt_pre;
 			goto schedule;
 		}
@@ -1611,7 +1693,10 @@ schedule:
 	chip->target_curr = min(chip->request_current, chip->pps_current_max);
 
 	if (chip->thermal_mitigation_level > 0
-		&& chip->thermal_mitigation_level < chip->num_thermal_zones - 1) {
+		&& chip->thermal_mitigation_level < chip->num_thermal_zones - 1
+		&& (chip->sm_state == PM_STATE_FLASHC_CC_LOOP
+		|| chip->sm_state == PM_STATE_FLASHC_CV_LOOP
+		|| chip->sm_state == PM_STATE_SW_LOOP)) {
 		chip->target_volt = min(chip->target_volt,
 		chip->thermal_mitigation_zones[chip->thermal_mitigation_level].power_voltage);
 		chip->target_curr = min(chip->target_curr,
@@ -1649,11 +1734,14 @@ schedule:
 				chip->thermal_mitigation_level);
 	}
 
-	mmi_pl_dbg(chip, PR_INTERRUPT, "sm work select power: "
-				"target voltage %dmV, target current %dmA"
-				"request voltage %dmV, request current %dmA\n",
-				chip->target_volt,chip->target_curr,
-				chip->request_volt,chip->request_current);
+	mmi_pl_dbg(chip, PR_INTERRUPT, "sm work step %s,select power: "
+				"target voltage %dmV, target current %dmA,"
+				"request voltage %dmV, request current %dmA,"
+				"thermal level %d\n",
+				pm_state_str[chip->sm_state],chip->target_volt,
+				chip->target_curr,
+				chip->request_volt,chip->request_current,
+				chip->thermal_mitigation_level);
 
 	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
 				chip->mmi_pps_pdo_idx,
@@ -1665,7 +1753,6 @@ schedule:
 		chip->request_volt_pre = chip->request_volt;
 		chip->request_curr_pre = chip->request_current;
 	}
-
 
 	if (chip->flashc_handle.charge_enabled
 		&& chip->pres_chrg_step < STEP_NORMAL
@@ -1732,54 +1819,12 @@ schedule:
 			heartbeat_dely_ms = 0;
 		schedule_delayed_work(&chip->mmi_pl_sm_work,
 				msecs_to_jiffies(heartbeat_dely_ms));
+	} else {
+		clear_chg_manager(chip);
+		chip->pd_pps_support =  false;
 	}
+
 	return;
-}
-
-static void kick_sm(struct mmi_pl_chg_manager *chip, int ms)
-{
-	if (!delayed_work_pending(&chip->mmi_pl_sm_work)) {
-
-		mmi_pl_dbg(chip, PR_INTERRUPT,
-					"lunch flash charger state machine\n");
-		schedule_delayed_work(&chip->mmi_pl_sm_work,
-				msecs_to_jiffies(ms));
-	} else
-		mmi_pl_dbg(chip, PR_INTERRUPT,
-					"flash charger state machine already existed\n");
-}
-
-static void cancel_sm(struct mmi_pl_chg_manager *chip, int ms)
-{
-	mmi_pl_dbg(chip, PR_INTERRUPT, "flush and cancel flash charger sm\n");
-	flush_delayed_work(&chip->mmi_pl_sm_work);
-	cancel_delayed_work(&chip->mmi_pl_sm_work);
-
-	if (chip->flashc_handle.charge_enabled) {
-		mmi_pl_err(chip, "disable flashc charger\n");
-		mmi_pl_pm_flashc_enable(chip, false);
-		mmi_pl_pm_check_flashc_enable(chip);
-	}
-
-	if (chip->pmic_ichg_limited) {
-		mmi_pl_dbg(chip, PR_MOTO, "recovery ichg lmt\n");
-		mmi_pl_pm_pmic_ichg_lmt(chip, chip->pmic_ichg_val);
-		chip->pmic_ichg_limited = false;
-	}
-
-	mmi_update_pmic_status(chip);
-	mmi_update_flashc_status(chip);
-	chip->sm_state  = PM_STATE_DISCONNECT;
-	chip->request_volt = 0;
-	chip->request_current = 0;
-	chip->target_curr = 0;
-	chip->target_volt = 0;
-	chip->pps_current_max = 0;
-	chip->pps_voltage_max = 0;
-	chip->force_pmic_chg = false;
-	chip->enter_sw_loop = false;
-	memset(chip->mmi_pdo_info, 0,
-			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
 }
 
 static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
@@ -1895,7 +1940,8 @@ static void psy_changed_work_func(struct work_struct *work)
 	if (chip->vbus_present && chip->pd_pps_support) {
 		kick_sm(chip, 100);
 	} else {
-		cancel_sm(chip, 100);
+		cancel_sm(chip);
+		clear_chg_manager(chip);
 		chip->pd_pps_support =  false;
 	}
 	return;
