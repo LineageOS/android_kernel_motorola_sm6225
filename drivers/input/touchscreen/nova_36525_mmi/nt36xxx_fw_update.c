@@ -982,7 +982,12 @@ void Boot_Update_Firmware(struct work_struct *work)
 	int32_t ret = 0;
 
 	char firmware_name[256] = "";
-	snprintf(firmware_name, sizeof(firmware_name), BOOT_UPDATE_FIRMWARE_NAME);
+	NVT_LOG("enter %s start\n",__func__);
+	if (ts->nvt_pid == PANNEL_ID) {
+		snprintf(firmware_name, sizeof(firmware_name), NT36525B_FIRMWARE_NAME);
+	} else {
+		snprintf(firmware_name, sizeof(firmware_name), BOOT_UPDATE_FIRMWARE_NAME);
+	}
 
 	// request bin file in "/etc/firmware"
 	ret = update_firmware_request(firmware_name);

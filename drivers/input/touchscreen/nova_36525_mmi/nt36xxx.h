@@ -45,6 +45,7 @@
 #define I2C_BLDR_Address 0x01
 #define I2C_FW_Address 0x01
 #define I2C_HW_Address 0x62
+#define PANNEL_ID 0x6013
 
 #if NVT_DEBUG
 #define NVT_LOG(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
@@ -83,8 +84,8 @@ extern const uint16_t gesture_key_array[];
 #endif
 #define BOOT_UPDATE_FIRMWARE 0
 #define BOOT_UPDATE_FIRMWARE_NAME "novatek_ts_fw.bin"
-
-//---ESD Protect.---
+#define NT36525B_FIRMWARE_NAME "novatek_ts_fw_pid6013.bin"
+/* ---ESD Protect.--- */
 #define NVT_TOUCH_ESD_PROTECT 1
 #define NVT_TOUCH_ESD_CHECK_PERIOD 2000	/* ms */
 
