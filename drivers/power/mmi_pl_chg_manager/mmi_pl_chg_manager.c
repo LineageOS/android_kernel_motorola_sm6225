@@ -455,7 +455,7 @@ static void mmi_update_flashc_status(struct mmi_pl_chg_manager *chip)
 	}
 	power_supply_put(chip->flashc_psy);
 
-	mmi_pl_dbg(chip, PR_MOTO, "flash charger IC : ---- status update ---\n");
+	mmi_pl_dbg(chip, PR_MOTO, "flash charge IC : ---- status update ---\n");
 	mmi_pl_dbg(chip, PR_MOTO, "vbat_volt %d \n",
 		chip->flashc_handle.vbat_volt);
 	mmi_pl_dbg(chip, PR_MOTO, "ibat_curr %d \n",
@@ -507,7 +507,7 @@ static void mmi_update_flashc_status(struct mmi_pl_chg_manager *chip)
 		chip->flashc_handle.bus_therm_fault);
 	mmi_pl_dbg(chip, PR_MOTO, "die_therm_fault %d \n",
 		chip->flashc_handle.die_therm_fault);
-	mmi_pl_dbg(chip, PR_MOTO, "flash charger : ---- over ---\n");
+	mmi_pl_dbg(chip, PR_MOTO, "flash charge : ---- over ---\n");
 
 }
 
@@ -1070,7 +1070,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 				< chip->sys_configs.flashc_min_vbat_start
 			|| chip->flashc_cc_max_curr_pre
 				<= chip->pmic_step_curr) {
-			mmi_pl_dbg(chip, PR_MOTO, "start switch charger due to : "
+			mmi_pl_dbg(chip, PR_MOTO, "start switch charge due to : "
 						"vbat %d, flashc_min_vbat %d, pps_support %d, "
 						"flashc_cc_max_curr %d\n",
 						chip->pmic_handle.vbat_volt,
@@ -1154,13 +1154,13 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			&& !chip->enter_sw_loop) {
 
 			mmi_pl_dbg(chip, PR_MOTO,
-						"battery volt %d, start flash charger\n",
+						"battery volt %d, start flash charge\n",
 						chip->pmic_handle.vbat_volt);
 			mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		} else {
 			mmi_pl_dbg(chip, PR_MOTO,
-					"keep in sw charger, vbat %d ,ibat %d\n",
+					"keep in sw charge, vbat %d ,ibat %d\n",
 					chip->pmic_handle.vbat_volt,
 					chip->pmic_handle.ibat_curr);
 			heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
@@ -1169,7 +1169,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 	case PM_STATE_FLASHC_ENTRY:
 		if (!chip->pmic_ichg_limited) {
 			mmi_pl_dbg(chip, PR_MOTO,
-						"flashc charger, limit pmic output curr %d\n",
+						"flashc charge, limit pmic output curr %d\n",
 						chip->sys_configs.pmic_curr_lp_lmt);
 			rc = mmi_pl_pm_pmic_ichg_lmt(chip,
 						chip->sys_configs.pmic_curr_lp_lmt);
@@ -1231,7 +1231,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		chip->request_current = request_curr;
 		chip->request_volt = request_volt;
 
-		mmi_pl_dbg(chip, PR_MOTO, "flashc charger ready 1 step,"
+		mmi_pl_dbg(chip, PR_MOTO, "flashc charge ready 1 step,"
 						"init pps output volt %d (2*vbat + %d uv),"
 						"output curr %d, pdo %d\n",
 						request_volt,
@@ -1247,7 +1247,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 		break;
 	case PM_STATE_FLASHC_TUNNING_CURR:
-		mmi_pl_dbg(chip, PR_MOTO, "flashc charger ready 2 step,"
+		mmi_pl_dbg(chip, PR_MOTO, "flashc charge ready 2 step,"
 								"increase pps current\n");
 		if ((chip->request_current +
 			chip->sys_configs.flashc_curr_up_steps)
@@ -1309,7 +1309,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		}
 		break;
 	case PM_STATE_FLASHC_TUNNING_VOLT:
-		mmi_pl_dbg(chip, PR_MOTO, "flashc charger ready 3,"
+		mmi_pl_dbg(chip, PR_MOTO, "flashc charge ready 3 step,"
 					"increase pps voltage, effective flashc cc max curr %d,"
 					"__param_flashc_cc_max_ua %d,"
 					" allocated from pps max curr %d\n",
@@ -1406,7 +1406,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		}
 		break;
 	case PM_STATE_FLASHC_CC_LOOP:
-		mmi_pl_dbg(chip, PR_MOTO, "flashc charger CC loop\n");
+		mmi_pl_dbg(chip, PR_MOTO, "flashc charge CC loop\n");
 		heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
 
 		if (chip->pps_result < 0) {
@@ -1467,7 +1467,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			chip->flashc_cc_tunning_cnt = 0;
 			mmi_pl_dbg(chip, PR_MOTO, "need increase pps voltage,"
 						"or decrease pps current"
-						"to keep CC charger power,"
+						"to keep CC charge power,"
 						"request volt %d, "
 						"request curr %d\n",
 						chip->request_volt,
@@ -1477,7 +1477,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 				&& chip->request_volt < chip->pps_voltage_max) {
 					chip->flashc_cc_tunning_cnt++;
 					mmi_pl_dbg(chip, PR_MOTO,
-						"flashc charger CC tunning cnt++ : %d \n",
+						"flashc charge CC tunning cnt++ : %d \n",
 						chip->flashc_cc_tunning_cnt);
 		} else
 			chip->flashc_cc_tunning_cnt = 0;
@@ -1493,7 +1493,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			} else {
 				chip->flashc_taper_cnt++;
 				mmi_pl_dbg(chip, PR_MOTO,
-							"flashc CC charger taper_cnt %d, "
+							"flashc CC charge taper_cnt %d, "
 							"flashc_cv_max_volt - 20mv %d\n",
 							chip->flashc_taper_cnt,
 							chip->flashc_cv_max_volt_pre - 20000);
@@ -1509,7 +1509,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		break;
 	case PM_STATE_FLASHC_CV_LOOP:
 		heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
-		mmi_pl_dbg(chip, PR_MOTO, "flashc charger CV loop,"
+		mmi_pl_dbg(chip, PR_MOTO, "flashc charge CV loop,"
 						"chrg_step %d , pre_chrg_step  %d \n",
 						chrg_step, chip->pres_chrg_step);
 
@@ -1562,7 +1562,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			if (chip->flashc_taper_cnt >= FLASHC_TAPPER_COUNT) {
 				if (ibat_curr < chip->pmic_step_curr) {
 					mmi_pl_dbg(chip, PR_MOTO,
-								"Ready to quit flashc CV charger, "
+								"Ready to quit flashc CV charge, "
 								"chrg step %d ,"
 								"battery curr %d, "
 								"flashc max curr %d, "
@@ -1585,7 +1585,7 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 					chip->flashc_cv_taper_curr_pre = flashc_cv_taper_curr;
 
 					mmi_pl_dbg(chip, PR_MOTO,
-							"Start jump to the next charger step %d \n",
+							"Start jump to the next charge step %d \n",
 							chip->pres_chrg_step);
 
 					mmi_pl_pm_move_state(chip, PM_STATE_FLASHC_CC_LOOP);
@@ -2551,5 +2551,5 @@ module_exit(mmi_pl_chg_manager_exit);
 
 MODULE_ALIAS("platform:mmi_pl_chg_manager");
 MODULE_AUTHOR("Motorola Mobility LLC");
-MODULE_DESCRIPTION("Motorola Mobility parallel charger");
+MODULE_DESCRIPTION("Motorola Mobility parallel charge");
 MODULE_LICENSE("GPL");
