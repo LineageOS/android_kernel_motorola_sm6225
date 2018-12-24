@@ -1184,12 +1184,14 @@ static int8_t nvt_ts_check_chip_ver_trim(void)
 				NVT_LOG("This is NVT touch IC\n");
 #if NVT_TOUCH_FW
 				if (list == 0) {
+					snprintf(ts->product_id, sizeof(ts->product_id), "NT36525B");
+				} else if (list == 1) {
 					snprintf(ts->product_id, sizeof(ts->product_id), "NT36672A");
-				} else if (list == 9) {
-					snprintf(ts->product_id, sizeof(ts->product_id), "NT36525");
 				} else if (list == 10) {
-					snprintf(ts->product_id, sizeof(ts->product_id), "NT36870");
+					snprintf(ts->product_id, sizeof(ts->product_id), "NT36525");
 				} else if (list == 11) {
+					snprintf(ts->product_id, sizeof(ts->product_id), "NT36870");
+				} else if (list == 12) {
 					snprintf(ts->product_id, sizeof(ts->product_id), "NT36676F");
 				} else {
 					snprintf(ts->product_id, sizeof(ts->product_id), "NT36772");
@@ -1269,6 +1271,8 @@ static int32_t nvt_ts_probe(struct i2c_client *client, const struct i2c_device_i
 		ret = -EINVAL;
 		goto err_chipvertrim_failed;
 	}
+
+	nvt_read_pid();
 
 	mutex_init(&ts->lock);
 
