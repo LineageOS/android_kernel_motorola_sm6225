@@ -413,6 +413,8 @@ struct synaptics_rmi4_packet_reg {
 	.expected = 1, .size = sz, .data = NULL,\
 	.nr_subpkts = ARRAY_SIZE(s), .subpkt = s}
 
+#define MAX_CONFIG_REGS 10
+
 struct synaptics_rmi4_func_packet_regs {
 	unsigned short f_number;
 	unsigned short base_addr;
@@ -593,6 +595,8 @@ struct synaptics_rmi4_data {
 
 	struct touch_area_stats touch_ud_stats;
 	struct touch_area_stats button_ud_stats;
+
+	struct synaptics_rmi4_func_packet_regs config_regs[MAX_CONFIG_REGS];
 };
 
 struct pdt_properties {
