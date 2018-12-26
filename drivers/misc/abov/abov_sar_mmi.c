@@ -209,8 +209,21 @@ static int abov_detect(struct i2c_client *client)
 static int manual_offset_calibration(pabovXX_t this)
 {
 	s32 returnValue = 0;
+	//pabovXX_t this = abov_sar_ptr;
+	pabov_t pDevice = NULL;
+	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
+
+	pDevice = this->pDevice;
+	input_top = pDevice->pbuttonInformation->input_top;
+	input_bottom = pDevice->pbuttonInformation->input_bottom;
 
 	returnValue = write_register(this, ABOV_RECALI_REG, 0x01);
+
+	input_report_abs(input_top, ABS_DISTANCE, 0);
+	input_sync(input_top);
+	input_report_abs(input_bottom, ABS_DISTANCE, 0);
+	input_sync(input_bottom);
 	return returnValue;
 }
 
@@ -245,7 +258,6 @@ static ssize_t manual_offset_calibration_store(struct device *dev,
 	}
 	return count;
 }
-
 static DEVICE_ATTR(calibrate, 0644, manual_offset_calibration_show,
 		manual_offset_calibration_store);
 static struct attribute *abov_attributes[] = {
@@ -749,6 +761,36 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 #endif
 
 static CLASS_ATTR(enable, 0660, capsense_enable_show, capsense_enable_store);
+
+static ssize_t capsense_calibrate_show(struct class *class,
+		struct class_attribute *attr,
+		char *buf)
+{
+	pabovXX_t this = abov_sar_ptr;
+	u8 reg_value = 0;
+
+	read_register(this, ABOV_IRQSTAT_REG, &reg_value);
+	return snprintf(buf, 8, "%d\n", reg_value);
+}
+
+static ssize_t capsense_calibrate_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t count)
+{
+	pabovXX_t this = abov_sar_ptr;
+
+	if (!count || (this == NULL))
+		return -EINVAL;
+
+	if (!strncmp(buf, "1", 1))
+	manual_offset_calibration(this);
+
+	LOG_INFO("calibration done\n");
+
+	return count;
+}
+
+static CLASS_ATTR(calibrate, 0660, capsense_calibrate_show, capsense_calibrate_store);
 
 static ssize_t reg_dump_show(struct class *class,
 		struct class_attribute *attr,
@@ -1676,6 +1718,13 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			LOG_ERR("Create fw dl status file failed (%d)\n", ret);
 			goto err_class_creat;
 		}
+
+		ret = class_create_file(&capsense_class, &class_attr_calibrate);
+		if (ret < 0) {
+			LOG_ERR("Create calibrate file failed (%d)\n", ret);
+			goto err_class_creat;
+		}
+
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable = capsensor_set_enable;
 		sensors_capsensor_top_cdev.sensors_poll_delay = NULL;
