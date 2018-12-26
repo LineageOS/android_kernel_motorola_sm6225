@@ -273,7 +273,6 @@ static ssize_t drv2624_store_duration(struct device *dev,
 	ret = kstrtouint(buf, 0, &value);
 	if (ret < 0)
 		return ret;
-
 	dev_dbg(ctrl->dev, "%s, value=%d\n", __func__, value);
 
 	mutex_lock(&ctrl->lock);
@@ -1471,6 +1470,7 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	ctrl->reduced_pwr_capable = drv2624_reduced_pwr_on(pdata);
+
 	ctrl->i2c_client = client;
 	ctrl->dev = &client->dev;
 	ctrl->mpRegmap = devm_regmap_init_i2c(client, &drv2624_i2c_regmap);
@@ -1486,8 +1486,8 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	i2c_set_clientdata(client, ctrl);
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioNPWR)) {
-		err = gpio_request(ctrl->msPlatData.mnGpioNPWR,
-				 HAPTICS_DEVICE_NAME "NPWR");
+		err = devm_gpio_request_one(ctrl->dev, ctrl->msPlatData.mnGpioNPWR,
+				GPIOF_OUT_INIT_LOW, "DRV2624_NPWR");
 		if (err < 0) {
 			dev_err(ctrl->dev, "%s: GPIO %d request PWR error\n",
 				__func__, ctrl->msPlatData.mnGpioNPWR);
@@ -1499,8 +1499,8 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioNRST)) {
-		err = gpio_request(ctrl->msPlatData.mnGpioNRST,
-				 HAPTICS_DEVICE_NAME "NRST");
+		err = devm_gpio_request_one(ctrl->dev, ctrl->msPlatData.mnGpioNRST,
+				GPIOF_OUT_INIT_LOW, "DRV2624_NRST");
 		if (err < 0) {
 			dev_err(ctrl->dev, "%s: GPIO %d request NRST error\n",
 				__func__, ctrl->msPlatData.mnGpioNRST);
@@ -1508,9 +1508,9 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		}
 
 		gpio_direction_output(ctrl->msPlatData.mnGpioNRST, 0);
-		udelay(1000);
+		msleep(1);
 		gpio_direction_output(ctrl->msPlatData.mnGpioNRST, 1);
-		udelay(500);
+		msleep(2);
 	}
 
 	err = drv2624_reg_read(ctrl, DRV2624_REG_ID);
@@ -1519,15 +1519,23 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto exit_gpio_request_failed;
 	}
 
-	ctrl->mnDeviceID = err;
-	dev_info(ctrl->dev, "%s, %s: revision %#1x\n",
-		__func__, (err & 0xF0 ? "DRV2625":"DRV2624"),  (err & 0x0F));
+	ctrl->mnDeviceID = err & 0xF0;
+	dev_info(ctrl->dev, "%s, %s: id  0x%2x\n",
+		__func__, (err & 0xF0 ? "DRV2625":"DRV2624"), err);
+
+	if (((ctrl->mnDeviceID) != 0x10) && ((ctrl->mnDeviceID) != 0x00)) {
+		dev_err(ctrl->dev, "%s:TI Chip ID check failed, id = 0x%x\n",
+				__func__, err);
+		err = -ENODEV;
+		goto exit_gpio_request_failed;
+	};
 
 	dev_init_platform_data(ctrl);
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioINT)) {
-		err = gpio_request(ctrl->msPlatData.mnGpioINT,
-				 HAPTICS_DEVICE_NAME "INT");
+		err = devm_gpio_request_one(ctrl->dev, ctrl->msPlatData.mnGpioINT,
+				GPIOF_DIR_IN, "DRV2624_INT");
+
 		if (err < 0) {
 			dev_err(ctrl->dev,
 				"%s: GPIO %d request INT error\n",
@@ -1535,16 +1543,12 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			goto exit_gpio_request_failed;
 		}
 
-		gpio_direction_input(ctrl->msPlatData.mnGpioINT);
-
-		err = request_threaded_irq(client->irq, drv2624_irq_handler,
-					   NULL,
-					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					   client->name, ctrl);
-
+		err = devm_request_threaded_irq(ctrl->dev,
+				client->irq, NULL, drv2624_irq_handler,
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				client->name, ctrl);
 		if (err < 0) {
-			dev_err(ctrl->dev, "%s: request_irq failed\n",
-				__func__);
+			dev_err(ctrl->dev, "%s: request_irq failed\n", __func__);
 			goto exit_gpio_request_failed;
 		}
 	}
@@ -1588,11 +1592,6 @@ drv2624_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	return 0;
 
  exit_gpio_request_failed:
-	if (gpio_is_valid(ctrl->msPlatData.mnGpioNRST))
-		gpio_free(ctrl->msPlatData.mnGpioNRST);
-
-	if (gpio_is_valid(ctrl->msPlatData.mnGpioINT))
-		gpio_free(ctrl->msPlatData.mnGpioINT);
 
 	dev_err(ctrl->dev, "%s failed, err=%d\n", __func__, err);
 	return err;
@@ -1604,12 +1603,12 @@ static int drv2624_remove(struct i2c_client *client)
 	int i = 0;
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioNRST))
-		gpio_free(ctrl->msPlatData.mnGpioNRST);
+		devm_gpio_free(ctrl->dev, ctrl->msPlatData.mnGpioNRST);
 
 	if (gpio_is_valid(ctrl->msPlatData.mnGpioINT))
-		gpio_free(ctrl->msPlatData.mnGpioINT);
+		devm_gpio_free(ctrl->dev, ctrl->msPlatData.mnGpioINT);
 
-	free_irq(client->irq, ctrl);
+	devm_free_irq(ctrl->dev, client->irq, ctrl);
 	cancel_work_sync(&ctrl->vibrator_work);
 	drv2624_class_vibrator(ctrl, false);
 	wake_lock_destroy(&ctrl->wklock);
