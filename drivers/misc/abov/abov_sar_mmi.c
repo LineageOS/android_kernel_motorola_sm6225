@@ -2091,12 +2091,19 @@ void abovXX_suspend(pabovXX_t this)
 	if (this) {
 		LOG_INFO("ABOV suspend: disable irq!\n");
 		disable_irq(this->irq);
+		/* if upper layer don't disable capsensor, */
+		/* we  should let it enter sleep in suspend. */
+		if (mEnabled)
+			write_register(this, ABOV_CTRL_MODE_RET, 0x02);
 	}
 }
 void abovXX_resume(pabovXX_t this)
 {
 	if (this) {
 		LOG_INFO("ABOV resume: enable irq!\n");
+		/* we should let capsensor enter active in resume*/
+		if (mEnabled)
+			write_register(this, ABOV_CTRL_MODE_RET, 0x00);
 		enable_irq(this->irq);
 	}
 }
