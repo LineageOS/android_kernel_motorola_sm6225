@@ -1578,8 +1578,9 @@ static void sx93XX_worker_func(struct work_struct *work)
 void sx93XX_suspend(psx93XX_t this)
 {
 	if (this) {
-		write_register(this, SX932x_CTRL1_REG,
-				this->board->cust_prox_ctrl0&0xdf);
+                if (mEnabled)
+		    write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0&0x20);
 		if (sx9325_debug_enable)
 			LOG_INFO("sx9325 suspend: disable irq!\n");
 		disable_irq(this->irq);
@@ -1599,8 +1600,9 @@ void sx93XX_resume(psx93XX_t this)
 		sx93XX_schedule_work(this, 0);
 #endif
 		enable_irq(this->irq);
-		write_register(this, SX932x_CTRL1_REG,
-				this->board->cust_prox_ctrl0|0x20);
+                if (mEnabled)
+		    write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0);
 	}
 }
 
