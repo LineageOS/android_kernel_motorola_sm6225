@@ -1660,6 +1660,10 @@ void sx93XX_suspend(psx93XX_t this)
 		if (sx9310_debug_enable)
 			LOG_INFO("sx9310 suspend: disable irq!\n");
 		disable_irq(this->irq);
+                /* if upper layer don't disable capsensor, */
+                /* we  should let it enter sleep in suspend. */
+                if (mEnabled)
+                    write_register(this, SX9310_CPS_CTRL0_REG, 0x20);
 	}
 }
 void sx93XX_resume(psx93XX_t this)
@@ -1675,6 +1679,9 @@ void sx93XX_resume(psx93XX_t this)
 #else
 		sx93XX_schedule_work(this, 0);
 #endif
+                /* we should let capsensor enter active in resume*/
+                if (mEnabled)
+                    write_register(this, SX9310_CPS_CTRL0_REG, 0x2f);
 		enable_irq(this->irq);
 		write_register(this,0x41,0x01);
 	}
