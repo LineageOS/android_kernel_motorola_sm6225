@@ -10,6 +10,10 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+#include <linux/extcon.h>
+#endif
+
 #if 0
 #include <linux/wakelock.h>
 #include <linux/earlysuspend.h>
@@ -702,6 +706,11 @@ struct sx933x_platform_data
 	bool ps_is_present;
 #ifdef CONFIG_CAPSENSE_ATTACH_CAL
 	bool phone_is_present;
+#endif
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+	struct notifier_block flip_notif;
+	struct extcon_dev *ext_flip_det;
+	bool phone_flip_state;
 #endif
 #endif
 	pbuttonInformation_t pbuttonInformation;

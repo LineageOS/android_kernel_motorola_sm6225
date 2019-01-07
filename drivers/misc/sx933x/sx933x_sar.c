@@ -803,7 +803,7 @@ static int ps_notify_callback(struct notifier_block *self,
 	bool present;
 	int retval;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
 	if (event == PSY_EVENT_PROP_CHANGED
 #else
 	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
@@ -845,6 +845,25 @@ static int ps_notify_callback(struct notifier_block *self,
 
 	return 0;
 }
+
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+static int flip_notify_callback(struct notifier_block *self,
+		unsigned long state, void *p)
+{
+	struct sx933x_platform_data *data =
+		container_of(self, struct sx933x_platform_data, flip_notif);
+	struct extcon_dev *edev = p;
+
+	if(data->ext_flip_det == edev) {
+		if(data->phone_flip_state != state) {
+			data->phone_flip_state = state;
+			schedule_work(&data->ps_notify_work);
+		}
+	}
+
+	return 0;
+}
+#endif
 #endif
 
 /*! \fn static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -1047,6 +1066,27 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				power_supply_unreg_notifier(&pplatData->ps_notif);
 			}
 		}
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+		if (of_property_read_bool(client->dev.of_node, "extcon")) {
+			pplatData->flip_notif.notifier_call = flip_notify_callback;
+			pplatData->ext_flip_det =
+				extcon_get_edev_by_phandle(&client->dev, 0);
+			if (IS_ERR(pplatData->ext_flip_det)) {
+				pplatData->ext_flip_det = NULL;
+				pr_err("%s: failed to get extcon flip dev\n", __func__);
+			} else {
+				if(extcon_register_notifier(pplatData->ext_flip_det,
+					EXTCON_MECHANICAL, &pplatData->flip_notif))
+					pr_err("%s: failed to register extcon flip dev notifier\n",
+						__func__);
+				else
+					pplatData->phone_flip_state =
+						extcon_get_state(pplatData->ext_flip_det,
+							EXTCON_MECHANICAL);
+			}
+		} else
+			pr_err("%s: extcon not in dev tree!\n", __func__);
+#endif
 #endif
 
 		sx93XX_IRQ_init(this);
