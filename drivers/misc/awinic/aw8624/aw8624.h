@@ -35,14 +35,28 @@
 
 #define HAPTIC_MAX_TIMEOUT                  10000
 
-#define AW8624_HAPTIC_F0_PRE                2600
-#define AW8624_HAPTIC_F0_CALI_PERCEN        7       /*-7%~7% */
-#define AW8624_HAPTIC_CONT_DRV_LVL          125 /*80 //125=2.98v */
-#define AW8624_HAPTIC_CONT_DRV_LVL_OV       155 /*  127  //155=3.69v */
-#define AW8624_HAPTIC_CONT_TD               0xf06c  /*0x005d */
-#define AW8624_HAPTIC_CONT_ZC_THR           0x0ff1 /* 0x009a */
-#define AW8624_HAPTIC_CONT_NUM_BRK          3
-#define AW8624_HAPTIC_F0_COEFF              260    /*2.604167 */
+#define AW8624_VBAT_REFER                   4200
+#define AW8624_VBAT_MIN                     3000
+#define AW8624_VBAT_MAX                     4500
+
+struct aw8624_dts_info {
+	int aw8624_f0_pre;		/* AW8624_HAPTIC_F0_PRE 2600 */
+	int aw8624_f0_cali_percen;	/* AW8624_HAPTIC_F0_CALI_PERCEN 7 */
+	int aw8624_cont_drv_lvl;	/* AW8624_HAPTIC_CONT_DRV_LVL 125 */
+	int aw8624_cont_drv_lvl_ov;	/* AW8624_HAPTIC_CONT_DRV_LVL_OV 155 */
+	int aw8624_cont_td;		/* AW8624_HAPTIC_CONT_TD 0xf06c */
+	int aw8624_cont_zc_thr;		/* AW8624_HAPTIC_CONT_ZC_THR 0x0ff1 */
+	int aw8624_cont_num_brk;	/* AW8624_HAPTIC_CONT_NUM_BRK 3 */
+	int aw8624_f0_coeff;		/* AW8624_HAPTIC_F0_COEFF 260 */
+
+	int aw8624_duration_time[5];
+	int aw8624_ram_brake[3][8];
+	int aw8624_cont_brake[3][8];
+
+	int aw8624_f0_trace_parameter[4];
+	int aw8624_bemf_config[4];
+};
+
 
 
 enum aw8624_flags {
@@ -82,6 +96,11 @@ enum aw8624_haptic_activate_mode {
 enum aw8624_haptic_vbat_comp_mode {
 	AW8624_HAPTIC_VBAT_SW_COMP_MODE = 0,
 	AW8624_HAPTIC_VBAT_HW_COMP_MODE = 1,
+};
+
+enum aw8624_haptic_ram_vbat_comp_mode {
+	AW8624_HAPTIC_RAM_VBAT_COMP_DISABLE = 0,
+	AW8624_HAPTIC_RAM_VBAT_COMP_ENABLE = 1,
 };
 
 enum aw8624_haptic_f0_flag {
@@ -168,6 +187,7 @@ struct aw8624 {
 	int index;
 	int vmax;
 	int gain;
+	int f0_value;
 
 	unsigned char seq[AW8624_SEQUENCER_SIZE];
 	unsigned char loop[AW8624_SEQUENCER_SIZE];
@@ -194,6 +214,9 @@ struct aw8624 {
 	bool dts_addr_real;
 	unsigned int real_i2c_addr;
 	struct haptic_audio haptic_audio;
+	unsigned char ram_vbat_comp;
+	unsigned int vbat;
+	unsigned int lra;
 };
 
 struct aw8624_container {
