@@ -590,5 +590,6 @@ const unsigned char aw8624_reg_access[AW8624_REG_MAX] = {
 #define AW8624_BIT_PRTIME_PRTIME_MASK       (~(0xff<<0))
 
 #define AW8624_BIT_BEMF_NUM_BRK_MASK            (~(0xf<<0))
+#define AW8624_BIT_TDH_TD_BRAKE_MASK          (~(0xF<<4))
 #endif
 
