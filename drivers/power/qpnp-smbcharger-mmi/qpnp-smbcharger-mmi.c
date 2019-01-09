@@ -224,6 +224,7 @@ struct smb_mmi_charger {
 	struct votable		*usb_icl_votable;
 
 	bool			enable_charging_limit;
+        bool                    enable_factory_poweroff;
 	bool			is_factory_image;
 	enum charging_limit_modes	charging_limit_modes;
 	int			upper_limit_capacity;
@@ -2303,7 +2304,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 	prev_vbus_mv = chg_stat.usb_mv;
 
-	if (chip->factory_mode || chip->is_factory_image) {
+	if (chip->factory_mode || (chip->is_factory_image && chip->enable_factory_poweroff)) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
 		if (rc < 0)
 			goto sch_hb;
@@ -2618,6 +2619,9 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 
 	chg->enable_charging_limit =
 		of_property_read_bool(node, "qcom,enable-charging-limit");
+
+        chg->enable_factory_poweroff =
+                of_property_read_bool(node, "qcom,enable-factory-poweroff");
 
 	rc = of_property_read_u32(node, "qcom,upper-limit-capacity",
 				  &chg->upper_limit_capacity);
