@@ -88,6 +88,9 @@ void *muc_ipc_log;
 /* Max number of chars we will copy from the fw vers sent by the muc */
 #define MUC_FW_VERS_MAX_SIZE 32
 
+/* Should match EXT_USB_CHECK_TIME in dwc3-msm.c */
+#define EXT_USB_CHECK_TIME 3000
+
 struct write_data {
 	struct list_head list;
 	uint16_t cmd;
@@ -132,6 +135,7 @@ struct mod_muc_data_t {
 	struct delayed_work idle_work;
 	struct delayed_work attach_work;
 	struct delayed_work write_work;
+	struct delayed_work connect_work;
 	struct work_struct ps_notify_work;
 	struct power_supply *phone_psy;
 	struct power_supply *batt_psy;
@@ -288,6 +292,29 @@ static irqreturn_t muc_uart_attach_irq_handler(int irq, void *data)
 	cancel_delayed_work(&mm_data->attach_work);
 	schedule_delayed_work(&mm_data->attach_work, msecs_to_jiffies(0));
 	return IRQ_HANDLED;
+}
+
+static void muc_uart_connect_work(struct work_struct *w)
+{
+	struct mod_muc_data_t *mm_data =
+		container_of(w, struct mod_muc_data_t, connect_work.work);
+	struct kobj_uevent_env *env;
+
+	if (mm_data) {
+		env = kzalloc(sizeof(*env), GFP_KERNEL);
+		if (!env)
+			return;
+
+		if (atomic_read(&mm_data->mod_online))
+			add_uevent_var(env, "MOD_EVENT=ONLINE");
+		else
+			add_uevent_var(env, "MOD_EVENT=OFFLINE");
+
+		kobject_uevent_env(&mm_data->pdev->dev.kobj,
+			KOBJ_CHANGE,
+			env->envp);
+		kfree(env);
+	}
 }
 
 static inline void set_sleep_req_pending(struct mod_muc_data_t *mm_data)
@@ -1529,6 +1556,9 @@ static int muc_uart_set_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE: {
+		schedule_delayed_work(&mm_data->connect_work,
+			msecs_to_jiffies(EXT_USB_CHECK_TIME));
+
 		usbctrl_pkt.cmd = val->intval;
 		muc_uart_queue_send(mm_data,
 			USB_CONTROL,
@@ -1577,6 +1607,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mm_data->idle_work, muc_uart_idle_work);
 	INIT_DELAYED_WORK(&mm_data->attach_work, muc_uart_attach_work);
 	INIT_DELAYED_WORK(&mm_data->write_work, muc_uart_send_work);
+	INIT_DELAYED_WORK(&mm_data->connect_work, muc_uart_connect_work);
 	INIT_WORK(&mm_data->ps_notify_work, muc_uart_ps_notifier_work);
 
 	/* Create workqueue for the write work */
