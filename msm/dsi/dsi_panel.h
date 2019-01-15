@@ -191,6 +191,7 @@ enum acl_state {
 enum hbm_state {
 	HBM_OFF_STATE = 0,
 	HBM_ON_STATE,
+	HBM_FOD_ON_STATE,
 	HBM_STATE_NUM
 };
 
@@ -203,7 +204,7 @@ struct panel_param_val_map {
 struct panel_param {
 	const char *param_name;
 	struct panel_param_val_map *val_map;
-	const u16 val_max;
+	u16 val_max;
 	const u16 default_value;
 	u16 value;
 	bool is_supported;
@@ -274,6 +275,7 @@ struct dsi_panel {
 	bool is_hbm_using_51_cmd;
 	bool is_hbm_on;
 	u32  bl_lvl_during_hbm;
+	bool panel_hbm_fod;
 
 	struct panel_param *param_cmds;
 };
