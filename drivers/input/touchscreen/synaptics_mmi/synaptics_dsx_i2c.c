@@ -726,22 +726,30 @@ static inline unsigned char register_type_to_ascii(int type)
 	return ascii;
 }
 
-static inline int synaptics_rmi4_scan_f54_ctrl_reg_info(
+__attribute__((weak))
+int synaptics_rmi4_scan_f54_ctrl_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *regs) {
 	return -ENOSYS;
 }
 
-static inline int synaptics_rmi4_scan_f54_cmd_reg_info(
+__attribute__((weak))
+int synaptics_rmi4_scan_f54_cmd_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *regs) {
 	return -ENOSYS;
 }
 
-static inline int synaptics_rmi4_scan_f54_data_reg_info(
+__attribute__((weak))
+int synaptics_rmi4_scan_f54_data_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *regs) {
 	return -ENOSYS;
 }
 
-static inline int synaptics_rmi4_scan_f54_query_reg_info(
+__attribute__((weak))
+int synaptics_rmi4_scan_f54_query_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *regs) {
 	return -ENOSYS;
 }
@@ -6582,7 +6590,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			/* hw init failed on previous step, thus
 			 * continue shutting things down */
 			terminate = true;
-			pr_debug("set terminate flag\n");
+			dev_dbg(dev, "%s: set terminate flag\n", __func__);
 		}
 	} else {
 		if (rmi4_data->fps_detection_enabled &&
@@ -6593,10 +6601,10 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				queue_delayed_work(det_workqueue,
 						&exp_fn_ctrl->det_work,
 						msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-				pr_err("Failed to register fps_notifier\n");
+				dev_err(dev, "%s: Failed to register fps_notifier\n", __func__);
 			} else {
 				rmi4_data->is_fps_registered = true;
-				pr_debug("registered FPS notifier\n");
+				dev_dbg(dev, "%s: registered FPS notifier\n", __func__);
 			}
 		}
 	}
@@ -6689,32 +6697,32 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			if (!regs)
 				continue;
 
-			error = synaptics_rmi4_scan_f54_ctrl_reg_info(regs);
+			error = synaptics_rmi4_scan_f54_ctrl_reg_info(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
-				pr_err("F54_Ctrl scan failed\n");
+				dev_err(dev, "%s: F54_Ctrl scan failed\n", __func__);
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | COMMAND_TYPE);
-			error = synaptics_rmi4_scan_f54_cmd_reg_info(regs);
+			error = synaptics_rmi4_scan_f54_cmd_reg_info(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
-				pr_err("F54_Cmd scan failed\n");
+				dev_err(dev, "%s: F54_Cmd scan failed\n", __func__);
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | DATA_TYPE);
-			error = synaptics_rmi4_scan_f54_data_reg_info(regs);
+			error = synaptics_rmi4_scan_f54_data_reg_info(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
-				pr_err("F54_Data scan failed\n");
+				dev_err(dev, "%s: F54_Data scan failed\n", __func__);
 				scan_failures++;
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | QUERY_TYPE);
-			error = synaptics_rmi4_scan_f54_query_reg_info(regs);
+			error = synaptics_rmi4_scan_f54_query_reg_info(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
-				pr_err("F54_Query scan failed\n");
+				dev_err(dev, "%s: F54_Query scan failed\n", __func__);
 				scan_failures++;
 			}
 
@@ -6728,7 +6736,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			/* invalidate insertion */
 			if (error) {
 				exp_fhandler->inserted = false;
-				pr_err("postpone CAB init\n");
+				dev_err(dev, "%s: postpone CAB init\n", __func__);
 			} else
 				control_access_block_update_dynamic(rmi4_data);
 		}
@@ -6747,8 +6755,8 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 				rmi = &(rmi4_data->rmi4_mod_info);
 				rmi4_data->in_bootloader = true;
-				pr_info("Product: %s is in bootloader mode\n",
-					rmi->product_id_string);
+				dev_info(dev, "%s: Product: %s is in bootloader mode\n",
+					__func__, rmi->product_id_string);
 			}
 			/* replace default status retrieval function */
 			rmi4_data->get_status = exp_fhandler->func_status;
@@ -6778,7 +6786,7 @@ release_mutex:
 	return;
 
 exit_reschedule:
-	pr_debug("re-scheduling...\n");
+	dev_dbg(dev, "%s: re-scheduling...\n", __func__);
 	queue_delayed_work(det_workqueue,
 			&exp_fn_ctrl->det_work,
 			msecs_to_jiffies(EXP_FN_DET_INTERVAL));
