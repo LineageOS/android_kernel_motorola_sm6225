@@ -592,6 +592,7 @@ struct synaptics_rmi4_data {
 
 	void *fwu_data;
 	void *rmidev_data;
+	void *f54_data;
 
 	struct touch_area_stats touch_ud_stats;
 	struct touch_area_stats button_ud_stats;
