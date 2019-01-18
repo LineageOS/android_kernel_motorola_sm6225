@@ -1524,14 +1524,20 @@ static int muc_uart_probe(struct platform_device *pdev)
 	struct mod_muc_data_t *mm_data;
 	struct power_supply_config psy_cfg = {};
 
+#ifdef CONFIG_IPC_LOGGING
+	muc_ipc_log = ipc_log_context_create(MUC_IPC_LOG_PAGES, "muc_uart", 0);
+	if (!muc_ipc_log)
+		MUC_ERR("Failed to create IPC logging context\n");
+#endif
+
+	MUC_LOG("probe start\n");
+
 	mm_data = devm_kzalloc(&pdev->dev, sizeof(*mm_data), GFP_KERNEL);
 	if (!mm_data)
 		return -ENOMEM;
 	mm_data->pdev = pdev;
 	platform_set_drvdata(pdev, mm_data);
 	psy_cfg.drv_data = mm_data;
-
-	MUC_LOG("probe start\n");
 
 	INIT_DELAYED_WORK(&mm_data->wake_work, muc_uart_wake_work);
 	INIT_DELAYED_WORK(&mm_data->sleep_work, muc_uart_sleep_work);
@@ -1559,20 +1565,41 @@ static int muc_uart_probe(struct platform_device *pdev)
 		muc_uart_sleep_req_cb,
 		(unsigned long)mm_data);
 
-	mm_data->wake_out_gpio = of_get_gpio(np, 0);
-	if (mm_data->wake_out_gpio >= 0) {
-		if (muc_uart_config_gpio(&pdev->dev,
-			mm_data->wake_out_gpio, "muc_wake", 1, 1))
-			goto err1;
-	} else
-		goto err1;
+	if (sysfs_create_groups(&pdev->dev.kobj, muc_uart_groups)) {
+		dev_err(&pdev->dev, "Failed to create sysfs attributes\n");
+		goto err_dest_wq;
+	}
 
+	if (mmi_uart_init(muc_uart_rx_cb,
+		muc_uart_register_cb,
+		muc_uart_get_uart_data,
+		pdev))
+		goto err_dest_groups;
+
+	mm_data->wake_out_gpio = of_get_gpio(np, 0);
 	mm_data->wake_in_gpio = of_get_gpio(np, 1);
-	if (mm_data->wake_in_gpio >= 0)
-		mm_data->wake_irq =
-			gpio_to_irq(mm_data->wake_in_gpio);
-	else
-		goto err2;
+	mm_data->mod_attached_gpio = of_get_gpio(np, 2);
+	mm_data->muc_1_gpio = of_get_gpio(np, 3);
+	mm_data->muc_2_gpio = of_get_gpio(np, 4);
+
+	if (mm_data->wake_out_gpio < 0 ||
+		mm_data->wake_in_gpio < 0 ||
+		mm_data->mod_attached_gpio < 0 ||
+		mm_data->muc_1_gpio < 0 ||
+		mm_data->muc_2_gpio < 0)
+		goto err_exit_uart;
+
+	mm_data->wake_irq =
+		gpio_to_irq(mm_data->wake_in_gpio);
+	mm_data->mod_attached_irq =
+		gpio_to_irq(mm_data->mod_attached_gpio);
+
+	/* Let wake irq take us out of suspend */
+	if (irq_set_irq_wake(mm_data->wake_irq, 1))
+		MUC_ERR("Failed to set wake irq as wake source");
+	/* Let attach irq take us out of suspend */
+	if (irq_set_irq_wake(mm_data->mod_attached_irq, 1))
+		MUC_ERR("Failed to set attach irq as wake source");
 
 	if (devm_request_irq(&pdev->dev,
 		mm_data->wake_irq,
@@ -1580,34 +1607,7 @@ static int muc_uart_probe(struct platform_device *pdev)
 		IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 		pdev->dev.driver->name,
 		mm_data))
-		goto err2;
-
-	/* Let wake irq take us out of suspend */
-	if (irq_set_irq_wake(mm_data->wake_irq, 1))
-		MUC_ERR("Failed to set wake irq as wake source");
-
-	mm_data->mod_attached_gpio = of_get_gpio(np, 2);
-	if (mm_data->mod_attached_gpio >= 0)
-		mm_data->mod_attached_irq =
-			gpio_to_irq(mm_data->mod_attached_gpio);
-	else
-		goto err2;
-
-	mm_data->muc_1_gpio = of_get_gpio(np, 3);
-	if (mm_data->muc_1_gpio >= 0) {
-		if (muc_uart_config_gpio(&pdev->dev,
-			mm_data->muc_1_gpio, "muc_1", 1, 0))
-			goto err1;
-	} else
-		goto err2;
-
-	mm_data->muc_2_gpio = of_get_gpio(np, 4);
-	if (mm_data->muc_2_gpio >= 0) {
-		if (muc_uart_config_gpio(&pdev->dev,
-			mm_data->muc_2_gpio, "muc_2", 1, 1))
-			goto err1;
-	} else
-		goto err2;
+		goto err_exit_uart;
 
 	if (devm_request_irq(&pdev->dev,
 		mm_data->mod_attached_irq,
@@ -1615,32 +1615,29 @@ static int muc_uart_probe(struct platform_device *pdev)
 		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 		pdev->dev.driver->name,
 		mm_data))
-		goto err2;
+		goto err_exit_uart;
 
-	/* Let attach irq take us out of suspend */
-	if (irq_set_irq_wake(mm_data->mod_attached_irq, 1))
-		MUC_ERR("Failed to set attach irq as wake source");
+	if (muc_uart_config_gpio(&pdev->dev,
+			mm_data->wake_out_gpio, "muc_wake", 1, 1))
+		goto err_exit_uart;
 
-	if (sysfs_create_groups(&pdev->dev.kobj, muc_uart_groups)) {
-		dev_err(&pdev->dev, "Failed to create sysfs attributes\n");
-		goto err2;
-	}
+	if (muc_uart_config_gpio(&pdev->dev,
+			mm_data->muc_1_gpio, "muc_1", 1, 0))
+		goto err_free_wake_out;
 
-	if (mmi_uart_init(muc_uart_rx_cb,
-		muc_uart_register_cb,
-		muc_uart_get_uart_data,
-		pdev))
-		goto err2;
+	if (muc_uart_config_gpio(&pdev->dev,
+			mm_data->muc_2_gpio, "muc_2", 1, 1))
+		goto err_free_muc1;
 
 	if (mmi_char_init(UART_MAX_MSG_SIZE - MSG_META_DATA_SIZE, pdev))
-		goto err3;
+		goto err_free_muc2;
 
 	mm_data->phone_psy = devm_power_supply_register(&pdev->dev,
 							&phone_psy_desc,
 							&psy_cfg);
 	if (IS_ERR(mm_data->phone_psy)) {
-		dev_err(&pdev->dev, "failed: phone power supply register\n");
-		goto err3;
+		MUC_ERR("failed: phone power supply register\n");
+		goto err_exit_char;
 	}
 
 	mm_data->batt_psy = power_supply_get_by_name("battery");
@@ -1650,27 +1647,40 @@ static int muc_uart_probe(struct platform_device *pdev)
 	mm_data->dc_psy = power_supply_get_by_name("dc");
 
 	mm_data->ps_nb.notifier_call = muc_uart_ps_notifier_cb;
-	if (power_supply_reg_notifier(&mm_data->ps_nb))
-		dev_err(&pdev->dev,
-			"couldn't register ps notifier\n");
+	if (power_supply_reg_notifier(&mm_data->ps_nb)) {
+		MUC_ERR("couldn't register ps notifier\n");
+		goto err_put_ps;
+	}
 
 	kobject_uevent(&pdev->dev.kobj, KOBJ_ADD);
 	schedule_delayed_work(&mm_data->attach_work, msecs_to_jiffies(0));
 
 	MUC_LOG("probe done\n");
 
-#ifdef CONFIG_IPC_LOGGING
-	muc_ipc_log = ipc_log_context_create(MUC_IPC_LOG_PAGES, "muc_uart", 0);
-	if (!muc_ipc_log)
-		MUC_ERR("Failed to create IPC logging context\n");
-#endif
-
 	return 0;
-err3:
-	mmi_uart_exit(mm_data->uart_data);
-err2:
+
+err_put_ps:
+	power_supply_put(mm_data->batt_psy);
+	power_supply_put(mm_data->bms_psy);
+	power_supply_put(mm_data->usb_psy);
+	power_supply_put(mm_data->mmi_psy);
+	power_supply_put(mm_data->dc_psy);
+err_exit_char:
+	mmi_char_exit();
+err_free_muc2:
+	gpio_free(mm_data->muc_2_gpio);
+err_free_muc1:
+	gpio_free(mm_data->muc_1_gpio);
+err_free_wake_out:
 	gpio_free(mm_data->wake_out_gpio);
-err1:
+err_exit_uart:
+	mmi_uart_exit(mm_data->uart_data);
+err_dest_groups:
+	sysfs_remove_groups(&pdev->dev.kobj, muc_uart_groups);
+err_dest_wq:
+	del_timer(&mm_data->idle_timer);
+	del_timer(&mm_data->ack_timer);
+	del_timer(&mm_data->sleep_req_timer);
 	destroy_workqueue(mm_data->write_wq);
 err:
 	return 1;
