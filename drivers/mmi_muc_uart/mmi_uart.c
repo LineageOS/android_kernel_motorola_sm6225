@@ -153,6 +153,7 @@ static int mmi_uart_get_ready(void *uart_data)
 	spin_lock_irqsave(&tx_lock, flags);
 	res = mud->tx_ready;
 	spin_unlock_irqrestore(&tx_lock, flags);
+
 	return res;
 }
 
@@ -365,6 +366,15 @@ int mmi_uart_open(void *uart_data)
 	 */
 	tty_unlock(tty_tmp);
 
+	/* Reset sysfs stat entries */
+	memset((void *)&mud->stats, 0, sizeof(struct mmi_uart_err_stats));
+
+	/* Set device to ready before we set up the ldisc, we don't want
+	 * to not be ready if we start processing rx messages.
+	 */
+	mud->tty = tty_tmp;
+	mmi_uart_set_ready(uart_data, true);
+
 	/*
 	 * Set the line discipline to the local ldisc. This will allow this
 	 * driver to know when new data is received without having to poll.
@@ -372,16 +382,12 @@ int mmi_uart_open(void *uart_data)
 	ret = tty_set_ldisc(tty_tmp, N_MMI_UART);
 	if (ret) {
 		dev_err(&mud->pdev->dev, "%s: Failed to set ldisc\n", __func__);
+		mmi_uart_set_ready(uart_data, false);
 		goto close_tty_unlocked;
 	}
 	tty_tmp->disc_data = mud;
 
-	/* Reset sysfs stat entries */
-	memset((void *)&mud->stats, 0, sizeof(struct mmi_uart_err_stats));
-
-	mud->tty = tty_tmp;
-
-	mmi_uart_set_ready(uart_data, true);
+	dev_info(&mud->pdev->dev, "%s: uart init done\n", __func__);
 
 	return 0;
 
