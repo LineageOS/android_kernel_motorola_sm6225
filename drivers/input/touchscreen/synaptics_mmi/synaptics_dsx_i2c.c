@@ -412,6 +412,22 @@ struct f54_q12_s0_type {
 	};
 };
 
+struct f54_c0_s0_type {
+	union {
+		struct {
+		unsigned char no_relax:1;
+		unsigned char no_scan:1;
+		unsigned char force_fast_relax:1;
+		unsigned char startup_fast_relax:1;
+		unsigned char gest_cancels_fast_relax:1;
+		unsigned char energy_ratio_relax:1;
+		unsigned char exces_noise_reporting:1;
+		unsigned char enable_cap_correction:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
 struct f54_c2_s0_type {
 	struct {
 		unsigned short saturation_cap;
@@ -532,14 +548,6 @@ do {\
 #define RMI4_DECLARE_REG_ONE_SUBPKT(rn, prefix) \
 do {\
 	r = RMI4_GET_PKT_REG(rnum++); snum = 0;\
-	DYNA_RMI4_REG(rn, 1, 0);\
-	s = RMI4_GET_SUBPKT(0);\
-	DYNA_RMI4_SUBPKT(prefix##_s0_type);\
-} while(0)
-
-#define RMI4_DECLARE_REG_STATIC(rn, prefix) \
-do {\
-	r = RMI4_GET_PKT_REG(rnum++); snum = 0;\
 	DYNA_RMI4_REG(rn, 1, sizeof(struct prefix##_s0_type));\
 	s = RMI4_GET_SUBPKT(0);\
 	DYNA_RMI4_SUBPKT(prefix##_s0_type);\
@@ -563,11 +571,11 @@ static int synaptics_dsx_config_regs_alloc(struct synaptics_rmi4_data *rmi4_data
 	struct synaptics_rmi4_subpkt *s;
 
 	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F01 | CTRL_TYPE), 0, NO_MATTER, 5);
-	RMI4_DECLARE_REG_STATIC(0, f01_c0);
-	RMI4_DECLARE_REG_STATIC(2, f01_c2);
-	RMI4_DECLARE_REG_STATIC(3, f01_c3);
-	RMI4_DECLARE_REG_STATIC(5, f01_c5);
-	RMI4_DECLARE_REG_STATIC(9, f01_c9);
+	RMI4_DECLARE_REG_ONE_SUBPKT(0, f01_c0);
+	RMI4_DECLARE_REG_ONE_SUBPKT(2, f01_c2);
+	RMI4_DECLARE_REG_ONE_SUBPKT(3, f01_c3);
+	RMI4_DECLARE_REG_ONE_SUBPKT(5, f01_c5);
+	RMI4_DECLARE_REG_ONE_SUBPKT(9, f01_c9);
 
 	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F12 | CTRL_TYPE), 0, 4, 8);
 	RMI4_DECLARE_REG_ONE_SUBPKT( 8, f12_c8);
@@ -605,7 +613,8 @@ static int synaptics_dsx_config_regs_alloc(struct synaptics_rmi4_data *rmi4_data
 	RMI4_DECLARE_REG_ONE_SUBPKT(16, f54_d16);
 	RMI4_DECLARE_REG_ONE_SUBPKT(17, f54_d17);
 
-	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F54 | CTRL_TYPE), 0, NO_MATTER, 2);
+	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F54 | CTRL_TYPE), 0, NO_MATTER, 3);
+	RMI4_DECLARE_REG_ONE_SUBPKT(0, f54_c0);
 	RMI4_DECLARE_REG_ONE_SUBPKT(2, f54_c2);
 	RMI4_DECLARE_REG_NO_ALLOC(95, 8);
 	RMI4_DECLARE_SUBPKT(f54_control_95n);
@@ -618,7 +627,7 @@ static int synaptics_dsx_config_regs_alloc(struct synaptics_rmi4_data *rmi4_data
 	RMI4_DECLARE_SUBPKT(f54_control_95n);
 
 	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F54 | COMMAND_TYPE), 0, NO_MATTER, 1);
-	RMI4_DECLARE_REG_STATIC(0, f54_m0);
+	RMI4_DECLARE_REG_ONE_SUBPKT(0, f54_m0);
 
 	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F54 | QUERY_TYPE), 0, NO_MATTER, 1);
 	RMI4_DECLARE_REG_ONE_SUBPKT(12, f54_q12);
@@ -629,7 +638,7 @@ static int synaptics_dsx_config_regs_alloc(struct synaptics_rmi4_data *rmi4_data
 	RMI4_DECLARE_REG_ONE_SUBPKT(4, f51_c4);
 
 	RMI4_DECLARE_FUNC((SYNAPTICS_RMI4_F51 | DATA_TYPE), 0, NO_MATTER, 1);
-	RMI4_DECLARE_REG_STATIC(0, f51_d0);
+	RMI4_DECLARE_REG_ONE_SUBPKT(0, f51_d0);
 
 	return 0;
 
@@ -724,34 +733,6 @@ static inline unsigned char register_type_to_ascii(int type)
 		ascii = 'C';
 	}
 	return ascii;
-}
-
-__attribute__((weak))
-int synaptics_rmi4_scan_f54_ctrl_reg_info(
-	struct synaptics_rmi4_data *rmi4_data,
-	struct synaptics_rmi4_func_packet_regs *regs) {
-	return -ENOSYS;
-}
-
-__attribute__((weak))
-int synaptics_rmi4_scan_f54_cmd_reg_info(
-	struct synaptics_rmi4_data *rmi4_data,
-	struct synaptics_rmi4_func_packet_regs *regs) {
-	return -ENOSYS;
-}
-
-__attribute__((weak))
-int synaptics_rmi4_scan_f54_data_reg_info(
-	struct synaptics_rmi4_data *rmi4_data,
-	struct synaptics_rmi4_func_packet_regs *regs) {
-	return -ENOSYS;
-}
-
-__attribute__((weak))
-int synaptics_rmi4_scan_f54_query_reg_info(
-	struct synaptics_rmi4_data *rmi4_data,
-	struct synaptics_rmi4_func_packet_regs *regs) {
-	return -ENOSYS;
 }
 
 #define F12_D1_IDX 0
@@ -4774,37 +4755,45 @@ static void synaptics_rmi4_f01_handler(struct synaptics_rmi4_data *rmi4_data,
 
 	switch (status.status_code) {
 	case 0x00:
-		printk(KERN_INFO "%s: No error.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: No error.\n", __func__);
 		break;
 
 	case 0x01:
-		printk(KERN_INFO "%s: Touch IC reset complete.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Touch IC reset complete.\n", __func__);
 		break;
 
 	case 0x02:
-		printk(KERN_ERR "%s: Touch IC configuration error--%s.\n",
-			__func__, "check platform settings");
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Touch IC configuration error--%s.\n",
+				__func__, "check platform settings");
 		break;
 
 	case 0x03:
-		printk(KERN_ERR "%s: Touch IC device failure.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Touch IC device failure.\n", __func__);
 		break;
 
 	case 0x04:
-		printk(KERN_ERR "%s: Configuration CRC failure.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Configuration CRC failure.\n", __func__);
 		break;
 
 	case 0x05:
-		printk(KERN_ERR "%s: Firmware CRC failure.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Firmware CRC failure.\n", __func__);
 		break;
 
 	case 0x06:
-		printk(KERN_ERR "%s: CRC in progress.\n", __func__);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: CRC in progress.\n", __func__);
 		break;
 
 	default:
-		printk(KERN_ERR "%s: Unknown error 0x%02X received.\n",
-			__func__, status.status_code);
+		dev_info(&rmi4_data->i2c_client->dev,
+				"%s: Unknown error 0x%02X received.\n",
+				__func__, status.status_code);
 		break;
 	}
 }
@@ -6689,29 +6678,32 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		exp_fhandler->func_init(rmi4_data);
 		state = synaptics_dsx_get_state_safe(rmi4_data);
 		exp_fhandler->inserted = true;
-		if (exp_fhandler->fn_type == RMI_F54) {
+		if (exp_fhandler->fn_type == RMI_F54 && rmi4_data->f54_data) {
 			int scan_failures = 0;
 			struct synaptics_rmi4_func_packet_regs *regs;
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54);
 			if (!regs)
 				continue;
-
-			error = synaptics_rmi4_scan_f54_ctrl_reg_info(rmi4_data, regs);
+			error = rmi4_data->scan_f54_ctrl_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
 				dev_err(dev, "%s: F54_Ctrl scan failed\n", __func__);
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | COMMAND_TYPE);
-			error = synaptics_rmi4_scan_f54_cmd_reg_info(rmi4_data, regs);
+			if (!regs)
+				continue;
+			error = rmi4_data->scan_f54_cmd_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
 				dev_err(dev, "%s: F54_Cmd scan failed\n", __func__);
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | DATA_TYPE);
-			error = synaptics_rmi4_scan_f54_data_reg_info(rmi4_data, regs);
+			if (!regs)
+				continue;
+			error = rmi4_data->scan_f54_data_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
 				dev_err(dev, "%s: F54_Data scan failed\n", __func__);
@@ -6719,7 +6711,9 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			}
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | QUERY_TYPE);
-			error = synaptics_rmi4_scan_f54_query_reg_info(rmi4_data, regs);
+			if (!regs)
+				continue;
+			error = rmi4_data->scan_f54_query_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
 				dev_err(dev, "%s: F54_Query scan failed\n", __func__);

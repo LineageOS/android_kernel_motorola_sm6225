@@ -382,12 +382,6 @@ struct synaptics_rmi4_subpkt {
 	void *data;
 };
 
-#define RMI4_SUBPKT(a)\
-	{.present = 0, .expected = 1, .size = sizeof(a), .data = &a}
-#define RMI4_SUBPKT_STATIC(o, a)\
-	{.present = 1, .expected = 1,\
-			.offset = o, .size = sizeof(a), .data = &a}
-
 struct synaptics_rmi4_packet_reg {
 	unsigned short r_number;
 	bool updated;	/* indicate that value in *data has been updated */
@@ -399,19 +393,6 @@ struct synaptics_rmi4_packet_reg {
 	unsigned char nr_subpkts;
 	struct synaptics_rmi4_subpkt *subpkt;
 };
-
-#define RMI4_NO_REG(r) {\
-	.r_number = r, .offset = -1, .updated = 0, .modified = 0,\
-	.expected = 0, .size = 0, .data = NULL,\
-	.nr_subpkts = 0, .subpkt = NULL}
-#define RMI4_REG(r, s) {\
-	.r_number = r, .offset = -1, .updated = 0, .modified = 0,\
-	.expected = 1, .size = 0, .data = NULL,\
-	.nr_subpkts = ARRAY_SIZE(s), .subpkt = s}
-#define RMI4_REG_STATIC(r, s, sz) {\
-	.r_number = r, .offset = r, .updated = 0, .modified = 0,\
-	.expected = 1, .size = sz, .data = NULL,\
-	.nr_subpkts = ARRAY_SIZE(s), .subpkt = s}
 
 #define MAX_CONFIG_REGS 10
 
@@ -593,6 +574,15 @@ struct synaptics_rmi4_data {
 	void *fwu_data;
 	void *rmidev_data;
 	void *f54_data;
+
+	int (*scan_f54_ctrl_regs)(struct synaptics_rmi4_data *data,
+				struct synaptics_rmi4_func_packet_regs *regs);
+	int (*scan_f54_cmd_regs)(struct synaptics_rmi4_data *data,
+				struct synaptics_rmi4_func_packet_regs *regs);
+	int (*scan_f54_query_regs)(struct synaptics_rmi4_data *data,
+				struct synaptics_rmi4_func_packet_regs *regs);
+	int (*scan_f54_data_regs)(struct synaptics_rmi4_data *data,
+				struct synaptics_rmi4_func_packet_regs *regs);
 
 	struct touch_area_stats touch_ud_stats;
 	struct touch_area_stats button_ud_stats;

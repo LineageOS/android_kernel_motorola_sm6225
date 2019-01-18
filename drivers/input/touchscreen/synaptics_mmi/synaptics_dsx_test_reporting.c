@@ -29,12 +29,23 @@
 #include <linux/hrtimer.h>
 #include "synaptics_dsx_i2c.h"
 
-#define WATCHDOG_HRTIMER
+#if 0
+#ifdef pr_debug
+#undef pr_debug
+#define pr_debug pr_err
+#endif
+#ifdef dev_dbg
+#undef dev_dbg
+#define dev_dbg dev_err
+#endif
+#endif
+
+#undef WATCHDOG_HRTIMER
 #define WATCHDOG_TIMEOUT_S 1
 #define STATUS_WORK_INTERVAL 20 /* ms */
 
 /* enable for report status polling */
-#undef REPORT_STATUS_POLLING
+#define REPORT_STATUS_POLLING
 
 /*
 #define RAW_HEX
@@ -59,10 +70,20 @@
 
 #define NO_AUTO_CAL_MASK 0x01
 
-static inline ssize_t synaptics_dsx_test_reporting_show_error(struct device *dev,
-		struct device_attribute *attr, char *buf);
-static inline ssize_t synaptics_dsx_test_reporting_store_error(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
+struct synaptics_rmi4_f54_handle;
+
+static inline ssize_t synaptics_dsx_test_reporting_show_error(
+		struct synaptics_rmi4_f54_handle *f54, char *buf);
+static inline ssize_t synaptics_dsx_test_reporting_store_error(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count);
+
+struct f54_attribute {
+	struct attribute attr;
+	ssize_t (*show)(struct synaptics_rmi4_f54_handle *f54, char *buf);
+	ssize_t (*store)(struct synaptics_rmi4_f54_handle *f54,
+				const char *buf, size_t count);
+};
 
 #define concat(a, b) a##b
 
@@ -70,15 +91,13 @@ static inline ssize_t synaptics_dsx_test_reporting_store_error(struct device *de
 	.attrs = _attrs,\
 }
 
-#define attrify(propname) (&dev_attr_##propname.attr)
+#define attrify(propname) (&f54_attr_##propname.attr)
 
 #define show_prototype_ext(propname, perm)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf);\
+		struct synaptics_rmi4_f54_handle *f54, char *buf);\
 \
-struct device_attribute dev_attr_##propname =\
+static struct f54_attribute f54_attr_##propname =\
 		__ATTR(propname, (perm),\
 		concat(synaptics_rmi4_f54, _##propname##_show),\
 		synaptics_dsx_test_reporting_store_error);
@@ -88,27 +107,23 @@ struct device_attribute dev_attr_##propname =\
 
 #define store_prototype(propname)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
+		struct synaptics_rmi4_f54_handle *f54,\
 		const char *buf, size_t count);\
 \
-struct device_attribute dev_attr_##propname =\
+static struct f54_attribute f54_attr_##propname =\
 		__ATTR(propname, S_IWUSR | S_IWGRP,\
 		synaptics_dsx_test_reporting_show_error,\
 		concat(synaptics_rmi4_f54, _##propname##_store));
 
 #define show_store_prototype_ext(propname, perm)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf);\
+		struct synaptics_rmi4_f54_handle *f54, char *buf);\
 \
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
+		struct synaptics_rmi4_f54_handle *f54,\
 		const char *buf, size_t count);\
 \
-struct device_attribute dev_attr_##propname =\
+static struct f54_attribute f54_attr_##propname =\
 		__ATTR(propname, (perm),\
 		concat(synaptics_rmi4_f54, _##propname##_show),\
 		concat(synaptics_rmi4_f54, _##propname##_store));
@@ -119,10 +134,11 @@ struct device_attribute dev_attr_##propname =\
 
 #define simple_show_func(rtype, propname, fmt)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf)\
+		struct synaptics_rmi4_f54_handle *f54, char *buf)\
 {\
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 	return snprintf(buf, PAGE_SIZE, fmt, f54->rtype.propname);\
 } \
 
@@ -131,12 +147,12 @@ simple_show_func(rtype, propname, "%u\n")
 
 #define show_func(rtype, rgrp, propname, fmt)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf)\
+		struct synaptics_rmi4_f54_handle *f54, char *buf)\
 {\
 	int retval;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -164,14 +180,15 @@ show_func(rtype, rgrp, propname, "%u\n")
 show_func(rtype, rgrp, propname, fmt)\
 \
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
+		struct synaptics_rmi4_f54_handle *f54,\
 		const char *buf, size_t count)\
 {\
 	int retval;\
 	unsigned long setting;\
 	unsigned long o_setting;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	retval = sstrtoul(buf, 10, &setting);\
 	if (retval)\
@@ -222,12 +239,12 @@ show_store_func(rtype, rgrp, propname, "%u\n")
 
 #define show_subpkt_func(rtype, rgrp, subpkt, propname, fmt)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf)\
+		struct synaptics_rmi4_f54_handle *f54, char *buf)\
 {\
 	int retval;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -255,14 +272,15 @@ show_subpkt_func(rtype, rgrp, subpkt, propname, "%u\n")
 show_subpkt_func(rtype, rgrp, subpkt, propname, fmt)\
 \
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
+		struct synaptics_rmi4_f54_handle *f54,\
 		const char *buf, size_t count)\
 {\
 	int retval;\
 	unsigned long setting;\
 	unsigned long o_setting;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	retval = sstrtoul(buf, 10, &setting);\
 	if (retval)\
@@ -313,9 +331,7 @@ show_store_subpkt_func(rtype, rgrp, subpkt, propname, "%u\n")
 
 #define show_replicated_func(rtype, rgrp, propname, fmt)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
-		char *buf)\
+		struct synaptics_rmi4_f54_handle *f54, char *buf)\
 {\
 	int retval;\
 	int size = 0;\
@@ -324,6 +340,8 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
 	unsigned char element_count;\
 	unsigned char *temp;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -375,8 +393,7 @@ show_replicated_func(rtype, rgrp, propname, "%u")
 show_replicated_func(rtype, rgrp, propname, fmt)\
 \
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
-		struct device *dev,\
-		struct device_attribute *attr,\
+		struct synaptics_rmi4_f54_handle *f54,\
 		const char *buf, size_t count)\
 {\
 	int retval;\
@@ -386,6 +403,8 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
 	unsigned char element_count;\
 	const unsigned char *temp;\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -446,8 +465,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 			GFP_KERNEL);\
 		if (!data->reg_##reg)\
 			goto exit_no_mem;\
-		pr_debug("d%s addr = 0x%02x added (%d)\n",\
-			 #reg, reg_addr, reg_num);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: d%s addr = 0x%02x added (%d)\n",\
+			 __func__, #reg, reg_addr, reg_num);\
 		data->reg_##reg->address = reg_addr;\
 		reg_addr += skip;\
 	} \
@@ -456,7 +476,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 
 #define DATA_REG_PRESENCE(reg, skip, cond) \
 	do { if (cond) { \
-		pr_debug("d%s addr = 0x%02x\n", #reg, reg_addr);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: d%s addr = 0x%02x\n",\
+			 __func__, #reg, reg_addr);\
 		reg_addr += skip;\
 	} \
 	} while (0)
@@ -468,8 +490,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 			GFP_KERNEL);\
 		if (!control->reg_##reg)\
 			goto exit_no_mem;\
-		pr_debug("c%s addr = 0x%02x added (%d)\n",\
-			 #reg, reg_addr, reg_num);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: c%s addr = 0x%02x added (%d)\n",\
+			 __func__, #reg, reg_addr, reg_num);\
 		control->reg_##reg->address = reg_addr;\
 		reg_addr += skip;\
 	} \
@@ -486,8 +509,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 		control->reg_##reg->data = kzalloc(size, GFP_KERNEL);\
 		if (!control->reg_##reg->data)\
 			goto exit_no_mem;\
-		pr_debug("c%s addr = 0x%02x size = %zu added (%d)\n",\
-			 #reg, reg_addr, size, reg_num);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: c%s addr = 0x%02x size = %zu added (%d)\n",\
+			 __func__, #reg, reg_addr, size, reg_num);\
 		control->reg_##reg->length = size;\
 		control->reg_##reg->address = reg_addr;\
 		reg_addr += skip;\
@@ -513,8 +537,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 #define CTRL_SUBPKT_ADD(reg, subpkt, cond) \
 	do { if (cond) { \
 		attrs_ctrl_regs_exist[reg_num] = true; \
-		pr_debug("subpkt c%s_%d added (%d)\n", \
-			 #reg, subpkt, reg_num); \
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: subpkt c%s_%d added (%d)\n", \
+			 __func__, #reg, subpkt, reg_num); \
 		control->reg_##reg->sp##subpkt = \
 			(void *)control->reg_##reg->data + \
 				control->reg_##reg->size; \
@@ -527,8 +552,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 #define CTRL_PKT_REG_END(reg, skip) \
 	do { if (control->reg_##reg->size) { \
 		control->reg_##reg->address = reg_addr; \
-		pr_debug("c%s addr = 0x%02x\n", \
-			 #reg, reg_addr); \
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: c%s addr = 0x%02x\n", \
+			 __func__, #reg, reg_addr); \
 		reg_addr += skip; \
 	} \
 	else { \
@@ -538,15 +564,17 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 
 #define CTRL_REG_PRESENCE(reg, skip, cond) \
 	do { if ((cond)) {\
-		pr_debug("c%s addr = 0x%02x\n",\
-			 #reg, reg_addr);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: c%s addr = 0x%02x\n",\
+			 __func__, #reg, reg_addr);\
 		reg_addr += (skip);\
 	} } while (0)
 
 #define CTRL_REG_RESERVED_PRESENCE(reg, skip, cond) \
 	do { if ((cond)) { \
-		pr_debug("c%s addr = 0x%02x (reserved)\n",\
-			 #reg, reg_addr);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: c%s addr = 0x%02x (reserved)\n",\
+			 __func__, #reg, reg_addr);\
 		reg_addr += skip;\
 	} } while (0)
 
@@ -562,8 +590,9 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 					#reg, __func__);\
 			goto err;\
 		} \
-		pr_debug("q%s addr = 0x%02x, val = 0x%02x\n",\
-			#reg, reg_addr, f54->query##reg.data[0]);\
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: q%s addr = 0x%02x, val = 0x%02x\n",\
+			__func__, #reg, reg_addr, f54->query##reg.data[0]);\
 		reg_addr += 1;\
 	} \
 	else { \
@@ -1935,6 +1964,15 @@ struct synaptics_rmi4_fn55_desc {
 	unsigned short control_base_addr;
 };
 
+struct f54_kobj_data {
+	struct kobject kobj;
+	struct bin_attribute *dev_report_data;
+	struct synaptics_rmi4_f54_handle *f54;
+};
+
+#define to_f54_kobj_data(x) container_of(x, struct f54_kobj_data, kobj)
+#define to_f54_attr(x) container_of(x, struct f54_attribute, attr)
+
 struct synaptics_rmi4_f54_handle {
 	bool no_auto_cal;
 	int status;
@@ -1989,7 +2027,6 @@ struct synaptics_rmi4_f54_handle {
 	struct f54_query46 query46;
 	struct f54_control control;
 	struct f54_data data;
-	struct kobject *attr_dir;
 	struct hrtimer watchdog;
 	struct work_struct timeout_work;
 	struct delayed_work status_work;
@@ -2000,6 +2037,50 @@ struct synaptics_rmi4_f54_handle {
 	struct f55_query_0_2 query_f55_0_2;
 	struct f55_query_3 query_f55_3;
 	struct wakeup_source test_wake_lock;
+	struct completion remove_complete;
+	struct f54_kobj_data *f54_kdata;
+};
+
+static ssize_t f54_attr_show(struct kobject *kobj,
+			struct attribute *attr, char *buf)
+{
+	struct f54_attribute *attribute = to_f54_attr(attr);
+	struct f54_kobj_data *f54_kobj_data = to_f54_kobj_data(kobj);
+
+	if (!attribute->show)
+		return -EIO;
+	return attribute->show(f54_kobj_data->f54, buf);
+}
+
+static ssize_t f54_attr_store(struct kobject *kobj,
+			struct attribute *attr, const char *buf, size_t len)
+{
+	struct f54_attribute *attribute = to_f54_attr(attr);
+	struct f54_kobj_data *f54_kobj_data = to_f54_kobj_data(kobj);
+
+	if (!attribute->store)
+		return -EIO;
+	return attribute->store(f54_kobj_data->f54, buf, len);
+}
+
+static const struct sysfs_ops f54_sysfs_ops = {
+	.show = f54_attr_show,
+	.store = f54_attr_store,
+};
+
+void f54_kobj_data_release(struct kobject *kobj)
+{
+	struct f54_kobj_data *f54_kobj_data;
+
+	f54_kobj_data = to_f54_kobj_data(kobj);
+	dev_dbg(&f54_kobj_data->f54->rmi4_data->i2c_client->dev,
+			"%s: f54_kobj_data released\n", __func__);
+	kfree(f54_kobj_data);
+}
+
+static struct kobj_type f54_ktype = {
+	.sysfs_ops = &f54_sysfs_ops,
+	.release = f54_kobj_data_release,
 };
 
 store_prototype(reset)
@@ -2665,34 +2746,22 @@ static struct attribute_group attrs_data_regs[] = {
 
 static bool attrs_data_regs_exist[ARRAY_SIZE(attrs_data_regs)];
 
-static struct bin_attribute dev_report_data = {
-	.attr = {
-		.name = "report_data",
-		.mode = S_IRUGO,
-	},
-	.size = 0,
-	.read = synaptics_rmi4_f54_data_read,
-};
-
-static struct synaptics_rmi4_f54_handle *f54;
-
-static struct completion remove_complete;
-
-static inline ssize_t synaptics_dsx_test_reporting_show_error(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static inline ssize_t synaptics_dsx_test_reporting_show_error(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
-	dev_warn(&f54->rmi4_data->i2c_client->dev,
-			"%s: Attempted to read from write-only attribute %s\n",
-			__func__, attr->attr.name);
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
+	dev_warn(&rmi4_data->i2c_client->dev,
+			"%s: Attempted to read from write-only attribute\n", __func__);
 	return -EPERM;
 }
 
-static inline ssize_t synaptics_dsx_test_reporting_store_error(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static inline ssize_t synaptics_dsx_test_reporting_store_error(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
-	dev_warn(&f54->rmi4_data->i2c_client->dev,
-			"%s: Attempted to write to read-only attribute %s\n",
-			__func__, attr->attr.name);
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
+	dev_warn(&rmi4_data->i2c_client->dev,
+			"%s: Attempted to write to read-only attribute\n", __func__);
 	return -EPERM;
 }
 
@@ -2728,7 +2797,8 @@ static bool is_report_type_valid(enum f54_report_types report_type)
 	}
 }
 
-static int set_user_report_type(enum f54_report_types *user_report_type,
+static int set_user_report_type(struct synaptics_rmi4_f54_handle *f54,
+	enum f54_report_types *user_report_type,
 	const char *buf, size_t count)
 {
 	unsigned int report_type;
@@ -2754,19 +2824,21 @@ out:
 	return retval;
 }
 
-static ssize_t synaptics_rmi4_f54_user_report_type1_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_user_report_type1_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
-	return set_user_report_type(&f54->user_report_type1, buf, count);
+	return set_user_report_type(f54, &f54->user_report_type1, buf, count);
 }
 
-static ssize_t synaptics_rmi4_f54_user_report_type2_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_user_report_type2_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
-	return set_user_report_type(&f54->user_report_type2, buf, count);
+	return set_user_report_type(f54, &f54->user_report_type2, buf, count);
 }
 
-static void set_report_size(void)
+static void set_report_size(struct synaptics_rmi4_f54_handle *f54)
 {
 	unsigned char rx = f54->rmi4_data->num_of_rx;
 	unsigned char tx = f54->rmi4_data->num_of_tx;
@@ -2821,11 +2893,11 @@ static void set_report_size(void)
 	default:
 		f54->report_size = 0;
 	}
-
+	pr_debug("report size %d\n", f54->report_size);
 	return;
 }
 
-static int set_interrupt(bool set)
+int set_interrupt(struct synaptics_rmi4_f54_handle *f54, bool set)
 {
 	int retval;
 	unsigned char ii;
@@ -2889,6 +2961,8 @@ static void timeout_set_status(struct work_struct *work)
 {
 	int retval;
 	unsigned char command;
+	struct synaptics_rmi4_f54_handle *f54 = container_of(work,
+			struct synaptics_rmi4_f54_handle, timeout_work);
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
 	mutex_lock(&f54->status_mutex);
@@ -2897,7 +2971,9 @@ static void timeout_set_status(struct work_struct *work)
 				f54->command_base_addr,
 				&command,
 				sizeof(command));
-		pr_debug("read F54_Cmd0=%d, rc = %d\n", command, retval);
+		dev_dbg(&rmi4_data->i2c_client->dev,\
+				"%s: read F54_Cmd0=%d, rc = %d\n",
+				__func__, command, retval);
 		if (retval < 0) {
 			dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to read command register\n",
@@ -2914,7 +2990,7 @@ static void timeout_set_status(struct work_struct *work)
 		f54->status = -ETIMEDOUT;
 		f54->report_type = INVALID_REPORT_TYPE;
 		f54->report_size = 0;
-		set_interrupt(false);
+		set_interrupt(f54, false);
 		__pm_relax(&f54->test_wake_lock);
 	}
 	mutex_unlock(&f54->status_mutex);
@@ -2924,6 +3000,9 @@ static void timeout_set_status(struct work_struct *work)
 
 static enum hrtimer_restart get_report_timeout(struct hrtimer *timer)
 {
+	struct synaptics_rmi4_f54_handle *f54 = container_of(timer,
+			struct synaptics_rmi4_f54_handle, watchdog);
+
 	schedule_work(&(f54->timeout_work));
 
 	return HRTIMER_NORESTART;
@@ -2931,7 +3010,7 @@ static enum hrtimer_restart get_report_timeout(struct hrtimer *timer)
 #endif
 
 #ifdef RAW_HEX
-static void print_raw_hex_report(void)
+static void print_raw_hex_report(struct synaptics_rmi4_f54_handle *f54)
 {
 	unsigned int ii;
 
@@ -2965,7 +3044,7 @@ static void print_raw_hex_report(void)
 #endif
 
 #ifdef HUMAN_READABLE
-static void print_image_report(void)
+static void print_image_report(struct synaptics_rmi4_f54_handle *f54)
 {
 	unsigned int ii;
 	unsigned int jj;
@@ -3009,7 +3088,7 @@ static void print_image_report(void)
 }
 #endif
 
-static void free_control_mem(void)
+static void free_control_mem(struct synaptics_rmi4_f54_handle *f54)
 {
 	struct f54_control control = f54->control;
 
@@ -3062,7 +3141,7 @@ static void free_control_mem(void)
 	return;
 }
 
-static void free_data_mem(void)
+static void free_data_mem(struct synaptics_rmi4_f54_handle *f54)
 {
 	struct f54_data data = f54->data;
 
@@ -3078,26 +3157,27 @@ static void free_data_mem(void)
 	kfree(data.reg_17);
 }
 
-static void remove_sysfs(void)
+static void remove_sysfs(struct synaptics_rmi4_f54_handle *f54)
 {
 	int reg_num;
 
-	sysfs_remove_bin_file(f54->attr_dir, &dev_report_data);
+	sysfs_remove_bin_file(&f54->f54_kdata->kobj, f54->f54_kdata->dev_report_data);
 
-	sysfs_remove_group(f54->attr_dir, &attr_group);
+	sysfs_remove_group(&f54->f54_kdata->kobj, &attr_group);
 
 	for (reg_num = 0; reg_num < ARRAY_SIZE(attrs_ctrl_regs); reg_num++)
-		sysfs_remove_group(f54->attr_dir, &attrs_ctrl_regs[reg_num]);
+		sysfs_remove_group(&f54->f54_kdata->kobj, &attrs_ctrl_regs[reg_num]);
 
 	for (reg_num = 0; reg_num < ARRAY_SIZE(attrs_data_regs); reg_num++)
-		sysfs_remove_group(f54->attr_dir, &attrs_data_regs[reg_num]);
+		sysfs_remove_group(&f54->f54_kdata->kobj, &attrs_data_regs[reg_num]);
 
-	kobject_put(f54->attr_dir);
+	kobject_put(&f54->f54_kdata->kobj);
+	kfree(f54->f54_kdata->dev_report_data);
 
 	return;
 }
 
-static int synaptics_rmi4_f54_reset(void)
+static int synaptics_rmi4_f54_reset(struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
@@ -3124,8 +3204,9 @@ static int synaptics_rmi4_f54_reset(void)
 	return 0;
 }
 
-static ssize_t synaptics_rmi4_f54_reset_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_reset_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned int reset;
@@ -3136,45 +3217,46 @@ static ssize_t synaptics_rmi4_f54_reset_store(struct device *dev,
 	if (reset != 1)
 		return -EINVAL;
 
-	retval = synaptics_rmi4_f54_reset();
+	retval = synaptics_rmi4_f54_reset(f54);
 	if (retval < 0)
 		return retval;
 
 	return count;
 }
 
-static ssize_t synaptics_rmi4_f54_status_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_status_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", f54->status);
 }
 
-static ssize_t synaptics_rmi4_f54_report_size_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_report_size_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->report_size);
 }
 
-static ssize_t synaptics_rmi4_f54_num_of_mapped_rx_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_num_of_mapped_rx_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->rmi4_data->num_of_rx);
 }
 
-static ssize_t synaptics_rmi4_f54_num_of_mapped_tx_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_num_of_mapped_tx_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->rmi4_data->num_of_tx);
 }
 
-static ssize_t synaptics_rmi4_f54_no_auto_cal_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_no_auto_cal_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->no_auto_cal);
 }
 
-static ssize_t synaptics_rmi4_f54_no_auto_cal_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_no_auto_cal_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned char data;
@@ -3220,13 +3302,15 @@ static ssize_t synaptics_rmi4_f54_no_auto_cal_store(struct device *dev,
 	return count;
 }
 
-static ssize_t synaptics_rmi4_f54_report_type_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_report_type_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", f54->report_type);
 }
 
-static int synaptics_rmi4_f54_report_type_set(enum f54_report_types report_type)
+static int synaptics_rmi4_f54_report_type_set(
+		struct synaptics_rmi4_f54_handle *f54,
+		enum f54_report_types report_type)
 {
 	unsigned char data;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
@@ -3257,8 +3341,9 @@ static int synaptics_rmi4_f54_report_type_set(enum f54_report_types report_type)
 	return 0;
 }
 
-static ssize_t synaptics_rmi4_f54_report_type_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_report_type_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned long setting;
@@ -3269,7 +3354,7 @@ static ssize_t synaptics_rmi4_f54_report_type_store(struct device *dev,
 		return retval;
 
 	if (f54->status != STATUS_BUSY) {
-		retval = synaptics_rmi4_f54_report_type_set(
+		retval = synaptics_rmi4_f54_report_type_set(f54,
 			(enum f54_report_types)setting);
 
 		if (retval < 0)
@@ -3284,20 +3369,20 @@ static ssize_t synaptics_rmi4_f54_report_type_store(struct device *dev,
 	}
 }
 
-static ssize_t synaptics_rmi4_f54_user_report_type1_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_user_report_type1_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->user_report_type1);
 }
 
-static ssize_t synaptics_rmi4_f54_user_report_type2_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_user_report_type2_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->user_report_type2);
 }
 
-static ssize_t synaptics_rmi4_f54_fifoindex_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_fifoindex_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	int retval;
 	unsigned char data[2];
@@ -3318,8 +3403,9 @@ static ssize_t synaptics_rmi4_f54_fifoindex_show(struct device *dev,
 
 	return snprintf(buf, PAGE_SIZE, "%u\n", f54->fifoindex);
 }
-static ssize_t synaptics_rmi4_f54_fifoindex_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_fifoindex_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned char data[2];
@@ -3349,7 +3435,8 @@ static ssize_t synaptics_rmi4_f54_fifoindex_store(struct device *dev,
 }
 
 #if defined(REPORT_STATUS_POLLING)
-static int test_wait_for_command_completion(void)
+static int test_wait_for_command_completion(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	unsigned char value;
@@ -3387,7 +3474,7 @@ static int test_wait_for_command_completion(void)
 }
 #endif
 
-ssize_t send_get_report_command(void)
+ssize_t send_get_report_command(struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	unsigned char command = (unsigned char)COMMAND_GET_REPORT;
@@ -3410,7 +3497,7 @@ ssize_t send_get_report_command(void)
 
 	__pm_stay_awake(&f54->test_wake_lock);
 #if !defined(REPORT_STATUS_POLLING)
-	set_interrupt(true);
+	set_interrupt(f54, true);
 #endif
 	f54->status = STATUS_BUSY;
 
@@ -3422,6 +3509,9 @@ ssize_t send_get_report_command(void)
 	/* unlock status mutex to allow jumping to error_exit label */
 	mutex_unlock(&f54->status_mutex);
 
+	dev_dbg(&rmi4_data->i2c_client->dev,
+			"%s: sent get report command\n", __func__);
+
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to write get report command\n",
@@ -3432,12 +3522,12 @@ ssize_t send_get_report_command(void)
 #if defined(REPORT_STATUS_POLLING)
 	/* if report status control method is polling */
 	pr_debug("will be polling test report status\n");
-	retval = test_wait_for_command_completion();
+	retval = test_wait_for_command_completion(f54);
 	if (retval < 0)
 		goto error_exit;
 
 	/* invoke status work immediately */
-	queue_delayed_work(f54->status_workqueue, &f54->status_work, 0);
+	schedule_delayed_work(&f54->status_work, 0);
 #else
 #ifdef WATCHDOG_HRTIMER
 	hrtimer_start(&f54->watchdog,
@@ -3451,7 +3541,7 @@ out:
 error_exit:
 	mutex_lock(&f54->status_mutex);
 #if !defined(REPORT_STATUS_POLLING)
-	set_interrupt(false);
+	set_interrupt(f54, false);
 #endif
 	__pm_relax(&f54->test_wake_lock);
 	f54->status = retval;
@@ -3460,8 +3550,9 @@ error_exit:
 	goto out;
 }
 
-static ssize_t synaptics_rmi4_f54_get_report_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_get_report_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned long setting;
@@ -3481,15 +3572,15 @@ static ssize_t synaptics_rmi4_f54_get_report_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	retval = send_get_report_command();
+	retval = send_get_report_command(f54);
 	if (retval < 0)
 		return retval;
 
 	return count;
 }
 
-static ssize_t synaptics_rmi4_f54_force_update_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_force_update_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	int retval;
 	unsigned char data[1];
@@ -3510,8 +3601,9 @@ static ssize_t synaptics_rmi4_f54_force_update_show(struct device *dev,
 		(data[0] & COMMAND_FORCE_UPDATE) == COMMAND_FORCE_UPDATE);
 }
 
-static ssize_t synaptics_rmi4_f54_force_update_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_force_update_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned char command;
@@ -3544,8 +3636,8 @@ static ssize_t synaptics_rmi4_f54_force_update_store(struct device *dev,
 	return count;
 }
 
-static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	int retval;
 	unsigned char data[1];
@@ -3568,8 +3660,9 @@ static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_show(struct device *de
 }
 
 
-static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned char command;
@@ -3603,8 +3696,9 @@ static ssize_t synaptics_rmi4_f54_enter_in_cell_test_mode_store(struct device *d
 }
 
 
-static ssize_t synaptics_rmi4_f54_force_cal_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t synaptics_rmi4_f54_force_cal_store(
+		struct synaptics_rmi4_f54_handle *f54,
+		const char *buf, size_t count)
 {
 	int retval;
 	unsigned char command;
@@ -3844,8 +3938,8 @@ simple_show_func_unsigned(query_f55_0_2, f55_q2_has_single_layer_multitouch)
 show_func_unsigned(control, reg_0_f55, f55_c0_receivers_on_x)
 show_func_unsigned(control, reg_8_f55, f55_c8_pattern_type)
 
-static ssize_t synaptics_rmi4_f54_burst_count_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_burst_count_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
 	int retval;
 	int size = 0;
@@ -3905,6 +3999,7 @@ static ssize_t synaptics_rmi4_f54_burst_count_show(struct device *dev,
 }
 
 static ssize_t synaptics_rmi4_f54_user_get_report_show(
+	struct synaptics_rmi4_f54_handle *f54,
 	char *buf, enum f54_report_types report_type)
 {
 	int retval;
@@ -3916,36 +4011,36 @@ static ssize_t synaptics_rmi4_f54_user_get_report_show(
 				"%s: WARNING: Resetting in busy state\n",
 				__func__);
 
-		retval = synaptics_rmi4_f54_reset();
+		retval = synaptics_rmi4_f54_reset(f54);
 		if (retval < 0)
 			goto out;
 	}
 
-	retval = synaptics_rmi4_f54_report_type_set(report_type);
+	retval = synaptics_rmi4_f54_report_type_set(f54, report_type);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 			"%s: Failed to set report type\n", __func__);
 		goto out;
 	}
 
-	retval = send_get_report_command();
+	retval = send_get_report_command(f54);
 
 out:
 	retval = scnprintf(buf, PAGE_SIZE, "%d\n", retval);
 	return retval;
 }
 
-static ssize_t synaptics_rmi4_f54_user_get_report1_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_user_get_report1_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
-	return synaptics_rmi4_f54_user_get_report_show(
+	return synaptics_rmi4_f54_user_get_report_show(f54,
 		buf, f54->user_report_type1);
 }
 
-static ssize_t synaptics_rmi4_f54_user_get_report2_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t synaptics_rmi4_f54_user_get_report2_show(
+		struct synaptics_rmi4_f54_handle *f54, char *buf)
 {
-	return synaptics_rmi4_f54_user_get_report_show(
+	return synaptics_rmi4_f54_user_get_report_show(f54,
 		buf, f54->user_report_type2);
 }
 
@@ -3953,6 +4048,7 @@ static ssize_t synaptics_rmi4_f54_data_read(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count)
 {
+	struct synaptics_rmi4_f54_handle *f54 = attributes->private;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
 	mutex_lock(&f54->data_mutex);
@@ -3976,23 +4072,43 @@ static ssize_t synaptics_rmi4_f54_data_read(struct file *data_file,
 	return count;
 }
 
-static int synaptics_rmi4_f54_set_sysfs(void)
+static int synaptics_rmi4_f54_set_sysfs(struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	int reg_num;
 	int dreg_num;
+	struct bin_attribute *dev_report_data;
+	struct f54_kobj_data *f54_kobj_data;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
-	f54->attr_dir = kobject_create_and_add("f54",
-			&rmi4_data->i2c_client->dev.kobj);
-	if (!f54->attr_dir) {
+	f54_kobj_data = kzalloc(sizeof(*f54_kobj_data), GFP_KERNEL);
+	if (!f54_kobj_data)
+		goto exit;
+
+	dev_report_data = kzalloc(sizeof(struct bin_attribute), GFP_KERNEL);
+	if (!dev_report_data)
+		goto exit_1;
+
+	dev_report_data->attr.name = "report_data";
+	dev_report_data->attr.mode = S_IRUGO;
+	dev_report_data->read = synaptics_rmi4_f54_data_read;
+	dev_report_data->private = (void *)f54;
+
+	f54_kobj_data->f54 = f54;
+	f54_kobj_data->dev_report_data = dev_report_data;
+
+	f54->f54_kdata = f54_kobj_data;
+
+	retval = kobject_init_and_add(&f54_kobj_data->kobj, &f54_ktype,
+					&rmi4_data->i2c_client->dev.kobj, "f54");
+	if (retval) {
 		dev_err(&rmi4_data->i2c_client->dev,
 			"%s: Failed to create sysfs directory\n",
 			__func__);
 		goto exit_1;
 	}
 
-	retval = sysfs_create_bin_file(f54->attr_dir, &dev_report_data);
+	retval = sysfs_create_bin_file(&f54_kobj_data->kobj, dev_report_data);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to create sysfs bin file\n",
@@ -4000,7 +4116,7 @@ static int synaptics_rmi4_f54_set_sysfs(void)
 		goto exit_2;
 	}
 
-	retval = sysfs_create_group(f54->attr_dir, &attr_group);
+	retval = sysfs_create_group(&f54_kobj_data->kobj, &attr_group);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to create sysfs attributes\n",
@@ -4010,7 +4126,7 @@ static int synaptics_rmi4_f54_set_sysfs(void)
 
 	for (reg_num = 0; reg_num < ARRAY_SIZE(attrs_ctrl_regs); reg_num++) {
 		if (attrs_ctrl_regs_exist[reg_num]) {
-			retval = sysfs_create_group(f54->attr_dir,
+			retval = sysfs_create_group(&f54_kobj_data->kobj,
 					&attrs_ctrl_regs[reg_num]);
 			if (retval < 0) {
 				dev_err(&rmi4_data->i2c_client->dev,
@@ -4023,7 +4139,7 @@ static int synaptics_rmi4_f54_set_sysfs(void)
 
 	for (dreg_num = 0; dreg_num < ARRAY_SIZE(attrs_data_regs); dreg_num++) {
 		if (attrs_data_regs_exist[dreg_num]) {
-			retval = sysfs_create_group(f54->attr_dir,
+			retval = sysfs_create_group(&f54_kobj_data->kobj,
 					&attrs_data_regs[dreg_num]);
 			if (retval < 0) {
 				dev_err(&rmi4_data->i2c_client->dev,
@@ -4038,21 +4154,24 @@ static int synaptics_rmi4_f54_set_sysfs(void)
 
 exit_5:
 	for (dreg_num--; dreg_num >= 0; dreg_num--)
-		sysfs_remove_group(f54->attr_dir, &attrs_data_regs[dreg_num]);
+		sysfs_remove_group(&f54_kobj_data->kobj, &attrs_data_regs[dreg_num]);
 
 exit_4:
 	for (reg_num--; reg_num >= 0; reg_num--)
-		sysfs_remove_group(f54->attr_dir, &attrs_ctrl_regs[reg_num]);
+		sysfs_remove_group(&f54_kobj_data->kobj, &attrs_ctrl_regs[reg_num]);
 
-	sysfs_remove_group(f54->attr_dir, &attr_group);
+	sysfs_remove_group(&f54_kobj_data->kobj, &attr_group);
 
 exit_3:
-	sysfs_remove_bin_file(f54->attr_dir, &dev_report_data);
+	sysfs_remove_bin_file(&f54_kobj_data->kobj, dev_report_data);
 
 exit_2:
-	kobject_put(f54->attr_dir);
+	kobject_put(&f54_kobj_data->kobj);
 
 exit_1:
+	kfree(dev_report_data);
+	kfree(f54->f54_kdata);
+exit:
 	return -ENODEV;
 }
 
@@ -4060,9 +4179,12 @@ exit_1:
  * Fill in base register address and offset of F54
  * control registers to allow run time patching
  */
-int synaptics_rmi4_scan_f54_ctrl_reg_info(
+static int synaptics_rmi4_scan_f54_ctrl_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *f54_ctrl_regs)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+			(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 	int ii, error = f54_ctrl_regs->nr_regs;
 	unsigned char *data;
 	struct synaptics_rmi4_packet_reg *reg;
@@ -4072,6 +4194,21 @@ int synaptics_rmi4_scan_f54_ctrl_reg_info(
 	for (ii = 0; ii < f54_ctrl_regs->nr_regs; ii++) {
 		reg = &f54_ctrl_regs->regs[ii];
 		subpkt = &reg->subpkt[0];
+		if (reg->r_number == 0 && f54->control.reg_0) {
+			data = kzalloc(sizeof(f54->control.reg_0->data),
+					GFP_KERNEL);
+			if (!data)
+				return -ENOMEM;
+			/* need an offset off of base address here */
+			reg->offset = f54->control.reg_0->address -
+					f54->control_base_addr;
+			reg->size = sizeof(f54->control.reg_0->data);
+			reg->data = data;
+			subpkt->present = true;
+			subpkt->offset = 0;
+			error--;
+		}
+
 		if (reg->r_number == 2 && f54->control.reg_2) {
 			data = kzalloc(sizeof(f54->control.reg_2->data),
 					GFP_KERNEL);
@@ -4085,7 +4222,6 @@ int synaptics_rmi4_scan_f54_ctrl_reg_info(
 			subpkt->present = true;
 			subpkt->offset = 0;
 			error--;
-			continue;
 		}
 
 		if (reg->r_number == 95 && f54->control.reg_95) {
@@ -4106,10 +4242,18 @@ int synaptics_rmi4_scan_f54_ctrl_reg_info(
 				subpkt = &reg->subpkt[jj];
 				subpkt->present = true;
 				subpkt->offset = jj * subpkt->size;
+				dev_dbg(&rmi4_data->i2c_client->dev,
+					"%s: subpkt[%d], off = %d, sz = %d\n", __func__,
+					jj, subpkt->offset, subpkt->size);
 			}
 			error--;
 		}
+		dev_dbg(&rmi4_data->i2c_client->dev,
+				"%s: reg[%d], addr = 0x%x, off = %d, sz = %d\n", __func__,
+				reg->r_number, f54->control_base_addr+reg->offset,
+				reg->offset, reg->size);
 	}
+	dev_dbg(&rmi4_data->i2c_client->dev, "%s: rc = %d\n", __func__, error);
 	return error;
 }
 
@@ -4117,9 +4261,12 @@ int synaptics_rmi4_scan_f54_ctrl_reg_info(
  * Fill in base register address and offset of F54
  * command register to allow run time patching
  */
-int synaptics_rmi4_scan_f54_cmd_reg_info(
+static int synaptics_rmi4_scan_f54_cmd_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *f54_cmd_regs)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+			(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 	unsigned char *data;
 	struct synaptics_rmi4_packet_reg *reg = f54_cmd_regs->regs;
 	struct synaptics_rmi4_subpkt *subpkt = &reg->subpkt[0];
@@ -4133,6 +4280,10 @@ int synaptics_rmi4_scan_f54_cmd_reg_info(
 	reg->data = data;
 	subpkt->present = true;
 	subpkt->offset = 0;
+	dev_dbg(&rmi4_data->i2c_client->dev,
+			"%s: reg[%d], addr = 0x%x, off = %d, sz = %d\n", __func__,
+			reg->r_number, f54->command_base_addr+reg->offset,
+			reg->offset, reg->size);
 	return 0;
 }
 
@@ -4140,9 +4291,12 @@ int synaptics_rmi4_scan_f54_cmd_reg_info(
   * Fill in base register address and offset of F54 query
   * register 12 to allow run time access
   */
-int synaptics_rmi4_scan_f54_query_reg_info(
+static int synaptics_rmi4_scan_f54_query_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *f54_query_regs)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+			(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 	struct synaptics_rmi4_packet_reg *reg = f54_query_regs->regs;
 	struct synaptics_rmi4_subpkt *subpkt = &reg->subpkt[0];
 	unsigned char *data = kzalloc(sizeof(f54->query12.data),
@@ -4156,6 +4310,10 @@ int synaptics_rmi4_scan_f54_query_reg_info(
 	reg->data = data;
 	subpkt->present = true;
 	subpkt->offset = 0;
+	dev_dbg(&rmi4_data->i2c_client->dev,
+			"%s: reg[%d], addr = 0x%x, off = %d, sz = %d\n", __func__,
+			reg->r_number, f54->query_base_addr+reg->offset,
+			reg->offset, reg->size);
 	return 0;
 }
 
@@ -4163,9 +4321,12 @@ int synaptics_rmi4_scan_f54_query_reg_info(
  * Fill in base register address and offset of F54 data
  * registers 10 & 17 to allow run time access
  */
-int synaptics_rmi4_scan_f54_data_reg_info(
+static int synaptics_rmi4_scan_f54_data_reg_info(
+	struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_func_packet_regs *f54_data_regs)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+			(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 	int ii, error = f54_data_regs->nr_regs;
 	unsigned char *data;
 	struct synaptics_rmi4_subpkt *subpkt;
@@ -4188,7 +4349,6 @@ int synaptics_rmi4_scan_f54_data_reg_info(
 			subpkt->present = true;
 			subpkt->offset = 0;
 			error--;
-			continue;
 		}
 
 		if (reg->r_number == 10 && f54->data.reg_10) {
@@ -4205,7 +4365,6 @@ int synaptics_rmi4_scan_f54_data_reg_info(
 			subpkt->present = true;
 			subpkt->offset = 0;
 			error--;
-			continue;
 		}
 
 		if (reg->r_number == 14 && f54->data.reg_14) {
@@ -4222,7 +4381,6 @@ int synaptics_rmi4_scan_f54_data_reg_info(
 			subpkt->present = true;
 			subpkt->offset = 0;
 			error--;
-			continue;
 		}
 
 		if (reg->r_number == 16 && f54->data.reg_16) {
@@ -4239,7 +4397,6 @@ int synaptics_rmi4_scan_f54_data_reg_info(
 			subpkt->present = true;
 			subpkt->offset = 0;
 			error--;
-			continue;
 		}
 
 		if (reg->r_number == 17 && f54->data.reg_17) {
@@ -4257,11 +4414,17 @@ int synaptics_rmi4_scan_f54_data_reg_info(
 			subpkt->offset = 0;
 			error--;
 		}
+		dev_dbg(&rmi4_data->i2c_client->dev,
+				"%s: reg[%d], addr = 0x%x, off = %d, sz = %d\n", __func__,
+				reg->r_number, f54->data_base_addr+reg->offset,
+				reg->offset, reg->size);
 	}
+	dev_dbg(&rmi4_data->i2c_client->dev, "%s: rc = %d\n", __func__, error);
 	return error ? -ENOSYS : error;
 }
 
-static int synaptics_rmi4_f54_set_ctrl(void)
+static int synaptics_rmi4_f54_set_ctrl(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	unsigned char length;
 	unsigned char reg_num = 0;
@@ -4704,7 +4867,8 @@ exit_no_mem:
 	return -ENOMEM;
 }
 
-static int synaptics_rmi4_f54_set_data(void)
+static int synaptics_rmi4_f54_set_data(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	unsigned char reg_num = 0;
 	unsigned short reg_addr = f54->data_base_addr;
@@ -4762,7 +4926,8 @@ exit_no_mem:
 	return -ENOMEM;
 }
 
-static int synaptics_rmi4_f55_read_query(void)
+static int synaptics_rmi4_f55_read_query(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
@@ -4790,7 +4955,8 @@ err:
 	return retval;
 }
 
-static void synaptics_rmi4_f54_sensor_mapping(void)
+static void synaptics_rmi4_f54_sensor_mapping(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
@@ -4853,14 +5019,9 @@ static void synaptics_rmi4_f54_sensor_mapping(void)
 	}
 
 	dev_info(&rmi4_data->i2c_client->dev,
-				"RxTx mapped from F$%s\n" \
-				"\n\tRx mapped count %d(%d)\n\tTx \
-				mapped count %d(%d)\n\n",
-				f54->fn55 ? "55" : "54",
-				rmi4_data->num_of_rx,
-				rx_len,
-				rmi4_data->num_of_tx,
-				tx_len);
+		"RxTx mapped from F$%s Rx mapped count %d(%d); Tx mapped count %d(%d)\n",
+		f54->fn55 ? "55" : "54", rmi4_data->num_of_rx,
+		rx_len, rmi4_data->num_of_tx, tx_len);
 exit:
 	kfree(buffer);
 }
@@ -4869,6 +5030,10 @@ static void synaptics_rmi4_f54_status_work(struct work_struct *work)
 {
 	int retval;
 	unsigned char report_index[2];
+	struct delayed_work *dw =
+			container_of(work, struct delayed_work, work);
+	struct synaptics_rmi4_f54_handle *f54 = container_of(dw,
+			struct synaptics_rmi4_f54_handle, status_work);
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
 	pr_debug("enter; status = %d\n", f54->status);
@@ -4877,7 +5042,7 @@ static void synaptics_rmi4_f54_status_work(struct work_struct *work)
 		goto error_exit;
 	}
 
-	set_report_size();
+	set_report_size(f54);
 	pr_debug("report_size = %d\n", f54->report_size);
 	if (f54->report_size == 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -4936,17 +5101,17 @@ static void synaptics_rmi4_f54_status_work(struct work_struct *work)
 	retval = STATUS_IDLE;
 
 #ifdef RAW_HEX
-	print_raw_hex_report();
+	print_raw_hex_report(f54);
 #endif
 
 #ifdef HUMAN_READABLE
-	print_image_report();
+	print_image_report(f54);
 #endif
 
 error_exit:
 	mutex_lock(&f54->status_mutex);
 #if !defined(REPORT_STATUS_POLLING)
-	set_interrupt(false);
+	set_interrupt(f54, false);
 #endif
 	__pm_relax(&f54->test_wake_lock);
 	f54->status = retval;
@@ -4959,16 +5124,20 @@ error_exit:
 static void synaptics_rmi4_f54_attn(struct synaptics_rmi4_data *rmi4_data,
 		unsigned char intr_mask)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+				(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
+
+	pr_debug("called f54_int_mask %x, int_mask %x\n", f54->intr_mask, intr_mask);
 	if (f54->intr_mask & intr_mask) {
-		queue_delayed_work(f54->status_workqueue,
-				&f54->status_work,
+		schedule_delayed_work(&f54->status_work,
 				msecs_to_jiffies(STATUS_WORK_INTERVAL));
 	}
 
 	return;
 }
 
-int synaptics_rmi4_f54_read_query(void)
+int synaptics_rmi4_f54_read_query(
+			struct synaptics_rmi4_f54_handle *f54)
 {
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
@@ -5039,17 +5208,9 @@ static int synaptics_rmi4_f54_init(struct synaptics_rmi4_data *rmi4_data)
 	unsigned char page;
 	unsigned char intr_count = 0;
 	unsigned char intr_offset;
-
 	struct synaptics_rmi4_fn_desc rmi_fd;
-
-	f54 = kzalloc(sizeof(*f54), GFP_KERNEL);
-	if (!f54) {
-		dev_err(&rmi4_data->i2c_client->dev,
-				"%s: Failed to alloc mem for f54\n",
-				__func__);
-		retval = -ENOMEM;
-		goto exit;
-	}
+	struct synaptics_rmi4_f54_handle *f54 =
+				(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 
 	f54->fn_ptr = kzalloc(sizeof(*(f54->fn_ptr)), GFP_KERNEL);
 	if (!f54->fn_ptr) {
@@ -5083,20 +5244,24 @@ static int synaptics_rmi4_f54_init(struct synaptics_rmi4_data *rmi4_data)
 				hasF54 = true;
 				f54->query_base_addr =
 					rmi_fd.query_base_addr | (page << 8);
-				pr_debug("query_base_addr 0x%04x\n",
-					f54->query_base_addr);
+				dev_dbg(&rmi4_data->i2c_client->dev,
+					"%s: query_base_addr 0x%04x\n",
+					__func__, f54->query_base_addr);
 				f54->control_base_addr =
 					rmi_fd.ctrl_base_addr | (page << 8);
-				pr_debug("ctrl_base_addr 0x%04x\n",
-					f54->control_base_addr);
+				dev_dbg(&rmi4_data->i2c_client->dev,
+					"%s: ctrl_base_addr 0x%04x\n",
+					__func__, f54->control_base_addr);
 				f54->data_base_addr =
 					rmi_fd.data_base_addr | (page << 8);
-				pr_debug("data_base_addr 0x%04x\n",
-					f54->data_base_addr);
+				dev_dbg(&rmi4_data->i2c_client->dev,
+					"%s: data_base_addr 0x%04x\n",
+					__func__, f54->data_base_addr);
 				f54->command_base_addr =
 					rmi_fd.cmd_base_addr | (page << 8);
-				pr_debug("command_base_addr 0x%04x\n",
-					f54->command_base_addr);
+				dev_dbg(&rmi4_data->i2c_client->dev,
+					"%s: command_base_addr 0x%04x\n",
+					__func__, f54->command_base_addr);
 			} else if (rmi_fd.fn_number == SYNAPTICS_RMI4_F55) {
 				hasF55 = true;
 				f54->fn55 = kmalloc(sizeof(*f54->fn55),
@@ -5136,7 +5301,7 @@ found:
 		f54->intr_mask |= 1 << ii;
 	}
 
-	retval = synaptics_rmi4_f54_read_query();
+	retval = synaptics_rmi4_f54_read_query(f54);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to read query registers\n",
@@ -5144,7 +5309,7 @@ found:
 		goto exit_free_mem;
 	}
 
-	retval = synaptics_rmi4_f55_read_query();
+	retval = synaptics_rmi4_f55_read_query(f54);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to set up F55 query registers\n",
@@ -5152,7 +5317,7 @@ found:
 		goto exit_free_control;
 	}
 
-	retval = synaptics_rmi4_f54_set_ctrl();
+	retval = synaptics_rmi4_f54_set_ctrl(f54);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to set up control registers\n",
@@ -5160,9 +5325,9 @@ found:
 		goto exit_free_control;
 	}
 
-	synaptics_rmi4_f54_sensor_mapping();
+	synaptics_rmi4_f54_sensor_mapping(f54);
 
-	retval = synaptics_rmi4_f54_set_data();
+	retval = synaptics_rmi4_f54_set_data(f54);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to set up data registers\n",
@@ -5174,7 +5339,7 @@ found:
 	mutex_init(&f54->data_mutex);
 	mutex_init(&f54->control_mutex);
 
-	retval = synaptics_rmi4_f54_set_sysfs();
+	retval = synaptics_rmi4_f54_set_sysfs(f54);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to create sysfs entries\n",
@@ -5182,8 +5347,6 @@ found:
 		goto exit_sysfs;
 	}
 
-	f54->status_workqueue =
-			create_singlethread_workqueue("f54_status_workqueue");
 	INIT_DELAYED_WORK(&f54->status_work,
 			synaptics_rmi4_f54_status_work);
 
@@ -5205,67 +5368,84 @@ found:
 
 exit_sysfs:
 exit_free_data:
-	free_data_mem();
+	free_data_mem(f54);
 
 exit_free_control:
-	free_control_mem();
+	free_control_mem(f54);
 
 exit_free_mem:
 	kfree(f54->fn_ptr);
 
 exit_free_f54:
 	kfree(f54);
-
+	rmi4_data->f54_data = NULL;
 exit:
 	return retval;
 }
 
 static void synaptics_rmi4_f54_remove(struct synaptics_rmi4_data *rmi4_data)
 {
+	struct synaptics_rmi4_f54_handle *f54 =
+				(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
 #ifdef WATCHDOG_HRTIMER
 	hrtimer_cancel(&f54->watchdog);
 #endif
 
-	cancel_delayed_work_sync(&f54->status_work);
-	flush_workqueue(f54->status_workqueue);
-	destroy_workqueue(f54->status_workqueue);
+	remove_sysfs(f54);
 
-	remove_sysfs();
-
-	free_data_mem();
-	free_control_mem();
+	free_data_mem(f54);
+	free_control_mem(f54);
 
 	kfree(f54->report_data);
 	kfree(f54->fn55);
 	kfree(f54->fn_ptr);
-	kfree(f54);
 
-	complete(&remove_complete);
+	complete(&f54->remove_complete);
 
 	return;
 }
 
 static int __init rmi4_f54_module_init(void)
 {
-	synaptics_rmi4_new_function(RMI_F54, true,
-			synaptics_rmi4_f54_init,
-			synaptics_rmi4_f54_remove,
-			synaptics_rmi4_f54_attn,
-			NULL, IC_MODE_UI);
+	struct synaptics_rmi4_f54_handle *f54;
+	struct synaptics_rmi4_data *next = NULL;
 
+	while ((next = synaptics_driver_getdata(next)) != NULL) {
+		f54 = kzalloc(sizeof(*f54), GFP_KERNEL);
+		next->f54_data = (void *)f54;
+		next->scan_f54_ctrl_regs = synaptics_rmi4_scan_f54_ctrl_reg_info;
+		next->scan_f54_cmd_regs = synaptics_rmi4_scan_f54_cmd_reg_info;
+		next->scan_f54_query_regs = synaptics_rmi4_scan_f54_query_reg_info;
+		next->scan_f54_data_regs = synaptics_rmi4_scan_f54_data_reg_info;
+		dev_dbg(&next->i2c_client->dev,
+				"%s: f54 ptr = %p, rmi4_data_ptr %p\n",
+				__func__, f54, dev_get_drvdata(&next->i2c_client->dev));
+		synaptics_rmi4_new_function(next, RMI_F54, true,
+				synaptics_rmi4_f54_init,
+				synaptics_rmi4_f54_remove,
+				synaptics_rmi4_f54_attn,
+				NULL, IC_MODE_UI);
+	}
 	return 0;
 }
 
 static void __exit rmi4_f54_module_exit(void)
 {
-	init_completion(&remove_complete);
-	synaptics_rmi4_new_function(RMI_F54, false,
-			synaptics_rmi4_f54_init,
-			synaptics_rmi4_f54_remove,
-			synaptics_rmi4_f54_attn,
-			NULL, IC_MODE_UI);
+	struct synaptics_rmi4_f54_handle *f54;
+	struct synaptics_rmi4_data *next = NULL;
 
-	wait_for_completion(&remove_complete);
+	while ((next = synaptics_driver_getdata(next)) != NULL) {
+		f54 = (struct synaptics_rmi4_f54_handle *)next->f54_data;
+		init_completion(&f54->remove_complete);
+		synaptics_rmi4_new_function(next, RMI_F54, false,
+				synaptics_rmi4_f54_init,
+				synaptics_rmi4_f54_remove,
+				synaptics_rmi4_f54_attn,
+				NULL, IC_MODE_UI);
+		wait_for_completion(&f54->remove_complete);
+		kfree(f54);
+		next->f54_data = NULL;
+	}
 	return;
 }
 
