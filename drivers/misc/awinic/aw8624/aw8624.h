@@ -55,6 +55,12 @@ struct aw8624_dts_info {
 
 	int aw8624_f0_trace_parameter[4];
 	int aw8624_bemf_config[4];
+	int aw8624_sw_brake;
+	int aw8624_wavseq[16];
+	int aw8624_wavloop[10];
+	int aw8624_td_brake[3];
+	int aw8624_tset;
+	int aw8624_parameter1;
 };
 
 
@@ -163,6 +169,7 @@ struct aw8624 {
 	struct work_struct irq_work;
 	struct work_struct rtp_work;
 	struct delayed_work ram_work;
+	struct delayed_work stop_work;
 
 	struct led_classdev to_dev;
 
@@ -177,6 +184,7 @@ struct aw8624 {
 	unsigned char hwen_flag;
 	unsigned char flags;
 	unsigned char chipid;
+	unsigned char chipid_flag;
 
 	unsigned char play_mode;
 	unsigned char activate_mode;
