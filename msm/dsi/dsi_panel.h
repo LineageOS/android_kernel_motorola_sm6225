@@ -405,4 +405,6 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 int dsi_panel_set_param(struct dsi_panel *panel,
 			struct msm_param_info *param_info);
 
+void dsi_panel_reset_param(struct dsi_panel *panel);
+
 #endif /* _DSI_PANEL_H_ */
