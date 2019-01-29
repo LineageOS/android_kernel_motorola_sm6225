@@ -48,6 +48,7 @@ struct mmi_uart_pb_hdr_t {
 #define BOOT_MODE             0x0007
 #define MUC_FW_VERSION        0x0008
 #define MUC_SET_GPIO          0x0009
+#define MUC_DEBUG_MSG         0x0010
 
 /* MUC gpios */
 #define MUC_GPIO_1            35

@@ -1164,6 +1164,15 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
 			break;
 		}
+		case MUC_DEBUG_MSG: {
+			if (payload_len) {
+				/* Ensure null terminated */
+				payload[payload_len - 1] = '\0';
+				MUC_LOG("muc_dbg_msg: %s\n", (char *)payload);
+			}
+			muc_uart_send(mm_data, hdr->cmd|MSG_ACK_MASK, NULL, 0);
+			break;
+		}
 		default: {
 			if (hdr->cmd & MSG_ACK_MASK)
 				clear_wait_for_ack(mm_data);
