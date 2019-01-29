@@ -2886,6 +2886,7 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 
 #endif
 	himax_int_enable(0);
+	himax_report_all_leave_event(ts);
 	g_core_fp.fp_suspend_ic_action();
 
 	if (!ts->use_irq) {
