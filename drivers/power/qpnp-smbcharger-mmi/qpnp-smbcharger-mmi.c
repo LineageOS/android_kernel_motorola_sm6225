@@ -65,6 +65,7 @@ enum {
 
 #define REV_BST_THRESH 4700
 #define REV_BST_DROP 150
+#define REV_BST_BULK_DROP 100
 #define REV_BST_MA -10
 #define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
@@ -2280,7 +2281,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
 
-	if ((chg_stat.batt_mv >= chg_stat.usb_mv) &&
+	pr_debug("SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
+		 chg_stat.batt_mv, chg_stat.usb_mv,
+		 prev_vbus_mv, chg_stat.batt_ma);
+	if ((abs(chg_stat.usb_mv - chg_stat.batt_mv) < REV_BST_BULK_DROP) &&
 	    ((chg_stat.usb_mv*1000) > TWO_VOLT)) {
 		if (((chg_stat.usb_mv < REV_BST_THRESH) &&
 		    ((prev_vbus_mv - REV_BST_DROP) > chg_stat.usb_mv)) ||
@@ -2304,7 +2308,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 	prev_vbus_mv = chg_stat.usb_mv;
 
-	if (chip->factory_mode || (chip->is_factory_image && chip->enable_factory_poweroff)) {
+	if (chip->factory_mode ||
+	    (chip->is_factory_image && chip->enable_factory_poweroff)) {
 		rc = smblib_get_usb_suspend(chip, &usb_suspend);
 		if (rc < 0)
 			goto sch_hb;
@@ -2323,6 +2328,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
+		pr_debug("SMBMMI: Factory Kill check pc %d, usb %d, susp %d\n",
+			 pc_online, pval.intval, usb_suspend);
 		if (pc_online ||
 		    pval.intval ||
 		    (usb_suspend && ((chg_stat.usb_mv*1000) > TWO_VOLT))) {
