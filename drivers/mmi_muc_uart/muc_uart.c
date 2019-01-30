@@ -85,6 +85,9 @@ void *muc_ipc_log;
 /* How many times to try to send a message before giving up */
 #define MUC_UART_RETRY_COUNT 100
 
+/* Max number of chars we will copy from the fw vers sent by the muc */
+#define MUC_FW_VERS_MAX_SIZE 32
+
 struct write_data {
 	struct list_head list;
 	uint16_t cmd;
@@ -138,6 +141,7 @@ struct mod_muc_data_t {
 	struct power_supply *dc_psy;
 	atomic_t sleep_req_pending;
 	struct notifier_block ps_nb;
+	char muc_fw_vers[MUC_FW_VERS_MAX_SIZE];
 };
 
 /* How long until we move on without an ack */
@@ -218,11 +222,26 @@ static ssize_t mod_attached_show(struct device *dev,
 	return snprintf(buf, 4, "%u\n", gpio_state);
 }
 
+static ssize_t muc_fw_vers_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct mod_muc_data_t *mm_data = platform_get_drvdata(pdev);
+
+	if (mm_data && mm_data->muc_fw_vers[0] != '\0')
+		return snprintf(buf, strlen(mm_data->muc_fw_vers) + 1,
+			"%s", mm_data->muc_fw_vers);
+
+	return 0;
+}
+
 /* /sys/devices/soc:mod_uart/mod_attached */
 DEVICE_ATTR_RO(mod_attached);
+DEVICE_ATTR_RO(muc_fw_vers);
 
 static struct attribute *muc_uart_attrs[] = {
 	&dev_attr_mod_attached.attr,
+	&dev_attr_muc_fw_vers.attr,
 	NULL
 };
 
@@ -1138,6 +1157,11 @@ static void muc_uart_handle_message(struct mod_muc_data_t *mm_data,
 				MUC_LOG("muc_fw_ver: %.*s\n",
 					(int)payload_len,
 					(char *)payload);
+				memset(mm_data->muc_fw_vers, 0, MUC_FW_VERS_MAX_SIZE);
+				/* Last value of muc_fw_vers should be null char */
+				memcpy(mm_data->muc_fw_vers, payload,
+					payload_len < (MUC_FW_VERS_MAX_SIZE - 1) ?
+					payload_len : (MUC_FW_VERS_MAX_SIZE - 1));
 			} else
 				muc_uart_send(mm_data, MUC_FW_VERSION|MSG_NACK_MASK, NULL, 0);
 			break;
