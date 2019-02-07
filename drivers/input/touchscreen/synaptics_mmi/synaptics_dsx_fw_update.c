@@ -755,9 +755,8 @@ static int fwu_parse_image_info(struct synaptics_rmi4_fwu_handle *fwu)
 
 static int fwu_read_flash_status(struct synaptics_rmi4_fwu_handle *fwu)
 {
-	int retval;
+	int retval, partition = -1;
 	unsigned char status;
-	struct f34_v7_data_1_5 data15;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(fwu->dev);
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
@@ -771,17 +770,6 @@ static int fwu_read_flash_status(struct synaptics_rmi4_fwu_handle *fwu)
 		return retval;
 	}
 
-	retval = synaptics_rmi4_reg_read(rmi4_data,
-			fwu->f34_fd.data_base_addr + fwu->off.partition_id,
-			(unsigned char *)&data15,
-			sizeof(data15));
-	if (retval < 0) {
-		dev_err(LOGDEV,
-				"%s: Failed to read data15\n",
-				__func__);
-		return retval;
-	}
-
 	fwu->in_bl_mode = status >> 7;
 
 	if (fwu->bl_version == BL_V5)
@@ -791,18 +779,53 @@ static int fwu_read_flash_status(struct synaptics_rmi4_fwu_handle *fwu)
 	else
 		fwu->flash_status = status & MASK_5BIT;
 
+	if (fwu->bl_version <= BL_V6) {
+		unsigned char command;
+
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				fwu->f34_fd.data_base_addr + fwu->off.flash_cmd,
+				&command,
+				sizeof(command));
+		if (retval < 0) {
+			dev_err(LOGDEV,
+					"%s: Failed to read flash command\n",
+					__func__);
+			return retval;
+		}
+
+		if (fwu->bl_version == BL_V5)
+			fwu->command = command & MASK_4BIT;
+		else if (fwu->bl_version == BL_V6)
+			fwu->command = command & MASK_6BIT;
+		else
+			fwu->command = command;
+
+	} else {
+		struct f34_v7_data_1_5 data15;
+
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				fwu->f34_fd.data_base_addr + fwu->off.partition_id,
+				(unsigned char *)&data15,
+				sizeof(data15));
+		if (retval < 0) {
+			dev_err(LOGDEV,
+					"%s: Failed to read data15\n",
+					__func__);
+			return retval;
+		}
+
+		if (fwu->flash_status == BAD_PARTITION_TABLE)
+			fwu->flash_status = 0x00;
+
+		partition = data15.partition_id;
+		fwu->command = data15.command;
+	}
+
 	if (fwu->flash_status != 0x00) {
 		dev_err(LOGDEV,
 				"%s: Flash status = %d, part_id = %d, command = 0x%02x\n",
-				__func__, fwu->flash_status, data15.partition_id, data15.command);
+				__func__, fwu->flash_status, partition, fwu->command);
 	}
-
-	if (fwu->bl_version >= BL_V7) {
-		if (fwu->flash_status == BAD_PARTITION_TABLE)
-			fwu->flash_status = 0x00;
-	}
-
-	fwu->command = data15.command;
 
 	return 0;
 }
@@ -882,12 +905,14 @@ static int fwu_wait_for_idle(
 {
 	int retval;
 
-	retval = down_timeout(&fwu->irq_sema, msecs_to_jiffies(timeout_ms));
-	if (retval) {
-		retval = -ETIMEDOUT;
-		dev_err(LOGDEV,
-			"%s: timed out waiting for cmd to complete\n",
-			__func__);
+	if (fwu->bl_version > BL_V6) {
+		retval = down_timeout(&fwu->irq_sema, msecs_to_jiffies(timeout_ms));
+		if (retval) {
+			retval = -ETIMEDOUT;
+			dev_err(LOGDEV,
+				"%s: timed out waiting for cmd to complete\n",
+				__func__);
+		}
 	}
 
 	retval = fwu_read_interrupt_status(fwu);
