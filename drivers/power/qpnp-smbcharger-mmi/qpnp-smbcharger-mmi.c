@@ -3070,11 +3070,6 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
 
-	if (chip->mmi_psy)
-		power_supply_unregister(chip->mmi_psy);
-	if (chip->batt_psy)
-		power_supply_unregister(chip->batt_psy);
-
 	if (chip->qcom_psy)
 		power_supply_put(chip->qcom_psy);
 	if (chip->bms_psy)
