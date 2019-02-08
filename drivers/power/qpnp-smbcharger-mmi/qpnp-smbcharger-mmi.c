@@ -2337,7 +2337,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
 			pr_err("SMBMMI:Factory kill power off\n");
-			kernel_power_off();
+			orderly_poweroff(true);
 		} else
 			chip->factory_kill_armed = false;
 	}
