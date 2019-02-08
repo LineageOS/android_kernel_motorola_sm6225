@@ -413,7 +413,7 @@ open_fail:
 int mmi_uart_close(void *uart_data)
 {
 	struct mmi_uart_data *mud = (struct mmi_uart_data *)uart_data;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(&mud->pdev->dev, "%s: closing uart\n", __func__);
 
