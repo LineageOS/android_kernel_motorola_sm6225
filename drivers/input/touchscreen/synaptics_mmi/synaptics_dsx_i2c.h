@@ -883,6 +883,7 @@ struct synaptics_rmi4_fwu_handle {
 	bool do_lockdown;
 	bool has_guest_code;
 	bool new_partition_table;
+	bool has_erase_all;
 	unsigned int data_pos;
 	unsigned char *ext_data_source;
 	unsigned char *read_config_buf;
