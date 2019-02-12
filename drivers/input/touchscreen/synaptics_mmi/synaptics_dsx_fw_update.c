@@ -905,14 +905,12 @@ static int fwu_wait_for_idle(
 {
 	int retval;
 
-	if (fwu->bl_version > BL_V6) {
-		retval = down_timeout(&fwu->irq_sema, msecs_to_jiffies(timeout_ms));
-		if (retval) {
-			retval = -ETIMEDOUT;
-			dev_err(LOGDEV,
+	retval = down_timeout(&fwu->irq_sema, msecs_to_jiffies(timeout_ms));
+	if (retval) {
+		retval = -ETIMEDOUT;
+		dev_err(LOGDEV,
 				"%s: timed out waiting for cmd to complete\n",
 				__func__);
-		}
 	}
 
 	retval = fwu_read_interrupt_status(fwu);
