@@ -28,6 +28,8 @@
 #include <asm/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/power_supply.h>
+#include <linux/wakelock.h>
+#include <linux/jiffies.h>
 #include "aw8624.h"
 #include "aw8624_reg.h"
 
@@ -38,7 +40,7 @@
  ******************************************************/
 #define AW8624_I2C_NAME "aw8624_haptic"
 #define AW8624_HAPTIC_NAME "aw8624_haptic"
-#define AW8624_VERSION "v1.0.4"
+#define AW8624_VERSION "v1.0.5"
 #define AWINIC_RAM_UPDATE_DELAY
 #define AW_I2C_RETRIES 2
 #define AW_I2C_RETRY_DELAY 2
@@ -2337,6 +2339,13 @@ static void aw8624_vibrator_work_routine(struct work_struct *work)
 		hrtimer_start(&aw8624->timer,
 			ktime_set(aw8624->duration / 1000, (aw8624->duration % 1000) * 1000000),
 			HRTIMER_MODE_REL);
+		wake_lock(&aw8624->wk_lock);
+		aw8624->wk_lock_flag = 1;
+	} else {
+		if (aw8624->wk_lock_flag == 1) {
+			wake_unlock(&aw8624->wk_lock);
+			aw8624->wk_lock_flag = 0;
+		}
 	}
 
 	mutex_unlock(&aw8624->lock);
@@ -2715,6 +2724,7 @@ static int aw8624_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
 
 	aw8624->dev = &i2c->dev;
 	aw8624->i2c = i2c;
+	wake_lock_init(&aw8624->wk_lock, WAKE_LOCK_SUSPEND, "aw8624_wakelock");
 
 	i2c_set_clientdata(i2c, aw8624);
 
