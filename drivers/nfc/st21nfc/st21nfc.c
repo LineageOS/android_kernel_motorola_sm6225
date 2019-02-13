@@ -93,22 +93,23 @@ static int st_clock_select(struct st21nfc_dev *st21nfc_dev)
 
 	st21nfc_dev->s_clk = clk_get(&st21nfc_dev->platform_data.client->dev, "nfc_ref_clk");
 
-	/* if NULL we assume external crystal and dont fail */
-	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
+	/* if s_clk NULL we assume external crystal and dont fail */
+	if (IS_ERR_OR_NULL(st21nfc_dev->s_clk)) {
+		st21nfc_dev->s_clk = NULL;
 		return 0;
+	}
 
-	if (st21nfc_dev->clk_run == false)
+	if (!st21nfc_dev->clk_run) {
 		r = clk_prepare_enable(st21nfc_dev->s_clk);
+		if (r) {
+			// error
+			r = -1;
+		} else {
+			dev_dbg(&st21nfc_dev->platform_data.client->dev,"st21nfc clk enabled\n");
+			st21nfc_dev->clk_run = true;
+		}
+	}
 
-	if (r)
-		goto err_clk;
-
-	st21nfc_dev->clk_run = true;
-
-	return r;
-
-err_clk:
-	r = -1;
 	return r;
 }
 
@@ -117,20 +118,14 @@ err_clk:
  */
 static int st_clock_deselect(struct st21nfc_dev *st21nfc_dev)
 {
-	int r = -1;
-
-	/* if NULL we assume external crystal and dont fail */
-	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
-		return 0;
-
-	if ((st21nfc_dev->s_clk != NULL) && !IS_ERR(st21nfc_dev->s_clk)) {
-		if (st21nfc_dev->clk_run == true) {
-			clk_disable_unprepare(st21nfc_dev->s_clk);
-			st21nfc_dev->clk_run = false;
-		}
-		return 0;
+	/* if s_clk is NULL we assume external crystal and dont fail */
+	if (st21nfc_dev->s_clk && st21nfc_dev->clk_run) {
+		clk_disable_unprepare(st21nfc_dev->s_clk);
+		st21nfc_dev->clk_run = false;
+		dev_dbg(&st21nfc_dev->platform_data.client->dev,"st21nfc clk disabled\n");
 	}
-	return r;
+
+	return 0;
 }
 
 static int st21nfc_loc_set_polaritymode(struct st21nfc_dev *st21nfc_dev,
@@ -761,10 +756,54 @@ static struct of_device_id st21nfc_of_match[] = {
 	{}
 };
 
+#ifdef CONFIG_PM
+
+static int st21nfc_suspend(struct device *dev)
+{
+	struct st21nfc_dev *st21nfc_dev = dev_get_drvdata(dev);
+	if (st21nfc_dev->s_clk && st21nfc_dev->clk_run) {
+		clk_disable_unprepare(st21nfc_dev->s_clk);
+		st21nfc_dev->clk_run = false;
+	}
+
+	return 0;
+}
+
+static int st21nfc_resume(struct device *dev)
+{
+	struct st21nfc_dev *st21nfc_dev = dev_get_drvdata(dev);
+	int r = 0;
+	if (st21nfc_dev->s_clk && !st21nfc_dev->clk_run) {
+		r = clk_prepare_enable(st21nfc_dev->s_clk);
+		if (r) {
+			pr_err("clk enable failed\n");
+		} else {
+			st21nfc_dev->clk_run = true;
+		}
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops st21nfc_pm_ops =
+{
+	.suspend = st21nfc_suspend,
+	.resume = st21nfc_resume,
+};
+
+#define DEV_PM_OPS (&st21nfc_pm_ops)
+#else
+#define DEV_PM_OPS NULL
+#endif /* CONFIG_PM */
+
+
+
+
 static struct i2c_driver st21nfc_driver = {
 	.id_table = st21nfc_id,
 	.driver = {
 		.name	= "st21nfc",
+		.pm	= DEV_PM_OPS,
 		.owner	= THIS_MODULE,
 		.of_match_table	= st21nfc_of_match,
 	},
