@@ -164,6 +164,8 @@ struct aw8624 {
 	struct device *dev;
 
 	struct mutex lock;
+	struct wake_lock wk_lock;
+	unsigned char wk_lock_flag;
 	struct hrtimer timer;
 	struct work_struct vibrator_work;
 	struct work_struct irq_work;
