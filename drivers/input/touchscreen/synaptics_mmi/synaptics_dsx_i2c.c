@@ -2782,15 +2782,31 @@ static int synaptics_dsx_sensor_ready_state(
 	int retval, state, i;
 
 	for (i = 0; i < 10; ++i) {
-		retval = rmi4_data->get_status(rmi4_data);
+		retval = synaptics_rmi4_f01_flashprog_status(rmi4_data);
+		dev_dbg(&rmi4_data->i2c_client->dev,
+			"%s: (%d): flashprog bit=%d\n",
+			__func__, i, retval);
+		/* if simple flashprog bit check reports BL mode */
+		/* then do not bother checking F34 flash status */
+		if (!retval &&
+		    rmi4_data->get_status != synaptics_rmi4_f01_flashprog_status) {
+			retval = rmi4_data->get_status(rmi4_data);
+			dev_dbg(&rmi4_data->i2c_client->dev,
+				"%s: (%d): f34 flash status %d\n",
+				__func__, i, retval);
+		}
+
 		if (retval < 0) {
-			pr_err("(%d) Failed to query touch ic status\n", i);
+			dev_err(&rmi4_data->i2c_client->dev,
+					"%s: (%d) Failed to query touch ic status\n",
+					__func__, i);
 			return retval;
 		}
 
 		ui_mode = retval == 0;
-		pr_debug("(%d) UI mode: %s\n", i, ui_mode ? "true" : "false");
-
+		dev_dbg(&rmi4_data->i2c_client->dev,
+				"%s: (%d) UI mode: %s\n",
+				__func__, i, ui_mode ? "true" : "false");
 		if (ui_mode)
 			break;
 
@@ -2801,7 +2817,9 @@ static int synaptics_dsx_sensor_ready_state(
 	if (!ui_mode && state == STATE_SUSPEND && rmi4_data->input_registered) {
 		/* expecting touch IC to enter UI mode based on */
 		/* its previous known good state */
-		pr_err("Timed out waiting for UI mode - UI mode forced\n");
+		dev_err(&rmi4_data->i2c_client->dev,
+				"%s: Timed out waiting for UI mode - UI mode forced\n",
+				__func__);
 		ui_mode = 1;
 	}
 
@@ -6553,7 +6571,8 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 	struct synaptics_rmi4_exp_fn *exp_fhandler, *next_list_entry;
 	struct device *dev = &rmi4_data->i2c_client->dev;
 	int state, error, probe_status;
-	bool all_inserted = true;
+	unsigned int scheduled_delay = 0;
+	bool f34_inserted = false;
 	bool terminate = false;
 	bool panel_ready = true;
 	char *pname = NULL;
@@ -6608,9 +6627,10 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 	list_for_each_entry(exp_fhandler,
 				&exp_fn_ctrl->fn_list,
 				link) {
-		if (!exp_fhandler->inserted) {
-			all_inserted = false;
-			dev_dbg(dev, "%s: not all inserted; keep waiting...\n", __func__);
+		if (exp_fhandler->fn_type == RMI_FW_UPDATER &&
+			exp_fhandler->inserted) {
+			f34_inserted = true;
+			dev_dbg(dev, "%s: F34 handler inserted\n", __func__);
 			break;
 		}
 	}
@@ -6626,58 +6646,84 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			exp_fhandler->func_init = NULL;
 		}
 
-		if (exp_fhandler->func_init == NULL) {
-			if (exp_fhandler->inserted == true) {
-				dev_dbg(dev, "%s: calling remove func for handler: %d\n",
+		if (exp_fhandler->inserted == true) {
+			if (exp_fhandler->func_init) {
+				dev_dbg(dev, "%s: handler %d already inserted\n",
 						__func__, exp_fhandler->fn_type);
-				exp_fhandler->func_remove(rmi4_data);
-
-				/* need to restore status function on F34 removal */
-				if (exp_fhandler->fn_type == RMI_FW_UPDATER &&
-					exp_fhandler->func_status == rmi4_data->get_status) {
-					rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
-					dev_info(dev,
-							"%s: using default status retrieval function\n",
-							__func__);
-				}
-
-				if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
-					if (terminate) {
-						cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
-						flush_workqueue(det_workqueue);
-
-						i2c_set_clientdata(rmi4_data->i2c_client, NULL);
-						kfree(rmi4_data);
-
-						dev_info(dev, "%s: driver removed\n", __func__);
-					} else if (all_inserted) {
-						synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
-						dev_info(dev, "%s: drm panel ready\n", __func__);
-					} else {
-						queue_delayed_work(det_workqueue,
-								&exp_fn_ctrl->det_work,
-								msecs_to_jiffies(EXP_FN_DET_INTERVAL));
-						dev_dbg(dev, "%s: keep drm fhandler\n", __func__);
-						continue;
-					}
-				}
-
-				list_del(&exp_fhandler->link);
-				kfree(exp_fhandler);
+				continue;
 			}
+
+			dev_dbg(dev, "%s: calling remove func for handler: %d\n",
+					__func__, exp_fhandler->fn_type);
+			exp_fhandler->func_remove(rmi4_data);
+
+			/* need to restore status function on F34 removal */
+			if (exp_fhandler->fn_type == RMI_FW_UPDATER &&
+				exp_fhandler->func_status == rmi4_data->get_status) {
+				rmi4_data->get_status = synaptics_rmi4_f01_flashprog_status;
+				dev_info(dev,
+						"%s: using default status retrieval function\n",
+						__func__);
+			}
+
+			if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
+				if (terminate) {
+					cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
+					flush_workqueue(det_workqueue);
+
+					i2c_set_clientdata(rmi4_data->i2c_client, NULL);
+					kfree(rmi4_data);
+
+					dev_info(dev, "%s: driver removed\n", __func__);
+				} else if (f34_inserted) {
+					synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
+					dev_info(dev, "%s: drm panel ready\n", __func__);
+					dev_err(dev, "%s: touch_stopped=%d, flash_enabled=%d\n",
+							__func__,
+							atomic_read(&rmi4_data->touch_stopped),
+							rmi4_data->flash_enabled);
+				} else {
+					queue_delayed_work(det_workqueue,
+							&exp_fn_ctrl->det_work,
+							msecs_to_jiffies(EXP_FN_DET_INTERVAL));
+					dev_dbg(dev, "%s: keep drm fhandler\n", __func__);
+					continue;
+				}
+			}
+
+			list_del(&exp_fhandler->link);
+			kfree(exp_fhandler);
 			continue;
 		}
 
-		if (exp_fhandler->inserted == true)
+		/* postpone all handlers, except for RMI_DRM_FRAMEWORK */
+		/* until RMI_FW_UPDATER processed */
+		if (!f34_inserted &&
+			!(exp_fhandler->fn_type == RMI_FW_UPDATER ||
+			  exp_fhandler->fn_type == RMI_DRM_FRAMEWORK)) {
+			dev_dbg(dev, "%s: hold handler %d until f34 inserted\n",
+					__func__, exp_fhandler->fn_type);
 			continue;
+		}
 
-		if (rmi4_data->in_bootloader &&
-			(exp_fhandler->mode == IC_MODE_UI))
-			continue;
+		state = synaptics_dsx_get_state_safe(rmi4_data);
+		dev_dbg(dev, "%s: current state: %s, in_bootloader: %s\n",
+				__func__, synaptics_dsx_state_name(state),
+				rmi4_data->in_bootloader ? "true" : "false");
+
+		if (exp_fhandler->mode == IC_MODE_UI) {
+			if (rmi4_data->in_bootloader) {
+				dev_err(dev, "%s: handler %d requires UI mode\n",
+						__func__, exp_fhandler->fn_type);
+				continue;
+			}
+		}
 
 		exp_fhandler->func_init(rmi4_data);
-		state = synaptics_dsx_get_state_safe(rmi4_data);
 		exp_fhandler->inserted = true;
+		dev_dbg(dev, "%s: handler %d inserted\n",
+				__func__, exp_fhandler->fn_type);
+
 		if (exp_fhandler->fn_type == RMI_F54 && rmi4_data->f54_data) {
 			int scan_failures = 0;
 			struct synaptics_rmi4_func_packet_regs *regs;
@@ -6749,12 +6795,19 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 				rmi = &(rmi4_data->rmi4_mod_info);
 				rmi4_data->in_bootloader = true;
+				synaptics_dsx_set_state_safe(rmi4_data, STATE_BL);
+
+				state = synaptics_dsx_get_state_safe(rmi4_data);
+				dev_dbg(dev, "%s: current state %s\n",
+					__func__, synaptics_dsx_state_name(state));
 				dev_info(dev, "%s: Product: %s is in bootloader mode\n",
 					__func__, rmi->product_id_string);
 			}
 			/* replace default status retrieval function */
 			rmi4_data->get_status = exp_fhandler->func_status;
 			dev_info(dev, "%s: using F34 status retrieval function\n", __func__);
+			/* allowing sufficient time for possible upgrade to start */
+			scheduled_delay = 3000;
 		}
 
 		if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
@@ -6768,11 +6821,13 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			exp_fhandler->func_init = NULL;
 			dev_dbg(dev, "%s: removing DRM\n", __func__);
 			/* allowing sufficient time for F34 to complete */
-			queue_delayed_work(det_workqueue,
-					&exp_fn_ctrl->det_work,
-					msecs_to_jiffies(5000));
+			scheduled_delay = 3000;
 		}
 	}
+
+	if (scheduled_delay)
+		queue_delayed_work(det_workqueue, &exp_fn_ctrl->det_work,
+					msecs_to_jiffies(scheduled_delay));
 
 release_mutex:
 	mutex_unlock(&exp_fn_ctrl->list_mutex);
