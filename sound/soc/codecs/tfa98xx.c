@@ -73,6 +73,8 @@ static nxpTfaContainer_t *tfa98xx_container = NULL;
 static int tfa98xx_kmsg_regs = 0;
 static int tfa98xx_ftrace_regs = 0;
 
+static uint32_t tfa98xx_rpc_send_delay = 0;
+
 static char *fw_name = "tfa98xx.cnt";
 module_param(fw_name, charp, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(fw_name, "TFA98xx DSP firmware (container file) name.");
@@ -863,7 +865,7 @@ static ssize_t tfa98xx_dbgfs_rpc_send(struct file *file,
 		pr_err("[0x%x] dsp_msg error: %d\n", i2c->addr, err);
 	}
 
-	mdelay(2);
+	mdelay(tfa98xx_rpc_send_delay);
 
 	mutex_unlock(&tfa98xx->dsp_lock);
 
@@ -3131,6 +3133,8 @@ static int tfa98xx_ext_reset(struct tfa98xx *tfa98xx)
 
 static int tfa98xx_parse_dt(struct device *dev, struct tfa98xx *tfa98xx,
 		struct device_node *np) {
+	int ret = 0;
+
 	tfa98xx->reset_gpio = of_get_named_gpio(np, "reset-gpio", 0);
 	if (tfa98xx->reset_gpio < 0)
 		dev_dbg(dev, "No reset GPIO provided, will not HW reset device\n");
@@ -3138,6 +3142,12 @@ static int tfa98xx_parse_dt(struct device *dev, struct tfa98xx *tfa98xx,
 	tfa98xx->irq_gpio =  of_get_named_gpio(np, "irq-gpio", 0);
 	if (tfa98xx->irq_gpio < 0)
 		dev_dbg(dev, "No IRQ GPIO provided.\n");
+
+	ret = of_property_read_u32(np, "rpc-send-delay", &tfa98xx_rpc_send_delay);
+	if (ret < 0) {
+		dev_dbg(dev, "No rpc-send-delay provided. Set to default\n");
+		tfa98xx_rpc_send_delay = 2;
+	}
 
 	return 0;
 }
