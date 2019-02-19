@@ -73,7 +73,7 @@ void *muc_ipc_log;
  * it already
  */
 #define MUC_UART_SEND_SLEEP_ON_IDLE 1
-#define MUC_UART_IDLE_TIME 5000 /* ms */
+#define MUC_UART_IDLE_TIME 1000 /* ms */
 
 /* When a sleep request on occurs either to or from the muc, sending
  * is blocked.  If the sleep request never finishes for some reason
