@@ -139,6 +139,8 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: stored value " #rtype "." #propname "\n", __func__);\
 	return snprintf(buf, PAGE_SIZE, fmt, f54->rtype.propname);\
 } \
 
@@ -153,6 +155,9 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: read value " #rtype "." #rgrp "." #propname " at addr=0x%x\n",\
+			__func__, f54->rtype.rgrp->address);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -213,6 +218,10 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
 		return count;\
 	} \
 \
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: write value %ld " #rtype "." #rgrp "." #propname " at addr=0x%x\n",\
+			__func__, setting, f54->rtype.rgrp->address);\
+\
 	o_setting = f54->rtype.rgrp->propname;\
 	f54->rtype.rgrp->propname = setting;\
 \
@@ -245,6 +254,9 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: read value " #rtype "." #rgrp "." #propname "." #subpkt " at addr=0x%x\n",\
+			__func__, f54->rtype.rgrp->address);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -281,6 +293,9 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: read then write value " #rtype "." #rgrp "." #propname "." #subpkt " at addr=0x%x\n",\
+			__func__, f54->rtype.rgrp->address);\
 \
 	retval = sstrtoul(buf, 10, &setting);\
 	if (retval)\
@@ -304,6 +319,10 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
 		mutex_unlock(&f54->rtype##_mutex);\
 		return count;\
 	} \
+\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: write value %ld " #rtype "." #rgrp "." #propname " at addr=0x%x\n",\
+			__func__, setting, f54->rtype.rgrp->address);\
 \
 	o_setting = f54->rtype.rgrp->sp##subpkt->propname;\
 	f54->rtype.rgrp->sp##subpkt->propname = setting;\
@@ -342,6 +361,9 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: read value " #rtype "." #rgrp "." #propname " at addr=0x%x\n",\
+			__func__, f54->rtype.rgrp->address);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
@@ -405,6 +427,9 @@ static ssize_t concat(synaptics_rmi4_f54, _##propname##_store)(\
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;\
 	dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: rmi4_data_ptr %p\n", __func__, rmi4_data);\
+	dev_dbg(&rmi4_data->i2c_client->dev,\
+			"%s: read then write value " #rtype "." #rgrp "." #propname " at addr=0x%x\n",\
+			__func__, f54->rtype.rgrp->address);\
 \
 	mutex_lock(&f54->rtype##_mutex);\
 \
