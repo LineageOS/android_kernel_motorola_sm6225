@@ -2272,6 +2272,14 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
 				report_cap);
 			chip->last_reported_soc = report_cap;
+		}else if ((batt_cap < 100) && (report_cap > (batt_cap + MONOTONIC_SOC))) {
+			chip->last_reported_soc++;
+			pr_info("SMBMMI: Alter Up Reported Capacity to %d target %d\n",
+			chip->last_reported_soc, report_cap);
+		}else if ((batt_cap > 0) && (report_cap < (batt_cap - MONOTONIC_SOC))) {
+			chip->last_reported_soc--;
+			pr_info("SMBMMI: Alter Down Reported Capacity to %d target %d\n",
+			chip->last_reported_soc, report_cap);
 		}
 
 		/* Dual Step and Thermal Charging */
