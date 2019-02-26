@@ -59,15 +59,18 @@ static struct workqueue_struct *det_workqueue;
 struct synaptics_rmi4_data *synaptics_driver_getdata(
 		struct synaptics_rmi4_data *prev)
 {
-	struct synaptics_rmi4_data *next;
+	struct synaptics_rmi4_data *next = NULL;
 	mutex_lock(&instances_mutex);
-	if (!prev)
-		next = list_first_entry(&drv_instances_list, struct synaptics_rmi4_data, node);
-	else if (list_is_last(&prev->node, &drv_instances_list))
-		next = NULL;
-	else
-		next = list_next_entry(prev, node);
+	if (!prev) {
+		if (!list_empty(&drv_instances_list))
+			next = list_first_entry(&drv_instances_list,
+						struct synaptics_rmi4_data, node);
+	} else {
+		if (!list_is_last(&prev->node, &drv_instances_list))
+			next = list_next_entry(prev, node);
+	}
 	mutex_unlock(&instances_mutex);
+	pr_debug("instance ptr %p\n", next);
 	return next;
 }
 EXPORT_SYMBOL(synaptics_driver_getdata);
@@ -6643,7 +6646,9 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		if (terminate) {
 			dev_dbg(dev, "%s: terminating the rest of handler: %d\n",
 					__func__, exp_fhandler->fn_type);
-			exp_fhandler->func_init = NULL;
+			/* DRM handler still needs to run for proper cleanup */
+			if (exp_fhandler->fn_type != RMI_DRM_FRAMEWORK)
+				exp_fhandler->func_init = NULL;
 		}
 
 		if (exp_fhandler->inserted == true) {
@@ -7504,6 +7509,10 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	int rc = 0;
 	struct synaptics_rmi4_data *rmi4_data;
 	struct synaptics_dsx_platform_data *platform_data;
+#if defined(CONFIG_DRM)
+	int panel_ready, probe_status;
+	char *display_name = NULL;
+#endif
 
 	if (!i2c_check_functionality(client->adapter,
 			I2C_FUNC_SMBUS_BYTE_DATA)) {
@@ -7547,19 +7556,29 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	platform_data = &rmi4_data->board;
 
 #if defined(CONFIG_DRM)
-	if (rmi4_data->bound_display) {
-		int probe_status;
-		char *display_name = NULL;
+	/* DRM status of panel associated with control DSI */
+	panel_ready = dsi_display_is_panel_enable(rmi4_data->ctrl_dsi,
+								&probe_status, &display_name);
+	dev_dbg(&client->dev,
+			"%s: drm: probe=%d, enable=%d, panel'%s'\n",
+			__func__, probe_status, panel_ready, display_name);
 
-		dsi_display_is_panel_enable(rmi4_data->ctrl_dsi,
-					&probe_status, &display_name);
+	if (rmi4_data->bound_display) {
 		if (probe_status == -ENODEV ||
 			(display_name && strncmp(display_name, rmi4_data->bound_display,
 				strlen(rmi4_data->bound_display)))) {
 			dev_err(&client->dev,
 					"%s: display binding failed\n", __func__);
 			kfree(rmi4_data);
-            return -ENODEV;
+			return -ENODEV;
+		}
+	} else {
+		/* check for dummy panel */
+		if (display_name && strstr(display_name, "dummy")) {
+			dev_info(&client->dev,
+					"%s: dummy panel detected; exiting...\n", __func__);
+			kfree(rmi4_data);
+			return -ENODEV;
 		}
 	}
 #endif
