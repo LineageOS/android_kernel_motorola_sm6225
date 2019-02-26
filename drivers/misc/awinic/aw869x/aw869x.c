@@ -109,6 +109,7 @@ static char aw869x_rtp_name[][AW869X_RTP_NAME_MAX] = {
     {"aw869x_rtp_Solarium.bin"},
     {"aw869x_rtp_Sparse.bin"},
     {"aw869x_rtp_Terrabytes.bin"},
+    {"aw869x_rtp_TJINGLE.bin"},
 };
 
 struct aw869x_container *aw869x_rtp;
