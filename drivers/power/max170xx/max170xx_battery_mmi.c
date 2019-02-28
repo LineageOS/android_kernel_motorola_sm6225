@@ -2258,6 +2258,45 @@ static const struct power_supply_desc max17042_no_current_sense_psy_desc = {
 	.num_properties	= ARRAY_SIZE(max17042_battery_props) - 2,
 };
 
+static ssize_t age_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct power_supply *psy;
+	struct max17042_chip *chip;
+	int age, ret;
+	u32 data;
+	psy = dev_get_drvdata(dev);
+	if (psy)
+		chip = power_supply_get_drvdata(psy);
+	else {
+		pr_err("MAX170xx: No Age PSY\n");
+		return 0;
+	}
+
+	ret = regmap_read(chip->regmap, MAX17042_FullCAP, &data);
+	if (ret < 0)
+		return 0;
+	if (!chip->charge_full_des)
+		return 0;
+
+	age = data * chip->fctr_uah_bit;
+	age *= 100;
+	age /= chip->charge_full_des;
+
+	return scnprintf(buf, 50, "%d\n", age);
+}
+static DEVICE_ATTR(age, S_IRUGO, age_show, NULL);
+
+static struct attribute * max_g[] = {
+	&dev_attr_age.attr,
+	NULL,
+};
+
+static const struct attribute_group power_supply_max_attr_group = {
+	.attrs = max_g,
+};
+
 #define MAX_CGAIN 0x7FFF
 static int max17042_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -2341,6 +2380,10 @@ static int max17042_probe(struct i2c_client *client,
 		dev_err(&client->dev, "failed: power supply register\n");
 		return PTR_ERR(chip->battery);
 	}
+	ret = sysfs_create_group(&chip->battery->dev.kobj,
+				&power_supply_max_attr_group);
+	if (ret)
+		dev_err(&client->dev, "failed: attr create\n");
 
 	chip->factory_mode = max17042_mmi_factory();
 	if (chip->factory_mode)
