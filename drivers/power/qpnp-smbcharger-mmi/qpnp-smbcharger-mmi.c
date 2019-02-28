@@ -20,6 +20,7 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/workqueue.h>
 
@@ -102,6 +103,17 @@ enum {
 	TERMINATE_CHARGE_V5,
 	PAUSE_CHARGE_V5,
 	DISABLE_CHARGE_V5,
+};
+
+enum {
+	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
+	POWER_SUPPLY_CHARGE_RATE_NORMAL,
+	POWER_SUPPLY_CHARGE_RATE_WEAK,
+	POWER_SUPPLY_CHARGE_RATE_TURBO,
+};
+
+static char *charge_rate[] = {
+	"None", "Normal", "Weak", "Turbo"
 };
 
 struct mmi_temp_zone {
@@ -247,6 +259,8 @@ struct smb_mmi_charger {
 	int 			last_reported_status;
 	struct regulator	*vbus;
 	bool			vbus_enabled;
+	int 			charger_rate;
+	int 			age;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1409,6 +1423,66 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 	return rc;
 }
 
+#define WEAK_CHRG_THRSH 450
+#define TURBO_CHRG_THRSH 2500
+void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
+{
+	union power_supply_propval val;
+	int chrg_cm_ma = 0;
+	int chrg_cs_ma = 0;
+	int prev_chg_rate = chg->charger_rate;
+	int rc = -EINVAL;
+
+	if (!chg->usb_psy) {
+		pr_err("No usb PSY\n");
+		return;
+	}
+
+	val.intval = 0;
+	rc = get_prop_charger_present(chg, &val);
+	if (rc < 0) {
+		pr_err("Error getting Charger Present rc = %d\n", rc);
+		return;
+	}
+
+	if (val.intval) {
+		val.intval = 0;
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
+		if (rc < 0) {
+			pr_err("Error getting HW Current Max rc = %d\n", rc);
+			return;
+		}
+		chrg_cm_ma = val.intval / 1000;
+
+		val.intval = 0;
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
+		if (rc < 0) {
+			pr_err("Error getting ICL Settled rc = %d\n", rc);
+			return;
+		}
+		chrg_cs_ma = val.intval / 1000;
+	} else {
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
+		goto end_rate_check;
+	}
+
+	pr_debug("SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
+	if (chrg_cm_ma >= TURBO_CHRG_THRSH)
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) && (chrg_cs_ma < WEAK_CHRG_THRSH))
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
+	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+
+end_rate_check:
+	if (prev_chg_rate != chg->charger_rate)
+		pr_err("%s Charger Detected\n",
+		       charge_rate[chg->charger_rate]);
+
+}
+
 #define TAPER_COUNT 2
 #define TAPER_DROP_MA 100
 static bool mmi_has_current_tapered(struct smb_mmi_charger *chg,
@@ -2107,6 +2181,76 @@ void update_charging_limit_modes(struct smb_mmi_charger *chip, int batt_soc)
 		chip->charging_limit_modes = charging_limit_modes;
 }
 
+static bool __smb_mmi_ps_is_supplied_by(struct power_supply *supplier,
+					struct power_supply *supply)
+{
+	int i;
+
+	if (!supply->supplied_from && !supplier->supplied_to)
+		return false;
+
+	/* Support both supplied_to and supplied_from modes */
+	if (supply->supplied_from) {
+		if (!supplier->desc->name)
+			return false;
+		for (i = 0; i < supply->num_supplies; i++)
+			if (!strcmp(supplier->desc->name,
+				    supply->supplied_from[i]))
+				return true;
+	} else {
+		if (!supply->desc->name)
+			return false;
+		for (i = 0; i < supplier->num_supplicants; i++)
+			if (!strcmp(supplier->supplied_to[i],
+				    supply->desc->name))
+				return true;
+	}
+
+	return false;
+}
+
+static int __smb_mmi_ps_changed(struct device *dev, void *data)
+{
+	struct power_supply *psy = data;
+	struct power_supply *pst = dev_get_drvdata(dev);
+
+	if (__smb_mmi_ps_is_supplied_by(psy, pst)) {
+		if (pst->desc->external_power_changed)
+			pst->desc->external_power_changed(pst);
+	}
+
+	return 0;
+}
+
+static void smb_mmi_power_supply_changed(struct power_supply *psy,
+					 char *envp_ext[])
+{
+	unsigned long flags;
+
+	dev_err(&psy->dev, "%s: %s\n", __func__, envp_ext[0]);
+
+	spin_lock_irqsave(&psy->changed_lock, flags);
+	/*
+	 * Check 'changed' here to avoid issues due to race between
+	 * power_supply_changed() and this routine. In worst case
+	 * power_supply_changed() can be called again just before we take above
+	 * lock. During the first call of this routine we will mark 'changed' as
+	 * false and it will stay false for the next call as well.
+	 */
+	if (likely(psy->changed)) {
+		psy->changed = false;
+		spin_unlock_irqrestore(&psy->changed_lock, flags);
+		class_for_each_device(power_supply_class, NULL, psy,
+				      __smb_mmi_ps_changed);
+		atomic_notifier_call_chain(&power_supply_notifier,
+				PSY_EVENT_PROP_CHANGED, psy);
+		kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
+		spin_lock_irqsave(&psy->changed_lock, flags);
+	}
+
+	spin_unlock_irqrestore(&psy->changed_lock, flags);
+}
+
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 static int suspend_wakeups;
@@ -2125,11 +2269,17 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int batt_cap = 0;
 	int main_cap = 0;
 	int main_cap_full = 0;
+	int main_age = 0;
 	int flip_cap = 0;
 	int flip_cap_full = 0;
+	int flip_age = 0;
+	int cap_err;
 	int report_cap;
 	int pc_online;
 	static int prev_vbus_mv = -1;
+	char *chrg_rate_string = NULL;
+	char *envp[2];
+
 	struct smb_mmi_chg_status chg_stat;
 
 	/* Have not been resumed so wait another 100 ms */
@@ -2205,6 +2355,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
 
+	mmi_chrg_rate_check(chip);
+
 	if (chip->vbus_enabled && chip->vbus && chg_stat.charger_present) {
 		rc = regulator_disable(chip->vbus);
 		if (rc)
@@ -2222,36 +2374,41 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		pr_warn("Factory Mode/Image so Limiting Charging!!!\n");
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
+		cap_err = 0;
 		rc = power_supply_get_property(chip->max_main_psy,
 					       POWER_SUPPLY_PROP_CAPACITY,
 					       &pval);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("SMBMMI: Couldn't get maxim main capacity\n");
-		else
+			cap_err = rc;
+		} else
 			main_cap = pval.intval;
 
 		rc = power_supply_get_property(chip->max_main_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("SMBMMI: Couldn't get maxim main chrg full\n");
-		else
+			cap_err = rc;
+		} else
 			main_cap_full = pval.intval;
 
 		rc = power_supply_get_property(chip->max_flip_psy,
 					       POWER_SUPPLY_PROP_CAPACITY,
 					       &pval);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("SMBMMI: Couldn't get maxim flip capacity\n");
-		else
+			cap_err = rc;
+		} else
 			flip_cap = pval.intval;
 
 		rc = power_supply_get_property(chip->max_flip_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("SMBMMI: Couldn't get maxim flip chrg full\n");
-		else
+			cap_err = rc;
+		} else
 			flip_cap_full = pval.intval;
 
 		report_cap = main_cap * main_cap_full;
@@ -2282,9 +2439,61 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			chip->last_reported_soc, report_cap);
 		}
 
+		/* Age calculation */
+		rc = power_supply_get_property(chip->max_main_psy,
+					       POWER_SUPPLY_PROP_CHARGE_FULL,
+					       &pval);
+		if (rc < 0) {
+			pr_err("SMBMMI: Couldn't get maxim main charge full\n");
+			cap_err = rc;
+		} else
+			main_cap = pval.intval;
+
+		rc = power_supply_get_property(chip->max_flip_psy,
+					       POWER_SUPPLY_PROP_CHARGE_FULL,
+					       &pval);
+		if (rc < 0) {
+			pr_err("SMBMMI: Couldn't get maxim flip charge full\n");
+			cap_err = rc;
+		} else
+			flip_cap = pval.intval;
+
+		main_age = ((main_cap / 10) / (main_cap_full / 1000));
+		flip_age = ((flip_cap / 10) / (flip_cap_full / 1000));
+
+		if (cap_err == 0)
+			chip->age = (main_age < flip_age) ? main_age : flip_age;
+
+		pr_debug("SMBMMI: Age %d, Main Age %d, Flip Age %d\n",
+			 chip->age, main_age, flip_age);
+
 		/* Dual Step and Thermal Charging */
 		hb_resch_time = mmi_dual_charge_control(chip, &chg_stat);
 	} else if (!chip->factory_mode) {
+		cap_err = 0;
+		rc = power_supply_get_property(chip->qcom_psy,
+					       POWER_SUPPLY_PROP_CHARGE_FULL,
+					       &pval);
+		if (rc < 0) {
+			pr_err("SMBMMI: Couldn't get charge full\n");
+			cap_err = rc;
+		} else
+			main_cap = pval.intval;
+
+		rc = power_supply_get_property(chip->qcom_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+					&pval);
+		if (rc < 0) {
+			pr_err("SMBMMI: Couldn't get charge full design\n");
+			cap_err = rc;
+		} else
+			main_cap_full = pval.intval;
+
+		if (cap_err == 0)
+			chip->age = ((main_cap / 10) / (main_cap_full / 1000));
+
+		pr_debug("SMBMMI: Age %d\n", chip->age);
+
 		/* Fall here for Basic Step and Thermal Charging */
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
@@ -2360,10 +2569,27 @@ sch_hb:
 	if (!chg_stat.charger_present)
 		smb_mmi_awake_vote(chip, false);
 
-	if (chip->batt_psy)
-		power_supply_changed(chip->batt_psy);
-	else if (chip->qcom_psy)
-		power_supply_changed(chip->qcom_psy);
+	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
+	if (!chrg_rate_string) {
+		pr_err("SMBMMI: Failed to Get Uevent Mem\n");
+		envp[0] = NULL;
+	} else {
+		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
+			  "POWER_SUPPLY_CHARGE_RATE=%s",
+			  charge_rate[chip->charger_rate]);
+		envp[0] = chrg_rate_string;
+		envp[1] = NULL;
+	}
+
+	if (chip->batt_psy) {
+		chip->batt_psy->changed = true;
+		smb_mmi_power_supply_changed(chip->batt_psy, envp);
+	} else if (chip->qcom_psy) {
+		chip->qcom_psy->changed = true;
+		smb_mmi_power_supply_changed(chip->qcom_psy, envp);
+	}
+
+	kfree(chrg_rate_string);
 
 	__pm_relax(&chip->smb_mmi_hb_wake_source);
 }
@@ -2802,6 +3028,60 @@ static int smb_mmi_chg_config_init(struct smb_mmi_charger *chip)
 	return 0;
 }
 
+static ssize_t charge_rate_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct power_supply *psy;
+	struct smb_mmi_charger *chip;
+	psy = dev_get_drvdata(dev);
+	if (psy &&
+	    (strcmp(psy->desc->name, "battery") == 0))
+		chip = power_supply_get_drvdata(psy);
+	else {
+		pr_err("SMBMMI: Not Correct PSY\n");
+		return 0;
+	}
+
+	if (!chip) {
+		pr_err("SMBMMI: Can't find mmi_chip\n");
+		return 0;
+	}
+	mmi_chrg_rate_check(chip);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%s\n",
+			 charge_rate[chip->charger_rate]);
+}
+static DEVICE_ATTR(charge_rate, S_IRUGO, charge_rate_show, NULL);
+
+static ssize_t age_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct power_supply *psy;
+	struct smb_mmi_charger *chip;
+	psy = dev_get_drvdata(dev);
+	if (psy &&
+	    (strcmp(psy->desc->name, "battery") == 0))
+		chip = power_supply_get_drvdata(psy);
+	else {
+		pr_err("SMBMMI: Not Correct PSY\n");
+		return 0;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chip->age);
+}
+static DEVICE_ATTR(age, S_IRUGO, age_show, NULL);
+
+static struct attribute * mmi_g[] = {
+	&dev_attr_charge_rate.attr,
+	&dev_attr_age.attr,
+	NULL,
+};
+
+static const struct attribute_group power_supply_mmi_attr_group = {
+	.attrs = mmi_g,
+};
+
 static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
@@ -2845,6 +3125,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		return PTR_ERR(chip->mmi_psy);
 	}
 
+	chip->age = 100;
 	chip->last_reported_soc = -1;
 	chip->last_reported_status = -1;
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
@@ -2857,9 +3138,19 @@ static int smb_mmi_probe(struct platform_device *pdev)
 				"failed: batt power supply register\n");
 			return PTR_ERR(chip->batt_psy);
 		}
+
+		rc = sysfs_create_group(&chip->batt_psy->dev.kobj,
+					&power_supply_mmi_attr_group);
+		if (rc)
+			dev_err(chip->dev, "failed: attr create\n");
 	} else {
 		chip->qcom_psy = power_supply_get_by_name("battery");
 		chip->batt_psy = NULL;
+
+		rc = sysfs_create_group(&chip->qcom_psy->dev.kobj,
+					&power_supply_mmi_attr_group);
+		if (rc)
+			dev_err(chip->dev, "failed: attr create\n");
 	}
 
 	chip->bms_psy = power_supply_get_by_name("bms");
