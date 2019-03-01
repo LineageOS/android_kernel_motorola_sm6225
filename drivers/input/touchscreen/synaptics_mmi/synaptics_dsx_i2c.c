@@ -6581,14 +6581,17 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 	char *pname = NULL;
 
 #if defined(CONFIG_DRM)
-	/* DRM status of primary panel */
-	panel_ready = dsi_display_is_panel_enable(rmi4_data->ctrl_dsi, &probe_status, &pname);
-	dev_dbg(dev, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
-			__func__, probe_status, panel_ready, pname);
-	/* check if primary panel is not a dummy one */
-	if (pname && strstr(pname, "dummy")) {
-		dev_info(dev, "%s: dummy panel detected; terminating...\n", __func__);
-		terminate = true;
+	if (rmi4_data->splash_screen_mode) {
+		/* DRM status of primary panel */
+		panel_ready = dsi_display_is_panel_enable(rmi4_data->ctrl_dsi,
+									&probe_status, &pname);
+		dev_dbg(dev, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
+				__func__, probe_status, panel_ready, pname);
+		/* check if primary panel is not a dummy one */
+		if (pname && strstr(pname, "dummy")) {
+			dev_info(dev, "%s: dummy panel detected; terminating...\n", __func__);
+			terminate = true;
+		}
 	}
 #endif
 	/* pname only gets initialized by DRM */
