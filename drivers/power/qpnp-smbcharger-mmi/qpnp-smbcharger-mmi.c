@@ -2461,8 +2461,9 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		main_age = ((main_cap / 10) / (main_cap_full / 1000));
 		flip_age = ((flip_cap / 10) / (flip_cap_full / 1000));
 
+		/* Block age output for now until FG can be vetted */
 		if (cap_err == 0)
-			chip->age = (main_age < flip_age) ? main_age : flip_age;
+			chip->age = 100;
 
 		pr_debug("SMBMMI: Age %d, Main Age %d, Flip Age %d\n",
 			 chip->age, main_age, flip_age);
