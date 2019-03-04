@@ -1696,6 +1696,11 @@ static int synaptics_dsx_of_init(struct i2c_client *client,
 	if (!retval)
 		pr_notice("bound to display '%s'\n", rmi4_data->bound_display);
 
+	retval = of_property_read_string(np, "synaptics,class-entry-name",
+		&rmi4_data->class_entry_name);
+	if (!retval)
+		pr_notice("class entry name '%s'\n", rmi4_data->class_entry_name);
+
 	return 0;
 }
 #else
@@ -7171,13 +7176,14 @@ static struct device_attribute touchscreen_attributes[] = {
 
 #define TSDEV_MINOR_BASE 128
 #define TSDEV_MINOR_MAX 32
+#define CLASS_PRIMARY_FNAME "primary"
 
 static int synaptics_dsx_sysfs_touchscreen(
 	struct synaptics_rmi4_data *rmi4_data, bool create)
 {
-	struct synaptics_rmi4_device_info *rmi = &(rmi4_data->rmi4_mod_info);
 	struct device_attribute *attrs = touchscreen_attributes;
 	int i, error = 0;
+	char *class_fname = CLASS_PRIMARY_FNAME;
 	static struct class *touchscreen_class;
 	static int minor;
 
@@ -7198,9 +7204,12 @@ static int synaptics_dsx_sysfs_touchscreen(
 			}
 		}
 
+		if (rmi4_data->class_entry_name)
+			class_fname = (char *)rmi4_data->class_entry_name;
+
 		rmi4_data->ts_class_dev = device_create(touchscreen_class,
 				NULL, MKDEV(INPUT_MAJOR, minor),
-				rmi4_data, rmi->product_id_string);
+				rmi4_data, class_fname);
 		if (IS_ERR(rmi4_data->ts_class_dev)) {
 			error = PTR_ERR(rmi4_data->ts_class_dev);
 			rmi4_data->ts_class_dev = NULL;
