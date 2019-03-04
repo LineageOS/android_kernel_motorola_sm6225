@@ -495,6 +495,7 @@ struct synaptics_rmi4_data {
 	int state;
 	int irq;
 	int ctrl_dsi;
+	const char *class_entry_name;
 	const char *bound_display;
 	int sensor_max_x;
 	int sensor_max_y;
