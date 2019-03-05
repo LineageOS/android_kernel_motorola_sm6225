@@ -94,6 +94,7 @@ static char *INSTANCE_DBG(char *string,
 }
 
 #define DRIVER_NAME "synaptics_mmi"
+#define CLASS_PRIMARY_FNAME "primary"
 #define INPUT_PHYS_NAME "synaptics_dsx_i2c/input"
 #define TYPE_B_PROTOCOL
 
@@ -2458,11 +2459,19 @@ static int synaptics_dsx_ic_reset(
 
 static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 {
+	char *suffix, input_name[64];
+
 	rmi4_data->input_dev = input_allocate_device();
 	if (IS_ERR_OR_NULL(rmi4_data->input_dev))
 		return PTR_ERR(rmi4_data->input_dev);
 
-	rmi4_data->input_dev->name = INSTANCE_RMI(DRIVER_NAME, rmi4_data);
+	if (rmi4_data->class_entry_name)
+		suffix = (char *)rmi4_data->class_entry_name;
+	else
+		suffix = CLASS_PRIMARY_FNAME;
+
+	snprintf(input_name, sizeof(input_name), DRIVER_NAME ".%s", suffix);
+	rmi4_data->input_dev->name = kstrdup(input_name, GFP_KERNEL);
 	rmi4_data->input_dev->phys = INSTANCE_RMI(INPUT_PHYS_NAME, rmi4_data);
 	rmi4_data->input_dev->id.bustype = BUS_I2C;
 	rmi4_data->input_dev->dev.parent = &rmi4_data->i2c_client->dev;
@@ -2472,8 +2481,8 @@ static int synaptics_dsx_alloc_input(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(EV_KEY, rmi4_data->input_dev->evbit);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_POWER);
 
-	pr_debug("allocated input device '%s'\n",
-				INSTANCE_DBG(INPUT_PHYS_NAME, rmi4_data));
+	pr_debug("allocated input device '%s'\n", rmi4_data->input_dev->name);
+
 	return 0;
 }
 
@@ -7176,7 +7185,6 @@ static struct device_attribute touchscreen_attributes[] = {
 
 #define TSDEV_MINOR_BASE 128
 #define TSDEV_MINOR_MAX 32
-#define CLASS_PRIMARY_FNAME "primary"
 
 static int synaptics_dsx_sysfs_touchscreen(
 	struct synaptics_rmi4_data *rmi4_data, bool create)
