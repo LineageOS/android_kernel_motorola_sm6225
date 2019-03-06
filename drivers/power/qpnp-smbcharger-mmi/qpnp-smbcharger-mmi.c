@@ -2472,7 +2472,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		hb_resch_time = mmi_dual_charge_control(chip, &chg_stat);
 	} else if (!chip->factory_mode) {
 		cap_err = 0;
-		rc = power_supply_get_property(chip->qcom_psy,
+		rc = power_supply_get_property(chip->bms_psy,
 					       POWER_SUPPLY_PROP_CHARGE_FULL,
 					       &pval);
 		if (rc < 0) {
@@ -2481,7 +2481,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		} else
 			main_cap = pval.intval;
 
-		rc = power_supply_get_property(chip->qcom_psy,
+		rc = power_supply_get_property(chip->bms_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
 		if (rc < 0) {
