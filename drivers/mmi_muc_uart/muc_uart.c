@@ -1574,7 +1574,7 @@ static int muc_uart_set_property(struct power_supply *psy,
 
 static const struct power_supply_desc phone_psy_desc = {
 	.name		= "phone",
-	.type		= POWER_SUPPLY_TYPE_USB,
+	.type		= POWER_SUPPLY_TYPE_MAIN,
 	.get_property	= muc_uart_get_property,
 	.set_property   = muc_uart_set_property,
 	.properties	= muc_uart_ps_props,
