@@ -2738,6 +2738,25 @@ static int batt_get_prop(struct power_supply *psy,
 		else
 			val->intval = chip->last_reported_soc;
 		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		if (chip->max_main_psy && chip->max_flip_psy) {
+			union power_supply_propval main_psy_val;
+			union power_supply_propval flip_psy_val;
+
+			/* Get the highest temp between main psy and flip psy */
+			rc = power_supply_get_property(chip->max_main_psy, psp, &main_psy_val);
+			if (rc >= 0) {
+				rc = power_supply_get_property(chip->max_flip_psy, psp, &flip_psy_val);
+				if (rc >= 0) {
+					if (main_psy_val.intval > flip_psy_val.intval)
+						val->intval = main_psy_val.intval;
+					else
+						val->intval = flip_psy_val.intval;
+					break;
+				}
+			}
+		}
+		/* Fall through */
 	default:
 		rc = power_supply_get_property(chip->qcom_psy, psp, val);
 		if (rc < 0) {
