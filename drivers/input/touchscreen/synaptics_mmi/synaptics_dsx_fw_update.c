@@ -26,6 +26,17 @@
 #include <linux/platform_device.h>
 #include "synaptics_dsx_i2c.h"
 
+#if 0
+#ifdef pr_debug
+#undef pr_debug
+#define pr_debug pr_err
+#endif
+#ifdef dev_dbg
+#undef dev_dbg
+#define dev_dbg dev_err
+#endif
+#endif
+
 #define FORCE_UPDATE false
 #define DO_LOCKDOWN false
 
@@ -428,6 +439,7 @@ static void fwu_compare_partition_tables(struct synaptics_rmi4_fwu_handle *fwu)
 		}
 	}
 
+	dev_dbg(LOGDEV, "%s: same partition table\n", __func__);
 	fwu->new_partition_table = false;
 	return;
 }
@@ -775,6 +787,8 @@ static int fwu_read_flash_status(struct synaptics_rmi4_fwu_handle *fwu)
 		return retval;
 	}
 
+	dev_dbg(LOGDEV, "%s: Flash status = 0x%02x\n",
+			__func__, (unsigned int)status);
 	fwu->in_bl_mode = status >> 7;
 
 	if (fwu->bl_version == BL_V5)
@@ -1378,6 +1392,8 @@ static int fwu_read_f34_v7_queries(
 
 	fwu->bootloader_id[0] = query_1_7.bl_minor_revision;
 	fwu->bootloader_id[1] = query_1_7.bl_major_revision;
+	dev_dbg(LOGDEV, "%s: BL ver %d.%d\n", __func__,
+			fwu->bootloader_id[1], fwu->bootloader_id[0]);
 
 	if (fwu->bootloader_id[1] == BL_V8)
 		fwu->bl_version = BL_V8;
@@ -1620,6 +1636,8 @@ static int fwu_read_f34_queries(
 	memset(&fwu->blkcount, 0x00, sizeof(fwu->blkcount));
 	memset(&fwu->phyaddr, 0x00, sizeof(fwu->phyaddr));
 
+	/* Strict BL version comparison is correct in this case, */
+	/* since PDT scan assigns bl_version to BL_V7 for F34 v.2*/
 	if (fwu->bl_version == BL_V7)
 		retval = fwu_read_f34_v7_queries(fwu);
 	else
@@ -2054,6 +2072,7 @@ static enum flash_area fwu_go_nogo(struct synaptics_rmi4_fwu_handle *fwu)
 	/* Update both UI and config if device is in bootloader mode */
 	if (fwu->in_bl_mode) {
 		flash_area = UI_FIRMWARE;
+		dev_dbg(LOGDEV, "%s: BL mode shortcut\n", __func__);
 		goto exit;
 	}
 
@@ -2192,6 +2211,10 @@ static int fwu_scan_pdt(struct synaptics_rmi4_fwu_handle *fwu)
 					return -EINVAL;
 				}
 
+				dev_dbg(LOGDEV,
+					"%s: F34 version %d\n",
+					__func__, rmi_fd.fn_version);
+
 				fwu->intr_mask = 0;
 				intr_src = rmi_fd.intr_src_count;
 				intr_off = intr_count % 8;
@@ -2284,8 +2307,10 @@ static int fwu_enter_flash_prog(struct synaptics_rmi4_fwu_handle *fwu)
 	if (retval < 0)
 		return retval;
 
-	if (fwu->in_bl_mode)
+	if (fwu->in_bl_mode) {
+		dev_dbg(LOGDEV, "%s: BL mode shortcut\n", __func__);
 		return 0;
+	}
 
 	retval = fwu_write_f34_command(fwu, CMD_ENABLE_FLASH_PROG);
 	if (retval < 0)
@@ -3251,8 +3276,8 @@ static int fwu_start_reflash(struct synaptics_rmi4_fwu_handle *fwu)
 
 		if (fwu->bl_version != fwu->img.bl_version) {
 			dev_err(LOGDEV,
-				"%s: Bootloader version mismatch\n",
-					__func__);
+				"%s: BL versions mismatch: ic=%d, image=%d\n",
+				__func__, fwu->bl_version, fwu->img.bl_version);
 			retval = -EINVAL;
 			goto exit;
 		}
@@ -3295,6 +3320,7 @@ static int fwu_start_reflash(struct synaptics_rmi4_fwu_handle *fwu)
 	}
 
 	flash_area = fwu_go_nogo(fwu);
+	dev_dbg(LOGDEV, "%s: flash_area = %d\n", __func__, flash_area);
 
 	if (flash_area != NONE) {
 		retval = fwu_enter_flash_prog(fwu);
@@ -4118,6 +4144,12 @@ reset_and_exit:
 	retval = fwu_scan_pdt(fwu);
 	if (retval < 0)
 		dev_err(LOGDEV, "%s: Failed to scan PDT\n", __func__);
+
+	if (!fwu->in_ub_mode) {
+		retval = fwu_read_f34_queries(fwu);
+		if (retval < 0)
+			dev_err(LOGDEV, "%s: Failed to query F34\n", __func__);
+	}
 
 	rmi4_data->ready_state(rmi4_data, false);
 	mutex_unlock(&rmi4_data->rmi4_exp_init_mutex);
