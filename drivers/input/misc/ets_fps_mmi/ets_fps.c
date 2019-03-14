@@ -761,6 +761,77 @@ static struct platform_driver etspi_driver = {
 /* remark for dual sensors */
 /* module_platform_driver(etspi_driver); */
 
+
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "egis");
+}
+static DEVICE_ATTR_RO(vendor);
+
+static struct attribute *class_attributes[] = {
+	&dev_attr_vendor.attr,
+	NULL
+};
+
+static const struct attribute_group class_attribute_group = {
+	.attrs = class_attributes,
+};
+
+
+#define MAX_INSTANCE	5
+#define MAJOR_BASE	32
+static int etspi_create_sysfs(struct etspi_data *etspi, bool create) {
+	struct device *dev = &etspi->spi->dev;
+	static struct device *class_dev;
+	static struct class *fingerprint_class;
+	static dev_t dev_no;
+	int rc = 0;
+
+	if (create) {
+		rc = alloc_chrdev_region(&dev_no, MAJOR_BASE, MAX_INSTANCE, "egis");
+		if (rc < 0) {
+			dev_err(dev, "%s alloc fingerprint class device MAJOR failed.\n", __func__);
+			goto ALLOC_REGION;
+		}
+		if (!fingerprint_class) {
+			fingerprint_class = class_create(THIS_MODULE, "fingerprint");
+			if (IS_ERR(fingerprint_class)) {
+				dev_err(dev, "%s create fingerprint class failed.\n", __func__);
+				rc = PTR_ERR(fingerprint_class);
+				fingerprint_class = NULL;
+				goto CLASS_CREATE_ERR;
+			}
+		}
+		class_dev = device_create(fingerprint_class, NULL, MAJOR(dev_no),
+			etspi, etspi_driver.driver.name);
+		if (IS_ERR(class_dev)) {
+			dev_err(dev, "%s create fingerprint class device failed.\n", __func__);
+			rc = PTR_ERR(class_dev);
+			class_dev = NULL;
+			goto DEVICE_CREATE_ERR;
+		}
+		rc = sysfs_create_group(&class_dev->kobj, &class_attribute_group);
+		if (rc) {
+			dev_err(dev, "could not create sysfs\n");
+			goto CREATE_SYSFS_ERR;
+		}
+		return 0;
+	}
+
+	sysfs_remove_group(&class_dev->kobj, &class_attribute_group);
+CREATE_SYSFS_ERR:
+	device_destroy(fingerprint_class, MAJOR(dev_no));
+	class_dev = NULL;
+DEVICE_CREATE_ERR:
+	class_destroy(fingerprint_class);
+	fingerprint_class = NULL;
+CLASS_CREATE_ERR:
+	unregister_chrdev_region(dev_no, 1);
+ALLOC_REGION:
+	return rc;
+}
 static int etspi_create_device(struct etspi_data *etspi, bool create) {
 	static struct class *etspi_class;
 	static struct device *fdev;
@@ -834,6 +905,7 @@ static int etspi_remove(struct platform_device *pdev)
 	struct etspi_data *etspi = dev_get_drvdata(dev);
 
 	DEBUG_PRINT("%s(#%d)\n", __func__, __LINE__);
+	etspi_create_sysfs(etspi, false);
 	sysfs_remove_group(&dev->kobj, &attribute_group);
 	wake_lock_destroy(&ets_wake_lock);
 	del_timer_sync(&fps_ints.timer);
@@ -918,8 +990,17 @@ static int etspi_probe(struct platform_device *pdev)
 		pr_err("%s could not create sysfs\n", __func__);
 		goto etspi_create_group_failed;
 	}
+
+	status = etspi_create_sysfs(etspi, true);
+	if (status) {
+		pr_err("%s could not create sysfs\n", __func__);
+		goto etspi_sysfs_failed;
+	}
+
 	return status;
 
+etspi_sysfs_failed:
+	sysfs_remove_group(&dev->kobj, &attribute_group);
 etspi_create_group_failed:
 	wake_lock_destroy(&ets_wake_lock);
 	del_timer_sync(&fps_ints.timer);
