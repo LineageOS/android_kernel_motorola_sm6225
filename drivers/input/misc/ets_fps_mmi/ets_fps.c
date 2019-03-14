@@ -172,8 +172,6 @@ void FPS_notify(unsigned long stype, int state)
 }
 #endif
 
-static struct etspi_data *g_data;
-
 DECLARE_BITMAP(minors, N_SPI_MINORS);
 LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
@@ -570,30 +568,35 @@ static int etspi_release(struct inode *inode, struct file *filp)
 
 
 
-int etspi_platformInit(struct etspi_data *etspi)
+int etspi_platformInit(struct etspi_data *etspi, bool init)
 {
 	int status = 0;
 	DEBUG_PRINT("%s\n", __func__);
 
-	if (etspi != NULL) {
+	if (!etspi) {
+		pr_err("%s etspi_data is empty.\n", __func__);
+		return -EBUSY;
+	}
+
+	if (init) {
 		if (gpio_is_valid(etspi->vdd_18v_Pin)) {
 			/* initial 18V power pin */
 			status = gpio_request(etspi->vdd_18v_Pin, "18v-gpio");
 			if (status < 0) {
 				pr_err("%s gpio_requset vdd_18v_Pin failed\n",
 					__func__);
-				goto etspi_platformInit_rst_failed;
+				goto etspi_platformInit_18v_failed;
 			}
 			gpio_direction_output(etspi->vdd_18v_Pin, 1);
 			if (status < 0) {
 				pr_err("%s gpio_direction_output vdd_18v_Pin failed\n",
 						__func__);
 				status = -EBUSY;
-				goto etspi_platformInit_rst_failed;
+				goto etspi_platformInit_18v_set_failed;
 			}
 
 			gpio_set_value(etspi->vdd_18v_Pin, 1);
-			pr_err("etspi:  vdd_18v_Pin set to high\n");
+			pr_info("etspi:  vdd_18v_Pin set to high\n");
 			mdelay(1);
 		}
 		if (gpio_is_valid(etspi->vcc_33v_Pin)) {
@@ -602,17 +605,17 @@ int etspi_platformInit(struct etspi_data *etspi)
 			if (status < 0) {
 				pr_err("%s gpio_requset vcc_33v_Pin failed\n",
 					__func__);
-				goto etspi_platformInit_rst_failed;
+				goto etspi_platformInit_33v_failed;
 			}
 			gpio_direction_output(etspi->vcc_33v_Pin, 1);
 			if (status < 0) {
 				pr_err("%s gpio_direction_output vcc_33v_Pin failed\n",
 						__func__);
 				status = -EBUSY;
-				goto etspi_platformInit_rst_failed;
+				goto etspi_platformInit_33v_set_failed;
 			}
 			gpio_set_value(etspi->vcc_33v_Pin, 1);
-			pr_err("etspi:  vcc_33v_Pin set to high\n");
+			pr_info("etspi:  vcc_33v_Pin set to high\n");
 			mdelay(2);
 		}
 		/* Initial Reset Pin*/
@@ -627,10 +630,10 @@ int etspi_platformInit(struct etspi_data *etspi)
 			pr_err("%s gpio_direction_output Reset failed\n",
 					__func__);
 			status = -EBUSY;
-			goto etspi_platformInit_rst_failed;
+			goto etspi_platformInit_rst_set_failed;
 		}
 		/* gpio_set_value(etspi->rstPin, 1); */
-		pr_err("etspi:  reset to high\n");
+		pr_info("etspi:  reset to high\n");
 
 		/* Initial IRQ Pin*/
 		status = gpio_request(etspi->irqPin, "irq-gpio");
@@ -643,24 +646,27 @@ int etspi_platformInit(struct etspi_data *etspi)
 		if (status < 0) {
 			pr_err("%s gpio_direction_input IRQ failed\n",
 				__func__);
-			goto etspi_platformInit_gpio_init_failed;
+			goto etspi_platformInit_set_irq_failed;
 		}
 
+		DEBUG_PRINT("ets320: %s successful status=%d\n", __func__, status);
+		return 0;
 	}
-	DEBUG_PRINT("ets320: %s successful status=%d\n", __func__, status);
-	return status;
 
-etspi_platformInit_gpio_init_failed:
+etspi_platformInit_set_irq_failed:
 	gpio_free(etspi->irqPin);
-	if (gpio_is_valid(etspi->vcc_33v_Pin))
-		gpio_free(etspi->vcc_33v_Pin);
-	if (gpio_is_valid(etspi->vdd_18v_Pin))
-		gpio_free(etspi->vdd_18v_Pin);
 etspi_platformInit_irq_failed:
+etspi_platformInit_rst_set_failed:
 	gpio_free(etspi->rstPin);
 etspi_platformInit_rst_failed:
-
-	pr_err("%s is failed\n", __func__);
+etspi_platformInit_33v_set_failed:
+	if (gpio_is_valid(etspi->vcc_33v_Pin))
+		gpio_free(etspi->vcc_33v_Pin);
+etspi_platformInit_33v_failed:
+etspi_platformInit_18v_set_failed:
+	if (gpio_is_valid(etspi->vdd_18v_Pin))
+		gpio_free(etspi->vdd_18v_Pin);
+etspi_platformInit_18v_failed:
 	return status;
 }
 
@@ -723,9 +729,6 @@ static const struct file_operations etspi_fops = {
 };
 
 /*-------------------------------------------------------------------------*/
-
-static struct class *etspi_class;
-
 static int etspi_probe(struct platform_device *pdev);
 static int etspi_remove(struct platform_device *pdev);
 
@@ -758,14 +761,85 @@ static struct platform_driver etspi_driver = {
 /* remark for dual sensors */
 /* module_platform_driver(etspi_driver); */
 
+static int etspi_create_device(struct etspi_data *etspi, bool create) {
+	static struct class *etspi_class;
+	static struct device *fdev;
+	static unsigned long minor;
+	struct platform_device *pdev = etspi->spi;
+	int rc = 0;
 
+	if (create) {
+		rc = register_chrdev(ET320_MAJOR,
+			etspi_driver.driver.name, &etspi_fops);
+		if (rc < 0) {
+			dev_err(&pdev->dev, "%s register_chrdev error.\n", __func__);
+			return rc;
+		}
+		etspi_class = class_create(THIS_MODULE, etspi_driver.driver.name);
+		if (IS_ERR(etspi_class)) {
+			rc = PTR_ERR(etspi_class);
+			dev_err(&pdev->dev, "%s class_create error.\n", __func__);
+			goto CREATE_DEVICE_CLASS_CREATE_FAILED;
+		}
+		/*
+		 * If we can allocate a minor number, hook up this device.
+		 * Reusing minors is fine so long as udev or mdev is working.
+		 */
+		minor = find_first_zero_bit(minors, N_SPI_MINORS);
+		if (minor >= N_SPI_MINORS) {
+			dev_err(&pdev->dev, "no minor number available!\n");
+			rc = -ENODEV;
+			goto CREATE_DEVICE_CLASS_NO_MINOR;
+		}
+		etspi->devt = MKDEV(ET320_MAJOR, minor);
+		fdev = device_create(etspi_class, &pdev->dev, etspi->devt, etspi, "esfp0");
+		rc = IS_ERR(fdev) ? PTR_ERR(fdev) : 0;
+		if (rc < 0) {
+			dev_err(&pdev->dev, "create esfp0 failed\n");
+			goto CREATE_DEVICE_CLASS_CREATE_DEVICE_FAILED;
+		}
+		set_bit(minor, minors);
+		mutex_lock(&device_list_lock);
+		list_add(&etspi->device_entry, &device_list);
+		mutex_unlock(&device_list_lock);
+#if EGIS_NAVI_INPUT
+		/*
+		 * William Add.
+		 */
+		sysfs_egis_init(etspi);
+		uinput_egis_init(etspi);
+#endif
+		return 0;
+	}
+
+	uinput_egis_destroy(etspi);
+	sysfs_egis_destroy(etspi);
+	mutex_lock(&device_list_lock);
+	list_del(&etspi->device_entry);
+	mutex_unlock(&device_list_lock);
+	clear_bit(minor, minors);
+	device_destroy(etspi_class, etspi->devt);
+CREATE_DEVICE_CLASS_CREATE_DEVICE_FAILED:
+CREATE_DEVICE_CLASS_NO_MINOR:
+	class_destroy(etspi_class);
+	etspi_class = NULL;
+CREATE_DEVICE_CLASS_CREATE_FAILED:
+	unregister_chrdev(ET320_MAJOR, etspi_driver.driver.name);
+	return rc;
+}
 
 static int etspi_remove(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
+	struct etspi_data *etspi = dev_get_drvdata(dev);
+
 	DEBUG_PRINT("%s(#%d)\n", __func__, __LINE__);
-	free_irq(gpio_irq, NULL);
-	del_timer_sync(&fps_ints.timer);
+	sysfs_remove_group(&dev->kobj, &attribute_group);
 	wake_lock_destroy(&ets_wake_lock);
+	del_timer_sync(&fps_ints.timer);
+	etspi_create_device(etspi, false);
+	//free_irq(gpio_irq, NULL);
+	etspi_platformInit(etspi, false);
 	request_irq_done = 0;
 	/* t_mode = 255; */
 	return 0;
@@ -776,31 +850,14 @@ static int etspi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct etspi_data *etspi;
 	int status = 0;
-	unsigned long minor;
 	/* int retval; */
 
+	BUILD_BUG_ON(N_SPI_MINORS > 256);
 	DEBUG_PRINT("%s initial\n", __func__);
 
-	BUILD_BUG_ON(N_SPI_MINORS > 256);
-	status = register_chrdev(ET320_MAJOR, "et320", &etspi_fops);
-	if (status < 0) {
-		pr_err("%s register_chrdev error.\n", __func__);
-		return status;
-	}
-
-	etspi_class = class_create(THIS_MODULE, "et320");
-	if (IS_ERR(etspi_class)) {
-		pr_err("%s class_create error.\n", __func__);
-		unregister_chrdev(ET320_MAJOR, etspi_driver.driver.name);
-		return PTR_ERR(etspi_class);
-	}
-
-	/* Allocate driver data */
-	etspi = kzalloc(sizeof(*etspi), GFP_KERNEL);
-	if (etspi == NULL) {
-		pr_err("%s - Failed to kzalloc\n", __func__);
-		return -ENOMEM;
-	}
+	etspi = devm_kzalloc(dev, sizeof(*etspi), GFP_KERNEL);
+	dev_set_drvdata(dev, etspi);
+	etspi->spi = pdev;
 
 	/* device tree call */
 	if (pdev->dev.of_node) {
@@ -811,21 +868,23 @@ static int etspi_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Initialize the driver data */
-	etspi->spi = pdev;
-	g_data = etspi;
-
-	spin_lock_init(&etspi->spi_lock);
-	mutex_init(&etspi->buf_lock);
-	mutex_init(&device_list_lock);
-
-	INIT_LIST_HEAD(&etspi->device_entry);
-
 	/* platform init */
-	status = etspi_platformInit(etspi);
+	status = etspi_platformInit(etspi, true);
 	if (status != 0) {
 		pr_err("%s platforminit failed\n", __func__);
 		goto etspi_probe_platformInit_failed;
+	}
+
+	/* Initialize the driver data */
+	mutex_init(&device_list_lock);
+	spin_lock_init(&etspi->spi_lock);
+	mutex_init(&etspi->buf_lock);
+	INIT_LIST_HEAD(&etspi->device_entry);
+
+	status = etspi_create_device(etspi, true);
+	if (status < 0) {
+		pr_err("%s create device failed\n", __func__);
+		goto etspi_probe_create_device_failed;
 	}
 
 	fps_ints.drdy_irq_flag = DRDY_IRQ_DISABLE;
@@ -844,46 +903,7 @@ static int etspi_probe(struct platform_device *pdev)
 	}
 */
 #endif
-
-	/*
-	 * If we can allocate a minor number, hook up this device.
-	 * Reusing minors is fine so long as udev or mdev is working.
-	 */
-	mutex_lock(&device_list_lock);
-	minor = find_first_zero_bit(minors, N_SPI_MINORS);
-	if (minor < N_SPI_MINORS) {
-		struct device *fdev;
-		etspi->devt = MKDEV(ET320_MAJOR, minor);
-		fdev = device_create(etspi_class, &pdev->dev, etspi->devt, etspi, "esfp0");
-		status = IS_ERR(fdev) ? PTR_ERR(fdev) : 0;
-	} else {
-		dev_dbg(&pdev->dev, "no minor number available!\n");
-		status = -ENODEV;
-	}
-	if (status == 0) {
-		set_bit(minor, minors);
-		list_add(&etspi->device_entry, &device_list);
-	}
-
-#if EGIS_NAVI_INPUT
-	/*
-	 * William Add.
-	 */
-	sysfs_egis_init(etspi);
-	uinput_egis_init(etspi);
-#endif
-
-	mutex_unlock(&device_list_lock);
-
-	if (status == 0) {
-		/* spi_set_drvdata(pdev, etspi); */
-		dev_set_drvdata(dev, etspi);
-	} else {
-		goto etspi_probe_failed;
-	}
 	etspi_reset(etspi);
-
-	fps_ints.drdy_irq_flag = DRDY_IRQ_DISABLE;
 
 	/* the timer is for ET310 */
 	setup_timer(&fps_ints.timer, interrupt_timer_routine, (unsigned long)&fps_ints);
@@ -896,24 +916,19 @@ static int etspi_probe(struct platform_device *pdev)
 	status = sysfs_create_group(&dev->kobj, &attribute_group);
 	if (status) {
 		pr_err("%s could not create sysfs\n", __func__);
-		goto etspi_probe_failed;
+		goto etspi_create_group_failed;
 	}
-	request_irq_done = 0;
 	return status;
 
-etspi_probe_failed:
-	device_destroy(etspi_class, etspi->devt);
-	class_destroy(etspi_class);
-
+etspi_create_group_failed:
+	wake_lock_destroy(&ets_wake_lock);
+	del_timer_sync(&fps_ints.timer);
+	etspi_create_device(etspi, false);
+etspi_probe_create_device_failed:
+	etspi_platformInit(etspi, false);
 etspi_probe_platformInit_failed:
 etspi_probe_parse_dt_failed:
-	kfree(etspi);
 	pr_err("%s is failed\n", __func__);
-#if EGIS_NAVI_INPUT
-	uinput_egis_destroy(etspi);
-	sysfs_egis_destroy(etspi);
-#endif
-
 	return status;
 }
 
