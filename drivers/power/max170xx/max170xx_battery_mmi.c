@@ -188,6 +188,7 @@ static enum power_supply_property max17042_battery_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_TEMP,
@@ -570,6 +571,12 @@ static int max17042_get_property(struct power_supply *psy,
 			return ret;
 
 		val->intval = ret;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_NOW:
+		regmap_read(map, MAX17042_RepCap, &data);
+
+		val->intval = (data & 0xFFFF) * chip->fctr_uah_bit;
+
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		regmap_read(map, MAX17042_STATUS, &data);
