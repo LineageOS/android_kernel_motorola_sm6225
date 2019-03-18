@@ -1072,9 +1072,10 @@ struct f54_query38 {
 			unsigned char has_ctrl147:1;
 			unsigned char has_ctrl148:1;
 			unsigned char has_ctrl149:1;
-			unsigned char f54_q38_b3:1;
+			unsigned char has_ctrl150:1;
 			unsigned char has_ctrl151:1;
-			unsigned char f54_q38_b5b6:2;
+			unsigned char has_ctrl152:1;
+			unsigned char has_ctrl153:1;
 			unsigned char has_query39:1;
 		} __packed;
 		unsigned char data[1];
@@ -1084,7 +1085,12 @@ struct f54_query38 {
 struct f54_query39 {
 	union {
 		struct {
-			unsigned char f54_b0_to_b6:7;
+			unsigned char has_ctrl154:1;
+			unsigned char has_ctrl155:1;
+			unsigned char has_ctrl156:1;
+			unsigned char has_ctrl160:1;
+			unsigned char has_ctrl157_158:1;
+			unsigned char f54_q39_b5b6:2;
 			unsigned char has_query40:1;
 		} __packed;
 		unsigned char data[1];
@@ -1094,13 +1100,13 @@ struct f54_query39 {
 struct f54_query40 {
 	union {
 		struct {
-			unsigned char f54_q40_b0:1;
+			unsigned char has_ctrl169:1;
 			unsigned char has_ctrl163_query41:1;
 			unsigned char f54_q40_b2:1;
 			unsigned char has_ctrl165_query42:1;
-			unsigned char f54_q40_b4:1;
+			unsigned char has_ctrl166:1;
 			unsigned char has_ctrl167:1;
-			unsigned char f54_q40_b6:1;
+			unsigned char has_ctrl168:1;
 			unsigned char has_query43:1;
 		} __packed;
 		unsigned char data[1];
@@ -1128,7 +1134,12 @@ struct f54_query42 {
 struct f54_query43 {
 	union {
 		struct {
-			unsigned char f54_q43_b0_to_b6:7;
+			unsigned char f54_q43_b0b1:2;
+			unsigned char has_ctrl171:1;
+			unsigned char has_ctrl172_query44_query45:1;
+			unsigned char has_ctrl173:1;
+			unsigned char has_ctrl174:1;
+			unsigned char has_ctrl175:1;
 			unsigned char has_query46:1;
 		} __packed;
 		unsigned char data[1];
@@ -1138,12 +1149,275 @@ struct f54_query43 {
 struct f54_query46 {
 	union {
 		struct {
-			unsigned char f54_q46_b0b1:2;
+			unsigned char has_ctrl176:1;
+			unsigned char has_ctrl177_178:1;
 			unsigned char has_ctrl179:1;
 			unsigned char f54_q46_b3:1;
-			unsigned char has_data27:1;
+ 			unsigned char has_data27:1;
 			unsigned char has_data28:1;
-			unsigned char f54_q46_b6b7:2;
+			unsigned char f54_q46_b6:1;
+			unsigned char has_query47:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query47 {
+	union {
+		struct {
+			unsigned char f54_q47_b0:1;
+			unsigned char has_ctrl182:1;
+			unsigned char has_ctrl183:1;
+			unsigned char f54_q47_b3:1;
+			unsigned char has_ctrl185:1;
+			unsigned char has_ctrl186:1;
+			unsigned char has_ctrl187:1;
+			unsigned char has_query49:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query49 {
+	union {
+		struct {
+			unsigned char f54_q49_b0:1;
+			unsigned char has_data30:1;
+			unsigned char has_ctrl188:1;
+			unsigned char has_data31:1;
+			unsigned char f54_q49_b4b6:3;
+			unsigned char has_query50:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query50 {
+	union {
+		struct {
+			unsigned char f54_q50_b0b1:2;
+			unsigned char has_ctrl193:1;
+			unsigned char has_query52:1;
+			unsigned char f54_q50_b4b6:3;
+			unsigned char has_query51:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query51 {
+	union {
+		struct {
+			unsigned char has_signal_clarity:1;
+			unsigned char f54_q51_b1:1;
+			unsigned char has_ctrl197:1;
+			unsigned char has_negative_cp:1;
+			unsigned char f54_q51_b4:1;
+			unsigned char has_query53_query54_ctrl198:1;
+			unsigned char has_ctrl199:1;
+			unsigned char has_query55:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query55 {
+	union {
+		struct {
+			unsigned char has_query56:1;
+			unsigned char has_data33_data34:1;
+			unsigned char has_alt_report_rate:1;
+			unsigned char has_ctrl200:1;
+			unsigned char has_ctrl201_ctrl202:1;
+			unsigned char has_ctrl203:1;
+			unsigned char has_ctrl204:1;
+			unsigned char has_query57:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query57 {
+	union {
+		struct {
+			unsigned char has_ctrl205:1;
+			unsigned char has_ctrl206:1;
+			unsigned char has_usb_bulk_read:1;
+			unsigned char has_ctrl207:1;
+			unsigned char has_ctrl208:1;
+			unsigned char has_ctrl209:1;
+			unsigned char has_ctrl210:1;
+			unsigned char has_query58:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query58 {
+	union {
+		struct {
+			unsigned char has_query59:1;
+			unsigned char has_query60:1;
+			unsigned char has_ctrl211:1;
+			unsigned char has_ctrl212:1;
+			unsigned char has_hybrid_abs_tx_axis_filtering:1;
+			unsigned char has_hybrid_abs_tx_interpolation:1;
+			unsigned char has_ctrl213:1;
+			unsigned char has_query61:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query61 {
+	union {
+		struct {
+			unsigned char has_ctrl214:1;
+			unsigned char has_ctrl215_query62_query63:1;
+			unsigned char f54_query_61_b2:1;
+			unsigned char has_ctrl216:1;
+			unsigned char has_ctrl217:1;
+			unsigned char has_misc_host_ctrl:1;
+			unsigned char has_ctrl219:1;
+			unsigned char has_query64:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query64 {
+	union {
+		struct {
+			unsigned char has_ctrl101_sub1:1;
+			unsigned char has_ctrl220:1;
+			unsigned char has_ctrl221:1;
+			unsigned char has_ctrl222:1;
+			unsigned char has_ctrl219_sub1:1;
+			unsigned char has_ctrl103_sub3:1;
+			unsigned char has_ctrl224_ctrl226_ctrl227:1;
+			unsigned char has_query65:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query65 {
+	union {
+		struct {
+			unsigned char f54_q65_b0b1:2;
+			unsigned char has_ctrl101_sub2:1;
+			unsigned char f54_65_b3b4:2;
+			unsigned char has_query66_ctrl231:1;
+			unsigned char has_ctrl232:1;
+			unsigned char has_query67:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query67 {
+	union {
+		struct {
+			unsigned char has_abs_doze_spatial_filter_en:1;
+			unsigned char has_abs_doze_avg_filter_enhancement_en:1;
+			unsigned char has_single_display_pulse:1;
+			unsigned char f54_q67_b3b4:2;
+			unsigned char has_ctrl235_ctrl236:1;
+			unsigned char has_ctrl109_sub1_sub2:1;
+			unsigned char has_query68:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query68 {
+	union {
+		struct {
+			unsigned char has_ctrl237:1;
+			unsigned char has_ctrl238:1;
+			unsigned char has_ctrl238_sub1:1;
+			unsigned char has_ctrl238_sub2:1;
+			unsigned char has_ctrl239:1;
+			unsigned char has_freq_filter_ext:1;
+			unsigned char is_tddi_hic:1;
+			unsigned char has_query69:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query69 {
+	union {
+		struct {
+			unsigned char has_ctrl240sub0:1;
+			unsigned char has_ctrl240sub1sub2:1;
+			unsigned char has_ctrl240sub3:1;
+			unsigned char has_ctrl240sub4:1;
+			unsigned char f54_q69_b4b6:3;
+			unsigned char has_query70:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query70 {
+	union {
+		struct {
+			unsigned char f54_q70_b0b1:2;
+			unsigned char has_ctrl242:1;
+			unsigned char f54_q70_b3b6:4;
+			unsigned char has_query71:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query71 {
+	union {
+		struct {
+			unsigned char f54_q71_b0b6:7;
+			unsigned char has_query72:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query72 {
+	union {
+		struct {
+			unsigned char f54_q72_b0b6:7;
+			unsigned char has_query73:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query73 {
+	union {
+		struct {
+			unsigned char f54_q73_b0b6:7;
+			unsigned char has_query74:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query74 {
+	union {
+		struct {
+			unsigned char f54_q74_b0b6:7;
+			unsigned char has_query75:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct f54_query75 {
+	union {
+		struct {
+			unsigned char f54_q75_b0b1:2;
+			unsigned char has_ctrl269:1;
+			unsigned char f54_q75_b3b7:5;
 		} __packed;
 		unsigned char data[1];
 	};
@@ -1730,6 +2004,32 @@ struct f54_control_146 {
 	};
 };
 
+struct f54_control_242 {
+	union {
+		struct {
+			unsigned char c242_cbc_servo_disable:1;
+			unsigned char c242_b1b7:7;
+		} __packed;
+		struct {
+			unsigned char data[1];
+			unsigned short address;
+		} __packed;
+	};
+};
+
+struct f54_control_269 {
+	union {
+		struct {
+			unsigned char c269_bsc_calibration_en:1;
+			unsigned char c269_b1b7:7;
+		} __packed;
+		struct {
+			unsigned char data[1];
+			unsigned short address;
+		} __packed;
+	};
+};
+
 struct f54_control {
 	struct f54_control_0 *reg_0;
 	struct f54_control_1 *reg_1;
@@ -1771,6 +2071,8 @@ struct f54_control {
 	struct f54_control_137 *reg_137;
 	struct f54_control_145 *reg_145;
 	struct f54_control_146 *reg_146;
+	struct f54_control_242 *reg_242;
+	struct f54_control_269 *reg_269;
 	struct f55_control_0 *reg_0_f55;
 	struct f55_control_8 *reg_8_f55;
 };
@@ -2050,6 +2352,25 @@ struct synaptics_rmi4_f54_handle {
 	struct f54_query42 query42;
 	struct f54_query43 query43;
 	struct f54_query46 query46;
+	struct f54_query47 query47;
+	struct f54_query49 query49;
+	struct f54_query50 query50;
+	struct f54_query51 query51;
+	struct f54_query55 query55;
+	struct f54_query57 query57;
+	struct f54_query58 query58;
+	struct f54_query61 query61;
+	struct f54_query64 query64;
+	struct f54_query65 query65;
+	struct f54_query67 query67;
+	struct f54_query68 query68;
+	struct f54_query69 query69;
+	struct f54_query70 query70;
+	struct f54_query71 query71;
+	struct f54_query72 query72;
+	struct f54_query73 query73;
+	struct f54_query74 query74;
+	struct f54_query75 query75;
 	struct f54_control control;
 	struct f54_data data;
 	struct hrtimer watchdog;
@@ -2306,6 +2627,8 @@ show_store_prototype(c146_burst_count1)
 show_store_prototype(c146_burst_count2)
 show_store_prototype(c146_stretch_dur2)
 show_store_prototype(c146_adc_clock_div)
+show_store_prototype(c242_cbc_servo_disable)
+show_store_prototype(c269_bsc_calibration_en)
 show_prototype(f55_q2_has_single_layer_multitouch)
 show_prototype(f55_c0_receivers_on_x)
 show_prototype(f55_c8_pattern_type)
@@ -2645,6 +2968,16 @@ static struct attribute *attrs_reg_146[] = {
 	NULL,
 };
 
+static struct attribute *attrs_reg_242[] = {
+	attrify(c242_cbc_servo_disable),
+	NULL,
+};
+
+static struct attribute *attrs_reg_269[] = {
+	attrify(c269_bsc_calibration_en),
+	NULL,
+};
+
 static struct attribute *attrs_f55_c0[] = {
 	attrify(f55_c0_receivers_on_x),
 	NULL,
@@ -2692,6 +3025,8 @@ static struct attribute_group attrs_ctrl_regs[] = {
 	GROUP(attrs_reg_137),
 	GROUP(attrs_reg_145),
 	GROUP(attrs_reg_146),
+	GROUP(attrs_reg_242),
+	GROUP(attrs_reg_269),
 	GROUP(attrs_f55_c0),
 	GROUP(attrs_f55_c8),
 };
@@ -3959,6 +4294,9 @@ show_store_func_unsigned(control, reg_146, c146_burst_count2)
 show_store_func_unsigned(control, reg_146, c146_stretch_dur2)
 show_store_func_unsigned(control, reg_146, c146_adc_clock_div)
 
+show_store_func_unsigned(control, reg_242, c242_cbc_servo_disable)
+show_store_func_unsigned(control, reg_269, c269_bsc_calibration_en)
+
 simple_show_func_unsigned(query_f55_0_2, f55_q2_has_single_layer_multitouch)
 show_func_unsigned(control, reg_0_f55, f55_c0_receivers_on_x)
 show_func_unsigned(control, reg_8_f55, f55_c8_pattern_type)
@@ -4473,8 +4811,32 @@ static int synaptics_rmi4_f54_set_ctrl(
 	struct f54_query35 *query35 = &f54->query35;
 	struct f54_query36 *query36 = &f54->query36;
 	struct f54_query38 *query38 = &f54->query38;
+	struct f54_query39 *query39 = &f54->query39;
 	struct f54_query40 *query40 = &f54->query40;
+//	struct f54_query41 *query41 = &f54->query41;
+//	struct f54_query42 *query42 = &f54->query42;
+	struct f54_query43 *query43 = &f54->query43;
 	struct f54_query46 *query46 = &f54->query46;
+	/* BSC control access */
+//	struct f54_query47 *query47 = &f54->query47;
+//	struct f54_query49 *query49 = &f54->query49;
+	struct f54_query50 *query50 = &f54->query50;
+	struct f54_query51 *query51 = &f54->query51;
+	struct f54_query55 *query55 = &f54->query55;
+//	struct f54_query57 *query57 = &f54->query57;
+//	struct f54_query58 *query58 = &f54->query58;
+	struct f54_query61 *query61 = &f54->query61;
+	struct f54_query64 *query64 = &f54->query64;
+//	struct f54_query65 *query65 = &f54->query65;
+//	struct f54_query67 *query67 = &f54->query67;
+	struct f54_query68 *query68 = &f54->query68;
+	struct f54_query69 *query69 = &f54->query69;
+	struct f54_query70 *query70 = &f54->query70;
+//	struct f54_query71 *query71 = &f54->query71;
+//	struct f54_query72 *query72 = &f54->query72;
+//	struct f54_query73 *query73 = &f54->query73;
+//	struct f54_query74 *query74 = &f54->query74;
+	struct f54_query75 *query75 = &f54->query75;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 	unsigned char num_of_sensing_freqs;
 
@@ -4835,36 +5197,111 @@ static int synaptics_rmi4_f54_set_ctrl(
 	CTRL_REG_PRESENCE(147, 1, query38->has_ctrl147);
 	CTRL_REG_PRESENCE(148, 1, query38->has_ctrl148);
 	CTRL_REG_PRESENCE(149, 1, query38->has_ctrl149);
-	CTRL_REG_RESERVED_PRESENCE(150, 1, 0);
+
+//	CTRL_REG_RESERVED_PRESENCE(150, 1, 0);
 	CTRL_REG_PRESENCE(151, 1, query38->has_ctrl151);
-	CTRL_REG_RESERVED_PRESENCE(152, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(153, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(154, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(155, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(156, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(157, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(158, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(159, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(160, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(161, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(162, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(152, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(153, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(154, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(155, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(156, 1, 0);
+	CTRL_REG_PRESENCE(157, 1, query39->has_ctrl157_158);
+	CTRL_REG_PRESENCE(158, 1, query39->has_ctrl157_158);
+//	CTRL_REG_RESERVED_PRESENCE(159, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(160, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(161, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(162, 1, 0);
 	CTRL_REG_PRESENCE(163, 1, query40->has_ctrl163_query41);
-	CTRL_REG_RESERVED_PRESENCE(164, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(164, 1, 0);
 	CTRL_REG_PRESENCE(165, 1, query40->has_ctrl165_query42);
-	CTRL_REG_RESERVED_PRESENCE(166, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(166, 1, 0);
 	CTRL_REG_PRESENCE(167, 1, query40->has_ctrl167);
-	CTRL_REG_RESERVED_PRESENCE(168, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(169, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(170, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(171, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(172, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(173, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(174, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(175, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(176, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(177, 1, 0);
-	CTRL_REG_RESERVED_PRESENCE(178, 1, 0);
+	CTRL_REG_PRESENCE(168, 1, query40->has_ctrl168);
+//	CTRL_REG_RESERVED_PRESENCE(170, 1, 0);
+	CTRL_REG_PRESENCE(171, 1, query43->has_ctrl171);
+//	CTRL_REG_RESERVED_PRESENCE(172, 1, 0);
+	CTRL_REG_PRESENCE(173, 1, query43->has_ctrl173);
+	CTRL_REG_PRESENCE(174, 1, query43->has_ctrl174);
+	CTRL_REG_PRESENCE(175, 1, query43->has_ctrl175);
+	CTRL_REG_PRESENCE(176, 1, query46->has_ctrl176);
+	CTRL_REG_PRESENCE(177, 1, query46->has_ctrl177_178);
+	CTRL_REG_PRESENCE(178, 1, query46->has_ctrl177_178);
 	CTRL_REG_PRESENCE(179, 1, query46->has_ctrl179);
+
+	/* BSC control access */
+#if 0
+	CTRL_REG_RESERVED_PRESENCE(180, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(181, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(182, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(183, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(184, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(185, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(186, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(187, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(188, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(189, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(190, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(191, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(192, 1, 0);
+#endif
+	CTRL_REG_PRESENCE(193, 1, query50->has_ctrl193);
+//	CTRL_REG_RESERVED_PRESENCE(194, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(195, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(196, 1, 0);
+	CTRL_REG_PRESENCE(197, 1, query51->has_ctrl197);
+	CTRL_REG_PRESENCE(198, 1, query51->has_query53_query54_ctrl198);
+	CTRL_REG_PRESENCE(199, 1, query51->has_ctrl199);
+//	CTRL_REG_RESERVED_PRESENCE(200, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(201, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(202, 1, 0);
+	CTRL_REG_PRESENCE(203, 1, query55->has_ctrl203);
+#if 0
+	CTRL_REG_RESERVED_PRESENCE(204, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(205, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(206, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(207, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(208, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(209, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(210, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(211, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(212, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(213, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(214, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(215, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(216, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(217, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(218, 1, 0);
+#endif
+	/* might have subpacket */
+	CTRL_REG_PRESENCE(219, 1, query61->has_ctrl219);
+
+
+	CTRL_REG_PRESENCE(220, 1, query64->has_ctrl220);
+	CTRL_REG_PRESENCE(221, 1, query64->has_ctrl221);
+#if 0
+	CTRL_REG_RESERVED_PRESENCE(222, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(223, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(224, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(225, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(226, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(227, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(228, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(229, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(230, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(231, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(232, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(233, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(234, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(235, 1, 0);
+	CTRL_REG_RESERVED_PRESENCE(236, 1, 0);
+#endif
+	CTRL_REG_PRESENCE(237, 1, query68->has_ctrl237);
+//	CTRL_REG_RESERVED_PRESENCE(238, 1, 0);
+//	CTRL_REG_RESERVED_PRESENCE(239, 1, 0);
+	/* might have up to 4 subpackets */
+	CTRL_REG_PRESENCE(240, 1, query69->data[0] & 0x0f);
+	CTRL_REG_ADD(242, 1, query70->has_ctrl242);
+	CTRL_REG_ADD(269, 1, query75->has_ctrl269);
 
 	/* add F55 control registers */
 	reg_addr = f54->fn55->control_base_addr;
@@ -5214,11 +5651,34 @@ int synaptics_rmi4_f54_read_query(
 	QUERY_REG_READ(41, f54->query40.has_ctrl163_query41);
 	QUERY_REG_READ(42, f54->query40.has_ctrl165_query42);
 	QUERY_REG_READ(43, f54->query40.has_query43);
+#if 0
 	reg_addr += 1; /* query44 is reserved - always present */
 	reg_addr += 1; /* query45 is reserved - always present */
+#endif
 	QUERY_REG_READ(46, f54->query43.has_query46);
+	QUERY_REG_READ(47, f54->query46.has_query47);
+	QUERY_REG_READ(49, f54->query47.has_query49);
+	QUERY_REG_READ(50, f54->query49.has_query50);
+	QUERY_REG_READ(51, f54->query50.has_query51);
+	if (f54->query50.has_query52)
+		reg_addr += 1;
+	QUERY_REG_READ(55, f54->query51.has_query55);
+	QUERY_REG_READ(57, f54->query55.has_query57);
+	QUERY_REG_READ(58, f54->query57.has_query58);
+	QUERY_REG_READ(61, f54->query58.has_query61);
+	QUERY_REG_READ(64, f54->query61.has_query64);
+	QUERY_REG_READ(65, f54->query64.has_query65);
+	QUERY_REG_READ(67, f54->query65.has_query67);
+	QUERY_REG_READ(68, f54->query67.has_query68);
+	QUERY_REG_READ(69, f54->query68.has_query69);
+	QUERY_REG_READ(70, f54->query69.has_query70);
+	QUERY_REG_READ(71, f54->query70.has_query71);
+	QUERY_REG_READ(72, f54->query71.has_query72);
+	QUERY_REG_READ(73, f54->query72.has_query73);
+	QUERY_REG_READ(74, f54->query73.has_query74);
+	QUERY_REG_READ(75, f54->query74.has_query75);
 
-return 0;
+	return 0;
 
 err:
 	return retval;
