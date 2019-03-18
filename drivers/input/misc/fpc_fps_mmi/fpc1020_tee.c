@@ -153,6 +153,14 @@ static ssize_t irq_cnt_get(struct device *device,
 }
 static DEVICE_ATTR(irq_cnt, S_IRUSR, irq_cnt_get, NULL);
 
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "fpc");
+}
+static DEVICE_ATTR_RO(vendor);
+
 static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
 			     char *buf)
 {
@@ -164,6 +172,7 @@ static struct attribute *attributes[] = {
 	&dev_attr_dev_enable.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_irq_cnt.attr,
+	&dev_attr_vendor.attr,
 	&dev_attr_modalias.attr,
 	NULL
 };
