@@ -111,6 +111,7 @@ void FPS_notify(unsigned long stype, int state)
 
 struct fpc1020_data {
 	struct device *dev;
+	struct device *class_dev;
 	struct platform_device *pdev;
 	struct notifier_block nb;
 	int irq_gpio;
@@ -152,10 +153,18 @@ static ssize_t irq_cnt_get(struct device *device,
 }
 static DEVICE_ATTR(irq_cnt, S_IRUSR, irq_cnt_get, NULL);
 
+static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
+			     char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "fpc1020");
+}
+static DEVICE_ATTR_RO(modalias);
+
 static struct attribute *attributes[] = {
 	&dev_attr_dev_enable.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_irq_cnt.attr,
+	&dev_attr_modalias.attr,
 	NULL
 };
 
@@ -172,7 +181,7 @@ static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 	pm_wakeup_event(fpc1020->dev, MAX_UP_TIME);
 	dev_dbg(fpc1020->dev, "%s\n", __func__);
 	fpc1020->irq_cnt++;
-	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
+	sysfs_notify(&fpc1020->class_dev->kobj, NULL, dev_attr_irq.attr.name);
 	return IRQ_HANDLED;
 }
 
@@ -191,6 +200,58 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	}
 	dev_dbg(dev, "%s %d\n", label, *gpio);
 	return 0;
+}
+
+#define MAX_INSTANCE	5
+#define MAJOR_BASE	32
+static int fpc1020_create_sysfs(struct fpc1020_data *fpc1020, bool create) {
+	struct device *dev = fpc1020->dev;
+	static struct class *fingerprint_class;
+	static dev_t dev_no;
+	int rc = 0;
+
+	if (create) {
+		rc = alloc_chrdev_region(&dev_no, MAJOR_BASE, MAX_INSTANCE, "fpc");
+		if (rc < 0) {
+			dev_err(dev, "%s alloc fingerprint class device MAJOR failed.\n", __func__);
+			goto ALLOC_REGION;
+		}
+		if (!fingerprint_class) {
+			fingerprint_class = class_create(THIS_MODULE, "fingerprint");
+			if (IS_ERR(fingerprint_class)) {
+				dev_err(dev, "%s create fingerprint class failed.\n", __func__);
+				rc = PTR_ERR(fingerprint_class);
+				fingerprint_class = NULL;
+				goto CLASS_CREATE_ERR;
+			}
+		}
+		fpc1020->class_dev = device_create(fingerprint_class, NULL, MAJOR(dev_no),
+			fpc1020, "fpc1020");
+		if (IS_ERR(fpc1020->class_dev)) {
+			dev_err(dev, "%s create fingerprint class device failed.\n", __func__);
+			rc = PTR_ERR(fpc1020->class_dev);
+			fpc1020->class_dev = NULL;
+			goto DEVICE_CREATE_ERR;
+		}
+		rc = sysfs_create_group(&fpc1020->class_dev->kobj, &attribute_group);
+		if (rc) {
+			dev_err(dev, "could not create sysfs\n");
+			goto CREATE_SYSFS_ERR;
+		}
+		return 0;
+	}
+
+	sysfs_remove_group(&fpc1020->class_dev->kobj, &attribute_group);
+CREATE_SYSFS_ERR:
+	device_destroy(fingerprint_class, MAJOR(dev_no));
+	fpc1020->class_dev = NULL;
+DEVICE_CREATE_ERR:
+	class_destroy(fingerprint_class);
+	fingerprint_class = NULL;
+CLASS_CREATE_ERR:
+	unregister_chrdev_region(dev_no, 1);
+ALLOC_REGION:
+	return rc;
 }
 
 static int fpc1020_probe(struct platform_device *pdev)
@@ -245,7 +306,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 	enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 
 
-	rc = sysfs_create_group(&dev->kobj, &attribute_group);
+	rc = fpc1020_create_sysfs(fpc1020, true);
 	if (rc) {
 		dev_err(dev, "could not create sysfs\n");
 		goto exit;
@@ -260,7 +321,7 @@ static int fpc1020_remove(struct platform_device *pdev)
 {
 	struct  fpc1020_data *fpc1020 = dev_get_drvdata(&pdev->dev);
 
-	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
+	fpc1020_create_sysfs(fpc1020, false);
 
 	device_init_wakeup(fpc1020->dev, false);
 	devm_free_irq(fpc1020->dev,gpio_to_irq(fpc1020->irq_gpio),fpc1020);
