@@ -82,6 +82,8 @@ enum {
 #define HEARTBEAT_DUAL_DELAY_MS 10000
 #define HEARTBEAT_FACTORY_MS 1000
 
+#define EMPTY_CYCLES 101
+
 enum {
 	TRICKLE_CHARGE = 0,
 	PRE_CHARGE,
@@ -261,6 +263,8 @@ struct smb_mmi_charger {
 	bool			vbus_enabled;
 	int 			charger_rate;
 	int 			age;
+	int 			cycles;
+	int 			soc_cycles_start;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1859,6 +1863,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	/* Check for Charge None */
 	if ((main_p->pres_chrg_step == STEP_NONE) ||
 	    (flip_p->pres_chrg_step == STEP_NONE)) {
+		chg->sm_param[BASE_BATT].pres_chrg_step = STEP_NONE;
 		target_fcc = main_p->target_fcc;
 		target_fv = chg->base_fv_mv;
 		sched_time = HEARTBEAT_DELAY_MS;
@@ -1866,6 +1871,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	/* Check for Charge FULL from each */
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
 		   (flip_p->pres_chrg_step == STEP_FULL)) {
+		chg->sm_param[BASE_BATT].pres_chrg_step = STEP_FULL;
 		target_fcc = -EINVAL;
 		target_fv = chg->base_fv_mv;
 		sched_time = HEARTBEAT_DELAY_MS;
@@ -1878,6 +1884,8 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		   (chg_stat_flip.batt_soc >= 95) &&
 		   ((chg_stat_flip.batt_mv + HYST_STEP_FLIP_MV) >=
 		    chg->base_fv_mv)) {
+		chg->sm_param[BASE_BATT].pres_chrg_step =
+			flip_p->pres_chrg_step;
 		target_fcc = flip_p->target_fcc;
 		target_fv = flip_p->target_fv;
 		pr_info("SMBMMI: Align Flip to Main FULL\n");
@@ -1888,6 +1896,8 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		   (chg_stat_main.batt_soc >= 95) &&
 		   ((chg_stat_main.batt_mv + HYST_STEP_MV) >=
 		    chg->base_fv_mv)) {
+		chg->sm_param[BASE_BATT].pres_chrg_step =
+			main_p->pres_chrg_step;
 		target_fcc = main_p->target_fcc;
 		target_fv = main_p->target_fv;
 		pr_info("SMBMMI: Align Main to Flip FULL\n");
@@ -1895,11 +1905,13 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	/* Check for Charge Disable from each */
 	} else if ((main_p->target_fcc < 0) ||
 		   (flip_p->target_fcc < 0)) {
+		chg->sm_param[BASE_BATT].pres_chrg_step = STEP_STOP;
 		target_fcc = -EINVAL;
 		target_fv = chg->base_fv_mv;
 		goto vote_now;
 	}
 
+	chg->sm_param[BASE_BATT].pres_chrg_step = main_p->pres_chrg_step;
 	chg->last_reported_status = -1;
 	if (main_p->target_fv < flip_p->target_fv)
 		target_fv = main_p->target_fv;
@@ -2276,6 +2288,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int cap_err;
 	int report_cap;
 	int pc_online;
+	int pres_chrg_step, prev_chrg_step;
 	static int prev_vbus_mv = -1;
 	char *chrg_rate_string = NULL;
 	char *envp[2];
@@ -2468,8 +2481,34 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		pr_debug("SMBMMI: Age %d, Main Age %d, Flip Age %d\n",
 			 chip->age, main_age, flip_age);
 
+		prev_chrg_step = chip->sm_param[BASE_BATT].pres_chrg_step;
+
 		/* Dual Step and Thermal Charging */
 		hb_resch_time = mmi_dual_charge_control(chip, &chg_stat);
+		pres_chrg_step = chip->sm_param[BASE_BATT].pres_chrg_step;
+
+		if ((prev_chrg_step == STEP_NONE) &&
+		    ((pres_chrg_step == STEP_MAX) ||
+		     (pres_chrg_step == STEP_NORM)))
+			chip->soc_cycles_start = chip->last_reported_soc;
+		else if ((pres_chrg_step == STEP_NONE) &&
+			 ((prev_chrg_step == STEP_MAX) ||
+			  (prev_chrg_step == STEP_NORM)) &&
+			 (chip->last_reported_soc > chip->soc_cycles_start)) {
+
+			chip->cycles += (chip->last_reported_soc -
+					 chip->soc_cycles_start);
+			chip->soc_cycles_start = EMPTY_CYCLES;
+
+		} else if ((pres_chrg_step == STEP_FULL) &&
+			   ((prev_chrg_step == STEP_MAX) ||
+			    (prev_chrg_step == STEP_NORM)) &&
+			   (100 > chip->soc_cycles_start)) {
+
+			chip->cycles += (100 - chip->soc_cycles_start);
+			chip->soc_cycles_start = EMPTY_CYCLES;
+		}
+
 	} else if (!chip->factory_mode) {
 		cap_err = 0;
 		rc = power_supply_get_property(chip->bms_psy,
@@ -2738,6 +2777,9 @@ static int batt_get_prop(struct power_supply *psy,
 		else
 			val->intval = chip->last_reported_soc;
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		val->intval = chip->cycles / 100;
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
 			union power_supply_propval main_psy_val;
@@ -2778,8 +2820,19 @@ static int batt_set_prop(struct power_supply *psy,
 	int rc = 0;
 	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
 
-	rc = power_supply_set_property(chip->qcom_psy, prop, val);
-
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		chip->cycles += val->intval * 100;
+		break;
+	default:
+		rc = power_supply_set_property(chip->qcom_psy, prop, val);
+		if (rc < 0) {
+			pr_debug("Get Unknown prop %d rc = %d\n", prop, rc);
+			/* soft fail so uevents are not blocked */
+			rc = 0;
+		}
+		break;
+	}
 	return rc;
 }
 
@@ -2798,6 +2851,7 @@ static int batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		return 1;
 	default:
 		break;
@@ -3146,6 +3200,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	chip->age = 100;
+	chip->cycles = 0;
+	chip->soc_cycles_start = EMPTY_CYCLES;
 	chip->last_reported_soc = -1;
 	chip->last_reported_status = -1;
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
