@@ -903,8 +903,11 @@ static int etspi_create_device(struct etspi_data *etspi, bool create) {
 		return 0;
 	}
 
+
+#if EGIS_NAVI_INPUT
 	uinput_egis_destroy(etspi);
 	sysfs_egis_destroy(etspi);
+#endif
 	mutex_lock(&device_list_lock);
 	list_del(&etspi->device_entry);
 	mutex_unlock(&device_list_lock);
