@@ -72,9 +72,8 @@
 #define MODEL_LOCK1		0X0000
 #define MODEL_LOCK2		0X0000
 
-#define dQ_ACC_DIV	0x4
-#define dP_ACC_100	0x1900
-#define dP_ACC_200	0x3200
+#define dQ_ACC_DIV	16
+#define dP_ACC_200	0xC80
 
 #define MAX17050_CFG_REV_REG	MAX17042_ManName
 #define MAX17050_CFG_REV_MASK	0x0007
@@ -900,7 +899,8 @@ static void max17042_load_new_capacity_params(struct max17042_chip *chip)
 	max17042_write_verify_reg(map, MAX17042_RepCap, rep_cap);
 
 	/* Write dQ_acc to 200% of Capacity and dP_acc to 200% */
-	dq_acc = config->fullcap / dQ_ACC_DIV;
+	dq_acc = CHRG_CONV_WR(chip->fctr_uah_bit,
+			      config->fullcapnom) / dQ_ACC_DIV;
 	max17042_write_verify_reg(map, MAX17042_dQacc, dq_acc);
 	max17042_write_verify_reg(map, MAX17042_dPacc, dP_ACC_200);
 
