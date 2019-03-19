@@ -64,6 +64,8 @@ enum {
 	USBIN_ADAPTER_ALLOW_5V_TO_12V	= 12,
 };
 
+#define LOW_BATT_MV 3300
+#define SHUT_BATT_MV 3100
 #define REV_BST_THRESH 4700
 #define REV_BST_DROP 150
 #define REV_BST_BULK_DROP 100
@@ -265,6 +267,7 @@ struct smb_mmi_charger {
 	int 			age;
 	int 			cycles;
 	int 			soc_cycles_start;
+	bool			shut_batt;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1967,6 +1970,15 @@ vote_now:
 	vote(chg->fcc_votable, MMI_HB_VOTER,
 	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
 
+	if (!stat->charger_present &&
+	    (chg_stat_main.batt_mv <= LOW_BATT_MV) &&
+	    (chg_stat_flip.batt_mv <= LOW_BATT_MV)) {
+		if ((chg_stat_main.batt_mv <= SHUT_BATT_MV) ||
+		    (chg_stat_flip.batt_mv <= SHUT_BATT_MV))
+		    chg->shut_batt = true;
+	} else
+		chg->shut_batt = false;
+
 	if (sm_update)
 		pr_info("SMBMMI:"
 			"IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
@@ -2428,7 +2440,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		report_cap += flip_cap * flip_cap_full;
 		report_cap /= main_cap_full + flip_cap_full;
 
-		if (report_cap < 0)
+		if (chip->shut_batt || (report_cap < 0))
 			report_cap = 0;
 		else if (report_cap > 100)
 			report_cap = 100;
@@ -2485,6 +2497,11 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 		/* Dual Step and Thermal Charging */
 		hb_resch_time = mmi_dual_charge_control(chip, &chg_stat);
+
+		/* Check to see if Voltage is shutdown */
+		if (chip->shut_batt)
+			chip->last_reported_soc = 0;
+
 		pres_chrg_step = chip->sm_param[BASE_BATT].pres_chrg_step;
 
 		if ((prev_chrg_step == STEP_NONE) &&
@@ -3201,6 +3218,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	chip->age = 100;
 	chip->cycles = 0;
+	chip->shut_batt = false;
 	chip->soc_cycles_start = EMPTY_CYCLES;
 	chip->last_reported_soc = -1;
 	chip->last_reported_status = -1;
