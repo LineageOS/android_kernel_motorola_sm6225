@@ -3239,6 +3239,17 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	    (pval.intval != POWER_SUPPLY_TYPE_USB_CDP)) {
 		dev_err(chip->dev, "Charger Present; Dis Factory Mode\n");
 		chip->factory_mode = false;
+		if(chip->chg_dis_votable)
+			pmic_vote_force_active_set(chip->chg_dis_votable, 0);
+
+		if(chip->fcc_votable)
+			pmic_vote_force_active_set(chip->fcc_votable, 0);
+
+		if(chip->fv_votable)
+			pmic_vote_force_active_set(chip->fv_votable, 0);
+
+		if(chip->usb_icl_votable)
+			pmic_vote_force_active_set(chip->usb_icl_votable, 0);
 	}
 
 	rc = device_create_file(chip->dev,
