@@ -518,7 +518,7 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 		dev_dbg(&rmi4_data->i2c_client->dev,\
 			"%s: c%s addr = 0x%02x added (%d)\n",\
 			 __func__, #reg, reg_addr, reg_num);\
-		control->reg_##reg->address = reg_addr;\
+		control->reg_##reg->address = reg_addr | PAGE_SELECT_ENFORCE;\
 		reg_addr += skip;\
 	} \
 	reg_num++;\
@@ -538,7 +538,7 @@ show_store_replicated_func(rtype, rgrp, propname, "%u")
 			"%s: c%s addr = 0x%02x size = %zu added (%d)\n",\
 			 __func__, #reg, reg_addr, size, reg_num);\
 		control->reg_##reg->length = size;\
-		control->reg_##reg->address = reg_addr;\
+		control->reg_##reg->address = reg_addr | PAGE_SELECT_ENFORCE;\
 		reg_addr += skip;\
 	} \
 	reg_num++;\

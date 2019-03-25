@@ -4116,13 +4116,20 @@ static int synaptics_rmi4_set_page(struct synaptics_rmi4_data *rmi4_data,
 		unsigned int address)
 {
 	int retval = 0;
+	bool enforce_page_select = false;
 	unsigned char retry;
 	unsigned char buf[PAGE_SELECT_LEN];
 	unsigned char page;
 	struct i2c_client *i2c = rmi4_data->i2c_client;
 
+	if (address & PAGE_SELECT_ENFORCE) {
+		enforce_page_select = true;
+		dev_dbg(&i2c->dev, "%s: Enforced page select\n", __func__);
+		address &= ~PAGE_SELECT_ENFORCE;
+	}
+
 	page = ((address >> 8) & MASK_8BIT);
-	if (page != rmi4_data->current_page) {
+	if (page != rmi4_data->current_page || enforce_page_select) {
 		buf[0] = MASK_8BIT;
 		buf[1] = page;
 		for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
