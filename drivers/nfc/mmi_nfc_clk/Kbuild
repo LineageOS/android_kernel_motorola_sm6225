@@ -1,0 +1,4 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+
+obj-m += mmi_nfc_clk.o
