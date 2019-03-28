@@ -41,7 +41,7 @@
 #define AW8695_I2C_NAME "aw8695_haptic"
 #define AW8695_HAPTIC_NAME "aw8695_haptic"
 
-#define AW8695_VERSION "v1.3.4"
+#define AW8695_VERSION "v1.3.5"
 
 
 #define AWINIC_RAM_UPDATE_DELAY
@@ -56,7 +56,7 @@
 
 
 #define AW8695_MAX_FIRMWARE_LOAD_CNT 20
-
+#define AW8695_SEQ_NO_RTP_BASE 102
 /******************************************************
  *
  * variable
@@ -66,8 +66,49 @@
 static char *aw8695_ram_name = "aw8695_haptic.bin";
 static char aw8695_rtp_name[][AW8695_RTP_NAME_MAX] = {
 	{"aw8695_rtp.bin"},
-	{"aw8695_rtp_lighthouse.bin"},
-	{"aw8695_rtp_silk.bin"},
+	{"aw8695_rtp_Argo_Navis.bin"},
+	{"aw8695_rtp_Attentive.bin"},
+	{"aw8695_rtp_Awake.bin"},
+	{"aw8695_rtp_Bird_Loop.bin"},
+	{"aw8695_rtp_Brilliant_Times.bin"},
+	{"aw8695_rtp_Chimey_Phone.bin"},
+	{"aw8695_rtp_Complex.bin"},
+	{"aw8695_rtp_Crazy_Dream.bin"},
+	{"aw8695_rtp_Curve_Ball_Blend.bin"},
+	{"aw8695_rtp_Digital_Phone.bin"},
+	{"aw8695_rtp_Electrovision.bin"},
+	{"aw8695_rtp_Ether_Shake.bin"},
+	{"aw8695_rtp_Fateful_Words.bin"},
+	{"aw8695_rtp_Flutey_Phone.bin"},
+	{"aw8695_rtp_Future_Funk.bin"},
+	{"aw8695_rtp_Future_Hi_Tech.bin"},
+	{"aw8695_rtp_Girtab.bin"},
+	{"aw8695_rtp_Hello.bin"},
+	{"aw8695_rtp_Hexagon.bin"},
+	{"aw8695_rtp_Hydra.bin"},
+	{"aw8695_rtp_Insert_Coin.bin"},
+	{"aw8695_rtp_Jumping_Dots.bin"},
+	{"aw8695_rtp_Keys.bin"},
+	{"aw8695_rtp_Loopy.bin"},
+	{"aw8695_rtp_Loopy_Lounge.bin"},
+	{"aw8695_rtp_Modular.bin"},
+	{"aw8695_rtp_Momentum.bin"},
+	{"aw8695_rtp_Morning.bin"},
+	{"aw8695_rtp_Moto.bin"},
+	{"aw8695_rtp_Natural.bin"},
+	{"aw8695_rtp_New_Player.bin"},
+	{"aw8695_rtp_Onward.bin"},
+	{"aw8695_rtp_Organ_Dub.bin"},
+	{"aw8695_rtp_Overclocked.bin"},
+	{"aw8695_rtp_Pegasus.bin"},
+	{"aw8695_rtp_Pyxis.bin"},
+	{"aw8695_rtp_Regrade.bin"},
+	{"aw8695_rtp_Scarabaeus.bin"},
+	{"aw8695_rtp_Sceptrum.bin"},
+	{"aw8695_rtp_Simple.bin"},
+	{"aw8695_rtp_Solarium.bin"},
+	{"aw8695_rtp_Sparse.bin"},
+	{"aw8695_rtp_Terrabytes.bin"},
 };
 
 struct aw8695_container *aw8695_rtp;
@@ -80,7 +121,7 @@ struct aw8695 *g_aw8695;
  ******************************************************/
 static void aw8695_interrupt_clear(struct aw8695 *aw8695);
 static int aw8695_haptic_trig_enable_config(struct aw8695 *aw8695);
-
+static void aw8695_vibrate(struct aw8695 *aw8695, int value);
 
 /******************************************************
 *
@@ -1747,6 +1788,110 @@ static int aw8695_haptic_init(struct aw8695 *aw8695)
  * vibrator
  *
  *****************************************************/
+
+static void aw8695_rtp_play(struct aw8695 *aw8695, int value)
+{
+	aw8695_haptic_stop(aw8695);
+	aw8695_haptic_set_rtp_aei(aw8695, false);
+	aw8695_interrupt_clear(aw8695);
+	if (value < (sizeof(aw8695_rtp_name) / AW8695_RTP_NAME_MAX)) {
+		aw8695->rtp_file_num = value;
+		if (value) {
+			schedule_work(&aw8695->rtp_work);
+		}
+	} else {
+		pr_err("%s: rtp_file_num 0x%02x over max value \n", __func__, aw8695->rtp_file_num);
+	}
+}
+
+#if 0
+static void aw8695_haptic_context(struct aw8695 *aw8695, enum aw8695_haptic_mode cmd)
+{
+	int t_top = 0;
+	if (!gpio_is_valid(aw8695->haptic_context_gpio)) {
+		pr_debug("%s haptic context gpio is invalid \n", __func__);
+		return;
+	}
+
+	t_top = gpio_get_value(aw8695->haptic_context_gpio);
+	if (t_top && atomic_read(&aw8695->reduce_pwr)) {
+		switch (cmd) {
+		case HAPTIC_RTP:
+			aw8695->gain = 0x20;
+			break;
+		case HAPTIC_SHORT:
+			aw8695->gain = 0x20;
+			break;
+		case HAPTIC_LONG:
+			aw8695->gain = 0x06;
+			break;
+		default:
+			break;
+		}
+	}
+}
+#endif
+
+static void aw8695_vibrate(struct aw8695 *aw8695, int value)
+{
+	int seq = 0;
+	mutex_lock(&aw8695->lock);
+
+	aw8695_haptic_stop(aw8695);
+	seq = aw8695->seq[0];
+	pr_info("%s: value=%d, seq=%d\n", __FUNCTION__, value, seq);
+
+	if (value > 0 || seq > 2) {
+
+		if (seq >= AW8695_SEQ_NO_RTP_BASE) {
+			aw8695->haptic_mode = HAPTIC_RTP;
+		} else if (value < 100 || seq > 2) {
+			aw8695->haptic_mode = HAPTIC_SHORT;
+		} else {
+			aw8695->haptic_mode = HAPTIC_LONG;
+		}
+
+		switch (aw8695->haptic_mode) {
+
+		case HAPTIC_RTP:
+			aw8695_rtp_play(aw8695, seq - AW8695_SEQ_NO_RTP_BASE);
+			break;
+		case HAPTIC_SHORT:
+			if (aw8695->seq[0] == 0)
+				aw8695->seq[0] = 0x01;
+			aw8695_haptic_set_wav_seq(aw8695, 0x00, aw8695->seq[0]);
+			aw8695_haptic_set_wav_loop(aw8695, 0x00, 0x00);
+			aw8695_haptic_ram_vbat_comp(aw8695, false);
+			aw8695_haptic_play_wav_seq(aw8695, 0x01);
+			break;
+		case HAPTIC_LONG:
+			aw8695->duration = value;
+			/* wav index config */
+			aw8695->index = 0x02;
+			aw8695_haptic_set_repeat_wav_seq(aw8695, aw8695->index);
+			//__pm_wakeup_event(aw8695->ws, value + 100);
+			/* run ms timer */
+			hrtimer_cancel(&aw8695->timer);
+			aw8695->state = 0x01;
+			if (aw8695->state)
+			{
+				hrtimer_start(&aw8695->timer,
+					ktime_set(aw8695->duration / 1000, (value % 1000) * 1000000),
+					HRTIMER_MODE_REL);
+			}
+			schedule_work(&aw8695->vibrator_work);
+			break;
+		default:
+			break;
+		}
+
+		/* Restore to default short waveform */
+		if (seq > 2)
+			aw8695->seq[0] = 0;
+	}
+
+    mutex_unlock(&aw8695->lock);
+}
 #ifdef TIMED_OUTPUT
 static int aw8695_vibrator_get_time(struct timed_output_dev *dev)
 {
@@ -1902,6 +2047,7 @@ static ssize_t aw8695_activate_store(struct device *dev,
 	struct led_classdev *cdev = dev_get_drvdata(dev);
 	struct aw8695 *aw8695 = container_of(cdev, struct aw8695, cdev);
 #endif
+
 	unsigned int val = 0;
 	int rc = 0;;
 
@@ -1912,23 +2058,12 @@ static ssize_t aw8695_activate_store(struct device *dev,
 	if (val != 0 && val != 1)
 		return count;
 
-	pr_debug("%s: value=%d\n", __FUNCTION__, val);
-
-	mutex_lock(&aw8695->lock);
-	hrtimer_cancel(&aw8695->timer);
-
+	pr_info("%s: value=%d\n", __FUNCTION__, val);
 	aw8695->state = val;
-
-	if (aw8695->state) {
-		/* clip value to max */
-		val = aw8695->duration;
-		/* run ms timer */
-		hrtimer_start(&aw8695->timer,
-			      ktime_set(val / 1000, (val % 1000) * 1000000),
-			      HRTIMER_MODE_REL);
-	}
-	mutex_unlock(&aw8695->lock);
-	schedule_work(&aw8695->vibrator_work);
+	if (aw8695->state)
+		aw8695_vibrate(aw8695, aw8695->duration);
+	else
+		aw8695_vibrate(aw8695, 0);
 
 	return count;
 }
@@ -2125,16 +2260,24 @@ static ssize_t aw8695_seq_store(struct device *dev,
 	struct led_classdev *cdev = dev_get_drvdata(dev);
 	struct aw8695 *aw8695 = container_of(cdev, struct aw8695, cdev);
 #endif
-	unsigned int databuf[2] = {0, 0};
 
-	if (2 == sscanf(buf, "%x %x", &databuf[0], &databuf[1])) {
-		pr_debug("%s: seq%d=0x%x\n", __FUNCTION__, databuf[0], databuf[1]);
-		mutex_lock(&aw8695->lock);
-		aw8695->seq[databuf[0]] = (unsigned char)databuf[1];
-		aw8695_haptic_set_wav_seq(aw8695, (unsigned char)databuf[0],
-					  aw8695->seq[databuf[0]]);
-		mutex_unlock(&aw8695->lock);
+	unsigned int i = 0;
+	unsigned int val = 0;
+	int rc = 0;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	pr_info("%s: value=%x\n", __FUNCTION__, val);
+
+	mutex_lock(&aw8695->lock);
+	for(i=0; i<4; i++) {
+		aw8695->seq[i] = (val>>((AW8695_WAV_SEQ_SIZE-i-1)*8)) & 0xFF;
+		aw8695_haptic_set_wav_seq(aw8695, i, aw8695->seq[i]);
 	}
+	mutex_unlock(&aw8695->lock);
+
 	return count;
 }
 
@@ -2263,17 +2406,7 @@ static ssize_t aw8695_rtp_store(struct device *dev, struct device_attribute *att
 	if (rc < 0)
 		return rc;
 
-	aw8695_haptic_stop(aw8695);
-	aw8695_haptic_set_rtp_aei(aw8695, false);
-	aw8695_interrupt_clear(aw8695);
-	if (val < (sizeof(aw8695_rtp_name) / AW8695_RTP_NAME_MAX)) {
-		aw8695->rtp_file_num = val;
-		if (val) {
-			schedule_work(&aw8695->rtp_work);
-		}
-	} else {
-		pr_err("%s: rtp_file_num 0x%02x over max value \n", __func__, aw8695->rtp_file_num);
-	}
+	aw8695_rtp_play(aw8695, val);
 
 	return count;
 }

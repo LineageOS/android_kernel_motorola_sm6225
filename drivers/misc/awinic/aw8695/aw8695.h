@@ -36,6 +36,7 @@
 
 #define AW8695_REG_MAX                      0xff
 
+#define AW8695_WAV_SEQ_SIZE               4
 #define AW8695_SEQUENCER_SIZE               8
 #define AW8695_SEQUENCER_LOOP_SIZE          4
 
@@ -221,6 +222,12 @@ enum aw8695_haptic_pwm_mode {
 	AW8695_PWM_12K = 2,
 };
 
+enum aw8695_haptic_mode{
+	HAPTIC_NONE	= 0x00,
+	HAPTIC_SHORT	= 0x01,
+	HAPTIC_LONG	= 0x02,
+	HAPTIC_RTP	= 0x03,
+};
 /*********************************************************
  *
  * struct
@@ -290,7 +297,10 @@ struct aw8695 {
 
 	int reset_gpio;
 	int irq_gpio;
+	int haptic_context_gpio;
 
+	enum aw8695_haptic_mode  haptic_mode;
+	atomic_t reduce_pwr;
 	unsigned char hwen_flag;
 	unsigned char flags;
 	unsigned char chipid;
