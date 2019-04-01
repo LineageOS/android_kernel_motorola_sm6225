@@ -6603,25 +6603,28 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 #if defined(CONFIG_DRM)
 	if (rmi4_data->splash_screen_mode) {
-		/* DRM status of primary panel */
+		/* DRM panel status */
 		panel_ready = dsi_display_is_panel_enable(rmi4_data->ctrl_dsi,
 									&probe_status, &pname);
 		dev_dbg(dev, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
 				__func__, probe_status, panel_ready, pname);
 		/* check if primary panel is not a dummy one */
 		if (pname && strstr(pname, "dummy")) {
-			dev_info(dev, "%s: dummy panel detected; terminating...\n", __func__);
-			terminate = true;
+			dev_info(dev, "%s: dummy panel detected\n", __func__);
+			rmi4_data->drm_state = DRM_ST_TERM;
+		} else if (panel_ready) {
+			dev_dbg(dev, "%s: panel ready\n", __func__);
+			rmi4_data->drm_state = DRM_ST_READY;
 		}
 	}
 #endif
 	/* pname only gets initialized by DRM */
 	/* it implies RMI_DRM_FRAMEWORK handler running */
 	if (pname) {
-		if (!panel_ready)
+		if (ASSERT(DRM_ST_UNDEF))
 			goto exit_reschedule;
 
-		if (rmi4_data->terminating) {
+		if (ASSERT(DRM_ST_TERM)) {
 			/* hw init failed on previous step, thus
 			 * continue shutting things down */
 			terminate = true;
@@ -6845,7 +6848,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				dev_dbg(dev, "%s: hw init failed\n", __func__);
 				/* not dummy panel found, but touch hw init failed, */
 				/* thus we need to terminate further processing */
-				rmi4_data->terminating = true;
+				rmi4_data->drm_state = DRM_ST_TERM;
 			}
 			exp_fhandler->func_init = NULL;
 			dev_dbg(dev, "%s: removing DRM\n", __func__);
