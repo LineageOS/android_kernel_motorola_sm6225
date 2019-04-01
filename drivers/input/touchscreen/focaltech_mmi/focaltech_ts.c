@@ -1272,14 +1272,24 @@ static int ft_ts_start(struct device *dev)
 			dev_err(dev, "Cannot get active pinctrl state\n");
 	}
 
-	err = ft_gpio_configure(data, true);
-	if (err < 0) {
-		dev_err(&data->client->dev,
-			"failed to put gpios in resue state\n");
-		goto err_gpio_configuration;
-	}
-
 	if (gpio_is_valid(data->pdata->reset_gpio)) {
+		err = gpio_request(data->pdata->reset_gpio,
+					"ft_reset_gpio");
+		if (err) {
+			dev_err(&data->client->dev,
+				"reset gpio request failed");
+			goto err_gpio_configuration;
+		}
+
+		err = gpio_direction_output(data->pdata->reset_gpio, 0);
+		if (err) {
+			dev_err(&data->client->dev,
+			"set_direction for reset gpio failed\n");
+			if (gpio_is_valid(data->pdata->reset_gpio))
+				gpio_free(data->pdata->reset_gpio);
+			goto err_gpio_configuration;
+		}
+
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 0);
 		usleep_range(800, 1000);
 		if (data->regulator_en) {
