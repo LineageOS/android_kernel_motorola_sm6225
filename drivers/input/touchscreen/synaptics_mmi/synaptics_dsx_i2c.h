@@ -568,7 +568,7 @@ struct synaptics_rmi4_data {
 	struct synaptics_exp_fn_ctrl exp_fn_ctrl;
 	struct list_head node;
 	struct semaphore reset_semaphore;
-	bool terminating;
+	int drm_state;
 	int instance;
 	char *irq_name;
 	char *reset_name;
@@ -591,6 +591,15 @@ struct synaptics_rmi4_data {
 
 	struct synaptics_rmi4_func_packet_regs config_regs[MAX_CONFIG_REGS];
 };
+
+enum {
+	DRM_ST_UNDEF = 0,
+	DRM_ST_READY,
+	DRM_ST_TERM,
+	DRM_ST_MAX
+};
+
+#define ASSERT(s) (rmi4_data->drm_state == s)
 
 struct pdt_properties {
 	union {
