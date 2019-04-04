@@ -2295,6 +2295,7 @@ struct synaptics_rmi4_fn55_desc {
 
 struct f54_kobj_data {
 	struct kobject kobj;
+	struct completion kobj_unregistered;
 	struct bin_attribute *dev_report_data;
 	struct synaptics_rmi4_f54_handle *f54;
 };
@@ -2423,7 +2424,7 @@ void f54_kobj_data_release(struct kobject *kobj)
 	f54_kobj_data = to_f54_kobj_data(kobj);
 	dev_dbg(&f54_kobj_data->f54->rmi4_data->i2c_client->dev,
 			"%s: f54_kobj_data released\n", __func__);
-	kfree(f54_kobj_data);
+	complete(&f54_kobj_data->kobj_unregistered);
 }
 
 static struct kobj_type f54_ktype = {
@@ -3465,15 +3466,20 @@ static void free_control_mem(struct synaptics_rmi4_f54_handle *f54)
 	kfree(control.reg_11);
 	kfree(control.reg_12__13);
 	kfree(control.reg_14);
-	kfree(control.reg_15->data);
+	if (control.reg_15)
+		kfree(control.reg_15->data);
 	kfree(control.reg_15);
-	kfree(control.reg_16->data);
+	if (control.reg_16)
+		kfree(control.reg_16->data);
 	kfree(control.reg_16);
-	kfree(control.reg_17->data);
+	if (control.reg_17)
+		kfree(control.reg_17->data);
 	kfree(control.reg_17);
-	kfree(control.reg_18->data);
+	if (control.reg_18)
+		kfree(control.reg_18->data);
 	kfree(control.reg_18);
-	kfree(control.reg_19->data);
+	if (control.reg_19)
+		kfree(control.reg_19->data);
 	kfree(control.reg_19);
 	kfree(control.reg_20);
 	kfree(control.reg_21);
@@ -3484,21 +3490,37 @@ static void free_control_mem(struct synaptics_rmi4_f54_handle *f54)
 	kfree(control.reg_30);
 	kfree(control.reg_31);
 	kfree(control.reg_32__35);
-	kfree(control.reg_36->data);
+	if (control.reg_36)
+		kfree(control.reg_36->data);
 	kfree(control.reg_36);
-	kfree(control.reg_37->data);
+	if (control.reg_37)
+		kfree(control.reg_37->data);
 	kfree(control.reg_37);
-	kfree(control.reg_38->data);
+	if (control.reg_38)
+		kfree(control.reg_38->data);
 	kfree(control.reg_38);
-	kfree(control.reg_39->data);
+	if (control.reg_39)
+		kfree(control.reg_39->data);
 	kfree(control.reg_39);
-	kfree(control.reg_40->data);
+	if (control.reg_40)
+		kfree(control.reg_40->data);
 	kfree(control.reg_40);
+	if (control.reg_89)
+		kfree(control.reg_89->data);
 	kfree(control.reg_89);
-	kfree(control.reg_95->data);
+	kfree(control.reg_93);
+	if (control.reg_95)
+		kfree(control.reg_95->data);
 	kfree(control.reg_95);
-	kfree(control.reg_99->data);
 	kfree(control.reg_99);
+	kfree(control.reg_107);
+	kfree(control.reg_113);
+	kfree(control.reg_116);
+	kfree(control.reg_137);
+	kfree(control.reg_145);
+	kfree(control.reg_146);
+	kfree(control.reg_242);
+	kfree(control.reg_269);
 
 	return;
 }
@@ -3534,7 +3556,9 @@ static void remove_sysfs(struct synaptics_rmi4_f54_handle *f54)
 		sysfs_remove_group(&f54->f54_kdata->kobj, &attrs_data_regs[reg_num]);
 
 	kobject_put(&f54->f54_kdata->kobj);
+	wait_for_completion(&f54->f54_kdata->kobj_unregistered);
 	kfree(f54->f54_kdata->dev_report_data);
+	kfree(f54->f54_kdata);
 
 	return;
 }
@@ -4462,6 +4486,7 @@ static int synaptics_rmi4_f54_set_sysfs(struct synaptics_rmi4_f54_handle *f54)
 	f54_kobj_data->f54 = f54;
 	f54_kobj_data->dev_report_data = dev_report_data;
 
+	init_completion(&f54_kobj_data->kobj_unregistered);
 	f54->f54_kdata = f54_kobj_data;
 
 	retval = kobject_init_and_add(&f54_kobj_data->kobj, &f54_ktype,
@@ -5879,6 +5904,9 @@ static void synaptics_rmi4_f54_remove(struct synaptics_rmi4_data *rmi4_data)
 	kfree(f54->fn55);
 	kfree(f54->fn_ptr);
 
+	cancel_delayed_work(&f54->status_work);
+	wakeup_source_trash(&f54->test_wake_lock);
+
 	complete(&f54->remove_complete);
 
 	return;
@@ -5923,6 +5951,10 @@ static void __exit rmi4_f54_module_exit(void)
 				NULL, IC_MODE_UI);
 		wait_for_completion(&f54->remove_complete);
 		kfree(f54);
+		next->scan_f54_ctrl_regs = NULL;
+		next->scan_f54_cmd_regs = NULL;
+		next->scan_f54_query_regs = NULL;
+		next->scan_f54_data_regs = NULL;
 		next->f54_data = NULL;
 	}
 	return;

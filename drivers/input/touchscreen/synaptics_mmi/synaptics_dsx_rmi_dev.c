@@ -611,14 +611,21 @@ static void rmidev_device_cleanup(struct rmidev_data *dev_data)
 
 		cdev_del(&dev_data->main_dev);
 
-		unregister_chrdev_region(devno, MAX_INSTANCE);
-
 		dev_dbg(&rmidev->rmi4_data->i2c_client->dev,
 				"%s: rmidev device removed\n",
 				__func__);
 	}
 
 	return;
+}
+
+static void rmidev_registered_release(struct device *dev)
+{
+	struct rmidev_handle *rmidev =
+			container_of(dev, struct rmidev_handle, dev);
+	dev_dbg(&rmidev->rmi4_data->i2c_client->dev,
+			"%s: rmidev release function called\n",
+			__func__);
 }
 
 static int rmidev_init_device(struct synaptics_rmi4_data *rmi4_data)
@@ -721,6 +728,7 @@ static int rmidev_init_device(struct synaptics_rmi4_data *rmi4_data)
 
 	rmidev->dev.class = &rmi_device_class;
 	rmidev->dev.parent = &rmi4_data->i2c_client->dev;
+	rmidev->dev.release = rmidev_registered_release;
 
 	dev_set_name(&rmidev->dev, DEVICE_CLASS_NAME "%d", rmi4_data->instance);
 	dev_set_drvdata(&rmidev->dev, dev_data);
@@ -867,6 +875,7 @@ static void __exit rmidev_module_exit(void)
 		next->rmidev_data = NULL;
 	}
 
+	unregister_chrdev_region(MKDEV(rmidev_major_num, 1), MAX_INSTANCE);
 	class_unregister(&rmi_device_class);
 
 	return;
