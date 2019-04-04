@@ -7724,31 +7724,9 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	if (rmi4_data == NULL)
 		return 0;
 
-	if (rmi4_data->exp_fn_ctrl.inited) {
-		cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
-		flush_workqueue(det_workqueue);
-	}
-
+	/* At this point, we're all good with clean-up works */
+	synaptics_dsx_set_state_safe(rmi4_data, STATE_STANDBY);
 	atomic_set(&rmi4_data->touch_stopped, 1);
-	synaptics_rmi4_irq_enable(rmi4_data, false);
-
-	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
-		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
-				&attrs[attr_count].attr);
-	}
-
-	device_remove_file(&rmi4_data->i2c_client->dev, &dev_attr_poweron);
-
-	if (rmi4_data->input_registered)
-		input_unregister_device(rmi4_data->input_dev);
-	else
-		input_free_device(rmi4_data->input_dev);
-
-	if (!IS_ERR(rmi4_data->vdd_quirk))
-		regulator_disable(rmi4_data->vdd_quirk);
-
-	if (rmi4_data->board.regulator_en)
-		regulator_disable(rmi4_data->regulator);
 
 #if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
 	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
@@ -7757,11 +7735,6 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 #elif defined(CONFIG_FB)
 	fb_unregister_client(&rmi4_data->panel_nb);
 #endif
-
-	synaptics_dsx_sysfs_touchscreen(rmi4_data, false);
-	synaptics_rmi4_cleanup(rmi4_data);
-
-	synaptics_dsx_pm_qos(rmi4_data, PM_REMOVE, false);
 
 #ifdef CONFIG_MMI_HALL_NOTIFICATIONS
 	if (rmi4_data->folio_detection_enabled)
@@ -7774,6 +7747,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 
 	unregister_reboot_notifier(&rmi4_data->rmi_reboot);
 
+	/* power down touch ic */
 	platform_data = &rmi4_data->board;
 	if (platform_data->gpio_config)
 		gpio_free(platform_data->irq_gpio);
@@ -7785,12 +7759,45 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 		dev_err(&rmi4_data->i2c_client->dev,
 			"%s: pinctrl default failed\n", __func__);
 
+	if (rmi4_data->ic_on) {
+		if (!IS_ERR(rmi4_data->vdd_quirk))
+			regulator_disable(rmi4_data->vdd_quirk);
+
+		if (rmi4_data->board.regulator_en)
+		regulator_disable(rmi4_data->regulator);
+		/* regulators are bound to device, thus no need to put here !!! */
+	}
+
+	if (rmi4_data->exp_fn_ctrl.inited) {
+		cancel_delayed_work_sync(&rmi4_data->exp_fn_ctrl.det_work);
+		flush_workqueue(det_workqueue);
+	}
+
+	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
+		sysfs_remove_file(&rmi4_data->i2c_client->dev.kobj,
+				&attrs[attr_count].attr);
+	}
+
+	device_remove_file(&rmi4_data->i2c_client->dev, &dev_attr_poweron);
+
+	synaptics_dsx_sysfs_touchscreen(rmi4_data, false);
+	synaptics_rmi4_cleanup(rmi4_data);
+
+	if (rmi4_data->input_registered)
+		input_unregister_device(rmi4_data->input_dev);
+	else
+		input_free_device(rmi4_data->input_dev);
+
 	list_del(&rmi4_data->node);
-	if (list_empty(&drv_instances_list))
+	if (list_empty(&drv_instances_list)) {
 		destroy_workqueue(det_workqueue);
+	}
+
+	synaptics_dsx_pm_qos(rmi4_data, PM_REMOVE, false);
+
+	i2c_set_clientdata(client, NULL);
 
 	kfree(rmi4_data);
-	i2c_set_clientdata(client, NULL);
 
 	return 0;
 }
