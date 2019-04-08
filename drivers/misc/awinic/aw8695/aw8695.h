@@ -50,7 +50,7 @@
 
 /* motor config */
 
-#define LRA_0832   //default
+#define LRA_205HZ   //default
 
 #ifdef LRA_0619
 #define AW8695_HAPTIC_F0_PRE                1700    /* 170Hz */
@@ -72,6 +72,16 @@
 #define AW8695_HAPTIC_CONT_NUM_BRK          3
 #endif
 
+
+#ifdef LRA_205HZ
+#define AW8695_HAPTIC_F0_PRE                2050    // 205Hz
+#define AW8695_HAPTIC_F0_CALI_PERCEN        7       // -7%~7%
+#define AW8695_HAPTIC_CONT_DRV_LVL          115     // 125*6.1/255=2.75v
+#define AW8695_HAPTIC_CONT_DRV_LVL_OV       135     // 155*6.1/255=3.22v
+#define AW8695_HAPTIC_CONT_TD               0x006c
+#define AW8695_HAPTIC_CONT_ZC_THR           0x0ff1
+#define AW8695_HAPTIC_CONT_NUM_BRK          3
+#endif
 
 #define AW8695_HAPTIC_F0_COEFF              260     /*2.604167 */
 
