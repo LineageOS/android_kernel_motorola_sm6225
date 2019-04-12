@@ -1437,7 +1437,8 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 		 if (ibat_curr < chip->flashc_cc_max_curr_pre
 				&& chip->request_volt < chip->pps_voltage_max
 				&& chip->flashc_cc_tunning_cnt >=
-					PPS_SELECT_PDO_RETRY_COUNT) {
+					PPS_SELECT_PDO_RETRY_COUNT
+				&& chip->thermal_mitigation_level == 0) {
 			if (chip->pps_power_balance) {
 				chip->request_current -=
 						chip->sys_configs.flashc_curr_down_steps;
@@ -1467,11 +1468,12 @@ static void mmi_pl_sm_work_func(struct work_struct *work)
 			chip->flashc_cc_tunning_cnt = 0;
 			mmi_pl_dbg(chip, PR_MOTO, "need increase pps voltage,"
 						"or decrease pps current"
-						"to keep CC charge power,"
+						"to keep CC charger power,"
 						"request volt %d, "
-						"request curr %d\n",
+						"request curr %d, "
+						"thermal level %d \n",
 						chip->request_volt,
-						chip->request_current);
+						chip->request_current,chip->thermal_mitigation_level);
 		} else if (ibat_curr <
 					chip->flashc_cc_max_curr_pre
 				&& chip->request_volt < chip->pps_voltage_max) {
