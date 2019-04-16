@@ -40,6 +40,8 @@
 #define BATTERY_CHARGER_STATUS_MASK		(GENMASK(2, 0))
 #define PM8150B_JEITA_EN_CFG_REG		(CHGR_BASE + 0x90)
 
+#define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
+
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
 #define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
@@ -52,6 +54,11 @@
 #define LEGACY_CABLE_CFG_REG			(TYPEC_BASE + 0x5A)
 #define USBIN_ADAPTER_ALLOW_CFG_REG		(USBIN_BASE + 0x60)
 #define USBIN_ADAPTER_ALLOW_MASK		GENMASK(3, 0)
+
+/* DCIN Interrupt Bits */
+#define DCIN_PLUGIN_RT_STS_BIT			BIT(4)
+#define DCIN_INT_RT_STS				(DCIN_BASE + 0x10)
+
 enum {
 	USBIN_ADAPTER_ALLOW_5V		= 0,
 	USBIN_ADAPTER_ALLOW_9V		= 2,
@@ -169,8 +176,10 @@ struct smb_mmi_chg_status {
 	int batt_soc;
 	int batt_temp;
 	int usb_mv;
+	int dc_mv;
 	int charger_present;
 	int vbus_present;
+	int dc_present;
 };
 
 struct smb_mmi_chg_param {
@@ -230,6 +239,7 @@ struct smb_mmi_charger {
 	struct power_supply	*bms_psy;
 	struct power_supply	*main_psy;
 	struct power_supply	*pc_port_psy;
+	struct power_supply	*dc_psy;
 	struct power_supply	*max_main_psy;
 	struct power_supply	*max_flip_psy;
 	struct notifier_block	mmi_psy_notifier;
@@ -239,6 +249,7 @@ struct smb_mmi_charger {
 	struct votable		*fcc_votable;
 	struct votable		*fv_votable;
 	struct votable		*usb_icl_votable;
+	struct votable		*dc_suspend_votable;
 
 	bool			enable_charging_limit;
         bool                    enable_factory_poweroff;
@@ -268,6 +279,7 @@ struct smb_mmi_charger {
 	int 			cycles;
 	int 			soc_cycles_start;
 	bool			shut_batt;
+	int			dc_cl_ma;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -297,11 +309,10 @@ static struct smb_mmi_params smb5_pm8150b_params = {
 		.step_u = 50000,
 	},
 	.dc_icl		= {
-		.name   = "dc input current limit",
-		/* TODO: For now USBIN seems to be the way to set this */
-		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.name   = "DC input current limit",
+		.reg    = DCDC_CFG_REF_MAX_PSNS_REG,
 		.min_u  = 0,
-		.max_u  = 5000000,
+		.max_u  = 1500000,
 		.step_u = 50000,
 	},
 };
@@ -1359,6 +1370,19 @@ static int get_prop_usb_voltage_now(struct smb_mmi_charger *chg,
 	return rc;
 }
 
+static int get_prop_dc_voltage_now(struct smb_mmi_charger *chg,
+				    union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->dc_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->dc_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
+	return rc;
+}
+
 static int get_prop_batt_temp(struct smb_mmi_charger *chg,
 			      struct power_supply *psy,
 			      union power_supply_propval *val)
@@ -1398,6 +1422,23 @@ static int get_prop_usb_present(struct smb_mmi_charger *chg,
 	}
 
 	val->intval = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
+
+	return 0;
+}
+
+static int get_prop_dc_present(struct smb_mmi_charger *chg,
+				union power_supply_propval *val)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read_mmi(chg, DCIN_INT_RT_STS, &stat);
+	if (rc < 0) {
+		pr_err("Couldn't read USBIN_RT_STS rc=%d\n", rc);
+		return rc;
+	}
+
+	val->intval = (bool)(stat & DCIN_PLUGIN_RT_STS_BIT);
 
 	return 0;
 }
@@ -2007,14 +2048,16 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
 
 	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
-		" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
+		" batt_temp %d, usb_mv %d, dc_mv %d, cp %d, vp %d dp %d\n",
 		stat->batt_mv,
 		stat->batt_ma,
 		stat->batt_soc,
 		stat->batt_temp,
 		stat->usb_mv,
+		stat->dc_mv,
 		stat->charger_present,
-		stat->vbus_present);
+		stat->vbus_present,
+		stat->dc_present);
 
 	if (!prm->temp_zones) {
 		pr_debug("SMBMMI: Skipping SM since No Temp Zone Defined!\n");
@@ -2120,7 +2163,11 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		break;
 	case STEP_NONE:
 		target_fv = max_fv_mv;
-		target_fcc = zone->fcc_norm_ma;
+		if (stat->dc_present)
+			target_fcc = 500;
+		else
+			target_fcc = zone->fcc_norm_ma;
+
 		chip->last_reported_status = -1;
 		break;
 	case STEP_STOP:
@@ -2141,6 +2188,11 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	}
 
 	/* Votes for State */
+	if (stat->dc_present)
+		vote(chip->dc_suspend_votable, MMI_HB_VOTER, false, 0);
+	else
+		vote(chip->dc_suspend_votable, MMI_HB_VOTER, true, 1);
+
 	vote(chip->fv_votable, MMI_HB_VOTER, true, target_fv * 1000);
 
 	vote(chip->chg_dis_votable, MMI_HB_VOTER,
@@ -2341,13 +2393,28 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	rc = get_prop_usb_voltage_now(chip, &pval);
 	if (rc < 0) {
-		pr_err("Error getting USB Voltage rc = %d\n", rc);
-		goto sch_hb;
+		if (rc == -ENODATA)
+			chg_stat.usb_mv = 0;
+		else {
+			pr_err("Error getting USB Voltage rc = %d\n", rc);
+			goto sch_hb;
+		}
 	} else
 		chg_stat.usb_mv = pval.intval / 1000;
 
 	if (prev_vbus_mv == -1)
 		prev_vbus_mv = chg_stat.usb_mv;
+
+	rc = get_prop_dc_voltage_now(chip, &pval);
+	if (rc < 0) {
+		if (rc == -ENODATA)
+			chg_stat.dc_mv = 0;
+		else {
+			pr_err("Error getting DC Voltage rc = %d\n", rc);
+			goto sch_hb;
+		}
+	} else
+		chg_stat.dc_mv = pval.intval / 1000;
 
 	rc = get_prop_batt_capacity(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
@@ -2372,6 +2439,13 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.vbus_present = pval.intval;
+
+	rc = get_prop_dc_present(chip, &pval);
+	if (rc < 0) {
+		pr_err("Error getting DC Present rc = %d\n", rc);
+		return;
+	} else
+		chg_stat.dc_present = pval.intval;
 
 	rc = get_prop_charger_present(chip, &pval);
 	if (rc < 0) {
@@ -2965,6 +3039,11 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->lower_limit_capacity = 0;
 
+	rc = of_property_read_u32(node, "qcom,dc-icl-ma",
+				  &chg->dc_cl_ma);
+	if (rc)
+		chg->dc_cl_ma = -EINVAL;
+
 	return rc;
 }
 
@@ -3251,6 +3330,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->usb_psy = power_supply_get_by_name("usb");
 	chip->main_psy = power_supply_get_by_name("main");
 	chip->pc_port_psy = power_supply_get_by_name("pc_port");
+	chip->dc_psy = power_supply_get_by_name("dc");
 	/* parse the dc power supply configuration */
 	rc = of_property_read_string(pdev->dev.of_node,
 				     "mmi,max-main-psy", &max_main_name);
@@ -3274,6 +3354,9 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->usb_icl_votable = find_votable("USB_ICL");
 	if (IS_ERR(chip->usb_icl_votable))
 		chip->usb_icl_votable = NULL;
+	chip->dc_suspend_votable = find_votable("DC_SUSPEND");
+	if (IS_ERR(chip->dc_suspend_votable))
+		chip->dc_suspend_votable = NULL;
 
 	if (chip->smb_version == PM8150B_SUBTYPE) {
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
@@ -3301,6 +3384,14 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->factory_mode = mmi_factory_check();
 	chip->is_factory_image = false;
 	chip->charging_limit_modes = CHARGING_LIMIT_UNKNOWN;
+
+	if (chip->dc_cl_ma >= 0) {
+		rc = smblib_set_charge_param(chip, &chip->param.dc_icl,
+					chip->dc_cl_ma * 1000);
+		if (rc)
+			dev_err(chip->dev, "SMBMMI: Failed to set DC ICL %d\n",
+				chip->dc_cl_ma);
+	}
 
 	pval.intval = 0;
 	rc = power_supply_get_property(chip->usb_psy,
@@ -3484,6 +3575,8 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 		power_supply_put(chip->main_psy);
 	if (chip->pc_port_psy)
 		power_supply_put(chip->pc_port_psy);
+	if (chip->dc_psy)
+		power_supply_put(chip->dc_psy);
 	if (chip->max_main_psy)
 		power_supply_put(chip->max_main_psy);
 	if (chip->max_flip_psy)
