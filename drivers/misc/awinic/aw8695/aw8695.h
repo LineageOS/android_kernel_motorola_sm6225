@@ -89,8 +89,11 @@
 /* trig config */
 #define AW8695_TRIG_NUM                     3
 #define AW8695_TRG1_ENABLE                  1
+#define AW8695_TRG1_DISABLE                 0
 #define AW8695_TRG2_ENABLE                  1
+#define AW8695_TRG2_DISABLE                 0
 #define AW8695_TRG3_ENABLE                  1
+#define AW8695_TRG3_DISABLE                 0
 
 /*
  * trig default high level

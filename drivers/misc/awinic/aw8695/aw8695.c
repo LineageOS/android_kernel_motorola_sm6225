@@ -793,19 +793,19 @@ static int aw8695_haptic_trig_param_init(struct aw8695 *aw8695)
 {
 	pr_debug("%s enter\n", __func__);
 
-	aw8695->trig[0].enable = AW8695_TRG1_ENABLE;
+	aw8695->trig[0].enable = AW8695_TRG1_DISABLE;
 	aw8695->trig[0].default_level = AW8695_TRG1_DEFAULT_LEVEL;
 	aw8695->trig[0].dual_edge = AW8695_TRG1_DUAL_EDGE;
 	aw8695->trig[0].frist_seq = AW8695_TRG1_FIRST_EDGE_SEQ;
 	aw8695->trig[0].second_seq = AW8695_TRG1_SECOND_EDGE_SEQ;
 
-	aw8695->trig[1].enable = AW8695_TRG2_ENABLE;
+	aw8695->trig[1].enable = AW8695_TRG2_DISABLE;
 	aw8695->trig[1].default_level = AW8695_TRG2_DEFAULT_LEVEL;
 	aw8695->trig[1].dual_edge = AW8695_TRG2_DUAL_EDGE;
 	aw8695->trig[1].frist_seq = AW8695_TRG2_FIRST_EDGE_SEQ;
 	aw8695->trig[1].second_seq = AW8695_TRG2_SECOND_EDGE_SEQ;
 
-	aw8695->trig[2].enable = AW8695_TRG3_ENABLE;
+	aw8695->trig[2].enable = AW8695_TRG3_DISABLE;
 	aw8695->trig[2].default_level = AW8695_TRG3_DEFAULT_LEVEL;
 	aw8695->trig[2].dual_edge = AW8695_TRG3_DUAL_EDGE;
 	aw8695->trig[2].frist_seq = AW8695_TRG3_FIRST_EDGE_SEQ;
@@ -1723,7 +1723,7 @@ static int aw8695_haptic_init(struct aw8695 *aw8695)
 	/* haptic init */
 	mutex_lock(&aw8695->lock);
 
-	aw8695->activate_mode = AW8695_HAPTIC_ACTIVATE_CONT_MODE;
+	aw8695->activate_mode = AW8695_HAPTIC_ACTIVATE_RAM_MODE;
 
 	ret = aw8695_i2c_read(aw8695, AW8695_REG_WAVSEQ1, &reg_val);
 	aw8695->index = reg_val & 0x7F;
