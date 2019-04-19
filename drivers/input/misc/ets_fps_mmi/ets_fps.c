@@ -57,7 +57,11 @@
 #define	EDGE_TRIGGER_RAISING    0x1
 #define	LEVEL_TRIGGER_LOW       0x2
 #define	LEVEL_TRIGGER_HIGH      0x3
+#ifdef CONFIG_INPUT_EGISTEC_FPS_NAVI
 #define EGIS_NAVI_INPUT 1  /* 1:open ; 0:close */
+#else
+#define EGIS_NAVI_INPUT 0
+#endif
 #ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock ets_wake_lock;
 #else
