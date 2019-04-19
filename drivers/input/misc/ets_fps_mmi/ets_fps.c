@@ -44,7 +44,11 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <soc/qcom/scm.h>
+#ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
+#else
+#include <linux/pm_wakeup.h>
+#endif
 
 #include "ets_fps.h"
 #include "ets_navi_input.h"
@@ -54,7 +58,11 @@
 #define	LEVEL_TRIGGER_LOW       0x2
 #define	LEVEL_TRIGGER_HIGH      0x3
 #define EGIS_NAVI_INPUT 1  /* 1:open ; 0:close */
+#ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock ets_wake_lock;
+#else
+static struct wakeup_source ets_wake_lock;
+#endif
 /*
  * FPS interrupt table
  */
@@ -221,7 +229,11 @@ static irqreturn_t fp_eint_func(int irq, void *dev_id)
 		mod_timer(&fps_ints.timer, jiffies + msecs_to_jiffies(fps_ints.detect_period));
 	fps_ints.int_count++;
 	/* printk_ratelimited(KERN_WARNING "-----------   zq fp fp_eint_func  ,fps_ints.int_count=%d",fps_ints.int_count);*/
+#ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
+#else
+	__pm_wakeup_event(&ets_wake_lock, msecs_to_jiffies(1500));
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -234,7 +246,11 @@ static irqreturn_t fp_eint_func_ll(int irq, void *dev_id)
 	fps_ints.drdy_irq_flag = DRDY_IRQ_DISABLE;
 	wake_up_interruptible(&interrupt_waitq);
 	/* printk_ratelimited(KERN_WARNING "-----------   zq fp fp_eint_func  ,fps_ints.int_count=%d",fps_ints.int_count);*/
+#ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
+#else
+	__pm_wakeup_event(&ets_wake_lock, msecs_to_jiffies(1500));
+#endif
 	return IRQ_RETVAL(IRQ_HANDLED);
 }
 
@@ -907,7 +923,11 @@ static int etspi_remove(struct platform_device *pdev)
 	DEBUG_PRINT("%s(#%d)\n", __func__, __LINE__);
 	etspi_create_sysfs(etspi, false);
 	sysfs_remove_group(&dev->kobj, &attribute_group);
+#ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&ets_wake_lock);
+#else
+	wakeup_source_trash(&ets_wake_lock);
+#endif
 	del_timer_sync(&fps_ints.timer);
 	etspi_create_device(etspi, false);
 	//free_irq(gpio_irq, NULL);
@@ -980,7 +1000,11 @@ static int etspi_probe(struct platform_device *pdev)
 	/* the timer is for ET310 */
 	setup_timer(&fps_ints.timer, interrupt_timer_routine, (unsigned long)&fps_ints);
 	add_timer(&fps_ints.timer);
+#ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&ets_wake_lock, WAKE_LOCK_SUSPEND, "ets_wake_lock");
+#else
+	wakeup_source_init(&ets_wake_lock, "ets_wake_lock");
+#endif
 	DEBUG_PRINT("  add_timer ---- \n");
 	DEBUG_PRINT("%s : initialize success %d\n",
 		__func__, status);
@@ -1002,7 +1026,11 @@ static int etspi_probe(struct platform_device *pdev)
 etspi_sysfs_failed:
 	sysfs_remove_group(&dev->kobj, &attribute_group);
 etspi_create_group_failed:
+#ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&ets_wake_lock);
+#else
+	wakeup_source_trash(&ets_wake_lock);
+#endif
 	del_timer_sync(&fps_ints.timer);
 	etspi_create_device(etspi, false);
 etspi_probe_create_device_failed:
