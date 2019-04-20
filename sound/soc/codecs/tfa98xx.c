@@ -1630,7 +1630,9 @@ static int tfa98xx_algo_set_gain_ctl(struct snd_kcontrol *kcontrol,
 	buff[nr++] = 0x00;
 	buff[nr++] = buff[0]; /* 00:0dB, ff:-127.5dB, 0.5dB/scale */
 
-	ret = send_tfa_cal_in_band(&buff[1], nr - 1);
+	if(0 == tfa98xx_mixer_profile) {
+		ret = send_tfa_cal_in_band(&buff[1], nr - 1);
+	}
 	return ret;
 }
 
