@@ -114,7 +114,13 @@
 /*
  * choose your ic chip type of focaltech
  */
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
 #define FTS_CHIP_TYPE   _FT8719
+#define FTS_CHIP_NAME   "ft8719"
+#else
+#define FTS_CHIP_TYPE   _FT8719
+#define FTS_CHIP_NAME   "ft8719"
+#endif
 
 /******************* Enables *********************/
 /*********** 1 to enable, 0 to disable ***********/
