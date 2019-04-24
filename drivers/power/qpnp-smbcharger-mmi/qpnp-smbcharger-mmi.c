@@ -1438,9 +1438,19 @@ static int get_prop_dc_present(struct smb_mmi_charger *chg,
 	int rc;
 	u8 stat;
 
+	/*
+	 * PMI632 has no DCIN support and address at 0x14XX is undefined,
+	 * so just return 0 to avoid too much err log and heatbeat_work
+	 * break
+	 */
+	if (chg->smb_version == PMI632_SUBTYPE) {
+		val->intval = 0;
+		return 0;
+	}
+
 	rc = smblib_read_mmi(chg, DCIN_INT_RT_STS, &stat);
 	if (rc < 0) {
-		pr_err("Couldn't read USBIN_RT_STS rc=%d\n", rc);
+		pr_err("Couldn't read DCIN_RT_STS rc=%d\n", rc);
 		return rc;
 	}
 
