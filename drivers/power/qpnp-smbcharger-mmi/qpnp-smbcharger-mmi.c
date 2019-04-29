@@ -1481,6 +1481,7 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 		val->intval = 1;
 		break;
 	default:
+		val->intval = 0;
 		break;
 	}
 
