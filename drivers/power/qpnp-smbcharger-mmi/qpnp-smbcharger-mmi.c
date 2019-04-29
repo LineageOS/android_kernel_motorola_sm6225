@@ -843,11 +843,9 @@ static ssize_t force_chg_ibatt_store(struct device *dev,
 	}
 
 	chg_current *= 1000; /* Convert to uA */
-	r = smblib_set_charge_param(mmi_chip, &mmi_chip->param.fcc, chg_current);
-	if (r < 0) {
-		pr_err("Factory Couldn't set masterfcc = %d rc=%d\n",
-		       (int)chg_current, (int)r);
-		return r;
+	if(mmi_chip->fcc_votable) {
+		pmic_vote_force_val_set(mmi_chip->fcc_votable, chg_current);
+		pmic_vote_force_active_set(mmi_chip->fcc_votable, 1);
 	}
 
 	return r ? r : count;
@@ -904,11 +902,9 @@ static ssize_t force_chg_iusb_store(struct device *dev,
 	}
 
 	usb_curr *= 1000; /* Convert to uA */
-	r = smblib_set_charge_param(mmi_chip, &mmi_chip->param.usb_icl, usb_curr);
-	if (r < 0) {
-		pr_err("Factory Couldn't set usb icl = %d rc=%d\n",
-		       (int)usb_curr, (int)r);
-		return r;
+	if (mmi_chip->usb_icl_votable) {
+		pmic_vote_force_val_set(mmi_chip->usb_icl_votable, usb_curr);
+		pmic_vote_force_active_set(mmi_chip->usb_icl_votable, 1);
 	}
 
 	r = smblib_masked_write_mmi(mmi_chip, USBIN_ICL_OPTIONS_REG,
