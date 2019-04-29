@@ -2653,7 +2653,7 @@ static void synaptics_dsx_enable_wakeup_source(
 
 static const char * const synaptics_state_names[] = {"UNKNOWN",
 	"ACTIVE", "SUSPEND", "UNUSED", "STANDBY", "BL", "INIT",
-	"FLASH", "QUERY", "INVALID" };
+	"FLASH", "QUERY", "LOADING", "INVALID" };
 
 static const char *synaptics_dsx_state_name(int state)
 {
@@ -2766,6 +2766,7 @@ static int synaptics_dsx_wait_for_idle(struct synaptics_rmi4_data *rmi4_data)
 		current_state = synaptics_dsx_get_state_safe(rmi4_data);
 		if (!(current_state == STATE_INIT ||
 			current_state == STATE_FLASH ||
+			current_state == STATE_LOADING ||
 			current_state == STATE_UNKNOWN))
 			break;
 
@@ -2884,6 +2885,7 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
 	case STATE_UNKNOWN:
 			rmi4_data->in_bootloader = false;
 	case STATE_FLASH:
+	case STATE_LOADING:
 		/* no special handling for these states */
 			break;
 
@@ -6745,10 +6747,20 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 		if (exp_fhandler->mode == IC_MODE_UI) {
 			if (rmi4_data->in_bootloader) {
-				dev_err(dev, "%s: handler %d requires UI mode\n",
+				dev_warn(dev, "%s: handler %d requires UI mode\n",
 						__func__, exp_fhandler->fn_type);
 				continue;
 			}
+			/* UI mode requires IC powered on */
+			if (state == STATE_SUSPEND) {
+				dev_warn(dev, "%s: handler %d cannot operate while suspended\n",
+						__func__, exp_fhandler->fn_type);
+				scheduled_delay = 500;
+				continue;
+			}
+			/* postpone suspend for loading RMI_F54 and  */
+			if (exp_fhandler->fn_type == RMI_F54)
+				synaptics_dsx_sensor_state(rmi4_data, STATE_LOADING);
 		}
 
 		exp_fhandler->func_init(rmi4_data);
@@ -6762,7 +6774,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54);
 			if (!regs)
-				continue;
+				goto restore_state;
 			error = rmi4_data->scan_f54_ctrl_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
@@ -6771,7 +6783,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | COMMAND_TYPE);
 			if (!regs)
-				continue;
+				goto restore_state;
 			error = rmi4_data->scan_f54_cmd_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
@@ -6780,7 +6792,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | DATA_TYPE);
 			if (!regs)
-				continue;
+				goto restore_state;
 			error = rmi4_data->scan_f54_data_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
@@ -6790,7 +6802,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 			regs = find_function(rmi4_data, SYNAPTICS_RMI4_F54 | QUERY_TYPE);
 			if (!regs)
-				continue;
+				goto restore_state;
 			error = rmi4_data->scan_f54_query_regs(rmi4_data, regs);
 			if (error) {
 				regs->nr_regs = 0;
@@ -6813,11 +6825,9 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				control_access_block_update_dynamic(rmi4_data);
 		}
 
-		if (exp_fhandler->fn_type == RMI_FW_UPDATER) {
+		if (exp_fhandler->fn_type == RMI_FW_UPDATER && exp_fhandler->func_status) {
 			int status;
 
-			if (!exp_fhandler->func_status)
-				continue;
 			status = exp_fhandler->func_status(rmi4_data);
 			/* consider changing to */
 			/* if (status == 1) */
@@ -6827,7 +6837,7 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 				rmi = &(rmi4_data->rmi4_mod_info);
 				rmi4_data->in_bootloader = true;
-				synaptics_dsx_set_state_safe(rmi4_data, STATE_BL);
+				synaptics_dsx_sensor_state(rmi4_data, STATE_BL);
 
 				state = synaptics_dsx_get_state_safe(rmi4_data);
 				dev_dbg(dev, "%s: current state %s\n",
@@ -6855,11 +6865,17 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			/* allowing sufficient time for F34 to complete */
 			scheduled_delay = 3000;
 		}
+
+restore_state:
+		if (STATE_LOADING == synaptics_dsx_get_state_safe(rmi4_data))
+			synaptics_dsx_sensor_state(rmi4_data, state);
 	}
 
-	if (scheduled_delay)
+	if (scheduled_delay) {
 		queue_delayed_work(det_workqueue, &exp_fn_ctrl->det_work,
 					msecs_to_jiffies(scheduled_delay));
+		dev_dbg(dev, "%s: re-scheduled %d\n", __func__, scheduled_delay);
+	}
 
 release_mutex:
 	mutex_unlock(&exp_fn_ctrl->list_mutex);
@@ -6936,12 +6952,18 @@ void synaptics_rmi4_new_function(
 		list_add_tail(&exp_fhandler->link, &rmi4_data->exp_fn_ctrl.fn_list);
 	} else {
 		list_for_each_entry(exp_fhandler, &rmi4_data->exp_fn_ctrl.fn_list, link) {
-			if (exp_fhandler->func_init == func_init) {
-				/* leave inserted flag ON to run */
-				/* remove function in detection work */
-				exp_fhandler->func_init = NULL;
-				goto exit;
+			if (exp_fhandler->func_init != func_init)
+				continue;
+			/* insert flag needed to run remove function in detection */
+			/* work even though function was never properly inserted */
+			if (!exp_fhandler->inserted) {
+				exp_fhandler->inserted = true;
+				dev_info(&rmi4_data->i2c_client->dev,
+						"removing not inserted handler %d\n",
+						exp_fhandler->fn_type);
 			}
+			exp_fhandler->func_init = NULL;
+			goto exit;
 		}
 	}
 
