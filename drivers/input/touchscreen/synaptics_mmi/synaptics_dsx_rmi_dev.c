@@ -850,7 +850,7 @@ static int __init rmidev_module_init(void)
 		synaptics_rmi4_new_function(next, RMI_DEV, true,
 				rmidev_init_device,
 				rmidev_remove_device,
-				NULL, NULL, IC_MODE_ANY);
+				NULL, NULL, IC_MODE_UI);
 	}
 
 	return 0;
@@ -869,7 +869,7 @@ static void __exit rmidev_module_exit(void)
 		synaptics_rmi4_new_function(next, RMI_DEV, false,
 				rmidev_init_device,
 				rmidev_remove_device,
-				NULL, NULL, IC_MODE_ANY);
+				NULL, NULL, IC_MODE_UI);
 		wait_for_completion(&rmidev->remove_complete);
 		kfree(rmidev);
 		next->rmidev_data = NULL;

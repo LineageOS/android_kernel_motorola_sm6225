@@ -2304,6 +2304,7 @@ struct f54_kobj_data {
 #define to_f54_attr(x) container_of(x, struct f54_attribute, attr)
 
 struct synaptics_rmi4_f54_handle {
+	bool init_done;
 	bool no_auto_cal;
 	int status;
 	unsigned char intr_mask;
@@ -3453,92 +3454,92 @@ static void print_image_report(struct synaptics_rmi4_f54_handle *f54)
 
 static void free_control_mem(struct synaptics_rmi4_f54_handle *f54)
 {
-	struct f54_control control = f54->control;
+	struct f54_control *control = &f54->control;
 
-	kfree(control.reg_0);
-	kfree(control.reg_1);
-	kfree(control.reg_2);
-	kfree(control.reg_3);
-	kfree(control.reg_4__6);
-	kfree(control.reg_7);
-	kfree(control.reg_8__9);
-	kfree(control.reg_10);
-	kfree(control.reg_11);
-	kfree(control.reg_12__13);
-	kfree(control.reg_14);
-	if (control.reg_15)
-		kfree(control.reg_15->data);
-	kfree(control.reg_15);
-	if (control.reg_16)
-		kfree(control.reg_16->data);
-	kfree(control.reg_16);
-	if (control.reg_17)
-		kfree(control.reg_17->data);
-	kfree(control.reg_17);
-	if (control.reg_18)
-		kfree(control.reg_18->data);
-	kfree(control.reg_18);
-	if (control.reg_19)
-		kfree(control.reg_19->data);
-	kfree(control.reg_19);
-	kfree(control.reg_20);
-	kfree(control.reg_21);
-	kfree(control.reg_22__26);
-	kfree(control.reg_27);
-	kfree(control.reg_28);
-	kfree(control.reg_29);
-	kfree(control.reg_30);
-	kfree(control.reg_31);
-	kfree(control.reg_32__35);
-	if (control.reg_36)
-		kfree(control.reg_36->data);
-	kfree(control.reg_36);
-	if (control.reg_37)
-		kfree(control.reg_37->data);
-	kfree(control.reg_37);
-	if (control.reg_38)
-		kfree(control.reg_38->data);
-	kfree(control.reg_38);
-	if (control.reg_39)
-		kfree(control.reg_39->data);
-	kfree(control.reg_39);
-	if (control.reg_40)
-		kfree(control.reg_40->data);
-	kfree(control.reg_40);
-	if (control.reg_89)
-		kfree(control.reg_89->data);
-	kfree(control.reg_89);
-	kfree(control.reg_93);
-	if (control.reg_95)
-		kfree(control.reg_95->data);
-	kfree(control.reg_95);
-	kfree(control.reg_99);
-	kfree(control.reg_107);
-	kfree(control.reg_113);
-	kfree(control.reg_116);
-	kfree(control.reg_137);
-	kfree(control.reg_145);
-	kfree(control.reg_146);
-	kfree(control.reg_242);
-	kfree(control.reg_269);
+	kfree(control->reg_0);
+	kfree(control->reg_1);
+	kfree(control->reg_2);
+	kfree(control->reg_3);
+	kfree(control->reg_4__6);
+	kfree(control->reg_7);
+	kfree(control->reg_8__9);
+	kfree(control->reg_10);
+	kfree(control->reg_11);
+	kfree(control->reg_12__13);
+	kfree(control->reg_14);
+	if (control->reg_15)
+		kfree(control->reg_15->data);
+	kfree(control->reg_15);
+	if (control->reg_16)
+		kfree(control->reg_16->data);
+	kfree(control->reg_16);
+	if (control->reg_17)
+		kfree(control->reg_17->data);
+	kfree(control->reg_17);
+	if (control->reg_18)
+		kfree(control->reg_18->data);
+	kfree(control->reg_18);
+	if (control->reg_19)
+		kfree(control->reg_19->data);
+	kfree(control->reg_19);
+	kfree(control->reg_20);
+	kfree(control->reg_21);
+	kfree(control->reg_22__26);
+	kfree(control->reg_27);
+	kfree(control->reg_28);
+	kfree(control->reg_29);
+	kfree(control->reg_30);
+	kfree(control->reg_31);
+	kfree(control->reg_32__35);
+	if (control->reg_36)
+		kfree(control->reg_36->data);
+	kfree(control->reg_36);
+	if (control->reg_37)
+		kfree(control->reg_37->data);
+	kfree(control->reg_37);
+	if (control->reg_38)
+		kfree(control->reg_38->data);
+	kfree(control->reg_38);
+	if (control->reg_39)
+		kfree(control->reg_39->data);
+	kfree(control->reg_39);
+	if (control->reg_40)
+		kfree(control->reg_40->data);
+	kfree(control->reg_40);
+	if (control->reg_89)
+		kfree(control->reg_89->data);
+	kfree(control->reg_89);
+	kfree(control->reg_93);
+	if (control->reg_95)
+		kfree(control->reg_95->data);
+	kfree(control->reg_95);
+	kfree(control->reg_99);
+	kfree(control->reg_107);
+	kfree(control->reg_113);
+	kfree(control->reg_116);
+	kfree(control->reg_137);
+	kfree(control->reg_145);
+	kfree(control->reg_146);
+	kfree(control->reg_242);
+	kfree(control->reg_269);
 
 	return;
 }
 
 static void free_data_mem(struct synaptics_rmi4_f54_handle *f54)
 {
-	struct f54_data data = f54->data;
+	struct f54_data *data = &f54->data;
 
-	kfree(data.reg_4);
-	kfree(data.reg_6);
-	kfree(data.reg_7_0);
-	kfree(data.reg_7_1);
-	kfree(data.reg_8);
-	kfree(data.reg_9);
-	kfree(data.reg_10);
-	kfree(data.reg_14);
-	kfree(data.reg_16);
-	kfree(data.reg_17);
+	kfree(data->reg_4);
+	kfree(data->reg_6);
+	kfree(data->reg_7_0);
+	kfree(data->reg_7_1);
+	kfree(data->reg_8);
+	kfree(data->reg_9);
+	kfree(data->reg_10);
+	kfree(data->reg_14);
+	kfree(data->reg_16);
+	kfree(data->reg_17);
 }
 
 static void remove_sysfs(struct synaptics_rmi4_f54_handle *f54)
@@ -5868,6 +5869,8 @@ found:
 	INIT_WORK(&f54->timeout_work, timeout_set_status);
 #endif
 
+	f54->init_done = true;
+
 	return 0;
 
 exit_sysfs:
@@ -5891,6 +5894,12 @@ static void synaptics_rmi4_f54_remove(struct synaptics_rmi4_data *rmi4_data)
 {
 	struct synaptics_rmi4_f54_handle *f54 =
 				(struct synaptics_rmi4_f54_handle *)rmi4_data->f54_data;
+
+	if (!f54->init_done) {
+		dev_dbg(&rmi4_data->i2c_client->dev, "%s: no cleanup necessary!!!\n", __func__);
+		goto exit_and_complete;
+	}
+
 #ifdef WATCHDOG_HRTIMER
 	hrtimer_cancel(&f54->watchdog);
 #endif
@@ -5902,11 +5911,12 @@ static void synaptics_rmi4_f54_remove(struct synaptics_rmi4_data *rmi4_data)
 
 	kfree(f54->report_data);
 	kfree(f54->fn55);
+	/* cancel delayed work first then free fn_ptr!!! */
+	cancel_delayed_work_sync(&f54->status_work);
 	kfree(f54->fn_ptr);
 
-	cancel_delayed_work(&f54->status_work);
 	wakeup_source_trash(&f54->test_wake_lock);
-
+exit_and_complete:
 	complete(&f54->remove_complete);
 
 	return;
