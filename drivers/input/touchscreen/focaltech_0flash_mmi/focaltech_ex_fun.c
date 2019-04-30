@@ -520,6 +520,24 @@ static ssize_t fts_hw_reset_store(
     return -EPERM;
 }
 
+static ssize_t reset_store(
+    struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct input_dev *input_dev = fts_data->input_dev;
+
+    if ('1' != buf[0]) {
+        pr_err("Invalid argument for reset\n");
+        return -EINVAL;
+    }
+
+    mutex_lock(&input_dev->mutex);
+    fts_reset_proc(0);
+    mutex_unlock(&input_dev->mutex);
+
+    return count;
+}
+
 /* fts_irq interface */
 static ssize_t fts_irq_show(
     struct device *dev, struct device_attribute *attr, char *buf)
@@ -533,6 +551,31 @@ static ssize_t fts_irq_show(
 }
 
 static ssize_t fts_irq_store(
+    struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct input_dev *input_dev = fts_data->input_dev;
+
+    mutex_lock(&input_dev->mutex);
+    if (FTS_SYSFS_ECHO_ON(buf)) {
+        FTS_INFO("enable irq");
+        fts_irq_enable();
+    } else if (FTS_SYSFS_ECHO_OFF(buf)) {
+        FTS_INFO("disable irq");
+        fts_irq_disable();
+    }
+    mutex_unlock(&input_dev->mutex);
+    return count;
+}
+
+static ssize_t drv_irq_show(
+    struct device *dev, struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%s\n",
+        fts_data->irq_disabled? "DISABLED" : "ENABLED");
+}
+
+static ssize_t drv_irq_store(
     struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -591,6 +634,26 @@ static ssize_t fts_bootmode_show(
     return count;
 }
 
+
+static ssize_t fts_poweron_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    struct fts_ts_data *data = fts_data;
+    struct input_dev *input_dev = data->input_dev;
+    bool val;
+
+    mutex_lock(&input_dev->mutex);
+    val = data->power_disabled;
+    mutex_unlock(&input_dev->mutex);
+
+    return scnprintf(buf, PAGE_SIZE, "%d\n", val == false);
+}
+
+
+static ssize_t fts_productinfo_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%s\n", FTS_CHIP_NAME);
+}
+
 /* fts_tpfwver interface */
 static ssize_t fts_tpfwver_show(
     struct device *dev, struct device_attribute *attr, char *buf)
@@ -623,6 +686,32 @@ static ssize_t fts_tpfwver_store(
     struct device_attribute *attr, const char *buf, size_t count)
 {
     return -EPERM;
+}
+
+static ssize_t buildid_show(
+    struct device *dev, struct device_attribute *attr, char *buf)
+{
+    struct fts_ts_data *ts_data = fts_data;
+    struct input_dev *input_dev = ts_data->input_dev;
+    ssize_t num_read_chars = 0;
+    u8 fwver = 0;
+
+    mutex_lock(&input_dev->mutex);
+
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(1);
+#endif
+    fts_read_reg(FTS_REG_FW_VER, &fwver);
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(0);
+#endif
+    if ((fwver == 0xFF) || (fwver == 0x00))
+        num_read_chars = snprintf(buf, PAGE_SIZE, "get tp fw version fail!\n");
+    else
+        num_read_chars = snprintf(buf, PAGE_SIZE, "0000-%02x\n", fwver);
+
+    mutex_unlock(&input_dev->mutex);
+    return num_read_chars;
 }
 
 /* fts_rw_reg */
@@ -923,6 +1012,63 @@ static ssize_t fts_fwforceupg_store(
     return count;
 }
 
+static ssize_t forcereflash_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    unsigned int input;
+
+    if (kstrtouint(buf, 10, &input) != 0)
+        return -EINVAL;
+
+    fts_data->force_reflash = (input == 0) ? false : true;
+
+    return count;
+}
+
+static ssize_t flashprog_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%d\n", (fts_data->fw_loading) ? 1 : 0);
+}
+
+static ssize_t doreflash_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    char fwname[FILE_NAME_LENGTH];
+    char prefix[FILE_NAME_LENGTH] = "focaltech";
+    char template[FILE_NAME_LENGTH];
+    struct input_dev *input_dev = fts_data->input_dev;
+
+    if (count > FILE_NAME_LENGTH) {
+        FTS_ERROR("%s: FW filename is too long\n", __func__);
+        return -EINVAL;
+    }
+
+    if (!fts_data->force_reflash) {
+        if (strncmp(buf, prefix, strnlen(prefix, sizeof(prefix)))) {
+            FTS_ERROR("%s: FW does not belong to Focaltech\n", __func__);
+            return -EINVAL;
+        }
+
+        snprintf(template, sizeof(template), "-%s-", FTS_CHIP_NAME);
+        if (!strnstr(buf + strnlen(prefix, sizeof(prefix)), template, count)) {
+            FTS_ERROR("%s: FW does not belong to %s\n", __func__, FTS_CHIP_NAME);
+            return -EINVAL;
+        }
+    }
+
+    memset(fwname, 0, sizeof(fwname));
+    snprintf(fwname, PAGE_SIZE, "%s", buf);
+    fwname[count - 1] = '\0';
+
+    mutex_lock(&input_dev->mutex);
+    fts_fw_update_vendor_name(fwname);
+    fts_fw_recovery();
+    mutex_unlock(&input_dev->mutex);
+    fts_data->force_reflash = false;
+
+    return count;
+}
+
 /* fts_driver_info interface */
 static ssize_t fts_driverinfo_show(
     struct device *dev, struct device_attribute *attr, char *buf)
@@ -1102,6 +1248,14 @@ static DEVICE_ATTR(fts_irq, S_IRUGO | S_IWUSR, fts_irq_show, fts_irq_store);
 static DEVICE_ATTR(fts_boot_mode, S_IRUGO | S_IWUSR, fts_bootmode_show, fts_bootmode_store);
 static DEVICE_ATTR(fts_touch_point, S_IRUGO | S_IWUSR, fts_tpbuf_show, fts_tpbuf_store);
 static DEVICE_ATTR(fts_log_level, S_IRUGO | S_IWUSR, fts_log_level_show, fts_log_level_store);
+static DEVICE_ATTR(drv_irq, S_IRUGO | S_IWUSR, drv_irq_show, drv_irq_store);
+static DEVICE_ATTR(reset, S_IWUSR | S_IWGRP, NULL, reset_store);
+static DEVICE_ATTR(buildid, S_IRUGO, buildid_show, NULL);
+static DEVICE_ATTR(forcereflash, S_IWUSR | S_IWGRP, NULL, forcereflash_store);
+static DEVICE_ATTR(flashprog, S_IRUGO, flashprog_show, NULL);
+static DEVICE_ATTR(doreflash, S_IWUSR | S_IWGRP, NULL, doreflash_store);
+static DEVICE_ATTR(poweron, S_IRUGO, fts_poweron_show, NULL);
+static DEVICE_ATTR(productinfo, S_IRUGO, fts_productinfo_show, NULL);
 
 /* add your attr in here*/
 static struct attribute *fts_attributes[] = {
@@ -1116,6 +1270,14 @@ static struct attribute *fts_attributes[] = {
     &dev_attr_fts_boot_mode.attr,
     &dev_attr_fts_touch_point.attr,
     &dev_attr_fts_log_level.attr,
+    &dev_attr_drv_irq.attr,
+    &dev_attr_reset.attr,
+    &dev_attr_buildid.attr,
+    &dev_attr_forcereflash.attr,
+    &dev_attr_flashprog.attr,
+    &dev_attr_doreflash.attr,
+    &dev_attr_poweron.attr,
+    &dev_attr_productinfo.attr,
     NULL
 };
 
