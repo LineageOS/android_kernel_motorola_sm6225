@@ -67,6 +67,8 @@ static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for mmi smbcharger driver");
 
+static struct smb_mmi_charger *this_chip = NULL;
+
 #ifndef PM8150B_SUBTYPE
 #define PM8150B_SUBTYPE PM855B_SUBTYPE
 #endif
@@ -3327,24 +3329,14 @@ static ssize_t charge_rate_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
 {
-	struct power_supply *psy;
-	struct smb_mmi_charger *chip;
-	psy = dev_get_drvdata(dev);
-	if (psy &&
-	    (strcmp(psy->desc->name, "battery") == 0))
-		chip = power_supply_get_drvdata(psy);
-	else {
-		pr_err("SMBMMI: Not Correct PSY\n");
+	if (!this_chip) {
+		pr_err("SMBMMI: mmi_chip is not initialized\n");
 		return 0;
 	}
 
-	if (!chip) {
-		pr_err("SMBMMI: Can't find mmi_chip\n");
-		return 0;
-	}
-	mmi_chrg_rate_check(chip);
+	mmi_chrg_rate_check(this_chip);
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%s\n",
-			 charge_rate[chip->charger_rate]);
+			 charge_rate[this_chip->charger_rate]);
 }
 static DEVICE_ATTR(charge_rate, S_IRUGO, charge_rate_show, NULL);
 
@@ -3352,18 +3344,12 @@ static ssize_t age_show(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	struct power_supply *psy;
-	struct smb_mmi_charger *chip;
-	psy = dev_get_drvdata(dev);
-	if (psy &&
-	    (strcmp(psy->desc->name, "battery") == 0))
-		chip = power_supply_get_drvdata(psy);
-	else {
-		pr_err("SMBMMI: Not Correct PSY\n");
+	if (!this_chip) {
+		pr_err("SMBMMI: mmi_chip is not initialized\n");
 		return 0;
 	}
 
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chip->age);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", this_chip->age);
 }
 static DEVICE_ATTR(age, S_IRUGO, age_show, NULL);
 
@@ -3395,6 +3381,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 	chip->suspended = 0;
 	chip->awake = false;
+	this_chip = chip;
 	device_init_wakeup(chip->dev, true);
 
 	smb_mmi_chg_config_init(chip);
