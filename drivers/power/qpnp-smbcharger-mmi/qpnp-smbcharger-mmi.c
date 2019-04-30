@@ -23,6 +23,49 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/workqueue.h>
+#include <linux/ipc_logging.h>
+
+#define mmi_err(chg, fmt, ...)			\
+	do {						\
+		pr_err("%s: %s: " fmt, chg->name,	\
+		       __func__, ##__VA_ARGS__);	\
+		ipc_log_string(chg->ipc_log,		\
+		"ERR:%s: " fmt, __func__, ##__VA_ARGS__); \
+	} while (0)
+
+#define mmi_warn(chg, fmt, ...)			\
+	do {						\
+		pr_warn("%s: %s: " fmt, chg->name,	\
+		       __func__, ##__VA_ARGS__);	\
+		ipc_log_string(chg->ipc_log,		\
+		"WARN:%s: " fmt, __func__, ##__VA_ARGS__); \
+	} while (0)
+
+#define mmi_info(chg, fmt, ...)			\
+	do {						\
+		pr_info("%s: %s: " fmt, chg->name,	\
+		       __func__, ##__VA_ARGS__);	\
+		ipc_log_string(chg->ipc_log,		\
+		"INFO:%s: " fmt, __func__, ##__VA_ARGS__); \
+	} while (0)
+
+#define mmi_dbg(chg, fmt, ...)			\
+	do {							\
+		if (*chg->debug_enabled)		\
+			pr_info("%s: %s: " fmt, chg->name,	\
+				__func__, ##__VA_ARGS__);	\
+		else						\
+			pr_debug("%s: %s: " fmt, chg->name,	\
+				__func__, ##__VA_ARGS__);	\
+		ipc_log_string(chg->ipc_log,		\
+			"DBG:%s: " fmt, __func__, ##__VA_ARGS__); \
+	} while (0)
+
+#define MMI_LOG_PAGES (50)
+
+static bool debug_enabled;
+module_param(debug_enabled, bool, 0600);
+MODULE_PARM_DESC(debug_enabled, "Enable debug for mmi smbcharger driver");
 
 #ifndef PM8150B_SUBTYPE
 #define PM8150B_SUBTYPE PM855B_SUBTYPE
@@ -286,6 +329,9 @@ struct smb_mmi_charger {
 	int 			soc_cycles_start;
 	bool			shut_batt;
 	int			dc_cl_ma;
+
+	bool			*debug_enabled;
+	void			*ipc_log;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -594,7 +640,7 @@ int smblib_set_usb_suspend(struct smb_mmi_charger *chg, bool suspend)
 	rc = smblib_masked_write_mmi(chg, USBIN_CMD_IL_REG, USBIN_SUSPEND_BIT,
 				     suspend ? USBIN_SUSPEND_BIT : 0);
 	if (rc < 0)
-		pr_err("Couldn't write %s to USBIN suspend rc=%d\n",
+		mmi_err(chg, "Couldn't write %s to USBIN suspend rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
 
 	return rc;
@@ -607,7 +653,7 @@ int smblib_get_usb_suspend(struct smb_mmi_charger *chg, int *suspend)
 
 	rc = smblib_read_mmi(chg, USBIN_CMD_IL_REG, &temp);
 	if (rc < 0) {
-		pr_err("Couldn't read USBIN_CMD_IL rc=%d\n", rc);
+		mmi_err(chg, "Couldn't read USBIN_CMD_IL rc=%d\n", rc);
 		return rc;
 	}
 	*suspend = temp & USBIN_SUSPEND_BIT;
@@ -654,7 +700,7 @@ static ssize_t force_chg_usb_suspend_show(struct device *dev,
 	}
 	ret = smblib_get_usb_suspend(mmi_chip, &state);
 	if (ret) {
-		pr_err("USBIN_SUSPEND_BIT failed ret = %d\n", ret);
+		mmi_err(mmi_chip, "USBIN_SUSPEND_BIT failed ret = %d\n", ret);
 		state = -EFAULT;
 		goto end;
 	}
@@ -724,7 +770,7 @@ static ssize_t force_chg_auto_enable_store(struct device *dev,
 				    CHARGING_ENABLE_CMD_BIT,
 				    mode ? CHARGING_ENABLE_CMD_BIT : 0);
 	if (r < 0) {
-		pr_err("Factory Couldn't %s charging rc=%d\n",
+		mmi_err(mmi_chip, "Factory Couldn't %s charging rc=%d\n",
 			   mode ? "enable" : "disable", (int)r);
 		return r;
 	}
@@ -750,7 +796,7 @@ static ssize_t force_chg_auto_enable_show(struct device *dev,
 
 	ret = smblib_read_mmi(mmi_chip, CHARGING_ENABLE_CMD_REG, &value);
 	if (ret) {
-		pr_err("CHG_EN_BIT failed ret = %d\n", ret);
+		mmi_err(mmi_chip, "CHG_EN_BIT failed ret = %d\n", ret);
 		state = -EFAULT;
 		goto end;
 	}
@@ -776,7 +822,7 @@ int smblib_set_charge_param(struct smb_mmi_charger *chg,
 			return -EINVAL;
 	} else {
 		if (val_u > param->max_u || val_u < param->min_u)
-			pr_debug("%s: %d is out of range [%d, %d]\n",
+			mmi_dbg(chg, "%s: %d is out of range [%d, %d]\n",
 				 param->name, val_u,
 				 param->min_u, param->max_u);
 
@@ -790,12 +836,12 @@ int smblib_set_charge_param(struct smb_mmi_charger *chg,
 
 	rc = smblib_write_mmi(chg, param->reg, val_raw);
 	if (rc < 0) {
-		pr_err("%s: Couldn't write 0x%02x to 0x%04x rc=%d\n",
+		mmi_err(chg, "%s: Couldn't write 0x%02x to 0x%04x rc=%d\n",
 			param->name, val_raw, param->reg, rc);
 		return rc;
 	}
 
-	pr_debug("%s = %d (0x%02x)\n", param->name, val_u, val_raw);
+	mmi_dbg(chg, "%s = %d (0x%02x)\n", param->name, val_u, val_raw);
 
 	return rc;
 }
@@ -808,7 +854,7 @@ int smblib_get_charge_param(struct smb_mmi_charger *chg,
 
 	rc = smblib_read_mmi(chg, param->reg, &val_raw);
 	if (rc < 0) {
-		pr_err("%s: Couldn't read from 0x%04x rc=%d\n",
+		mmi_err(chg, "%s: Couldn't read from 0x%04x rc=%d\n",
 		       param->name, param->reg, rc);
 		return rc;
 	}
@@ -817,7 +863,7 @@ int smblib_get_charge_param(struct smb_mmi_charger *chg,
 		*val_u = param->get_proc(param, val_raw);
 	else
 		*val_u = val_raw * param->step_u + param->min_u;
-	pr_debug("%s = %d (0x%02x)\n", param->name, *val_u, val_raw);
+	mmi_dbg(chg, "%s = %d (0x%02x)\n", param->name, *val_u, val_raw);
 
 	return rc;
 }
@@ -868,7 +914,7 @@ static ssize_t force_chg_ibatt_show(struct device *dev,
 
 	ret = smblib_get_charge_param(mmi_chip, &mmi_chip->param.fcc, &state);
 	if (ret < 0) {
-		pr_err("Factory Couldn't get master fcc rc=%d\n", (int)ret);
+		mmi_err(mmi_chip, "Factory Couldn't get master fcc rc=%d\n", (int)ret);
 		return ret;
 	}
 
@@ -910,18 +956,18 @@ static ssize_t force_chg_iusb_store(struct device *dev,
 	r = smblib_masked_write_mmi(mmi_chip, USBIN_ICL_OPTIONS_REG,
 				    USBIN_MODE_CHG_BIT, USBIN_MODE_CHG_BIT);
 	if (r < 0)
-		pr_err("Couldn't set USBIN_ICL_OPTIONS r=%d\n", (int)r);
+		mmi_err(mmi_chip, "Couldn't set USBIN_ICL_OPTIONS r=%d\n", (int)r);
 
 	r = smblib_masked_write_mmi(mmi_chip, USBIN_LOAD_CFG_REG,
 				    ICL_OVERRIDE_AFTER_APSD_BIT,
 				    ICL_OVERRIDE_AFTER_APSD_BIT);
 	if (r < 0)
-		pr_err("Couldn't set USBIN_LOAD_CFG rc=%d\n", (int)r);
+		mmi_err(mmi_chip, "Couldn't set USBIN_LOAD_CFG rc=%d\n", (int)r);
 
 	r = smblib_masked_write_mmi(mmi_chip, USBIN_AICL_OPTIONS_CFG_REG,
 				    0xFF, 0x00);
 	if (r < 0)
-		pr_err("Couldn't set USBIN_AICL_OPTIONS rc=%d\n", (int)r);
+		mmi_err(mmi_chip, "Couldn't set USBIN_AICL_OPTIONS rc=%d\n", (int)r);
 
 	return r ? r : count;
 }
@@ -943,7 +989,7 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 
 	r = smblib_get_charge_param(mmi_chip, &mmi_chip->param.usb_icl, &state);
 	if (r < 0) {
-		pr_err("Factory Couldn't get usb_icl rc=%d\n", (int)r);
+		mmi_err(mmi_chip, "Factory Couldn't get usb_icl rc=%d\n", (int)r);
 		return r;
 	}
 	state /= 1000; /* Convert to mA */
@@ -977,7 +1023,7 @@ static ssize_t force_chg_idc_store(struct device *dev,
 	dc_curr *= 1000; /* Convert to uA */
 	r = smblib_set_charge_param(mmi_chip, &mmi_chip->param.dc_icl, dc_curr);
 	if (r < 0) {
-		pr_err("Factory Couldn't set dc icl = %d rc=%d\n",
+		mmi_err(mmi_chip, "Factory Couldn't set dc icl = %d rc=%d\n",
 		       (int)dc_curr, (int)r);
 		return r;
 	}
@@ -1002,7 +1048,7 @@ static ssize_t force_chg_idc_show(struct device *dev,
 
 	r = smblib_get_charge_param(mmi_chip, &mmi_chip->param.dc_icl, &state);
 	if (r < 0) {
-		pr_err("Factory Couldn't get dc_icl rc=%d\n", (int)r);
+		mmi_err(mmi_chip, "Factory Couldn't get dc_icl rc=%d\n", (int)r);
 		return r;
 	}
 	state /= 1000; /* Convert to mA */
@@ -1068,8 +1114,8 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 			value = (u8)chg_current;
 		break;
 	default:
-		pr_err("SMBMMI:Set ITRICK PMIC subtype %d not supported\n",
-		       mmi_chip->smb_version);
+		mmi_err(mmi_chip, "SMBMMI:Set ITRICK PMIC subtype %d not supported\n",
+			mmi_chip->smb_version);
 		return -EINVAL;
 	}
 
@@ -1077,7 +1123,7 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 				    mask,
 				    value);
 	if (r < 0) {
-		pr_err("Factory Couldn't set ITRICK %d  mV rc=%d\n",
+		mmi_err(mmi_chip, "Factory Couldn't set ITRICK %d  mV rc=%d\n",
 			   (int)value, (int)r);
 		return r;
 	}
@@ -1103,7 +1149,7 @@ static ssize_t force_chg_itrick_show(struct device *dev,
 
 	ret = smblib_read_mmi(mmi_chip, PRE_CHARGE_CURRENT_CFG_REG, &value);
 	if (ret) {
-		pr_err("Pre Chg ITrick failed ret = %d\n", ret);
+		mmi_err(mmi_chip, "Pre Chg ITrick failed ret = %d\n", ret);
 		state = -EFAULT;
 		goto end;
 	}
@@ -1119,8 +1165,8 @@ static ssize_t force_chg_itrick_show(struct device *dev,
 		state = value * PRE_CHARGE_SMB2_CONV_MV;
 		break;
 	default:
-		pr_err("SMBMMI:Get ITRICK PMIC subtype %d not supported\n",
-		       mmi_chip->smb_version);
+		mmi_err(mmi_chip, "SMBMMI:Get ITRICK PMIC subtype %d not supported\n",
+			mmi_chip->smb_version);
 		return -EINVAL;
 	}
 end:
@@ -1200,7 +1246,7 @@ static int smb_mmi_set_property(struct power_supply *psy,
 					       val);
 			override = USBIN_ICL_OVERRIDE_BIT;
 		}
-		pr_warn("SMBMMI: Request for ICL to %d uA\n", val->intval);
+		mmi_warn(chip, "SMBMMI: Request for ICL to %d uA\n", val->intval);
 		rc = smblib_masked_write_mmi(chip, USBIN_CMD_ICL_OVERRIDE_REG,
 					     USBIN_ICL_OVERRIDE_BIT,
 					     override);
@@ -1214,21 +1260,21 @@ static int smb_mmi_set_property(struct power_supply *psy,
 		if (!chip->vbus) {
 			chip->vbus = devm_regulator_get(chip->dev, "vbus");
 			if (IS_ERR(chip->vbus)) {
-				pr_err("SMBMMI: Unable to get vbus\n");
+				mmi_err(chip, "SMBMMI: Unable to get vbus\n");
 				return -EINVAL;
 			}
 		}
 
 		if (val->intval) {
 			rc = regulator_enable(chip->vbus);
-			pr_info("SMBMMI: VBUS Enable\n");
+			mmi_info(chip, "SMBMMI: VBUS Enable\n");
 		} else if (chip->vbus_enabled) {
 			rc = regulator_disable(chip->vbus);
-			pr_info("SMBMMI: VBUS Disable\n");
+			mmi_info(chip, "SMBMMI: VBUS Disable\n");
 		}
 
 		if (rc)
-			pr_err("SMBMMI: Unable to %s vbus (%d)\n",
+			mmi_err(chip, "SMBMMI: Unable to %s vbus (%d)\n",
 			       val->intval ? "enable" : "disable", rc);
 		else if (val->intval)
 			chip->vbus_enabled = true;
@@ -1323,7 +1369,7 @@ static bool mmi_find_temp_zone(struct smb_mmi_charger *chg,
 	}
 
 	if (prev_zone != chip->pres_temp_zone) {
-		pr_debug("Entered Temp Zone %d!\n",
+		mmi_dbg(chg, "Entered Temp Zone %d!\n",
 			   chip->pres_temp_zone);
 		return true;
 	}
@@ -1419,7 +1465,7 @@ static int get_prop_usb_present(struct smb_mmi_charger *chg,
 
 	rc = smblib_read_mmi(chg, USBIN_INT_RT_STS, &stat);
 	if (rc < 0) {
-		pr_err("Couldn't read USBIN_RT_STS rc=%d\n", rc);
+		mmi_err(chg, "Couldn't read USBIN_RT_STS rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1446,7 +1492,7 @@ static int get_prop_dc_present(struct smb_mmi_charger *chg,
 
 	rc = smblib_read_mmi(chg, DCIN_INT_RT_STS, &stat);
 	if (rc < 0) {
-		pr_err("Couldn't read DCIN_RT_STS rc=%d\n", rc);
+		mmi_err(chg, "Couldn't read DCIN_RT_STS rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1466,7 +1512,7 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 		rc = power_supply_get_property(chg->usb_psy,
 				POWER_SUPPLY_PROP_TYPEC_MODE, val);
 	if (rc < 0) {
-		pr_err("Couldn't read TypeC Mode rc=%d\n", rc);
+		mmi_err(chg, "Couldn't read TypeC Mode rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1495,14 +1541,14 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	int rc = -EINVAL;
 
 	if (!chg->usb_psy) {
-		pr_err("No usb PSY\n");
+		mmi_err(chg, "No usb PSY\n");
 		return;
 	}
 
 	val.intval = 0;
 	rc = get_prop_charger_present(chg, &val);
 	if (rc < 0) {
-		pr_err("Error getting Charger Present rc = %d\n", rc);
+		mmi_err(chg, "Error getting Charger Present rc = %d\n", rc);
 		return;
 	}
 
@@ -1511,7 +1557,7 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 		rc = power_supply_get_property(chg->usb_psy,
 				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
 		if (rc < 0) {
-			pr_err("Error getting HW Current Max rc = %d\n", rc);
+			mmi_err(chg, "Error getting HW Current Max rc = %d\n", rc);
 			return;
 		}
 		chrg_cm_ma = val.intval / 1000;
@@ -1520,7 +1566,7 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 		rc = power_supply_get_property(chg->usb_psy,
 				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
 		if (rc < 0) {
-			pr_err("Error getting ICL Settled rc = %d\n", rc);
+			mmi_err(chg, "Error getting ICL Settled rc = %d\n", rc);
 			return;
 		}
 		chrg_cs_ma = val.intval / 1000;
@@ -1529,7 +1575,7 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 		goto end_rate_check;
 	}
 
-	pr_debug("SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
+	mmi_dbg(chg, "SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
 	if (chrg_cm_ma >= TURBO_CHRG_THRSH)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
 	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) && (chrg_cs_ma < WEAK_CHRG_THRSH))
@@ -1539,7 +1585,7 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 
 end_rate_check:
 	if (prev_chg_rate != chg->charger_rate)
-		pr_err("%s Charger Detected\n",
+		mmi_info(chg, "%s Charger Detected\n",
 		       charge_rate[chg->charger_rate]);
 
 }
@@ -1554,7 +1600,7 @@ static bool mmi_has_current_tapered(struct smb_mmi_charger *chg,
 	int allowed_fcc, target_ma;
 
 	if (!chg) {
-		pr_debug("called before chip valid!\n");
+		mmi_dbg(chg, "called before chip valid!\n");
 		return false;
 	}
 
@@ -1594,7 +1640,7 @@ bool mmi_charge_halted(struct smb_mmi_charger *chg)
 
 	rc = smblib_read_mmi(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
 	if (rc < 0) {
-		pr_err("Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+		mmi_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
 			rc);
 		return flag;
 	}
@@ -1630,7 +1676,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 						    struct smb_mmi_charger,
 						    heartbeat_alarm);
 
-	pr_err("SMBMMI: HB alarm fired\n");
+	mmi_info(chip, "SMBMMI: HB alarm fired\n");
 
 	__pm_stay_awake(&chip->smb_mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
@@ -1653,7 +1699,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 	int start_step = chip->pres_chrg_step;
 
 	if (!chip->temp_zones) {
-		pr_debug("SMBMMI: No Temp Zone Defined for batt %d!\n", batt);
+		mmi_err(chg, "SMBMMI: No Temp Zone Defined for batt %d!\n", batt);
 		return -ENODEV;
 	}
 
@@ -1784,7 +1830,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 
 	if ((start_tz != chip->pres_temp_zone) ||
 	    (start_step != chip->pres_chrg_step)) {
-		pr_info("SMB_MMI:"
+		mmi_info(chg, "SMB_MMI:"
 			"Batt %d: batt_mv = %d, batt_ma %d, batt_soc %d,"
 			" batt_temp %d, usb_mv %d, cp %d, vp %d\n",
 			batt,
@@ -1795,7 +1841,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			stat->usb_mv,
 			stat->charger_present,
 			stat->vbus_present);
-		pr_info("SMBMMI:"
+		mmi_info(chg, "SMBMMI:"
 			"Batt %d Step State = %s, Temp Zone %d, Health %d\n",
 			batt,
 			stepchg_str[(int)chip->pres_chrg_step],
@@ -1803,7 +1849,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			chip->batt_health);
 		return 1;
 	} else {
-		pr_debug("SMB_MMI:"
+		mmi_dbg(chg, "SMB_MMI:"
 			 "Batt %d: batt_mv = %d, batt_ma %d, batt_soc %d,"
 			 " batt_temp %d, usb_mv %d, cp %d, vp %d\n",
 			 batt,
@@ -1814,7 +1860,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			 stat->usb_mv,
 			 stat->charger_present,
 			 stat->vbus_present);
-		pr_debug("SMBMMI:"
+		mmi_dbg(chg, "SMBMMI:"
 			 "Batt %d Step State = %s, Temp Zone %d, Health %d\n",
 			 batt,
 			 stepchg_str[(int)chip->pres_chrg_step],
@@ -1853,56 +1899,56 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	rc = get_prop_batt_voltage_now(chg, chg->max_main_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Main Batt Voltage rc = %d\n", rc);
+		mmi_err(chg, "Error getting Main Batt Voltage rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_main.batt_mv = pval.intval / 1000;
 
 	rc = get_prop_batt_voltage_now(chg, chg->max_flip_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Flip Batt Voltage rc = %d\n", rc);
+		mmi_err(chg, "Error getting Flip Batt Voltage rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_flip.batt_mv = pval.intval / 1000;
 
 	rc = get_prop_batt_current_now(chg, chg->max_main_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Main Batt Current rc = %d\n", rc);
+		mmi_err(chg, "Error getting Main Batt Current rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_main.batt_ma = (pval.intval / 1000) * -1;
 
 	rc = get_prop_batt_current_now(chg, chg->max_flip_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Flip Batt Current rc = %d\n", rc);
+		mmi_err(chg, "Error getting Flip Batt Current rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_flip.batt_ma = (pval.intval / 1000) * -1;
 
 	rc = get_prop_batt_capacity(chg, chg->max_main_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Main Batt Capacity rc = %d\n", rc);
+		mmi_err(chg, "Error getting Main Batt Capacity rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_main.batt_soc = pval.intval;
 
 	rc = get_prop_batt_capacity(chg, chg->max_flip_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Flip Batt Capacity rc = %d\n", rc);
+		mmi_err(chg, "Error getting Flip Batt Capacity rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_flip.batt_soc = pval.intval;
 
 	rc = get_prop_batt_temp(chg, chg->max_main_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Main Batt Temperature rc = %d\n", rc);
+		mmi_err(chg, "Error getting Main Batt Temperature rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_main.batt_temp = pval.intval / 10;
 
 	rc = get_prop_batt_temp(chg, chg->max_flip_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Flip Batt Temperature rc = %d\n", rc);
+		mmi_err(chg, "Error getting Flip Batt Temperature rc = %d\n", rc);
 		return sched_time;
 	} else
 		chg_stat_flip.batt_temp = pval.intval / 10;
@@ -1931,7 +1977,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	/* Check for Charge Demo */
 	} else if ((main_p->pres_chrg_step == STEP_DEMO) ||
 	    (flip_p->pres_chrg_step == STEP_DEMO)) {
-		pr_info("SMBMMI: Battery in Demo Mode charging limited "
+		mmi_info(chg, "SMBMMI: Battery in Demo Mode charging limited "
 			"%d%%\n", chg->demo_mode);
 
 		voltage_full = ((chg->demo_mode_usb_suspend == false) &&
@@ -1989,7 +2035,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 			flip_p->pres_chrg_step;
 		target_fcc = flip_p->target_fcc;
 		target_fv = flip_p->target_fv;
-		pr_info("SMBMMI: Align Flip to Main FULL\n");
+		mmi_info(chg, "SMBMMI: Align Flip to Main FULL\n");
 		goto vote_now;
 	} else if ((flip_p->pres_chrg_step == STEP_FULL) &&
 		   ((main_p->pres_chrg_step == STEP_MAX) ||
@@ -2001,7 +2047,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 			main_p->pres_chrg_step;
 		target_fcc = main_p->target_fcc;
 		target_fv = main_p->target_fv;
-		pr_info("SMBMMI: Align Main to Flip FULL\n");
+		mmi_info(chg, "SMBMMI: Align Main to Flip FULL\n");
 		goto vote_now;
 	/* Check for Charge Disable from each */
 	} else if ((main_p->target_fcc < 0) ||
@@ -2024,7 +2070,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		if (chg_stat_main.batt_ma > main_p->target_fcc) {
 			ocp = chg_stat_main.batt_ma - main_p->target_fcc;
 			main_p->ocp[main_p->pres_temp_zone] += ocp;
-			pr_info("SMBMMI: Main Exceed by %d mA\n",
+			mmi_info(chg, "SMBMMI: Main Exceed by %d mA\n",
 				main_p->ocp[main_p->pres_temp_zone]);
 		}
 	}
@@ -2034,7 +2080,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
 			ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
 			flip_p->ocp[flip_p->pres_temp_zone] += ocp;
-			pr_info("SMBMMI: Flip Exceed by %d mA\n",
+			mmi_info(chg, "SMBMMI: Flip Exceed by %d mA\n",
 				flip_p->ocp[flip_p->pres_temp_zone]);
 		}
 	}
@@ -2043,7 +2089,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	target_fcc -= main_p->ocp[main_p->pres_temp_zone];
 	target_fcc -= flip_p->ocp[flip_p->pres_temp_zone];
 	if (target_fcc < main_p->target_fcc) {
-		pr_info("SMBMMI: Target FCC adjust too much\n");
+		mmi_info(chg, "SMBMMI: Target FCC adjust too much\n");
 		target_fcc = main_p->target_fcc;
 	}
 
@@ -2054,7 +2100,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	    mmi_charge_halted(chg)) {
 		vote(chg->chg_dis_votable,
 		     MMI_HB_VOTER, true, 0);
-		pr_err("SMBMMI: Charge Halt..Toggle\n");
+		mmi_err(chg, "SMBMMI: Charge Halt..Toggle\n");
 		msleep(50);
 	}
 
@@ -2078,14 +2124,14 @@ vote_now:
 		chg->shut_batt = false;
 
 	if (sm_update)
-		pr_info("SMBMMI:"
+		mmi_info(chg, "SMBMMI:"
 			"IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 			effective_fv,
 			get_effective_result(chg->chg_dis_votable),
 			effective_fcc,
 			get_effective_result(chg->usb_icl_votable));
 	else
-		pr_debug("SMBMMI:"
+		mmi_dbg(chg, "SMBMMI:"
 			"IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 			effective_fv,
 			get_effective_result(chg->chg_dis_votable),
@@ -2106,7 +2152,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	bool voltage_full;
 	static int demo_full_soc = 100;
 
-	pr_info("SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
+	mmi_info(chip, "SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
 		" batt_temp %d, usb_mv %d, dc_mv %d, cp %d, vp %d dp %d\n",
 		stat->batt_mv,
 		stat->batt_ma,
@@ -2119,7 +2165,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		stat->dc_present);
 
 	if (!prm->temp_zones) {
-		pr_debug("SMBMMI: Skipping SM since No Temp Zone Defined!\n");
+		mmi_dbg(chip, "SMBMMI: Skipping SM since No Temp Zone Defined!\n");
 		return;
 	}
 
@@ -2142,7 +2188,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		prm->pres_chrg_step = STEP_STOP;
 	} else if (chip->demo_mode) { /* Demo Mode */
 		prm->pres_chrg_step = STEP_DEMO;
-		pr_info("SMBMMI: Battery in Demo Mode charging limited "
+		mmi_info(chip, "SMBMMI: Battery in Demo Mode charging limited "
 			"%d%%\n", chip->demo_mode);
 
 		voltage_full = ((chip->demo_mode_usb_suspend == false) &&
@@ -2192,7 +2238,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			if (mmi_charge_halted(chip)) {
 				vote(chip->chg_dis_votable,
 				     MMI_HB_VOTER, true, 0);
-				pr_err("SMBMMI: Charge Halt..Toggle\n");
+				mmi_warn(chip, "SMBMMI: Charge Halt..Toggle\n");
 				msleep(50);
 			}
 
@@ -2298,11 +2344,11 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	} else
 		prm->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 
-	pr_info("SMBMMI: Step State = %s, Temp Zone %d, Health %d\n",
+	mmi_info(chip, "SMBMMI: Step State = %s, Temp Zone %d, Health %d\n",
 		stepchg_str[(int)prm->pres_chrg_step],
 		prm->pres_temp_zone,
 		prm->batt_health);
-	pr_info("SMBMMI: IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
+	mmi_info(chip, "SMBMMI: IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 		get_effective_result(chip->fv_votable),
 		get_effective_result(chip->chg_dis_votable),
 		get_effective_result(chip->fcc_votable),
@@ -2441,7 +2487,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	/* Have not been resumed so wait another 100 ms */
 	if (chip->suspended & IS_SUSPENDED) {
-		pr_err("SMBMMI: HB running before Resume\n");
+		mmi_err(chip, "SMBMMI: HB running before Resume\n");
 		schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(100));
 		return;
@@ -2450,7 +2496,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	smb_mmi_awake_vote(chip, true);
 	alarm_try_to_cancel(&chip->heartbeat_alarm);
 
-	pr_debug("SMBMMI: Heartbeat!\n");
+	mmi_dbg(chip, "SMBMMI: Heartbeat!\n");
 	if (chip->factory_mode)
 		hb_resch_time = HEARTBEAT_FACTORY_MS;
 	else
@@ -2459,14 +2505,14 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	chg_stat.charger_present = false;
 	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Batt Voltage rc = %d\n", rc);
+		mmi_err(chip, "Error getting Batt Voltage rc = %d\n", rc);
 		goto sch_hb;
 	} else
 		chg_stat.batt_mv = pval.intval / 1000;
 
 	rc = get_prop_batt_current_now(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Batt Current rc = %d\n", rc);
+		mmi_err(chip, "Error getting Batt Current rc = %d\n", rc);
 		goto sch_hb;
 	} else
 		chg_stat.batt_ma = pval.intval / 1000;
@@ -2475,7 +2521,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	if (rc < 0) {
 		chg_stat.usb_mv = 0;
 		if (rc != -ENODATA)
-			pr_err("Error getting USB Voltage rc = %d\n", rc);
+			mmi_err(chip, "Error getting USB Voltage rc = %d\n", rc);
 	} else
 		chg_stat.usb_mv = pval.intval / 1000;
 
@@ -2484,14 +2530,14 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	rc = get_prop_dc_voltage_now(chip, &pval);
 	if (rc < 0) {
-		pr_debug("Error getting DC Voltage rc = %d\n", rc);
+		mmi_dbg(chip, "Error getting DC Voltage rc = %d\n", rc);
 		chg_stat.dc_mv = 0;
 	} else
 		chg_stat.dc_mv = pval.intval / 1000;
 
 	rc = get_prop_batt_capacity(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Batt Capacity rc = %d\n", rc);
+		mmi_err(chip, "Error getting Batt Capacity rc = %d\n", rc);
 		return;
 	} else
 		chg_stat.batt_soc = pval.intval;
@@ -2501,28 +2547,28 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	rc = get_prop_batt_temp(chip, chip->bms_psy, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Batt Temperature rc = %d\n", rc);
+		mmi_err(chip, "Error getting Batt Temperature rc = %d\n", rc);
 		return;
 	} else
 		chg_stat.batt_temp = pval.intval / 10;
 
 	rc = get_prop_usb_present(chip, &pval);
 	if (rc < 0) {
-		pr_err("Error getting USB Present rc = %d\n", rc);
+		mmi_err(chip, "Error getting USB Present rc = %d\n", rc);
 		return;
 	} else
 		chg_stat.vbus_present = pval.intval;
 
 	rc = get_prop_dc_present(chip, &pval);
 	if (rc < 0) {
-		pr_err("Error getting DC Present rc = %d\n", rc);
+		mmi_err(chip, "Error getting DC Present rc = %d\n", rc);
 		return;
 	} else
 		chg_stat.dc_present = pval.intval;
 
 	rc = get_prop_charger_present(chip, &pval);
 	if (rc < 0) {
-		pr_err("Error getting Charger Present rc = %d\n", rc);
+		mmi_err(chip, "Error getting Charger Present rc = %d\n", rc);
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
@@ -2532,10 +2578,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	if (chip->vbus_enabled && chip->vbus && chg_stat.charger_present) {
 		rc = regulator_disable(chip->vbus);
 		if (rc)
-			pr_err("SMBMMI: Unable to disable vbus (%d)\n", rc);
+			mmi_err(chip, "SMBMMI: Unable to disable vbus (%d)\n", rc);
 		else {
 			chip->vbus_enabled = false;
-			pr_info("SMBMMI: VBUS Disable due to Charger\n");
+			mmi_info(chip, "SMBMMI: VBUS Disable due to Charger\n");
 		}
 	}
 
@@ -2543,7 +2589,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		update_charging_limit_modes(chip, chg_stat.batt_soc);
 
 	if (chip->charging_limit_modes == CHARGING_LIMIT_RUN)
-		pr_warn("Factory Mode/Image so Limiting Charging!!!\n");
+		mmi_warn(chip, "Factory Mode/Image so Limiting Charging!!!\n");
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		cap_err = 0;
@@ -2551,7 +2597,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					       POWER_SUPPLY_PROP_CAPACITY,
 					       &pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim main capacity\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim main capacity\n");
 			cap_err = rc;
 		} else
 			main_cap = pval.intval;
@@ -2560,7 +2606,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim main chrg full\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim main chrg full\n");
 			cap_err = rc;
 		} else
 			main_cap_full = pval.intval;
@@ -2569,7 +2615,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					       POWER_SUPPLY_PROP_CAPACITY,
 					       &pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim flip capacity\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim flip capacity\n");
 			cap_err = rc;
 		} else
 			flip_cap = pval.intval;
@@ -2578,7 +2624,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim flip chrg full\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim flip chrg full\n");
 			cap_err = rc;
 		} else
 			flip_cap_full = pval.intval;
@@ -2601,17 +2647,19 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		    ((report_cap != batt_cap) &&
 		     (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
 		     (report_cap >= (batt_cap - MONOTONIC_SOC)))) {
-			pr_info("SMBMMI: Updating Reported Capacity to %d\n",
+			mmi_info(chip, "SMBMMI: Updating Reported Capacity to %d\n",
 				report_cap);
 			chip->last_reported_soc = report_cap;
 		}else if ((batt_cap < 100) && (report_cap > (batt_cap + MONOTONIC_SOC))) {
 			chip->last_reported_soc++;
-			pr_info("SMBMMI: Alter Up Reported Capacity to %d target %d\n",
-			chip->last_reported_soc, report_cap);
+			mmi_info(chip,
+				"SMBMMI: Alter Up Reported Capacity to %d target %d\n",
+				chip->last_reported_soc, report_cap);
 		}else if ((batt_cap > 0) && (report_cap < (batt_cap - MONOTONIC_SOC))) {
 			chip->last_reported_soc--;
-			pr_info("SMBMMI: Alter Down Reported Capacity to %d target %d\n",
-			chip->last_reported_soc, report_cap);
+			mmi_info(chip,
+				"SMBMMI: Alter Down Reported Capacity to %d target %d\n",
+				chip->last_reported_soc, report_cap);
 		}
 
 		/* Age calculation */
@@ -2619,7 +2667,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					       POWER_SUPPLY_PROP_CHARGE_FULL,
 					       &pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim main charge full\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim main charge full\n");
 			cap_err = rc;
 		} else
 			main_cap = pval.intval;
@@ -2628,7 +2676,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					       POWER_SUPPLY_PROP_CHARGE_FULL,
 					       &pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get maxim flip charge full\n");
+			mmi_err(chip, "SMBMMI: Couldn't get maxim flip charge full\n");
 			cap_err = rc;
 		} else
 			flip_cap = pval.intval;
@@ -2640,7 +2688,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (cap_err == 0)
 			chip->age = 100;
 
-		pr_debug("SMBMMI: Age %d, Main Age %d, Flip Age %d\n",
+		mmi_dbg(chip, "SMBMMI: Age %d, Main Age %d, Flip Age %d\n",
 			 chip->age, main_age, flip_age);
 
 		prev_chrg_step = chip->sm_param[BASE_BATT].pres_chrg_step;
@@ -2682,7 +2730,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					       POWER_SUPPLY_PROP_CHARGE_FULL,
 					       &pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get charge full\n");
+			mmi_err(chip, "SMBMMI: Couldn't get charge full\n");
 			cap_err = rc;
 		} else
 			main_cap = pval.intval;
@@ -2691,7 +2739,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 					&pval);
 		if (rc < 0) {
-			pr_err("SMBMMI: Couldn't get charge full design\n");
+			mmi_err(chip, "SMBMMI: Couldn't get charge full design\n");
 			cap_err = rc;
 		} else
 			main_cap_full = pval.intval;
@@ -2699,13 +2747,13 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (cap_err == 0)
 			chip->age = ((main_cap / 10) / (main_cap_full / 1000));
 
-		pr_debug("SMBMMI: Age %d\n", chip->age);
+		mmi_dbg(chip, "SMBMMI: Age %d\n", chip->age);
 
 		/* Fall here for Basic Step and Thermal Charging */
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
 
-	pr_debug("SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
+	mmi_dbg(chip, "SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
 		 chg_stat.batt_mv, chg_stat.usb_mv,
 		 prev_vbus_mv, chg_stat.batt_ma);
 	if ((abs(chg_stat.usb_mv - chg_stat.batt_mv) < REV_BST_BULK_DROP) &&
@@ -2713,7 +2761,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (((chg_stat.usb_mv < REV_BST_THRESH) &&
 		    ((prev_vbus_mv - REV_BST_DROP) > chg_stat.usb_mv)) ||
 		    (chg_stat.batt_ma > REV_BST_MA)) {
-			pr_err("Reverse Boosted: Clear, USB Suspend\n");
+			mmi_err(chip, "Reverse Boosted: Clear, USB Suspend\n");
 			if (chip->factory_mode)
 				smblib_set_usb_suspend(chip, true);
 			else
@@ -2726,7 +2774,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 				vote(chip->usb_icl_votable, BOOST_BACK_VOTER,
 				     false, 0);
 		} else {
-			pr_err("Reverse Boosted: USB %d mV PUSB %d mV\n",
+			mmi_err(chip, "Reverse Boosted: USB %d mV PUSB %d mV\n",
 				   chg_stat.usb_mv, prev_vbus_mv);
 		}
 	}
@@ -2753,15 +2801,15 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
-		pr_debug("SMBMMI: Factory Kill check pc %d, usb %d, susp %d\n",
+		mmi_dbg(chip, "SMBMMI: Factory Kill check pc %d, usb %d, susp %d\n",
 			 pc_online, pval.intval, usb_suspend);
 		if (pc_online ||
 		    pval.intval ||
 		    (usb_suspend && ((chg_stat.usb_mv*1000) > TWO_VOLT))) {
-			pr_debug("SMBMMI: Factory Kill Armed\n");
+			mmi_dbg(chip, "SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
-			pr_err("SMBMMI:Factory kill power off\n");
+			mmi_warn(chip, "SMBMMI:Factory kill power off\n");
 			orderly_poweroff(true);
 		} else
 			chip->factory_kill_armed = false;
@@ -2779,7 +2827,7 @@ sch_hb:
 
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
 	if (!chrg_rate_string) {
-		pr_err("SMBMMI: Failed to Get Uevent Mem\n");
+		mmi_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
 		envp[0] = NULL;
 	} else {
 		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
@@ -2862,10 +2910,10 @@ static int smbchg_reboot(struct notifier_block *nb,
 						chg->usb_psy,
 						 POWER_SUPPLY_PROP_VOLTAGE_NOW,
 						 &val);
-				pr_err("Wait for VBUS to decay\n");
+				mmi_info(chg, "Wait for VBUS to decay\n");
 			}
 
-			pr_err("VBUS UV wait 1 sec!\n");
+			mmi_info(chg, "VBUS UV wait 1 sec!\n");
 			/* Delay 1 sec to allow more VBUS decay */
 			msleep(1000);
 			break;
@@ -2970,7 +3018,7 @@ static int batt_get_prop(struct power_supply *psy,
 	default:
 		rc = power_supply_get_property(chip->qcom_psy, psp, val);
 		if (rc < 0) {
-			pr_debug("Get Unknown prop %d rc = %d\n", psp, rc);
+			mmi_dbg(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
 			/* soft fail so uevents are not blocked */
 			rc = 0;
 			val->intval = -EINVAL;
@@ -2995,7 +3043,7 @@ static int batt_set_prop(struct power_supply *psy,
 	default:
 		rc = power_supply_set_property(chip->qcom_psy, prop, val);
 		if (rc < 0) {
-			pr_debug("Get Unknown prop %d rc = %d\n", prop, rc);
+			mmi_dbg(chip, "Get Unknown prop %d rc = %d\n", prop, rc);
 			/* soft fail so uevents are not blocked */
 			rc = 0;
 		}
@@ -3047,14 +3095,14 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	struct mmi_sm_params *chip;
 
 	if (!node) {
-		pr_err("mmi dtree info. missing\n");
+		mmi_err(chg, "mmi dtree info. missing\n");
 		return -ENODEV;
 	}
 
 	chip = &chg->sm_param[BASE_BATT];
 	if (of_find_property(node, "qcom,mmi-temp-zones", &byte_len)) {
 		if ((byte_len / sizeof(u32)) % 4) {
-			pr_err("DT error wrong mmi temp zones\n");
+			mmi_err(chg, "DT error wrong mmi temp zones\n");
 			return -ENODEV;
 		}
 
@@ -3072,13 +3120,13 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 				(u32 *)chip->temp_zones,
 				byte_len / sizeof(u32));
 		if (rc < 0) {
-			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			mmi_err(chg, "Couldn't read mmi temp zones rc = %d\n", rc);
 			return rc;
 		}
 
-		pr_err("mmi temp zones: Num: %d\n", chip->num_temp_zones);
+		mmi_info(chg, "mmi temp zones: Num: %d\n", chip->num_temp_zones);
 		for (i = 0; i < chip->num_temp_zones; i++) {
-			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+			mmi_info(chg, "mmi temp zones: Zone %d, Temp %d C, " \
 				"Step Volt %d mV, Full Rate %d mA, " \
 				"Taper Rate %d mA\n", i,
 				chip->temp_zones[i].temp_c,
@@ -3133,14 +3181,14 @@ static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
 	struct mmi_sm_params *chip;
 
 	if (!node) {
-		pr_err("mmi dtree info. missing\n");
+		mmi_err(chg, "mmi dtree info. missing\n");
 		return -ENODEV;
 	}
 
 	chip = &chg->sm_param[MAIN_BATT];
 	if (of_find_property(node, "qcom,mmi-temp-zones-main", &byte_len)) {
 		if ((byte_len / sizeof(u32)) % 4) {
-			pr_err("DT error wrong mmi temp zones\n");
+			mmi_err(chg, "DT error wrong mmi temp zones\n");
 			return -ENODEV;
 		}
 
@@ -3158,13 +3206,13 @@ static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
 				(u32 *)chip->temp_zones,
 				byte_len / sizeof(u32));
 		if (rc < 0) {
-			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			mmi_err(chg, "Couldn't read mmi temp zones rc = %d\n", rc);
 			return rc;
 		}
 
-		pr_err("mmi temp zones main: Num: %d\n", chip->num_temp_zones);
+		mmi_info(chg, "mmi temp zones main: Num: %d\n", chip->num_temp_zones);
 		for (i = 0; i < chip->num_temp_zones; i++) {
-			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+			mmi_info(chg, "mmi temp zones: Zone %d, Temp %d C, " \
 				"Step Volt %d mV, Full Rate %d mA, " \
 				"Taper Rate %d mA\n", i,
 				chip->temp_zones[i].temp_c,
@@ -3183,7 +3231,7 @@ static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
 	chip = &chg->sm_param[FLIP_BATT];
 	if (of_find_property(node, "qcom,mmi-temp-zones-flip", &byte_len)) {
 		if ((byte_len / sizeof(u32)) % 4) {
-			pr_err("DT error wrong mmi temp zones\n");
+			mmi_err(chg, "DT error wrong mmi temp zones\n");
 			return -ENODEV;
 		}
 
@@ -3201,13 +3249,13 @@ static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
 				(u32 *)chip->temp_zones,
 				byte_len / sizeof(u32));
 		if (rc < 0) {
-			pr_err("Couldn't read mmi temp zones rc = %d\n", rc);
+			mmi_err(chg, "Couldn't read mmi temp zones rc = %d\n", rc);
 			return rc;
 		}
 
-		pr_err("mmi temp zones main: Num: %d\n", chip->num_temp_zones);
+		mmi_info(chg, "mmi temp zones main: Num: %d\n", chip->num_temp_zones);
 		for (i = 0; i < chip->num_temp_zones; i++) {
-			pr_err("mmi temp zones: Zone %d, Temp %d C, "	\
+			mmi_info(chg, "mmi temp zones: Zone %d, Temp %d C, " \
 				"Step Volt %d mV, Full Rate %d mA, " \
 				"Taper Rate %d mA\n", i,
 				chip->temp_zones[i].temp_c,
@@ -3351,9 +3399,16 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	smb_mmi_chg_config_init(chip);
 
+	chip->debug_enabled = &debug_enabled;
+	chip->ipc_log = ipc_log_context_create(MMI_LOG_PAGES, "charger", 0);
+	if (!chip->ipc_log)
+		mmi_err(chip, "Failed to create mmi smbcharger IPC log\n");
+	else
+		mmi_info(chip, "IPC logging is enabled for mmi smbcharger\n");
+
 	chip->regmap = dev_get_regmap(chip->dev->parent, NULL);
 	if (!chip->regmap) {
-		pr_err("parent regmap is missing\n");
+		mmi_err(chip, "parent regmap is missing\n");
 		return -EINVAL;
 	}
 
@@ -3368,7 +3423,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->mmi_psy = devm_power_supply_register(chip->dev, &mmi_psy_desc,
 						   &psy_cfg);
 	if (IS_ERR(chip->mmi_psy)) {
-		dev_err(chip->dev, "failed: mmi power supply register\n");
+		mmi_err(chip, "failed: mmi power supply register\n");
 		return PTR_ERR(chip->mmi_psy);
 	}
 
@@ -3384,7 +3439,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 							    &batt_psy_desc,
 							    &psy_cfg);
 		if (IS_ERR(chip->batt_psy)) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				"failed: batt power supply register\n");
 			return PTR_ERR(chip->batt_psy);
 		}
@@ -3392,7 +3447,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		rc = sysfs_create_group(&chip->batt_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		if (rc)
-			dev_err(chip->dev, "failed: attr create\n");
+			mmi_err(chip, "failed: attr create\n");
 	} else {
 		chip->qcom_psy = power_supply_get_by_name("battery");
 		chip->batt_psy = NULL;
@@ -3400,7 +3455,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		rc = sysfs_create_group(&chip->qcom_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		if (rc)
-			dev_err(chip->dev, "failed: attr create\n");
+			mmi_err(chip, "failed: attr create\n");
 	}
 
 	chip->bms_psy = power_supply_get_by_name("bms");
@@ -3438,7 +3493,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (chip->smb_version == PM8150B_SUBTYPE) {
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
 					    0xFF, 0))
-			pr_err("SMBMMI: Could Not set Legacy Cable CFG\n");
+			mmi_err(chip, "SMBMMI: Could Not set Legacy Cable CFG\n");
 
 		/* Ensure SW JEITA is DISABLED */
 		pval.intval = 0;
@@ -3448,7 +3503,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		/* Ensure HW JEITA is DISABLED */
 		if (smblib_masked_write_mmi(chip, PM8150B_JEITA_EN_CFG_REG,
 					    0xFF, 0x00))
-			pr_err("SMBMMI: Could Not Disable JEITA CFG\n");
+			mmi_err(chip, "SMBMMI: Could Not Disable JEITA CFG\n");
 	}
 
 	if ((chip->smb_version == PM8150B_SUBTYPE) ||
@@ -3456,7 +3511,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		if (smblib_masked_write_mmi(chip, USBIN_ADAPTER_ALLOW_CFG_REG,
 					    USBIN_ADAPTER_ALLOW_MASK,
 					    USBIN_ADAPTER_ALLOW_5V_TO_9V))
-			pr_err("Could Not set USB Adapter CFG\n");
+			mmi_err(chip, "Could Not set USB Adapter CFG\n");
 
 	chip->factory_mode = mmi_factory_check();
 	chip->is_factory_image = false;
@@ -3466,7 +3521,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		rc = smblib_set_charge_param(chip, &chip->param.dc_icl,
 					chip->dc_cl_ma * 1000);
 		if (rc)
-			dev_err(chip->dev, "SMBMMI: Failed to set DC ICL %d\n",
+			mmi_err(chip, "SMBMMI: Failed to set DC ICL %d\n",
 				chip->dc_cl_ma);
 	}
 
@@ -3479,7 +3534,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	    (pval.intval != POWER_SUPPLY_TYPE_UNKNOWN) &&
 	    (pval.intval != POWER_SUPPLY_TYPE_USB) &&
 	    (pval.intval != POWER_SUPPLY_TYPE_USB_CDP)) {
-		dev_err(chip->dev, "Charger Present; Dis Factory Mode\n");
+		mmi_info(chip, "Charger Present; Dis Factory Mode\n");
 		chip->factory_mode = false;
 		if(chip->chg_dis_votable)
 			pmic_vote_force_active_set(chip->chg_dis_votable, 0);
@@ -3505,61 +3560,64 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	rc = device_create_file(chip->dev,
 				&dev_attr_force_demo_mode);
 	if (rc) {
-		dev_err(chip->dev, "couldn't create force_demo_mode\n");
+		mmi_err(chip, "couldn't create force_demo_mode\n");
 	}
 
 	rc = device_create_file(chip->dev,
 				&dev_attr_force_max_chrg_temp);
 	if (rc) {
-		dev_err(chip->dev, "couldn't create force_max_chrg_temp\n");
+		mmi_err(chip, "couldn't create force_max_chrg_temp\n");
 	}
 
 	rc = device_create_file(chip->dev,
 				&dev_attr_factory_image_mode);
 	if (rc)
-		dev_err(chip->dev, "couldn't create factory_image_mode\n");
+		mmi_err(chip, "couldn't create factory_image_mode\n");
 
 	rc = device_create_file(chip->dev,
 				&dev_attr_factory_charge_upper);
 	if (rc)
-		dev_err(chip->dev, "couldn't create factory_charge_upper\n");
+		mmi_err(chip, "couldn't create factory_charge_upper\n");
 
 	/* Register the notifier for the psy updates*/
 	chip->mmi_psy_notifier.notifier_call = mmi_psy_notifier_call;
 	rc = power_supply_reg_notifier(&chip->mmi_psy_notifier);
 	if (rc)
-		pr_err("SMBMMI: failed to reg notifier: %d\n", rc);
+		mmi_err(chip, "SMBMMI: failed to reg notifier: %d\n", rc);
 
 	if (chip->factory_mode) {
-		dev_err(chip->dev, "Entering Factory Mode SMB!\n");
+		mmi_info(chip, "Entering Factory Mode SMB!\n");
 		rc = smblib_masked_write_mmi(chip, USBIN_ICL_OPTIONS_REG,
 					     USBIN_MODE_CHG_BIT,
 					     USBIN_MODE_CHG_BIT);
 		if (rc < 0)
-			pr_err("Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
+			mmi_err(chip,
+				"Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
 
 		rc = smblib_masked_write_mmi(chip, USBIN_LOAD_CFG_REG,
 					     ICL_OVERRIDE_AFTER_APSD_BIT,
 					     ICL_OVERRIDE_AFTER_APSD_BIT);
 		if (rc < 0)
-			pr_err("Couldn't set USBIN_LOAD_CFG rc=%d\n", rc);
+			mmi_err(chip,
+				"Couldn't set USBIN_LOAD_CFG rc=%d\n", rc);
 
 		rc = smblib_masked_write_mmi(chip, USBIN_AICL_OPTIONS_CFG_REG,
 					     0xFF, 0x00);
 		if (rc < 0)
-			pr_err("Couldn't set USBIN_AICL_OPTIONS rc=%d\n", rc);
+			mmi_err(chip,
+				"Couldn't set USBIN_AICL_OPTIONS rc=%d\n", rc);
 
 		chip->smb_reboot.notifier_call = smbchg_reboot;
 		chip->smb_reboot.next = NULL;
 		chip->smb_reboot.priority = 1;
 		rc = register_reboot_notifier(&chip->smb_reboot);
 		if (rc)
-			pr_err("SMBMMI: register for reboot failed\n");
+			mmi_err(chip, "SMBMMI: register for reboot failed\n");
 		rc = power_supply_get_property(chip->pc_port_psy,
 					       POWER_SUPPLY_PROP_ONLINE,
 					       &val);
 		if (rc >= 0 && val.intval) {
-			pr_err("SMBMMI: Factory Kill Armed\n");
+			mmi_info(chip, "SMBMMI: Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		}
 
@@ -3585,54 +3643,55 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		rc = smblib_set_charge_param(chip, &chip->param.usb_icl,
 					     3000000);
 		if (rc < 0)
-			pr_err("Factory Couldn't set usb icl = 3000 rc=%d\n",
-			       (int)rc);
+			mmi_err(chip,
+				"Factory Couldn't set usb icl = 3000 rc=%d\n",
+				(int)rc);
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_usb_suspend);
 		if (rc) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				   "couldn't create force_chg_usb_suspend\n");
 		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_fail_clear);
 		if (rc) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				   "couldn't create force_chg_fail_clear\n");
 		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_auto_enable);
 		if (rc) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				   "couldn't create force_chg_auto_enable\n");
 		}
 
 		rc = device_create_file(chip->dev,
 				&dev_attr_force_chg_ibatt);
 		if (rc) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				"couldn't create force_chg_ibatt\n");
 		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_iusb);
 		if (rc) {
-			dev_err(chip->dev,
+			mmi_err(chip,
 				"couldn't create force_chg_iusb\n");
 		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_idc);
 		if (rc) {
-			dev_err(chip->dev, "couldn't create force_chg_idc\n");
+			mmi_err(chip, "couldn't create force_chg_idc\n");
 		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_itrick);
 		if (rc) {
-			dev_err(chip->dev, "couldn't create force_chg_itrick\n");
+			mmi_err(chip, "couldn't create force_chg_itrick\n");
 		}
 
 	}
@@ -3641,7 +3700,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(0));
 
-	pr_info("QPNP SMB MMI probed successfully!\n");
+	mmi_info(chip, "QPNP SMB MMI probed successfully!\n");
 
 	return rc;
 }
