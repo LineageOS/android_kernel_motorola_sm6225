@@ -160,6 +160,7 @@ struct fts_ts_data {
     int fw_is_running;      /* confirm fw is running when using spi:default 0 */
     bool suspended;
     bool fw_loading;
+    bool force_reflash;
     bool irq_disabled;
     bool power_disabled;
     bool glove_mode;
@@ -256,6 +257,7 @@ int fts_fw_resume(void);
 int fts_fw_recovery(void);
 int fts_upgrade_bin(char *fw_name, bool force);
 int fts_enter_test_environment(bool test_state);
+int fts_fw_update_vendor_name(const char* name);
 
 /* Other */
 int fts_reset_proc(int hdelayms);
