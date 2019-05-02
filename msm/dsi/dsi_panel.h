@@ -338,6 +338,8 @@ int dsi_panel_set_nolp(struct dsi_panel *panel);
 
 int dsi_panel_prepare(struct dsi_panel *panel);
 
+int dsi_panel_reset(struct dsi_panel *panel);
+
 int dsi_panel_enable(struct dsi_panel *panel);
 
 int dsi_panel_post_enable(struct dsi_panel *panel);

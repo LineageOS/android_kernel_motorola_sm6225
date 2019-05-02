@@ -373,12 +373,13 @@ int dsi_panel_trigger_esd_attack(struct dsi_panel *panel)
 	return -EINVAL;
 }
 
-static int dsi_panel_reset(struct dsi_panel *panel)
+int dsi_panel_reset(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int i;
 
+	DSI_DEBUG("++\n");
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
 		rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
 		if (rc) {
@@ -482,22 +483,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		goto error_disable_vregs;
 	}
 
-	rc = dsi_panel_reset(panel);
-	if (rc) {
-		DSI_ERR("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
-		goto error_disable_gpio;
-	}
-
 	goto exit;
-
-error_disable_gpio:
-	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
-		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
-
-	if (gpio_is_valid(panel->bl_config.en_gpio))
-		gpio_set_value(panel->bl_config.en_gpio, 0);
-
-	(void)dsi_panel_set_pinctrl_state(panel, false);
 
 error_disable_vregs:
 	(void)dsi_pwr_enable_regulator(&panel->power_info, false);
@@ -4358,14 +4344,17 @@ int dsi_panel_pre_prepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	/* If LP11_INIT is set, panel will be powered up during prepare() */
-	if (panel->lp11_init)
-		goto error;
-
-	rc = dsi_panel_power_on(panel);
-	if (rc) {
-		DSI_ERR("[%s] panel power on failed, rc=%d\n", panel->name, rc);
-		goto error;
+	/*
+	 * If LP11_INIT is set, panel will be powered up here, not during
+	 * prepare(), but panel's reset will be called later, in prepare call.
+	 */
+	if (panel->lp11_init) {
+		rc = dsi_panel_power_on(panel);
+		if (rc) {
+			DSI_ERR("[%s] panel power on failed, rc=%d\n",
+						panel->name, rc);
+			goto error;
+		}
 	}
 
 error:
@@ -4506,23 +4495,42 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	if (panel->lp11_init) {
+	/* If LP11_INIT is not set, then panel will be powered here */
+	if (!panel->lp11_init) {
 		rc = dsi_panel_power_on(panel);
 		if (rc) {
 			DSI_ERR("[%s] panel power on failed, rc=%d\n",
 			       panel->name, rc);
-			goto error;
+			goto end;
 		}
+	}
+
+	rc = dsi_panel_reset(panel);
+	if (rc) {
+		DSI_ERR("[%s] panel reset failed, rc=%d\n", panel->name, rc);
+		goto error_disable_gpio;
 	}
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_ON);
 	if (rc) {
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_PRE_ON cmds, rc=%d\n",
 		       panel->name, rc);
-		goto error;
+		goto error_disable_gpio;
 	}
 
-error:
+	goto end;
+error_disable_gpio:
+	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
+		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
+
+	if (gpio_is_valid(panel->bl_config.en_gpio))
+		gpio_set_value(panel->bl_config.en_gpio, 0);
+
+	if (!panel->lp11_init) {
+		(void)dsi_panel_set_pinctrl_state(panel, false);
+		(void)dsi_pwr_enable_regulator(&panel->power_info, false);
+	}
+end:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
