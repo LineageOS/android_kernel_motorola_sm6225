@@ -35,6 +35,7 @@
 #include <linux/reboot.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/input/mt.h>
+#include <soc/qcom/mmi_boot_info.h>
 
 #if 0
 #ifdef pr_debug
@@ -4391,6 +4392,13 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	struct f12_d1_s0_type *finger_data_buf;
 	struct synaptics_rmi4_packet_reg *reg_data_1 =
 			&rmi4_data->f12_data_registers_ptr->regs[F12_D1_IDX];
+	static int print_xy = -1;
+
+	if (unlikely(print_xy == -1)) {
+		print_xy = 0;
+		if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0)
+			print_xy = 1;
+	}
 
 	if (atomic_read(&rmi4_data->panel_off_flag))
 		return 0;
@@ -4470,7 +4478,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			INPUT_REPORT_MT_SLOT_STATE(rmi4_data,
 					MT_TOOL_FINGER, finger_status);
 #endif
-			dev_dbg(&rmi4_data->i2c_client->dev,
+			if (print_xy) {
+				dev_info(&rmi4_data->i2c_client->dev,
 						"%s: Finger %d:\n"
 						"x = %d\n"
 						"y = %d\n"
@@ -4478,6 +4487,16 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 						"w = %d\n",
 						__func__, finger,
 						x, y, p, w);
+			} else {
+				dev_dbg(&rmi4_data->i2c_client->dev,
+						"%s: Finger %d:\n"
+						"x = %d\n"
+						"y = %d\n"
+						"p = %d\n"
+						"w = %d\n",
+						__func__, finger,
+						x, y, p, w);
+			}
 
 			input_report_abs(rmi4_data->input_dev,
 					ABS_MT_POSITION_X, x);
