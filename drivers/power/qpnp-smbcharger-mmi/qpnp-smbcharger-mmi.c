@@ -3480,6 +3480,14 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			pmic_vote_force_active_set(chip->usb_icl_votable, 0);
 	}
 
+	/* Workaround for some cables that collapse on boot */
+	if (!chip->factory_mode) {
+		dev_err(chip->dev, "Suspending USB for 50 ms to clear\n");
+		smblib_set_usb_suspend(chip, true);
+		msleep(50);
+		smblib_set_usb_suspend(chip, false);
+	}
+
 	rc = device_create_file(chip->dev,
 				&dev_attr_force_demo_mode);
 	if (rc) {
