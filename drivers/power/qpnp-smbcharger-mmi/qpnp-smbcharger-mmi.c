@@ -91,6 +91,9 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
 #define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
 #define USBIN_ICL_OVERRIDE_BIT			BIT(0)
+#define HVDCP_PULSE_COUNT_MAX_REG		(USBIN_BASE + 0x5B)
+#define HVDCP_PULSE_COUNT_MAX_QC2_MASK		GENMASK(7, 6)
+#define HVDCP_PULSE_COUNT_MAX_QC3_MASK		GENMASK(5, 0)
 #define USBIN_ICL_OPTIONS_REG			(USBIN_BASE + 0x66)
 #define USBIN_MODE_CHG_BIT			BIT(0)
 #define USBIN_LOAD_CFG_REG			(USBIN_BASE + 0x65)
@@ -334,6 +337,9 @@ struct smb_mmi_charger {
 
 	bool			*debug_enabled;
 	void			*ipc_log;
+
+	bool			force_hvdcp_5v;
+	int			inc_hvdcp_cnt;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -1532,6 +1538,71 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 	return rc;
 }
 
+#define HVDCP_VOLTAGE_NOM 5000
+#define HVDCP_VOLTAGE_MAX 5400
+#define HVDCP_VOLTAGE_MIN 4000
+#define HVDCP_VOLTAGE_TARGET 5200
+#define HVDCP_PULSE_COUNT_MAX 4
+static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
+{
+	int rc = -EINVAL;
+	union power_supply_propval val = {0, };
+
+	if (!chg->usb_psy || !chg->qcom_psy)
+		return;
+
+	if (cur_mv < HVDCP_VOLTAGE_MIN)
+		return;
+
+	rc = power_supply_get_property(chg->usb_psy,
+			POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read PD active rc=%d\n", rc);
+	} else if (val.intval) {
+		mmi_dbg(chg, "Skip usb vbus voltage config for PD charger\n");
+		return;
+	}
+
+	rc = power_supply_get_property(chg->usb_psy,
+			POWER_SUPPLY_PROP_REAL_TYPE, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read charger type rc=%d\n", rc);
+		return;
+	}
+	if (val.intval != POWER_SUPPLY_TYPE_USB_HVDCP_3)
+		return;
+
+	/* Maintain vbus voltage for QC3.0 5V/3A 15W charging */
+	rc = power_supply_get_property(chg->qcom_psy,
+			POWER_SUPPLY_PROP_DP_DM, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
+		return;
+	}
+	if (cur_mv < HVDCP_VOLTAGE_NOM && val.intval < chg->inc_hvdcp_cnt)
+		val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
+	else if (cur_mv > HVDCP_VOLTAGE_MAX && val.intval > 0)
+		val.intval = POWER_SUPPLY_DP_DM_DM_PULSE;
+	else {
+		mmi_dbg(chg, "No need to change hvdcp voltage\n");
+		return;
+	}
+	rc = power_supply_set_property(chg->qcom_psy,
+			POWER_SUPPLY_PROP_DP_DM, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
+		return;
+	}
+	power_supply_changed(chg->usb_psy);
+}
+
+static void mmi_chrg_input_config(struct smb_mmi_charger *chg,
+				  struct smb_mmi_chg_status *stat)
+{
+	if (chg->force_hvdcp_5v)
+		mmi_chrg_usb_vin_config(chg, stat->usb_mv);
+}
+
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
@@ -2593,6 +2664,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	if (chip->charging_limit_modes == CHARGING_LIMIT_RUN)
 		mmi_warn(chip, "Factory Mode/Image so Limiting Charging!!!\n");
 
+	mmi_chrg_input_config(chip, &chg_stat);
+
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		cap_err = 0;
 		rc = power_supply_get_property(chip->max_main_psy,
@@ -3042,6 +3115,10 @@ static int batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		chip->cycles += val->intval * 100;
 		break;
+	case POWER_SUPPLY_PROP_DP_DM:
+		/* Skip the hvdcp request from hvdcp daemon */
+		if (chip->force_hvdcp_5v)
+			break;
 	default:
 		rc = power_supply_set_property(chip->qcom_psy, prop, val);
 		if (rc < 0) {
@@ -3170,6 +3247,12 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 				  &chg->dc_cl_ma);
 	if (rc)
 		chg->dc_cl_ma = -EINVAL;
+
+	chg->force_hvdcp_5v = of_property_read_bool(node, "qcom,force-hvdcp-5v");
+	rc = of_property_read_u32(node, "qcom,inc-hvdcp-cnt",
+				  &chg->inc_hvdcp_cnt);
+	if (rc)
+		chg->inc_hvdcp_cnt = HVDCP_PULSE_COUNT_MAX;
 
 	return rc;
 }
@@ -3499,6 +3582,19 @@ static int smb_mmi_probe(struct platform_device *pdev)
 					    USBIN_ADAPTER_ALLOW_MASK,
 					    USBIN_ADAPTER_ALLOW_5V_TO_9V))
 			mmi_err(chip, "Could Not set USB Adapter CFG\n");
+
+	/*
+	 * Only 5V is allowed for QC2.0 and QC3.0, so set pulse count max
+	 * accordingly to limit voltage increment.
+	 */
+	if (chip->force_hvdcp_5v) {
+		rc = smblib_masked_write_mmi(chip, HVDCP_PULSE_COUNT_MAX_REG,
+					    HVDCP_PULSE_COUNT_MAX_QC2_MASK |
+					    HVDCP_PULSE_COUNT_MAX_QC3_MASK,
+					    chip->inc_hvdcp_cnt);
+		if (rc < 0)
+			mmi_err(chip, "Could not set HVDCP pulse count max\n");
+	}
 
 	chip->factory_mode = mmi_factory_check();
 	chip->is_factory_image = false;
