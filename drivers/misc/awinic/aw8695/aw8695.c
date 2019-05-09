@@ -1404,8 +1404,8 @@ static int aw8695_haptic_get_f0(struct aw8695 *aw8695)
 
 	/* f0 trace parameter */
 	f0_pre_num = 0x05;
-	f0_wait_num = 0x03;
-	f0_repeat_num = 0x02;
+	f0_wait_num = 0x02;
+	f0_repeat_num = 0x0d;
 	f0_trace_num = 0x0f;
 	aw8695_i2c_write(aw8695, AW8695_REG_NUM_F0_1, (f0_pre_num << 4) | (f0_wait_num << 0));
 	aw8695_i2c_write(aw8695, AW8695_REG_NUM_F0_2, (f0_repeat_num << 0));
@@ -1509,10 +1509,6 @@ static int aw8695_haptic_f0_calibration(struct aw8695 *aw8695)
 		aw8695_i2c_write(aw8695, AW8695_REG_TRIM_LRA, (char)f0_cali_lra);
 		aw8695_i2c_read(aw8695, AW8695_REG_TRIM_LRA, &reg_val);
 		pr_info("%s final trim_lra=0x%02x\n", __func__, reg_val);
-	}
-
-	if (aw8695_haptic_get_f0(aw8695)) {
-		pr_err("%s get f0 error, user defafult f0\n", __func__);
 	}
 
 	/* restore default work mode */
