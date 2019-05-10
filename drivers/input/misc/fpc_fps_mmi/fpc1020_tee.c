@@ -181,6 +181,11 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
+static const struct attribute_group *attribute_groups[] = {
+	&attribute_group,
+	NULL
+};
+
 #define MAX_UP_TIME (1 * MSEC_PER_SEC)
 
 static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
@@ -234,24 +239,17 @@ static int fpc1020_create_sysfs(struct fpc1020_data *fpc1020, bool create) {
 				goto CLASS_CREATE_ERR;
 			}
 		}
-		fpc1020->class_dev = device_create(fingerprint_class, NULL, MAJOR(dev_no),
-			fpc1020, "fpc1020");
+		fpc1020->class_dev = device_create_with_groups(fingerprint_class, NULL,
+				MAJOR(dev_no), fpc1020, attribute_groups, "fpc1020");
 		if (IS_ERR(fpc1020->class_dev)) {
 			dev_err(dev, "%s create fingerprint class device failed.\n", __func__);
 			rc = PTR_ERR(fpc1020->class_dev);
 			fpc1020->class_dev = NULL;
 			goto DEVICE_CREATE_ERR;
 		}
-		rc = sysfs_create_group(&fpc1020->class_dev->kobj, &attribute_group);
-		if (rc) {
-			dev_err(dev, "could not create sysfs\n");
-			goto CREATE_SYSFS_ERR;
-		}
 		return 0;
 	}
 
-	sysfs_remove_group(&fpc1020->class_dev->kobj, &attribute_group);
-CREATE_SYSFS_ERR:
 	device_destroy(fingerprint_class, MAJOR(dev_no));
 	fpc1020->class_dev = NULL;
 DEVICE_CREATE_ERR:
