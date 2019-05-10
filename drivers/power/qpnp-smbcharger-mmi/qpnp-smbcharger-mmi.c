@@ -2831,7 +2831,14 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	mmi_dbg(chip, "SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
 		 chg_stat.batt_mv, chg_stat.usb_mv,
 		 prev_vbus_mv, chg_stat.batt_ma);
-	if ((abs(chg_stat.usb_mv - chg_stat.batt_mv) < REV_BST_BULK_DROP) &&
+
+	rc = smblib_get_usb_suspend(chip, &usb_suspend);
+	if (rc < 0) {
+		usb_suspend = 0;
+		mmi_err(chip, "Couldn't get USB suspend rc = %d\n", rc);
+	}
+	if (!usb_suspend &&
+	    (abs(chg_stat.usb_mv - chg_stat.batt_mv) < REV_BST_BULK_DROP) &&
 	    ((chg_stat.usb_mv*1000) > TWO_VOLT)) {
 		if (((chg_stat.usb_mv < REV_BST_THRESH) &&
 		    ((prev_vbus_mv - REV_BST_DROP) > chg_stat.usb_mv)) ||
@@ -2858,10 +2865,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	if (chip->factory_mode ||
 	    (chip->is_factory_image && chip->enable_factory_poweroff)) {
-		rc = smblib_get_usb_suspend(chip, &usb_suspend);
-		if (rc < 0)
-			goto sch_hb;
-
 		rc = power_supply_get_property(chip->pc_port_psy,
 					       POWER_SUPPLY_PROP_ONLINE,
 					       &pval);
