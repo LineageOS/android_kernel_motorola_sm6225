@@ -14,7 +14,6 @@ EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include
 EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
 endif
 
-EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
 
 ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
@@ -31,34 +30,6 @@ EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
 EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/sound/soc/codecs/inc
 EXTRA_CFLAGS += -Werror
-cirrus_madera-objs = madera.o madera-slimbus.o
-obj-m += cirrus_madera.o
-
-cirrus_wm_adsp-objs = wm_adsp.o
-obj-m += cirrus_wm_adsp.o
-
-cirrus_cs35l35-objs = cs35l35.o
-obj-m += cirrus_cs35l35.o
-
-cirrus_cs35l36-objs = cs35l36.o cs35l36-tables.o
-obj-m += cirrus_cs35l36.o
-
-cirrus_cs47l35-objs =  cs47l35.o
-obj-m += cirrus_cs47l35.o
-
-cirrus_cs47l90-objs =  cs47l90.o
-obj-m += cirrus_cs47l90.o
-
-obj-m += aov_trigger.o
-
-cirrus_cs35l41-objs = cs35l41.o cs35l41-tables.o
-obj-m += cirrus_cs35l41.o
-
-ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
-   cirrus_cs35l41-objs += cs35l41-spi.o
-else
-   cirrus_cs35l41-objs += cs35l41-i2c.o
-endif
 
 cirrus_playback-objs = msm-cirrus-playback.o
 obj-m += cirrus_playback.o
