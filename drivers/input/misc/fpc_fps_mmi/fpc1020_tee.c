@@ -296,6 +296,12 @@ static int fpc1020_probe(struct platform_device *pdev)
 	if (rc)
 		goto exit;
 
+	rc = fpc1020_create_sysfs(fpc1020, true);
+	if (rc) {
+		dev_err(dev, "could not create sysfs\n");
+		goto exit;
+	}
+
 	fpc1020->irq_cnt = 0;
 	irqf = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
 
@@ -305,21 +311,19 @@ static int fpc1020_probe(struct platform_device *pdev)
 	if (rc) {
 		dev_err(dev, "could not request irq %d\n",
 				gpio_to_irq(fpc1020->irq_gpio));
-		goto exit;
+		goto irq_exit;
 	}
 	dev_dbg(dev, "requested irq %d\n", gpio_to_irq(fpc1020->irq_gpio));
 
 	/* Request that the interrupt should be wakeable */
 	enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 
-
-	rc = fpc1020_create_sysfs(fpc1020, true);
-	if (rc) {
-		dev_err(dev, "could not create sysfs\n");
-		goto exit;
-	}
-
 	dev_info(dev, "%s: ok\n", __func__);
+
+	return 0;
+
+irq_exit:
+	fpc1020_create_sysfs(fpc1020, false);
 exit:
 	return rc;
 }
