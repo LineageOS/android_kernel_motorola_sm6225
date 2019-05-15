@@ -562,10 +562,10 @@ static int fts_read_touchdata(struct fts_ts_data *data)
     memset(buf, 0xFF, data->pnt_buf_size);
 
     ret = fts_read(NULL, 0, buf + 1, data->pnt_buf_size - 1);
-    if ((ret < 0) && ((buf[1] & 0xF0) != 0x90)) {
+    if ((0xEF == buf[2]) && (0xEF == buf[3]) && (0xEF == buf[4])) {
         /* check if need recovery fw */
         fts_fw_recovery();
-        return ret;
+        return 1;
     } else if ((ret < 0) || ((buf[1] & 0xF0) != 0x90)) {
         FTS_ERROR("touch data(%x) fail,ret:%d", buf[1], ret);
         return -EIO;
