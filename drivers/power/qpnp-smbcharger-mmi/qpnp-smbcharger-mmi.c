@@ -223,6 +223,9 @@ enum charging_limit_modes {
 	CHARGING_LIMIT_UNKNOWN,
 };
 
+#define IS_SUSPENDED BIT(0)
+#define WAS_SUSPENDED BIT(1)
+
 struct smb_mmi_charger {
 	struct device		*dev;
 	struct regmap 		*regmap;
@@ -271,7 +274,7 @@ struct smb_mmi_charger {
 	int			vfloat_comp_mv;
 	struct wakeup_source	smb_mmi_hb_wake_source;
 	struct alarm		heartbeat_alarm;
-	bool			suspended;
+	int			suspended;
 	bool			awake;
 	int 			last_reported_soc;
 	int 			last_reported_status;
@@ -2430,7 +2433,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	struct smb_mmi_chg_status chg_stat;
 
 	/* Have not been resumed so wait another 100 ms */
-	if (chip->suspended) {
+	if (chip->suspended & IS_SUSPENDED) {
 		pr_err("SMBMMI: HB running before Resume\n");
 		schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(100));
@@ -2582,7 +2585,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		else if (report_cap > 100)
 			report_cap = 100;
 
-		batt_cap = chip->last_reported_soc;
+		if (chip->suspended & WAS_SUSPENDED)
+			batt_cap = -1;
+		else
+			batt_cap = chip->last_reported_soc;
 
 		if ((batt_cap == -1) ||
 		    ((report_cap != batt_cap) &&
@@ -2718,6 +2724,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		}
 	}
 	prev_vbus_mv = chg_stat.usb_mv;
+	chip->suspended = 0;
 
 	if (chip->factory_mode ||
 	    (chip->is_factory_image && chip->enable_factory_poweroff)) {
@@ -3331,7 +3338,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->dev = &pdev->dev;
 	psy_cfg.drv_data = chip;
 	platform_set_drvdata(pdev, chip);
-	chip->suspended = false;
+	chip->suspended = 0;
 	chip->awake = false;
 	device_init_wakeup(chip->dev, true);
 
@@ -3664,7 +3671,8 @@ static int smb_mmi_suspend(struct device *device)
 	struct platform_device *pdev = to_platform_device(device);
 	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
 
-	chip->suspended = true;
+	chip->suspended &= ~WAS_SUSPENDED;
+	chip->suspended |= IS_SUSPENDED;
 
 	return 0;
 }
@@ -3674,7 +3682,8 @@ static int smb_mmi_resume(struct device *device)
 	struct platform_device *pdev = to_platform_device(device);
 	struct smb_mmi_charger *chip = platform_get_drvdata(pdev);
 
-	chip->suspended = false;
+	chip->suspended &= ~IS_SUSPENDED;
+	chip->suspended |= WAS_SUSPENDED;
 
 	return 0;
 }
