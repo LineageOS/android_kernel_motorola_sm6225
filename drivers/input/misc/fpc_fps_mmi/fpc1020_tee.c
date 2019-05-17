@@ -111,7 +111,9 @@ void FPS_notify(unsigned long stype, int state)
 
 struct fpc1020_data {
 	struct device *dev;
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	struct device *class_dev;
+#endif
 	struct platform_device *pdev;
 	struct notifier_block nb;
 	int irq_gpio;
@@ -153,6 +155,7 @@ static ssize_t irq_cnt_get(struct device *device,
 }
 static DEVICE_ATTR(irq_cnt, S_IRUSR, irq_cnt_get, NULL);
 
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 /* Attribute: vendor (RO) */
 static ssize_t vendor_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -167,13 +170,16 @@ static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
 	return scnprintf(buf, PAGE_SIZE, "fpc1020");
 }
 static DEVICE_ATTR_RO(modalias);
+#endif
 
 static struct attribute *attributes[] = {
 	&dev_attr_dev_enable.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_irq_cnt.attr,
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	&dev_attr_vendor.attr,
 	&dev_attr_modalias.attr,
+#endif
 	NULL
 };
 
@@ -181,10 +187,12 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 static const struct attribute_group *attribute_groups[] = {
 	&attribute_group,
 	NULL
 };
+#endif
 
 #define MAX_UP_TIME (1 * MSEC_PER_SEC)
 
@@ -195,7 +203,11 @@ static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 	pm_wakeup_event(fpc1020->dev, MAX_UP_TIME);
 	dev_dbg(fpc1020->dev, "%s\n", __func__);
 	fpc1020->irq_cnt++;
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	sysfs_notify(&fpc1020->class_dev->kobj, NULL, dev_attr_irq.attr.name);
+#else
+	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -216,6 +228,7 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	return 0;
 }
 
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 #define MAX_INSTANCE	5
 #define MAJOR_BASE	32
 static int fpc1020_create_sysfs(struct fpc1020_data *fpc1020, bool create) {
@@ -260,6 +273,7 @@ CLASS_CREATE_ERR:
 ALLOC_REGION:
 	return rc;
 }
+#endif
 
 static int fpc1020_probe(struct platform_device *pdev)
 {
@@ -296,7 +310,11 @@ static int fpc1020_probe(struct platform_device *pdev)
 	if (rc)
 		goto exit;
 
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	rc = fpc1020_create_sysfs(fpc1020, true);
+#else
+	rc = sysfs_create_group(&dev->kobj, &attribute_group);
+#endif
 	if (rc) {
 		dev_err(dev, "could not create sysfs\n");
 		goto exit;
@@ -323,7 +341,11 @@ static int fpc1020_probe(struct platform_device *pdev)
 	return 0;
 
 irq_exit:
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	fpc1020_create_sysfs(fpc1020, false);
+#else
+	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
+#endif
 exit:
 	return rc;
 }
@@ -332,7 +354,11 @@ static int fpc1020_remove(struct platform_device *pdev)
 {
 	struct  fpc1020_data *fpc1020 = dev_get_drvdata(&pdev->dev);
 
+#ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	fpc1020_create_sysfs(fpc1020, false);
+#else
+	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
+#endif
 
 	device_init_wakeup(fpc1020->dev, false);
 	devm_free_irq(fpc1020->dev,gpio_to_irq(fpc1020->irq_gpio),fpc1020);
