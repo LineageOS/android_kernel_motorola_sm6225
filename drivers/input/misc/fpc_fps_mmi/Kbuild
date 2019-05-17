@@ -2,6 +2,10 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
 
+ifneq ($(filter m y,$(CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
+endif
+
 fpc1020_mmi-y += fpc1020_tee.o
 
 obj-m += fpc1020_mmi.o
