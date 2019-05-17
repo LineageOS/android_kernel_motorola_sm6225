@@ -2500,30 +2500,13 @@ static int __smb_mmi_ps_changed(struct device *dev, void *data)
 static void smb_mmi_power_supply_changed(struct power_supply *psy,
 					 char *envp_ext[])
 {
-	unsigned long flags;
-
 	dev_err(&psy->dev, "%s: %s\n", __func__, envp_ext[0]);
 
-	spin_lock_irqsave(&psy->changed_lock, flags);
-	/*
-	 * Check 'changed' here to avoid issues due to race between
-	 * power_supply_changed() and this routine. In worst case
-	 * power_supply_changed() can be called again just before we take above
-	 * lock. During the first call of this routine we will mark 'changed' as
-	 * false and it will stay false for the next call as well.
-	 */
-	if (likely(psy->changed)) {
-		psy->changed = false;
-		spin_unlock_irqrestore(&psy->changed_lock, flags);
-		class_for_each_device(power_supply_class, NULL, psy,
-				      __smb_mmi_ps_changed);
-		atomic_notifier_call_chain(&power_supply_notifier,
-				PSY_EVENT_PROP_CHANGED, psy);
-		kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
-		spin_lock_irqsave(&psy->changed_lock, flags);
-	}
-
-	spin_unlock_irqrestore(&psy->changed_lock, flags);
+	class_for_each_device(power_supply_class, NULL, psy,
+			      __smb_mmi_ps_changed);
+	atomic_notifier_call_chain(&power_supply_notifier,
+			PSY_EVENT_PROP_CHANGED, psy);
+	kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
 }
 
 static int factory_kill_disable;
@@ -2916,10 +2899,8 @@ sch_hb:
 	}
 
 	if (chip->batt_psy) {
-		chip->batt_psy->changed = true;
 		smb_mmi_power_supply_changed(chip->batt_psy, envp);
 	} else if (chip->qcom_psy) {
-		chip->qcom_psy->changed = true;
 		smb_mmi_power_supply_changed(chip->qcom_psy, envp);
 	}
 
