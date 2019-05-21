@@ -1325,7 +1325,6 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	new_profile = ucontrol->value.integer.value[0];
-    pr_err("%s:new_profile:%d profile :%d\n",__func__,new_profile, profile);
 	if (new_profile == profile)
 		return 0;
 
@@ -1575,7 +1574,6 @@ static int tfa98xx_set_stereo_ctl(struct snd_kcontrol *kcontrol,
                                 tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
 				tfa98xx->profile = 1;
 				tfa98xx_mixer_profile = 1;
-                pr_err("%s:profile:%d\n",__func__,tfa98xx->profile);
 			}
                         else
                                 tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;
@@ -1634,9 +1632,7 @@ static int tfa98xx_algo_set_gain_ctl(struct snd_kcontrol *kcontrol,
 
 	if(0 == tfa98xx_mixer_profile) {
 		ret = send_tfa_cal_in_band(&buff[1], nr - 1);
-	} else {
-        pr_err("%s:bypass mode current profile is %d\n", __func__, tfa98xx_mixer_profile);
-    }
+	}
 	return ret;
 }
 
@@ -2936,7 +2932,7 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 			if(0 == tfa98xx->profile) {
 			    tfa98xx_adsp_send_calib_values(tfa98xx);
 			} else {
-			    pr_err("current profile:%d\n",tfa98xx->profile);
+			    pr_debug("current profile:%d\n",tfa98xx->profile);
 			}
 			/* Start DSP */
 			if ((tfa98xx->flags & TFA98XX_FLAG_CHIP_SELECTED) &&
