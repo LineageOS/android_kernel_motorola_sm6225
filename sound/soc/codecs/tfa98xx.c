@@ -74,7 +74,6 @@ static int tfa98xx_kmsg_regs = 0;
 static int tfa98xx_ftrace_regs = 0;
 
 static uint32_t tfa98xx_rpc_send_delay = 0;
-static bool tfa98xx_ampe_monitor = false;
 
 static char *fw_name = "tfa98xx.cnt";
 module_param(fw_name, charp, S_IRUGO | S_IWUSR);
@@ -1326,6 +1325,7 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	new_profile = ucontrol->value.integer.value[0];
+    pr_err("%s:new_profile:%d profile :%d\n",__func__,new_profile, profile);
 	if (new_profile == profile)
 		return 0;
 
@@ -1575,6 +1575,7 @@ static int tfa98xx_set_stereo_ctl(struct snd_kcontrol *kcontrol,
                                 tfa98xx->flags |= TFA98XX_FLAG_CHIP_SELECTED;
 				tfa98xx->profile = 1;
 				tfa98xx_mixer_profile = 1;
+                pr_err("%s:profile:%d\n",__func__,tfa98xx->profile);
 			}
                         else
                                 tfa98xx->flags &= ~TFA98XX_FLAG_CHIP_SELECTED;
@@ -1634,8 +1635,8 @@ static int tfa98xx_algo_set_gain_ctl(struct snd_kcontrol *kcontrol,
 	if(0 == tfa98xx_mixer_profile) {
 		ret = send_tfa_cal_in_band(&buff[1], nr - 1);
 	} else {
-		pr_debug("%s:bypass mode current profile is %d\n", __func__, tfa98xx_mixer_profile);
-	}
+        pr_err("%s:bypass mode current profile is %d\n", __func__, tfa98xx_mixer_profile);
+    }
 	return ret;
 }
 
@@ -2936,8 +2937,6 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 			    tfa98xx_adsp_send_calib_values(tfa98xx);
 			} else {
 			    pr_err("current profile:%d\n",tfa98xx->profile);
-			    if(tfa98xx_ampe_monitor)
-			        queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->monitor_work, 5*HZ);
 			}
 			/* Start DSP */
 			if ((tfa98xx->flags & TFA98XX_FLAG_CHIP_SELECTED) &&
@@ -3155,8 +3154,6 @@ static int tfa98xx_parse_dt(struct device *dev, struct tfa98xx *tfa98xx,
 		dev_dbg(dev, "No rpc-send-delay provided. Set to default\n");
 		tfa98xx_rpc_send_delay = 2;
 	}
-
-	tfa98xx_ampe_monitor = of_property_read_bool(np, "rcv-ampe-monitor");
 
 	return 0;
 }
