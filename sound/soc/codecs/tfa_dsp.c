@@ -3717,7 +3717,6 @@ enum Tfa98xx_Error tfa_status(struct tfa_device *tfa)
 {
 	int value;
 	uint16_t val;
-	uint16_t val2;
 
 	/*
 	 * check IC status bits: cold start
@@ -3729,16 +3728,6 @@ enum Tfa98xx_Error tfa_status(struct tfa_device *tfa)
 	val = (uint16_t)value;
 
 	/* pr_debug("SYS_STATUS0: 0x%04x\n", val); */
-	value = TFA_READ_REG(tfa, AMPE);
-	if (value < 0)
-		return -value;
-	val2 = (uint16_t)value;
-	if (!TFA_GET_BF_VALUE(tfa, AMPE, val2)&& !TFA_GET_BF_VALUE(tfa, PWDN, val2)) {
-		pr_err("ERROR: AMPE=0, PWDN=0\n");
-		TFA_SET_BF_VOLATILE(tfa, AMPE, 1);
-		//return Tfa98xx_Error_DSP_not_running;
-	}
-
 	if (TFA_GET_BF_VALUE(tfa, ACS, val) ||
 	    TFA_GET_BF_VALUE(tfa, WDS, val)) {
 
