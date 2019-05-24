@@ -359,6 +359,13 @@ static int usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 		return 0;
 	}
 
+	if (!context->bulk_in->enabled) {
+		dev_kfree_skb_any(skb);
+		USBNETDBG(context,
+			 "%s: bulk_in didn't enabled\n", __func__);
+		return 0;
+	}
+
 	req = usb_get_xmit_request(STOP_QUEUE, dev);
 
 	if (!req) {
