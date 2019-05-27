@@ -94,6 +94,7 @@ Test Status
 #define FACTORY_REG_LCD_NOISE_START             0x11
 #define FACTORY_REG_LCD_NOISE_FRAME             0x12
 #define FACTORY_REG_LCD_NOISE_NUMBER            0x13
+#define FACTORY_REG_LCD_NOISE_TEST_STATE        0x13
 #define FACTORY_REG_LCD_NOISE_TTHR              0x14
 #define FACTORY_REG_OPEN_START                  0x15
 #define FACTORY_REG_OPEN_STATE                  0x16
@@ -101,6 +102,8 @@ Test Status
 #define FACTORY_REG_OPEN_BUSY                   0x01
 #define FACTORY_REG_CB_ADDR_H                   0x18
 #define FACTORY_REG_CB_ADDR_L                   0x19
+#define FACTORY_REG_ORDER_ADDR_H                0x1A
+#define FACTORY_REG_ORDER_ADDR_L                0x1B
 #define FACTORY_REG_LCD_NOISE_STATE             0x1E
 #define FACTORY_REG_KEYSHORT_EN                 0x2E
 #define FACTORY_REG_KEYSHORT_STATE              0x2F
@@ -111,10 +114,12 @@ Test Status
 #define FACTORY_REG_OPEN_REG21                  0x21
 #define FACTORY_REG_OPEN_REG22                  0x22
 #define FACTORY_REG_OPEN_REG23                  0x23
+#define FACTORY_REG_OPEN_REG2E                  0x2E
 #define FACTORY_REG_OPEN_REG86                  0x86
 #define FACTORY_REG_K1                          0x31
 #define FACTORY_REG_K2                          0x32
 #define FACTORY_REG_RAWDATA_ADDR                0x6A
+#define FACTORY_REG_ORDER_ADDR                  0x6C
 #define FACTORY_REG_CB_ADDR                     0x6E
 #define FACTORY_REG_SHORT_ADDR                  0x89
 #define FACTORY_REG_RAWDATA_TEST_EN             0x9E
@@ -183,6 +188,7 @@ struct incell_testitem {
     u32 rawdata_test                : 1;
     u32 lcdnoise_test               : 1;
     u32 keyshort_test               : 1;
+    u32 mux_open_test               : 1;
 };
 
 struct incell_threshold_b {
@@ -211,6 +217,7 @@ struct incell_threshold_b {
     int keyshort_cb_max;
     int rawdata2_min;
     int rawdata2_max;
+    int mux_open_cb_min;
 };
 
 struct incell_threshold {
@@ -313,6 +320,7 @@ struct sc_testitem {
     u32 rawdata_test                : 1;
     u32 cb_test                     : 1;
     u32 delta_cb_test               : 1;
+    u32 short_test                  : 1;
 };
 
 struct sc_threshold_b {
@@ -337,6 +345,7 @@ struct sc_threshold_b {
     int dcb_cs4;
     int dcb_cs5;
     int dcb_cs6;
+    int short_min;
 };
 
 struct sc_threshold {
@@ -469,6 +478,7 @@ enum csv_itemcode_incell {
     CODE_SHORT_TEST = 15,
     CODE_OPEN_TEST = 25,
     CODE_LCD_NOISE_TEST = 27,
+    CODE_MUX_OPEN_TEST = 41,
 };
 
 enum csv_itemcode_mc_sc {
@@ -489,7 +499,12 @@ enum csv_itemcode_sc {
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
 extern struct test_funcs test_func_ft8719;
+#endif
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+extern struct test_funcs test_func_ft8756;
+#endif
 
 extern struct fts_test *fts_ftest;
 
