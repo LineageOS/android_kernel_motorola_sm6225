@@ -700,7 +700,7 @@ int fts_fw_update_vendor_name(const char* name) {
     char* pos;
     int len;
 
-    if (!upg || !upg->module_info || !upg->module_info->vendor_name) {
+    if (!upg || !upg->module_info) {
         FTS_ERROR("upgrade struct not init");
         return -EINVAL;
     }
