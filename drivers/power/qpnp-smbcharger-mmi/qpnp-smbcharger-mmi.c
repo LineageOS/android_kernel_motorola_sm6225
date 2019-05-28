@@ -3055,6 +3055,12 @@ static int batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		val->intval = chip->cycles / 100;
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		if (chip->max_main_psy && chip->max_flip_psy)
+			val->intval = chip->sm_param[MAIN_BATT].batt_health;
+		else
+			val->intval = chip->sm_param[BASE_BATT].batt_health;
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
 			union power_supply_propval main_psy_val;
@@ -3549,7 +3555,10 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
 					    0xFF, 0))
 			mmi_err(chip, "SMBMMI: Could Not set Legacy Cable CFG\n");
+	}
 
+	if (chip->smb_version == PM8150B_SUBTYPE ||
+	    chip->smb_version == PMI632_SUBTYPE) {
 		/* Ensure SW JEITA is DISABLED */
 		pval.intval = 0;
 		power_supply_set_property(chip->qcom_psy,
