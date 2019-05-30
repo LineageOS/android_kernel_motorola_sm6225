@@ -2223,6 +2223,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	struct mmi_temp_zone *zone;
 	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
 	bool voltage_full;
+	bool is_chg_dis = get_effective_result(chip->chg_dis_votable);
 	static int demo_full_soc = 100;
 
 	mmi_info(chip, "SMBMMI: batt_mv = %d, batt_ma %d, batt_soc %d,"
@@ -2399,6 +2400,13 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 
 	vote(chip->fcc_votable, MMI_HB_VOTER,
 	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
+
+	/* Rerun AICL to recover USB ICL from recharge */
+	if (is_chg_dis != get_effective_result(chip->chg_dis_votable)) {
+		power_supply_set_property(chip->qcom_psy,
+				POWER_SUPPLY_PROP_RERUN_AICL,
+				NULL);
+	}
 
 	if (prm->pres_temp_zone == ZONE_HOT) {
 		prm->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
