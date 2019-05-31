@@ -3016,6 +3016,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_QNOVO,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
@@ -3068,6 +3069,9 @@ static int batt_get_prop(struct power_supply *psy,
 			val->intval = chip->sm_param[MAIN_BATT].batt_health;
 		else
 			val->intval = chip->sm_param[BASE_BATT].batt_health;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = get_effective_result(chip->fcc_votable);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
