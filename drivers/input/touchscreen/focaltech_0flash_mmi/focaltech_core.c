@@ -37,11 +37,14 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-#if defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
+
+#ifdef CONFIG_DRM
+	#include <linux/msm_drm_notify.h>
+#elif defined(CONFIG_FB)
+	#include <linux/notifier.h>
+	#include <linux/fb.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
-#include <linux/earlysuspend.h>
+	#include <linux/earlysuspend.h>
 #define FTS_SUSPEND_LEVEL 1     /* Early-suspend level */
 #endif
 #include "focaltech_core.h"
@@ -1220,7 +1223,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     return 0;
 }
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 static void fts_resume_work(struct work_struct *work)
 {
     struct fts_ts_data *ts_data = container_of(work, struct fts_ts_data,
@@ -1228,7 +1231,51 @@ static void fts_resume_work(struct work_struct *work)
 
     fts_ts_resume(ts_data->dev);
 }
+#endif
 
+#ifdef CONFIG_DRM
+int drm_notifier_callback(struct notifier_block *self,
+				unsigned long event, void *data)
+{
+	struct msm_drm_notifier *evdata = data;
+	int *blank;
+	struct fts_ts_data *ts_data =
+		container_of(self, struct fts_ts_data, fb_notif);
+
+	if (!evdata || (evdata->id != 0)) {
+		return 0;
+    }
+
+    if (!(event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK)) {
+        FTS_INFO("event(%lu) do not need process\n", event);
+        return 0;
+    }
+    blank = evdata->data;
+    FTS_INFO("DRM event:%lu,blank:%d", event, *blank);
+    switch (*blank) {
+    case MSM_DRM_BLANK_UNBLANK:
+        if (MSM_DRM_EARLY_EVENT_BLANK == event) {
+            FTS_INFO("resume: event = %lu, not care\n", event);
+        } else if (MSM_DRM_EVENT_BLANK == event) {
+            queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+        }
+        break;
+    case MSM_DRM_BLANK_POWERDOWN:
+        if (MSM_DRM_EARLY_EVENT_BLANK == event) {
+            cancel_work_sync(&fts_data->resume_work);
+            fts_ts_suspend(ts_data->dev);
+        } else if (MSM_DRM_EVENT_BLANK == event) {
+            FTS_INFO("suspend: event = %lu, not care\n", event);
+        }
+        break;
+    default:
+        FTS_INFO("DAM BLANK(%d) do not need process\n", *blank);
+        break;
+    }
+
+	return 0;
+}
+#elif defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
                                 unsigned long event, void *data)
 {
@@ -1416,7 +1463,16 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("init fw upgrade fail");
     }
 
-#if defined(CONFIG_FB)
+#ifdef CONFIG_DRM
+    if (ts_data->ts_workqueue) {
+        INIT_WORK(&ts_data->resume_work, fts_resume_work);
+    }
+    ts_data->fb_notif.notifier_call = drm_notifier_callback;
+    ret = msm_drm_register_client(&ts_data->fb_notif);
+    if (ret) {
+        FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
+    }
+#elif defined(CONFIG_FB)
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
     }
@@ -1500,9 +1556,12 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
 
-#if defined(CONFIG_FB)
+#ifdef CONFIG_DRM
+    if (msm_drm_unregister_client(&ts_data->fb_notif))
+        FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
+#elif defined(CONFIG_FB)
     if (fb_unregister_client(&ts_data->fb_notif))
-        FTS_ERROR("Error occurred while unregistering fb_notifier.");
+        FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&ts_data->early_suspend);
 #endif
@@ -1562,6 +1621,9 @@ static int fts_ts_suspend(struct device *dev)
     if (ret < 0)
         FTS_ERROR("set TP to sleep mode fail, ret=%d", ret);
 
+    /* TP delay 50ms then lcd entery suspend*/
+    mdelay(50);
+
     if (!ts_data->ic_info.is_incell) {
 #if FTS_POWER_SOURCE_CUST_EN
         ret = fts_power_source_suspend(ts_data);
@@ -1592,7 +1654,7 @@ static int fts_ts_resume(struct device *dev)
 #if FTS_POWER_SOURCE_CUST_EN
         fts_power_source_resume(ts_data);
 #endif
-        fts_reset_proc(200);
+        //fts_reset_proc(200);
     }
 
     fts_tp_state_recovery(ts_data);
