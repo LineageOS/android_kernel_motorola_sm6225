@@ -32,6 +32,7 @@ char *g_rslt_data;
 static char g_file_path[256];
 static char g_rslt_log[256];
 static char g_start_log[256];
+char *hx_self_test_file_name = NULL;
 
 char *g_himax_inspection_mode[] = {
 	"HIMAX_INSPECTION_OPEN",
@@ -1639,7 +1640,6 @@ static int himax_parse_criteria_file(void)
 {
 	int err = HX_INSPECT_OK;
 	const struct firmware *file_entry = NULL;
-	char *file_name = "hx_criteria.csv";
 	char **result;
 	int i = 0;
 	int crtra_count = HX_CRITERIA_SIZE;
@@ -1651,10 +1651,16 @@ static int himax_parse_criteria_file(void)
 	int size_of_result_str = 0;
 
 	I("%s,Entering\n", __func__);
-	I("file name = %s\n", file_name);
+	if (hx_self_test_file_name == NULL) {
+		E("file name is NULL\n");
+		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
+		snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
+		I("%s: Use default name\n", __func__);
+	}
 
+	I("file name = %s\n", hx_self_test_file_name);
 	/* default path is /system/etc/firmware */
-	err = request_firmware(&file_entry, file_name, private_ts->dev);
+	err = request_firmware(&file_entry, hx_self_test_file_name, private_ts->dev);
 	if (err < 0) {
 		E("%s,fail in line%d error code=%d\n", __func__, __LINE__, err);
 		err = HX_INSPECT_EFILE;
@@ -1826,6 +1832,8 @@ static void himax_self_test_data_deinit(void)
 static int himax_chip_self_test(void)
 {
 	uint32_t ret = HX_INSPECT_OK;
+	uint8_t tmp_addr[DATA_LEN_4] = {0x94, 0x72, 0x00, 0x10};
+	uint8_t tmp_data[DATA_LEN_4] = {0x01, 0x00, 0x00, 0x00};
 
 #ifdef HX_CODE_OVERLAY
 	uint8_t normalfw[32] = "Himax_firmware.bin";
@@ -2043,11 +2051,14 @@ static int himax_chip_self_test(void)
 	)
 		himax_press_powerkey();
 
+/* Workaround delete */
+#if 0
 	/* Wait suspend done */
 	while (private_ts->suspend_resume_done != 1)
 		usleep_range(1000, 1001);
 
 	private_ts->suspend_resume_done = 0;
+#endif
 
 	if (g_inspt_crtra_flag[IDX_LPWUG_RAWDATA_MIN] == 1 &&
 	  g_inspt_crtra_flag[IDX_LPWUG_RAWDATA_MAX] == 1) {
@@ -2131,20 +2142,27 @@ static int himax_chip_self_test(void)
 
 	hx_test_data_pop_out(g_rslt_data, g_file_path);
 
+/* Workaround delete */
+#if 0
 	/* Wait resume done */
 	while (private_ts->suspend_resume_done != 1)
 		usleep_range(1000, 1001);
+#endif
 
 #ifdef HX_CODE_OVERLAY
 	private_ts->in_self_test = 0;
 	g_core_fp.fp_0f_op_file_dirly(normalfw);
 	hx_turn_on_mp_func(0);
+	/* set N frame back to default value 1*/
+	g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
 	g_core_fp.fp_reload_disable(0);
 	g_core_fp.fp_sense_on(0);
 #else
 	g_core_fp.fp_sense_off(true);
 	hx_turn_on_mp_func(0);
-	himax_set_N_frame(1, HIMAX_INSPECTION_WEIGHT_NOISE);
+	/*himax_set_N_frame(1, HIMAX_INSPECTION_WEIGHT_NOISE);*/
+	/* set N frame back to default value 1*/
+	g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
 #ifndef HX_ZERO_FLASH
 	if (g_core_fp.fp_reload_disable != NULL)
 		g_core_fp.fp_reload_disable(0);
