@@ -379,6 +379,7 @@ struct himax_ts_data {
 	struct mutex	spi_lock;
 	struct spi_device	*spi;
 	int hx_irq;
+	uint8_t *xfer_buff;
 /******* SPI-end *******/
 
 	int in_self_test;

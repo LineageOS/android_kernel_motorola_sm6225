@@ -2595,17 +2595,16 @@ int himax_report_data(struct himax_ts_data *ts, int ts_path, int ts_status)
 static int himax_ts_operation(struct himax_ts_data *ts, int ts_path, int ts_status)
 {
 	uint8_t hw_reset_check[2];
-	static uint8_t buf[128];
 
-	memset(buf, 0x00, sizeof(buf));
+	memset(ts->xfer_buff, 0x00, 128 * sizeof(uint8_t));
 	memset(hw_reset_check, 0x00, sizeof(hw_reset_check));
 
-	ts_status = himax_touch_get(ts, buf, ts_path, ts_status);
+	ts_status = himax_touch_get(ts, ts->xfer_buff, ts_path, ts_status);
 	if (ts_status == HX_TS_GET_DATA_FAIL)
 		goto END_FUNCTION;
 
-	ts_status = himax_distribute_touch_data(buf, ts_path, ts_status);
-	ts_status = himax_err_ctrl(ts, buf, ts_path, ts_status);
+	ts_status = himax_distribute_touch_data(ts->xfer_buff, ts_path, ts_status);
+	ts_status = himax_err_ctrl(ts, ts->xfer_buff, ts_path, ts_status);
 	if (ts_status == HX_REPORT_DATA || ts_status == HX_TS_NORMAL_END)
 		ts_status = himax_parse_report_data(ts, ts_path, ts_status);
 	else
@@ -2829,6 +2828,11 @@ int himax_chip_common_init(void)
 	g_embedded_fw.size = (size_t)_binary___Himax_firmware_bin_end -
 			(size_t)_binary___Himax_firmware_bin_start;
 #endif
+	ts->xfer_buff = devm_kzalloc(ts->dev, 128 * sizeof(uint8_t), GFP_KERNEL);
+	if (ts->xfer_buff == NULL) {
+		err = -ENOMEM;
+		goto err_dt_platform_data_fail;
+	}
 
 	I("PDATA START\n");
 	pdata = kzalloc(sizeof(struct himax_i2c_platform_data), GFP_KERNEL);
