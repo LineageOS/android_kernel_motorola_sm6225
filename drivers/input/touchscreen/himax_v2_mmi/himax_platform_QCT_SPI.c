@@ -804,6 +804,10 @@ static int himax_common_suspend(struct device *dev)
 	struct himax_ts_data *ts = dev_get_drvdata(dev);
 
 	I("%s: enter\n", __func__);
+#ifdef CONFIG_DRM
+	if (!ts->initialized)
+		return -ECANCELED;
+#endif
 	himax_chip_common_suspend(ts);
 	return 0;
 }
@@ -813,11 +817,59 @@ static int himax_common_resume(struct device *dev)
 	struct himax_ts_data *ts = dev_get_drvdata(dev);
 
 	I("%s: enter\n", __func__);
+#ifdef CONFIG_DRM
+	if (!ts->initialized) {
+	/*
+	 *	wait until device resume for TDDI
+	 *	TDDI: Touch and display Driver IC
+	 */
+		if (himax_chip_common_init())
+			return -ECANCELED;
+	}
+#endif
 	himax_chip_common_resume(ts);
 	return 0;
 }
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_DRM)
+int drm_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct msm_drm_notifier *evdata = data;
+	int *blank;
+	struct himax_ts_data *ts =
+		container_of(self, struct himax_ts_data, fb_notif);
+
+	if (!evdata || (evdata->id != 0))
+		return 0;
+
+	D("DRM  %s\n", __func__);
+
+	if (evdata->data && event == MSM_DRM_EARLY_EVENT_BLANK && ts != NULL &&
+			ts->dev != NULL) {
+		blank = evdata->data;
+		switch (*blank) {
+		case MSM_DRM_BLANK_POWERDOWN:
+			if (!ts->initialized)
+				return -ECANCELED;
+			himax_common_suspend(ts->dev);
+			break;
+		}
+	}
+
+	if (evdata->data && event == MSM_DRM_EVENT_BLANK && ts != NULL &&
+			ts->dev != NULL) {
+		blank = evdata->data;
+		switch (*blank) {
+		case MSM_DRM_BLANK_UNBLANK:
+			himax_common_resume(ts->dev);
+			break;
+		}
+	}
+
+	return 0;
+}
+#elif defined(CONFIG_FB)
 int fb_notifier_callback(struct notifier_block *self,
 							unsigned long event, void *data)
 {
@@ -887,6 +939,7 @@ int himax_chip_common_probe(struct spi_device *spi)
 	dev_set_drvdata(&spi->dev, ts);
 	spi_set_drvdata(spi, ts);
 
+	ts->initialized = false;
 	ret = himax_chip_common_init();
 	if (ret < 0)
 		goto err_alloc_data_failed;
@@ -916,7 +969,7 @@ int himax_chip_common_remove(struct spi_device *spi)
 }
 
 static const struct dev_pm_ops himax_common_pm_ops = {
-#if (!defined(CONFIG_FB))
+#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
 	.suspend = himax_common_suspend,
 	.resume  = himax_common_resume,
 #endif
