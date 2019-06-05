@@ -208,3 +208,4 @@ enum HX_INSPECT_ERR_ENUM {
 };
 
 extern void himax_inspect_data_clear(void);
+extern char *hx_self_test_file_name;

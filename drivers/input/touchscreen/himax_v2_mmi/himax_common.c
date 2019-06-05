@@ -190,7 +190,6 @@ int g_zero_event_count;
 
 #endif
 
-static bool chip_test_r_flag;
 u8 HX_HW_RESET_ACTIVATE;
 
 static uint8_t AA_press;
@@ -234,6 +233,9 @@ EXPORT_SYMBOL(g_ts_dbg);
 /* File node for Selftest, SMWP and HSEN - Start*/
 #define HIMAX_PROC_SELF_TEST_FILE	"self_test"
 struct proc_dir_entry *himax_proc_self_test_file;
+
+#define HIMAX_PROC_SELF_TEST_RAW_FILE	"self_test_rawdata"
+struct proc_dir_entry *himax_proc_self_raw_file = NULL;
 
 uint8_t HX_PROC_SEND_FLAG;
 EXPORT_SYMBOL(HX_PROC_SEND_FLAG);
@@ -285,6 +287,133 @@ static int himax_palm_detect(uint8_t *buf)
 }
 #endif
 
+static ssize_t himax_self_test_write(struct file *file, const char *buff,
+									size_t len, loff_t *pos)
+{
+	int i = 0;
+	char buf[80] = {0};
+
+	if (len >= 80) {
+		I("%s: no command exceeds 80 chars.\n", __func__);
+		return -EFAULT;
+	}
+
+	if (copy_from_user(buf, buff, len)) {
+		return -EFAULT;
+	}
+
+	if (hx_self_test_file_name == NULL) {
+		E("file name is NULL\n");
+		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
+		snprintf(hx_self_test_file_name, 15, "hx_criteria.csv");
+	}
+
+	for (i = 0; i < 80; i++) {
+		if (buf[i] == ',' || buf[i] == '\n') {
+			memset(hx_self_test_file_name, 0x0, 80);
+			memcpy(hx_self_test_file_name, buf, i);
+			I("%s: Get name from Customer\n", __func__);
+			break;
+		}
+	}
+	if (i == 80) {
+		memset(hx_self_test_file_name, 0x0, 80);
+		snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
+		I("%s: Use default name\n", __func__);
+		}
+	I("file name = %s\n", hx_self_test_file_name);
+
+	return len;
+}
+
+static ssize_t himax_self_test_read(struct file *file, char *buf,
+									size_t len, loff_t *pos)
+{
+	int val = 0x00;
+	size_t ret = 0;
+	char *temp_buf;
+	I("%s: enter, %d \n", __func__, __LINE__);
+
+	if (!HX_PROC_SEND_FLAG) {
+		temp_buf = kzalloc(len, GFP_KERNEL);
+		himax_int_enable(0);/* disable irq */
+		private_ts->in_self_test = 1;
+		val = g_core_fp.fp_chip_self_test();
+#ifdef HX_ESD_RECOVERY
+		HX_ESD_RESET_ACTIVATE = 1;
+#endif
+		himax_int_enable(1);/* enable irq */
+
+		if (val == 0x00) {
+			ret += snprintf(temp_buf + ret, len - ret, "Self_Test Pass\n");
+		} else {
+			ret += snprintf(temp_buf + ret, len - ret, "Self_Test Fail\n");
+		}
+
+		private_ts->in_self_test = 0;
+
+		if (copy_to_user(buf, temp_buf, len))
+			I("%s,here:%d\n", __func__, __LINE__);
+
+		kfree(temp_buf);
+		HX_PROC_SEND_FLAG = 1;
+	} else {
+		HX_PROC_SEND_FLAG = 0;
+	}
+
+	return ret;
+}
+
+static struct file_operations himax_proc_self_test_ops = {
+	.owner = THIS_MODULE,
+	.read = himax_self_test_read,
+	.write = himax_self_test_write,
+};
+
+static void *himax_self_raw_seq_start(struct seq_file *s, loff_t *pos)
+{
+	if (*pos >= 1) {
+		return NULL;
+	}
+	return (void *)((unsigned long) *pos + 1);
+}
+
+static void *himax_self_raw_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	return NULL;
+}
+
+static void himax_self_raw_seq_stop(struct seq_file *s, void *v)
+{
+}
+
+static int himax_self_raw_seq_read(struct seq_file *s, void *v)
+{
+	size_t ret = 0;
+
+	if (g_rslt_data != NULL) {
+			seq_printf(s, "%s", g_rslt_data);
+		}
+	return ret;
+}
+static struct seq_operations himax_self_raw_seq_ops = {
+	.start	= himax_self_raw_seq_start,
+	.next	= himax_self_raw_seq_next,
+	.stop	= himax_self_raw_seq_stop,
+	.show	= himax_self_raw_seq_read,
+};
+static int himax_self_raw_proc_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &himax_self_raw_seq_ops);
+};
+
+static struct file_operations himax_proc_self_raw_ops = {
+	.owner = THIS_MODULE,
+	.open = himax_self_raw_proc_open,
+	.read = seq_read,
+};
+
+#if 0
 static ssize_t himax_self_test(struct seq_file *s, void *v)
 {
 	int val = 0x00;
@@ -508,6 +637,7 @@ static const struct file_operations himax_proc_self_test_ops = {
 	.write = himax_self_test_write,
 	.release = seq_release,
 };
+#endif
 
 #ifdef HX_HIGH_SENSE
 static ssize_t himax_HSEN_read(struct file *file, char *buf,
@@ -832,6 +962,12 @@ int himax_common_proc_init(void)
 		goto fail_1;
 	}
 
+	himax_proc_self_raw_file = proc_create(HIMAX_PROC_SELF_TEST_RAW_FILE, 0444, himax_touch_proc_dir, &himax_proc_self_raw_ops);
+	if (himax_proc_self_raw_file == NULL) {
+		E(" %s: proc self_test raw file create failed!\n", __func__);
+		goto fail_1_1;
+	}
+
 #ifdef HX_HIGH_SENSE
 	himax_proc_HSEN_file = proc_create(HIMAX_PROC_HSEN_FILE, 0666,
 									   himax_touch_proc_dir, &himax_proc_HSEN_ops);
@@ -896,6 +1032,8 @@ fail_3:
 	remove_proc_entry(HIMAX_PROC_HSEN_FILE, himax_touch_proc_dir);
 fail_2:
 #endif
+	remove_proc_entry(HIMAX_PROC_SELF_TEST_RAW_FILE, himax_touch_proc_dir);
+fail_1_1:
 	remove_proc_entry(HIMAX_PROC_SELF_TEST_FILE, himax_touch_proc_dir);
 fail_1:
 	return -ENOMEM;
@@ -904,6 +1042,7 @@ fail_1:
 void himax_common_proc_deinit(void)
 {
 remove_proc_entry(HIMAX_PROC_SELF_TEST_FILE, himax_touch_proc_dir);
+remove_proc_entry(HIMAX_PROC_SELF_TEST_RAW_FILE, himax_touch_proc_dir);
 
 #ifdef HX_EDGE_LIMIT
 	remove_proc_entry(HIMAX_PROC_EDGE_LIMIT_FILE, himax_touch_proc_dir);
