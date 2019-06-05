@@ -65,20 +65,21 @@ static struct stmvl53l0_data *gp_vl53l0_data;
 static int s_count;
 static int s_prevalue;
 
-static struct stmvl53l0_module_fn_t stmvl53l0_module_func_tbl_cci = {
+#ifdef CAMERA_CCI
+static struct stmvl53l0_module_fn_t stmvl53l0_module_func_tbl = {
 	.init = stmvl53l0_init_cci,
 	.deinit = stmvl53l0_exit_cci,
 	.power_up = stmvl53l0_power_up_cci,
 	.power_down = stmvl53l0_power_down_cci,
 };
-
-static struct stmvl53l0_module_fn_t stmvl53l0_module_func_tbl_i2c = {
+#else
+static struct stmvl53l0_module_fn_t stmvl53l0_module_func_tbl = {
 	.init = stmvl53l0_init_i2c,
 	.deinit = stmvl53l0_exit_i2c,
 	.power_up = stmvl53l0_power_up_i2c,
 	.power_down = stmvl53l0_power_down_i2c,
 };
-
+#endif
 struct stmvl53l0_module_fn_t *pmodule_func_tbl;
 static struct stmvl53l0_parameter s_parameters[10];
 static int s_nump;
@@ -2578,23 +2579,23 @@ int stmvl53l0_setup(struct stmvl53l0_data *data, uint8_t type)
 		data->bus_type = CCI_BUS;
 		data->client_object = &(data->cci_client_object);
 		/* assign function table */
-		pmodule_func_tbl = &stmvl53l0_module_func_tbl_cci;
-		gpio = data->cci_client_object.gconf.cam_gpio_req_tbl[1].gpio;
+		pmodule_func_tbl = &stmvl53l0_module_func_tbl;
+		gpio = data->cci_client_object.gconf.cam_gpio_req_tbl[2].gpio;
 		data->lowv = data->cci_client_object.lowv;
 		data->highv = data->cci_client_object.highv;
 		data->xtalk = data->cci_client_object.xtalk;
 	} else {
 		data->bus_type = I2C_BUS;
 		data->client_object = &(data->i2c_client_object);
-		pmodule_func_tbl = &stmvl53l0_module_func_tbl_i2c;
-		gpio = data->i2c_client_object.gconf.cam_gpio_req_tbl[1].gpio;
+		pmodule_func_tbl = &stmvl53l0_module_func_tbl;
+		gpio = data->i2c_client_object.gconf.cam_gpio_req_tbl[2].gpio;
 		data->lowv = data->i2c_client_object.lowv;
 		data->highv = data->i2c_client_object.highv;
 		data->xtalk = data->i2c_client_object.xtalk;
 	}
-
 	/* init interrupt */
-	gpio_request(gpio, "vl6180_gpio_int");
+	gpio_request(gpio, "vl53l0_gpio_int");
+	vl53l0_dbgmsg("gpio_request %d to register_irq\n", gpio);
 	gpio_direction_input(gpio);
 	irq = gpio_to_irq(gpio);
 
@@ -2754,8 +2755,7 @@ static int __init stmvl53l0_init(void)
 	/* assign function table */
 	papi_func_tbl = &stmvl53l0_api_func_tbl;
 	/* client specific init function */
-	stmvl53l0_module_func_tbl_i2c.init();
-	stmvl53l0_module_func_tbl_cci.init();
+	stmvl53l0_module_func_tbl.init();
 
 	if (ret) {
 		kfree(vl53l0_data);
