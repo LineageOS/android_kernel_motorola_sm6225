@@ -1962,6 +1962,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	struct mmi_sm_params *main_p = &chg->sm_param[MAIN_BATT];
 	struct mmi_sm_params *flip_p = &chg->sm_param[FLIP_BATT];
 	static int demo_full_soc = 100;
+	bool is_chg_dis = get_effective_result(chg->chg_dis_votable);
 
 	chg_stat_main.charger_present = stat->charger_present;
 	chg_stat_flip.charger_present = stat->charger_present;
@@ -2186,6 +2187,13 @@ vote_now:
 
 	vote(chg->fcc_votable, MMI_HB_VOTER,
 	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
+
+	/* Rerun AICL to recover USB ICL from recharge */
+	if (is_chg_dis != get_effective_result(chg->chg_dis_votable)) {
+		power_supply_set_property(chg->qcom_psy,
+					  POWER_SUPPLY_PROP_RERUN_AICL,
+					  NULL);
+	}
 
 	if (!stat->charger_present &&
 	    (chg_stat_main.batt_mv <= LOW_BATT_MV) &&
