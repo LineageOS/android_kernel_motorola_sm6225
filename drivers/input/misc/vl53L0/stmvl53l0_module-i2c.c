@@ -131,6 +131,189 @@ int get_dt_threshold_data(struct device_node *of_node, int *lowv, int *highv)
 	return rc;
 }
 
+static int stmvl53l0_get_dt_gpio_req_tbl(struct device_node *of_node,
+	struct msm_camera_gpio_conf *gconf, uint16_t *gpio_array,
+	uint16_t gpio_array_size)
+{
+	int rc = 0, i = 0;
+	uint32_t count = 0;
+	uint32_t *val_array = NULL;
+
+	if (!of_get_property(of_node, "qcom,gpio-req-tbl-num", &count))
+		return 0;
+
+	count /= sizeof(uint32_t);
+	if (!count) {
+		pr_err("%s qcom,gpio-req-tbl-num 0\n", __func__);
+		return 0;
+	}
+
+	val_array = kcalloc(count, sizeof(uint32_t), GFP_KERNEL);
+	if (!val_array)
+		return -ENOMEM;
+
+	gconf->cam_gpio_req_tbl = kcalloc(count, sizeof(struct gpio),
+		GFP_KERNEL);
+	if (!gconf->cam_gpio_req_tbl) {
+		rc = -ENOMEM;
+		goto ERROR1;
+	}
+	gconf->cam_gpio_req_tbl_size = count;
+
+	rc = of_property_read_u32_array(of_node, "qcom,gpio-req-tbl-num",
+		val_array, count);
+	if (rc < 0) {
+		pr_err("%s failed %d\n", __func__, __LINE__);
+		goto ERROR2;
+	}
+	for (i = 0; i < count; i++) {
+		if (val_array[i] >= gpio_array_size) {
+			pr_err("%s gpio req tbl index %d invalid\n",
+				__func__, val_array[i]);
+			return -EINVAL;
+		}
+		gconf->cam_gpio_req_tbl[i].gpio = gpio_array[val_array[i]];
+		vl53l0_dbgmsg("cam_gpio_req_tbl[%d].gpio = %d\n", i,
+			gconf->cam_gpio_req_tbl[i].gpio);
+	}
+
+	rc = of_property_read_u32_array(of_node, "qcom,gpio-req-tbl-flags",
+		val_array, count);
+	if (rc < 0) {
+		pr_err("%s failed %d\n", __func__, __LINE__);
+		goto ERROR2;
+	}
+	for (i = 0; i < count; i++) {
+		gconf->cam_gpio_req_tbl[i].flags = val_array[i];
+		vl53l0_dbgmsg("cam_gpio_req_tbl[%d].flags = %ld\n", i,
+			gconf->cam_gpio_req_tbl[i].flags);
+	}
+
+	for (i = 0; i < count; i++) {
+		rc = of_property_read_string_index(of_node,
+			"qcom,gpio-req-tbl-label", i,
+			&gconf->cam_gpio_req_tbl[i].label);
+		vl53l0_dbgmsg("cam_gpio_req_tbl[%d].label = %s\n", i,
+			gconf->cam_gpio_req_tbl[i].label);
+		if (rc < 0) {
+			pr_err("%s failed %d\n", __func__, __LINE__);
+			goto ERROR2;
+		}
+	}
+
+	kfree(val_array);
+	return rc;
+
+ERROR2:
+	kfree(gconf->cam_gpio_req_tbl);
+ERROR1:
+	kfree(val_array);
+	gconf->cam_gpio_req_tbl_size = 0;
+	return rc;
+}
+
+static int stmvl53l0_init_gpio_pin_tbl(struct device_node *of_node,
+	struct msm_camera_gpio_conf *gconf, uint16_t *gpio_array,
+	uint16_t gpio_array_size)
+{
+	int rc = 0, val = 0;
+
+	gconf->gpio_num_info = kzalloc(sizeof(struct msm_camera_gpio_num_info),
+		GFP_KERNEL);
+	if (!gconf->gpio_num_info) {
+		rc = -ENOMEM;
+		return rc;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,gpio-vana", &val);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-vana failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-vana invalid %d\n",
+				__func__, __LINE__, val);
+			rc = -EINVAL;
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[1] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[1] = 1;
+		vl53l0_dbgmsg("qcom,gpio-vana %d\n",
+			gconf->gpio_num_info->gpio_num[1]);
+	} else {
+		rc = 0;
+	}
+
+	rc = of_property_read_u32(of_node, "qcom,gpio-reset", &val);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s:%d read qcom,gpio-reset failed rc %d\n",
+				__func__, __LINE__, rc);
+			goto ERROR;
+		} else if (val >= gpio_array_size) {
+			pr_err("%s:%d qcom,gpio-reset invalid %d\n",
+				__func__, __LINE__, val);
+			rc = -EINVAL;
+			goto ERROR;
+		}
+		gconf->gpio_num_info->gpio_num[0] =
+			gpio_array[val];
+		gconf->gpio_num_info->valid[0] = 1;
+		vl53l0_dbgmsg("qcom,gpio-reset %d\n",
+			gconf->gpio_num_info->gpio_num[0]);
+	} else {
+		rc = 0;
+	}
+
+	return rc;
+
+ERROR:
+	kfree(gconf->gpio_num_info);
+	gconf->gpio_num_info = NULL;
+	return rc;
+}
+
+
+static void stmvl53l0_request_gpio_table(struct gpio *gpio_tbl, uint8_t size,
+	int gpio_en)
+{
+	int i = 0, err = 1, retry_count = 0;
+
+	if (!gpio_tbl || !size) {
+		pr_err("%s:%d invalid gpio_tbl %pK / size %d\n", __func__,
+			__LINE__, gpio_tbl, size);
+	}
+	for (i = 0; i < size; i++) {
+		vl53l0_dbgmsg("%d i %d, gpio %d dir %ld\n", __LINE__, i,
+			gpio_tbl[i].gpio, gpio_tbl[i].flags);
+	}
+	if (gpio_en) {
+		while (err && retry_count < 10) {
+			for (i = 0; i < size; i++) {
+				err = gpio_request_one(gpio_tbl[i].gpio,
+					gpio_tbl[i].flags, gpio_tbl[i].label);
+				if (err) {
+					/*
+					* After GPIO request fails, contine to
+					* apply new gpios, outout a error message
+					* for driver bringup debug
+					*/
+					pr_err("%s:%d gpio %d:%s request fails, retry_count %d\n",
+						__func__, __LINE__,
+						gpio_tbl[i].gpio, gpio_tbl[i].label, retry_count);
+					msleep(30);
+					retry_count++;
+					break;
+				}
+			}
+		}
+	} else {
+		gpio_free_array(gpio_tbl, size);
+	}
+}
+
 static int stmvl53l0_get_dt_data(struct device *dev, struct i2c_data *data)
 {
 	int rc = 0;
@@ -175,7 +358,7 @@ static int stmvl53l0_get_dt_data(struct device *dev, struct i2c_data *data)
 					gpio_array[i]);
 			}
 
-			rc = msm_camera_get_dt_gpio_req_tbl(of_node, gconf,
+			rc = stmvl53l0_get_dt_gpio_req_tbl(of_node, gconf,
 				gpio_array, gpio_array_size);
 			if (rc < 0) {
 				pr_err("%s failed %d\n", __func__, __LINE__);
@@ -183,7 +366,7 @@ static int stmvl53l0_get_dt_data(struct device *dev, struct i2c_data *data)
 				return rc;
 			}
 
-			rc = msm_camera_init_gpio_pin_tbl(of_node, gconf,
+			rc = stmvl53l0_init_gpio_pin_tbl(of_node, gconf,
 				gpio_array, gpio_array_size);
 			if (rc < 0) {
 				pr_err("%s failed %d\n", __func__, __LINE__);
@@ -267,8 +450,8 @@ static int stmvl53l0_probe(struct i2c_client *client,
 	if (rc != 0) {
 		vl53l0_errmsg("%d,error rc %d\n", __LINE__, rc);
 		stmvl53l0_power_down_i2c(i2c_object);
-		return rc;
 	}
+
 	stmvl53l0_power_down_i2c(i2c_object);
 
 	rc = stmvl53l0_setup(vl53l0_data, I2C_BUS);
@@ -301,6 +484,7 @@ static const struct of_device_id st_stmvl53l0_dt_match[] = {
 	{ },
 };
 
+/*
 int stmv153l0_resume(struct i2c_client *clt)
 {
 	struct stmvl53l0_data *vl53l0_data = NULL;
@@ -310,8 +494,9 @@ int stmv153l0_resume(struct i2c_client *clt)
 	stmvl53l0_livechecking(vl53l0_data);
 	return 0;
 }
+*/
 
-static struct i2c_driver stmvl6180_driver = {
+static struct i2c_driver stmvl53l0_driver = {
 	.driver = {
 		.name	= STMVL53L0_DRV_NAME,
 		.owner	= THIS_MODULE,
@@ -319,7 +504,7 @@ static struct i2c_driver stmvl6180_driver = {
 	},
 	.probe	= stmvl53l0_probe,
 	.remove	= stmvl53l0_remove,
-	.resume = stmv153l0_resume,
+	/* .resume = stmv153l0_resume, */
 	.id_table = stmvl53l0_id,
 
 };
@@ -331,8 +516,6 @@ int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
 	struct i2c_data *data = (struct i2c_data *)i2c_object;
 
 	vl53l0_dbgmsg("Enter i2c powerup\n");
-	pinctrl_select_state(data->pinctrl_info.pinctrl,
-					data->pinctrl_info.gpio_state_active);
 
 	if (!IS_ERR(data->vana)) {
 		ret = regulator_set_voltage(data->vana, VL53L0_VDD_MIN,
@@ -350,11 +533,22 @@ int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
 		}
 	}
 
-	msm_camera_request_gpio_table(
+	stmvl53l0_request_gpio_table(
 		data->gconf.cam_gpio_req_tbl,
 		data->gconf.cam_gpio_req_tbl_size, 1);
 
+	pinctrl_select_state(data->pinctrl_info.pinctrl,
+		data->pinctrl_info.gpio_state_active);
+
+	gpio_set_value_cansleep(data->gconf.cam_gpio_req_tbl[1].gpio, 1);
+	vl53l0_dbgmsg("Enable gpio%d\n",data->gconf.cam_gpio_req_tbl[1].gpio );
+	msleep(20);
 	gpio_set_value_cansleep(data->gconf.cam_gpio_req_tbl[0].gpio, 1);
+	vl53l0_dbgmsg("Enable gpio%d\n",data->gconf.cam_gpio_req_tbl[0].gpio );
+
+	stmvl53l0_request_gpio_table(
+		data->gconf.cam_gpio_req_tbl,
+		data->gconf.cam_gpio_req_tbl_size, 0);
 
 	data->power_up = 1;
 	*preset_flag = 1;
@@ -371,15 +565,23 @@ int stmvl53l0_power_down_i2c(void *i2c_object)
 
 	vl53l0_dbgmsg("Enter\n");
 	if (data->power_up) {
+		stmvl53l0_request_gpio_table(
+			data->gconf.cam_gpio_req_tbl,
+			data->gconf.cam_gpio_req_tbl_size, 1);
+
 		pinctrl_select_state(data->pinctrl_info.pinctrl,
 			data->pinctrl_info.gpio_state_suspend);
 
-		msm_camera_request_gpio_table(
-			data->gconf.cam_gpio_req_tbl,
-			data->gconf.cam_gpio_req_tbl_size, 0);
-
 		gpio_set_value_cansleep(
 			data->gconf.cam_gpio_req_tbl[0].gpio, 0);
+		vl53l0_dbgmsg("Disable gpio%d\n",data->gconf.cam_gpio_req_tbl[0].gpio );
+		gpio_set_value_cansleep(
+			data->gconf.cam_gpio_req_tbl[1].gpio, 0);
+		vl53l0_dbgmsg("Disable gpio%d\n",data->gconf.cam_gpio_req_tbl[1].gpio );
+
+		stmvl53l0_request_gpio_table(
+			data->gconf.cam_gpio_req_tbl,
+			data->gconf.cam_gpio_req_tbl_size, 0);
 
 		if (!IS_ERR(data->vana)) {
 			ret = regulator_disable(data->vana);
@@ -390,7 +592,6 @@ int stmvl53l0_power_down_i2c(void *i2c_object)
 
 		data->power_up = 0;
 	}
-
 
 	vl53l0_dbgmsg("End\n");
 	return ret;
@@ -403,7 +604,7 @@ int stmvl53l0_init_i2c(void)
 	vl53l0_dbgmsg("Enter\n");
 
 	/* register as a i2c client device */
-	ret = i2c_add_driver(&stmvl6180_driver);
+	ret = i2c_add_driver(&stmvl53l0_driver);
 	if (ret)
 		vl53l0_errmsg("%d erro ret:%d\n", __LINE__, ret);
 
@@ -415,7 +616,7 @@ int stmvl53l0_init_i2c(void)
 void stmvl53l0_exit_i2c(void *i2c_object)
 {
 	vl53l0_dbgmsg("Enter\n");
-	i2c_del_driver(&stmvl6180_driver);
+	i2c_del_driver(&stmvl53l0_driver);
 
 	vl53l0_dbgmsg("End\n");
 }

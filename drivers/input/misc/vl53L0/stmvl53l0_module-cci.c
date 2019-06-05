@@ -52,7 +52,7 @@
 #include "stmvl53l0.h"
 #define LASER_SENSOR_PINCTRL_STATE_SLEEP "laser_suspend"
 #define LASER_SENSOR_PINCTRL_STATE_DEFAULT "laser_default"
-
+#ifdef CAMERA_CCI
 /*
  * Global data
  */
@@ -472,4 +472,4 @@ void stmvl53l0_exit_cci(void *cci_object)
 
 	vl53l0_dbgmsg("End\n");
 }
-
+#endif /* end of CAMERA_CCI */
