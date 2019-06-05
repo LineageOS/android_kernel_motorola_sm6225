@@ -208,7 +208,10 @@ static int probe_fail_flag;
 	bool USB_detect_flag;
 #endif
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_DRM)
+int drm_notifier_callback(struct notifier_block *self,
+						unsigned long event, void *data);
+#elif defined(CONFIG_FB)
 int fb_notifier_callback(struct notifier_block *self,
 						unsigned long event, void *data);
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2686,7 +2689,22 @@ static int hx_chk_flash_sts(void)
 }
 #endif
 
-#ifdef CONFIG_FB
+#if defined(CONFIG_DRM)
+static void himax_fb_register(struct work_struct *work)
+{
+	int ret = 0;
+
+	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_att.work);
+
+
+	I("%s in\n", __func__);
+	ts->fb_notif.notifier_call = drm_notifier_callback;
+	ret = msm_drm_register_client(&ts->fb_notif);
+
+	if (ret)
+		E("Unable to register fb_notifier: %d\n", ret);
+}
+#elif defined(CONFIG_FB)
 static void himax_fb_register(struct work_struct *work)
 {
 	int ret = 0;
@@ -2892,7 +2910,8 @@ FW_force_upgrade:
 		goto err_input_register_device_failed;
 	}
 
-#ifdef CONFIG_FB
+	ts->initialized = true;
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	ts->himax_att_wq = create_singlethread_workqueue("HMX_ATT_reuqest");
 
 	if (!ts->himax_att_wq) {
@@ -2952,7 +2971,7 @@ err_report_data_init_failed:
 #ifdef HX_SMART_WAKEUP
 	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
 #endif
-#ifdef CONFIG_FB
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	cancel_delayed_work_sync(&ts->work_att);
 	destroy_workqueue(ts->himax_att_wq);
 err_get_intr_bit_failed:
@@ -3011,7 +3030,12 @@ void himax_chip_common_deinit(void)
 #ifdef HX_SMART_WAKEUP
 	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
 #endif
-#ifdef CONFIG_FB
+#if defined(CONFIG_DRM)
+	if (msm_drm_unregister_client(&ts->fb_notif))
+		E("Error occurred while unregistering fb_notifier.\n");
+	cancel_delayed_work_sync(&ts->work_att);
+	destroy_workqueue(ts->himax_att_wq);
+#elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		E("Error occurred while unregistering fb_notifier.\n");
 	cancel_delayed_work_sync(&ts->work_att);

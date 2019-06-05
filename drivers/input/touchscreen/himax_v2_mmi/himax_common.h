@@ -40,7 +40,9 @@
 #include "himax_platform.h"
 #include <linux/kallsyms.h>
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_DRM)
+	#include <linux/msm_drm_notify.h>
+#elif defined(CONFIG_FB)
 	#include <linux/notifier.h>
 	#include <linux/fb.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -314,6 +316,7 @@ struct himax_report_data {
 };
 
 struct himax_ts_data {
+	bool initialized;
 	bool suspended;
 	atomic_t suspend_mode;
 	uint8_t x_channel;
@@ -381,7 +384,7 @@ struct himax_ts_data {
 	int suspend_resume_done;
 	int bus_speed;
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notif;
 	struct workqueue_struct *himax_att_wq;
 	struct delayed_work work_att;
