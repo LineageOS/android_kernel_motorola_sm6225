@@ -311,6 +311,10 @@ struct hx_guest_info {
 	#define fw_data_ulpm_33									0x33
 	#define fw_data_ulpm_aa									0xAA
 
+	#define fw_func_edge_portrait_pwd			 			0xA55AA55A
+	#define fw_func_edge_lsp_left_pwd			 			0xA11AA11A
+	#define fw_func_edge_lsp_right_pwd			 			0xA33AA33A
+
 	#define on_fw_addr_smwp_enable							0xA2
 	#define on_fw_usb_detect_addr							0xA4
 	#define on_fw_addr_program_reload_from					0x00000000
@@ -514,6 +518,9 @@ struct fw_operation {
 	uint8_t  addr_flag_reset_event[4];
 	uint8_t  addr_hsen_enable[4];
 	uint8_t  addr_smwp_enable[4];
+#ifdef HX_EDGE_LIMIT
+	uint8_t  addr_edge_limit_enable[4];
+#endif
 	uint8_t  addr_program_reload_from[4];
 	uint8_t  addr_program_reload_to[4];
 	uint8_t  addr_program_reload_page_write[4];
@@ -837,6 +844,9 @@ struct himax_core_fp {
 	void (*fp_set_reload_cmd)(uint8_t *write_data, int idx, uint32_t cmd_from, uint32_t cmd_to, uint32_t cmd_beat);
 	bool (*fp_program_reload)(void);
 	void (*fp_set_SMWP_enable)(uint8_t SMWP_enable, bool suspended);
+#ifdef HX_EDGE_LIMIT
+	void (*fp_set_edge_limit_enable)(uint8_t edge_limit_enable, bool suspended);
+#endif
 	void (*fp_set_HSEN_enable)(uint8_t HSEN_enable, bool suspended);
 	void (*fp_diag_register_set)(uint8_t diag_command, uint8_t storage_type);
 #ifdef HX_TP_SELF_TEST_DRIVER

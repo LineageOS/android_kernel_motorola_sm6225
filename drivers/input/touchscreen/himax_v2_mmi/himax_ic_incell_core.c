@@ -958,6 +958,39 @@ static void himax_mcu_set_SMWP_enable(uint8_t SMWP_enable, bool suspended)
 	} while ((tmp_data[3] != back_data[3] || tmp_data[2] != back_data[2] || tmp_data[1] != back_data[1]  || tmp_data[0] != back_data[0]) && retry_cnt < HIMAX_REG_RETRY_TIMES);
 }
 
+#ifdef HX_EDGE_LIMIT
+static void himax_mcu_set_edge_limit_enable(uint8_t edge_limit_enable, bool suspended)
+{
+	uint8_t tmp_data[DATA_LEN_4];
+	uint8_t back_data[DATA_LEN_4];
+	uint8_t retry_cnt = 0;
+
+	do {
+		if (edge_limit_enable == 0x01) {/*Portrait*/
+			himax_in_parse_assign_cmd(fw_func_edge_portrait_pwd, tmp_data, 4);
+			g_core_fp.fp_register_write(pfw_op->addr_edge_limit_enable, DATA_LEN_4, tmp_data, 0);
+			himax_in_parse_assign_cmd(fw_func_edge_portrait_pwd, back_data, 4);
+		} else if (edge_limit_enable == 0x02) {/*Landscape-Right*/
+			himax_in_parse_assign_cmd(fw_func_edge_lsp_right_pwd, tmp_data, 4);
+			g_core_fp.fp_register_write(pfw_op->addr_edge_limit_enable, DATA_LEN_4, tmp_data, 0);
+			himax_in_parse_assign_cmd(fw_func_edge_lsp_right_pwd, back_data, 4);
+		} else if (edge_limit_enable == 0x03) {/*Landscape-Left*/
+			himax_in_parse_assign_cmd(fw_func_edge_lsp_left_pwd, tmp_data, 4);
+			g_core_fp.fp_register_write(pfw_op->addr_edge_limit_enable, DATA_LEN_4, tmp_data, 0);
+			himax_in_parse_assign_cmd(fw_func_edge_lsp_left_pwd, back_data, 4);
+		} else {
+			himax_in_parse_assign_cmd(fw_data_safe_mode_release_pw_reset, tmp_data, 4);
+			g_core_fp.fp_register_write(pfw_op->addr_edge_limit_enable, DATA_LEN_4, tmp_data, 0);
+			himax_in_parse_assign_cmd(fw_data_safe_mode_release_pw_reset, back_data, 4);
+		}
+
+		g_core_fp.fp_register_read(pfw_op->addr_edge_limit_enable, DATA_LEN_4, tmp_data, 0);
+		I("%s: tmp_data[0]=%d, SMWP_enable=%d, retry_cnt=%d \n", __func__, tmp_data[0], edge_limit_enable, retry_cnt);
+		retry_cnt++;
+	} while ((tmp_data[3] != back_data[3] || tmp_data[2] != back_data[2] || tmp_data[1] != back_data[1]  || tmp_data[0] != back_data[0]) && retry_cnt < HIMAX_REG_RETRY_TIMES);
+}
+#endif
+
 static void himax_mcu_set_HSEN_enable(uint8_t HSEN_enable, bool suspended)
 {
 	uint8_t tmp_data[DATA_LEN_4];
@@ -2380,6 +2413,9 @@ static void himax_mcu_resend_cmd_func(bool suspended)
 #ifdef HX_SMART_WAKEUP
 	g_core_fp.fp_set_SMWP_enable(ts->SMWP_enable, suspended);
 #endif
+#ifdef HX_EDGE_LIMIT
+	g_core_fp.fp_set_edge_limit_enable(ts->edge_limit_enable, suspended);
+#endif
 #ifdef HX_HIGH_SENSE
 	g_core_fp.fp_set_HSEN_enable(ts->HSEN_enable, suspended);
 #endif
@@ -3311,6 +3347,9 @@ static void himax_mcu_fp_init(void)
 	g_core_fp.fp_black_gest_ctrl = himax_mcu_black_gest_ctrl;
 #endif
 	g_core_fp.fp_set_SMWP_enable = himax_mcu_set_SMWP_enable;
+#ifdef HX_EDGE_LIMIT
+	g_core_fp.fp_set_edge_limit_enable = himax_mcu_set_edge_limit_enable;
+#endif
 	g_core_fp.fp_set_HSEN_enable = himax_mcu_set_HSEN_enable;
 	g_core_fp.fp_usb_detect_set = himax_mcu_usb_detect_set;
 	g_core_fp.fp_diag_register_set = himax_mcu_diag_register_set;
