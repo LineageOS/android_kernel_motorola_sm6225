@@ -82,6 +82,7 @@
 /*#define HX_ZERO_FLASH*/
 /*#if defined(HX_ZERO_FLASH)*/
 /*#define HX_CODE_OVERLAY*/
+/*#define HX_EDGE_LIMIT*/
 /*#endif*/
 /*#define HX_EN_DYNAMIC_NAME*/	/* Support dynamic load fw name ,default is close */
 /*#undef CONFIG_FB*/ /* Enable it if driver go into suspend/resume twice */
@@ -415,6 +416,11 @@ struct himax_ts_data {
 #ifdef HX_P_SENSOR
 	bool psensor_flag;
 #endif
+#endif
+
+#ifdef HX_EDGE_LIMIT
+	uint8_t edge_limit_enable;
+	uint8_t edge_limit_en[8];
 #endif
 
 #ifdef HX_HIGH_SENSE
