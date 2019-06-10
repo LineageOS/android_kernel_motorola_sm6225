@@ -85,6 +85,9 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define BATTERY_CHARGER_STATUS_MASK		(GENMASK(2, 0))
 #define PM8150B_JEITA_EN_CFG_REG		(CHGR_BASE + 0x90)
 
+#define POWER_PATH_STATUS_REG			(DCDC_BASE + 0x0B)
+#define USBIN_SUSPEND_STS_BIT			BIT(6)
+
 #define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
 
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
@@ -659,12 +662,12 @@ int smblib_get_usb_suspend(struct smb_mmi_charger *chg, int *suspend)
 	int rc = 0;
 	u8 temp;
 
-	rc = smblib_read_mmi(chg, USBIN_CMD_IL_REG, &temp);
+	rc = smblib_read_mmi(chg, POWER_PATH_STATUS_REG, &temp);
 	if (rc < 0) {
-		mmi_err(chg, "Couldn't read USBIN_CMD_IL rc=%d\n", rc);
+		mmi_err(chg, "Couldn't read POWER_PATH_STATUS_REG rc=%d\n", rc);
 		return rc;
 	}
-	*suspend = temp & USBIN_SUSPEND_BIT;
+	*suspend = temp & USBIN_SUSPEND_STS_BIT;
 
 	return rc;
 }
