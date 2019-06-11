@@ -956,7 +956,7 @@ int himax_common_proc_init(void)
 		fp_himax_self_test_init();
 #endif
 
-	himax_proc_self_test_file = proc_create(HIMAX_PROC_SELF_TEST_FILE, 0444, himax_touch_proc_dir, &himax_proc_self_test_ops);
+	himax_proc_self_test_file = proc_create(HIMAX_PROC_SELF_TEST_FILE, 0664, himax_touch_proc_dir, &himax_proc_self_test_ops);
 	if (himax_proc_self_test_file == NULL) {
 		E(" %s: proc self_test file create failed!\n", __func__);
 		goto fail_1;
