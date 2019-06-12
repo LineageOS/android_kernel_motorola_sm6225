@@ -1001,9 +1001,9 @@ int get_rawdata_mc(u8 fre, u8 fir, int *rawdata)
     }
 
     /* fir enable/disable */
-    ret = fts_test_write_reg(FACTORY_REG_FIR, 1);
+    ret = fts_test_write_reg(FACTORY_REG_FIR, fir);
     if (ret < 0) {
-        FTS_TEST_SAVE_ERR("set fir fail,ret=%d\n", fir);
+        FTS_TEST_SAVE_ERR("set fir fail,ret=%d\n", ret);
         return ret;
     }
 

@@ -56,7 +56,7 @@
 #define INTERVAL_READ_REG                   200  /* unit:ms */
 #define TIMEOUT_READ_REG                    1000 /* unit:ms */
 #if FTS_POWER_SOURCE_CUST_EN
-#define FTS_VTG_MIN_UV                      2600000
+#define FTS_VTG_MIN_UV                      2800000
 #define FTS_VTG_MAX_UV                      3300000
 #define FTS_I2C_VTG_MIN_UV                  1800000
 #define FTS_I2C_VTG_MAX_UV                  1800000
@@ -564,13 +564,16 @@ static int fts_read_touchdata(struct fts_ts_data *data)
 
     memset(buf, 0xFF, data->pnt_buf_size);
 
-    ret = fts_read(NULL, 0, buf + 1, data->pnt_buf_size - 1);
-    if ((0xEF == buf[2]) && (0xEF == buf[3]) && (0xEF == buf[4])) {
+    buf[0] = 0x01;
+    ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
+    if ((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3])) {
         /* check if need recovery fw */
         fts_fw_recovery();
         return 1;
-    } else if ((ret < 0) || ((buf[1] & 0xF0) != 0x90)) {
-        FTS_ERROR("touch data(%x) fail,ret:%d", buf[1], ret);
+    }
+
+    if ((ret < 0) || ((buf[1] & 0xF0) != 0x90)) {
+        FTS_ERROR("touch data(%x) abnormal,ret:%d", buf[1], ret);
         return -EIO;
     }
 
@@ -609,9 +612,10 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
     data->touch_point = 0;
 
     if (data->ic_info.is_incell) {
-        if ((data->point_num == 0x0F) && (buf[1] == 0xFF) && (buf[2] == 0xFF)
-            && (buf[3] == 0xFF) && (buf[4] == 0xFF) && (buf[5] == 0xFF) && (buf[6] == 0xFF)) {
+        if ((data->point_num == 0x0F) && (buf[2] == 0xFF) && (buf[3] == 0xFF)
+            && (buf[4] == 0xFF) && (buf[5] == 0xFF) && (buf[6] == 0xFF)) {
             FTS_DEBUG("touch buff is 0xff, need recovery state");
+            fts_release_all_finger();
             fts_tp_state_recovery(data);
             return -EIO;
         }
@@ -1338,6 +1342,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     int pdata_size = sizeof(struct fts_ts_platform_data);
 
     FTS_FUNC_ENTER();
+    FTS_INFO("%s", FTS_DRIVER_VERSION);
     ts_data->pdata = kzalloc(pdata_size, GFP_KERNEL);
     if (!ts_data->pdata) {
         FTS_ERROR("allocate memory for platform_data fail");
@@ -1367,7 +1372,11 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     mutex_init(&ts_data->bus_lock);
 
     /* Init communication interface */
-    fts_bus_init(ts_data);
+    ret = fts_bus_init(ts_data);
+    if (ret) {
+        FTS_ERROR("bus initialize fail");
+        goto err_bus_init;
+    }
 
     ret = fts_input_init(ts_data);
     if (ret) {
@@ -1508,8 +1517,9 @@ err_report_buffer:
 err_input_init:
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
-
-    kfree_safe(ts_data->bus_buf);
+err_bus_init:
+    kfree_safe(ts_data->bus_tx_buf);
+    kfree_safe(ts_data->bus_rx_buf);
     kfree_safe(ts_data->pdata);
 
     FTS_FUNC_EXIT();
@@ -1685,7 +1695,14 @@ static int fts_ts_probe(struct spi_device *spi)
     struct fts_ts_data *ts_data = NULL;
 
     FTS_INFO("Touch Screen(SPI BUS) driver prboe...");
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756)
+    spi->mode = SPI_MODE_0;
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
     spi->mode = SPI_MODE_1;
+#else
+    spi->mode = SPI_MODE_1;
+#endif
+
     spi->bits_per_word = 8;
     if (spi->max_speed_hz > FTS_SPI_CLK_MAX)
         spi->max_speed_hz = FTS_SPI_CLK_MAX;
