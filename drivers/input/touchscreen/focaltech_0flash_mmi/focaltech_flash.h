@@ -22,10 +22,14 @@
 * Private constant and macro definitions using #define
 *****************************************************************************/
 #define FTS_CMD_RESET                               0x07
+#define FTS_ROMBOOT_CMD_SET_PRAM_ADDR               0xAD
+#define FTS_ROMBOOT_CMD_SET_PRAM_ADDR_LEN           4
 #define FTS_ROMBOOT_CMD_WRITE                       0xAE
 #define FTS_ROMBOOT_CMD_START_APP                   0x08
 #define FTS_DELAY_PRAMBOOT_START                    10
 #define FTS_ROMBOOT_CMD_ECC                         0xCC
+#define FTS_PRAM_SADDR                              0x000000
+#define FTS_DRAM_SADDR                              0xD00000
 
 #define FTS_CMD_READ                                0x03
 #define FTS_CMD_READ_DELAY                          1
@@ -69,6 +73,7 @@
 #define FTS_MIN_LEN                                 0x120
 #define FTS_MAX_LEN_FILE                            (128 * 1024)
 #define FTS_MAX_LEN_APP                             (64 * 1024)
+#define FTS_MAX_LEN_APP_PARAMS                      (32 * 1024)
 #define FTS_MAX_LEN_SECTOR                          (4 * 1024)
 #define FTS_CONIFG_VENDORID_OFF                     0x04
 #define FTS_CONIFG_MODULEID_OFF                     0x1E

@@ -574,7 +574,7 @@ int fts_enter_test_environment(bool test_state)
     return 0;
 }
 
-int fts_fw_resume(void)
+static int fts_fw_resume(void)
 {
     int ret = 0;
     struct fts_upgrade *upg = fwupgrade;

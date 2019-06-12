@@ -69,6 +69,7 @@ struct ini_data {
     "RAWDATA_TEST", \
     "LCD_NOISE_TEST", \
     "KEY_SHORT_TEST", \
+    "MUX_OPEN_TEST", \
 }
 
 #define BASIC_THRESHOLD_INCELL      { \
@@ -105,9 +106,10 @@ struct ini_data {
 }
 
 #define TEST_ITEM_SC                { \
+    "RAWDATA_TEST", \
     "CB_TEST", \
     "DELTA_CB_TEST", \
-    "RAWDATA_TEST", \
+    "WEAK_SHORT_TEST", \
 }
 
 #define BASIC_THRESHOLD_SC          { \

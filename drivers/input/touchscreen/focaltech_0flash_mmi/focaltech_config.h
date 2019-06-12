@@ -49,6 +49,10 @@
 #define _FT7251             0x72510812
 #define _FT7252             0x72520813
 #define _FT8613S            0x8613C814
+#define _FT8756             0x87560815
+#define _FT8302             0x83020816
+#define _FT8009             0x80090817
+#define _FT8656             0x86560818
 
 #define _FT5416             0x54160402
 #define _FT5426             0x54260402
@@ -109,12 +113,22 @@
 #define _FT7202             0x72020084
 #define _FT3308             0x33080084
 
+#define _FT6346U            0x6346D085
+#define _FT6346G            0x6346A085
+#define _FT3067             0x30670085
+#define _FT3068             0x30680085
+#define _FT3168             0x31680085
+#define _FT3268             0x32680085
+
 /*************************************************/
 
 /*
  * choose your ic chip type of focaltech
  */
-#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756)
+#define FTS_CHIP_TYPE   _FT8756
+#define FTS_CHIP_NAME   "ft8756"
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
 #define FTS_CHIP_TYPE   _FT8719
 #define FTS_CHIP_NAME   "ft8719"
 #else
