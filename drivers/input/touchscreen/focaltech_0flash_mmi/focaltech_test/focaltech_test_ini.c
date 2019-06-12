@@ -104,6 +104,18 @@ struct ini_ic_type ic_types[] = {
     {"FT8613S", 0x94000014},
 
     {"FT8756", 0x95000015},
+    {"FT8656", 0x95010018},
+
+    {"FT8302", 0x97000016},
+
+    {"FT8009", 0x98000017},
+
+    {"FT3068", 0x65010085},
+    {"FT3168", 0x65020085},
+    {"FT3067", 0x65030085},
+    {"FT3268", 0x65040085},
+    {"FT6346U", 0x65050085},
+    {"FT6346G", 0x65060085},
 };
 
 /*****************************************************************************
@@ -449,7 +461,7 @@ static int ini_parse_section(struct ini_data *ini, char *line_buffer)
         return -EINVAL;
     }
 
-    if ((ini->section_num < 0) || (ini->section_num > MAX_INI_SECTION_NUM)) {
+    if ((ini->section_num < 0) || (ini->section_num >= MAX_INI_SECTION_NUM)) {
         FTS_TEST_ERROR("section_num(%d) fail", ini->section_num);
         return -EINVAL;
     }
@@ -737,7 +749,7 @@ static int init_node_valid(void)
         for (cnt = 0; cnt < node_num; cnt++) {
             i = cnt / chy + 1;
             j = cnt % chy + 1;
-            snprintf(str, MAX_KEYWORD_VALUE_LEN, "InvalidNode[%d][%d]", i, j);
+            snprintf(str, MAX_KEYWORD_NAME_LEN, "InvalidNode[%d][%d]", i, j);
             get_keyword_value("INVALID_NODE", str, &tdata->node_valid[cnt]);
         }
     }
@@ -750,7 +762,7 @@ static int init_node_valid(void)
         for (cnt = 0; cnt < node_num; cnt++) {
             i = (cnt >= chy) ? 2 : 1;
             j = (cnt >= chy) ? (cnt - chy + 1) : (cnt + 1);
-            snprintf(str, MAX_KEYWORD_VALUE_LEN, "InvalidNodeS[%d][%d]", i, j);
+            snprintf(str, MAX_KEYWORD_NAME_LEN, "InvalidNodeS[%d][%d]", i, j);
             get_keyword_value("INVALID_NODES", str, &tdata->node_valid_sc[cnt]);
         }
     }
