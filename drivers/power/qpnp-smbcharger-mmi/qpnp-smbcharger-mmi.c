@@ -1516,27 +1516,27 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 				    union power_supply_propval *val)
 {
 	int rc = -EINVAL;
+	bool chg_online = false;
 
 	val->intval = 0;
 
-	if (chg->usb_psy)
+	if (chg->usb_psy) {
 		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_TYPEC_MODE, val);
-	if (rc < 0) {
-		mmi_err(chg, "Couldn't read TypeC Mode rc=%d\n", rc);
-		return rc;
+				POWER_SUPPLY_PROP_ONLINE, val);
+		if (rc < 0)
+			mmi_err(chg, "Couldn't read USB online rc=%d\n", rc);
 	}
+	chg_online = !!val->intval;
 
-	switch (val->intval) {
-	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
-	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
-	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
-		val->intval = 1;
-		break;
-	default:
-		val->intval = 0;
-		break;
+	if (chg->pc_port_psy) {
+		rc = power_supply_get_property(chg->pc_port_psy,
+				POWER_SUPPLY_PROP_ONLINE, val);
+		if (rc < 0)
+			mmi_err(chg, "Couldn't read PC online rc=%d\n", rc);
 	}
+	chg_online = chg_online || !!val->intval;
+
+	val->intval = chg_online;
 
 	return rc;
 }
