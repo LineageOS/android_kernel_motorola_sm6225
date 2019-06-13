@@ -31,9 +31,6 @@ EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/sound/soc/codecs/inc
 EXTRA_CFLAGS += -Werror
 
-cirrus_playback-objs = msm-cirrus-playback.o
-obj-m += cirrus_playback.o
-
 snd_soc_tfa9874-objs += tfa98xx.o
 snd_soc_tfa9874-objs += tfa_container.o
 snd_soc_tfa9874-objs += tfa_dsp.o
