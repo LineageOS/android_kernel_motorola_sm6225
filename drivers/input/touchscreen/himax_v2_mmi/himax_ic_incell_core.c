@@ -2848,6 +2848,7 @@ ALOC_ZF_INFO_ARR_FAIL:
 void himax_mcu_firmware_update_0f(const struct firmware *fw_entry)
 {
 	int ret = 0;
+	uint8_t tmp_data[DATA_LEN_4] = {0x01, 0x00, 0x00, 0x00};
 
 	I("%s,Entering - total FW size=%d\n", __func__, (int)fw_entry->size);
 
@@ -2914,6 +2915,7 @@ void himax_mcu_firmware_update_0f(const struct firmware *fw_entry)
 	 *else
 	 * g_core_fp.fp_clean_sram_0f(pzf_op->data_mode_switch, 4, 2);
 	 */
+	g_core_fp.fp_register_write(pfw_op->addr_set_frame_addr, 4, tmp_data, 0);
 
 	I("%s, End\n", __func__);
 }
@@ -3263,7 +3265,7 @@ void himax_mcu_firmware_read_0f(const struct firmware *fw_entry, int type)
 		g_core_fp.fp_read_sram_0f(fw_entry, pzf_op->data_map_table, 0xE000, 1536);
 
 		/* set n frame=0*/
-		g_core_fp.fp_read_sram_0f(fw_entry, pzf_op->data_mode_switch, 0xC30C, 4);
+		g_core_fp.fp_read_sram_0f(fw_entry, pfw_op->addr_set_frame_addr, 0xC30C, 4);
 	}
 
 	I("%s, END\n", __func__);
@@ -3775,7 +3777,7 @@ void himax_mcu_in_cmd_init(void)
 	himax_in_parse_assign_cmd(zf_data_adc_cfg_2, pzf_op->data_adc_cfg_2, sizeof(pzf_op->data_adc_cfg_2));
 	himax_in_parse_assign_cmd(zf_data_adc_cfg_3, pzf_op->data_adc_cfg_3, sizeof(pzf_op->data_adc_cfg_3));
 	himax_in_parse_assign_cmd(zf_data_map_table, pzf_op->data_map_table, sizeof(pzf_op->data_map_table));
-	himax_in_parse_assign_cmd(zf_data_mode_switch, pzf_op->data_mode_switch, sizeof(pzf_op->data_mode_switch));
+	/*himax_in_parse_assign_cmd(zf_data_mode_switch, pzf_op->data_mode_switch, sizeof(pzf_op->data_mode_switch));*/
 	himax_in_parse_assign_cmd(zf_addr_sts_chk, pzf_op->addr_sts_chk, sizeof(pzf_op->addr_sts_chk));
 	himax_in_parse_assign_cmd(zf_data_activ_sts, pzf_op->data_activ_sts, sizeof(pzf_op->data_activ_sts));
 	himax_in_parse_assign_cmd(zf_addr_activ_relod, pzf_op->addr_activ_relod, sizeof(pzf_op->addr_activ_relod));
