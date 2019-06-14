@@ -13,7 +13,6 @@ focaltech_0flash_mmi-objs += focaltech_ex_mode.o
 focaltech_0flash_mmi-objs += focaltech_flash.o
 focaltech_0flash_mmi-objs += focaltech_gesture.o
 focaltech_0flash_mmi-objs += focaltech_point_report_check.o
-focaltech_0flash_mmi-objs += focaltech_spi.o
 focaltech_0flash_mmi-objs += focaltech_test/focaltech_test.o
 focaltech_0flash_mmi-objs += focaltech_test/focaltech_test_ini.o
 
@@ -21,9 +20,11 @@ ifneq ($(filter ft8719,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
 	focaltech_0flash_mmi-objs += focaltech_test/supported_ic/focaltech_test_ft8719.o
 	focaltech_0flash_mmi-objs += focaltech_flash_ft8719.o
+	focaltech_0flash_mmi-objs += focaltech_spi_v1_1.o
 endif
 ifneq ($(filter ft8756,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
 	focaltech_0flash_mmi-objs += focaltech_test/supported_ic/focaltech_test_ft8756.o
 	focaltech_0flash_mmi-objs += focaltech_flash_ft8756.o
+	focaltech_0flash_mmi-objs += focaltech_spi_v1_1_1.o
 endif
