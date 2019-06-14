@@ -564,9 +564,15 @@ static int fts_read_touchdata(struct fts_ts_data *data)
 
     memset(buf, 0xFF, data->pnt_buf_size);
 
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756)
     buf[0] = 0x01;
     ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
-    if ((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3])) {
+    if ((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3]))
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
+    ret = fts_read(NULL, 0, buf + 1, data->pnt_buf_size - 1);
+    if ((0xEF == buf[2]) && (0xEF == buf[3]) && (0xEF == buf[4]))
+#endif
+    {
         /* check if need recovery fw */
         fts_fw_recovery();
         return 1;

@@ -25,7 +25,8 @@
 *
 *  Abstract: new spi protocol communication with TP
 *
-*   Version: v1.0
+*   FocalVersion: v1.0
+*   Version: v1.1.1
 *
 * Revision History:
 *
