@@ -1649,6 +1649,7 @@ static int fts_ts_suspend(struct device *dev)
 #endif
     }
 
+    fts_release_all_finger();
     ts_data->suspended = true;
     FTS_FUNC_EXIT();
     return 0;
