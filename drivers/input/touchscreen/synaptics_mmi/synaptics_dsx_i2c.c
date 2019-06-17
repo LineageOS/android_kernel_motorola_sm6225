@@ -2953,16 +2953,6 @@ static void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
 				pr_notice("failed to clear interrupt\n");
 		}
 
-		/* de-allocate input device earlier to allow */
-		/* EventHub become notified of input removal */
-		if (rmi4_data->input_registered) {
-			input_unregister_device(rmi4_data->input_dev);
-			rmi4_data->input_dev = NULL;
-			rmi4_data->input_registered = false;
-
-			pr_debug("de-allocated input device\n");
-		}
-
 		if (gStat.enabled)
 			statistics_stop_timekeeping();
 			break;
