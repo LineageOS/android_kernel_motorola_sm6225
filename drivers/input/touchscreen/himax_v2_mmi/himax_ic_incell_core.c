@@ -35,12 +35,7 @@ EXPORT_SYMBOL(pzf_op);
 void (*himax_mcu_cmd_struct_free)(void);
 static uint8_t *g_internal_buffer;
 
-#define HX_SPI_6125_MAX_WRITE_SZ  (16-4)
-#define __MTK_SPI__
-#ifdef HX_SPI_MTK_MAX_WRITE_SZ
-#undef HX_SPI_MTK_MAX_WRITE_SZ
-#define HX_SPI_MTK_MAX_WRITE_SZ   (16-4)
-#endif
+#define HX_SPI_6125_MAX_WRITE_SZ  (4096-4)
 
 #ifdef CORE_IC
 /* IC side start*/
@@ -2457,8 +2452,8 @@ void himax_mcu_clean_sram_0f(uint8_t *addr, int write_len, int type)
 	else
 		max_bus_size = write_len;
 #else
-	if (total_size > 4096)
-		max_bus_size = 4096;
+	if (total_size > HX_SPI_6125_MAX_WRITE_SZ - 4)
+		max_bus_size = HX_SPI_6125_MAX_WRITE_SZ - 4;
 #endif
 
 	total_size_temp = write_len;
