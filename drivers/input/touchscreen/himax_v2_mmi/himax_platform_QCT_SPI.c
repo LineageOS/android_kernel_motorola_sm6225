@@ -21,7 +21,7 @@ int irq_enable_count;
 EXPORT_SYMBOL(irq_enable_count);
 struct spi_device *spi;
 
-#define PACKET_MAX_SZ (256 + 2)
+#define PACKET_MAX_SZ (4096 + 2)
 static uint8_t *gBuffer;
 
 int himax_dev_set(struct himax_ts_data *ts)
