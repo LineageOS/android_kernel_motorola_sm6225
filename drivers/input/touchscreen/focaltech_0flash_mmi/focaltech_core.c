@@ -1087,10 +1087,12 @@ static int fts_gpio_configure(struct fts_ts_data *data)
 
     /* request reset gpio */
     if (gpio_is_valid(data->pdata->reset_gpio)) {
-        ret = gpio_request(data->pdata->reset_gpio, "fts_reset_gpio");
-        if (ret) {
-            FTS_ERROR("[GPIO]reset gpio request failed");
-            goto err_irq_gpio_dir;
+        if(!data->pdata->share_reset_gpio) {
+            ret = gpio_request(data->pdata->reset_gpio, "fts_reset_gpio");
+            if (ret) {
+                FTS_ERROR("[GPIO]reset gpio request failed");
+                goto err_irq_gpio_dir;
+            }
         }
 
         ret = gpio_direction_output(data->pdata->reset_gpio, 1);
@@ -1207,6 +1209,10 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
                         0, &pdata->reset_gpio_flags);
     if (pdata->reset_gpio < 0)
         FTS_ERROR("Unable to get reset_gpio");
+
+    pdata->share_reset_gpio = of_property_read_bool(np, "focaltech,share_reset_gpio");
+    if (pdata->share_reset_gpio)
+        FTS_INFO("TP reset pin is shared with LCD");
 
     pdata->irq_gpio = of_get_named_gpio_flags(np, "focaltech,irq-gpio",
                       0, &pdata->irq_gpio_flags);
