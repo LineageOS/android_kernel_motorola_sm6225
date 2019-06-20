@@ -6,6 +6,10 @@ ifneq (,$(filter river%,$(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
 endif
 
+ifneq (,$(filter doha%,$(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
+endif
+
 ifneq (,$(filter odin%,$(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL \
 		-DCONFIG_CAPSENSE_ATTACH_CAL
