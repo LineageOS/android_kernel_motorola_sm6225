@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -79,11 +79,14 @@ VL53L0_Error VL53L0_load_tuning_settings(VL53L0_DEV Dev,
 
 VL53L0_Error VL53L0_calc_sigma_estimate(VL53L0_DEV Dev,
 		VL53L0_RangingMeasurementData_t *pRangingMeasurementData,
-        FixPoint1616_t *pSigmaEstimate, uint32_t *pDmax_mm);
+		FixPoint1616_t *pSigmaEstimate);
+
+VL53L0_Error VL53L0_calc_dmax(
+	VL53L0_DEV Dev, FixPoint1616_t ambRateMeas, uint32_t *pdmax_mm);
 
 VL53L0_Error VL53L0_get_total_xtalk_rate(VL53L0_DEV Dev,
 	VL53L0_RangingMeasurementData_t *pRangingMeasurementData,
-    FixPoint1616_t *ptotal_xtalk_rate_mcps);
+	FixPoint1616_t *ptotal_xtalk_rate_mcps);
 
 VL53L0_Error VL53L0_get_total_signal_rate(VL53L0_DEV Dev,
 	VL53L0_RangingMeasurementData_t *pRangingMeasurementData,

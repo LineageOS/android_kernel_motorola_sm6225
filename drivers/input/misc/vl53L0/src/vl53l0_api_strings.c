@@ -1,5 +1,5 @@
 /*******************************************************************************
- Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -273,6 +273,10 @@ VL53L0_Error VL53L0_get_pal_error_string(VL53L0_Error PalErrorCode,
 		VL53L0_COPYSTRING(pPalErrorString,
 			VL53L0_STRING_ERROR_NOT_SUPPORTED);
 	break;
+	case VL53L0_ERROR_INTERRUPT_NOT_CLEARED:
+		VL53L0_COPYSTRING(pPalErrorString,
+			VL53L0_STRING_ERROR_INTERRUPT_NOT_CLEARED);
+	break;
 	case VL53L0_ERROR_RANGE_ERROR:
 		VL53L0_COPYSTRING(pPalErrorString,
 			VL53L0_STRING_ERROR_RANGE_ERROR);
@@ -378,6 +382,7 @@ VL53L0_Error VL53L0_get_sequence_steps_info(
 		char *pSequenceStepsString)
 {
 	VL53L0_Error Status = VL53L0_ERROR_NONE;
+
 	LOG_FUNCTION_START("");
 
 	switch (SequenceStepId) {
@@ -435,6 +440,16 @@ VL53L0_Error VL53L0_get_limit_check_info(VL53L0_DEV Dev, uint16_t LimitCheckId,
 	case VL53L0_CHECKENABLE_RANGE_IGNORE_THRESHOLD:
 		VL53L0_COPYSTRING(pLimitCheckString,
 			VL53L0_STRING_CHECKENABLE_RANGE_IGNORE_THRESHOLD);
+	break;
+
+	case VL53L0_CHECKENABLE_SIGNAL_RATE_MSRC:
+		VL53L0_COPYSTRING(pLimitCheckString,
+			VL53L0_STRING_CHECKENABLE_SIGNAL_RATE_MSRC);
+	break;
+
+	case VL53L0_CHECKENABLE_SIGNAL_RATE_PRE_RANGE:
+		VL53L0_COPYSTRING(pLimitCheckString,
+			VL53L0_STRING_CHECKENABLE_SIGNAL_RATE_PRE_RANGE);
 	break;
 
 	default:

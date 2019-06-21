@@ -1,5 +1,5 @@
 /*******************************************************************************
- Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -137,7 +137,8 @@ VL53L0_Error VL53L0_perform_xtalk_calibration(VL53L0_DEV Dev,
 
 		/* Round Cal Distance to Whole Number.
 		 * Note that the cal distance is in mm, therefore no resolution
-		 * is lost.*/
+		 * is lost.
+		 */
 		 xTalkCalDistanceAsInt = (XTalkCalDistance + 0x8000) >> 16;
 
 		if (xTalkStoredMeanRtnSpadsAsInt == 0 ||
@@ -146,15 +147,17 @@ VL53L0_Error VL53L0_perform_xtalk_calibration(VL53L0_DEV Dev,
 			XTalkCompensationRateMegaCps = 0;
 		} else {
 			/* Round Cal Distance to Whole Number.
-			   Note that the cal distance is in mm, therefore no
-			   resolution is lost.*/
+			 * Note that the cal distance is in mm, therefore no
+			 * resolution is lost.
+			 */
 			xTalkCalDistanceAsInt = (XTalkCalDistance +
 				0x8000) >> 16;
 
 			/* Apply division by mean spad count early in the
 			 * calculation to keep the numbers small.
 			 * This ensures we can maintain a 32bit calculation.
-			 * Fixed1616 / int := Fixed1616 */
+			 * Fixed1616 / int := Fixed1616
+			 */
 			signalXTalkTotalPerSpad = (xTalkStoredMeanSignalRate) /
 				xTalkStoredMeanRtnSpadsAsInt;
 
@@ -169,9 +172,6 @@ VL53L0_Error VL53L0_perform_xtalk_calibration(VL53L0_DEV Dev,
 			/* Round from 2^16 * Fixed1616, to Fixed1616. */
 			XTalkCompensationRateMegaCps = (signalXTalkTotalPerSpad
 				+ 0x8000) >> 16;
-
-			if (XTalkCompensationRateMegaCps < 0)
-				XTalkCompensationRateMegaCps = 0;
 		}
 
 		*pXTalkCompensationRateMegaCps = XTalkCompensationRateMegaCps;
@@ -262,7 +262,8 @@ VL53L0_Error VL53L0_perform_offset_calibration(VL53L0_DEV Dev,
 
 		/* Round Cal Distance to Whole Number.
 		 * Note that the cal distance is in mm, therefore no resolution
-		 * is lost.*/
+		 * is lost.
+		 */
 		 CalDistanceAsInt_mm = (CalDistanceMilliMeter + 0x8000) >> 16;
 
 		 *pOffsetMicroMeter = (CalDistanceAsInt_mm -
@@ -365,7 +366,8 @@ VL53L0_Error VL53L0_apply_offset_adjustment(VL53L0_DEV Dev)
 	int32_t CurrentOffsetMicroMeters;
 
 	/* if we run on this function we can read all the NVM info
-	 * used by the API */
+	 * used by the API
+	 */
 	Status = VL53L0_get_info_from_device(Dev, 7);
 
 	/* Read back current device offset */
@@ -429,7 +431,8 @@ void get_next_good_spad(uint8_t goodSpadArray[], uint32_t size,
 
 		if (coarseIndex == startIndex) {
 			/* locate the bit position of the provided current
-			 * spad bit before iterating */
+			 * spad bit before iterating
+			 */
 			dataByte >>= fineOffset;
 			fineIndex = fineOffset;
 		}
@@ -455,6 +458,7 @@ uint8_t is_aperture(uint32_t spadIndex)
 	 */
 	uint32_t quadrant;
 	uint8_t isAperture = 1;
+
 	quadrant = spadIndex >> 6;
 	if (refArrayQuadrants[quadrant] == REF_ARRAY_SPAD_0)
 		isAperture = 0;
@@ -518,7 +522,7 @@ VL53L0_Error count_enabled_spads(uint8_t spadArray[],
 				if (!spadTypeIdentified) {
 					*pIsAperture = 1;
 					if ((byteIndex < 2) && (bitIndex < 4))
-							*pIsAperture = 0;
+						*pIsAperture = 0;
 					spadTypeIdentified = 1;
 				}
 			}
@@ -734,9 +738,9 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 	 * Note that there are 6 bytes. Only the first 44 bits will be used to
 	 * represent spads.
 	 */
-	for (index = 0; index < spadArraySize; index++) {
+	for (index = 0; index < spadArraySize; index++)
 		Dev->Data.SpadData.RefSpadEnables[index] = 0;
-	}
+
 
 	Status = VL53L0_WrByte(Dev, 0xFF, 0x01);
 
@@ -790,7 +794,8 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 		if ((Status == VL53L0_ERROR_NONE) &&
 			(peakSignalRateRef > targetRefRate)) {
 			/* Signal rate measurement too high,
-			 * switch to APERTURE SPADs */
+			 * switch to APERTURE SPADs
+			 */
 
 			for (index = 0; index < spadArraySize; index++)
 				Dev->Data.SpadData.RefSpadEnables[index] = 0;
@@ -823,10 +828,12 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 					(peakSignalRateRef > targetRefRate)) {
 					/* Signal rate still too high after
 					 * setting the minimum number of
-					 * APERTURE spads. Can do no more.
+					 * APERTURE spads. Can do no more
+					 * therefore set the min number of
+					 * aperture spads as the result.
 					 */
-					Status = VL53L0_ERROR_REF_SPAD_INIT;
-					needAptSpads	= 0;
+					isApertureSpads_int = 1;
+					refSpadCount_int = minimumSpadCount;
 				}
 			}
 		} else {
@@ -861,16 +868,19 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 				break;
 			}
 
-			(refSpadCount_int)++;
-
 			/* Cannot combine Aperture and Non-Aperture spads, so
 			 * ensure the current spad is of the correct type.
 			 */
 			if (is_aperture((uint32_t)startSelect + nextGoodSpad) !=
 					needAptSpads) {
-				Status = VL53L0_ERROR_REF_SPAD_INIT;
+				/* At this point we have enabled the maximum
+				 * number of Aperture spads.
+				 */
+				complete = 1;
 				break;
 			}
+
+			(refSpadCount_int)++;
 
 			currentSpadIndex = nextGoodSpad;
 			Status = enable_spad_bit(
@@ -880,7 +890,8 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 			if (Status == VL53L0_ERROR_NONE) {
 				currentSpadIndex++;
 				/* Proceed to apply the additional spad and
-				 * perform measurement. */
+				 * perform measurement.
+				 */
 				Status = set_ref_spad_map(Dev,
 					Dev->Data.SpadData.RefSpadEnables);
 			}
@@ -903,7 +914,8 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
 				 */
 				if (signalRateDiff > lastSignalRateDiff) {
 					/* Previous spad map produced a closer
-					 * measurement, so choose this. */
+					 * measurement, so choose this.
+					 */
 					Status = set_ref_spad_map(Dev,
 							lastSpadArray);
 					memcpy(
@@ -974,9 +986,8 @@ VL53L0_Error VL53L0_set_reference_spads(VL53L0_DEV Dev,
 			VL53L0_REG_GLOBAL_CONFIG_REF_EN_START_SELECT,
 			startSelect);
 
-	for (index = 0; index < spadArraySize; index++) {
+	for (index = 0; index < spadArraySize; index++)
 		Dev->Data.SpadData.RefSpadEnables[index] = 0;
-	}
 
 	if (isApertureSpads) {
 		/* Increment to the first APERTURE spad */
@@ -1022,7 +1033,7 @@ VL53L0_Error VL53L0_get_reference_spads(VL53L0_DEV Dev,
 
 	if (refSpadsInitialised == 1) {
 
-		*pSpadCount	  = (uint32_t)VL53L0_GETDEVICESPECIFICPARAMETER(Dev,
+		*pSpadCount = (uint32_t)VL53L0_GETDEVICESPECIFICPARAMETER(Dev,
 			ReferenceSpadCount);
 		*pIsApertureSpads = VL53L0_GETDEVICESPECIFICPARAMETER(Dev,
 			ReferenceSpadType);
@@ -1222,7 +1233,8 @@ VL53L0_Error VL53L0_perform_ref_calibration(VL53L0_DEV Dev,
 	SequenceConfig = PALDevDataGet(Dev, SequenceConfig);
 
 	/* In the following function we don't save the config to optimize
-	 * writes on device. Config is saved and restored only once. */
+	 * writes on device. Config is saved and restored only once.
+	 */
 	Status = VL53L0_perform_vhv_calibration(
 			Dev, pVhvSettings, get_data_enable, 0);
 

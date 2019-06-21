@@ -1,5 +1,5 @@
 /*******************************************************************************
- Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,7 @@ VL53L0_Error VL53L0_start_histogram_measurement(VL53L0_DEV Dev,
 {
 	VL53L0_Error Status = VL53L0_ERROR_NONE;
 	uint8_t dataByte;
+
 	LOG_FUNCTION_START("");
 
 
@@ -104,7 +105,7 @@ VL53L0_Error VL53L0_confirm_measurement_start(VL53L0_DEV Dev)
 	do {
 		Status = VL53L0_GetMeasurementDataReady(Dev, &NewDataReady);
 		if ((NewDataReady == 0x01) || Status != VL53L0_ERROR_NONE)
-				break;
+			break;
 
 		LoopNb = LoopNb + 1;
 		VL53L0_PollingDelay(Dev);
@@ -271,6 +272,7 @@ VL53L0_Error VL53L0_get_histogram_measurement_data(VL53L0_DEV Dev,
 		VL53L0_HistogramMeasurementData_t *pHistogramMeasurementData)
 {
 	VL53L0_Error Status = VL53L0_ERROR_NOT_IMPLEMENTED;
+
 	LOG_FUNCTION_START("");
 
 	LOG_FUNCTION_END(Status);
@@ -402,13 +404,14 @@ VL53L0_Error VL53L0_get_max_spads(VL53L0_DEV Dev,
 	if (Status == VL53L0_ERROR_NONE) {
 		if (max_spads <= 0) {
 			*pambient_too_high = 1;
-			return VL53L0_ERROR_DIVISION_BY_ZERO;
+			Status = VL53L0_ERROR_DIVISION_BY_ZERO;
 		} else {
 			ratio = RangingMeasurementData.AmbientRateRtnMegaCps /
 				max_spads;
 
 			/* ratio is given in mega count per second and
-			 * FixPoint1616_t */
+			 * FixPoint1616_t
+			 */
 			if (ratio >  65536/100)
 				*pambient_too_high = 1;
 			else
@@ -519,6 +522,7 @@ uint32_t bytes_to_int(uint8_t *data_bytes)
 	/* Convert an array of 4 bytes to an integer.
 	 */
 	uint32_t data = (uint32_t)data_bytes[0] << 24;
+
 	data += ((uint32_t)data_bytes[1] << 16);
 	data += ((uint32_t)data_bytes[2] << 8);
 	data += ((uint32_t)data_bytes[3]);
