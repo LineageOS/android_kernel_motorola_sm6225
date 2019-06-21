@@ -21,7 +21,6 @@ int irq_enable_count;
 EXPORT_SYMBOL(irq_enable_count);
 struct spi_device *spi;
 
-#define PACKET_MAX_SZ (4096 + 2)
 static uint8_t *gBuffer;
 
 int himax_dev_set(struct himax_ts_data *ts)
@@ -271,7 +270,7 @@ int himax_bus_write(uint8_t command, uint8_t *data, uint32_t length, uint8_t toR
 	int i = 0;
 	int result = 0;
 
-	memset(spi_format_buf, 0, PACKET_MAX_SZ * sizeof(uint8_t));
+	memset(spi_format_buf, 0, GBUFFER_SZ * sizeof(uint8_t));
 	mutex_lock(&(private_ts->spi_lock));
 	spi_format_buf[0] = 0xF2;
 	spi_format_buf[1] = command;
