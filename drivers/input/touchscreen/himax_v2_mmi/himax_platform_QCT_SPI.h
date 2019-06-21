@@ -67,6 +67,8 @@ do { \
 #define HIMAX_common_NAME	"himax_tp"
 #define HIMAX_I2C_ADDR	0x48
 #define INPUT_DEV_NAME	"himax-touchscreen"
+#define PACKET_MAX_SZ 4096
+#define GBUFFER_SZ PACKET_MAX_SZ - 2
 
 struct himax_i2c_platform_data {
 	int abs_x_min;
