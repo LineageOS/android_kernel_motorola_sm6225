@@ -35,8 +35,6 @@ EXPORT_SYMBOL(pzf_op);
 void (*himax_mcu_cmd_struct_free)(void);
 static uint8_t *g_internal_buffer;
 
-#define HX_SPI_6125_MAX_WRITE_SZ  (4096-4)
-
 #ifdef CORE_IC
 /* IC side start*/
 static void himax_mcu_burst_enable(uint8_t auto_add_4_byte)
@@ -139,22 +137,26 @@ static int himax_mcu_flash_write_burst_lenth(uint8_t *reg_byte, uint8_t *write_d
 static int himax_mcu_register_write(uint8_t *write_addr, uint32_t write_length, uint8_t *write_data, uint8_t cfg_flag)
 {
 	int address;
-#ifdef __MTK_SPI__
+#if 1
 	uint8_t tmp_addr[4];
 	uint8_t *tmp_data;
 
 	int total_read_times = 0;
-	uint8_t max_bus_size = MAX_I2C_TRANS_SZ;
+	uint32_t max_bus_size = MAX_I2C_TRANS_SZ;
 	uint32_t total_size_temp = 0;
 	int i = 0;
 #endif
 
 	/*I("%s,Entering\n", __func__);*/
 	if (cfg_flag == 0) {
-#ifdef __MTK_SPI__
 		total_size_temp = write_length;
+#ifdef __MTK_SPI__
 		if (write_length > (HX_SPI_MTK_MAX_WRITE_SZ - 4))
 			max_bus_size = HX_SPI_MTK_MAX_WRITE_SZ - 4;
+#else
+		if (write_length > (PACKET_MAX_SZ - 8))
+			max_bus_size = PACKET_MAX_SZ - 8;
+#endif
 		else
 			max_bus_size = write_length;
 
@@ -168,15 +170,12 @@ static int himax_mcu_register_write(uint8_t *write_addr, uint32_t write_length, 
 		else
 			total_read_times = total_size_temp / max_bus_size + 1;
 
-#endif
-		address = (write_addr[3] << 24) + (write_addr[2] << 16) + (write_addr[1] << 8) + write_addr[0];
-
 		if (write_length > DATA_LEN_4)
 			g_core_fp.fp_burst_enable(1);
 		else
 			g_core_fp.fp_burst_enable(0);
 
-#ifdef __MTK_SPI__
+#if 1
 		for (i = 0; i < (total_read_times); i++) {
 			/* I("[log]write %d time start!\n", i);
 			 * I("[log]addr[3]=0x%02X, addr[2]=0x%02X, addr[1]=0x%02X, addr[0]=0x%02X!\n", tmp_addr[3], tmp_addr[2], tmp_addr[1], tmp_addr[0]);
@@ -193,7 +192,7 @@ static int himax_mcu_register_write(uint8_t *write_addr, uint32_t write_length, 
 			} else {
 				tmp_data = write_data+(i * max_bus_size);
 				/* I("last total_size_temp=%d\n", total_size_temp % max_bus_size); */
-				if (himax_mcu_flash_write_burst_lenth(tmp_addr, tmp_data, max_bus_size) < 0) {
+				if (himax_mcu_flash_write_burst_lenth(tmp_addr, tmp_data, total_size_temp) < 0) {
 					I("%s: i2c access fail!\n", __func__);
 					return I2C_FAIL;
 				}
@@ -2452,8 +2451,8 @@ void himax_mcu_clean_sram_0f(uint8_t *addr, int write_len, int type)
 	else
 		max_bus_size = write_len;
 #else
-	if (total_size > HX_SPI_6125_MAX_WRITE_SZ - 4)
-		max_bus_size = HX_SPI_6125_MAX_WRITE_SZ - 4;
+	if (total_size > PACKET_MAX_SZ - 8)
+		max_bus_size = PACKET_MAX_SZ - 8;
 #endif
 
 	total_size_temp = write_len;
@@ -2522,8 +2521,8 @@ void himax_mcu_write_sram_0f(const struct firmware *fw_entry, uint8_t *addr, int
 	I("%s, Entering - total write size=%d\n", __func__, total_size_temp);
 
 #if defined(HX_SPI_OPERATION)
-	if (write_len > HX_SPI_6125_MAX_WRITE_SZ - 4)
-		max_bus_size = HX_SPI_6125_MAX_WRITE_SZ - 4;
+	if (write_len > PACKET_MAX_SZ - 8)
+		max_bus_size = PACKET_MAX_SZ - 8;
 	else
 		max_bus_size = write_len;
 #else
@@ -3071,8 +3070,8 @@ void himax_mcu_read_sram_0f(const struct firmware *fw_entry, uint8_t *addr, int 
 	total_size_temp = read_len;
 
 #if defined(HX_SPI_OPERATION)
-	if (read_len > HX_SPI_6125_MAX_WRITE_SZ - 4)
-		max_bus_size = HX_SPI_6125_MAX_WRITE_SZ - 4;
+	if (read_len > 2048)
+		max_bus_size = 2048;
 	else
 		max_bus_size = read_len;
 #else
