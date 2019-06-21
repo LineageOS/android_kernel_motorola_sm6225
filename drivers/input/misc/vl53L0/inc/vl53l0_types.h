@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -37,14 +37,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 /** use where fractional values are expected
  *
- * Given a floating point value f it's .16 bit point is (int)(f*(1<<16))*/
+ * Given a floating point value f it's .16 bit point is (int)(f*(1<<16))
+ */
 typedef unsigned int FixPoint1616_t;
 
 #if !defined(STDINT_H) &&  !defined(_GCC_STDINT_H) \
 	&& !defined(_STDINT_H) && !defined(_LINUX_TYPES_H)
 
-#pragma message("Please review type definition of STDINT define for your \
-platform and add to list above ")
+#pragma message("Please review type definition of STDINT define for your" \
+"platform and add to list above ")
 
 /*
 *  target platform do not provide stdint or use a different #define than above

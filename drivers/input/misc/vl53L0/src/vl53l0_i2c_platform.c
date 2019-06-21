@@ -22,8 +22,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include "stmvl53l0-i2c.h"
-#include "stmvl53l0-cci.h"
-
 #include "vl53l0_platform.h"
 #include "vl53l0_i2c_platform.h"
 #include "vl53l0_def.h"
@@ -75,15 +73,18 @@
     #define VL53L0_GetLocalBuffer(Dev, n_byte)  LocBuffer
 #elif I2C_BUFFER_CONFIG == 2
     /* user define buffer type declare DECL_I2C_BUFFER  as access  via
-	VL53L0_GetLocalBuffer */
+     * VL53L0_GetLocalBuffer
+     */
     #define DECL_I2C_BUFFER
 #else
 #error "invalid I2C_BUFFER_CONFIG "
 #endif
 
 
-#define VL53L0_I2C_USER_VAR         /* none but could be for a flag var to
-		get/pass to mutex interruptible  return flags and try again */
+/* none but could be for a flag var to
+ * get/pass to mutex interruptible  return flags and try again
+ */
+#define VL53L0_I2C_USER_VAR
 #define VL53L0_GetI2CAccess(Dev)    /* todo mutex acquire */
 #define VL53L0_DoneI2CAcces(Dev)    /* todo mutex release */
 

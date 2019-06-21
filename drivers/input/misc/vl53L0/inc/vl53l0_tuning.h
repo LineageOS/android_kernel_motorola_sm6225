@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -134,6 +134,7 @@ uint8_t DefaultTuningSettings[] = {
 	0x01, 0x8e, 0x01,
 	0x01, 0x00, 0x01,
 	0x01, 0xFF, 0x00,
+	0x01, 0x80, 0x00,
 
 	0x00, 0x00, 0x00
 };
