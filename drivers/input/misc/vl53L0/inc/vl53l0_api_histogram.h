@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+ * Copyright © 2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@ VL53L0_Error VL53L0_set_histogram_mode(VL53L0_DEV Dev,
 	VL53L0_HistogramModes HistogramMode);
 
 VL53L0_Error VL53L0_get_histogram_mode(VL53L0_DEV Dev,
-	VL53L0_HistogramModes *pHistogramMode);
+	VL53L0_HistogramModes * pHistogramMode);
 
 VL53L0_Error VL53L0_start_histogram_measurement(VL53L0_DEV Dev,
 	VL53L0_HistogramModes histoMode,
