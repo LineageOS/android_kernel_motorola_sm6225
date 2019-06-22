@@ -78,7 +78,7 @@
 /*#define HX_PROTOCOL_A*/				/* for MTK special platform.If turning on,it will report to system by using specific format. */
 /*#define HX_RESUME_HW_RESET*/
 #define HX_PROTOCOL_B_3PA
-/*#define HX_FIX_TOUCH_INFO*/	/* if open, you need to change the touch info in the fix_touch_info*/
+#define HX_FIX_TOUCH_INFO	/* if open, you need to change the touch info in the fix_touch_info*/
 /*#define HX_ZERO_FLASH*/
 /*#if defined(HX_ZERO_FLASH)*/
 /*#define HX_CODE_OVERLAY*/
@@ -203,17 +203,17 @@ enum cell_type {
 };
 #ifdef HX_FIX_TOUCH_INFO
 enum fix_touch_info {
-	FIX_HX_RX_NUM = 0,
-	FIX_HX_TX_NUM = 0,
+	FIX_HX_RX_NUM = 36,
+	FIX_HX_TX_NUM = 18,
 	FIX_HX_BT_NUM = 0,
-	FIX_HX_X_RES = 0,
-	FIX_HX_Y_RES = 0,
-	FIX_HX_MAX_PT = 0,
+	FIX_HX_X_RES = 1080,
+	FIX_HX_Y_RES = 2280,
+	FIX_HX_MAX_PT = 10,
 	FIX_HX_XY_REVERSE = false,
 	FIX_HX_INT_IS_EDGE = true,
 #ifdef HX_TP_PROC_2T2R
-	FIX_HX_RX_NUM_2 = 0,
-	FIX_HX_TX_NUM_2 = 0,
+	FIX_HX_RX_NUM_2 = 36,
+	FIX_HX_TX_NUM_2 = 18,
 #endif
 };
 #endif
