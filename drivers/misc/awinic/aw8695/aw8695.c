@@ -966,21 +966,26 @@ static int aw8695_haptic_get_vbat(struct aw8695 *aw8695)
 static int aw8695_haptic_ram_vbat_comp(struct aw8695 *aw8695, bool flag)
 {
 	int temp_gain = 0;
+	int aw8695_gain = 0;
 
+	if (aw8695->debugfs_debug)
+		aw8695_gain = aw8695->gain_debug;
+	else
+		aw8695_gain = aw8695->gain;
 	if (flag) {
 		if (aw8695->ram_vbat_comp == AW8695_HAPTIC_RAM_VBAT_COMP_ENABLE) {
 			aw8695_haptic_get_vbat(aw8695);
-			temp_gain = aw8695->gain * AW8695_VBAT_REFER / aw8695->vbat;
+			temp_gain = aw8695_gain * AW8695_VBAT_REFER / aw8695->vbat;
 			if (temp_gain > (128 * AW8695_VBAT_REFER / AW8695_VBAT_MIN)) {
 				temp_gain = 128 * AW8695_VBAT_REFER / AW8695_VBAT_MIN;
 				pr_debug("%s gain limit=%d\n", __func__, temp_gain);
 			}
 			aw8695_haptic_set_gain(aw8695, temp_gain);
 		} else {
-			aw8695_haptic_set_gain(aw8695, aw8695->gain);
+			aw8695_haptic_set_gain(aw8695, aw8695_gain);
 		}
 	} else {
-		aw8695_haptic_set_gain(aw8695, aw8695->gain);
+		aw8695_haptic_set_gain(aw8695, aw8695_gain);
 	}
 
 	return 0;
@@ -1809,13 +1814,13 @@ static void aw8695_haptic_context(struct aw8695 *aw8695, enum aw8695_haptic_mode
 	}
 
 	t_top = gpio_get_value(aw8695->haptic_context_gpio);
-	if (t_top && atomic_read(&aw8695->reduce_pwr)) {
+	if (t_top) {
 		switch (cmd) {
 		case HAPTIC_RTP:
-			aw8695->gain = 0x20;
+			aw8695->gain = 0x80;
 			break;
 		case HAPTIC_SHORT:
-			aw8695->gain = 0x20;
+			aw8695->gain = 0x80;
 			break;
 		case HAPTIC_LONG:
 			aw8695->gain = aw8695->long_gain_reduced;
@@ -1839,10 +1844,10 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 
 		if (seq >= AW8695_SEQ_NO_RTP_BASE) {
 			aw8695->haptic_mode = HAPTIC_RTP;
-			aw8695->gain = 0x20;
+			aw8695->gain = 0x80;
 		} else if (value < 100 || seq > 2) {
 			aw8695->haptic_mode = HAPTIC_SHORT;
-			aw8695->gain = 0x20;
+			aw8695->gain = 0x80;
 		} else {
 			aw8695->haptic_mode = HAPTIC_LONG;
 			aw8695->gain = aw8695->long_gain_normal;
@@ -3376,14 +3381,14 @@ static int aw8695_parse_dt(struct device *dev, struct aw8695 *aw8695,
 
 	rc = of_property_read_s32(np, "long-gain-normal", &aw8695->long_gain_normal);
 	if (rc) {
-		aw8695->long_gain_normal = 0x0e;
+		aw8695->long_gain_normal = 0x80;
 		dev_err(dev, "%s: no normal gain value for long vibrating provided.\n", __func__);
 	}
 	dev_info(dev, "%s: normal gain value for long vibrating is 0x%02x.\n", __func__, aw8695->long_gain_normal);
 
 	rc = of_property_read_s32(np, "long-gain-reduced", &aw8695->long_gain_reduced);
 	if (rc) {
-		aw8695->long_gain_reduced = 0x06;
+		aw8695->long_gain_reduced = 0x80;
 		dev_err(dev, "%s: no reduced gain value for long vibrating provided.\n", __func__);
 	}
 	dev_info(dev, "%s: reduced gain value for long vibrating is 0x%02x.\n", __func__, aw8695->long_gain_reduced);
