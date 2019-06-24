@@ -3104,7 +3104,11 @@ int himax_chip_common_init(void)
 #ifdef HX_RST_PIN_FUNC
 	ts->rst_gpio = pdata->gpio_reset;
 #endif
-	himax_gpio_power_config(pdata);
+	if (himax_gpio_power_config(pdata)) {
+		err = -1;
+		E("%s: himax_gpio_power_config failed, stop Himax probe\n", __func__);
+		goto err_himax_gpio_power_config_failed;
+	}
 #ifndef CONFIG_OF
 
 	if (pdata->power) {
@@ -3326,6 +3330,7 @@ error_ic_detect_failed:
 #ifndef CONFIG_OF
 err_power_failed:
 #endif
+err_himax_gpio_power_config_failed:
 err_alloc_dt_pdata_failed:
 	kfree(hx_touch_data);
 	hx_touch_data = NULL;
