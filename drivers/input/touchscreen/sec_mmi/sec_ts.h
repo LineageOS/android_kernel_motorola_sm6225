@@ -23,7 +23,6 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
-#include <linux/input/sec_cmd.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -36,24 +35,38 @@
 #include <linux/time.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-#include <linux/wakelock.h>
 #include <linux/workqueue.h>
+
+#include "sec_cmd.h"
 
 #ifdef CONFIG_INPUT_BOOSTER
 #include <linux/input/input_booster.h>
 #endif
 
+#ifndef ABS_MT_CUSTOM
+#include "sec_custom.h"
+#endif
+
 #ifndef input_info
-#define input_info(f, d, fmt, args...) dev_info(d, fmt ##args)
+#define input_info(f, d, fmt, args...) dev_info(d, fmt, ##args)
 #endif
 
 #ifndef input_err
-#define input_info(f, d, fmt, args...) dev_info(d, fmt ##args)
+#define input_err(f, d, fmt, args...) dev_err(d, fmt, ##args)
+#endif
+
+#ifndef input_dbg
+#define input_dbg(f, d, fmt, args...) dev_dbg(d, fmt, ##args)
+#endif
+
+#ifndef input_raw_info
+#define input_raw_info(f, d, fmt, args...) dev_info(d, fmt, ##args)
 #endif
 
 #define SEC_TS_I2C_NAME		"sec_ts"
 #define SEC_TS_DEVICE_NAME	"SEC_TS"
 
+#undef USE_EXTRA_INPUT_FEATURES
 #define USE_OPEN_CLOSE
 #undef USE_RESET_DURING_POWER_ON
 #undef USE_RESET_EXIT_LPM
@@ -565,6 +578,7 @@ struct sec_ts_coordinate {
 	u8 left_event;
 };
 
+struct sec_mmi_data;
 
 struct sec_ts_data {
 	u32 isr_pin;
@@ -574,6 +588,7 @@ struct sec_ts_data {
 	u32 para_addr;
 	u32 flash_page_size;
 	u8 boot_ver[3];
+	u8 device_id[5];
 
 	struct device *dev;
 	struct i2c_client *client;
@@ -622,7 +637,7 @@ struct sec_ts_data {
 	volatile bool reset_is_on_going;
 #endif
 	struct completion resume_done;
-	struct wake_lock wakelock;
+	struct wakeup_source wakelock;
 	struct sec_cmd_data sec;
 	short *pFrame;
 
@@ -653,10 +668,8 @@ struct sec_ts_data {
 	int grip_landscape_edge;
 	u16 grip_landscape_deadzone;
 
-#ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
 	struct delayed_work ghost_check;
 	u8 tsp_dump_lock;
-#endif
 
 	int nv;
 	int cal_count;
@@ -703,11 +716,16 @@ struct sec_ts_data {
 	int (*sec_ts_i2c_write_burst)(struct sec_ts_data *ts, u8 *data, int len);
 	int (*sec_ts_i2c_read_bulk)(struct sec_ts_data *ts, u8 *data, int len);
 	int (*sec_ts_read_customlib)(struct sec_ts_data *ts, u8 *data, int len);
+
+	struct sec_mmi_data *mmi_ptr;
+	bool fw_invalid;
+	bool irq_enabled;
 };
 
 struct sec_ts_plat_data {
 	int max_x;
 	int max_y;
+	unsigned rst_gpio;
 	unsigned irq_gpio;
 	int irq_type;
 	int i2c_burstmax;
@@ -773,6 +791,7 @@ int sec_ts_power(void *data, bool on);
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode);
+int sec_ts_firmware_update(struct sec_ts_data *ts, const u8 *data, size_t size, int bl_update, int restore_cal, int retry);
 int sec_ts_firmware_update_on_probe(struct sec_ts_data *ts, bool force_update);
 int sec_ts_firmware_update_on_hidden_menu(struct sec_ts_data *ts, int update_type);
 int sec_ts_glove_mode_enables(struct sec_ts_data *ts, int mode);
@@ -801,6 +820,8 @@ int execute_selftest(struct sec_ts_data *ts, bool save_result);
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);
 
 void sec_ts_reinit(struct sec_ts_data *ts);
+void sec_ts_sense_on(struct sec_ts_data *ts);
+void sec_ts_irq_enable(struct sec_ts_data *ts, bool on);
 
 #if (1)//!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 
@@ -818,5 +839,10 @@ extern unsigned int lpcharge;
 extern void set_grip_data_to_ic(struct sec_ts_data *ts, u8 flag);
 extern void sec_ts_set_grip_type(struct sec_ts_data *ts, u8 set_type);
 
-
+#ifndef input_log_fix
+#define input_log_fix()
+#endif
+#ifndef input_raw_data_clear
+#define input_raw_data_clear()
+#endif
 #endif

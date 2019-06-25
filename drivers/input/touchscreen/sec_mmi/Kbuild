@@ -1,7 +1,9 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+EXTRA_CFLAGS += \
+		-I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
 
 obj-m := sec_mmi.o
-sec_mmi-objs = sec_ts.o sec_ts_fn.o sec_ts_fw.o sec_ts_only_vendor.o sec_ts_mmi.o
+sec_mmi-objs = sec_ts.o sec_ts_fn.o sec_ts_fw.o sec_ts_mmi.o sec_cmd.o
+# sec_ts_only_vendor.o

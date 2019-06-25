@@ -571,7 +571,7 @@ err_write_fail:
 	return ret;
 }
 
-static int sec_ts_firmware_update(struct sec_ts_data *ts, const u8 *data,
+int sec_ts_firmware_update(struct sec_ts_data *ts, const u8 *data,
 						size_t size, int bl_update, int restore_cal, int retry)
 {
 	int i;
