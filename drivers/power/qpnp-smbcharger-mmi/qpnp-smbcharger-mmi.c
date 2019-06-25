@@ -2706,6 +2706,12 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		} else
 			flip_cap_full = pval.intval;
 
+		if (cap_err == -EAGAIN) {
+			mmi_err(chip, "SMBMMI: The FGs are not ready yet\n");
+			hb_resch_time = HEARTBEAT_DUAL_DELAY_MS;
+			goto sch_hb;
+		}
+
 		report_cap = main_cap * main_cap_full;
 		report_cap += flip_cap * flip_cap_full;
 		report_cap /= main_cap_full + flip_cap_full;
