@@ -1480,11 +1480,11 @@ static void module_on_master(void *device_data)
 	int ret = 0;
 
 	ret = sec_ts_start_device(ts);
-
-	if (ts->input_dev->disabled) {
+	// FIXME
+	// if (ts->input_dev->disabled) {
 		sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
 		ts->power_status = SEC_TS_STATE_LPM;
-	}
+	// }
 
 	if (ret == 0)
 		snprintf(buff, sizeof(buff), "%s", "OK");
@@ -1550,7 +1550,7 @@ static void set_mis_cal_spec(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	if (ts->plat_data->mis_cal_check == 0) {
-		input_err(true, &ts->client->dev, "%s: [ERROR] not support, %d\n", __func__);
+		input_err(true, &ts->client->dev, "%s: [ERROR] not support\n", __func__);
 		goto NG;
 	} else if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n", __func__);
@@ -1620,7 +1620,7 @@ static void get_mis_cal_info(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	if (ts->plat_data->mis_cal_check == 0) {
-		input_err(true, &ts->client->dev, "%s: [ERROR] not support, %d\n", __func__);
+		input_err(true, &ts->client->dev, "%s: [ERROR] not support\n", __func__);
 		mis_cal_data = 0xF1;
 		goto NG;
 	} else if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
@@ -2461,7 +2461,7 @@ int get_tsp_nvm_data_by_size(struct sec_ts_data *ts, u8 offset, int length, u8 *
 	if (!buff)
 		return -ENOMEM;
 
-	input_info(true, &ts->client->dev, "%s: offset:%u, length:%d, size:%d\n", __func__, offset, length, sizeof(data));
+	input_info(true, &ts->client->dev, "%s: offset:%u, length:%d, size:%zu\n", __func__, offset, length, sizeof(data));
 
 	/* SENSE OFF -> CELAR EVENT STACK -> READ NV -> SENSE ON */
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_OFF, NULL, 0);
@@ -3819,7 +3819,7 @@ void sec_ts_fn_remove(struct sec_ts_data *ts)
 {
 	input_err(true, &ts->client->dev, "%s\n", __func__);
 
-	sysfs_delete_link(&ts->sec.fac_dev->kobj, &ts->input_dev->dev.kobj, "input");
+	sysfs_remove_link(&ts->sec.fac_dev->kobj, "input");
 
 	sysfs_remove_group(&ts->sec.fac_dev->kobj,
 			   &cmd_attr_group);
