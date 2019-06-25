@@ -271,7 +271,7 @@ int sec_ts_raw_device_init(struct sec_ts_data *ts)
 	ret = IS_ERR_OR_NULL(sec_class);
 	if (ret) {
 		input_err(true, &ts->client->dev, "%s: fail - class_create\n", __func__);
-		return;
+		return ret;
 	}
 
 	ts->dev = device_create(sec_class, NULL, 0, ts, "sec_ts");
