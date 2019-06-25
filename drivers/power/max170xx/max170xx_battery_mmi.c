@@ -1250,13 +1250,14 @@ static irqreturn_t max17042_thread_handler(int id, void *dev)
 
 static void max17042_thread_worker(struct work_struct *work)
 {
-	u32 val;
+	u32 val, val2;
 	union power_supply_propval ret = {0, };
 	const char *batt_psy_name;
 	struct max17042_chip *chip =
 		container_of(work, struct max17042_chip,
 				thread_work.work);
 	struct regmap *map = chip->regmap;
+	int retval = 0;
 
 	if (!chip->batt_psy && chip->pdata->batt_psy_name) {
 		batt_psy_name = chip->pdata->batt_psy_name;
@@ -1265,7 +1266,21 @@ static void max17042_thread_worker(struct work_struct *work)
 	}
 
 	regmap_read(chip->regmap, MAX17042_STATUS, &val);
-	if ((val & STATUS_POR_BIT) && chip->init_complete) {
+	if ((val & STATUS_POR_BIT) &&
+	    (chip->init_complete || chip->factory_mode)) {
+		retval = regmap_read(map, MAX17042_OCVInternal, &val);
+		if (retval < 0)
+			val = -EINVAL;
+		else
+			val = val * 625 / 8;
+		retval = regmap_read(map, MAX17042_OCV, &val2);
+		if (retval < 0)
+			val2 = -EINVAL;
+		else
+			val2 = val2 * 625 / 8;
+
+		dev_warn(&chip->client->dev,
+			 "After OCV = %d, OCV Internal = %d\n", val2, val);
 		dev_warn(&chip->client->dev, "POR Detected, Loading Config\n");
 		chip->init_complete = 0;
 		schedule_work(&chip->work);
@@ -2453,8 +2468,30 @@ static int max17042_probe(struct i2c_client *client,
 	val2 &= MAX17050_CFG_REV_MASK;
 
 	INIT_WORK(&chip->work, max17042_init_worker);
+	INIT_DELAYED_WORK(&chip->thread_work, max17042_thread_worker);
 
-	if (val & STATUS_POR_BIT) {
+	if (chip->factory_mode) {
+		ret = regmap_read(chip->regmap, MAX17042_OCVInternal, &val);
+		if (ret < 0)
+			val = -EINVAL;
+		else
+			val = val * 625 / 8;
+		ret = regmap_read(chip->regmap, MAX17042_OCV, &val2);
+		if (ret < 0)
+			val2 = -EINVAL;
+		else
+			val2 = val2 * 625 / 8;
+
+		dev_warn(&client->dev, "Factory Mode so Force POR\n");
+		dev_warn(&client->dev, "OCV = %d, OCV Internal = %d\n",
+			 val2, val);
+
+		regmap_write(chip->regmap, MAX17042_VFSOC0Enable,
+			     MAX17050_FORCE_POR);
+		chip->init_complete = 0;
+		schedule_delayed_work(&chip->thread_work,
+			msecs_to_jiffies(MAX17050_POR_WAIT_MS));
+	} else if (val & STATUS_POR_BIT) {
 		dev_warn(&client->dev, "POR Detected, Loading Config\n");
 		schedule_work(&chip->work);
 	} else if (val2 != chip->pdata->config_data->revision) {
@@ -2478,7 +2515,6 @@ static int max17042_probe(struct i2c_client *client,
 			   "max17042_wake");
 	INIT_DELAYED_WORK(&chip->iterm_work,
 			  iterm_work);
-	INIT_DELAYED_WORK(&chip->thread_work, max17042_thread_worker);
 
 	schedule_delayed_work(&chip->iterm_work,
 			      msecs_to_jiffies(10000));
