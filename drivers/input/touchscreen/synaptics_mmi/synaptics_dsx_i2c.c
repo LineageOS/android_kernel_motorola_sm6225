@@ -6756,13 +6756,13 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 		if (exp_fhandler->mode == IC_MODE_UI) {
 			if (rmi4_data->in_bootloader) {
-				dev_warn(dev, "%s: handler %d requires UI mode\n",
+				dev_dbg(dev, "%s: handler %d requires UI mode\n",
 						__func__, exp_fhandler->fn_type);
 				continue;
 			}
 			/* UI mode requires IC powered on */
 			if (state == STATE_SUSPEND) {
-				dev_warn(dev, "%s: handler %d cannot operate while suspended\n",
+				dev_dbg(dev, "%s: handler %d cannot operate while suspended\n",
 						__func__, exp_fhandler->fn_type);
 				scheduled_delay = 500;
 				continue;
