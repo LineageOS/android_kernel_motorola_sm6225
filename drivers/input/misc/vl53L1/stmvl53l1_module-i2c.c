@@ -506,6 +506,8 @@ static int stmvl53l1_probe(struct i2c_client *client,
 	i2c_data->client = client;
 	i2c_data->vl53l1_data = vl53l1_data;
 	i2c_data->irq = -1 ; /* init to no irq */
+	i2c_data->dma_data.len = 0;
+	mutex_init(&i2c_data->dma_data.lock);
 
 	/* parse and configure hardware */
 	rc = stmvl53l1_parse_tree(&i2c_data->client->dev, i2c_data);
@@ -921,6 +923,10 @@ static void memory_release(struct kref *kref)
 	struct i2c_data *data = container_of(kref, struct i2c_data, ref);
 
 	vl53l1_dbgmsg("Enter\n");
+	mutex_lock(&data->dma_data.lock);
+	if (data->dma_data.len > 0 && data->dma_data.data)
+		kfree(data->dma_data.data);
+	mutex_unlock(&data->dma_data.lock);
 	kfree(data->vl53l1_data);
 	kfree(data);
 	vl53l1_dbgmsg("End\n");
