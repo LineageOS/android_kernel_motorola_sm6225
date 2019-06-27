@@ -111,7 +111,6 @@ static uint32_t tv_elapsed_ms(struct timeval *tv)
 static int cci_write(struct stmvl53l1_data *dev, int index,
 		uint8_t *data, uint16_t len)
 {
-	uint8_t buffer[STMVL53L1_MAX_CCI_XFER_SZ + 2];
 	struct i2c_msg msg;
 	struct i2c_data *i2c_client_obj = (struct i2c_data *)dev->client_object;
 	struct i2c_client *client = (struct i2c_client *)i2c_client_obj->client;
@@ -122,16 +121,30 @@ static int cci_write(struct stmvl53l1_data *dev, int index,
 		vl53l1_errmsg("invalid len %d\n", len);
 		return -1;
 	}
+
+	mutex_lock(&i2c_client_obj->dma_data.lock);
+	if (i2c_client_obj->dma_data.len < len + 2) {
+		if (i2c_client_obj->dma_data.data)
+			kfree(i2c_client_obj->dma_data.data);
+		i2c_client_obj->dma_data.data = kzalloc(len + 2, GFP_KERNEL);
+		if (!i2c_client_obj->dma_data.data) {
+			i2c_client_obj->dma_data.len = 0;
+			mutex_unlock(&i2c_client_obj->dma_data.lock);
+			return -1;
+		}
+		i2c_client_obj->dma_data.len = len + 2;
+	}
+
 	cci_access_start();
 	/* build up little endian index in buffer */
-	buffer[0] = (index >> 8) & 0xFF;
-	buffer[1] = (index >> 0) & 0xFF;
+	i2c_client_obj->dma_data.data[0] = (index >> 8) & 0xFF;
+	i2c_client_obj->dma_data.data[1] = (index >> 0) & 0xFF;
 	/* copy write data to buffer after index  */
-	memcpy(buffer + 2, data, len);
+	memcpy(i2c_client_obj->dma_data.data + 2, data, len);
 	/* set i2c msg */
 	msg.addr = client->addr;
 	msg.flags = client->flags;
-	msg.buf = buffer;
+	msg.buf = i2c_client_obj->dma_data.data;
 	msg.len = len + 2;
 
 	rc = i2c_transfer(client->adapter, &msg, 1);
@@ -139,6 +152,9 @@ static int cci_write(struct stmvl53l1_data *dev, int index,
 		vl53l1_errmsg("wr i2c_transfer err:%d, index 0x%x len %d\n",
 				rc, index, len);
 	}
+
+	mutex_unlock(&i2c_client_obj->dma_data.lock);
+
 	cci_access_over("rd status %d long %d ", rc != 1, len);
 	return rc != 1;
 }
@@ -157,6 +173,20 @@ static int cci_read(struct stmvl53l1_data *dev, int index,
 		vl53l1_errmsg("invalid len %d\n", len);
 		return -1;
 	}
+
+	mutex_lock(&i2c_client_obj->dma_data.lock);
+	if (i2c_client_obj->dma_data.len < len) {
+		if (i2c_client_obj->dma_data.data)
+			kfree(i2c_client_obj->dma_data.data);
+		i2c_client_obj->dma_data.data = kzalloc(len, GFP_KERNEL);
+		if (!i2c_client_obj->dma_data.data) {
+			i2c_client_obj->dma_data.len = 0;
+			mutex_unlock(&i2c_client_obj->dma_data.lock);
+			return -1;
+		}
+		i2c_client_obj->dma_data.len = len;
+	}
+
 	cci_access_start();
 
 	/* build up little endian index in buffer */
@@ -170,7 +200,7 @@ static int cci_read(struct stmvl53l1_data *dev, int index,
 	/* read part of the i2c transaction */
 	msg[1].addr = client->addr;
 	msg[1].flags = I2C_M_RD | client->flags;
-	msg[1].buf = data;
+	msg[1].buf = i2c_client_obj->dma_data.data;
 	msg[1].len = len;
 
 	rc = i2c_transfer(client->adapter, msg, 2);
@@ -179,6 +209,10 @@ static int cci_read(struct stmvl53l1_data *dev, int index,
 				__func__, rc, client->addr, index, len);
 
 	}
+
+	memcpy(data, i2c_client_obj->dma_data.data, len);
+	mutex_unlock(&i2c_client_obj->dma_data.lock);
+
 	cci_access_over(" wr len %d status %d", rc != 2, len);
 	return rc != 2;
 }
