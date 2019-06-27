@@ -58,7 +58,7 @@
  * Configure the Netlink-id use
  */
 #ifndef STMVL531_CFG_NETLINK_USER
-#define STMVL531_CFG_NETLINK_USER 23
+#define STMVL531_CFG_NETLINK_USER 8
 #endif
 
 #define STMVL53L1_MAX_CCI_XFER_SZ	256
