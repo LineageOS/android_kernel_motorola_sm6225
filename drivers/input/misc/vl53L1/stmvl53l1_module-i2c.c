@@ -389,12 +389,10 @@ static int stmvl53l1_parse_tree(struct device *dev, struct i2c_data *i2c_data)
 		if (IS_ERR(i2c_data->vdd) || i2c_data->vdd == NULL) {
 			i2c_data->vdd = NULL;
 			/* try gpio */
-			rc = of_property_read_u32_array(dev->of_node,
-				"pwren-gpio", &i2c_data->pwren_gpio, 1);
-			if (rc) {
+			i2c_data->pwren_gpio = of_get_named_gpio(dev->of_node, "pwren-gpio", 0);
+			if (i2c_data->pwren_gpio < 0) {
 				i2c_data->pwren_gpio = -1;
-				vl53l1_wanrmsg(
-			"no regulator, nor power gpio => power ctrl disabled");
+				vl53l1_errmsg(" get i2c_data->pwren_gpio failed\n");
 			}
 		}
 
