@@ -797,6 +797,35 @@ static ssize_t fts_tprwreg_show(
     return count;
 }
 
+/* fts_reg_raw */
+static ssize_t fts_tprwreg_raw_show(
+    struct device *dev, struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    struct input_dev *input_dev = fts_data->input_dev;
+
+    mutex_lock(&input_dev->mutex);
+
+    if (rw_op.len < 0) {
+        count = snprintf(buf, PAGE_SIZE, "Invalid cmd line\n");
+    } else if (rw_op.len == 1) {
+        if (RWREG_OP_READ == rw_op.type) {
+            if (rw_op.res == 0) {
+                buf[0] = (char)rw_op.val;
+                count = 1;
+            }
+        }
+    } else {
+        if (RWREG_OP_READ == rw_op.type) {
+            memcpy(buf, rw_op.opbuf, rw_op.len);
+                count = rw_op.len;
+        }
+    }
+    mutex_unlock(&input_dev->mutex);
+
+    return count;
+}
+
 static int shex_to_int(const char *hex_buf, int size)
 {
     int i;
@@ -1255,6 +1284,7 @@ static DEVICE_ATTR(fts_fw_version, S_IRUGO | S_IWUSR, fts_tpfwver_show, fts_tpfw
 *       cat rw_reg
 */
 static DEVICE_ATTR(fts_rw_reg, S_IRUGO | S_IWUSR, fts_tprwreg_show, fts_tprwreg_store);
+static DEVICE_ATTR(fts_reg_raw, S_IRUGO, fts_tprwreg_raw_show, NULL);
 /*  upgrade from fw bin file   example:echo "*.bin" > fts_upgrade_bin */
 static DEVICE_ATTR(fts_upgrade_bin, S_IRUGO | S_IWUSR, fts_fwupgradebin_show, fts_fwupgradebin_store);
 static DEVICE_ATTR(fts_force_upgrade, S_IRUGO | S_IWUSR, fts_fwforceupg_show, fts_fwforceupg_store);
@@ -1278,6 +1308,7 @@ static DEVICE_ATTR(productinfo, S_IRUGO, fts_productinfo_show, NULL);
 static struct attribute *fts_attributes[] = {
     &dev_attr_fts_fw_version.attr,
     &dev_attr_fts_rw_reg.attr,
+    &dev_attr_fts_reg_raw.attr,
     &dev_attr_fts_dump_reg.attr,
     &dev_attr_fts_upgrade_bin.attr,
     &dev_attr_fts_force_upgrade.attr,
