@@ -76,6 +76,9 @@ uint8_t sel_type = 0x0D;
 
 /* Moved from debug.h End */
 char buf_tmp[BUF_SIZE] = {0};
+uint8_t *reg_read_data = NULL;
+#define DEBUG_READ_BUF_SIZE 128
+
 
 #if defined(HX_PEN_FUNC_EN)
 	struct proc_dir_entry *himax_proc_pen_pos_file;
@@ -152,8 +155,7 @@ static ssize_t himax_pen_ops_read(struct file *file, char *buf,
 				"0\n");
 		}
 
-
-		if (copy_to_user(buf, buf_tmp, len))
+		if (copy_to_user(buf, buf_tmp, (len > BUF_SIZE) ? BUF_SIZE : len))
 			I("%s,here:%d\n", __func__, __LINE__);
 
 		HX_PROC_SEND_FLAG = 1;
@@ -263,7 +265,7 @@ static ssize_t himax_vendor_read(struct file *file, char *buf,
 			HIMAX_DRIVER_VER);
 		HX_PROC_SEND_FLAG = 1;
 
-		if (copy_to_user(buf, buf_tmp, len))
+		if (copy_to_user(buf, buf_tmp, (len > BUF_SIZE) ? BUF_SIZE : len))
 			I("%s,here:%d\n", __func__, __LINE__);
 
 	} else {
@@ -415,7 +417,7 @@ static ssize_t himax_debug_level_read(char *buf, size_t len)
 	ret += snprintf(buf_tmp + ret, sizeof(buf_tmp) - ret, "%d\n",
 		ts_data->debug_log_level);
 
-	if (copy_to_user(buf, buf_tmp, len))
+	if (copy_to_user(buf, buf_tmp, (len > BUF_SIZE) ? BUF_SIZE : len))
 		I("%s,here:%d\n", __func__, __LINE__);
 
 	return ret;
@@ -485,14 +487,17 @@ static ssize_t himax_proc_register_read(char *buf, size_t len)
 {
 	int ret = 0;
 	uint16_t loop_i;
-	uint8_t data[128];
 
-	memset(data, 0x00, sizeof(data));
+	if(reg_read_data == NULL){
+		E("%s reg_read_data is null \n",__func__);
+		return ret;
+	}
+	memset(reg_read_data, 0x00, DEBUG_READ_BUF_SIZE * sizeof(uint8_t));
 
 	I("himax_register_show: %02X,%02X,%02X,%02X\n",
 		register_command[3], register_command[2],
 		register_command[1], register_command[0]);
-	g_core_fp.fp_register_read(register_command, 128, data,
+	g_core_fp.fp_register_read(register_command, 128, reg_read_data,
 				cfg_flag);
 	ret += snprintf(buf_tmp + ret, len - ret,
 		"command:  %02X,%02X,%02X,%02X\n",
@@ -501,7 +506,7 @@ static ssize_t himax_proc_register_read(char *buf, size_t len)
 
 	for (loop_i = 0; loop_i < 128; loop_i++) {
 		ret += snprintf(buf_tmp + ret, sizeof(buf_tmp) - ret, "0x%2.2X ",
-			data[loop_i]);
+			reg_read_data[loop_i]);
 		if ((loop_i % 16) == 15)
 			ret += snprintf(buf_tmp + ret, sizeof(buf_tmp) - ret, "\n");
 
@@ -2055,7 +2060,8 @@ static ssize_t himax_debug_read(struct file *file, char *buf,
 	int i = 0;
 
 	if (!HX_PROC_SEND_FLAG) {
-		I("%s, Enter\n", __func__);
+		I("%s, Enter, len = %d\n", __func__, (int)len);
+		memset(buf_tmp, 0, sizeof(buf_tmp));
 
 		if (dbg_cmd_flag) {
 			memset(buf_tmp, 0, sizeof(buf_tmp));
@@ -2249,7 +2255,7 @@ static ssize_t himax_debug_read(struct file *file, char *buf,
 		}
 
 END_FUNC_R:
-		if (copy_to_user(buf, buf_tmp, len))
+		if (copy_to_user(buf, buf_tmp, (len > BUF_SIZE) ? BUF_SIZE : len))
 			I("%s,here:%d\n", __func__, __LINE__);
 
 		HX_PROC_SEND_FLAG = 1;
@@ -2701,6 +2707,12 @@ int himax_debug_init(void)
 		return -EPROBE_DEFER;
 	}
 
+	reg_read_data = kzalloc(DEBUG_READ_BUF_SIZE * sizeof(uint8_t), GFP_KERNEL);
+	if (reg_read_data == NULL) {
+		err = -ENOMEM;
+		goto err_alloc_reg_read_data_fail;
+	}
+
 	debug_data = kzalloc(sizeof(struct himax_debug), GFP_KERNEL);
 	if (debug_data == NULL) { /*Allocate debug data space*/
 		err = -ENOMEM;
@@ -2805,6 +2817,9 @@ err_create_flash_dump_wq_failed:
 	kfree(debug_data);
 	debug_data = NULL;
 err_alloc_debug_data_fail:
+	kfree(reg_read_data);
+	reg_read_data = NULL;
+err_alloc_reg_read_data_fail:
 
 	return err;
 }
