@@ -3587,7 +3587,9 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	if (chip->smb_version == PM8150B_SUBTYPE ||
-	    chip->smb_version == PMI632_SUBTYPE) {
+	    chip->smb_version == PMI632_SUBTYPE ||
+	    chip->smb_version == PM660_SUBTYPE) {
+		mmi_err(chip, "DISABLE all QCOM JEITA\n");
 		/* Ensure SW JEITA is DISABLED */
 		pval.intval = 0;
 		power_supply_set_property(chip->qcom_psy,
