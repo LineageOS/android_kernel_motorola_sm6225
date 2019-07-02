@@ -21,6 +21,13 @@
 #include <linux/platform_device.h>
 #include <linux/notifier.h>
 
+#define RESET_LOW_SLEEP_MIN_US 5000
+#define RESET_LOW_SLEEP_MAX_US (RESET_LOW_SLEEP_MIN_US + 100)
+#define RESET_HIGH_SLEEP1_MIN_US 100
+#define RESET_HIGH_SLEEP1_MAX_US (RESET_HIGH_SLEEP1_MIN_US + 100)
+#define RESET_HIGH_SLEEP2_MIN_US 5000
+#define RESET_HIGH_SLEEP2_MAX_US (RESET_HIGH_SLEEP2_MIN_US + 100)
+
 struct FPS_data {
 	unsigned int enabled;
 	unsigned int state;
@@ -119,7 +126,53 @@ struct fpc1020_data {
 	int irq_gpio;
 	int irq_num;
 	unsigned int irq_cnt;
+	int rst_gpio;
 };
+
+static int hw_reset(struct fpc1020_data *fpc1020)
+{
+	int irq_gpio;
+	struct device *dev = fpc1020->dev;
+	int rc = 0;
+
+	if (!gpio_is_valid(fpc1020->rst_gpio)) {
+		dev_warn(dev, "reset pin is invalid\n");
+		goto exit;
+	}
+
+	rc = gpio_direction_output(fpc1020->rst_gpio, 1);
+	if (rc)
+		goto exit;
+	usleep_range(RESET_HIGH_SLEEP1_MIN_US, RESET_HIGH_SLEEP1_MAX_US);
+
+	rc = gpio_direction_output(fpc1020->rst_gpio, 0);
+	if (rc)
+		goto exit;
+	usleep_range(RESET_LOW_SLEEP_MIN_US, RESET_LOW_SLEEP_MAX_US);
+
+	rc = gpio_direction_output(fpc1020->rst_gpio, 1);
+	if (rc)
+		goto exit;
+	usleep_range(RESET_HIGH_SLEEP2_MIN_US, RESET_HIGH_SLEEP2_MAX_US);
+
+	irq_gpio = gpio_get_value(fpc1020->irq_gpio);
+	dev_info(dev, "IRQ after reset %d\n", irq_gpio);
+
+exit:
+	return rc;
+}
+
+static ssize_t hw_reset_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int rc;
+	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+
+	rc = hw_reset(fpc1020);
+
+	return rc ? rc : count;
+}
+static DEVICE_ATTR(hw_reset, S_IWUSR, NULL, hw_reset_set);
 
 static ssize_t dev_enable_set(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -176,6 +229,7 @@ static struct attribute *attributes[] = {
 	&dev_attr_dev_enable.attr,
 	&dev_attr_irq.attr,
 	&dev_attr_irq_cnt.attr,
+	&dev_attr_hw_reset.attr,
 #ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	&dev_attr_vendor.attr,
 	&dev_attr_modalias.attr,
@@ -219,6 +273,10 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	int rc;
 
 	*gpio = of_get_named_gpio(np, label, 0);
+	if (!gpio_is_valid(*gpio)) {
+		dev_err(dev, "gpio %s is invalid\n", label);
+		return -EINVAL;
+	}
 	rc = devm_gpio_request(dev, *gpio, label);
 	if (rc) {
 		dev_err(dev, "failed to request gpio %d\n", *gpio);
@@ -305,6 +363,20 @@ static int fpc1020_probe(struct platform_device *pdev)
 	gpio_direction_input(fpc1020->irq_gpio);
 	if (rc)
 		goto exit;
+
+	rc = fpc1020_request_named_gpio(fpc1020, "rst",
+			&fpc1020->rst_gpio);
+	if (rc)
+		fpc1020->rst_gpio = -EINVAL;
+
+	if (gpio_is_valid(fpc1020->rst_gpio)) {
+		usleep_range(RESET_LOW_SLEEP_MIN_US, RESET_LOW_SLEEP_MAX_US);
+		rc = gpio_direction_output(fpc1020->rst_gpio, 1);
+		if (rc) {
+			dev_err(dev, "cannot set reset pin direction\n");
+			goto exit;
+		}
+	}
 
 	rc = device_init_wakeup(fpc1020->dev, true);
 	if (rc)
