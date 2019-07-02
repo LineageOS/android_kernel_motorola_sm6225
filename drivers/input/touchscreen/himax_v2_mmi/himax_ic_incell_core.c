@@ -2089,51 +2089,47 @@ static void himax_mcu_touch_information(void)
 	char data[DATA_LEN_8] = {0};
 	uint8_t err_cnt = 0;
 
-	g_core_fp.fp_register_read(pdriver_op->addr_fw_define_rxnum_txnum_maxpt, DATA_LEN_8, data, 0);
-	ic_data->HX_RX_NUM				= data[2];
-	ic_data->HX_TX_NUM				= data[3];
-	ic_data->HX_MAX_PT				= data[4];
-	/*I("%s : HX_RX_NUM=%d,ic_data->HX_TX_NUM=%d,ic_data->HX_MAX_PT=%d\n",__func__,ic_data->HX_RX_NUM,ic_data->HX_TX_NUM,ic_data->HX_MAX_PT);*/
-	g_core_fp.fp_register_read(pdriver_op->addr_fw_define_xy_res_enable, DATA_LEN_4, data, 0);
+	I(" DT-%s:touch_info: HX_RX_NUM = %d, HX_TX_NUM = %d, HX_BT_NUM = %d,HX_X_RES = %d,HX_Y_RES = %d, HX_MAX_PT = %d, HX_XY_REVERSE = %d, HX_INT_IS_EDGE = %d\n", __func__,
+		ic_data->HX_RX_NUM,ic_data->HX_TX_NUM,ic_data->HX_BT_NUM,ic_data->HX_X_RES,ic_data->HX_Y_RES,ic_data->HX_MAX_PT,ic_data->HX_XY_REVERSE,ic_data->HX_INT_IS_EDGE);
 
-	/*I("%s : c_data->HX_XY_REVERSE=0x%2.2X\n",__func__,data[1]);*/
-	if ((data[1] & 0x04) == 0x04)
-		ic_data->HX_XY_REVERSE = true;
-	else
-		ic_data->HX_XY_REVERSE = false;
+	if ((0 == ic_data->HX_RX_NUM) || (0 == ic_data->HX_TX_NUM) || (0 == ic_data->HX_X_RES) || (0 == ic_data->HX_Y_RES)) {
+		g_core_fp.fp_register_read(pdriver_op->addr_fw_define_rxnum_txnum_maxpt, DATA_LEN_8, data, 0);
+		ic_data->HX_RX_NUM				= data[2];
+		ic_data->HX_TX_NUM				= data[3];
+		ic_data->HX_MAX_PT				= data[4];
+		/*I("%s : HX_RX_NUM=%d,ic_data->HX_TX_NUM=%d,ic_data->HX_MAX_PT=%d\n",__func__,ic_data->HX_RX_NUM,ic_data->HX_TX_NUM,ic_data->HX_MAX_PT);*/
+		g_core_fp.fp_register_read(pdriver_op->addr_fw_define_xy_res_enable, DATA_LEN_4, data, 0);
 
-	g_core_fp.fp_register_read(pdriver_op->addr_fw_define_x_y_res, DATA_LEN_4, data, 0);
-	ic_data->HX_Y_RES = data[0] * 256 + data[1];
-	ic_data->HX_X_RES = data[2] * 256 + data[3];
-	/*I("%s : ic_data->HX_Y_RES=%d,ic_data->HX_X_RES=%d\n",__func__,ic_data->HX_Y_RES,ic_data->HX_X_RES);*/
+		/*I("%s : c_data->HX_XY_REVERSE=0x%2.2X\n",__func__,data[1]);*/
+		if ((data[1] & 0x04) == 0x04)
+			ic_data->HX_XY_REVERSE = true;
+		else
+			ic_data->HX_XY_REVERSE = false;
 
-	g_core_fp.fp_register_read(pdriver_op->addr_fw_define_int_is_edge, DATA_LEN_4, data, 0);
-	/*I("%s : data[0]=0x%2.2X,data[1]=0x%2.2X,data[2]=0x%2.2X,data[3]=0x%2.2X\n",__func__,data[0],data[1],data[2],data[3]);*/
-	/*I("data[0] & 0x01 = %d\n",(data[0] & 0x01));*/
-	if ((data[1] & 0x01) == 1)
-		ic_data->HX_INT_IS_EDGE = true;
-	else
-		ic_data->HX_INT_IS_EDGE = false;
+		g_core_fp.fp_register_read(pdriver_op->addr_fw_define_x_y_res, DATA_LEN_4, data, 0);
+		ic_data->HX_Y_RES = data[0] * 256 + data[1];
+		ic_data->HX_X_RES = data[2] * 256 + data[3];
+		/*I("%s : ic_data->HX_Y_RES=%d,ic_data->HX_X_RES=%d\n",__func__,ic_data->HX_Y_RES,ic_data->HX_X_RES);*/
 
-	/*1. Read number of MKey R100070E8H to determin data size*/
-	g_core_fp.fp_register_read(psram_op->addr_mkey, DATA_LEN_4, data, 0);
-	/* I("%s: tmp_data[0] = 0x%02X,tmp_data[1] = 0x%02X,tmp_data[2] = 0x%02X,tmp_data[3] = 0x%02X\n",*/
-	/*__func__, tmp_data[0], tmp_data[1], tmp_data[2], tmp_data[3]);*/
-	ic_data->HX_BT_NUM = data[0] & 0x03;
+		g_core_fp.fp_register_read(pdriver_op->addr_fw_define_int_is_edge, DATA_LEN_4, data, 0);
+		/*I("%s : data[0]=0x%2.2X,data[1]=0x%2.2X,data[2]=0x%2.2X,data[3]=0x%2.2X\n",__func__,data[0],data[1],data[2],data[3]);*/
+		/*I("data[0] & 0x01 = %d\n",(data[0] & 0x01));*/
+		if ((data[1] & 0x01) == 1)
+			ic_data->HX_INT_IS_EDGE = true;
+		else
+			ic_data->HX_INT_IS_EDGE = false;
 
-	err_cnt = himax_mcu_tp_info_check();
-	if (err_cnt > 0)
-		E("TP Info from IC is wrong, err_cnt = 0x%X", err_cnt);
+		/*1. Read number of MKey R100070E8H to determin data size*/
+		g_core_fp.fp_register_read(psram_op->addr_mkey, DATA_LEN_4, data, 0);
+		/* I("%s: tmp_data[0] = 0x%02X,tmp_data[1] = 0x%02X,tmp_data[2] = 0x%02X,tmp_data[3] = 0x%02X\n",*/
+		/*__func__, tmp_data[0], tmp_data[1], tmp_data[2], tmp_data[3]);*/
+		ic_data->HX_BT_NUM = data[0] & 0x03;
 
-#else
-	ic_data->HX_RX_NUM				= FIX_HX_RX_NUM;
-	ic_data->HX_TX_NUM				= FIX_HX_TX_NUM;
-	ic_data->HX_BT_NUM				= FIX_HX_BT_NUM;
-	ic_data->HX_X_RES				= FIX_HX_X_RES;
-	ic_data->HX_Y_RES				= FIX_HX_Y_RES;
-	ic_data->HX_MAX_PT				= FIX_HX_MAX_PT;
-	ic_data->HX_XY_REVERSE			= FIX_HX_XY_REVERSE;
-	ic_data->HX_INT_IS_EDGE			= FIX_HX_INT_IS_EDGE;
+		err_cnt = himax_mcu_tp_info_check();
+		if (err_cnt > 0)
+			E("TP Info from IC is wrong, err_cnt = 0x%X", err_cnt);
+	}
+
 #endif
 	I("%s:HX_RX_NUM =%d,HX_TX_NUM =%d,HX_MAX_PT=%d\n", __func__, ic_data->HX_RX_NUM, ic_data->HX_TX_NUM, ic_data->HX_MAX_PT);
 	I("%s:HX_XY_REVERSE =%d,HX_Y_RES =%d,HX_X_RES=%d\n", __func__, ic_data->HX_XY_REVERSE, ic_data->HX_Y_RES, ic_data->HX_X_RES);
