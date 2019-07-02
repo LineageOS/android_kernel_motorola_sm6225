@@ -196,6 +196,11 @@ int himax_parse_dt(struct himax_ts_data *ts,
 		I(" DT:protocol_type=%d\n", pdata->protocol_type);
 	}
 
+	ts->vdd_1v8_always_on = of_property_read_bool(dt, "himax,vdd_1v8_always_on");
+	if (ts->vdd_1v8_always_on){
+		I(" DT:vdd_1v8_always_on=%d\n", ts->vdd_1v8_always_on);
+	}
+
 	himax_vk_parser(dt, pdata);
 	return 0;
 }

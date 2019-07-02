@@ -3474,7 +3474,7 @@ END:
 
 int himax_chip_common_resume(struct himax_ts_data *ts)
 {
-#if defined(HX_RST_PIN_FUNC) && defined(HX_RESUME_HW_RESET) && defined(HX_ZERO_FLASH)
+#if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 	int result = 0;
 #endif
 	I("%s: enter\n", __func__);
@@ -3497,21 +3497,15 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 		if (ts->pdata->powerOff3V3 && ts->pdata->power)
 			ts->pdata->power(1);
 
-
-#if defined(HX_SMART_WAKEUP) || defined(HX_HIGH_SENSE) || defined(HX_USB_DETECT_GLOBAL)
-	if (g_core_fp.fp_resend_cmd_func != NULL)
-		g_core_fp.fp_resend_cmd_func(ts->suspended);
-
-#ifdef HX_CODE_OVERLAY
-	if (ts->SMWP_enable && ts->in_self_test == 0)
-		g_core_fp.fp_0f_overlay(3, 0);
-#endif
-
-#elif defined(HX_RST_PIN_FUNC) && defined(HX_RESUME_HW_RESET)
+#if defined(HX_RST_PIN_FUNC) && defined(HX_RESUME_HW_RESET)
 	if (g_core_fp.fp_ic_reset != NULL)
 		g_core_fp.fp_ic_reset(false, false);
-#ifdef HX_ZERO_FLASH
-	I("It will update fw after esd event in zero flash mode!\n");
+#endif
+#if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
+#ifdef HX_SMART_WAKEUP
+	if (!ts->SMWP_enable) {
+#endif
+	I("It will update fw after resume in zero flash mode!\n");
 	if (g_core_fp.fp_0f_operation_dirly != NULL) {
 		result = g_core_fp.fp_0f_operation_dirly();
 		if (result) {
@@ -3523,6 +3517,17 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 		g_core_fp.fp_reload_disable(0);
 	if (g_core_fp.fp_sense_on != NULL)
 		g_core_fp.fp_sense_on(0x00);
+#ifdef HX_SMART_WAKEUP
+	}
+#endif
+#endif
+#if defined(HX_SMART_WAKEUP) || defined(HX_HIGH_SENSE) || defined(HX_USB_DETECT_GLOBAL)
+	if (g_core_fp.fp_resend_cmd_func != NULL)
+		g_core_fp.fp_resend_cmd_func(ts->suspended);
+
+#ifdef HX_CODE_OVERLAY
+	if (ts->SMWP_enable && ts->in_self_test == 0)
+		g_core_fp.fp_0f_overlay(3, 0);
 #endif
 #endif
 	himax_report_all_leave_event(ts);
@@ -3530,7 +3535,7 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 	if (g_core_fp.fp_sense_on != NULL)
 		g_core_fp.fp_resume_ic_action();
 	himax_int_enable(1);
-#if defined(HX_RST_PIN_FUNC) && defined(HX_RESUME_HW_RESET) && defined(HX_ZERO_FLASH)
+#if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 ESCAPE_0F_UPDATE:
 #endif
 END:
