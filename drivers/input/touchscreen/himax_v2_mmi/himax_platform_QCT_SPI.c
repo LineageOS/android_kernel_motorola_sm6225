@@ -104,7 +104,9 @@ int himax_parse_dt(struct himax_ts_data *ts,
 					struct himax_i2c_platform_data *pdata)
 {
 	int rc, coords_size = 0;
+	int touch_info_size = 0;
 	uint32_t coords[4] = {0};
+	uint32_t touch_info[8] = {0};
 	struct property *prop;
 	struct device_node *dt = ts->dev->of_node;
 	u32 data = 0;
@@ -149,6 +151,32 @@ int himax_parse_dt(struct himax_ts_data *ts,
 
 	if (!gpio_is_valid(pdata->gpio_irq))
 		I(" DT:gpio_irq value is not valid\n");
+
+	prop = of_find_property(dt, "himax,touch_info", NULL);
+	if (prop) {
+		touch_info_size = prop->length / sizeof(u32);
+		if (touch_info_size != 8) {
+			D(" %s:Invalid touch_info size %d\n", __func__, touch_info_size);
+		} else {
+			rc = of_property_read_u32_array(dt, "himax,touch_info", touch_info, touch_info_size);
+			if (rc && (rc != -EINVAL)) {
+				D(" %s:Fail to read touch_info %d\n", __func__, rc);
+			} else {
+				ic_data->HX_RX_NUM	= touch_info[0];
+				ic_data->HX_TX_NUM	= touch_info[1];
+				ic_data->HX_BT_NUM	= touch_info[2];
+				ic_data->HX_X_RES	= touch_info[3];
+				ic_data->HX_Y_RES	= touch_info[4];
+				ic_data->HX_MAX_PT	= touch_info[5];
+				ic_data->HX_XY_REVERSE	= touch_info[6];
+				ic_data->HX_INT_IS_EDGE	= touch_info[7];
+				D(" %s:success to read touch_info from dts \n", __func__);
+			}
+		}
+	}
+
+	I(" DT-%s:touch_info: HX_RX_NUM = %d, HX_TX_NUM = %d, HX_BT_NUM = %d,HX_X_RES = %d,HX_Y_RES = %d, HX_MAX_PT = %d, HX_XY_REVERSE = %d, HX_INT_IS_EDGE = %d\n", __func__,
+		ic_data->HX_RX_NUM,ic_data->HX_TX_NUM,ic_data->HX_BT_NUM,ic_data->HX_X_RES,ic_data->HX_Y_RES,ic_data->HX_MAX_PT,ic_data->HX_XY_REVERSE,ic_data->HX_INT_IS_EDGE);
 
 
 	pdata->gpio_reset = of_get_named_gpio(dt, "himax,rst-gpio", 0);
