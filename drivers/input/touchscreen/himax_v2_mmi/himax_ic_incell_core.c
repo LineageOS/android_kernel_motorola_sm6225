@@ -2019,11 +2019,20 @@ static int himax_mcu_fw_ver_bin(void)
 #ifdef HX_RST_PIN_FUNC
 static void himax_mcu_pin_reset(void)
 {
-	I("%s: Now reset the Touch chip.\n", __func__);
+	I("%s: Now reset the Touch chip,private_ts->vdd_1v8_always_on = %d \n",
+		__func__,private_ts->vdd_1v8_always_on);
 	himax_rst_gpio_set(private_ts->rst_gpio, 0);
-	msleep(20);
+	if(private_ts->vdd_1v8_always_on)
+		msleep(10);
+	else
+		msleep(20);
 	himax_rst_gpio_set(private_ts->rst_gpio, 1);
-	msleep(50);
+#ifdef HX_ZERO_FLASH
+		msleep(10);
+#else
+		msleep(50);
+#endif
+
 }
 
 static void himax_mcu_ic_reset(uint8_t loadconfig, uint8_t int_off)
