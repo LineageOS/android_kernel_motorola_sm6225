@@ -771,6 +771,8 @@ void sysfs_egis_init(struct etspi_data *etspi)
 		platform_device_put(etspi->spi);
 		return;
 	}
+
+	kobject_uevent(&etspi->spi->dev.kobj, KOBJ_CHANGE);  // chengql2
 }
 
 void sysfs_egis_destroy(struct etspi_data *etspi)
