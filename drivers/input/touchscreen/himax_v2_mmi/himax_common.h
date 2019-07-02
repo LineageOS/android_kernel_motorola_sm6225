@@ -76,10 +76,11 @@
 /*#define HX_USB_DETECT_GLOBAL*/
 /*#define HX_USB_DETECT_CALLBACK*/
 /*#define HX_PROTOCOL_A*/				/* for MTK special platform.If turning on,it will report to system by using specific format. */
-/*#define HX_RESUME_HW_RESET*/
+#define HX_RESUME_HW_RESET
 #define HX_PROTOCOL_B_3PA
 /*#define HX_FIX_TOUCH_INFO*/	/* if open, you need to change the touch info in the fix_touch_info*/
 /*#define HX_ZERO_FLASH*/
+/*#define HX_RESUME_SET_FW*/
 /*#if defined(HX_ZERO_FLASH)*/
 /*#define HX_CODE_OVERLAY*/
 /*#define HX_EDGE_LIMIT*/
@@ -361,6 +362,7 @@ struct himax_ts_data {
 	int use_irq;
 	int (*power)(int on);
 	int pre_finger_data[10][2];
+	bool vdd_1v8_always_on;
 
 	struct device *dev;
 	struct workqueue_struct *himax_wq;
