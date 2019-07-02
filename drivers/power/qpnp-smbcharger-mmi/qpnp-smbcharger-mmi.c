@@ -138,6 +138,8 @@ enum {
 #define DEMO_MODE_VOLTAGE 4000
 #define WARM_TEMP 45
 #define COOL_TEMP 0
+#define WEAK_CHARGER_WAIT 30000
+#define EVENT_WEAK_CHARGER_WAIT 0
 
 #define HEARTBEAT_DELAY_MS 60000
 #define HEARTBEAT_DUAL_DELAY_MS 10000
@@ -300,6 +302,7 @@ struct smb_mmi_charger {
 	struct power_supply	*max_flip_psy;
 	struct notifier_block	mmi_psy_notifier;
 	struct delayed_work	heartbeat_work;
+	struct delayed_work	weakcharger_work;
 
 	struct votable 		*chg_dis_votable;
 	struct votable		*fcc_votable;
@@ -318,6 +321,7 @@ struct smb_mmi_charger {
 	bool			factory_kill_armed;
 	int			gen_log_rate_s;
 	bool			demo_mode_usb_suspend;
+	unsigned long		flags;
 
 	/* Charge Profile */
 	struct mmi_sm_params	sm_param[3];
@@ -1606,6 +1610,20 @@ static void mmi_chrg_input_config(struct smb_mmi_charger *chg,
 		mmi_chrg_usb_vin_config(chg, stat->usb_mv);
 }
 
+static void mmi_weakcharger_work(struct work_struct *work)
+{
+	struct smb_mmi_charger *chip = container_of(work,
+						struct smb_mmi_charger,
+						weakcharger_work.work);
+
+	set_bit(EVENT_WEAK_CHARGER_WAIT, &chip->flags);
+	cancel_delayed_work(&chip->heartbeat_work);
+	schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(100));
+
+	mmi_dbg(chip, "SMBMMI: Weak timer expired\n");
+}
+
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
@@ -1654,16 +1672,24 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	mmi_dbg(chg, "SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
 	if (chrg_cm_ma >= TURBO_CHRG_THRSH)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
-	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) && (chrg_cs_ma < WEAK_CHRG_THRSH))
+	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) &&
+			(chrg_cs_ma < WEAK_CHRG_THRSH) &&
+			test_bit(EVENT_WEAK_CHARGER_WAIT, &chg->flags))
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
 	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
 
 end_rate_check:
-	if (prev_chg_rate != chg->charger_rate)
+	if (prev_chg_rate != chg->charger_rate) {
+		clear_bit(EVENT_WEAK_CHARGER_WAIT, &chg->flags);
+		cancel_delayed_work(&chg->weakcharger_work);
+		if(chg->charger_rate == POWER_SUPPLY_CHARGE_RATE_NORMAL)
+			schedule_delayed_work(&chg->weakcharger_work,
+					msecs_to_jiffies(WEAK_CHARGER_WAIT));
+
 		mmi_info(chg, "%s Charger Detected\n",
 		       charge_rate[chg->charger_rate]);
-
+	}
 }
 
 #define TAPER_COUNT 2
@@ -3505,6 +3531,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	parse_mmi_dt(chip);
 
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
+	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
 	wakeup_source_init(&chip->smb_mmi_hb_wake_source,
 			   "smb_mmi_hb_wake");
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
