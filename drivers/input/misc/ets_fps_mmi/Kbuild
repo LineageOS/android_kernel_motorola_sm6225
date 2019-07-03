@@ -22,3 +22,9 @@ endif
 
 obj-m += ets_fps_mmi.o
 
+ifneq ($(filter doha%, $(TARGET_PRODUCT)),)
+EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_POSE=0
+else
+EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_POSE=270
+endif
+
