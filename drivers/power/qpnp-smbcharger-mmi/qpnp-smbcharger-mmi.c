@@ -1520,7 +1520,6 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 				    union power_supply_propval *val)
 {
 	int rc = -EINVAL;
-	bool chg_online = false;
 
 	val->intval = 0;
 
@@ -1529,18 +1528,32 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 				POWER_SUPPLY_PROP_ONLINE, val);
 		if (rc < 0)
 			mmi_err(chg, "Couldn't read USB online rc=%d\n", rc);
+		else if (val->intval)
+			return rc;
 	}
-	chg_online = !!val->intval;
 
 	if (chg->pc_port_psy) {
 		rc = power_supply_get_property(chg->pc_port_psy,
 				POWER_SUPPLY_PROP_ONLINE, val);
 		if (rc < 0)
 			mmi_err(chg, "Couldn't read PC online rc=%d\n", rc);
+		else if (val->intval)
+			return rc;
 	}
-	chg_online = chg_online || !!val->intval;
 
-	val->intval = chg_online;
+	val->intval = 0;
+	if (chg->usb_psy) {
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_TYPEC_MODE, val);
+		if (rc < 0)
+			mmi_err(chg, "Couldn't read typec mode rc=%d\n", rc);
+		else if (val->intval == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT ||
+			 val->intval == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM ||
+			 val->intval == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+			val->intval = 1;
+			return rc;
+		}
+	}
 
 	return rc;
 }
