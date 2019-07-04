@@ -128,7 +128,7 @@ u32 bi_boot_seq(void)
 EXPORT_SYMBOL(bi_boot_seq);
 
 #define EMIT_BOOT_SEQ() \
-	    EMIT_BOOTINFO("BOOT_SEQ", "0x%08x", boot_seq)
+	    EMIT_BOOTINFO("BOOT_SEQ", "%d", boot_seq)
 
 /*
  * BL build signature a succession of lines of text each denoting
@@ -306,11 +306,11 @@ int mmi_boot_info_init(void)
 	mmi_annotate_persist("MBM_VERSION: 0x%08x\n", bi_mbm_version());
 	mmi_annotate_persist("SERIAL: 0x%llx\n", bi_serial());
 	mmi_annotate_persist("HW_REV: 0x%04x\n", bi_hwrev());
-	mmi_annotate_persist("BOOT_SEQ: 0x%08x\n", bi_boot_seq());
+	mmi_annotate_persist("BOOT_SEQ: %d\n", bi_boot_seq());
 	mmi_annotate("POWERUPREASON: 0x%08x\n", bi_powerup_reason());
 	mmi_annotate("Last boot reason: %s\n\n", bi_bootreason());
 
-	pr_info("BOOT_SEQ: 0x%08x\n", bi_boot_seq());
+	pr_info("BOOT_SEQ: %d\n", bi_boot_seq());
 	return 0;
 }
 
