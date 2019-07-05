@@ -35,7 +35,6 @@
 #include <linux/sensors.h>
 #include <linux/input/sx933x.h> 	/* main struct, interrupt,init,pointers */
 
-
 #define SX933x_DEBUG 0
 #define LOG_TAG "[sar SX933x]: "
 
@@ -628,15 +627,40 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 {
 	struct device_node *dNode = dev->of_node;
 	enum of_gpio_flags flags;
+	int rc;
 
 	if (dNode == NULL)
 		return -ENODEV;
 
+	rc = of_property_read_u32(dNode,"Semtech,power-supply-type",&pdata->power_supply_type);
+	if(rc < 0){
+		pdata->power_supply_type = SX933X_POWER_SUPPLY_TYPE_PMIC_LDO;
+		LOG_INFO("%s :pmic ldo is the default if not set power-supply-type in dt\n",
+					__func__);
+	}
+
+	switch(pdata->power_supply_type){
+		case SX933X_POWER_SUPPLY_TYPE_PMIC_LDO:
+			/* using regulator_get() to fetch power_supply in sx933x_probe()*/
+			break;
+		case SX933X_POWER_SUPPLY_TYPE_ALWAYS_ON:
+			/* power supply always on: no need fetch others control  in drivers */
+			break;
+		case SX933X_POWER_SUPPLY_TYPE_EXTERNAL_LDO:
+			/* parse the gpio number for external LDO enable pin*/
+			pdata->eldo_gpio = of_get_named_gpio_flags(dNode,
+					"Semtech,eldo-gpio",0,&flags);
+			LOG_INFO("%s -  used eLDO_gpio 0x%x \n", __func__, pdata->eldo_gpio);
+			break;
+		default:
+			LOG_INFO("%s -  Error power_supply_type: 0x%x \n", __func__, pdata->power_supply_type);
+			break;
+	}
+
 	pdata->irq_gpio= of_get_named_gpio_flags(dNode,
 			"Semtech,nirq-gpio", 0, &flags);
 	irq_gpio_num = pdata->irq_gpio;
-	if (pdata->irq_gpio < 0)
-	{
+	if (pdata->irq_gpio < 0){
 		LOG_DBG("%s - get irq_gpio error\n", __func__);
 		return -ENODEV;
 	}
@@ -1028,26 +1052,49 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 			}
 		}
 
-		pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
-		if (IS_ERR(pplatData->cap_vdd)) {
-			if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
-				err = PTR_ERR(pplatData->cap_vdd);
-				return err;
-			}
-			LOG_DBG("%s: Failed to get regulator\n",
-					__func__);
-		} else {
-			err = regulator_enable(pplatData->cap_vdd);
-			if (err) {
-				regulator_put(pplatData->cap_vdd);
-				LOG_DBG("%s: Error %d enable regulator\n",
-						__func__, err);
-				return err;
-			}
-			pplatData->cap_vdd_en = true;
-			LOG_DBG("cap_vdd regulator is %s\n",
+		switch(pplatData->power_supply_type){
+			case SX933X_POWER_SUPPLY_TYPE_PMIC_LDO:
+				pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
+				if (IS_ERR(pplatData->cap_vdd)) {
+					if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
+						err = PTR_ERR(pplatData->cap_vdd);
+						return err;
+					}
+					LOG_INFO("%s: Failed to get regulator\n", __func__);
+				} else {
+					LOG_INFO("%s: with cap_vdd\n",  __func__);
+					err = regulator_enable(pplatData->cap_vdd);
+					if (err) {
+						regulator_put(pplatData->cap_vdd);
+						LOG_INFO("%s: Error %d enable regulator\n",
+								__func__, err);
+						return err;
+					}
+					pplatData->cap_vdd_en = true;
+					LOG_INFO("cap_vdd regulator is %s\n",
 					regulator_is_enabled(pplatData->cap_vdd) ?
-					"on" : "off");
+									"on" : "off");
+				}
+				break;
+			case SX933X_POWER_SUPPLY_TYPE_ALWAYS_ON:
+				LOG_INFO("%s: using always on power supply\n",  __func__);
+				break;
+			case SX933X_POWER_SUPPLY_TYPE_EXTERNAL_LDO:
+				LOG_INFO("%s: enable external LDO, en_gpio:%d\n",
+						__func__, pplatData->eldo_gpio);
+				err = gpio_request(pplatData->eldo_gpio, "sx933x_eldo_gpio");
+				if (err < 0){
+					LOG_DBG("SX933x Request eLDO gpio. Fail![%d]\n", err);
+					return err;
+				}
+				err = gpio_direction_output(pplatData->eldo_gpio,1);
+				if(err < 0){
+					LOG_INFO("%s:can not enable external LDO,%d",__func__, err);
+					return err;
+				}
+				pplatData->eldo_vdd_en = true;
+				msleep(20);
+				break;
 		}
 
 #ifdef CONFIG_CAPSENSE_USB_CAL
@@ -1144,6 +1191,10 @@ static int sx933x_remove(struct i2c_client *client)
 		if (pplatData->cap_vdd_en) {
 			regulator_disable(pplatData->cap_vdd);
 			regulator_put(pplatData->cap_vdd);
+		}
+
+		if(pplatData->eldo_vdd_en){
+			gpio_direction_output(pplatData->eldo_gpio,0);
 		}
 		for (i = 0; i <pDevice->pbuttonInformation->buttonSize; i++) {
 			pCurrentbutton = &(pDevice->pbuttonInformation->buttons[i]);
