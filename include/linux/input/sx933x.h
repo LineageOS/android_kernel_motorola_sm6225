@@ -259,7 +259,11 @@
 #define SX933X_EXIT_CONTROL                   0x0000000C
 
 
-
+typedef enum{
+	SX933X_POWER_SUPPLY_TYPE_PMIC_LDO,	// pmic LDO
+	SX933X_POWER_SUPPLY_TYPE_ALWAYS_ON, // power-supply always on
+	SX933X_POWER_SUPPLY_TYPE_EXTERNAL_LDO,	// external LDO
+}sx933x_power_supply_type_t;
 
 /**************************************
  *   define platform data
@@ -700,6 +704,9 @@ struct sx933x_platform_data
 	bool cap_vdd_en;
 	struct smtc_reg_data *pi2c_reg;
 	int irq_gpio;
+	int eldo_gpio;
+	bool eldo_vdd_en;
+	sx933x_power_supply_type_t power_supply_type;
 #ifdef CONFIG_CAPSENSE_USB_CAL
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;
