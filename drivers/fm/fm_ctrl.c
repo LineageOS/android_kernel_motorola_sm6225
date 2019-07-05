@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
 
 #define DRIVER_VERSION "0.0.1"
 
@@ -32,7 +33,22 @@ struct fm_ctrl_drvdata {
 	struct pinctrl_state *pstate_default;
 	struct pinctrl_state *pstate_active;
 	struct pinctrl_state *pstate_suspend;
+	bool   factory_mode;
 };
+
+
+static bool mmi_factory_check(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory = false;
+
+	if (np)
+		factory = of_property_read_bool(np, "mmi,factory-cable");
+
+	of_node_put(np);
+
+	return factory;
+}
 
 static ssize_t device_name_read(struct device *dev,
 				    struct device_attribute *attr,
@@ -154,6 +170,16 @@ static int fm_ctrl_probe(struct platform_device *pdev)
 		ret = PTR_ERR(drvdata->pstate_suspend);
 		pr_err("Can not lookup suspend pinstate %d\n", ret);
 		return ret;
+	}
+	drvdata->factory_mode = mmi_factory_check();
+	if(drvdata->factory_mode) {
+		ret = pinctrl_select_state(drvdata->pinctrl, drvdata->pstate_active);
+		if(ret) {
+			pr_err("fm_ctrl failed to set pinctrl @factory mode!\n");
+		}
+		else {
+			pr_info("fm_ctrl enable elan @ factory mode\n");
+		}
 	}
 
 	ret = sysfs_create_group(&dev->kobj, &fm_ctrl_sysfs_attr_grp);
