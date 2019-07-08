@@ -3730,30 +3730,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 				chip->dc_cl_ma);
 	}
 
-	pval.intval = 0;
-	rc = power_supply_get_property(chip->usb_psy,
-				       POWER_SUPPLY_PROP_REAL_TYPE,
-				       &pval);
-	if (!rc &&
-	    chip->factory_mode &&
-	    (pval.intval != POWER_SUPPLY_TYPE_UNKNOWN) &&
-	    (pval.intval != POWER_SUPPLY_TYPE_USB) &&
-	    (pval.intval != POWER_SUPPLY_TYPE_USB_CDP)) {
-		mmi_info(chip, "Charger Present; Dis Factory Mode\n");
-		chip->factory_mode = false;
-		if(chip->chg_dis_votable)
-			pmic_vote_force_active_set(chip->chg_dis_votable, 0);
-
-		if(chip->fcc_votable)
-			pmic_vote_force_active_set(chip->fcc_votable, 0);
-
-		if(chip->fv_votable)
-			pmic_vote_force_active_set(chip->fv_votable, 0);
-
-		if(chip->usb_icl_votable)
-			pmic_vote_force_active_set(chip->usb_icl_votable, 0);
-	}
-
 	/* Workaround for some cables that collapse on boot */
 	if (!chip->factory_mode) {
 		dev_err(chip->dev, "Suspending USB for 50 ms to clear\n");
