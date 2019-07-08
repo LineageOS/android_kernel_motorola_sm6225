@@ -33,7 +33,7 @@
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #include <linux/sensors.h>
-#include <linux/input/sx933x.h> 	/* main struct, interrupt,init,pointers */
+#include "../../../include/linux/input/sx933x.h"	/* main struct, interrupt,init,pointers */
 
 #define SX933x_DEBUG 0
 #define LOG_TAG "[sar SX933x]: "
