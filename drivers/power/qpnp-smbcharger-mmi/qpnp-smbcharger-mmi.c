@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/workqueue.h>
 #include <linux/ipc_logging.h>
+#include <linux/debugfs.h>
 
 #define mmi_err(chg, fmt, ...)			\
 	do {						\
@@ -3505,6 +3506,62 @@ static const struct attribute_group power_supply_mmi_attr_group = {
 	.attrs = mmi_g,
 };
 
+#if defined(CONFIG_DEBUG_FS)
+static int register_dump_read(struct seq_file *m, void *data)
+{
+	int rc;
+	u8 stat;
+	int i;
+	struct smb_mmi_charger *chip = m->private;
+
+	for (i = CHGR_BASE; i < MISC_BASE + 0x100; i++) {
+		rc = smblib_read_mmi(chip, i, &stat);
+		if (rc < 0)
+			continue;
+		seq_printf(m, "REG:0x%x: 0x%x\n", i, stat);
+	}
+
+	return 0;
+}
+
+static int register_dump_debugfs_open(struct inode *inode, struct file *file)
+{
+	struct smb_mmi_charger *chip = inode->i_private;
+
+	return single_open(file, register_dump_read, chip);
+}
+
+static const struct file_operations register_dump_debugfs_ops = {
+	.owner		= THIS_MODULE,
+	.open		= register_dump_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static void smb_mmi_create_debugfs(struct smb_mmi_charger *chip)
+{
+	struct dentry *dfs_root, *file;
+
+	dfs_root = debugfs_lookup("charger", NULL);
+	if (IS_ERR_OR_NULL(dfs_root)) {
+		pr_err("Couldn't find charger debugfs rc=%ld\n",
+			(long)dfs_root);
+		return;
+	}
+
+	file = debugfs_create_file("register_dump",
+			    S_IRUSR | S_IRGRP | S_IROTH,
+			    dfs_root, chip, &register_dump_debugfs_ops);
+	if (IS_ERR_OR_NULL(file))
+		pr_err("Couldn't create register_dump file rc=%ld\n",
+			(long)file);
+}
+#else
+static void smb_mmi_create_debugfs(struct smb_mmi_charger *chip)
+{}
+#endif
+
 static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
@@ -3844,6 +3901,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	}
 
+	smb_mmi_create_debugfs(chip);
 	cancel_delayed_work(&chip->heartbeat_work);
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(0));
