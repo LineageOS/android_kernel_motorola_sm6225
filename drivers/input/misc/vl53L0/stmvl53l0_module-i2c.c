@@ -544,9 +544,11 @@ int stmvl53l0_power_down_i2c(void *i2c_object)
 		gpio_set_value_cansleep(
 			data->gconf.cam_gpio_req_tbl[0].gpio, 0);
 		vl53l0_dbgmsg("Disable gpio%d\n",data->gconf.cam_gpio_req_tbl[0].gpio );
-		gpio_set_value_cansleep(
-			data->gconf.cam_gpio_req_tbl[1].gpio, 0);
-		vl53l0_dbgmsg("Disable gpio%d\n",data->gconf.cam_gpio_req_tbl[1].gpio );
+
+		/* HACK, no disable TOF_VANA as GPIO 70 is common for Prox and TOF*/
+		//gpio_set_value_cansleep(
+		//	data->gconf.cam_gpio_req_tbl[1].gpio, 0);
+		//vl53l0_dbgmsg("Disable gpio%d\n",data->gconf.cam_gpio_req_tbl[1].gpio );
 
 		stmvl53l0_request_gpio_table(
 			data->gconf.cam_gpio_req_tbl,
