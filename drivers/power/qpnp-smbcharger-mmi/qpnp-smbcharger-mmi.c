@@ -3543,9 +3543,9 @@ static void smb_mmi_create_debugfs(struct smb_mmi_charger *chip)
 {
 	struct dentry *dfs_root, *file;
 
-	dfs_root = debugfs_lookup("charger", NULL);
+	dfs_root = debugfs_create_dir("charger_mmi", NULL);
 	if (IS_ERR_OR_NULL(dfs_root)) {
-		pr_err("Couldn't find charger debugfs rc=%ld\n",
+		pr_err("Couldn't create charger debugfs rc=%ld\n",
 			(long)dfs_root);
 		return;
 	}
