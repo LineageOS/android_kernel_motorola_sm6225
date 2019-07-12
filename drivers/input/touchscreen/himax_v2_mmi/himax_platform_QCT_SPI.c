@@ -1003,6 +1003,10 @@ int himax_chip_common_remove(struct spi_device *spi)
 	if (g_hx_chip_inited)
 		himax_chip_common_deinit();
 
+#if defined(HX_USB_DETECT_GLOBAL)
+	if (ts->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ts->charger_notif);
+#endif
 	ts->spi = NULL;
 	/* spin_unlock_irq(&ts->spi_lock); */
 	spi_set_drvdata(spi, NULL);
