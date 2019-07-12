@@ -54,7 +54,9 @@ static int pd_volt_max_init = 0;
 static int pd_curr_max_init = 0;
 static int *dt_temp_zones;
 static struct mmi_chrg_dts_info *chrg_name_list;
-
+static char *charge_rate[] = {
+	"None", "Normal", "Weak", "Turbo"
+};
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
 //#define MIN_MAX_TEMP_C 47
@@ -656,10 +658,104 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 		return NOTIFY_OK;
 	}
 
-	if (ptr == chip->usb_psy && evt == PSY_EVENT_PROP_CHANGED)
+	if (ptr == chip->usb_psy && evt == PSY_EVENT_PROP_CHANGED) {
 		schedule_work(&chip->psy_changed_work);
 
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(0));
+
+	}
+
 	return NOTIFY_OK;
+}
+
+static int get_prop_charger_present(struct mmi_charger_manager *chg,
+				    union power_supply_propval *val)
+{
+	int rc = -EINVAL;
+	val->intval = 0;
+
+	if (chg->usb_psy)
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_TYPEC_MODE, val);
+	if (rc < 0) {
+		mmi_chrg_err(chg, "Couldn't read TypeC Mode rc=%d\n", rc);
+		return rc;
+	}
+
+	switch (val->intval) {
+	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		val->intval = 1;
+		break;
+	default:
+		val->intval = 0;
+		break;
+	}
+
+	return rc;
+}
+
+#define WEAK_CHRG_THRSH 450
+#define TURBO_CHRG_THRSH 2500
+void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
+{
+	union power_supply_propval val;
+	int chrg_cm_ma = 0;
+	int chrg_cs_ma = 0;
+	int prev_chg_rate = chg->charger_rate;
+	int rc = -EINVAL;
+
+	if (!chg->usb_psy) {
+		mmi_chrg_err(chg, "No usb PSY\n");
+		return;
+	}
+
+	val.intval = 0;
+	rc = get_prop_charger_present(chg, &val);
+	if (rc < 0) {
+		mmi_chrg_err(chg, "Error getting Charger Present rc = %d\n", rc);
+		return;
+	}
+
+	if (val.intval) {
+		val.intval = 0;
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
+		if (rc < 0) {
+			mmi_chrg_info(chg, "Error getting HW Current Max rc = %d\n", rc);
+			return;
+		}
+		chrg_cm_ma = val.intval / 1000;
+
+		val.intval = 0;
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
+		if (rc < 0) {
+			mmi_chrg_err(chg, "Error getting ICL Settled rc = %d\n", rc);
+			return;
+		}
+		chrg_cs_ma = val.intval / 1000;
+	} else {
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
+		goto end_rate_check;
+	}
+
+	mmi_chrg_info(chg, "SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
+	if (chrg_cm_ma >= TURBO_CHRG_THRSH)
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) && (chrg_cs_ma < WEAK_CHRG_THRSH))
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
+	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+
+end_rate_check:
+	if (prev_chg_rate != chg->charger_rate)
+		mmi_chrg_info(chg, "%s Charger Detected\n",
+		       charge_rate[chg->charger_rate]);
+
 }
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
@@ -698,11 +794,164 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
 }
 
+static void mmi_awake_vote(struct mmi_charger_manager *chip, bool awake)
+{
+	if (awake == chip->awake)
+		return;
+
+	chip->awake = awake;
+	if (awake)
+		pm_stay_awake(chip->dev);
+	else
+		pm_relax(chip->dev);
+}
+
+static bool __mmi_ps_is_supplied_by(struct power_supply *supplier,
+					struct power_supply *supply)
+{
+	int i;
+
+	if (!supply->supplied_from && !supplier->supplied_to)
+		return false;
+
+	/* Support both supplied_to and supplied_from modes */
+	if (supply->supplied_from) {
+		if (!supplier->desc->name)
+			return false;
+		for (i = 0; i < supply->num_supplies; i++)
+			if (!strcmp(supplier->desc->name,
+				    supply->supplied_from[i]))
+				return true;
+	} else {
+		if (!supply->desc->name)
+			return false;
+		for (i = 0; i < supplier->num_supplicants; i++)
+			if (!strcmp(supplier->supplied_to[i],
+				    supply->desc->name))
+				return true;
+	}
+
+	return false;
+}
+
+static int __mmi_ps_changed(struct device *dev, void *data)
+{
+	struct power_supply *psy = data;
+	struct power_supply *pst = dev_get_drvdata(dev);
+
+	if (__mmi_ps_is_supplied_by(psy, pst)) {
+		if (pst->desc->external_power_changed)
+			pst->desc->external_power_changed(pst);
+	}
+
+	return 0;
+}
+
+static void mmi_power_supply_changed(struct power_supply *psy,
+					 char *envp_ext[])
+{
+	dev_err(&psy->dev, "%s: %s\n", __func__, envp_ext[0]);
+
+	class_for_each_device(power_supply_class, NULL, psy,
+			      __mmi_ps_changed);
+	atomic_notifier_call_chain(&power_supply_notifier,
+			PSY_EVENT_PROP_CHANGED, psy);
+	kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
+}
+
+static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
+						      ktime_t now)
+{
+	struct mmi_charger_manager *chip = container_of(alarm,
+						    struct mmi_charger_manager,
+						    heartbeat_alarm);
+
+	mmi_chrg_info(chip, "MMI: HB alarm fired\n");
+
+	__pm_stay_awake(&chip->mmi_hb_wake_source);
+	cancel_delayed_work(&chip->heartbeat_work);
+	/* Delay by 500 ms to allow devices to resume. */
+	schedule_delayed_work(&chip->heartbeat_work,
+			      msecs_to_jiffies(500));
+
+	return ALARMTIMER_NORESTART;
+}
+
+#define HEARTBEAT_DELAY_MS 60000
+#define SMBCHG_HEARTBEAT_INTRVAL_NS	70000000000
+#define CHG_SHOW_MAX_SIZE 50
 static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, heartbeat_work.work);
-	mmi_chrg_info(chip, "kick psy changed work\n");
+	int hb_resch_time = 0, ret = 0;
+	char *chrg_rate_string = NULL;
+	char *envp[2];
+	union power_supply_propval val;
+
+	mmi_chrg_info(chip, "MMI: Heartbeat!\n");
+	/* Have not been resumed so wait another 100 ms */
+	if (chip->suspended) {
+		mmi_chrg_err(chip, "SMBMMI: HB running before Resume\n");
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(100));
+		return;
+	}
+
+	mmi_awake_vote(chip, true);
+	alarm_try_to_cancel(&chip->heartbeat_alarm);
+
+
+	if (!chip->usb_psy) {
+		chip->usb_psy = power_supply_get_by_name("usb");
+		if (!chip->usb_psy) {
+			mmi_chrg_err(chip,
+				"Could not get USB power_supply, deferring probe\n");
+			return;
+		}
+	}
+
+	ret = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PRESENT, &val);
+	if (ret) {
+		mmi_chrg_err(chip, "Unable to read USB PRESENT: %d\n", ret);
+		return;
+	}
+	chip->vbus_present = val.intval;
+
+	mmi_chrg_rate_check(chip);
+	hb_resch_time = HEARTBEAT_DELAY_MS;
+
+
+	if (chip->vbus_present)
+		alarm_start_relative(&chip->heartbeat_alarm,
+				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
+
+	if (!chip->vbus_present)
+		mmi_awake_vote(chip, false);
+
+	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
+	if (!chrg_rate_string) {
+		mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
+		envp[0] = NULL;
+	} else {
+		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
+			  "POWER_SUPPLY_CHARGE_RATE=%s",
+			  charge_rate[chip->charger_rate]);
+		envp[0] = chrg_rate_string;
+		envp[1] = NULL;
+	}
+
+	if (chip->qcom_psy) {
+		mmi_power_supply_changed(chip->batt_psy, envp);
+	}
+
+	kfree(chrg_rate_string);
+
+	__pm_relax(&chip->mmi_hb_wake_source);
+
+	schedule_delayed_work(&chip->heartbeat_work,
+			      msecs_to_jiffies(hb_resch_time));
 
 }
 
@@ -1093,6 +1342,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	chip->dev = &pdev->dev;
 	chip->name = "mmi_chrg_manager";
 	chip->debug_mask = &__debug_mask;
+	chip->suspended = false;
 
 	ret = mmi_charger_class_init();
 	if (ret < 0) {
@@ -1154,6 +1404,11 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	INIT_WORK(&chip->psy_changed_work, psy_changed_work_func);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
+	wakeup_source_init(&chip->mmi_hb_wake_source,
+			   "mmi_hb_wake");
+	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
+		   mmi_heartbeat_alarm_cb);
+
 
 	ret = mmi_chrg_mgr_psy_register(chip);
 	if (ret)
@@ -1191,6 +1446,35 @@ static int mmi_chrg_manager_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int mmi_chrg_suspend(struct device *device)
+{
+	struct platform_device *pdev = to_platform_device(device);
+	struct mmi_charger_manager *chip = platform_get_drvdata(pdev);
+
+	chip->suspended = true;
+
+	return 0;
+}
+
+static int mmi_chrg_resume(struct device *device)
+{
+	struct platform_device *pdev = to_platform_device(device);
+	struct mmi_charger_manager *chip = platform_get_drvdata(pdev);
+
+	chip->suspended = false;
+
+	return 0;
+}
+#else
+#define smb_mmi_suspend NULL
+#define smb_mmi_resume NULL
+#endif
+
+static const struct dev_pm_ops mmi_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mmi_chrg_suspend, mmi_chrg_resume)
+};
+
 static const struct of_device_id mmi_chrg_manager_match_table[] = {
 	{.compatible = "mmi,chrg-manager"},
 	{},
@@ -1203,6 +1487,7 @@ static struct platform_driver mmi_chrg_manager_driver = {
 	.driver = {
 		.name = "mmi_chrg_manager",
 		.owner = THIS_MODULE,
+		.pm = &mmi_dev_pm_ops,
 		.of_match_table = mmi_chrg_manager_match_table,
 	},
 };
