@@ -844,6 +844,15 @@ static int himax_common_suspend(struct device *dev)
 	return 0;
 }
 
+#if defined(HX_RESUME_SET_FW)
+void himax_resume_thread_func(void)
+{
+	struct himax_ts_data *ts = private_ts;
+	I("%s: TP resume from thread\n", __func__);
+	queue_work(ts->ts_int_workqueue, &ts->ts_int_work);
+	return;
+}
+#endif
 static int himax_common_resume(struct device *dev)
 {
 	struct himax_ts_data *ts = dev_get_drvdata(dev);
@@ -859,7 +868,11 @@ static int himax_common_resume(struct device *dev)
 			return -ECANCELED;
 	}
 #endif
+#if defined(HX_RESUME_SET_FW)
+	himax_resume_thread_func();
+#else
 	himax_chip_common_resume(ts);
+#endif
 	return 0;
 }
 
