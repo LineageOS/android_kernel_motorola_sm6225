@@ -7227,13 +7227,25 @@ static struct device_attribute touchscreen_attributes[] = {
 #define TSDEV_MINOR_BASE 128
 #define TSDEV_MINOR_MAX 32
 
+static struct class *touchscreen_class;
+struct class *get_touchscreen_class_ptr(void)
+{
+	return touchscreen_class;
+}
+EXPORT_SYMBOL(get_touchscreen_class_ptr);
+
+void set_touchscreen_class_ptr(struct class *ptr)
+{
+	touchscreen_class = ptr;
+}
+EXPORT_SYMBOL(set_touchscreen_class_ptr);
+
 static int synaptics_dsx_sysfs_touchscreen(
 	struct synaptics_rmi4_data *rmi4_data, bool create)
 {
 	struct device_attribute *attrs = touchscreen_attributes;
 	int i, error = 0;
 	char *class_fname = CLASS_PRIMARY_FNAME;
-	static struct class *touchscreen_class;
 	static int minor;
 
 	if (create) {
