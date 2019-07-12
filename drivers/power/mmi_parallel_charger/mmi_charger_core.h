@@ -45,6 +45,8 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
+#include <linux/alarmtimer.h>
+#include <linux/notifier.h>
 #include "mmi_charger_class.h"
 
 #define mmi_chrg_err(chip, fmt, ...)		\
@@ -144,6 +146,12 @@ struct mmi_charger_manager {
 	struct usbpd	*pd_handle;
 	struct usbpd_pdo_info	mmi_pdo_info[PD_MAX_PDO_NUM];
 	struct notifier_block	psy_nb;
+
+	struct wakeup_source	mmi_hb_wake_source;
+	struct alarm		heartbeat_alarm;
+	bool			suspended;
+	bool			awake;
+
 	int *debug_mask;
 	int mmi_pd_pdo_idx;	/*request the pdo idx of PD*/
 	int pps_volt_steps;	/*PPS voltage, programming step size*/
@@ -173,6 +181,7 @@ struct mmi_charger_manager {
 	int pps_result_history_idx;
 	/*save the result of the return from PD request*/
 
+	int 	charger_rate;
 	bool vbus_present;
 	bool pd_pps_support;
 	bool pd_pps_balance;
