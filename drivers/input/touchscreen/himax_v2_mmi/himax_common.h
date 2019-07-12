@@ -80,7 +80,7 @@
 #define HX_PROTOCOL_B_3PA
 /*#define HX_FIX_TOUCH_INFO*/	/* if open, you need to change the touch info in the fix_touch_info*/
 /*#define HX_ZERO_FLASH*/
-/*#define HX_RESUME_SET_FW*/
+#define HX_RESUME_SET_FW
 /*#if defined(HX_ZERO_FLASH)*/
 /*#define HX_CODE_OVERLAY*/
 /*#define HX_EDGE_LIMIT*/
@@ -407,6 +407,10 @@ struct himax_ts_data {
 #ifdef HX_ZERO_FLASH
 	struct workqueue_struct *himax_0f_update_wq;
 	struct delayed_work work_0f_update;
+#endif
+#ifdef HX_RESUME_SET_FW
+	struct workqueue_struct *ts_int_workqueue;
+	struct work_struct ts_int_work;
 #endif
 
 	struct workqueue_struct *himax_diag_wq;

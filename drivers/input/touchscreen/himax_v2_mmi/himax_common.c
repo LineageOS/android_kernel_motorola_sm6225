@@ -3045,6 +3045,14 @@ device_destroy:
 	return -ENODEV;
 }
 
+#if defined(HX_RESUME_SET_FW)
+void himax_resume_work_func(struct work_struct *work)
+{
+	struct himax_ts_data *ts = private_ts;
+	himax_chip_common_resume(ts);
+	return;
+}
+#endif
 int himax_chip_common_init(void)
 {
 
@@ -3199,6 +3207,14 @@ FW_force_upgrade:
 	queue_delayed_work(ts->himax_0f_update_wq, &ts->work_0f_update, msecs_to_jiffies(2000));
 #endif
 
+#ifdef HX_RESUME_SET_FW
+	ts->ts_int_workqueue = create_singlethread_workqueue("himax_ts_resume_wq");
+	if (!ts->ts_int_workqueue) {
+		E("%s: create ts_resume workqueue failed\n", __func__);
+		goto err_create_ts_resume_wq_failed;
+	}
+	INIT_WORK(&ts->ts_int_work, himax_resume_work_func);
+#endif
 	/*Himax Power On and Load Config*/
 	if (himax_loadSensorConfig(pdata)) {
 		E("%s: Load Sesnsor configuration failed, unload driver.\n", __func__);
@@ -3313,6 +3329,11 @@ err_get_intr_bit_failed:
 err_input_register_device_failed:
 	input_free_device(ts->input_dev);
 err_detect_failed:
+#ifdef HX_RESUME_SET_FW
+	cancel_work_sync(&ts->ts_int_work);
+	destroy_workqueue(ts->ts_int_workqueue);
+err_create_ts_resume_wq_failed:
+#endif
 #ifdef HX_ZERO_FLASH
 	cancel_delayed_work_sync(&ts->work_0f_update);
 	destroy_workqueue(ts->himax_0f_update_wq);
@@ -3497,10 +3518,13 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 		if (ts->pdata->powerOff3V3 && ts->pdata->power)
 			ts->pdata->power(1);
 
+#ifndef HX_RESUME_SET_FW
 #if defined(HX_RST_PIN_FUNC) && defined(HX_RESUME_HW_RESET)
 	if (g_core_fp.fp_ic_reset != NULL)
 		g_core_fp.fp_ic_reset(false, false);
 #endif
+#endif
+
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 #ifdef HX_SMART_WAKEUP
 	if (!ts->SMWP_enable) {
