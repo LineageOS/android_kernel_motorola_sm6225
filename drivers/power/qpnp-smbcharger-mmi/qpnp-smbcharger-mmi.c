@@ -25,6 +25,7 @@
 #include <linux/workqueue.h>
 #include <linux/ipc_logging.h>
 #include <linux/debugfs.h>
+#include <linux/string.h>
 
 #define mmi_err(chg, fmt, ...)			\
 	do {						\
@@ -1193,14 +1194,38 @@ static DEVICE_ATTR(force_chg_itrick, 0664,
 		   force_chg_itrick_show,
 		   force_chg_itrick_store);
 
-static bool mmi_factory_check(void)
+enum {
+	MMI_FACTORY_MODE,
+	MMI_FACTORY_BUILD,
+};
+
+static bool mmi_factory_check(int type)
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
 	bool factory = false;
+	const char *bootargs = NULL;
+	char *bl_version = NULL;
 
-	if (np)
-		factory = of_property_read_bool(np, "mmi,factory-cable");
+	if (!np)
+		return factory;
 
+	switch (type) {
+	case MMI_FACTORY_MODE:
+		factory = of_property_read_bool(np,
+					"mmi,factory-cable");
+		break;
+	case MMI_FACTORY_BUILD:
+		if (!of_property_read_string(np,
+					"bootargs", &bootargs)) {
+			bl_version = strstr(bootargs,
+					"androidboot.bootloader=");
+			if (bl_version && strstr(bl_version, "factory"))
+				factory = true;
+		}
+		break;
+	default:
+		factory = false;
+	}
 	of_node_put(np);
 
 	return factory;
@@ -3730,8 +3755,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			mmi_err(chip, "Could not set HVDCP pulse count max\n");
 	}
 
-	chip->factory_mode = mmi_factory_check();
-	chip->is_factory_image = false;
+	chip->factory_mode = mmi_factory_check(MMI_FACTORY_MODE);
+	chip->is_factory_image = mmi_factory_check(MMI_FACTORY_BUILD);
 	chip->charging_limit_modes = CHARGING_LIMIT_UNKNOWN;
 
 	if (chip->dc_cl_ma >= 0) {
