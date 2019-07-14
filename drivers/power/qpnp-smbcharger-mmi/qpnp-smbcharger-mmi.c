@@ -3130,6 +3130,18 @@ static int batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = get_effective_result(chip->fcc_votable);
 		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		if (chip->smb_version == PMI632_SUBTYPE) {
+			val->intval = get_effective_result(chip->fcc_votable);
+			break;
+		}
+		rc = power_supply_get_property(chip->qcom_psy, psp, val);
+		if (rc < 0) {
+			/* soft fail so uevents are not blocked */
+			rc = 0;
+			val->intval = -EINVAL;
+		}
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
 			union power_supply_propval main_psy_val;
