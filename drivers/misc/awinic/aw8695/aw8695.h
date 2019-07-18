@@ -295,6 +295,7 @@ struct aw8695 {
 	struct device *dev;
 	struct input_dev *input;
 
+	struct wakeup_source *ws;
 	struct mutex lock;
 	struct hrtimer timer;
 	struct work_struct vibrator_work;
