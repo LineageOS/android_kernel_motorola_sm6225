@@ -3852,11 +3852,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			pmic_vote_force_val_set(chip->fv_votable, 4400000);
 			pmic_vote_force_active_set(chip->fv_votable, 1);
 		}
-		if(chip->usb_icl_votable) {
-			pmic_vote_force_val_set(chip->usb_icl_votable,
-						3000000);
-			pmic_vote_force_active_set(chip->usb_icl_votable, 1);
-		}
 
 		/* Some Cables need a more forced approach */
 		rc = smblib_set_charge_param(chip, &chip->param.usb_icl,
