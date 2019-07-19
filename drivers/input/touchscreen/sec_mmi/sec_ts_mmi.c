@@ -44,6 +44,8 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_drv_irq_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_erase_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_drv_irq_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_hw_irqstat_show(struct device *dev,
@@ -52,14 +54,24 @@ static ssize_t sec_mmi_ic_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_poweron_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_productinfo_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_buildid_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_flashprog_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(forcereflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_forcereflash_store);
 static DEVICE_ATTR(doreflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_doreflash_store);
 static DEVICE_ATTR(drv_irq, (S_IWUSR | S_IWGRP | S_IRUGO), sec_mmi_drv_irq_show, sec_mmi_drv_irq_store);
 static DEVICE_ATTR(hw_irqstat, S_IRUGO, sec_mmi_hw_irqstat_show, NULL);
 static DEVICE_ATTR(ic_ver, S_IRUGO, sec_mmi_ic_ver_show, NULL);
+static DEVICE_ATTR(productinfo, S_IRUGO, sec_mmi_productinfo_show, NULL);
+static DEVICE_ATTR(buildid, S_IRUGO, sec_mmi_buildid_show, NULL);
+static DEVICE_ATTR(flashprog, S_IRUGO, sec_mmi_flashprog_show, NULL);
 static DEVICE_ATTR(poweron, S_IRUGO, sec_mmi_poweron_show, NULL);
 static DEVICE_ATTR(reset, (S_IWUSR | S_IWGRP), NULL, sec_mmi_reset_store);
+static DEVICE_ATTR(erase_all, (S_IWUSR | S_IWGRP), NULL, sec_mmi_erase_store);
 
 static struct attribute *mmi_attributes[] = {
 	&dev_attr_forcereflash.attr,
@@ -67,8 +79,12 @@ static struct attribute *mmi_attributes[] = {
 	&dev_attr_drv_irq.attr,
 	&dev_attr_hw_irqstat.attr,
 	&dev_attr_ic_ver.attr,
+	&dev_attr_productinfo.attr,
+	&dev_attr_buildid.attr,
+	&dev_attr_flashprog.attr,
 	&dev_attr_poweron.attr,
 	&dev_attr_reset.attr,
+	&dev_attr_erase_all.attr,
 	NULL,
 };
 
@@ -208,12 +224,12 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 	return 0;
 }
 
-static inline void batohui(unsigned int *dest, unsigned char *src, size_t size)
+static inline void bdc2ui(unsigned int *dest, unsigned char *src, size_t size)
 {
-	int si = size;
+	int i, shift = 0;
 	*dest = 0;
-	for (; --si >= 0;)
-		*dest += src[si] << (si << 3);
+	for (i = 0; i < size; i++, shift += 8)
+		*dest += src[i] << (24 - shift);
 }
 
 static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
@@ -228,7 +244,7 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				"%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
-		batohui(&data->build_id, buffer, sizeof(data->build_id));
+		bdc2ui(&data->build_id, buffer, sizeof(data->build_id));
 		dev_dbg(DEV_MMI, "%s: FW VERSION: " \
 				"%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
@@ -242,7 +258,7 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				"%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
-		batohui(&data->config_id, buffer, sizeof(data->config_id));
+		bdc2ui(&data->config_id, buffer+4, sizeof(data->config_id));
 		dev_dbg(DEV_MMI, "%s: CONFIG VER: " \
 				"%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
@@ -256,7 +272,6 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				"%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
-		batohui(&data->config_id, buffer, sizeof(data->config_id));
 		dev_dbg(DEV_MMI, "%s: IMAGE VER: " \
 				"%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
@@ -436,12 +451,44 @@ static ssize_t sec_mmi_poweron_show(struct device *dev,
 			ts->power_status != SEC_TS_STATE_POWER_OFF);
 }
 
+static ssize_t sec_mmi_productinfo_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	struct sec_mmi_data *data = ts->mmi_ptr;
+	return scnprintf(buf, PAGE_SIZE, "%s\n", data->product_id);
+}
+
+static ssize_t sec_mmi_buildid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	struct sec_mmi_data *data = ts->mmi_ptr;
+	return scnprintf(buf, PAGE_SIZE, "%08x-%08x\n",
+			data->build_id, data->config_id);
+}
+
+static ssize_t sec_mmi_flashprog_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ts->fw_invalid ? 1 : 0);
+}
+
 static ssize_t sec_mmi_hw_irqstat_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			ts->power_status != SEC_TS_STATE_POWER_OFF);
+	switch (gpio_get_value(ts->plat_data->irq_gpio)) {
+		case 0:
+			return scnprintf(buf, PAGE_SIZE, "Low\n");
+		case 1:
+			return scnprintf(buf, PAGE_SIZE, "High\n");
+		default:
+			dev_err(DEV_TS, "%s: Failed to get irq gpio %d state\n",
+					__func__, ts->plat_data->irq_gpio);
+			return scnprintf(buf, PAGE_SIZE, "Unknown\n");
+	}
 }
 
 static ssize_t sec_mmi_drv_irq_show(struct device *dev,
@@ -450,6 +497,35 @@ static ssize_t sec_mmi_drv_irq_show(struct device *dev,
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	return scnprintf(buf, PAGE_SIZE, "%s\n",
 			ts->irq_enabled ? "ENABLED" : "DISABLED");
+}
+
+static ssize_t sec_mmi_erase_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	unsigned long value = 0;
+	int err = 0;
+
+	err = kstrtoul(buf, 10, &value);
+	if (err < 0) {
+		dev_err(DEV_TS, "%s: Failed to convert value\n", __func__);
+		return -EINVAL;
+	}
+
+	if (value != 1)
+		return -EINVAL;
+
+	mutex_lock(&ts->modechange);
+	sec_ts_irq_enable(ts, false);
+	__pm_stay_awake(&ts->wakelock);
+
+
+	ts->fw_invalid = true;
+
+	mutex_unlock(&ts->modechange);
+	__pm_relax(&ts->wakelock);
+
+	return size;
 }
 
 static ssize_t sec_mmi_drv_irq_store(struct device *dev,
@@ -490,7 +566,7 @@ static ssize_t sec_mmi_ic_ver_show(struct device *dev,
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	struct sec_mmi_data *data = ts->mmi_ptr;
-	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%x\n%s%x\n",
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%08x\n%s%08x\n",
 			"Product ID: ", data->product_id,
 			"Build ID: ", data->build_id,
 			"Config ID: ", data->config_id);
@@ -499,7 +575,7 @@ static ssize_t sec_mmi_ic_ver_show(struct device *dev,
 static ssize_t sec_mmi_forcereflash_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
-	return 0;
+	return size;
 }
 
 static ssize_t sec_mmi_doreflash_store(struct device *dev,
@@ -508,29 +584,37 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	const struct firmware *fw_entry;
 	char fw_path[SEC_TS_MAX_FW_PATH];
-	int result = -1;
+	int result = -EFAULT;
 
 	if (size > SEC_TS_MAX_FW_PATH) {
 		dev_err(DEV_TS, "%s: FW filename is too long\n", __func__);
 		return -EINVAL;
 	}
 
-	disable_irq(ts->client->irq);
-	scnprintf(fw_path, SEC_TS_MAX_FW_PATH, "%s", buf);
-	input_info(true, DEV_TS, "%s: initial bl update %s\n", __func__, fw_path);
+	strlcpy(fw_path, buf, size);
+	input_info(true, DEV_TS, "%s: update fw from %s\n", __func__, fw_path);
 
 	/* Loading Firmware------------------------------------------ */
-	if (request_firmware(&fw_entry, fw_path, &ts->client->dev) !=  0) {
-		input_err(true, DEV_TS, "%s: bt is not available\n", __func__);
+	if (request_firmware(&fw_entry, fw_path, &ts->client->dev) != 0) {
+		input_err(true, DEV_TS, "%s: fw not available\n", __func__);
 		goto err_request_fw;
 	}
-	input_info(true, DEV_TS, "%s: request bt done! size = %d\n", __func__, (int)fw_entry->size);
+	input_info(true, DEV_TS, "%s: fw size = %d\n", __func__, (int)fw_entry->size);
 
-	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size, 1, false, 0);
+	mutex_lock(&ts->modechange);
+	sec_ts_irq_enable(ts, false);
+	__pm_stay_awake(&ts->wakelock);
+
+	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size, 0, false, 0);
+	if (result == 1)
+		sec_mmi_fw_read_id(ts->mmi_ptr);
+
+	mutex_unlock(&ts->modechange);
+	sec_ts_irq_enable(ts, true);
+	__pm_relax(&ts->wakelock);
 
 err_request_fw:
 	release_firmware(fw_entry);
-	enable_irq(ts->client->irq);
 
 	return result;
 }
