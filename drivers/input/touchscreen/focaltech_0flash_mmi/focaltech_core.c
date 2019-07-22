@@ -695,7 +695,7 @@ static void fts_mcu_usb_detect_set(uint8_t usb_connected)
 		ret = fts_read_reg(FTS_REG_CHARGER_MODE_EN, &read_data);
 		if (ret < 0)
 			FTS_ERROR("read 8b register fail, ret=%d", ret);
-
+		retry_cnt++;
 	}while((write_data != read_data) && retry_cnt < FTS_REG_RETRY_TIMES);
 }
 
