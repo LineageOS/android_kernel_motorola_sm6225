@@ -63,7 +63,7 @@
 #define	BAT_OCP_ALARM_SHIFT			1
 #define	BUS_OVP_ALARM_SHIFT			2
 #define	BUS_OCP_ALARM_SHIFT			3
-#define	BAT_THERM_ALARM_SHIFT			4
+#define	BUS_UCP_FAULT_SHIFT			4
 #define	BUS_THERM_ALARM_SHIFT			5
 #define	DIE_THERM_ALARM_SHIFT			6
 #define	BAT_UCP_ALARM_SHIFT			7
@@ -72,7 +72,7 @@
 #define	BAT_OCP_ALARM_MASK		(1 << BAT_OCP_ALARM_SHIFT)
 #define	BUS_OVP_ALARM_MASK		(1 << BUS_OVP_ALARM_SHIFT)
 #define	BUS_OCP_ALARM_MASK		(1 << BUS_OCP_ALARM_SHIFT)
-#define	BAT_THERM_ALARM_MASK		(1 << BAT_THERM_ALARM_SHIFT)
+#define	BUS_UCP_FAULT_MASK		(1 << BUS_UCP_FAULT_SHIFT)
 #define	BUS_THERM_ALARM_MASK		(1 << BUS_THERM_ALARM_SHIFT)
 #define	DIE_THERM_ALARM_MASK		(1 << DIE_THERM_ALARM_SHIFT)
 #define	BAT_UCP_ALARM_MASK		(1 << BAT_UCP_ALARM_SHIFT)
@@ -225,8 +225,6 @@ static int bq2597x_update_charger_error_status(struct mmi_charger_device *chrg)
 				!!(prop.intval & BUS_OCP_ALARM_MASK);
 		chrg->charger_error.bat_ucp_alarm =
 				!!(prop.intval & BAT_UCP_ALARM_MASK);
-		chrg->charger_error.bat_therm_alarm =
-				!!(prop.intval & BAT_THERM_ALARM_MASK);
 		chrg->charger_error.bus_therm_alarm =
 				!!(prop.intval & BUS_THERM_ALARM_MASK);
 		chrg->charger_error.die_therm_alarm =
@@ -251,7 +249,23 @@ static int bq2597x_update_charger_error_status(struct mmi_charger_device *chrg)
 				!!(prop.intval & SS_TIMEOUT_FAULT_MASK);
 		chrg->charger_error.ts_shut_fault =
 				!!(prop.intval & TS_SHUT_FAULT_MASK);
+		chrg->charger_error.bus_ucp_alarm =
+				!!(prop.intval & BUS_UCP_FAULT_MASK);
 	}
+
+	return rc;
+}
+
+static int bq2597x_clear_charger_error(struct mmi_charger_device *chrg)
+{
+	int rc;
+	union power_supply_propval prop = {0,};
+
+	if (!chrg->chrg_psy)
+		return -ENODEV;
+
+	rc = power_supply_set_property(chrg->chrg_psy,
+				POWER_SUPPLY_PROP_UPDATE_NOW, &prop);
 
 	return rc;
 }
@@ -263,4 +277,5 @@ struct mmi_charger_ops bq2597x_charger_ops = {
 	.get_input_current = bq2597x_get_input_current,
 	.update_charger_status = bq2597x_update_charger_status,
 	.update_charger_error = bq2597x_update_charger_error_status,
+	.clear_charger_error = bq2597x_clear_charger_error,
 };

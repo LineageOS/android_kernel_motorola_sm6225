@@ -72,6 +72,7 @@ struct mmi_cp_policy_dev {
 	bool pmic_sw;
 	bool cp_master;
 	bool cp_slave;
+	bool cp_clave_later;
 	struct mmi_charger_device *chrg_dev[CHRG_NUM];
 };
 
@@ -115,6 +116,8 @@ static pm_sm_state_t	sm_state = PM_STATE_DISCONNECT;
 static int chrg_cc_power_tunning_cnt = 0;
 static int chrg_cv_taper_tunning_cnt = 0;
 static int chrg_cv_delta_volt = 0;
+static int quit_slave_chrg_cnt = 0;
+static struct mmi_cp_policy_dev g_chrg_list = {0};
 
 static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state_t state)
 {
@@ -123,10 +126,12 @@ static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state
 	sm_state = state;
 }
 
-static void chrg_dev_check(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
+static void chrg_dev_init(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
 {
 	int chrg_num, i;
 	chrg_num = chip->mmi_chrg_dev_num;
+	mmi_chrg_err(chip,"runing in chrg dev init!\n");
+
 	for (i = 0; i < chrg_num; i++) {
 
 		switch (i) {
@@ -145,6 +150,7 @@ static void chrg_dev_check(struct mmi_charger_manager *chip, struct mmi_cp_polic
 		case CP_SLAVE:
 			if (is_charger_exist(dev_ops[CP_SLAVE].dev_name)) {
 				chrg_list->cp_slave = true;
+				chrg_list->cp_clave_later = false;
 				chrg_list->chrg_dev[CP_SLAVE] = chip->chrg_list[CP_SLAVE];
 				}
 			break;
@@ -156,20 +162,111 @@ static void chrg_dev_check(struct mmi_charger_manager *chip, struct mmi_cp_polic
 	return;
 }
 
+static void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
+{
+	int chrg_num, i;
+	struct mmi_charger_device *chrg_dev;
+	chrg_num = chip->mmi_chrg_dev_num;
+
+	for (i = 0; i < chrg_num; i++) {
+		if (is_charger_exist(dev_ops[i].dev_name)) {
+			chrg_dev = chrg_list->chrg_dev[i];
+			chrg_dev->charger_error.bus_ucp_err_cnt = 0;
+			chrg_dev->charger_error.bus_ocp_err_cnt = 0;
+		}
+	}
+	return;
+}
+
+#define PPS_INIT_VOLT_COMP	500000
+static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
+										struct mmi_cp_policy_dev *chrg_list)
+{
+	int chrg_num, i;
+	struct mmi_charger_device *chrg_dev;
+	chrg_num = chip->mmi_chrg_dev_num;
+
+	for (i = 0; i < chrg_num; i++) {
+
+		switch (i) {
+		case PMIC_SW:
+			break;
+		case CP_MASTER:
+		if (is_charger_exist(dev_ops[CP_MASTER].dev_name)) {
+				chrg_dev = chrg_list->chrg_dev[CP_MASTER];
+
+				if (chrg_dev->charger_error.bus_ucp_alarm) {
+					mmi_chrg_info(chip,"CP master bus ucp error %d, "
+						"pps volt comp %dmV\n",
+						chrg_dev->charger_error.bus_ucp_err_cnt,
+						chip->pps_volt_comp);
+
+					if (chrg_dev->charger_error.bus_ucp_err_cnt > 3) {
+						if (chrg_list->cp_slave) {
+							chrg_list->cp_slave = false;
+							chrg_dev->charger_error.bus_ucp_err_cnt = 0;
+							mmi_chrg_sm_move_state(chip,
+								PM_STATE_CHRG_PUMP_ENTRY);
+						} else {
+							chip->recovery_pmic_chrg = true;
+							mmi_chrg_sm_move_state(chip,
+								PM_STATE_SW_ENTRY);
+							chrg_dev->charger_error.bus_ucp_err_cnt = 0;
+						}
+					} else if (chrg_dev->charger_error.bus_ucp_err_cnt > 6) {
+						chip->recovery_pmic_chrg = true;
+						mmi_chrg_sm_move_state(chip,
+								PM_STATE_SW_ENTRY);
+						chrg_dev->charger_error.bus_ucp_err_cnt = 0;
+					}
+
+					chrg_dev->charger_error.bus_ucp_err_cnt++;
+					chip->pps_volt_comp += PPS_INIT_VOLT_COMP;
+					mmi_clear_charger_error(chrg_dev);
+				} else if (chrg_dev->charger_error.bus_ocp_alarm) {
+
+					mmi_chrg_info(chip, "CP master bus ocp error %d, "
+						"pps volt comp %dmV\n",
+						chrg_dev->charger_error.bus_ocp_err_cnt,
+						chip->pps_volt_comp);
+
+					if (chrg_dev->charger_error.bus_ocp_err_cnt > 3) {
+						chip->recovery_pmic_chrg = true;
+						mmi_chrg_sm_move_state(chip,
+								PM_STATE_SW_ENTRY);
+						chrg_dev->charger_error.bus_ocp_err_cnt = 0;
+					}
+					chrg_dev->charger_error.bus_ucp_err_cnt++;
+					chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
+					mmi_chrg_info(chip,"reset pps volt comp %dmV\n",
+						chip->pps_volt_comp);
+				}
+			}
+			break;
+		case CP_SLAVE:
+			break;
+		default:
+			mmi_chrg_err(chip,"No mmi_chrg_dev found %d !\n",i);
+			break;
+		}
+	}
+	return;
+}
+
+
 #define HEARTBEAT_SHORT_DELAY_MS 1000
 #define HEARTBEAT_lOOP_WAIT_MS 3000
 #define HEARTBEAT_PPS_TUNNING_MS 100
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANCEL -1
-#define PPS_INIT_VOLT_COMP	500000
 #define STEP_FIREST_CURR_COMP 300000
+#define CC_CURR_DEBOUNCE 100000
 #define CV_TAPPER_COUNT 3
 #define CC_POWER_COUNT 3
 #define CV_DELTA_VOLT 100000
 #define THERMAL_TUNNING_VOLT 100000
 #define COOLING_DELTA_POWER 100000
 #define PPS_SELECT_PDO_RETRY_COUNT 3
-#define COOLING_TEMP 45
 #define DISABLE_CHRG_LIMIT -1
 static void mmi_chrg_sm_work_func(struct work_struct *work)
 {
@@ -178,25 +275,24 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	int i = 0, rc = 0;
 	int ibatt_curr = 0, vbatt_volt = 0, batt_temp = 0, vbus_pres = 0;
 	int heartbeat_dely_ms = 0;
-	int cooling_volt = 0, cooling_curr = 0;
+	int cooling_curr = 0;
 	bool zone_change = false;
 	struct mmi_chrg_step_info *chrg_step;
 	union power_supply_propval prop = {0,};
-	struct mmi_cp_policy_dev chrg_list = {0};
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 
 	mmi_chrg_dbg(chip, PR_MOTO, "\n\n\n");
 
 	mmi_chrg_dbg(chip, PR_MOTO, "schedule SM work, sm state %s \n",
 					pm_state_str[sm_state]);
 
-	chrg_dev_check(chip, &chrg_list);
 	mmi_chrg_dbg(chip, PR_MOTO, "pmic-sw is exist: %d  "
 								"cp-master is exist: %d  "
 								"cp-slave is exist: %d\n",
-								chrg_list.pmic_sw,
-								chrg_list.cp_master,
-								chrg_list.cp_slave);
-	if (!chrg_list.pmic_sw) {
+								chrg_list->pmic_sw,
+								chrg_list->cp_master,
+								chrg_list->cp_slave);
+	if (!chrg_list->pmic_sw) {
 		mmi_chrg_err(chip,"PMIC-SW isn't exist, force quite mmi chrg sm work !\n");
 		return;
 	}
@@ -222,22 +318,22 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 
 
 	mmi_update_all_charger_status(chip);
-	//mmi_update_all_charger_error(chip);
+	mmi_update_all_charger_error(chip);
 
 	if (chip->extrn_sense) {
-		ibatt_curr = chrg_list.chrg_dev[CP_MASTER]->charger_data.ibatt_curr;
+		ibatt_curr = chrg_list->chrg_dev[CP_MASTER]->charger_data.ibatt_curr;
 		ibatt_curr *= 1000;
 		if (ibatt_curr < 0)
 			ibatt_curr *= -1;
-		vbatt_volt = chrg_list.chrg_dev[CP_MASTER]->charger_data.vbatt_volt;
+		vbatt_volt = chrg_list->chrg_dev[CP_MASTER]->charger_data.vbatt_volt;
 		vbatt_volt *= 1000;
 	}
 
-	vbus_pres = chrg_list.chrg_dev[PMIC_SW]->charger_data.vbus_pres;
+	vbus_pres = chrg_list->chrg_dev[PMIC_SW]->charger_data.vbus_pres;
 	if (!vbus_pres) {
 		for (i = 0; i < 3; i++) {
 			mmi_update_all_charger_status(chip);
-			vbus_pres = chrg_list.chrg_dev[PMIC_SW]->charger_data.vbus_pres;
+			vbus_pres = chrg_list->chrg_dev[PMIC_SW]->charger_data.vbus_pres;
 			mmi_chrg_info(chip, "Retry check charger status, vbus %d\n", vbus_pres);
 			if (vbus_pres) {
 				mmi_chrg_info(chip, "Get vbus present , continue to charging\n");
@@ -247,18 +343,21 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 	}
 
-	//mmi_dump_charger_error(chip, chrg_list.chrg_dev[CP_MASTER]);
 	mmi_chrg_info(chip, "battery current %d\n", ibatt_curr);
 	mmi_chrg_info(chip, "battery voltage %d\n", vbatt_volt);
 	mmi_chrg_info(chip, "battery temp %d\n", batt_temp);
 
+	if (vbus_pres) {
+		mmi_dump_charger_error(chip, chrg_list->chrg_dev[CP_MASTER]);
+		chrg_policy_error_recovery(chip, chrg_list);
+	}
 
 	zone_change = mmi_find_temp_zone(chip, batt_temp);
 	chrg_step = &chip->chrg_step;
 
 	if (chip->pres_temp_zone == ZONE_COLD
 		|| chip->pres_temp_zone == ZONE_HOT
-		|| !chrg_list.chrg_dev[PMIC_SW]->charger_enabled) {
+		|| !chrg_list->chrg_dev[PMIC_SW]->charger_enabled) {
 		mmi_chrg_sm_move_state(chip, PM_STATE_STOP_CHARGE);
 	}
 
@@ -268,30 +367,20 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			|| sm_state == PM_STATE_STOP_CHARGE) {
 		mmi_find_chrg_step(chip, chip->pres_temp_zone, vbatt_volt);
 	} else if (sm_state == PM_STATE_DISCONNECT) {
-		mmi_get_input_current_settled(chrg_list.chrg_dev[PMIC_SW],
-					&chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
+		mmi_get_input_current_settled(chrg_list->chrg_dev[PMIC_SW],
+					&chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 		mmi_find_chrg_step(chip, chip->pres_temp_zone, vbatt_volt);
 		mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 	} else if (zone_change &&
 			chip->pres_temp_zone != ZONE_COLD &&
-			chip->pres_temp_zone != ZONE_HOT &&
-			sm_state != PM_STATE_COOLING_LOOP) {
+			chip->pres_temp_zone != ZONE_HOT) {
 
 			if (batt_temp > chrg_step->temp_c) {
-				mmi_chrg_info(chip, "battery temp %d, cmp temp %d "
+				mmi_chrg_info(chip, "battery temp %d, temp thre %d "
 						"Enter into COOLING LOOP !\n",
 						batt_temp, chrg_step->temp_c);
-				mmi_chrg_sm_move_state(chip,
-						PM_STATE_COOLING_LOOP);
-				chrg_cv_taper_tunning_cnt = 0;
-			} /*else {
-				mmi_chrg_info(chip, "battery temp %d, "
-						"Restart PM_STATE_ENTRY !\n", batt_temp);
-				mmi_find_chrg_step(chip, chip->pres_temp_zone,
-										vbatt_volt);
-				mmi_chrg_sm_move_state(chip,
-						PM_STATE_ENTRY);
-			}*/
+				chip->thermal_cooling = true;
+			}
 	}
 
 	mmi_chrg_dbg(chip, PR_MOTO, "temp zone %d, is_changed %d, "
@@ -307,35 +396,35 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	case PM_STATE_DISCONNECT:
 		mmi_chrg_info(chip,"vbus disconnect !, jump to PM_STATE_DISCONNECT,"
 					"recovery PMIC-SW limitation, and close CP charg\n");
-		if (chrg_list.cp_slave
-			&& chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], false);
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
 		}
 
-		if (chrg_list.cp_master
-			&& chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], false);
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
-		if (chrg_list.chrg_dev[PMIC_SW]->charger_limited) {
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
+		if (chrg_list->chrg_dev[PMIC_SW]->charger_limited) {
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 			mmi_chrg_info(chip,"recovery PMIC-SW ichg lmt ,%d uA\n",
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
 							DISABLE_CHRG_LIMIT);
-			chrg_list.chrg_dev[PMIC_SW]->charger_limited = false;
+			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 		}
 
 		heartbeat_dely_ms = HEARTBEAT_CANCEL;
 		break;
 	case PM_STATE_ENTRY:
 		if (chip->pd_pps_support
-			&& chrg_list.cp_master
+			&& chrg_list->cp_master
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& chrg_step->chrg_step_cc_curr >=
-				chrg_list.chrg_dev[CP_MASTER]->charging_curr_min) {
+				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min) {
 
 			mmi_chrg_dbg(chip, PR_MOTO, "Enter into CHRG PUMP, "
 							"vbatt %d uV, "
@@ -347,7 +436,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 							chip->pd_pps_support,
 			  				chrg_step->pres_chrg_step,
 			  				chrg_step->chrg_step_cc_curr,
-			  				chrg_list.chrg_dev[CP_MASTER]->charging_curr_min);
+			  				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min);
 			mmi_chrg_sm_move_state(chip, PM_STATE_CHRG_PUMP_ENTRY);
 
 		} else {
@@ -362,33 +451,34 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 
 		}
+		chip->thermal_cooling = false;
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_SW_ENTRY:
-		if (chrg_list.cp_slave
-			&& chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], false);
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
 		}
 
-		if (chrg_list.cp_master
-			&& chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], false);
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
-		if (chrg_list.chrg_dev[PMIC_SW]->charger_limited) {
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
+		if (chrg_list->chrg_dev[PMIC_SW]->charger_limited) {
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 			mmi_chrg_info(chip, "Recovery PMIC-SW ichg lmt ,%d uA\n",
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
 							DISABLE_CHRG_LIMIT);
-			chrg_list.chrg_dev[PMIC_SW]->charger_limited = false;
+			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 		}
 
 		mmi_chrg_info(chip, "Do an rerun usb AICL for PMIC-SW\n");
-		mmi_enable_charging(chrg_list.chrg_dev[PMIC_SW], false);
+		mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
 		msleep(100);
-		mmi_enable_charging(chrg_list.chrg_dev[PMIC_SW], true);
+		mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
@@ -405,8 +495,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 				}
 		}
 
-		chip->pd_request_curr = SWITCH_CHARGER_PPS_VOLT;
-		chip->pd_request_volt = TYPEC_HIGH_CURRENT_UA;
+		chip->pd_request_volt = SWITCH_CHARGER_PPS_VOLT;
+		chip->pd_request_curr = TYPEC_HIGH_CURRENT_UA;
 		mmi_chrg_info(chip,"Select pdo %d, pd request curr %d, volt %d\n",
 						chip->mmi_pd_pdo_idx,
 						chip->pd_request_curr,
@@ -437,16 +527,16 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		break;
 	case PM_STATE_CHRG_PUMP_ENTRY:
 		mmi_chrg_info(chip,"CP master exist %d, CP slave exist %d !\n",
-							chrg_list.cp_master,
-							chrg_list.cp_slave);
-		if (chrg_list.cp_slave) {
+							chrg_list->cp_master,
+							chrg_list->cp_slave);
+		if (chrg_list->cp_slave) {
 			mmi_chrg_info(chip,"CP slave is exist !\n");
 			mmi_chrg_info(chip,"chrg step cc curr %d uA, "
 							"CP slave charging curr min %d uA\n",
 			  				chrg_step->chrg_step_cc_curr,
-			  				chrg_list.chrg_dev[CP_SLAVE]->charging_curr_min);
+			  				chrg_list->chrg_dev[CP_SLAVE]->charging_curr_min);
 			if (chrg_step->chrg_step_cc_curr >=
-					chrg_list.chrg_dev[CP_SLAVE]->charging_curr_min) {
+					chrg_list->chrg_dev[CP_SLAVE]->charging_curr_min) {
 				mmi_chrg_sm_move_state(chip,
 							PM_STATE_DULE_CP_ENTRY);
 			} else
@@ -458,13 +548,13 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_chrg_info(chip,"Set PMIC SW FCC limits!\n");
-		if (!chrg_list.chrg_dev[PMIC_SW]->charger_limited
-			&& chrg_list.chrg_dev[PMIC_SW]->charging_curr_limited > 0) {
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
-							chrg_list.chrg_dev[PMIC_SW]->charging_curr_limited);
+		if (!chrg_list->chrg_dev[PMIC_SW]->charger_limited
+			&& chrg_list->chrg_dev[PMIC_SW]->charging_curr_limited > 0) {
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->charging_curr_limited);
 			mmi_chrg_info(chip,"Set PMIC-SW ichg lmt ,%d uA\n",
-							chrg_list.chrg_dev[PMIC_SW]->charging_curr_limited);
-			chrg_list.chrg_dev[PMIC_SW]->charger_limited = true;
+							chrg_list->chrg_dev[PMIC_SW]->charging_curr_limited);
+			chrg_list->chrg_dev[PMIC_SW]->charger_limited = true;
 		}
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
@@ -502,46 +592,47 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		/*Initial setup pps request power by the battery voltage*/
 		chip->pd_request_volt = (2 * vbatt_volt) % 20000;
 		chip->pd_request_volt = 2 * vbatt_volt - chip->pd_request_volt
-							+ PPS_INIT_VOLT_COMP;
+							+ chip->pps_volt_comp;
 		chip->pd_request_curr =
 					min(chip->pd_curr_max, TYPEC_HIGH_CURRENT_UA);
-
+		mmi_chrg_info(chip,"pps init , volt %dmV, curr %dmA, volt comp %dmv\n",
+			chip->pd_request_volt, chip->pd_request_curr, chip->pps_volt_comp);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_SINGLE_CP_ENTRY:
-		if (chrg_list.cp_slave
-			&& chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
 			mmi_chrg_info(chip,"Disable Slave Charger Pump !\n");
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], false);
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
 		}
 
-		if (chrg_list.cp_master) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], true);
+		if (chrg_list->cp_master) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], true);
 			mmi_chrg_info(chip,"Enable Master Charger Pump !\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_PPS_TUNNING_CURR);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		}
 		break;
 	case PM_STATE_DULE_CP_ENTRY:
-		if (chrg_list.cp_master) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], true);
+		if (chrg_list->cp_master) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], true);
 			mmi_chrg_info(chip,"Enable Master Charger Pump !\n");
 		}
 
-		if (chrg_list.cp_slave) {
-			//mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], true);
+		if (chrg_list->cp_slave) {
+			chrg_list->cp_clave_later = true;
 			mmi_chrg_info(chip,"For ibus UCP, "
 			"delay start Slave Charger Pump in TUNNING_VOLT stage !\n");
 		}
 
-		if (chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
+		if (chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
 			mmi_chrg_sm_move_state(chip, PM_STATE_PPS_TUNNING_CURR);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		}
 		break;
 	case PM_STATE_PPS_TUNNING_CURR:
-		if (chrg_list.cp_master
-			&& !chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
+		if (chrg_list->cp_master
+			&& !chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into "
 								"SW directly\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
@@ -580,14 +671,15 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 		break;
 	case PM_STATE_PPS_TUNNING_VOLT:
-		if (chrg_list.cp_slave
-			&& !chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], true);
+		if (chrg_list->cp_slave
+			&& chrg_list->cp_clave_later
+			&& !chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], true);
 			mmi_chrg_info(chip,"Enable Slave Charger Pump !\n");
 		}
 
-		if (chrg_list.cp_master
-			&& !chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
+		if (chrg_list->cp_master
+			&& !chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, "
 							"Enter into SW directly\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
@@ -638,8 +730,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 								vbatt_volt, ibatt_curr,
 								chrg_step->chrg_step_cc_curr,
 								chrg_step->chrg_step_cv_volt);
-		if (chrg_list.cp_master
-			&& !chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
+		if (chrg_list->cp_master
+			&& !chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into SW directly\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
@@ -671,61 +763,109 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			goto schedule;
 		}
 
-		if (ibatt_curr < chrg_step->chrg_step_cc_curr
-			&& chip->pd_request_volt < chip->pd_volt_max
-			&& chrg_cc_power_tunning_cnt >=
-				CC_POWER_COUNT) {
-			if (chip->pd_pps_balance) {
-				chip->pd_request_curr -=
-					chip->pps_curr_steps;
-				chip->pd_request_volt +=
-					mmi_calculate_delta_volt(chip->pd_request_volt_prev,
-					chip->pd_request_curr_prev,
-					chip->pps_curr_steps);
-				mmi_chrg_dbg(chip, PR_MOTO,
-								"Request curr decreass %dmA, "
-								"Request volt increase %dmV \n",
-								chip->pd_request_curr,
-								chip->pd_request_volt);
-			} else {
-				if (chip->pd_request_curr + chip->pps_curr_steps
-					< chip->pd_curr_max) {
-					chip->pd_request_curr +=
-						chip->pps_curr_steps;
-					mmi_chrg_dbg(chip, PR_MOTO,
-								"Request curr decreass %dmA\n ",
-								chip->pd_request_curr);
-				} else if (chip->pd_request_volt + chip->pps_volt_steps
-						< chip->pd_volt_max) {
-					chip->pd_request_volt +=
-						chip->pps_volt_steps;
-					mmi_chrg_dbg(chip, PR_MOTO,
-								"Request volt decreass %duV\n ",
-								chip->pd_request_volt);
-				}
+		if (chip->thermal_cooling) {
+			if (batt_temp > chrg_step->temp_c + COOLING_HYSTERISIS_DEGC) {
+
+				mmi_chrg_info(chip,"Batt temp %d, Cooling loop failed, "
+								"force enter PM_STATE_ENTRY "
+								"restart this charger process !\n",
+							batt_temp);
+				chip->thermal_cooling = false;
+				mmi_find_chrg_step(chip, chip->pres_temp_zone,
+											vbatt_volt);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_ENTRY);
+
+			} else if (batt_temp > chrg_step->temp_c) {
+					cooling_curr =
+						min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+					if (chip->pd_request_curr > cooling_curr) {
+						chip->pd_request_curr -= COOLING_DELTA_POWER;
+					} else {
+						mmi_chrg_info(chip, "pd request curr %dmA, "
+							"battery temp %d, "
+							"cooling failed, Restart PM_STATE_ENTRY !\n",
+							chip->pd_request_curr, batt_temp);
+						mmi_find_chrg_step(chip, chip->pres_temp_zone,
+											vbatt_volt);
+						chip->thermal_cooling = false;
+						mmi_chrg_sm_move_state(chip,
+											PM_STATE_ENTRY);
+					}
+
+			} else if (batt_temp < chrg_step->temp_c - COOLING_DELTA_POWER) {
+
+				mmi_chrg_info(chip,"Batt temp %d, "
+								"Exit successfully from COOLing loop, "
+								"and Enter int TUNNING_CURR again !\n",
+							batt_temp);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_PPS_TUNNING_CURR);
+				chip->thermal_cooling = false;
 			}
-			chrg_cc_power_tunning_cnt = 0;
-			mmi_chrg_dbg(chip, PR_MOTO,
-								"For keeping CC chrg POWER, "
-								"Have to adjust pd input volt or curr"
-								"Request volt %dmV,  "
-								"Request curr %dmA\n",
-								chip->pd_request_volt,
-								chip->pd_request_curr);
-		}else if (ibatt_curr < chrg_step->chrg_step_cc_curr
-			&& chip->pd_request_volt < chip->pd_volt_max) {
-			chrg_cc_power_tunning_cnt++;
-			mmi_chrg_dbg(chip, PR_MOTO,
-								"Chrg CC tunning cnt %d\n",
-								chrg_cc_power_tunning_cnt);
-		} else if (ibatt_curr > chrg_step->chrg_step_cc_curr) {
-			chip->pd_request_volt -= chip->pps_volt_steps;
-			mmi_chrg_dbg(chip, PR_MOTO,
-								"In the CC step , the ibatt is greater than CC curr, "
-								"Request volt decreass %duV to remain CC step\n ",
-								chip->pd_request_volt);
-		} else
-			chrg_cc_power_tunning_cnt = 0;
+			heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
+		} else {
+			if (ibatt_curr < chrg_step->chrg_step_cc_curr
+				&& chip->pd_request_volt < chip->pd_volt_max
+				&& chrg_cc_power_tunning_cnt >=
+					CC_POWER_COUNT) {
+				if (chip->pd_pps_balance) {
+					chip->pd_request_curr -=
+						chip->pps_curr_steps;
+					chip->pd_request_volt +=
+						mmi_calculate_delta_volt(chip->pd_request_volt_prev,
+						chip->pd_request_curr_prev,
+						chip->pps_curr_steps);
+					mmi_chrg_dbg(chip, PR_MOTO,
+									"Request curr decreass %dmA, "
+									"Request volt increase %dmV \n",
+									chip->pd_request_curr,
+									chip->pd_request_volt);
+				} else {
+					if (chip->pd_request_curr + chip->pps_curr_steps
+						< chip->pd_curr_max) {
+						chip->pd_request_curr +=
+							chip->pps_curr_steps;
+						mmi_chrg_dbg(chip, PR_MOTO,
+									"Request curr decreass %dmA\n ",
+									chip->pd_request_curr);
+					} else if (chip->pd_request_volt + chip->pps_volt_steps
+							< chip->pd_volt_max) {
+						chip->pd_request_volt +=
+							chip->pps_volt_steps;
+						mmi_chrg_dbg(chip, PR_MOTO,
+									"Request volt decreass %duV\n ",
+									chip->pd_request_volt);
+					}
+				}
+				chrg_cc_power_tunning_cnt = 0;
+				mmi_chrg_dbg(chip, PR_MOTO,
+									"For keeping CC chrg POWER, "
+									"Have to adjust pd input volt or curr"
+									"Request volt %dmV,  "
+									"Request curr %dmA\n",
+									chip->pd_request_volt,
+									chip->pd_request_curr);
+			}else if (ibatt_curr < chrg_step->chrg_step_cc_curr
+				&& chip->pd_request_volt < chip->pd_volt_max) {
+				chrg_cc_power_tunning_cnt++;
+				mmi_chrg_dbg(chip, PR_MOTO,
+									"Chrg CC tunning cnt %d\n",
+									chrg_cc_power_tunning_cnt);
+			} else if (ibatt_curr > chrg_step->chrg_step_cc_curr
+								+ CC_CURR_DEBOUNCE) {
+				chip->pd_request_volt -= chip->pps_volt_steps;
+				mmi_chrg_dbg(chip, PR_MOTO,
+					"In the CC step , the ibatt is greater than CC curr, "
+					"Request volt decreass %duV to remain CC step\n ",
+					chip->pd_request_volt);
+			} else
+				chrg_cc_power_tunning_cnt = 0;
+
+			if(ibatt_curr < chrg_step->chrg_step_cc_curr)
+				heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
+		}
+			
 		if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
 			if (chrg_cv_taper_tunning_cnt >
 				CV_TAPPER_COUNT) {
@@ -758,8 +898,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 								vbatt_volt, ibatt_curr,
 								chrg_step->chrg_step_cv_volt,
 								chrg_step->chrg_step_cv_tapper_curr);
-		if (chrg_list.cp_master
-			&& !chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
+		if (chrg_list->cp_master
+			&& !chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into SW directly\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
@@ -789,10 +929,10 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		if (vbatt_volt >= chrg_step->chrg_step_cv_volt
 			&& (ibatt_curr < chrg_step->chrg_step_cv_tapper_curr
-			|| ibatt_curr < chrg_list.chrg_dev[CP_MASTER]->charging_curr_min)) {
+			|| ibatt_curr < chrg_list->chrg_dev[CP_MASTER]->charging_curr_min)) {
 			if (chrg_cv_taper_tunning_cnt >= CV_TAPPER_COUNT) {
 				if (ibatt_curr <
-					chrg_list.chrg_dev[CP_MASTER]->charging_curr_min) {
+					chrg_list->chrg_dev[CP_MASTER]->charging_curr_min) {
 					mmi_chrg_info(chip, "Ready quite CP chrg stage, "
 								"and Enter into PMIC switch chrg stage, "
 								"chrg step %d, ibatt %dmA\n",
@@ -809,9 +949,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 						mmi_chrg_sm_move_state(chip,
 									PM_STATE_CP_CC_LOOP);
 					} else {
-					mmi_chrg_info(chip,"Can't find next chrg step\n");
-//						mmi_chrg_sm_move_state(chip,
-//									PM_STATE_STOP_CHARGE);
+						mmi_chrg_info(chip,"Can't find next chrg step\n");
+						mmi_chrg_sm_move_state(chip, PM_STATE_CP_QUIT);
 					}
 				}
 				chrg_cv_taper_tunning_cnt = 0;
@@ -821,9 +960,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 								chrg_cv_taper_tunning_cnt);
 			}
 
-		}	else {
+		} else {
 			chrg_cv_taper_tunning_cnt = 0;
-
 			if (vbatt_volt > chrg_step->chrg_step_cv_volt + 10000) {
 				if (chrg_cv_delta_volt > 20000)
 					chip->pd_request_volt -= chrg_cv_delta_volt;
@@ -847,38 +985,98 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			}
 		}
 
-		break;
-	case PM_STATE_CP_QUIT:
-		if (chrg_list.cp_slave
-			&& chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], false);
+		if (chip->thermal_cooling) {
+			if (batt_temp > chrg_step->temp_c + COOLING_HYSTERISIS_DEGC) {
+
+				mmi_chrg_info(chip,"Batt temp %d, Cooling loop failed, "
+								"force enter PM_STATE_ENTRY "
+								"restart this charger process !\n",
+							batt_temp);
+				chip->thermal_cooling = false;
+				mmi_find_chrg_step(chip, chip->pres_temp_zone,
+											vbatt_volt);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_ENTRY);
+
+			} else if (batt_temp > chrg_step->temp_c) {
+					cooling_curr =
+						min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+					if (chip->pd_request_curr > cooling_curr) {
+						chip->pd_request_curr -= COOLING_DELTA_POWER;
+					} else {
+						mmi_chrg_info(chip, "pd request curr %dmA, "
+							"battery temp %d, "
+							"cooling failed, Restart PM_STATE_ENTRY !\n",
+							chip->pd_request_curr, batt_temp);
+						mmi_find_chrg_step(chip, chip->pres_temp_zone,
+											vbatt_volt);
+						chip->thermal_cooling = false;
+						mmi_chrg_sm_move_state(chip,
+											PM_STATE_ENTRY);
+					}
+
+			} else if (batt_temp < chrg_step->temp_c - COOLING_DELTA_POWER) {
+
+				mmi_chrg_info(chip,"Batt temp %d, successful exit from COOLing loop, "
+								"and Enter int TUNNING_CURR again !\n",
+							batt_temp);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_PPS_TUNNING_CURR);
+				chip->thermal_cooling = false;
+			}
 		}
 
-		if (chrg_list.cp_master
-			&& chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], false);
+		if (chrg_list->cp_slave) {
+			if (quit_slave_chrg_cnt > 3
+				&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+				mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
+				mmi_chrg_info(chip,"Quit slave chrg, the reason is :ibatt %duA, "
+							"CP slave charging curr min %d uA\n",
+			  				ibatt_curr,
+			  				chrg_list->chrg_dev[CP_SLAVE]->charging_curr_min);
+				msleep(100);
+				mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], true);
+				mmi_chrg_info(chip,"Restart CP master again\n");
+			}
+
+			if (ibatt_curr <
+					chrg_list->chrg_dev[CP_SLAVE]->charging_curr_min)
+				quit_slave_chrg_cnt++;
+			else
+				quit_slave_chrg_cnt = 0;
+		}
+		break;
+	case PM_STATE_CP_QUIT:
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
+		}
+
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
 		mmi_chrg_sm_move_state(chip, PM_STATE_RECOVERY_SW);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_RECOVERY_SW:
-		if (chrg_list.chrg_dev[PMIC_SW]->charger_limited) {
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
+		if (chrg_list->chrg_dev[PMIC_SW]->charger_limited) {
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 			mmi_chrg_info(chip,"Recovery PMIC-SW ichg lmt ,%d uA\n",
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
 							DISABLE_CHRG_LIMIT);
-			chrg_list.chrg_dev[PMIC_SW]->charger_limited = false;
+			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 
 			mmi_chrg_info(chip,"Do an rerun usb AICL for PMIC-SW\n");
-			mmi_enable_charging(chrg_list.chrg_dev[PMIC_SW], false);
+			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
 			msleep(100);
-			mmi_enable_charging(chrg_list.chrg_dev[PMIC_SW], true);
+			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 			chip->recovery_pmic_chrg = true;
+			chrg_cv_taper_tunning_cnt = 0;
 		}
-
 
 		chip->pd_request_curr = TYPEC_HIGH_CURRENT_UA;
 		mmi_chrg_info(chip,"ibatt : %dmA, step cc curr : %dmA\n",
@@ -889,36 +1087,42 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_dbg(chip, PR_MOTO, "Reduce pps volt %dmV, curr %dmA\n ",
 						chip->pd_request_volt, chip->pd_request_curr);
 			heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
+			chrg_cv_taper_tunning_cnt = 0;
 		} else {
+			chrg_cv_taper_tunning_cnt++;
+
+		}
+
+		if (chrg_cv_taper_tunning_cnt > CV_TAPPER_COUNT){
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_LOOP);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		}
 		break;
 	case PM_STATE_STOP_CHARGE:
 		heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
-		if (chrg_list.cp_slave
-			&& chrg_list.chrg_dev[CP_SLAVE]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_SLAVE], false);
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
 		}
 
-		if (chrg_list.cp_master
-			&& chrg_list.chrg_dev[CP_MASTER]->charger_enabled) {
-			mmi_enable_charging(chrg_list.chrg_dev[CP_MASTER], false);
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
-		if (chrg_list.chrg_dev[PMIC_SW]->charger_limited) {
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
+		if (chrg_list->chrg_dev[PMIC_SW]->charger_limited) {
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 			mmi_chrg_info(chip,"Recovery PMIC-SW ichg lmt ,%d uA\n",
-							chrg_list.chrg_dev[PMIC_SW]->input_curr_setted);
-			mmi_set_charing_current(chrg_list.chrg_dev[PMIC_SW],
+							chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
+			mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
 							DISABLE_CHRG_LIMIT);
-			chrg_list.chrg_dev[PMIC_SW]->charger_limited = false;
+			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 		}
 
 		if (chip->pres_temp_zone != ZONE_COLD
 		&& chip->pres_temp_zone != ZONE_HOT
-		&& chrg_list.chrg_dev[PMIC_SW]->charger_enabled
+		&& chrg_list->chrg_dev[PMIC_SW]->charger_enabled
 		&& chrg_step->chrg_step_cc_curr > 0) {
 			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
@@ -930,31 +1134,35 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		mmi_chrg_info(chip,"In cooling loop, batt temp %d, cmp temp %d\n",
 						batt_temp, chrg_step->temp_c);
 
-		if (batt_temp > chrg_step->temp_c) {
-			cooling_volt = (2 * vbatt_volt) % 20000;
-			cooling_volt = 2 * vbatt_volt - cooling_volt
-							+ PPS_INIT_VOLT_COMP;
-			cooling_curr =
-					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+		if (batt_temp > chrg_step->temp_c + COOLING_HYSTERISIS_DEGC) {
 
-			if (chip->pd_request_volt > cooling_volt) {
-				chip->pd_request_volt -= COOLING_DELTA_POWER;
-			} else if (chip->pd_request_curr > cooling_curr) {
-				chip->pd_request_curr -= COOLING_DELTA_POWER;
-			} else {
-
-				mmi_chrg_info(chip, "battery temp %d, "
-						"cooling failed, Restart PM_STATE_ENTRY !\n", batt_temp);
-				mmi_find_chrg_step(chip, chip->pres_temp_zone,
+			mmi_chrg_info(chip,"Batt temp %d, Cooling loop failed, "
+							"force enter PM_STATE_ENTRY "
+							"restart this charger process !\n",
+						batt_temp);
+			mmi_find_chrg_step(chip, chip->pres_temp_zone,
 										vbatt_volt);
-				mmi_chrg_sm_move_state(chip,
+			mmi_chrg_sm_move_state(chip,
 						PM_STATE_ENTRY);
-			}
 
-			mmi_chrg_dbg(chip, PR_MOTO, "Cooling loop, pd power : volt%d, curr %d\n",
-								chip->pd_request_volt, chip->pd_request_curr);
+		} else if (batt_temp > chrg_step->temp_c) {
+				cooling_curr =
+					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+				if (chip->pd_request_curr > cooling_curr) {
+					chip->pd_request_curr -= COOLING_DELTA_POWER;
+				} else {
+					mmi_chrg_info(chip, "pd request curr %dmA, "
+						"battery temp %d, "
+						"cooling failed, Restart PM_STATE_ENTRY !\n",
+						chip->pd_request_curr, batt_temp);
+					mmi_find_chrg_step(chip, chip->pres_temp_zone,
+										vbatt_volt);
+					mmi_chrg_sm_move_state(chip,
+										PM_STATE_ENTRY);
+				}
 
-		}else {
+		} else if (batt_temp < chrg_step->temp_c - COOLING_DELTA_POWER) {
+
 			mmi_chrg_info(chip,"Batt temp %d, successful exit from COOLing loop, "
 							"and Enter int TUNNING_CURR again !\n",
 						batt_temp);
@@ -962,6 +1170,32 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 						PM_STATE_PPS_TUNNING_CURR);
 		}
 
+		if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
+			if (chrg_cv_taper_tunning_cnt >
+				CV_TAPPER_COUNT) {
+
+				mmi_chrg_info(chip, "vbatt_volt %dmV, "
+					"battery temp %d, "
+					"chrg step cv volt %dmV"
+					"cooling failed, Restart PM_STATE_ENTRY !\n",
+					vbatt_volt, batt_temp, chrg_step->chrg_step_cv_volt);
+				mmi_find_chrg_step(chip, chip->pres_temp_zone,
+										vbatt_volt);
+				mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
+				chrg_cv_taper_tunning_cnt = 0;
+				heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
+			} else {
+				chrg_cv_taper_tunning_cnt++;
+				mmi_chrg_dbg(chip, PR_MOTO,
+								"Chrg CV taper cnt %d, "
+								"chrg step cv volt %dmV, "
+								"vbatt %dmV\n",
+								chrg_cv_taper_tunning_cnt,
+								chrg_step->chrg_step_cv_volt,
+								vbatt_volt);
+			}
+		} else
+			chrg_cv_taper_tunning_cnt = 0;
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 		break;
 	}
@@ -1052,9 +1286,16 @@ schedule:
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(heartbeat_dely_ms));
 	} else {
+		chrg_dev_init(chip, &g_chrg_list);
+		clear_chrg_dev_error_cnt(chip, &g_chrg_list);
 		clear_chg_manager(chip);
-		chip->pd_pps_support =  false;
 		sm_state = PM_STATE_DISCONNECT;
+		chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
+		quit_slave_chrg_cnt = 0;
+		chrg_cc_power_tunning_cnt = 0;
+		chrg_cv_taper_tunning_cnt = 0;
+		chrg_cv_delta_volt = 0;
+		mmi_chrg_err(chip, "exit sm work\n");
 	}
 
 	return;
@@ -1126,6 +1367,8 @@ int mmi_chrg_policy_init(struct mmi_charger_manager *chip,
 		return -EINVAL;
 	}
 
+	chrg_dev_init(chip, &g_chrg_list);
+	chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 	INIT_DELAYED_WORK(&chip->mmi_chrg_sm_work, mmi_chrg_sm_work_func);
 	return 0;
 }

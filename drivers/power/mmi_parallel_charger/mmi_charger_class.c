@@ -110,6 +110,14 @@ int mmi_update_charger_error(struct mmi_charger_device *chrg)
 	return -ENOTSUPP;
 }
 
+int mmi_clear_charger_error(struct mmi_charger_device *chrg)
+{
+	if(chrg != NULL && chrg->ops != NULL && chrg->ops->clear_charger_error)
+		return chrg->ops->clear_charger_error(chrg);
+
+	return -ENOTSUPP;
+}
+
 static void mmi_charger_device_release(struct device *dev)
 {
 	struct mmi_charger_device *charger_dev = to_mmi_charger_device(dev);
