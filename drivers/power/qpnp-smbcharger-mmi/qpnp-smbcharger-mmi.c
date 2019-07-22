@@ -3736,6 +3736,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	if ((chip->smb_version == PM8150B_SUBTYPE) ||
+	    (chip->smb_version == PMI632_SUBTYPE) ||
 	    (chip->smb_version == PM660_SUBTYPE))
 		if (smblib_masked_write_mmi(chip, USBIN_ADAPTER_ALLOW_CFG_REG,
 					    USBIN_ADAPTER_ALLOW_MASK,
