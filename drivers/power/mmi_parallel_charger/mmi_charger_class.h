@@ -64,6 +64,7 @@ struct mmi_charger_error_info {
 	bool bat_ocp_alarm;
 	bool bus_ovp_alarm;
 	bool bus_ocp_alarm;
+	bool bus_ucp_alarm;
 	bool bat_ucp_alarm;
 
 	bool bat_therm_alarm;
@@ -77,6 +78,9 @@ struct mmi_charger_error_info {
 	bool conv_ocp_fault;
 	bool ss_timeout_fault;
 	bool ts_shut_fault;
+
+	int bus_ucp_err_cnt;
+	int bus_ocp_err_cnt;
 };
 
 struct mmi_charger_device {
@@ -87,6 +91,7 @@ struct mmi_charger_device {
 	struct device	dev;
 	struct mmi_charger_info	charger_data;
 	struct mmi_charger_error_info charger_error;
+	int *debug_mask;
 	int input_curr_setted; /*save input current*/
 	int charging_curr_limited; /*charger current limitation*/
 	int charging_curr_min; /*The minimum charging current supported by this device*/
@@ -104,6 +109,7 @@ struct mmi_charger_ops {
 	int (*set_input_current)(struct mmi_charger_device *chrg, u32 uA);
 	int (*update_charger_status)(struct mmi_charger_device *chrg);
 	int (*update_charger_error)(struct mmi_charger_device *chrg);
+	int (*clear_charger_error)(struct mmi_charger_device *chrg);
 };
 
 
@@ -123,6 +129,7 @@ extern int mmi_get_input_current(struct mmi_charger_device *chrg, u32 *uA);
 extern int mmi_set_input_current(struct mmi_charger_device *chrg, u32 uA);
 extern int mmi_update_charger_status(struct mmi_charger_device *chrg);
 extern int mmi_update_charger_error(struct mmi_charger_device *chrg);
+extern int mmi_clear_charger_error(struct mmi_charger_device *chrg);
 extern struct mmi_charger_device *mmi_charger_device_register(const char *name,
 		const char *psy_name,struct device *parent, void *devdata,
 		const struct mmi_charger_ops *ops);
