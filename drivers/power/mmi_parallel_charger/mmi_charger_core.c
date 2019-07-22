@@ -59,7 +59,6 @@ static char *charge_rate[] = {
 };
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
-//#define MIN_MAX_TEMP_C 47
 #define HYSTERISIS_DEGC 2
 bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c)
 {
@@ -345,6 +344,8 @@ void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 					chrg_dev->name, chrg_dev->charger_error.ss_timeout_fault);
 	mmi_chrg_dbg(chip, PR_MOTO, "%s: ts_shut_fault %d\n",
 					chrg_dev->name, chrg_dev->charger_error.ts_shut_fault);
+	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ucp_fault %d\n",
+					chrg_dev->name, chrg_dev->charger_error.bus_ucp_alarm);	
 	return;
 }
 
@@ -402,7 +403,6 @@ static int batt_get_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-//	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_TEMP:
 		rc = power_supply_get_property(chip->extrn_psy,
 							psp, &prop);
@@ -420,7 +420,8 @@ static int batt_get_property(struct power_supply *psy,
 							psp, &prop);
 		if (rc < 0) {
 			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
-			return -EINVAL;
+			rc = 0;
+			val->intval = -EINVAL;
 		} else
 			val->intval = prop.intval;
 		break;
@@ -789,6 +790,9 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->pd_target_volt = 0;
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
+	chip->recovery_pmic_chrg = false;
+	chip->thermal_mitigation_doing = false;
+	chip->pd_pps_support = false;
 
 	memset(chip->mmi_pdo_info, 0,
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);

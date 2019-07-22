@@ -134,7 +134,7 @@ struct mmi_chrg_dts_info {
 #define TYPEC_MIDDLE_CURRENT_UA		2000000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
 #define PUMP_CHARGER_PPS_MIN_VOLT	8000000
-
+#define COOLING_HYSTERISIS_DEGC 2
 struct mmi_charger_manager {
 	const char	*name;
 	struct device	*dev;
@@ -162,6 +162,7 @@ struct mmi_charger_manager {
 	int batt_ovp_lmt;	/*the battery over current limitation*/
 	int pl_chrg_vbatt_min;	/*the minimum battery voltage to enable parallel charging*/
 
+	int pps_volt_comp;
 	int pd_request_volt;
 	int pd_request_curr;
 	/*the request PD power*/
@@ -191,6 +192,7 @@ struct mmi_charger_manager {
 	bool extrn_sense;
 	bool recovery_pmic_chrg;
 	bool thermal_mitigation_doing;
+	bool thermal_cooling;
 
 	struct delayed_work	mmi_chrg_sm_work;	/*mmi charger state machine work*/
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
