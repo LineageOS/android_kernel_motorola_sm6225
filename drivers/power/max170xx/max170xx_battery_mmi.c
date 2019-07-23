@@ -122,6 +122,8 @@ struct max17042_wakeup_source {
 
 #define MAX17042_VMAX_TOLERANCE		50 /* 50 mV */
 
+DEFINE_MUTEX(instance_lock);
+
 struct max17042_chip {
 	struct i2c_client *client;
 	struct regmap *regmap;
@@ -1056,6 +1058,60 @@ static int max17042_init_chip(struct max17042_chip *chip)
 	/* Init complete, Clear the POR bit */
 	regmap_update_bits(map, MAX17042_STATUS, STATUS_POR_BIT, 0x0);
 	return 0;
+}
+
+static void max17042_force_reset(struct max17042_chip *chip)
+{
+	if (chip->pdata->main_psy)
+		dev_warn(&chip->client->dev, "Forcing reset of main fg\n");
+	else
+		dev_warn(&chip->client->dev, "Forcing reset of flip fg\n");
+
+	regmap_write(chip->regmap, MAX17042_VFSOC0Enable,
+				MAX17050_FORCE_POR);
+	schedule_delayed_work(&chip->thread_work,
+		msecs_to_jiffies(MAX17050_POR_WAIT_MS));
+}
+
+#define MAX_DIFFERENTIAL 15
+static void max17042_check_fuel_gauge_diff(struct max17042_chip *this_instance)
+{
+	static struct max17042_chip *other_instance = NULL;
+	static int other_instance_capacity = 0;
+	union power_supply_propval pval = {0};
+
+	mutex_lock(&instance_lock);
+
+	if (!this_instance->battery)
+		goto out;
+
+	if (power_supply_get_property(this_instance->battery,
+		POWER_SUPPLY_PROP_CAPACITY, &pval))
+		goto out;
+
+	if (this_instance->pdata->main_psy)
+		dev_info(&this_instance->client->dev,
+			"Main fg capacity is %d\n", pval.intval);
+	else
+		dev_info(&this_instance->client->dev,
+			"Flip fg capacity is %d\n", pval.intval);
+
+	if (other_instance) {
+		if (abs(pval.intval - other_instance_capacity)
+				>= MAX_DIFFERENTIAL) {
+			dev_warn(&this_instance->client->dev,
+				"Main and flip fg capacity diff exceeds %d!\n",
+				MAX_DIFFERENTIAL);
+			max17042_force_reset(this_instance);
+			max17042_force_reset(other_instance);
+		}
+	} else {
+		other_instance = this_instance;
+		other_instance_capacity = pval.intval;
+	}
+
+out:
+	mutex_unlock(&instance_lock);
 }
 
 static void max17042_set_temp_threshold(struct max17042_chip *chip,
@@ -2504,6 +2560,11 @@ static int max17042_probe(struct i2c_client *client,
 				     config->full_soc_thresh);
 		chip->init_complete = 1;
 	}
+
+	/* Check if we need a reset, if the diff between this fuel
+	 * gauge and the other is too large, there is probably something wrong.
+	 */
+	max17042_check_fuel_gauge_diff(chip);
 
 	ret = max17042_debugfs_create(chip);
 	if (ret) {
