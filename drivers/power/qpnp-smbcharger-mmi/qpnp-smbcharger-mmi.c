@@ -92,8 +92,29 @@ static struct smb_mmi_charger *this_chip = NULL;
 
 #define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
 
+#define APSD_STATUS_REG				(USBIN_BASE + 0x07)
+#define APSD_STATUS_7_BIT			BIT(7)
+#define HVDCP_CHECK_TIMEOUT_BIT			BIT(6)
+#define SLOW_PLUGIN_TIMEOUT_BIT			BIT(5)
+#define ENUMERATION_DONE_BIT			BIT(4)
+#define VADP_CHANGE_DONE_AFTER_AUTH_BIT		BIT(3)
+#define QC_AUTH_DONE_STATUS_BIT			BIT(2)
+#define QC_CHARGER_BIT				BIT(1)
+#define APSD_DTC_STATUS_DONE_BIT		BIT(0)
+#define APSD_RESULT_STATUS_REG			(USBIN_BASE + 0x08)
+#define APSD_RESULT_STATUS_7_BIT		BIT(7)
+#define APSD_RESULT_STATUS_MASK			GENMASK(6, 0)
+#define QC_3P0_BIT				BIT(6)
+#define QC_2P0_BIT				BIT(5)
+#define FLOAT_CHARGER_BIT			BIT(4)
+#define DCP_CHARGER_BIT				BIT(3)
+#define CDP_CHARGER_BIT				BIT(2)
+#define OCP_CHARGER_BIT				BIT(1)
+#define SDP_CHARGER_BIT				BIT(0)
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
+#define CMD_APSD_REG				(USBIN_BASE + 0x41)
+#define APSD_RERUN_BIT				BIT(0)
 #define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
 #define USBIN_ICL_OVERRIDE_BIT			BIT(0)
 #define HVDCP_PULSE_COUNT_MAX_REG		(USBIN_BASE + 0x5B)
@@ -177,6 +198,17 @@ enum {
 	POWER_SUPPLY_CHARGE_RATE_NORMAL,
 	POWER_SUPPLY_CHARGE_RATE_WEAK,
 	POWER_SUPPLY_CHARGE_RATE_TURBO,
+};
+
+enum {
+	CHG_BC1P2_SDP = 0,
+	CHG_BC1P2_OCP,
+	CHG_BC1P2_CDP,
+	CHG_BC1P2_DCP,
+	CHG_BC1P2_FLOAT,
+	CHG_BC1P2_QC_2P0,
+	CHG_BC1P2_QC_3P0,
+	CHG_BC1P2_UNKNOWN,
 };
 
 static char *charge_rate[] = {
@@ -305,6 +337,7 @@ struct smb_mmi_charger {
 	struct notifier_block	mmi_psy_notifier;
 	struct delayed_work	heartbeat_work;
 	struct delayed_work	weakcharger_work;
+	struct delayed_work	charger_check_work;
 
 	struct votable 		*chg_dis_votable;
 	struct votable		*fcc_votable;
@@ -469,6 +502,59 @@ int smblib_write_mmi(struct smb_mmi_charger *chg, u16 addr, u8 val)
 int smblib_masked_write_mmi(struct smb_mmi_charger *chg, u16 addr, u8 mask, u8 val)
 {
 	return regmap_update_bits(chg->regmap, addr, mask, val);
+}
+
+int smblib_get_apsd_result(struct smb_mmi_charger *chg, int *type)
+{
+	int rc = 0;
+	u8 stat;
+	int apsd;
+
+	rc = smblib_read_mmi(chg, APSD_STATUS_REG, &stat);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read APSD_STATUS_REG rc=%d\n", rc);
+		return rc;
+	}
+	if (!(stat & APSD_DTC_STATUS_DONE_BIT))
+		return -EBUSY;
+
+	rc = smblib_read_mmi(chg, APSD_RESULT_STATUS_REG, &stat);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read APSD_RESULT_STATUS_REG rc=%d\n", rc);
+		return rc;
+	}
+
+	if (stat & QC_3P0_BIT)
+		apsd = CHG_BC1P2_QC_3P0;
+	else if (stat & QC_2P0_BIT)
+		apsd = CHG_BC1P2_QC_2P0;
+	else if (stat & FLOAT_CHARGER_BIT)
+		apsd = CHG_BC1P2_FLOAT;
+	else if (stat & DCP_CHARGER_BIT)
+		apsd = CHG_BC1P2_DCP;
+	else if (stat & CDP_CHARGER_BIT)
+		apsd = CHG_BC1P2_CDP;
+	else if (stat & OCP_CHARGER_BIT)
+		apsd = CHG_BC1P2_OCP;
+	else if (stat & SDP_CHARGER_BIT)
+		apsd = CHG_BC1P2_SDP;
+	else
+		apsd = CHG_BC1P2_UNKNOWN;
+
+	*type = apsd;
+
+	return rc;
+}
+
+int smblib_rerun_apsd(struct smb_mmi_charger *chg)
+{
+	int rc = 0;
+
+	rc = smblib_write_mmi(chg, CMD_APSD_REG, APSD_RERUN_BIT);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't rerun apsd rc=%d\n", rc);
+	}
+	return rc;
 }
 
 #define CHG_SHOW_MAX_SIZE 50
@@ -1663,6 +1749,30 @@ static void mmi_weakcharger_work(struct work_struct *work)
 	mmi_dbg(chip, "SMBMMI: Weak timer expired\n");
 }
 
+#define USBIN_100MA 100000
+#define CHARGER_CHECK_DELAY_MS 10000
+static void mmi_charger_check_work(struct work_struct *work)
+{
+	int rc;
+	int apsd;
+	int usb_icl;
+	struct smb_mmi_charger *chg = container_of(work,
+						struct smb_mmi_charger,
+						charger_check_work.work);
+
+	rc = smblib_get_apsd_result(chg, &apsd);
+	if (rc < 0 || apsd == CHG_BC1P2_UNKNOWN)
+		return;
+
+	usb_icl = get_effective_result(chg->usb_icl_votable);
+	if (usb_icl <= USBIN_100MA ||
+	    apsd == CHG_BC1P2_FLOAT ||
+	    apsd == CHG_BC1P2_OCP) {
+		smblib_rerun_apsd(chg);
+		mmi_info(chg, "SMBMMI: Rerun APSD, apsd=%d, icl=%d\n", apsd, usb_icl);
+	}
+}
+
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
@@ -2624,6 +2734,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	char *envp[2];
 
 	struct smb_mmi_chg_status chg_stat;
+	int apsd;
+	static int prev_apsd = CHG_BC1P2_UNKNOWN;
 
 	/* Have not been resumed so wait another 100 ms */
 	if (chip->suspended & IS_SUSPENDED) {
@@ -2712,6 +2824,23 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
+
+	apsd = prev_apsd;
+	rc = smblib_get_apsd_result(chip, &apsd);
+	if (rc < 0) {
+		mmi_warn(chip, "Error getting apsd result rc = %d\n", rc);
+		if (!chg_stat.charger_present)
+			apsd = CHG_BC1P2_UNKNOWN;
+	}
+	if (apsd != prev_apsd) {
+		mmi_info(chip, "Update apsd (%d)-> (%d)\n", prev_apsd, apsd);
+		prev_apsd = apsd;
+		cancel_delayed_work(&chip->charger_check_work);
+		if (apsd != CHG_BC1P2_UNKNOWN) {
+			schedule_delayed_work(&chip->charger_check_work,
+				msecs_to_jiffies(CHARGER_CHECK_DELAY_MS));
+		}
+	}
 
 	mmi_chrg_rate_check(chip);
 
@@ -3639,6 +3768,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
+	INIT_DELAYED_WORK(&chip->charger_check_work, mmi_charger_check_work);
 	wakeup_source_init(&chip->smb_mmi_hb_wake_source,
 			   "smb_mmi_hb_wake");
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
