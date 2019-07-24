@@ -676,6 +676,11 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	else
 		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 
+	if (bl->bl_2bytes_enable)
+		rc = mipi_dsi_dcs_set_display_brightness_2bytes(dsi, bl_lvl);
+	else
+		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 
@@ -2417,6 +2422,12 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
+
+	panel->bl_config.bl_2bytes_enable = utils->read_bool(utils->data,
+			"qcom,bklt-dcs-2bytes-enabled");
+
+	pr_info("[%s] bl_2bytes_enable=%d\n", panel->name,
+			panel->bl_config.bl_2bytes_enable);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
