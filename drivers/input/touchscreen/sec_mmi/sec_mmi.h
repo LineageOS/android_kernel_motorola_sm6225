@@ -23,6 +23,9 @@ struct sec_mmi_data {
 	struct delayed_work resume_work;
 	struct delayed_work detection_work;
 
+	atomic_t touch_stopped;
+
+	bool force_calibration;
 	int ctrl_dsi;
 	unsigned int build_id;
 	unsigned int config_id;

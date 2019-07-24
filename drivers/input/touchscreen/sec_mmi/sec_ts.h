@@ -815,6 +815,7 @@ void sec_ts_locked_release_all_finger(struct sec_ts_data *ts);
 void sec_ts_fn_remove(struct sec_ts_data *ts);
 void sec_ts_delay(unsigned int ms);
 int sec_ts_read_information(struct sec_ts_data *ts);
+int sec_ts_integrity_check(struct sec_ts_data *ts);
 int execute_selftest(struct sec_ts_data *ts, bool save_result);
 
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);

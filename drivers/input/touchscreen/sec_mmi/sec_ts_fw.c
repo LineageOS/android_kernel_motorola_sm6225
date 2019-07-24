@@ -627,6 +627,7 @@ int sec_ts_firmware_update(struct sec_ts_data *ts, const u8 *data,
 	}
 
 	sec_ts_sw_reset(ts);
+	ts->fw_invalid = true;
 
 	if (!bl_update) {
 		if (restore_cal) {
@@ -654,6 +655,7 @@ int sec_ts_firmware_update(struct sec_ts_data *ts, const u8 *data,
 			return -EIO;
 		}
 
+		ts->fw_invalid = false;
 		input_info(true, &ts->client->dev, "%s: fw update Success! read_boot_status = 0x%x\n", __func__, fw_status);
 
 		return 1;
