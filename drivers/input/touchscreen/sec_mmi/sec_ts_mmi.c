@@ -129,7 +129,11 @@ static int sec_mmi_touchscreen_class(
 	struct device_attribute *attrs = class_attributes;
 	bool unreg_class = false;
 	int i, error = 0;
+	char buffer[128];
+	struct sec_ts_data *ts = data->ts_ptr;
+	ssize_t namelen;
 	const char *class_fname = "primary";
+	static char *input_dev_name;
 	static struct class *touchscreen_class;
 	static int minor;
 
@@ -167,6 +171,14 @@ static int sec_mmi_touchscreen_class(
 		}
 
 		dev_set_drvdata(data->ts_class_dev, data);
+
+		/* construct input device name */
+		namelen = scnprintf(buffer, sizeof(buffer), "samsung_mmi.%s", class_fname);
+		// FIXME namelen = scnprintf(buffer, sizeof(buffer), "synaptics_mmi.%s", class_fname);
+		if (namelen) {
+			input_dev_name = kstrdup(buffer, GFP_KERNEL);
+			ts->input_dev->name = input_dev_name;
+		}
 
 		for (i = 0; attrs[i].attr.name != NULL; ++i) {
 			error = device_create_file(data->ts_class_dev, &attrs[i]);
@@ -244,7 +256,6 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				"%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
-		bdc2ui(&data->build_id, buffer, sizeof(data->build_id));
 		dev_dbg(DEV_MMI, "%s: FW VERSION: " \
 				"%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
@@ -272,11 +283,18 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				"%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
+		if (buffer[0] == 0x17)
+			ts->device_id[3] = 0x7C;
+		bdc2ui(&data->build_id, buffer, sizeof(data->build_id));
 		dev_dbg(DEV_MMI, "%s: IMAGE VER: " \
 				"%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
 				buffer[4], buffer[5], buffer[6], buffer[7]);
 	}
+
+	snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
+				tolower(ts->device_id[0]), tolower(ts->device_id[1]),
+				ts->device_id[2], ts->device_id[3]);
 }
 
 static void sec_mmi_ic_reset(struct sec_mmi_data *data)
@@ -329,7 +347,6 @@ static void sec_mmi_work(struct work_struct *w)
 	bool panel_ready = true;
 	char *pname = NULL;
 
-#if defined(CONFIG_DRM)
 	/* DRM panel status */
 	panel_ready = dsi_display_is_panel_enable(data->ctrl_dsi,
 									&probe_status, &pname);
@@ -343,13 +360,13 @@ static void sec_mmi_work(struct work_struct *w)
 		dev_dbg(DEV_MMI, "%s: panel ready\n", __func__);
 		//rmi4_data->drm_state = DRM_ST_READY;
 	}
-#endif
 
-	if (!ts->fw_invalid) {
+	if (ts->fw_invalid == false) {
+		sec_mmi_fw_read_id(data);
+		sec_ts_integrity_check(ts);
+
 		sec_ts_sense_on(ts);
 		dev_dbg(DEV_MMI, "%s: sensing turned on\n", __func__);
-
-		sec_mmi_fw_read_id(data);
 	}
 }
 
@@ -360,11 +377,27 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 	struct sec_mmi_data *data =
 		container_of(dw, struct sec_mmi_data, resume_work);
 	struct sec_ts_data *ts = data->ts_ptr;
+	unsigned char buffer = 0;
+	int ret;
+
+	if (atomic_cmpxchg(&data->touch_stopped, 1, 0) == 0)
+		return;
+
+	sec_mmi_ic_reset(data);
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
+					&buffer, sizeof(buffer));
+	if (ret < 0)
+		dev_err(DEV_MMI,
+				"%s: failed to read boot status (%d)\n",
+				__func__, ret);
+
+	ts->fw_invalid = buffer == SEC_TS_STATUS_BOOT_MODE;
+	ts->power_status = SEC_TS_STATE_POWER_ON;
 
 	if (ts->lowpower_mode)
 		complete_all(&ts->resume_done);
 
-	dev_dbg(DEV_MMI, "%s: touch resumed\n", __func__);
+	dev_info(DEV_MMI, "%s: touch resumed\n", __func__);
 }
 
 static int inline sec_mmi_display_on(struct sec_mmi_data *data)
@@ -378,12 +411,17 @@ static int inline sec_mmi_display_off(struct sec_mmi_data *data)
 {
 	struct sec_ts_data *ts = data->ts_ptr;
 
-	cancel_delayed_work_sync(&data->resume_work);
+	if (atomic_cmpxchg(&data->touch_stopped, 0, 1) == 1)
+		return 0;
+	/* complete critical work */
 	sec_mmi_wait4idle(data);
+	sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
+	cancel_delayed_work_sync(&data->resume_work);
+
 	if (ts->lowpower_mode)
 		reinit_completion(&ts->resume_done);
 
-	dev_dbg(DEV_MMI, "%s: touch suspended\n", __func__);
+	dev_info(DEV_MMI, "%s: touch suspended\n", __func__);
 
 	return 0;
 }
@@ -558,7 +596,7 @@ static ssize_t sec_mmi_reset_store(struct device *dev,
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	sec_mmi_ic_reset(ts->mmi_ptr);
-	return 0;
+	return size;
 }
 
 static ssize_t sec_mmi_ic_ver_show(struct device *dev,
@@ -575,6 +613,9 @@ static ssize_t sec_mmi_ic_ver_show(struct device *dev,
 static ssize_t sec_mmi_forcereflash_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	struct sec_mmi_data *data = ts->mmi_ptr;
+	data->force_calibration = true;
 	return size;
 }
 
@@ -582,6 +623,7 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	struct sec_mmi_data *data = ts->mmi_ptr;
 	const struct firmware *fw_entry;
 	char fw_path[SEC_TS_MAX_FW_PATH];
 	int result = -EFAULT;
@@ -592,22 +634,27 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 	}
 
 	strlcpy(fw_path, buf, size);
-	input_info(true, DEV_TS, "%s: update fw from %s\n", __func__, fw_path);
+	dev_dbg(DEV_TS, "%s: update fw from %s\n", __func__, fw_path);
 
 	/* Loading Firmware------------------------------------------ */
 	if (request_firmware(&fw_entry, fw_path, &ts->client->dev) != 0) {
-		input_err(true, DEV_TS, "%s: fw not available\n", __func__);
+		dev_err(DEV_TS, "%s: fw not available\n", __func__);
 		goto err_request_fw;
 	}
-	input_info(true, DEV_TS, "%s: fw size = %d\n", __func__, (int)fw_entry->size);
+	dev_dbg(DEV_TS, "%s: fw size = %d\n", __func__, (int)fw_entry->size);
 
 	mutex_lock(&ts->modechange);
 	sec_ts_irq_enable(ts, false);
 	__pm_stay_awake(&ts->wakelock);
 
-	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size, 0, false, 0);
-	if (result == 1)
+	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size,
+					0, data->force_calibration, 0);
+	if (ts->fw_invalid == false) {
 		sec_mmi_fw_read_id(ts->mmi_ptr);
+		sec_ts_integrity_check(ts);
+	}
+
+	data->force_calibration = false;
 
 	mutex_unlock(&ts->modechange);
 	sec_ts_irq_enable(ts, true);
@@ -682,10 +729,6 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			return -ENODEV;
 		}
 #endif
-		snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
-				tolower(ts->device_id[0]), tolower(ts->device_id[1]),
-				ts->device_id[2], ts->device_id[3]);
-
 		INIT_DELAYED_WORK(&data->resume_work, sec_mmi_queued_resume);
 		INIT_DELAYED_WORK(&data->detection_work, sec_mmi_work);
 

@@ -64,6 +64,7 @@ struct command {
 #endif
 
 struct sec_cmd_data {
+	struct class		*sec_class;
 	struct device		*fac_dev;
 	struct list_head	cmd_list_head;
 	u8			cmd_state;

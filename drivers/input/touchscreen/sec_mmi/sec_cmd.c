@@ -421,27 +421,20 @@ static struct attribute_group sec_fac_attr_group = {
 	.attrs = sec_fac_attrs,
 };
 
+#ifdef CONFIG_SEC_SYSFS
 static inline struct device *sec_device_create(struct sec_cmd_data *data, char *dev_name) {
 	return NULL;
 }
 
 static inline void sec_device_destroy(int devt) {
 }
-
-struct class *sec_class;
+#endif
 
 int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 			int len, int devt)
 {
 	const char *dev_name;
 	int ret, i;
-
-	sec_class = class_create(THIS_MODULE, "sec_cmd");
-	ret = IS_ERR_OR_NULL(sec_class);
-	if (ret) {
-		pr_err("%s: fail - class_create\n", __func__);
-		return -ENODEV;
-	}
 
 	INIT_LIST_HEAD(&data->cmd_list_head);
 
@@ -484,7 +477,7 @@ int sec_cmd_init(struct sec_cmd_data *data, struct sec_cmd *cmds,
 #ifdef CONFIG_SEC_SYSFS
 	data->fac_dev = sec_device_create(data, dev_name);
 #else
-	data->fac_dev = device_create(sec_class, NULL, devt, data, dev_name);
+	data->fac_dev = device_create(data->sec_class, NULL, devt, data, dev_name);
 #endif
 	if (IS_ERR(data->fac_dev)) {
 		pr_err("%s: failed to create device for the sysfs\n", __func__);
@@ -506,7 +499,7 @@ err_sysfs_group:
 #ifdef CONFIG_SEC_SYSFS
 	sec_device_destroy(data->fac_dev->devt);
 #else
-	device_destroy(sec_class, devt);
+	device_destroy(data->sec_class, devt);
 #endif
 err_sysfs_device:
 err_get_dev_name:
@@ -533,7 +526,7 @@ void sec_cmd_exit(struct sec_cmd_data *data, int devt)
 #ifdef CONFIG_SEC_SYSFS
 	sec_device_destroy(data->fac_dev->devt);
 #else
-	device_destroy(sec_class, devt);
+	device_destroy(data->sec_class, devt);
 #endif
 #ifdef USE_SEC_CMD_QUEUE
 	mutex_lock(&data->fifo_lock);

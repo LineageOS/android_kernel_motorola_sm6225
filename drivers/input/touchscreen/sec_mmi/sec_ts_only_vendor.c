@@ -238,7 +238,7 @@ static ssize_t sec_ts_enter_recovery_store(struct device *dev, struct device_att
 		enable_irq(ts->client->irq);
 	}
 
-	sec_ts_read_information(ts);
+	sec_ts_integrity_check(ts);
 
 	return size;
 }
@@ -274,6 +274,7 @@ int sec_ts_raw_device_init(struct sec_ts_data *ts)
 		return ret;
 	}
 
+	ts->sec.sec_class = sec_class;
 	ts->dev = device_create(sec_class, NULL, 0, ts, "sec_ts");
 
 	ret = IS_ERR(ts->dev);
