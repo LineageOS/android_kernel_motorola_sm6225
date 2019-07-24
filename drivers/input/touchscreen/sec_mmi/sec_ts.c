@@ -1196,6 +1196,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			input_err(true, &client->dev, "%s: Unable to request tsp_rst [%d]\n", __func__, pdata->rst_gpio);
 			return -EINVAL;
 		}
+		gpio_set_value(pdata->rst_gpio, 1);
 	} else
 		input_info(true, &client->dev, "%s: has no rst gpio\n", __func__);
 
@@ -1233,10 +1234,10 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 
 	if (of_property_read_u32_array(np, "sec,max_coords", coords, 2)) {
 		input_err(true, &client->dev, "%s: Failed to get max_coords property\n", __func__);
-		return -EINVAL;
+	} else {
+		pdata->max_x = coords[0] - 1;
+		pdata->max_y = coords[1] - 1;
 	}
-	pdata->max_x = coords[0] - 1;
-	pdata->max_y = coords[1] - 1;
 
 	pdata->tsp_id = of_get_named_gpio(np, "sec,tsp-id_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_id))
@@ -1573,6 +1574,26 @@ static void sec_ts_read_hw_info(struct sec_ts_data *ts)
 		ts->fw_invalid = true;
 }
 
+int sec_ts_integrity_check(struct sec_ts_data *ts)
+{
+	int ret = 0;
+
+	ret = sec_ts_read_fw_info(ts);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to read information 0x%x\n", __func__, ret);
+		return -EIO;
+	}
+
+	ts->touch_functions |= SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION, (u8 *)&ts->touch_functions, 2);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: Failed to send touch func_mode command", __func__);
+
+	schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(50));
+
+	return 0;
+}
+
 static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct sec_ts_data *ts;
@@ -1714,43 +1735,17 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n", __func__);
 #endif
 #endif
-	ret = sec_ts_read_fw_info(ts);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: fail to read information 0x%x\n", __func__, ret);
-		goto err_init;
-	}
-
-	ts->touch_functions |= SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
-	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION, (u8 *)&ts->touch_functions, 2);
-	if (ret < 0)
-		input_err(true, &ts->client->dev, "%s: Failed to send touch func_mode command", __func__);
-
 	if (ts->plat_data->support_dex) {
 		ts->input_dev_pad->name = "sec_touchpad";
 		sec_ts_set_input_prop(ts, ts->input_dev_pad, INPUT_PROP_POINTER);
-	}
-	ts->dex_name = "";
 
-	ts->input_dev->name = "sec_touchscreen";
-	sec_ts_set_input_prop(ts, ts->input_dev, INPUT_PROP_DIRECT);
-#ifdef USE_OPEN_CLOSE
-	ts->input_dev->open = sec_ts_input_open;
-	ts->input_dev->close = sec_ts_input_close;
-#endif
-	ts->input_dev_touch = ts->input_dev;
-
-	ret = input_register_device(ts->input_dev);
-	if (ret) {
-		input_err(true, &ts->client->dev, "%s: Unable to register %s input device\n", __func__, ts->input_dev->name);
-		goto err_input_register_device;
-	}
-	if (ts->plat_data->support_dex) {
 		ret = input_register_device(ts->input_dev_pad);
 		if (ret) {
 			input_err(true, &ts->client->dev, "%s: Unable to register %s input device\n", __func__, ts->input_dev_pad->name);
 			goto err_input_pad_register_device;
 		}
 	}
+	ts->dex_name = "";
 
 	input_info(true, &ts->client->dev, "%s: request_irq = %d\n", __func__, client->irq);
 
@@ -1765,7 +1760,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->irq_enabled = true;
 
 	/* need remove below resource @ remove driver */
-#if 0 //!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+#if 1 //!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	sec_ts_raw_device_init(ts);
 #endif
 	sec_ts_fn_init(ts);
@@ -1781,9 +1776,20 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (ret)
 		goto err_mmi_data;
 
-	device_init_wakeup(&client->dev, true);
+	sec_ts_set_input_prop(ts, ts->input_dev, INPUT_PROP_DIRECT);
+#ifdef USE_OPEN_CLOSE
+	ts->input_dev->open = sec_ts_input_open;
+	ts->input_dev->close = sec_ts_input_close;
+#endif
+	ts->input_dev_touch = ts->input_dev;
 
-	schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(50));
+	ret = input_register_device(ts->input_dev);
+	if (ret) {
+		input_err(true, &ts->client->dev, "%s: Unable to register %s input device\n", __func__, ts->input_dev->name);
+		goto err_input_register_device;
+	}
+
+	device_init_wakeup(&client->dev, true);
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	dump_callbacks.inform_dump = dump_tsp_log;
@@ -1807,19 +1813,17 @@ err_irq:
 		input_unregister_device(ts->input_dev_pad);
 		ts->input_dev_pad = NULL;
 	}
-err_input_pad_register_device:
-	input_unregister_device(ts->input_dev);
-	ts->input_dev = NULL;
-	ts->input_dev_touch = NULL;
 err_input_register_device:
 	kfree(ts->pFrame);
-err_init:
 	wakeup_source_trash(&ts->wakelock);
 	sec_ts_power(ts, false);
 	if (ts->plat_data->support_dex) {
 		if (ts->input_dev_pad)
 			input_free_device(ts->input_dev_pad);
 	}
+err_input_pad_register_device:
+	ts->input_dev = NULL;
+	ts->input_dev_touch = NULL;
 err_allocate_input_dev_pad:
 	if (ts->input_dev)
 		input_free_device(ts->input_dev);
