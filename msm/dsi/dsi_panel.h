@@ -28,6 +28,8 @@
 
 #define DSI_MODE_MAX 32
 
+#define DSI_PANEL_MAX_PANEL_LEN 256
+
 /*
  * Defining custom dsi msg flag,
  * continued from drm_mipi_dsi.h
@@ -227,6 +229,10 @@ struct dsi_panel {
 	int panel_test_gpio;
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
+
+	bool esd_utag_enable;
+	u64 panel_ver;
+	char panel_name[DSI_PANEL_MAX_PANEL_LEN];
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
