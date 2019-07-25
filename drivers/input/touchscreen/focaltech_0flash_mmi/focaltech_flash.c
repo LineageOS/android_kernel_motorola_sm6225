@@ -235,13 +235,21 @@ int fts_enter_test_environment(bool test_state)
         return -EINVAL;
     }
 
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+    if (!upg->fw || (upg->fw_length <= FTS_MAX_LEN_APP_FT8756)) {
+#else
     if (!upg->fw || (upg->fw_length <= FTS_MAX_LEN_APP)) {
+#endif
         FTS_INFO("not multi-app");
         return 0;
     }
 
     if (test_state) {
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+        ret = fts_fw_download(upg->fw + FTS_MAX_LEN_APP_FT8756, upg->fw_length, true);
+#else
         ret = fts_fw_download(upg->fw + FTS_MAX_LEN_APP, upg->fw_length, true);
+#endif
     } else {
         ret = fts_fw_download(upg->fw, upg->fw_length, true);
     }
