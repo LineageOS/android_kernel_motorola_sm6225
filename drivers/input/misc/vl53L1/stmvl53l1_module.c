@@ -4535,6 +4535,8 @@ int stmvl53l1_setup(struct stmvl53l1_data *data)
 		goto exit_unregister_dev_ps;
 	}
 
+	kobject_uevent_env(&data->input_dev_ps->dev.kobj, KOBJ_CHANGE, NULL);
+
 	data->enable_sensor = 0;
 
 	data->poll_delay_ms = STMVL53L1_CFG_POLL_DELAY_MS;
