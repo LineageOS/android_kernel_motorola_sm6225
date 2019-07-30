@@ -718,6 +718,20 @@ enum dsi_pixel_format dsi_display_get_dst_format(
 		struct drm_connector *connector,
 		void *display);
 
+/*
+ * dsi_display_cmd_mipi_transfer() - Sending the MIPI DSI command
+ * @display:         Handle to display
+ * @msg:             MIPI DSI command information
+ * @flags:           Modifier flags
+ * Return: if this is a MIPI DSI read then it will return number read byte
+ *                                in success case. Otherwise will be "<=0"
+ *         if this is a MIPI DSI write then it will return "0" for success
+ *
+ */
+int dsi_display_cmd_mipi_transfer(struct dsi_display *display,
+		struct mipi_dsi_msg *msg,
+		u32 flags);
+
 /**
  * dsi_display_cont_splash_config() - initialize splash resources
  * @display:         Handle to display

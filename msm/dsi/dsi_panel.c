@@ -10,6 +10,7 @@
 #include <linux/pwm.h>
 #include <video/mipi_display.h>
 
+#include "dsi_display.h"
 #include "dsi_panel.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
@@ -3426,6 +3427,76 @@ end:
 	utils->node = panel->panel_of_node;
 }
 
+static int dsi_panel_parse_mot_panel_config(struct dsi_panel *panel,
+					struct device_node *of_node)
+{
+	int rc;
+	struct drm_panel_esd_config *esd_config = &panel->esd_config;
+
+	rc = of_property_read_u32(of_node,
+			"qcom,mdss-dsi-panel-on-check-value",
+			&panel->disp_on_chk_val);
+	if (rc) {
+		/*
+		 * No panel_on_chk_val is configured in dts, then check for ESD
+		 * setting */
+		if ((esd_config->status_cmd.count == 1) &&
+				(esd_config->status_value) &&
+				(esd_config->status_value[0] != 0)) {
+			panel->disp_on_chk_val = esd_config->status_value[0];
+			DSI_INFO("disp_on_chk_val is set with ESD's chk value\n");
+		 } else {
+			DSI_INFO("hardcode disp_on_chk_val\n");
+			panel->disp_on_chk_val = 0x9c;
+		}
+	} else
+		DSI_INFO("disp_on_chk_val = 0x%x is defined\n",
+					panel->disp_on_chk_val);
+
+	panel->no_panel_on_read_support = of_property_read_bool(of_node,
+				"qcom,mdss-dsi-no-panel-on-read-support");
+	return rc;
+}
+
+static int dsi_panel_get_pwr_mode(struct dsi_panel *panel, u8 *val)
+{
+	int rc = 0;
+	struct dsi_cmd_desc cmd;
+	struct dsi_display *display = NULL;
+	u32 flags;
+	u8 payload = MIPI_DCS_GET_POWER_MODE;
+
+	display = container_of(panel->host, struct dsi_display, host);
+	if (!display) {
+		DSI_ERR("failed to retrieve display handle\n", display);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	memset(&cmd, 0x00, sizeof(struct dsi_cmd_desc));
+	flags = DSI_CTRL_CMD_READ;
+
+	cmd.msg.type = MIPI_DSI_DCS_READ;
+	cmd.last_command = 1;
+	cmd.msg.flags = MIPI_DSI_MSG_LASTCOMMAND;
+	cmd.msg.channel = 0;
+
+	cmd.msg.tx_len = 1;
+	cmd.msg.tx_buf = &payload;
+	cmd.msg.rx_len = 1;
+	cmd.msg.rx_buf = val;
+
+	rc = dsi_display_cmd_mipi_transfer(display, &cmd.msg, flags);
+	if (rc <= 0) {
+		DSI_ERR("Failed to call dsi_display_cmd_transfer. rc=%d\n", rc);
+		rc = -EIO;
+	} else
+		rc = 0;
+end:
+	return rc;
+
+}
+
 struct dsi_panel *dsi_panel_get(struct device *parent,
 				struct device_node *of_node,
 				struct device_node *parser_node,
@@ -3461,6 +3532,11 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 				"qcom,mdss-dsi-panel-physical-type", NULL);
 	if (panel_physical_type && !strcmp(panel_physical_type, "oled"))
 		panel->panel_type = DSI_DISPLAY_PANEL_TYPE_OLED;
+
+	rc = dsi_panel_parse_mot_panel_config(panel, of_node);
+	if (rc)
+		DSI_DEBUG("failed to parse mot_panel_config, rc = %d\n", rc);
+
 	rc = dsi_panel_parse_host_config(panel);
 	if (rc) {
 		DSI_ERR("failed to parse host configuration, rc=%d\n",
@@ -4525,6 +4601,7 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
+	u8 pwr_mode;
 
 	if (!panel) {
 		DSI_ERR("Invalid params\n");
@@ -4535,11 +4612,31 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
-	if (rc)
+	if (rc) {
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
 		       panel->name, rc);
-	else
-		panel->panel_initialized = true;
+		goto err;
+	}
+
+	if (!panel->no_panel_on_read_support) {
+		rc = dsi_panel_get_pwr_mode(panel, &pwr_mode);
+		if (rc) {
+			DSI_ERR("[%s] Failed to read pwr_mode, rc = %d",
+					panel->name, rc);
+			goto err;
+		}
+
+		if (pwr_mode != panel->disp_on_chk_val) {
+			DSI_ERR("%s: Read Pwr_mode=0%x is not matched with expected value =0x%x\n",
+				__func__, pwr_mode, panel->disp_on_chk_val);
+		} else
+			DSI_INFO("-. Pwr_mode(0x0A) = 0x%x\n", pwr_mode);
+	} else
+		DSI_INFO("-: no_panel_on_read_support is set\n");
+
+	panel->panel_initialized = true;
+err:
+
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
