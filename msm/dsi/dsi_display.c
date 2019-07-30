@@ -697,6 +697,40 @@ exit:
 	return rc;
 }
 
+int dsi_display_cmd_mipi_transfer(struct dsi_display *display,
+				struct mipi_dsi_msg *msg,
+				u32 flags)
+{
+	int rc = 0;
+	struct dsi_display_ctrl *m_ctrl;
+
+	m_ctrl = &display->ctrl[display->cmd_master_idx];
+
+	if (display->tx_cmd_buf == NULL) {
+		rc = dsi_host_alloc_cmd_tx_buffer(display);
+		if (rc) {
+			DSI_ERR("failed to allocate cmd tx buffer memory\n");
+			goto done;
+		}
+	}
+
+	rc = dsi_display_cmd_engine_enable(display);
+	if (rc) {
+		DSI_ERR("cmd engine enable failed\n");
+		return -EPERM;
+	}
+
+	flags |= DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
+	rc = dsi_ctrl_cmd_transfer(m_ctrl->ctrl, msg, &flags);
+	if (((flags & DSI_CTRL_CMD_READ) && rc <= 0) ||
+		(!(flags & DSI_CTRL_CMD_READ) && rc))
+		DSI_ERR("failed to transfer cmd. rc = %d\n", rc);
+
+	dsi_display_cmd_engine_disable(display);
+done:
+	return rc;
+}
+
 static int dsi_display_status_reg_read(struct dsi_display *display)
 {
 	int rc = 0, i;
