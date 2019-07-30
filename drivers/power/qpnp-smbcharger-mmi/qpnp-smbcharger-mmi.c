@@ -1670,13 +1670,43 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 	return rc;
 }
 
+#define USBIN_500MA     500000
+#define USBIN_900MA     900000
 int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 {
 	int rc = 0;
+	int apsd;
+	u8 usb51_mode, icl_override, apsd_override;
 	union power_supply_propval val;
 
-	val.intval = icl;
+	if (chg->factory_mode)
+		return rc;
+
+	if (chg->usb_psy) {
+		val.intval = POWER_SUPPLY_TYPEC_NONE;
+		rc = power_supply_get_property(chg->usb_psy,
+				POWER_SUPPLY_PROP_TYPEC_MODE, &val);
+		if (rc < 0 || val.intval != POWER_SUPPLY_TYPEC_NONE)
+			return rc;
+	}
+
+	rc = smblib_get_apsd_result(chg, &apsd);
+	if (rc < 0 || apsd == CHG_BC1P2_UNKNOWN)
+		return rc;
+
+	if (apsd == CHG_BC1P2_SDP &&
+	    (icl == USBIN_900MA || icl <= USBIN_500MA)) {
+		usb51_mode = 0;
+		icl_override = USBIN_ICL_OVERRIDE_BIT;
+		apsd_override = 0;
+	} else {
+		usb51_mode = USBIN_MODE_CHG_BIT;
+		icl_override = USBIN_ICL_OVERRIDE_BIT;
+		apsd_override = ICL_OVERRIDE_AFTER_APSD_BIT;
+	}
+
 	if (chg->main_psy) {
+		val.intval = icl;
 		rc = power_supply_set_property(chg->main_psy,
 				POWER_SUPPLY_PROP_CURRENT_MAX,
 				&val);
@@ -1685,12 +1715,26 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 		}
 	}
 
+	rc = smblib_masked_write_mmi(chg, USBIN_ICL_OPTIONS_REG,
+				     USBIN_MODE_CHG_BIT,
+				     usb51_mode);
+	if (rc < 0)
+		mmi_err(chg,
+			"Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
+
 	rc = smblib_masked_write_mmi(chg, USBIN_CMD_ICL_OVERRIDE_REG,
-				USBIN_ICL_OVERRIDE_BIT,
-				USBIN_ICL_OVERRIDE_BIT);
-	if (rc < 0) {
-		mmi_err(chg, "Couldn't override usb icl, rc=%d\n", rc);
-	}
+				     USBIN_ICL_OVERRIDE_BIT,
+				     icl_override);
+	if (rc < 0)
+		mmi_err(chg,
+			"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
+
+	rc = smblib_masked_write_mmi(chg, USBIN_LOAD_CFG_REG,
+				     ICL_OVERRIDE_AFTER_APSD_BIT,
+				     apsd_override);
+	if (rc < 0)
+		mmi_err(chg,
+			"Couldn't set USBIN_LOAD_CFG rc=%d\n", rc);
 
 	return rc;
 }
@@ -2613,7 +2657,10 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	     true, (target_fcc >= 0) ? (target_fcc * 1000) : 0);
 
 	/* Override USB ICL using the target value */
-	mmi_usb_icl_override(chip, get_effective_result(chip->usb_icl_votable));
+	if (stat->charger_present) {
+		mmi_usb_icl_override(chip,
+		get_effective_result(chip->usb_icl_votable));
+	}
 
 	/* Rerun AICL to recover USB ICL from recharge */
 	if (is_chg_dis != get_effective_result(chip->chg_dis_votable)) {
