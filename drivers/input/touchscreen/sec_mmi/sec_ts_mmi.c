@@ -173,8 +173,8 @@ static int sec_mmi_touchscreen_class(
 		dev_set_drvdata(data->ts_class_dev, data);
 
 		/* construct input device name */
-		namelen = scnprintf(buffer, sizeof(buffer), "samsung_mmi.%s", class_fname);
-		// FIXME namelen = scnprintf(buffer, sizeof(buffer), "synaptics_mmi.%s", class_fname);
+		// FIXME namelen = scnprintf(buffer, sizeof(buffer), "samsung_mmi.%s", class_fname);
+		namelen = scnprintf(buffer, sizeof(buffer), "synaptics_mmi.%s", class_fname);
 		if (namelen) {
 			input_dev_name = kstrdup(buffer, GFP_KERNEL);
 			ts->input_dev->name = input_dev_name;
