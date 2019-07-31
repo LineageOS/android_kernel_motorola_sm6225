@@ -673,13 +673,13 @@ static void sec_mmi_sysfs(struct sec_mmi_data *data, bool enable)
 	if (enable) {
 		int ret;
 
-		ret = sysfs_create_group(&ts->dev->kobj, &mmi_attr_group);
+		ret = sysfs_create_group(&data->i2c_client->dev.kobj, &mmi_attr_group);
 		if (ret < 0) {
 			input_err(true, DEV_TS,
 					"%s: Failed to create MMI sysfs attributes\n", __func__);
 		}
 	} else
-		sysfs_remove_group(&ts->dev->kobj, &mmi_attr_group);
+		sysfs_remove_group(&data->i2c_client->dev.kobj, &mmi_attr_group);
 }
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
