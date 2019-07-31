@@ -4131,7 +4131,7 @@ static int synaptics_rmi4_set_page(struct synaptics_rmi4_data *rmi4_data,
 				dev_err(&i2c->dev,
 						"%s: I2C retry %d\n",
 						__func__, retry + 1);
-				msleep(20);
+				usleep_range(5000, 5000);
 			} else {
 				rmi4_data->current_page = page;
 				break;
@@ -4216,7 +4216,7 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 				__func__, retry + 1);
 		synaptics_dropbox_report_event_ratelimit(
 				SYNAPTICS_DROPBOX_MSG_I2C, 1);
-		msleep(20);
+		usleep_range(5000, 5000);
 	}
 exit:
 	mutex_unlock(&(rmi4_data->rmi4_io_ctrl_mutex));
@@ -6624,8 +6624,9 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 			dev_info(dev, "%s: dummy panel detected\n", __func__);
 			rmi4_data->drm_state = DRM_ST_TERM;
 		} else if (panel_ready) {
-			dev_dbg(dev, "%s: panel ready\n", __func__);
-			rmi4_data->drm_state = DRM_ST_READY;
+			if (rmi4_data->drm_state != DRM_ST_TERM)
+				rmi4_data->drm_state = DRM_ST_READY;
+			dev_dbg(dev, "%s: panel ready; drm_st=%d\n", __func__, rmi4_data->drm_state);
 		}
 	}
 #endif
@@ -6862,17 +6863,19 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 		}
 
 		if (exp_fhandler->fn_type == RMI_DRM_FRAMEWORK) {
+			/* allowing sufficient time for F34 to complete */
+			scheduled_delay = 3000;
 			error = synaptics_rmi4_hw_init(rmi4_data);
+			exp_fhandler->func_init = NULL;
+			dev_dbg(dev, "%s: removing DRM\n", __func__);
 			if (error) {
-				dev_dbg(dev, "%s: hw init failed\n", __func__);
+				dev_err(dev, "%s: hw init failed!!!\n", __func__);
 				/* not dummy panel found, but touch hw init failed, */
 				/* thus we need to terminate further processing */
 				rmi4_data->drm_state = DRM_ST_TERM;
+				scheduled_delay = 20; /* no reason to wait anymore */
+				break;
 			}
-			exp_fhandler->func_init = NULL;
-			dev_dbg(dev, "%s: removing DRM\n", __func__);
-			/* allowing sufficient time for F34 to complete */
-			scheduled_delay = 3000;
 		}
 
 restore_state:
