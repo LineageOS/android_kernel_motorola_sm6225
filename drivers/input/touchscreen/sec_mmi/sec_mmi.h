@@ -30,6 +30,7 @@ struct sec_mmi_data {
 	unsigned int build_id;
 	unsigned int config_id;
 	char product_id[10];
+	char panel_supplier[16];
 
 	char *image_name;
 	const char *class_entry_name;
