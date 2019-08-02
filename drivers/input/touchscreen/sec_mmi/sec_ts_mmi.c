@@ -60,6 +60,8 @@ static ssize_t sec_mmi_buildid_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_flashprog_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_panel_supplier_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(forcereflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_forcereflash_store);
 static DEVICE_ATTR(doreflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_doreflash_store);
@@ -72,6 +74,7 @@ static DEVICE_ATTR(flashprog, S_IRUGO, sec_mmi_flashprog_show, NULL);
 static DEVICE_ATTR(poweron, S_IRUGO, sec_mmi_poweron_show, NULL);
 static DEVICE_ATTR(reset, (S_IWUSR | S_IWGRP), NULL, sec_mmi_reset_store);
 static DEVICE_ATTR(erase_all, (S_IWUSR | S_IWGRP), NULL, sec_mmi_erase_store);
+static DEVICE_ATTR(panel_supplier, S_IRUGO, sec_mmi_panel_supplier_show, NULL);
 
 static struct attribute *mmi_attributes[] = {
 	&dev_attr_forcereflash.attr,
@@ -85,6 +88,7 @@ static struct attribute *mmi_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_erase_all.attr,
+	&dev_attr_panel_supplier.attr,
 	NULL,
 };
 
@@ -174,7 +178,6 @@ static int sec_mmi_touchscreen_class(
 
 		/* construct input device name */
 		namelen = scnprintf(buffer, sizeof(buffer), "samsung_mmi.%s", class_fname);
-		// FIXME namelen = scnprintf(buffer, sizeof(buffer), "synaptics_mmi.%s", class_fname);
 		if (namelen) {
 			input_dev_name = kstrdup(buffer, GFP_KERNEL);
 			ts->input_dev->name = input_dev_name;
@@ -222,16 +225,32 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 	struct device_node *np = dev->of_node;
 
 	if (!of_property_read_string(np, "sec,class-entry-name", &data->class_entry_name))
-		input_info(true, dev, "%s: class-entry-name property %s\n",
+		dev_info(DEV_MMI, "%s: class-entry-name property %s\n",
 				__func__, data->class_entry_name);
 
 	if (!of_property_read_string(np, "sec,bound-display", &data->bound_display))
-		input_info(true, dev, "%s: bound-display property %s\n",
+		dev_info(DEV_MMI, "%s: bound-display property %s\n",
 				__func__, data->bound_display);
 
 	if (!of_property_read_u32(np, "sec,control-dsi", &data->ctrl_dsi))
-		input_info(true, dev, "%s: ctrl-dsi property %d\n",
+		dev_info(DEV_MMI, "%s: ctrl-dsi property %d\n",
 				__func__, data->ctrl_dsi);
+
+	np = of_find_node_by_name(NULL, "chosen");
+	if (np) {
+		const char *supplier;
+		char *s, *d;
+
+		of_property_read_string(np, "mmi,panel_name", (const char **)&supplier);
+		/* skip dsi_ part */
+		s = (char *)supplier + 4;
+		d = data->panel_supplier;
+		while (*s != '_') *d++ = *s++;
+		dev_info(DEV_MMI, "%s: panel-supplier %s\n",
+				__func__, data->panel_supplier);
+
+		of_node_put(np);
+	}
 
 	return 0;
 }
@@ -479,6 +498,14 @@ static int sec_mmi_register_notifier(
 				__func__, enable ? "" : "un");
 
 	return rc;
+}
+
+static ssize_t sec_mmi_panel_supplier_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	struct sec_mmi_data *data = ts->mmi_ptr;
+	return scnprintf(buf, PAGE_SIZE, "%s\n", data->panel_supplier);
 }
 
 static ssize_t sec_mmi_poweron_show(struct device *dev,
