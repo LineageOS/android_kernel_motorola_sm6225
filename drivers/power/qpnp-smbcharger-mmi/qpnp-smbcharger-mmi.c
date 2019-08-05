@@ -3361,6 +3361,12 @@ static int batt_get_prop(struct power_supply *psy,
 		else
 			val->intval = chip->sm_param[BASE_BATT].batt_health;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_DONE:
+		if (chip->last_reported_status == POWER_SUPPLY_STATUS_FULL)
+			val->intval = 1;
+		else
+			val->intval = 0;
+		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = get_effective_result(chip->fcc_votable);
 		break;
