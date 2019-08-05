@@ -316,7 +316,7 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				ts->device_id[2], ts->device_id[3]);
 }
 
-static void sec_mmi_ic_reset(struct sec_mmi_data *data)
+static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 {
 	struct sec_ts_data *ts = data->ts_ptr;
 
@@ -327,9 +327,17 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data)
 	mutex_lock(&ts->modechange);
 	__pm_stay_awake(&ts->wakelock);
 
-	gpio_set_value(ts->plat_data->rst_gpio, 0);
-	usleep_range(10, 10);
-	gpio_set_value(ts->plat_data->rst_gpio, 1);
+	if (mode) {
+		gpio_set_value(ts->plat_data->rst_gpio, 0);
+		usleep_range(10, 10);
+		gpio_set_value(ts->plat_data->rst_gpio, 1);
+	} else {
+		int ret;
+
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SW_RESET, NULL, 0);
+		if (ret < 0)
+			dev_err(DEV_MMI, "%s: error sending sw reset cmd\n", __func__);
+	}
 
 	sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 
@@ -402,7 +410,10 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 	if (atomic_cmpxchg(&data->touch_stopped, 1, 0) == 0)
 		return;
 
-	sec_mmi_ic_reset(data);
+	sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
+	if (ts->lowpower_mode)
+		complete_all(&ts->resume_done);
+
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
 					&buffer, sizeof(buffer));
 	if (ret < 0)
@@ -411,10 +422,6 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 				__func__, ret);
 
 	ts->fw_invalid = buffer == SEC_TS_STATUS_BOOT_MODE;
-	ts->power_status = SEC_TS_STATE_POWER_ON;
-
-	if (ts->lowpower_mode)
-		complete_all(&ts->resume_done);
 
 	dev_info(DEV_MMI, "%s: touch resumed\n", __func__);
 }
@@ -584,7 +591,6 @@ static ssize_t sec_mmi_erase_store(struct device *dev,
 	sec_ts_irq_enable(ts, false);
 	__pm_stay_awake(&ts->wakelock);
 
-
 	ts->fw_invalid = true;
 
 	mutex_unlock(&ts->modechange);
@@ -622,7 +628,8 @@ static ssize_t sec_mmi_reset_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
-	sec_mmi_ic_reset(ts->mmi_ptr);
+	struct sec_mmi_data *data = ts->mmi_ptr;
+	data->reset(ts->mmi_ptr, 1);
 	return size;
 }
 
@@ -733,7 +740,7 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		ts->mmi_ptr = (void *)data;
 		data->ts_ptr = ts;
 		data->i2c_client = ts->client;
-		data->hard_reset = sec_mmi_ic_reset;
+		data->reset = sec_mmi_ic_reset;
 
 		sec_mmi_dt(data);
 

@@ -36,7 +36,7 @@ struct sec_mmi_data {
 	const char *class_entry_name;
 	const char *bound_display;
 
-	void (*hard_reset)(struct sec_mmi_data *data);
+	void (*reset)(struct sec_mmi_data *data, int mode);
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable);
