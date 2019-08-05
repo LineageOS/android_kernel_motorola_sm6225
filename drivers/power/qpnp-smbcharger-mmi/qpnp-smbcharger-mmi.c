@@ -2915,9 +2915,11 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			mmi_info(chip, "APSD = %d, rerun_apsd_count = %d\n",
 				apsd, rerun_apsd_count);
 		}
-	} else if (rerun_apsd_count) {
+	} else if (rerun_apsd_count && !chg_stat.charger_present) {
 		rerun_apsd_count = 0;
 		cancel_delayed_work(&chip->charger_check_work);
+		mmi_info(chip, "reset rerun_apsd_count = %d\n",
+						rerun_apsd_count);
 	}
 
 	mmi_chrg_rate_check(chip);
