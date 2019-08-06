@@ -1,7 +1,7 @@
 /*
  * aw8624.c   aw8624 haptic module
  *
- * Version: v1.0.4
+ * Version: v1.0.6
  *
  * Copyright (c) 2018 AWINIC Technology CO., LTD
  *
@@ -28,7 +28,7 @@
 #include <asm/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/power_supply.h>
-#include <linux/wakelock.h>
+#include <linux/pm_wakeup.h>
 #include <linux/jiffies.h>
 #include "aw8624.h"
 #include "aw8624_reg.h"
@@ -40,7 +40,7 @@
  ******************************************************/
 #define AW8624_I2C_NAME "aw8624_haptic"
 #define AW8624_HAPTIC_NAME "aw8624_haptic"
-#define AW8624_VERSION "v1.0.5"
+#define AW8624_VERSION "v1.0.6"
 #define AWINIC_RAM_UPDATE_DELAY
 #define AW_I2C_RETRIES 2
 #define AW_I2C_RETRY_DELAY 2
@@ -2339,11 +2339,11 @@ static void aw8624_vibrator_work_routine(struct work_struct *work)
 		hrtimer_start(&aw8624->timer,
 			ktime_set(aw8624->duration / 1000, (aw8624->duration % 1000) * 1000000),
 			HRTIMER_MODE_REL);
-		wake_lock(&aw8624->wk_lock);
+		__pm_stay_awake(aw8624->ws);
 		aw8624->wk_lock_flag = 1;
 	} else {
 		if (aw8624->wk_lock_flag == 1) {
-			wake_unlock(&aw8624->wk_lock);
+			__pm_relax(aw8624->ws);
 			aw8624->wk_lock_flag = 0;
 		}
 	}
@@ -2789,8 +2789,9 @@ static int aw8624_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
 
 	g_aw8624 = aw8624;
 
-	wake_lock_init(&aw8624->wk_lock, WAKE_LOCK_SUSPEND, "aw8624_wakelock");
-
+	aw8624->ws = wakeup_source_register("vibrator");
+	if (!aw8624->ws)
+		return -ENOMEM;
 	aw8624_vibrator_init(aw8624);
 	aw8624_haptic_init(aw8624);
 	aw8624_ram_init(aw8624);
@@ -2830,7 +2831,7 @@ static int aw8624_i2c_remove(struct i2c_client *i2c)
 	mutex_destroy(&aw8624->lock);
 	mutex_destroy(&aw8624->haptic_audio.lock);
 
-	wake_lock_destroy(&aw8624->wk_lock);
+	wakeup_source_unregister(aw8624->ws);
 
 	sysfs_remove_group(&i2c->dev.kobj, &aw8624_attribute_group);
 	sysfs_remove_group(&i2c->dev.kobj, &aw8624_vibrator_attribute_group);
