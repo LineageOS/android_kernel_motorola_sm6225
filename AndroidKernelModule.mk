@@ -150,10 +150,17 @@ $(KBUILD_TARGET)_RULE := 1
 $(KBUILD_TARGET): local_path     := $(LOCAL_PATH)
 $(KBUILD_TARGET): kbuild_out_dir := $(KBUILD_OUT_DIR)
 $(KBUILD_TARGET): kbuild_options := $(KBUILD_OPTIONS)
+ifneq ($(USE_CLANG_FOR_MODULES),)
+$(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
+	@mkdir -p $(kbuild_out_dir)
+	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
+	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options) ANDROID_BUILD_TOP=$$(pwd)
+else
 $(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
 	@mkdir -p $(kbuild_out_dir)
 	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
 	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules $(kbuild_options)
+endif
 
 # Once the KBUILD_OPTIONS variable has been used for the target
 # that's specific to the LOCAL_PATH, clear it. If this isn't done,
