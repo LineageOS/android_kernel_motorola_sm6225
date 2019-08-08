@@ -502,7 +502,8 @@ enum csv_itemcode_sc {
 #ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
 extern struct test_funcs test_func_ft8719;
 #endif
-#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
 extern struct test_funcs test_func_ft8756;
 #endif
 
