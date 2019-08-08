@@ -235,7 +235,8 @@ int fts_enter_test_environment(bool test_state)
         return -EINVAL;
     }
 
-#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
     if (!upg->fw || (upg->fw_length <= FTS_MAX_LEN_APP_FT8756)) {
 #else
     if (!upg->fw || (upg->fw_length <= FTS_MAX_LEN_APP)) {
@@ -245,7 +246,8 @@ int fts_enter_test_environment(bool test_state)
     }
 
     if (test_state) {
-#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
         ret = fts_fw_download(upg->fw + FTS_MAX_LEN_APP_FT8756, upg->fw_length, true);
 #else
         ret = fts_fw_download(upg->fw + FTS_MAX_LEN_APP, upg->fw_length, true);

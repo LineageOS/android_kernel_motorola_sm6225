@@ -28,3 +28,9 @@ ifneq ($(filter ft8756,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 	focaltech_0flash_mmi-objs += focaltech_flash_ft8756.o
 	focaltech_0flash_mmi-objs += focaltech_spi_v1_1_1.o
 endif
+ifneq ($(filter ft8009,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009
+	focaltech_0flash_mmi-objs += focaltech_test/supported_ic/focaltech_test_ft8756.o
+	focaltech_0flash_mmi-objs += focaltech_flash_ft8756.o
+	focaltech_0flash_mmi-objs += focaltech_spi_v1_1_1.o
+endif
