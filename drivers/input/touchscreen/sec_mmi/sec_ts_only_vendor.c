@@ -39,26 +39,15 @@ static int lv1_readsize;
 static int lv1_readremain;
 static int lv1_readoffset;
 
-static ssize_t sec_ts_reg_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_ts_regreadsize_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static inline ssize_t sec_ts_store_error(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 static ssize_t sec_ts_enter_recovery_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t sec_ts_regread_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
 static ssize_t sec_ts_gesture_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static inline ssize_t sec_ts_show_error(struct device *dev,
-		struct device_attribute *attr, char *buf);
-
-static ssize_t sec_ts_address_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t sec_ts_size_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t sec_ts_data_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(sec_ts_reg, (S_IWUSR | S_IWGRP), NULL, sec_ts_reg_store);
@@ -67,19 +56,12 @@ static DEVICE_ATTR(sec_ts_enter_recovery, (S_IWUSR | S_IWGRP), NULL, sec_ts_ente
 static DEVICE_ATTR(sec_ts_regread, S_IRUGO, sec_ts_regread_show, NULL);
 static DEVICE_ATTR(sec_ts_gesture_status, S_IRUGO, sec_ts_gesture_status_show, NULL);
 
-static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_ts_address_store);
-static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_ts_size_store);
-static DEVICE_ATTR(data, S_IRUGO, sec_ts_data_show, NULL);
-
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_sec_ts_reg.attr,
 	&dev_attr_sec_ts_regreadsize.attr,
 	&dev_attr_sec_ts_enter_recovery.attr,
 	&dev_attr_sec_ts_regread.attr,
 	&dev_attr_sec_ts_gesture_status.attr,
-	&dev_attr_address.attr,
-	&dev_attr_size.attr,
-	&dev_attr_data.attr,
 	NULL,
 };
 
@@ -88,7 +70,15 @@ static struct attribute_group cmd_attr_group = {
 };
 
 /* for debugging--------------------------------------------------------------------------------------*/
-static ssize_t sec_ts_reg_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+void sec_ts_lv1_params(u8 cmd, int size)
+{
+	lv1cmd = cmd;
+	lv1_readsize = size;
+	lv1_readoffset = 0;
+	lv1_readremain = 0;
+}
+
+ssize_t sec_ts_reg_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
@@ -104,7 +94,7 @@ static ssize_t sec_ts_reg_store(struct device *dev, struct device_attribute *att
 	return size;
 }
 
-static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *attr, char *buf)
+ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	int ret;
@@ -190,61 +180,6 @@ static ssize_t sec_ts_regreadsize_store(struct device *dev, struct device_attrib
 	mutex_unlock(&ts->device_mutex);
 
 	return size;
-}
-
-#define MAX_DATA_SZ	1024
-
-static ssize_t sec_ts_address_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_ts_data *ts = dev_get_drvdata(dev);
-	int error;
-	long value;
-
-	error = kstrtol(buf, 0, &value);
-	if (error || value > MAX_DATA_SZ)
-		return -EINVAL;
-
-	lv1cmd = (u8)value;
-	input_info(true, &ts->client->dev, "%s: read address 0x%02X\n", __func__, lv1cmd);
-
-	return size;
-}
-
-static ssize_t sec_ts_size_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_ts_data *ts = dev_get_drvdata(dev);
-	int error;
-	long value;
-
-	error = kstrtol(buf, 0, &value);
-	if (error)
-		return -EINVAL;
-
-	lv1_readsize = (unsigned int)value;
-	lv1_readoffset = 0;
-	lv1_readremain = 0;
-	input_info(true, &ts->client->dev, "%s: read size %u\n", __func__, lv1_readsize);
-
-	return size;
-}
-
-static ssize_t sec_ts_data_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct sec_ts_data *ts = dev_get_drvdata(dev);
-	u8 buffer[MAX_DATA_SZ];
-	ssize_t length, blen = 0;
-	int i;
-
-	length = sec_ts_regread_show(dev, attr, buffer);
-	if (length != lv1_readsize)
-		return sprintf(buf, "error %zu reading %u bytes from reg addr=0x%02X\n", length, lv1_readsize, lv1cmd);
-
-	input_info(true, &ts->client->dev, "%s: %u bytes from reg addr=0x%02X\n", __func__, lv1_readsize, lv1cmd);
-	for (i = 0; i < length; i++)
-		blen += scnprintf(buf + blen, PAGE_SIZE - blen, "%02X ", buffer[i]);
-	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "\n");
-
-	return blen;
 }
 
 static ssize_t sec_ts_enter_recovery_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)

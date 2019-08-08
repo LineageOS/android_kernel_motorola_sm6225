@@ -31,6 +31,7 @@
 #include <linux/time.h>
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
+#include <soc/qcom/mmi_boot_info.h>
 
 #include "sec_ts.h"
 #include "sec_mmi.h"
@@ -62,6 +63,15 @@ static ssize_t sec_mmi_flashprog_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_panel_supplier_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_address_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_size_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_write_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_data_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
 
 static DEVICE_ATTR(forcereflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_forcereflash_store);
 static DEVICE_ATTR(doreflash, (S_IWUSR | S_IWGRP), NULL, sec_mmi_doreflash_store);
@@ -73,8 +83,10 @@ static DEVICE_ATTR(buildid, S_IRUGO, sec_mmi_buildid_show, NULL);
 static DEVICE_ATTR(flashprog, S_IRUGO, sec_mmi_flashprog_show, NULL);
 static DEVICE_ATTR(poweron, S_IRUGO, sec_mmi_poweron_show, NULL);
 static DEVICE_ATTR(reset, (S_IWUSR | S_IWGRP), NULL, sec_mmi_reset_store);
-static DEVICE_ATTR(erase_all, (S_IWUSR | S_IWGRP), NULL, sec_mmi_erase_store);
 static DEVICE_ATTR(panel_supplier, S_IRUGO, sec_mmi_panel_supplier_show, NULL);
+static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_mmi_address_store);
+static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_mmi_size_store);
+static DEVICE_ATTR(data, S_IRUGO, sec_mmi_data_show, NULL);
 
 static struct attribute *mmi_attributes[] = {
 	&dev_attr_forcereflash.attr,
@@ -87,13 +99,28 @@ static struct attribute *mmi_attributes[] = {
 	&dev_attr_flashprog.attr,
 	&dev_attr_poweron.attr,
 	&dev_attr_reset.attr,
-	&dev_attr_erase_all.attr,
 	&dev_attr_panel_supplier.attr,
+	&dev_attr_address.attr,
+	&dev_attr_size.attr,
+	&dev_attr_data.attr,
 	NULL,
 };
 
 static struct attribute_group mmi_attr_group = {
 	.attrs = mmi_attributes,
+};
+
+static DEVICE_ATTR(write, (S_IWUSR | S_IWGRP), NULL, sec_mmi_write_store);
+static DEVICE_ATTR(erase_all, (S_IWUSR | S_IWGRP), NULL, sec_mmi_erase_store);
+
+static struct attribute *factory_attributes[] = {
+	&dev_attr_write.attr,
+	&dev_attr_erase_all.attr,
+	NULL,
+};
+
+static struct attribute_group factory_attr_group = {
+	.attrs = factory_attributes,
 };
 
 /* Attribute: path (RO) */
@@ -578,6 +605,11 @@ static ssize_t sec_mmi_erase_store(struct device *dev,
 	unsigned long value = 0;
 	int err = 0;
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_err(DEV_TS, "%s: Power off state\n", __func__);
+		return -EIO;
+	}
+
 	err = kstrtoul(buf, 10, &value);
 	if (err < 0) {
 		dev_err(DEV_TS, "%s: Failed to convert value\n", __func__);
@@ -605,6 +637,7 @@ static ssize_t sec_mmi_drv_irq_store(struct device *dev,
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	unsigned long value = 0;
 	int err = 0;
+
 	err = kstrtoul(buf, 10, &value);
 	if (err < 0) {
 		dev_err(DEV_TS, "%s: Failed to convert value\n", __func__);
@@ -700,6 +733,119 @@ err_request_fw:
 	return result;
 }
 
+#define MAX_DATA_SZ	1024
+
+static bool factory_mode;
+static u8 reg_address;
+static int data_size;
+
+static ssize_t sec_mmi_address_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int error;
+	long value;
+
+	error = kstrtol(buf, 0, &value);
+	if (error || value > MAX_DATA_SZ)
+		return -EINVAL;
+
+	reg_address = (u8)value;
+	dev_info(DEV_TS, "%s: read address 0x%02X\n", __func__, reg_address);
+
+	return size;
+}
+
+static ssize_t sec_mmi_size_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int error;
+	long value;
+
+	error = kstrtol(buf, 0, &value);
+	if (error)
+		return -EINVAL;
+
+	data_size = (unsigned int)value;
+	dev_info(DEV_TS, "%s: read size %u\n", __func__, data_size);
+
+	return size;
+}
+
+static ssize_t sec_mmi_write_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	char ascii[3] = {0};
+	char *sptr, *eptr;
+	size_t data_sz = size;
+	u8 hex[MAX_DATA_SZ];
+	int byte, error;
+	long value;
+
+	if (*(buf + size - 1) == '\n')
+		data_sz--;
+
+	if ((data_sz%2 != 0) || (data_sz/2 > MAX_DATA_SZ)) {
+		dev_err(DEV_TS, "%s: odd input\n", __func__);
+		return -EINVAL;
+	}
+
+	sptr = (char *)buf;
+	eptr = (char *)buf + data_sz;
+	pr_debug("%s: data to write: ", __func__);
+	for (byte = 0; sptr < eptr; sptr += 2, byte++) {
+		memcpy(ascii, sptr, 2);
+		error = kstrtol(ascii, 16, &value);
+		if (error)
+			break;
+		hex[byte] = (u8)value;
+		pr_cont("0x%02x ", hex[byte]);
+	}
+	pr_cont("; total=%d\n", byte);
+
+	if (error) {
+		dev_err(DEV_TS, "%s: input conversion failed\n", __func__);
+		return -EINVAL;
+	}
+
+	error = sec_ts_reg_store(dev, attr, hex, byte);
+	if (error != byte) {
+		dev_err(DEV_TS, "%s: write error\n", __func__);
+		return -EIO;
+	}
+
+	dev_info(DEV_TS, "%s: written %d bytes to address 0x%02X\n",
+			__func__, byte, hex[0]);
+	return size;
+}
+
+static ssize_t sec_mmi_data_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	u8 buffer[MAX_DATA_SZ];
+	ssize_t length, blen = 0;
+	int i;
+
+	/* init parameters required for sec_ts_regread_show() */
+	sec_ts_lv1_params(reg_address, data_size);
+	length = sec_ts_regread_show(dev, attr, buffer);
+	if (length != data_size)
+		return sprintf(buf,
+					"error %zu reading %u bytes from reg addr=0x%02X\n",
+					length, data_size, reg_address);
+
+	dev_info(DEV_TS, "%s: read %u bytes from reg addr=0x%02X\n",
+			__func__, data_size, reg_address);
+	for (i = 0; i < length; i++)
+		blen += scnprintf(buf + blen, PAGE_SIZE - blen, "%02X ", buffer[i]);
+	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "\n");
+
+	return blen;
+}
+
 static void sec_mmi_sysfs(struct sec_mmi_data *data, bool enable)
 {
 	struct sec_ts_data *ts = data->ts_ptr;
@@ -709,11 +855,22 @@ static void sec_mmi_sysfs(struct sec_mmi_data *data, bool enable)
 
 		ret = sysfs_create_group(&data->i2c_client->dev.kobj, &mmi_attr_group);
 		if (ret < 0) {
-			input_err(true, DEV_TS,
-					"%s: Failed to create MMI sysfs attributes\n", __func__);
+			dev_err(DEV_TS, "%s: Failed to create MMI sysfs attrs\n", __func__);
 		}
-	} else
+
+		if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
+			ret = sysfs_create_group(&data->i2c_client->dev.kobj,
+						&factory_attr_group);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: Failed to create factory sysfs\n", __func__);
+			else
+				factory_mode = true;
+		}
+	} else {
 		sysfs_remove_group(&data->i2c_client->dev.kobj, &mmi_attr_group);
+		if (factory_mode)
+			sysfs_remove_group(&data->i2c_client->dev.kobj, &factory_attr_group);
+	}
 }
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
@@ -726,7 +883,7 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		data = ts->mmi_ptr;
 
 	if (!data) {
-		input_err(true, DEV_TS, "%s: MMI data is NULL\n", __func__);
+		dev_err(DEV_TS, "%s: MMI data is NULL\n", __func__);
 		return 0;
 	}
 
@@ -748,18 +905,18 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		/* DRM panel status */
 		panel_ready = dsi_display_is_panel_enable(data->ctrl_dsi,
 							&probe_status, &pname);
-		input_info(true, DEV_TS, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
+		dev_info(DEV_TS, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
 					__func__, probe_status, panel_ready, pname);
 		/* check panel binding */
 		if (data->bound_display && (probe_status == -ENODEV ||
 				(pname && strncmp(pname, data->bound_display,
 				strlen(data->bound_display))))) {
-			input_err(true, DEV_TS, "%s: panel binding failed\n", __func__);
+			dev_err(DEV_TS, "%s: panel binding failed\n", __func__);
 			return -ENODEV;
 		}
 
 		if (pname && strstr(pname, "dummy")) {
-			input_info(true, DEV_TS, "%s: dummy panel; exiting...\n", __func__);
+			dev_info(DEV_TS, "%s: dummy panel; exiting...\n", __func__);
 			return -ENODEV;
 		}
 #endif

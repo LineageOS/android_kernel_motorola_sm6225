@@ -824,6 +824,12 @@ void sec_ts_reinit(struct sec_ts_data *ts);
 void sec_ts_sense_on(struct sec_ts_data *ts);
 void sec_ts_irq_enable(struct sec_ts_data *ts, bool on);
 
+void sec_ts_lv1_params(u8 cmd, int size);
+ssize_t sec_ts_reg_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+ssize_t sec_ts_regread_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
 #if (1)//!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 
 int sec_ts_raw_device_init(struct sec_ts_data *ts);
