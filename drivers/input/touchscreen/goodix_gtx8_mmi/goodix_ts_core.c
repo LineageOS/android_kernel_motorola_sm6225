@@ -1591,7 +1591,9 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 		r = regulator_set_voltage(core_data->avdd, GT_VTG_MIN_UV,
 					   GT_VTG_MAX_UV);
 		if (r) {
-			ts_err("Regulator set_vtg failed vdd r=%d\n", r);
+			ts_err("Regulator set_vtg failed avdd r=%d\n", r);
+			/* FIXME not fatal error, requested voltage 3V while constraints are 3.08V */
+			r = 0;
 		}
 	}
 
@@ -1611,7 +1613,7 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 		r = regulator_set_voltage(core_data->iovdd, GT_I2C_VTG_MIN_UV,
 					   GT_I2C_VTG_MAX_UV);
 		if (r) {
-			ts_err("Regulator set_vtg failed vdd r=%d\n", r);
+			ts_err("Regulator set_vtg failed iovdd r=%d\n", r);
 		}
 	}
 	return r;
