@@ -27,7 +27,6 @@
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include <linux/i2c.h>
-#include <linux/mods/wakelock.h>
 #include "goodix_ts_core.h"
 
 #define GSX_REG_GESTURE_DATA			0x4100
@@ -40,7 +39,7 @@
 #define GSX_KEY_DATA_LEN	37
 
 #ifdef GOODIX_SENSOR_EN
-static struct wake_lock gesture_wakelock;
+static struct wakeup_source gesture_wakelock;
 static struct goodix_ts_core *goodix_core_data;
 static int gsx_sensor_init(struct goodix_ts_core *data);
 
@@ -52,7 +51,7 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.name = "dt-gesture",
 	.vendor = "Goodix",
 	.version = 1,
-	.type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+	.type = 0, //FIXME SENSOR_TYPE_MOTO_DOUBLE_TAP,
 	.max_range = "5.0",
 	.resolution = "5.0",
 	.sensor_power = "1",
@@ -264,8 +263,7 @@ static int gsx_gesture_init(struct goodix_ts_core *core_data,
 #ifdef GOODIX_SENSOR_EN
 	goodix_core_data = core_data;
 	if (!initialized_sensor) {
-		wake_lock_init(&gesture_wakelock,
-			WAKE_LOCK_SUSPEND, "poll-wake-lock");
+		wakeup_source_init(&gesture_wakelock, "poll-wake-lock");
 		if (!gsx_sensor_init(core_data))
 			initialized_sensor = true;
 	}
@@ -411,7 +409,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 			report_cnt = 0;
 		}
 		input_sync(core_data->sensor_pdata->input_sensor_dev);
-		wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
+		//wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
 		input_report_key(core_data->input_dev, KEY_POWER, 1);
 		input_sync(core_data->input_dev);
@@ -646,6 +644,9 @@ int __init goodix_gsx_gesture_init(void)
 void __exit goodix_gsx_gesture_exit(void)
 {
 	ts_info("gesture module exit");
+#ifdef GOODIX_SENSOR_EN
+	wakeup_source_trash(&gesture_wakelock);
+#endif
 	if (gsx_gesture->kobj_initialized)
 		kobject_put(&gsx_gesture->module.kobj);
 	kfree(gsx_gesture);
