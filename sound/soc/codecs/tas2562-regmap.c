@@ -471,10 +471,14 @@ static void tas2562_hw_reset(struct tas2562_priv *p_tas2562)
 {
 	if (gpio_is_valid(p_tas2562->mn_reset_gpio)) {
 		gpio_direction_output(p_tas2562->mn_reset_gpio, 0);
-		gpio_direction_output(p_tas2562->mn_reset_gpio2, 0);
+		if (gpio_is_valid(p_tas2562->mn_reset_gpio2)) {
+			gpio_direction_output(p_tas2562->mn_reset_gpio2, 0);
+		}
 		msleep(20);
 		gpio_direction_output(p_tas2562->mn_reset_gpio, 1);
-		gpio_direction_output(p_tas2562->mn_reset_gpio2, 1);
+		if (gpio_is_valid(p_tas2562->mn_reset_gpio2)) {
+			gpio_direction_output(p_tas2562->mn_reset_gpio2, 1);
+		}
 		msleep(20);
 	}
 	dev_err(p_tas2562->dev, "gpio up !!\n");
