@@ -1325,6 +1325,7 @@ static int abov_detect(struct i2c_client *client)
 					return 1;
 				}
 			}
+			msleep(10);
 		}
 		LOG_INFO("abov boot detect start\n");
 		for (i = 0; i < 3; i++) {
