@@ -10,7 +10,7 @@
  * published by the Free Software Foundation.
  */
 #define DRIVER_NAME "abov_sar"
-//#define USE_SENSORS_CLASS
+#define USE_SENSORS_CLASS
 
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -21,7 +21,7 @@
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/device.h>
-//#include <linux/sensors.h>
+#include <linux/sensors.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
 #include <linux/notifier.h>
@@ -1552,7 +1552,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			LOG_DBG("create bottom_lmb cap sensor_class file failed (%d)\n", ret);
 		sensors_capsensor_bottom_hb_cdev.sensors_enable = capsensor_set_enable;
 		sensors_capsensor_bottom_hb_cdev.sensors_poll_delay = NULL;
-		ret = sensors_classdev_register(&input_bottom_lmb->dev, &sensors_capsensor_bottom_hb_cdev);
+		ret = sensors_classdev_register(&input_bottom_hb->dev, &sensors_capsensor_bottom_hb_cdev);
 		if (ret < 0)
 			LOG_DBG("create bottom_hb cap sensor_class file failed (%d)\n", ret);
 #endif
