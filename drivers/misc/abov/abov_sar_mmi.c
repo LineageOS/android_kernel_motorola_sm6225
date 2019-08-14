@@ -30,6 +30,7 @@
 #include <linux/notifier.h>
 #include <linux/usb.h>
 #include <linux/power_supply.h>
+#include <linux/version.h>
 #include <linux/input/abov_sar.h> /* main struct, interrupt,init,pointers */
 
 #define BOOT_UPDATE_ABOV_FIRMWARE 1
@@ -56,17 +57,17 @@ static char _Buffer[128];
 #define S_PROX   1
 #define S_BODY   2
 
-#define ABOV_DEBUG 0
-#define LOG_TAG "ABOV "
+#define ABOV_DEBUG 1
+#define LOG_TAG "<ABOV_LOG>"
 
 #if ABOV_DEBUG
-#define LOG_INFO(fmt, args...)    pr_info(LOG_TAG fmt, ##args)
+#define LOG_INFO(fmt, args...)    pr_info(LOG_TAG "[INFO]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 #else
 #define LOG_INFO(fmt, args...)
 #endif
 
-#define LOG_DBG(fmt, args...)	pr_info(LOG_TAG fmt, ##args)
-#define LOG_ERR(fmt, args...)   pr_err(LOG_TAG fmt, ##args)
+#define LOG_DBG(fmt, args...)	pr_info(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
+#define LOG_ERR(fmt, args...)   pr_err(LOG_TAG "[ERR]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 
 static int last_val;
 static int mEnabled;
@@ -568,9 +569,16 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	u32 cap_channel_top, cap_channel_bottom;
 	int ret;
+	enum of_gpio_flags flags;
 
-	client->irq = of_get_gpio(np, 0);
-	pplatData->irq_gpio = client->irq;
+	pplatData->irq_gpio = of_get_named_gpio_flags(np,
+			"abov,irq-gpio", 0, &flags);
+	if (pplatData->irq_gpio < 0) {
+		LOG_ERR("get irq_gpio error\n");
+		return;
+	}
+	LOG_INFO("irq_gpio = %d\n", pplatData->irq_gpio);
+
 	ret = of_property_read_u32(np, "cap,use_channel_top", &cap_channel_top);
 
 	ret = of_property_read_u32(np, "cap,use_channel_bottom", &cap_channel_bottom);
@@ -595,6 +603,9 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 		LOG_ERR("firmware name read error!\n");
 		return;
 	}
+	LOG_INFO("firmware name = %s\n", pplatData->fw_name);
+
+	return;
 }
 
 static ssize_t capsense_soft_reset_show(struct class *class,
@@ -631,8 +642,6 @@ static ssize_t capsense_soft_reset_store(struct class *class,
 	return count;
 }
 
-static CLASS_ATTR(soft_reset, 0660, capsense_soft_reset_show, capsense_soft_reset_store);
-
 static ssize_t capsense_reset_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t count)
@@ -662,8 +671,6 @@ static ssize_t capsense_reset_store(struct class *class,
 	input_sync(input_bottom);
 	return count;
 }
-
-static CLASS_ATTR(reset, 0660, NULL, capsense_reset_store);
 
 static ssize_t capsense_enable_show(struct class *class,
 		struct class_attribute *attr,
@@ -760,8 +767,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 }
 #endif
 
-static CLASS_ATTR(enable, 0660, capsense_enable_show, capsense_enable_store);
-
 static ssize_t capsense_calibrate_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
@@ -789,9 +794,6 @@ static ssize_t capsense_calibrate_store(struct class *class,
 
 	return count;
 }
-
-static CLASS_ATTR(calibrate, 0660, capsense_calibrate_show, capsense_calibrate_store);
-
 static ssize_t reg_dump_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
@@ -808,7 +810,7 @@ static ssize_t reg_dump_show(struct class *class,
 		return (p-buf);
 	}
 
-	for (i = 0; i < 0x24; i++) {
+	for (i = 0; i < 0x26; i++) {
 		read_register(this, i, &reg_value);
 		p += snprintf(p, PAGE_SIZE, "(0x%02x)=0x%02x\n",
 				i, reg_value);
@@ -888,13 +890,6 @@ static ssize_t reg_dump_store(struct class *class,
 	return count;
 }
 
-static CLASS_ATTR(reg, 0660, reg_dump_show, reg_dump_store);
-
-static struct class capsense_class = {
-	.name			= "capsense",
-	.owner			= THIS_MODULE,
-};
-
 static void ps_notify_callback_work(struct work_struct *work)
 {
 	pabovXX_t this = container_of(work, abovXX_t, ps_notify_work);
@@ -947,7 +942,11 @@ static int ps_notify_callback(struct notifier_block *self,
 		return -ENODEV;
 	if(!psy->desc)
 		return -ENODEV;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
+	if (event == PSY_EVENT_PROP_CHANGED
+#else
 	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
+#endif
 			&& psy &&  psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "usb", sizeof("usb"))) {
 		LOG_INFO("ps notification: event = %lu\n", event);
@@ -1340,7 +1339,7 @@ static int abov_fw_update(bool force)
 	const struct firmware *fw = NULL;
 	char fw_name[32] = {0};
 
-	strlcpy(fw_name, this->board->fw_name, NAME_MAX);
+	strcpy(fw_name, this->board->fw_name);
 	strlcat(fw_name, ".BIN", NAME_MAX);
 	rc = request_firmware(&fw, fw_name, this->pdev);
 	if (rc < 0) {
@@ -1433,7 +1432,6 @@ static ssize_t capsense_update_fw_store(struct class *class,
 
 	return count;
 }
-static CLASS_ATTR(update_fw, 0660, capsense_fw_ver_show, capsense_update_fw_store);
 
 static ssize_t capsense_force_update_fw_store(struct class *class,
 		struct class_attribute *attr,
@@ -1466,7 +1464,6 @@ static ssize_t capsense_force_update_fw_store(struct class *class,
 
 	return count;
 }
-static CLASS_ATTR(force_update_fw, 0660, capsense_fw_ver_show, capsense_force_update_fw_store);
 
 static ssize_t capsense_fw_download_status_show(struct class *class,
 		struct class_attribute *attr,
@@ -1474,7 +1471,6 @@ static ssize_t capsense_fw_download_status_show(struct class *class,
 {
 	return snprintf(buf, 8, "%d", fw_dl_status);
 }
-static CLASS_ATTR(fw_download_status, 0660, capsense_fw_download_status_show, NULL);
 
 static void capsense_update_work(struct work_struct *work)
 {
@@ -1488,6 +1484,66 @@ static void capsense_update_work(struct work_struct *work)
 	mutex_unlock(&this->mutex);
 	LOG_INFO("%s: update firmware end\n", __func__);
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+static struct class_attribute class_attr_soft_reset =
+	__ATTR(soft_reset, 0660, capsense_soft_reset_show, capsense_soft_reset_store);
+
+static struct class_attribute class_attr_reset =
+	__ATTR(reset, 0660, NULL, capsense_reset_store);
+
+static struct class_attribute class_attr_enable =
+	__ATTR(enable, 0660, capsense_enable_show, capsense_enable_store);
+
+static struct class_attribute class_attr_reg =
+	__ATTR(reg, 0660, reg_dump_show, reg_dump_store);
+
+static struct class_attribute class_attr_update_fw =
+	__ATTR(update_fw, 0660, capsense_fw_ver_show, capsense_update_fw_store);
+
+static struct class_attribute class_attr_force_update_fw =
+	__ATTR(force_update_fw, 0660, capsense_fw_ver_show, capsense_force_update_fw_store);
+
+static struct class_attribute class_attr_fw_download_status =
+	__ATTR(fw_download_status, 0660, capsense_fw_download_status_show, NULL);
+static struct class_attribute class_attr_calibrate =
+	__ATTR(calibrate, 0660, capsense_calibrate_show, capsense_calibrate_store);
+
+static struct attribute *capsense_class_attrs[] = {
+	&class_attr_soft_reset.attr,
+	&class_attr_reset.attr,
+	&class_attr_enable.attr,
+	&class_attr_reg.attr,
+	&class_attr_update_fw.attr,
+	&class_attr_force_update_fw.attr,
+	&class_attr_fw_download_status.attr,
+	&class_attr_calibrate.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(capsense_class);
+#else
+static struct class_attribute capsense_class_attributes[] = {
+	__ATTR(soft_reset, 0660, capsense_soft_reset_show, capsense_soft_reset_store),
+	__ATTR(reset, 0660, NULL, capsense_reset_store),
+	__ATTR(enable, 0660, capsense_enable_show, capsense_enable_store),
+	__ATTR(reg, 0660, reg_dump_show, reg_dump_store),
+	__ATTR(update_fw, 0660, capsense_fw_ver_show, capsense_update_fw_store),
+	__ATTR(force_update_fw, 0660, capsense_fw_ver_show, capsense_force_update_fw_store),
+	__ATTR(fw_download_status, 0660, capsense_fw_download_status_show, NULL),
+	__ATTR(calibrate, 0660, capsense_calibrate_show, capsense_calibrate_store),
+	__ATTR_NULL,
+};
+#endif
+
+static struct class capsense_class = {
+	.name			= "capsense",
+	.owner			= THIS_MODULE,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	.class_groups	= capsense_class_groups,
+#else
+	.class_attrs		= capsense_class_attributes,
+#endif
+};
 
 /**
  * fn static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -1508,6 +1564,12 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct power_supply *psy = NULL;
 
 	LOG_DBG("abov_probe()\n");
+
+	if (!i2c_check_functionality(client->adapter,
+				I2C_FUNC_SMBUS_READ_WORD_DATA)) {
+		ret = -EIO;
+		goto err_this_device;
+	}
 
 	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
 	if (!pplatData) {
@@ -1536,26 +1598,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				regulator_is_enabled(pplatData->cap_vdd) ?
 				"on" : "off");
 	}
-#if 0
 
-	pplatData->cap_svdd = regulator_get(&client->dev, "cap_svdd");
-	if (!IS_ERR(pplatData->cap_svdd)) {
-		ret = regulator_enable(pplatData->cap_svdd);
-		if (ret) {
-			regulator_put(pplatData->cap_svdd);
-			LOG_INFO("Failed to enable cap_svdd\n");
-			goto err_svdd_error;
-		}
-		pplatData->cap_svdd_en = true;
-		LOG_INFO("cap_svdd regulator is %s\n",
-				regulator_is_enabled(pplatData->cap_svdd) ?
-				"on" : "off");
-	} else {
-		ret = PTR_ERR(pplatData->cap_vdd);
-		if (ret == -EPROBE_DEFER)
-			goto err_svdd_error;
-	}
-#endif
 	/* detect if abov exist or not */
 	ret = abov_detect(client);
 	if (ret == UNKONOW_MODE) {
@@ -1568,14 +1611,8 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	abov_platform_data_of_init(client, pplatData);
 	client->dev.platform_data = pplatData;
 
-	if (!i2c_check_functionality(client->adapter,
-				I2C_FUNC_SMBUS_READ_WORD_DATA)) {
-		ret = -EIO;
-		goto err_this_device;
-	}
-
 	this = kzalloc(sizeof(abovXX_t), GFP_KERNEL);
-	LOG_INFO("\t Initialized Main Memory: 0x%p\n", this);
+	LOG_INFO("Initialized Main Memory: 0x%p\n", this);
 
 	if (this) {
 		/* In case we need to reinitialize data
@@ -1587,7 +1624,25 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		 * (1->NIRQ=0, 0->NIRQ=1) */
 		this->get_nirq_low = pplatData->get_is_nirq_low;
 		/* save irq in case we need to reference it */
-		this->irq = gpio_to_irq(client->irq);
+
+		if (gpio_is_valid(pplatData->irq_gpio)) {
+			ret = gpio_request(pplatData->irq_gpio, "abov_irq_gpio");
+			if (ret < 0) {
+				LOG_ERR("abov Request gpio. Fail! ret = %d\n", ret);
+				return ret;
+			}
+
+			ret = gpio_direction_input(pplatData->irq_gpio);
+			if (ret < 0) {
+				LOG_ERR("abov Set gpio direction. Fail! ret = %d\n", ret);
+				return ret;
+			}
+
+			this->irq = gpio_to_irq(pplatData->irq_gpio);
+		}
+
+		LOG_INFO("this irq num = %d, client irq num = %d\n", this->irq, client->irq);
+
 		/* do we need to create an irq timer after interrupt ? */
 		this->useIrqTimer = 0;
 		this->board = pplatData;
@@ -1675,54 +1730,6 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		if (ret < 0) {
 			LOG_ERR("Create fsys class failed (%d)\n", ret);
 			goto err_class_register;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_reset);
-		if (ret < 0) {
-			LOG_ERR("Create reset file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_soft_reset);
-		if (ret < 0) {
-			LOG_ERR("Create soft reset file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_enable);
-		if (ret < 0) {
-			LOG_ERR("Create enable file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_reg);
-		if (ret < 0) {
-			LOG_ERR("Create reg file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_update_fw);
-		if (ret < 0) {
-			LOG_ERR("Create update_fw file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_force_update_fw);
-		if (ret < 0) {
-			LOG_ERR("Create update_fw file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_fw_download_status);
-		if (ret < 0) {
-			LOG_ERR("Create fw dl status file failed (%d)\n", ret);
-			goto err_class_creat;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_calibrate);
-		if (ret < 0) {
-			LOG_ERR("Create calibrate file failed (%d)\n", ret);
-			goto err_class_creat;
 		}
 
 #ifdef USE_SENSORS_CLASS
@@ -1904,11 +1911,10 @@ static int abov_resume(struct device *dev)
 #endif
 
 #ifdef CONFIG_OF
-static const struct of_device_id synaptics_rmi4_match_tbl[] = {
-	{ .compatible = "abov," DRIVER_NAME },
+static const struct of_device_id abov_match_table[] = {
+	{ .compatible = "abov,abov_sar" DRIVER_NAME },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, synaptics_rmi4_match_tbl);
 #endif
 
 #if defined(USE_KERNEL_SUSPEND)
@@ -1928,6 +1934,7 @@ static struct i2c_driver abov_driver = {
 	.driver = {
 		.owner  = THIS_MODULE,
 		.name   = DRIVER_NAME,
+		.of_match_table	= abov_match_table,
 #if defined(USE_KERNEL_SUSPEND)
 		.pm     = &abov_pm_ops,
 #endif
