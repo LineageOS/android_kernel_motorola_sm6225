@@ -4,6 +4,8 @@
 #include <linux/major.h>
 #include <linux/kdev_t.h>
 #include <linux/notifier.h>
+#include <linux/usb.h>
+#include <linux/power_supply.h>
 
 #if defined(CONFIG_DRM)
 #include <linux/msm_drm_notify.h>
@@ -24,6 +26,11 @@ struct sec_mmi_data {
 	struct delayed_work detection_work;
 
 	atomic_t touch_stopped;
+
+	bool usb_detection;
+	struct work_struct ps_notify_work;
+	struct notifier_block ps_notif;
+	bool ps_is_present;
 
 	bool force_calibration;
 	int ctrl_dsi;
