@@ -246,6 +246,68 @@ device_destroy:
 	return -ENODEV;
 }
 
+static int sec_mmi_ps_get_state(struct power_supply *psy, bool *present)
+{
+	union power_supply_propval pval = {0};
+	int ret;
+
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &pval);
+	if (ret)
+		return ret;
+	*present = !pval.intval ? false : true;
+	return 0;
+}
+
+static void sec_mmi_ps_work(struct work_struct *work)
+{
+	struct sec_mmi_data *data = container_of(work,
+					struct sec_mmi_data, ps_notify_work);
+	struct sec_ts_data *ts = data->ts_ptr;
+	u8 mode = 1;
+	int ret;
+
+	/* plugged in USB should change value to 2 */
+	if (data->ps_is_present)
+		mode++;
+	ret = ts->sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE,
+								&mode, sizeof(mode));
+	if (ret < 0) {
+		dev_err(DEV_TS, "%s: failed to set charger mode %d\n",
+				__func__, mode);
+	}
+}
+
+static int sec_mmi_ps_notify_callback(struct notifier_block *self,
+				unsigned long event, void *ptr)
+{
+	struct sec_mmi_data *data = container_of(
+					self, struct sec_mmi_data, ps_notif);
+	struct power_supply *psy = ptr;
+	int ret;
+	bool present;
+
+	if (!((event == PSY_EVENT_PROP_CHANGED) && psy &&
+			psy->desc->get_property && psy->desc->name &&
+			!strncmp(psy->desc->name, "usb", sizeof("usb"))))
+		return 0;
+
+	ret = sec_mmi_ps_get_state(psy, &present);
+	if (ret) {
+		dev_err(DEV_MMI, "%s: failed to get usb status: %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	if (data->ps_is_present != present) {
+		data->ps_is_present = present;
+		schedule_work(&data->ps_notify_work);
+		dev_dbg(DEV_MMI, "%s: usb status changed: %d\n",
+				__func__, data->ps_is_present);
+	}
+
+	return 0;
+}
+
 static int sec_mmi_dt(struct sec_mmi_data *data)
 {
 	struct device *dev = &data->i2c_client->dev;
@@ -262,6 +324,11 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 	if (!of_property_read_u32(np, "sec,control-dsi", &data->ctrl_dsi))
 		dev_info(DEV_MMI, "%s: ctrl-dsi property %d\n",
 				__func__, data->ctrl_dsi);
+
+	if (of_property_read_bool(np, "sec,usb-charger-detection")) {
+		dev_info(DEV_MMI, "%s: using usb detection\n", __func__);
+		data->usb_detection = true;
+	}
 
 	np = of_find_node_by_name(NULL, "chosen");
 	if (np) {
@@ -311,8 +378,7 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 	memset(buffer, 0, sizeof(buffer));
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_PARA_VERSION, buffer, sizeof(buffer));
 	if (ret < 0) {
-		input_err(true, &ts->client->dev,
-				"%s: failed to read fw version (%d)\n",
+		dev_err(DEV_MMI, "%s: failed to read fw version (%d)\n",
 				__func__, ret);
 	} else {
 		bdc2ui(&data->config_id, buffer+4, sizeof(data->config_id));
@@ -468,7 +534,7 @@ static int inline sec_mmi_display_off(struct sec_mmi_data *data)
 		return 0;
 	/* complete critical work */
 	sec_mmi_wait4idle(data);
-	sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
+	sec_ts_set_lowpowermode(ts, TO_SLEEP_MODE);
 	cancel_delayed_work_sync(&data->resume_work);
 
 	if (ts->lowpower_mode)
@@ -513,7 +579,7 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 	return 0;
 }
 
-static int sec_mmi_register_notifier(
+static int sec_mmi_register_notifiers(
 	struct sec_mmi_data *data, bool enable)
 {
 	int rc;
@@ -521,14 +587,32 @@ static int sec_mmi_register_notifier(
 	if (enable) {
 		data->panel_nb.notifier_call = sec_mmi_panel_cb;
 		rc = msm_drm_register_client(&data->panel_nb);
-	} else
+
+		if (data->usb_detection) {
+			struct power_supply *psy;
+
+			psy = power_supply_get_by_name("usb");
+			if (psy) {
+				rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
+				if (rc) {
+					dev_err(DEV_MMI, "%s: failed to get usb status\n", __func__);
+				}
+			}
+
+			data->ps_notif.notifier_call = sec_mmi_ps_notify_callback;
+			rc = power_supply_reg_notifier(&data->ps_notif);
+		}
+	} else {
 		rc = msm_drm_unregister_client(&data->panel_nb);
+		if (data->usb_detection)
+			power_supply_unreg_notifier(&data->ps_notif);
+	}
 
 	if (!rc)
-		dev_dbg(DEV_MMI, "%s: %sregistered drm notifier\n",
+		dev_dbg(DEV_MMI, "%s: %sregistered notifier\n",
 				__func__, enable ? "" : "un");
 	else
-		dev_err(DEV_MMI, "%s: unable to %sregister drm notifier\n",
+		dev_err(DEV_MMI, "%s: failed to %sregister notifiers\n",
 				__func__, enable ? "" : "un");
 
 	return rc;
@@ -922,18 +1006,21 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 #endif
 		INIT_DELAYED_WORK(&data->resume_work, sec_mmi_queued_resume);
 		INIT_DELAYED_WORK(&data->detection_work, sec_mmi_work);
+		INIT_WORK(&data->ps_notify_work, sec_mmi_ps_work);
 
 		schedule_delayed_work(&data->detection_work, msecs_to_jiffies(50));
 	}
 
 	sec_mmi_touchscreen_class(data, enable);
-	sec_mmi_register_notifier(data, enable);
+	sec_mmi_register_notifiers(data, enable);
 	sec_mmi_sysfs(data, enable);
 
 	if (!enable) {
 		sec_mmi_sysfs(data, true);
 		cancel_delayed_work(&data->resume_work);
 		cancel_delayed_work(&data->detection_work);
+		if (data->usb_detection)
+			cancel_work_sync(&data->ps_notify_work);
 		kfree(data);
 		ts->mmi_ptr = NULL;
 	}
