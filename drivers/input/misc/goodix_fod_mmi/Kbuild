@@ -1,0 +1,9 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+
+
+goodix_fod_mmi-y += gf_spi.o netlink.o platform.o
+
+obj-m += goodix_fod_mmi.o
+
