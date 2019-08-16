@@ -164,7 +164,11 @@
  * Gesture function enable
  * default: disable
  */
+#ifdef FOCALTECH_SENSOR_EN
+#define FTS_GESTURE_EN                          1
+#else
 #define FTS_GESTURE_EN                          0
+#endif
 
 /*
  * ESD check & protection
