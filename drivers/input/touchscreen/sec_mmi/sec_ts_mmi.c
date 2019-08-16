@@ -263,18 +263,21 @@ static void sec_mmi_ps_work(struct work_struct *work)
 	struct sec_mmi_data *data = container_of(work,
 					struct sec_mmi_data, ps_notify_work);
 	struct sec_ts_data *ts = data->ts_ptr;
+	u8 cval = 0;
 	u8 mode = 1;
 	int ret;
 
 	/* plugged in USB should change value to 2 */
 	if (data->ps_is_present)
 		mode++;
-	ret = ts->sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE,
-								&mode, sizeof(mode));
+	ret = ts->sec_ts_i2c_read(ts, SET_TS_CMD_SET_CHARGER_MODE,
+					&cval, sizeof(cval));
 	if (ret < 0) {
-		dev_err(DEV_TS, "%s: failed to set charger mode %d\n",
-				__func__, mode);
+		dev_err(DEV_TS, "%s: failed to read charger mode\n", __func__);
 	}
+
+	if (cval != mode)
+		sec_ts_set_charger(ts, data->ps_is_present);
 }
 
 static int sec_mmi_ps_notify_callback(struct notifier_block *self,
@@ -298,11 +301,12 @@ static int sec_mmi_ps_notify_callback(struct notifier_block *self,
 		return ret;
 	}
 
+	dev_dbg(DEV_MMI, "%s: event=%lu, usb status: cur=%d, prev=%d\n",
+				__func__, event, present, data->ps_is_present);
+
 	if (data->ps_is_present != present) {
 		data->ps_is_present = present;
 		schedule_work(&data->ps_notify_work);
-		dev_dbg(DEV_MMI, "%s: usb status changed: %d\n",
-				__func__, data->ps_is_present);
 	}
 
 	return 0;
@@ -328,6 +332,20 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 	if (of_property_read_bool(np, "sec,usb-charger-detection")) {
 		dev_info(DEV_MMI, "%s: using usb detection\n", __func__);
 		data->usb_detection = true;
+	}
+
+	if (of_property_read_bool(np, "sec,reset-on-resume")) {
+		dev_info(DEV_MMI, "%s: using hw reset on resume\n", __func__);
+		data->hw_reset = true;
+	}
+
+	if (of_property_read_bool(np, "sec,power-off-suspend")) {
+		dev_info(DEV_MMI, "%s: using power off in suspend\n", __func__);
+		data->power_off_suspend = true;
+		if (data->hw_reset) {
+			data->hw_reset = false;
+			dev_info(DEV_MMI, "%s: unset hw reset on resume!!!\n", __func__);
+		}
 	}
 
 	np = of_find_node_by_name(NULL, "chosen");
@@ -417,13 +435,16 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 		!gpio_get_value(ts->plat_data->rst_gpio))
 		return;
 
-	mutex_lock(&ts->modechange);
 	__pm_stay_awake(&ts->wakelock);
+	mutex_lock(&ts->modechange);
+	/* disable irq to ensure getting boot complete */
+	sec_ts_irq_enable(ts, false);
 
 	if (mode) {
 		gpio_set_value(ts->plat_data->rst_gpio, 0);
 		usleep_range(10, 10);
 		gpio_set_value(ts->plat_data->rst_gpio, 1);
+		dev_dbg(DEV_MMI, "%s: reset line toggled\n", __func__);
 	} else {
 		int ret;
 
@@ -433,6 +454,7 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 	}
 
 	sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	sec_ts_irq_enable(ts, true);
 
 	mutex_unlock(&ts->modechange);
 	__pm_relax(&ts->wakelock);
@@ -482,8 +504,22 @@ static void sec_mmi_work(struct work_struct *w)
 	}
 
 	if (ts->fw_invalid == false) {
+		struct power_supply *psy;
+
 		sec_mmi_fw_read_id(data);
 		sec_ts_integrity_check(ts);
+
+		psy = power_supply_get_by_name("usb");
+		if (psy) {
+			int rc;
+			rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
+			if (rc) {
+				dev_err(DEV_MMI, "%s: failed to get usb status\n", __func__);
+			}
+
+			if (data->ps_is_present)
+				sec_ts_set_charger(ts, data->ps_is_present);
+		}
 
 		sec_ts_sense_on(ts);
 		dev_dbg(DEV_MMI, "%s: sensing turned on\n", __func__);
@@ -498,12 +534,40 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 		container_of(dw, struct sec_mmi_data, resume_work);
 	struct sec_ts_data *ts = data->ts_ptr;
 	unsigned char buffer = 0;
+	bool wait4_boot_complete = true;
+	bool update_charger = true;
 	int ret;
 
 	if (atomic_cmpxchg(&data->touch_stopped, 1, 0) == 0)
 		return;
 
-	sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
+	if (data->hw_reset) {
+		dev_dbg(DEV_MMI, "%s: doing hw reset...\n", __func__);
+		data->reset(ts->mmi_ptr, 1);
+	} else if (data->power_off_suspend) {
+		sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	} else {
+		sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
+		wait4_boot_complete = false;
+		update_charger = false;
+	}
+
+	if (wait4_boot_complete) {
+		if (data->power_off_suspend)
+			sec_ts_irq_enable(ts, true);
+
+		/* Sense_on */
+		dev_dbg(DEV_MMI, "%s: sending sense_on...\n", __func__);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
+		if (ret < 0)
+			dev_err(DEV_MMI,
+					"%s: failed sense_on (%d)\n", __func__, ret);
+	}
+
+	/* make sure charger mode is properly set after reset */
+	if (update_charger)
+		schedule_work(&data->ps_notify_work);
+
 	if (ts->lowpower_mode)
 		complete_all(&ts->resume_done);
 
@@ -516,7 +580,7 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 
 	ts->fw_invalid = buffer == SEC_TS_STATUS_BOOT_MODE;
 
-	dev_info(DEV_MMI, "%s: touch resumed\n", __func__);
+	dev_info(DEV_MMI, "%s: done\n", __func__);
 }
 
 static int inline sec_mmi_display_on(struct sec_mmi_data *data)
@@ -534,13 +598,18 @@ static int inline sec_mmi_display_off(struct sec_mmi_data *data)
 		return 0;
 	/* complete critical work */
 	sec_mmi_wait4idle(data);
-	sec_ts_set_lowpowermode(ts, TO_SLEEP_MODE);
+
+	if (data->power_off_suspend)
+		sec_ts_irq_enable(ts, false);
+	else
+		sec_ts_set_lowpowermode(ts, TO_SLEEP_MODE);
+
 	cancel_delayed_work_sync(&data->resume_work);
 
 	if (ts->lowpower_mode)
 		reinit_completion(&ts->resume_done);
 
-	dev_info(DEV_MMI, "%s: touch suspended\n", __func__);
+	dev_info(DEV_MMI, "%s: done\n", __func__);
 
 	return 0;
 }
@@ -560,6 +629,7 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 
 	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
 		 evdata && evdata->data && data) {
+		struct sec_ts_data *ts = data->ts_ptr;
 		int *blank = evdata->data;
 
 		dev_dbg(DEV_MMI, "%s: drm notification: event = %lu blank = %d\n",
@@ -567,12 +637,36 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 		/* entering suspend upon early blank event */
 		/* to ensure shared power supply is still on */
 		/* for in-cell design touch solutions */
-		if (event == MSM_DRM_EARLY_EVENT_BLANK) {
-			if (*blank != MSM_DRM_BLANK_POWERDOWN)
-				return 0;
-			sec_mmi_display_off(data);
-		} else if (*blank == MSM_DRM_BLANK_UNBLANK) {
-			sec_mmi_display_on(data);
+		switch (event) {
+			case MSM_DRM_EARLY_EVENT_BLANK:
+				if (*blank == MSM_DRM_BLANK_POWERDOWN) {
+					/* put in reset first */
+					if (data->power_off_suspend)
+						sec_ts_pinctrl_configure(ts, false);
+
+					sec_mmi_display_off(data);
+
+				} else if (data->power_off_suspend) {
+					/* powering on early */
+					sec_ts_power((void *)ts, true);
+					dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
+				}
+					break;
+
+			case MSM_DRM_EVENT_BLANK:
+				if (*blank == MSM_DRM_BLANK_UNBLANK) {
+					/* out of reset to allow wait for boot complete */
+					if (data->power_off_suspend)
+						sec_ts_pinctrl_configure(ts, true);
+
+					sec_mmi_display_on(data);
+
+				} else if (data->power_off_suspend) {
+					/* then proceed with de-powering */
+					sec_ts_power((void *)ts, false);
+					dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
+				}
+					break;
 		}
 	}
 
@@ -589,16 +683,6 @@ static int sec_mmi_register_notifiers(
 		rc = msm_drm_register_client(&data->panel_nb);
 
 		if (data->usb_detection) {
-			struct power_supply *psy;
-
-			psy = power_supply_get_by_name("usb");
-			if (psy) {
-				rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
-				if (rc) {
-					dev_err(DEV_MMI, "%s: failed to get usb status\n", __func__);
-				}
-			}
-
 			data->ps_notif.notifier_call = sec_mmi_ps_notify_callback;
 			rc = power_supply_reg_notifier(&data->ps_notif);
 		}

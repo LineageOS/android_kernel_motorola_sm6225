@@ -927,26 +927,26 @@ int get_tsp_status(void)
 }
 EXPORT_SYMBOL(get_tsp_status);
 
-void sec_ts_set_charger(bool enable)
+void sec_ts_set_charger(struct sec_ts_data *ts, bool enable)
 {
-	return;
-#if 0
 	int ret;
-	u8 noise_mode_on[] = {0x01};
-	u8 noise_mode_off[] = {0x00};
+	u8 charger_in[] = {0x02};
+	u8 charger_out[] = {0x01};
 
 	if (enable) {
-		input_info(true, &ts->client->dev, "sec_ts_set_charger : charger CONNECTED!!\n");
-		ret = sec_ts_i2c_write(ts, SEC_TS_CMD_NOISE_MODE, noise_mode_on, sizeof(noise_mode_on));
-		if (ret < 0)
-			input_err(true, &ts->client->dev, "sec_ts_set_charger: fail to write NOISE_ON\n");
+		input_info(true, &ts->client->dev,
+					"sec_ts_set_charger : charger CONNECTED!!\n");
+		ret = sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE,
+						charger_in, sizeof(charger_in));
 	} else {
-		input_info(true, &ts->client->dev, "sec_ts_set_charger : charger DISCONNECTED!!\n");
-		ret = sec_ts_i2c_write(ts, SEC_TS_CMD_NOISE_MODE, noise_mode_off, sizeof(noise_mode_off));
-		if (ret < 0)
-			input_err(true, &ts->client->dev, "sec_ts_set_charger: fail to write NOISE_OFF\n");
+		input_info(true, &ts->client->dev,
+					"sec_ts_set_charger : charger DISCONNECTED!!\n");
+		ret = sec_ts_i2c_write(ts, SET_TS_CMD_SET_CHARGER_MODE,
+						charger_out, sizeof(charger_out));
 	}
-#endif
+	if (ret < 0)
+		input_err(true, &ts->client->dev,
+					"sec_ts_set_charger: fail to write\n");
 }
 EXPORT_SYMBOL(sec_ts_set_charger);
 
@@ -1077,7 +1077,7 @@ void sec_ts_set_grip_type(struct sec_ts_data *ts, u8 set_type)
 
 /* for debugging--------------------------------------------------------------------------------------*/
 
-static int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
+int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
 {
 	struct pinctrl_state *state;
 
@@ -1087,6 +1087,11 @@ static int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
 		state = pinctrl_lookup_state(ts->plat_data->pinctrl, "on_state");
 		if (IS_ERR(ts->plat_data->pinctrl))
 			input_err(true, &ts->client->dev, "%s: could not get active pinstate\n", __func__);
+		if (gpio_is_valid(ts->plat_data->rst_gpio)) {
+			/* pinctrl is not setting RESET gpio high by default */
+			/* due to compatibility issues with Synaptics driver */
+			gpio_set_value(ts->plat_data->rst_gpio, 1);
+		}
 	} else {
 		state = pinctrl_lookup_state(ts->plat_data->pinctrl, "off_state");
 		if (IS_ERR(ts->plat_data->pinctrl))
@@ -1196,7 +1201,6 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			input_err(true, &client->dev, "%s: Unable to request tsp_rst [%d]\n", __func__, pdata->rst_gpio);
 			return -EINVAL;
 		}
-		gpio_set_value(pdata->rst_gpio, 1);
 	} else
 		input_info(true, &client->dev, "%s: has no rst gpio\n", __func__);
 
