@@ -384,6 +384,7 @@ enum switch_system_mode {
 	TO_LOWPOWER_MODE		= 1,
 	TO_SELFTEST_MODE		= 2,
 	TO_FLASH_MODE			= 3,
+	TO_SLEEP_MODE			= 4,
 };
 
 enum {
