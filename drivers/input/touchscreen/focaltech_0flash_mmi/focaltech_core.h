@@ -65,6 +65,9 @@
 #ifdef FTS_USB_DETECT_EN
 #include <linux/power_supply.h>
 #endif
+#ifdef FOCALTECH_SENSOR_EN
+#include <linux/sensors.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -111,6 +114,14 @@
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
+#ifdef FOCALTECH_SENSOR_EN
+/* display state */
+enum display_state {
+    SCREEN_UNKNOWN,
+    SCREEN_OFF,
+    SCREEN_ON,
+};
+#endif
 struct ftxxxx_proc {
     struct proc_dir_entry *proc_entry;
     u8 opmode;
@@ -144,6 +155,16 @@ struct ts_event {
     int id;     /*touch ID */
     int area;
 };
+
+#ifdef FOCALTECH_SENSOR_EN
+struct focaltech_sensor_platform_data {
+    struct input_dev *input_sensor_dev;
+    struct sensors_classdev ps_cdev;
+    int sensor_opened;
+    char sensor_data; /* 0 near, 1 far */
+    struct fts_ts_data *data;
+};
+#endif
 
 struct fts_ts_data {
     struct i2c_client *client;
@@ -203,6 +224,13 @@ struct fts_ts_data {
 	struct notifier_block charger_notif;
 #endif
 
+#ifdef FOCALTECH_SENSOR_EN
+    bool wakeable;
+    bool should_enable_gesture;
+    enum display_state screen_state;
+    struct mutex state_mutex;
+    struct focaltech_sensor_platform_data *sensor_pdata;
+#endif
 };
 
 /*****************************************************************************

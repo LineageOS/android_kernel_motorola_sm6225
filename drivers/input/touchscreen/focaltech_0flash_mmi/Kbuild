@@ -34,3 +34,6 @@ ifneq ($(filter ft8009,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 	focaltech_0flash_mmi-objs += focaltech_flash_ft8756.o
 	focaltech_0flash_mmi-objs += focaltech_spi_v1_1_1.o
 endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+endif
