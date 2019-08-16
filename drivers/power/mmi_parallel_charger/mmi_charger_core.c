@@ -792,6 +792,8 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->pd_curr_max = pd_curr_max_init;
 	chip->recovery_pmic_chrg = false;
 	chip->thermal_mitigation_doing = false;
+	chip->thermal_cooling = false;
+	chip->thermal_cooling_cnt = 0;
 	chip->pd_pps_support = false;
 
 	memset(chip->mmi_pdo_info, 0,
