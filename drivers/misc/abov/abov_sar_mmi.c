@@ -569,16 +569,9 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	u32 cap_channel_top, cap_channel_bottom;
 	int ret;
-	enum of_gpio_flags flags;
 
-	pplatData->irq_gpio = of_get_named_gpio_flags(np,
-			"abov,irq-gpio", 0, &flags);
-	if (pplatData->irq_gpio < 0) {
-		LOG_ERR("get irq_gpio error\n");
-		return;
-	}
-	LOG_INFO("irq_gpio = %d\n", pplatData->irq_gpio);
-
+	client->irq = of_get_gpio(np, 0);
+	pplatData->irq_gpio = client->irq;
 	ret = of_property_read_u32(np, "cap,use_channel_top", &cap_channel_top);
 
 	ret = of_property_read_u32(np, "cap,use_channel_bottom", &cap_channel_bottom);
@@ -1624,25 +1617,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		 * (1->NIRQ=0, 0->NIRQ=1) */
 		this->get_nirq_low = pplatData->get_is_nirq_low;
 		/* save irq in case we need to reference it */
-
-		if (gpio_is_valid(pplatData->irq_gpio)) {
-			ret = gpio_request(pplatData->irq_gpio, "abov_irq_gpio");
-			if (ret < 0) {
-				LOG_ERR("abov Request gpio. Fail! ret = %d\n", ret);
-				return ret;
-			}
-
-			ret = gpio_direction_input(pplatData->irq_gpio);
-			if (ret < 0) {
-				LOG_ERR("abov Set gpio direction. Fail! ret = %d\n", ret);
-				return ret;
-			}
-
-			this->irq = gpio_to_irq(pplatData->irq_gpio);
-		}
-
-		LOG_INFO("this irq num = %d, client irq num = %d\n", this->irq, client->irq);
-
+		this->irq = gpio_to_irq(client->irq);
 		/* do we need to create an irq timer after interrupt ? */
 		this->useIrqTimer = 0;
 		this->board = pplatData;
