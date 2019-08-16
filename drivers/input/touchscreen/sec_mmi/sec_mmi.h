@@ -27,6 +27,8 @@ struct sec_mmi_data {
 
 	atomic_t touch_stopped;
 
+	bool power_off_suspend;
+	bool hw_reset;
 	bool usb_detection;
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;
