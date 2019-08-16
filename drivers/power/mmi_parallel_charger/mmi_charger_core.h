@@ -193,6 +193,7 @@ struct mmi_charger_manager {
 	bool recovery_pmic_chrg;
 	bool thermal_mitigation_doing;
 	bool thermal_cooling;
+	int thermal_cooling_cnt;
 
 	struct delayed_work	mmi_chrg_sm_work;	/*mmi charger state machine work*/
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
