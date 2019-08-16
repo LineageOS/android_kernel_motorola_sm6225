@@ -788,6 +788,7 @@ typedef struct {
 	u32 reserved;
 } fw_chunk;
 
+int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable);
 int sec_ts_power(void *data, bool on);
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);
@@ -824,6 +825,7 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);
 void sec_ts_reinit(struct sec_ts_data *ts);
 void sec_ts_sense_on(struct sec_ts_data *ts);
 void sec_ts_irq_enable(struct sec_ts_data *ts, bool on);
+void sec_ts_set_charger(struct sec_ts_data *ts, bool enable);
 
 void sec_ts_lv1_params(u8 cmd, int size);
 ssize_t sec_ts_reg_store(struct device *dev,
