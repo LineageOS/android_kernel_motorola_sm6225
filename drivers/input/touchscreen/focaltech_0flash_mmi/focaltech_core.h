@@ -65,8 +65,9 @@
 #ifdef FTS_USB_DETECT_EN
 #include <linux/power_supply.h>
 #endif
-#ifdef FOCALTECH_SENSOR_EN
+#if defined(FOCALTECH_SENSOR_EN) || defined(FOCALTECH_PALM_SENSOR_EN)
 #include <linux/sensors.h>
+#define SENSOR_TYPE_MOTO_TOUCH_PALM	(SENSOR_TYPE_DEVICE_PRIVATE_BASE + 31)
 #endif
 
 /*****************************************************************************
@@ -156,7 +157,7 @@ struct ts_event {
     int area;
 };
 
-#ifdef FOCALTECH_SENSOR_EN
+#if defined(FOCALTECH_SENSOR_EN) || defined(FOCALTECH_PALM_SENSOR_EN)
 struct focaltech_sensor_platform_data {
     struct input_dev *input_sensor_dev;
     struct sensors_classdev ps_cdev;
@@ -230,6 +231,11 @@ struct fts_ts_data {
     enum display_state screen_state;
     struct mutex state_mutex;
     struct focaltech_sensor_platform_data *sensor_pdata;
+#endif
+
+#ifdef FOCALTECH_PALM_SENSOR_EN
+    bool palm_detection_enabled;
+    struct focaltech_sensor_platform_data *palm_sensor_pdata;
 #endif
 };
 
