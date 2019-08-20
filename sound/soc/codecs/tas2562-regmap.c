@@ -830,6 +830,34 @@ static int tas2562_runtime_resume(struct tas2562_priv *p_tas2562)
 	return 0;
 }
 
+static int tas2562_pm_suspend(struct device *dev)
+{
+	struct tas2562_priv *p_tas2562 = dev_get_drvdata(dev);
+
+	if(!p_tas2562){
+		dev_err(p_tas2562->dev, "drvdata is NULL\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&p_tas2562->codec_lock);
+	tas2562_runtime_suspend(p_tas2562);
+	mutex_unlock(&p_tas2562->codec_lock);
+	return 0;
+}
+static int tas2562_pm_resume(struct device *dev)
+{
+	struct tas2562_priv *p_tas2562 = dev_get_drvdata(dev);
+
+	if(!p_tas2562){
+		dev_err(p_tas2562->dev, "drvdata is NULL\n");
+		return -EINVAL;
+	}
+	mutex_lock(&p_tas2562->codec_lock);
+	tas2562_runtime_resume(p_tas2562);
+	mutex_unlock(&p_tas2562->codec_lock);
+	return 0;
+}
+
 static int tas2562_parse_dt(struct device *dev, struct tas2562_priv *p_tas2562)
 {
 	struct device_node *np = dev->of_node;
@@ -863,16 +891,6 @@ static int tas2562_parse_dt(struct device *dev, struct tas2562_priv *p_tas2562)
 			p_tas2562->mn_l_addr);
 	}
 
-	rc = of_property_read_u32(np, "ti,right-channel",
-			&p_tas2562->mn_r_addr);
-	if (rc) {
-		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
-			"ti,right-channel", np->full_name, rc);
-	} else {
-		dev_dbg(p_tas2562->dev, "ti,right-channel=0x%x",
-			p_tas2562->mn_r_addr);
-	}
-
 	p_tas2562->mn_reset_gpio = of_get_named_gpio(np, "ti,reset-gpio", 0);
 	if (!gpio_is_valid(p_tas2562->mn_reset_gpio)) {
 		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
@@ -881,16 +899,6 @@ static int tas2562_parse_dt(struct device *dev, struct tas2562_priv *p_tas2562)
 	} else {
 		dev_dbg(p_tas2562->dev, "ti,reset-gpio=%d",
 			p_tas2562->mn_reset_gpio);
-	}
-
-	p_tas2562->mn_reset_gpio2 = of_get_named_gpio(np, "ti,reset-gpio2", 0);
-	if (!gpio_is_valid(p_tas2562->mn_reset_gpio2)) {
-		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
-			"ti,reset-gpio2", np->full_name,
-				p_tas2562->mn_reset_gpio2);
-	} else {
-		dev_dbg(p_tas2562->dev, "ti,reset-gpio2=%d",
-			p_tas2562->mn_reset_gpio2);
 	}
 
 	p_tas2562->mn_irq_gpio = of_get_named_gpio(np, "ti,irq-gpio", 0);
@@ -902,13 +910,35 @@ static int tas2562_parse_dt(struct device *dev, struct tas2562_priv *p_tas2562)
 			p_tas2562->mn_irq_gpio);
 	}
 
-	p_tas2562->mn_irq_gpio2 = of_get_named_gpio(np, "ti,irq-gpio2", 0);
-	if (!gpio_is_valid(p_tas2562->mn_irq_gpio2)) {
-		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
+	if(p_tas2562->mn_channels != 1) {
+		rc = of_property_read_u32(np, "ti,right-channel",
+			&p_tas2562->mn_r_addr);
+		if (rc) {
+			dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
+				"ti,right-channel", np->full_name, rc);
+		} else {
+			dev_dbg(p_tas2562->dev, "ti,right-channel=0x%x",
+				p_tas2562->mn_r_addr);
+		}
+
+		p_tas2562->mn_reset_gpio2 = of_get_named_gpio(np, "ti,reset-gpio2", 0);
+		if (!gpio_is_valid(p_tas2562->mn_reset_gpio2)) {
+			dev_dbg(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
+				"ti,reset-gpio2", np->full_name,
+				p_tas2562->mn_reset_gpio2);
+		} else {
+			dev_dbg(p_tas2562->dev, "ti,reset-gpio2=%d",
+				p_tas2562->mn_reset_gpio2);
+		}
+
+		p_tas2562->mn_irq_gpio2 = of_get_named_gpio(np, "ti,irq-gpio2", 0);
+		if (!gpio_is_valid(p_tas2562->mn_irq_gpio2)) {
+			dev_dbg(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
 			"ti,irq-gpio2", np->full_name, p_tas2562->mn_irq_gpio2);
-	} else {
-		dev_dbg(p_tas2562->dev, "ti,irq-gpio2=%d",
-			p_tas2562->mn_irq_gpio2);
+		} else {
+			dev_dbg(p_tas2562->dev, "ti,irq-gpio2=%d",
+				p_tas2562->mn_irq_gpio2);
+		}
 	}
 
 	return ret;
@@ -978,8 +1008,11 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 	p_tas2562->update_bits = tas2562_dev_update_bits;
 	p_tas2562->hw_reset = tas2562_hw_reset;
 	p_tas2562->enable_irq = tas2562_enable_irq;
+#ifdef CODEC_PM
 	p_tas2562->runtime_suspend = tas2562_runtime_suspend;
 	p_tas2562->runtime_resume = tas2562_runtime_resume;
+	p_tas2562->mn_power_state = TAS2562_POWER_SHUTDOWN;
+#endif
 	p_tas2562->mn_power_state = TAS2562_POWER_SHUTDOWN;
 	p_tas2562->spk_l_control = 1;
 
@@ -1117,6 +1150,10 @@ static const struct of_device_id tas2562_of_match[] = {
 MODULE_DEVICE_TABLE(of, tas2562_of_match);
 #endif
 
+static const struct dev_pm_ops tas2562_pm_ops = {
+	.suspend = tas2562_pm_suspend,
+	.resume = tas2562_pm_resume
+};
 
 static struct i2c_driver tas2562_i2c_driver = {
 	.driver = {
@@ -1125,6 +1162,7 @@ static struct i2c_driver tas2562_i2c_driver = {
 #if defined(CONFIG_OF)
 		.of_match_table = of_match_ptr(tas2562_of_match),
 #endif
+        .pm = &tas2562_pm_ops,
 	},
 	.probe      = tas2562_i2c_probe,
 	.remove     = tas2562_i2c_remove,
