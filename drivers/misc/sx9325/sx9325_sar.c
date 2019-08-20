@@ -30,6 +30,7 @@
 #include <linux/notifier.h>
 #include <linux/usb.h>
 #include <linux/power_supply.h>
+#include <linux/version.h>
 
 /* main struct, interrupt,init,pointers */
 #include <linux/input/sx9325_sar.h>
@@ -44,13 +45,13 @@
 #define LOG_TAG "SX9325 "
 
 #if SX9325_DEBUG
-#define LOG_INFO(fmt, args...)    pr_info(LOG_TAG fmt, ##args)
+#define LOG_INFO(fmt, args...)    pr_info(LOG_TAG "[INFO]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 #else
 #define LOG_INFO(fmt, args...)
 #endif
 
-#define LOG_DBG(fmt, args...)	pr_debug(LOG_TAG fmt, ##args)
-#define LOG_ERR(fmt, args...)	pr_err(LOG_TAG fmt, ##args)
+#define LOG_DBG(fmt, args...)	pr_info(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
+#define LOG_ERR(fmt, args...)	pr_err(LOG_TAG "[ERR]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 /* lenovo-sw wunan3 IKSWP-12537	New log structure for SAR sensor begin */
 static int sx9325_debug_enable;
 module_param_named(
@@ -206,11 +207,12 @@ static int manual_offset_calibration(psx93XX_t this)
  * brief sysfs show function for manual calibration which currently just
  * returns register value.
  */
-static ssize_t manual_offset_calibration_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t manual_offset_calibration_show(struct class *class,
+		struct class_attribute *attr,
+		char *buf)
 {
 	u8 reg_value = 0;
-	psx93XX_t this = dev_get_drvdata(dev);
+	psx93XX_t this = sx9325_sar_ptr;
 
 	LOG_INFO("Reading IRQSTAT_REG\n");
 	read_register(this, SX932x_IRQSTAT_REG, &reg_value);
@@ -218,11 +220,11 @@ static ssize_t manual_offset_calibration_show(struct device *dev,
 }
 
 /* brief sysfs store function for manual calibration */
-static ssize_t manual_offset_calibration_store(struct device *dev,
-		struct device_attribute *attr,
+static ssize_t manual_offset_calibration_store(struct class *class,
+		struct class_attribute *attr,
 		const char *buf, size_t count)
 {
-	psx93XX_t this = dev_get_drvdata(dev);
+	psx93XX_t this = sx9325_sar_ptr;
 	unsigned long val;
 
 	if (kstrtoul(buf, 0, &val))
@@ -233,17 +235,6 @@ static ssize_t manual_offset_calibration_store(struct device *dev,
 	}
 	return count;
 }
-
-static DEVICE_ATTR(calibrate, 0644, manual_offset_calibration_show,
-		manual_offset_calibration_store);
-static struct attribute *sx9325_attributes[] = {
-	&dev_attr_calibrate.attr,
-	NULL,
-};
-static struct attribute_group sx9325_attr_group = {
-	.attrs = sx9325_attributes,
-};
-
 /**
  * fn static int read_regStat(psx93XX_t this)
  * brief Shortcut to read what caused interrupt.
@@ -686,7 +677,6 @@ static void sx9325_platform_data_of_init(struct i2c_client *client,
 
 	pplatData->pbuttonInformation = &smtcButtonInformation;
 }
-
 static ssize_t capsense_reset_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
@@ -720,8 +710,6 @@ static ssize_t capsense_reset_store(struct class *class,
 
 	return count;
 }
-
-static CLASS_ATTR(reset, 0660, capsense_reset_show, capsense_reset_store);
 
 static ssize_t capsense_enable_show(struct class *class,
 		struct class_attribute *attr,
@@ -814,7 +802,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 }
 #endif
 
-static CLASS_ATTR(enable, 0660, capsense_enable_show, capsense_enable_store);
 
 static ssize_t reg_dump_show(struct class *class,
 		struct class_attribute *attr,
@@ -934,7 +921,6 @@ static ssize_t reg_dump_store(struct class *class,
 	return count;
 }
 
-static CLASS_ATTR(reg, 0660, reg_dump_show, reg_dump_store);
 
 static void ps_notify_callback_work(struct work_struct *work)
 {
@@ -992,7 +978,11 @@ static int ps_notify_callback(struct notifier_block *self,
 	bool present;
 	int retval;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
+	if (event == PSY_EVENT_PROP_CHANGED
+#else
 	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
+#endif
 			&& psy && psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "usb", sizeof("usb"))) {
 		LOG_INFO("ps notification: event = %lu\n", event);
@@ -1014,10 +1004,44 @@ static int ps_notify_callback(struct notifier_block *self,
 
 	return 0;
 }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+static struct class_attribute class_attr_reset =
+	__ATTR(reset, 0660, capsense_reset_show, capsense_reset_store);
 
+static struct class_attribute class_attr_enable =
+	__ATTR(enable, 0660, capsense_enable_show, capsense_enable_store);
+
+static struct class_attribute class_attr_reg =
+	__ATTR(reg, 0660, reg_dump_show, reg_dump_store);
+static struct class_attribute class_attr_calibrate =
+	__ATTR(calibrate, 0660, manual_offset_calibration_show,
+	manual_offset_calibration_store);
+
+static struct attribute *capsense_class_attrs[] = {
+	&class_attr_reset.attr,
+	&class_attr_enable.attr,
+	&class_attr_reg.attr,
+	&class_attr_calibrate.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(capsense_class);
+#else
+static struct class_attribute capsense_class_attributes[] = {
+	__ATTR(reset, 0660, capsense_reset_show, capsense_reset_store),
+	__ATTR(enable, 0660, capsense_enable_show, capsense_enable_store),
+	__ATTR(reg, 0660, reg_dump_show, reg_dump_store),
+	__ATTR(calibrate, 0660, manual_offset_calibration_show,manual_offset_calibration_store),
+	__ATTR_NULL,
+};
+#endif
 static struct class capsense_class = {
 	.name			= "capsense",
 	.owner			= THIS_MODULE,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	.class_groups           = capsense_class_groups,
+#else
+	.class_attrs		= capsense_class_attributes,
+#endif
 };
 
 /**
@@ -1100,11 +1124,6 @@ static int sx9325_probe(struct i2c_client *client,
 				pDevice);
 		sx9325_sar_ptr = this;
 		if (pDevice) {
-			/* for accessing items in user data (e.g. calibrate) */
-			ret = sysfs_create_group(&client->dev.kobj,
-						 &sx9325_attr_group);
-
-
 			/* Check if we hava a platform
 			 * initialization function to call*/
 			if (pplatData->init_platform_hw)
@@ -1159,24 +1178,6 @@ static int sx9325_probe(struct i2c_client *client,
 			LOG_ERR("Create fsys class failed (%d)\n", ret);
 			return ret;
 		}
-
-		ret = class_create_file(&capsense_class, &class_attr_reset);
-		if (ret < 0) {
-			LOG_ERR("Create reset file failed (%d)\n", ret);
-			return ret;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_enable);
-		if (ret < 0) {
-			LOG_ERR("Create enable file failed (%d)\n", ret);
-			return ret;
-		}
-
-		ret = class_create_file(&capsense_class, &class_attr_reg);
-		if (ret < 0) {
-			LOG_ERR("Create reg file failed (%d)\n", ret);
-			return ret;
-		}
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable =
 							capsensor_set_enable;
@@ -1195,7 +1196,7 @@ static int sx9325_probe(struct i2c_client *client,
 			LOG_ERR("create bottom cap sensor_class file \
 				 failed (%d)\n", ret);
 #endif
-#if 0
+#if 1
 		pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
 		if (IS_ERR(pplatData->cap_vdd)) {
 			if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
@@ -1281,7 +1282,7 @@ err_svdd_error:
 	regulator_disable(pplatData->cap_vdd);
 	regulator_put(pplatData->cap_vdd);
 #endif
-#if 0
+#if 1
 err_vdd_defer:
 	LOG_ERR("%s input free device.\n", __func__);
 	input_free_device(input_top);
@@ -1319,17 +1320,18 @@ static int sx9325_remove(struct i2c_client *client)
 
 		if (gpio_is_valid(pplatData ->irq_gpio))
 			gpio_free(pplatData ->irq_gpio);
+#if 0
 		if (this->board->cap_svdd_en) {
 			regulator_disable(this->board->cap_svdd);
 			regulator_put(this->board->cap_svdd);
 		}
-#if 0
+#endif
+#if 1
 		if (this->board->cap_vdd_en) {
 			regulator_disable(this->board->cap_vdd);
 			regulator_put(this->board->cap_vdd);
 		}
 #endif
-		sysfs_remove_group(&client->dev.kobj, &sx9325_attr_group);
 		class_unregister(&capsense_class);
 		if (pplatData && pplatData->exit_platform_hw)
 			pplatData->exit_platform_hw();
@@ -1362,11 +1364,11 @@ static int sx9325_resume(struct device *dev)
 #endif
 
 #ifdef CONFIG_OF
-static const struct of_device_id synaptics_rmi4_match_tbl[] = {
+static const struct of_device_id sx9325_match_table[] = {
 	{ .compatible = "semtech," DRIVER_NAME },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, synaptics_rmi4_match_tbl);
+//MODULE_DEVICE_TABLE(of, synaptics_rmi4_match_tbl);
 #endif
 
 #if defined(USE_KERNEL_SUSPEND)
@@ -1386,6 +1388,7 @@ static struct i2c_driver sx9325_driver = {
 	.driver = {
 		.owner  = THIS_MODULE,
 		.name   = DRIVER_NAME,
+		.of_match_table	= sx9325_match_table,
 #if defined(USE_KERNEL_SUSPEND)
 		.pm     = &sx9325_pm_ops,
 #endif
