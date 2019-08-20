@@ -630,6 +630,20 @@ static int fts_read_touchdata(struct fts_ts_data *data)
 }
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
+static void fts_palm_report(bool active) {
+    if (active) {
+        input_report_abs(fts_data->palm_sensor_pdata->input_sensor_dev,
+                         ABS_DISTANCE, 1);
+        input_sync(fts_data->palm_sensor_pdata->input_sensor_dev);
+        FTS_INFO("%s: palm report 1\n", __func__);
+    } else {
+        input_report_abs(fts_data->palm_sensor_pdata->input_sensor_dev,
+                         ABS_DISTANCE, 0);
+        input_sync(fts_data->palm_sensor_pdata->input_sensor_dev);
+        FTS_INFO("%s: palm report 0\n", __func__);
+    }
+}
+
 static int fts_palm_detect(u8 reg_data) {
     int fd_val = reg_data & 0x03;
 
@@ -669,15 +683,12 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
         pd_state = fts_palm_detect(buf[1]);
         if (pd_state > 0) {
             if (pd_state == 1) {
-                input_report_abs(data->palm_sensor_pdata->input_sensor_dev,
-                                 ABS_DISTANCE, 1);
-
-                input_sync(data->palm_sensor_pdata->input_sensor_dev);
+                del_timer(&fts_data->palm_release_fimer);
+                fts_palm_report(true);
                 return -1;
 	    } else if (pd_state == 2) {
-                input_report_abs(data->palm_sensor_pdata->input_sensor_dev,
-                             ABS_DISTANCE, 0);
-                input_sync(data->palm_sensor_pdata->input_sensor_dev);
+                mod_timer(&fts_data->palm_release_fimer,
+                          jiffies + msecs_to_jiffies(fts_data->palm_release_delay_ms));
                 return -1;
             }
         }
@@ -932,6 +943,11 @@ static int fts_report_buffer_init(struct fts_ts_data *ts_data)
 
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
+static void fts_palm_sensor_release_timer_handler(unsigned long data)
+{
+    fts_palm_report(false);
+}
+
 static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
     unsigned int enable)
 {
@@ -941,6 +957,10 @@ static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
         fts_write_reg(0xB0, 0x01);
     } else if (enable == 0) {
         fts_data->palm_detection_enabled = false;
+        if (timer_pending(&fts_data->palm_release_fimer)) {
+            fts_palm_report(false);
+            del_timer(&fts_data->palm_release_fimer);
+        }
         fts_write_reg(0xB0, 0x00);
     } else {
         FTS_INFO("unknown enable symbol\n");
@@ -990,6 +1010,10 @@ static int fts_palm_sensor_init(struct fts_ts_data *data)
                                     &sensor_pdata->ps_cdev);
     if (err)
         goto unregister_sensor_input_device;
+
+    data->palm_release_fimer.function = fts_palm_sensor_release_timer_handler;
+    init_timer(&data->palm_release_fimer);
+    data->palm_release_delay_ms = 850;
 
     return 0;
 

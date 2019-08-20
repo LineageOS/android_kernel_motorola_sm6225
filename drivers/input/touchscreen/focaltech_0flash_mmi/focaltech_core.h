@@ -236,6 +236,8 @@ struct fts_ts_data {
 #ifdef FOCALTECH_PALM_SENSOR_EN
     bool palm_detection_enabled;
     struct focaltech_sensor_platform_data *palm_sensor_pdata;
+    struct timer_list palm_release_fimer;
+    unsigned int palm_release_delay_ms;
 #endif
 };
 
