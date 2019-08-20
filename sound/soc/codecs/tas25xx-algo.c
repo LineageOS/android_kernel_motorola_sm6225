@@ -1,3 +1,4 @@
+#ifdef CONFIG_TAS25XX_ALGO
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
@@ -820,3 +821,4 @@ EXPORT_SYMBOL(tas_smartamp_remove_algo_controls);
 MODULE_AUTHOR("Texas Instrumnets Inc.");
 MODULE_DESCRIPTION("TAS25xx ALSA SOC Smart Amplifier algo driver");
 MODULE_LICENSE("GPL v2");
+#endif /* CONFIG_TAS25XX_ALGO */
