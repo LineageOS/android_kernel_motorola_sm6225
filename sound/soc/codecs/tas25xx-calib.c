@@ -19,6 +19,7 @@
 ** =============================================================================
 */
 
+#ifdef CONFIG_TAS25XX_CALIB
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
@@ -189,3 +190,4 @@ void tas_calib_exit(void)
 MODULE_AUTHOR("Texas Instruments Inc.");
 MODULE_DESCRIPTION("tas2560 Misc driver");
 MODULE_LICENSE("GPL v2");
+#endif /* CONFIG_TAS25XX_CALIB */
