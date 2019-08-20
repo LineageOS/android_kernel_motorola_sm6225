@@ -44,6 +44,11 @@
 
 #include "tas2562.h"
 
+#ifdef CONFIG_TAS25XX_ALGO
+#include <dsp/tas_smart_amp_v2.h>
+#include "tas25xx-calib.h"
+#endif /*CONFIG_TAS25XX_ALGO*/
+
 #define TAS2562_MDELAY 0xFFFFFFFE
 #define TAS2562_MSLEEP 0xFFFFFFFD
 #define TAS2562_IVSENSER_ENABLE  1
@@ -93,7 +98,7 @@ static unsigned int tas2562_codec_read(struct snd_soc_codec *codec,
 {
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_err(p_tas2562->dev, "Should not get here\n");
+	dev_dbg(p_tas2562->dev, "Should not get here\n");
 
 	return 0;
 }
@@ -128,11 +133,17 @@ static int tas2562iv_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	struct tas2562_priv *p_tas2562 = NULL;
 	int iv_enable = 0, n_result = 0;
 
 	if (codec == NULL) {
 		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
 		return 0;
 	}
 
@@ -149,8 +160,19 @@ static int tas2562iv_get(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	struct tas2562_priv *p_tas2562 = NULL;
 	int ret, value;
+
+	if (codec == NULL) {
+		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
+		return 0;
+	}
 
 	ret = p_tas2562->read(p_tas2562, channel_left,
 			TAS2562_POWERCONTROL, &value);
@@ -183,7 +205,7 @@ static int tas2562_codec_write(struct snd_soc_codec *codec, unsigned int reg,
 {
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_err(p_tas2562->dev, "Should not get here\n");
+	dev_dbg(p_tas2562->dev, "Should not get here\n");
 
 	return 0;
 }
@@ -245,6 +267,7 @@ static int tas2562_i2c_load_data(struct tas2562_priv *p_tas2562,
 	return n_result;
 }
 
+#ifdef CODEC_PM
 static int tas2562_codec_suspend(struct snd_soc_codec *codec)
 {
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
@@ -272,6 +295,7 @@ static int tas2562_codec_resume(struct snd_soc_codec *codec)
 	mutex_unlock(&p_tas2562->codec_lock);
 	return ret;
 }
+#endif
 
 static int tas2562_set_power_state(struct tas2562_priv *p_tas2562,
 			enum channel chn, int state)
@@ -376,16 +400,12 @@ static const struct snd_soc_dapm_widget tas2562_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("ASI1", "ASI1 Playback", 0, SND_SOC_NOPM, 0, 0),
 	SND_SOC_DAPM_DAC_E("DAC", NULL, SND_SOC_NOPM, 0, 0, tas2562_dac_event,
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
-	SND_SOC_DAPM_OUTPUT("OUT"),
-	SND_SOC_DAPM_SIGGEN("VMON"),
-	SND_SOC_DAPM_SIGGEN("IMON")
+	SND_SOC_DAPM_OUTPUT("OUT")
 };
 
 static const struct snd_soc_dapm_route tas2562_audio_map[] = {
 	{"DAC", NULL, "ASI1"},
-	{"OUT", NULL, "DAC"},
-	{"Voltage Sense", NULL, "VMON"},
-	{"Current Sense", NULL, "IMON"},
+	{"OUT", NULL, "DAC"}
 };
 
 static int tas2562_get_left_speaker_switch(struct snd_kcontrol *pKcontrol,
@@ -512,6 +532,7 @@ static int tas2562_set_slot(struct tas2562_priv *p_tas2562, int slot_width)
 {
 	int ret = 0;
 
+	dev_info(p_tas2562->dev, "%s: slot_width = %d\n", __func__, slot_width);
 	switch (slot_width) {
 	case 16:
 	ret = p_tas2562->update_bits(p_tas2562, channel_both,
@@ -955,10 +976,17 @@ static int tas2562_load_init(struct tas2562_priv *p_tas2562)
 		TAS2562_MISCCONFIGURATIONREG0, 0xcf);
 	if (ret < 0)
 		return ret;
-	ret = p_tas2562->write(p_tas2562, channel_both,
-		TAS2562_TDMConfigurationReg4, 0x01);
-	if (ret < 0)
-		return ret;
+	if(p_tas2562->mn_channels == 2) {
+		ret = p_tas2562->write(p_tas2562, channel_both,
+			TAS2562_TDMConfigurationReg4, 0x11);
+		if (ret < 0)
+			return ret;
+	} else {
+		ret = p_tas2562->write(p_tas2562, channel_both,
+			TAS2562_TDMConfigurationReg4, 0x01);
+		if (ret < 0)
+			return ret;
+	}
 	ret = p_tas2562->write(p_tas2562, channel_both,
 		TAS2562_CLOCKCONFIGURATION, 0x0c);
 	if (ret < 0)
@@ -984,6 +1012,10 @@ static int tas2562_codec_probe(struct snd_soc_codec *codec)
 
 	tas2562_load_init(p_tas2562);
 	tas2562_iv_enable(p_tas2562, 1);
+#ifdef CONFIG_TAS25XX_ALGO
+	tas_smartamp_add_algo_controls(codec);
+#endif //CONFIG_TAS25XX_ALGO
+
 	dev_err(p_tas2562->dev, "%s\n", __func__);
 
 	return 0;
@@ -991,6 +1023,10 @@ static int tas2562_codec_probe(struct snd_soc_codec *codec)
 
 static int tas2562_codec_remove(struct snd_soc_codec *codec)
 {
+#ifdef CONFIG_TAS25XX_ALGO
+	tas_smartamp_remove_algo_controls(codec);
+#endif //CONFIG_TAS25XX_ALGO
+
 	return 0;
 }
 
@@ -1023,8 +1059,10 @@ static struct snd_soc_codec_driver soc_codec_driver_tas2562 = {
 	.remove			= tas2562_codec_remove,
 	.read			= tas2562_codec_read,
 	.write			= tas2562_codec_write,
+#ifdef CODEC_PM
 	.suspend		= tas2562_codec_suspend,
 	.resume			= tas2562_codec_resume,
+#endif
 	.component_driver = {
 	.controls		= tas2562_snd_controls,
 	.num_controls		= ARRAY_SIZE(tas2562_snd_controls),
