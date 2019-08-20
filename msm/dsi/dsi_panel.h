@@ -178,6 +178,11 @@ struct drm_panel_esd_config {
 	u32 groups;
 };
 
+enum panel_idx {
+        MAIN_IDX = 0,
+        PANEL_IDX_MAX,
+};
+
 enum hbm_state {
 	HBM_OFF_STATE = 0,
 	HBM_ON_STATE,
