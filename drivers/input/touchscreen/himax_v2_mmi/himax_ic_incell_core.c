@@ -3313,6 +3313,26 @@ int himax_mcu_0f_overlay(int ovl_type, int mode)
 
 #endif
 
+
+#ifdef HIMAX_PALM_SENSOR_EN
+int himax_mcu_palm_detection(int mode)
+{
+	uint8_t data_byte[DATA_LEN_4];
+	uint8_t tmp_addr[4];
+	I("%s: set palm detection mode to %d", __func__, mode);
+	if (mode)
+		himax_in_parse_assign_cmd(palm_detection_register_enable, data_byte, 4);
+	else
+		himax_in_parse_assign_cmd(palm_detection_register_disable, data_byte, 4);
+
+	g_core_fp.fp_register_write(pfw_op->addr_palm_detection_enable, DATA_LEN_4, data_byte, 0);
+	g_core_fp.fp_register_read(pfw_op->addr_palm_detection_enable, DATA_LEN_4, tmp_addr, 0);
+	I("%s: reg=0x%02X%02X%02X%02X.", __func__, tmp_addr[0],tmp_addr[1],tmp_addr[2],tmp_addr[3]);
+
+	return 0;
+}
+#endif
+
 #ifdef CORE_INIT
 /* init start */
 static void himax_mcu_fp_init(void)
@@ -3443,6 +3463,9 @@ static void himax_mcu_fp_init(void)
 #endif
 #ifdef HX_CODE_OVERLAY
 	g_core_fp.fp_0f_overlay = himax_mcu_0f_overlay;
+#endif
+#ifdef HIMAX_PALM_SENSOR_EN
+	g_core_fp.fp_palm_detection_function = himax_mcu_palm_detection;
 #endif
 #endif
 }
@@ -3614,6 +3637,10 @@ EXPORT_SYMBOL(himax_in_parse_assign_cmd);
 void himax_mcu_in_cmd_init(void)
 {
 	I("%s: Entering!\n", __func__);
+
+#ifdef HIMAX_PALM_SENSOR_EN
+	himax_in_parse_assign_cmd(palm_detection_register, pfw_op->addr_palm_detection_enable, sizeof(pfw_op->addr_palm_detection_enable));
+#endif
 #ifdef CORE_IC
 	himax_in_parse_assign_cmd(ic_adr_ahb_addr_byte_0, pic_op->addr_ahb_addr_byte_0, sizeof(pic_op->addr_ahb_addr_byte_0));
 	himax_in_parse_assign_cmd(ic_adr_ahb_rdata_byte_0, pic_op->addr_ahb_rdata_byte_0, sizeof(pic_op->addr_ahb_rdata_byte_0));

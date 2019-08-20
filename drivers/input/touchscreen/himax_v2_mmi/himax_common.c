@@ -42,6 +42,27 @@
 uint8_t *wake_event_buffer;
 #endif
 
+#ifdef HIMAX_PALM_SENSOR_EN
+static struct sensors_classdev __maybe_unused palm_sensors_touch_cdev = {
+	.name = "palm-gesture",
+	.vendor = "Himax",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_TOUCH_PALM,
+	.max_range = "5.0",
+	.resolution = "5.0",
+	.sensor_power = "1",
+	.min_delay = 0,
+	.max_delay = 0,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 200,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
+static void himax_palm_detect_func(struct himax_ts_data *ts, bool detected);
+#endif
+
 #define SUPPORT_FINGER_DATA_CHECKSUM 0x0F
 #define TS_WAKE_LOCK_TIMEOUT		(5000)
 #define FRAME_COUNT 5
@@ -279,11 +300,24 @@ static int himax_palm_detect(uint8_t *buf)
 	x = buf[base] << 8 | buf[base + 1];
 	y = (buf[base + 2] << 8 | buf[base + 3]);
 	w = buf[(ts->nFinger_support * 4) + loop_i];
+#ifndef HIMAX_PALM_SENSOR_EN
 	I(" %s HX_PALM_REPORT_loopi=%d,base=%x,X=%x,Y=%x,W=%x\n", __func__, loop_i, base, x, y, w);
 	if ((!atomic_read(&ts->suspend_mode)) && (x == 0xFA5A) && (y == 0xFA5A) && (w == 0x00))
 		return PALM_REPORT;
 	else
 		return NOT_REPORT;
+#else
+	if ((x == 0xFA5A) && (y == 0xFA5A)) {
+		I("%s: HX_PALM_REPORT loop_i=%d base=%x X=%x, Y=%x, W=%x\n",
+			__func__, loop_i, base, x, y, w);
+		return PALM_REPORT;
+	} else if ((x == 0xFC5C) && (y == 0xFC5C)) {
+		I("%s: HX_PALM_REPORT loop_i=%d base=%x X=%x, Y=%x, W=%x\n",
+			__func__, loop_i, base, x, y, w);
+		return PALM_LEAVE_REPORT;
+	} else
+		return NOT_REPORT;
+#endif
 }
 #endif
 
@@ -2611,6 +2645,20 @@ static void himax_finger_report(struct himax_ts_data *ts)
 		I("%s:end\n", __func__);
 }
 
+
+#ifdef HIMAX_PALM_SENSOR_EN
+static void himax_palm_detect_func(struct himax_ts_data *ts, bool detected) {
+	if (detected) {
+		I("palm detected\n");
+		input_report_abs(ts->palm_sensor_pdata->input_sensor_dev, ABS_DISTANCE, 1);
+	} else {
+		I("palm leave\n");
+		input_report_abs(ts->palm_sensor_pdata->input_sensor_dev, ABS_DISTANCE, 0);
+	}
+	input_sync(ts->palm_sensor_pdata->input_sensor_dev);
+}
+#endif
+
 static void himax_finger_leave(struct himax_ts_data *ts)
 {
 #ifndef	HX_PROTOCOL_A
@@ -2619,6 +2667,8 @@ static void himax_finger_leave(struct himax_ts_data *ts)
 
 	if (g_ts_dbg != 0)
 		I("%s: start!\n", __func__);
+
+#ifndef HIMAX_PALM_SENSOR_EN
 #if defined(HX_PALM_REPORT)
 	if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_REPORT) {
 		I(" %s HX_PALM_REPORT KEY power event press\n", __func__);
@@ -2631,6 +2681,7 @@ static void himax_finger_leave(struct himax_ts_data *ts)
 		input_sync(ts->input_dev);
 		return;
 	}
+#endif
 #endif
 
 	hx_touch_data->finger_on = 0;
@@ -2689,6 +2740,19 @@ static void himax_report_points(struct himax_ts_data *ts)
 	if (g_ts_dbg != 0)
 		I("%s: start!\n", __func__);
 
+#if defined(HX_PALM_REPORT) && defined(HIMAX_PALM_SENSOR_EN)
+	if (ts->palm_detection_enabled) {
+		if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_REPORT) {
+			I(" %s HX_PALM_REPORT\n", __func__);
+			himax_palm_detect_func(ts, true);
+			return;
+		} else if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_LEAVE_REPORT) {
+			I(" %s HX_PALM_LEAVE_REPORT\n", __func__);
+			himax_palm_detect_func(ts, false);
+			return;
+		}
+	}
+#endif
 	if (ts->hx_point_num != 0)
 		himax_finger_report(ts);
 	else
@@ -2756,6 +2820,91 @@ static int himax_ts_operation(struct himax_ts_data *ts, int ts_path, int ts_stat
 END_FUNCTION:
 	return ts_status;
 }
+
+#ifdef HIMAX_PALM_SENSOR_EN
+static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	I("Gesture set enable %d!", enable);
+	if (enable == 1) {
+		g_core_fp.fp_palm_detection_function(1);
+		private_ts->palm_detection_enabled = true;
+	} else if (enable == 0) {
+		g_core_fp.fp_palm_detection_function(0);
+		private_ts->palm_detection_enabled = false;
+	} else
+		E("unknown enable symbol\n");
+
+	return 0;
+}
+
+static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
+{
+	struct himax_sensor_platform_data *sensor_pdata;
+	struct input_dev *sensor_input_dev;
+	int err;
+
+	sensor_input_dev = input_allocate_device();
+	if (!sensor_input_dev) {
+		E("Failed to allocate device");
+		goto exit;
+	}
+
+	sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+			sizeof(struct himax_sensor_platform_data),
+			GFP_KERNEL);
+	if (!sensor_pdata) {
+		E("Failed to allocate memory");
+		goto free_sensor_pdata;
+	}
+	data->palm_sensor_pdata = sensor_pdata;
+
+	__set_bit(EV_ABS, sensor_input_dev->evbit);
+	__set_bit(EV_SYN, sensor_input_dev->evbit);
+	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+			0, 5, 0, 0);
+	sensor_input_dev->name = "palm_detect";
+	data->palm_sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+	err = input_register_device(sensor_input_dev);
+	if (err) {
+		E("Unable to register device, err=%d", err);
+		goto free_sensor_input_dev;
+	}
+
+	sensor_pdata->ps_cdev = palm_sensors_touch_cdev;
+	sensor_pdata->ps_cdev.sensors_enable = himax_palm_detect_sensor_set_enable;
+	sensor_pdata->data = data;
+
+	err = sensors_classdev_register(&sensor_input_dev->dev,
+				&sensor_pdata->ps_cdev);
+	if (err)
+		goto unregister_sensor_input_device;
+
+	return 0;
+
+unregister_sensor_input_device:
+	input_unregister_device(data->palm_sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+	input_free_device(data->palm_sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+	data->palm_sensor_pdata= NULL;
+exit:
+	return 1;
+}
+
+int himax_palm_detect_sensor_remove(struct himax_ts_data *data)
+{
+	sensors_classdev_unregister(&data->palm_sensor_pdata->ps_cdev);
+	input_unregister_device(data->palm_sensor_pdata->input_sensor_dev);
+	devm_kfree(&data->palm_sensor_pdata->input_sensor_dev->dev,
+		data->palm_sensor_pdata);
+	data->palm_sensor_pdata = NULL;
+	data->palm_detection_enabled = false;
+	return 0;
+}
+#endif
 
 void himax_ts_work(struct himax_ts_data *ts)
 {
@@ -3334,6 +3483,14 @@ FW_force_upgrade:
 		cable_detect_register_notifier(&himax_cable_status_handler);
 
 #endif
+
+#ifdef HIMAX_PALM_SENSOR_EN
+	if (himax_palm_detect_sensor_init(ts)) {
+		E(" %s: himax_palm_detect_sensor_init failed!\n", __func__);
+		goto err_create_palm_sensor_failed;
+	}
+#endif
+
 	himax_ts_register_interrupt();
 
 #ifdef CONFIG_TOUCHSCREEN_HIMAX_DEBUG
@@ -3350,6 +3507,9 @@ FW_force_upgrade:
 	g_hx_chip_inited = true;
 	return 0;
 
+#ifdef HIMAX_PALM_SENSOR_EN
+err_create_palm_sensor_failed:
+#endif
 err_creat_proc_file_failed:
 	himax_report_data_deinit();
 err_report_data_init_failed:
@@ -3477,6 +3637,15 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 		I("%s: enter\n", __func__);
 	}
 
+#ifdef HIMAX_PALM_SENSOR_EN
+	if (ts->palm_detection_enabled) {
+		himax_report_all_leave_event(ts);
+		atomic_set(&ts->suspend_mode, 1);
+		I("[himax] %s: palm detect function enable, reject suspend\n", __func__);
+		goto END;
+	}
+#endif
+
 	if (debug_data != NULL && debug_data->flash_dump_going == true) {
 		I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
 		goto END;
@@ -3554,6 +3723,12 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 #endif
 
 	atomic_set(&ts->suspend_mode, 0);
+#ifdef HIMAX_PALM_SENSOR_EN
+	if (ts->palm_detection_enabled) {
+		I("[himax] %s: palm detect function enable, skip resume\n", __func__);
+		goto END;
+	}
+#endif
 
 	if (ts->pdata)
 		if (ts->pdata->powerOff3V3 && ts->pdata->power)

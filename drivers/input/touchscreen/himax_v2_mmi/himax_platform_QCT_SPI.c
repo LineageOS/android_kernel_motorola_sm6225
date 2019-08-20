@@ -898,6 +898,12 @@ int drm_notifier_callback(struct notifier_block *self,
 			if (!ts->initialized)
 				return -ECANCELED;
 			himax_common_suspend(ts->dev);
+#ifdef HIMAX_PALM_SENSOR_EN
+			if (ts->palm_detection_enabled) {
+				I("%s: palm detection is enabled", __func__);
+				return 1;
+			}
+#endif
 			break;
 		}
 	}

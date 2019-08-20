@@ -489,6 +489,12 @@ struct zf_info {
 };
 #endif
 
+#ifdef HIMAX_PALM_SENSOR_EN
+	#define	palm_detection_register			0x10007FF4
+	#define	palm_detection_register_enable		0xA55AA55A
+	#define	palm_detection_register_disable		0x00000000
+#endif
+
 struct ic_operation {
 	uint8_t  addr_ahb_addr_byte_0[1];
 	uint8_t  addr_ahb_rdata_byte_0[1];
@@ -520,6 +526,9 @@ struct fw_operation {
 	uint8_t  addr_smwp_enable[4];
 #ifdef HX_EDGE_LIMIT
 	uint8_t  addr_edge_limit_enable[4];
+#endif
+#ifdef HIMAX_PALM_SENSOR_EN
+	uint8_t  addr_palm_detection_enable[4];
 #endif
 	uint8_t  addr_program_reload_from[4];
 	uint8_t  addr_program_reload_to[4];
@@ -944,6 +953,9 @@ struct himax_core_fp {
 #endif
 #ifdef HX_CODE_OVERLAY
 	int (*fp_0f_overlay)(int ovl_type, int mode);
+#endif
+#ifdef HIMAX_PALM_SENSOR_EN
+	int (*fp_palm_detection_function)(int mode);
 #endif
 #endif
 };

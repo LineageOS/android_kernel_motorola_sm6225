@@ -39,6 +39,10 @@
 #include <linux/proc_fs.h>
 #include "himax_platform.h"
 #include <linux/kallsyms.h>
+#ifdef HIMAX_PALM_SENSOR_EN
+#include <linux/sensors.h>
+#define SENSOR_TYPE_MOTO_TOUCH_PALM    (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 31)
+#endif
 
 #if defined(CONFIG_DRM)
 	#include <linux/msm_drm_notify.h>
@@ -61,6 +65,17 @@
 	#define HX_TP_PROC_2T2R
 	/*#define HX_TP_SELF_TEST_DRIVER*/ /*if enable, selftest works in driver*/
 #endif
+
+#ifdef HIMAX_PALM_SENSOR_EN
+struct himax_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	int sensor_opened;
+	char sensor_data; /* 0 near, 1 far */
+	struct himax_ts_data *data;
+};
+#endif
+
 /*===========Himax Option function=============*/
 #define HX_RST_PIN_FUNC
 #define HX_RESUME_SEND_CMD
@@ -72,7 +87,11 @@
 /*#define HX_SMART_WAKEUP*/
 /*#define HX_GESTURE_TRACK*/
 /*#define HX_HIGH_SENSE*/
+#ifdef HIMAX_PALM_SENSOR_EN
+#define HX_PALM_REPORT
+#else
 /*#define HX_PALM_REPORT*/
+#endif
 #define HX_USB_DETECT_GLOBAL
 /*#define HX_USB_DETECT_CALLBACK*/
 /*#define HX_PROTOCOL_A*/				/* for MTK special platform.If turning on,it will report to system by using specific format. */
@@ -167,6 +186,7 @@
 
 #if defined(HX_PALM_REPORT)
 #define PALM_REPORT 1
+#define PALM_LEAVE_REPORT 2
 #define NOT_REPORT -1
 #endif
 
@@ -448,6 +468,10 @@ struct himax_ts_data {
 	struct work_struct			guest_info_work;
 #endif
 
+#ifdef HIMAX_PALM_SENSOR_EN
+	bool palm_detection_enabled;
+	struct himax_sensor_platform_data *palm_sensor_pdata;
+#endif
 
 };
 
