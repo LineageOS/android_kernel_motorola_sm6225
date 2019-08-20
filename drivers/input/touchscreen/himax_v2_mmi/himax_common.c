@@ -2743,12 +2743,12 @@ static void himax_report_points(struct himax_ts_data *ts)
 #if defined(HX_PALM_REPORT) && defined(HIMAX_PALM_SENSOR_EN)
 	if (ts->palm_detection_enabled) {
 		if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_REPORT) {
-			I(" %s HX_PALM_REPORT\n", __func__);
+			del_timer(&ts->palm_release_fimer);
 			himax_palm_detect_func(ts, true);
 			return;
 		} else if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_LEAVE_REPORT) {
-			I(" %s HX_PALM_LEAVE_REPORT\n", __func__);
-			himax_palm_detect_func(ts, false);
+			mod_timer(&ts->palm_release_fimer,
+				jiffies + msecs_to_jiffies(ts->palm_release_delay_ms));
 			return;
 		}
 	}
@@ -2822,6 +2822,11 @@ END_FUNCTION:
 }
 
 #ifdef HIMAX_PALM_SENSOR_EN
+static void himax_palm_sensor_release_timer_handler(unsigned long data)
+{
+	himax_palm_detect_func(private_ts, false);
+}
+
 static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
@@ -2830,6 +2835,10 @@ static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_
 		g_core_fp.fp_palm_detection_function(1);
 		private_ts->palm_detection_enabled = true;
 	} else if (enable == 0) {
+		if (timer_pending(&private_ts->palm_release_fimer)) {
+			himax_palm_detect_func(private_ts, false);
+			del_timer(&private_ts->palm_release_fimer);
+		}
 		g_core_fp.fp_palm_detection_function(0);
 		private_ts->palm_detection_enabled = false;
 	} else
@@ -2880,6 +2889,10 @@ static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
 				&sensor_pdata->ps_cdev);
 	if (err)
 		goto unregister_sensor_input_device;
+
+	data->palm_release_fimer.function = himax_palm_sensor_release_timer_handler;
+	init_timer(&data->palm_release_fimer);
+	data->palm_release_delay_ms = 850;
 
 	return 0;
 
