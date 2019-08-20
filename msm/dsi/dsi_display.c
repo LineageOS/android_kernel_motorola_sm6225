@@ -7844,6 +7844,59 @@ int dsi_display_pre_commit(void *display,
 	return rc;
 }
 
+/* start of MMI_STOPSHIP section */
+struct dsi_enable_status {
+	struct dsi_display *display;
+	bool enable;
+};
+
+static struct dsi_enable_status enable_status[2];
+
+static int dsi_display_enable_status (struct dsi_display *display, bool enable)
+{
+	int ret = 0;
+
+	if (!strncmp("DSI-1", display->drm_conn->name, 5)) {
+		DSI_DEBUG("display->drm_conn->name=%s enable = %d MAIN_DISPLAY\n",
+			display->drm_conn->name, enable);
+		enable_status[0].display = display;
+		enable_status[0].enable = enable;
+	} else if (!strncmp("DSI-2", display->drm_conn->name, 5)) {
+                DSI_DEBUG("display->drm_conn->name=%s enable = %d CLI_DISPLAY\n",
+			display->drm_conn->name, enable);
+		enable_status[1].display = display;
+		enable_status[1].enable = enable;
+	} else {
+		DSI_ERR(" Invalid display->drm_conn->name = %s\n",
+					display->drm_conn->name);
+		ret =  -EINVAL;
+	}
+
+	return ret;
+}
+
+bool dsi_display_is_panel_enable (int panel_index)
+{
+	struct dsi_display *display;
+	bool enable = false;
+
+	if (panel_index > 1) {
+		pr_err("Invalid panel index =%d\n", panel_index);
+		return false;
+	}
+
+	display = enable_status[panel_index].display;
+	if (display) {
+		mutex_lock(&display->display_lock);
+		enable = enable_status[panel_index].enable;
+		mutex_unlock(&display->display_lock);
+	}
+
+	return enable;
+}
+EXPORT_SYMBOL(dsi_display_is_panel_enable);
+/* end of MMI_STOPSHIP section */
+
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
@@ -7898,6 +7951,8 @@ int dsi_display_enable(struct dsi_display *display)
 			       display->name, rc);
 			goto error;
 		}
+
+		dsi_display_enable_status(display, true);
 	}
 
 	/* Block sending pps command if modeset is due to fps difference */
@@ -8064,6 +8119,8 @@ int dsi_display_disable(struct dsi_display *display)
 	if (rc)
 		DSI_ERR("[%s] display wake up failed, rc=%d\n",
 		       display->name, rc);
+	else
+		dsi_display_enable_status(display, false);
 
 	if (display->config.panel_mode == DSI_OP_VIDEO_MODE) {
 		rc = dsi_display_vid_engine_disable(display);
