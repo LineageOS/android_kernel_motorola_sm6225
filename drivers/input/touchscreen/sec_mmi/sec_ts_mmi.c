@@ -11,8 +11,6 @@
  * GNU General Public License for more details.
 */
 
-#define DEBUG 511
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -278,6 +276,8 @@ static void sec_mmi_ps_work(struct work_struct *work)
 
 	if (cval != mode)
 		sec_ts_set_charger(ts, data->ps_is_present);
+	else
+		dev_dbg(DEV_TS, "%s: charger mode already %d\n", __func__, cval);
 }
 
 static int sec_mmi_ps_notify_callback(struct notifier_block *self,
@@ -315,7 +315,7 @@ static int sec_mmi_ps_notify_callback(struct notifier_block *self,
 static int sec_mmi_dt(struct sec_mmi_data *data)
 {
 	struct device *dev = &data->i2c_client->dev;
-	struct device_node *np = dev->of_node;
+	struct device_node *chosen, *np = dev->of_node;
 
 	if (!of_property_read_string(np, "sec,class-entry-name", &data->class_entry_name))
 		dev_info(DEV_MMI, "%s: class-entry-name property %s\n",
@@ -348,22 +348,79 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 		}
 	}
 
-	np = of_find_node_by_name(NULL, "chosen");
-	if (np) {
+	chosen = of_find_node_by_name(NULL, "chosen");
+	if (chosen) {
+		struct device_node *child;
 		const char *supplier;
 		char *s, *d;
+		int rc;
+		u64 panel_ver, panel_id;
 
-		of_property_read_string(np, "mmi,panel_name", (const char **)&supplier);
+		rc = of_property_read_string(chosen, "mmi,panel_name",
+					(const char **)&supplier);
+		if (rc) {
+			dev_err(DEV_MMI, "%s: cannot read mmi,panel_name %d\n",
+					__func__, rc);
+			goto done;
+		}
+		dev_dbg(DEV_MMI, "%s: mmi,panel_name %s\n", __func__, supplier);
+
 		/* skip dsi_ part */
 		s = (char *)supplier + 4;
 		d = data->panel_supplier;
 		while (*s != '_') *d++ = *s++;
-		dev_info(DEV_MMI, "%s: panel-supplier %s\n",
-				__func__, data->panel_supplier);
+
+		rc = of_property_read_u64(chosen, "mmi,panel_id", &panel_id);
+		if (rc) {
+			dev_err(DEV_MMI, "%s: cannot read mmi,panel_id %d\n", __func__, rc);
+			goto done;
+		}
+		rc = of_property_read_u64(chosen, "mmi,panel_ver", &panel_ver);
+		if (rc) {
+			dev_err(DEV_MMI, "%s: cannot read mmi,panel_ver %d\n", __func__, rc);
+			goto done;
+		}
+		of_node_put(chosen);
+		dev_dbg(DEV_MMI, "%s: [%s] id=%llx ver=%llx\n",
+					__func__, chosen->name, panel_id, panel_ver);
+
+		np = of_find_node_by_name(dev->of_node, "mmi,panel-mappings");
+		if (!np) {
+			dev_err(DEV_MMI, "%s: cannot read mmi,panel-mappings\n", __func__);
+			goto done;
+		}
+
+		for_each_child_of_node(np, child) {
+			u64 id, ver;
+
+			rc = of_property_read_u64(child, "panel-id", &id);
+			if (rc) {
+				dev_err(DEV_MMI, "%s: cannot read panel-id %d\n", __func__, rc);
+				goto done;
+			}
+			rc = of_property_read_u64(child, "panel-ver", &ver);
+			if (rc) {
+				dev_err(DEV_MMI, "%s: cannot read panel-ver %d\n", __func__, rc);
+				goto done;
+			}
+
+			dev_dbg(DEV_MMI, "%s: [%s] id=%llx ver=%llx\n",
+					__func__, child->name, id, ver);
+			of_node_put(child);
+
+			if (id == panel_id && ver == panel_ver) {
+				strlcpy(data->panel_supplier, child->name,
+						sizeof(data->panel_supplier));
+				break;
+			}
+		}
 
 		of_node_put(np);
+		dev_info(DEV_MMI, "%s: panel-supplier %s\n",
+				__func__, data->panel_supplier);
 	}
 
+done:
 	return 0;
 }
 
