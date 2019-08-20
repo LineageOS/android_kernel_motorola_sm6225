@@ -105,8 +105,11 @@ static struct panel_param_val_map hbm_map[HBM_STATE_NUM] = {
 	{HBM_ON_STATE, DSI_CMD_SET_HBM_ON, NULL},
 };
 
-static struct panel_param dsi_panel_param[PARAM_ID_NUM] = {
-	{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE, HBM_OFF_STATE, false},
+static struct panel_param dsi_panel_param[PANEL_IDX_MAX][PARAM_ID_NUM] = {
+	{
+		{"HBM", hbm_map, HBM_STATE_NUM, HBM_OFF_STATE,
+				HBM_OFF_STATE, false},
+	},
 };
 
 int dsi_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc, char *buf,
@@ -838,7 +841,7 @@ static int dsi_panel_pwm_register(struct dsi_panel *panel)
 	return 0;
 }
 
-static int dsi_panel_send_param_cmd (struct dsi_panel *panel,
+static int dsi_panel_send_param_cmd(struct dsi_panel *panel,
                                 struct msm_param_info *param_info)
 {
 	int rc = 0;
@@ -872,6 +875,12 @@ static int dsi_panel_send_param_cmd (struct dsi_panel *panel,
 			panel_param->value, param_info->value);
 		param_map = panel->param_cmds[param_info->param_idx].val_map;
 		param_map_state = &param_map[param_info->value];
+
+		if (!param_map_state->cmds || !param_map_state->cmds->cmds) {
+			DSI_ERR("Invalid cmds or cmds->cmds\n");
+			rc = -EINVAL;
+			goto end;
+		}
 
 		cmds = param_map_state->cmds->cmds;
 		if (param_map_state->cmds->state == DSI_CMD_SET_STATE_LP)
@@ -3537,7 +3546,7 @@ end:
 }
 
 static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
-					struct device_node *of_node)
+				struct device_node *of_node, u32 param_idx)
 {
 	int i, j, rc =0;
 	struct panel_param *param;
@@ -3548,9 +3557,15 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 	struct dsi_parser_utils *utils = &panel->utils;
 
 	for (i = 0; i < PARAM_ID_NUM; i++) {
-		param = &dsi_panel_param[i];
+		param = &dsi_panel_param[param_idx][i];
 
-		for (j = 0; j < param->val_max; j++) {
+		if (!param) {
+			pr_err("Invalid param\n");
+			goto err;
+		}
+
+		rc = -EINVAL;
+		for (j = 0; j < param->val_max && param->val_max > 0 ; j++) {
 			param_map = &param->val_map[j];
 			param_map->cmds = NULL;
 			cmds = kcalloc(param->val_max,
@@ -3576,15 +3591,17 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 			}
 		}
 
-		param->is_supported = true;
-		DSI_INFO("%s: feature enabled.\n", param->param_name);
+		if (!rc) {
+			param->is_supported = true;
+			DSI_INFO("%s: feature enabled.\n", param->param_name);
+		}
 	}
 
 	return rc;
 
 parse_err:
 	for (i = 0; i < ARRAY_SIZE(dsi_panel_param); i++) {
-		param = &dsi_panel_param[i];
+		param = &dsi_panel_param[param_idx][i];
 		for (j = 0; j < param->val_max; j++) {
 			if (param->val_map[j].cmds) {
 				kfree(param->val_map[j].cmds);
@@ -3694,6 +3711,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	struct dsi_parser_utils *utils;
 	const char *panel_physical_type;
 	int rc = 0;
+	u32 param_idx = 0; /* Since only panel support for now */
 
 	panel = kzalloc(sizeof(*panel), GFP_KERNEL);
 	if (!panel)
@@ -3724,8 +3742,8 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		DSI_DEBUG("failed to parse mot_panel_config, rc = %d\n", rc);
 
-	panel->param_cmds = &dsi_panel_param[0];
-	rc = dsi_panel_parse_param_prop(panel, of_node);
+	panel->param_cmds = dsi_panel_param[param_idx];
+	rc = dsi_panel_parse_param_prop(panel, of_node, param_idx );
 	if (rc)
 		pr_debug("failed to parse panel param prop, rc =%d\n", rc);
 
