@@ -807,7 +807,7 @@ static void fts_irq_read_report(void)
 #endif
 
     ret = fts_read_parse_touchdata(ts_data);
-    if (ret == 0) {
+    if ((ret == 0) && !ts_data->suspended) {
         mutex_lock(&ts_data->report_mutex);
 #if FTS_MT_PROTOCOL_B_EN
         fts_input_report_b(ts_data);
