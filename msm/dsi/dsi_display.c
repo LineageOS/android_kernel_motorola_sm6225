@@ -45,6 +45,8 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{}
 };
 
+static void dsi_display_is_probed(int enable_idx, int probe_status);
+
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -5636,6 +5638,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	int rc = 0, index = DSI_PRIMARY;
 	bool firm_req = false;
 	struct dsi_display_boot_param *boot_disp;
+	int enable_idx;
 
 	if (!pdev || !pdev->dev.of_node) {
 		DSI_ERR("pdev not found\n");
@@ -5659,11 +5662,15 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	display->display_type = of_get_property(pdev->dev.of_node,
 				"label", NULL);
-	if (!display->display_type)
+	if (!display->display_type) {
 		display->display_type = "primary";
+		enable_idx = 0;
+	}
 
-	if (!strcmp(display->display_type, "secondary"))
+	if (!strcmp(display->display_type, "secondary")) {
 		index = DSI_SECONDARY;
+		enable_idx = 1;
+	}
 
 	boot_disp = &boot_displays[index];
 	node = pdev->dev.of_node;
@@ -5716,6 +5723,8 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		rc = dsi_display_init(display);
 		if (rc)
 			goto end;
+		else
+			dsi_display_is_probed(enable_idx, rc);
 	}
 
 	return 0;
@@ -7847,10 +7856,25 @@ int dsi_display_pre_commit(void *display,
 /* start of MMI_STOPSHIP section */
 struct dsi_enable_status {
 	struct dsi_display *display;
+	int probed;
 	bool enable;
 };
 
-static struct dsi_enable_status enable_status[2];
+static struct dsi_enable_status enable_status[2] = {
+	{
+		.probed = -ENODEV,
+	},
+	{
+		.probed = -ENODEV,
+	},
+};
+
+static void dsi_display_is_probed (int enable_idx, int probe_status)
+{
+	enable_status[enable_idx].probed = probe_status;
+	pr_debug("display->drm_conn[%d] probe set =%d\n",
+					enable_idx, probe_status);
+}
 
 static int dsi_display_enable_status (struct dsi_display *display, bool enable)
 {
@@ -7862,12 +7886,12 @@ static int dsi_display_enable_status (struct dsi_display *display, bool enable)
 		enable_status[0].display = display;
 		enable_status[0].enable = enable;
 	} else if (!strncmp("DSI-2", display->drm_conn->name, 5)) {
-                DSI_DEBUG("display->drm_conn->name=%s enable = %d CLI_DISPLAY\n",
+		DSI_DEBUG("display->drm_conn->name=%s enable = %d CLI_DISPLAY\n",
 			display->drm_conn->name, enable);
 		enable_status[1].display = display;
 		enable_status[1].enable = enable;
 	} else {
-		DSI_ERR(" Invalid display->drm_conn->name = %s\n",
+		DSI_ERR("display->drm_conn: invalid name =%s\n",
 					display->drm_conn->name);
 		ret =  -EINVAL;
 	}
@@ -7875,15 +7899,21 @@ static int dsi_display_enable_status (struct dsi_display *display, bool enable)
 	return ret;
 }
 
-bool dsi_display_is_panel_enable (int panel_index)
+bool dsi_display_is_panel_enable (int panel_index, int *probe_status)
 {
 	struct dsi_display *display;
 	bool enable = false;
 
 	if (panel_index > 1) {
-		pr_err("Invalid panel index =%d\n", panel_index);
+		pr_err("display->drm_conn: invalid panel index =%d\n",
+								panel_index);
+		if (probe_status)
+			*probe_status = -ENODEV;
 		return false;
 	}
+
+	if (probe_status)
+		*probe_status = enable_status[panel_index].probed;
 
 	display = enable_status[panel_index].display;
 	if (display) {
