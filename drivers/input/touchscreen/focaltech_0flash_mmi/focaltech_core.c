@@ -689,6 +689,13 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 	    } else if (pd_state == 2) {
                 mod_timer(&fts_data->palm_release_fimer,
                           jiffies + msecs_to_jiffies(fts_data->palm_release_delay_ms));
+#ifdef CONFIG_HAS_WAKELOCK
+                wake_lock_timeout(&fts_data->palm_gesture_wakelock,
+                                  fts_data->palm_release_delay_ms);
+#else
+                __pm_wakeup_event(&fts_data->palm_gesture_wakelock,
+                                  fts_data->palm_release_delay_ms);
+#endif
                 return -1;
             }
         }
@@ -1011,6 +1018,12 @@ static int fts_palm_sensor_init(struct fts_ts_data *data)
     if (err)
         goto unregister_sensor_input_device;
 
+#ifdef CONFIG_HAS_WAKELOCK
+    wake_lock_init(&data->palm_gesture_wakelock, WAKE_LOCK_SUSPEND, "palm_detect_wl");
+#else
+    wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
+#endif
+
     data->palm_release_fimer.function = fts_palm_sensor_release_timer_handler;
     init_timer(&data->palm_release_fimer);
     data->palm_release_delay_ms = 850;
@@ -1034,6 +1047,11 @@ int fts_palm_sensor_remove(struct fts_ts_data *data)
     input_unregister_device(data->palm_sensor_pdata->input_sensor_dev);
     devm_kfree(&data->palm_sensor_pdata->input_sensor_dev->dev,
                data->palm_sensor_pdata);
+#ifdef CONFIG_HAS_WAKELOCK
+    wake_lock_destroy(&data->palm_gesture_wakelock);
+#else
+    wakeup_source_trash(&data->palm_gesture_wakelock);
+#endif
     data->palm_sensor_pdata = NULL;
     data->palm_detection_enabled = false;
     return 0;
