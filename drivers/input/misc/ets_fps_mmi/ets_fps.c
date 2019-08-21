@@ -229,10 +229,10 @@ void interrupt_timer_routine(unsigned long _data)
 
 static irqreturn_t fp_eint_func(int irq, void *dev_id)
 {
-	if (!fps_ints.int_count)
-		mod_timer(&fps_ints.timer, jiffies + msecs_to_jiffies(fps_ints.detect_period));
-	fps_ints.int_count++;
-	/* printk_ratelimited(KERN_WARNING "-----------   zq fp fp_eint_func  ,fps_ints.int_count=%d",fps_ints.int_count);*/
+
+	fps_ints.finger_on = 1;
+	wake_up_interruptible(&interrupt_waitq);
+	DEBUG_PRINT("etspi: %s int trigger\n", __func__);
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
@@ -400,12 +400,13 @@ struct poll_table_struct *wait)
 {
 	unsigned int mask = 0;
 
-	/* DEBUG_PRINT("%s %d\n", __func__, fps_ints.finger_on);*/
-	/* fps_ints.int_count = 0; */
-	poll_wait(file, &interrupt_waitq, wait);
 	if (fps_ints.finger_on) {
 		mask |= POLLIN | POLLRDNORM;
-		/* fps_ints.finger_on = 0; */
+	} else {
+		poll_wait(file, &interrupt_waitq, wait);
+		if (fps_ints.finger_on) {
+			mask |= POLLIN | POLLRDNORM;
+		}
 	}
 	return mask;
 }
@@ -492,9 +493,7 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		etspi_reset(etspi);
 		goto done;
 	case INT_TRIGGER_CLOSE:
-		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function close\n");
-		retval = Interrupt_Free(etspi);
-		DEBUG_PRINT("etspi:fp_ioctl trigger close = %x\n", retval);
+		pr_info("etspi: skip interrupt close request from HAL.");
 		goto done;
 	case INT_TRIGGER_ABORT:
 		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function abort\n");
