@@ -473,6 +473,11 @@ struct himax_ts_data {
 	struct himax_sensor_platform_data *palm_sensor_pdata;
 	struct timer_list palm_release_fimer;
 	unsigned int palm_release_delay_ms;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock palm_gesture_wakelock;
+#else
+	struct wakeup_source palm_gesture_wakelock;
+#endif
 #endif
 
 };
