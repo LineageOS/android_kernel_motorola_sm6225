@@ -2749,6 +2749,13 @@ static void himax_report_points(struct himax_ts_data *ts)
 		} else if (himax_palm_detect(hx_touch_data->hx_coord_buf) == PALM_LEAVE_REPORT) {
 			mod_timer(&ts->palm_release_fimer,
 				jiffies + msecs_to_jiffies(ts->palm_release_delay_ms));
+#ifdef CONFIG_HAS_WAKELOCK
+			wake_lock_timeout(&ts->palm_gesture_wakelock,
+				ts->palm_release_delay_ms);
+#else
+			__pm_wakeup_event(&ts->palm_gesture_wakelock,
+				ts->palm_release_delay_ms);
+#endif
 			return;
 		}
 	}
@@ -2890,6 +2897,12 @@ static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
 	if (err)
 		goto unregister_sensor_input_device;
 
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_init(&data->palm_gesture_wakelock, WAKE_LOCK_SUSPEND, "palm_detect_wl");
+#else
+	wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
+#endif
+
 	data->palm_release_fimer.function = himax_palm_sensor_release_timer_handler;
 	init_timer(&data->palm_release_fimer);
 	data->palm_release_delay_ms = 850;
@@ -2913,6 +2926,11 @@ int himax_palm_detect_sensor_remove(struct himax_ts_data *data)
 	input_unregister_device(data->palm_sensor_pdata->input_sensor_dev);
 	devm_kfree(&data->palm_sensor_pdata->input_sensor_dev->dev,
 		data->palm_sensor_pdata);
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_destroy(&data->palm_gesture_wakelock);
+#else
+	wakeup_source_trash(&data->palm_gesture_wakelock);
+#endif
 	data->palm_sensor_pdata = NULL;
 	data->palm_detection_enabled = false;
 	return 0;
