@@ -245,6 +245,7 @@ struct stmvl53l1_data {
 	int16_t xtalk_y; /*!< crosstalk compensation y plane gradient kcps */
 	int16_t inner_offset; /*!< inner offset mm */
 	int16_t outer_offset; /*!< outer offset mm */
+	VL53L1_CalibrationData_t *cali_data; /*!< full calibration data */
 
 	/* Range Data and stat */
 	struct range_t {
