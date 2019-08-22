@@ -1364,7 +1364,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			I2C_FUNC_SMBUS_READ_WORD_DATA))
 		return -EIO;
 
-	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
+	pplatData = kzalloc(sizeof(struct abov_platform_data), GFP_KERNEL);
 	if (!pplatData) {
 		LOG_DBG("platform data is required!\n");
 		return -EINVAL;

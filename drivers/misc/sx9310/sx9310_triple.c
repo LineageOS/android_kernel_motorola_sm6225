@@ -1122,7 +1122,7 @@ static int sx9310_probe(struct i2c_client *client,
 
 	LOG_INFO("sx9310_probe()\n");
 
-	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
+	pplatData = kzalloc(sizeof(struct sx9310_platform_data), GFP_KERNEL);
 	sx9310_platform_data_of_init(client, pplatData);
 	client->dev.platform_data = pplatData;
 
