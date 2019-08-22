@@ -365,7 +365,12 @@ int fts_fw_recovery(void)
             return ret;
         }
 
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
         if (boot_state != 0x01) {
+#else
+        if (boot_state != 0x02) {
+#endif
             FTS_INFO("not in boot mode(0x%x),exit", boot_state);
             upg->ts_data->fw_is_running = true;
             return -EIO;
