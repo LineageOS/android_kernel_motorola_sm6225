@@ -773,11 +773,15 @@ static int stmvl53l1_sendparams(struct stmvl53l1_data *data)
 			sizeof(VL53L1_RangingMeasurementData_t));
 
 	memset(&cali, 0, sizeof(cali));
-	rc = VL53L1_GetCalibrationData(&data->stdev, &cali);
-	if (rc) {
-		vl53l1_errmsg("VL53L1_GetCalibrationData fail\n");
-		rc = store_last_error(data, rc);
-		goto done;
+	if (!data->cali_data) {
+		rc = VL53L1_GetCalibrationData(&data->stdev, &cali);
+		if (rc) {
+			vl53l1_errmsg("VL53L1_GetCalibrationData fail\n");
+			rc = store_last_error(data, rc);
+			goto done;
+		}
+	} else {
+		memcpy(&cali, data->cali_data, sizeof(VL53L1_CalibrationData_t));
 	}
 
 	/* set autonomous mode configuration */
@@ -2491,6 +2495,7 @@ static ssize_t stmvl53l1_calib_data_write(struct file *filp,
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct stmvl53l1_data *data = dev_get_drvdata(dev);
+	VL53L1_CalibrationData_t *cali_data = (VL53L1_CalibrationData_t *)buf;
 	int rc;
 
 	mutex_lock(&data->work_mutex);
@@ -2504,16 +2509,26 @@ static ssize_t stmvl53l1_calib_data_write(struct file *filp,
 	}
 
 	/* we only support one time write */
-	if (off != 0 || count != sizeof(VL53L1_CalibrationData_t))
+	if (off != 0 || count != sizeof(VL53L1_CalibrationData_t)) {
+		vl53l1_errmsg("calib data size not match: count=%lu\n", count);
 		goto invalid;
+	}
 
-	rc = VL53L1_SetCalibrationData(&data->stdev,
-		(VL53L1_CalibrationData_t *) buf);
+	rc = VL53L1_SetCalibrationData(&data->stdev, cali_data);
 	if (rc) {
 		vl53l1_errmsg("VL53L1_SetCalibrationData fail %d", rc);
 		rc = store_last_error(data, rc);
 		goto error;
 	}
+
+	if (!data->cali_data)
+		data->cali_data = kmalloc(sizeof(VL53L1_CalibrationData_t), GFP_KERNEL);
+	if (data->cali_data)
+		memcpy(data->cali_data, cali_data, sizeof(VL53L1_CalibrationData_t));
+
+	data->xtalk_offset = cali_data->customer.algo__crosstalk_compensation_plane_offset_kcps;
+	data->xtalk_x = cali_data->customer.algo__crosstalk_compensation_x_plane_gradient_kcps;
+	data->xtalk_y = cali_data->customer.algo__crosstalk_compensation_y_plane_gradient_kcps;
 
 	mutex_unlock(&data->work_mutex);
 
@@ -4817,6 +4832,10 @@ void stmvl53l1_cleanup(struct stmvl53l1_data *data)
 	vl53l1_dbgmsg("done\n");
 	deallocate_dev_id(data->id);
 	data->is_device_remove = true;
+	if (data->cali_data) {
+		kfree(data->cali_data);
+		data->cali_data = NULL;
+	}
 }
 
 #ifdef CONFIG_PM_SLEEP
