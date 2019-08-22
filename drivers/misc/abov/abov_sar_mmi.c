@@ -1564,7 +1564,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_this_device;
 	}
 
-	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
+	pplatData = kzalloc(sizeof(struct abov_platform_data), GFP_KERNEL);
 	if (!pplatData) {
 		LOG_ERR("platform data is required!\n");
 		return -EINVAL;
