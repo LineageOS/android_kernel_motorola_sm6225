@@ -760,6 +760,118 @@ end_rate_check:
 
 }
 
+#define CHG_SHOW_MAX_SIZE 50
+static ssize_t factory_image_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid factory image mode value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	mmi_set_factory_image_mode(mode);
+
+	return r ? r : count;
+}
+
+static ssize_t factory_image_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+	state = mmi_get_factory_image_mode() ? 1 : 0;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(factory_image_mode, 0644,
+		factory_image_mode_show,
+		factory_image_mode_store);
+
+static ssize_t factory_charge_upper_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+	state = mmi_get_factory_charge_upper();
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(factory_charge_upper, 0444,
+		factory_charge_upper_show,
+		NULL);
+
+static ssize_t force_demo_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid demo  mode value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	mmi_set_demo_mode(mode);
+
+	return r ? r : count;
+}
+
+static ssize_t force_demo_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+
+	state = 	mmi_get_demo_mode();
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(force_demo_mode, 0644,
+		force_demo_mode_show,
+		force_demo_mode_store);
+
+static ssize_t force_max_chrg_temp_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("Invalid max temp value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	mmi_set_max_chrg_temp(mode);
+
+	return r ? r : count;
+}
+
+static ssize_t force_max_chrg_temp_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+	state = mmi_get_max_chrg_temp();
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(force_max_chrg_temp, 0644,
+		force_max_chrg_temp_show,
+		force_max_chrg_temp_store);
+
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
 	if (!delayed_work_pending(&chip->mmi_chrg_sm_work)) {
@@ -1378,6 +1490,30 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 			mmi_chrg_err(chip, "Batt psy register failed\n");
 			goto cleanup;
 		}
+
+		ret = device_create_file(chip->dev,
+					&dev_attr_factory_image_mode);
+		if (ret) {
+			mmi_chrg_err(chip, "couldn't create factory_image_mode\n");
+		}
+
+		ret = device_create_file(chip->dev,
+					&dev_attr_force_demo_mode);
+		if (ret) {
+			mmi_chrg_err(chip, "couldn't create force_demo_mode\n");
+		}
+
+		ret = device_create_file(chip->dev,
+					&dev_attr_force_max_chrg_temp);
+		if (ret) {
+			mmi_chrg_err(chip, "couldn't create force_max_chrg_temp\n");
+		}
+
+		ret = device_create_file(chip->dev,
+					&dev_attr_factory_charge_upper);
+		if (ret)
+			mmi_chrg_err(chip, "couldn't create factory_charge_upper\n");
+
 	} else
 		chip->batt_psy = power_supply_get_by_name("battery");
 
