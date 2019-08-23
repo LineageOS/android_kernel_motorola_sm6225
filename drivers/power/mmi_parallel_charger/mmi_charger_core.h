@@ -225,4 +225,11 @@ extern void mmi_update_all_charger_status(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
 extern void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 									struct mmi_charger_device *chrg_dev);
+extern ssize_t mmi_get_factory_image_mode(void);
+extern ssize_t mmi_set_factory_image_mode(int mode);
+extern ssize_t mmi_get_factory_charge_upper(void);
+extern ssize_t mmi_get_demo_mode(void);
+extern ssize_t mmi_set_demo_mode(int mode);
+extern ssize_t mmi_get_max_chrg_temp(void);
+extern ssize_t mmi_set_max_chrg_temp(int value);
 #endif
