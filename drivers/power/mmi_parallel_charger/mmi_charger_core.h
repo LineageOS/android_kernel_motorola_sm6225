@@ -101,7 +101,7 @@ struct mmi_chrg_step_power {
 };
 
 struct mmi_chrg_temp_zone {
-	u32	temp_c;	/*temperature*/
+	int	temp_c;	/*temperature*/
 	struct	mmi_chrg_step_power *chrg_step_power;
 };
 

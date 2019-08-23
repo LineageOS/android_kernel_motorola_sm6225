@@ -113,7 +113,7 @@ bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c)
 			colder_t = zones[prev_zone - 1].temp_c;
 		}
 
-		if (temp_c < MIN_TEMP_C)
+		if (temp_c <= MIN_TEMP_C)
 			chip->pres_temp_zone = ZONE_COLD;
 		else if (temp_c >= max_temp)
 			chip->pres_temp_zone = ZONE_HOT;
@@ -151,7 +151,8 @@ bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vba
 	}
 
 	if (chip->pres_temp_zone == ZONE_HOT ||
-		chip->pres_temp_zone == ZONE_COLD) {
+		chip->pres_temp_zone == ZONE_COLD ||
+		chip->pres_temp_zone < ZONE_FIRST) {
 		mmi_chrg_err(chip, "pres temp zone is HOT or COLD, "
 							"can't find chrg step\n");
 		return false;
