@@ -2902,6 +2902,11 @@ static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
 #else
 	wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
 #endif
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_init(&data->palm_gesture_read_wakelock, WAKE_LOCK_SUSPEND, "palm_read_wl");
+#else
+	wakeup_source_init(&data->palm_gesture_read_wakelock, "palm_read_wl");
+#endif
 
 	data->palm_release_fimer.function = himax_palm_sensor_release_timer_handler;
 	init_timer(&data->palm_release_fimer);
@@ -2931,6 +2936,11 @@ int himax_palm_detect_sensor_remove(struct himax_ts_data *data)
 #else
 	wakeup_source_trash(&data->palm_gesture_wakelock);
 #endif
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_destroy(&data->palm_gesture_read_wakelock);
+#else
+	wakeup_source_trash(&data->palm_gesture_read_wakelock);
+#endif
 	data->palm_sensor_pdata = NULL;
 	data->palm_detection_enabled = false;
 	return 0;
@@ -2942,6 +2952,25 @@ void himax_ts_work(struct himax_ts_data *ts)
 
 	int ts_status = HX_TS_NORMAL_END;
 	int ts_path = 0;
+
+/*
+ * If palm detect function is enabled, interrupt will not disable, IC works in
+ * normal mode. But in case touch event is reported to input subsystem, skip
+ * touch event when suspend flag is true. So input subsystem will not take
+ * wakelock because no one report event.
+ * In this case, we still need read data from IC, so AP can not enter suspend.
+ * Add a 10ms wakelock when this function is enabled. (TP report rate is around
+ * 100Hz).
+ */
+#ifdef HIMAX_PALM_SENSOR_EN
+    if (ts->palm_detection_enabled) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_timeout(&ts->palm_gesture_read_wakelock, 10);
+#else
+		__pm_wakeup_event(&ts->palm_gesture_read_wakelock, 10);
+#endif
+	}
+#endif
 
 	if (debug_data != NULL)
 		debug_data->fp_ts_dbg_func(ts, HX_FINGER_ON);
