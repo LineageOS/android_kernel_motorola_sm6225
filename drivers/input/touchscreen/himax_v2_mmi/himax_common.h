@@ -478,6 +478,11 @@ struct himax_ts_data {
 #else
 	struct wakeup_source palm_gesture_wakelock;
 #endif
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock palm_gesture_read_wakelock;
+#else
+	struct wakeup_source palm_gesture_read_wakelock;
+#endif
 #endif
 
 };
