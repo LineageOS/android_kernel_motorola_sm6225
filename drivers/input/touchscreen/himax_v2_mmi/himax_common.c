@@ -2757,7 +2757,8 @@ static void himax_report_points(struct himax_ts_data *ts)
 				ts->palm_release_delay_ms);
 #endif
 			return;
-		}
+		} else if (ts->suspended)
+			return;
 	}
 #endif
 	if (ts->hx_point_num != 0)
