@@ -843,6 +843,25 @@ static void fts_irq_read_report(void)
 
 static irqreturn_t fts_irq_handler(int irq, void *data)
 {
+/*
+ * If palm detect function is enabled, interrupt will not disable, IC works in
+ * normal mode. But in case touch event is reported to input subsystem, skip
+ * touch event when suspend flag is true. So input subsystem will not take
+ * wakelock because no one report event.
+ * In this case, we still need read data from IC, so AP can not enter suspend.
+ * Add a 10ms wakelock when this function is enabled. (TP report rate is around
+ * 100Hz).
+ */
+#ifdef FOCALTECH_PALM_SENSOR_EN
+    if (fts_data->palm_detection_enabled) {
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_lock_timeout(&fts_data->palm_gesture_read_wakelock, 10);
+#else
+        __pm_wakeup_event(&fts_data->palm_gesture_read_wakelock, 10);
+#endif
+    }
+#endif
+
     fts_irq_read_report();
     return IRQ_HANDLED;
 }
@@ -1023,6 +1042,11 @@ static int fts_palm_sensor_init(struct fts_ts_data *data)
 #else
     wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
 #endif
+#ifdef CONFIG_HAS_WAKELOCK
+    wake_lock_init(&data->palm_gesture_read_wakelock, WAKE_LOCK_SUSPEND, "palm_read_wl");
+#else
+    wakeup_source_init(&data->palm_gesture_read_wakelock, "palm_read_wl");
+#endif
 
     data->palm_release_fimer.function = fts_palm_sensor_release_timer_handler;
     init_timer(&data->palm_release_fimer);
@@ -1051,6 +1075,11 @@ int fts_palm_sensor_remove(struct fts_ts_data *data)
     wake_lock_destroy(&data->palm_gesture_wakelock);
 #else
     wakeup_source_trash(&data->palm_gesture_wakelock);
+#endif
+#ifdef CONFIG_HAS_WAKELOCK
+    wake_lock_destroy(&data->palm_gesture_read_wakelock);
+#else
+    wakeup_source_trash(&data->palm_gesture_read_wakelock);
 #endif
     data->palm_sensor_pdata = NULL;
     data->palm_detection_enabled = false;
@@ -2052,8 +2081,6 @@ static int fts_ts_resume(struct device *dev)
         FTS_DEBUG("Already in awake state");
         return 0;
     }
-
-    fts_release_all_finger();
 
     if (!ts_data->ic_info.is_incell) {
 #if FTS_POWER_SOURCE_CUST_EN
