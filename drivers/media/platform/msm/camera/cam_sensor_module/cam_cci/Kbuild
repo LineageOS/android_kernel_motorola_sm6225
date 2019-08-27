@@ -1,4 +1,6 @@
-ifeq ($(TARGET_KERNEL_VERSION),$(filter $(TARGET_KERNEL_VERSION),4.19))
+HAVE_KERNEL_419 = $(shell test -d $(TOP)/kernel/msm-4.19 && echo 1)
+
+ifeq ($(HAVE_KERNEL_419),1)
         KERNEL_SOURCE_PATH ?= kernel/msm-4.19
 else
         KERNEL_SOURCE_PATH ?= kernel/msm-4.9
