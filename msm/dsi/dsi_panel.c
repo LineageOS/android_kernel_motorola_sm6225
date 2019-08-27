@@ -477,7 +477,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	DSI_INFO("%s(%s)+\n", __func__, panel->name);
+	DSI_INFO("(%s)+\n", panel->name);
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
@@ -504,7 +504,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	DSI_INFO("%s(%s)+\n", __func__, panel->name);
+	DSI_INFO("(%s)+\n", panel->name);
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
@@ -861,8 +861,8 @@ static int dsi_panel_send_param_cmd(struct dsi_panel *panel,
 	mutex_lock(&panel->panel_lock);
 	if (panel_param->value == param_info->value)
 	{
-		DSI_INFO("%s(mode=%d): requested value=%d is same. Do nothing\n",
-			__func__, param_info->param_idx, param_info->value);
+		DSI_INFO("(mode=%d): requested value=%d is same. Do nothing\n",
+			param_info->param_idx, param_info->value);
 		rc = 0;
 	} else {
 		DSI_DEBUG("%s: requested: old=%d new=%d.\n", __func__,
@@ -889,7 +889,7 @@ static int dsi_panel_send_param_cmd(struct dsi_panel *panel,
 		}
 
 		panel_param->value = param_info->value;
-		DSI_INFO("%s(%d) is setting new value %d\n", __func__,
+		DSI_INFO("(%d) is setting new value %d\n",
 			param_info->param_idx, param_info->value);
 		rc = len;
 	}
@@ -904,7 +904,7 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 {
 	int rc = 0;
 
-	pr_info("%s(%d)\n", __func__, param_info->value);
+	pr_info("(%d)\n", param_info->value);
 	rc = dsi_panel_send_param_cmd(panel, param_info);
 	if (rc < 0)
 		DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
@@ -3096,7 +3096,7 @@ static int dsi_panel_parse_topology(
 	}
 
 	if (topology_override >= 0 && topology_override < top_count) {
-		DSI_INFO("override topology: cfg:%d lm:%d comp_enc:%d intf:%d\n",
+		DSI_DEBUG("override topology: cfg:%d lm:%d comp_enc:%d intf:%d\n",
 			topology_override,
 			topology[topology_override].num_lm,
 			topology[topology_override].num_enc,
@@ -3119,7 +3119,7 @@ static int dsi_panel_parse_topology(
 		goto parse_fail;
 	}
 
-	DSI_INFO("default topology: lm: %d comp_enc:%d intf: %d\n",
+	DSI_DEBUG("default topology: lm: %d comp_enc:%d intf: %d\n",
 		topology[top_sel].num_lm,
 		topology[top_sel].num_enc,
 		topology[top_sel].num_intf);
@@ -4821,6 +4821,7 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
+	pr_info("(%s)+\n", panel->name);
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_TIMING_SWITCH);
@@ -4843,7 +4844,7 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-	DSI_INFO("%s(%s)+\n", __func__, panel->name);
+	DSI_INFO("(%s)+\n", panel->name);
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
@@ -4874,7 +4875,7 @@ int dsi_panel_enable(struct dsi_panel *panel)
 
 			dsi_panel_trigger_panel_dead_event(panel);
 		} else {
-			DSI_INFO("-. Pwr_mode(0x0A) = 0x%x\n", pwr_mode);
+			DSI_INFO("Pwr_mode(0x0A) = 0x%x\n", pwr_mode);
 			panel_recovery_retry = 0;
 		}
 	} else
@@ -4941,7 +4942,7 @@ int dsi_panel_disable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-	DSI_INFO("%s(%s)+\n", __func__, panel->name);
+	DSI_INFO("(%s)+\n", panel->name);
 	mutex_lock(&panel->panel_lock);
 
 	/* Avoid sending panel off commands when ESD recovery is underway */
