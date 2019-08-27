@@ -1079,6 +1079,7 @@ void sec_ts_set_grip_type(struct sec_ts_data *ts, u8 set_type)
 
 int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
 {
+	int rc = 0;
 	struct pinctrl_state *state;
 
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, enable ? "ACTIVE" : "SUSPEND");
@@ -1087,21 +1088,23 @@ int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
 		state = pinctrl_lookup_state(ts->plat_data->pinctrl, "on_state");
 		if (IS_ERR(ts->plat_data->pinctrl))
 			input_err(true, &ts->client->dev, "%s: could not get active pinstate\n", __func__);
-		if (gpio_is_valid(ts->plat_data->rst_gpio)) {
-			/* pinctrl is not setting RESET gpio high by default */
-			/* due to compatibility issues with Synaptics driver */
-			gpio_set_value(ts->plat_data->rst_gpio, 1);
-		}
 	} else {
 		state = pinctrl_lookup_state(ts->plat_data->pinctrl, "off_state");
 		if (IS_ERR(ts->plat_data->pinctrl))
 			input_err(true, &ts->client->dev, "%s: could not get suspend pinstate\n", __func__);
 	}
 
-	if (!IS_ERR_OR_NULL(state))
-		return pinctrl_select_state(ts->plat_data->pinctrl, state);
+	if (!IS_ERR_OR_NULL(state)) {
+		rc = pinctrl_select_state(ts->plat_data->pinctrl, state);
+		if (enable && gpio_is_valid(ts->plat_data->rst_gpio)) {
+			/* pinctrl is not setting RESET gpio high by default */
+			/* due to compatibility issues with Synaptics driver */
+			gpio_set_value(ts->plat_data->rst_gpio, 1);
+			input_dbg(true, &ts->client->dev, "%s: rst gpio is %d\n", __func__, gpio_get_value(ts->plat_data->rst_gpio));
+		}
+	}
 
-	return 0;
+	return rc;
 
 }
 
@@ -1200,6 +1203,12 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 		if (ret) {
 			input_err(true, &client->dev, "%s: Unable to request tsp_rst [%d]\n", __func__, pdata->rst_gpio);
 			return -EINVAL;
+		}
+		if (gpio_is_valid(pdata->rst_gpio)) {
+			/* pinctrl is not setting RESET gpio high by default */
+			/* due to compatibility issues with Synaptics driver */
+			gpio_set_value(pdata->rst_gpio, 1);
+			input_dbg(true, &client->dev, "%s: rst gpio is %d\n", __func__, gpio_get_value(pdata->rst_gpio));
 		}
 	} else
 		input_info(true, &client->dev, "%s: has no rst gpio\n", __func__);
