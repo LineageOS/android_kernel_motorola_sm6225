@@ -478,10 +478,6 @@ static void sec_mmi_fw_read_id(struct sec_mmi_data *data)
 				__func__, buffer[0], buffer[1], buffer[2], buffer[3],
 				buffer[4], buffer[5], buffer[6], buffer[7]);
 	}
-
-	snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
-				tolower(ts->device_id[0]), tolower(ts->device_id[1]),
-				ts->device_id[2], ts->device_id[3]);
 }
 
 static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
@@ -580,7 +576,12 @@ static void sec_mmi_work(struct work_struct *w)
 
 		sec_ts_sense_on(ts);
 		dev_dbg(DEV_MMI, "%s: sensing turned on\n", __func__);
-	}
+	} else /* stuck in BL mode, update productinfo to report 'se77c' */
+		ts->device_id[3] = 0x7C;
+
+	snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
+				tolower(ts->device_id[0]), tolower(ts->device_id[1]),
+				ts->device_id[2], ts->device_id[3]);
 }
 
 static void sec_mmi_queued_resume(struct work_struct *w)
