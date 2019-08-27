@@ -1,4 +1,8 @@
-KERNEL_SOURCE_PATH ?= kernel/msm-4.9
+ifeq ($(TARGET_KERNEL_VERSION),$(filter $(TARGET_KERNEL_VERSION),4.19))
+        KERNEL_SOURCE_PATH ?= kernel/msm-4.19
+else
+        KERNEL_SOURCE_PATH ?= kernel/msm-4.9
+endif
 
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
