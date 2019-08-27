@@ -182,6 +182,12 @@ enum panel_idx {
         PANEL_IDX_MAX,
 };
 
+enum acl_state {
+	ACL_OFF_STATE = 0,
+	ACL_ON_STATE,
+	ACL_STATE_NUM,
+};
+
 enum hbm_state {
 	HBM_OFF_STATE = 0,
 	HBM_ON_STATE,
