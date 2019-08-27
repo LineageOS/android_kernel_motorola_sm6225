@@ -16,18 +16,23 @@
 
 #include <linux/module.h>
 #include <linux/miscdevice.h>
+#include <linux/version.h>
 #include <cam_cci_dev.h>
 #include <media/v4l2-ioctl.h>
 #include <media/cci_intf.h>
 
 static int32_t cci_intf_xfer(
 		struct msm_cci_intf_xfer *xfer,
-		int cmd)
+		unsigned int cmd)
 {
 	int32_t rc, rc2;
 	uint16_t addr;
 	struct cam_sensor_cci_client cci_info = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+		.cci_subdev     = cam_cci_get_subdev(xfer->cci_bus),
+#else
 		.cci_subdev     = cam_cci_get_subdev(),
+#endif
 		.cci_i2c_master = xfer->cci_bus,
 		.sid            = xfer->slave_addr,
 	};
@@ -50,7 +55,11 @@ static int32_t cci_intf_xfer(
 
 	/* init */
 	cci_ctrl.cmd = MSM_CCI_INIT;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+	rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+#else
 	rc = v4l2_subdev_call(cam_cci_get_subdev(),
+#endif
 			core, ioctl, VIDIOC_MSM_CCI_CFG, &cci_ctrl);
 	if (rc < 0) {
 		pr_err("%s: cci init fail (%d)\n", __func__, rc);
@@ -68,7 +77,11 @@ static int32_t cci_intf_xfer(
 			 CAMERA_SENSOR_I2C_TYPE_WORD);
 		cci_ctrl.cfg.cci_i2c_read_cfg.data = xfer->data.buf;
 		cci_ctrl.cfg.cci_i2c_read_cfg.num_byte = xfer->data.count;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+		rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+#else
 		rc = v4l2_subdev_call(cam_cci_get_subdev(),
+#endif
 			core, ioctl, VIDIOC_MSM_CCI_CFG, &cci_ctrl);
 		if (rc < 0) {
 			pr_err("%s: cci read fail (%d)\n", __func__, rc);
@@ -100,7 +113,11 @@ static int32_t cci_intf_xfer(
 		cci_ctrl.cfg.cci_i2c_write_cfg.data_type =
 			CAMERA_SENSOR_I2C_TYPE_BYTE;
 		cci_ctrl.cfg.cci_i2c_write_cfg.size = xfer->data.count;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+		rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+#else
 		rc = v4l2_subdev_call(cam_cci_get_subdev(),
+#endif
 				core, ioctl, VIDIOC_MSM_CCI_CFG, &cci_ctrl);
 		kfree(reg_conf_tbl);
 		if (rc < 0) {
@@ -118,7 +135,11 @@ static int32_t cci_intf_xfer(
 release:
 	/* release */
 	cci_ctrl.cmd = MSM_CCI_RELEASE;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+	rc2 = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+#else
 	rc2 = v4l2_subdev_call(cam_cci_get_subdev(),
+#endif
 			core, ioctl, VIDIOC_MSM_CCI_CFG, &cci_ctrl);
 	if (rc2 < 0) {
 		pr_err("%s: cci release fail (%d)\n", __func__, rc2);
