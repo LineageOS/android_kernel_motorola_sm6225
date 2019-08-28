@@ -3479,6 +3479,7 @@ FW_force_upgrade:
 	pdata->cable_config[1]             = 0x00;
 #endif
 	ts->suspended                      = false;
+	mutex_init(&ts->suspend_resume_mutex);
 #if defined(HX_USB_DETECT_CALLBACK) || defined(HX_USB_DETECT_GLOBAL)
 	ts->usb_connected = 0x00;
 	ts->cable_config = pdata->cable_config;
@@ -3688,7 +3689,7 @@ void himax_chip_common_deinit(void)
 	I("%s: Common section deinited!\n", __func__);
 }
 
-int himax_chip_common_suspend(struct himax_ts_data *ts)
+int _himax_chip_common_suspend(struct himax_ts_data *ts)
 {
 	if (ts->suspended) {
 		I("%s: Already suspended. Skipped.\n", __func__);
@@ -3764,7 +3765,17 @@ END:
 	return 0;
 }
 
-int himax_chip_common_resume(struct himax_ts_data *ts)
+int himax_chip_common_suspend(struct himax_ts_data *ts)
+{
+	int ret = 0;
+	mutex_lock(&ts->suspend_resume_mutex);
+	ret = _himax_chip_common_suspend(ts);
+	mutex_unlock(&ts->suspend_resume_mutex);
+
+	return ret;
+}
+
+int _himax_chip_common_resume(struct himax_ts_data *ts)
 {
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 	int result = 0;
@@ -3845,5 +3856,15 @@ END:
 
 	I("%s: END\n", __func__);
 	return 0;
+}
+
+int himax_chip_common_resume(struct himax_ts_data *ts)
+{
+	int ret = 0;
+	mutex_lock(&ts->suspend_resume_mutex);
+	ret = _himax_chip_common_resume(ts);
+	mutex_unlock(&ts->suspend_resume_mutex);
+
+	return ret;
 }
 
