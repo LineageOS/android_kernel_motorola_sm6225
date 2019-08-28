@@ -662,7 +662,7 @@ info_retry:
 		ret = 0;
 	}
 
-	NVT_LOG("FW type is 0x%02X\n", buf[14]);
+	NVT_LOG("fw_ver = 0x%02X, fw_type = 0x%02X\n", ts->fw_ver, buf[14]);
 
 	//---Get Novatek PID---
 	nvt_read_pid();
@@ -1493,6 +1493,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	ts->client->bits_per_word = 8;
 	ts->client->mode = SPI_MODE_0;
+	ts->client->chip_select = 0;
 
 	ret = spi_setup(ts->client);
 	if (ret < 0) {
