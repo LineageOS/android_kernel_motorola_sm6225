@@ -357,26 +357,87 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	int32_t x = 0;
 	int32_t y = 0;
 	int32_t iArrayIndex = 0;
+	struct file *fp = NULL;
+	char *fbufp = NULL;
+	mm_segment_t org_fs;
+	int32_t write_ret = 0;
+	uint32_t output_len = 0;
+	loff_t pos = 0;
 #if TOUCH_KEY_NUM > 0
 	int32_t k = 0;
+	int32_t keydata_output_offset = 0;
 #endif /* #if TOUCH_KEY_NUM > 0 */
 
-	printk("%s:++%s\n", __func__, file_path);
+	printk("%s:++\n", __func__);
+	fbufp = (char *)kzalloc(8192, GFP_KERNEL);
+	if (!fbufp) {
+		NVT_ERR("kzalloc for fbufp failed!\n");
+		return -ENOMEM;
+	}
 
 	for (y = 0; y < y_ch; y++) {
 		for (x = 0; x < x_ch; x++) {
 			iArrayIndex = y * x_ch + x;
+			sprintf(fbufp + iArrayIndex * 7 + y * 2, "%5d, ", rawdata[iArrayIndex]);
 		}
 		nvt_print_data_log_in_one_line(rawdata + y * x_ch, x_ch);
 		printk("\n");
+		sprintf(fbufp + (iArrayIndex + 1) * 7 + y * 2,"\r\n");
 	}
 #if TOUCH_KEY_NUM > 0
+	keydata_output_offset = y_ch * x_ch * 7 + y_ch * 2;
 	for (k = 0; k < Key_Channel; k++) {
 		iArrayIndex = y_ch * x_ch + k;
+		sprintf(fbufp + keydata_output_offset + k * 7, "%5d, ", rawdata[iArrayIndex]);
 	}
 	nvt_print_data_log_in_one_line(rawdata + y_ch * x_ch, Key_Channel);
 	printk("\n");
+	sprintf(fbufp + y_ch * x_ch * 7 + y_ch * 2 + Key_Channel * 7, "\r\n");
 #endif /* #if TOUCH_KEY_NUM > 0 */
+
+	org_fs = get_fs();
+	set_fs(KERNEL_DS);
+	fp = filp_open(file_path, O_RDWR | O_CREAT, 0644);
+	if (fp == NULL || IS_ERR(fp)) {
+		NVT_ERR("open %s failed\n", file_path);
+		set_fs(org_fs);
+		if (fbufp) {
+			kfree(fbufp);
+			fbufp = NULL;
+		}
+		return -1;
+	}
+
+#if TOUCH_KEY_NUM > 0
+	output_len = y_ch * x_ch * 7 + y_ch * 2 + Key_Channel * 7 + 2;
+#else
+	output_len = y_ch * x_ch * 7 + y_ch * 2;
+#endif /* #if TOUCH_KEY_NUM > 0 */
+	pos = offset;
+	write_ret = vfs_write(fp, (char __user *)fbufp, output_len, &pos);
+	if (write_ret <= 0) {
+		NVT_ERR("write %s failed\n", file_path);
+		set_fs(org_fs);
+		if (fp) {
+			filp_close(fp, NULL);
+			fp = NULL;
+		}
+		if (fbufp) {
+			kfree(fbufp);
+			fbufp = NULL;
+		}
+		return -1;
+	}
+
+	set_fs(org_fs);
+	if (fp) {
+		filp_close(fp, NULL);
+		fp = NULL;
+	}
+	if (fbufp) {
+		kfree(fbufp);
+		fbufp = NULL;
+	}
 
 	printk("%s:--\n", __func__);
 

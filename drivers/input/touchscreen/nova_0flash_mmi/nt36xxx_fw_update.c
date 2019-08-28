@@ -724,6 +724,74 @@ static void nvt_set_bld_hw_crc(void)
 
 /*******************************************************
 Description:
+	Novatek touchscreen read BLD hw crc info function.
+This function will check crc results from register.
+
+return:
+	n.a.
+*******************************************************/
+static void nvt_read_bld_hw_crc(void)
+{
+	uint8_t buf[8] = {0};
+	uint32_t g_crc = 0, r_crc = 0;
+
+	/* CRC Flag */
+	nvt_set_page(ts->mmap->BLD_ILM_DLM_CRC_ADDR);
+	buf[0] = ts->mmap->BLD_ILM_DLM_CRC_ADDR & 0x7F;
+	buf[1] = 0x00;
+	CTP_SPI_READ(ts->client, buf, 2);
+	NVT_ERR("crc_done = %d, ilm_crc_flag = %d, dlm_crc_flag = %d\n",
+			(buf[1] >> 2) & 0x01, (buf[1] >> 0) & 0x01, (buf[1] >> 1) & 0x01);
+
+	/* ILM CRC */
+	nvt_set_page(ts->mmap->G_ILM_CHECKSUM_ADDR);
+	buf[0] = ts->mmap->G_ILM_CHECKSUM_ADDR & 0x7F;
+	buf[1] = 0x00;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	buf[4] = 0x00;
+	CTP_SPI_READ(ts->client, buf, 5);
+	g_crc = buf[1] | (buf[2] << 8) | (buf[3] << 16) | (buf[4] << 24);
+
+	nvt_set_page(ts->mmap->R_ILM_CHECKSUM_ADDR);
+	buf[0] = ts->mmap->R_ILM_CHECKSUM_ADDR & 0x7F;
+	buf[1] = 0x00;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	buf[4] = 0x00;
+	CTP_SPI_READ(ts->client, buf, 5);
+	r_crc = buf[1] | (buf[2] << 8) | (buf[3] << 16) | (buf[4] << 24);
+
+	NVT_ERR("ilm: bin crc = 0x%08X, golden = 0x%08X, result = 0x%08X\n",
+			bin_map[0].crc, g_crc, r_crc);
+
+	/* DLM CRC */
+	nvt_set_page(ts->mmap->G_DLM_CHECKSUM_ADDR);
+	buf[0] = ts->mmap->G_DLM_CHECKSUM_ADDR & 0x7F;
+	buf[1] = 0x00;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	buf[4] = 0x00;
+	CTP_SPI_READ(ts->client, buf, 5);
+	g_crc = buf[1] | (buf[2] << 8) | (buf[3] << 16) | (buf[4] << 24);
+
+	nvt_set_page(ts->mmap->R_DLM_CHECKSUM_ADDR);
+	buf[0] = ts->mmap->R_DLM_CHECKSUM_ADDR & 0x7F;
+	buf[1] = 0x00;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	buf[4] = 0x00;
+	CTP_SPI_READ(ts->client, buf, 5);
+	r_crc = buf[1] | (buf[2] << 8) | (buf[3] << 16) | (buf[4] << 24);
+
+	NVT_ERR("dlm: bin crc = 0x%08X, golden = 0x%08X, result = 0x%08X\n",
+			bin_map[1].crc, g_crc, r_crc);
+
+	return;
+}
+
+/*******************************************************
+Description:
 	Novatek touchscreen Download_Firmware with HW CRC
 function. It's complete download firmware flow.
 
@@ -779,6 +847,7 @@ fail:
 		retry++;
 		if(unlikely(retry > 2)) {
 			NVT_ERR("error, retry=%d\n", retry);
+			nvt_read_bld_hw_crc();
 			break;
 		}
 	}
