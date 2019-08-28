@@ -179,6 +179,7 @@ struct fts_ts_data {
     struct delayed_work esdcheck_work;
     struct delayed_work prc_work;
     struct work_struct resume_work;
+    struct mutex suspend_resume_mutex;
     struct ftxxxx_proc proc;
     spinlock_t irq_lock;
     struct mutex report_mutex;
