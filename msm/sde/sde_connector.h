@@ -15,6 +15,7 @@
 #include "msm_prop.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
+#include "sde_motUtil.h"
 
 #define SDE_CONNECTOR_NAME_SIZE	16
 #define SDE_CONNECTOR_DHDR_MEMPOOL_MAX_SIZE	SZ_32
@@ -263,6 +264,18 @@ struct sde_connector_ops {
 	int (*cmd_transfer)(struct drm_connector *connector,
 			void *display, const char *cmd_buf,
 			u32 cmd_buf_len);
+
+	/**
+	 * motUtil_transfer - Convert motUtil data and Transfer command
+	 * 			to the connected display panel
+	 * @display: Pointer to private display handle
+	 * @cmd_buf: Command buffer
+	 * @cmd_buf_len: Command buffer length in bytes
+	 * @motUtil_data: motUtil data information
+	 * Returns: Zero for success, negetive for failure
+	 */
+	int (*motUtil_transfer)(void *display, const char *cmd_buf,
+			u32 cmd_buf_len, struct motUtil *motUtil_data);
 
 	/**
 	 * config_hdr - configure HDR
