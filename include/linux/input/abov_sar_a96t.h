@@ -78,8 +78,8 @@ struct _totalButtonInformation {
 	struct _buttonInfo *buttons;
 	int buttonSize;
 	struct input_dev *input_top;
-	struct input_dev *input_bottom_lmb;
-	struct input_dev *input_bottom_hb;
+	struct input_dev *input_bottom_left;
+	struct input_dev *input_bottom_right;
 };
 
 typedef struct _totalButtonInformation buttonInformation_t;
@@ -130,8 +130,8 @@ struct abov_platform_data {
 	unsigned irq_gpio;
 	/* used for custom setting for channel and scan period */
 	int cap_channel_top;
-	int cap_channel_bottom_lmb;
-	int cap_channel_bottom_hb;
+	int cap_channel_bottom_left;
+	int cap_channel_bottom_right;
 	pbuttonInformation_t pbuttonInformation;
 	const char *fw_name;
 
@@ -159,8 +159,8 @@ static struct sensors_classdev sensors_capsensor_top_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
-static struct sensors_classdev sensors_capsensor_bottom_lmb_cdev = {
-	.name = "capsense_bottom_lmb",
+static struct sensors_classdev sensors_capsensor_bottom_left_cdev = {
+	.name = "capsense_bottom_left",
 	.vendor = "abov",
 	.version = 1,
 	.type = SENSOR_TYPE_MOTO_CAPSENSE,
@@ -175,8 +175,8 @@ static struct sensors_classdev sensors_capsensor_bottom_lmb_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
-static struct sensors_classdev sensors_capsensor_bottom_hb_cdev = {
-	.name = "capsense_bottom_hb",
+static struct sensors_classdev sensors_capsensor_bottom_right_cdev = {
+	.name = "capsense_bottom_right",
 	.vendor = "abov",
 	.version = 1,
 	.type = SENSOR_TYPE_MOTO_CAPSENSE,
