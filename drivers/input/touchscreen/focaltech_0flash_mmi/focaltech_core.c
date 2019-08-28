@@ -843,25 +843,6 @@ static void fts_irq_read_report(void)
 
 static irqreturn_t fts_irq_handler(int irq, void *data)
 {
-/*
- * If palm detect function is enabled, interrupt will not disable, IC works in
- * normal mode. But in case touch event is reported to input subsystem, skip
- * touch event when suspend flag is true. So input subsystem will not take
- * wakelock because no one report event.
- * In this case, we still need read data from IC, so AP can not enter suspend.
- * Add a 10ms wakelock when this function is enabled. (TP report rate is around
- * 100Hz).
- */
-#ifdef FOCALTECH_PALM_SENSOR_EN
-    if (fts_data->palm_detection_enabled) {
-#ifdef CONFIG_HAS_WAKELOCK
-        wake_lock_timeout(&fts_data->palm_gesture_read_wakelock, 10);
-#else
-        __pm_wakeup_event(&fts_data->palm_gesture_read_wakelock, 10);
-#endif
-    }
-#endif
-
     fts_irq_read_report();
     return IRQ_HANDLED;
 }
@@ -977,7 +958,19 @@ static void fts_palm_sensor_release_timer_handler(unsigned long data)
 static int _fts_palm_sensor_set_enable(unsigned int enable)
 {
     FTS_INFO("Palm gesture set enable %d!", enable);
+/*
+ * If palm detect function is enabled, interrupt will not disable, IC works in
+ * normal mode. But in case touch event is reported to input subsystem, skip
+ * touch event when suspend flag is true. So input subsystem will not take
+ * wakelock because no one report event.
+ * In this case, we still need read data from IC, so AP can not enter suspend.
+ */
     if (enable == 1) {
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_lock(&fts_data->palm_gesture_read_wakelock);
+#else
+        __pm_stay_awake(&fts_data->palm_gesture_read_wakelock);
+#endif
         fts_data->palm_detection_enabled = true;
         fts_write_reg(0xB0, 0x01);
     } else if (enable == 0) {
@@ -987,6 +980,11 @@ static int _fts_palm_sensor_set_enable(unsigned int enable)
             del_timer(&fts_data->palm_release_fimer);
         }
         fts_write_reg(0xB0, 0x00);
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_unlock(&fts_data->palm_gesture_read_wakelock);
+#else
+        __pm_relax(&fts_data->palm_gesture_read_wakelock);
+#endif
     } else {
         FTS_INFO("unknown enable symbol\n");
     }
