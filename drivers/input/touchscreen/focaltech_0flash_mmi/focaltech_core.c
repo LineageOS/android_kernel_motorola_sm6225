@@ -2032,6 +2032,7 @@ static int _fts_ts_suspend(struct device *dev)
         if (ret) {
             FTS_DEBUG("enable_irq_wake(irq:%d) fail", ts_data->irq);
         }
+        fts_release_all_finger();
         ts_data->suspended = true;
         FTS_INFO("Enter from palm detect suspend mode.");
         return 0;
