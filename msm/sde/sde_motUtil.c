@@ -93,6 +93,7 @@ static struct sde_connector *_sde_debugfs_motUtil_get_sde_conn(
 	struct sde_connector *sde_conn = NULL;
 	int found_conn = 0;
 	enum sde_motUtil_disp_cmd panel_type = input[DISPUTIL_PANEL_TYPE];
+	struct drm_connector_list_iter conn_iter;
 
 	mutex_lock(&dev->mode_config.mutex);
 	drm_connector_list_iter_begin(dev, &conn_iter);
@@ -177,6 +178,14 @@ static ssize_t _sde_debugfs_motUtil_exe_command(struct sde_kms *kms,
 	enum sde_motUtil_type motUtil_type = input[0];
 
 	motUtil_data.motUtil_type = motUtil_type;
+	switch (motUtil_type) {
+	case MOTUTIL_DISP_UTIL:
+		ret = _sde_debugfs_motUtil_transfer(kms, count, input);
+		break;
+	default:
+		SDE_ERROR("Un-support motUtil type = %d\n", motUtil_type);
+		ret = -EINVAL;
+	}
 
 	return ret;
 }
@@ -217,6 +226,23 @@ static ssize_t _sde_debugfs_motUtil_write(struct file *file,
 	return count;
 }
 
+static ssize_t _sde_debugfs_motUtil_dispUtil_read(char *buffer)
+{
+	int blen = 0, i;
+
+	if (motUtil_data.read_len) {
+		blen = snprintf(buffer, 16, "motUtil_read: ");
+		for (i = 0; i < motUtil_data.read_len; i ++)
+			blen += snprintf((buffer + blen) , 6, "0x%02x ",
+					*motUtil_data.rd_buf++);
+
+			blen += snprintf((buffer + blen), 2, "\n");
+	} else
+		SDE_ERROR("motUtil failed to read from panel\n");
+
+	return blen;
+}
+
 static ssize_t _sde_debugfs_motUtil_read(struct file *file,
 			char __user *buf, size_t count, loff_t *ppos)
 {
@@ -227,10 +253,13 @@ static ssize_t _sde_debugfs_motUtil_read(struct file *file,
 		return 0;
 
 	mutex_lock(&motUtil_data.lock);
-	if (!motUtil_data.read_cmd)
+	if (!motUtil_data.read_cmd) {
 		blen = snprintf(buffer, MAX_CMD_PAYLOAD_SIZE,
 			"motUtil_status: 0x%x\n",
 			motUtil_data.last_cmd_tx_status);
+	} else if (motUtil_data.motUtil_type == MOTUTIL_DISP_UTIL) {
+			blen = _sde_debugfs_motUtil_dispUtil_read(buffer);
+	}
 
         SDE_INFO("%s\n", buffer);
 
