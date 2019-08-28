@@ -167,6 +167,14 @@ struct focaltech_sensor_platform_data {
 };
 #endif
 
+#ifdef FOCALTECH_PALM_SENSOR_EN
+enum palm_sensor_lazy_set {
+    PALM_SENSOR_LAZY_SET_NONE = 0,
+    PALM_SENSOR_LAZY_SET_ENABLE,
+    PALM_SENSOR_LAZY_SET_DISABLE,
+};
+#endif
+
 struct fts_ts_data {
     struct i2c_client *client;
     struct spi_device *spi;
@@ -236,6 +244,7 @@ struct fts_ts_data {
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
     bool palm_detection_enabled;
+    enum palm_sensor_lazy_set palm_detection_lazy_set;
     struct focaltech_sensor_platform_data *palm_sensor_pdata;
     struct timer_list palm_release_fimer;
     unsigned int palm_release_delay_ms;
