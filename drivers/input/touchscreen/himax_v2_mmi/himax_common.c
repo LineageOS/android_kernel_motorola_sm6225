@@ -2835,8 +2835,7 @@ static void himax_palm_sensor_release_timer_handler(unsigned long data)
 	himax_palm_detect_func(private_ts, false);
 }
 
-static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_cdev,
-		unsigned int enable)
+static int _himax_palm_detect_sensor_set_enable(unsigned int enable)
 {
 	I("Gesture set enable %d!", enable);
 	if (enable == 1) {
@@ -2853,6 +2852,28 @@ static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_
 		E("unknown enable symbol\n");
 
 	return 0;
+}
+
+static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	int ret = 0;
+
+	mutex_lock(&private_ts->suspend_resume_mutex);
+	if (!private_ts->suspended)
+		ret = _himax_palm_detect_sensor_set_enable(enable);
+	else {
+		I("Gesture lazy set enable %d!", enable);
+		if (enable == 1)
+			private_ts->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_ENABLE;
+		else if (enable == 0)
+			private_ts->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_DISABLE;
+		else
+			E("unknown enable symbol\n");
+	}
+	mutex_unlock(&private_ts->suspend_resume_mutex);
+
+	return ret;
 }
 
 static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
@@ -3798,7 +3819,7 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 #ifdef HIMAX_PALM_SENSOR_EN
 	if (ts->palm_detection_enabled) {
 		I("[himax] %s: palm detect function enable, skip resume\n", __func__);
-		goto END;
+		goto CHECK_LAZY_SET_END;
 	}
 #endif
 
@@ -3849,6 +3870,13 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 	himax_int_enable(1);
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 ESCAPE_0F_UPDATE:
+#endif
+
+#ifdef HIMAX_PALM_SENSOR_EN
+CHECK_LAZY_SET_END:
+	if (ts->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE)
+		_himax_palm_detect_sensor_set_enable(
+			(ts->palm_detection_lazy_set == PALM_SENSOR_LAZY_SET_ENABLE) ? 1 : 0);
 #endif
 END:
 	if (ts->in_self_test == 1)
