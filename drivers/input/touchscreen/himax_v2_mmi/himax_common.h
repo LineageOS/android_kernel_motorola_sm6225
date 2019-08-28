@@ -344,6 +344,7 @@ struct himax_ts_data {
 	bool initialized;
 	bool suspended;
 	atomic_t suspend_mode;
+	struct mutex suspend_resume_mutex;
 	uint8_t x_channel;
 	uint8_t y_channel;
 	uint8_t useScreenRes;
