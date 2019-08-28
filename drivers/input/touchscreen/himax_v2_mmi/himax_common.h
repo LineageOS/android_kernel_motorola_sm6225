@@ -74,6 +74,12 @@ struct himax_sensor_platform_data {
 	char sensor_data; /* 0 near, 1 far */
 	struct himax_ts_data *data;
 };
+
+enum palm_sensor_lazy_set {
+	PALM_SENSOR_LAZY_SET_NONE = 0,
+	PALM_SENSOR_LAZY_SET_ENABLE,
+	PALM_SENSOR_LAZY_SET_DISABLE,
+};
 #endif
 
 /*===========Himax Option function=============*/
@@ -471,6 +477,7 @@ struct himax_ts_data {
 
 #ifdef HIMAX_PALM_SENSOR_EN
 	bool palm_detection_enabled;
+	enum palm_sensor_lazy_set palm_detection_lazy_set;
 	struct himax_sensor_platform_data *palm_sensor_pdata;
 	struct timer_list palm_release_fimer;
 	unsigned int palm_release_delay_ms;
