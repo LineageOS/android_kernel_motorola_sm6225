@@ -1712,6 +1712,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     spin_lock_init(&ts_data->irq_lock);
     mutex_init(&ts_data->report_mutex);
     mutex_init(&ts_data->bus_lock);
+    mutex_init(&ts_data->suspend_resume_mutex);
 #ifdef FOCALTECH_SENSOR_EN
     mutex_init(&ts_data->state_mutex);
     //unknown screen state
@@ -1976,7 +1977,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     return 0;
 }
 
-static int fts_ts_suspend(struct device *dev)
+static int _fts_ts_suspend(struct device *dev)
 {
     int ret = 0;
     struct fts_ts_data *ts_data = fts_data;
@@ -2065,7 +2066,17 @@ static int fts_ts_suspend(struct device *dev)
     return 0;
 }
 
-static int fts_ts_resume(struct device *dev)
+static int fts_ts_suspend(struct device *dev)
+{
+    int ret = 0;
+    mutex_lock(&fts_data->suspend_resume_mutex);
+    ret = _fts_ts_suspend(dev);
+    mutex_unlock(&fts_data->suspend_resume_mutex);
+
+    return ret;
+}
+
+static int _fts_ts_resume(struct device *dev)
 {
     struct fts_ts_data *ts_data = fts_data;
 
@@ -2139,6 +2150,16 @@ static int fts_ts_resume(struct device *dev)
     ts_data->screen_state = SCREEN_ON;
 #endif
     return 0;
+}
+
+static int fts_ts_resume(struct device *dev)
+{
+    int ret = 0;
+    mutex_lock(&fts_data->suspend_resume_mutex);
+    ret = _fts_ts_resume(dev);
+    mutex_unlock(&fts_data->suspend_resume_mutex);
+
+    return ret;
 }
 
 /*****************************************************************************
