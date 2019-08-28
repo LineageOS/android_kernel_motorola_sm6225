@@ -974,8 +974,7 @@ static void fts_palm_sensor_release_timer_handler(unsigned long data)
     fts_palm_report(false);
 }
 
-static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
-    unsigned int enable)
+static int _fts_palm_sensor_set_enable(unsigned int enable)
 {
     FTS_INFO("Palm gesture set enable %d!", enable);
     if (enable == 1) {
@@ -992,6 +991,28 @@ static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
         FTS_INFO("unknown enable symbol\n");
     }
     return 0;
+}
+
+static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+    int ret = 0;
+
+    mutex_lock(&fts_data->suspend_resume_mutex);
+    if (!fts_data->suspended)
+        ret = _fts_palm_sensor_set_enable(enable);
+    else {
+        FTS_INFO("Gesture lazy set enable %d!", enable);
+        if (enable == 1)
+            fts_data->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_ENABLE;
+        else if (enable == 0)
+            fts_data->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_DISABLE;
+        else
+            FTS_INFO("unknown enable symbol\n");
+    }
+    mutex_unlock(&fts_data->suspend_resume_mutex);
+
+    return ret;
 }
 
 static int fts_palm_sensor_init(struct fts_ts_data *data)
@@ -2115,7 +2136,7 @@ static int _fts_ts_resume(struct device *dev)
         }
         FTS_INFO("Exit from palm detect suspend mode.");
         ts_data->suspended = false;
-        return 0;
+        goto CHECK_LAZY_SET;
     }
 #endif
 
@@ -2148,6 +2169,12 @@ static int _fts_ts_resume(struct device *dev)
 #ifdef FOCALTECH_SENSOR_EN
     mutex_unlock(&ts_data->state_mutex);
     ts_data->screen_state = SCREEN_ON;
+#endif
+#ifdef FOCALTECH_PALM_SENSOR_EN
+CHECK_LAZY_SET:
+    if (ts_data->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE)
+        _fts_palm_sensor_set_enable(
+            (ts_data->palm_detection_lazy_set == PALM_SENSOR_LAZY_SET_ENABLE) ? 1 : 0);
 #endif
     return 0;
 }
