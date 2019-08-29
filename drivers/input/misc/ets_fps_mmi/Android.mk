@@ -13,6 +13,10 @@ ifeq ($(FPS_NAVI_ENABLE),true)
 	KERNEL_CFLAGS += CONFIG_INPUT_EGISTEC_FPS_NAVI_VERTICAL=y
 endif
 
+ifeq ($(DISPLAY_SPEED_UP), true)
+	KERNEL_CFLAGS += CONFIG_DISPLAY_SPEED_UP=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := ets_fps_mmi.ko
 LOCAL_MODULE_TAGS := optional

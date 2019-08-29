@@ -227,6 +227,11 @@ void interrupt_timer_routine(unsigned long _data)
 	wake_up_interruptible(&interrupt_waitq);
 }
 
+#ifdef CONFIG_DISPLAY_SPEED_UP
+extern void ext_dsi_display_early_power_on(void);
+static bool is_auth_ready = false;
+#endif
+
 static irqreturn_t fp_eint_func(int irq, void *dev_id)
 {
 
@@ -237,6 +242,13 @@ static irqreturn_t fp_eint_func(int irq, void *dev_id)
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
 	__pm_wakeup_event(&ets_wake_lock, msecs_to_jiffies(1500));
+#endif
+#ifdef CONFIG_DISPLAY_SPEED_UP
+	if (is_auth_ready) {
+		pr_info("etspi: call ext_dsi_display_early_power_on()");
+		ext_dsi_display_early_power_on();
+	} else
+		pr_info("etspi: not in authentication mode");
 #endif
 	return IRQ_HANDLED;
 }
@@ -499,6 +511,13 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function abort\n");
 		fps_interrupt_abort();
 		goto done;
+#ifdef CONFIG_DISPLAY_SPEED_UP
+	case SET_AUTH_STATUS:
+		pr_info("etspi: - set auth status: %lu", arg);
+		if (arg) is_auth_ready = true;
+		else is_auth_ready = false;
+		goto done;
+#endif
 	default:
 	retval = -ENOTTY;
 	break;
