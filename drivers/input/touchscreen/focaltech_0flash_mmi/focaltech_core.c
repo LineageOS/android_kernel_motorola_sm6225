@@ -1009,6 +1009,7 @@ static int fts_palm_sensor_set_enable(struct sensors_classdev *sensors_cdev,
             FTS_INFO("unknown enable symbol\n");
     }
     mutex_unlock(&fts_data->suspend_resume_mutex);
+    fts_palm_report(false);
 
     return ret;
 }
