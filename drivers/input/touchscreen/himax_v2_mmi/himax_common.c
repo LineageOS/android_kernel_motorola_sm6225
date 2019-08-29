@@ -2889,6 +2889,7 @@ static int himax_palm_detect_sensor_set_enable(struct sensors_classdev *sensors_
 			E("unknown enable symbol\n");
 	}
 	mutex_unlock(&private_ts->suspend_resume_mutex);
+	himax_palm_detect_func(private_ts, false);
 
 	return ret;
 }
