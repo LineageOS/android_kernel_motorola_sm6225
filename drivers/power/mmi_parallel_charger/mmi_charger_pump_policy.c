@@ -269,12 +269,14 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 #define COOLING_MAX_CNT 5
 #define PPS_SELECT_PDO_RETRY_COUNT 3
 #define DISABLE_CHRG_LIMIT -1
+#define CP_CHRG_SOC_LIMIT 90
 static void mmi_chrg_sm_work_func(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, mmi_chrg_sm_work.work);
 	int i = 0, rc = 0;
 	int ibatt_curr = 0, vbatt_volt = 0, batt_temp = 0, vbus_pres = 0;
+	int batt_soc = 0;
 	int heartbeat_dely_ms = 0;
 	int cooling_curr = 0;
 	int cooling_volt = 0;
@@ -314,6 +316,11 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	if (!rc)
 		batt_temp = prop.intval / 10;
 
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CAPACITY, &prop);
+	if (!rc)
+		batt_soc = prop.intval;
+
 
 	if (ibatt_curr < 0)
 		ibatt_curr *= -1;
@@ -348,6 +355,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	mmi_chrg_info(chip, "battery current %d\n", ibatt_curr);
 	mmi_chrg_info(chip, "battery voltage %d\n", vbatt_volt);
 	mmi_chrg_info(chip, "battery temp %d\n", batt_temp);
+	mmi_chrg_info(chip, "battery capacity %d\n", batt_soc);
 
 	if (vbus_pres) {
 //		mmi_dump_charger_error(chip, chrg_list->chrg_dev[CP_MASTER]);
@@ -426,7 +434,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& chrg_step->chrg_step_cc_curr >=
-				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min) {
+				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min
+			&& batt_soc < CP_CHRG_SOC_LIMIT) {
 
 			mmi_chrg_dbg(chip, PR_MOTO, "Enter into CHRG PUMP, "
 							"vbatt %d uV, "
@@ -513,7 +522,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& !chip->recovery_pmic_chrg
-			&& !chip->thermal_mitigation_doing) {
+			&& !chip->thermal_force_pmic_chrg
+			&& batt_soc < CP_CHRG_SOC_LIMIT) {
 			mmi_chrg_info(chip, "Enter CP, the reason is : "
 							"pd pps support %d, "
 							"vbatt %duV, chrg step %d\n",
@@ -1245,14 +1255,19 @@ schedule:
 
 	if (chip->system_thermal_level == 0) {
 		chip->thermal_mitigation_doing = false;
-	} else if (chip->system_thermal_level == chip->thermal_levels) {
+		chip->thermal_force_pmic_chrg = false;
+	} else if ((chip->system_thermal_level == chip->thermal_levels - 1)
+	&& !chip->thermal_force_pmic_chrg) {
 		chip->thermal_mitigation_doing = true;
+		chip->thermal_force_pmic_chrg = true;
 		mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 		mmi_chrg_info(chip, "Thermal is the highest, level %d, "
 						"Force enter into single pmic charging !\n",
 						chip->system_thermal_level);
 
-	} else if (chip->system_thermal_level > 0) {
+	} else if (chip->system_thermal_level > 0 &&
+		(sm_state == PM_STATE_CP_CC_LOOP ||
+		sm_state == PM_STATE_CP_CV_LOOP)) {
 
 		mmi_chrg_dbg(chip, PR_MOTO, "Thermal level is %d\n",
 								chip->system_thermal_level);
@@ -1290,7 +1305,10 @@ schedule:
 								"pd target curr %dmA, "
 								"thermal level %d, "
 								"thermal volt %dmV, "
-								"thermal curr %dmA\n",
+								"thermal curr %dmA, "
+								"thermal cooling %d, "
+								"thermal mitigation %d, "
+								"thermal force pmic chrg %d\n",
 								pm_state_str[sm_state],
 								chip->pd_request_volt,
 								chip->pd_request_curr,
@@ -1298,7 +1316,11 @@ schedule:
 								chip->pd_target_curr,
 								chip->system_thermal_level,
 								chip->pd_thermal_volt,
-								chip->pd_thermal_curr);
+								chip->pd_thermal_curr,
+								chip->thermal_cooling,
+								chip->thermal_mitigation_doing,
+								chip->thermal_force_pmic_chrg);
+
 	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
 								chip->mmi_pd_pdo_idx,
 								chip->pd_target_volt,
