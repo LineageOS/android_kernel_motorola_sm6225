@@ -563,12 +563,22 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 {
 	pr_debug("%s enter\n", __func__);
 
-	if (flag == true) {
+	if (!flag) {
+		do_gettimeofday(&aw8695->current_time);
+		aw8695->interval_us = (aw8695->current_time.tv_sec - aw8695->pre_enter_time.tv_sec) * 1000000
+			+ (aw8695->current_time.tv_usec - aw8695->pre_enter_time.tv_usec);
+		if (aw8695->interval_us < 2000) {
+			pr_info("aw8695->interval_us t=%u\n", aw8695->interval_us);
+			mdelay(2);
+		}
+	}
+	if(flag == true) {
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
-				      AW8695_BIT_GO_MASK, AW8695_BIT_GO_ENABLE);
+			AW8695_BIT_GO_MASK, AW8695_BIT_GO_ENABLE);
+		do_gettimeofday(&aw8695->pre_enter_time);
 	} else {
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
-				      AW8695_BIT_GO_MASK, AW8695_BIT_GO_DISABLE);
+			AW8695_BIT_GO_MASK, AW8695_BIT_GO_DISABLE);
 	}
 	return 0;
 }
