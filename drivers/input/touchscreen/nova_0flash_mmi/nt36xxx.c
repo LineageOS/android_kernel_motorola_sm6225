@@ -991,6 +991,36 @@ return:
 	n.a.
 *******************************************************/
 #ifdef CONFIG_OF
+static int nvt_get_dt_def_coords(struct device *dev, char *name)
+{
+	u32 coords[TOUCH_COORDS_ARR_SIZE];
+	struct property *prop;
+	struct device_node *np = dev->of_node;
+	int coords_size, rc;
+
+	prop = of_find_property(np, name, NULL);
+	if (!prop)
+		return -EINVAL;
+	if (!prop->value)
+		return -ENODATA;
+
+	coords_size = prop->length / sizeof(u32);
+	if (coords_size != TOUCH_COORDS_ARR_SIZE) {
+		dev_err(dev, "invalid %s\n", name);
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u32_array(np, name, coords, coords_size);
+	if (rc && (rc != -EINVAL)) {
+		NVT_LOG("Unable to read novatek,def-max-resolution\n");
+		return rc;
+	}
+
+	ts->abs_x_max = coords[0];
+	ts->abs_y_max = coords[1];
+	return rc;
+}
+
 static int32_t nvt_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -1010,6 +1040,13 @@ static int32_t nvt_parse_dt(struct device *dev)
 	} else {
 		NVT_LOG("SWRST_N8_ADDR=0x%06X\n", SWRST_N8_ADDR);
 	}
+
+	ret = nvt_get_dt_def_coords(dev, "novatek,def-max-resolution");
+	if (ret) {
+		ts->abs_x_max = TOUCH_DEFAULT_MAX_WIDTH;
+		ts->abs_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
+	}
+	NVT_LOG("novatek,def-max-resolution=%d,%d\n", ts->abs_x_max, ts->abs_y_max);
 
 	ret = of_property_read_u32(np, "novatek,spi-rd-fast-addr", &SPI_RD_FAST_ADDR);
 	if (ret) {
@@ -1549,9 +1586,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		ret = -EINVAL;
 		goto err_chipvertrim_failed;
 	}
-
-	ts->abs_x_max = TOUCH_DEFAULT_MAX_WIDTH;
-	ts->abs_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
 
 	//---allocate input device---
 	ts->input_dev = input_allocate_device();
