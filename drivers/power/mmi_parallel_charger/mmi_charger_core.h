@@ -192,6 +192,7 @@ struct mmi_charger_manager {
 	bool extrn_sense;
 	bool recovery_pmic_chrg;
 	bool thermal_mitigation_doing;
+	bool thermal_force_pmic_chrg;
 	bool thermal_cooling;
 	int thermal_cooling_cnt;
 
