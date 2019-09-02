@@ -3873,9 +3873,12 @@ ESCAPE_0F_UPDATE:
 
 #ifdef HIMAX_PALM_SENSOR_EN
 CHECK_LAZY_SET_END:
-	if (ts->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE)
+	if (ts->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE) {
 		_himax_palm_detect_sensor_set_enable(
 			(ts->palm_detection_lazy_set == PALM_SENSOR_LAZY_SET_ENABLE) ? 1 : 0);
+		I("%s: Palm sensor lazy set done, clear flag.\n", __func__);
+		ts->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_NONE;
+	}
 #endif
 END:
 	if (ts->in_self_test == 1)
