@@ -2172,9 +2172,12 @@ static int _fts_ts_resume(struct device *dev)
 #endif
 #ifdef FOCALTECH_PALM_SENSOR_EN
 CHECK_LAZY_SET:
-    if (ts_data->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE)
+    if (ts_data->palm_detection_lazy_set != PALM_SENSOR_LAZY_SET_NONE) {
         _fts_palm_sensor_set_enable(
             (ts_data->palm_detection_lazy_set == PALM_SENSOR_LAZY_SET_ENABLE) ? 1 : 0);
+        FTS_INFO("Palm sensor lazy set done, clear flag.");
+        ts_data->palm_detection_lazy_set = PALM_SENSOR_LAZY_SET_NONE;
+    }
 #endif
     return 0;
 }
