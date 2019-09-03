@@ -23,6 +23,9 @@
 #include <linux/of.h>
 #include <linux/spi/spi.h>
 #include <linux/uaccess.h>
+#ifdef NVT_SENSOR_EN
+#include <linux/sensors.h>
+#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -85,7 +88,11 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 #define NVT_TOUCH_EXT_PROC 1
 #define NVT_TOUCH_MP 1
 #define MT_PROTOCOL_B 1
+#ifdef NVT_SENSOR_EN
 #define WAKEUP_GESTURE 1
+#else
+#define WAKEUP_GESTURE 0
+#endif
 #if WAKEUP_GESTURE
 extern const uint16_t gesture_key_array[];
 #endif
@@ -99,6 +106,22 @@ extern const uint16_t gesture_key_array[];
 #define NVT_TOUCH_ESD_PROTECT 0
 #define NVT_TOUCH_ESD_CHECK_PERIOD 1500	/* ms */
 #define NVT_TOUCH_WDT_RECOVERY 1
+
+#ifdef NVT_SENSOR_EN
+/* display state */
+enum display_state {
+	SCREEN_UNKNOWN,
+	SCREEN_OFF,
+	SCREEN_ON,
+};
+struct nvt_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	int sensor_opened;
+	char sensor_data; /* 0 near, 1 far */
+	struct nvt_ts_data *data;
+};
+#endif
 
 struct nvt_ts_data {
 	struct spi_device *client;
@@ -141,6 +164,14 @@ struct nvt_ts_data {
 #endif
 #ifdef CONFIG_SPI_MT65XX
     struct mtk_chip_config spi_ctrl;
+#endif
+#ifdef NVT_SENSOR_EN
+	bool wakeable;
+	bool should_enable_gesture;
+	bool gesture_enabled;
+	enum display_state screen_state;
+	struct mutex state_mutex;
+	struct nvt_sensor_platform_data *sensor_pdata;
 #endif
 };
 
