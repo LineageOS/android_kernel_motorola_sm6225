@@ -645,27 +645,46 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
 
 	if (enable == 1) {
-		LOG_DBG("enable cap sensor\n");
-		initialize(this);
+		LOG_DBG("enable cap sensor: %s\n",sensors_cdev->name);
+		if(mEnabled == 0){
+			initialize(this);
+			mEnabled = 1;
+		}
 
-		input_report_abs(input_top, ABS_DISTANCE, 0);
-		input_sync(input_top);
-		input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-		input_sync(input_bottom_left);
-		input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-		input_sync(input_bottom_right);
-		mEnabled = 1;
+		if(!strcmp(sensors_cdev->name, "capsense_top")){
+			input_report_abs(input_top, ABS_DISTANCE, 0);
+			input_sync(input_top);
+			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_TOP;
+		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+			input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+			input_sync(input_bottom_left);
+			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
+		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+			input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+			input_sync(input_bottom_right);
+			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+		}
 	} else if (enable == 0) {
-		LOG_DBG("disable cap sensor\n");
+		LOG_DBG("disable cap sensor: %s\n",sensors_cdev->name);
+		if(!strcmp(sensors_cdev->name, "capsense_top")){
+			input_report_abs(input_top, ABS_DISTANCE, -1);
+			input_sync(input_top);
+			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_TOP;
+		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+			input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
+			input_sync(input_bottom_left);
+			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
+		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+			input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
+			input_sync(input_bottom_right);
+			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+		}
 
-		write_register(this, ABOV_CTRL_MODE_REG, 0x02);
-		input_report_abs(input_top, ABS_DISTANCE, -1);
-		input_sync(input_top);
-		input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
-		input_sync(input_bottom_left);
-		input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
-		input_sync(input_bottom_right);
-		mEnabled = 0;
+		if(!(this->enable_flag &0x07)){
+			mEnabled = 0;
+			write_register(this, ABOV_CTRL_MODE_REG, 0x02);
+			LOG_DBG("all cap sensor disable,change to STOP mode.\n");
+		}
 	} else {
 		LOG_DBG("unknown enable symbol\n");
 	}
@@ -1148,7 +1167,9 @@ static int abov_fw_update(bool force)
 			if (rc < 0)
 				LOG_INFO("retry : %d times!\n", update_loop);
 			else {
-				initialize(this);
+				//this funtion under the mutex lock, and the initialize will enable irq,
+				//if trigger the interrupts, the cap-sensor will no work, so, initialize() no stay here.
+				//initialize(this);
 				break;
 			}
 		}
@@ -1279,6 +1300,10 @@ static void capsense_update_work(struct work_struct *work)
 		enable_irq(this->irq);
 		this->irq_disabled = 0;
 	}
+
+	if(mEnabled){
+		initialize(this);
+	}
 	LOG_INFO("%s: update firmware end\n", __func__);
 }
 
@@ -1296,10 +1321,14 @@ static void capsense_fore_update_work(struct work_struct *work)
 	abov_fw_update(true);
 	this->loading_fw = false;
 	mutex_unlock(&this->mutex);
-    if(this->irq_disabled == 1) {
+	if(this->irq_disabled == 1) {
 	    enable_irq(this->irq);
 		this->irq_disabled = 0;
-    }
+	}
+
+	if(mEnabled){
+		initialize(this);
+	}
 	LOG_INFO("%s: force update firmware end\n", __func__);
 }
 
@@ -1315,7 +1344,7 @@ static int abov_detect(struct i2c_client *client)
 	u8 value = 0xAB;
 
 	if (client) {
-		for (i = 0; i < 3; i++) {
+		for (i = 0; i < 10; i++) {
 			returnValue = i2c_smbus_read_byte_data(client, address);
 			LOG_INFO("abov read_register for %d time Addr: 0x%02x Return: 0x%02x\n",
 					i, address, returnValue);
@@ -1648,11 +1677,7 @@ static int abov_remove(struct i2c_client *client)
 			regulator_disable(this->board->cap_vdd);
 			regulator_put(this->board->cap_vdd);
 		}
-#ifdef USE_SENSORS_CLASS
-		sensors_classdev_unregister(&sensors_capsensor_top_cdev);
-		sensors_classdev_unregister(&sensors_capsensor_bottom_left_cdev);
-		sensors_classdev_unregister(&sensors_capsensor_bottom_right_cdev);
-#endif
+
 		sysfs_remove_group(&client->dev.kobj, &abov_attr_group);
 		pplatData = client->dev.platform_data;
 		if (pplatData && pplatData->exit_platform_hw)
@@ -1661,7 +1686,7 @@ static int abov_remove(struct i2c_client *client)
 	}
 	return abovXX_sar_remove(this);
 }
-#ifdef CONFIG_PM_SLEEP
+
 static int abov_suspend(struct device *dev)
 {
 	pabovXX_t this = dev_get_drvdata(dev);
@@ -1678,7 +1703,6 @@ static int abov_resume(struct device *dev)
 	return 0;
 }
 static SIMPLE_DEV_PM_OPS(abov_pm_ops, abov_suspend, abov_resume);
-#endif
 
 
 #ifdef CONFIG_OF
@@ -1700,9 +1724,7 @@ static struct i2c_driver abov_driver = {
 		.owner  = THIS_MODULE,
 		.name   = DRIVER_NAME,
 		.of_match_table = of_match_ptr(abov_match_tbl),
-#ifdef CONFIG_PM_SLEEP
 		.pm     = &abov_pm_ops,
-#endif
 	},
 	.id_table = abov_idtable,
 	.probe	  = abov_probe,
@@ -1853,7 +1875,7 @@ static void abovXX_worker_func(struct work_struct *work)
 void abovXX_suspend(pabovXX_t this)
 {
 	if (this) {
-		LOG_INFO("ABOV suspend: disable irq!\n");
+		LOG_INFO("ABOV suspend[%d]: disable irq!\n",mEnabled);
 		disable_irq(this->irq);
 		/* if upper layer don't disable capsensor, */
 		/* we  should let it enter sleep in suspend. */
@@ -1864,7 +1886,7 @@ void abovXX_suspend(pabovXX_t this)
 void abovXX_resume(pabovXX_t this)
 {
 	if (this) {
-		LOG_INFO("ABOV resume: enable irq!\n");
+		LOG_INFO("ABOV resume[%d]: enable irq!\n",mEnabled);
 		/* we should let capsensor enter active in resume*/
 		if (mEnabled)
 			write_register(this, ABOV_CTRL_MODE_REG, 0x00);
