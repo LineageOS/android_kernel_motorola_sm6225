@@ -921,6 +921,15 @@ static ssize_t reg_dump_store(struct class *class,
 	return count;
 }
 
+static ssize_t sx932x_trigger_rawdata_log_store(struct class *class,
+        struct class_attribute *attr,
+        const char *buf, size_t count)
+{
+    psx93XX_t this = sx9325_sar_ptr;
+    if (strncmp(buf, "1", 1) == 0)
+        read_rawData(this);
+    return count;
+}
 
 static void ps_notify_callback_work(struct work_struct *work)
 {
@@ -1013,15 +1022,20 @@ static struct class_attribute class_attr_enable =
 
 static struct class_attribute class_attr_reg =
 	__ATTR(reg, 0660, reg_dump_show, reg_dump_store);
+
 static struct class_attribute class_attr_calibrate =
 	__ATTR(calibrate, 0660, manual_offset_calibration_show,
 	manual_offset_calibration_store);
+
+static struct class_attribute class_attr_trigger_rawdata_log =
+	__ATTR(trigger_rawdata_log, 0660, NULL, sx932x_trigger_rawdata_log_store);
 
 static struct attribute *capsense_class_attrs[] = {
 	&class_attr_reset.attr,
 	&class_attr_enable.attr,
 	&class_attr_reg.attr,
 	&class_attr_calibrate.attr,
+	&class_attr_trigger_rawdata_log.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(capsense_class);
@@ -1031,6 +1045,7 @@ static struct class_attribute capsense_class_attributes[] = {
 	__ATTR(enable, 0660, capsense_enable_show, capsense_enable_store),
 	__ATTR(reg, 0660, reg_dump_show, reg_dump_store),
 	__ATTR(calibrate, 0660, manual_offset_calibration_show,manual_offset_calibration_store),
+	__ATTR(trigger_rawdata_log, 0660, NULL, sx932x_trigger_rawdata_log_store),
 	__ATTR_NULL,
 };
 #endif
