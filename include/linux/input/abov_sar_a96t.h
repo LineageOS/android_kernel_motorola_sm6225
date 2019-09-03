@@ -193,6 +193,14 @@ static struct sensors_classdev sensors_capsensor_bottom_right_cdev = {
 };
 
 #endif
+
+
+typedef enum{
+	CAPSENSOR_ENABLE_FLAG_TOP,
+	CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT,
+	CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT,
+	CAPSENSOR_ENABLE_FLAG_MAX
+}capsensor_enable_flag_t;
 /***************************************
 * define data struct/interrupt
 * @pdev: pdev common device struction for linux
@@ -238,6 +246,9 @@ struct abovXX {
 	 * or does not work properly */
 	u8 useIrqTimer;
 	u8 read_reg;
+
+	// sensors enable flag
+	capsensor_enable_flag_t enable_flag;
 
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;
