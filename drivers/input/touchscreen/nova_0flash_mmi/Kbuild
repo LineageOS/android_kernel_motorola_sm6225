@@ -6,6 +6,9 @@ EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
 ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI)),)
 	obj-m := nova_0flash_mmi.o
 endif
+ifneq ($(filter m y,$(CONFIG_INPUT_NOVA_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DNVT_SENSOR_EN
+endif
 
 nova_0flash_mmi-objs += nt36xxx.o
 nova_0flash_mmi-objs += nt36xxx_ext_proc.o

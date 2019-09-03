@@ -40,6 +40,34 @@
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
+
+#ifdef NVT_SENSOR_EN
+#ifdef CONFIG_HAS_WAKELOCK
+static struct wake_lock gesture_wakelock;
+#else
+static struct wakeup_source gesture_wakelock;
+#endif
+static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
+
+	.name = "dt-gesture",
+	.vendor = "Novatek",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+	.max_range = "5.0",
+	.resolution = "5.0",
+	.sensor_power = "1",
+	.min_delay = -1,
+	.max_delay = 0,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 200,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
+#define REPORT_MAX_COUNT 10000
+#endif
+
 #if NVT_TOUCH_ESD_PROTECT
 static struct delayed_work nvt_esd_check_work;
 static struct workqueue_struct *nvt_esd_check_wq;
@@ -662,7 +690,8 @@ info_retry:
 		ret = 0;
 	}
 
-	NVT_LOG("fw_ver = 0x%02X, fw_type = 0x%02X\n", ts->fw_ver, buf[14]);
+	NVT_LOG("fw_ver=%d, x_num=%d, y_num=%d, abs_xmax=%d, abs_y_max=%d, max_button_num=%d!\n", ts->fw_ver, ts->x_num, ts->y_num, ts->abs_x_max, ts->abs_y_max, ts->max_button_num);
+	NVT_LOG("FW type is 0x%02X\n", buf[14]);
 
 	//---Get Novatek PID---
 	nvt_read_pid();
@@ -906,6 +935,9 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	uint32_t keycode = 0;
 	uint8_t func_type = data[2];
 	uint8_t func_id = data[3];
+#ifdef NVT_SENSOR_EN
+	static int report_cnt = 0;
+#endif
 
 	/* support fw specifal data protocol */
 	if ((gesture_id == DATA_PROTOCOL) && (func_type == FUNCPAGE_GESTURE)) {
@@ -975,10 +1007,38 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	}
 
 	if (keycode > 0) {
+#ifdef NVT_SENSOR_EN
+		if (!ts->wakeable) {
+			uint8_t buf[2] = {0};
+			NVT_LOG("Predict enable failed.");
+			ts->should_enable_gesture = false;
+			//---write command to enter "deep sleep mode"---
+			buf[0] = EVENT_MAP_HOST_CMD;
+			buf[1] = 0x11;
+			CTP_SPI_WRITE(ts->client, buf, 2);
+			ts->gesture_enabled = false;
+			disable_irq_wake(ts->client->irq);
+			return;
+		}
+		input_report_abs(ts->sensor_pdata->input_sensor_dev,
+				ABS_DISTANCE,
+				++report_cnt);
+		NVT_LOG("input report: %d", report_cnt);
+		if (report_cnt >= REPORT_MAX_COUNT) {
+			report_cnt = 0;
+		}
+		input_sync(ts->sensor_pdata->input_sensor_dev);
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
+#else
+		__pm_wakeup_event(&gesture_wakelock, msecs_to_jiffies(5000));
+#endif
+#else
 		input_report_key(ts->input_dev, keycode, 1);
 		input_sync(ts->input_dev);
 		input_report_key(ts->input_dev, keycode, 0);
 		input_sync(ts->input_dev);
+#endif
 	}
 }
 #endif
@@ -1487,6 +1547,224 @@ out:
 	return ret;
 }
 
+#ifdef NVT_SENSOR_EN
+static int nvt_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	NVT_LOG("Gesture set enable %d!", enable);
+	mutex_lock(&ts->state_mutex);
+	if (enable == 1) {
+		uint8_t buf[2] = {0};
+		ts->wakeable = true;
+		if (bTouchIsAwake && ts->screen_state == SCREEN_ON) {
+			NVT_LOG("Touch still in normal mode, skip to set to gesture mode");
+			mutex_unlock(&ts->state_mutex);
+			return 0;
+		}
+		if (ts->gesture_enabled) {
+			NVT_LOG("Already in gesture mode");
+			mutex_unlock(&ts->state_mutex);
+			return 0;
+		}
+
+		ts->should_enable_gesture = true;
+		//---write command to enter "wakeup gesture mode"---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0x13;
+		CTP_SPI_WRITE(ts->client, buf, 2);
+
+		nvt_irq_enable(true);
+		enable_irq_wake(ts->client->irq);
+		ts->gesture_enabled = true;
+		NVT_LOG("Set IC in doze mode");
+	} else if (enable == 0) {
+		ts->wakeable = false;
+		//fts_gesture_resume(fts_data);
+	} else {
+		NVT_LOG("unknown enable symbol\n");
+	}
+	mutex_unlock(&ts->state_mutex);
+	return 0;
+}
+
+static int nvt_sensor_init(struct nvt_ts_data *data)
+{
+	struct nvt_sensor_platform_data *sensor_pdata;
+	struct input_dev *sensor_input_dev;
+	int err;
+
+	sensor_input_dev = input_allocate_device();
+	if (!sensor_input_dev) {
+		NVT_ERR("Failed to allocate device");
+		goto exit;
+	}
+
+	sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+			sizeof(struct nvt_sensor_platform_data),
+			GFP_KERNEL);
+	if (!sensor_pdata) {
+		NVT_ERR("Failed to allocate memory");
+		goto free_sensor_pdata;
+	}
+	data->sensor_pdata = sensor_pdata;
+
+	__set_bit(EV_ABS, sensor_input_dev->evbit);
+	__set_bit(EV_SYN, sensor_input_dev->evbit);
+	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+			0, REPORT_MAX_COUNT, 0, 0);
+	sensor_input_dev->name = "double-tap";
+	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+	err = input_register_device(sensor_input_dev);
+	if (err) {
+		NVT_ERR("Unable to register device, err=%d", err);
+		goto free_sensor_input_dev;
+	}
+
+	sensor_pdata->ps_cdev = sensors_touch_cdev;
+	sensor_pdata->ps_cdev.sensors_enable = nvt_sensor_set_enable;
+	sensor_pdata->data = data;
+
+	err = sensors_classdev_register(&sensor_input_dev->dev,
+				&sensor_pdata->ps_cdev);
+	if (err)
+		goto unregister_sensor_input_device;
+
+	return 0;
+
+unregister_sensor_input_device:
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+	input_free_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+	data->sensor_pdata = NULL;
+exit:
+	return 1;
+}
+
+int nvt_sensor_remove(struct nvt_ts_data *data)
+{
+	sensors_classdev_unregister(&data->sensor_pdata->ps_cdev);
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+	devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
+		data->sensor_pdata);
+	data->sensor_pdata = NULL;
+	data->wakeable = false;
+	data->should_enable_gesture = false;
+	return 0;
+}
+#endif
+
+#include <linux/slab.h>
+#include <linux/major.h>
+#include <linux/kdev_t.h>
+
+/* Attribute: path (RO) */
+static ssize_t path_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t blen;
+	const char *path;
+
+	path = kobject_get_path(&ts->client->dev.kobj, GFP_KERNEL);
+	blen = scnprintf(buf, PAGE_SIZE, "%s", path ? path : "na");
+	kfree(path);
+	return blen;
+}
+
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "novatek_ts");
+}
+
+static struct device_attribute touchscreen_attributes[] = {
+	__ATTR_RO(path),
+	__ATTR_RO(vendor),
+	__ATTR_NULL
+};
+
+#define TSDEV_MINOR_BASE 128
+#define TSDEV_MINOR_MAX 32
+
+/*******************************************************
+Description:
+	Novatek touchscreen FW function class. file node
+	initial function.
+
+return:
+	Executive outcomes. 0---succeed. -1---failed.
+*******************************************************/
+int32_t nvt_fw_class_init(bool create)
+{
+	struct device_attribute *attrs = touchscreen_attributes;
+	int i, error = 0;
+	static struct class *touchscreen_class;
+	static struct device *ts_class_dev;
+	static int minor;
+
+	if (create) {
+		minor = input_get_new_minor(ts->client->chip_select,
+						1, false);
+		if (minor < 0)
+			minor = input_get_new_minor(TSDEV_MINOR_BASE,
+					TSDEV_MINOR_MAX, true);
+		NVT_LOG("assigned minor %d\n", minor);
+
+		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
+		if (IS_ERR(touchscreen_class)) {
+			error = PTR_ERR(touchscreen_class);
+			touchscreen_class = NULL;
+			return error;
+		}
+
+		ts_class_dev = device_create(touchscreen_class, NULL,
+				MKDEV(INPUT_MAJOR, minor),
+				ts, NVT_SPI_NAME);
+		if (IS_ERR(ts_class_dev)) {
+			error = PTR_ERR(ts_class_dev);
+			ts_class_dev = NULL;
+			return error;
+		}
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i) {
+			error = device_create_file(ts_class_dev, &attrs[i]);
+			if (error)
+				break;
+		}
+
+		if (error)
+			goto device_destroy;
+		else
+			NVT_LOG("create /sys/class/touchscreen/%s Succeeded!\n", NVT_SPI_NAME);
+	} else {
+		if (!touchscreen_class || !ts_class_dev)
+			return -ENODEV;
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i)
+			device_remove_file(ts_class_dev, &attrs[i]);
+
+		device_unregister(ts_class_dev);
+		class_unregister(touchscreen_class);
+	}
+
+	return 0;
+
+device_destroy:
+	for (--i; i >= 0; --i)
+		device_remove_file(ts_class_dev, &attrs[i]);
+	device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));
+	ts_class_dev = NULL;
+	class_unregister(touchscreen_class);
+	NVT_ERR("error creating touchscreen class\n");
+
+	return -ENODEV;
+}
+
+
+
 /*******************************************************
 Description:
 	Novatek touchscreen driver probe function.
@@ -1500,10 +1778,13 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #if ((TOUCH_KEY_NUM > 0) || WAKEUP_GESTURE)
 	int32_t retry = 0;
 #endif
+#ifdef NVT_SENSOR_EN
+	static bool initialized_sensor;
+#endif
 
 	NVT_LOG("start\n");
 
-	ts = kmalloc(sizeof(struct nvt_ts_data), GFP_KERNEL);
+	ts = kzalloc(sizeof(struct nvt_ts_data), GFP_KERNEL);
 	if (ts == NULL) {
 		NVT_ERR("failed to allocated memory for nvt ts data\n");
 		return -ENOMEM;
@@ -1568,6 +1849,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 	mutex_init(&ts->lock);
 	mutex_init(&ts->xbuf_lock);
+
+#ifdef NVT_SENSOR_EN
+	mutex_init(&ts->state_mutex);
+	//unknown screen state
+	ts->screen_state = SCREEN_UNKNOWN;
+#endif
 
 	//---eng reset before TP_RESX high
 	nvt_eng_reset();
@@ -1670,6 +1957,17 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
 #endif
+#ifdef NVT_SENSOR_EN
+	if (!initialized_sensor) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
+#else
+		wakeup_source_init(&gesture_wakelock, "dt-wake-lock");
+#endif
+		if (!nvt_sensor_init(ts))
+			initialized_sensor = true;
+	}
+#endif
 
 #if BOOT_UPDATE_FIRMWARE
 	nvt_fwu_wq = alloc_workqueue("nvt_fwu_wq", WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
@@ -1748,13 +2046,19 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 #endif
 
+	ret = nvt_fw_class_init(true);
+	if (ret) {
+		NVT_ERR("Create touchscreen class failed. ret=%d\n", ret);
+		goto err_create_touchscreen_class_failed;
+	}
+
 	bTouchIsAwake = 1;
 	NVT_LOG("end\n");
 
 	nvt_irq_enable(true);
 
 	return 0;
-
+err_create_touchscreen_class_failed:
 #if defined(CONFIG_FB)
 #ifdef _MSM_DRM_NOTIFY_H_
 	if (msm_drm_unregister_client(&ts->drm_notif))
@@ -1836,6 +2140,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 {
 	NVT_LOG("Removing driver...\n");
 
+	nvt_fw_class_init(false);
 #if defined(CONFIG_FB)
 #ifdef _MSM_DRM_NOTIFY_H_
 	if (msm_drm_unregister_client(&ts->drm_notif))
@@ -1966,13 +2271,25 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	uint32_t i = 0;
 #endif
 
+#ifdef NVT_SENSOR_EN
+	mutex_lock(&ts->state_mutex);
+#endif
+
 	if (!bTouchIsAwake) {
+#ifdef NVT_SENSOR_EN
+		mutex_unlock(&ts->state_mutex);
+#endif
 		NVT_LOG("Touch is already suspend\n");
 		return 0;
 	}
 
 #if !WAKEUP_GESTURE
 	nvt_irq_enable(false);
+#else
+#ifdef NVT_SENSOR_EN
+	if (!ts->should_enable_gesture)
+		nvt_irq_enable(false);
+#endif
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
@@ -1988,15 +2305,27 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	bTouchIsAwake = 0;
 
 #if WAKEUP_GESTURE
-	//---write command to enter "wakeup gesture mode"---
-	buf[0] = EVENT_MAP_HOST_CMD;
-	buf[1] = 0x13;
-	CTP_SPI_WRITE(ts->client, buf, 2);
+#ifdef NVT_SENSOR_EN
+	if (ts->should_enable_gesture) {
+#endif
+		//---write command to enter "wakeup gesture mode"---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0x13;
+		CTP_SPI_WRITE(ts->client, buf, 2);
 
-	enable_irq_wake(ts->client->irq);
+		enable_irq_wake(ts->client->irq);
+		ts->gesture_enabled = true;
 
-	NVT_LOG("Enabled touch wakeup gesture\n");
-
+		NVT_LOG("Enabled touch wakeup gesture\n");
+#ifdef NVT_SENSOR_EN
+	} else {
+		//---write command to enter "deep sleep mode"---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0x11;
+		CTP_SPI_WRITE(ts->client, buf, 2);
+		ts->gesture_enabled = false;
+	}
+#endif
 #else // WAKEUP_GESTURE
 	//---write command to enter "deep sleep mode"---
 	buf[0] = EVENT_MAP_HOST_CMD;
@@ -2024,6 +2353,10 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	msleep(50);
 
 	NVT_LOG("end\n");
+#ifdef NVT_SENSOR_EN
+	ts->screen_state = SCREEN_OFF;
+	mutex_unlock(&ts->state_mutex);
+#endif
 
 	return 0;
 }
@@ -2037,7 +2370,14 @@ return:
 *******************************************************/
 static int32_t nvt_ts_resume(struct device *dev)
 {
+
+#ifdef NVT_SENSOR_EN
+	mutex_lock(&ts->state_mutex);
+#endif
 	if (bTouchIsAwake) {
+#ifdef NVT_SENSOR_EN
+		mutex_unlock(&ts->state_mutex);
+#endif
 		NVT_LOG("Touch is already resume\n");
 		return 0;
 	}
@@ -2058,6 +2398,11 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 #if !WAKEUP_GESTURE
 	nvt_irq_enable(true);
+#else
+#ifdef NVT_SENSOR_EN
+	if (!ts->should_enable_gesture)
+		nvt_irq_enable(true);
+#endif
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
@@ -2066,12 +2411,25 @@ static int32_t nvt_ts_resume(struct device *dev)
 			msecs_to_jiffies(NVT_TOUCH_ESD_CHECK_PERIOD));
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
+#if WAKEUP_GESTURE
+#ifdef NVT_SENSOR_EN
+	if (ts->should_enable_gesture) {
+		disable_irq_wake(ts->client->irq);
+		ts->gesture_enabled = false;
+	}
+#endif
+#endif
+
 	bTouchIsAwake = 1;
 
 	mutex_unlock(&ts->lock);
 
 	NVT_LOG("end\n");
 
+#ifdef NVT_SENSOR_EN
+	ts->screen_state = SCREEN_ON;
+	mutex_unlock(&ts->state_mutex);
+#endif
 	return 0;
 }
 
