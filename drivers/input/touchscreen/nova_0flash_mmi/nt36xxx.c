@@ -2452,6 +2452,12 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 			if (*blank == MSM_DRM_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
 				nvt_ts_suspend(&ts->client->dev);
+#ifdef NVT_SENSOR_EN
+				if (ts->should_enable_gesture) {
+					NVT_LOG("double tap gesture suspend\n");
+					return 1;
+				}
+#endif
 			}
 		} else if (event == MSM_DRM_EVENT_BLANK) {
 			if (*blank == MSM_DRM_BLANK_UNBLANK) {
