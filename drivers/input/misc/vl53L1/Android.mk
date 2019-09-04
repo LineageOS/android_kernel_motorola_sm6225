@@ -1,6 +1,10 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(PRODUCT_USE_TOF_vl53l3),true)
+	KERNEL_CFLAGS += CONFIG_INPUT_MISC_TOF_USE_VL53L3=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := stmvl53l1.ko
 LOCAL_MODULE_TAGS := optional
