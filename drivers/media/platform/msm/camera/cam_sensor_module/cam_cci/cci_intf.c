@@ -29,7 +29,7 @@ static int32_t cci_intf_xfer(
 	uint16_t addr;
 	struct cam_sensor_cci_client cci_info = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
-		.cci_subdev     = cam_cci_get_subdev(xfer->cci_bus),
+		.cci_subdev     = cam_cci_get_subdev(CCI_DEVICE_0),
 #else
 		.cci_subdev     = cam_cci_get_subdev(),
 #endif
@@ -56,7 +56,7 @@ static int32_t cci_intf_xfer(
 	/* init */
 	cci_ctrl.cmd = MSM_CCI_INIT;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
-	rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+	rc = v4l2_subdev_call(cam_cci_get_subdev(CCI_DEVICE_0),
 #else
 	rc = v4l2_subdev_call(cam_cci_get_subdev(),
 #endif
@@ -78,7 +78,7 @@ static int32_t cci_intf_xfer(
 		cci_ctrl.cfg.cci_i2c_read_cfg.data = xfer->data.buf;
 		cci_ctrl.cfg.cci_i2c_read_cfg.num_byte = xfer->data.count;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
-		rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+		rc = v4l2_subdev_call(cam_cci_get_subdev(CCI_DEVICE_0),
 #else
 		rc = v4l2_subdev_call(cam_cci_get_subdev(),
 #endif
@@ -114,7 +114,7 @@ static int32_t cci_intf_xfer(
 			CAMERA_SENSOR_I2C_TYPE_BYTE;
 		cci_ctrl.cfg.cci_i2c_write_cfg.size = xfer->data.count;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
-		rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+		rc = v4l2_subdev_call(cam_cci_get_subdev(CCI_DEVICE_0),
 #else
 		rc = v4l2_subdev_call(cam_cci_get_subdev(),
 #endif
@@ -136,7 +136,7 @@ release:
 	/* release */
 	cci_ctrl.cmd = MSM_CCI_RELEASE;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
-	rc2 = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_bus),
+	rc2 = v4l2_subdev_call(cam_cci_get_subdev(CCI_DEVICE_0),
 #else
 	rc2 = v4l2_subdev_call(cam_cci_get_subdev(),
 #endif
