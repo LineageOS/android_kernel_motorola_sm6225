@@ -299,6 +299,9 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
             FTS_INFO("Predict enable failed.");
             fts_data->should_enable_gesture = false;
             fts_gesture_resume(fts_data);
+            /* TP enter sleep mode */
+            if (fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP_VALUE) < 0)
+                FTS_ERROR("set TP to sleep mode fail.");
             return;
         }
         input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
