@@ -496,13 +496,13 @@ static int stmvl53l1_probe(struct i2c_client *client,
 		rc = -ENOMEM;
 		return rc;
 	}
-	if (vl53l1_data) {
-		vl53l1_data->client_object =
-				kzalloc(sizeof(struct i2c_data), GFP_KERNEL);
-		if (!vl53l1_data)
-			goto done_freemem;
-		i2c_data = (struct i2c_data *)vl53l1_data->client_object;
-	}
+
+	vl53l1_data->client_object =
+			kzalloc(sizeof(struct i2c_data), GFP_KERNEL);
+	if (!vl53l1_data->client_object)
+		goto done_freemem;
+	i2c_data = (struct i2c_data *)vl53l1_data->client_object;
+
 	i2c_data->client = client;
 	i2c_data->vl53l1_data = vl53l1_data;
 	i2c_data->irq = -1 ; /* init to no irq */
