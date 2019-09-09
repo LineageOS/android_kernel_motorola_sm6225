@@ -241,7 +241,7 @@ static irqreturn_t fp_eint_func(int irq, void *dev_id)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
-	__pm_wakeup_event(&ets_wake_lock, msecs_to_jiffies(1500));
+	__pm_wakeup_event(&ets_wake_lock, 1500);
 #endif
 #ifdef CONFIG_DISPLAY_SPEED_UP
 	if (is_auth_ready) {
@@ -265,7 +265,7 @@ static irqreturn_t fp_eint_func_ll(int irq, void *dev_id)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
-	__pm_wakeup_event(&ets_wake_lock, msecs_to_jiffies(1500));
+	__pm_wakeup_event(&ets_wake_lock, 1500);
 #endif
 	return IRQ_RETVAL(IRQ_HANDLED);
 }
