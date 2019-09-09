@@ -1578,26 +1578,21 @@ static int synaptics_dsx_of_init(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	struct synaptics_dsx_cap_button_map *button_map = NULL;
 
-	rmi4_data->patching_enabled = 1;
 	retval = synaptics_dsx_dt_parse_modifiers(rmi4_data);
-	if (retval)
-		rmi4_data->patching_enabled = 0;
-	else {
-		force_update_patch = devm_kzalloc(&client->dev,
-				sizeof(struct synaptics_dsx_patch), GFP_KERNEL);
-		power_sleep_patch = devm_kzalloc(&client->dev,
-				sizeof(struct synaptics_dsx_patch), GFP_KERNEL);
+	rmi4_data->patching_enabled = !retval;
 
-		if (!force_update_patch || !power_sleep_patch)
-			return -EINVAL;
-
+	if (!force_update_patch && (force_update_patch = kzalloc(
+			sizeof(struct synaptics_dsx_patch), GFP_KERNEL))) {
 		force_update_patch->name = "force-update";
 		force_update_patch->cfg_num = 1;
 		sema_init(&force_update_patch->list_sema, 1);
 		INIT_LIST_HEAD(&force_update_patch->cfg_head);
 		list_add(&force_update_func_patch.link,
 					&force_update_patch->cfg_head);
+	}
 
+	if (!power_sleep_patch && (power_sleep_patch = kzalloc(
+			sizeof(struct synaptics_dsx_patch), GFP_KERNEL))) {
 		power_sleep_patch->name = "power-sleep";
 		power_sleep_patch->cfg_num = 1;
 		sema_init(&power_sleep_patch->list_sema, 1);
