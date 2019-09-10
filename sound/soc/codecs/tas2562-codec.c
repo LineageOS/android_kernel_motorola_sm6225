@@ -973,7 +973,7 @@ static int tas2562_load_init(struct tas2562_priv *p_tas2562)
 #endif
 
 	ret = p_tas2562->write(p_tas2562, channel_both,
-		TAS2562_MISCCONFIGURATIONREG0, 0xcf);
+		TAS2562_MISCCONFIGURATIONREG0, 0xc7);
 	if (ret < 0)
 		return ret;
 	if(p_tas2562->mn_channels == 2) {
