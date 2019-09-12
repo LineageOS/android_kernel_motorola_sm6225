@@ -7520,12 +7520,8 @@ err_sysfs:
 #endif
 
 err_query_device:
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
-		if (rmi4_data->splash_screen_mode)
-			dev_warn(&rmi4_data->i2c_client->dev, "leaving vdd_quirk enabled\n");
-		else
+	if (!IS_ERR(rmi4_data->vdd_quirk))
 			regulator_disable(rmi4_data->vdd_quirk);
-	}
 
 err_vdd_quirk:
 	if (platform_data->regulator_en)
@@ -8048,12 +8044,14 @@ static int synaptics_rmi4_suspend(struct device *dev)
 			dev_err(&rmi4_data->i2c_client->dev,
 				"pinctrl failed err %ld\n", PTR_ERR(pinctrl));
 
-		if (!IS_ERR(rmi4_data->vdd_quirk))
-			regulator_disable(rmi4_data->vdd_quirk);
+		if (!rmi4_data->splash_screen_mode) {
+			if (!IS_ERR(rmi4_data->vdd_quirk))
+				regulator_disable(rmi4_data->vdd_quirk);
 
-		/* if touch REGULATOR is available - turn it OFF */
-		if (platform_data->regulator_en)
-			regulator_disable(rmi4_data->regulator);
+			/* if touch REGULATOR is available - turn it OFF */
+			if (platform_data->regulator_en)
+				regulator_disable(rmi4_data->regulator);
+		}
 
 		rmi4_data->ic_on = false;
 	}
@@ -8090,17 +8088,19 @@ static int synaptics_rmi4_resume(struct device *dev)
 	pr_debug("set pm_qos latency %d\n", rmi4_data->pm_qos_latency);
 
 	if (!rmi4_data->ic_on) {
-		/* if touch REGULATOR is avaialble - turn it ON */
-		if (platform_data->regulator_en) {
-			retval = regulator_enable(rmi4_data->regulator);
-			if (retval)
-				pr_err("failed enabling touch-vdd: %d\n", retval);
-		}
+		if (!rmi4_data->splash_screen_mode) {
+			/* if touch REGULATOR is avaialble - turn it ON */
+			if (platform_data->regulator_en) {
+				retval = regulator_enable(rmi4_data->regulator);
+				if (retval)
+					pr_err("failed enabling touch-vdd: %d\n", retval);
+			}
 
-		if (!IS_ERR(rmi4_data->vdd_quirk)) {
-			retval = regulator_enable(rmi4_data->vdd_quirk);
-			if (retval)
-				pr_err("failed enabling vdd-quirk: %d\n", retval);
+			if (!IS_ERR(rmi4_data->vdd_quirk)) {
+				retval = regulator_enable(rmi4_data->vdd_quirk);
+				if (retval)
+					pr_err("failed enabling vdd-quirk: %d\n", retval);
+			}
 		}
 
 		/* if RESET GPIO is in SUSPEND state - no HW reset */
