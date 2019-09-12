@@ -4768,10 +4768,20 @@ int stmvl53l1_sysfs_laser(struct stmvl53l1_data *data, bool create)
 				&laser_name_attributes);
 		if (error)
 			goto device_destroy;
+
+		error = sysfs_create_bin_file(&laser_class_dev->kobj,
+					&stmvl53l1_calib_data_attr);
+		if (error) {
+			device_remove_file(laser_class_dev,
+					&laser_name_attributes);
+			goto device_destroy;
+		}
 	} else {
 		if (!laser_class || !laser_class_dev)
 			return -ENODEV;
 
+		sysfs_remove_bin_file(&laser_class_dev->kobj,
+					&stmvl53l1_calib_data_attr);
 		device_remove_file(laser_class_dev,
 				&laser_name_attributes);
 		for (i = 0; stmvl53l1_attributes[i] != NULL; ++i)
