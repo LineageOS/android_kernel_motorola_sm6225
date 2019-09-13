@@ -1482,11 +1482,11 @@ static int aw8695_haptic_f0_calibration(struct aw8695 *aw8695)
 	} else {
 		/* max and min limit */
 		f0_limit = aw8695->f0;
-		if (aw8695->f0 * 100 < AW8695_HAPTIC_F0_PRE * (100 - AW8695_HAPTIC_F0_CALI_PERCEN)) {
-			f0_limit = AW8695_HAPTIC_F0_PRE * (100 - AW8695_HAPTIC_F0_CALI_PERCEN) / 100;
+		if (aw8695->f0 * 100 < aw8695->f0_pre * (100 - aw8695->f0_cali_percen)) {
+			f0_limit = aw8695->f0_pre * (100 - aw8695->f0_cali_percen) / 100;
 		}
-		if (aw8695->f0 * 100 > AW8695_HAPTIC_F0_PRE * (100 + AW8695_HAPTIC_F0_CALI_PERCEN)) {
-			f0_limit = AW8695_HAPTIC_F0_PRE * (100 + AW8695_HAPTIC_F0_CALI_PERCEN) / 100;
+		if (aw8695->f0 * 100 > aw8695->f0_pre * (100 + aw8695->f0_cali_percen)) {
+			f0_limit = aw8695->f0_pre * (100 + aw8695->f0_cali_percen) / 100;
 		}
 
 		/* calculate cali step */
@@ -1780,12 +1780,6 @@ static int aw8695_haptic_init(struct aw8695 *aw8695)
 
 	/* f0 calibration */
 	mutex_lock(&aw8695->lock);
-	aw8695->f0_pre = AW8695_HAPTIC_F0_PRE;
-	aw8695->cont_drv_lvl = AW8695_HAPTIC_CONT_DRV_LVL;
-	aw8695->cont_drv_lvl_ov = AW8695_HAPTIC_CONT_DRV_LVL_OV;
-	aw8695->cont_td = AW8695_HAPTIC_CONT_TD;
-	aw8695->cont_zc_thr = AW8695_HAPTIC_CONT_ZC_THR;
-	aw8695->cont_num_brk = AW8695_HAPTIC_CONT_NUM_BRK;
 	aw8695_haptic_f0_calibration(aw8695);
 	mutex_unlock(&aw8695->lock);
 
@@ -3395,6 +3389,48 @@ static int aw8695_parse_dt(struct device *dev, struct aw8695 *aw8695,
 		dev_err(dev, "%s: no haptic context gpio provided.\n", __func__);
 	} else {
 		dev_info(dev, "%s: haptic context gpio provided ok.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_f0_pre", &aw8695->f0_pre);
+	if (rc) {
+		aw8695->f0_pre = 2050; /* 205HZ as default */
+		dev_err(dev, "%s: no f0_pre provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_f0_cali_percen", &aw8695->f0_cali_percen);
+	if (rc) {
+		aw8695->f0_cali_percen = 7; /* 7 as default */
+		dev_err(dev, "%s: no f0_cali_percen provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_cont_drv_lvl", &aw8695->cont_drv_lvl);
+	if (rc) {
+		aw8695->cont_drv_lvl = 100; /* 100 as default */
+		dev_err(dev, "%s: no cont_drv_lvl provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_cont_drv_lvl_ov", &aw8695->cont_drv_lvl_ov);
+	if (rc) {
+		aw8695->cont_drv_lvl_ov = 120; /* 120 as default */
+		dev_err(dev, "%s: no cont_drv_lvl_ov provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_cont_td", &aw8695->cont_td);
+	if (rc) {
+		aw8695->cont_td = 0x006c; /* 0x006c as default */
+		dev_err(dev, "%s: no cont_td provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_cont_zc_thr", &aw8695->cont_zc_thr);
+	if (rc) {
+		aw8695->cont_zc_thr = 0x0ff1; /* 0x0ff1 as default */
+		dev_err(dev, "%s: no cont_zc_thr provided.\n", __func__);
+	}
+
+	rc = of_property_read_u32(np, "vib_cont_num_brk", &aw8695->cont_num_brk);
+	if (rc) {
+		aw8695->cont_num_brk = 3; /* 3 as default */
+		dev_err(dev, "%s: no cont_zc_thr provided.\n", __func__);
 	}
 
 	rc = of_property_read_s32(np, "long-gain-normal", &aw8695->long_gain_normal);
