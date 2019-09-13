@@ -50,39 +50,6 @@
 
 /* motor config */
 
-#define LRA_205HZ   //default
-
-#ifdef LRA_0619
-#define AW8695_HAPTIC_F0_PRE                1700    /* 170Hz */
-#define AW8695_HAPTIC_F0_CALI_PERCEN        7       /* -7%~7% */
-#define AW8695_HAPTIC_CONT_DRV_LVL          105     /* 105*6.1/256=2.50v */
-#define AW8695_HAPTIC_CONT_DRV_LVL_OV       125     /* 125*6.1/256=2.98v */
-#define AW8695_HAPTIC_CONT_TD               0x009a
-#define AW8695_HAPTIC_CONT_ZC_THR           0x0ff1
-#define AW8695_HAPTIC_CONT_NUM_BRK          3
-#endif
-
-#ifdef LRA_0832
-#define AW8695_HAPTIC_F0_PRE                2350    /* 235Hz */
-#define AW8695_HAPTIC_F0_CALI_PERCEN        7       /* -7%~7% */
-#define AW8695_HAPTIC_CONT_DRV_LVL          125     /* 125*6.1/256=2.98v */
-#define AW8695_HAPTIC_CONT_DRV_LVL_OV       155     /* 155*6.1/256=3.69v */
-#define AW8695_HAPTIC_CONT_TD               0x006c
-#define AW8695_HAPTIC_CONT_ZC_THR           0x0ff1
-#define AW8695_HAPTIC_CONT_NUM_BRK          3
-#endif
-
-
-#ifdef LRA_205HZ
-#define AW8695_HAPTIC_F0_PRE                2050    // 205Hz
-#define AW8695_HAPTIC_F0_CALI_PERCEN        7       // -7%~7%
-#define AW8695_HAPTIC_CONT_DRV_LVL          100     // 125*6.1/255=2.75v
-#define AW8695_HAPTIC_CONT_DRV_LVL_OV       120     // 155*6.1/255=3.22v
-#define AW8695_HAPTIC_CONT_TD               0x006c
-#define AW8695_HAPTIC_CONT_ZC_THR           0x0ff1
-#define AW8695_HAPTIC_CONT_NUM_BRK          3
-#endif
-
 #define AW8695_HAPTIC_F0_COEFF              260     /*2.604167 */
 
 
@@ -349,12 +316,13 @@ struct aw8695 {
 
 	unsigned int f0;
 	unsigned int f0_pre;
+	unsigned int f0_cali_percen;
 	unsigned int cont_f0;
 	unsigned int cont_td;
 	unsigned int cont_zc_thr;
-	unsigned char cont_drv_lvl;
-	unsigned char cont_drv_lvl_ov;
-	unsigned char cont_num_brk;
+	unsigned int cont_drv_lvl;
+	unsigned int cont_drv_lvl_ov;
+	unsigned int cont_num_brk;
 	unsigned char max_pos_beme;
 	unsigned char max_neg_beme;
 	unsigned char f0_cali_flag;
