@@ -1674,8 +1674,11 @@ static int himax_parse_criteria_file(void)
 	if (hx_self_test_file_name == NULL) {
 		E("file name is NULL\n");
 		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
-		snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
-		I("%s: Use default name\n", __func__);
+		if (private_ts->pdata->panel_supplier)
+			snprintf(hx_self_test_file_name, 60, "%s_hx_criteria.csv", private_ts->pdata->panel_supplier);
+		else
+			snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
+		I("%s: Use name %s\n", __func__, hx_self_test_file_name);
 	}
 
 	I("file name = %s\n", hx_self_test_file_name);

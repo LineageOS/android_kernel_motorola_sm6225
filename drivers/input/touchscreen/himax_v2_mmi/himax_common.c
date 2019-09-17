@@ -94,6 +94,8 @@ struct firmware g_embedded_fw = {
 };
 #endif
 
+#define HIMAX_FILE_NAME_LENGTH                    128
+
 #if defined(HX_AUTO_UPDATE_FW) || defined(HX_ZERO_FLASH)
 #if defined(HX_EN_DYNAMIC_NAME)
 char *i_CTPM_firmware_name;
@@ -3389,6 +3391,17 @@ int himax_chip_common_init(void)
 
 #endif
 
+	i_CTPM_firmware_name = kzalloc(HIMAX_FILE_NAME_LENGTH, GFP_KERNEL);
+	if (!i_CTPM_firmware_name) {
+		E("%s: alloc i_CTPM_firmware_name failed\n", __func__);
+		goto firmware_name_alloc_failed;
+	}
+	if (pdata->panel_supplier)
+		snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "%s_Himax_firmware.bin",
+			pdata->panel_supplier);
+	else
+		snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "Himax_firmware.bin");
+
 	g_hx_chip_inited = 0;
 	idx = himax_get_ksym_idx();
 	if (idx >= 0) {
@@ -3630,6 +3643,7 @@ err_register_charger_notify_failed:
 #endif
 error_ic_detect_failed:
 	himax_gpio_power_deconfig(pdata);
+firmware_name_alloc_failed:
 #ifndef CONFIG_OF
 err_power_failed:
 #endif
