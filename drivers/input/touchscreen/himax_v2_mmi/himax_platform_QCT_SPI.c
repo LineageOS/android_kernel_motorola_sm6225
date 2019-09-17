@@ -108,7 +108,7 @@ int himax_parse_dt(struct himax_ts_data *ts,
 	uint32_t coords[4] = {0};
 	uint32_t touch_info[8] = {0};
 	struct property *prop;
-	struct device_node *dt = ts->dev->of_node;
+	struct device_node *chosen, *dt = ts->dev->of_node;
 	u32 data = 0;
 
 	prop = of_find_property(dt, "himax,panel-coords", NULL);
@@ -202,6 +202,31 @@ int himax_parse_dt(struct himax_ts_data *ts,
 	}
 
 	himax_vk_parser(dt, pdata);
+
+	chosen = of_find_node_by_name(NULL, "chosen");
+	if (chosen) {
+		const char *supplier;
+		char *s, *d;
+		int rc;
+
+		rc = of_property_read_string(chosen, "mmi,panel_name",
+					(const char **)&supplier);
+		if (rc) {
+			I("%s: cannot read mmi,panel_name %d\n",
+						__func__, rc);
+		} else {
+			I( "%s: mmi,panel_name %s\n", __func__, supplier);
+
+			/* skip dsi_ part */
+			s = (char *)supplier;
+			d = pdata->panel_supplier;
+			while (*s != '_') *d++ = *s++;
+
+			I("%s: panel-supplier %s\n", __func__, pdata->panel_supplier);
+		}
+		of_node_put(chosen);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(himax_parse_dt);

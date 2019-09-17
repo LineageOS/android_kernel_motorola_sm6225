@@ -92,6 +92,7 @@ struct himax_i2c_platform_data {
 	int gpio_irq;
 	int gpio_reset;
 	int gpio_3v3_en;
+	char panel_supplier[16];
 	int (*power)(int on);
 	void (*reset)(void);
 	struct himax_virtual_key *virtual_key;
