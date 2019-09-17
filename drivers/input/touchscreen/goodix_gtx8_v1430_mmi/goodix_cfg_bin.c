@@ -7,7 +7,7 @@ int goodix_ts_core_release(struct goodix_ts_core *core_data);
 static int goodix_parse_cfg_bin(struct goodix_cfg_bin *cfg_bin);
 static int goodix_get_reg_and_cfg(struct goodix_ts_device *ts_dev,
 				  struct goodix_cfg_bin *cfg_bin);
-static int goodix_read_cfg_bin(struct device *dev,
+static int goodix_read_cfg_bin(struct goodix_ts_device *ts_dev,
 			       struct goodix_cfg_bin *cfg_bin);
 static void goodix_cfg_pkg_leToCpu(struct goodix_cfg_package *pkg);
 
@@ -162,7 +162,7 @@ static int goodix_cfg_bin_proc(struct goodix_ts_core *core_data)
 	ts_dev->cfg_bin_state = CFG_BIN_STATE_ERROR;
 
 	/*get cfg_bin from file system*/
-	r = goodix_read_cfg_bin(ts_dev->dev, cfg_bin);
+	r = goodix_read_cfg_bin(ts_dev, cfg_bin);
 	if (r < 0) {
 		ts_err("Failed get valid config bin data");
 		goto exit;
@@ -411,19 +411,24 @@ get_default_pkg:
 	return r;
 }
 
-static int goodix_read_cfg_bin(struct device *dev, struct goodix_cfg_bin *cfg_bin)
+static int goodix_read_cfg_bin(struct goodix_ts_device *ts_dev, struct goodix_cfg_bin *cfg_bin)
 {
 	const struct firmware *firmware = NULL;
 	char cfg_bin_name[32] = {0x00};
 	int i = 0, r;
 
 	/*get cfg_bin_name*/
-	strlcpy(cfg_bin_name, TS_DEFAULT_CFG_BIN, sizeof(cfg_bin_name));
+	if(ts_dev->board_data.cfg_bin_name)
+		strlcpy(cfg_bin_name, ts_dev->board_data.cfg_bin_name,
+				sizeof(cfg_bin_name));
+	else
+		strlcpy(cfg_bin_name, TS_DEFAULT_CFG_BIN,
+					sizeof(cfg_bin_name));
 
 	ts_info("cfg_bin_name:%s", cfg_bin_name);
 
 	for (i = 0; i < TS_RQST_FW_RETRY_TIMES; i++) {
-		r = request_firmware(&firmware, cfg_bin_name, dev);
+		r = request_firmware(&firmware, cfg_bin_name, ts_dev->dev);
 		if (r < 0) {
 			ts_err("failed get cfg bin[%s] error:%d, try_times:%d",
 				cfg_bin_name, r, i + 1);

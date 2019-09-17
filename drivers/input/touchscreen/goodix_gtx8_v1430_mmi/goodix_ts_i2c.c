@@ -164,6 +164,14 @@ static int goodix_parse_dt(struct device_node *node,
 		return -EINVAL;
 	}
 
+	board_data->cfg_bin_name = kzalloc(32 * sizeof(char), GFP_KERNEL);
+	r = of_property_read_string(node, "goodix,cfg_bin_name",
+				&board_data->cfg_bin_name);
+	if (r) {
+		ts_err("Unable to read cfg name %d\n", r);
+		board_data->cfg_bin_name = NULL;
+	}
+
 	memset(board_data->avdd_name, 0, sizeof(board_data->avdd_name));
 	r = of_property_read_string(node, "goodix,avdd-name", &name_tmp);
 	if (!r) {
