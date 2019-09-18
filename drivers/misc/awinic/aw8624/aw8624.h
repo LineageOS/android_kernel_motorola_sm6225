@@ -61,6 +61,9 @@ struct aw8624_dts_info {
 	int aw8624_td_brake[3];
 	int aw8624_tset;
 	int aw8624_parameter1;
+	int aw8624_timed_output;
+	int aw8624_ram_config;
+	int aw8624_vbat_comp;
 };
 
 
@@ -168,11 +171,11 @@ struct aw8624 {
 	unsigned char wk_lock_flag;
 	struct hrtimer timer;
 	struct work_struct vibrator_work;
-	struct work_struct irq_work;
 	struct work_struct rtp_work;
 	struct delayed_work ram_work;
 	struct delayed_work stop_work;
-
+	struct timeval current_time;
+	struct timeval pre_enter_time;
 	struct led_classdev to_dev;
 
 	struct fileops fileops;
@@ -227,6 +230,7 @@ struct aw8624 {
 	unsigned char ram_vbat_comp;
 	unsigned int vbat;
 	unsigned int lra;
+	unsigned int interval_us;
 };
 
 struct aw8624_container {
