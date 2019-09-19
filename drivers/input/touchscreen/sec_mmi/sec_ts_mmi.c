@@ -557,21 +557,23 @@ static void sec_mmi_work(struct work_struct *w)
 	}
 
 	if (ts->fw_invalid == false) {
-		struct power_supply *psy;
-
 		sec_mmi_fw_read_id(data);
 		sec_ts_integrity_check(ts);
 
-		psy = power_supply_get_by_name("usb");
-		if (psy) {
-			int rc;
-			rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
-			if (rc) {
-				dev_err(DEV_MMI, "%s: failed to get usb status\n", __func__);
-			}
+		if (data->usb_detection) {
+			struct power_supply *psy;
 
-			if (data->ps_is_present)
-				sec_ts_set_charger(ts, data->ps_is_present);
+			psy = power_supply_get_by_name("usb");
+			if (psy) {
+				int rc;
+				rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
+				if (rc) {
+					dev_err(DEV_MMI,
+							"%s: failed to get usb status\n", __func__);
+				}
+				if (data->ps_is_present)
+					sec_ts_set_charger(ts, data->ps_is_present);
+			}
 		}
 
 		sec_ts_sense_on(ts);
@@ -623,7 +625,7 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 	}
 
 	/* make sure charger mode is properly set after reset */
-	if (update_charger)
+	if (data->usb_detection && update_charger)
 		schedule_work(&data->ps_notify_work);
 
 	if (ts->lowpower_mode)
@@ -1148,7 +1150,8 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 #endif
 		INIT_DELAYED_WORK(&data->resume_work, sec_mmi_queued_resume);
 		INIT_DELAYED_WORK(&data->detection_work, sec_mmi_work);
-		INIT_WORK(&data->ps_notify_work, sec_mmi_ps_work);
+		if (data->usb_detection)
+			INIT_WORK(&data->ps_notify_work, sec_mmi_ps_work);
 
 		schedule_delayed_work(&data->detection_work, msecs_to_jiffies(50));
 	}
