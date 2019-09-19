@@ -25,8 +25,12 @@
 #include <linux/platform_device.h>
 #include <linux/thermal.h>
 #include <linux/uaccess.h>
+#include <linux/power_supply.h>
+#include <linux/notifier.h>
+#include <linux/workqueue.h>
 
 #define TEMP_NODE_SENSOR_NAMES "mmi,temperature-names"
+#define SENSOR_LISTENER_NAMES "mmi,sensor-listener-names"
 #define DEFAULT_TEMPERATURE 0
 
 struct mmi_sys_temp_sensor {
@@ -38,7 +42,11 @@ struct mmi_sys_temp_sensor {
 struct mmi_sys_temp_dev {
 	struct platform_device *pdev;
 	int num_sensors;
-	struct mmi_sys_temp_sensor sensor[0];
+	int num_sensors_listener;
+	struct mmi_sys_temp_sensor *sensor;
+	struct mmi_sys_temp_sensor *sensor_listener;
+	struct notifier_block psy_nb;
+	struct work_struct psy_changed_work;
 };
 
 static struct mmi_sys_temp_dev *sys_temp_dev;
@@ -144,6 +152,53 @@ static struct thermal_zone_device_ops mmi_sys_temp_ops = {
 	.get_temp = mmi_sys_temp_get,
 };
 
+static void psy_changed_work_func(struct work_struct *work)
+{
+	int num_sensors_listener, i, desc = 0;
+	char buf[1024];
+
+	if (!sys_temp_dev)
+		return;
+
+	num_sensors_listener = sys_temp_dev->num_sensors_listener;
+
+		for (i = 0; i < num_sensors_listener; i++) {
+			if(sys_temp_dev->sensor_listener[i].tz_dev) {
+
+				thermal_zone_get_temp(sys_temp_dev->sensor_listener[i].tz_dev,
+						&sys_temp_dev->sensor_listener[i].temp);
+			} else {
+				dev_err(&sys_temp_dev->pdev->dev,
+					"Invalid thermal zone\n");
+				return;
+			}
+		}
+
+		for (i = 0; i < num_sensors_listener; i++) {
+			desc +=
+				sprintf(buf + desc, "%s=%s%d.%d, ",
+				sys_temp_dev->sensor_listener[i].name,
+				sys_temp_dev->sensor_listener[i].temp < 0 ? "-" : "",
+				abs(sys_temp_dev->sensor_listener[i].temp / 1000),
+				abs(sys_temp_dev->sensor_listener[i].temp % 1000));
+		}
+
+		dev_info(&sys_temp_dev->pdev->dev,
+				"%s\n", buf);
+	return;
+}
+
+static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
+{
+	if (!sys_temp_dev)
+		return -EINVAL;
+
+	if (evt == PSY_EVENT_PROP_CHANGED)
+		schedule_work(&sys_temp_dev->psy_changed_work);
+
+	return NOTIFY_OK;
+}
+
 static int mmi_sys_temp_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -151,6 +206,7 @@ static int mmi_sys_temp_probe(struct platform_device *pdev)
 	struct device_node *node;
 	int num_sensors;
 	int num_registered = 0;
+	int num_sensors_listener;
 
 	if (!pdev)
 		return -ENODEV;
@@ -168,9 +224,12 @@ static int mmi_sys_temp_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	sys_temp_dev = devm_kzalloc(&pdev->dev, sizeof(struct mmi_sys_temp_dev)
-				    + (num_sensors *
-				       sizeof(struct mmi_sys_temp_sensor)),
+	num_sensors_listener = of_property_count_strings(node, SENSOR_LISTENER_NAMES);
+	if (num_sensors_listener <= 0) {
+		dev_err(&pdev->dev,
+			"bad number of sensors-listener: %d\n", num_sensors_listener);
+	}
+	sys_temp_dev = devm_kzalloc(&pdev->dev, sizeof(struct mmi_sys_temp_dev),
 				    GFP_KERNEL);
 	if (!sys_temp_dev) {
 		dev_err(&pdev->dev,
@@ -180,6 +239,17 @@ static int mmi_sys_temp_probe(struct platform_device *pdev)
 
 	sys_temp_dev->pdev = pdev;
 	sys_temp_dev->num_sensors = num_sensors;
+
+	sys_temp_dev->sensor =
+				(struct mmi_sys_temp_sensor *)devm_kzalloc(&pdev->dev,
+				(num_sensors *
+				       sizeof(struct mmi_sys_temp_sensor)),
+				       GFP_KERNEL);
+	if (!sys_temp_dev->sensor) {
+		dev_err(&pdev->dev,
+			"Unable to alloc memory for sensor\n");
+		return -ENOMEM;
+	}
 
 	for (i = 0; i < num_sensors; i++) {
 		ret = of_property_read_string_index(node,
@@ -214,6 +284,54 @@ static int mmi_sys_temp_probe(struct platform_device *pdev)
 		goto err_thermal_unreg;
 	}
 
+	if (num_sensors_listener <= 0) {
+		dev_info(&sys_temp_dev->pdev->dev,
+				"No configure sensors listener !\n");
+		goto err_sensors_listener;
+	}
+
+	sys_temp_dev->num_sensors_listener = num_sensors_listener;
+	sys_temp_dev->sensor_listener =
+				(struct mmi_sys_temp_sensor *)devm_kzalloc(&pdev->dev,
+				(num_sensors_listener *
+				       sizeof(struct mmi_sys_temp_sensor)),
+				       GFP_KERNEL);
+	if (!sys_temp_dev->sensor_listener) {
+		dev_err(&pdev->dev,
+			"Unable to alloc memory for sensor_listener\n");
+		goto err_sensors_listener;
+	}
+
+	for (i = 0; i < num_sensors_listener; i++) {
+		ret = of_property_read_string_index(node,
+						SENSOR_LISTENER_NAMES, i,
+						&sys_temp_dev->sensor_listener[i].name);
+		if (ret) {
+			dev_err(&pdev->dev, "Unable to read of_prop string\n");
+			goto err_sensors_listener;
+		}
+
+		sys_temp_dev->sensor_listener[i].temp = DEFAULT_TEMPERATURE;
+		if (sys_temp_dev->sensor_listener[i].name) {
+			sys_temp_dev->sensor_listener[i].tz_dev =
+			thermal_zone_get_zone_by_name(sys_temp_dev->sensor_listener[i].name);
+			if (IS_ERR(sys_temp_dev->sensor_listener[i].tz_dev)) {
+				dev_err(&pdev->dev,
+					"thermal_zone_get_zone_by_name() failed."
+					"name %s, i %d\n", sys_temp_dev->sensor_listener[i].name, i);
+				goto err_sensors_listener;
+			}
+		} else {
+			dev_err(&pdev->dev,
+				"Invalid sensor listener name\n");
+			goto err_sensors_listener;
+		}
+	}
+
+	INIT_WORK(&sys_temp_dev->psy_changed_work, psy_changed_work_func);
+	sys_temp_dev->psy_nb.notifier_call = psy_changed;
+	power_supply_reg_notifier(&sys_temp_dev->psy_nb);
+err_sensors_listener:
 	return 0;
 
 err_thermal_unreg:
