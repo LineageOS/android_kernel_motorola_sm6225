@@ -334,17 +334,16 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 		data->usb_detection = true;
 	}
 
-	if (of_property_read_bool(np, "sec,reset-on-resume")) {
-		dev_info(DEV_MMI, "%s: using hw reset on resume\n", __func__);
-		data->hw_reset = true;
-	}
+	if (!of_property_read_u32(np, "sec,reset-on-resume", &data->reset))
+		dev_info(DEV_MMI, "%s: using %u reset on resume\n",
+				__func__, data->reset);
 
 	if (of_property_read_bool(np, "sec,power-off-suspend")) {
 		dev_info(DEV_MMI, "%s: using power off in suspend\n", __func__);
 		data->power_off_suspend = true;
-		if (data->hw_reset) {
-			data->hw_reset = false;
-			dev_info(DEV_MMI, "%s: unset hw reset on resume!!!\n", __func__);
+		if (data->reset) {
+			data->reset = 0;
+			dev_info(DEV_MMI, "%s: unset reset on resume!!!\n", __func__);
 		}
 	}
 
@@ -493,7 +492,7 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 	/* disable irq to ensure getting boot complete */
 	sec_ts_irq_enable(ts, false);
 
-	if (mode) {
+	if (mode == 1) {
 		gpio_set_value(ts->plat_data->rst_gpio, 0);
 		usleep_range(10, 10);
 		gpio_set_value(ts->plat_data->rst_gpio, 1);
@@ -531,6 +530,33 @@ static void sec_mmi_wait4idle(struct sec_mmi_data *data)
 			__func__, jiffies_to_msecs(jiffies - start_wait_jiffies));
 }
 
+static void sec_mmi_enable_touch(struct sec_mmi_data *data)
+{
+	struct sec_ts_data *ts = data->ts_ptr;
+
+	sec_mmi_fw_read_id(data);
+	sec_ts_integrity_check(ts);
+
+	if (data->usb_detection) {
+		struct power_supply *psy;
+
+		psy = power_supply_get_by_name("usb");
+		if (psy) {
+			int rc;
+			rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
+			if (rc) {
+				dev_err(DEV_MMI,
+							"%s: failed to get usb status\n", __func__);
+			}
+			if (data->ps_is_present)
+				sec_ts_set_charger(ts, data->ps_is_present);
+		}
+	}
+
+	sec_ts_sense_on(ts);
+	dev_dbg(DEV_MMI, "%s: touch sensing ready\n", __func__);
+}
+
 static void sec_mmi_work(struct work_struct *w)
 {
 	struct delayed_work *dw =
@@ -557,27 +583,7 @@ static void sec_mmi_work(struct work_struct *w)
 	}
 
 	if (ts->fw_invalid == false) {
-		sec_mmi_fw_read_id(data);
-		sec_ts_integrity_check(ts);
-
-		if (data->usb_detection) {
-			struct power_supply *psy;
-
-			psy = power_supply_get_by_name("usb");
-			if (psy) {
-				int rc;
-				rc = sec_mmi_ps_get_state(psy, &data->ps_is_present);
-				if (rc) {
-					dev_err(DEV_MMI,
-							"%s: failed to get usb status\n", __func__);
-				}
-				if (data->ps_is_present)
-					sec_ts_set_charger(ts, data->ps_is_present);
-			}
-		}
-
-		sec_ts_sense_on(ts);
-		dev_dbg(DEV_MMI, "%s: sensing turned on\n", __func__);
+		sec_mmi_enable_touch(data);
 	} else /* stuck in BL mode, update productinfo to report 'se77c' */
 		ts->device_id[3] = 0x7C;
 
@@ -601,12 +607,9 @@ static void sec_mmi_queued_resume(struct work_struct *w)
 	if (atomic_cmpxchg(&data->touch_stopped, 1, 0) == 0)
 		return;
 
-	if (data->hw_reset) {
-		dev_dbg(DEV_MMI, "%s: doing hw reset...\n", __func__);
-		data->reset(ts->mmi_ptr, 1);
-	} else if (data->power_off_suspend) {
+	if (data->power_off_suspend) {
 		sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
-	} else {
+	} else if (!data->reset) {
 		sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
 		wait4_boot_complete = false;
 		update_charger = false;
@@ -710,6 +713,9 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 					/* powering on early */
 					sec_ts_power((void *)ts, true);
 					dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
+				} else if (data->reset) {
+					dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
+					data->reset_func(ts->mmi_ptr, data->reset);
 				}
 					break;
 
@@ -890,7 +896,7 @@ static ssize_t sec_mmi_reset_store(struct device *dev,
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	struct sec_mmi_data *data = ts->mmi_ptr;
-	data->reset(ts->mmi_ptr, 1);
+	data->reset_func(ts->mmi_ptr, 1);
 	return size;
 }
 
@@ -929,14 +935,14 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 	}
 
 	strlcpy(fw_path, buf, size);
-	dev_dbg(DEV_TS, "%s: update fw from %s\n", __func__, fw_path);
 
 	/* Loading Firmware------------------------------------------ */
 	if (request_firmware(&fw_entry, fw_path, &ts->client->dev) != 0) {
 		dev_err(DEV_TS, "%s: fw not available\n", __func__);
 		goto err_request_fw;
 	}
-	dev_dbg(DEV_TS, "%s: fw size = %d\n", __func__, (int)fw_entry->size);
+	dev_info(DEV_TS, "%s: update fw from %s, size = %d\n",
+			__func__, fw_path, (int)fw_entry->size);
 
 	mutex_lock(&ts->modechange);
 	sec_ts_irq_enable(ts, false);
@@ -944,10 +950,8 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 
 	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size,
 					0, data->force_calibration, 0);
-	if (ts->fw_invalid == false) {
-		sec_mmi_fw_read_id(ts->mmi_ptr);
-		sec_ts_integrity_check(ts);
-	}
+	if (ts->fw_invalid == false)
+		sec_mmi_enable_touch(data);
 
 	data->force_calibration = false;
 
@@ -1125,7 +1129,7 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		ts->mmi_ptr = (void *)data;
 		data->ts_ptr = ts;
 		data->i2c_client = ts->client;
-		data->reset = sec_mmi_ic_reset;
+		data->reset_func = sec_mmi_ic_reset;
 
 		sec_mmi_dt(data);
 
