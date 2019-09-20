@@ -28,7 +28,7 @@ struct sec_mmi_data {
 	atomic_t touch_stopped;
 
 	bool power_off_suspend;
-	bool hw_reset;
+	unsigned int reset;
 	bool usb_detection;
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;
@@ -45,7 +45,7 @@ struct sec_mmi_data {
 	const char *class_entry_name;
 	const char *bound_display;
 
-	void (*reset)(struct sec_mmi_data *data, int mode);
+	void (*reset_func)(struct sec_mmi_data *data, int mode);
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable);
