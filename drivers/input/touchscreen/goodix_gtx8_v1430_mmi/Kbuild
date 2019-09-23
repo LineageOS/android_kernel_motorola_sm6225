@@ -7,3 +7,6 @@ EXTRA_CFLAGS += \
 obj-m := goodix_v1430_mmi.o
 goodix_v1430_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_cfg_bin.o
 
+obj-m += goodix_v1430_update_mmi.o
+goodix_v1430_update_mmi-objs = goodix_gtx8_update.o
+

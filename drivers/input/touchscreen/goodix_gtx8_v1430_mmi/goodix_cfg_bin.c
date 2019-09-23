@@ -524,7 +524,11 @@ static int goodix_later_init_thread(void *data)
 
 	if (ts_dev->cfg_bin_state == CFG_BIN_STATE_TEMP) {
 		ts_err("failed get valid config data, retry after fwupdate");
-		ret = goodix_do_fw_update(UPDATE_MODE_BLOCK|UPDATE_MODE_FORCE|
+		if (!ts_core->do_fw_update) {
+			ts_err("fw update handler not ready.");
+			goto release_core;
+		}
+		ret = ts_core->do_fw_update(UPDATE_MODE_BLOCK|UPDATE_MODE_FORCE|
 					  UPDATE_MODE_FLASH_CFG|
 					  UPDATE_MODE_SRC_REQUEST);
 		if (ret) {
@@ -539,12 +543,14 @@ static int goodix_later_init_thread(void *data)
 		}
 	} else {
 		ts_info("success parse config bin");
-		ret = goodix_do_fw_update(UPDATE_MODE_BLOCK|
-					  UPDATE_MODE_FLASH_CFG|
-					  UPDATE_MODE_SRC_REQUEST);
-		if (ret) {
-			ts_err("fw update failed, %d[ignore]", ret);
-			ret = 0;
+		if (ts_core->do_fw_update) {
+			ret = ts_core->do_fw_update(UPDATE_MODE_BLOCK|
+						  UPDATE_MODE_FLASH_CFG|
+						  UPDATE_MODE_SRC_REQUEST);
+			if (ret) {
+				ts_err("fw update failed, %d[ignore]", ret);
+				ret = 0;
+			}
 		}
 	}
 	ret = goodix_ts_stage2_init(ts_core);

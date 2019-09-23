@@ -87,6 +87,8 @@ enum TS_SEND_CFG_REPLY {
 #define IRQ_HEAD_LEN_YS			8
 #define IRQ_HEAD_LEN_NOR		2
 
+
+static struct platform_device *goodix_pdev;
 int goodix_ts_core_init(void);
 #ifdef CONFIG_OF
 /**
@@ -1303,6 +1305,7 @@ int goodix_hw_reset(struct goodix_ts_device *dev)
  */
 static int goodix_request_handler(struct goodix_ts_device *dev)
 {
+	struct goodix_ts_core *core_data = platform_get_drvdata(goodix_pdev);
 	unsigned char buffer[1];
 	int r;
 
@@ -1328,7 +1331,10 @@ static int goodix_request_handler(struct goodix_ts_device *dev)
 	break;
 	case REQUEST_RELOADFW:
 		ts_info("HW request reload fw");
-		goodix_do_fw_update(UPDATE_MODE_FORCE|UPDATE_MODE_SRC_REQUEST);
+		if (core_data && core_data->do_fw_update)
+			core_data->do_fw_update(UPDATE_MODE_FORCE|UPDATE_MODE_SRC_REQUEST);
+		else
+			ts_err("fw update handler not ready.");
 	break;
 	case REQUEST_IDLE:
 		ts_info("HW request idle");
@@ -1794,8 +1800,6 @@ static const struct goodix_ts_hw_ops hw_i2c_ops = {
 	.resume = goodix_hw_resume,
 	.check_hw = goodix_esd_check,
 };
-
-static struct platform_device *goodix_pdev;
 
 static void goodix_pdev_release(struct device *dev)
 {
