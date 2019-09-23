@@ -1518,6 +1518,12 @@ static int goodix_fw_update_init(struct goodix_ts_core *core_data,
 	goodix_fw_update_ctrl.initialized = 1;
 err_out:
 	mutex_unlock(&goodix_fw_update_ctrl.mutex);
+	if (!ret) {
+		goodix_do_fw_update(UPDATE_MODE_SRC_REQUEST);
+		if (ret)
+			ts_err("fw update failed, %d", ret);
+	}
+
 	return ret;
 }
 
