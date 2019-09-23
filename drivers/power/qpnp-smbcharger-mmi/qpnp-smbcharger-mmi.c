@@ -88,6 +88,7 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define PM8150B_JEITA_EN_CFG_REG		(CHGR_BASE + 0x90)
 
 #define POWER_PATH_STATUS_REG			(DCDC_BASE + 0x0B)
+#define MISC_POWER_PATH_STATUS_REG		(MISC_BASE + 0x0B)
 #define USBIN_SUSPEND_STS_BIT			BIT(6)
 
 #define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
@@ -114,7 +115,8 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
 #define CMD_APSD_REG				(USBIN_BASE + 0x41)
-#define APSD_RERUN_BIT				BIT(0)
+#define APSD_RERUN_BIT					BIT(0)
+#define ICL_OVERRIDE_BIT				BIT(1)
 #define USBIN_CMD_ICL_OVERRIDE_REG		(USBIN_BASE + 0x42)
 #define USBIN_ICL_OVERRIDE_BIT			BIT(0)
 #define HVDCP_PULSE_COUNT_MAX_REG		(USBIN_BASE + 0x5B)
@@ -752,9 +754,12 @@ int smblib_set_usb_suspend(struct smb_mmi_charger *chg, bool suspend)
 int smblib_get_usb_suspend(struct smb_mmi_charger *chg, int *suspend)
 {
 	int rc = 0;
-	u8 temp;
+	u8 temp = 0;
 
-	rc = smblib_read_mmi(chg, POWER_PATH_STATUS_REG, &temp);
+	if (chg->smb_version == PM660_SUBTYPE) {
+		rc = smblib_read_mmi(chg, MISC_POWER_PATH_STATUS_REG, &temp);
+	} else
+		rc = smblib_read_mmi(chg, POWER_PATH_STATUS_REG, &temp);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read POWER_PATH_STATUS_REG rc=%d\n", rc);
 		return rc;
@@ -1371,13 +1376,29 @@ static int smb_mmi_set_property(struct power_supply *psy,
 			rc = power_supply_set_property(chip->main_psy,
 					       POWER_SUPPLY_PROP_CURRENT_MAX,
 					       val);
-			override = USBIN_ICL_OVERRIDE_BIT;
+			if (chip->smb_version == PM660_SUBTYPE)
+				override = ICL_OVERRIDE_BIT;
+			else
+				override = USBIN_ICL_OVERRIDE_BIT;
 		}
 		mmi_warn(chip, "SMBMMI: Request for ICL to %d uA\n", val->intval);
-		rc = smblib_masked_write_mmi(chip, USBIN_CMD_ICL_OVERRIDE_REG,
-					     USBIN_ICL_OVERRIDE_BIT,
-					     override);
 
+		if (chip->smb_version == PM660_SUBTYPE) {
+			rc = smblib_masked_write_mmi(chip, CMD_APSD_REG,
+						ICL_OVERRIDE_BIT,
+						override);
+			if (rc < 0)
+				mmi_err(chip,
+					"Couldn't set ICL_OVERRIDE_BIT rc=%d\n", rc);
+		} else  {
+			rc = smblib_masked_write_mmi(chip,
+						USBIN_CMD_ICL_OVERRIDE_REG,
+						USBIN_ICL_OVERRIDE_BIT,
+						override);
+			if (rc < 0)
+				mmi_err(chip,
+					"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
+		}
 		break;
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		chip->gen_log_rate_s = val->intval;
@@ -1697,12 +1718,18 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 	if (apsd == CHG_BC1P2_SDP &&
 	    (icl == USBIN_900MA || icl <= USBIN_500MA)) {
 		usb51_mode = 0;
-		icl_override = USBIN_ICL_OVERRIDE_BIT;
 		apsd_override = 0;
+		if (chg->smb_version == PM660_SUBTYPE)
+			icl_override = ICL_OVERRIDE_BIT;
+		else
+			icl_override = USBIN_ICL_OVERRIDE_BIT;
 	} else {
 		usb51_mode = USBIN_MODE_CHG_BIT;
-		icl_override = USBIN_ICL_OVERRIDE_BIT;
 		apsd_override = ICL_OVERRIDE_AFTER_APSD_BIT;
+		if (chg->smb_version == PM660_SUBTYPE)
+			icl_override = ICL_OVERRIDE_BIT;
+		else
+			icl_override = USBIN_ICL_OVERRIDE_BIT;
 	}
 
 	if (chg->main_psy) {
@@ -1722,12 +1749,21 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 		mmi_err(chg,
 			"Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
 
-	rc = smblib_masked_write_mmi(chg, USBIN_CMD_ICL_OVERRIDE_REG,
+	if (chg->smb_version == PM660_SUBTYPE) {
+		rc = smblib_masked_write_mmi(chg, CMD_APSD_REG,
+				     ICL_OVERRIDE_BIT,
+				     icl_override);
+		if (rc < 0)
+			mmi_err(chg,
+				"Couldn't set ICL_OVERRIDE_BIT rc=%d\n", rc);
+	} else {
+		rc = smblib_masked_write_mmi(chg, USBIN_CMD_ICL_OVERRIDE_REG,
 				     USBIN_ICL_OVERRIDE_BIT,
 				     icl_override);
-	if (rc < 0)
-		mmi_err(chg,
-			"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
+		if (rc < 0)
+			mmi_err(chg,
+				"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
+	}
 
 	rc = smblib_masked_write_mmi(chg, USBIN_LOAD_CFG_REG,
 				     ICL_OVERRIDE_AFTER_APSD_BIT,
