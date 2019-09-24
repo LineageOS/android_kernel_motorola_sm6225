@@ -179,10 +179,11 @@ static void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mm
 }
 
 #define PPS_INIT_VOLT_COMP	500000
+#define PPS_VOLT_COMP_DELTA	300000
 static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 										struct mmi_cp_policy_dev *chrg_list)
 {
-	int chrg_num, i;
+	int chrg_num = 0, i = 0, chrg_error_type= 0;
 	struct mmi_charger_device *chrg_dev;
 	chrg_num = chip->mmi_chrg_dev_num;
 
@@ -194,54 +195,68 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 		case CP_MASTER:
 		if (is_charger_exist(dev_ops[CP_MASTER].dev_name)) {
 				chrg_dev = chrg_list->chrg_dev[CP_MASTER];
-
-				if (chrg_dev->charger_error.bus_ucp_alarm) {
-					mmi_chrg_info(chip,"CP master bus ucp error %d, "
+				chrg_error_type = chrg_dev->charger_error.chrg_err_type;
+			if (chrg_error_type & (1 << MMI_BUS_UCP_ALARM_BIT) ||
+				chrg_error_type & (1 << MMI_BUS_UCP_FAULT_BIT)) {
+				mmi_chrg_info(chip,"CP master bus ucp error %d, cnt %d,"
 						"pps volt comp %dmV\n",
+						chrg_error_type,
 						chrg_dev->charger_error.bus_ucp_err_cnt,
 						chip->pps_volt_comp);
 
-					if (chrg_dev->charger_error.bus_ucp_err_cnt > 3) {
-						if (chrg_list->cp_slave) {
-							chrg_list->cp_slave = false;
-							chrg_dev->charger_error.bus_ucp_err_cnt = 0;
-							mmi_chrg_sm_move_state(chip,
-								PM_STATE_CHRG_PUMP_ENTRY);
-						} else {
-							chip->recovery_pmic_chrg = true;
-							mmi_chrg_sm_move_state(chip,
-								PM_STATE_SW_ENTRY);
-							chrg_dev->charger_error.bus_ucp_err_cnt = 0;
-						}
-					} else if (chrg_dev->charger_error.bus_ucp_err_cnt > 6) {
+				if (chrg_dev->charger_error.bus_ucp_err_cnt > 3) {
+					if (chrg_list->cp_slave) {
+						chrg_list->cp_slave = false;
+						chrg_dev->charger_error.bus_ucp_err_cnt = 0;
+						mmi_chrg_sm_move_state(chip,
+							PM_STATE_CHRG_PUMP_ENTRY);
+					} else {
 						chip->recovery_pmic_chrg = true;
 						mmi_chrg_sm_move_state(chip,
-								PM_STATE_SW_ENTRY);
+							PM_STATE_SW_ENTRY);
 						chrg_dev->charger_error.bus_ucp_err_cnt = 0;
 					}
-
-					chrg_dev->charger_error.bus_ucp_err_cnt++;
-					chip->pps_volt_comp += PPS_INIT_VOLT_COMP;
-					mmi_clear_charger_error(chrg_dev);
-				} else if (chrg_dev->charger_error.bus_ocp_alarm) {
-
-					mmi_chrg_info(chip, "CP master bus ocp error %d, "
-						"pps volt comp %dmV\n",
-						chrg_dev->charger_error.bus_ocp_err_cnt,
-						chip->pps_volt_comp);
-
-					if (chrg_dev->charger_error.bus_ocp_err_cnt > 3) {
-						chip->recovery_pmic_chrg = true;
-						mmi_chrg_sm_move_state(chip,
-								PM_STATE_SW_ENTRY);
-						chrg_dev->charger_error.bus_ocp_err_cnt = 0;
-					}
-					chrg_dev->charger_error.bus_ucp_err_cnt++;
-					chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
-					mmi_chrg_info(chip,"reset pps volt comp %dmV\n",
-						chip->pps_volt_comp);
+				} else if (chrg_dev->charger_error.bus_ucp_err_cnt > 6) {
+					chip->recovery_pmic_chrg = true;
+					mmi_chrg_sm_move_state(chip,
+							PM_STATE_SW_ENTRY);
+					chrg_dev->charger_error.bus_ucp_err_cnt = 0;
 				}
+
+				chrg_dev->charger_error.bus_ucp_err_cnt++;
+				chip->pps_volt_comp += PPS_VOLT_COMP_DELTA;
+				mmi_chrg_info(chip,"Restart charging, "
+						"increase pps volt comp %dmV\n",
+						chip->pps_volt_comp);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_CHRG_PUMP_ENTRY);
+				mmi_clear_charger_error(chrg_dev);
+			}else if (chrg_error_type & (1 << MMI_BUS_OCP_ALARM_BIT) ||
+				chrg_error_type & (1 << MMI_BUS_OCP_FAULT_BIT) ||
+				chrg_error_type & (1 << MMI_CONV_OCP_FAULT_BIT)) {
+				mmi_chrg_info(chip,"CP master ocp error %d, cnt %d,"
+					"pps volt comp %dmV\n",
+					chrg_error_type,
+					chrg_dev->charger_error.bus_ocp_err_cnt,
+					chip->pps_volt_comp);
+				if (chrg_dev->charger_error.bus_ocp_err_cnt > 3) {
+					chip->recovery_pmic_chrg = true;
+					mmi_chrg_sm_move_state(chip,
+							PM_STATE_SW_ENTRY);
+					chrg_dev->charger_error.bus_ocp_err_cnt = 0;
+				}
+				chrg_dev->charger_error.bus_ocp_err_cnt++;
+				chip->pps_volt_comp -= PPS_VOLT_COMP_DELTA;
+				if (chip->pps_volt_comp < 0)
+					chip->pps_volt_comp = 0;
+				mmi_chrg_info(chip,"Restart charging, "
+						"decrease pps volt comp %dmV\n",
+						chip->pps_volt_comp);
+				mmi_chrg_sm_move_state(chip,
+							PM_STATE_CHRG_PUMP_ENTRY);
+				mmi_clear_charger_error(chrg_dev);
 			}
+		}
 			break;
 		case CP_SLAVE:
 			break;
@@ -358,7 +373,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	mmi_chrg_info(chip, "battery capacity %d\n", batt_soc);
 
 	if (vbus_pres) {
-//		mmi_dump_charger_error(chip, chrg_list->chrg_dev[CP_MASTER]);
+		mmi_dump_charger_error(chip, chrg_list->chrg_dev[CP_MASTER]);
 		chrg_policy_error_recovery(chip, chrg_list);
 	}
 
@@ -1298,28 +1313,38 @@ schedule:
 		chip->pd_target_volt = min(chip->pd_request_volt, chip->pd_thermal_volt);
 		chip->pd_target_curr = min(chip->pd_request_curr, chip->pd_thermal_curr);
 	}
-	mmi_chrg_dbg(chip, PR_MOTO, "chrg sm work, chrg step %s, "
-								"pd request volt %dmV,"
+
+	mmi_chrg_dbg(chip, PR_MOTO, "chrg sm work,%s, "
+								"battery soc %d, "
+								"battery temp %d, "
+								"battery current %d, "
+								"battery voltage %d"
+								"thermal level %d, "
+								"thermal cooling %d, "
+								"thermal mitigation %d, "
+								"thermal force pmic chrg %d, "
+								"recovery pmic chrg %d\n",
+								pm_state_str[sm_state],
+								batt_soc, batt_temp,
+								ibatt_curr, vbatt_volt,
+								chip->system_thermal_level,
+								chip->thermal_cooling,
+								chip->thermal_mitigation_doing,
+								chip->thermal_force_pmic_chrg,
+								chip->recovery_pmic_chrg);
+
+	mmi_chrg_dbg(chip, PR_MOTO, 	"pd request volt %dmV,"
 								"pd request curr %dmA, "
 								"pd target volt %dmV, "
 								"pd target curr %dmA, "
-								"thermal level %d, "
 								"thermal volt %dmV, "
-								"thermal curr %dmA, "
-								"thermal cooling %d, "
-								"thermal mitigation %d, "
-								"thermal force pmic chrg %d\n",
-								pm_state_str[sm_state],
+								"thermal curr %dmA\n",
 								chip->pd_request_volt,
 								chip->pd_request_curr,
 								chip->pd_target_volt,
 								chip->pd_target_curr,
-								chip->system_thermal_level,
 								chip->pd_thermal_volt,
-								chip->pd_thermal_curr,
-								chip->thermal_cooling,
-								chip->thermal_mitigation_doing,
-								chip->thermal_force_pmic_chrg);
+								chip->pd_thermal_curr);
 
 	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
 								chip->mmi_pd_pdo_idx,

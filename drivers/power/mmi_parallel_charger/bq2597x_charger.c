@@ -215,44 +215,41 @@ static int bq2597x_update_charger_error_status(struct mmi_charger_device *chrg)
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_STATUS, &prop);
 	if (!rc) {
-		chrg->charger_error.bat_ovp_alarm =
-				!!(prop.intval & BAT_OVP_ALARM_MASK);
-		chrg->charger_error.bat_ocp_alarm =
-				!!(prop.intval & BAT_OCP_ALARM_MASK);
-		chrg->charger_error.bus_ovp_alarm =
-				!!(prop.intval & BUS_OVP_ALARM_MASK);
-		chrg->charger_error.bus_ocp_alarm =
-				!!(prop.intval & BUS_OCP_ALARM_MASK);
-		chrg->charger_error.bat_ucp_alarm =
-				!!(prop.intval & BAT_UCP_ALARM_MASK);
-		chrg->charger_error.bus_therm_alarm =
-				!!(prop.intval & BUS_THERM_ALARM_MASK);
-		chrg->charger_error.die_therm_alarm =
-				!!(prop.intval & DIE_THERM_ALARM_MASK);
-		chrg->charger_error.bat_ovp_fault =
-				!!(prop.intval & BAT_OVP_FAULT_MASK);
-		chrg->charger_error.bat_ocp_fault =
-				!!(prop.intval & BAT_OCP_FAULT_MASK);
-		chrg->charger_error.bus_ovp_fault =
-				!!(prop.intval & BUS_OVP_FAULT_MASK);
-		chrg->charger_error.bus_ocp_fault =
-				!!(prop.intval & BUS_OCP_FAULT_MASK);
-		chrg->charger_error.bat_therm_fault =
-				!!(prop.intval & BAT_THERM_FAULT_MASK);
-		chrg->charger_error.bus_therm_fault =
-				!!(prop.intval & BUS_THERM_FAULT_MASK);
-		chrg->charger_error.die_therm_fault =
-				!!(prop.intval & DIE_THERM_FAULT_MASK);
-		chrg->charger_error.conv_ocp_fault =
-				!!(prop.intval & CONV_OCP_FAULT_MASK);
-		chrg->charger_error.ss_timeout_fault =
-				!!(prop.intval & SS_TIMEOUT_FAULT_MASK);
-		chrg->charger_error.ts_shut_fault =
-				!!(prop.intval & TS_SHUT_FAULT_MASK);
-		chrg->charger_error.bus_ucp_alarm =
-				!!(prop.intval & BUS_UCP_FAULT_MASK);
+		chrg->charger_error.chrg_err_type =
+			((!!(prop.intval & BAT_OVP_ALARM_MASK)) ?
+			1 << MMI_BAT_OVP_ALARM_BIT :
+			0 << MMI_BAT_OVP_ALARM_BIT) |
+			((!!(prop.intval & BAT_OCP_ALARM_MASK)) ?
+			1 << MMI_BAT_OCP_ALARM_BIT :
+			0 << MMI_BAT_OCP_ALARM_BIT) |
+			((!!(prop.intval & BAT_UCP_ALARM_MASK)) ?
+			1 << MMI_BAT_UCP_ALARM_BIT :
+			0 << MMI_BAT_UCP_ALARM_BIT) |
+			((!!(prop.intval & BUS_OVP_ALARM_MASK)) ?
+			1 << MMI_BUS_OVP_ALARM_BIT :
+			0 << MMI_BUS_OVP_ALARM_BIT) |
+			((!!(prop.intval & BUS_OCP_ALARM_MASK)) ?
+			1 << MMI_BUS_OCP_ALARM_BIT :
+			0 << MMI_BUS_OCP_ALARM_BIT) |
+			((!!(prop.intval & BAT_OVP_FAULT_MASK)) ?
+			1 << MMI_BAT_OVP_FAULT_BIT :
+			0 << MMI_BAT_OVP_FAULT_BIT) |
+			((!!(prop.intval & BAT_OCP_FAULT_MASK)) ?
+			1 << MMI_BAT_OCP_FAULT_BIT :
+			0 << MMI_BAT_OCP_FAULT_BIT) |
+			((!!(prop.intval & BUS_OVP_FAULT_MASK)) ?
+			1 << MMI_BUS_OVP_FAULT_BIT :
+			0 << MMI_BUS_OVP_FAULT_BIT) |
+			((!!(prop.intval & BUS_OCP_FAULT_MASK)) ?
+			1 << MMI_BUS_OCP_FAULT_BIT :
+			0 << MMI_BUS_OCP_FAULT_BIT) |
+			((!!(prop.intval & BUS_UCP_FAULT_MASK)) ?
+			1 << MMI_BUS_UCP_FAULT_BIT :
+			0 << MMI_BUS_UCP_FAULT_BIT) |
+			((!!(prop.intval & CONV_OCP_FAULT_MASK)) ?
+			1 << MMI_CONV_OCP_FAULT_BIT :
+			0 << MMI_CONV_OCP_FAULT_BIT);
 	}
-
 	return rc;
 }
 

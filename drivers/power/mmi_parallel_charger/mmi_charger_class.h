@@ -53,32 +53,24 @@ struct mmi_charger_info {
 	int batt_temp;
 };
 
+#define MMI_BAT_OVP_ALARM_BIT 0
+#define MMI_BAT_OCP_ALARM_BIT 1
+#define MMI_BAT_UCP_ALARM_BIT 2
+#define MMI_BUS_OVP_ALARM_BIT 3
+#define MMI_BUS_OCP_ALARM_BIT 4
+#define MMI_BUS_UCP_ALARM_BIT 5
+#define MMI_BAT_OVP_FAULT_BIT 6
+#define MMI_BAT_OCP_FAULT_BIT 7
+#define MMI_BAT_UCP_FAULT_BIT 8
+#define MMI_BUS_OVP_FAULT_BIT 9
+#define MMI_BUS_OCP_FAULT_BIT 10
+#define MMI_BUS_UCP_FAULT_BIT 11
+#define MMI_CONV_OCP_FAULT_BIT 12
+#define MMI_THERM_ALARM_BIT 13
+#define MMI_THERM_FAULT_BIT  14
+
 struct mmi_charger_error_info {
-	/* alarm/fault status */
-	bool bat_ovp_fault;
-	bool bat_ocp_fault;
-	bool bus_ovp_fault;
-	bool bus_ocp_fault;
-
-	bool bat_ovp_alarm;
-	bool bat_ocp_alarm;
-	bool bus_ovp_alarm;
-	bool bus_ocp_alarm;
-	bool bus_ucp_alarm;
-	bool bat_ucp_alarm;
-
-	bool bat_therm_alarm;
-	bool bus_therm_alarm;
-	bool die_therm_alarm;
-
-	bool bat_therm_fault;
-	bool bus_therm_fault;
-	bool die_therm_fault;
-
-	bool conv_ocp_fault;
-	bool ss_timeout_fault;
-	bool ts_shut_fault;
-
+	int chrg_err_type;
 	int bus_ucp_err_cnt;
 	int bus_ocp_err_cnt;
 };
