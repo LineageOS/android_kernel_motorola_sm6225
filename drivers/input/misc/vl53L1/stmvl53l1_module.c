@@ -1170,7 +1170,6 @@ static ssize_t stmvl53l1_show_roi(struct device *dev,
 }
 
 
-static const char str_roi_ranging[] = "ERROR can't set roi while ranging\n";
 
 static ssize_t stmvl53l1_store_roi(struct device *dev,
 					struct device_attribute *attr,
