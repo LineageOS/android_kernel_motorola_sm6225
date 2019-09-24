@@ -305,48 +305,12 @@ void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 		mmi_chrg_err(chip, "called before chip valid!\n");
 		return;
 	}
-
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_ovp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_ovp_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_ocp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_ocp_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ovp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_ovp_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ocp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_ocp_fault);
-
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_ovp_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_ovp_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_ocp_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_ocp_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ovp_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_ovp_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ocp_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_ocp_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_ucp_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_ucp_alarm);
-
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_therm_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_therm_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_therm_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_therm_alarm);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: die_therm_alarm %d\n",
-					chrg_dev->name, chrg_dev->charger_error.die_therm_alarm);
-
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bat_therm_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bat_therm_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_therm_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_therm_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: die_therm_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.die_therm_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: conv_ocp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.conv_ocp_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: ss_timeout_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.ss_timeout_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: ts_shut_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.ts_shut_fault);
-	mmi_chrg_dbg(chip, PR_MOTO, "%s: bus_ucp_fault %d\n",
-					chrg_dev->name, chrg_dev->charger_error.bus_ucp_alarm);	
+	mmi_chrg_dbg(chip, PR_MOTO, "%s: charger error type %d, "
+					"bus ucp err cnt %d, bus ocp err cnt %d\n",
+					chrg_dev->name,
+					chrg_dev->charger_error.chrg_err_type,
+					chrg_dev->charger_error.bus_ucp_err_cnt,
+					chrg_dev->charger_error.bus_ocp_err_cnt);
 	return;
 }
 
