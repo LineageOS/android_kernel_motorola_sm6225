@@ -629,7 +629,7 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
-				      msecs_to_jiffies(0));
+				      msecs_to_jiffies(1000));
 
 	}
 
@@ -838,12 +838,13 @@ static DEVICE_ATTR(force_max_chrg_temp, 0644,
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
-	if (!delayed_work_pending(&chip->mmi_chrg_sm_work)) {
-
+	if (!chip->sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
-					"lunch mmi chrg sm work\n");
+					"launch mmi chrg sm work\n");
+		mmi_chrg_policy_clear(chip);
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
+		chip->sm_work_running = true;
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg sm work already existed\n");
@@ -851,9 +852,11 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
-	mmi_chrg_dbg(chip, PR_INTERRUPT, "flush and cancel mmi chrg sm work\n");
+	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
-	cancel_delayed_work(&chip->mmi_chrg_sm_work);
+	chip->sm_work_running = false;
+	mmi_chrg_dbg(chip, PR_INTERRUPT,
+					"cancel sync and flush mmi chrg sm work\n");
 }
 
 void clear_chg_manager(struct mmi_charger_manager *chip)
@@ -968,10 +971,11 @@ static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, heartbeat_work.work);
-	int hb_resch_time = 0, ret = 0;
+	int hb_resch_time = 0, ret = 0, i = 0;
 	char *chrg_rate_string = NULL;
 	char *envp[2];
 	union power_supply_propval val;
+	bool pd_active;
 
 	mmi_chrg_info(chip, "MMI: Heartbeat!\n");
 	/* Have not been resumed so wait another 100 ms */
@@ -1006,7 +1010,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	mmi_chrg_rate_check(chip);
 	hb_resch_time = HEARTBEAT_DELAY_MS;
 
-
 	if (chip->vbus_present)
 		alarm_start_relative(&chip->heartbeat_alarm,
 				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
@@ -1034,9 +1037,66 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	__pm_relax(&chip->mmi_hb_wake_source);
 
+	ret = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	if (ret) {
+		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
+		goto schedule_work;
+	}
+	pd_active = val.intval;
+
+	if (!chip->pd_handle) {
+		chip->pd_handle = devm_usbpd_get_by_phandle(chip->dev,
+						    "qcom,usbpd-phandle");
+		if (IS_ERR_OR_NULL(chip->pd_handle)) {
+			mmi_chrg_err(chip, "Error getting the pd phandle %ld\n",
+				PTR_ERR(chip->pd_handle));
+			chip->pd_handle = NULL;
+			goto schedule_work;
+		}
+	}
+
+	if (!chip->sm_work_running && chip->vbus_present
+		&& pd_active) {
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+		mmi_chrg_info(chip, "check all effective pdo info\n");
+		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
+			if ((chip->mmi_pdo_info[i].type ==
+					PD_SRC_PDO_TYPE_AUGMENTED)
+				&& chip->mmi_pdo_info[i].uv_max >= PUMP_CHARGER_PPS_MIN_VOLT
+				&& chip->mmi_pdo_info[i].ua >= TYPEC_MIDDLE_CURRENT_UA) {
+					chip->mmi_pd_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
+					mmi_chrg_info(chip,
+							"pd charger support pps, pdo %d, "
+							"volt %d, curr %d \n",
+							chip->mmi_pd_pdo_idx,
+							chip->mmi_pdo_info[i].uv_max,
+							chip->mmi_pdo_info[i].ua);
+					chip->pd_pps_support = true;
+
+					if (chip->mmi_pdo_info[i].uv_max <
+							chip->pd_volt_max) {
+						chip->pd_volt_max =
+						chip->mmi_pdo_info[i].uv_max;
+					}
+					if (chip->mmi_pdo_info[i].ua <
+							chip->pd_curr_max) {
+						chip->pd_curr_max =
+						chip->mmi_pdo_info[i].ua;
+					}
+				break;
+			}
+		}
+
+		if (chip->pd_pps_support) {
+			mmi_chrg_info(chip, "MMI: Heartbeat!, launch sm work\n");
+			kick_sm(chip, 100);
+		}
+	}
+
+schedule_work:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
-
 }
 
 static void psy_changed_work_func(struct work_struct *work)
