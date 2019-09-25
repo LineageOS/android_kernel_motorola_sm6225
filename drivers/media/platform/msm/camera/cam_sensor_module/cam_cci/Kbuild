@@ -10,6 +10,7 @@ HAVE_TECHPACK_CAMERA = $(shell test -d $(TOP)/$(KERNEL_SOURCE_PATH)/techpack/cam
 
 ifeq ($(HAVE_TECHPACK_CAMERA),1)
         KERNEL_CAMERA_DRIVER_PATH ?= $(TOP)/$(KERNEL_SOURCE_PATH)/techpack/camera/drivers
+        EXTRA_CFLAGS += -DCONFIG_SPECTRA_CAMERA=1
         EXTRA_CFLAGS += -I$(KERNEL_CAMERA_DRIVER_PATH)/../include
         EXTRA_CFLAGS += -I$(KERNEL_CAMERA_DRIVER_PATH)/../include/uapi
 else
