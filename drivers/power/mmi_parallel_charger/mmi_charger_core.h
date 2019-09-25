@@ -200,7 +200,7 @@ struct mmi_charger_manager {
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
 	struct completion	sm_completion;
 	struct work_struct	psy_changed_work;	/*the change notification of power supply*/
-
+	bool sm_work_running;
 	int num_temp_zones;
 	struct mmi_chrg_temp_zone		*temp_zones;	/*the temperature zone of charging*/
 	enum mmi_chrg_temp_zones	pres_temp_zone;	/*the present zone idx*/
