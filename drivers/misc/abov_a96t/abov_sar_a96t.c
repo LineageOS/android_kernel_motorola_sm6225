@@ -35,6 +35,7 @@
 #include <asm/atomic.h>
 #include <linux/async.h>
 #include <linux/firmware.h>
+#include <linux/version.h>
 #define SLEEP(x)	mdelay(x)
 
 #define C_I2C_FIFO_SIZE 8
@@ -786,13 +787,13 @@ static int ps_get_state(struct power_supply *psy, bool *present)
 
 	retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,
 			&pval);
-	/*if (retval) {
-		LOG_DBG("%s psy get property failed\n", psy->name);
+	if (retval) {
+		LOG_DBG("%s psy get property failed\n", psy->desc->name);
 		return retval;
-	}*/
+	}
 	*present = (pval.intval) ? true : false;
-	/*LOG_INFO("%s is %s\n", psy->name,
-			(*present) ? "present" : "not present");*/
+	LOG_INFO("%s is %s\n", psy->desc->name,
+			(*present) ? "present" : "not present");
 	return 0;
 }
 
@@ -804,10 +805,13 @@ static int ps_notify_callback(struct notifier_block *self,
 	bool present;
 	int retval;
 
-	/*if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
-			&& psy && psy->get_property && psy->name &&
-			!strncmp(psy->name, "usb", sizeof("usb"))) {*/
-	if (event == PSY_EVENT_PROP_CHANGED) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
+	if (event == PSY_EVENT_PROP_CHANGED
+#else
+	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
+#endif
+			&& psy && psy->desc->get_property && psy->desc->name &&
+			!strncmp(psy->desc->name, "usb", sizeof("usb"))){
 		LOG_INFO("ps notification: event = %lu\n", event);
 		retval = ps_get_state(psy, &present);
 		if (retval) {
