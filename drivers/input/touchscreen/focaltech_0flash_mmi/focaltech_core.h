@@ -135,6 +135,7 @@ struct fts_ts_platform_data {
     u32 irq_gpio_flags;
     u32 reset_gpio;
     u32 reset_gpio_flags;
+    bool always_on_vio;
     bool share_reset_gpio;
     bool have_key;
     u32 key_number;
