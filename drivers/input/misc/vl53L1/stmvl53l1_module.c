@@ -141,26 +141,6 @@
 struct timeval start_tv, stop_tv;
 #endif
 
-/* Set special tuning parameters for VL53L3 (ticket 513812) */
-static const int tunings_L3[][2] = {
-		{VL53L1_TUNINGPARM_HIST_AMB_THRESH_SIGMA_1, 80},
-		{VL53L1_TUNINGPARM_HIST_SIGNAL_TOTAL_EVENTS_LIMIT, 50},
-		{VL53L1_TUNINGPARM_HIST_SIGMA_THRESH_MM, 180},
-		{VL53L1_TUNINGPARM_CONSISTENCY_HIST_MIN_MAX_TOLERANCE_MM, 0},
-		{VL53L1_TUNINGPARM_XTALK_DETECT_MAX_VALID_RATE_KCPS, 400},
-		{VL53L1_TUNINGPARM_HIST_XTALK_MARGIN_KCPS, 0},
-		{VL53L1_TUNINGPARM_XTALK_EXTRACT_NUM_OF_SAMPLES, 13},
-		{VL53L1_TUNINGPARM_XTALK_EXTRACT_MAX_VALID_RATE_KCPS, 640},
-		{VL53L1_TUNINGPARM_DYNXTALK_SMUDGE_MARGIN, 0},
-		{VL53L1_TUNINGPARM_DYNXTALK_NOISE_MARGIN, 100},
-		{VL53L1_TUNINGPARM_DYNXTALK_SINGLE_XTALK_DELTA, 2048},
-		{VL53L1_TUNINGPARM_DYNXTALK_AVERAGED_XTALK_DELTA, 308},
-		{VL53L1_TUNINGPARM_DYNXTALK_CLIP_LIMIT, 10240},
-		{VL53L1_TUNINGPARM_DYNXTALK_XTALK_AMB_THRESHOLD, 128},
-		{VL53L1_TUNINGPARM_DYNXTALK_NODETECT_SAMPLE_LIMIT, 40}
-};
-/* End of Set special tuning parameters for VL53L3 (ticket 513812) */
-
 /* Set default value to 1 to allow to see module insertion debug messages */
 int stmvl53l1_enable_debug = 1;
 
@@ -523,7 +503,7 @@ static void dump_roi(VL53L1_UserRoi_t *rois, uint32_t n)
 #	define dump_roi(...) (void)0
 #endif
 
-static int setup_tunings(struct stmvl53l1_data *data, uint8_t ProductType)
+static int setup_tunings(struct stmvl53l1_data *data)
 {
 	int rc = 0;
 	int i;
@@ -536,40 +516,6 @@ static int setup_tunings(struct stmvl53l1_data *data, uint8_t ProductType)
 			break;
 		}
 	}
-
-	/* Set special tuning parameters for VL53L3 (ticket 513812) */
-	if ((!rc) && (ProductType == 0xAA))
-	{
-		for (i = 0; i < ARRAY_SIZE(tunings_L3); i++) {
-			rc = VL53L1_SetTuningParameter(&data->stdev, tunings_L3[i][0],
-					tunings_L3[i][1]);
-			if (rc) {
-				rc = store_last_error(data, rc);
-				break;
-			}
-		}
-
-		if (!rc) {
-			/* Special setting forbidden by VL53L1_SetTuningParameter
-			 * (ticket 487847)
-			 *  Use VL53L1_set_tuning_parm to force a specific value */
-			rc = VL53L1_set_tuning_parm(&data->stdev,
-					VL53L1_TUNINGPARM_DYNXTALK_NODETECT_XTALK_OFFSET_KCPS,
-					410);
-			if (rc)
-				rc = store_last_error(data, rc);
-		}
-
-		if (!rc) {
-			/*Some default settings here for VL53L3*/
-			data->timing_budget = 30000;
-			data->crosstalk_enable = 1;
-			data->dmax_mode = VL53L1_DMAXMODE_CUSTCAL_DATA;
-			data->smudge_correction_mode = VL53L1_SMUDGE_CORRECTION_CONTINUOUS;
-			data->dmax_reflectance = (5 << 16);
-		}
-	}
-	/* End of Set special tuning parameters for VL53L3 (ticket 513812) */
 
 	return rc;
 }
@@ -4601,10 +4547,20 @@ int stmvl53l1_setup(struct stmvl53l1_data *data)
 	}
 
 	/* set tuning from stmvl53l1_tunings.h */
-	rc = setup_tunings(data, dev_info.ProductType);
+	rc = setup_tunings(data);
 	if (rc) {
 		vl53l1_errmsg("setup_tunings %d\n", rc);
 		goto exit_unregister_dev_ps;
+	}
+
+	/* Set special parameters for VL53L3 (ticket 513812) */
+	if (dev_info.ProductType == 0xAA)
+	{
+		data->timing_budget = 30000;
+		data->crosstalk_enable = 1;
+		data->dmax_mode = VL53L1_DMAXMODE_CUSTCAL_DATA;
+		data->smudge_correction_mode = VL53L1_SMUDGE_CORRECTION_CONTINUOUS;
+		data->dmax_reflectance = (5 << 16);
 	}
 
 	data->hw_rev = dev_info.ProductRevisionMinor;

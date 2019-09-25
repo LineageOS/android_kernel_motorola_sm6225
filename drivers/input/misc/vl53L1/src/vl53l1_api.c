@@ -3177,13 +3177,11 @@ VL53L1_Error VL53L1_PerformOffsetSimpleCalibration(VL53L1_DEV Dev,
 		Status = VL53L1_StartMeasurement(Dev);
 
 
-		if (Status == VL53L1_ERROR_NONE)
-			Status = VL53L1_WaitMeasurementDataReady(Dev);
-		if (Status == VL53L1_ERROR_NONE)
-			Status = VL53L1_GetRangingMeasurementData(Dev,
-						&RangingMeasurementData);
-		if (Status == VL53L1_ERROR_NONE)
-			Status = VL53L1_ClearInterruptAndStartMeasurement(Dev);
+		if (Status == VL53L1_ERROR_NONE) {
+			VL53L1_WaitMeasurementDataReady(Dev);
+			VL53L1_GetRangingMeasurementData(Dev, &RangingMeasurementData);
+			VL53L1_ClearInterruptAndStartMeasurement(Dev);
+		}
 
 
 		inloopcount = 0;
