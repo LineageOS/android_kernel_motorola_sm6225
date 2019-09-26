@@ -111,8 +111,10 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
     .max_range = "5.0",
     .resolution = "5.0",
     .sensor_power = "1",
-    .min_delay = -1,
+    .min_delay = 0,
     .max_delay = 0,
+    /* WAKE_UP & ON_CHANGE */
+    .flags = 1 | 2,
     .fifo_reserved_event_count = 0,
     .fifo_max_event_count = 0,
     .enabled = 0,
@@ -295,13 +297,8 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
     if (gesture != -1) {
         FTS_DEBUG("Gesture Code=%d", gesture);
 #ifdef FOCALTECH_SENSOR_EN
-        if (!fts_data->wakeable) {
-            FTS_INFO("Predict enable failed.");
-            fts_data->should_enable_gesture = false;
-            fts_gesture_resume(fts_data);
-            /* TP enter sleep mode */
-            if (fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP_VALUE) < 0)
-                FTS_ERROR("set TP to sleep mode fail.");
+        if (!(fts_data->wakeable && fts_data->should_enable_gesture)) {
+            FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
             return;
         }
         input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
@@ -313,7 +310,7 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
-        __pm_wakeup_event(&gesture_wakelock, msecs_to_jiffies(5000));
+        __pm_wakeup_event(&gesture_wakelock, 5000);
 #endif
 #else
         input_report_key(input_dev, gesture, 1);
@@ -330,28 +327,13 @@ static int fts_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 {
     FTS_INFO("Gesture set enable %d!", enable);
     mutex_lock(&fts_data->state_mutex);
-    if (enable == 1) {
-        fts_data->wakeable = true;
-        if (!fts_data->suspended && fts_data->screen_state == SCREEN_ON) {
-            FTS_INFO("Touch still in normal mode, skip to set to gesture mode");
-            mutex_unlock(&fts_data->state_mutex);
-            return 0;
-        }
-        if (fts_gesture_data.active == ENABLE) {
-            FTS_INFO("already in gesture mode");
-            mutex_unlock(&fts_data->state_mutex);
-            return 0;
-        }
-
+    if (enable == 1)
         fts_data->should_enable_gesture = true;
-        fts_gesture_suspend(fts_data);
-        FTS_INFO("Set IC in doze mode");
-    } else if (enable == 0) {
-        fts_data->wakeable = false;
-        //fts_gesture_resume(fts_data);
-    } else {
+    else if (enable == 0)
+        fts_data->should_enable_gesture = false;
+    else
         FTS_INFO("unknown enable symbol\n");
-    }
+
     mutex_unlock(&fts_data->state_mutex);
     return 0;
 }
