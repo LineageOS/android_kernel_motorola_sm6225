@@ -244,6 +244,13 @@ bool mmi_get_pps_result_history(struct mmi_charger_manager *chip)
 		return NO_ERROR;
 }
 
+void mmi_clear_pps_result_history(struct mmi_charger_manager *chip)
+{
+	int i = 0;;
+	for (i = 0; i < PPS_RET_HISTORY_SIZE; i++)
+		chip->pps_result_history[i] = 0;
+}
+
 int mmi_calculate_delta_volt(int pps_voltage, int pps_current, int delta_curr)
 {
 	u64 power;
@@ -875,7 +882,6 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->thermal_force_pmic_chrg = false;
 	chip->thermal_cooling = false;
 	chip->thermal_cooling_cnt = 0;
-	chip->pd_pps_support = false;
 
 	memset(chip->mmi_pdo_info, 0,
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
