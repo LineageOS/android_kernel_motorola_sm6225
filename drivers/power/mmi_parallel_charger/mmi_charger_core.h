@@ -218,6 +218,7 @@ struct mmi_charger_manager {
 
 extern bool mmi_get_pps_result_history(struct mmi_charger_manager *chip);
 extern void mmi_set_pps_result_history(struct mmi_charger_manager *chip, int pps_result);
+extern void mmi_clear_pps_result_history(struct mmi_charger_manager *chip);
 extern int mmi_calculate_delta_volt(int pps_voltage, int pps_current, int delta_curr);
 extern bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vbatt_volt);
 extern bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c);

@@ -117,6 +117,8 @@ static int chrg_cc_power_tunning_cnt = 0;
 static int chrg_cv_taper_tunning_cnt = 0;
 static int chrg_cv_delta_volt = 0;
 static int quit_slave_chrg_cnt = 0;
+static int batt_curr_roof = 0;
+static int pd_constant_power_cnt = 0;
 static struct mmi_cp_policy_dev g_chrg_list = {0};
 
 static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state_t state)
@@ -286,6 +288,7 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 #define PPS_SELECT_PDO_RETRY_COUNT 3
 #define DISABLE_CHRG_LIMIT -1
 #define CP_CHRG_SOC_LIMIT 90
+#define PD_CONT_PWR_CNT 5
 
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	chrg_dev_init(chip, &g_chrg_list);
@@ -297,6 +300,8 @@ void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	chrg_cc_power_tunning_cnt = 0;
 	chrg_cv_taper_tunning_cnt = 0;
 	chrg_cv_delta_volt = 0;
+	pd_constant_power_cnt = 0;
+	batt_curr_roof = 0;
 	return;
 }
 
@@ -387,7 +392,11 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	mmi_chrg_info(chip, "battery temp %d\n", batt_temp);
 	mmi_chrg_info(chip, "battery capacity %d\n", batt_soc);
 
-	if (vbus_pres) {
+	if (vbus_pres &&
+		(sm_state == PM_STATE_PPS_TUNNING_CURR
+		|| sm_state == PM_STATE_PPS_TUNNING_VOLT
+		|| sm_state == PM_STATE_CP_CC_LOOP
+		|| sm_state == PM_STATE_CP_CV_LOOP)) {
 		mmi_dump_charger_error(chip, chrg_list->chrg_dev[CP_MASTER]);
 		chrg_policy_error_recovery(chip, chrg_list);
 	}
@@ -420,7 +429,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 						"Enter into COOLING LOOP !\n",
 						batt_temp, chrg_step->temp_c);
 				chip->thermal_cooling = true;
-			} else {
+			} else if (!chip->thermal_cooling) {
 				mmi_chrg_info(chip, "battery temp %d, temp thre %d "
 						"Restart select chrg step and temp zone !\n",
 						batt_temp, chrg_step->temp_c);
@@ -643,7 +652,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		chip->pd_request_volt = 2 * vbatt_volt - chip->pd_request_volt
 							+ chip->pps_volt_comp;
 		chip->pd_request_curr =
-					min(chip->pd_curr_max, TYPEC_HIGH_CURRENT_UA);
+					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
 		mmi_chrg_info(chip,"pps init , volt %dmV, curr %dmA, volt comp %dmv\n",
 			chip->pd_request_volt, chip->pd_request_curr, chip->pps_volt_comp);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
@@ -687,10 +696,12 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 								"SW directly\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 		}else if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
-			chip->pd_request_curr -= chip->pps_curr_steps;
+			if (chip->pd_request_curr - chip->pps_curr_steps
+				> TYPEC_MIDDLE_CURRENT_UA)
+				chip->pd_request_curr -= chip->pps_curr_steps;
 			mmi_chrg_sm_move_state(chip,
 						PM_STATE_CP_CC_LOOP);
-			mmi_chrg_info(chip,"Duing the curr going up process, "
+			mmi_chrg_info(chip,"During the curr going up process, "
 						"the chrg step was changed,"
 						"stop increase pps curr and Enter into "
 						"CC stage as soon!\n");
@@ -700,6 +711,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 						PM_STATE_CP_CC_LOOP);
 				mmi_chrg_info(chip,"Too many pdo request failed,"
 							" Enter into CC stage directly!\n");
+				mmi_clear_pps_result_history(chip);
 			}
 			chip->pd_request_curr = chip->pd_request_curr_prev;
 			goto schedule;
@@ -742,6 +754,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			if (mmi_get_pps_result_history(chip) != NO_ERROR) {
 				mmi_chrg_sm_move_state(chip,
 						PM_STATE_CP_CC_LOOP);
+				mmi_clear_pps_result_history(chip);
 				mmi_chrg_info(chip,"Too many pdo request failed,"
 							" Enter into CC stage directly!\n");
 			}
@@ -761,6 +774,24 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_info(chip,"Enter into CC loop stage !\n");
 			mmi_chrg_sm_move_state(chip, PM_STATE_CP_CC_LOOP);
 		}
+
+		if (ibatt_curr > batt_curr_roof) {
+			batt_curr_roof = ibatt_curr;
+		}
+		if (ibatt_curr < batt_curr_roof)
+			pd_constant_power_cnt++;
+		else
+			pd_constant_power_cnt = 0;
+
+		if (pd_constant_power_cnt > PD_CONT_PWR_CNT) {
+			mmi_chrg_info(chip,"PD adapter was ready in constant power state, "
+							"Enter into CC loop stage !\n");
+			mmi_chrg_sm_move_state(chip, PM_STATE_CP_CC_LOOP);
+		}
+		mmi_chrg_info(chip, "pd_constant_power_cnt %d, "
+							"batt_curr_roof %d\n",
+							pd_constant_power_cnt,
+							batt_curr_roof);
 		break;
 	case PM_STATE_CP_CC_LOOP:
 		heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
@@ -788,11 +819,13 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			case BLANCE_POWER:
 				chip->pd_pps_balance = true;
 				mmi_chrg_err(chip, "Enable pps power balance\n");
+				mmi_clear_pps_result_history(chip);
 				break;
 			case RESET_POWER:
 				mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 				mmi_chrg_err(chip, "Hard reset charger policy to recovery power,"
 								"Since too many pdo failed\n");
+				mmi_clear_pps_result_history(chip);
 				break;
 			default:
 				break;
@@ -807,12 +840,15 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		if (!chip->thermal_cooling
-			&& !chip->thermal_mitigation_doing) {
+			&& !chip->thermal_mitigation_doing
+			&& pd_constant_power_cnt <= PD_CONT_PWR_CNT) {
 			if (ibatt_curr < chrg_step->chrg_step_cc_curr
 				&& chip->pd_request_volt < chip->pd_volt_max
 				&& chrg_cc_power_tunning_cnt >=
 					CC_POWER_COUNT) {
-				if (chip->pd_pps_balance) {
+				if (chip->pd_pps_balance
+					&& (chip->pd_request_curr - chip->pps_curr_steps)
+						> TYPEC_MIDDLE_CURRENT_UA) {
 					chip->pd_request_curr -=
 						chip->pps_curr_steps;
 					chip->pd_request_volt +=
@@ -868,7 +904,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			if(ibatt_curr < chrg_step->chrg_step_cc_curr)
 				heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 		}
-			
+
 		if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
 			if (chrg_cv_taper_tunning_cnt >
 				CV_TAPPER_COUNT) {
@@ -917,11 +953,13 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 				chip->pd_request_curr -=
 					chip->pps_curr_steps;
 				mmi_chrg_err(chip, "Reduce pps curr,for pps power balance\n");
+				mmi_clear_pps_result_history(chip);
 				break;
 			case RESET_POWER:
 				mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 				mmi_chrg_err(chip, "Hard reset charger policy to recovery power,"
 								"Since too many pdo failed\n");
+				mmi_clear_pps_result_history(chip);
 				break;
 			default:
 				break;
@@ -1361,6 +1399,25 @@ schedule:
 								chip->pd_thermal_volt,
 								chip->pd_thermal_curr);
 
+	if (chip->pd_target_volt < SWITCH_CHARGER_PPS_VOLT
+		|| chip->pd_target_curr < TYPEC_MIDDLE_CURRENT_UA) {
+
+		if (sm_state == PM_STATE_PPS_TUNNING_CURR
+			|| sm_state == PM_STATE_PPS_TUNNING_VOLT
+			|| sm_state == PM_STATE_CP_CC_LOOP
+			|| sm_state == PM_STATE_CP_CV_LOOP) {
+
+			mmi_chrg_err(chip, "%s, wrong pd voltage or current , "
+						"request pd voltage %d, "
+						"request pd current %d\n",
+						pm_state_str[sm_state],
+						chip->pd_target_volt,
+						chip->pd_target_curr);
+			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
+		}
+		goto skip_pd_select;
+	}
+
 	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
 								chip->mmi_pd_pdo_idx,
 								chip->pd_target_volt,
@@ -1372,15 +1429,16 @@ schedule:
 		chip->pd_request_curr_prev = chip->pd_target_curr;
 	}
 
+skip_pd_select:
+
 	if (heartbeat_dely_ms > 0) {
-		if (chip->pps_result < 0)
-			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
-		mmi_chrg_err(chip, "schedule work timer %d\n", heartbeat_dely_ms);
+		mmi_chrg_err(chip, "schedule work timer %dms\n", heartbeat_dely_ms);
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(heartbeat_dely_ms));
 	} else {
 		mmi_chrg_policy_clear(chip);
 		chip->sm_work_running = false;
+		chip->pd_pps_support = false;
 		mmi_chrg_err(chip, "exit sm work\n");
 	}
 
