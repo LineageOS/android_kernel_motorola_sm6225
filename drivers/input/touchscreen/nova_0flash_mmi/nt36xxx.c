@@ -2363,11 +2363,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 #if NVT_TOUCH_SUPPORT_HW_RST
 	gpio_set_value(ts->reset_gpio, 1);
 #endif
-	if (nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME)) {
-		NVT_ERR("download firmware failed, ignore check fw state\n");
-	} else {
-		nvt_check_fw_reset_state(RESET_STATE_REK);
-	}
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(0));
 
 #if !WAKEUP_GESTURE
 	nvt_irq_enable(true);
