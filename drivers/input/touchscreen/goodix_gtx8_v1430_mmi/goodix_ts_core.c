@@ -1138,7 +1138,7 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 	dev =  core_data->ts_dev->dev;
 	ts_bdata = board_data(core_data);
 
-	if (strlen(ts_bdata->avdd_name)) {
+	if (ts_bdata->avdd_name) {
 		core_data->avdd = devm_regulator_get(dev,
 				 ts_bdata->avdd_name);
 		if (IS_ERR_OR_NULL(core_data->avdd)) {
@@ -1149,6 +1149,18 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 		}
 	} else {
 		ts_info("Avdd name is NULL[skip]");
+	}
+
+	if (ts_bdata->iovdd_name) {
+		core_data->iovdd = devm_regulator_get(dev,
+				 ts_bdata->iovdd_name);
+		if (IS_ERR_OR_NULL(core_data->iovdd)) {
+			r = PTR_ERR(core_data->iovdd);
+			ts_err("Failed to get regulator iovdd:%d", r);
+			core_data->iovdd = NULL;
+		}
+	} else {
+		ts_info("iovdd name is NULL");
 	}
 
 	return r;
@@ -1162,30 +1174,36 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 int goodix_ts_power_on(struct goodix_ts_core *core_data)
 {
 	struct goodix_ts_board_data *ts_bdata = board_data(core_data);
-	int r;
+	int r = 0;
 
 	ts_info("Device power on");
 	if (core_data->power_on)
 		return 0;
 
-	if (!core_data->avdd) {
-		core_data->power_on = 1;
-		return 0;
+	if (core_data->avdd) {
+		r = regulator_enable(core_data->avdd);
+		if (!r) {
+			ts_info("regulator enable SUCCESS");
+			if (ts_bdata->power_on_delay_us)
+				usleep_range(ts_bdata->power_on_delay_us,
+						 ts_bdata->power_on_delay_us);
+		} else {
+			ts_err("Failed to enable avdd:%d", r);
+			goto err_exit;
+		}
 	}
 
-	r = regulator_enable(core_data->avdd);
-	if (!r) {
-		ts_info("regulator enable SUCCESS");
-		if (ts_bdata->power_on_delay_us)
-			usleep_range(ts_bdata->power_on_delay_us,
-				     ts_bdata->power_on_delay_us);
-	} else {
-		ts_err("Failed to enable analog power:%d", r);
-		return r;
+	if (core_data->iovdd) {
+		r = regulator_enable(core_data->iovdd);
+		if (r) {
+			ts_err("Failed to enable iovdd:%d", r);
+			goto err_exit;
+		}
 	}
 
 	core_data->power_on = 1;
-	return 0;
+err_exit:
+	return r;
 }
 
 /**
@@ -1196,7 +1214,7 @@ int goodix_ts_power_on(struct goodix_ts_core *core_data)
 int goodix_ts_power_off(struct goodix_ts_core *core_data)
 {
 	struct goodix_ts_board_data *ts_bdata = board_data(core_data);
-	int r;
+	int r = 0;
 
 	ts_info("Device power off");
 	if (!core_data->power_on)
@@ -1210,13 +1228,22 @@ int goodix_ts_power_off(struct goodix_ts_core *core_data)
 				usleep_range(ts_bdata->power_off_delay_us,
 					     ts_bdata->power_off_delay_us);
 		} else {
-			ts_err("Failed to disable analog power:%d", r);
-			return r;
+			ts_err("Failed to disable avdd:%d", r);
+			goto err_exit;
+		}
+	}
+
+	if (core_data->iovdd) {
+		r = regulator_disable(core_data->iovdd);
+		if (r) {
+			ts_err("Failed to disable iovdd:%d", r);
+			goto err_exit;
 		}
 	}
 
 	core_data->power_on = 0;
-	return 0;
+err_exit:
+	return r;
 }
 
 #ifdef CONFIG_PINCTRL

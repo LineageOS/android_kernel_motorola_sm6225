@@ -125,6 +125,19 @@ static int goodix_parse_dt_resolution(struct device_node *node,
 	return 0;
 }
 
+static const char *goodix_parse_dt_text(struct device_node *node,
+	const char *name)
+{
+	const char *prop = NULL;
+	int r;
+
+	r = of_property_read_string(node, name, &prop);
+	if (r) {
+		ts_err("%s: error reading property = %d", name, r);
+	}
+	return prop;
+}
+
 /**
  * goodix_parse_dt - parse board data from dt
  * @dev: pointer to device
@@ -135,7 +148,6 @@ static int goodix_parse_dt(struct device_node *node,
 	struct goodix_ts_board_data *board_data)
 {
 	struct property *prop;
-	const char *name_tmp;
 	int r;
 
 	if (!board_data) {
@@ -166,34 +178,15 @@ static int goodix_parse_dt(struct device_node *node,
 		return -EINVAL;
 	}
 
-	board_data->cfg_bin_name = kzalloc(32 * sizeof(char), GFP_KERNEL);
-	r = of_property_read_string(node, "goodix,cfg_bin_name",
-				&board_data->cfg_bin_name);
-	if (r) {
-		ts_err("Unable to read cfg name %d\n", r);
-		board_data->cfg_bin_name = NULL;
-	}
+	board_data->cfg_bin_name = goodix_parse_dt_text(node,
+			"goodix,cfg_bin_name");
+	board_data->fw_name = goodix_parse_dt_text(node,
+			"goodix,fw_name");
+	board_data->avdd_name = goodix_parse_dt_text(node,
+			"goodix,avdd-name");
+	board_data->iovdd_name = goodix_parse_dt_text(node,
+			"goodix,iovdd-name");
 
-	board_data->fw_name = kzalloc(32 * sizeof(char), GFP_KERNEL);
-	r = of_property_read_string(node, "goodix,fw_name",
-				&board_data->fw_name);
-	if (r) {
-		ts_err("Unable to read fw name %d\n", r);
-		board_data->fw_name = NULL;
-	}
-
-	memset(board_data->avdd_name, 0, sizeof(board_data->avdd_name));
-	r = of_property_read_string(node, "goodix,avdd-name", &name_tmp);
-	if (!r) {
-		ts_info("avdd name form dt: %s", name_tmp);
-		if (strlen(name_tmp) < sizeof(board_data->avdd_name))
-			strncpy(board_data->avdd_name,
-				name_tmp, sizeof(board_data->avdd_name));
-		else
-			ts_info("invalied avdd name length: %ld > %ld",
-				strlen(name_tmp),
-				sizeof(board_data->avdd_name));
-	}
 	r = of_property_read_u32(node, "goodix,power-on-delay-us",
 				&board_data->power_on_delay_us);
 	if (!r) {
