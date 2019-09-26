@@ -110,7 +110,8 @@ struct goodix_module {
  * @fw_name: name of the firmware image
  */
 struct goodix_ts_board_data {
-	char avdd_name[24];
+	const char *avdd_name;
+	const char *iovdd_name;
 	unsigned int reset_gpio;
 	unsigned int irq_gpio;
 	int irq;
@@ -435,6 +436,7 @@ struct goodix_ts_core {
 	struct input_dev *pen_dev;
 
 	struct regulator *avdd;
+	struct regulator *iovdd;
 #ifdef CONFIG_PINCTRL
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pin_sta_active;
