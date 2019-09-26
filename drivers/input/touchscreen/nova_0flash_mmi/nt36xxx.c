@@ -56,8 +56,10 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.max_range = "5.0",
 	.resolution = "5.0",
 	.sensor_power = "1",
-	.min_delay = -1,
+	.min_delay = 0,
 	.max_delay = 0,
+	/* WAKE_UP & ON_CHANGE */
+	.flags = 1 | 2,
 	.fifo_reserved_event_count = 0,
 	.fifo_max_event_count = 0,
 	.enabled = 0,
@@ -1008,16 +1010,8 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 
 	if (keycode > 0) {
 #ifdef NVT_SENSOR_EN
-		if (!ts->wakeable) {
-			uint8_t buf[2] = {0};
-			NVT_LOG("Predict enable failed.");
-			ts->should_enable_gesture = false;
-			//---write command to enter "deep sleep mode"---
-			buf[0] = EVENT_MAP_HOST_CMD;
-			buf[1] = 0x11;
-			CTP_SPI_WRITE(ts->client, buf, 2);
-			ts->gesture_enabled = false;
-			disable_irq_wake(ts->client->irq);
+		if (!(ts->wakeable && ts->should_enable_gesture)) {
+			NVT_LOG("Gesture got but wakeable not set. Skip this gesture.");
 			return;
 		}
 		input_report_abs(ts->sensor_pdata->input_sensor_dev,
@@ -1031,7 +1025,7 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
-		__pm_wakeup_event(&gesture_wakelock, msecs_to_jiffies(5000));
+		__pm_wakeup_event(&gesture_wakelock, 5000);
 #endif
 #else
 		input_report_key(ts->input_dev, keycode, 1);
@@ -1554,32 +1548,9 @@ static int nvt_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 	NVT_LOG("Gesture set enable %d!", enable);
 	mutex_lock(&ts->state_mutex);
 	if (enable == 1) {
-		uint8_t buf[2] = {0};
-		ts->wakeable = true;
-		if (bTouchIsAwake && ts->screen_state == SCREEN_ON) {
-			NVT_LOG("Touch still in normal mode, skip to set to gesture mode");
-			mutex_unlock(&ts->state_mutex);
-			return 0;
-		}
-		if (ts->gesture_enabled) {
-			NVT_LOG("Already in gesture mode");
-			mutex_unlock(&ts->state_mutex);
-			return 0;
-		}
-
 		ts->should_enable_gesture = true;
-		//---write command to enter "wakeup gesture mode"---
-		buf[0] = EVENT_MAP_HOST_CMD;
-		buf[1] = 0x13;
-		CTP_SPI_WRITE(ts->client, buf, 2);
-
-		nvt_irq_enable(true);
-		enable_irq_wake(ts->client->irq);
-		ts->gesture_enabled = true;
-		NVT_LOG("Set IC in doze mode");
 	} else if (enable == 0) {
-		ts->wakeable = false;
-		//fts_gesture_resume(fts_data);
+		ts->should_enable_gesture = false;
 	} else {
 		NVT_LOG("unknown enable symbol\n");
 	}
@@ -2315,6 +2286,7 @@ static int32_t nvt_ts_suspend(struct device *dev)
 
 		enable_irq_wake(ts->client->irq);
 		ts->gesture_enabled = true;
+		ts->wakeable = true;
 
 		NVT_LOG("Enabled touch wakeup gesture\n");
 #ifdef NVT_SENSOR_EN
@@ -2324,6 +2296,7 @@ static int32_t nvt_ts_suspend(struct device *dev)
 		buf[1] = 0x11;
 		CTP_SPI_WRITE(ts->client, buf, 2);
 		ts->gesture_enabled = false;
+		ts->wakeable = false;
 	}
 #endif
 #else // WAKEUP_GESTURE
@@ -2413,9 +2386,10 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 #if WAKEUP_GESTURE
 #ifdef NVT_SENSOR_EN
-	if (ts->should_enable_gesture) {
+	if (ts->wakeable) {
 		disable_irq_wake(ts->client->irq);
 		ts->gesture_enabled = false;
+		ts->wakeable = false;
 	}
 #endif
 #endif
