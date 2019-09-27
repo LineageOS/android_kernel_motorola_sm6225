@@ -1008,6 +1008,9 @@ void Boot_Update_Firmware(struct work_struct *work)
 	} else {
 		nvt_check_fw_reset_state(RESET_STATE_REK);
 	}
+	if (ts->charger_detection) {
+		queue_work(ts->charger_detection->nvt_charger_notify_wq, &ts->charger_detection->charger_notify_work);
+	}
 
 	mutex_unlock(&ts->lock);
 }
