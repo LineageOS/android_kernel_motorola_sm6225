@@ -111,6 +111,7 @@ struct mmi_chrg_step_info {
 	int	chrg_step_cc_curr;
 	int	chrg_step_cv_volt;
 	int	chrg_step_cv_tapper_curr;
+	bool	last_step;
 };
 
 struct mmi_chrg_dev_ops {
