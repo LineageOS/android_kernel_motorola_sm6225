@@ -126,6 +126,8 @@ static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state
 	mmi_chrg_dbg(chip, PR_INTERRUPT, "pm_state change:%s -> %s\n",
 		pm_state_str[sm_state], pm_state_str[state]);
 	sm_state = state;
+	pd_constant_power_cnt = 0;
+	batt_curr_roof = 0;
 }
 
 static void chrg_dev_init(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
@@ -474,6 +476,16 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		heartbeat_dely_ms = HEARTBEAT_CANCEL;
 		break;
 	case PM_STATE_ENTRY:
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
+		}
+
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
+		}
+
 		if (chip->pd_pps_support
 			&& chrg_list->cp_master
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
@@ -969,8 +981,9 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		if (vbatt_volt >= chrg_step->chrg_step_cv_volt
-			&& (ibatt_curr < chrg_step->chrg_step_cv_tapper_curr
-			|| ibatt_curr < chrg_list->chrg_dev[CP_MASTER]->charging_curr_min)) {
+			&& ((!chrg_step->last_step &&
+				ibatt_curr < chrg_step->chrg_step_cv_tapper_curr)
+				|| ibatt_curr < chrg_list->chrg_dev[CP_MASTER]->charging_curr_min)) {
 			if (chrg_cv_taper_tunning_cnt >= CV_TAPPER_COUNT) {
 				if (ibatt_curr <
 					chrg_list->chrg_dev[CP_MASTER]->charging_curr_min) {
@@ -1265,7 +1278,7 @@ schedule:
 						"battery temp %d\n",
 						chip->pd_request_curr, batt_temp);
 
-				} else if (ibatt_curr < TYPEC_HIGH_CURRENT_UA
+				} else if (ibatt_curr > TYPEC_HIGH_CURRENT_UA
 						&& chip->pd_request_volt > cooling_volt) {
 					chip->pd_request_volt -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
