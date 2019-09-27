@@ -165,12 +165,16 @@ bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vba
 	batt_volt = vbatt_volt;
 	chrg_step_inline.temp_c = zone.temp_c;
 
-	mmi_chrg_info(chip, "batt_volt %d, step num %d\n",
-						batt_volt, chip->chrg_step_nums);
+	mmi_chrg_info(chip, "batt_volt %d, chrg step %d, step nums %d\n",
+						batt_volt, prev_step.pres_chrg_step,
+						chip->chrg_step_nums);
+
+	/*In the first search cycle, find out the vbatt is less than step volt*/
 
 	for (i = 0; i < chip->chrg_step_nums; i++) {
-		mmi_chrg_info(chip, "i %d, step volt %d, batt_volt %d\n",
-						i, chrg_steps[i].chrg_step_volt, batt_volt);
+		mmi_chrg_info(chip,
+					"first cycle,i %d, step volt %d, batt_volt %d\n",
+					i, chrg_steps[i].chrg_step_volt, batt_volt);
 		if (chrg_steps[i].chrg_step_volt > 0
 			&& batt_volt < chrg_steps[i].chrg_step_volt) {
 			if ( (i + 1) < chip->chrg_step_nums
@@ -186,6 +190,7 @@ bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vba
 				chrg_steps[i].chrg_step_volt;
 			chrg_step_inline.pres_chrg_step = i;
 			find_step = true;
+			mmi_chrg_info(chip, "find chrg step\n");
 			break;
 		}
 	}
@@ -199,19 +204,70 @@ bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vba
 					chrg_step_inline.chrg_step_cv_volt,
 					chrg_step_inline.chrg_step_cv_tapper_curr);
 		chip->chrg_step = chrg_step_inline;
+	} else {
+
+	/*If can't find out any chrg step in the first search cycle,*/
+	/*it means that vbatt is already greater than all chrg step volt, */
+	/*therefore, start to enter second search cycle, */
+	/*to find out the maximal chrg step volt*/
+		for (i = 0; i < chip->chrg_step_nums; i++) {
+			mmi_chrg_info(chip,
+						"second cycle, i %d, step volt %d, batt_volt %d\n",
+						i, chrg_steps[i].chrg_step_volt, batt_volt);
+			if (chrg_steps[i].chrg_step_volt > 0
+				&& batt_volt > chrg_steps[i].chrg_step_volt) {
+				if ( (i + 1) < chip->chrg_step_nums
+					&& chrg_steps[i + 1].chrg_step_volt > 0) {
+					chrg_step_inline.chrg_step_cv_tapper_curr =
+						chrg_steps[i + 1].chrg_step_curr;
+				} else
+					chrg_step_inline.chrg_step_cv_tapper_curr =
+						chrg_steps[i].chrg_step_curr;
+				chrg_step_inline.chrg_step_cc_curr =
+					chrg_steps[i].chrg_step_curr;
+				chrg_step_inline.chrg_step_cv_volt =
+					chrg_steps[i].chrg_step_volt;
+				chrg_step_inline.pres_chrg_step = i;
+				find_step = true;
+				mmi_chrg_info(chip, "find chrg step\n");
+			}
+		}
+
+		if (find_step) {
+			mmi_chrg_info(chip, "chrg step %d, "
+					"step cc curr %d, step cv volt %d, "
+					"step cv tapper curr %d\n",
+					chrg_step_inline.pres_chrg_step,
+					chrg_step_inline.chrg_step_cc_curr,
+					chrg_step_inline.chrg_step_cv_volt,
+					chrg_step_inline.chrg_step_cv_tapper_curr);
+			chip->chrg_step = chrg_step_inline;
+		}
 	}
 
-	if (find_step &&
-		prev_step.pres_chrg_step != chip->chrg_step.pres_chrg_step) {
-	mmi_chrg_info(chip,"temp zone %d, "
-				"Select chrg step %d, step cc curr %d,"
-				"step cv volt %d, step cv tapper curr %d\n",
+
+	if (find_step) {
+		if (chip->chrg_step.chrg_step_cc_curr ==
+			chip->chrg_step.chrg_step_cv_tapper_curr)
+			chip->chrg_step.last_step = true;
+		else
+			chip->chrg_step.last_step = false;
+
+		mmi_chrg_info(chip,"Temp zone %d, "
+				"select chrg step %d, step cc curr %d,"
+				"step cv volt %d, step cv tapper curr %d, "
+				"is the last chrg step %d\n",
 				chip->pres_temp_zone,
 				chip->chrg_step.pres_chrg_step,
 				chip->chrg_step.chrg_step_cc_curr,
 				chip->chrg_step.chrg_step_cv_volt,
-				chip->chrg_step.chrg_step_cv_tapper_curr);
-		return true;
+				chip->chrg_step.chrg_step_cv_tapper_curr,
+				chip->chrg_step.last_step);
+
+		if (prev_step.pres_chrg_step != chip->chrg_step.pres_chrg_step) {
+			mmi_chrg_info(chip, "Find the next chrg step\n");
+			return true;
+		}
 	}
 	return false;
 }
