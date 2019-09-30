@@ -2576,7 +2576,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		}
 	} else if ((prm->pres_chrg_step == STEP_NONE) ||
 		   (prm->pres_chrg_step == STEP_STOP)) {
-		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
+		if (zone->norm_mv && ((stat->batt_mv + HYST_STEP_MV) >= zone->norm_mv)) {
 			if (zone->fcc_norm_ma)
 				prm->pres_chrg_step = STEP_NORM;
 			else
@@ -2611,7 +2611,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		}
 	} else if (prm->pres_chrg_step == STEP_NORM) {
 		if (!zone->fcc_norm_ma)
-			prm->pres_chrg_step = STEP_STOP;
+			prm->pres_chrg_step = STEP_FLOAT;
 		else if ((stat->batt_soc < 100) ||
 			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
 			prm->chrg_taper_cnt = 0;
@@ -2629,6 +2629,9 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		if ((zone->fcc_norm_ma) ||
 		    ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv))
 			prm->pres_chrg_step = STEP_MAX;
+		else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+						   prm->chrg_iterm))
+			prm->pres_chrg_step = STEP_STOP;
 	}
 
 	/* Take State actions */
@@ -2636,9 +2639,9 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	case STEP_FLOAT:
 	case STEP_MAX:
 		if (!zone->norm_mv)
-			target_fv = max_fv_mv;
+			target_fv = max_fv_mv + chip->vfloat_comp_mv;
 		else
-			target_fv = zone->norm_mv;
+			target_fv = zone->norm_mv + chip->vfloat_comp_mv;
 		target_fcc = zone->fcc_max_ma;
 		chip->last_reported_status = -1;
 		break;
