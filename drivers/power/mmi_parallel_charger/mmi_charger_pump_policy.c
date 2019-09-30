@@ -521,6 +521,10 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 		chip->thermal_cooling = false;
 		chip->thermal_cooling_cnt = 0;
+		chip->pd_thermal_volt =  chip->pd_request_volt_prev;
+		chip->pd_thermal_curr = chip->pd_request_curr_prev;
+		chip->thermal_mitigation_doing = false;
+		chip->thermal_force_pmic_chrg = false;
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_SW_ENTRY:
@@ -552,7 +556,10 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
-
+		mmi_chrg_info(chip,"find pdo %d, max volt %d, max curr %d\n",
+						chip->mmi_pdo_info[i].type,
+						chip->mmi_pdo_info[i].uv_max,
+						chip->mmi_pdo_info[i].ua);
 			if (chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_FIXED
 				&& chip->mmi_pdo_info[i].uv_max >= SWITCH_CHARGER_PPS_VOLT
@@ -578,6 +585,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		if (chip->pd_pps_support
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
+			&& chrg_step->chrg_step_cc_curr >=
+				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min
 			&& !chip->recovery_pmic_chrg
 			&& !chip->thermal_force_pmic_chrg
 			&& batt_soc < CP_CHRG_SOC_LIMIT) {
@@ -1092,6 +1101,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
+		chip->thermal_cooling = false;
+		chip->thermal_cooling_cnt = 0;
 		mmi_chrg_sm_move_state(chip, PM_STATE_RECOVERY_SW);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
@@ -1248,8 +1259,7 @@ schedule:
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 	}
 
-	if (chip->thermal_cooling
-		&& !chip->thermal_mitigation_doing) {
+	if (chip->thermal_cooling && !chip->thermal_force_pmic_chrg) {
 		if (batt_temp > chrg_step->temp_c + COOLING_HYSTERISIS_DEGC) {
 
 			mmi_chrg_info(chip,"Batt temp %d, Cooling loop failed, "
@@ -1271,13 +1281,14 @@ schedule:
 						+ chip->pps_volt_comp;
 				if (ibatt_curr > TYPEC_HIGH_CURRENT_UA
 					&& chip->pd_request_curr > cooling_curr) {
-					chip->pd_request_curr -= COOLING_DELTA_POWER;
 
+					if (chip->pd_request_curr - COOLING_DELTA_POWER >=
+						TYPEC_MIDDLE_CURRENT_UA)
+						chip->pd_request_curr -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
 						"pd request curr %dmA, "
 						"battery temp %d\n",
 						chip->pd_request_curr, batt_temp);
-
 				} else if (ibatt_curr > TYPEC_HIGH_CURRENT_UA
 						&& chip->pd_request_volt > cooling_volt) {
 					chip->pd_request_volt -= COOLING_DELTA_POWER;
@@ -1361,19 +1372,38 @@ schedule:
 		if (ibatt_curr >
 			chip->thermal_mitigation[chip->system_thermal_level]
 			+ CC_CURR_DEBOUNCE) {
+			if (chip->pd_thermal_curr - THERMAL_TUNNING_CURR >=
+				TYPEC_MIDDLE_CURRENT_UA) {
 				chip->pd_thermal_curr -= THERMAL_TUNNING_CURR;
 				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, decrease pps curr %d\n",
 								chip->pd_thermal_curr);
+
+			} else {
+				mmi_chrg_dbg(chip, PR_MOTO,
+								"pd_thermal_curr %dmA was less than %dmA, "
+								"Give up thermal mitigation!",
+								chip->pd_thermal_curr - THERMAL_TUNNING_CURR,
+								TYPEC_MIDDLE_CURRENT_UA);
+			}
 		} else if (ibatt_curr <
 			chip->thermal_mitigation[chip->system_thermal_level]
 			- CC_CURR_DEBOUNCE) {
+			if (chip->pd_thermal_curr + THERMAL_TUNNING_CURR <=
+				chip->pd_curr_max) {
 				chip->pd_thermal_curr += THERMAL_TUNNING_CURR;
 				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, increase pps curr %d\n",
 								chip->pd_thermal_curr);
+			}
 		}
 
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
-	}
+		} else if (chip->system_thermal_level > 0 &&
+		chip->system_thermal_level != chip->thermal_levels - 1 &&
+		sm_state == PM_STATE_SW_LOOP &&
+		chip->thermal_force_pmic_chrg) {
+			mmi_chrg_dbg(chip, PR_MOTO, "Try to recovery charger pump!\n");		
+			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
+		}
 
 	if (chip->thermal_mitigation_doing) {
 		chip->pd_target_volt = min(chip->pd_request_volt, chip->pd_thermal_volt);
