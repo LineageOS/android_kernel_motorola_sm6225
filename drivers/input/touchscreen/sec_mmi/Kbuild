@@ -1,5 +1,5 @@
 # add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
+# EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += \
 		-I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi

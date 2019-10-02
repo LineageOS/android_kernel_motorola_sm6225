@@ -504,21 +504,21 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "mutual,%d,", data[0] & 0x01 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "hover,%d,", data[0] & 0x02 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "cover,%d,", data[0] & 0x04 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "glove,%d,", data[0] & 0x08 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "stylus,%d,", data[0] & 0x10 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "palm,%d,", data[0] & 0x20 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "wet,%d,", data[0] & 0x40 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "prox,%d,", data[0] & 0x80 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	memset(data, 0x00, 2);
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_SET_POWER_MODE, data, 1);
@@ -526,13 +526,13 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "npm,%d,", data[0] == 0 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "lpm,%d,", data[0] == 1 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "test,%d,", data[0] == 2 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "flash,%d,", data[0] == 3 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	memset(data, 0x00, 2);
 	ret = ts->sec_ts_i2c_read(ts, SET_TS_CMD_SET_CHARGER_MODE, data, 1);
@@ -540,11 +540,11 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "no_charge,%d,", data[0] == 0 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "wire_charge,%d,", data[0] == 1 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 	snprintf(temp, sizeof(temp), "wireless_charge,%d,", data[0] == 2 ? 1 : 0);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	memset(data, 0x00, 2);
 	ret = ts->sec_ts_i2c_read(ts, SET_TS_CMD_SET_NOISE_MODE, data, 1);
@@ -552,7 +552,7 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "noise,%d,", data[0]);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	memset(data, 0x00, 2);
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_SET_COVERTYPE, data, 1);
@@ -560,7 +560,7 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "cover_type,%d,", data[0]);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	data[0] = 0;
 
@@ -569,7 +569,7 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "dex,%d,", data[0]);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	data[0] = 0;
 
@@ -578,7 +578,7 @@ static ssize_t ic_status_show(struct device *dev,
 		return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buff);
 
 	snprintf(temp, sizeof(temp), "artcanvas,%d,", data[0]);
-	strncat(buff, temp, sizeof(temp));
+	strncat(buff, temp, strlen(temp));
 
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 
@@ -2592,7 +2592,8 @@ static void clear_cover_mode(void *device_data)
 			ts->flip_enable = false;
 		}
 
-		if (!ts->power_status == SEC_TS_STATE_POWER_OFF && ts->reinit_done) {
+		/* initial if condition ambiguous */
+		if (!(ts->power_status == SEC_TS_STATE_POWER_OFF && ts->reinit_done)) {
 			if (ts->flip_enable)
 				sec_ts_set_cover_type(ts, true);
 			else
@@ -2946,7 +2947,7 @@ static void run_trx_short_test(void *device_data)
 		strncat(pStr, pTmp, strnlen(pTmp, sizeof(pTmp)));
 		if (ii % 8 == 4) {
 			input_raw_info(true, &ts->client->dev, "%s\n", pStr);
-			strncat(buff, pStr, sizeof(pStr));
+			strncat(buff, pStr, strlen(pStr));
 			
 			memset(pStr, 0x00, sizeof(pStr));
 		} else {
