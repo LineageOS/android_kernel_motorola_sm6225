@@ -169,7 +169,7 @@ static int tas25xx_set_profile(struct snd_kcontrol *pKcontrol,
 	int profile_id = pUcontrol->value.integer.value[0];
 	int param_id = 0;
 	int max_number_of_profiles = sizeof(profile_index_text)/sizeof(profile_index_text[0]);
-	if (profile_id >= max_number_of_profiles)
+	if ((profile_id >= max_number_of_profiles) || (profile_id < 0))
 		return -EINVAL;
 
 	pr_info("TI-SmartPA: %s: Setting profile %s", __func__, profile_index_text[profile_id]);
