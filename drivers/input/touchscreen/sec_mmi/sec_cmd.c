@@ -389,8 +389,13 @@ static ssize_t sec_cmd_list_show(struct device *dev,
 {
 	struct sec_cmd_data *data = dev_get_drvdata(dev);
 	struct sec_cmd *sec_cmd_ptr = NULL;
-	char buffer[data->cmd_buffer_size + 30];
+	char *buffer;
 	char buffer_name[SEC_CMD_STR_LEN];
+	ssize_t len;
+
+	buffer = kzalloc(data->cmd_buffer_size + 30, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
 
 	snprintf(buffer, 30, "++factory command list++\n");
 
@@ -401,7 +406,10 @@ static ssize_t sec_cmd_list_show(struct device *dev,
 		}
 	}
 
-	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buffer);
+	len = snprintf(buf, SEC_CMD_BUF_SIZE, "%s\n", buffer);
+	kfree(buffer);
+
+	return len;
 }
 
 static DEVICE_ATTR(cmd, S_IWUSR | S_IWGRP, NULL, sec_cmd_store);
