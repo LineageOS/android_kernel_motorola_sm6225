@@ -489,6 +489,8 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		return error;
 	}
 
+	/* FIXME - Optimize Delay  */
+	mdelay(10);
 	ret = slg51000_regulator_init(chip);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to init regulator(%d)\n", ret);
