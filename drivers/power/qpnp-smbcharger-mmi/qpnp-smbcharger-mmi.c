@@ -706,10 +706,12 @@ static ssize_t force_max_chrg_temp_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	if ((mode >= MIN_MAX_TEMP_C) && (mode <= MAX_TEMP_C))
-		mmi_chip->max_chrg_temp = mode;
-	else
-		mmi_chip->max_chrg_temp = MAX_TEMP_C;
+  	// MMI_STOPSHIP revert this commit later: safer to have limits. Temporary for Burton EVT1
+	if ((mode < MIN_MAX_TEMP_C) || (mode > MAX_TEMP_C))
+		pr_warn("New value %d is outside of suggested limits: min %d, max %d",
+			mode, MIN_MAX_TEMP_C, MAX_TEMP_C);
+
+	mmi_chip->max_chrg_temp = mode;
 
 	return r ? r : count;
 }
