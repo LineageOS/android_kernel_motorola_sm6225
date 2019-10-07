@@ -3485,12 +3485,17 @@ static int aw8695_read_chipid(struct aw8695 *aw8695)
 			dev_err(aw8695->dev, "%s: failed to read register AW8695_REG_ID: %d\n", __func__, ret);
 		}
 		switch (reg) {
-		case AW8695_CHIPID:
+		case AW8695_CHIPID1:
 			pr_info("%s aw8695 detected\n", __func__);
-			aw8695->chipid = AW8695_CHIPID;
+			aw8695->chipid = AW8695_CHIPID1;
 			/*
 			 *aw8695->flags |= AW8695_FLAG_SKIP_INTERRUPTS;
 			 */
+			aw8695_haptic_softreset(aw8695);
+			return 0;
+		case AW8695_CHIPID2:
+			pr_info("%s aw8697 detected\n", __func__);
+			aw8695->chipid = AW8695_CHIPID2;
 			aw8695_haptic_softreset(aw8695);
 			return 0;
 		default:
