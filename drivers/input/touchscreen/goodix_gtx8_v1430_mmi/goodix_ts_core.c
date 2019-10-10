@@ -798,6 +798,104 @@ static const struct attribute_group sysfs_group = {
 	.attrs = sysfs_attrs,
 };
 
+
+/****/
+static ssize_t path_show(struct device *dev, struct device_attribute *pAttr, char *pBuf)
+{
+	ssize_t blen;
+	const char *path;
+	struct goodix_ts_device *ts_device =
+		dev_get_drvdata(dev);
+	struct i2c_client *client = to_i2c_client(ts_device->dev);
+
+	path = kobject_get_path(&client->dev.kobj, GFP_KERNEL);
+	blen = scnprintf(pBuf, PAGE_SIZE, "%s\n", path ? path : "na");
+	kfree(path);
+
+	return blen;
+}
+
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ts_info("*** %s() vendor = %s ***", __func__, "goodix");
+	return scnprintf(buf, PAGE_SIZE, "goodix");
+}
+
+
+static struct device_attribute touchscreen_attributes[] = {
+	__ATTR_RO(path),
+	__ATTR_RO(vendor),
+	__ATTR_NULL
+};
+
+static int goodix_ts_sysfs_class(struct goodix_ts_device *core_data, bool create)
+{
+	int i, error = 0;
+	dev_t devno;
+	s32 ret = 0;
+	struct device_attribute *attrs = touchscreen_attributes;
+	static struct class *touchscreen_class;
+	static struct device *touchscreen_class_dev;
+
+	if (create) {
+		ret = alloc_chrdev_region(&devno, 0, 1, GOODIX_TP_IC_TYPE);
+
+		if (ret) {
+			ts_err("cant`t allocate chrdev");
+			return ret;
+		}
+		ts_debug("allocate chrdev ok");
+
+		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
+		if (IS_ERR(touchscreen_class)) {
+			error = PTR_ERR(touchscreen_class);
+			touchscreen_class = NULL;
+			ts_err("Faild to create touchscreen class!");
+			return ret;
+		}
+
+		touchscreen_class_dev = device_create(touchscreen_class, NULL,
+				devno, core_data, GOODIX_TP_IC_TYPE);
+		if (IS_ERR(touchscreen_class_dev)) {
+			error = PTR_ERR(touchscreen_class_dev);
+			touchscreen_class_dev = NULL;
+			ts_err("Faild to create device(touchscreen_class_dev)!");
+			return error;
+		}
+
+		ts_info("Succeed to create device(touchscreen_class_dev)!");
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i) {
+			ret = device_create_file(touchscreen_class_dev, &attrs[i]);
+			if (ret < 0)
+				goto device_destroy;
+		}
+	} else {
+		if (!touchscreen_class || !touchscreen_class_dev)
+			return -ENODEV;
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i)
+			device_remove_file(touchscreen_class_dev, &attrs[i]);
+
+		device_unregister(touchscreen_class_dev);
+		class_unregister(touchscreen_class);
+	}
+
+	return 0;
+
+device_destroy:
+	for (--i; i >= 0; --i)
+		device_remove_file(touchscreen_class_dev, &attrs[i]);
+	/*device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));*/
+	touchscreen_class_dev = NULL;
+	class_unregister(touchscreen_class);
+	ts_err("error creating touchscreen class");
+
+	return -ENODEV;
+}
+
 static ssize_t goodix_sysfs_config_write(struct file *file,
 		struct kobject *kobj, struct bin_attribute *attr,
 		char *buf, loff_t pos, size_t count)
@@ -889,11 +987,20 @@ static int goodix_ts_sysfs_init(struct goodix_ts_core *core_data)
 		return ret;
 	}
 
+	ret = goodix_ts_sysfs_class(core_data->ts_dev, true);
+	if (ret) {
+		sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
+		sysfs_remove_bin_file(&core_data->pdev->dev.kobj,
+				      &goodix_config_bin_attr);
+		ts_err("sys class files creation failed");
+	}
+
 	return ret;
 }
 
 static void goodix_ts_sysfs_exit(struct goodix_ts_core *core_data)
 {
+	goodix_ts_sysfs_class(core_data->ts_dev, false);
 	sysfs_remove_bin_file(&core_data->pdev->dev.kobj,
 			      &goodix_config_bin_attr);
 	sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
