@@ -34,6 +34,7 @@
 #include <linux/power_supply.h>
 #include <linux/sensors.h>
 #include "../../../include/linux/input/sx933x.h"	/* main struct, interrupt,init,pointers */
+#include "base.h"
 
 #define SX933x_DEBUG 0
 #define LOG_TAG "[sar SX933x]: "
@@ -1000,6 +1001,9 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				LOG_DBG("Create fsys class failed (%d)\n", err);
 				return err;
 			}
+
+			/*restore sys/class/capsense label*/
+			kobject_uevent(&capsense_class.p->subsys.kobj, KOBJ_CHANGE);
 
 			/* Add Pointer to main platform data struct */
 			pDevice->hw = pplatData;
