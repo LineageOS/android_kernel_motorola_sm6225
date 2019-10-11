@@ -170,9 +170,12 @@ struct mmi_charger_manager {
 	int pd_request_volt_prev;
 	int pd_request_curr_prev;
 	/*the previous request PD power*/
-	int pd_thermal_volt;
-	int pd_thermal_curr;
+	int pd_sys_therm_volt;
+	int pd_sys_therm_curr;
 	/*the thermal PD power*/
+
+	int pd_batt_therm_volt;
+	int pd_batt_therm_curr;
 
 	int pd_target_volt;
 	int pd_target_curr;
@@ -192,10 +195,11 @@ struct mmi_charger_manager {
 	const char	*extrn_fg_name;
 	bool extrn_sense;
 	bool recovery_pmic_chrg;
-	bool thermal_mitigation_doing;
-	bool thermal_force_pmic_chrg;
-	bool thermal_cooling;
-	int thermal_cooling_cnt;
+
+	bool sys_therm_cooling;
+	bool sys_therm_force_pmic_chrg;
+	bool batt_therm_cooling;
+	int batt_therm_cooling_cnt;
 
 	struct delayed_work	mmi_chrg_sm_work;	/*mmi charger state machine work*/
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
@@ -222,7 +226,7 @@ extern void mmi_set_pps_result_history(struct mmi_charger_manager *chip, int pps
 extern void mmi_clear_pps_result_history(struct mmi_charger_manager *chip);
 extern int mmi_calculate_delta_volt(int pps_voltage, int pps_current, int delta_curr);
 extern bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vbatt_volt);
-extern bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c);
+extern bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c, bool ignore_hysteresis_degc);
 extern void clear_chg_manager(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_status(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
