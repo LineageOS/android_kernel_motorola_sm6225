@@ -213,7 +213,7 @@ static int bq2597x_update_charger_error_status(struct mmi_charger_device *chrg)
 		return -ENODEV;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
-				POWER_SUPPLY_PROP_STATUS, &prop);
+				POWER_SUPPLY_PROP_CP_STATUS1, &prop);
 	if (!rc) {
 		chrg->charger_error.chrg_err_type =
 			((!!(prop.intval & BAT_OVP_ALARM_MASK)) ?

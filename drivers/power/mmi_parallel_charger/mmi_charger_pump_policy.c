@@ -317,7 +317,9 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	int heartbeat_dely_ms = 0;
 	int cooling_curr = 0;
 	int cooling_volt = 0;
+	int pmic_sys_therm_level = 0;
 	bool zone_change = false;
+	bool ignore_hysteresis_degc = false;
 	struct mmi_chrg_step_info *chrg_step;
 	union power_supply_propval prop = {0,};
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
@@ -337,6 +339,11 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		mmi_chrg_err(chip,"PMIC-SW isn't exist, force quite mmi chrg sm work !\n");
 		return;
 	}
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL, &prop);
+	if (!rc)
+		pmic_sys_therm_level = prop.intval;
 
 	rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
@@ -403,12 +410,24 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		chrg_policy_error_recovery(chip, chrg_list);
 	}
 
-	zone_change = mmi_find_temp_zone(chip, batt_temp);
+	if (sm_state == PM_STATE_CP_CV_LOOP)
+		ignore_hysteresis_degc = true;
+	zone_change = mmi_find_temp_zone(chip, batt_temp, ignore_hysteresis_degc);
 	chrg_step = &chip->chrg_step;
 
 	if (chip->pres_temp_zone == ZONE_COLD
 		|| chip->pres_temp_zone == ZONE_HOT
-		|| !chrg_list->chrg_dev[PMIC_SW]->charger_enabled) {
+		|| !chrg_list->chrg_dev[PMIC_SW]->charger_enabled
+		|| vbatt_volt > chip->batt_ovp_lmt) {
+
+		mmi_chrg_info(chip, "Force stop charging, "
+						"pres_temp_zone %d, "
+						"pmic charger enabled %d, "
+						"vbatt_volt %dmv, "
+						"batt ovp limit %dmv\n",
+						chip->pres_temp_zone,
+						chrg_list->chrg_dev[PMIC_SW]->charger_enabled,
+						vbatt_volt, chip->batt_ovp_lmt);
 		mmi_chrg_sm_move_state(chip, PM_STATE_STOP_CHARGE);
 	}
 
@@ -426,12 +445,15 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			chip->pres_temp_zone != ZONE_COLD &&
 			chip->pres_temp_zone != ZONE_HOT) {
 
-			if (batt_temp > chrg_step->temp_c) {
+			if (batt_temp >= chrg_step->temp_c) {
 				mmi_chrg_info(chip, "battery temp %d, temp thre %d "
 						"Enter into COOLING LOOP !\n",
 						batt_temp, chrg_step->temp_c);
-				chip->thermal_cooling = true;
-			} else if (!chip->thermal_cooling) {
+				chip->batt_therm_cooling = true;
+				chip->pd_batt_therm_volt = chip->pd_request_volt_prev;
+				chip->pd_batt_therm_curr = chip->pd_request_curr_prev;
+			} else if (!chip->batt_therm_cooling &&
+					!ignore_hysteresis_degc) {
 				mmi_chrg_info(chip, "battery temp %d, temp thre %d "
 						"Restart select chrg step and temp zone !\n",
 						batt_temp, chrg_step->temp_c);
@@ -519,12 +541,15 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 
 		}
-		chip->thermal_cooling = false;
-		chip->thermal_cooling_cnt = 0;
-		chip->pd_thermal_volt =  chip->pd_request_volt_prev;
-		chip->pd_thermal_curr = chip->pd_request_curr_prev;
-		chip->thermal_mitigation_doing = false;
-		chip->thermal_force_pmic_chrg = false;
+		chip->batt_therm_cooling = false;
+		chip->batt_therm_cooling_cnt= 0;
+		chip->pd_sys_therm_volt=  chip->pd_request_volt_prev;
+		chip->pd_sys_therm_curr = chip->pd_request_curr_prev;
+		chip->pd_batt_therm_volt = chip->pd_request_volt_prev;
+		chip->pd_batt_therm_curr = chip->pd_request_curr_prev;
+		chip->sys_therm_cooling = false;
+		chip->sys_therm_force_pmic_chrg = false;
+		chip->recovery_pmic_chrg = false;
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_SW_ENTRY:
@@ -588,7 +613,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			&& chrg_step->chrg_step_cc_curr >=
 				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min
 			&& !chip->recovery_pmic_chrg
-			&& !chip->thermal_force_pmic_chrg
+			&& !chip->sys_therm_force_pmic_chrg
 			&& batt_soc < CP_CHRG_SOC_LIMIT) {
 			mmi_chrg_info(chip, "Enter CP, the reason is : "
 							"pd pps support %d, "
@@ -860,8 +885,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			goto schedule;
 		}
 
-		if (!chip->thermal_cooling
-			&& !chip->thermal_mitigation_doing
+		if (!chip->sys_therm_cooling
+			&& !chip->batt_therm_cooling
 			&& pd_constant_power_cnt <= PD_CONT_PWR_CNT) {
 			if (ibatt_curr < chrg_step->chrg_step_cc_curr
 				&& chip->pd_request_volt < chip->pd_volt_max
@@ -1023,8 +1048,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 								chrg_cv_taper_tunning_cnt);
 			}
 
-		}else if (!chip->thermal_cooling
-			&& !chip->thermal_mitigation_doing)  {
+		}else if (!chip->sys_therm_cooling
+			&& !chip->batt_therm_cooling)  {
 
 			chrg_cv_taper_tunning_cnt = 0;
 			if (vbatt_volt > chrg_step->chrg_step_cv_volt + 10000) {
@@ -1036,9 +1061,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 					"For keeping CV stage, decrease volt %dmV, "
 					"cv delta volt %dmV\n",
 					chip->pd_request_volt, chrg_cv_delta_volt);
-			} else if (vbatt_volt < chrg_step->chrg_step_cv_volt - 10000
-				&& !chip->thermal_cooling
-				&& !chip->thermal_mitigation_doing) {
+			} else if (vbatt_volt < chrg_step->chrg_step_cv_volt - 10000) {
 				chrg_cv_delta_volt -= 20000;
 				chip->pd_request_volt += 20000;
 				mmi_chrg_info(chip,
@@ -1052,7 +1075,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			}
 
 		}else {
-		/*In this case, thermal_cooling or thermal_mitigation_doing is ture*/
+		/*In this case, sys_therm_cooling or batt_therm_cooling is ture*/
 
 			if (vbatt_volt > chrg_step->chrg_step_cv_volt + 10000) {
 				if (chrg_cv_delta_volt > 20000)
@@ -1101,8 +1124,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 		}
 
-		chip->thermal_cooling = false;
-		chip->thermal_cooling_cnt = 0;
+		chip->batt_therm_cooling = false;
+		chip->batt_therm_cooling_cnt = 0;
 		mmi_chrg_sm_move_state(chip, PM_STATE_RECOVERY_SW);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
@@ -1249,25 +1272,83 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 
 schedule:
 
-	if (vbatt_volt > chip->batt_ovp_lmt) {
-		chip->pd_request_volt -= COOLING_DELTA_POWER;
-		mmi_chrg_info(chip, "vbatt %dmV exceed OVT limit %dmV, "
-						"reduce pps volt to %dmV\n",
-						vbatt_volt,
-						chip->batt_ovp_lmt,
-						chip->pd_request_volt);
+	chip->pd_target_volt = min(chip->pd_request_volt, chip->pd_volt_max);
+	chip->pd_target_curr = min(chip->pd_request_curr, chip->pd_curr_max);
+
+	if (chip->system_thermal_level == 0) {
+		chip->sys_therm_cooling= false;
+		chip->sys_therm_force_pmic_chrg = false;
+	} else if ((chip->system_thermal_level == chip->thermal_levels - 1)
+	&& !chip->sys_therm_force_pmic_chrg) {
+		chip->sys_therm_cooling = true;
+		chip->sys_therm_force_pmic_chrg = true;
+		mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
+		mmi_chrg_info(chip, "Thermal is the highest, level %d, "
+						"Force enter into single pmic charging !\n",
+						chip->system_thermal_level);
+
+	} else if (chip->system_thermal_level > 0 &&
+		(sm_state == PM_STATE_CP_CC_LOOP ||
+		sm_state == PM_STATE_CP_CV_LOOP)) {
+
+		mmi_chrg_dbg(chip, PR_MOTO, "Thermal level is %d\n",
+								chip->system_thermal_level);
+		if (!chip->sys_therm_cooling) {
+			chip->sys_therm_cooling = true;
+			chip->pd_sys_therm_volt = chip->pd_request_volt_prev;
+			chip->pd_sys_therm_curr = chip->pd_request_curr_prev;
+		}
+
+		if (ibatt_curr >
+			chip->thermal_mitigation[chip->system_thermal_level]
+			+ CC_CURR_DEBOUNCE) {
+			if (chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR >=
+				TYPEC_MIDDLE_CURRENT_UA) {
+				chip->pd_sys_therm_curr -= THERMAL_TUNNING_CURR;
+				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, decrease pps curr %d\n",
+								chip->pd_sys_therm_curr);
+
+			} else {
+				mmi_chrg_dbg(chip, PR_MOTO,
+								"pd_sys_therm_curr %dmA was less than %dmA, "
+								"Give up thermal mitigation!",
+								chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR,
+								TYPEC_MIDDLE_CURRENT_UA);
+			}
+		} else if (ibatt_curr <
+			chip->thermal_mitigation[chip->system_thermal_level]
+			- CC_CURR_DEBOUNCE) {
+			if (chip->pd_sys_therm_curr + THERMAL_TUNNING_CURR <=
+				chip->pd_curr_max) {
+				chip->pd_sys_therm_curr += THERMAL_TUNNING_CURR;
+				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, increase pps curr %d\n",
+								chip->pd_sys_therm_curr);
+			}
+		}
+
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
+	} else if (chip->system_thermal_level > 0 &&
+		chip->system_thermal_level != chip->thermal_levels - 1 &&
+		sm_state == PM_STATE_SW_LOOP &&
+		chip->sys_therm_force_pmic_chrg) {
+			mmi_chrg_dbg(chip, PR_MOTO, "Try to recovery charger pump!\n");		
+			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 	}
 
-	if (chip->thermal_cooling && !chip->thermal_force_pmic_chrg) {
+	if (chip->sys_therm_cooling) {
+		chip->pd_target_volt = min(chip->pd_target_volt, chip->pd_sys_therm_volt);
+		chip->pd_target_curr = min(chip->pd_target_curr, chip->pd_sys_therm_curr);
+	}
+
+	if (chip->batt_therm_cooling && !chip->sys_therm_force_pmic_chrg) {
 		if (batt_temp > chrg_step->temp_c + COOLING_HYSTERISIS_DEGC) {
 
 			mmi_chrg_info(chip,"Batt temp %d, Cooling loop failed, "
 							"force enter PM_STATE_ENTRY "
 							"restart this charger process !\n",
 						batt_temp);
-			chip->thermal_cooling = false;
-			chip->thermal_cooling_cnt = 0;
+			chip->batt_therm_cooling = false;
+			chip->batt_therm_cooling_cnt= 0;
 			mmi_find_chrg_step(chip, chip->pres_temp_zone,
 										vbatt_volt);
 			mmi_chrg_sm_move_state(chip,
@@ -1280,38 +1361,38 @@ schedule:
 				cooling_volt = 2 * vbatt_volt - cooling_volt
 						+ chip->pps_volt_comp;
 				if (ibatt_curr > TYPEC_HIGH_CURRENT_UA
-					&& chip->pd_request_curr > cooling_curr) {
+					&& chip->pd_batt_therm_curr > cooling_curr) {
 
-					if (chip->pd_request_curr - COOLING_DELTA_POWER >=
+					if (chip->pd_batt_therm_curr - COOLING_DELTA_POWER >=
 						TYPEC_MIDDLE_CURRENT_UA)
-						chip->pd_request_curr -= COOLING_DELTA_POWER;
+						chip->pd_batt_therm_curr -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
-						"pd request curr %dmA, "
+						"pd_batt_therm_curr %dmA, "
 						"battery temp %d\n",
-						chip->pd_request_curr, batt_temp);
+						chip->pd_batt_therm_curr, batt_temp);
 				} else if (ibatt_curr > TYPEC_HIGH_CURRENT_UA
-						&& chip->pd_request_volt > cooling_volt) {
-					chip->pd_request_volt -= COOLING_DELTA_POWER;
+						&& chip->pd_batt_therm_volt > cooling_volt) {
+					chip->pd_batt_therm_volt -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
 						"pd request volt %dmA, "
 						"battery temp %d\n",
-						chip->pd_request_volt, batt_temp);
+						chip->pd_batt_therm_volt, batt_temp);
 
 					} else {
-						if (chip->thermal_cooling_cnt > COOLING_MAX_CNT) {
+						if (chip->batt_therm_cooling_cnt > COOLING_MAX_CNT) {
 
 						mmi_chrg_info(chip, "Do chrg power cooling failed"
-							"pd request curr %dmA, "
-							"pd request volt %dmV"
+							"pd_batt_therm_currr %dmA, "
+							"pd_batt_therm_volt %dmV"
 							"battery temp %d, "
 							"Restart PM_STATE_ENTRY !\n",
-							chip->pd_request_curr,
-							chip->pd_request_volt,
+							chip->pd_batt_therm_curr,
+							chip->pd_batt_therm_volt,
 							batt_temp);
 						mmi_find_chrg_step(chip, chip->pres_temp_zone,
 											vbatt_volt);
-						chip->thermal_cooling = false;
-						chip->thermal_cooling_cnt = 0;
+						chip->batt_therm_cooling = false;
+						chip->batt_therm_cooling_cnt = 0;
 						mmi_chrg_sm_move_state(chip,
 											PM_STATE_ENTRY);
 
@@ -1319,8 +1400,8 @@ schedule:
 						mmi_chrg_info(chip, "It's already the lowest cooling chrg power"
 							"waiting for a while, cooling cnt %d, "
 							"battery temp %d\n",
-							chip->thermal_cooling_cnt, batt_temp);
-							chip->thermal_cooling_cnt++;
+							batt_temp, chip->batt_therm_cooling);
+							chip->batt_therm_cooling_cnt++;
 						}
 				}
 
@@ -1336,111 +1417,54 @@ schedule:
 					mmi_chrg_sm_move_state(chip,
 								PM_STATE_PPS_TUNNING_CURR);
 			}
-			chip->thermal_cooling = false;
-			chip->thermal_cooling_cnt = 0;
+			chip->batt_therm_cooling = false;
+			chip->batt_therm_cooling_cnt = 0;
 		}
 		heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
 	}
 
-	chip->pd_target_volt = min(chip->pd_request_volt, chip->pd_volt_max);
-	chip->pd_target_curr = min(chip->pd_request_curr, chip->pd_curr_max);
-
-	if (chip->system_thermal_level == 0) {
-		chip->thermal_mitigation_doing = false;
-		chip->thermal_force_pmic_chrg = false;
-	} else if ((chip->system_thermal_level == chip->thermal_levels - 1)
-	&& !chip->thermal_force_pmic_chrg) {
-		chip->thermal_mitigation_doing = true;
-		chip->thermal_force_pmic_chrg = true;
-		mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
-		mmi_chrg_info(chip, "Thermal is the highest, level %d, "
-						"Force enter into single pmic charging !\n",
-						chip->system_thermal_level);
-
-	} else if (chip->system_thermal_level > 0 &&
-		(sm_state == PM_STATE_CP_CC_LOOP ||
-		sm_state == PM_STATE_CP_CV_LOOP)) {
-
-		mmi_chrg_dbg(chip, PR_MOTO, "Thermal level is %d\n",
-								chip->system_thermal_level);
-		if (!chip->thermal_mitigation_doing) {
-			chip->thermal_mitigation_doing = true;
-			chip->pd_thermal_volt = chip->pd_request_volt_prev;
-			chip->pd_thermal_curr = chip->pd_request_curr_prev;
-		}
-
-		if (ibatt_curr >
-			chip->thermal_mitigation[chip->system_thermal_level]
-			+ CC_CURR_DEBOUNCE) {
-			if (chip->pd_thermal_curr - THERMAL_TUNNING_CURR >=
-				TYPEC_MIDDLE_CURRENT_UA) {
-				chip->pd_thermal_curr -= THERMAL_TUNNING_CURR;
-				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, decrease pps curr %d\n",
-								chip->pd_thermal_curr);
-
-			} else {
-				mmi_chrg_dbg(chip, PR_MOTO,
-								"pd_thermal_curr %dmA was less than %dmA, "
-								"Give up thermal mitigation!",
-								chip->pd_thermal_curr - THERMAL_TUNNING_CURR,
-								TYPEC_MIDDLE_CURRENT_UA);
-			}
-		} else if (ibatt_curr <
-			chip->thermal_mitigation[chip->system_thermal_level]
-			- CC_CURR_DEBOUNCE) {
-			if (chip->pd_thermal_curr + THERMAL_TUNNING_CURR <=
-				chip->pd_curr_max) {
-				chip->pd_thermal_curr += THERMAL_TUNNING_CURR;
-				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, increase pps curr %d\n",
-								chip->pd_thermal_curr);
-			}
-		}
-
-		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
-		} else if (chip->system_thermal_level > 0 &&
-		chip->system_thermal_level != chip->thermal_levels - 1 &&
-		sm_state == PM_STATE_SW_LOOP &&
-		chip->thermal_force_pmic_chrg) {
-			mmi_chrg_dbg(chip, PR_MOTO, "Try to recovery charger pump!\n");		
-			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
-		}
-
-	if (chip->thermal_mitigation_doing) {
-		chip->pd_target_volt = min(chip->pd_request_volt, chip->pd_thermal_volt);
-		chip->pd_target_curr = min(chip->pd_request_curr, chip->pd_thermal_curr);
+	if (chip->batt_therm_cooling) {
+		chip->pd_target_volt = min(chip->pd_target_volt, chip->pd_batt_therm_volt);
+		chip->pd_target_curr = min(chip->pd_target_curr, chip->pd_batt_therm_curr);
 	}
 
 	mmi_chrg_dbg(chip, PR_MOTO, "chrg sm work,%s, "
 								"battery soc %d, "
 								"battery temp %d, "
 								"battery current %d, "
-								"battery voltage %d"
-								"thermal level %d, "
-								"thermal cooling %d, "
-								"thermal mitigation %d, "
-								"thermal force pmic chrg %d, "
+								"battery voltage %d, "
+								"sys therm level %d, "
+								"pmic therm level %d, "
+								"sys therm cooling %d, "
+								"batt therm cooling %d, "
+								"sys therm force pmic chrg %d, "
 								"recovery pmic chrg %d\n",
 								pm_state_str[sm_state],
 								batt_soc, batt_temp,
 								ibatt_curr, vbatt_volt,
 								chip->system_thermal_level,
-								chip->thermal_cooling,
-								chip->thermal_mitigation_doing,
-								chip->thermal_force_pmic_chrg,
+								pmic_sys_therm_level,
+								chip->sys_therm_cooling,
+								chip->batt_therm_cooling,
+								chip->sys_therm_force_pmic_chrg,
 								chip->recovery_pmic_chrg);
 
-	mmi_chrg_dbg(chip, PR_MOTO, 	"pd request volt %dmV,"
+	mmi_chrg_dbg(chip, PR_MOTO, 	"pd request volt %dmV, "
 								"pd request curr %dmA, "
 								"pd target volt %dmV, "
 								"pd target curr %dmA, "
-								"thermal volt %dmV, "
-								"thermal curr %dmA\n",
+								"sys therm volt %dmV, "
+								"sys therm curr %dmA, "
+								"batt therm volt %dmV, "
+								"batt therm curr %dmA\n",
 								chip->pd_request_volt,
 								chip->pd_request_curr,
 								chip->pd_target_volt,
 								chip->pd_target_curr,
-								chip->pd_thermal_volt,
-								chip->pd_thermal_curr);
+								chip->pd_sys_therm_volt,
+								chip->pd_sys_therm_curr,
+								chip->pd_batt_therm_volt,
+								chip->pd_batt_therm_curr);
 
 	if (chip->pd_target_volt < SWITCH_CHARGER_PPS_VOLT
 		|| chip->pd_target_curr < TYPEC_MIDDLE_CURRENT_UA) {
@@ -1466,8 +1490,7 @@ schedule:
 								chip->pd_target_volt,
 								chip->pd_target_curr);
 	mmi_set_pps_result_history(chip, chip->pps_result);
-	if (chip->system_thermal_level == 0
-		&& !chip->pps_result) {
+	if (!chip->pps_result) {
 		chip->pd_request_volt_prev = chip->pd_target_volt;
 		chip->pd_request_curr_prev = chip->pd_target_curr;
 	}

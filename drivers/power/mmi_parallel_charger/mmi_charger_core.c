@@ -59,13 +59,13 @@ static char *charge_rate[] = {
 };
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
-#define HYSTERISIS_DEGC 2
-bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c)
+#define HYSTEREISIS_DEGC 2
+bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c, bool ignore_hysteresis_degc)
 {
 	int prev_zone, num_zones;
 	struct mmi_chrg_temp_zone *zones;
-	int hotter_t;
-	int colder_t;
+	int hotter_t = 0, hotter_fcc = 0;
+	int colder_t = 0, colder_fcc = 0;
 	int i;
 	int max_temp;
 
@@ -96,36 +96,51 @@ bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c)
 	}
 
 	if (prev_zone == ZONE_COLD) {
-		if (temp_c >= MIN_TEMP_C + HYSTERISIS_DEGC)
+		if (temp_c >= MIN_TEMP_C + HYSTEREISIS_DEGC)
 			chip->pres_temp_zone = ZONE_FIRST;
 	} else if (prev_zone == ZONE_HOT) {
-		if (temp_c <=  max_temp - HYSTERISIS_DEGC)
+		if (temp_c <=  max_temp - HYSTEREISIS_DEGC)
 			chip->pres_temp_zone = num_zones - 1;
 	} else {
 		if (prev_zone == ZONE_FIRST) {
 			hotter_t = zones[prev_zone].temp_c;
 			colder_t = MIN_TEMP_C;
+			hotter_fcc = zones[prev_zone + 1].chrg_step_power->chrg_step_curr;
+			colder_fcc = 0;
 		} else if (prev_zone == num_zones - 1) {
 			hotter_t = zones[prev_zone].temp_c;
 			colder_t = zones[prev_zone - 1].temp_c;
+			hotter_fcc = 0;
+			colder_fcc = zones[prev_zone - 1].chrg_step_power->chrg_step_curr;
 		} else {
 			hotter_t = zones[prev_zone].temp_c;
 			colder_t = zones[prev_zone - 1].temp_c;
+			hotter_fcc = zones[prev_zone + 1].chrg_step_power->chrg_step_curr;
+			colder_fcc = zones[prev_zone - 1].chrg_step_power->chrg_step_curr;
+		}
+
+		if (!ignore_hysteresis_degc) {
+			if (zones[prev_zone].chrg_step_power->chrg_step_curr < hotter_fcc)
+				hotter_t += HYSTEREISIS_DEGC;
+			if (zones[prev_zone].chrg_step_power->chrg_step_curr < colder_fcc)
+				colder_t -= HYSTEREISIS_DEGC;
 		}
 
 		if (temp_c <= MIN_TEMP_C)
 			chip->pres_temp_zone = ZONE_COLD;
 		else if (temp_c >= max_temp)
 			chip->pres_temp_zone = ZONE_HOT;
-		else if (temp_c > hotter_t)
+		else if (temp_c >= hotter_t)
 			chip->pres_temp_zone++;
-		else if (temp_c <= colder_t)
+		else if (temp_c < colder_t)
 			chip->pres_temp_zone--;
 	}
 
-
-	mmi_chrg_info(chip, "batt temp_c %d, prev zone %d, pres zone %d\n",
-						temp_c,prev_zone, chip->pres_temp_zone);
+	mmi_chrg_info(chip, "batt temp_c %d, prev zone %d, pres zone %d, "
+						"hotter_fcc %dmA, colder_fcc %dmA, "
+						"hotter_t %dC, colder_t %dC\n",
+						temp_c,prev_zone, chip->pres_temp_zone,
+						hotter_fcc, colder_fcc, hotter_t, colder_t);
 
 	if (prev_zone != chip->pres_temp_zone) {
 		mmi_chrg_info(chip,
@@ -926,18 +941,22 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 {
 	mmi_chrg_dbg(chip, PR_INTERRUPT, "clear mmi chrg manager!\n");
 	chip->pd_request_volt = 0;
-	chip->pd_request_volt_prev = 0;
 	chip->pd_request_curr = 0;
+	chip->pd_request_volt_prev = 0;
 	chip->pd_request_curr_prev = 0;
 	chip->pd_target_curr = 0;
 	chip->pd_target_volt = 0;
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
+	chip->pd_batt_therm_volt = 0;
+	chip->pd_batt_therm_curr = 0;
+	chip->pd_sys_therm_volt = 0;
+	chip->pd_sys_therm_curr = 0;
 	chip->recovery_pmic_chrg = false;
-	chip->thermal_mitigation_doing = false;
-	chip->thermal_force_pmic_chrg = false;
-	chip->thermal_cooling = false;
-	chip->thermal_cooling_cnt = 0;
+	chip->sys_therm_cooling= false;
+	chip->sys_therm_force_pmic_chrg = false;
+	chip->batt_therm_cooling = false;
+	chip->batt_therm_cooling_cnt = 0;
 
 	memset(chip->mmi_pdo_info, 0,
 			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
