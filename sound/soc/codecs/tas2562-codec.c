@@ -56,11 +56,13 @@
 /* #define TAS2558_CODEC */
 
 static char const *iv_enable_text[] = {"Off", "On"};
+static char const *brownout_enable_text[] = {"Off", "On"};
 static int tas2562iv_enable;
 static int mb_mute;
 
 static const struct soc_enum tas2562_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(iv_enable_text), iv_enable_text),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(brownout_enable_text), brownout_enable_text),
 };
 static int tas2562_set_fmt(struct tas2562_priv *p_tas2562, unsigned int fmt);
 
@@ -74,6 +76,8 @@ static int tas2562_mute_ctrl_get(struct snd_kcontrol *pKcontrol,
 	struct snd_ctl_elem_value *pValue);
 static int tas2562_mute_ctrl_put(struct snd_kcontrol *pKcontrol,
 	struct snd_ctl_elem_value *pValue);
+
+static int tas2562_brownout_params_init(struct tas2562_priv *p_tas2562);
 
 static unsigned int p_tas2562_classh_d_data[] = {
 		/* reg address			size	values */
@@ -96,11 +100,13 @@ static unsigned int p_tas2562_classh_d_data[] = {
 static unsigned int tas2562_codec_read(struct snd_soc_codec *codec,
 		unsigned int reg)
 {
+	unsigned int value = 0;
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_dbg(p_tas2562->dev, "Should not get here\n");
+	p_tas2562->read (p_tas2562, channel_left, reg, &value);
+	dev_dbg(p_tas2562->dev, "%s, reg=%d, value=%d", __func__, reg, value);
 
-	return 0;
+	return value;
 }
 
 static int tas2562_iv_enable(struct tas2562_priv *p_tas2562, int enable)
@@ -195,9 +201,87 @@ static int tas2562iv_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+int tas2562_brownout_enable(struct tas2562_priv *p_tas2562, bool enable)
+{
+	int ret = 0;
+	dev_info(p_tas2562->dev, "%s, enable = %d\n", __func__, enable);
+	/* Brownout Protection Init */
+	if (enable) {
+		ret = p_tas2562->write(p_tas2562, channel_both,
+			TAS2562_LIMITERCONFIGURATIONREG0,
+			0x51);
+		if (ret < 0)
+			return ret;
+		tas2562_brownout_params_init(p_tas2562);
+		p_tas2562->tas2562brownout_enable = true;
+	} else {
+		ret = p_tas2562->write(p_tas2562, channel_both,
+			TAS2562_LIMITERCONFIGURATIONREG0,
+			0x12);
+		if (ret < 0)
+			return ret;
+		p_tas2562->tas2562brownout_enable = false;
+	}
+
+	return ret;
+}
+
+static int tas2562_brownout_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct tas2562_priv *p_tas2562 = NULL;
+	int brownout_enable = 0, n_result = 0;
+
+	if (codec == NULL) {
+		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
+		return 0;
+	}
+
+	brownout_enable = ucontrol->value.integer.value[0];
+
+	n_result = tas2562_brownout_enable(p_tas2562, brownout_enable);
+
+	pr_debug("%s: brownout_enable = %d\n", __func__, brownout_enable);
+
+	return n_result;
+}
+
+static int tas2562_brownout_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct tas2562_priv *p_tas2562 = NULL;
+
+	if (codec == NULL) {
+		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
+		return 0;
+	}
+
+	ucontrol->value.integer.value[0] = p_tas2562->tas2562brownout_enable;
+
+	dev_err(p_tas2562->dev, "brownout enable %d\n", p_tas2562->tas2562brownout_enable);
+
+	return 0;
+}
+
 static const struct snd_kcontrol_new tas2562_controls[] = {
 SOC_ENUM_EXT("TAS2562 IVSENSE ENABLE", tas2562_enum[0],
 			tas2562iv_get, tas2562iv_put),
+SOC_ENUM_EXT("TAS2562 BROWNOUT PROTECT ENABLE", tas2562_enum[1],
+			tas2562_brownout_get, tas2562_brownout_put),
 };
 
 static int tas2562_codec_write(struct snd_soc_codec *codec, unsigned int reg,
@@ -205,7 +289,8 @@ static int tas2562_codec_write(struct snd_soc_codec *codec, unsigned int reg,
 {
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_dbg(p_tas2562->dev, "Should not get here\n");
+	dev_dbg(p_tas2562->dev, "%s: %d, %d", __func__, reg, value);
+	p_tas2562->write (p_tas2562, channel_both, reg, value);
 
 	return 0;
 }
@@ -372,6 +457,8 @@ static int tas2562_set_power_state(struct tas2562_priv *p_tas2562,
 		dev_err(p_tas2562->dev, "wrong power state setting %d\n",
 				state);
 	}
+
+	n_result = tas2562_brownout_enable(p_tas2562, p_tas2562->tas2562brownout_enable);
 
 	return n_result;
 }
@@ -954,6 +1041,77 @@ static struct snd_soc_dai_driver tas2562_dai_driver[] = {
 	},
 };
 
+static int tas2562_brownout_params_init(struct tas2562_priv *p_tas2562)
+{
+	int ret = 0;
+
+	dev_info(p_tas2562->dev, "%s, lim_th_min = %d, lim_th_max = %d!\n",
+		__func__, p_tas2562->lim_th_min, p_tas2562->lim_th_max);
+
+	if (p_tas2562->lim_th_min <= 0 ||
+		p_tas2562->lim_th_min > p_tas2562->lim_th_max) {
+		dev_info(p_tas2562->dev, "%s: use default config!\n", __func__);
+		p_tas2562->lim_th_min = 4;
+	}
+	if (p_tas2562->lim_th_max <= 0 ||
+		p_tas2562->lim_th_min > p_tas2562->lim_th_max) {
+		dev_info(p_tas2562->dev, "%s: use default config!\n", __func__);
+		p_tas2562->lim_th_max = 9;
+	}
+
+	/* LIMB_TH_MAX config*/
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN0,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_min, 0xFF000000, 24));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN1,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_min, 0x00FF0000, 16));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN2,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_min, 0x0000FF00, 8));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN3,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_min, 0x000000FF, 0));
+	if (ret < 0)
+		return ret;
+
+	/* LIMB TH MAX CONFIG */
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MAX0,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_max, 0xFF000000, 24));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN1,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_max, 0x00FF0000, 16));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN2,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_max, 0x0000FF00, 8));
+	if (ret < 0)
+		return ret;
+
+	ret = p_tas2562->write(p_tas2562, channel_both,
+		TAS2562_BROWNOUT_LIMB_TH_MIN3,
+		TAS2562_BROWNOUT_VBAT_CONVERT(p_tas2562->lim_th_max, 0x000000FF, 0));
+	if (ret < 0)
+		return ret;
+
+        return 0;
+}
+
 static int tas2562_load_init(struct tas2562_priv *p_tas2562)
 {
 	int ret;
@@ -1040,7 +1198,7 @@ static const struct soc_enum spk_enum[] = {
 
 static const struct snd_kcontrol_new tas2562_snd_controls[] = {
 	SOC_SINGLE_TLV("Amp Output Level", TAS2562_PLAYBACKCONFIGURATIONREG0,
-		0, 0x16, 0,
+		1, 0x16, 0,
 		tas2562_digital_tlv),
 	SOC_SINGLE_EXT("SmartPA System Mute", SND_SOC_NOPM, 0, 0x0001, 0,
 			tas2562_system_mute_ctrl_get, tas2562_system_mute_ctrl_put),
