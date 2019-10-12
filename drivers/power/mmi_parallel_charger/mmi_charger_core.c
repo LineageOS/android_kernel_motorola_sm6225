@@ -465,8 +465,17 @@ static int batt_get_property(struct power_supply *psy,
 			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
 			rc = 0;
 			val->intval = -EINVAL;
-		} else
+		} else {
+
 			val->intval = prop.intval;
+			if (psp == POWER_SUPPLY_PROP_STATUS &&
+				prop.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
+			rc = power_supply_get_property(chip->extrn_psy,
+								psp, &prop);
+			if (!rc && prop.intval == POWER_SUPPLY_STATUS_CHARGING)
+				val->intval = prop.intval;
+			}
+		}
 		break;
 	}
 	return rc;
