@@ -27,5 +27,6 @@
 int tas2562_register_codec(struct tas2562_priv *p_tas2562);
 int tas2562_deregister_codec(struct tas2562_priv *p_tas2562);
 int tas2562_load_config(struct tas2562_priv *p_tas2562);
+int tas2562_brownout_enable(struct tas2562_priv *p_tas2562, bool enable);
 
 #endif /* _TAS2562_CODEC_H */

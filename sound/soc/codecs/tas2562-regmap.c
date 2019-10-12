@@ -665,7 +665,7 @@ static void irq_work_routine(struct work_struct *work)
 				TAS2562_POWERCONTROL, &nDevInt1Status);
 		if (n_result < 0)
 			goto reload;
-		if (chn && channel_right)
+		if (chn & channel_right)
 			n_result = p_tas2562->read(p_tas2562, channel_right,
 			TAS2562_POWERCONTROL, &nDevInt3Status);
 		if (n_result < 0)
@@ -758,6 +758,10 @@ static void irq_work_routine(struct work_struct *work)
 		TAS2562_INTERRUPTMASKREG1, 0xb1);
 	if (n_result < 0)
 		goto reload;
+
+	n_result = tas2562_brownout_enable(p_tas2562, p_tas2562->tas2562brownout_enable);
+	if (n_result < 0)
+		return n_result;
 
 	goto end;
 
@@ -939,6 +943,26 @@ static int tas2562_parse_dt(struct device *dev, struct tas2562_priv *p_tas2562)
 			dev_dbg(p_tas2562->dev, "ti,irq-gpio2=%d",
 				p_tas2562->mn_irq_gpio2);
 		}
+	}
+
+
+
+	rc = of_property_read_u32(np, "ti,lim_th_min", &p_tas2562->lim_th_min);
+	if (rc) {
+		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
+			"ti,lim_th_min", np->full_name, rc);
+	} else {
+		dev_dbg(p_tas2562->dev, "ti,lim_th_min=%d",
+			p_tas2562->lim_th_min);
+	}
+
+	rc = of_property_read_u32(np, "ti,lim_th_max", &p_tas2562->lim_th_max);
+	if (rc) {
+		dev_err(p_tas2562->dev, "Looking up %s property in node %s failed %d\n",
+			"ti,lim_th_max", np->full_name, rc);
+	} else {
+		dev_dbg(p_tas2562->dev, "ti,lim_th_max=%d",
+			p_tas2562->lim_th_max);
 	}
 
 	return ret;
