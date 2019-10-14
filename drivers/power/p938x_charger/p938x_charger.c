@@ -54,7 +54,8 @@
 #define CHIP_ID_REG			0x0000
 #define HW_VER_REG			0x0002
 #define CUST_ID_REG			0x0003
-#define MTP_FW_VER_REG		0x0004
+#define MTP_FW_MAJ_VER_REG	0x0004
+#define MTP_FW_MIN_VER_REG	0x0006
 #define MTP_FW_DATE_REG		0x0008
 #define E2PROM_FW_VER_REG	0x001c
 #define DEV_STATUS_REG		0x0034
@@ -71,8 +72,8 @@
 #define OPT_FREQ_REG		0x0048
 #define DIE_TEMP_REG		0x0066
 
-#define SYS_MODE_REG		0x004c
-#define CMD_2_REG		0x004e
+#define SYS_MODE_REG		0x004a
+#define SYS_CMD_REG		0x004C
 
 #define ST_TX_FOD_FAULT	BIT(15)
 #define ST_TX_CONFLICT	BIT(14)
@@ -92,27 +93,36 @@
 #define SYS_MODE_TXMODE	BIT(2)
 #define SYS_MODE_WPCMODE	BIT(0)
 
-#define CMD_2_RENEGOTIATE	BIT(7)
-#define CMD_2_SWITCH_RAM	BIT(6)
-#define CMD_2_CLR_IRQ		BIT(5)
-#define CMD_2_SEND_CSP		BIT(4)
-#define CMD_2_SEND_EPT		BIT(3)
-#define CMD_2_CFG_TABLE		BIT(2)
-#define CMD_2_TOGGLE_LDO	BIT(1)
-#define CMD_2_SEND_RX_DATA	BIT(0)
+#define CMD_RX_RENEGOTIATE	BIT(7)
+#define CMD_RX_SWITCH_RAM	BIT(6)
+#define CMD_RX_CLR_IRQ		BIT(5)
+#define CMD_RX_SEND_CSP		BIT(4)
+#define CMD_RX_SEND_EPT		BIT(3)
+#define CMD_RX_CFG_TABLE	BIT(2)
+#define CMD_RX_TOGGLE_LDO	BIT(1)
+#define CMD_RX_SEND_RX_DATA	BIT(0)
 
 #define WAIT_FOR_AUTH_MS 1000
 #define WAIT_FOR_RCVD_TIMEOUT_MS 1000
-#define HEARTBEAT_INTERVAL_MS 60000
+#define HEARTBEAT_INTERVAL_MS 30000
 
-#define MAX_VOUT_MV_DEFAULT 5000
-#define MAX_IOUT_MA_DEFAULT 500
-#define MAX_VOUT_MV_NORM 5000
-#define MAX_IOUT_MA_NORM 1000
-#define MAX_VOUT_MV_FAST 9000
-#define MAX_IOUT_MA_FAST 1100
+#define BPP_MAX_VOUT 5000
+#define BPP_MAX_IOUT 1400
+#define EPP_MAX_VOUT 9000
+#define EPP_MAX_IOUT 1400
+
+#define MIN_VOUT_SET 3500
+#define MAX_VOUT_SET 13000
+#define MIN_IOUT_SET 500
+#define MAX_IOUT_SET 3000
 
 #define WLS_SHOW_MAX_SIZE 32
+
+#define MIN_CHIP_VERS 0x9380
+#define MAX_CHIP_VERS 0x9389
+#define CHIP_VENDOR "idt"
+
+#define DETACH_ON_READ_FAILURE
 
 #define p938x_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -185,26 +195,16 @@ enum {
 
 enum print_reason {
 	PR_INTERRUPT    = BIT(0),
+	PR_IMPORTANT	= BIT(1),
 	PR_MISC         = BIT(2),
 	PR_MOTO         = BIT(7),
 	PR_FWPROG       = BIT(6)
 };
 
-static int __debug_mask = PR_MOTO | PR_INTERRUPT;
+static int __debug_mask = PR_IMPORTANT;
 module_param_named(
 	debug_mask, __debug_mask, int, S_IRUSR | S_IWUSR
 );
-
-struct battery_st {
-	int status;
-	int capacity;
-	int voltage_now;
-	int voltage_max;
-	int current_now;
-	int current_max;
-	int charge_type;
-	int temp;
-};
 
 struct p938x_charger {
 	const char		*name;
@@ -213,9 +213,6 @@ struct p938x_charger {
 	struct device		*dev;
 	struct regmap		*regmap;
 
-	u32			chg_efficiency;
-	u32			chg_limit_soc;
-	u32			chg_idle_cl;
 	struct regulator	*vdd_i2c_vreg;
 	struct gpio		wchg_int_n;
 	struct gpio		wchg_en_n;
@@ -229,45 +226,35 @@ struct p938x_charger {
 	u16			irq_en;
 	u16			irq_stat;
 	u16			stat;
-	u16			mode;
-	u16			rx_vout_max;
-	u16			rx_iout_max;
-	u16			wls_allowed_vmax;
-	u16			wls_allowed_imax;
-	bool			wired_connected;
-	bool			charging_disabled;
-	int			temp_level;
-	int			thermal_levels;
-	struct battery_st	batt_st;
+	u8			mode;
+	bool		wired_connected;
 
-	struct work_struct	chg_det_work;
 	struct delayed_work	heartbeat_work;
 
 	u32			peek_poke_address;
 	struct dentry		*debug_root;
 
-	struct power_supply	*consumer_psy;
-	struct power_supply	*batt_psy;
 	struct power_supply	*usb_psy;
-	struct power_supply	*main_psy;
-	struct power_supply     *wls_psy;
-	struct power_supply_desc	wls_psy_d;
+	struct power_supply *wls_psy;
 
 	char			fw_name[NAME_MAX];
 	int			program_fw_stat;
 
 	atomic_t tx_attached;
 	atomic_t boost_enabled;
+
+	struct wakeup_source wls_wake_source;
+	bool	epp_mode;
 };
 
+/* Send our notications to the battery */
 static char *pm_wls_supplied_to[] = {
-	"wireless",
+	"battery",
 };
 
+/* Get notifications from supplies */
 static char *pm_wls_supplied_from[] = {
-	"battery",
 	"usb",
-	"dc",
 };
 
 static inline int p938x_is_chip_on(struct p938x_charger *chip)
@@ -292,9 +279,7 @@ static int p938x_read_reg(struct p938x_charger *chip, u16 reg, u8 *val)
 	unsigned int temp;
 
 	rc = regmap_read(chip->regmap, reg, &temp);
-	if (rc < 0)
-		p938x_err(chip, "Failed to read reg=0x%x, rc=%d\n", reg, rc);
-	else
+	if (rc >= 0)
 		*val = (u8)temp;
 
 	return rc;
@@ -302,18 +287,33 @@ static int p938x_read_reg(struct p938x_charger *chip, u16 reg, u8 *val)
 
 static int p938x_write_reg(struct p938x_charger *chip, u16 reg, u8 val)
 {
-	int rc;
-
-	rc = regmap_write(chip->regmap, reg, val);
-	if (rc < 0)
-		p938x_err(chip, "Failed to write reg=0x%x, rc=%d\n", reg, rc);
-
-	return rc;
+	return regmap_write(chip->regmap, reg, val);
 }
 
-static void p938x_write_reg_ignore_err(struct p938x_charger *chip, u16 reg, u8 val)
+static void p938x_reset(struct p938x_charger *chip)
 {
-	regmap_write(chip->regmap, reg, val);
+	p938x_write_reg(chip, 0x3040, 0x80);
+	msleep(100);
+}
+
+static void p938x_handle_wls_removal(struct p938x_charger *chip)
+{
+	if(atomic_read(&chip->tx_attached)) {
+		atomic_set(&chip->tx_attached, 0);
+		power_supply_changed(chip->wls_psy);
+		cancel_delayed_work(&chip->heartbeat_work);
+
+		/* Try to reset the chip to guard against false positives, we want
+		* don't want to end up in a broken state if we triggered disconnect
+		* accidentally
+		*/
+		if (!atomic_read(&chip->boost_enabled)) {
+			__pm_relax(&chip->wls_wake_source);
+			p938x_reset(chip);
+		}
+
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is removed\n");
+	}
 }
 
 static int p938x_read_buffer(struct p938x_charger *chip, u16 reg,
@@ -322,9 +322,10 @@ static int p938x_read_buffer(struct p938x_charger *chip, u16 reg,
 	int rc;
 
 	rc = regmap_bulk_read(chip->regmap, reg, buf, size);
-	if (rc < 0)
-		p938x_err(chip, "Failed to read buffer on reg=0x%x, rc=%d\n",
-					reg, rc);
+#ifdef DETACH_ON_READ_FAILURE
+	if(rc)
+		p938x_handle_wls_removal(chip);
+#endif
 
 	return rc;
 }
@@ -340,22 +341,16 @@ static int p938x_write_buffer(struct p938x_charger *chip, u16 reg,
 			break;
 	}
 
-	if (rc < 0)
-		p938x_err(chip, "Failed to write buffer on reg=0x%x, rc=%d\n",
-					reg, rc);
-
 	return rc;
-}
-
-static void p938x_reset(struct p938x_charger *chip)
-{
-	p938x_write_reg_ignore_err(chip, 0x3040, 0x80);
 }
 
 static int p938x_get_rx_vout(struct p938x_charger *chip)
 {
 	int rc;
 	u16 volt;
+
+	if(!p938x_is_tx_connected(chip))
+		return 0;
 
 	rc = p938x_read_buffer(chip, VOUT_READ_REG, (u8 *)&volt, 2);
 	if (rc < 0) {
@@ -366,22 +361,78 @@ static int p938x_get_rx_vout(struct p938x_charger *chip)
 	return volt;
 }
 
+static int p938x_get_rx_vrect(struct p938x_charger *chip)
+{
+	int rc;
+	u16 volt;
+
+	if(!p938x_is_tx_connected(chip))
+		return 0;
+
+	rc = p938x_read_buffer(chip, VRECT_READ_REG, (u8 *)&volt, 2);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to read rx voltage, rc = %d\n", rc);
+		return rc;
+	}
+
+	return volt;
+}
+
+static int p938x_get_rx_vout_set(struct p938x_charger *chip)
+{
+	int rc;
+	u8 volt;
+
+	if(!p938x_is_chip_on(chip))
+		return 0;
+
+	rc = p938x_read_buffer(chip, VOUT_SET_REG, &volt, 1);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to read rx voltage, rc = %d\n", rc);
+		return rc;
+	}
+
+	return (volt * 100);
+}
+
 static int p938x_set_rx_vout(struct p938x_charger *chip, u16 mv)
 {
 	int rc;
-	u16 rx_vout_max = mv;
 
-	if (mv < 3500)
-		mv = 3500;
-	else if (mv > 12500)
-		mv = 12500;
+	if(!p938x_is_chip_on(chip))
+		return 1;
 
-	mv = mv / 100;
-	rc = p938x_write_reg(chip, VOUT_SET_REG, (u8)mv);
+	if (mv < MIN_VOUT_SET)
+		mv = MIN_VOUT_SET;
+	else if (mv > MAX_VOUT_SET)
+		mv = MAX_VOUT_SET;
+
+	rc = p938x_write_reg(chip, VOUT_SET_REG, (u8)(mv / 100));
 	if (rc < 0)
 		p938x_err(chip, "Failed to set rx voltage, rc = %d\n", rc);
 	else
-		chip->rx_vout_max = rx_vout_max;
+		p938x_dbg(chip, PR_MOTO, "Set VOUT to %u mV\n", mv);
+
+	return rc;
+}
+
+static int p938x_set_rx_ocl(struct p938x_charger *chip, u16 ma)
+{
+	int rc;
+
+	if(!p938x_is_chip_on(chip))
+		return 1;
+
+	if (ma < MIN_IOUT_SET)
+		ma = MIN_IOUT_SET;
+	else if (ma > MAX_IOUT_SET)
+		ma = MAX_IOUT_SET;
+
+	rc = p938x_write_reg(chip, ILIMIT_SET_REG, (u8)((ma - 100) / 100));
+	if (rc < 0)
+		p938x_err(chip, "Failed to set rx current, rc = %d\n", rc);
+	else
+		p938x_dbg(chip, PR_MOTO, "Set ILIMIT to %u mA\n", ma);
 
 	return rc;
 }
@@ -390,6 +441,9 @@ static int p938x_get_rx_iout(struct p938x_charger *chip)
 {
 	int rc;
 	u16 ma;
+
+	if(!p938x_is_tx_connected(chip))
+		return 0;
 
 	rc = p938x_read_buffer(chip, IOUT_READ_REG, (u8 *)&ma, 2);
 	if (rc < 0) {
@@ -405,6 +459,9 @@ static int p938x_get_rx_ocl(struct p938x_charger *chip)
 	int rc;
 	u16 ma;
 
+	if(!p938x_is_chip_on(chip))
+		return 0;
+
 	rc = p938x_read_buffer(chip, ILIMIT_SET_REG, (u8 *)&ma, 2);
 	if (rc < 0) {
 		p938x_err(chip, "Failed to read rx current, rc = %d\n", rc);
@@ -418,7 +475,10 @@ static int p938x_enable_charging(struct p938x_charger *chip, bool on)
 {
 	int rc = 0;
 
-	rc = p938x_write_reg(chip, CMD_2_REG, CMD_2_TOGGLE_LDO);
+	if(!p938x_is_tx_connected(chip))
+		return 1;
+
+	rc = p938x_write_reg(chip, SYS_CMD_REG, CMD_RX_TOGGLE_LDO);
 	if (rc < 0)
 		p938x_err(chip, "Failed to %s RX ldo, rc = %d\n",
 			on ? "enable":"disable", rc);
@@ -429,54 +489,6 @@ static int p938x_enable_charging(struct p938x_charger *chip, bool on)
 
 	return rc;
 }
-
-// TODO
-/*static int p938x_request_rx_power(struct p938x_charger *chip,
-		int vout, int iout)
-{
-	int rc = 0;
-	u16 vmax, imax;
-
-	if (vout < 0 && iout < 0) {
-		p938x_err(chip, "Invalid request power parameters\n");
-		return -EINVAL;
-	}
-
-	p938x_get_tx_capability(chip, &vmax, &imax);
-	if (vout >= 0) {
-		if (vmax < vout)
-			return -EINVAL;
-
-		rc = p938x_set_fastchg_voltage(chip, vout);
-		if (rc == -EOPNOTSUPP && vout < MAX_VOUT_MV_FAST)
-			rc = p938x_set_rx_vout(chip, vout);
-		if (rc < 0) {
-			p938x_err(chip, "Failed to req vout=%d, rc=%d\n",
-						vout, rc);
-			return rc;
-		}
-	}
-
-	if (chip->rx_vout_max <= MAX_VOUT_MV_NORM &&
-	    (vmax > MAX_VOUT_MV_NORM ||
-	    imax > MAX_IOUT_MA_NORM))
-		imax = MAX_IOUT_MA_NORM;
-
-	if (chip->rx_iout_max > imax)
-		chip->rx_iout_max = imax;
-
-	if (iout >= 0) {
-		if (imax < iout)
-			return -EINVAL;
-
-		chip->rx_iout_max = iout;
-	}
-
-	p938x_dbg(chip, PR_MOTO, "Request RX power, V=%dmV, I=%dmA\n",
-				chip->rx_vout_max, chip->rx_iout_max);
-
-	return rc;
-}*/
 
 static int p938x_update_supplies_status(struct p938x_charger *chip)
 {
@@ -494,229 +506,54 @@ static int p938x_update_supplies_status(struct p938x_charger *chip)
 	if (rc) {
 		p938x_err(chip, "Couldn't read USB present prop, rc=%d\n", rc);
 		return rc;
-	} else if (!prop.intval) {
-		rc = power_supply_get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_TYPEC_MODE, &prop);
-		if (rc) {
-			p938x_err(chip,
-				"Couldn't read USB mode prop, rc=%d\n", rc);
-			return rc;
-		}
 	}
+
 	chip->wired_connected = !!prop.intval;
 
-	if (!chip->batt_psy)
-		chip->batt_psy = power_supply_get_by_name("battery");
-	if (!chip->batt_psy) {
-		pr_debug("Battery psy not found\n");
-		return -EINVAL;
-	}
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_STATUS, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt status prop, rc=%d\n", rc);
-		return rc;
-	}
-	chip->batt_st.status = prop.intval;
+	// TODO tx mode should work even when USB is connected ?
+	// Only disable LDO, do not turn chip off...
 
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_CAPACITY, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt capacity prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.capacity = prop.intval;
-
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_TEMP, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt temp prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.temp = prop.intval;
-
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt voltage now prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.voltage_now = prop.intval / 1000;
-
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt current now prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.current_now = prop.intval / 1000;
-
-	rc = power_supply_get_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_CHARGE_TYPE, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt charge type prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.charge_type = prop.intval;
-
-	if (!chip->main_psy)
-		chip->main_psy = power_supply_get_by_name("main");
-	if (!chip->main_psy) {
-		pr_debug("Main psy not found\n");
-		return -EINVAL;
-	}
-	rc = power_supply_get_property(chip->main_psy,
-			POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt voltage max prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.voltage_max = prop.intval / 1000;
-
-	rc = power_supply_get_property(chip->main_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
-	if (rc) {
-		p938x_err(chip, "Couldn't read batt current max prop, rc=%d\n",
-					rc);
-		return rc;
-	}
-	chip->batt_st.current_max = prop.intval / 1000;
+	p938x_dbg(chip, PR_MOTO, "Is usb connected? %d\n", chip->wired_connected);
 
 	return 0;
-}
-
-static void p938x_handle_wls_insertion(struct p938x_charger *chip)
-{
-	chip->rx_vout_max = MAX_VOUT_MV_DEFAULT;
-	chip->rx_iout_max = 0;
-
-	// TODO hardcoded for testing
-	p938x_set_rx_vout(chip, 5000);
-	p938x_enable_charging(chip, 1);
-
-	power_supply_changed(chip->wls_psy);
-	cancel_delayed_work(&chip->heartbeat_work);
-	schedule_delayed_work(&chip->heartbeat_work,
-			msecs_to_jiffies(0));
-}
-
-static void p938x_handle_wls_removal(struct p938x_charger *chip)
-{
-	chip->irq_en = 0;
-	chip->irq_stat = 0;
-	chip->stat = 0;
-	chip->rx_vout_max = 0;
-	chip->rx_iout_max = 0;
-	chip->temp_level = 0;
-	chip->thermal_levels = 0;
-	memset(&chip->batt_st, 0, sizeof(struct battery_st));
-
-	power_supply_changed(chip->wls_psy);
-	cancel_delayed_work(&chip->heartbeat_work);
 }
 
 static void p938x_clear_irq(struct p938x_charger *chip, u16 mask)
 {
 	p938x_dbg(chip, PR_MOTO, "IRQ Clear 0x%02X\n", mask);
 	p938x_write_buffer(chip, IRQ_CLEAR_REG, (u8 *)&mask, 2);
-	p938x_write_reg(chip, CMD_2_REG, CMD_2_CLR_IRQ);
+	p938x_write_reg(chip, SYS_CMD_REG, CMD_RX_CLR_IRQ);
 }
 
-static void p938x_chg_det_work(struct work_struct *work)
-{
-	struct p938x_charger *chip = container_of(work,
-				struct p938x_charger, chg_det_work);
-
-	if (!p938x_is_tx_connected(chip)) {
-		p938x_handle_wls_removal(chip);
-		p938x_dbg(chip, PR_MOTO, "Wireless charger is removed\n");
-	} else if (p938x_is_tx_connected(chip)) {
-		p938x_handle_wls_insertion(chip);
-		p938x_dbg(chip, PR_MOTO, "Wireless charger is inserted\n");
-	}
-}
-
-// TODO
 static void p938x_heartbeat_work(struct work_struct *work)
 {
 	struct p938x_charger *chip = container_of(work,
 				struct p938x_charger, heartbeat_work.work);
+	int vout = 0;
+	int iout = 0;
+	int vout_set = 0;
+	int iout_limit = 0;
+	int vrect = 0;
 
 	if (p938x_is_tx_connected(chip)) {
-		int rc;
-		/*u16 vmax, imax;
-		u16 target_vout, target_iout;*/
-
-		rc = p938x_update_supplies_status(chip);
-		if (rc < 0) {
-			p938x_err(chip,	"Update supplies status, rc=%d\n", rc);
+		if (!p938x_is_ldo_on(chip)) {
+			p938x_dbg(chip, PR_MOTO, "LDO is not on yet\n");
+			cancel_delayed_work(&chip->heartbeat_work);
 			schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(HEARTBEAT_INTERVAL_MS));
+					msecs_to_jiffies(2000));
 			return;
 		}
 
-		/* p938x_get_tx_capability(chip, &vmax, &imax);
-		if (chip->wired_connected || chip->charging_disabled) {
-			target_vout = MAX_VOUT_MV_DEFAULT;
-			target_iout = 0;
-		} else if (chip->batt_st.capacity > chip->chg_limit_soc) {
-			target_vout = MAX_VOUT_MV_DEFAULT;
-			if (chip->batt_st.status == POWER_SUPPLY_STATUS_FULL)
-				target_iout = chip->chg_idle_cl;
-			else if (chip->batt_st.capacity == 100)
-				target_iout = MAX_IOUT_MA_DEFAULT / 2;
-			else
-				target_iout = MAX_IOUT_MA_DEFAULT;
-		} else {
-			int batt_pwr_max;
-			int chg_pwr_max;
-			int type = chip->batt_st.charge_type;
+		vout = p938x_get_rx_vout(chip);
+		vout_set = p938x_get_rx_vout_set(chip);
+		vrect = p938x_get_rx_vrect(chip);
+		iout = p938x_get_rx_iout(chip);
+		iout_limit = p938x_get_rx_ocl(chip);
 
-			if (type == POWER_SUPPLY_CHARGE_TYPE_TAPER &&
-			    chip->batt_st.current_now < 0) {
-				batt_pwr_max = chip->batt_st.voltage_max *
-						(-chip->batt_st.current_now);
-				chg_pwr_max = batt_pwr_max * 100 /
-						chip->chg_efficiency;
-			} else if (type == POWER_SUPPLY_CHARGE_TYPE_FAST ||
-			    type == POWER_SUPPLY_CHARGE_TYPE_TRICKLE) {
-				batt_pwr_max = chip->batt_st.voltage_max *
-						chip->batt_st.current_max;
-				chg_pwr_max = batt_pwr_max * 100 /
-						chip->chg_efficiency;
-			} else
-				chg_pwr_max = chip->rx_vout_max *
-						chip->rx_iout_max;
-
-			chg_pwr_max = min(chg_pwr_max, (vmax * imax));
-			target_vout = vmax;
-			target_iout = chg_pwr_max / target_vout;
-			if (target_iout < chip->chg_idle_cl)
-				target_iout = chip->chg_idle_cl;
-		}
-
-		target_vout = min(target_vout, chip->wls_allowed_vmax);
-		target_iout = min(target_iout, chip->wls_allowed_imax);
-		if (target_vout != chip->rx_vout_max ||
-		    target_iout != chip->rx_iout_max) {
-			rc = p938x_request_rx_power(chip,
-						target_vout,
-						target_iout);
-			if (rc < 0)
-				p938x_err(chip, "Request power, rc=%d\n", rc);
-			else
-				power_supply_changed(chip->wls_psy);
-		} else if (!chip->consumer_psy) {
-			chip->consumer_psy =
-				power_supply_get_by_name(pm_wls_supplied_to[0]);
-			power_supply_changed(chip->wls_psy);
-		}*/
+		p938x_dbg(chip, PR_IMPORTANT,
+			"mode=%s vout=%d vout_set=%d vrect=%d iout=%d ocl=%d\n",
+			chip->epp_mode ? "epp" : "bpp",
+			vout, vout_set, vrect, iout, iout_limit);
 
 		schedule_delayed_work(&chip->heartbeat_work,
 			msecs_to_jiffies(HEARTBEAT_INTERVAL_MS));
@@ -805,6 +642,12 @@ disable_vreg:
 
 static inline void p938x_set_boost(struct p938x_charger *chip, int val)
 {
+	/* Assume if we turned the boost on we want to stay awake */
+	if (val)
+		__pm_stay_awake(&chip->wls_wake_source);
+	else
+		__pm_relax(&chip->wls_wake_source);
+
 	gpio_set_value(chip->wchg_boost.gpio, !!val);
 	atomic_set(&chip->boost_enabled, !!val);
 }
@@ -812,6 +655,54 @@ static inline void p938x_set_boost(struct p938x_charger *chip, int val)
 static inline int p938x_get_boost(struct p938x_charger *chip)
 {
 	return gpio_get_value(chip->wchg_boost.gpio);
+}
+
+static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
+{
+	u8 buf = 0;
+	int rc;
+
+	// TODO block if tx connected OR stop rx power ?
+
+	if (val) {
+		/* Power on and wait for boot */
+		p938x_set_boost(chip, 1);
+		msleep(100);
+
+		rc = p938x_write_reg(chip, SYS_MODE_REG, SYS_MODE_TXMODE);
+		if (rc < 0) {
+			p938x_err(chip, "Failed to write 0x%04x(0x%02lx), rc=%d\n",
+				SYS_MODE_REG, SYS_MODE_TXMODE, rc);
+			p938x_set_boost(chip, 0);
+		}
+	} else {
+		rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
+		if (rc < 0)
+			p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+				SYS_MODE_REG, rc);
+
+		rc = p938x_write_reg(chip, SYS_MODE_REG, (buf & ~SYS_MODE_TXMODE));
+		if (rc < 0)
+			p938x_err(chip, "Failed to write 0x%04x(0x%02lx), rc=%d\n",
+				SYS_MODE_REG, (buf & ~SYS_MODE_TXMODE), rc);
+
+		p938x_set_boost(chip, 0);
+	}
+}
+
+static inline int p938x_get_tx_mode(struct p938x_charger *chip)
+{
+	u8 buf = 0;
+	int rc;
+
+	rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+			SYS_MODE_REG, rc);
+		return rc;
+	}
+
+	return (buf & SYS_MODE_TXMODE);
 }
 
 static int p938x_program_mtp_downloader(struct p938x_charger *chip)
@@ -864,7 +755,6 @@ static int p938x_program_mtp_downloader(struct p938x_charger *chip)
 
 	/* ignoreNAK */
 	p938x_reset(chip);
-	msleep(100);
 
 	return rc;
 }
@@ -1026,7 +916,6 @@ static int p938x_program_mtp(struct p938x_charger *chip, const u8 *src, u32 size
 
 	/* ignoreNAK */
 	p938x_reset(chip);
-	msleep(100);
 
 	return rc;
 }
@@ -1035,6 +924,11 @@ static int p938x_program_fw(struct p938x_charger *chip)
 {
 	int rc = 0;
 	const struct firmware *fw = NULL;
+
+	if (!strlen(chip->fw_name)) {
+		p938x_err(chip, "No FW name given\n");
+		return -EINVAL;
+	}
 
 	if (chip->program_fw_stat == PROGRAM_FW_PENDING) {
 		p938x_err(chip, "Programming FW is ongoing\n");
@@ -1056,7 +950,7 @@ static int p938x_program_fw(struct p938x_charger *chip)
 	/* Brief delay for ic init */
 	msleep(100);
 
-	p938x_dbg(chip, PR_MOTO, "Loading FW programmer...\n");
+	p938x_dbg(chip, PR_FWPROG, "Loading FW programmer...\n");
 
 	rc = p938x_program_mtp_downloader(chip);
 	if (rc < 0) {
@@ -1066,7 +960,7 @@ static int p938x_program_fw(struct p938x_charger *chip)
 		goto release_fw;
 	}
 
-	p938x_dbg(chip, PR_MOTO, "Starting FW programming...\n");
+	p938x_dbg(chip, PR_FWPROG, "Starting FW programming...\n");
 
 	rc = p938x_program_mtp(chip, fw->data, fw->size);
 	if (rc < 0) {
@@ -1076,12 +970,44 @@ static int p938x_program_fw(struct p938x_charger *chip)
 	}
 
 	chip->program_fw_stat = PROGRAM_FW_SUCCESS;
-	p938x_dbg(chip, PR_MOTO, "Programming FW success\n");
+	p938x_dbg(chip, PR_IMPORTANT, "Programming FW success\n");
 
 release_fw:
 	release_firmware(fw);
 	p938x_set_boost(chip, 0);
 	return rc;
+}
+
+static int p938x_check_system_mode(struct p938x_charger *chip)
+{
+	int rc;
+
+	chip->mode = 0;
+	rc = p938x_read_buffer(chip, SYS_MODE_REG, &chip->mode, 1);
+	if (rc < 0)
+		return rc;
+
+	p938x_dbg(chip, PR_MOTO, "MODE=0x%02x\n", chip->mode);
+
+	if (chip->mode & SYS_MODE_RAMCODE)
+		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_RAMCODE\n");
+	if (chip->mode & SYS_MODE_TXMODE)
+		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_TXMODE\n");
+	if (chip->mode & SYS_MODE_WPCMODE) {
+		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_WPCMODE\n");
+		if (chip->mode & SYS_MODE_EXTENDED) {
+			p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_EXTENDED\n");
+			chip->epp_mode = true;
+			p938x_set_rx_vout(chip, EPP_MAX_VOUT);
+			p938x_set_rx_ocl(chip, EPP_MAX_IOUT);
+		} else {
+			chip->epp_mode = false;
+			p938x_set_rx_vout(chip, BPP_MAX_VOUT);
+			p938x_set_rx_ocl(chip, BPP_MAX_IOUT);
+		}
+	}
+
+	return 0;
 }
 
 static int p938x_get_status(struct p938x_charger *chip)
@@ -1090,36 +1016,22 @@ static int p938x_get_status(struct p938x_charger *chip)
 
 	chip->irq_en = 0;
 	rc = p938x_read_buffer(chip, IRQ_ENABLE_REG, (u8 *)&chip->irq_en, 2);
-	if (rc < 0) {
-		p938x_err(chip, "Failed to get irq enable, rc=%d\n", rc);
+	if (rc < 0)
 		return rc;
-	}
 
 	// TODO spec says to read these two together
-
 	chip->stat = 0;
 	rc = p938x_read_buffer(chip, DEV_STATUS_REG, (u8 *)&chip->stat, 2);
-	if (rc < 0) {
-		p938x_err(chip, "Failed to get status, rc=%d\n", rc);
+	if (rc < 0)
 		return rc;
-	}
 
 	chip->irq_stat = 0;
 	rc = p938x_read_buffer(chip, IRQ_STATUS_REG, (u8 *)&chip->irq_stat, 2);
-	if (rc < 0) {
-		p938x_err(chip, "Failed to get irq status, rc=%d\n", rc);
+	if (rc < 0)
 		return rc;
-	}
 
-	chip->mode = 0;
-	rc = p938x_read_buffer(chip, SYS_MODE_REG, (u8 *)&chip->mode, 2);
-	if (rc < 0) {
-		p938x_err(chip, "Failed to get mode status, rc=%d\n", rc);
-		return rc;
-	}
-
-	p938x_dbg(chip, PR_MOTO, "IRQ_ENABLE=0x%04x, IRQ_ST=0x%04x, STATUS=0x%04x, MODE=0x%02x\n",
-		chip->irq_en, chip->irq_stat, chip->stat, chip->mode);
+	p938x_dbg(chip, PR_MOTO, "IRQ_ENABLE=0x%04x, IRQ_ST=0x%04x, STATUS=0x%04x\n",
+		chip->irq_en, chip->irq_stat, chip->stat);
 
 	return 0;
 }
@@ -1129,69 +1041,64 @@ static void p938x_check_status(struct p938x_charger *chip)
 	u16 status = chip->stat;
 	u16 irq_status = chip->irq_stat;
 
-	if(status & ST_TX_FOD_FAULT)
+	if (status & ST_TX_FOD_FAULT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_TX_FOD_FAULT\n");
-	if(status & ST_TX_CONFLICT)
+	if (status & ST_TX_CONFLICT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_TX_CONFLICT\n");
-	if(status & ST_RX_CONN)
+	if (status & ST_RX_CONN)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_RX_CONN\n");
-	if(status & ST_ADT_ERR)
+	if (status & ST_ADT_ERR)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_ADT_ERR\n");
-	if(status & ST_ADT_RCV)
+	if (status & ST_ADT_RCV)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_ADT_RCV\n");
-	if(status & ST_ADT_SENT)
+	if (status & ST_ADT_SENT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_ADT_SENT\n");
-	if(status & ST_VOUT_ON)
+	if (status & ST_VOUT_ON)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_VOUT_ON\n");
-	if(status & ST_VRECT_ON)
+	if (status & ST_VRECT_ON)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_VRECT_ON\n");
-	if(status & ST_MODE_CHANGE)
+	if (status & ST_MODE_CHANGE)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_MODE_CHANGE\n");
-	if(status & ST_OVER_TEMP)
+	if (status & ST_OVER_TEMP)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_OVER_TEMP\n");
-	if(status & ST_OVER_VOLT)
+	if (status & ST_OVER_VOLT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_OVER_VOLT\n");
-	if(status & ST_OVER_CURR)
+	if (status & ST_OVER_CURR)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_OVER_CURR\n");
 
-	if(irq_status & ST_TX_FOD_FAULT)
+	if (irq_status & ST_TX_FOD_FAULT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_TX_FOD_FAULT\n");
-	if(irq_status & ST_TX_CONFLICT)
+	if (irq_status & ST_TX_CONFLICT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_TX_CONFLICT\n");
-	if(irq_status & ST_RX_CONN)
+	if (irq_status & ST_RX_CONN)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_RX_CONN\n");
-	if(irq_status & ST_ADT_ERR)
+	if (irq_status & ST_ADT_ERR)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_ERR\n");
-	if(irq_status & ST_ADT_RCV)
+	if (irq_status & ST_ADT_RCV)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_RCV\n");
-	if(irq_status & ST_ADT_SENT)
+	if (irq_status & ST_ADT_SENT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_SENT\n");
-	if(irq_status & ST_VOUT_ON)
+	if (irq_status & ST_VOUT_ON) {
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VOUT_ON\n");
-	if(irq_status & ST_VRECT_ON)
+		p938x_check_system_mode(chip);
+	}
+	if (irq_status & ST_VRECT_ON) {
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VRECT_ON\n");
-	if(irq_status & ST_MODE_CHANGE)
+		__pm_stay_awake(&chip->wls_wake_source);
+		atomic_set(&chip->tx_attached, 1);
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				msecs_to_jiffies(2000));
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
+	}
+	if (irq_status & ST_MODE_CHANGE)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_MODE_CHANGE\n");
-	if(irq_status & ST_OVER_TEMP)
+	if (irq_status & ST_OVER_TEMP)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_OVER_TEMP\n");
-	if(irq_status & ST_OVER_VOLT)
+	if (irq_status & ST_OVER_VOLT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_OVER_VOLT\n");
-	if(irq_status & ST_OVER_CURR)
+	if (irq_status & ST_OVER_CURR)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_OVER_CURR\n");
-}
-
-static void p938x_check_system_mode(struct p938x_charger *chip)
-{
-	u16 mode = chip->mode;
-
-	if(mode & SYS_MODE_RAMCODE)
-		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_RAMCODE\n");
-	if(mode & SYS_MODE_EXTENDED)
-		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_EXTENDED\n");
-	if(mode & SYS_MODE_TXMODE)
-		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_TXMODE\n");
-	if(mode & SYS_MODE_WPCMODE)
-		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_WPCMODE\n");
 }
 
 static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
@@ -1208,15 +1115,13 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if(!p938x_get_status(chip)) {
-		p938x_check_status(chip);
-		p938x_check_system_mode(chip);
+	if (p938x_get_status(chip)) {
+		p938x_err(chip,
+			"Error reading status. Check charging pad alignment\n");
+		return IRQ_HANDLED;
 	}
 
-	// TODO should this be in both places
-	if(chip->irq_stat & ST_VRECT_ON)
-		schedule_work(&chip->chg_det_work);
-
+	p938x_check_status(chip);
 	p938x_clear_irq(chip, chip->irq_stat);
 
 	return IRQ_HANDLED;
@@ -1227,16 +1132,13 @@ static irqreturn_t p938x_det_irq_handler(int irq, void *dev_id)
 	struct p938x_charger *chip = dev_id;
 	int tx_detected = gpio_get_value(chip->wchg_det.gpio);
 
-	atomic_set(&chip->tx_attached, tx_detected);
-
-	// TODO should this be in both places
-	// TODO clean up on detach
-	schedule_work(&chip->chg_det_work);
+	if (!tx_detected)
+		p938x_handle_wls_removal(chip);
 
 	return IRQ_HANDLED;
 }
 
-static ssize_t boost_store(struct device *dev,
+static ssize_t tx_mode_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
@@ -1250,27 +1152,58 @@ static ssize_t boost_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	p938x_set_boost(chip, value);
+	p938x_set_tx_mode(chip, value);
 
 	return r ? r : count;
 }
 
-static ssize_t boost_show(struct device *dev,
+static ssize_t tx_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct p938x_charger *chip = dev_get_drvdata(dev);
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
-		p938x_get_boost(chip));
+		p938x_get_tx_mode(chip));
+}
+
+static ssize_t chip_id_max_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%04x\n",
+		MAX_CHIP_VERS);
+}
+
+static ssize_t chip_id_min_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%04x\n",
+		MIN_CHIP_VERS);
+}
+
+static ssize_t chip_vendor_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%s\n",
+		CHIP_VENDOR);
 }
 
 static ssize_t chip_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct p938x_charger *chip = dev_get_drvdata(dev);
+	int turn_off = 0;
 	u8 data[2];
 
+	if(!p938x_is_chip_on(chip)) {
+		turn_off = 1;
+		p938x_set_boost(chip, 1);
+		msleep(100);
+	}
+
 	p938x_read_buffer(chip, CHIP_ID_REG, data, 2);
+
+	if(turn_off)
+		p938x_set_boost(chip, 0);
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%02x%02x\n",
 		data[1], data[0]);
@@ -1280,11 +1213,24 @@ static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct p938x_charger *chip = dev_get_drvdata(dev);
-	u8 data[12];
+	int turn_off = 0;
+	u16 minor_vers = 0x00;
+	u16 major_vers = 0x00;
 
-	p938x_read_buffer(chip, MTP_FW_DATE_REG, data, 12);
+	if(!p938x_is_chip_on(chip)) {
+		turn_off = 1;
+		p938x_set_boost(chip, 1);
+		msleep(100);
+	}
 
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%s\n", data);
+	p938x_read_buffer(chip, MTP_FW_MAJ_VER_REG, (u8 *)&major_vers, 2);
+	p938x_read_buffer(chip, MTP_FW_MIN_VER_REG, (u8 *)&minor_vers, 2);
+
+	if(turn_off)
+		p938x_set_boost(chip, 0);
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%04x%04x\n",
+		major_vers, minor_vers);
 }
 
 static ssize_t fw_name_store(struct device *dev,
@@ -1333,88 +1279,26 @@ static ssize_t program_fw_store(struct device *dev,
 	return r ? r : count;
 }
 
-static ssize_t rx_vout_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	int rc;
-	unsigned long r;
-	unsigned long vout;
-	struct p938x_charger *chip = dev_get_drvdata(dev);
-
-	r = kstrtoul(buf, 0, &vout);
-	if (r) {
-		p938x_err(chip, "Invalid vout value = %lu\n", vout);
-		return -EINVAL;
-	}
-
-	rc = p938x_set_rx_vout(chip, (u16)vout);
-	if (rc < 0)
-		return rc;
-
-	power_supply_changed(chip->wls_psy);
-	return r ? r : count;
-}
-
-static ssize_t rx_vout_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int vout;
-	struct p938x_charger *chip = dev_get_drvdata(dev);
-
-	vout = p938x_get_rx_vout(chip);
-	if (vout < 0)
-		return vout;
-
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n", vout);
-}
-
-static ssize_t rx_iout_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int iout;
-	struct p938x_charger *chip = dev_get_drvdata(dev);
-
-	iout = p938x_get_rx_iout(chip);
-	if (iout < 0)
-		return iout;
-
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n", iout);
-}
-
-static ssize_t rx_ocl_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int ocl;
-	struct p938x_charger *chip = dev_get_drvdata(dev);
-
-	ocl = p938x_get_rx_ocl(chip);
-	if (ocl < 0)
-		return ocl;
-
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n", ocl);
-}
-
-static DEVICE_ATTR(boost, S_IRUGO|S_IWUSR, boost_show, boost_store);
+static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, chip_id_show, NULL);
+static DEVICE_ATTR(vendor, S_IRUGO, chip_vendor_show, NULL);
+static DEVICE_ATTR(chip_id_max, S_IRUGO, chip_id_max_show, NULL);
+static DEVICE_ATTR(chip_id_min, S_IRUGO, chip_id_min_show, NULL);
 static DEVICE_ATTR(fw_ver, S_IRUGO, fw_ver_show, NULL);
 static DEVICE_ATTR(fw_name, S_IWUSR, NULL, fw_name_store);
 static DEVICE_ATTR(program_fw_stat, S_IRUGO, program_fw_stat_show, NULL);
 static DEVICE_ATTR(program_fw, S_IWUSR, NULL, program_fw_store);
-static DEVICE_ATTR(rx_vout, S_IRUGO|S_IWUSR, rx_vout_show, rx_vout_store);
-static DEVICE_ATTR(rx_iout, S_IRUGO, rx_iout_show, NULL);
-static DEVICE_ATTR(rx_ocl, S_IRUGO, rx_ocl_show, NULL);
 
 static struct attribute *p938x_attrs[] = {
-	&dev_attr_boost.attr,
+	&dev_attr_tx_mode.attr,
+	&dev_attr_chip_id_max.attr,
+	&dev_attr_chip_id_min.attr,
 	&dev_attr_chip_id.attr,
+	&dev_attr_vendor.attr,
 	&dev_attr_fw_ver.attr,
 	&dev_attr_fw_name.attr,
 	&dev_attr_program_fw_stat.attr,
 	&dev_attr_program_fw.attr,
-	&dev_attr_rx_vout.attr,
-	&dev_attr_rx_iout.attr,
-	&dev_attr_rx_ocl.attr,
 	NULL
 };
 
@@ -1431,11 +1315,11 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "HW_VER: 0x%02x\n", buf[0]);
 	p938x_read_reg(chip, CUST_ID_REG, &buf[0]);
 	seq_printf(m, "CUST_ID: 0x%02x\n", buf[0]);
-	p938x_read_buffer(chip, MTP_FW_VER_REG, buf, 4);
+	p938x_read_buffer(chip, MTP_FW_MAJ_VER_REG, buf, 4);
 	seq_printf(m, "MTP_FW_VER: 0x%02x%02x:0x%02x%02x\n",
 			buf[0], buf[1], buf[2], buf[3]);
 	p938x_read_buffer(chip, MTP_FW_DATE_REG, buf, 12);
-	seq_printf(m, "MTP_FW_DATE: %s", buf);
+	seq_printf(m, "MTP_FW_DATE: %s\n", buf);
 	p938x_read_buffer(chip, E2PROM_FW_VER_REG, buf, 4);
 	seq_printf(m, "E2PROM_FW_VER: 0x%02x%02x:0x%02x%02x\n",
 			buf[0], buf[1], buf[2], buf[3]);
@@ -1447,7 +1331,7 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "IRQ ENABLE: 0x%02x%02x\n", buf[1], buf[0]);
 	p938x_read_buffer(chip, IRQ_CLEAR_REG, buf, 2);
 	seq_printf(m, "IRQ CLEAR: 0x%02x%02x\n", buf[1], buf[0]);
-	p938x_read_reg(chip, CMD_2_REG, &buf[0]);
+	p938x_read_reg(chip, SYS_CMD_REG, &buf[0]);
 	seq_printf(m, "CMD_REG: 0x%02x\n", buf[0]);
 	p938x_read_buffer(chip, VOUT_READ_REG, buf, 2);
 	seq_printf(m, "VOUT: %dmV\n", (buf[1] << 8) | buf[0]);
@@ -1458,11 +1342,12 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	p938x_read_buffer(chip, IOUT_READ_REG, buf, 2);
 	seq_printf(m, "IOUT: %dmA\n", (buf[1] << 8) | buf[0]);
 	p938x_read_buffer(chip, DIE_TEMP_REG, buf, 2);
-	seq_printf(m, "DIE TEMP: %d C\n",
-		((((buf[1]&0x0F) << 8)|buf[0]) - 1350) * 83 / 444 - 273);
+	/* TODO conv is NOT right. */
+	seq_printf(m, "DIE TEMP: %d %dC\n",((buf[1] << 8)| buf[0]),
+		(((buf[1] << 8)| buf[0]) - 1350) * 83 / 444 - 273);
 	p938x_read_buffer(chip, OPT_FREQ_REG, buf, 2);
 	seq_printf(m, "OPT FREQ: %dkHz\n", (buf[1] << 8) | buf[0]);
-	p938x_read_buffer(chip, ILIMIT_SET_REG, buf, 2);
+	p938x_read_buffer(chip, ILIMIT_SET_REG, buf, 1);
 	seq_printf(m, "ILIMIT_SET: %dmA\n", buf[0] * 100 + 100);
 	p938x_read_reg(chip, SYS_MODE_REG, &buf[0]);
 	seq_printf(m, "SYS_MODE: 0x%02x\n", buf[0]);
@@ -1562,29 +1447,12 @@ static int p938x_parse_gpio(struct device_node *node, struct gpio *gpio, int idx
 
 static int p938x_parse_dt(struct p938x_charger *chip)
 {
-	int rc = 0;
 	struct device_node *node = chip->dev->of_node;
-	const char *fw_name;
 
 	if (!node) {
 		p938x_err(chip, "device tree info. missing\n");
 		return -EINVAL;
 	}
-
-	rc = of_property_read_u32(node, "idt,chg-efficiency",
-					&chip->chg_efficiency);
-	if (rc)
-		chip->chg_efficiency = 85;
-
-	rc = of_property_read_u32(node, "idt,chg-limit-soc",
-					&chip->chg_limit_soc);
-	if (rc)
-		chip->chg_limit_soc = 95;
-
-	rc = of_property_read_u32(node, "idt,chg-idle-cl",
-					&chip->chg_idle_cl);
-	if (rc)
-		chip->chg_idle_cl = 50;
 
 	if (of_find_property(node, "vdd-i2c-supply", NULL)) {
 		chip->vdd_i2c_vreg = devm_regulator_get(chip->dev, "vdd-i2c");
@@ -1630,10 +1498,6 @@ static int p938x_parse_dt(struct p938x_charger *chip)
 	chip->pinctrl_name = of_get_property(chip->dev->of_node,
 						"pinctrl-names", NULL);
 
-	fw_name = of_get_property(chip->dev->of_node,"fw-name", NULL);
-	if(fw_name)
-		strncpy(chip->fw_name, fw_name, NAME_MAX);
-
 	return 0;
 }
 
@@ -1646,7 +1510,6 @@ static enum power_supply_property p938x_wls_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
-	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 };
 
 static int p938x_wls_get_prop(struct power_supply *psy,
@@ -1654,7 +1517,6 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		union power_supply_propval *val)
 {
 	struct p938x_charger *chip = power_supply_get_drvdata(psy);
-	int rc = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -1664,44 +1526,25 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		val->intval = p938x_is_ldo_on(chip);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		if (p938x_is_chip_on(chip)) {
-			rc = p938x_get_rx_iout(chip);
-			if (rc >= 0)
-				val->intval = rc * 1000;
-		} else
-			val->intval = 0;
+		val->intval = p938x_get_rx_iout(chip) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = chip->rx_iout_max * 1000;
+		val->intval = p938x_get_rx_ocl(chip) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		if (p938x_is_chip_on(chip)) {
-			rc = p938x_get_rx_vout(chip);
-			if (rc >= 0)
-				val->intval = rc * 1000;
-		} else
-			val->intval = 0;
+		val->intval = p938x_get_rx_vout(chip) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		val->intval = chip->rx_vout_max * 1000;
+		val->intval = p938x_get_rx_vout_set(chip) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_REAL_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_WIRELESS;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = !chip->charging_disabled;
-		break;
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-		val->intval = chip->temp_level;
+		val->intval = p938x_is_ldo_on(chip);
 		break;
 	default:
 		return -EINVAL;
-	}
-
-	if (rc < 0) {
-		p938x_dbg(chip, PR_MISC, "Couldn't get prop %d rc = %d\n",
-					psp, rc);
-		return rc;
 	}
 
 	return 0;
@@ -1716,27 +1559,13 @@ static int p938x_wls_set_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		if ((val->intval / 1000) > MAX_IOUT_MA_FAST)
-			return -EINVAL;
-		chip->wls_allowed_imax = val->intval / 1000;
+		rc = p938x_set_rx_ocl(chip, val->intval / 1000);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		if ((val->intval / 1000) > MAX_VOUT_MV_FAST)
-			return -EINVAL;
-		chip->wls_allowed_vmax = val->intval / 1000;
+		rc = p938x_set_rx_vout(chip, val->intval / 1000);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		chip->charging_disabled = !val->intval;
-		if (p938x_is_tx_connected(chip))
-			rc = p938x_enable_charging(chip, val->intval);
-		break;
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-		if (chip->thermal_levels <= 0)
-			break;
-		if (val->intval > chip->thermal_levels)
-			chip->temp_level = chip->thermal_levels - 1;
-		else
-			chip->temp_level = val->intval;
+		rc = p938x_enable_charging(chip, val->intval);
 		break;
 	default:
 		return -EINVAL;
@@ -1755,7 +1584,6 @@ static int p938x_wls_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		rc = 1;
 		break;
 	default:
@@ -1766,17 +1594,48 @@ static int p938x_wls_prop_is_writeable(struct power_supply *psy,
 	return rc;
 }
 
+/* Called when something we are "supplied_from" reports a change */
 static void p938x_external_power_changed(struct power_supply *psy)
 {
-	// TODO
-	/*struct p938x_charger *chip = power_supply_get_drvdata(psy);
+	struct p938x_charger *chip = power_supply_get_drvdata(psy);
 
-	if (p938x_is_tx_connected(chip)) {
-		schedule_work(&chip->chg_det_work);
-		cancel_delayed_work(&chip->heartbeat_work);
-		schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(0));
-	}*/
+	p938x_update_supplies_status(chip);
+}
+
+static const struct power_supply_desc wls_psy_desc = {
+	.name = "wireless",
+	.type = POWER_SUPPLY_TYPE_WIRELESS,
+	.get_property = p938x_wls_get_prop,
+	.set_property = p938x_wls_set_prop,
+	.property_is_writeable = p938x_wls_prop_is_writeable,
+	.properties = p938x_wls_props,
+	.num_properties = ARRAY_SIZE(p938x_wls_props),
+	.external_power_changed = p938x_external_power_changed,
+};
+
+static int p938x_register_power_supply(struct p938x_charger *chip)
+{
+	struct power_supply_config wls_psy_cfg = {};
+	int rc = 0;
+
+	wls_psy_cfg.drv_data = chip;
+	wls_psy_cfg.supplied_to = pm_wls_supplied_to;
+	wls_psy_cfg.num_supplicants = ARRAY_SIZE(pm_wls_supplied_to);
+
+	chip->wls_psy = power_supply_register(chip->dev,
+			&wls_psy_desc,
+			&wls_psy_cfg);
+
+	if (IS_ERR(chip->wls_psy)) {
+		p938x_err(chip, "Couldn't register wls psy rc=%ld\n",
+				PTR_ERR(chip->wls_psy));
+		rc = PTR_ERR(chip->wls_psy);
+	} else {
+		chip->wls_psy->supplied_from = pm_wls_supplied_from;
+		chip->wls_psy->num_supplies = ARRAY_SIZE(pm_wls_supplied_from);
+	}
+
+	return rc;
 }
 
 static const struct regmap_config p938x_regmap_config = {
@@ -1790,7 +1649,6 @@ static int p938x_charger_probe(struct i2c_client *client,
 {
 	int rc;
 	struct p938x_charger *chip;
-	struct power_supply_config wls_psy_cfg = {};
 
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -1800,7 +1658,6 @@ static int p938x_charger_probe(struct i2c_client *client,
 	chip->dev = &client->dev;
 	chip->name = "WLS";
 	chip->debug_mask = &__debug_mask;
-	INIT_WORK(&chip->chg_det_work, p938x_chg_det_work);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, p938x_heartbeat_work);
 	device_init_wakeup(chip->dev, true);
 
@@ -1821,43 +1678,11 @@ static int p938x_charger_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 	dev_set_drvdata(chip->dev, chip);
 
-	chip->wls_psy_d.name		= "idt_wireless";
-	chip->wls_psy_d.type		= POWER_SUPPLY_TYPE_WIRELESS;
-	chip->wls_psy_d.get_property	= p938x_wls_get_prop;
-	chip->wls_psy_d.set_property	= p938x_wls_set_prop;
-	chip->wls_psy_d.property_is_writeable =
-					p938x_wls_prop_is_writeable;
-	chip->wls_psy_d.properties	= p938x_wls_props;
-	chip->wls_psy_d.num_properties	=
-				ARRAY_SIZE(p938x_wls_props);
-	chip->wls_psy_d.external_power_changed =
-					p938x_external_power_changed;
-
-	wls_psy_cfg.drv_data = chip;
-	wls_psy_cfg.supplied_to = pm_wls_supplied_to;
-	wls_psy_cfg.num_supplicants = ARRAY_SIZE(pm_wls_supplied_to);
-	chip->wls_psy = power_supply_register(chip->dev,
-			&chip->wls_psy_d,
-			&wls_psy_cfg);
-	if (IS_ERR(chip->wls_psy)) {
-		p938x_err(chip, "Couldn't register wls psy rc=%ld\n",
-				PTR_ERR(chip->wls_psy));
-		rc = PTR_ERR(chip->wls_psy);
+	rc = p938x_register_power_supply(chip);
+	if (rc) {
+		p938x_err(chip, "Couldn't register power supply rc=%d\n", rc);
 		goto free_mem;
 	}
-	chip->wls_psy->supplied_from = pm_wls_supplied_from;
-	chip->wls_psy->num_supplies = ARRAY_SIZE(pm_wls_supplied_from);
-
-	chip->irq_en = 0;
-	chip->irq_stat = 0;
-	chip->stat = 0;
-	chip->rx_vout_max = 0;
-	chip->rx_iout_max = 0;
-	chip->wls_allowed_vmax = MAX_VOUT_MV_FAST;
-	chip->wls_allowed_imax = MAX_IOUT_MA_FAST;
-	chip->temp_level = 0;
-	chip->thermal_levels = 0;
-	memset(&chip->batt_st, 0, sizeof(struct battery_st));
 
 	rc = p938x_hw_init(chip);
 	if (rc < 0) {
@@ -1865,9 +1690,12 @@ static int p938x_charger_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
+	/* This IRQ handler is the primary one, and detects when a wireless charger
+	 * is attached
+	 */
 	rc = devm_request_threaded_irq(&client->dev, client->irq, NULL,
 			p938x_irq_handler,
-			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 			"p938x_irq", chip);
 	if (rc) {
 		p938x_err(chip, "Failed irq=%d request rc = %d\n",
@@ -1875,9 +1703,16 @@ static int p938x_charger_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
+	enable_irq_wake(client->irq);
+	wakeup_source_init(&chip->wls_wake_source, "p938x wireless charger");
+
+	/* This IRQ handler is for detachment only.  The chip is powered off when
+	 * the transmitter is removed, so we need to rely on a separate IRQ to
+	 * handle that event
+	 */
 	rc = devm_request_threaded_irq(&client->dev, chip->wchg_det_irq, NULL,
 			p938x_det_irq_handler,
-			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			"p938x_det_irq", chip);
 	if (rc) {
 		p938x_err(chip, "Failed irq=%d request rc = %d\n",
@@ -1885,17 +1720,16 @@ static int p938x_charger_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
-	enable_irq_wake(chip->wchg_det_irq);
-
-	create_debugfs_entries(chip);
-
-	if (sysfs_create_groups(&chip->dev->kobj, p938x_groups))
-		p938x_err(chip, "Failed to create sysfs attributes\n");
-
 	/* Reset the chip to in case we inserted the module with a transmitter attached
 	 * in order to force the right irqs to run
 	 */
 	p938x_reset(chip);
+
+	/* TODO Consider enabling mode change IRQ */
+
+	create_debugfs_entries(chip);
+	if (sysfs_create_groups(&chip->dev->kobj, p938x_groups))
+		p938x_err(chip, "Failed to create sysfs attributes\n");
 
 	pr_info("p938x wireless receiver initialized successfully\n");
 
@@ -1912,6 +1746,7 @@ static int p938x_charger_remove(struct i2c_client *client)
 {
 	struct p938x_charger *chip = i2c_get_clientdata(client);
 
+	wakeup_source_trash(&chip->wls_wake_source);
 	sysfs_remove_groups(&chip->dev->kobj, p938x_groups);
 	cancel_delayed_work_sync(&chip->heartbeat_work);
 	debugfs_remove_recursive(chip->debug_root);
