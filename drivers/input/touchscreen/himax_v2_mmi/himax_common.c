@@ -63,6 +63,29 @@ static struct sensors_classdev __maybe_unused palm_sensors_touch_cdev = {
 static void himax_palm_detect_func(struct himax_ts_data *ts, bool detected);
 #endif
 
+#ifdef HIMAX_V2_SENSOR_EN
+static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
+	.name = "dt-gesture",
+	.vendor = "Himax",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+	.max_range = "5.0",
+	.resolution = "5.0",
+	.sensor_power = "1",
+	.min_delay = 0,
+	.max_delay = 0,
+	/* WAKE_UP & ON_CHANGE */
+	.flags = 1 | 2,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 200,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
+#define REPORT_MAX_COUNT 10000
+#endif
+
 #define SUPPORT_FINGER_DATA_CHECKSUM 0x0F
 #define TS_WAKE_LOCK_TIMEOUT		(5000)
 #define FRAME_COUNT 5
@@ -1515,17 +1538,27 @@ END:
 static void himax_wake_event_report(void)
 {
 	int KEY_EVENT = g_target_report_data->SMWP_event_chk;
-
+#ifdef HIMAX_V2_SENSOR_EN
+	static int report_cnt = 0;
+#endif
 	if (g_ts_dbg != 0)
 		I("%s: Entering!\n", __func__);
 
 	if (KEY_EVENT) {
+#ifdef HIMAX_V2_SENSOR_EN
+		input_report_abs(private_ts->sensor_pdata->input_sensor_dev, ABS_DISTANCE, ++report_cnt);
+		I("input report: %d", report_cnt);
+		if (report_cnt >= REPORT_MAX_COUNT)
+			report_cnt = 0;
+		input_sync(private_ts->sensor_pdata->input_sensor_dev);
+#else
 		I(" %s SMART WAKEUP KEY event %d press\n", __func__, KEY_EVENT);
 		input_report_key(private_ts->input_dev, KEY_EVENT, 1);
 		input_sync(private_ts->input_dev);
 		I(" %s SMART WAKEUP KEY event %d release\n", __func__, KEY_EVENT);
 		input_report_key(private_ts->input_dev, KEY_EVENT, 0);
 		input_sync(private_ts->input_dev);
+#endif
 		FAKE_POWER_KEY_SEND = true;
 #ifdef HX_GESTURE_TRACK
 		I("gest_start_x= %d, gest_start_y= %d, gest_end_x= %d, gest_end_y= %d\n", gest_start_x, gest_start_y,
@@ -2989,6 +3022,97 @@ int himax_palm_detect_sensor_remove(struct himax_ts_data *data)
 }
 #endif
 
+#ifdef HIMAX_V2_SENSOR_EN
+static int himax_tap_detect_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	int ret = 0;
+	struct himax_ts_data *ts = private_ts;
+
+	if (enable) {
+		ts->SMWP_enable = 1;
+		ts->gesture_cust_en[0] = 1;
+		I("%s,here:%d, gesture_cust_en[0] = %d\n", __func__, __LINE__, ts->gesture_cust_en[0]);
+	} else {
+		ts->SMWP_enable = 0;
+		ts->gesture_cust_en[0] = 0;
+		I("%s,here:%d, gesture_cust_en[0] = %d\n", __func__, __LINE__, ts->gesture_cust_en[0]);
+	}
+
+	g_core_fp.fp_set_SMWP_enable(ts->SMWP_enable, ts->suspended);
+	HX_SMWP_EN = ts->SMWP_enable;
+	I("%s: SMART_WAKEUP_enable = %d.\n", __func__, HX_SMWP_EN);
+
+	return ret;
+}
+
+static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
+{
+	struct himax_tap_sensor_platform_data *sensor_pdata;
+	struct input_dev *sensor_input_dev;
+	int err;
+
+	sensor_input_dev = input_allocate_device();
+	if (!sensor_input_dev) {
+		E("Failed to allocate device");
+		goto exit;
+	}
+
+	sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+			sizeof(struct himax_tap_sensor_platform_data),
+			GFP_KERNEL);
+	if (!sensor_pdata) {
+		E("Failed to allocate memory");
+		goto free_sensor_pdata;
+	}
+	data->sensor_pdata = sensor_pdata;
+
+	__set_bit(EV_ABS, sensor_input_dev->evbit);
+	__set_bit(EV_SYN, sensor_input_dev->evbit);
+	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+			0, REPORT_MAX_COUNT, 0, 0);
+	sensor_input_dev->name = "double-tap";
+	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+	err = input_register_device(sensor_input_dev);
+	if (err) {
+		E("Unable to register device, err=%d", err);
+		goto free_sensor_input_dev;
+	}
+
+	sensor_pdata->ps_cdev = sensors_touch_cdev;
+	sensor_pdata->ps_cdev.sensors_enable = himax_tap_detect_sensor_set_enable;
+	sensor_pdata->data = data;
+
+	err = sensors_classdev_register(&sensor_input_dev->dev,
+				&sensor_pdata->ps_cdev);
+	if (err)
+		goto unregister_sensor_input_device;
+
+	return 0;
+
+unregister_sensor_input_device:
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+	input_free_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+	data->sensor_pdata= NULL;
+exit:
+	return 1;
+}
+
+int himax_tap_detect_sensor_remove(struct himax_ts_data *data)
+{
+	sensors_classdev_unregister(&data->sensor_pdata->ps_cdev);
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+	devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
+		data->sensor_pdata);
+	data->sensor_pdata = NULL;
+	return 0;
+}
+#endif
+
 void himax_ts_work(struct himax_ts_data *ts)
 {
 
@@ -3586,6 +3710,13 @@ FW_force_upgrade:
 	}
 #endif
 
+#ifdef HIMAX_V2_SENSOR_EN
+	if (himax_tap_detect_sensor_init(ts)) {
+		E(" %s: himax_tap_detect_sensor_init failed!\n", __func__);
+		goto err_create_tap_sensor_failed;
+	}
+#endif
+
 	himax_ts_register_interrupt();
 
 #ifdef CONFIG_TOUCHSCREEN_HIMAX_DEBUG
@@ -3602,6 +3733,9 @@ FW_force_upgrade:
 	g_hx_chip_inited = true;
 	return 0;
 
+#ifdef HIMAX_V2_SENSOR_EN
+err_create_tap_sensor_failed:
+#endif
 #ifdef HIMAX_PALM_SENSOR_EN
 err_create_palm_sensor_failed:
 #endif
