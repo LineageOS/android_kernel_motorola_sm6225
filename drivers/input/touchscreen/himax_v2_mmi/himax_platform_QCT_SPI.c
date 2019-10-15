@@ -929,6 +929,12 @@ int drm_notifier_callback(struct notifier_block *self,
 				return 1;
 			}
 #endif
+#ifdef HIMAX_V2_SENSOR_EN
+			if (ts->SMWP_enable) {
+				I("%s: tap detection is enabled", __func__);
+				return 1;
+			}
+#endif
 			break;
 		}
 	}
