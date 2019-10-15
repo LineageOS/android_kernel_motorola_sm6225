@@ -33,6 +33,7 @@
 
 /* main struct, interrupt,init,pointers */
 #include <linux/input/sx9310_triple.h>
+#include "base.h"
 
 #define IDLE 0
 #define ACTIVE 1
@@ -1296,6 +1297,9 @@ static int sx9310_probe(struct i2c_client *client,
 			LOG_ERR("Create reg file failed (%d)\n", ret);
 			return ret;
 		}
+
+		/*restore sys/class/capsense label*/
+		kobject_uevent(&capsense_class.p->subsys.kobj, KOBJ_CHANGE);
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable =
 							capsensor_set_enable;
