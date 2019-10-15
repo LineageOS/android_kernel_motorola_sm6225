@@ -36,6 +36,8 @@
 #include <linux/async.h>
 #include <linux/firmware.h>
 #include <linux/version.h>
+#include "base.h"
+
 #define SLEEP(x)	mdelay(x)
 
 #define C_I2C_FIFO_SIZE 8
@@ -1572,6 +1574,9 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			LOG_DBG("Create update_fw file failed (%d)\n", ret);
 			return ret;
 		}
+		/*restore sys/class/capsense label*/
+		kobject_uevent(&capsense_class.p->subsys.kobj, KOBJ_CHANGE);
+
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable = capsensor_set_enable;
 		sensors_capsensor_top_cdev.sensors_poll_delay = NULL;
