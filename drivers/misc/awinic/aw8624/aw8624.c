@@ -1550,6 +1550,7 @@ static ssize_t aw8624_duration_store(struct device *dev,
 	if (rc < 0)
 		return rc;
 
+	pr_debug("%s: value=%d\n", __FUNCTION__, val);
 	/* setting 0 on duration is NOP for now */
 	if (val <= 0)
 		return count;
@@ -1590,7 +1591,8 @@ static ssize_t aw8624_activate_store(struct device *dev,
 	pr_debug("%s: value=%d\n", __FUNCTION__, val);
 
 	if (val ==  0)
-		return count;
+		msleep(5);
+
 	mutex_lock(&aw8624->lock);
 	hrtimer_cancel(&aw8624->timer);
 	aw8624->state = val;
