@@ -2772,6 +2772,8 @@ int stmvl53l0_setup(struct stmvl53l0_data *data)
 	if (misc_register(&data->miscdev) != 0)
 		vl53l0_errmsg("Could not register misc. dev for stmvl53l0 ranging\n");
 
+	kobject_uevent_env(&data->input_dev_ps->dev.kobj, KOBJ_CHANGE, NULL);
+
 	/* init default device parameter value */
 	data->enable_ps_sensor = 0;
 	data->reset = 1;
