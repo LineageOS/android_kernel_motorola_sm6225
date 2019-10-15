@@ -43,6 +43,9 @@
 #include <linux/sensors.h>
 #define SENSOR_TYPE_MOTO_TOUCH_PALM    (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 31)
 #endif
+#ifdef HIMAX_V2_SENSOR_EN
+#include <linux/sensors.h>
+#endif
 
 #if defined(CONFIG_DRM)
 	#include <linux/msm_drm_notify.h>
@@ -82,6 +85,14 @@ enum palm_sensor_lazy_set {
 };
 #endif
 
+#ifdef HIMAX_V2_SENSOR_EN
+struct himax_tap_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	struct himax_ts_data *data;
+};
+#endif
+
 /*===========Himax Option function=============*/
 #define HX_RST_PIN_FUNC
 #define HX_RESUME_SEND_CMD
@@ -90,7 +101,11 @@ enum palm_sensor_lazy_set {
 /*#define HX_SHARP_ENABLE_PON*/
 /*#define HX_NEW_EVENT_STACK_FORMAT*/
 /*#define HX_AUTO_UPDATE_FW*/
-/*#define HX_SMART_WAKEUP*/
+#ifdef HIMAX_V2_SENSOR_EN
+#define HX_SMART_WAKEUP
+#else
+//#define HX_SMART_WAKEUP
+#endif
 /*#define HX_GESTURE_TRACK*/
 /*#define HX_HIGH_SENSE*/
 #ifdef HIMAX_PALM_SENSOR_EN
@@ -491,6 +506,10 @@ struct himax_ts_data {
 #else
 	struct wakeup_source palm_gesture_read_wakelock;
 #endif
+#endif
+
+#ifdef HIMAX_V2_SENSOR_EN
+	struct himax_tap_sensor_platform_data *sensor_pdata;
 #endif
 
 };

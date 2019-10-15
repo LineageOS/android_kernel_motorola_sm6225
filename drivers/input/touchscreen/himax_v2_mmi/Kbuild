@@ -20,6 +20,10 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_ENABLE_PALM)),)
 	EXTRA_CFLAGS += -DHIMAX_PALM_SENSOR_EN
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_HIMAX_V2_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DHIMAX_V2_SENSOR_EN
+endif
+
 obj-m := himax_v2_mmi.o
 
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_0FLASH)),)
