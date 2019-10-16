@@ -2449,7 +2449,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 	nvt_irq_enable(true);
 #else
 #ifdef NVT_SENSOR_EN
-	if (!ts->should_enable_gesture)
+	if (!ts->gesture_enabled)
 		nvt_irq_enable(true);
 #endif
 #endif
