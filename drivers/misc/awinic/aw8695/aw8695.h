@@ -285,6 +285,7 @@ struct aw8695 {
 	int long_gain_reduced;
 
 	enum aw8695_haptic_mode  haptic_mode;
+	bool factorymode_reduce;
 	bool factory_mode;
 	bool debugfs_debug;
 	atomic_t reduce_pwr;

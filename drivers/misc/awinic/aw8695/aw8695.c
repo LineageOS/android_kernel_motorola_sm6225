@@ -3391,6 +3391,13 @@ static int aw8695_parse_dt(struct device *dev, struct aw8695 *aw8695,
 		dev_info(dev, "%s: haptic context gpio provided ok.\n", __func__);
 	}
 
+	aw8695->factorymode_reduce =  of_property_read_bool(np, "factorymode-reduce");
+	if (aw8695->factorymode_reduce) {
+		dev_err(dev, "%s: reduce on factory mode.\n", __func__);
+	} else {
+		dev_info(dev, "%s:normal on factory mode.\n", __func__);
+	}
+
 	rc = of_property_read_u32(np, "vib_f0_pre", &aw8695->f0_pre);
 	if (rc) {
 		aw8695->f0_pre = 2050; /* 205HZ as default */
@@ -3707,7 +3714,11 @@ static int aw8695_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *
 
 	g_aw8695 = aw8695;
 
-	aw8695->factory_mode = mmi_factory_check();
+	if (aw8695->factorymode_reduce)
+		aw8695->factory_mode = false;
+	else
+		aw8695->factory_mode = mmi_factory_check();
+
 	aw8695_vibrator_init(aw8695);
 
 	aw8695_haptic_init(aw8695);
