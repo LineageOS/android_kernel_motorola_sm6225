@@ -19,6 +19,7 @@
 #include <asm/uaccess.h>
 #include <linux/of_gpio.h>
 #include <linux/irq.h>
+#include <linux/pen_detection_notify.h>
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
 #else
@@ -68,6 +69,48 @@ static struct hall_sensor_str {
 	struct delayed_work hall_sensor_work;
 	struct delayed_work hall_sensor_dowork;
 }* hall_sensor_dev;
+
+static BLOCKING_NOTIFIER_HEAD(pen_detection_notifier_list);
+
+/**
+ * pen_detection_register_client - register a client notifier
+ * @nb: notifier block to callback on events
+ *
+ * This function registers a notifier callback function
+ * to pen_detection_notifier_list, which would be called when
+ * the passive pen is inserted or pulled out.
+ */
+int pen_detection_register_client(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&pen_detection_notifier_list,
+						nb);
+}
+EXPORT_SYMBOL(pen_detection_register_client);
+
+/**
+ * pen_detection_unregister_client - unregister a client notifier
+ * @nb: notifier block to callback on events
+ *
+ * This function unregisters the callback function from
+ * pen_detection_notifier_list.
+ */
+int pen_detection_unregister_client(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&pen_detection_notifier_list,
+						  nb);
+}
+EXPORT_SYMBOL(pen_detection_unregister_client);
+
+/**
+ * pen_detection_notifier_call_chain - notify clients of pen_detection_events
+ * @val: event PEN_DETECTION_INSERT or PEN_DETECTION_PULL
+ * @v: notifier data, inculde display pen detection event.
+ */
+static int pen_detection_notifier_call_chain(unsigned long val, void *v)
+{
+	return blocking_notifier_call_chain(&pen_detection_notifier_list, val,
+					    v);
+}
 
 //static void hall_sensor_shutdown(struct platform_device *pdev);
 int pen_connect(struct input_handler *handler, struct input_dev *dev, const struct input_device_id *id){
@@ -288,6 +331,10 @@ static void pen_report_function(struct work_struct *dat)
 	__pm_wakeup_event(&hall_sensor_dev->wake_lock, msecs_to_jiffies(3000));
 #endif
 
+	if(!hall_sensor_dev->status)
+		pen_detection_notifier_call_chain(PEN_DETECTION_INSERT, NULL);
+	else
+		pen_detection_notifier_call_chain(PEN_DETECTION_PULL, NULL);
 	pen_info("[%s] SW_pen report value = %d\n", DRIVER_NAME,!hall_sensor_dev->status);
 }
 
