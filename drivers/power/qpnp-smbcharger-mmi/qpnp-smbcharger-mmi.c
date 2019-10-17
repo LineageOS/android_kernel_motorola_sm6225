@@ -1674,7 +1674,6 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 			return rc;
 	}
 
-	val->intval = 0;
 	if (chg->usb_psy) {
 		rc = power_supply_get_property(chg->usb_psy,
 				POWER_SUPPLY_PROP_TYPEC_MODE, val);
@@ -1688,6 +1687,9 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 		}
 	}
 
+	//intval can be changed by get_property call we should reset to 0
+	//this is true for a OTG cable
+	val->intval = 0;
 	return rc;
 }
 
