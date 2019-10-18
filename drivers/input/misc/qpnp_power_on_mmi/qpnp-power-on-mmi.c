@@ -42,6 +42,21 @@ struct qpnp_pon_mmi {
 	u32 			kpd_bark_irq;
 };
 
+static bool mmi_kungpow_check(void)
+{
+	struct device_node *soc = of_find_node_by_path("/soc");
+	struct device_node *kungpow = NULL;
+	bool has_kungpow = false;
+	if (soc)
+		kungpow = of_find_node_by_name(soc, "kungpow_default");
+
+	has_kungpow = (kungpow != NULL);
+
+	of_node_put(kungpow);
+	of_node_put(soc);
+
+	return has_kungpow;
+}
 
 static void kpd_bark_work_func(struct work_struct *work)
 {
@@ -49,7 +64,8 @@ static void kpd_bark_work_func(struct work_struct *work)
 		container_of(work, struct qpnp_pon_mmi, kpd_bark_work.work);
 
 	dev_err(&pon->pdev->dev, "HW User Reset! 2 sec to Reset!\n");
-	qpnp_pon_store_extra_reset_info(RESET_EXTRA_RESET_KUNPOW_REASON, 0);
+	qpnp_pon_store_extra_reset_info(RESET_EXTRA_RESET_KUNPOW_REASON,
+		mmi_kungpow_check() ? 0 : RESET_EXTRA_RESET_KUNPOW_REASON);
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 	kernel_halt();
 }
