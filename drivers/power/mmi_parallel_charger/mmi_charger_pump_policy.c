@@ -293,9 +293,12 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 #define PD_CONT_PWR_CNT 5
 
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	chrg_dev_init(chip, &g_chrg_list);
 	clear_chrg_dev_error_cnt(chip, &g_chrg_list);;
 	clear_chg_manager(chip);
+	mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+							DISABLE_CHRG_LIMIT);
 	sm_state = PM_STATE_DISCONNECT;
 	chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 	quit_slave_chrg_cnt = 0;
