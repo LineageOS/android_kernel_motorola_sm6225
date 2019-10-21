@@ -941,6 +941,7 @@ static void cancel_sm(struct mmi_charger_manager *chip)
 {
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
+	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"cancel sync and flush mmi chrg sm work\n");
