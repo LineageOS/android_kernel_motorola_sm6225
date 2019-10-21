@@ -150,6 +150,7 @@ struct mmi_charger_manager {
 
 	struct wakeup_source	mmi_hb_wake_source;
 	struct alarm		heartbeat_alarm;
+	bool			factory_mode;
 	bool			suspended;
 	bool			awake;
 
