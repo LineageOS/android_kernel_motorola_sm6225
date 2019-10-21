@@ -923,6 +923,20 @@ static DEVICE_ATTR(force_max_chrg_temp, 0644,
 		force_max_chrg_temp_show,
 		force_max_chrg_temp_store);
 
+static bool mmi_factory_check(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory = false;
+
+	if (np)
+		factory = of_property_read_bool(np, "mmi,factory-cable");
+
+	of_node_put(np);
+
+	return factory;
+}
+
+
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
 	if (!chip->sm_work_running) {
@@ -1179,7 +1193,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			}
 		}
 
-		if (chip->pd_pps_support) {
+		if (chip->pd_pps_support
+			&& !chip->factory_mode) {
 			mmi_chrg_info(chip, "MMI: Heartbeat!, launch sm work\n");
 			kick_sm(chip, 100);
 		}
@@ -1277,7 +1292,9 @@ static void psy_changed_work_func(struct work_struct *work)
 					chip->pd_volt_max,
 					chip->pd_curr_max);
 
-	if (chip->vbus_present && chip->pd_pps_support) {
+	if (chip->vbus_present
+		&& chip->pd_pps_support
+		&& !chip->factory_mode) {
 		kick_sm(chip, 100);
 	} else {
 		cancel_sm(chip);
@@ -1592,6 +1609,8 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 			"parse dt failed\n");
 		goto cleanup;
 	}
+
+	chip->factory_mode = mmi_factory_check();
 
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
 	if (chip->qcom_psy && chip->extrn_fg) {
