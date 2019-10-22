@@ -28,11 +28,31 @@
 #include <linux/of_gpio.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
-#include <linux/uaccess.h>
 #include <soc/qcom/mmi_boot_info.h>
 
 #include "sec_ts.h"
 #include "sec_mmi.h"
+
+#if defined(USE_STUBS)
+static struct class *local_touchscreen_class;
+struct class *get_touchscreen_class_ptr(void)
+{
+	pr_info("sec_mmi: stub %s\n", __func__);
+	return local_touchscreen_class;
+}
+void set_touchscreen_class_ptr(struct class *ptr)
+{
+	pr_info("sec_mmi: stub %s\n", __func__);
+	local_touchscreen_class = ptr;
+}
+bool dsi_display_is_panel_enable(int ctrl_dsi, int *probe_status, char **pname)
+{
+	pr_info("sec_mmi: stub %s\n", __func__);
+	*probe_status = 0;
+	*pname = "csot_620_876x2142_cmd_display_v1";
+	return true;
+}
+#endif
 
 /* MMI specific sysfs entries and API */
 static ssize_t sec_mmi_reset_store(struct device *dev,
