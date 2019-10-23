@@ -202,6 +202,14 @@ struct mmi_charger_manager {
 	bool batt_therm_cooling;
 	int batt_therm_cooling_cnt;
 
+	bool use_batt_age;
+	int cycles;
+	int batt_cap_delta;
+	int batt_soc_delta;
+	int soc_cycles_start;
+	int pres_batt_status;
+	int prev_batt_status;
+
 	struct delayed_work	mmi_chrg_sm_work;	/*mmi charger state machine work*/
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
 	struct completion	sm_completion;

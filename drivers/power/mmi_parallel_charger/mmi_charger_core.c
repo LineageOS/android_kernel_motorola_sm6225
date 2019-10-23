@@ -425,6 +425,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_FORCE_RECHARGE,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
@@ -441,12 +442,14 @@ static int batt_get_property(struct power_supply *psy,
 {
 	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
 	union power_supply_propval prop = {0,};
-	int rc;
+	int rc = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 	case POWER_SUPPLY_PROP_TEMP:
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		rc = power_supply_get_property(chip->extrn_psy,
 							psp, &prop);
 		if (rc < 0) {
@@ -458,7 +461,22 @@ static int batt_get_property(struct power_supply *psy,
 		if (!rc)
 			val->intval = prop.intval;
 		break;
-	default:
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		if (chip->use_batt_age) {
+			val->intval = chip->cycles;
+		} else {
+			rc = power_supply_get_property(chip->qcom_psy,
+							psp, &prop);
+			if (rc < 0) {
+				mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
+				rc = 0;
+				val->intval = -EINVAL;
+			}
+			if (!rc)
+				val->intval = prop.intval;
+		}
+		break;
+	case POWER_SUPPLY_PROP_STATUS:
 		rc = power_supply_get_property(chip->qcom_psy,
 							psp, &prop);
 		if (rc < 0) {
@@ -466,17 +484,27 @@ static int batt_get_property(struct power_supply *psy,
 			rc = 0;
 			val->intval = -EINVAL;
 		} else {
-
 			val->intval = prop.intval;
-			if (psp == POWER_SUPPLY_PROP_STATUS &&
-				prop.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
-			rc = power_supply_get_property(chip->extrn_psy,
-								psp, &prop);
-			if (!rc && prop.intval == POWER_SUPPLY_STATUS_CHARGING)
-				val->intval = prop.intval;
+			if (prop.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
+				rc = power_supply_get_property(chip->extrn_psy,
+									psp, &prop);
+				if (!rc && prop.intval == POWER_SUPPLY_STATUS_CHARGING)
+					val->intval = prop.intval;
 			}
 		}
 		break;
+	default:
+		rc = power_supply_get_property(chip->qcom_psy,
+							psp, &prop);
+		if (rc < 0) {
+			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
+			rc = 0;
+			val->intval = -EINVAL;
+		}
+		if (!rc)
+			val->intval = prop.intval;
+		break;
+
 	}
 	return rc;
 }
@@ -486,9 +514,21 @@ static int batt_set_property(struct power_supply *psy,
 				       const union power_supply_propval *val)
 {
 	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
-	int rc;
-	rc = power_supply_set_property(chip->qcom_psy,
+	int rc = 0;
+
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		chip->cycles = val->intval;
+		break;
+	default:
+		rc = power_supply_set_property(chip->qcom_psy,
 						prop, val);
+		if (rc < 0) {
+			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", prop, rc);
+			rc = 0;
+		}
+		break;
+	}
 	return rc;
 }
 
@@ -507,6 +547,7 @@ static int batt_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
 	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		return 1;
 	default:
 		break;
@@ -998,6 +1039,108 @@ static void mmi_awake_vote(struct mmi_charger_manager *chip, bool awake)
 		pm_relax(chip->dev);
 }
 
+static void mmi_batt_age_init(struct mmi_charger_manager *chip)
+{
+	int rc = 0;
+	union power_supply_propval pval;
+	if (!chip->batt_psy) {
+		chip->batt_psy = power_supply_get_by_name("battery");
+		if (!chip->batt_psy)
+			return;
+	}
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_STATUS, &pval);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't get batt status\n");
+		return;
+	}
+	chip->pres_batt_status = pval.intval;
+	chip->prev_batt_status = chip->pres_batt_status;
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CAPACITY, &pval);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't get batt capacity\n");
+		return;
+	}
+
+	chip->soc_cycles_start= pval.intval;
+	chip->batt_cap_delta = 0;
+	return;
+}
+
+static void mmi_cycle_counts(struct mmi_charger_manager *chip)
+{
+	int rc = 0;
+	int batt_design_capacity = 0, new_cycles = 0;
+	int soc_report = 0, soc_delta = 0, batt_delta_capacity = 0;
+	union power_supply_propval pval;
+	if (!chip->batt_psy) {
+		chip->batt_psy = power_supply_get_by_name("battery");
+		if (!chip->batt_psy)
+			return;
+	}
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN, &pval);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't get batt design capacity\n");
+		return;
+	}
+		batt_design_capacity = pval.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_STATUS, &pval);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't get batt status\n");
+		return;
+	}
+	chip ->pres_batt_status = pval.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CAPACITY, &pval);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't get batt capacity\n");
+		return;
+	}
+	soc_report = pval.intval;
+
+	mmi_chrg_dbg(chip, PR_MOTO, "cycle_count %d, pres %d, prev %d, soc_report %d, "
+					"soc_cycles_start %d, batt_cap_delta %d, "
+					"design_capcaity %d, batt_soc_delta %d\n",
+					chip->cycles, chip->pres_batt_status,
+					chip->prev_batt_status,
+					soc_report, chip->soc_cycles_start,
+					chip->batt_cap_delta, batt_design_capacity,
+					chip->batt_soc_delta);
+
+	if (chip->prev_batt_status == POWER_SUPPLY_STATUS_CHARGING
+		&& chip->pres_batt_status != POWER_SUPPLY_STATUS_CHARGING) {
+		chip->soc_cycles_start = soc_report;
+	} else if (chip->prev_batt_status != POWER_SUPPLY_STATUS_CHARGING
+		&& chip->pres_batt_status == POWER_SUPPLY_STATUS_CHARGING) {
+
+		soc_delta = chip->soc_cycles_start - soc_report;
+		if (soc_delta > 0) {
+			chip->batt_soc_delta += soc_delta;
+
+			batt_delta_capacity = (chip->batt_soc_delta * batt_design_capacity) / 100
+								+ chip->batt_cap_delta;
+
+			new_cycles = batt_delta_capacity / batt_design_capacity;
+			if (new_cycles > 0) {
+				chip->cycles += batt_delta_capacity / batt_design_capacity;
+				chip->batt_cap_delta = batt_delta_capacity % batt_design_capacity;
+				chip->batt_soc_delta = 0;
+			}
+		}
+		chip->soc_cycles_start = soc_report;
+	}
+
+	chip->prev_batt_status = chip->pres_batt_status;
+}
+
 static bool __mmi_ps_is_supplied_by(struct power_supply *supplier,
 					struct power_supply *supply)
 {
@@ -1200,6 +1343,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		}
 	}
 
+	if (chip->use_batt_age)
+		mmi_cycle_counts(chip);
 schedule_work:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
@@ -1330,6 +1475,9 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 	if (rc < 0)
 		chip->pl_chrg_vbatt_min =
 				DEFAULT_PL_CHRG_VBATT_MIN;
+
+	chip->use_batt_age = of_property_read_bool(node,
+				"mmi,use-batt-age");
 
 	chip->extrn_fg = of_property_read_bool(node,
 				"mmi,extrn-fg");
@@ -1696,6 +1844,8 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	ret = power_supply_reg_notifier(&chip->psy_nb);
 	if (ret)
 		goto cleanup;
+
+	mmi_batt_age_init(chip);
 
 	init_completion(&chip->sm_completion);
 	platform_set_drvdata(pdev, chip);
