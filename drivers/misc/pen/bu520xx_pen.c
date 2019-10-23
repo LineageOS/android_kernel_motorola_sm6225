@@ -306,15 +306,13 @@ static void pen_report_function(struct work_struct *dat)
 		}else{
 			hall_sensor_dev->status = 0;
 		}
-		pen_info("[%s] SW_PEN_INSERTED check value = %d\n", DRIVER_NAME,!hall_sensor_dev->status);
+		pen_info("[%s] SW_PEN_INSERTED check[%d] value = %d\n", DRIVER_NAME, counter, !hall_sensor_dev->status);
 		spin_unlock_irqrestore(&hall_sensor_dev->mHallSensorLock, flags);
 	}
+
 	if((status > 0) && (status < 3)){
 		pen_info("[%s] SW_PEN_INSERTED do not report to framework.\n", DRIVER_NAME);
 		hall_sensor_dev->status = initial_status;
-		input_report_switch(hall_sensor_dev->pen_indev, SW_PEN_INSERTED, 2);
-		input_sync(hall_sensor_dev->pen_indev);
-		//wake_unlock(&hall_sensor_dev->wake_lock);
 		return;
 	}
 
