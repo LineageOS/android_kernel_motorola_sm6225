@@ -223,7 +223,10 @@ struct fts_ts_data {
     struct pinctrl_state *pins_suspend;
     struct pinctrl_state *pins_release;
 #endif
-
+#ifdef FOCALTECH_PEN_NOTIFIER
+    int fts_pen_detect_flag;
+    struct notifier_block pen_notif;
+#endif
 #if defined(CONFIG_FB) || defined(CONFIG_DRM)
     struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)

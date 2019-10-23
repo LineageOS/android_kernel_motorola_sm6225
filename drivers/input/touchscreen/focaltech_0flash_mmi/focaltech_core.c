@@ -38,6 +38,9 @@
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 
+#ifdef FOCALTECH_PEN_NOTIFIER
+#include <linux/pen_detection_notify.h>
+#endif
 #ifdef CONFIG_DRM
 	#include <linux/msm_drm_notify.h>
 #elif defined(CONFIG_FB)
@@ -93,6 +96,9 @@ static struct sensors_classdev __maybe_unused palm_sensors_touch_cdev = {
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
+#ifdef FOCALTECH_PEN_NOTIFIER
+static int fts_mcu_pen_detect_set(uint8_t pen_detect);
+#endif
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
 
@@ -151,6 +157,9 @@ void fts_tp_state_recovery(struct fts_ts_data *ts_data)
 #endif
 #if FTS_GESTURE_EN
     fts_gesture_recovery(ts_data);
+#endif
+#ifdef FOCALTECH_PEN_NOTIFIER
+    fts_mcu_pen_detect_set(ts_data->fts_pen_detect_flag);
 #endif
     FTS_FUNC_EXIT();
 }
@@ -804,6 +813,48 @@ void fts_cable_detect_func(bool force_renew)
 		fts_mcu_usb_detect_set(ts_data->usb_connected);
 		FTS_INFO("%s: Cable status change: 0x%2.2X\n", __func__, ts_data->usb_connected);
 	}
+}
+#endif
+
+#ifdef FOCALTECH_PEN_NOTIFIER
+static int fts_mcu_pen_detect_set(uint8_t pen_detect)
+{
+    uint8_t write_data = 0;
+    uint8_t read_data = 0;
+    uint8_t retry_cnt = 0;
+    int ret = 0;
+
+    do{
+        if (pen_detect == PEN_DETECTION_INSERT) {
+            write_data= 0x01;
+            ret = fts_write_reg(FTS_REG_PEN_DETECTION, write_data);
+            if (ret < 0) {
+                FTS_ERROR("set register PEN IN fail, ret=%d", ret);
+                return ret;
+            }
+            FTS_INFO("%s: PEN detect status IN!\n", __func__);
+        } else if (pen_detect == PEN_DETECTION_PULL) {
+            write_data= 0x00;
+            ret = fts_write_reg(FTS_REG_PEN_DETECTION, write_data);
+            if (ret < 0) {
+                FTS_ERROR("set register PEN OUT fail, ret=%d", ret);
+                return ret;
+            }
+            FTS_INFO("%s: PEN detect status OUT!\n", __func__);
+        }
+
+        ret = fts_read_reg(FTS_REG_PEN_DETECTION, &read_data);
+        if (ret < 0)
+            FTS_ERROR("read 8b register fail, ret=%d", ret);
+        retry_cnt++;
+    }while((write_data != read_data) && retry_cnt < FTS_REG_RETRY_TIMES);
+
+    if (retry_cnt >= FTS_REG_RETRY_TIMES) {
+        FTS_ERROR("write pen status fail");
+        return -EIO;
+    }
+
+    return 0;
 }
 #endif
 
@@ -1568,6 +1619,34 @@ static void fts_resume_work(struct work_struct *work)
 }
 #endif
 
+#ifdef FOCALTECH_PEN_NOTIFIER
+static int pen_notifier_callback(struct notifier_block *self,
+				unsigned long event, void *data)
+{
+    int ret = 0;
+
+    struct fts_ts_data *ts_data =
+        container_of(self, struct fts_ts_data, pen_notif);
+    FTS_INFO("Received event(%lu) for pen detection\n", event);
+
+    if (event == PEN_DETECTION_INSERT)
+        ts_data->fts_pen_detect_flag = PEN_DETECTION_INSERT;
+    else if (event == PEN_DETECTION_PULL)
+        ts_data->fts_pen_detect_flag = PEN_DETECTION_PULL;
+
+    if ((fts_data->suspended) || (!fts_data->fw_is_running)) {
+        FTS_INFO("touch in suspend or no firmware, so store.");
+    } else {
+        ret = fts_mcu_pen_detect_set(ts_data->fts_pen_detect_flag);
+        if (ret < 0) {
+            FTS_ERROR("write pen state fail");
+        }
+    }
+
+    return 0;
+}
+#endif
+
 #ifdef CONFIG_DRM
 int drm_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
@@ -1857,6 +1936,15 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("init fw upgrade fail");
     }
 
+#ifdef FOCALTECH_PEN_NOTIFIER
+    ts_data->fts_pen_detect_flag = PEN_DETECTION_PULL;
+    ts_data->pen_notif.notifier_call = pen_notifier_callback;
+    ret = pen_detection_register_client(&ts_data->pen_notif);
+    if (ret) {
+        FTS_ERROR("[PEN]Unable to register pen_notifier: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_DRM
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
@@ -1975,7 +2063,10 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
-
+#ifdef FOCALTECH_PEN_NOTIFIER
+    if (pen_detection_unregister_client(&ts_data->pen_notif))
+        FTS_ERROR("Error occurred while unregistering pen_notifier.\n");
+#endif
 #ifdef CONFIG_DRM
     if (msm_drm_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
