@@ -107,12 +107,12 @@
 #define HEARTBEAT_INTERVAL_MS 30000
 
 #define BPP_MAX_VOUT 5000
-#define BPP_MAX_IOUT 1400
-#define EPP_MAX_VOUT 9000
-#define EPP_MAX_IOUT 1400
+#define BPP_MAX_IOUT 1600
+#define EPP_MAX_VOUT 12000
+#define EPP_MAX_IOUT 1600
 
-#define MIN_VOUT_SET 3500
-#define MAX_VOUT_SET 13000
+#define MIN_VOUT_SET 5000
+#define MAX_VOUT_SET 12000
 #define MIN_IOUT_SET 500
 #define MAX_IOUT_SET 3000
 
@@ -222,6 +222,9 @@ struct p938x_charger {
 	int			wchg_det_irq;
 	struct pinctrl		*pinctrl_irq;
 	const char		*pinctrl_name;
+
+	u16 wls_vout_max;
+	u16 wls_iout_max;
 
 	u16			irq_en;
 	u16			irq_stat;
@@ -663,6 +666,8 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 	int rc;
 
 	// TODO block if tx connected OR stop rx power ?
+	// TODO turn ldo off when tx mode is enabled, turn ldo on when tx mode is turned off
+	// (or reset chip)
 
 	if (val) {
 		/* Power on and wait for boot */
@@ -1005,6 +1010,12 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 			p938x_set_rx_vout(chip, BPP_MAX_VOUT);
 			p938x_set_rx_ocl(chip, BPP_MAX_IOUT);
 		}
+
+		/* Override if set */
+		if(chip->wls_vout_max)
+			p938x_set_rx_vout(chip, chip->wls_vout_max);
+		if(chip->wls_iout_max)
+			p938x_set_rx_ocl(chip, chip->wls_iout_max);
 	}
 
 	return 0;
@@ -1081,6 +1092,7 @@ static void p938x_check_status(struct p938x_charger *chip)
 	if (irq_status & ST_VOUT_ON) {
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VOUT_ON\n");
 		p938x_check_system_mode(chip);
+		power_supply_changed(chip->wls_psy);
 	}
 	if (irq_status & ST_VRECT_ON) {
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VRECT_ON\n");
@@ -1507,9 +1519,9 @@ static enum power_supply_property p938x_wls_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
-	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 };
 
 static int p938x_wls_get_prop(struct power_supply *psy,
@@ -1531,6 +1543,7 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = p938x_get_rx_ocl(chip) * 1000;
 		break;
+	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = p938x_get_rx_vout(chip) * 1000;
 		break;
@@ -1539,9 +1552,6 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_REAL_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_WIRELESS;
-		break;
-	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = p938x_is_ldo_on(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -1559,10 +1569,12 @@ static int p938x_wls_set_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		rc = p938x_set_rx_ocl(chip, val->intval / 1000);
+		chip->wls_iout_max = val->intval / 1000;
+		rc = p938x_set_rx_ocl(chip, chip->wls_iout_max);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		rc = p938x_set_rx_vout(chip, val->intval / 1000);
+		chip->wls_vout_max = val->intval / 1000;
+		rc = p938x_set_rx_vout(chip, chip->wls_vout_max);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		rc = p938x_enable_charging(chip, val->intval);
