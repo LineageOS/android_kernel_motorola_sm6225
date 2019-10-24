@@ -336,6 +336,7 @@ struct smb_mmi_charger {
 	struct power_supply	*main_psy;
 	struct power_supply	*pc_port_psy;
 	struct power_supply	*dc_psy;
+	struct power_supply 	*wls_psy;
 	struct power_supply	*max_main_psy;
 	struct power_supply	*max_flip_psy;
 	struct notifier_block	mmi_psy_notifier;
@@ -1679,6 +1680,15 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 		}
 	}
 
+	if (chg->wls_psy) {
+		rc = power_supply_get_property(chg->wls_psy,
+				POWER_SUPPLY_PROP_ONLINE, val);
+		if (rc < 0)
+			mmi_err(chg, "Couldn't read wls online rc=%d\n", rc);
+		else if (val->intval)
+			return rc;
+	}
+
 	//intval can be changed by get_property call we should reset to 0
 	//this is true for a OTG cable
 	val->intval = 0;
@@ -1848,6 +1858,24 @@ static void mmi_weakcharger_work(struct work_struct *work)
 	mmi_dbg(chip, "SMBMMI: Weak timer expired\n");
 }
 
+int is_wls_online(struct smb_mmi_charger *chg)
+{
+	int rc;
+	union power_supply_propval val;
+
+	if (!chg->wls_psy)
+		return 0;
+
+	rc = power_supply_get_property(chg->wls_psy,
+			POWER_SUPPLY_PROP_ONLINE, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Error wls online rc = %d\n", rc);
+		return 0;
+	}
+
+	return val.intval;
+}
+
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
@@ -1868,6 +1896,11 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	if (rc < 0) {
 		mmi_err(chg, "Error getting Charger Present rc = %d\n", rc);
 		return;
+	}
+
+	if (val.intval && is_wls_online(chg)) {
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+		goto end_rate_check;
 	}
 
 	if (val.intval) {
@@ -2629,7 +2662,9 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		break;
 	case STEP_NONE:
 		target_fv = max_fv_mv;
-		if (stat->dc_present)
+		if (is_wls_online(chip))
+			target_fcc = zone->fcc_norm_ma;
+		else if (stat->dc_present)
 			target_fcc = 500;
 		else
 			target_fcc = zone->fcc_norm_ma;
@@ -3211,7 +3246,8 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 		return NOTIFY_OK;
 
 	if (psy &&
-	    (strcmp(psy->desc->name, "usb") == 0)) {
+	    ((strcmp(psy->desc->name, "usb") == 0) ||
+		(strcmp(psy->desc->name, "wireless") == 0))) {
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(0));
@@ -3894,6 +3930,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->main_psy = power_supply_get_by_name("main");
 	chip->pc_port_psy = power_supply_get_by_name("pc_port");
 	chip->dc_psy = power_supply_get_by_name("dc");
+	chip->wls_psy = power_supply_get_by_name("wireless");
 	/* parse the dc power supply configuration */
 	rc = of_property_read_string(pdev->dev.of_node,
 				     "mmi,max-main-psy", &max_main_name);
