@@ -1902,7 +1902,37 @@ out:
 	return 0;
 }
 
-#ifdef CONFIG_FB
+#if defined(CONFIG_DRM)
+int goodix_ts_fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct goodix_ts_core *core_data =
+		container_of(self, struct goodix_ts_core, fb_notifier);
+	struct goodix_ts_board_data *ts_bdata = board_data(core_data);
+	struct msm_drm_notifier *evdata = data;
+
+	if (!evdata || (evdata->id != ts_bdata->ctrl_dsi))
+		return 0;
+
+	ts_info("Notifier's event = %ld", event);
+	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
+			evdata && evdata->data && core_data) {
+		int *blank = evdata->data;
+		pr_debug("drm notification: event = %lu blank = %d\n", event, *blank);
+		if (event == MSM_DRM_EARLY_EVENT_BLANK) {
+			if (*blank != MSM_DRM_BLANK_POWERDOWN)
+				return 0;
+			ts_info("TP Suspend");
+			goodix_ts_suspend(core_data);
+		} else if (*blank == MSM_DRM_BLANK_UNBLANK) {
+			ts_info("TP Resume");
+			goodix_ts_resume(core_data);
+		}
+	}
+
+	return 0;
+}
+#elif defined(CONFIG_FB)
 /**
  * goodix_ts_fb_notifier_callback - Framebuffer notifier callback
  * Called by kernel during framebuffer blanck/unblank phrase
@@ -2049,7 +2079,14 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 	}
 	ts_info("success register irq");
 
-#ifdef CONFIG_FB
+#ifdef CONFIG_DRM
+	core_data->fb_notifier.notifier_call = goodix_ts_fb_notifier_callback;
+	if (!msm_drm_register_client(&core_data->fb_notifier))
+		ts_info("registered DRM notifier");
+	else
+		ts_err("%s: Unable to register DRM notifier",
+				__func__);
+#elif defined(CONFIG_FB)
 	core_data->fb_notifier.notifier_call = goodix_ts_fb_notifier_callback;
 	if (fb_register_client(&core_data->fb_notifier))
 		ts_err("Failed to register fb notifier client:%d", r);
@@ -2177,7 +2214,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 
 #ifdef CONFIG_PM
 static const struct dev_pm_ops dev_pm_ops = {
-#if !defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND)
+#if !defined(CONFIG_FB) && !defined(CONFIG_DRM) && !defined(CONFIG_HAS_EARLYSUSPEND)
 	.suspend = goodix_ts_pm_suspend,
 	.resume = goodix_ts_pm_resume,
 #endif
