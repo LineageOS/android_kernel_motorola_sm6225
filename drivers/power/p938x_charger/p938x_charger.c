@@ -1169,14 +1169,14 @@ static ssize_t tx_mode_show(struct device *dev,
 static ssize_t chip_id_max_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%04x\n",
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "0x%04x\n",
 		MAX_CHIP_VERS);
 }
 
 static ssize_t chip_id_min_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%04x\n",
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "0x%04x\n",
 		MIN_CHIP_VERS);
 }
 
@@ -1205,7 +1205,7 @@ static ssize_t chip_id_show(struct device *dev,
 	if(turn_off)
 		p938x_set_boost(chip, 0);
 
-	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%02x%02x\n",
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "0x%02x%02x\n",
 		data[1], data[0]);
 }
 
