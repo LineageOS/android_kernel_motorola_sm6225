@@ -488,7 +488,8 @@ static int batt_get_property(struct power_supply *psy,
 			if (prop.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
 				rc = power_supply_get_property(chip->extrn_psy,
 									psp, &prop);
-				if (!rc && prop.intval == POWER_SUPPLY_STATUS_CHARGING)
+				if (!rc && (prop.intval == POWER_SUPPLY_STATUS_CHARGING
+					|| prop.intval == POWER_SUPPLY_STATUS_FULL))
 					val->intval = prop.intval;
 			}
 		}

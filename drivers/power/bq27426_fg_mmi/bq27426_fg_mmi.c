@@ -2206,9 +2206,10 @@ static void debug_fg_dump_registers(struct bq_fg_chip *bq)
 			sprintf(buf + desc, "Reg[%02X] = %d, ", debug_fg_dump_regs[i], val);
 		}
 	}
+	mmi_fg_dbg(bq, PR_DEBUG, "%s\n", buf);
 }
 
-#define ITERM 80
+#define ITERM 200
 static void fg_check_soc(struct bq_fg_chip *bq)
 {
 	int batt_status = 0;
@@ -2230,7 +2231,7 @@ static void fg_check_soc(struct bq_fg_chip *bq)
 		&& bq->batt_curr < ITERM
 		&& (batt_status == POWER_SUPPLY_STATUS_NOT_CHARGING
 			|| batt_status == POWER_SUPPLY_STATUS_CHARGING)) {
-		mmi_fg_err(bq, "Force report soc 100, batt curr %d, batt status %d\n",
+		pr_err("Force report soc 100, batt curr %d, batt status %d\n",
 				bq->batt_curr, batt_status);
 		bq->batt_soc = 100;
 	}
