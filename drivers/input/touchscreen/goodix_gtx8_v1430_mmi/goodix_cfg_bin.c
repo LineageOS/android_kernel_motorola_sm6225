@@ -184,6 +184,8 @@ static int goodix_cfg_bin_proc(struct goodix_ts_core *core_data)
 		ts_err("failed get cfg and reg info, update fw then retry");
 	}
 
+	goodix_modules.good2go = true;
+
 	/*debug*/
 	ts_info("cfg_send_flag:0x%04x", ts_dev->reg.cfg_send_flag);
 	ts_info("pid:0x%04x", ts_dev->reg.pid);

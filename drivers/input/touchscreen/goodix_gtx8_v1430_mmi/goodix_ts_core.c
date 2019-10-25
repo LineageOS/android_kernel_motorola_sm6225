@@ -82,6 +82,11 @@ static void  __do_register_ext_module(struct work_struct *work)
 		return;
 	}
 
+	/* driver probe failed */
+	if (!goodix_modules.good2go) {
+		ts_err("Can't register ext_module probe failed");
+		return;
+	}
 	ts_info("start register ext_module");
 
 	/* prority level *must* be set */
@@ -2171,6 +2176,7 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ts_err("goodix device confirm failed[skip]");
 		goto out;
 	}
+	goodix_modules.good2go = true;
 	msleep(100);
 
 	/* Try start a thread to get config-bin info */
