@@ -339,7 +339,6 @@ struct smb_mmi_charger {
 	struct notifier_block	mmi_psy_notifier;
 	struct delayed_work	heartbeat_work;
 	struct delayed_work	weakcharger_work;
-	struct delayed_work	charger_check_work;
 
 	struct votable 		*chg_dis_votable;
 	struct votable		*fcc_votable;
@@ -545,17 +544,6 @@ int smblib_get_apsd_result(struct smb_mmi_charger *chg, int *type)
 
 	*type = apsd;
 
-	return rc;
-}
-
-int smblib_rerun_apsd(struct smb_mmi_charger *chg)
-{
-	int rc = 0;
-
-	rc = smblib_write_mmi(chg, CMD_APSD_REG, APSD_RERUN_BIT);
-	if (rc < 0) {
-		mmi_err(chg, "Couldn't rerun apsd rc=%d\n", rc);
-	}
 	return rc;
 }
 
@@ -1856,30 +1844,6 @@ static void mmi_weakcharger_work(struct work_struct *work)
 	mmi_dbg(chip, "SMBMMI: Weak timer expired\n");
 }
 
-#define USBIN_100MA 100000
-#define CHARGER_CHECK_DELAY_MS 10000
-static void mmi_charger_check_work(struct work_struct *work)
-{
-	int rc;
-	int apsd;
-	int usb_icl;
-	struct smb_mmi_charger *chg = container_of(work,
-						struct smb_mmi_charger,
-						charger_check_work.work);
-
-	rc = smblib_get_apsd_result(chg, &apsd);
-	if (rc < 0 || apsd == CHG_BC1P2_UNKNOWN)
-		return;
-
-	usb_icl = get_effective_result(chg->usb_icl_votable);
-	if (usb_icl <= USBIN_100MA ||
-	    apsd == CHG_BC1P2_FLOAT ||
-	    apsd == CHG_BC1P2_OCP) {
-		smblib_rerun_apsd(chg);
-		mmi_info(chg, "SMBMMI: Rerun APSD, apsd=%d, icl=%d\n", apsd, usb_icl);
-	}
-}
-
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
@@ -2850,8 +2814,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	char *envp[2];
 
 	struct smb_mmi_chg_status chg_stat;
-	int apsd;
-	static int prev_apsd = CHG_BC1P2_UNKNOWN;
 
 	/* Have not been resumed so wait another 100 ms */
 	if (chip->suspended & IS_SUSPENDED) {
@@ -2940,23 +2902,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
-
-	apsd = prev_apsd;
-	rc = smblib_get_apsd_result(chip, &apsd);
-	if (rc < 0) {
-		mmi_warn(chip, "Error getting apsd result rc = %d\n", rc);
-		if (!chg_stat.charger_present)
-			apsd = CHG_BC1P2_UNKNOWN;
-	}
-	if (apsd != prev_apsd) {
-		mmi_info(chip, "Update apsd (%d)-> (%d)\n", prev_apsd, apsd);
-		prev_apsd = apsd;
-		cancel_delayed_work(&chip->charger_check_work);
-		if (apsd != CHG_BC1P2_UNKNOWN) {
-			schedule_delayed_work(&chip->charger_check_work,
-				msecs_to_jiffies(CHARGER_CHECK_DELAY_MS));
-		}
-	}
 
 	mmi_chrg_rate_check(chip);
 
@@ -3890,7 +3835,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
-	INIT_DELAYED_WORK(&chip->charger_check_work, mmi_charger_check_work);
 	wakeup_source_init(&chip->smb_mmi_hb_wake_source,
 			   "smb_mmi_hb_wake");
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
