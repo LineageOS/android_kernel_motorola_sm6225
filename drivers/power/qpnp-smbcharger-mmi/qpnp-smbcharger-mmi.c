@@ -1862,21 +1862,21 @@ static void mmi_charger_check_work(struct work_struct *work)
 {
 	int rc;
 	int apsd;
+	int usb_icl;
 	struct smb_mmi_charger *chg = container_of(work,
 						struct smb_mmi_charger,
 						charger_check_work.work);
-
-	if (chg->factory_mode)
-		return;
 
 	rc = smblib_get_apsd_result(chg, &apsd);
 	if (rc < 0 || apsd == CHG_BC1P2_UNKNOWN)
 		return;
 
-	if (apsd == CHG_BC1P2_FLOAT ||
+	usb_icl = get_effective_result(chg->usb_icl_votable);
+	if (usb_icl <= USBIN_100MA ||
+	    apsd == CHG_BC1P2_FLOAT ||
 	    apsd == CHG_BC1P2_OCP) {
 		smblib_rerun_apsd(chg);
-		mmi_info(chg, "SMBMMI: Rerun APSD, apsd=%d\n", apsd);
+		mmi_info(chg, "SMBMMI: Rerun APSD, apsd=%d, icl=%d\n", apsd, usb_icl);
 	}
 }
 
@@ -2851,7 +2851,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	struct smb_mmi_chg_status chg_stat;
 	int apsd;
-	static int rerun_apsd_count = 0;
+	static int prev_apsd = CHG_BC1P2_UNKNOWN;
 
 	/* Have not been resumed so wait another 100 ms */
 	if (chip->suspended & IS_SUSPENDED) {
@@ -2941,24 +2941,21 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
 
-	if (!rerun_apsd_count && chg_stat.charger_present) {
-		rc = smblib_get_apsd_result(chip, &apsd);
-		if (rc < 0) {
-			mmi_warn(chip, "Error getting apsd result rc = %d\n", rc);
+	apsd = prev_apsd;
+	rc = smblib_get_apsd_result(chip, &apsd);
+	if (rc < 0) {
+		mmi_warn(chip, "Error getting apsd result rc = %d\n", rc);
+		if (!chg_stat.charger_present)
 			apsd = CHG_BC1P2_UNKNOWN;
-		}
-
+	}
+	if (apsd != prev_apsd) {
+		mmi_info(chip, "Update apsd (%d)-> (%d)\n", prev_apsd, apsd);
+		prev_apsd = apsd;
+		cancel_delayed_work(&chip->charger_check_work);
 		if (apsd != CHG_BC1P2_UNKNOWN) {
-			rerun_apsd_count ++;
-			cancel_delayed_work(&chip->charger_check_work);
 			schedule_delayed_work(&chip->charger_check_work,
 				msecs_to_jiffies(CHARGER_CHECK_DELAY_MS));
-			mmi_info(chip, "APSD = %d, rerun_apsd_count = %d\n",
-				apsd, rerun_apsd_count);
 		}
-	} else if (rerun_apsd_count) {
-		rerun_apsd_count = 0;
-		cancel_delayed_work(&chip->charger_check_work);
 	}
 
 	mmi_chrg_rate_check(chip);
