@@ -2187,9 +2187,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
 out:
 	if (r)
 		core_data->initialized = 0;
-	else
+	else {
 		core_data->initialized = 1;
-	goodix_modules.core_data = core_data;
+		goodix_modules.core_data = core_data;
+	}
 	ts_info("goodix_ts_probe OUT, r:%d", r);
 	/* wakeup ext module register work */
 	complete_all(&goodix_modules.core_comp);
@@ -2201,6 +2202,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	struct goodix_ts_core *core_data = platform_get_drvdata(pdev);
 
 	core_data->initialized = 0;
+	goodix_ts_unregister_notifier(&core_data->ts_notifier);
 	if (atomic_read(&core_data->ts_esd.esd_on))
 		goodix_ts_esd_off(core_data);
 	goodix_remove_all_ext_modules();
@@ -2263,5 +2265,6 @@ int goodix_ts_core_release(struct goodix_ts_core *core_data)
 
 	platform_driver_unregister(&goodix_ts_driver);
 	goodix_ts_dev_release();
+	goodix_modules.core_data = NULL;
 	return 0;
 }
