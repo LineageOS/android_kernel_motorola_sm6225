@@ -86,8 +86,6 @@
  * @mutex: mutex lock
  * @count: current number of registered external module
  * @wq: workqueue to do register work
- * @good2go: if goodix touch detection failed, then no
- *   registration is allowed.
  * @core_data: core_data pointer
  */
 struct goodix_module {
@@ -96,7 +94,6 @@ struct goodix_module {
 	struct mutex mutex;
 	unsigned int count;
 	struct workqueue_struct *wq;
-	bool good2go;
 	struct completion core_comp;
 	struct goodix_ts_core *core_data;
 };
