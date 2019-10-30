@@ -1838,7 +1838,7 @@ static int himax_ts_work_status(struct himax_ts_data *ts)
 		result = HX_REPORT_COORD_RAWDATA;
 
 #ifdef HX_SMART_WAKEUP
-	if (atomic_read(&ts->suspend_mode) && (!FAKE_POWER_KEY_SEND) && (ts->SMWP_enable) && (!hx_touch_data->diag_cmd))
+	if (atomic_read(&ts->suspend_mode) && (ts->SMWP_enable) && (!hx_touch_data->diag_cmd))
 		result = HX_REPORT_SMWP_EVENT;
 #endif
 	/* I("Now Status is %d\n", result); */
@@ -3963,6 +3963,7 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 #endif
 
 	atomic_set(&ts->suspend_mode, 0);
+	ts->diag_cmd = 0;
 #ifdef HIMAX_PALM_SENSOR_EN
 	if (ts->palm_detection_enabled) {
 		I("[himax] %s: palm detect function enable, skip resume\n", __func__);
