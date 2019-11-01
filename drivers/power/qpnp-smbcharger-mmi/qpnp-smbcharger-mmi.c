@@ -74,6 +74,9 @@ static struct smb_mmi_charger *this_chip = NULL;
 #ifndef PM8150B_SUBTYPE
 #define PM8150B_SUBTYPE PM855B_SUBTYPE
 #endif
+#ifndef PM7250B_SUBTYPE
+#define PM7250B_SUBTYPE PM8150B_SUBTYPE
+#endif
 
 #define CHGR_BASE	0x1000
 #define DCDC_BASE	0x1100
@@ -1186,6 +1189,7 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 
 	switch (mmi_chip->smb_version) {
 	case PM8150B_SUBTYPE:
+	case PM7250B_SUBTYPE:
 	case PMI632_SUBTYPE:
 		mask = PRE_CHARGE_CURRENT_SETTING_MASK;
 		if (chg_current < PRE_CHARGE_MIN)
@@ -1252,6 +1256,7 @@ static ssize_t force_chg_itrick_show(struct device *dev,
 
 	switch (mmi_chip->smb_version) {
 	case PM8150B_SUBTYPE:
+	case PM7250B_SUBTYPE:
 	case PMI632_SUBTYPE:
 		value &= PRE_CHARGE_CURRENT_SETTING_MASK;
 		state = (value * PRE_CHARGE_CONV_MV) + PRE_CHARGE_MIN;
@@ -1968,7 +1973,9 @@ bool mmi_charge_halted(struct smb_mmi_charger *chg)
 	}
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
 
-	if (chg->smb_version == PM8150B_SUBTYPE) {
+	if (chg->smb_version == PM8150B_SUBTYPE ||
+	    chg->smb_version == PM7250B_SUBTYPE ||
+	    chg->smb_version == PMI632_SUBTYPE) {
 		switch (stat) {
 		case TERMINATE_CHARGE_V5:
 		case INHIBIT_CHARGE_V5:
@@ -3680,6 +3687,11 @@ static int smb_mmi_chg_config_init(struct smb_mmi_charger *chip)
 		chip->name = "pm8150b_charger";
 		chip->param = smb5_pm8150b_params;
 		break;
+	case PM7250B_SUBTYPE:
+		chip->smb_version = PM7250B_SUBTYPE;
+		chip->name = "pm7250b_charger";
+		chip->param = smb5_pm8150b_params;
+		break;
 	case PMI632_SUBTYPE:
 		chip->smb_version = PMI632_SUBTYPE;
 		chip->name = "pmi632_charger";
@@ -3917,6 +3929,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	if (chip->smb_version == PM8150B_SUBTYPE ||
+	    chip->smb_version == PM7250B_SUBTYPE ||
 	    chip->smb_version == PMI632_SUBTYPE ||
 	    chip->smb_version == PM660_SUBTYPE) {
 		mmi_err(chip, "DISABLE all QCOM JEITA\n");
@@ -3932,6 +3945,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	if ((chip->smb_version == PM8150B_SUBTYPE) ||
+	    (chip->smb_version == PM7250B_SUBTYPE) ||
 	    (chip->smb_version == PMI632_SUBTYPE) ||
 	    (chip->smb_version == PM660_SUBTYPE))
 		if (smblib_masked_write_mmi(chip, USBIN_ADAPTER_ALLOW_CFG_REG,
