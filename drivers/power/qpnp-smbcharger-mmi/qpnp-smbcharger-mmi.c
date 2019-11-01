@@ -75,7 +75,7 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define PM8150B_SUBTYPE PM855B_SUBTYPE
 #endif
 #ifndef PM7250B_SUBTYPE
-#define PM7250B_SUBTYPE PM8150B_SUBTYPE
+#define PM7250B_SUBTYPE 0x2E
 #endif
 
 #define CHGR_BASE	0x1000
