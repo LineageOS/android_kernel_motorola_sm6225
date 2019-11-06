@@ -226,10 +226,8 @@ struct p938x_charger {
 	u16 wls_vout_max;
 	u16 wls_iout_max;
 
-	u16			irq_en;
-	u16			irq_stat;
-	u16			stat;
-	u8			mode;
+	u16 stat;
+	u16 irq_stat;
 	bool		wired_connected;
 
 	struct delayed_work	heartbeat_work;
@@ -239,6 +237,7 @@ struct p938x_charger {
 
 	struct power_supply	*usb_psy;
 	struct power_supply *wls_psy;
+	struct power_supply *dc_psy;
 
 	char			fw_name[NAME_MAX];
 	int			program_fw_stat;
@@ -252,6 +251,7 @@ struct p938x_charger {
 #define WLS_FLAG_BOOST_ENABLED 0
 #define WLS_FLAG_TX_ATTACHED   1
 #define WLS_FLAG_KEEP_AWAKE    2
+#define WLS_FLAG_TX_MODE_EN    3
 
 /* Send our notications to the battery */
 static char *pm_wls_supplied_to[] = {
@@ -319,6 +319,9 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 		clear_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 		power_supply_changed(chip->wls_psy);
 		cancel_delayed_work(&chip->heartbeat_work);
+
+		chip->stat = 0;
+		chip->irq_stat = 0;
 
 		/* Try to reset the chip to guard against false positives, we want
 		* don't want to end up in a broken state if we triggered disconnect
@@ -527,8 +530,8 @@ static int p938x_update_supplies_status(struct p938x_charger *chip)
 
 	chip->wired_connected = !!prop.intval;
 
-	// TODO tx mode should work even when USB is connected ?
-	// Only disable LDO, do not turn chip off...
+	/* TODO is there any action to take or block when usb is connected */
+	/* TODO Set dc_in_en and dc_suspend? */
 
 	p938x_dbg(chip, PR_MOTO, "Is usb connected? %d\n", chip->wired_connected);
 
@@ -676,27 +679,88 @@ static inline int p938x_get_boost(struct p938x_charger *chip)
 	return gpio_get_value(chip->wchg_boost.gpio);
 }
 
+static int p938x_set_dc_psp_prop(struct p938x_charger *chip,
+	enum power_supply_property psp,
+	union power_supply_propval val)
+{
+	int rc = 1;
+
+	if (chip->dc_psy) {
+		rc = power_supply_set_property(chip->dc_psy, psp, &val);
+		if (rc < 0) {
+			p938x_err(chip, "Couldn't set dc prop %d, rc=%d\n", psp, rc);
+		}
+	}
+
+	return rc;
+}
+
+static int p938x_set_dc_suspend(struct p938x_charger *chip, int en)
+{
+	union power_supply_propval val;
+
+	val.intval = en;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_INPUT_SUSPEND,
+		val);
+}
+
+static int p938x_set_dc_en_override(struct p938x_charger *chip, int en)
+{
+	union power_supply_propval val;
+
+	val.intval = en;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_PIN_ENABLED,
+		val);
+}
+
 static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 {
 	u8 buf = 0;
 	int rc;
 
-	// TODO block if tx connected OR stop rx power ?
-	// TODO turn ldo off when tx mode is enabled, turn ldo on when tx mode is turned off
-	// (or reset chip)
+	if (test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
+		p938x_err(chip, "Tx mode request rejected, charger is attached.\n");
+		return;
+	}
 
 	if (val) {
+		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+			p938x_dbg(chip, PR_MOTO, "Tx mode already enabled\n");
+			return;
+		}
+
+		/* Force dc in off so system doesn't see charger attached */
+		/* TODO are both dc_en and dc suspend needed? */
+		p938x_set_dc_suspend(chip, 1);
+		p938x_set_dc_en_override(chip, 1);
+
 		/* Power on and wait for boot */
-		p938x_set_boost(chip, 1);
-		msleep(100);
+		if(!p938x_is_chip_on(chip)) {
+			p938x_set_boost(chip, 1);
+			msleep(100);
+		}
 
 		rc = p938x_write_reg(chip, SYS_MODE_REG, SYS_MODE_TXMODE);
 		if (rc < 0) {
 			p938x_err(chip, "Failed to write 0x%04x(0x%02lx), rc=%d\n",
 				SYS_MODE_REG, SYS_MODE_TXMODE, rc);
 			p938x_set_boost(chip, 0);
+			p938x_set_dc_en_override(chip, 0);
+			p938x_set_dc_suspend(chip, 0);
+		} else {
+			p938x_dbg(chip, PR_MOTO, "tx mode enabled OK\n");
+			set_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
 		}
 	} else {
+		if (!test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+			p938x_dbg(chip, PR_MOTO, "Tx mode already disabled\n");
+			return;
+		}
+
 		rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
 		if (rc < 0)
 			p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
@@ -708,22 +772,31 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 				SYS_MODE_REG, (buf & ~SYS_MODE_TXMODE), rc);
 
 		p938x_set_boost(chip, 0);
+		p938x_set_dc_en_override(chip, 0);
+		p938x_set_dc_suspend(chip, 0);
+
+		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
+
+		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
 	}
 }
 
-static inline int p938x_get_tx_mode(struct p938x_charger *chip)
+static int p938x_get_tx_mode(struct p938x_charger *chip)
 {
 	u8 buf = 0;
 	int rc;
+
+	if (!p938x_is_chip_on(chip))
+		return 0;
 
 	rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
 	if (rc < 0) {
 		p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
 			SYS_MODE_REG, rc);
-		return rc;
+		return 0;
 	}
 
-	return (buf & SYS_MODE_TXMODE);
+	return !!(buf & SYS_MODE_TXMODE);
 }
 
 static int p938x_program_mtp_downloader(struct p938x_charger *chip)
@@ -1002,21 +1075,21 @@ release_fw:
 static int p938x_check_system_mode(struct p938x_charger *chip)
 {
 	int rc;
+	u8 mode = 0;
 
-	chip->mode = 0;
-	rc = p938x_read_buffer(chip, SYS_MODE_REG, &chip->mode, 1);
+	rc = p938x_read_buffer(chip, SYS_MODE_REG, &mode, 1);
 	if (rc < 0)
 		return rc;
 
-	p938x_dbg(chip, PR_MOTO, "MODE=0x%02x\n", chip->mode);
+	p938x_dbg(chip, PR_MOTO, "MODE=0x%02x\n", mode);
 
-	if (chip->mode & SYS_MODE_RAMCODE)
+	if (mode & SYS_MODE_RAMCODE)
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_RAMCODE\n");
-	if (chip->mode & SYS_MODE_TXMODE)
+	if (mode & SYS_MODE_TXMODE)
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_TXMODE\n");
-	if (chip->mode & SYS_MODE_WPCMODE) {
+	if (mode & SYS_MODE_WPCMODE) {
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_WPCMODE\n");
-		if (chip->mode & SYS_MODE_EXTENDED) {
+		if (mode & SYS_MODE_EXTENDED) {
 			p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_EXTENDED\n");
 			chip->epp_mode = true;
 			p938x_set_rx_vout(chip, EPP_MAX_VOUT);
@@ -1037,37 +1110,34 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 	return 0;
 }
 
-static int p938x_get_status(struct p938x_charger *chip)
+static int p938x_get_status(struct p938x_charger *chip, u16 *stat, u16 *irq_stat)
 {
 	int rc;
+	u16 irq_en;
+	u32 stat_and_irq_stat;
 
-	chip->irq_en = 0;
-	rc = p938x_read_buffer(chip, IRQ_ENABLE_REG, (u8 *)&chip->irq_en, 2);
+	rc = p938x_read_buffer(chip, IRQ_ENABLE_REG, (u8 *)&irq_en, 2);
 	if (rc < 0)
 		return rc;
 
-	// TODO spec says to read these two together
-	chip->stat = 0;
-	rc = p938x_read_buffer(chip, DEV_STATUS_REG, (u8 *)&chip->stat, 2);
-	if (rc < 0)
-		return rc;
-
-	chip->irq_stat = 0;
-	rc = p938x_read_buffer(chip, IRQ_STATUS_REG, (u8 *)&chip->irq_stat, 2);
+	/* Read both DEV_STATUS_REG and IRQ_STATUS_REG together */
+	rc = p938x_read_buffer(chip, DEV_STATUS_REG, (u8 *)&stat_and_irq_stat, 4);
 	if (rc < 0)
 		return rc;
 
 	p938x_dbg(chip, PR_MOTO, "IRQ_ENABLE=0x%04x, IRQ_ST=0x%04x, STATUS=0x%04x\n",
-		chip->irq_en, chip->irq_stat, chip->stat);
+		irq_en, ((u16 *)(&stat_and_irq_stat))[1], ((u16 *)(&stat_and_irq_stat))[0]);
 
-	return 0;
+	if(stat)
+		*stat = ((u16 *)(&stat_and_irq_stat))[0];
+	if(irq_stat)
+		*irq_stat = ((u16 *)(&stat_and_irq_stat))[1];
+
+	return rc;
 }
 
-static void p938x_check_status(struct p938x_charger *chip)
+static void p938x_debug_status(struct p938x_charger *chip, u16 status)
 {
-	u16 status = chip->stat;
-	u16 irq_status = chip->irq_stat;
-
 	if (status & ST_TX_FOD_FAULT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_TX_FOD_FAULT\n");
 	if (status & ST_TX_CONFLICT)
@@ -1092,7 +1162,10 @@ static void p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_OVER_VOLT\n");
 	if (status & ST_OVER_CURR)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_OVER_CURR\n");
+}
 
+static void p938x_debug_irq(struct p938x_charger *chip, u16 irq_status)
+{
 	if (irq_status & ST_TX_FOD_FAULT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_TX_FOD_FAULT\n");
 	if (irq_status & ST_TX_CONFLICT)
@@ -1105,20 +1178,10 @@ static void p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_RCV\n");
 	if (irq_status & ST_ADT_SENT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_SENT\n");
-	if (irq_status & ST_VOUT_ON) {
+	if (irq_status  & ST_VOUT_ON)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VOUT_ON\n");
-		p938x_check_system_mode(chip);
-		power_supply_changed(chip->wls_psy);
-	}
-	if (irq_status & ST_VRECT_ON) {
+	if (irq_status & ST_VRECT_ON)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VRECT_ON\n");
-		p938x_pm_set_awake(chip, 1);
-		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
-		cancel_delayed_work(&chip->heartbeat_work);
-		schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(2000));
-		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
-	}
 	if (irq_status & ST_MODE_CHANGE)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_MODE_CHANGE\n");
 	if (irq_status & ST_OVER_TEMP)
@@ -1127,6 +1190,51 @@ static void p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_OVER_VOLT\n");
 	if (irq_status & ST_OVER_CURR)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_OVER_CURR\n");
+}
+
+static int p938x_check_status(struct p938x_charger *chip)
+{
+	u16 status;
+	u16 irq_status;
+
+	if (p938x_get_status(chip, &status, &irq_status)) {
+		p938x_err(chip, "Could not read status registers");
+		return 1;
+	}
+
+	chip->stat = status;
+	chip->irq_stat = irq_status;
+
+	p938x_debug_status(chip, status);
+	p938x_debug_irq(chip, irq_status);
+
+	if (irq_status & status & ST_TX_CONFLICT) {
+		p938x_set_tx_mode(chip, 0);
+		p938x_dbg(chip, PR_IMPORTANT, "Tx mode conflict. Disabled tx mode\n");
+	}
+
+	if (irq_status & status & ST_VOUT_ON) {
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger ldo is on\n");
+		p938x_check_system_mode(chip);
+		power_supply_changed(chip->wls_psy);
+	}
+
+	if (irq_status & status & ST_VRECT_ON) {
+		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
+			p938x_set_tx_mode(chip, 0);
+		}
+		p938x_pm_set_awake(chip, 1);
+		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				msecs_to_jiffies(2000));
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
+	}
+
+	p938x_clear_irq(chip, irq_status);
+
+	return 0;
 }
 
 static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
@@ -1143,14 +1251,10 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if (p938x_get_status(chip)) {
+	if (p938x_check_status(chip)) {
 		p938x_err(chip,
-			"Error reading status. Check charging pad alignment\n");
-		return IRQ_HANDLED;
+			"Error checking status. Check charging pad alignment\n");
 	}
-
-	p938x_check_status(chip);
-	p938x_clear_irq(chip, chip->irq_stat);
 
 	return IRQ_HANDLED;
 }
@@ -1551,6 +1655,7 @@ static enum power_supply_property p938x_wls_props[] = {
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 };
 
 static int p938x_wls_get_prop(struct power_supply *psy,
@@ -1581,6 +1686,9 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_REAL_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_WIRELESS;
+		break;
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		val->intval = p938x_is_ldo_on(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -1728,6 +1836,12 @@ static int p938x_charger_probe(struct i2c_client *client,
 	rc = p938x_hw_init(chip);
 	if (rc < 0) {
 		p938x_err(chip, "Failed to init hw, rc=%d\n", rc);
+		goto free_psy;
+	}
+
+	chip->dc_psy = power_supply_get_by_name("dc");
+	if (!chip->dc_psy) {
+		p938x_err(chip, "Couldn't get dc psy\n");
 		goto free_psy;
 	}
 
