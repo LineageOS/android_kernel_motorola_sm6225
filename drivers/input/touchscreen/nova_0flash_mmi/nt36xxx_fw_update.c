@@ -92,7 +92,7 @@ static int32_t nvt_download_init(void)
 	//NVT_LOG("NVT_TRANSFER_LEN = 0x%06X\n", NVT_TRANSFER_LEN);
 
 	if (fwbuf == NULL) {
-		fwbuf = (uint8_t *)kzalloc((NVT_TRANSFER_LEN+1), GFP_KERNEL);
+		fwbuf = (uint8_t *)kzalloc((NVT_TRANSFER_LEN+2), GFP_KERNEL);
 		if(fwbuf == NULL) {
 			NVT_ERR("kzalloc for fwbuf failed!\n");
 			return -ENOMEM;
@@ -567,7 +567,7 @@ static int32_t nvt_write_firmware(const u8 *fwdata, size_t fwsize)
 	uint32_t BIN_addr, SRAM_addr, size;
 	int32_t ret = 0;
 
-	memset(fwbuf, 0, (NVT_TRANSFER_LEN+1));
+	memset(fwbuf, 0, (NVT_TRANSFER_LEN+2));
 
 	for (list = 0; list < partition; list++) {
 		/* initialize variable */
