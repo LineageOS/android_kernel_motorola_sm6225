@@ -436,11 +436,6 @@ static int bu520xx_pen_probe(struct platform_device *pdev)
 	gpio_request(hall_sensor_dev->gpio,"pen_detect_gpio");
 	gpio_direction_input(hall_sensor_dev->gpio);
 
-	//set irq
-	ret = set_irq_hall_sensor();
-	if (ret < 0)
-		goto fail_for_irq_hall_sensor;
-
 	//create input_dev
 	hall_sensor_dev->pen_indev = NULL;
 	ret = pen_input_device_create();
@@ -460,14 +455,25 @@ static int bu520xx_pen_probe(struct platform_device *pdev)
 #else
 	wakeup_source_init(&hall_sensor_dev->wake_lock, "pen_suspend_blocker");
 #endif
+	//set irq
+	ret = set_irq_hall_sensor();
+	if (ret < 0)
+		goto fail_for_irq_hall_sensor;
 
 	pen_info("hall_sensor_init Done.\r\n");
 	return 0;
 
-fail_for_create_input_dev:
-	free_irq(hall_sensor_dev->irq, hall_sensor_dev);
-
 fail_for_irq_hall_sensor:
+	destroy_workqueue(hall_sensor_do_wq);
+	destroy_workqueue(hall_sensor_wq);
+	input_free_device(hall_sensor_dev->pen_indev);
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_destroy(&hall_sensor_dev->wake_lock);
+#else
+	wakeup_source_trash(&hall_sensor_dev->wake_lock);
+#endif
+fail_for_create_input_dev:
+    hall_sensor_dev->pen_indev=NULL;
 	gpio_free(hall_sensor_dev->gpio);
 fail_for_set_gpio_hall_sensor:
 	kfree(hall_sensor_dev);
