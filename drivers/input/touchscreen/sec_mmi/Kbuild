@@ -4,7 +4,7 @@ EXTRA_CFLAGS += \
 		-I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
 
-ifneq (,$(filter smith%,$(TARGET_PRODUCT)))
+ifneq (,$(filter smith% racer%,$(TARGET_PRODUCT)))
 # MMI_STOPSHIP LSI: remove when all DLKM available
 EXTRA_CFLAGS += -DUSE_STUBS
 endif
