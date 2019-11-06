@@ -243,12 +243,15 @@ struct p938x_charger {
 	char			fw_name[NAME_MAX];
 	int			program_fw_stat;
 
-	atomic_t tx_attached;
-	atomic_t boost_enabled;
+	unsigned long flags;
 
 	struct wakeup_source wls_wake_source;
 	bool	epp_mode;
 };
+
+#define WLS_FLAG_BOOST_ENABLED 0
+#define WLS_FLAG_TX_ATTACHED   1
+#define WLS_FLAG_KEEP_AWAKE    2
 
 /* Send our notications to the battery */
 static char *pm_wls_supplied_to[] = {
@@ -262,8 +265,8 @@ static char *pm_wls_supplied_from[] = {
 
 static inline int p938x_is_chip_on(struct p938x_charger *chip)
 {
-	return (atomic_read(&chip->boost_enabled) ||
-		atomic_read(&chip->tx_attached));
+	return (test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags) ||
+		test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags));
 }
 
 static inline int p938x_is_tx_connected(struct p938x_charger *chip)
@@ -299,10 +302,21 @@ static void p938x_reset(struct p938x_charger *chip)
 	msleep(100);
 }
 
+static void p938x_pm_set_awake(struct p938x_charger *chip, int awake)
+{
+	if(!test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags) && awake) {
+		__pm_stay_awake(&chip->wls_wake_source);
+		set_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags);
+	} else if(test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags) && !awake) {
+		__pm_relax(&chip->wls_wake_source);
+		clear_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags);
+	}
+}
+
 static void p938x_handle_wls_removal(struct p938x_charger *chip)
 {
-	if(atomic_read(&chip->tx_attached)) {
-		atomic_set(&chip->tx_attached, 0);
+	if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
+		clear_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 		power_supply_changed(chip->wls_psy);
 		cancel_delayed_work(&chip->heartbeat_work);
 
@@ -310,8 +324,8 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 		* don't want to end up in a broken state if we triggered disconnect
 		* accidentally
 		*/
-		if (!atomic_read(&chip->boost_enabled)) {
-			__pm_relax(&chip->wls_wake_source);
+		if (!test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags)) {
+			p938x_pm_set_awake(chip, 0);
 			p938x_reset(chip);
 		}
 
@@ -643,16 +657,18 @@ disable_vreg:
 	return rc;
 }
 
+
+
 static inline void p938x_set_boost(struct p938x_charger *chip, int val)
 {
 	/* Assume if we turned the boost on we want to stay awake */
-	if (val)
-		__pm_stay_awake(&chip->wls_wake_source);
-	else
-		__pm_relax(&chip->wls_wake_source);
-
+	p938x_pm_set_awake(chip, !!val);
 	gpio_set_value(chip->wchg_boost.gpio, !!val);
-	atomic_set(&chip->boost_enabled, !!val);
+
+	if(val)
+		set_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
+	else
+		clear_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
 }
 
 static inline int p938x_get_boost(struct p938x_charger *chip)
@@ -1096,8 +1112,8 @@ static void p938x_check_status(struct p938x_charger *chip)
 	}
 	if (irq_status & ST_VRECT_ON) {
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_VRECT_ON\n");
-		__pm_stay_awake(&chip->wls_wake_source);
-		atomic_set(&chip->tx_attached, 1);
+		p938x_pm_set_awake(chip, 1);
+		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
 				msecs_to_jiffies(2000));
@@ -1316,6 +1332,17 @@ static struct attribute *p938x_attrs[] = {
 
 ATTRIBUTE_GROUPS(p938x);
 
+static void show_dump_flags(struct seq_file *m,
+	struct p938x_charger *chip)
+{
+	seq_printf(m, "WLS_FLAG_BOOST_ENABLED: %d\n",
+		test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags));
+	seq_printf(m, "WLS_FLAG_KEEP_AWAKE: %d\n",
+		test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags));
+	seq_printf(m, "WLS_FLAG_TX_ATTACHED: %d\n",
+		test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags));
+}
+
 static int show_dump_regs(struct seq_file *m, void *data)
 {
 	struct p938x_charger *chip = m->private;
@@ -1363,6 +1390,8 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "ILIMIT_SET: %dmA\n", buf[0] * 100 + 100);
 	p938x_read_reg(chip, SYS_MODE_REG, &buf[0]);
 	seq_printf(m, "SYS_MODE: 0x%02x\n", buf[0]);
+
+	show_dump_flags(m, chip);
 
 	return 0;
 }
