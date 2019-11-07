@@ -55,11 +55,12 @@ static int pd_curr_max_init = 0;
 static int *dt_temp_zones;
 static struct mmi_chrg_dts_info *chrg_name_list;
 static char *charge_rate[] = {
-	"None", "Normal", "Weak", "Turbo"
+	"None", "Normal", "Weak", "Turbo", "Hyper"
 };
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
 #define HYSTEREISIS_DEGC 2
+void mmi_chrg_rate_check(struct mmi_charger_manager *chg);
 bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c, bool ignore_hysteresis_degc)
 {
 	int prev_zone, num_zones;
@@ -494,6 +495,10 @@ static int batt_get_property(struct power_supply *psy,
 			}
 		}
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_RATE:
+		mmi_chrg_rate_check(chip);
+		val->intval = chip->charger_rate;
+		break;
 	default:
 		rc = power_supply_get_property(chip->qcom_psy,
 							psp, &prop);
@@ -795,11 +800,15 @@ static int get_prop_charger_present(struct mmi_charger_manager *chg,
 
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
+#define TURBO_CHRG_THRSH_UW 12500000
+#define HYPER_CHRG_THRSH_UW 40000000
+
 void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 {
 	union power_supply_propval val;
 	int chrg_cm_ma = 0;
 	int chrg_cs_ma = 0;
+	int charger_power = 0;
 	int prev_chg_rate = chg->charger_rate;
 	int rc = -EINVAL;
 
@@ -846,6 +855,13 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
 
+	if (chg->pd_pps_support) {
+		charger_power = (chg->pd_curr_max / 1000) * (chg->pd_volt_max / 1000);
+		if (charger_power >= HYPER_CHRG_THRSH_UW)
+			chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_HYPER;
+		else if (charger_power >= TURBO_CHRG_THRSH_UW)
+			chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+	}
 end_rate_check:
 	if (prev_chg_rate != chg->charger_rate)
 		mmi_chrg_info(chg, "%s Charger Detected\n",
@@ -999,6 +1015,8 @@ static void cancel_sm(struct mmi_charger_manager *chip)
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
+	chip->pd_volt_max = pd_volt_max_init;
+	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"cancel sync and flush mmi chrg sm work\n");
 }
@@ -1012,8 +1030,6 @@ void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->pd_request_curr_prev = 0;
 	chip->pd_target_curr = 0;
 	chip->pd_target_volt = 0;
-	chip->pd_volt_max = pd_volt_max_init;
-	chip->pd_curr_max = pd_curr_max_init;
 	chip->pd_batt_therm_volt = 0;
 	chip->pd_batt_therm_curr = 0;
 	chip->pd_sys_therm_volt = 0;
@@ -1256,7 +1272,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 	chip->vbus_present = val.intval;
 
-	mmi_chrg_rate_check(chip);
 	hb_resch_time = HEARTBEAT_DELAY_MS;
 
 	if (chip->vbus_present)
@@ -1265,26 +1280,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	if (!chip->vbus_present)
 		mmi_awake_vote(chip, false);
-
-	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
-	if (!chrg_rate_string) {
-		mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
-		envp[0] = NULL;
-	} else {
-		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
-			  "POWER_SUPPLY_CHARGE_RATE=%s",
-			  charge_rate[chip->charger_rate]);
-		envp[0] = chrg_rate_string;
-		envp[1] = NULL;
-	}
-
-	if (chip->qcom_psy) {
-		mmi_power_supply_changed(chip->batt_psy, envp);
-	}
-
-	kfree(chrg_rate_string);
-
-	__pm_relax(&chip->mmi_hb_wake_source);
 
 	ret = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
@@ -1346,6 +1341,29 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	if (chip->use_batt_age)
 		mmi_cycle_counts(chip);
+
+	mmi_chrg_rate_check(chip);
+
+	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
+	if (!chrg_rate_string) {
+		mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
+		envp[0] = NULL;
+	} else {
+		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
+			  "POWER_SUPPLY_CHARGE_RATE=%s",
+			  charge_rate[chip->charger_rate]);
+		envp[0] = chrg_rate_string;
+		envp[1] = NULL;
+	}
+
+	if (chip->qcom_psy) {
+		mmi_power_supply_changed(chip->batt_psy, envp);
+	}
+
+	kfree(chrg_rate_string);
+
+	__pm_relax(&chip->mmi_hb_wake_source);
+
 schedule_work:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
