@@ -761,7 +761,7 @@ static void irq_work_routine(struct work_struct *work)
 
 	n_result = tas2562_brownout_enable(p_tas2562, p_tas2562->tas2562brownout_enable);
 	if (n_result < 0)
-		return n_result;
+		dev_err(p_tas2562->dev, "brownout enable fail!\n");
 
 	goto end;
 
