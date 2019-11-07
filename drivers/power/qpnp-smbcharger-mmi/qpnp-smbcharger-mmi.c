@@ -117,6 +117,8 @@ static struct smb_mmi_charger *this_chip = NULL;
 #define SDP_CHARGER_BIT				BIT(0)
 #define USBIN_INT_RT_STS			(USBIN_BASE + 0x10)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(4)
+#define USBIN_INT_EN_CLR				(USBIN_BASE + 0x16)
+#define USBIN_OV_EN_CLR					BIT(3)
 #define CMD_APSD_REG				(USBIN_BASE + 0x41)
 #define APSD_RERUN_BIT					BIT(0)
 #define ICL_OVERRIDE_BIT				BIT(1)
@@ -4020,6 +4022,15 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		smblib_set_usb_suspend(chip, true);
 		msleep(50);
 		smblib_set_usb_suspend(chip, false);
+	}
+
+	if (chip->factory_mode &&
+		(chip->smb_version == PMI632_SUBTYPE)) {
+		rc = smblib_masked_write_mmi(chip, USBIN_INT_EN_CLR,
+					    0xFF, USBIN_OV_EN_CLR))
+		if (rc) {
+			mmi_err(chip, "SMBMMI: Could Not disable usbin ov irq\n");
+		}
 	}
 
 	rc = device_create_file(chip->dev,
