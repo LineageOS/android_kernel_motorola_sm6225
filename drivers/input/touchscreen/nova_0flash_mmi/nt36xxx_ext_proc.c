@@ -28,6 +28,7 @@
 #define NVT_RAW "nvt_raw"
 #define NVT_DIFF "nvt_diff"
 #define NVT_UPDATE "nvt_update"
+#define NVT_MONITOR_CTRL_FLAG "nvt_monitor_control"
 
 #define BUS_TRANSFER_LENGTH  256
 
@@ -46,6 +47,7 @@ static struct proc_dir_entry *NVT_proc_baseline_entry;
 static struct proc_dir_entry *NVT_proc_raw_entry;
 static struct proc_dir_entry *NVT_proc_diff_entry;
 static struct proc_dir_entry *NVT_proc_fwupdate_entry;
+static struct proc_dir_entry *NVT_proc_monitor_control_entry;
 
 /*******************************************************
 Description:
@@ -584,6 +586,109 @@ static const struct file_operations nvt_fwupdate_fops = {
 	.read = nvt_fwupdate_read,
 };
 
+uint8_t status = 1;
+#define ENABLE_MONITOR 1
+#define DISABLE_MONITOR 0
+#define ENABLE_DOZE_MODE_CMD 0xB7
+#define DISABLE_DOZE_MODE_CMD 0xB8
+
+int32_t nvt_monitor_control(uint8_t status)
+{
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	NVT_LOG("set monitor control: %d\n", status);
+
+	//---set xdata index to EVENT BUF ADDR---
+	ret = nvt_set_page(ts->mmap->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	if (ret < 0) {
+		NVT_ERR("Set event buffer index fail!\n");
+		goto nvt_monitor_control_out;
+	}
+
+	if (status == ENABLE_MONITOR) {
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = ENABLE_DOZE_MODE_CMD;
+		ret = CTP_SPI_WRITE(ts->client, buf, 2);
+		if (ret < 0) {
+			NVT_ERR("Write enable doze mode command fail!\n");
+			goto nvt_monitor_control_out;
+		} else {
+			NVT_LOG("set enable doze mode cmd succeeded\n");
+		}
+	} else if (status == DISABLE_MONITOR) {
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = DISABLE_DOZE_MODE_CMD;
+		ret = CTP_SPI_WRITE(ts->client, buf, 2);
+		if (ret < 0) {
+			NVT_ERR("Write disable doze mode command fail!\n");
+			goto nvt_monitor_control_out;
+		} else {
+			NVT_LOG("set disable doze mode cmd succeeded\n");
+		}
+	} else {
+		NVT_ERR("Invalid monitor_control parameter!\n");
+		ret = -EINVAL;
+	}
+
+    nvt_monitor_control_out:
+
+	return ret;
+}
+
+static int nvt_monitor_control_show(struct seq_file *sfile, void *v)
+{
+	if(status == ENABLE_MONITOR)
+		seq_printf(sfile, "Enable Doze MODE!\n");
+	else if (status == DISABLE_MONITOR)
+		seq_printf(sfile, "Disable Doze MODE!\n");
+	else
+		seq_printf(sfile, "UNKNOW MODE!\n");
+	return 0;
+}
+
+static ssize_t nvt_monitor_control_store(struct file *file, const char *buffer, size_t count, loff_t *pos)
+{
+	int input;
+	uint8_t *str = NULL;
+
+	/* allocate buffer */
+	str = (uint8_t *)kzalloc((count), GFP_KERNEL);
+	if(str == NULL) {
+		NVT_ERR("kzalloc for buf failed!\n");
+		return -ENOMEM;
+	}
+
+	if (copy_from_user(str, buffer, count)) {
+		NVT_ERR("copy from user error\n");
+		kfree(str);
+		return -EFAULT;
+	}
+
+	if (sscanf(str, "%d", &input) != 1) {
+		kfree(str);
+		return -EINVAL;
+	}
+
+	status = input;
+	nvt_monitor_control(status);
+	kfree(str);
+
+	return count;
+}
+static int32_t nvt_monitor_control_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, nvt_monitor_control_show, NULL);
+}
+static const struct file_operations monitor_control_fops = {
+	.owner = THIS_MODULE,
+	.open = nvt_monitor_control_open,
+	.read = seq_read,
+	.write = nvt_monitor_control_store,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
 
 /*******************************************************
 Description:
@@ -635,6 +740,13 @@ int32_t nvt_extra_proc_init(void)
 		NVT_LOG("create proc/nvt_update Succeeded!\n");
 	}
 
+	NVT_proc_monitor_control_entry = proc_create(NVT_MONITOR_CTRL_FLAG, 0644, NULL,&monitor_control_fops);
+	if (NVT_proc_monitor_control_entry == NULL) {
+		NVT_ERR("create proc/nvt_monitor_control Failed!\n");
+		return -ENOMEM;
+	} else {
+		NVT_LOG("create proc/nvt_monitor_control Succeeded!\n");
+	}
 	return 0;
 }
 
@@ -676,6 +788,12 @@ void nvt_extra_proc_deinit(void)
 		remove_proc_entry(NVT_UPDATE, NULL);
 		NVT_proc_fwupdate_entry = NULL;
 		NVT_LOG("Removed /proc/%s\n", NVT_UPDATE);
+	}
+
+	if (NVT_proc_monitor_control_entry != NULL) {
+		remove_proc_entry(NVT_MONITOR_CTRL_FLAG, NULL);
+		NVT_proc_monitor_control_entry = NULL;
+		NVT_LOG("Removed /proc/%s\n", NVT_MONITOR_CTRL_FLAG);
 	}
 }
 #endif
