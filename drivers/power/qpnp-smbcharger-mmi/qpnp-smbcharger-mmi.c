@@ -4027,7 +4027,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (chip->factory_mode &&
 		(chip->smb_version == PMI632_SUBTYPE)) {
 		rc = smblib_masked_write_mmi(chip, USBIN_INT_EN_CLR,
-					    0xFF, USBIN_OV_EN_CLR))
+					    0xFF, USBIN_OV_EN_CLR);
 		if (rc) {
 			mmi_err(chip, "SMBMMI: Could Not disable usbin ov irq\n");
 		}
