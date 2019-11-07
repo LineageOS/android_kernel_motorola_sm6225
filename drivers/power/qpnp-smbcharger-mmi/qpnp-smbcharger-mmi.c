@@ -2552,7 +2552,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	mmi_find_temp_zone(chip, prm, stat->batt_temp);
 	zone = &prm->temp_zones[prm->pres_temp_zone];
 
-	if (!stat->charger_present) {
+	if (!stat->charger_present && !is_wls_online(chip)) {
 		prm->pres_chrg_step = STEP_NONE;
 	} else if ((prm->pres_temp_zone == ZONE_HOT) ||
 		   (prm->pres_temp_zone == ZONE_COLD) ||
