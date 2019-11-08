@@ -104,7 +104,7 @@
 
 #define WAIT_FOR_AUTH_MS 1000
 #define WAIT_FOR_RCVD_TIMEOUT_MS 1000
-#define HEARTBEAT_INTERVAL_MS 30000
+#define HEARTBEAT_INTERVAL_MS 60000
 
 #define BPP_MAX_VOUT 5000
 #define BPP_MAX_IOUT 1600
@@ -252,6 +252,8 @@ struct p938x_charger {
 #define WLS_FLAG_TX_ATTACHED   1
 #define WLS_FLAG_KEEP_AWAKE    2
 #define WLS_FLAG_TX_MODE_EN    3
+#define WLS_FLAG_USB_CONNECTED 4
+#define WLS_FLAG_USB_KEEP_ON   5
 
 /* Send our notications to the battery */
 static char *pm_wls_supplied_to[] = {
@@ -530,10 +532,22 @@ static int p938x_update_supplies_status(struct p938x_charger *chip)
 
 	chip->wired_connected = !!prop.intval;
 
-	/* TODO is there any action to take or block when usb is connected */
-	/* TODO Set dc_in_en and dc_suspend? */
-
-	p938x_dbg(chip, PR_MOTO, "Is usb connected? %d\n", chip->wired_connected);
+	/* TODO For now disable wireless charging when a usb cable is connected */
+	if (chip->wired_connected && !test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+		set_bit(WLS_FLAG_USB_CONNECTED, &chip->flags);
+		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags))
+			p938x_dbg(chip, PR_MOTO, "usb connected, tx mode enabled - keep wls on\n");
+		else if (test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags))
+			p938x_dbg(chip, PR_MOTO, "usb keep on enabled - keep wls on\n");
+		else {
+			gpio_set_value(chip->wchg_en_n.gpio, 1);
+			p938x_dbg(chip, PR_MOTO, "usb connected, disabled wls\n");
+		}
+	} else if (!chip->wired_connected && test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+		clear_bit(WLS_FLAG_USB_CONNECTED, &chip->flags);
+		gpio_set_value(chip->wchg_en_n.gpio, 0);
+		p938x_dbg(chip, PR_MOTO, "usb disconnected, enabled wls\n");
+	}
 
 	return 0;
 }
@@ -660,18 +674,19 @@ disable_vreg:
 	return rc;
 }
 
-
-
 static inline void p938x_set_boost(struct p938x_charger *chip, int val)
 {
 	/* Assume if we turned the boost on we want to stay awake */
-	p938x_pm_set_awake(chip, !!val);
 	gpio_set_value(chip->wchg_boost.gpio, !!val);
 
-	if(val)
+	if(val) {
 		set_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
-	else
+		p938x_pm_set_awake(chip, 1);
+	} else {
 		clear_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
+		if (!p938x_is_chip_on(chip))
+			p938x_pm_set_awake(chip, 0);
+	}
 }
 
 static inline int p938x_get_boost(struct p938x_charger *chip)
@@ -733,6 +748,11 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			return;
 		}
 
+		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+			p938x_dbg(chip, PR_MOTO, "Disabled due to usb. Turning on for tx mode\n");
+			gpio_set_value(chip->wchg_en_n.gpio, 0);
+		}
+
 		/* Force dc in off so system doesn't see charger attached */
 		/* TODO are both dc_en and dc suspend needed? */
 		p938x_set_dc_suspend(chip, 1);
@@ -778,6 +798,13 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
 
 		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
+
+		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+			if (!test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags)) {
+				p938x_dbg(chip, PR_MOTO, "usb connected, power off wls\n");
+				gpio_set_value(chip->wchg_en_n.gpio, 1);
+			}
+		}
 	}
 }
 
@@ -1216,10 +1243,15 @@ static int p938x_check_status(struct p938x_charger *chip)
 	if (irq_status & status & ST_VOUT_ON) {
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger ldo is on\n");
 		p938x_check_system_mode(chip);
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				msecs_to_jiffies(0));
 		power_supply_changed(chip->wls_psy);
 	}
 
 	if (irq_status & status & ST_VRECT_ON) {
+		/* Update usb status incase we powered on with it connected */
+		p938x_update_supplies_status(chip);
 		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
 			p938x_set_tx_mode(chip, 0);
@@ -1269,6 +1301,73 @@ static irqreturn_t p938x_det_irq_handler(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+
+/* Only allow usb_keep_on and boost in userdebug builds */
+#ifdef P938X_USER_DEBUG
+static ssize_t usb_keep_on_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long value;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	r = kstrtoul(buf, 0, &value);
+	if (r) {
+		p938x_err(chip, "Invalid usb keep on value = %ld\n", value);
+		return -EINVAL;
+	}
+
+	if (value) {
+		set_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags);
+		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags))
+			gpio_set_value(chip->wchg_en_n.gpio, 0);
+	} else {
+		clear_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags);
+		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags))
+			gpio_set_value(chip->wchg_en_n.gpio, 1);
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t usb_keep_on_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
+		test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags));
+}
+
+static ssize_t boost_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long value;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	r = kstrtoul(buf, 0, &value);
+	if (r) {
+		p938x_err(chip, "Invalid boost value = %ld\n", value);
+		return -EINVAL;
+	}
+
+	p938x_set_boost(chip, value);
+
+	return r ? r : count;
+}
+
+static ssize_t boost_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
+		p938x_get_boost(chip));
+}
+#endif
 
 static ssize_t tx_mode_store(struct device *dev,
 		struct device_attribute *attr,
@@ -1411,6 +1510,10 @@ static ssize_t program_fw_store(struct device *dev,
 	return r ? r : count;
 }
 
+#ifdef P938X_USER_DEBUG
+static DEVICE_ATTR(usb_keep_on, S_IRUGO|S_IWUSR, usb_keep_on_show, usb_keep_on_store);
+static DEVICE_ATTR(boost, S_IRUGO|S_IWUSR, boost_show, boost_store);
+#endif
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, chip_id_show, NULL);
 static DEVICE_ATTR(vendor, S_IRUGO, chip_vendor_show, NULL);
@@ -1422,6 +1525,10 @@ static DEVICE_ATTR(program_fw_stat, S_IRUGO, program_fw_stat_show, NULL);
 static DEVICE_ATTR(program_fw, S_IWUSR, NULL, program_fw_store);
 
 static struct attribute *p938x_attrs[] = {
+#ifdef P938X_USER_DEBUG
+	&dev_attr_usb_keep_on.attr,
+	&dev_attr_boost.attr,
+#endif
 	&dev_attr_tx_mode.attr,
 	&dev_attr_chip_id_max.attr,
 	&dev_attr_chip_id_min.attr,
@@ -1445,6 +1552,12 @@ static void show_dump_flags(struct seq_file *m,
 		test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags));
 	seq_printf(m, "WLS_FLAG_TX_ATTACHED: %d\n",
 		test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags));
+	seq_printf(m, "WLS_FLAG_TX_MODE_EN: %d\n",
+		test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags));
+	seq_printf(m, "WLS_FLAG_USB_CONNECTED: %d\n",
+		test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags));
+	seq_printf(m, "WLS_FLAG_USB_KEEP_ON: %d\n",
+		test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags));
 }
 
 static int show_dump_regs(struct seq_file *m, void *data)
@@ -1749,6 +1862,10 @@ static void p938x_external_power_changed(struct power_supply *psy)
 	struct p938x_charger *chip = power_supply_get_drvdata(psy);
 
 	p938x_update_supplies_status(chip);
+
+	cancel_delayed_work(&chip->heartbeat_work);
+	schedule_delayed_work(&chip->heartbeat_work,
+		msecs_to_jiffies(0));
 }
 
 static const struct power_supply_desc wls_psy_desc = {
