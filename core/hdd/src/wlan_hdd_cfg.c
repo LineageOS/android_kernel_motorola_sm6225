@@ -59,7 +59,7 @@
 #define DEVICE_SERIALNO_BOOTARG "androidboot.serialno="
 #define MACSTRLEN 12
 #define MACSTRCOLON 58
-#define MACADDRESSUSED 1
+#define MACADDRESSUSED 2
 
 struct sdesc {
    struct shash_desc shash;
@@ -494,6 +494,7 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
 
 	char *bufferPtr = NULL;
 	char buffer_temp[MACSTRLEN];
+	char buffer_mac2[MACSTRLEN];
 	const char *cmd_line = NULL;
 	struct device_node *chosen_node = NULL;
 	char *buffer = NULL;
@@ -547,6 +548,17 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
         }
         bufferPtr++;
     }
+    if( *bufferPtr == ',' || *bufferPtr == '-') {
+        bufferPtr++;
+    }
+    for (iteration = 0; iteration < MACSTRLEN; iteration++) {
+        if (*bufferPtr != MACSTRCOLON) {
+            buffer_mac2[iteration] = *bufferPtr;
+        } else {
+            iteration = iteration - 1;
+        }
+        bufferPtr++;
+    }
     /* Mac address data format used by qcom:
      * Intf0MacAddress used for 1 macaddress
      * if gp2pdeviceAdmistered is set to 1
@@ -557,8 +569,10 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
      */
     macTable[0].name = "Intf0MacAddress";
     macTable[0].value = &buffer_temp[0];
+    macTable[1].value = &buffer_mac2[0];
     update_mac_from_string(hdd_ctx, &macTable[0], MACADDRESSUSED);
     pHddCtx->num_provisioned_addr = MACADDRESSUSED;
+    hdd_populate_random_mac_addr(pHddCtx, QDF_MAX_CONCURRENCY_PERSONA - MACADDRESSUSED);
     qdf_mem_copy(&customMacAddr,
 	     &pHddCtx->provisioned_mac_addr[0].bytes[0],
              sizeof(tSirMacAddr));
