@@ -118,9 +118,10 @@ QDF_STATUS hdd_update_mac_serial(struct hdd_context *hdd_ctx)
         qdf_status = QDF_STATUS_E_FAILURE;
         goto config_exit;
     }
-    qdf_mem_copy(&pHddCtx->derived_mac_addr[0].bytes,
+    hdd_ctx->num_provisioned_addr = MACADDRESSUSED;
+    qdf_mem_copy(&hdd_ctx->provisioned_mac_addr[0].bytes[0],
                        (uint8_t *)computedMac, QDF_MAC_ADDR_SIZE);
-    pHddCtx->num_derived_addr++;
+    //pHddCtx->num_derived_addr++;
 
 config_exit:
     qdf_mem_free(computedMac);
@@ -192,8 +193,7 @@ QDF_STATUS hdd_generate_random_mac_from_serialno(char *serialNo, int serialnoLen
 
     return cryptoStatus;
 }
-#endif
-
+#else
 
 /**
  * get_next_line() - find and locate the new line pointer
@@ -271,6 +271,8 @@ static char *i_trim(char *str)
 
 	return str;
 }
+
+#endif
 
 /** struct hdd_cfg_entry - ini configuration entry
  * @name: name of the entry
@@ -571,10 +573,10 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
     macTable[0].value = &buffer_temp[0];
     macTable[1].value = &buffer_mac2[0];
     update_mac_from_string(hdd_ctx, &macTable[0], MACADDRESSUSED);
-    pHddCtx->num_provisioned_addr = MACADDRESSUSED;
-    hdd_populate_random_mac_addr(pHddCtx, QDF_MAX_CONCURRENCY_PERSONA - MACADDRESSUSED);
+    hdd_ctx->num_provisioned_addr = MACADDRESSUSED;
+    hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - MACADDRESSUSED);
     qdf_mem_copy(&customMacAddr,
-	     &pHddCtx->provisioned_mac_addr[0].bytes[0],
+             &hdd_ctx->provisioned_mac_addr[0].bytes[0],
              sizeof(tSirMacAddr));
 	sme_set_custom_mac_addr(customMacAddr);
 
