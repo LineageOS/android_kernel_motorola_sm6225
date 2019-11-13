@@ -1148,7 +1148,7 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				extcon_get_edev_by_phandle(&client->dev, 0);
 			if (IS_ERR(pplatData->ext_flip_det)) {
 				pplatData->ext_flip_det = NULL;
-				LOG_ERR("failed to get extcon flip dev\n", __func__);
+				LOG_ERR("failed to get extcon flip dev\n");
 			} else {
 				if(extcon_register_notifier(pplatData->ext_flip_det,
 					EXTCON_MECHANICAL, &pplatData->flip_notif))
