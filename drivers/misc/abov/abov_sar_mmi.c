@@ -9,7 +9,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#define DEBUG
+//#define DEBUG
 #define DRIVER_NAME "abov_sar"
 #define USE_SENSORS_CLASS
 #define USE_KERNEL_SUSPEND
@@ -58,16 +58,10 @@ static char _Buffer[128];
 #define S_PROX   1
 #define S_BODY   2
 
-#define ABOV_DEBUG 1
 #define LOG_TAG "<ABOV_LOG>"
 
-#if ABOV_DEBUG
 #define LOG_INFO(fmt, args...)    pr_info(LOG_TAG "[INFO]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
-#else
-#define LOG_INFO(fmt, args...)
-#endif
-
-#define LOG_DBG(fmt, args...)	pr_info(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
+#define LOG_DBG(fmt, args...)	pr_debug(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 #define LOG_ERR(fmt, args...)   pr_err(LOG_TAG "[ERR]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 
 static int last_val;
@@ -96,7 +90,7 @@ static void ForcetoTouched(pabovXX_t this)
 
 	pDevice = this->pDevice;
 	if (this && pDevice) {
-		LOG_INFO("ForcetoTouched()\n");
+		LOG_DBG("ForcetoTouched()\n");
 
 		pCurrentButton = pDevice->pbuttonInformation->buttons;
 		input_top = pDevice->pbuttonInformation->input_top;
@@ -109,7 +103,7 @@ static void ForcetoTouched(pabovXX_t this)
 			input_report_abs(input_bottom, ABS_DISTANCE, 1);
 			input_sync(input_bottom);
 		}
-		LOG_INFO("Leaving ForcetoTouched()\n");
+		LOG_DBG("Leaving ForcetoTouched()\n");
 	}
 }
 
@@ -134,7 +128,7 @@ static int write_register(pabovXX_t this, u8 address, u8 value)
 		i2c = this->bus;
 
 		returnValue = i2c_master_send(i2c, buffer, 2);
-		LOG_INFO("write_register Addr: 0x%x Val: 0x%x Return: %d\n",
+		LOG_DBG("write_register Addr: 0x%x Val: 0x%x Return: %d\n",
 				address, value, returnValue);
 	}
 	if (returnValue < 0) {
@@ -160,7 +154,7 @@ static int read_register(pabovXX_t this, u8 address, u8 *value)
 	if (this && value && this->bus) {
 		i2c = this->bus;
 		returnValue = i2c_smbus_read_byte_data(i2c, address);
-		LOG_INFO("read_register Addr: 0x%x Return: 0x%x\n",
+		LOG_DBG("read_register Addr: 0x%x Return: 0x%x\n",
 				address, returnValue);
 		if (returnValue >= 0) {
 			*value = returnValue;
@@ -170,7 +164,7 @@ static int read_register(pabovXX_t this, u8 address, u8 *value)
 		}
 	}
 	ForcetoTouched(this);
-	LOG_ERR("read_register-ForcetoTouched()\n");
+	LOG_DBG("read_register-ForcetoTouched()\n");
 	return -ENOMEM;
 }
 
@@ -199,7 +193,7 @@ static int abov_detect(struct i2c_client *client)
 			SLEEP(100);
 		}
 	}
-	LOG_INFO("abov detect failed!!!\n");
+	LOG_ERR("abov detect failed!!!\n");
 	return UNKONOW_MODE;
 }
 
@@ -239,7 +233,7 @@ static ssize_t manual_offset_calibration_show(struct device *dev,
 	u8 reg_value = 0;
 	pabovXX_t this = dev_get_drvdata(dev);
 
-	LOG_INFO("Reading IRQSTAT_REG\n");
+	LOG_DBG("Reading IRQSTAT_REG\n");
 	read_register(this, ABOV_IRQSTAT_REG, &reg_value);
 	return scnprintf(buf, PAGE_SIZE, "%d\n", reg_value);
 }
@@ -255,7 +249,7 @@ static ssize_t manual_offset_calibration_store(struct device *dev,
 	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
 	if (val) {
-		LOG_INFO("Performing manual_offset_calibration()\n");
+		LOG_DBG("Performing manual_offset_calibration()\n");
 		manual_offset_calibration(this);
 	}
 	return count;
@@ -317,7 +311,7 @@ static void hw_init(pabovXX_t this)
 		LOG_ERR("ERROR! platform data 0x%p\n", pDevice->hw);
 		/* Force to touched if error */
 		ForcetoTouched(this);
-		LOG_INFO("Hardware_init-ForcetoTouched()\n");
+		LOG_ERR("Hardware_init-ForcetoTouched()\n");
 	}
 }
 
@@ -392,7 +386,7 @@ static void touchProcess(pabovXX_t this)
 	pDevice = this->pDevice;
 	board = this->board;
 	if (this && pDevice) {
-		LOG_INFO("Inside touchProcess()\n");
+		LOG_DBG("Inside touchProcess()\n");
 		read_register(this, ABOV_IRQSTAT_REG, &i);
 
 		buttons = pDevice->pbuttonInformation->buttons;
@@ -415,7 +409,7 @@ static void touchProcess(pabovXX_t this)
 			switch (pCurrentButton->state) {
 			case IDLE: /* Button is being in far state! */
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
-					LOG_INFO("CS %d State=BODY.\n",
+					LOG_DBG("CS %d State=BODY.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 2);
@@ -427,7 +421,7 @@ static void touchProcess(pabovXX_t this)
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
 				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x05)) {
-					LOG_INFO("CS %d State=PROX.\n",
+					LOG_DBG("CS %d State=PROX.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 1);
@@ -439,13 +433,13 @@ static void touchProcess(pabovXX_t this)
 					pCurrentButton->state = S_PROX;
 					last_val = 0;
 				} else {
-					LOG_INFO("CS %d still in IDLE State.\n",
+					LOG_DBG("CS %d still in IDLE State.\n",
 							counter);
 				}
 				break;
 			case S_PROX: /* Button is being in proximity! */
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
-					LOG_INFO("CS %d State=BODY.\n",
+					LOG_DBG("CS %d State=BODY.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 2);
@@ -457,10 +451,10 @@ static void touchProcess(pabovXX_t this)
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
 				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x05)) {
-					LOG_INFO("CS %d still in PROX State.\n",
+					LOG_DBG("CS %d still in PROX State.\n",
 							counter);
 				} else{
-					LOG_INFO("CS %d State=IDLE.\n",
+					LOG_DBG("CS %d State=IDLE.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 0);
@@ -475,10 +469,10 @@ static void touchProcess(pabovXX_t this)
 				break;
 			case S_BODY: /* Button is being in 0mm! */
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
-					LOG_INFO("CS %d still in BODY State.\n",
+					LOG_DBG("CS %d still in BODY State.\n",
 							counter);
 				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x05)) {
-					LOG_INFO("CS %d State=PROX.\n",
+					LOG_DBG("CS %d State=PROX.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 1);
@@ -490,7 +484,7 @@ static void touchProcess(pabovXX_t this)
 					pCurrentButton->state = S_PROX;
 					last_val = 1;
 				} else{
-					LOG_INFO("CS %d State=IDLE.\n",
+					LOG_DBG("CS %d State=IDLE.\n",
 							counter);
 					if (board->cap_channel_top == counter) {
 						input_report_abs(input_top, ABS_DISTANCE, 0);
@@ -507,7 +501,7 @@ static void touchProcess(pabovXX_t this)
 				break;
 			};
 		}
-		LOG_INFO("Leaving touchProcess()\n");
+		LOG_DBG("Leaving touchProcess()\n");
 	}
 }
 
@@ -650,7 +644,7 @@ static ssize_t capsense_reset_store(struct class *class,
 	input_top = pDevice->pbuttonInformation->input_top;
 	input_bottom = pDevice->pbuttonInformation->input_bottom;
 
-	LOG_INFO("headset insert,going to force calibrate\n");
+	LOG_DBG("headset insert,going to force calibrate\n");
 	if (!count || (this == NULL))
 		return -EINVAL;
 
@@ -690,7 +684,7 @@ static ssize_t capsense_enable_store(struct class *class,
 		return -EINVAL;
 
 	if ((!strncmp(buf, "1", 1)) && (mEnabled == 0)) {
-		LOG_DBG("enable cap sensor\n");
+		LOG_INFO("enable cap sensor\n");
 		initialize(this);
 
 		input_report_abs(input_top, ABS_DISTANCE, 0);
@@ -699,7 +693,7 @@ static ssize_t capsense_enable_store(struct class *class,
 		input_sync(input_bottom);
 		mEnabled = 1;
 	} else if ((!strncmp(buf, "0", 1)) && (mEnabled == 1)) {
-		LOG_DBG("disable cap sensor\n");
+		LOG_INFO("disable cap sensor\n");
 
 		write_register(this, ABOV_CTRL_MODE_RET, 0x02);
 
@@ -709,7 +703,7 @@ static ssize_t capsense_enable_store(struct class *class,
 		input_sync(input_bottom);
 		mEnabled = 0;
 	} else {
-		LOG_DBG("unknown enable symbol\n");
+		LOG_ERR("unknown enable symbol\n");
 	}
 
 	return count;
@@ -736,7 +730,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	}
 
 	if ((enable == 1) && (mEnabled == 0)) {
-		LOG_DBG("enable cap sensor\n");
+		LOG_INFO("enable cap sensor\n");
 		initialize(this);
 
 		input_report_abs(input_top, ABS_DISTANCE, 0);
@@ -745,7 +739,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 		input_sync(input_bottom);
 		mEnabled = 1;
 	} else if ((enable == 0) && (mEnabled == 1)) {
-		LOG_DBG("disable cap sensor\n");
+		LOG_INFO("disable cap sensor\n");
 
 		write_register(this, ABOV_CTRL_MODE_RET, 0x02);
 		input_report_abs(input_top, ABS_DISTANCE, -1);
@@ -754,7 +748,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 		input_sync(input_bottom);
 		mEnabled = 0;
 	} else {
-		LOG_DBG("unknown enable symbol\n");
+		LOG_ERR("unknown enable symbol\n");
 	}
 
 	return 0;
@@ -784,7 +778,7 @@ static ssize_t capsense_calibrate_store(struct class *class,
 	if (!strncmp(buf, "1", 1))
 	manual_offset_calibration(this);
 
-	LOG_INFO("calibration done\n");
+	LOG_DBG("calibration done\n");
 
 	return count;
 }
@@ -872,12 +866,12 @@ static ssize_t reg_dump_store(struct class *class,
 	} else if (strcmp("calibrate\n", buf) == 0) {
 		write_register(this, ABOV_RECALI_REG, 0x01);
 	} else if (sscanf(buf, "%x,%x,%x", &reg, &val, &opt) == 3) {
-		LOG_DBG("%s, read reg = 0x%02x\n", __func__, *(u8 *)&reg);
+		LOG_DBG(" read reg = 0x%02x\n", *(u8 *)&reg);
 		this->read_reg = *((u8 *)&reg);
 		this->read_flag = 1;
 	} else if (sscanf(buf, "%x,%x", &reg, &val) == 2) {
-		LOG_DBG("%s,reg = 0x%02x, val = 0x%02x\n",
-				__func__, *(u8 *)&reg, *(u8 *)&val);
+		LOG_DBG("reg = 0x%02x, val = 0x%02x\n",
+				*(u8 *)&reg, *(u8 *)&val);
 		write_register(this, *((u8 *)&reg), *((u8 *)&val));
 	}
 
@@ -919,7 +913,7 @@ static int ps_get_state(struct power_supply *psy, bool *present)
 		return retval;
 	}
 	*present = (pval.intval) ? true : false;
-	LOG_INFO("%s is %s\n", psy->desc->name,
+	LOG_DBG("%s is %s\n", psy->desc->name,
 			(*present) ? "present" : "not present");
 	return 0;
 }
@@ -943,7 +937,7 @@ static int ps_notify_callback(struct notifier_block *self,
 #endif
 			&& psy &&  psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "usb", sizeof("usb"))) {
-		LOG_INFO("ps notification: event = %lu\n", event);
+		LOG_DBG("ps notification: event = %lu\n", event);
 		retval = ps_get_state(psy, &present);
 		if (retval) {
 			LOG_ERR("psy get property failed\n");
@@ -952,7 +946,7 @@ static int ps_notify_callback(struct notifier_block *self,
 
 		if (event == PSY_EVENT_PROP_CHANGED) {
 			if (this->ps_is_present == present) {
-				LOG_INFO("ps present state not change\n");
+				LOG_DBG("ps present state not change\n");
 				return 0;
 			}
 		}
@@ -1044,7 +1038,7 @@ static int abov_tk_check_busy(struct i2c_client *client)
 		if (val & 0x01) {
 			count++;
 			if (count > 1000) {
-				LOG_INFO("%s: val = 0x%x\r\n", __func__, val);
+				LOG_ERR("val = 0x%x\r\n", val);
 				return ret;
 			}
 		} else {
@@ -1116,7 +1110,7 @@ static int i2c_adapter_read_raw(struct i2c_client *client, u8 *data, u8 len)
 		}
 
 		if (ret < 0) {
-			LOG_ERR("%s fail(data read)(%d)\n", __func__, retry);
+			LOG_ERR("fail(data read)(%d)\n", retry);
 			SLEEP(10);
 		}
 	}
@@ -1257,7 +1251,7 @@ static int _abov_fw_update(struct i2c_client *client, const u8 *image, u32 size)
 	unsigned char data[32] = {0, };
 	pabovXX_t this = abov_sar_ptr;
 
-	LOG_INFO("%s: call in\r\n", __func__);
+	LOG_INFO(": call in\r\n");
 
 	if (abov_tk_reset_for_bootmode(client) < 0) {
 		LOG_ERR("don't reset(enter boot mode)!");
@@ -1470,13 +1464,13 @@ static void capsense_update_work(struct work_struct *work)
 {
 	pabovXX_t this = container_of(work, abovXX_t, fw_update_work.worker);
 
-	LOG_INFO("%s: start update firmware\n", __func__);
+	LOG_INFO(": start update firmware\n");
 	mutex_lock(&this->mutex);
 	this->loading_fw = true;
 	abov_fw_update(this->fw_update_work.force_update);
 	this->loading_fw = false;
 	mutex_unlock(&this->mutex);
-	LOG_INFO("%s: update firmware end\n", __func__);
+	LOG_INFO(": update firmware end\n");
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
@@ -1557,7 +1551,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct input_dev *input_bottom = NULL;
 	struct power_supply *psy = NULL;
 
-	LOG_DBG("abov_probe()\n");
+	LOG_INFO("abov_probe()\n");
 
 	if (!i2c_check_functionality(client->adapter,
 				I2C_FUNC_SMBUS_READ_WORD_DATA)) {
@@ -1577,14 +1571,14 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			ret = PTR_ERR(pplatData->cap_vdd);
 			goto err_vdd_defer;
 		}
-		LOG_ERR("%s: Failed to get regulator\n", __func__);
+		LOG_ERR("Failed to get regulator\n");
 	} else {
 		ret = regulator_enable(pplatData->cap_vdd);
 
 		if (ret) {
 			regulator_put(pplatData->cap_vdd);
-			LOG_ERR("%s: Error %d enable regulator\n",
-					__func__, ret);
+			LOG_ERR("Error %d enable regulator\n",
+					 ret);
 			goto err_vdd_defer;
 		}
 		pplatData->cap_vdd_en = true;
@@ -1675,7 +1669,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			pDevice->pbuttonInformation->input_top = input_top;
 			input_top->name = "ABOV Cap Touch top";
 			if (input_register_device(input_top)) {
-				LOG_INFO("add top cap touch unsuccess\n");
+				LOG_ERR("add top cap touch unsuccess\n");
 				ret = -ENOMEM;
 				goto err_top_register;
 			}
@@ -1693,7 +1687,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			/* save the input pointer and finish initialization */
 			input_bottom->name = "ABOV Cap Touch bottom";
 			if (input_register_device(input_bottom)) {
-				LOG_INFO("add bottom cap touch unsuccess\n");
+				LOG_ERR("add bottom cap touch unsuccess\n");
 				ret = -ENOMEM;
 				goto err_bottom_register;
 			}
@@ -1759,63 +1753,63 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		INIT_WORK(&this->fw_update_work.worker, capsense_update_work);
 		schedule_work(&this->fw_update_work.worker);
 
-		LOG_DBG("abov_probe() SUCCESS\n");
+		LOG_INFO("abov_probe() SUCCESS\n");
 		return  0;
 	}
 	ret =  -ENOMEM;
 	goto err_this_device;
 
 free_ps_notifier:
-	LOG_ERR("%s unregister bottom classdev and ps_notif.\n", __func__);
+	LOG_ERR("unregister bottom classdev and ps_notif.\n");
 	power_supply_unreg_notifier(&this->ps_notif);
 	sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
 
 err_bottom_classdev:
-	LOG_ERR("%s unregister top classdev.\n", __func__);
+	LOG_ERR("unregister top classdev.\n");
 	sensors_classdev_unregister(&sensors_capsensor_top_cdev);
 
 err_class_creat:
-	LOG_ERR("%s unregister capsense class.\n", __func__);
+	LOG_ERR("unregister capsense class.\n");
 	class_unregister(&capsense_class);
 
 err_class_register:
-	LOG_ERR("%s unregister bottom device.\n", __func__);
+	LOG_ERR("unregister bottom device.\n");
 	input_unregister_device(input_bottom);
 
 err_bottom_register:
-	LOG_ERR("%s input free bottom device.\n", __func__);
+	LOG_ERR("input free bottom device.\n");
 	input_free_device(input_bottom);
 
 err_bottom_alloc:
-	LOG_ERR("%s unregister top device.\n", __func__);
+	LOG_ERR("unregister top device.\n");
 	input_unregister_device(input_top);
 
 err_top_register:
-	LOG_ERR("%s input free top device.\n", __func__);
+	LOG_ERR("input free top device.\n");
 	input_free_device(input_top);
 
 err_top_alloc:
-	LOG_ERR("%s input free pDevice.\n", __func__);
+	LOG_ERR("input free pDevice.\n");
 	kfree(this->pDevice);
 
 err_pDevice:
-	LOG_ERR("%s free device this.\n", __func__);
+	LOG_ERR("free device this.\n");
 	kfree(this);
 
 err_this_device:
-	LOG_ERR("%s device this defer.\n", __func__);
+	LOG_ERR("device this defer.\n");
 #if 0
 	regulator_disable(pplatData->cap_svdd);
 	regulator_put(pplatData->cap_svdd);
 
 err_svdd_error:
-	LOG_DBG("%s svdd defer.\n", __func__);
+	LOG_DBG("svdd defer.\n");
 	regulator_disable(pplatData->cap_vdd);
 	regulator_put(pplatData->cap_vdd);
 #endif
 
 err_vdd_defer:
-	LOG_ERR("%s free pplatData.\n", __func__);
+	LOG_ERR("free pplatData.\n");
 
 
 	kfree(pplatData);
@@ -1945,12 +1939,12 @@ static void abovXX_process_interrupt(pabovXX_t this, u8 nirqlow)
 	int status = 0;
 
 	if (!this) {
-		pr_err("abovXX_worker_func, NULL abovXX_t\n");
+		LOG_ERR("abovXX_worker_func, NULL abovXX_t\n");
 		return;
 	}
 	/* since we are not in an interrupt don't need to disable irq. */
 	status = this->refreshStatus(this);
-	LOG_INFO("Worker - Refresh Status %d\n", status);
+	LOG_DBG("Worker - Refresh Status %d\n", status);
 	this->statusFunc[6](this);
 	if (unlikely(this->useIrqTimer && nirqlow)) {
 		/* In case we need to send a timer for example on a touchscreen
@@ -1958,7 +1952,7 @@ static void abovXX_process_interrupt(pabovXX_t this, u8 nirqlow)
 		 */
 		cancel_delayed_work(&this->dworker);
 		schedule_delayed_work(&this->dworker, msecs_to_jiffies(this->irqTimeout));
-		LOG_INFO("Schedule Irq timer");
+		LOG_DBG("Schedule Irq timer");
 	}
 }
 
@@ -1987,11 +1981,11 @@ static irqreturn_t abovXX_interrupt_thread(int irq, void *data)
 	this = data;
 
 	mutex_lock(&this->mutex);
-	LOG_INFO("abovXX_irq\n");
+	LOG_DBG("abovXX_irq\n");
 	if ((!this->get_nirq_low) || this->get_nirq_low(this->board->irq_gpio))
 		abovXX_process_interrupt(this, 1);
 	else
-		LOG_DBG("abovXX_irq - nirq read high\n");
+		LOG_ERR("abovXX_irq - nirq read high\n");
 	mutex_unlock(&this->mutex);
 	return IRQ_HANDLED;
 }
@@ -2001,7 +1995,7 @@ static void abovXX_schedule_work(pabovXX_t this, unsigned long delay)
 	unsigned long flags;
 
 	if (this) {
-		LOG_INFO("abovXX_schedule_work()\n");
+		LOG_DBG("abovXX_schedule_work()\n");
 		spin_lock_irqsave(&this->lock, flags);
 		/* Stop any pending penup queues */
 		cancel_delayed_work(&this->dworker);
@@ -2021,14 +2015,14 @@ static irqreturn_t abovXX_irq(int irq, void *pvoid)
 return IRQ_HANDLED;
 	if (pvoid) {
 		this = (pabovXX_t)pvoid;
-		LOG_INFO("abovXX_irq\n");
+		LOG_DBG("abovXX_irq\n");
 		if ((!this->get_nirq_low) || this->get_nirq_low(this->board->irq_gpio)) {
-			LOG_INFO("abovXX_irq - Schedule Work\n");
+			LOG_DBG("abovXX_irq - Schedule Work\n");
 			abovXX_schedule_work(this, 0);
 		} else
-			LOG_INFO("abovXX_irq - nirq read high\n");
+			LOG_ERR("abovXX_irq - nirq read high\n");
 	} else
-		LOG_INFO("abovXX_irq, NULL pvoid\n");
+		LOG_ERR("abovXX_irq, NULL pvoid\n");
 	return IRQ_HANDLED;
 }
 
@@ -2053,11 +2047,11 @@ static void abovXX_worker_func(struct work_struct *work)
 		/* since we are not in an interrupt don't need to disable irq. */
 		status = this->refreshStatus(this);
 		counter = -1;
-		LOG_INFO("Worker - Refresh Status %d\n", status);
+		LOG_DBG("Worker - Refresh Status %d\n", status);
 		while ((++counter) < MAX_NUM_STATUS_BITS) { /* counter start from MSB */
-			LOG_INFO("Looping Counter %d\n", counter);
+			LOG_DBG("Looping Counter %d\n", counter);
 			if (((status >> counter) & 0x01) && (this->statusFunc[counter])) {
-				LOG_INFO("Function Pointer Found. Calling\n");
+				LOG_DBG("Function Pointer Found. Calling\n");
 				this->statusFunc[counter](this);
 			}
 		}
@@ -2075,7 +2069,7 @@ static void abovXX_worker_func(struct work_struct *work)
 void abovXX_suspend(pabovXX_t this)
 {
 	if (this) {
-		LOG_INFO("ABOV suspend: disable irq!\n");
+		LOG_DBG("ABOV suspend: disable irq!\n");
 		disable_irq(this->irq);
 		/* if upper layer don't disable capsensor, */
 		/* we  should let it enter sleep in suspend. */
@@ -2086,7 +2080,7 @@ void abovXX_suspend(pabovXX_t this)
 void abovXX_resume(pabovXX_t this)
 {
 	if (this) {
-		LOG_INFO("ABOV resume: enable irq!\n");
+		LOG_DBG("ABOV resume: enable irq!\n");
 		/* we should let capsensor enter active in resume*/
 		if (mEnabled)
 			write_register(this, ABOV_CTRL_MODE_RET, 0x00);
@@ -2129,14 +2123,14 @@ int abovXX_sar_init(pabovXX_t this)
 			return err;
 		}
 #ifdef USE_THREADED_IRQ
-		LOG_DBG("registered with threaded irq (%d)\n", this->irq);
+		LOG_INFO("registered with threaded irq (%d)\n", this->irq);
 #else
-		LOG_DBG("registered with irq (%d)\n", this->irq);
+		LOG_INFO("registered with irq (%d)\n", this->irq);
 #endif
 		/* call init function pointer (this should initialize all registers */
 		if (this->init)
 			return this->init(this);
-		LOG_DBG("No init function!!!!\n");
+		LOG_ERR("No init function!!!!\n");
 	}
 	return -ENOMEM;
 }

@@ -111,7 +111,7 @@ static int sx933x_i2c_write_16bit(psx93XX_t this, u16 reg_addr, u32 buf)
 
 		ret = i2c_transfer(i2c->adapter, &msg, 1);
 		if (ret < 0)
-			LOG_ERR("%s - i2c write reg 0x%x error %d\n", __func__, reg_addr, ret);
+			LOG_ERR(" i2c write reg 0x%x error %d\n", reg_addr, ret);
 
 	}
 	return ret;
@@ -151,7 +151,7 @@ static int sx933x_i2c_read_16bit(psx93XX_t this, u16 reg_addr, u32 *data32)
 
 		ret = i2c_transfer(i2c->adapter, msg, 2);
 		if (ret < 0)
-			LOG_ERR("%s - i2c read reg 0x%x error %d\n", __func__, reg_addr, ret);
+			LOG_ERR("i2c read reg 0x%x error %d\n", reg_addr, ret);
 
 		data32[0] = ((u32)buf[0]<<24) | ((u32)buf[1]<<16) | ((u32)buf[2]<<8) | ((u32)buf[3]);
 
@@ -328,13 +328,13 @@ static ssize_t sx933x_register_write_store(struct class *class,
 
 	if (sscanf(buf, "%x,%x", &reg_address, &val) != 2)
 	{
-		LOG_ERR("%s - The number of data are wrong\n",__func__);
+		LOG_ERR("The number of data are wrong\n");
 		return -EINVAL;
 	}
 
 	sx933x_i2c_write_16bit(this, reg_address, val);
 
-	LOG_DBG("%s - Register(0x%x) data(0x%x)\n",__func__, reg_address, val);
+	LOG_DBG("Register(0x%x) data(0x%x)\n", reg_address, val);
 	return count;
 }
 
@@ -349,14 +349,14 @@ static ssize_t sx933x_register_read_store(struct class *class,
 
 	if (sscanf(buf, "%x", &regist) != 1)
 	{
-		LOG_ERR("%s - The number of data are wrong\n",__func__);
+		LOG_ERR(" The number of data are wrong\n");
 		return -EINVAL;
 	}
 
 	sx933x_i2c_read_16bit(this, regist, &val);
 	nirq_state = sx933x_get_nirq_state();
 
-	LOG_DBG("%s - Register(0x%2x) data(0x%4x) nirq_state(%d)\n",__func__, regist, val, nirq_state);
+	LOG_DBG("Register(0x%2x) data(0x%4x) nirq_state(%d)\n", regist, val, nirq_state);
 	return count;
 }
 
@@ -382,7 +382,7 @@ static ssize_t manual_offset_calibration_store(struct class *class,
 
 	if (kstrtoul(buf, 10, &val))                //(strict_strtoul(buf, 10, &val)) {
 	{
-		LOG_ERR(" %s - Invalid Argument\n", __func__);
+		LOG_ERR("Invalid Argument\n");
 		return -EINVAL;
 	}
 
@@ -646,8 +646,7 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 	rc = of_property_read_u32(dNode,"Semtech,power-supply-type",&pdata->power_supply_type);
 	if(rc < 0){
 		pdata->power_supply_type = SX933X_POWER_SUPPLY_TYPE_PMIC_LDO;
-		LOG_INFO("%s :pmic ldo is the default if not set power-supply-type in dt\n",
-					__func__);
+		LOG_INFO("pmic ldo is the default if not set power-supply-type in dt\n");
 	}
 
 	switch(pdata->power_supply_type){
@@ -661,10 +660,10 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 			/* parse the gpio number for external LDO enable pin*/
 			pdata->eldo_gpio = of_get_named_gpio_flags(dNode,
 					"Semtech,eldo-gpio",0,&flags);
-			LOG_INFO("%s -  used eLDO_gpio 0x%x \n", __func__, pdata->eldo_gpio);
+			LOG_INFO("used eLDO_gpio 0x%x \n", pdata->eldo_gpio);
 			break;
 		default:
-			LOG_INFO("%s -  Error power_supply_type: 0x%x \n", __func__, pdata->power_supply_type);
+			LOG_INFO("Error power_supply_type: 0x%x \n", pdata->power_supply_type);
 			break;
 	}
 
@@ -672,27 +671,27 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 			"Semtech,nirq-gpio", 0, &flags);
 	irq_gpio_num = pdata->irq_gpio;
 	if (pdata->irq_gpio < 0){
-		LOG_ERR("%s - get irq_gpio error\n", __func__);
+		LOG_ERR("get irq_gpio error\n");
 		return -ENODEV;
 	}
 
 	pdata->button_used_flag = 0;
 	of_property_read_u32(dNode,"Semtech,button-flag",&pdata->button_used_flag);
-	LOG_INFO("%s -  used button 0x%x \n", __func__, pdata->button_used_flag);
+	LOG_INFO("used button 0x%x \n", pdata->button_used_flag);
 
 #ifdef USE_DTS_REG
 	// load in registers from device tree
 	of_property_read_u32(dNode,"Semtech,reg-num",&pdata->i2c_reg_num);
 	// layout is register, value, register, value....
 	// if an extra item is after just ignore it. reading the array in will cause it to fail anyway
-	LOG_INFO("%s -  size of elements %d \n", __func__,pdata->i2c_reg_num);
+	LOG_INFO("size of elements %d \n", pdata->i2c_reg_num);
 	if (pdata->i2c_reg_num > 0)
 	{
 		// initialize platform reg data array
 		pdata->pi2c_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->i2c_reg_num, GFP_KERNEL);
 		if (unlikely(pdata->pi2c_reg == NULL))
 		{
-			LOG_ERR("%s -  size of elements %d alloc error\n", __func__,pdata->i2c_reg_num);
+			LOG_ERR("size of elements %d alloc error\n", pdata->i2c_reg_num);
 			return -ENOMEM;
 		}
 
@@ -701,7 +700,7 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 			return -ENOMEM;
 	}
 #endif
-	LOG_INFO("%s -[%d] parse_dt complete\n", __func__,pdata->irq_gpio);
+	LOG_INFO("-[%d] parse_dt complete\n", pdata->irq_gpio);
 	return 0;
 }
 
@@ -714,7 +713,7 @@ static int sx933x_init_platform_hw(struct i2c_client *client)
 
 	int rc = 0;
 
-	LOG_INFO("%s init_platform_hw start!",__func__);
+	LOG_INFO("init_platform_hw start!");
 
 	if (this && (pDevice = this->pDevice) && (pdata = pDevice->hw))
 	{
@@ -741,7 +740,7 @@ static int sx933x_init_platform_hw(struct i2c_client *client)
 	}
 	else
 	{
-		LOG_ERR("%s - Do not init platform HW", __func__);
+		LOG_ERR("Do not init platform HW");
 	}
 	return rc;
 }
@@ -1088,14 +1087,14 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 						err = PTR_ERR(pplatData->cap_vdd);
 						return err;
 					}
-					LOG_INFO("%s: Failed to get regulator\n", __func__);
+					LOG_INFO("Failed to get regulator\n");
 				} else {
-					LOG_INFO("%s: with cap_vdd\n",  __func__);
+					LOG_INFO("with cap_vdd\n");
 					err = regulator_enable(pplatData->cap_vdd);
 					if (err) {
 						regulator_put(pplatData->cap_vdd);
-						LOG_ERR("%s: Error %d enable regulator\n",
-								__func__, err);
+						LOG_ERR("Error %d enable regulator\n",
+								err);
 						return err;
 					}
 					pplatData->cap_vdd_en = true;
@@ -1105,11 +1104,11 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				}
 				break;
 			case SX933X_POWER_SUPPLY_TYPE_ALWAYS_ON:
-				LOG_INFO("%s: using always on power supply\n",  __func__);
+				LOG_INFO("using always on power supply\n");
 				break;
 			case SX933X_POWER_SUPPLY_TYPE_EXTERNAL_LDO:
-				LOG_INFO("%s: enable external LDO, en_gpio:%d\n",
-						__func__, pplatData->eldo_gpio);
+				LOG_INFO("enable external LDO, en_gpio:%d\n",
+						 pplatData->eldo_gpio);
 				err = gpio_request(pplatData->eldo_gpio, "sx933x_eldo_gpio");
 				if (err < 0){
 					LOG_ERR("SX933x Request eLDO gpio. Fail![%d]\n", err);
@@ -1117,7 +1116,7 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				}
 				err = gpio_direction_output(pplatData->eldo_gpio,1);
 				if(err < 0){
-					LOG_ERR("%s:can not enable external LDO,%d",__func__, err);
+					LOG_ERR("can not enable external LDO,%d", err);
 					return err;
 				}
 				pplatData->eldo_vdd_en = true;
