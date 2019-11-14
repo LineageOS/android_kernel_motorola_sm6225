@@ -3551,6 +3551,7 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 				chip->temp_zones[i].fcc_norm_ma);
 		}
 		chip->pres_temp_zone = ZONE_NONE;
+		chip->pres_chrg_step = STEP_NONE;
 	}
 
 	rc = of_property_read_u32(node, "qcom,iterm-ma",
