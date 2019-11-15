@@ -1416,7 +1416,7 @@ int __iw_softap_modify_acl(struct net_device *dev,
 			   union iwreq_data *wrqu, char *extra)
 {
 	struct hdd_adapter *adapter = (netdev_priv(dev));
-	uint8_t *value = (uint8_t *) extra;
+	uint8_t *value = (uint8_t *)(wrqu->data.pointer);
 	uint8_t peer_mac[QDF_MAC_ADDR_SIZE];
 	int list_type, cmd, i;
 	int ret;
@@ -1835,7 +1835,7 @@ static __iw_softap_disassoc_sta(struct net_device *dev,
 	/* iwpriv tool or framework calls this ioctl with
 	 * data passed in extra (less than 16 octets);
 	 */
-	peer_macaddr = (uint8_t *) (extra);
+	peer_macaddr = (uint8_t *) (wrqu->data.pointer);
 
 	hdd_debug("data " QDF_MAC_ADDR_FMT,
 		  QDF_MAC_ADDR_REF(peer_macaddr));
