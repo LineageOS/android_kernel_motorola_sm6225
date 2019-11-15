@@ -228,7 +228,6 @@ struct p938x_charger {
 
 	u16 stat;
 	u16 irq_stat;
-	bool		wired_connected;
 
 	struct delayed_work	heartbeat_work;
 
@@ -512,10 +511,32 @@ static int p938x_enable_charging(struct p938x_charger *chip, bool on)
 	return rc;
 }
 
+static inline void p938x_set_boost(struct p938x_charger *chip, int val)
+{
+	/* Assume if we turned the boost on we want to stay awake */
+	gpio_set_value(chip->wchg_boost.gpio, !!val);
+
+	if(val) {
+		set_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
+		p938x_pm_set_awake(chip, 1);
+		gpio_set_value(chip->wchg_en_n.gpio, 0);
+	} else {
+		clear_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
+		if (!p938x_is_chip_on(chip))
+			p938x_pm_set_awake(chip, 0);
+	}
+}
+
+static inline int p938x_get_boost(struct p938x_charger *chip)
+{
+	return gpio_get_value(chip->wchg_boost.gpio);
+}
+
 static int p938x_update_supplies_status(struct p938x_charger *chip)
 {
 	int rc;
 	union power_supply_propval prop = {0,};
+	int wired_connection;
 
 	if (!chip->usb_psy)
 		chip->usb_psy = power_supply_get_by_name("usb");
@@ -530,23 +551,22 @@ static int p938x_update_supplies_status(struct p938x_charger *chip)
 		return rc;
 	}
 
-	chip->wired_connected = !!prop.intval;
+	wired_connection = !!prop.intval;
 
 	/* TODO For now disable wireless charging when a usb cable is connected */
-	if (chip->wired_connected && !test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+	if (wired_connection) {
 		set_bit(WLS_FLAG_USB_CONNECTED, &chip->flags);
-		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags))
-			p938x_dbg(chip, PR_MOTO, "usb connected, tx mode enabled - keep wls on\n");
-		else if (test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags))
-			p938x_dbg(chip, PR_MOTO, "usb keep on enabled - keep wls on\n");
-		else {
+		if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags) &&
+				!test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags)) {
 			gpio_set_value(chip->wchg_en_n.gpio, 1);
-			p938x_dbg(chip, PR_MOTO, "usb connected, disabled wls\n");
+			/* Turn off boost too just in case */
+			p938x_set_boost(chip, 0);
+			p938x_dbg(chip, PR_MOTO, "usb and tx connected, disabled wls\n");
 		}
-	} else if (!chip->wired_connected && test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
+	}
+	else {
 		clear_bit(WLS_FLAG_USB_CONNECTED, &chip->flags);
 		gpio_set_value(chip->wchg_en_n.gpio, 0);
-		p938x_dbg(chip, PR_MOTO, "usb disconnected, enabled wls\n");
 	}
 
 	return 0;
@@ -674,26 +694,6 @@ disable_vreg:
 	return rc;
 }
 
-static inline void p938x_set_boost(struct p938x_charger *chip, int val)
-{
-	/* Assume if we turned the boost on we want to stay awake */
-	gpio_set_value(chip->wchg_boost.gpio, !!val);
-
-	if(val) {
-		set_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
-		p938x_pm_set_awake(chip, 1);
-	} else {
-		clear_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags);
-		if (!p938x_is_chip_on(chip))
-			p938x_pm_set_awake(chip, 0);
-	}
-}
-
-static inline int p938x_get_boost(struct p938x_charger *chip)
-{
-	return gpio_get_value(chip->wchg_boost.gpio);
-}
-
 static int p938x_set_dc_psp_prop(struct p938x_charger *chip,
 	enum power_supply_property psp,
 	union power_supply_propval val)
@@ -748,11 +748,6 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			return;
 		}
 
-		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
-			p938x_dbg(chip, PR_MOTO, "Disabled due to usb. Turning on for tx mode\n");
-			gpio_set_value(chip->wchg_en_n.gpio, 0);
-		}
-
 		/* Force dc in off so system doesn't see charger attached */
 		/* TODO are both dc_en and dc suspend needed? */
 		p938x_set_dc_suspend(chip, 1);
@@ -798,13 +793,6 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
 
 		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
-
-		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags)) {
-			if (!test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags)) {
-				p938x_dbg(chip, PR_MOTO, "usb connected, power off wls\n");
-				gpio_set_value(chip->wchg_en_n.gpio, 1);
-			}
-		}
 	}
 }
 
@@ -1250,14 +1238,16 @@ static int p938x_check_status(struct p938x_charger *chip)
 	}
 
 	if (irq_status & status & ST_VRECT_ON) {
-		/* Update usb status incase we powered on with it connected */
-		p938x_update_supplies_status(chip);
 		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
 			p938x_set_tx_mode(chip, 0);
 		}
-		p938x_pm_set_awake(chip, 1);
+
 		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
+		/* Update usb status incase we powered on with it connected */
+		p938x_update_supplies_status(chip);
+		p938x_pm_set_awake(chip, 1);
+
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
 				msecs_to_jiffies(2000));
@@ -1324,7 +1314,8 @@ static ssize_t usb_keep_on_store(struct device *dev,
 			gpio_set_value(chip->wchg_en_n.gpio, 0);
 	} else {
 		clear_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags);
-		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags))
+		if (test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags) &&
+				test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags))
 			gpio_set_value(chip->wchg_en_n.gpio, 1);
 	}
 
