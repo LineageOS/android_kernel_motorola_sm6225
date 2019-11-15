@@ -2977,6 +2977,10 @@ VL53L1_Error VL53L1_PerformXTalkCalibration(VL53L1_DEV Dev,
 	int16_t CalDistanceMm;
 	VL53L1_xtalk_calibration_results_t xtalk;
 
+	int16_t i;
+	uint32_t sum = 0;
+	VL53L1_CalibrationData_t  caldata;
+
 	LOG_FUNCTION_START("");
 
 	switch (CalibrationOption) {
@@ -2995,6 +2999,28 @@ VL53L1_Error VL53L1_PerformXTalkCalibration(VL53L1_DEV Dev,
 		BDTable[VL53L1_TUNING_XTALK_FULL_ROI_TARGET_DISTANCE_MM];
 		Status = VL53L1_run_hist_xtalk_extraction(Dev, CalDistanceMm,
 				&UnfilteredStatus);
+
+		/*fix for low xtalk coverglass*/
+                VL53L1_GetCalibrationData(Dev, &caldata);
+                for (i=0;i<12;i++){
+                      sum += caldata.xtalkhisto.xtalk_shape.bin_data[i];
+                }
+
+		if (((caldata.customer.algo__crosstalk_compensation_plane_offset_kcps) > 1024000)||
+			((sum>1048) || (sum<1000)))
+		{
+			caldata.customer.algo__crosstalk_compensation_plane_offset_kcps= 50;
+			Dev->LLData.xtalk_cal.algo__crosstalk_compensation_plane_offset_kcps = 50;
+			caldata.xtalkhisto.xtalk_shape.bin_data[0]=307;
+			caldata.xtalkhisto.xtalk_shape.bin_data[1]=410;
+			caldata.xtalkhisto.xtalk_shape.bin_data[2]=410;
+			caldata.xtalkhisto.xtalk_shape.bin_data[3]=307;
+			for (i=4;i<12;i++){
+				caldata.xtalkhisto.xtalk_shape.bin_data[i]=0;
+                       }
+			VL53L1_SetCalibrationData(Dev, &caldata);
+                }
+		/*end of fix for low xtalk coverglass*/
 		break;
 	default:
 		Status = VL53L1_ERROR_INVALID_PARAMS;
