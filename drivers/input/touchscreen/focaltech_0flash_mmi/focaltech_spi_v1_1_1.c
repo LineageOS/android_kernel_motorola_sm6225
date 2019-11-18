@@ -275,7 +275,7 @@ int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
             }
             break;
         } else {
-            FTS_DEBUG("data read(status=%x),retry=%d,ret=%d",
+            FTS_INFO("data read(status=%x),retry=%d,ret=%d",
                       rxbuf[3], i, ret);
             ret = -EIO;
             udelay(CS_HIGH_DELAY);
