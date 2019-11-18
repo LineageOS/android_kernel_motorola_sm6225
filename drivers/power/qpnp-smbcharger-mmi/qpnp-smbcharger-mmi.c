@@ -2550,10 +2550,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	max_fv_mv = chip->base_fv_mv;
 
 	mmi_find_temp_zone(chip, prm, stat->batt_temp);
-	if (prm->pres_temp_zone >=  chip->num_temp_zones)
-		zone = &prm->temp_zones[0];
-	else
-		zone = &prm->temp_zones[prm->pres_temp_zone];
+	zone = &prm->temp_zones[prm->pres_temp_zone];
 
 	if (!stat->charger_present && !is_wls_online(chip)) {
 		prm->pres_chrg_step = STEP_NONE;
