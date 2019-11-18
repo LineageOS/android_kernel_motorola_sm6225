@@ -1681,6 +1681,7 @@ static int goodix_esd_notifier_callback(struct notifier_block *nb,
 		break;
 	case NOTIFY_FWUPDATE_FAILED:
 	case NOTIFY_FWUPDATE_SUCCESS:
+	case NOTIFY_FWUPDATE_SKIP:
 	case NOTIFY_RESUME:
 	case NOTIFY_ESD_ON:
 		goodix_ts_esd_on(ts_esd->ts_core);
@@ -2030,6 +2031,11 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 	ts_info("notify event type 0x%x", (unsigned int)action);
 	switch (action) {
 	case NOTIFY_FWUPDATE_SUCCESS:
+		/* send normal-cfg to firmware */
+		r = ts_dev->hw_ops->send_config(ts_dev, &(ts_dev->normal_cfg));
+		if (r < 0)
+			ts_info("failed send normal config[ignore]");
+	case NOTIFY_FWUPDATE_SKIP:
 	case NOTIFY_FWUPDATE_FAILED:
 		r = hw_ops->read_version(ts_dev, &ts_dev->chip_version);
 		if (r < 0)

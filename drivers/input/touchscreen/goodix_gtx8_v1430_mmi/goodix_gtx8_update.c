@@ -1175,8 +1175,13 @@ out:
 		ts_err("fw update failed, %d", r);
 		goodix_ts_blocking_notify(NOTIFY_FWUPDATE_FAILED, NULL);
 	} else {
-		ts_info("fw update success");
-		goodix_ts_blocking_notify(NOTIFY_FWUPDATE_SUCCESS, NULL);
+		if (fwu_ctrl->status == UPSTA_SUCCESS) {
+			ts_info("fw update success");
+			goodix_ts_blocking_notify(NOTIFY_FWUPDATE_SUCCESS, NULL);
+		} else if (fwu_ctrl->status == UPSTA_ABORT) {
+			ts_info("fw update skiped");
+			goodix_ts_blocking_notify(NOTIFY_FWUPDATE_SKIP, NULL);
+		}
 	}
 	return r;
 }
