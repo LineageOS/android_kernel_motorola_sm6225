@@ -522,6 +522,12 @@ TAS2562_INTERRUPTCONFIGURATION_PININTCONFIG10_ASSERT2MSONLATCHEDINTERRUPTS \
 
 #define TAS2562_ICN_REG TAS2562_REG(0x0, 0x2, 0x64)
 
+#define TAS2562_DVC_REG TAS2562_REG(0x0, 0x2, 0x0c)
+#define TAS2562_DVC_CFG1_REG TAS2562_REG(0x0, 0x2, 0x0c)
+#define TAS2562_DVC_CFG2_REG TAS2562_REG(0x0, 0x2, 0x0d)
+#define TAS2562_DVC_CFG3_REG TAS2562_REG(0x0, 0x2, 0x0e)
+#define TAS2562_DVC_CFG4_REG TAS2562_REG(0x0, 0x2, 0x0f)
+
 #define TAS2562_TESTPAGECONFIGURATION TAS2562_REG(0x0, 0xfd, 0xd)
 #define TAS2562_CLASSDCONFIGURATION1	TAS2562_REG(0x0, 0xfd, 0x19)
 #define TAS2562_CLASSDCONFIGURATION2	TAS2562_REG(0x0, 0xfd, 0x32)
@@ -660,6 +666,7 @@ bool i2c_suspend;
 int mn_channels;
 int spk_l_control;
 int spk_r_control;
+int spk_digital_vol;
 int (*read)(struct tas2562_priv *p_tas2562, enum channel chn,
 	unsigned int reg, unsigned int *pValue);
 int (*write)(struct tas2562_priv *p_tas2562, enum channel chn,
