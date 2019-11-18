@@ -2628,7 +2628,8 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 				prm->pres_chrg_step = STEP_FULL;
 		}
 	} else if (prm->pres_chrg_step == STEP_FULL) {
-		if (stat->batt_soc <= 99) {
+		if ((stat->batt_soc <= 99) ||
+			stat->batt_mv < (max_fv_mv - HYST_STEP_MV * 2)) {
 			prm->chrg_taper_cnt = 0;
 			prm->pres_chrg_step = STEP_NORM;
 		}
