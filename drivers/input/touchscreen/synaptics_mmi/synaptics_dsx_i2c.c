@@ -4873,6 +4873,10 @@ static void synaptics_rmi4_f51_handler(struct synaptics_rmi4_data *rmi4_data,
 	if (!regs)
 		return;
 
+	reg = find_packet_reg(regs, 0);
+	if (!reg)
+		return;
+
 	error = synaptics_rmi4_read_packet_reg(rmi4_data, regs,	reg->r_number);
 	if (error < 0) {
 		pr_err("F51 read failed\n");
@@ -7268,7 +7272,7 @@ static int synaptics_dsx_sysfs_touchscreen(
 
 		rmi4_data->ts_class_dev = device_create(touchscreen_class,
 				NULL, MKDEV(INPUT_MAJOR, minor),
-				rmi4_data, class_fname);
+				rmi4_data, !rmi4_data->class_entry_name ? CLASS_PRIMARY_FNAME : "secondary");
 		if (IS_ERR(rmi4_data->ts_class_dev)) {
 			error = PTR_ERR(rmi4_data->ts_class_dev);
 			rmi4_data->ts_class_dev = NULL;
@@ -7547,15 +7551,15 @@ err_gpio_free:
 
 static int dummy_init(struct synaptics_rmi4_data *rmi4_data)
 {
-	struct synaptics_rmi4_data *ptr = rmi4_data;
-	ptr = ptr;
+	struct synaptics_rmi4_data *ptr;
+	ptr = rmi4_data;
 	return 0;
 }
 
 static void dummy_remove(struct synaptics_rmi4_data *rmi4_data)
 {
 	struct synaptics_rmi4_data *ptr = rmi4_data;
-	ptr = ptr;
+	ptr = rmi4_data;
 }
 
  /**
@@ -8157,17 +8161,11 @@ static int synaptics_rmi4_resume(struct device *dev)
 	return 0;
 }
 
+#if !defined(CONFIG_FB) && defined(CONFIG_PM)
 static const struct dev_pm_ops synaptics_rmi4_dev_pm_ops = {
 	.suspend = synaptics_rmi4_suspend,
 	.resume  = synaptics_rmi4_resume,
 };
-
-#ifdef CONFIG_OF
-static const struct of_device_id synaptics_rmi4_match_tbl[] = {
-	{ .compatible = "synaptics," DRIVER_NAME },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, synaptics_rmi4_match_tbl);
 #endif
 
 static const struct i2c_device_id synaptics_rmi4_id_table[] = {
