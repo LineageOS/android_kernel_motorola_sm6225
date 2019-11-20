@@ -136,7 +136,7 @@ struct fts_ts_platform_data {
     u32 reset_gpio;
     u32 reset_gpio_flags;
     bool always_on_vio;
-    bool rst_in_resume;
+    bool dlfw_in_resume;
     bool share_reset_gpio;
     bool have_key;
     u32 key_number;
@@ -330,6 +330,8 @@ void fts_prc_queue_work(struct fts_ts_data *ts_data);
 int fts_fwupg_init(struct fts_ts_data *ts_data);
 int fts_fwupg_exit(struct fts_ts_data *ts_data);
 int fts_fw_recovery(void);
+int fts_fw_resume(bool need_reset);
+
 int fts_upgrade_bin(char *fw_name, bool force);
 int fts_enter_test_environment(bool test_state);
 int fts_fw_update_vendor_name(const char* name);
