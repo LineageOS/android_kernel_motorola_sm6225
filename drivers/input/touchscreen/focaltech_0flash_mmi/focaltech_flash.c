@@ -267,7 +267,7 @@ int fts_enter_test_environment(bool test_state)
     return 0;
 }
 
-static int fts_fw_resume(void)
+int fts_fw_resume(bool need_reset)
 {
     int ret = 0;
     struct fts_upgrade *upg = fwupgrade;
@@ -294,10 +294,10 @@ static int fts_fw_resume(void)
         FTS_ERROR("%s:firmware(%s) request fail,ret=%d\n",
                   __func__, fwname, ret);
         FTS_INFO("download fw from bootimage");
-        ret = fts_fw_download(upg->fw, upg->fw_length, false);
+        ret = fts_fw_download(upg->fw, upg->fw_length, need_reset);
     } else {
         FTS_INFO("firmware(%s) request successfully", fwname);
-        ret = fts_fw_download(fw->data, fw->size, false);
+        ret = fts_fw_download(fw->data, fw->size, need_reset);
     }
     if (ret < 0) {
         FTS_ERROR("fw resume download failed");
@@ -379,7 +379,7 @@ int fts_fw_recovery(void)
         FTS_INFO("abnormal situation,need download fw");
     }
 
-    ret = fts_fw_resume();
+    ret = fts_fw_resume(false);
     if (ret < 0) {
         FTS_ERROR("fts_fw_resume fail");
         return ret;
