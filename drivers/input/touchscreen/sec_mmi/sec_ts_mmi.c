@@ -33,6 +33,20 @@
 #include "sec_ts.h"
 #include "sec_mmi.h"
 
+#if defined(USE_STUBS)
+static struct class *local_touchscreen_class;
+struct class *get_touchscreen_class_ptr(void)
+{
+	pr_info("sec_mmi: stub %s\n", __func__);
+	return local_touchscreen_class;
+}
+void set_touchscreen_class_ptr(struct class *ptr)
+{
+	pr_info("sec_mmi: stub %s\n", __func__);
+	local_touchscreen_class = ptr;
+}
+#endif
+
 /* MMI specific sysfs entries and API */
 static ssize_t sec_mmi_reset_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
