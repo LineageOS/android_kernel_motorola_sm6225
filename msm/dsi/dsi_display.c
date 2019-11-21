@@ -4043,6 +4043,11 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 			break;
 	}
 
+	/* Parse mot extend feature supporting */
+	display->is_dsi_mot_ext_enabled = of_property_read_bool(of_node,
+				"qcom,platform-mot-ext-feature-enable");
+	pr_info("is_dsi_mot_ext_enabled\n", display->is_dsi_mot_ext_enabled);
+
 	DSI_DEBUG("success\n");
 error:
 	return rc;
@@ -5727,6 +5732,12 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 			goto end;
 	}
 
+	// Initialize mot extend code for early powern and debug tool feature
+	if ( display->is_dsi_mot_ext_enabled && index == DSI_PRIMARY ) {
+		dsi_display_ext_init(display);
+	}
+	pr_info("dsi_display_dev_probe: display(%p), name: %s, is_dsi_mot_ext_enabled=%d\n", display, (display->name==NULL)?"Null":display->name, display->is_dsi_mot_ext_enabled);
+
 	return 0;
 end:
 	if (display)
@@ -6339,8 +6350,12 @@ int dsi_display_get_info(struct drm_connector *connector,
 
 	info->is_connected = true;
 
-	if (!strcmp(display->display_type, "primary"))
+	if (!strcmp(display->display_type, "primary")) {
 		info->display_type = SDE_CONNECTOR_PRIMARY;
+		//Update panel info for Mot early power
+		if ( display->is_dsi_mot_ext_enabled )
+			display->is_dsi_mot_primary = true;
+	}
 	else if (!strcmp(display->display_type, "secondary"))
 		info->display_type = SDE_CONNECTOR_SECONDARY;
 
@@ -7073,6 +7088,14 @@ int dsi_display_set_mode(struct dsi_display *display,
 			timing.refresh_rate);
 
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));
+
+	//Update early power state
+	//This interface is called from dsi bridge, not moto early-power.
+	//It means it is system who want powr on display
+	//From now on early power on is forbidden
+	if ( display->is_dsi_mot_ext_enabled )
+		display->dsi_mot_ext.early_power_state = DSI_EARLY_POWER_FORBIDDEN;
+
 error:
 	mutex_unlock(&display->display_lock);
 	return rc;
@@ -7452,6 +7475,12 @@ int dsi_display_prepare(struct dsi_display *display)
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
 
+	//Check if Mot early power is on going...
+	if ( display->is_dsi_mot_ext_enabled && display->is_dsi_display_prepared ) {
+		pr_info("already prepared\n");
+		goto error;
+	}
+
 	mode = display->panel->cur_mode;
 
 	dsi_display_set_ctrl_esd_check_flag(display, false);
@@ -7576,6 +7605,11 @@ int dsi_display_prepare(struct dsi_display *display)
 			}
 		}
 	}
+
+	//Update prepare statue for Mot early power
+	if ( display->is_dsi_mot_ext_enabled )
+		display->is_dsi_display_prepared = true;
+
 	goto error;
 
 error_ctrl_link_off:
@@ -7987,6 +8021,12 @@ int dsi_display_enable(struct dsi_display *display)
 
 	mutex_lock(&display->display_lock);
 
+	//Check if Mot early power is on going
+	if ( display->is_dsi_mot_ext_enabled && dsi_panel_initialized(display->panel)) {
+		pr_info("panel already enabled\n");
+		goto error;
+	}
+
 	mode = display->panel->cur_mode;
 
 	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) {
@@ -8141,6 +8181,15 @@ int dsi_display_pre_disable(struct dsi_display *display)
 			DSI_ERR("[%s] panel pre-disable failed, rc=%d\n",
 				display->name, rc);
 	}
+
+
+        //Update early power state
+        //Here is called from dsi bridge, not moto early-power.
+        //It means it is system who want powr off display
+        //From now on early power on is permitted
+        if ( display->is_dsi_mot_ext_enabled )
+                display->dsi_mot_ext.early_power_state = DSI_EARLY_POWER_IDLE;
+
 	goto exit;
 
 error_disable_clks:
@@ -8167,6 +8216,14 @@ int dsi_display_disable(struct dsi_display *display)
 	DSI_INFO("%s(%s)+\n", __func__, display->drm_conn->name);
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
+
+	//Check is Mot early power is on going
+	pr_info("display %p, name %s is_dsi_mot_primary(%d)\n", display, display->name, display->is_dsi_mot_primary);
+	if ( display->is_dsi_mot_ext_enabled && !display->is_dsi_display_prepared) {
+		mutex_unlock(&display->display_lock);
+		pr_info("panel already unprepared\n");
+		return rc;
+	}
 
 	rc = dsi_display_wake_up(display);
 	if (rc)
@@ -8230,6 +8287,13 @@ int dsi_display_unprepare(struct dsi_display *display)
 
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
+
+	//Check if Mot early power is on going
+	if ( display->is_dsi_mot_ext_enabled && !dsi_panel_initialized(display->panel)) {
+		mutex_unlock(&display->display_lock);
+		pr_info("panel already disabled\n");
+		return rc;
+	}
 
 	rc = dsi_display_wake_up(display);
 	if (rc)
@@ -8297,6 +8361,10 @@ int dsi_display_unprepare(struct dsi_display *display)
 			DSI_ERR("[%s] panel post-unprepare failed, rc=%d\n",
 			       display->name, rc);
 	}
+
+	//Update prepare state for Mot early power
+	if ( display->is_dsi_mot_ext_enabled )
+		display->is_dsi_display_prepared = false;
 
 	mutex_unlock(&display->display_lock);
 
