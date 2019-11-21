@@ -36,6 +36,7 @@
 
 #define MAX_I2C_BUFFER_SIZE                 65536
 
+#define AW8697_WAV_SEQ_SIZE                 4
 #define AW8697_SEQUENCER_SIZE               8
 #define AW8697_SEQUENCER_LOOP_SIZE          4
 
@@ -206,6 +207,12 @@ enum aw8697_haptic_cmd {
 	AW8697_HAPTIC_CMD_STOP = 255,
 };
 
+enum aw8697_haptic_mode{
+	HAPTIC_NONE	= 0x00,
+	HAPTIC_SHORT	= 0x01,
+	HAPTIC_LONG	= 0x02,
+	HAPTIC_RTP	= 0x03,
+};
 /*********************************************************
  *
  * struct
@@ -283,6 +290,10 @@ struct aw8697_dts_info {
 	unsigned int r_spare;
 	unsigned int bstdbg[6];
 	unsigned int parameter1;
+	unsigned int long_gain_normal;
+	unsigned int long_gain_reduced;
+	unsigned int short_gain;
+	unsigned int rtp_gain;
 };
 
 struct aw8697 {
@@ -290,6 +301,8 @@ struct aw8697 {
 	struct i2c_client *i2c;
 	struct device *dev;
 	struct input_dev *input;
+
+	struct wakeup_source *ws;
 
 	struct mutex lock;
 	struct mutex rtp_lock;
@@ -316,6 +329,7 @@ struct aw8697 {
 
 	int reset_gpio;
 	int irq_gpio;
+	int haptic_context_gpio;
 
 	unsigned char hwen_flag;
 	unsigned char flags;
@@ -333,6 +347,8 @@ struct aw8697 {
 	int index;
 	int vmax;
 	int gain;
+	int gain_debug;
+	bool debugfs_debug;
 
 	unsigned char seq[AW8697_SEQUENCER_SIZE];
 	unsigned char loop[AW8697_SEQUENCER_SIZE];
@@ -357,12 +373,13 @@ struct aw8697 {
 
 	struct trig trig[AW8697_TRIG_NUM];
 
+	enum aw8697_haptic_mode  haptic_mode;
 	struct haptic_audio haptic_audio;
 	struct aw8697_dts_info info;
 	unsigned int ramupdate_flag;
 	unsigned int rtpupdate_flag;
-    unsigned int osc_cali_run;
-    unsigned int lra_calib_data;
+	unsigned int osc_cali_run;
+	unsigned int lra_calib_data;
 	unsigned int f0_calib_data;
 };
 
