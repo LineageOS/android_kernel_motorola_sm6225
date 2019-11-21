@@ -21,6 +21,7 @@
 #include "dsi_panel.h"
 #include "sde_connector.h"
 #include "sde_motUtil.h"
+#include "dsi_display_mot_ext.h"
 
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
@@ -265,6 +266,11 @@ struct dsi_display {
 	struct work_struct fifo_underflow_work;
 	struct work_struct fifo_overflow_work;
 	struct work_struct lp_rx_timeout_work;
+	/* used for moto feature early-pane- power to speed up the power on sequence */
+	bool is_dsi_mot_ext_enabled;
+	bool is_dsi_display_prepared;
+	bool is_dsi_mot_primary;
+	struct dsi_mot_ext_feature dsi_mot_ext;
 
 	/* firmware panel data */
 	const struct firmware *fw;
