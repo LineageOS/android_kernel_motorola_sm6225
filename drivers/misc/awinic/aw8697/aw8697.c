@@ -64,9 +64,9 @@ struct pm_qos_request pm_qos_req_vb;
  ******************************************************/
 #define AW8697_RTP_NAME_MAX        64
 static char *aw8697_ram_name = "aw8697_haptic.bin";
+static char *aw8697_cali_name = "aw8697_osc_rtp_24K_5s.bin";
 static char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
-	{"aw8697_osc_rtp_24K_5s.bin"},
-    {"aw8697_rtp.bin"},
+	{"aw8697_rtp.bin"},
 	{"aw8697_rtp_lighthouse.bin"},
 	{"aw8697_rtp_silk.bin"},
 };
@@ -1424,11 +1424,11 @@ static int aw8697_rtp_osc_calibration(struct aw8697 *aw8697)
 	pr_info("%s enter\n", __func__);
 	/* fw loaded */
 	ret = request_firmware(&rtp_file,
-			       aw8697_rtp_name[0],/*aw8697->rtp_file_num */
+			       aw8697_cali_name,
 			       aw8697->dev);
 	if (ret < 0) {
 		pr_err("%s: failed to read %s\n", __func__,
-		       aw8697_rtp_name[0]);/*aw8697->rtp_file_num */
+		       aw8697_cali_name);
 		return ret;
 	}
 	/*awinic add stop,for irq interrupt during calibrate*/
@@ -1446,7 +1446,7 @@ static int aw8697_rtp_osc_calibration(struct aw8697 *aw8697)
 	aw8697_rtp->len = rtp_file->size;
 	aw8697->rtp_len = rtp_file->size;
 	pr_info("%s: rtp file [%s] size = %d\n", __func__,
-		aw8697_rtp_name[0], aw8697_rtp->len);/*aw8697->rtp_file_num */
+		aw8697_cali_name, aw8697_rtp->len);
 	memcpy(aw8697_rtp->data, rtp_file->data, rtp_file->size);
 	release_firmware(rtp_file);
 	mutex_unlock(&aw8697->rtp_lock);
