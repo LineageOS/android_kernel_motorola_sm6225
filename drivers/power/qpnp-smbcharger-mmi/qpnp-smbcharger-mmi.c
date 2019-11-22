@@ -3907,7 +3907,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->soc_cycles_start = EMPTY_CYCLES;
 	chip->last_reported_soc = -1;
 	chip->last_reported_status = -1;
-	chip->sm_param[BASE_BATT].batt_health = POWER_SUPPLY_HEALTH_GOOD;
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
 	if (chip->qcom_psy) {
 		chip->batt_psy = devm_power_supply_register(chip->dev,
