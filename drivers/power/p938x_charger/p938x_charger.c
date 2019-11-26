@@ -75,6 +75,9 @@
 #define SYS_MODE_REG		0x004a
 #define SYS_CMD_REG		0x004C
 
+#define EPP_TX_GUARANTEED	0x0084
+#define EPP_TX_POTENTIAL	0x0085
+
 #define ST_TX_FOD_FAULT	BIT(15)
 #define ST_TX_CONFLICT	BIT(14)
 #define ST_RX_CONN		BIT(13)
@@ -108,8 +111,10 @@
 
 #define BPP_MAX_VOUT 5000
 #define BPP_MAX_IOUT 1600
+#define BPP_MAX_IDC  1000
 #define EPP_MAX_VOUT 12000
 #define EPP_MAX_IOUT 1600
+#define EPP_MAX_IDC  1250
 
 #define MIN_VOUT_SET 5000
 #define MAX_VOUT_SET 12000
@@ -225,6 +230,7 @@ struct p938x_charger {
 
 	u16 wls_vout_max;
 	u16 wls_iout_max;
+	int wls_idc_max;
 
 	u16 stat;
 	u16 irq_stat;
@@ -246,6 +252,20 @@ struct p938x_charger {
 	struct wakeup_source wls_wake_source;
 	bool	epp_mode;
 };
+
+struct p938x_limits {
+	unsigned int tx_capability_mw;
+	unsigned long idc_max_ma;
+};
+
+/* Lowest mW first, highest mW last */
+static struct p938x_limits p938x_epp_limits[] = {
+	{10000, 850},
+	{15000, 1250},
+};
+
+static const int p938x_epp_limit_num =
+	sizeof(p938x_epp_limits) / sizeof(struct p938x_limits);
 
 #define WLS_FLAG_BOOST_ENABLED 0
 #define WLS_FLAG_TX_ATTACHED   1
@@ -732,6 +752,20 @@ static int p938x_set_dc_en_override(struct p938x_charger *chip, int en)
 		val);
 }
 
+static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
+{
+	union power_supply_propval val;
+
+	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
+
+	idc *= 1000; /* Convert to uA */
+	val.intval = idc;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_CURRENT_MAX,
+		val);
+}
+
 static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 {
 	u8 buf = 0;
@@ -1087,10 +1121,32 @@ release_fw:
 	return rc;
 }
 
+static int p938x_get_tx_capability(struct p938x_charger *chip, int *guaranteed,
+	int *potential)
+{
+	u8 tmp;
+
+	if (!p938x_read_reg(chip, EPP_TX_POTENTIAL, &tmp))
+		*potential = 500 * tmp;
+	else
+		return 1;
+
+	if (!p938x_read_reg(chip, EPP_TX_GUARANTEED, &tmp))
+		*guaranteed = 500 * tmp;
+	else
+		return 1;
+
+	return 0;
+}
+
 static int p938x_check_system_mode(struct p938x_charger *chip)
 {
 	int rc;
+	int i;
 	u8 mode = 0;
+	int tx_guaranteed;
+	int tx_potential;
+	struct p938x_limits epp_limit = p938x_epp_limits[0];
 
 	rc = p938x_read_buffer(chip, SYS_MODE_REG, &mode, 1);
 	if (rc < 0)
@@ -1107,10 +1163,34 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 		if (mode & SYS_MODE_EXTENDED) {
 			p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_EXTENDED\n");
 			chip->epp_mode = true;
+
+			if (!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential)) {
+				p938x_dbg(chip, PR_INTERRUPT, "EPP GUARANTEED %dmW, POTENTIAL %dmW\n",
+					tx_guaranteed, tx_potential);
+
+				/* Default value is the lowest setting, start at the highest setting
+				 * and go backwards, if we find one more appropriate use that one
+				 * instead
+				 */
+				for(i=p938x_epp_limit_num-1; i >= 0; i--) {
+					if(tx_potential >= p938x_epp_limits[i].tx_capability_mw) {
+						epp_limit = p938x_epp_limits[i];
+						break;
+					}
+				}
+
+				p938x_dbg(chip, PR_INTERRUPT, "EPP LIMIT is %d mW -> %lu mA\n",
+					epp_limit.tx_capability_mw, epp_limit.idc_max_ma);
+
+				p938x_set_dc_max_icl_ma(chip, epp_limit.idc_max_ma);
+			} else
+				p938x_set_dc_max_icl_ma(chip, EPP_MAX_IDC);
+
 			p938x_set_rx_vout(chip, EPP_MAX_VOUT);
 			p938x_set_rx_ocl(chip, EPP_MAX_IOUT);
 		} else {
 			chip->epp_mode = false;
+			p938x_set_dc_max_icl_ma(chip, BPP_MAX_IDC);
 			p938x_set_rx_vout(chip, BPP_MAX_VOUT);
 			p938x_set_rx_ocl(chip, BPP_MAX_IOUT);
 		}
@@ -1120,6 +1200,8 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 			p938x_set_rx_vout(chip, chip->wls_vout_max);
 		if(chip->wls_iout_max)
 			p938x_set_rx_ocl(chip, chip->wls_iout_max);
+		if(chip->wls_idc_max)
+			p938x_set_dc_max_icl_ma(chip, chip->wls_idc_max);
 	}
 
 	return 0;
@@ -1358,6 +1440,46 @@ static ssize_t boost_show(struct device *dev,
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
 		p938x_get_boost(chip));
 }
+
+static ssize_t force_idc_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long value;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	r = kstrtoul(buf, 0, &value);
+	if (r) {
+		p938x_err(chip, "Invalid idc value = %ld\n", value);
+		return -EINVAL;
+	}
+
+	/* Store to persist change */
+	chip->wls_idc_max = value;
+
+	p938x_set_dc_max_icl_ma(chip, value);
+
+	return r ? r : count;
+}
+
+static ssize_t force_idc_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int rc;
+	union power_supply_propval prop = {0,};
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	rc = power_supply_get_property(chip->dc_psy,
+			POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
+	if (rc) {
+		p938x_err(chip, "Couldn't read IDC prop, rc=%d\n", rc);
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "Unknown\n");
+	}
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
+		prop.intval / 1000);
+}
 #endif
 
 static ssize_t tx_mode_store(struct device *dev,
@@ -1501,9 +1623,29 @@ static ssize_t program_fw_store(struct device *dev,
 	return r ? r : count;
 }
 
+static ssize_t tx_capability_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+	int tx_potential;
+	int tx_guaranteed;
+
+	if (!test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags))
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "No charger attached\n");
+
+	if (chip->epp_mode) {
+		if (!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential))
+			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP %dmW\n", tx_potential);
+		else
+			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP Unknown\n");
+	} else
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "BPP\n");
+}
+
 #ifdef P938X_USER_DEBUG
 static DEVICE_ATTR(usb_keep_on, S_IRUGO|S_IWUSR, usb_keep_on_show, usb_keep_on_store);
 static DEVICE_ATTR(boost, S_IRUGO|S_IWUSR, boost_show, boost_store);
+static DEVICE_ATTR(force_idc, S_IRUGO|S_IWUSR, force_idc_show, force_idc_store);
 #endif
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, chip_id_show, NULL);
@@ -1514,11 +1656,13 @@ static DEVICE_ATTR(fw_ver, S_IRUGO, fw_ver_show, NULL);
 static DEVICE_ATTR(fw_name, S_IWUSR, NULL, fw_name_store);
 static DEVICE_ATTR(program_fw_stat, S_IRUGO, program_fw_stat_show, NULL);
 static DEVICE_ATTR(program_fw, S_IWUSR, NULL, program_fw_store);
+static DEVICE_ATTR(tx_capability, S_IRUGO, tx_capability_show, NULL);
 
 static struct attribute *p938x_attrs[] = {
 #ifdef P938X_USER_DEBUG
 	&dev_attr_usb_keep_on.attr,
 	&dev_attr_boost.attr,
+	&dev_attr_force_idc.attr,
 #endif
 	&dev_attr_tx_mode.attr,
 	&dev_attr_chip_id_max.attr,
@@ -1529,6 +1673,7 @@ static struct attribute *p938x_attrs[] = {
 	&dev_attr_fw_name.attr,
 	&dev_attr_program_fw_stat.attr,
 	&dev_attr_program_fw.attr,
+	&dev_attr_tx_capability.attr,
 	NULL
 };
 
@@ -1598,6 +1743,10 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "ILIMIT_SET: %dmA\n", buf[0] * 100 + 100);
 	p938x_read_reg(chip, SYS_MODE_REG, &buf[0]);
 	seq_printf(m, "SYS_MODE: 0x%02x\n", buf[0]);
+	p938x_read_reg(chip, EPP_TX_GUARANTEED, &buf[0]);
+	seq_printf(m, "EPP_TX_GUARANTEED: 0x%02x\n", buf[0]);
+	p938x_read_reg(chip, EPP_TX_POTENTIAL, &buf[0]);
+	seq_printf(m, "EPP_TX_POTENTIAL: 0x%02x\n", buf[0]);
 
 	show_dump_flags(m, chip);
 
@@ -1834,8 +1983,10 @@ static int p938x_wls_prop_is_writeable(struct power_supply *psy,
 	int rc;
 
 	switch (psp) {
+#ifdef P938X_USER_DEBUG
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+#endif
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		rc = 1;
 		break;
