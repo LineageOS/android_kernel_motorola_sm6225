@@ -33,6 +33,8 @@
 #include "sec_ts.h"
 #include "sec_mmi.h"
 
+extern struct blocking_notifier_head dsi_freq_head;
+
 #if defined(USE_STUBS)
 static struct class *local_touchscreen_class;
 struct class *get_touchscreen_class_ptr(void)
@@ -360,6 +362,11 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 		}
 	}
 
+	if (of_property_read_bool(np, "sec,refresh-rate-update")) {
+		dev_info(DEV_MMI, "%s: using refresh rate update\n", __func__);
+		data->update_refresh_rate = true;
+	}
+
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;
@@ -575,34 +582,47 @@ static void sec_mmi_work(struct work_struct *w)
 	struct delayed_work *dw =
 		container_of(w, struct delayed_work, work);
 	struct sec_mmi_data *data =
-		container_of(dw, struct sec_mmi_data, detection_work);
+		container_of(dw, struct sec_mmi_data, work);
 	struct sec_ts_data *ts = data->ts_ptr;
-	int probe_status;
+	int rc, probe_status;
 	bool panel_ready = true;
 	char *pname = NULL;
 
-	/* DRM panel status */
-	panel_ready = dsi_display_is_panel_enable(data->ctrl_dsi,
-									&probe_status, &pname);
-	dev_dbg(DEV_MMI, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
-			__func__, probe_status, panel_ready, pname);
-	/* check if bound panel is not present */
-	if (pname && strstr(pname, "dummy")) {
-		dev_info(DEV_MMI, "%s: dummy panel detected\n", __func__);
-		//rmi4_data->drm_state = DRM_ST_TERM;
-	} else if (panel_ready) {
-		dev_dbg(DEV_MMI, "%s: panel ready\n", __func__);
-		//rmi4_data->drm_state = DRM_ST_READY;
+	switch (data->task) {
+	case MMI_TASK_INIT:
+		/* DRM panel status */
+		panel_ready = dsi_display_is_panel_enable(
+					data->ctrl_dsi, &probe_status, &pname);
+		dev_dbg(DEV_MMI, "%s: drm: probe=%d, enable=%d, panel'%s'\n",
+				__func__, probe_status, panel_ready, pname);
+		/* check if bound panel is not present */
+		if (pname && strstr(pname, "dummy")) {
+			dev_info(DEV_MMI, "%s: dummy panel detected\n", __func__);
+			//rmi4_data->drm_state = DRM_ST_TERM;
+		} else if (panel_ready) {
+			dev_dbg(DEV_MMI, "%s: panel ready\n", __func__);
+			//rmi4_data->drm_state = DRM_ST_READY;
+		}
+
+		if (ts->fw_invalid == false) {
+			sec_mmi_enable_touch(data);
+		} else /* stuck in BL mode, update productinfo to report 'se77c' */
+			ts->device_id[3] = 0x7C;
+
+		snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
+			tolower(ts->device_id[0]), tolower(ts->device_id[1]),
+			ts->device_id[2], ts->device_id[3]);
+			break;
+
+	case MMI_TASK_SET_RATE:
+		/* Switch refresh rate */
+		dev_info(DEV_MMI, "%s: writing refresh rate %dhz\n",
+				__func__, data->refresh_rate);
+		rc = ts->sec_ts_i2c_write(ts, 0x4C, &data->refresh_rate, 1);
+		if (rc < 0)
+			dev_err(DEV_MMI, "%s: failed refresh_rate (%d)\n", __func__, rc);
+			break;
 	}
-
-	if (ts->fw_invalid == false) {
-		sec_mmi_enable_touch(data);
-	} else /* stuck in BL mode, update productinfo to report 'se77c' */
-		ts->device_id[3] = 0x7C;
-
-	snprintf(data->product_id, sizeof(data->product_id), "%c%c%c%02x",
-				tolower(ts->device_id[0]), tolower(ts->device_id[1]),
-				ts->device_id[2], ts->device_id[3]);
 }
 
 static void sec_mmi_queued_resume(struct work_struct *w)
@@ -752,6 +772,30 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 	return 0;
 }
 
+static int sec_mmi_refresh_rate(struct notifier_block *nb,
+		unsigned long refresh_rate, void *ptr)
+{
+	struct sec_mmi_data *data =
+		container_of(nb, struct sec_mmi_data, freq_nb);
+	bool do_calibration = false;
+
+	if (!data)
+		return 0;
+
+	if (!data->refresh_rate ||
+		(data->refresh_rate != (refresh_rate & 0xFF))) {
+		data->refresh_rate = refresh_rate & 0xFF;
+		do_calibration = true;
+	}
+
+	if (do_calibration) {
+		data->task = MMI_TASK_SET_RATE;
+		schedule_delayed_work(&data->work, 0);
+	}
+
+	return 0;
+}
+
 static int sec_mmi_register_notifiers(
 	struct sec_mmi_data *data, bool enable)
 {
@@ -765,10 +809,21 @@ static int sec_mmi_register_notifiers(
 			data->ps_notif.notifier_call = sec_mmi_ps_notify_callback;
 			rc = power_supply_reg_notifier(&data->ps_notif);
 		}
+
+		if (data->update_refresh_rate) {
+			data->freq_nb.notifier_call = sec_mmi_refresh_rate;
+			rc = blocking_notifier_chain_register(
+				&dsi_freq_head, &data->freq_nb);
+		}
 	} else {
 		rc = msm_drm_unregister_client(&data->panel_nb);
 		if (data->usb_detection)
 			power_supply_unreg_notifier(&data->ps_notif);
+
+		if (data->update_refresh_rate) {
+			rc = blocking_notifier_chain_unregister(
+				&dsi_freq_head, &data->freq_nb);
+		}
 	}
 
 	if (!rc)
@@ -1166,11 +1221,12 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		}
 #endif
 		INIT_DELAYED_WORK(&data->resume_work, sec_mmi_queued_resume);
-		INIT_DELAYED_WORK(&data->detection_work, sec_mmi_work);
+		INIT_DELAYED_WORK(&data->work, sec_mmi_work);
 		if (data->usb_detection)
 			INIT_WORK(&data->ps_notify_work, sec_mmi_ps_work);
 
-		schedule_delayed_work(&data->detection_work, msecs_to_jiffies(50));
+		data->task = MMI_TASK_INIT;
+		schedule_delayed_work(&data->work, msecs_to_jiffies(50));
 	}
 
 	sec_mmi_touchscreen_class(data, enable);
@@ -1180,7 +1236,7 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 	if (!enable) {
 		sec_mmi_sysfs(data, true);
 		cancel_delayed_work(&data->resume_work);
-		cancel_delayed_work(&data->detection_work);
+		cancel_delayed_work(&data->work);
 		if (data->usb_detection)
 			cancel_work_sync(&data->ps_notify_work);
 		kfree(data);
