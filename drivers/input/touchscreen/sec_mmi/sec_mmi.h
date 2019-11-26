@@ -17,13 +17,24 @@ extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname)
 
 struct sec_ts_data;
 
+enum sec_mmi_task {
+	MMI_TASK_INIT = 0,
+	MMI_TASK_SET_RATE,
+};
+
 struct sec_mmi_data {
 	struct sec_ts_data *ts_ptr;
 	struct i2c_client *i2c_client;
 	struct device *ts_class_dev;
 	struct notifier_block panel_nb;
+
+	bool update_refresh_rate;
+	struct notifier_block freq_nb;
+	unsigned char refresh_rate;
+	enum sec_mmi_task task;
+
 	struct delayed_work resume_work;
-	struct delayed_work detection_work;
+	struct delayed_work work;
 
 	atomic_t touch_stopped;
 
