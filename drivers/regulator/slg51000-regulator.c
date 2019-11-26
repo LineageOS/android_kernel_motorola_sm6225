@@ -502,7 +502,7 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 	if (chip->chip_irq) {
 		ret = devm_request_threaded_irq(dev, chip->chip_irq, NULL,
 						slg51000_irq_handler,
-						(IRQF_TRIGGER_HIGH
+						(IRQF_TRIGGER_LOW
 						| IRQF_ONESHOT),
 						"slg51000-irq", chip);
 		if (ret != 0) {
