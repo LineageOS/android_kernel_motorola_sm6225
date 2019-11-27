@@ -138,6 +138,10 @@ struct aw8695 *g_aw8695;
 static void aw8695_interrupt_clear(struct aw8695 *aw8695);
 static int aw8695_haptic_trig_enable_config(struct aw8695 *aw8695);
 static void aw8695_vibrate(struct aw8695 *aw8695, int value);
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+extern int mot_actuator_on_vibrate_start(void);
+extern int mot_actuator_on_vibrate_stop(void);
+#endif
 
 /******************************************************
 *
@@ -626,12 +630,24 @@ static int aw8695_haptic_stop(struct aw8695 *aw8695)
 	aw8695_haptic_stop_delay(aw8695);
 	aw8695_haptic_play_mode(aw8695, AW8695_HAPTIC_STANDBY_MODE);
 
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+	if (aw8695->duration > 80)	{
+		mot_actuator_on_vibrate_stop();
+	}
+#endif
+
 	return 0;
 }
 
 static int aw8695_haptic_start(struct aw8695 *aw8695)
 {
 	pr_debug("%s enter\n", __func__);
+
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+	if (aw8695->duration > 80) {
+		mot_actuator_on_vibrate_start();
+	}
+#endif
 
 	aw8695_haptic_play_go(aw8695, true);
 
