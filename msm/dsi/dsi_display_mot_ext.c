@@ -564,14 +564,22 @@ error_exit:
 	return true;
 }
 
-static bool dsi_panel_mot_parse_u32(char* str, u32* val)
+static bool dsi_panel_mot_parse_u32(char* str, const char* keystr, u32* val)
 {
 	char * pos = NULL;
 	char * posStart = NULL;
 	char * posEnd = NULL;
+	char* pContent = NULL;
 	char buf[64];
 	uint len = 0;
-	posStart = strstr(str, "=");
+	u32 keylen;
+
+	keylen = strlen(keystr);
+	if ( strncmp(str, keystr, keylen) )
+		return false;
+
+	pContent = str + keylen;
+	posStart = strstr(pContent, "=");
 	if (posStart) {
 		posStart = strstr(posStart, "<");
 		if (posStart) {
@@ -618,6 +626,7 @@ void dsi_panel_mot_parse_timing_from_file(struct dsi_display *display, int index
 	u32 keylen, llen, cmdstrlen;
 	struct dsi_display_mode *display_mode;
 	struct dsi_display_mode_priv_info *priv_info;
+	char keystr[128];
 	char * fwbuf = NULL;
 	char * pbuf = NULL;
 	char * pline = NULL;
@@ -708,157 +717,141 @@ void dsi_panel_mot_parse_timing_from_file(struct dsi_display *display, int index
 			goto goContinue;
 		}
 
-		// qcom,mdss-dsi-panel-clockrate
-		keylen = strlen("qcom,mdss-dsi-panel-clockrate");
-		if ( strncmp(pline, "qcom,mdss-dsi-panel-clockrate", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-panel-clockrate: %d\n", val);
-				mode_timing->clk_rate_hz = val;
-				display_mode->priv_info->clk_rate_hz = mode_timing->clk_rate_hz;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-panel-clockrate", &val)) {
+			pr_info("got qcom,mdss-dsi-panel-clockrate: %d\n", val);
+			mode_timing->clk_rate_hz = val;
+			display_mode->priv_info->clk_rate_hz = mode_timing->clk_rate_hz;
 		}
 
-		// qcom,mdss-mdp-transfer-time-us
-		keylen = strlen("qcom,mdss-mdp-transfer-time-us");
-		if ( strncmp(pline, "qcom,mdss-mdp-transfer-time-us", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-mdp-transfer-time-us: %d\n", val);
-				mode_timing->mdp_transfer_time_us = val;
-				display_mode->priv_info->mdp_transfer_time_us =	mode_timing->mdp_transfer_time_us;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-mdp-transfer-time-us", &val)) {
+			pr_info("got qcom,mdss-mdp-transfer-time-us: %d\n", val);
+			mode_timing->mdp_transfer_time_us = val;
+			display_mode->priv_info->mdp_transfer_time_us =	mode_timing->mdp_transfer_time_us;
 		}
 
-		// qcom,mdss-dsi-panel-framerate
-		keylen = strlen("qcom,mdss-dsi-panel-framerate");
-		if ( strncmp(pline, "qcom,mdss-dsi-panel-framerate", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-panel-framerate: %d\n", val);
-				mode_timing->refresh_rate = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-panel-framerate", &val)) {
+			pr_info("got qcom,mdss-dsi-panel-framerate: %d\n", val);
+			mode_timing->refresh_rate = val;
 		}
 
-		// qcom,mdss-dsi-panel-width
-		keylen = strlen("qcom,mdss-dsi-panel-width");
-		if ( strncmp(pline, "qcom,mdss-dsi-panel-width", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-panel-width: %d\n", val);
-				mode_timing->h_active = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-panel-width", &val)) {
+			pr_info("got qcom,mdss-dsi-panel-width: %d\n", val);
+			mode_timing->h_active = val;
 		}
 
-		// qcom,mdss-dsi-h-front-porch
-		keylen = strlen("qcom,mdss-dsi-h-front-porch");
-		if ( strncmp(pline, "qcom,mdss-dsi-h-front-porch", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-h-front-porch: %d\n", val);
-				mode_timing->h_front_porch = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-h-front-porch", &val)) {
+			pr_info("got qcom,mdss-dsi-h-front-porch: %d\n", val);
+			mode_timing->h_front_porch = val;
 		}
 
-		// qcom,mdss-dsi-h-back-porch
-		keylen = strlen("qcom,mdss-dsi-h-back-porch");
-		if ( strncmp(pline, "qcom,mdss-dsi-h-back-porch", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-h-back-porch: %d\n", val);
-				mode_timing->h_back_porch = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-h-back-porch", &val)) {
+			pr_info("got qcom,mdss-dsi-h-back-porch: %d\n", val);
+			mode_timing->h_back_porch = val;
 		}
 
-		// qcom,mdss-dsi-h-pulse-width
-		keylen = strlen("qcom,mdss-dsi-h-pulse-width");
-		if ( strncmp(pline, "qcom,mdss-dsi-h-pulse-width", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-h-pulse-width: %d\n", val);
-				mode_timing->h_sync_width = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-h-pulse-width", &val)) {
+			pr_info("got qcom,mdss-dsi-h-pulse-width: %d\n", val);
+			mode_timing->h_sync_width = val;
 		}
 
-		// qcom,mdss-dsi-h-sync-skew
-		keylen = strlen("qcom,mdss-dsi-h-sync-skew");
-		if ( strncmp(pline, "qcom,mdss-dsi-h-sync-skew", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-h-sync-skew: %d\n", val);
-				mode_timing->h_skew = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-h-sync-skew", &val)) {
+			pr_info("got qcom,mdss-dsi-h-sync-skew: %d\n", val);
+			mode_timing->h_skew = val;
 		}
 
-		// qcom,mdss-dsi-panel-height
-		keylen = strlen("qcom,mdss-dsi-panel-height");
-		if ( strncmp(pline, "qcom,mdss-dsi-panel-height", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-panel-height: %d\n", val);
-				mode_timing->v_active = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-panel-height", &val)) {
+			pr_info("got qcom,mdss-dsi-panel-height: %d\n", val);
+			mode_timing->v_active = val;
 		}
 
-		// qcom,mdss-dsi-v-back-porch
-		keylen = strlen("qcom,mdss-dsi-v-back-porch");
-		if ( strncmp(pline, "qcom,mdss-dsi-v-back-porch", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-v-back-porch: %d\n", val);
-				mode_timing->v_back_porch = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-v-back-porch", &val)) {
+			pr_info("got qcom,mdss-dsi-v-back-porch: %d\n", val);
+			mode_timing->v_back_porch = val;
 		}
 
-		// qcom,mdss-dsi-v-front-porch
-		keylen = strlen("qcom,mdss-dsi-v-front-porch");
-		if ( strncmp(pline, "qcom,mdss-dsi-v-front-porch", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-v-front-porch: %d\n", val);
-				mode_timing->v_front_porch = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-v-front-porch", &val)) {
+			pr_info("got qcom,mdss-dsi-v-front-porch: %d\n", val);
+			mode_timing->v_front_porch = val;
 		}
 
-		// qcom,mdss-dsi-v-pulse-width
-		keylen = strlen("qcom,mdss-dsi-v-pulse-width");
-		if ( strncmp(pline, "qcom,mdss-dsi-v-pulse-width", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-v-pulse-width: %d\n", val);
-				mode_timing->v_sync_width = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-v-pulse-width", &val)) {
+			pr_info("got qcom,mdss-dsi-v-pulse-width: %d\n", val);
+			mode_timing->v_sync_width = val;
 		}
 
-		// qcom,mdss-dsi-t-clk-post
-		keylen = strlen("qcom,mdss-dsi-t-clk-post");
-		if ( strncmp(pline, "qcom,mdss-dsi-t-clk-post", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-t-clk-post: %d\n", val);
-				display->panel->host_config.t_clk_post = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-t-clk-post", &val)) {
+			pr_info("got qcom,mdss-dsi-t-clk-post: %d\n", val);
+			display->panel->host_config.t_clk_post = val;
 		}
 
-		// qcom,mdss-dsi-t-clk-pre
-		keylen = strlen("qcom,mdss-dsi-t-clk-pre");
-		if ( strncmp(pline, "qcom,mdss-dsi-t-clk-pre", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-dsi-t-clk-pre: %d\n", val);
-				display->panel->host_config.t_clk_pre = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsi-t-clk-pre", &val)) {
+			pr_info("got qcom,mdss-dsi-t-clk-pre: %d\n", val);
+			display->panel->host_config.t_clk_pre = val;
 		}
 
-		// qcom,mdss-pan-physical-width-dimension
-		keylen = strlen("qcom,mdss-pan-physical-width-dimension");
-		if ( strncmp(pline, "qcom,mdss-pan-physical-width-dimension", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-pan-physical-width-dimension: %d\n", val);
-				display->panel->phy_props.panel_width_mm = val;
-			}
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-pan-physical-width-dimension", &val)) {
+			pr_info("got qcom,mdss-pan-physical-width-dimension: %d\n", val);
+			display->panel->phy_props.panel_width_mm = val;
 		}
 
-		// qcom,mdss-pan-physical-height-dimension
-		keylen = strlen("qcom,mdss-pan-physical-height-dimension");
-		if ( strncmp(pline, "qcom,mdss-pan-physical-height-dimension", keylen)  == 0) {
-			if (dsi_panel_mot_parse_u32(pline+keylen, &val)) {
-				pr_info("got qcom,mdss-pan-physical-height-dimension: %d\n", val);
-				display->panel->phy_props.panel_height_mm = val;
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-pan-physical-height-dimension", &val)) {
+			pr_info("got qcom,mdss-pan-physical-height-dimension: %d\n", val);
+			display->panel->phy_props.panel_height_mm = val;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-version", &val)) {
+			pr_info("got qcom,mdss-dsc-version: %d\n", val);
+			display_mode->priv_info->dsc.version = val & 0xff;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-scr-version", &val)) {
+			pr_info("got qcom,mdss-dsc-scr-version: %d\n", val);
+			display_mode->priv_info->dsc.scr_rev = val & 0xff;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-slice-height", &val)) {
+			pr_info("got qcom,mdss-dsc-slice-height: %d\n", val);
+			display_mode->priv_info->dsc.slice_height = val;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-slice-width", &val)) {
+			pr_info("got qcom,mdss-dsc-slice-width: %d\n", val);
+			display_mode->priv_info->dsc.slice_width = val;
+			if (display_mode->timing.h_active % priv_info->dsc.slice_width) {
+				pr_err("invalid slice width for the intf width:%d slice width:%d\n",
+					display_mode->timing.h_active, display_mode->priv_info->dsc.slice_width);
 			}
+			display_mode->priv_info->dsc.pic_width = display_mode->timing.h_active;
+			display_mode->priv_info->dsc.pic_height = display_mode->timing.v_active;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-slice-per-pkt", &val)) {
+			pr_info("got qcom,mdss-dsc-slice-per-pkt: %d\n", val);
+			display_mode->priv_info->dsc.slice_per_pkt = val;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-bit-per-component", &val)) {
+			pr_info("got qcom,mdss-dsc-bit-per-component: %d\n", val);
+			display_mode->priv_info->dsc.bpc = val;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-dsc-bit-per-pixel", &val)) {
+			pr_info("got qcom,mdss-dsc-bit-per-pixel: %d\n", val);
+			display_mode->priv_info->dsc.bpp = val;
+		}
+
+		if (dsi_panel_mot_parse_u32(pline, "qcom,mdss-pps-delay-ms", &val)) {
+			pr_info("got qcom,mdss-pps-delay-ms: %d\n", val);
+			display_mode->priv_info->dsc.pps_delay_ms = val;
 		}
 
 		// qcom,mdss-dsi-on-command
-		keylen = strlen("qcom,mdss-dsi-on-command");
-		if ( strncmp(pline, "qcom,mdss-dsi-on-command", keylen)  == 0) {
+		memset(keystr, 0, 128);
+		strcpy(keystr, "qcom,mdss-dsi-on-command");
+		keylen = strlen(keystr);
+		if ( strncmp(pline, keystr, keylen)  == 0) {
 			if (dsi_panel_mot_parse_commands(pbuf - llen + keylen -1, &cmdstrlen, priv_info, DSI_CMD_SET_ON, pbuf)) {
-				pr_info("got qcom,mdss-dsi-on-command: str lenght: %d\n", cmdstrlen);
+				pr_info("got %s: str lenght: %d\n", keystr, cmdstrlen);
 				pbuf += cmdstrlen;
 			}
 		}
@@ -868,6 +861,15 @@ void dsi_panel_mot_parse_timing_from_file(struct dsi_display *display, int index
 		if ( strncmp(pline, "qcom,mdss-dsi-off-command", keylen)  == 0) {
 			if (dsi_panel_mot_parse_commands(pbuf - llen + keylen -1, &cmdstrlen, priv_info, DSI_CMD_SET_OFF, pbuf)) {
 				pr_info("got qcom,mdss-dsi-off-command: lenght: %d\n", cmdstrlen);
+				pbuf += cmdstrlen;
+			}
+		}
+
+		// qcom,mdss-dsi-timing-switch-command
+		keylen = strlen("qcom,mdss-dsi-timing-switch-command");
+		if ( strncmp(pline, "qcom,mdss-dsi-timing-switch-command", keylen)  == 0) {
+			if (dsi_panel_mot_parse_commands(pbuf - llen + keylen -1, &cmdstrlen, priv_info, DSI_CMD_SET_TIMING_SWITCH, pbuf)) {
+				pr_info("got qcom,mdss-dsi-timing-switch-command: lenght: %d\n", cmdstrlen);
 				pbuf += cmdstrlen;
 			}
 		}
@@ -1112,6 +1114,7 @@ static ssize_t dsi_display_parse_para_get(struct device *dev,
 		strcat(buf, pbuf);
 		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_ON, priv_info);
 		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_OFF, priv_info);
+		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_TIMING_SWITCH, priv_info);
 		printk("%s\n", buf);
 
 	} else {
@@ -1200,8 +1203,8 @@ int dsi_display_ext_init(struct dsi_display *display)
 
 	dsi_display_sysfs_ext_init(display);
 
-	display->is_dsi_display_prepared = false;
-	display->is_dsi_mot_primary = false;
+	//display->is_dsi_display_prepared = false;
+	//display->is_dsi_mot_primary = false;
 	g_dsi_mot_ext->early_power_state = DSI_EARLY_POWER_STATE_NUM;
 	g_dsi_mot_ext->early_power_workq = create_singlethread_workqueue("dsi_early_power_workq");
 	if (!g_dsi_mot_ext->early_power_workq) {

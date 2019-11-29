@@ -268,6 +268,7 @@ struct dsi_display {
 	struct work_struct lp_rx_timeout_work;
 	/* used for moto feature early-pane- power to speed up the power on sequence */
 	bool is_dsi_mot_ext_enabled;
+	bool is_dsi_mot_early_power_enabled;
 	bool is_dsi_display_prepared;
 	bool is_dsi_mot_primary;
 	struct dsi_mot_ext_feature dsi_mot_ext;
