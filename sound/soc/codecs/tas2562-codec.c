@@ -682,7 +682,7 @@ static int tas2562_set_digital_volume(struct snd_kcontrol *pKcontrol,
 	p_tas2562->spk_digital_vol = p_u_control->value.integer.value[0];
 
 	vol += p_tas2562->spk_digital_vol * 4;
-	ret = p_tas2562->bulk_write(p_tas2562, channel_both, TAS2562_DVC_REG, vol, 4);
+	ret = p_tas2562->bulk_write(p_tas2562, channel_left, TAS2562_DVC_REG, vol, 4);
 
 	return ret;
 }
