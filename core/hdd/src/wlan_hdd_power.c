@@ -2257,8 +2257,10 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 
 	status = wlan_hdd_set_powersave(adapter, allow_power_save, timeout);
 
-	allow_power_save ? hdd_stop_dhcp_ind(adapter) :
-		hdd_start_dhcp_ind(adapter);
+	if ( hdd_ctx->bt_coex_mode_set ) {
+		allow_power_save ? hdd_stop_dhcp_ind(adapter) :
+				hdd_start_dhcp_ind(adapter);
+	}
 
 	hdd_exit();
 	return status;
