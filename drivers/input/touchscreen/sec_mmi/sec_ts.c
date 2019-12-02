@@ -1597,6 +1597,14 @@ int sec_ts_integrity_check(struct sec_ts_data *ts)
 		return -EIO;
 	}
 
+	if (ts->force_calibration) {
+		sec_ts_irq_enable(ts, false);
+		ret = sec_ts_execute_force_calibration(ts, OFFSET_CAL_SET);
+		if (ret < 0)
+			input_err(true, &ts->client->dev, "%s: Failed to calibrate", __func__);
+		sec_ts_irq_enable(ts, true);
+	}
+
 	ts->touch_functions |= SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
 	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION, (u8 *)&ts->touch_functions, 2);
 	if (ret < 0)
