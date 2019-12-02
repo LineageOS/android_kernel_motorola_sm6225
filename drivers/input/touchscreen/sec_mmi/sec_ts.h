@@ -642,6 +642,7 @@ struct sec_ts_data {
 	struct sec_cmd_data sec;
 	short *pFrame;
 
+	bool force_calibration;
 	bool probe_done;
 	bool reinit_done;
 	bool flip_enable;
