@@ -1056,7 +1056,7 @@ static void dsi_display_show_para(char* buf, char* pbuf, enum dsi_cmd_set_type t
 	int count = priv_info->cmd_sets[type].count;
 
 	memset(pbuf, 0, PAGE_SIZE);
-	rc = snprintf(pbuf, PAGE_SIZE, "## count:%d ====\n", count);
+	rc = snprintf(pbuf, PAGE_SIZE, "##Command for %s: count:%d ====\n", cmd_set_prop_map[type], count);
 	strcat(buf, pbuf);
 	memset(pbuf, 0, PAGE_SIZE);
 	for (i=0; i<count; i++) {
@@ -1090,6 +1090,7 @@ static ssize_t dsi_display_parse_para_get(struct device *dev,
 	struct dsi_display_mode *display_mode;
 	struct dsi_display_mode_priv_info *priv_info;
 	char* pbuf = NULL;
+	char* psubbuf = NULL;
 
 	display = dev_get_drvdata(dev);
 	if (!display) {
@@ -1100,27 +1101,35 @@ static ssize_t dsi_display_parse_para_get(struct device *dev,
 	priv_info = display->modes[index].priv_info;
 	mode_timing = &display->modes[index].timing;
 
-	pbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	pbuf = kzalloc(PAGE_SIZE*4, GFP_KERNEL);
 	if (pbuf) {
-		rc = snprintf(buf, PAGE_SIZE, "panel horz active:%d front_portch:%d back_porch:%d pulse_width:%d h_skew:%d\n",
+		psubbuf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+		if (!psubbuf)
+			return rc;
+		rc = snprintf(psubbuf, PAGE_SIZE, "panel horz active:%d front_portch:%d back_porch:%d pulse_width:%d h_skew:%d\n",
 			mode_timing->h_active, mode_timing->h_front_porch, mode_timing->h_back_porch, 	mode_timing->h_sync_width, mode_timing->h_skew);
-		memset(pbuf, 0, PAGE_SIZE);
-		rc = snprintf(pbuf, PAGE_SIZE, "panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
+		strcat(pbuf, psubbuf);
+		memset(psubbuf, 0, PAGE_SIZE);
+		rc = snprintf(psubbuf, PAGE_SIZE, "panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
 			mode_timing->v_active, mode_timing->v_front_porch, mode_timing->v_back_porch, 	mode_timing->v_sync_width);
-		strcat(buf, pbuf);
-		memset(pbuf, 0, PAGE_SIZE);
-		rc = snprintf(pbuf, PAGE_SIZE, "panel clk rate:%d mdp_transfer_time_us:%d refresh_rate:%d\n",
+		strcat(pbuf, psubbuf);
+		memset(psubbuf, 0, PAGE_SIZE);
+		rc = snprintf(psubbuf, PAGE_SIZE, "panel clk rate:%d mdp_transfer_time_us:%d refresh_rate:%d\n",
 			display_mode->priv_info->clk_rate_hz , display_mode->priv_info->mdp_transfer_time_us, mode_timing->refresh_rate);
-		strcat(buf, pbuf);
-		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_ON, priv_info);
-		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_OFF, priv_info);
-		dsi_display_show_para(buf, pbuf, DSI_CMD_SET_TIMING_SWITCH, priv_info);
+		strcat(pbuf, psubbuf);
+		memset(psubbuf, 0, PAGE_SIZE);
+		dsi_display_show_para(pbuf, psubbuf, DSI_CMD_SET_ON, priv_info);
+		dsi_display_show_para(pbuf, psubbuf, DSI_CMD_SET_OFF, priv_info);
+		dsi_display_show_para(pbuf, psubbuf, DSI_CMD_SET_TIMING_SWITCH, priv_info);
+		rc = snprintf(buf, PAGE_SIZE, "%s\n", pbuf);
 		printk("%s\n", buf);
 
 	} else {
 		pr_warn("kmalloc failed\n" );
 	}
 
+	if (psubbuf)
+		kfree(psubbuf);
 	if (pbuf)
 		kfree(pbuf);
 	return rc;
