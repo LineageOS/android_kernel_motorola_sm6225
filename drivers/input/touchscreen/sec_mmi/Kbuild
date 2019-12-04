@@ -5,7 +5,9 @@ EXTRA_CFLAGS += \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
 
 ifneq (,$(filter racer% burton%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DUSE_STUBS
+# NOTE: USE_STUBS option will go away when touchscreen_mmi class introduced, but
+#       CONFIG_DRM_DYNAMIC_REFRESH_RATE is staying!!!
+EXTRA_CFLAGS += -DUSE_STUBS -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
 endif
 
 obj-m := sec_mmi.o
