@@ -1880,9 +1880,11 @@ int is_wls_online(struct smb_mmi_charger *chg)
 
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
+#define PD_CHRG_THRSH 8500
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 {
 	union power_supply_propval val;
+	int chrg_v_mv = 0;
 	int chrg_cm_ma = 0;
 	int chrg_cs_ma = 0;
 	int prev_chg_rate = chg->charger_rate;
@@ -1923,13 +1925,20 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 			return;
 		}
 		chrg_cs_ma = val.intval / 1000;
+
+		rc = get_prop_usb_voltage_now(chg, &val);
+		if (rc != -ENOMEM && rc < 0) {
+			mmi_err(chg, "Error getting USB Input Voltage rc = %d\n", rc);
+			return;
+		}
+		chrg_v_mv = val.intval / 1000;
 	} else {
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
 		goto end_rate_check;
 	}
 
-	mmi_dbg(chg, "SMBMMI: cm %d, cs %d\n", chrg_cm_ma, chrg_cs_ma);
-	if (chrg_cm_ma >= TURBO_CHRG_THRSH)
+	mmi_dbg(chg, "SMBMMI: cm %d, cs %d, v %d\n", chrg_cm_ma, chrg_cs_ma, chrg_v_mv);
+	if (chrg_cm_ma >= TURBO_CHRG_THRSH || chrg_v_mv >= PD_CHRG_THRSH)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
 	else if ((chrg_cm_ma > WEAK_CHRG_THRSH) &&
 			(chrg_cs_ma < WEAK_CHRG_THRSH) &&
