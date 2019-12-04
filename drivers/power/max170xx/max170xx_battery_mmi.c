@@ -149,6 +149,7 @@ struct max17042_chip {
 	int charge_full_des;
 	int taper_reached;
 	bool factory_mode;
+	bool is_factory_image;
 	char fg_report_str[FUEL_GAUGE_REPORT_SIZE];
 	bool fullcap_report_sent;
 	int last_fullcap;
@@ -2277,14 +2278,38 @@ iterm_fail:
 	return;
 }
 
-static bool max17042_mmi_factory(void)
+enum {
+	MMI_FACTORY_MODE,
+	MMI_FACTORY_BUILD,
+};
+
+static bool mmi_factory_check(int type)
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
 	bool factory = false;
+	const char *bootargs = NULL;
+	char *bl_version = NULL;
 
-	if (np)
-		factory = of_property_read_bool(np, "mmi,factory-cable");
+	if (!np)
+		return factory;
 
+	switch (type) {
+	case MMI_FACTORY_MODE:
+		factory = of_property_read_bool(np,
+					"mmi,factory-cable");
+		break;
+	case MMI_FACTORY_BUILD:
+		if (!of_property_read_string(np,
+					"bootargs", &bootargs)) {
+			bl_version = strstr(bootargs,
+					"androidboot.bootloader=");
+			if (bl_version && strstr(bl_version, "factory"))
+				factory = true;
+		}
+		break;
+	default:
+		factory = false;
+	}
 	of_node_put(np);
 
 	return factory;
@@ -2463,7 +2488,8 @@ static int max17042_probe(struct i2c_client *client,
 	if (ret)
 		dev_err(&client->dev, "failed: attr create\n");
 
-	chip->factory_mode = max17042_mmi_factory();
+	chip->factory_mode = mmi_factory_check(MMI_FACTORY_MODE);
+	chip->is_factory_image = mmi_factory_check(MMI_FACTORY_BUILD);
 	if (chip->factory_mode)
 		dev_info(&client->dev, "max17042: Factory Mode\n");
 
@@ -2526,7 +2552,7 @@ static int max17042_probe(struct i2c_client *client,
 	INIT_WORK(&chip->work, max17042_init_worker);
 	INIT_DELAYED_WORK(&chip->thread_work, max17042_thread_worker);
 
-	if (chip->factory_mode) {
+	if (chip->factory_mode || chip->is_factory_image) {
 		ret = regmap_read(chip->regmap, MAX17042_OCVInternal, &val);
 		if (ret < 0)
 			val = -EINVAL;
