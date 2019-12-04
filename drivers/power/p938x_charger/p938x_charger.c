@@ -111,6 +111,7 @@
 #define WAIT_FOR_AUTH_MS 1000
 #define WAIT_FOR_RCVD_TIMEOUT_MS 1000
 #define HEARTBEAT_INTERVAL_MS 60000
+#define TXMODEWORK_INTERVAL_MS 2000
 
 #define BPP_MAX_VOUT 5000
 #define BPP_MAX_IOUT 1600
@@ -237,6 +238,7 @@ struct p938x_charger {
 	int			wchg_det_irq;
 	struct pinctrl		*pinctrl_irq;
 	const char		*pinctrl_name;
+	long long unsigned error_cnt;
 
 	u16 wls_vout_max;
 	u16 wls_iout_max;
@@ -246,6 +248,7 @@ struct p938x_charger {
 	u16 irq_stat;
 
 	struct delayed_work	heartbeat_work;
+	struct delayed_work	tx_mode_work;
 
 	u32			peek_poke_address;
 	struct dentry		*debug_root;
@@ -494,7 +497,7 @@ static int p938x_get_rx_iout(struct p938x_charger *chip)
 	int rc;
 	u16 ma;
 
-	if(!p938x_is_tx_connected(chip))
+	if(!p938x_is_chip_on(chip))
 		return 0;
 
 	rc = p938x_read_buffer(chip, IOUT_READ_REG, (u8 *)&ma, 2);
@@ -824,7 +827,14 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			msleep(100);
 		}
 
-		rc = p938x_write_reg(chip, SYS_MODE_REG, SYS_MODE_TXMODE);
+		rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
+		if (rc < 0) {
+			p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+				SYS_MODE_REG, rc);
+			buf = 0;
+		}
+
+		rc = p938x_write_reg(chip, SYS_MODE_REG, buf | SYS_MODE_TXMODE);
 		if (rc < 0) {
 			p938x_err(chip, "Failed to write 0x%04x(0x%02lx), rc=%d\n",
 				SYS_MODE_REG, SYS_MODE_TXMODE, rc);
@@ -836,6 +846,10 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			set_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
 			p938x_program_fod(chip, chip->fod_array_tx,
 				chip->fod_array_tx_len);
+			sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
+			cancel_delayed_work(&chip->tx_mode_work);
+			schedule_delayed_work(&chip->tx_mode_work,
+				msecs_to_jiffies(TXMODEWORK_INTERVAL_MS));
 		}
 	} else {
 		if (!test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
@@ -858,27 +872,10 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 		p938x_set_dc_suspend(chip, 0);
 
 		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
+		sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
 
 		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
 	}
-}
-
-static int p938x_get_tx_mode(struct p938x_charger *chip)
-{
-	u8 buf = 0;
-	int rc;
-
-	if (!p938x_is_chip_on(chip))
-		return 0;
-
-	rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
-	if (rc < 0) {
-		p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
-			SYS_MODE_REG, rc);
-		return 0;
-	}
-
-	return !!(buf & SYS_MODE_TXMODE);
 }
 
 static int p938x_program_mtp_downloader(struct p938x_charger *chip)
@@ -1349,6 +1346,10 @@ static int p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_IMPORTANT, "Tx mode conflict. Disabled tx mode\n");
 	}
 
+	if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
+	}
+
 	if (irq_status & status & ST_VOUT_ON) {
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger ldo is on\n");
 		p938x_check_system_mode(chip);
@@ -1383,6 +1384,46 @@ static int p938x_check_status(struct p938x_charger *chip)
 	return 0;
 }
 
+/* Sometimes the tx mode turns off on its own... make sure the user doesn't
+ * notice
+ */
+static void p938x_tx_mode_work(struct work_struct *work)
+{
+	u8 buf;
+	u8 mode;
+	int rc;
+	struct p938x_charger *chip = container_of(work,
+				struct p938x_charger, tx_mode_work.work);
+
+	if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+		rc = p938x_read_buffer(chip, SYS_MODE_REG, &mode, 1);
+		if (rc >= 0) {
+			if (!(mode & SYS_MODE_TXMODE)) {
+				p938x_dbg(chip, PR_INTERRUPT,
+					"Tx mode is off and it should be on, turning back on.\n");
+
+				rc = p938x_read_reg(chip, SYS_MODE_REG, &buf);
+				if (rc < 0) {
+					p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+						SYS_MODE_REG, rc);
+				} else {
+					rc = p938x_write_reg(chip, SYS_MODE_REG, buf | SYS_MODE_TXMODE);
+					if (rc < 0) {
+						p938x_err(chip, "Failed to write 0x%04x(0x%02lx), rc=%d\n",
+							SYS_MODE_REG, SYS_MODE_TXMODE, rc);
+					} else
+						p938x_program_fod(chip, chip->fod_array_tx,
+							chip->fod_array_tx_len);
+				}
+				p938x_check_status(chip);
+			}
+		}
+
+		schedule_delayed_work(&chip->tx_mode_work,
+			msecs_to_jiffies(TXMODEWORK_INTERVAL_MS));
+	}
+}
+
 static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 {
 	struct p938x_charger *chip = dev_id;
@@ -1400,6 +1441,8 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 	if (p938x_check_status(chip)) {
 		p938x_err(chip,
 			"Error checking status. Check charging pad alignment\n");
+		chip->error_cnt++;
+		sysfs_notify(&chip->dev->kobj, NULL, "error_cnt");
 	}
 
 	return IRQ_HANDLED;
@@ -1708,7 +1751,7 @@ static ssize_t tx_mode_show(struct device *dev,
 	struct p938x_charger *chip = dev_get_drvdata(dev);
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
-		p938x_get_tx_mode(chip));
+		test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags));
 }
 
 static ssize_t chip_id_max_show(struct device *dev,
@@ -1834,6 +1877,9 @@ static ssize_t tx_capability_show(struct device *dev,
 	if (!test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags))
 		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "No charger attached\n");
 
+	if (!p938x_is_ldo_on(chip))
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "Unknown\n");
+
 	if (chip->epp_mode) {
 		if (!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential))
 			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP %dmW (Potential %dmW)\n",
@@ -1842,6 +1888,32 @@ static ssize_t tx_capability_show(struct device *dev,
 			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP Unknown\n");
 	} else
 		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "BPP\n");
+}
+
+static ssize_t rx_connected_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+	int rx_connected;
+
+	if ((chip->stat & ST_RX_CONN) && p938x_get_rx_iout(chip))
+		rx_connected = 2;
+	else if ((chip->stat & ST_RX_CONN) && !p938x_get_rx_iout(chip))
+		rx_connected = 1;
+	else
+		rx_connected = 0;
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
+		rx_connected);
+}
+
+static ssize_t error_cnt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%llu\n",
+		chip->error_cnt);
 }
 
 #ifdef P938X_USER_DEBUG
@@ -1863,6 +1935,8 @@ static DEVICE_ATTR(fw_name, S_IWUSR, NULL, fw_name_store);
 static DEVICE_ATTR(program_fw_stat, S_IRUGO, program_fw_stat_show, NULL);
 static DEVICE_ATTR(program_fw, S_IWUSR, NULL, program_fw_store);
 static DEVICE_ATTR(tx_capability, S_IRUGO, tx_capability_show, NULL);
+static DEVICE_ATTR(rx_connected, S_IRUGO, rx_connected_show, NULL);
+static DEVICE_ATTR(error_cnt, S_IRUGO, error_cnt_show, NULL);
 
 static struct attribute *p938x_attrs[] = {
 #ifdef P938X_USER_DEBUG
@@ -1884,6 +1958,8 @@ static struct attribute *p938x_attrs[] = {
 	&dev_attr_program_fw_stat.attr,
 	&dev_attr_program_fw.attr,
 	&dev_attr_tx_capability.attr,
+	&dev_attr_rx_connected.attr,
+	&dev_attr_error_cnt.attr,
 	NULL
 };
 
@@ -2202,6 +2278,7 @@ static enum power_supply_property p938x_wls_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
 };
 
 static int p938x_wls_get_prop(struct power_supply *psy,
@@ -2235,6 +2312,15 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		val->intval = p938x_is_ldo_on(chip);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		if (p938x_is_ldo_on(chip)) {
+			if (chip->epp_mode)
+				val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
+			else
+				val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
+		} else
+			val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
 		break;
 	default:
 		return -EINVAL;
@@ -2360,6 +2446,7 @@ static int p938x_charger_probe(struct i2c_client *client,
 	chip->name = "WLS";
 	chip->debug_mask = &__debug_mask;
 	INIT_DELAYED_WORK(&chip->heartbeat_work, p938x_heartbeat_work);
+	INIT_DELAYED_WORK(&chip->tx_mode_work, p938x_tx_mode_work);
 	device_init_wakeup(chip->dev, true);
 
 	chip->regmap = regmap_init_i2c(client, &p938x_regmap_config);
@@ -2456,6 +2543,7 @@ static int p938x_charger_remove(struct i2c_client *client)
 	wakeup_source_trash(&chip->wls_wake_source);
 	sysfs_remove_groups(&chip->dev->kobj, p938x_groups);
 	cancel_delayed_work_sync(&chip->heartbeat_work);
+	cancel_delayed_work_sync(&chip->tx_mode_work);
 	debugfs_remove_recursive(chip->debug_root);
 
 	return 0;
