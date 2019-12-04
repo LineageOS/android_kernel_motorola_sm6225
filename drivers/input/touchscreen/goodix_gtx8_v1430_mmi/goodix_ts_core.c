@@ -799,6 +799,7 @@ static const struct attribute_group sysfs_group = {
 };
 
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 /****/
 static ssize_t path_show(struct device *dev, struct device_attribute *pAttr, char *pBuf)
 {
@@ -895,6 +896,7 @@ device_destroy:
 
 	return -ENODEV;
 }
+#endif
 
 static ssize_t goodix_sysfs_config_write(struct file *file,
 		struct kobject *kobj, struct bin_attribute *attr,
@@ -987,6 +989,7 @@ static int goodix_ts_sysfs_init(struct goodix_ts_core *core_data)
 		return ret;
 	}
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	ret = goodix_ts_sysfs_class(core_data->ts_dev, true);
 	if (ret) {
 		sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
@@ -994,13 +997,16 @@ static int goodix_ts_sysfs_init(struct goodix_ts_core *core_data)
 				      &goodix_config_bin_attr);
 		ts_err("sys class files creation failed");
 	}
+#endif
 
 	return ret;
 }
 
 static void goodix_ts_sysfs_exit(struct goodix_ts_core *core_data)
 {
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	goodix_ts_sysfs_class(core_data->ts_dev, false);
+#endif
 	sysfs_remove_bin_file(&core_data->pdev->dev.kobj,
 			      &goodix_config_bin_attr);
 	sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
