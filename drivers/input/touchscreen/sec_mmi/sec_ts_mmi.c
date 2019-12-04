@@ -33,7 +33,16 @@
 #include "sec_ts.h"
 #include "sec_mmi.h"
 
+#ifdef CONFIG_DRM_DYNAMIC_REFRESH_RATE
 extern struct blocking_notifier_head dsi_freq_head;
+#define register_dynamic_refresh_rate_notifier(...) \
+		blocking_notifier_chain_register(&dsi_freq_head, &data->freq_nb)
+#define unregister_dynamic_refresh_rate_notifier(...) \
+		blocking_notifier_chain_unregister(&dsi_freq_head, &data->freq_nb)
+#else
+#define register_dynamic_refresh_rate_notifier(...) rc
+#define unregister_dynamic_refresh_rate_notifier(...) rc
+#endif
 
 #if defined(USE_STUBS)
 static struct class *local_touchscreen_class;
@@ -817,7 +826,7 @@ static int sec_mmi_register_notifiers(
 
 		if (data->update_refresh_rate) {
 			data->freq_nb.notifier_call = sec_mmi_refresh_rate;
-			rc = blocking_notifier_chain_register(
+			rc = register_dynamic_refresh_rate_notifier(
 				&dsi_freq_head, &data->freq_nb);
 		}
 	} else {
@@ -826,7 +835,7 @@ static int sec_mmi_register_notifiers(
 			power_supply_unreg_notifier(&data->ps_notif);
 
 		if (data->update_refresh_rate) {
-			rc = blocking_notifier_chain_unregister(
+			rc = unregister_dynamic_refresh_rate_notifier(
 				&dsi_freq_head, &data->freq_nb);
 		}
 	}
