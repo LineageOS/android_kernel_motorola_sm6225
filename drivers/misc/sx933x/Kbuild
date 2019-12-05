@@ -36,6 +36,10 @@ ifneq (,$(filter burton%,$(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
 endif
 
+ifneq (,$(filter smith%,$(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
+endif
+
 ifneq (,$(KERNEL_DIR_PATH))
         EXTRA_CFLAGS += -I$(TOP)/kernel/$(KERNEL_VERSION_NAME)/drivers/base
 else
