@@ -75,8 +75,11 @@
 #define SYS_MODE_REG		0x004a
 #define SYS_CMD_REG		0x004C
 
+#define EPP_QFACTOR_REG	0x0083
 #define EPP_TX_GUARANTEED	0x0084
 #define EPP_TX_POTENTIAL	0x0085
+
+#define FOD_CFG_REG		0x0070
 
 #define ST_TX_FOD_FAULT	BIT(15)
 #define ST_TX_CONFLICT	BIT(14)
@@ -120,6 +123,8 @@
 #define MAX_VOUT_SET 12000
 #define MIN_IOUT_SET 500
 #define MAX_IOUT_SET 3000
+
+#define FOD_MAX_LEN 16
 
 #define WLS_SHOW_MAX_SIZE 32
 
@@ -251,6 +256,15 @@ struct p938x_charger {
 
 	struct wakeup_source wls_wake_source;
 	bool	epp_mode;
+
+	u8	fod_array_bpp[FOD_MAX_LEN];
+	u8	fod_array_epp[FOD_MAX_LEN];
+	u8	fod_array_tx[FOD_MAX_LEN];
+	int	fod_array_bpp_len;
+	int	fod_array_epp_len;
+	int	fod_array_tx_len;
+	bool 	use_q_factor;
+	u8	q_factor;
 };
 
 struct p938x_limits {
@@ -766,6 +780,26 @@ static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
 		val);
 }
 
+static int p938x_program_fod(struct p938x_charger *chip,
+	u8 *array, int array_len)
+{
+	int rc;
+
+	if (array_len <= 0 || array_len > FOD_MAX_LEN) {
+		p938x_err(chip, "FOD length is not valid: %d\n", array_len);
+		return 1;
+	}
+
+	rc = p938x_write_buffer(chip, FOD_CFG_REG,
+			array, array_len);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to program fod: %d\n", rc);
+		return 1;
+	}
+
+	return 0;
+}
+
 static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 {
 	u8 buf = 0;
@@ -803,6 +837,8 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 		} else {
 			p938x_dbg(chip, PR_MOTO, "tx mode enabled OK\n");
 			set_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
+			p938x_program_fod(chip, chip->fod_array_tx,
+				chip->fod_array_tx_len);
 		}
 	} else {
 		if (!test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
@@ -1188,11 +1224,15 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 
 			p938x_set_rx_vout(chip, EPP_MAX_VOUT);
 			p938x_set_rx_ocl(chip, EPP_MAX_IOUT);
+			p938x_program_fod(chip, chip->fod_array_epp,
+				chip->fod_array_epp_len);
 		} else {
 			chip->epp_mode = false;
 			p938x_set_dc_max_icl_ma(chip, BPP_MAX_IDC);
 			p938x_set_rx_vout(chip, BPP_MAX_VOUT);
 			p938x_set_rx_ocl(chip, BPP_MAX_IOUT);
+			p938x_program_fod(chip, chip->fod_array_bpp,
+				chip->fod_array_bpp_len);
 		}
 
 		/* Override if set */
@@ -1324,6 +1364,9 @@ static int p938x_check_status(struct p938x_charger *chip)
 			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
 			p938x_set_tx_mode(chip, 0);
 		}
+
+		if (chip->use_q_factor)
+			p938x_write_reg(chip, EPP_QFACTOR_REG, chip->q_factor);
 
 		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 		/* Update usb status incase we powered on with it connected */
@@ -1479,6 +1522,150 @@ static ssize_t force_idc_show(struct device *dev,
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
 		prop.intval / 1000);
+}
+
+static int fod_store(struct p938x_charger *chip, const char *buf,
+	u8 *fod_array, u32 *fod_array_len)
+{
+	int i = 0, ret = 0, sum = 0;
+	char *buffer;
+	unsigned int temp;
+	u8 fod_array_temp[FOD_MAX_LEN];
+
+	buffer = (char *)buf;
+
+	for (i = 0; i < FOD_MAX_LEN; i++) {
+		ret = sscanf((const char *)buffer, "%x,%s", &temp, buffer);
+		fod_array_temp[i] = temp;
+		sum++;
+		if (ret != 2)
+			break;
+	}
+
+	if (sum > 0 && sum <= FOD_MAX_LEN) {
+		memcpy(fod_array, fod_array_temp, sizeof(sum));
+		*fod_array_len = sum;
+		p938x_program_fod(chip, fod_array, *fod_array_len);
+	}
+
+	return sum;
+}
+
+static ssize_t fod_epp_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	fod_store(chip, buf, chip->fod_array_epp,
+		&chip->fod_array_epp_len);
+
+	return count;
+}
+
+static ssize_t fod_bpp_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	fod_store(chip, buf, chip->fod_array_bpp,
+		&chip->fod_array_bpp_len);
+
+	return count;
+}
+
+static ssize_t fod_tx_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	fod_store(chip, buf, chip->fod_array_tx,
+		&chip->fod_array_tx_len);
+
+	return count;
+}
+
+static ssize_t fod_epp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0, i = 0;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	for (i = 0; i < chip->fod_array_epp_len; i++) {
+		count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE,
+				"0x%02x ", chip->fod_array_epp[i]);
+		if (i == chip->fod_array_epp_len - 1)
+			count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE, "\n");
+	}
+
+	return count;
+}
+
+static ssize_t fod_bpp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0, i = 0;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	for (i = 0; i < chip->fod_array_bpp_len; i++) {
+		count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE,
+				"0x%02x ", chip->fod_array_bpp[i]);
+		if (i == chip->fod_array_bpp_len - 1)
+			count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE, "\n");
+	}
+
+	return count;
+}
+
+static ssize_t fod_tx_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0, i = 0;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	for (i = 0; i < chip->fod_array_tx_len; i++) {
+		count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE,
+				"0x%02x ", chip->fod_array_tx[i]);
+		if (i == chip->fod_array_tx_len - 1)
+			count += scnprintf(buf+count, WLS_SHOW_MAX_SIZE, "\n");
+	}
+
+	return count;
+}
+
+static ssize_t q_factor_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long value;
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	r = kstrtoul(buf, 0, &value);
+	if (r) {
+		p938x_err(chip, "Invalid q factor value = %ld\n", value);
+		return -EINVAL;
+	}
+
+	chip->q_factor = value;
+	chip->use_q_factor = true;
+
+	return r ? r : count;
+}
+
+static ssize_t q_factor_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct p938x_charger *chip = dev_get_drvdata(dev);
+
+	if (chip->use_q_factor)
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE, "0x%02X\n",
+			chip->q_factor);
+	else
+		return scnprintf(buf, WLS_SHOW_MAX_SIZE,
+			"Using default\n");
 }
 #endif
 
@@ -1646,6 +1833,10 @@ static ssize_t tx_capability_show(struct device *dev,
 static DEVICE_ATTR(usb_keep_on, S_IRUGO|S_IWUSR, usb_keep_on_show, usb_keep_on_store);
 static DEVICE_ATTR(boost, S_IRUGO|S_IWUSR, boost_show, boost_store);
 static DEVICE_ATTR(force_idc, S_IRUGO|S_IWUSR, force_idc_show, force_idc_store);
+static DEVICE_ATTR(fod_epp, S_IRUGO|S_IWUSR, fod_epp_show, fod_epp_store);
+static DEVICE_ATTR(fod_bpp, S_IRUGO|S_IWUSR, fod_bpp_show, fod_bpp_store);
+static DEVICE_ATTR(fod_tx, S_IRUGO|S_IWUSR, fod_tx_show, fod_tx_store);
+static DEVICE_ATTR(q_factor, S_IRUGO|S_IWUSR, q_factor_show, q_factor_store);
 #endif
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, chip_id_show, NULL);
@@ -1663,6 +1854,10 @@ static struct attribute *p938x_attrs[] = {
 	&dev_attr_usb_keep_on.attr,
 	&dev_attr_boost.attr,
 	&dev_attr_force_idc.attr,
+	&dev_attr_fod_epp.attr,
+	&dev_attr_fod_bpp.attr,
+	&dev_attr_fod_tx.attr,
+	&dev_attr_q_factor.attr,
 #endif
 	&dev_attr_tx_mode.attr,
 	&dev_attr_chip_id_max.attr,
@@ -1699,7 +1894,7 @@ static void show_dump_flags(struct seq_file *m,
 static int show_dump_regs(struct seq_file *m, void *data)
 {
 	struct p938x_charger *chip = m->private;
-	u8 buf[12];
+	u8 buf[16];
 
 	p938x_read_buffer(chip, CHIP_ID_REG, buf, 2);
 	seq_printf(m, "CHIP_ID: 0x%02x%02x\n", buf[1], buf[0]);
@@ -1747,6 +1942,17 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "EPP_TX_GUARANTEED: 0x%02x\n", buf[0]);
 	p938x_read_reg(chip, EPP_TX_POTENTIAL, &buf[0]);
 	seq_printf(m, "EPP_TX_POTENTIAL: 0x%02x\n", buf[0]);
+	p938x_read_reg(chip, EPP_QFACTOR_REG, &buf[0]);
+	seq_printf(m, "EPP_QFACTOR_REG: 0x%02x\n", buf[0]);
+	p938x_read_buffer(chip, FOD_CFG_REG, buf, 16);
+	seq_printf(m, "FOD_CFG_REG: %02X%02X %02X%02X "
+		"%02X%02X %02X%02X "
+		"%02X%02X %02X%02X "
+		"%02X%02X %02X%02X\n",
+		buf[0], buf[1], buf[2], buf[3],
+		buf[4], buf[5], buf[6], buf[7],
+		buf[8], buf[9], buf[10], buf[11],
+		buf[12], buf[13], buf[14], buf[15]);
 
 	show_dump_flags(m, chip);
 
@@ -1846,6 +2052,8 @@ static int p938x_parse_gpio(struct device_node *node, struct gpio *gpio, int idx
 static int p938x_parse_dt(struct p938x_charger *chip)
 {
 	struct device_node *node = chip->dev->of_node;
+	int rc;
+	unsigned tmp;
 
 	if (!node) {
 		p938x_err(chip, "device tree info. missing\n");
@@ -1895,6 +2103,35 @@ static int p938x_parse_dt(struct p938x_charger *chip)
 
 	chip->pinctrl_name = of_get_property(chip->dev->of_node,
 						"pinctrl-names", NULL);
+
+	chip->fod_array_bpp_len =
+		of_property_count_u8_elems(node,
+					"fod-array-bpp-val");
+
+	chip->fod_array_epp_len =
+		of_property_count_u8_elems(node,
+					"fod-array-epp-val");
+
+	chip->fod_array_tx_len =
+		of_property_count_u8_elems(node,
+					"fod-array-tx-val");
+
+	of_property_read_u8_array(chip->dev->of_node, "fod-array-bpp-val",
+					chip->fod_array_bpp,
+					chip->fod_array_bpp_len);
+	of_property_read_u8_array(chip->dev->of_node, "fod-array-epp-val",
+					chip->fod_array_epp,
+					chip->fod_array_epp_len);
+	of_property_read_u8_array(chip->dev->of_node, "fod-array-tx-val",
+					chip->fod_array_tx,
+					chip->fod_array_tx_len);
+
+	rc = of_property_read_u32(node, "epp-q-factor",
+				  &tmp);
+	if (!rc) {
+		chip->use_q_factor = true;
+		chip->q_factor = tmp;
+	}
 
 	return 0;
 }
