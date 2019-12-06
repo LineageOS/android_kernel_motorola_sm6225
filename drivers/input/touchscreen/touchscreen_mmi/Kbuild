@@ -1,0 +1,6 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+obj-m := touchscreen_mmi.o
+touchscreen_mmi-objs := touchscreen_mmi_class.o touchscreen_mmi_panel.o
