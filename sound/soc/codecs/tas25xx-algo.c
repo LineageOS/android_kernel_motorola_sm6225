@@ -23,133 +23,6 @@ static int s_tas_smartamp_bypass = 0;
 static int s_tas_smartamp_enable = 0;
 static struct mutex routing_lock;
 
-static uint32_t tas_digital_volume[] = {
-	0x00000179, //-105dB
-	0x000001A7,
-	0x000001DB,
-	0x00000215,
-	0x00000256,
-	0x0000029F,
-	0x000002F0,
-	0x0000034C,
-	0x000003B3,
-	0x00000427,
-	0x000004A9,
-	0x0000053A,
-	0x000005DE,
-	0x00000695,
-	0x00000763,
-	0x0000084A,
-	0x0000094D,
-	0x00000A6F,
-	0x00000BB5,
-	0x00000D23,
-	0x00000EBD,
-	0x0000108A,
-	0x0000128E,
-	0x000014D2,
-	0x0000175D,
-	0x00001A36,
-	0x00001D69,
-	0x00002100,
-	0x00002507,
-	0x0000298C,
-	0x00002E9D,
-	0x0000344D,
-	0x00003AAF,
-	0x000041D8,
-	0x000049E1,
-	0x000052E5,
-	0x00005D03,
-	0x0000685C,
-	0x00007518,
-	0x00008362,
-	0x0000936A,
-	0x0000A566,
-	0x0000B995,
-	0x0000D03A,
-	0x0000E9A2,
-	0x00010624,
-	0x00012621,
-	0x00014A05,
-	0x00017249,
-	0x00019F78,
-	0x0001D22A,
-	0x00020B0B,
-	0x00024ADE,
-	0x00029279,
-	0x0002E2D2,
-	0x00033CF8,
-	0x0003A21F,
-	0x0004139D,
-	0x000492F4,
-	0x000521D5,
-	0x0005C224,
-	0x00067604,
-	0x00073FD6,
-	0x00082248,
-	0x0009205C,
-	0x000A3D70,
-	0x000B7D4D,
-	0x000CE432,
-	0x000E76E1,
-	0x00103AB3,
-	0x001235A7,
-	0x00146E75,
-	0x0016ECAC,
-	0x0019B8C2,
-	0x001CDC38,
-	0x002061B8,
-	0x00245538,
-	0x0028C423,
-	0x002DBD8A,
-	0x00335252,
-	0x00399570,
-	0x00409C2B,
-	0x00487E5F,
-	0x005156D6,
-	0x005B439B,
-	0x00666666,
-	0x0072E50A,
-	0x0080E9F9,
-	0x0090A4D2,
-	0x00A24B06,
-	0x00B61887,
-	0x00CC509A,
-	0x00E53EBB,
-	0x01013798,
-	0x01209A37,
-	0x0143D136,
-	0x016B5433,
-	0x0197A967,
-	0x01C9676C,
-	0x02013739,
-	0x023FD667,
-	0x028619AE,
-	0x02D4EFBD,
-	0x032D6461,
-	0x0390A415,
-	0x04000000, //0dB
-	0x047CF267,
-	0x050923BE,
-	0x05A6703D,
-	0x0656EE3D, //+4dB, default
-	0x071CF547,
-	0x07FB260B,
-	0x08F47350,
-	0x0A0C2BF4,
-	0x0B46062C,
-	0x0CA62C1D,
-	0x0E314A02,
-	0x0FEC9E0F,
-	0x11DE0A3C,
-	0x140C2843,
-	0x167E600B,
-	0x193D00D2,
-	0x1C515D65,
-	0x1FC5EBCE  //+18dB
-};
-
 #ifdef CONFIG_SET_RE_IN_KERNEL
 static int get_calibrated_re_tcalib (uint32_t *rdc_fix, uint32_t *tv_fix, int channel_count)
 {
@@ -874,63 +747,6 @@ static int tas25xx_get_tv_right(struct snd_kcontrol *pKcontrol,
 }
 #endif
 
-static int tas25xx_set_digital_gain(struct snd_kcontrol *pKcontrol,
-				struct snd_ctl_elem_value *pUcontrol)
-{
-	int param_id = 0, ret = 0;
-	int gain = pUcontrol->value.integer.value[0];
-	uint32_t user_data = 0;
-	int value = 1;
-
-	pr_info("TI-SmartPA: %s: Setting gain %d", __func__, gain);
-	if((gain < 0) || (gain > 123)) {
-		pr_err("TI-SmartPA: %s: Invaild gain %d\n", __func__, gain);
-		return -EINVAL;
-	}
-
-	user_data = tas_digital_volume[gain];
-	param_id = TAS_CALC_PARAM_IDX(TAS_SA_SET_GAIN, 1, CHANNEL0);
-	ret = tas25xx_smartamp_algo_ctrl((u8 *)&user_data, param_id,
-					TAS_SET_PARAM, sizeof(uint32_t), AFE_SMARTAMP_MODULE_RX);
-
-	if(!ret) {
-		param_id = TAS_CALC_PARAM_IDX(TAS_SA_SWAP, 1, CHANNEL0);
-		ret = tas25xx_smartamp_algo_ctrl ((u8 *)&value, param_id,
-			TAS_SET_PARAM, sizeof(uint32_t), AFE_SMARTAMP_MODULE_RX);
-	}
-#ifdef CONFIG_TAS25XX_ALGO_STEREO
-	param_id = TAS_CALC_PARAM_IDX(TAS_SA_SET_GAIN, 1, CHANNEL1);
-	ret = tas25xx_smartamp_algo_ctrl((u8 *)&user_data, param_id,
-					TAS_SET_PARAM, sizeof(uint32_t), AFE_SMARTAMP_MODULE_RX);
-
-	if(!ret) {
-		param_id = TAS_CALC_PARAM_IDX(TAS_SA_SWAP, 1, CHANNEL1);
-		ret = tas25xx_smartamp_algo_ctrl ((u8 *)&value, param_id,
-			TAS_SET_PARAM, sizeof(uint32_t), AFE_SMARTAMP_MODULE_RX);
-	}
-#endif
-	return ret;
-}
-
-/* For stereo product, we set left digital volume same as right as usual, so only read ch0 */
-static int tas25xx_get_digital_gain(struct snd_kcontrol *pKcontrol,
-	struct snd_ctl_elem_value *pUcontrol)
-{
-	int ret = 0, param_id = 0, gain = 0;
-
-	param_id = TAS_CALC_PARAM_IDX(TAS_SA_SET_GAIN, 1, CHANNEL0);
-	ret = tas25xx_smartamp_algo_ctrl((u8 *)&gain, param_id,
-		TAS_GET_PARAM, sizeof(uint32_t), AFE_SMARTAMP_MODULE_RX);
-	if (ret < 0) {
-		pr_err("TI-SmartPA: %s: Failed to get digital gain!\n", __func__);
-		gain = 0;
-	}
-
-	pUcontrol->value.integer.value[0] = gain;
-
-	return ret;
-}
-
 static const struct snd_kcontrol_new smartamp_tas25xx_mixer_controls[] = {
 	SOC_ENUM_EXT("TAS25XX_ALGO_PROFILE", profile_index_enum[0],
 		tas25xx_get_profile, tas25xx_set_profile),
@@ -972,10 +788,6 @@ static const struct snd_kcontrol_new smartamp_tas25xx_mixer_controls[] = {
 
 	SOC_ENUM_EXT("TAS25XX_ALGO_BYPASS", tas25xx_smartamp_bypass_enum[0],
 		tas25xx_smartamp_bypass_get, tas25xx_smartamp_bypass_set),
-	SOC_SINGLE_EXT("TAS25XX_SET_DIGITAL_GAIN", SND_SOC_NOPM, 0, 0x7fffffff, 0,
-	        tas25xx_get_digital_gain, tas25xx_set_digital_gain),
-	SOC_SINGLE_EXT("TAS25XX_GET_DIGITAL_GAIN", SND_SOC_NOPM, 0, 0x7fffffff, 0,
-	        tas25xx_get_digital_gain, tas25xx_set_digital_gain),
 };
 
 #if CODEC_CONTROL
