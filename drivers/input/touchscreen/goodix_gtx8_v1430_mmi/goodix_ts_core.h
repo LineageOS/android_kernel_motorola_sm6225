@@ -417,6 +417,7 @@ struct goodix_ts_esd {
 struct goodix_ts_mmi {
 	struct notifier_block mmi_notifier;
 	int update_status;
+	int need_reflash;
 };
 #endif
 

@@ -1337,10 +1337,23 @@ static int goodix_request_handler(struct goodix_ts_device *dev)
 	break;
 	case REQUEST_RELOADFW:
 		ts_info("HW request reload fw");
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		if (core_data && core_data->do_fw_update) {
+			r = core_data->do_fw_update(UPDATE_MODE_FORCE|UPDATE_MODE_SRC_REQUEST);
+			if (r) {
+				ts_err("fw update failed, %d[try later]", r);
+				core_data->ts_mmi_info.need_reflash = 1;
+			}
+		} else {
+			ts_err("fw update handler not ready [try later].");
+			core_data->ts_mmi_info.need_reflash = 1;
+		}
+#else
 		if (core_data && core_data->do_fw_update)
 			core_data->do_fw_update(UPDATE_MODE_FORCE|UPDATE_MODE_SRC_REQUEST);
 		else
 			ts_err("fw update handler not ready.");
+#endif
 	break;
 	case REQUEST_IDLE:
 		ts_info("HW request idle");

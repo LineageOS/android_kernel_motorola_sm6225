@@ -110,7 +110,10 @@ static int goodix_ts_mmi_methods_get_flashprog(struct device *dev, void *idata) 
 		ts_err("Failed to get driver data");
 		return -ENODEV;
 	}
-	TO_INT(idata) = core_data->ts_mmi_info.update_status;
+	if (core_data->ts_mmi_info.need_reflash)
+		TO_INT(idata) = 1;
+	else
+		TO_INT(idata) = core_data->ts_mmi_info.update_status;
 	return 0;
 }
 static int goodix_ts_mmi_methods_drv_irq(struct device *dev, int state) {
@@ -168,6 +171,7 @@ static int goodix_ts_firmware_update(struct device *dev, char *fwname) {
 		ts_err("fw update handler not ready.");
 		return -EFAULT;
 	}
+	core_data->ts_mmi_info.need_reflash = 0;
 	return 0;
 }
 
