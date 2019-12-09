@@ -31,6 +31,9 @@
 #endif
 
 #include "goodix_ts_core.h"
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+#include "goodix_ts_mmi.h"
+#endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
 #include <linux/input/mt.h>
@@ -2196,6 +2199,15 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
 	goodix_ts_register_notifier(&core_data->ts_notifier);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	r = goodix_ts_mmi_dev_register(pdev);
+	if (r) {
+		ts_info("Failed register touchscreen mmi.");
+		goto out;
+	}
+#endif
+
 out:
 	if (r)
 		core_data->initialized = 0;
@@ -2213,6 +2225,9 @@ static int goodix_ts_remove(struct platform_device *pdev)
 {
 	struct goodix_ts_core *core_data = platform_get_drvdata(pdev);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	goodix_ts_mmi_dev_unregister(pdev);
+#endif
 	core_data->initialized = 0;
 	goodix_ts_unregister_notifier(&core_data->ts_notifier);
 	if (atomic_read(&core_data->ts_esd.esd_on))
