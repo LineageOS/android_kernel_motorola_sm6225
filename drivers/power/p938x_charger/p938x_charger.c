@@ -2159,7 +2159,7 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		val->intval = p938x_is_tx_connected(chip);
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = p938x_is_ldo_on(chip);
+		val->intval = p938x_is_tx_connected(chip);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = p938x_get_rx_iout(chip) * 1000;
