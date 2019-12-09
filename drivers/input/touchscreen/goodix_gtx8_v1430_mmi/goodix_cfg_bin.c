@@ -526,14 +526,22 @@ static int goodix_later_init_thread(void *data)
 		ts_err("failed get valid config data, retry after fwupdate");
 		if (!ts_core->do_fw_update) {
 			ts_err("fw update handler not ready.");
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+			goto update_fw_later;
+#else
 			goto release_core;
+#endif
 		}
 		ret = ts_core->do_fw_update(UPDATE_MODE_BLOCK|UPDATE_MODE_FORCE|
 					  UPDATE_MODE_FLASH_CFG|
 					  UPDATE_MODE_SRC_REQUEST);
 		if (ret) {
 			ts_err("fw update failed, %d", ret);
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+			goto update_fw_later;
+#else
 			goto release_core;
+#endif
 		}
 		ts_info("fw update success retry parse cfg bin");
 		ret = goodix_cfg_bin_proc(ts_core);
@@ -541,6 +549,9 @@ static int goodix_later_init_thread(void *data)
 			ts_err("failed parse cfg bin after fw update");
 			goto release_core;
 		}
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		goto stage2_init;
+#endif
 	} else {
 		ts_info("success parse config bin");
 		if (ts_core->do_fw_update) {
@@ -548,11 +559,19 @@ static int goodix_later_init_thread(void *data)
 						  UPDATE_MODE_FLASH_CFG|
 						  UPDATE_MODE_SRC_REQUEST);
 			if (ret) {
-				ts_err("fw update failed, %d[ignore]", ret);
+				ts_info("fw update failed, %d[ignore]", ret);
 				ret = 0;
 			}
 		}
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		goto stage2_init;
+#endif
 	}
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+update_fw_later:
+	ts_core->ts_mmi_info.need_reflash = 1;
+stage2_init:
+#endif
 	ret = goodix_ts_stage2_init(ts_core);
 	if (!ret) {
 		ts_info("stage2 init success");
