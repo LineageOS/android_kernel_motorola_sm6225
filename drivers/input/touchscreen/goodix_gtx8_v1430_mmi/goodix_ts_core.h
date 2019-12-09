@@ -196,7 +196,7 @@ struct goodix_ts_cmd {
 	u32 cmd_reg;
 	u32 length;
 	u8 cmds[8];
-	};
+};
 #pragma pack()
 
 /* interrupt event type */
@@ -413,6 +413,13 @@ struct goodix_ts_esd {
 	atomic_t esd_on;
 };
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+struct goodix_ts_mmi {
+	struct notifier_block mmi_notifier;
+	int update_status;
+};
+#endif
+
 /*
  * struct godix_ts_core - core layer data struct
  * @initialized: indicate core state, 1 ok, 0 bad
@@ -465,6 +472,11 @@ struct goodix_ts_core {
 #endif
 
 	int (*do_fw_update)(int mode);
+
+	int (*set_fw_name)(char* fw_name);
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	struct goodix_ts_mmi ts_mmi_info;
+#endif
 };
 
 /* external module structures */
