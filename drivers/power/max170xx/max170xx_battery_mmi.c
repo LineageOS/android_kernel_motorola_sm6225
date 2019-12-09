@@ -1324,7 +1324,7 @@ static void max17042_thread_worker(struct work_struct *work)
 
 	regmap_read(chip->regmap, MAX17042_STATUS, &val);
 	if ((val & STATUS_POR_BIT) &&
-	    (chip->init_complete || chip->factory_mode)) {
+	    (chip->init_complete || chip->factory_mode || chip->is_factory_image)) {
 		retval = regmap_read(map, MAX17042_OCVInternal, &val);
 		if (retval < 0)
 			val = -EINVAL;
