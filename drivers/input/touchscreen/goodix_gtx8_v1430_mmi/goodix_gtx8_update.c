@@ -164,13 +164,22 @@ struct fw_update_ctrl {
 	struct goodix_ts_device *ts_dev;
 	struct goodix_ts_core *core_data;
 
-	char fw_name[32];
+	char fw_name[64];
 	struct bin_attribute attr_fwimage;
 };
 static struct fw_update_ctrl goodix_fw_update_ctrl;
 
 static int goodix_do_fw_update(int mode);
 
+static int goodix_set_fwname(char* fw_name) {
+	if (fw_name != NULL) {
+		strlcpy(goodix_fw_update_ctrl.fw_name, fw_name,
+				sizeof(goodix_fw_update_ctrl.fw_name));
+		return 0;
+	}
+	else
+		return -EINVAL;
+}
 /**
  * goodix_parse_firmware - parse firmware header infomation
  *	and subsystem infomation from firmware data buffer
@@ -1497,6 +1506,7 @@ static int goodix_fw_update_init(struct goodix_ts_core *core_data,
 
 	mutex_lock(&goodix_fw_update_ctrl.mutex);
 	core_data->do_fw_update = goodix_do_fw_update;
+	core_data->set_fw_name = goodix_set_fwname;
 	module->priv_data = &goodix_fw_update_ctrl;
 
 	goodix_fw_update_ctrl.ts_dev = core_data->ts_dev;
