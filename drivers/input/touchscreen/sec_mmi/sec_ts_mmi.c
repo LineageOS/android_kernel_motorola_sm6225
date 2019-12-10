@@ -44,6 +44,14 @@ extern struct blocking_notifier_head dsi_freq_head;
 #define unregister_dynamic_refresh_rate_notifier(...) rc
 #endif
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#define register_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_unregister_notifier
+#else
+#define register_panel_notifier(...) rc
+#define unregister_panel_notifier(...) rc
+#endif
+
 #if defined(USE_STUBS)
 static struct class *local_touchscreen_class;
 struct class *get_touchscreen_class_ptr(void)
@@ -746,6 +754,7 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 	/* to ensure shared power supply is still on */
 	/* for in-cell design touch solutions */
 	switch (event) {
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
 	case PANEL_EVENT_PRE_DISPLAY_OFF:
 			/* put in reset first */
 			if (data->power_off_suspend)
@@ -777,6 +786,10 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 			if (data->power_off_suspend)
 				sec_ts_pinctrl_configure(ts, true);
 			sec_mmi_display_on(data);
+				break;
+#endif
+	default:
+			dev_dbg(DEV_MMI, "%s: function not implemented\n", __func__);
 				break;
 	}
 
@@ -814,7 +827,7 @@ static int sec_mmi_register_notifiers(
 
 	if (enable) {
 		data->panel_nb.notifier_call = sec_mmi_panel_cb;
-		rc = panel_register_notifier(&data->panel_nb);
+		rc = register_panel_notifier(&data->panel_nb);
 
 		if (data->usb_detection) {
 			data->ps_notif.notifier_call = sec_mmi_ps_notify_callback;
@@ -827,7 +840,7 @@ static int sec_mmi_register_notifiers(
 				&dsi_freq_head, &data->freq_nb);
 		}
 	} else {
-		rc = panel_unregister_notifier(&data->panel_nb);
+		rc = unregister_panel_notifier(&data->panel_nb);
 
 		if (data->usb_detection)
 			power_supply_unreg_notifier(&data->ps_notif);
