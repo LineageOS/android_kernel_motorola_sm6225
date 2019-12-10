@@ -788,8 +788,8 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 			sec_mmi_display_on(data);
 				break;
 #endif
-	default:
-			dev_dbg(DEV_MMI, "%s: function not implemented\n", __func__);
+	default:	/* use DEV_TS here to avoid unused variable */
+			dev_dbg(DEV_TS, "%s: function not implemented\n", __func__);
 				break;
 	}
 
