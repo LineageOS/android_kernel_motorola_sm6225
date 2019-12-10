@@ -364,6 +364,16 @@ static int sec_mmi_dt(struct sec_mmi_data *data)
 		ts->force_calibration = true;
 	}
 
+	if (of_property_read_bool(np, "sec,enable-gestures")) {
+		dev_info(DEV_MMI, "%s: using enable gestures\n", __func__);
+		data->gestures_enabled = true;
+	}
+
+	if (of_property_read_bool(np, "sec,gpio-config")) {
+		dev_info(DEV_MMI, "%s: using gpio config\n", __func__);
+		data->gpio_config = true;
+	}
+
 	if (!of_property_read_u32(np, "sec,reset-on-resume", &data->reset))
 		dev_info(DEV_MMI, "%s: using %u reset on resume\n",
 				__func__, data->reset);
@@ -712,8 +722,9 @@ static int inline sec_mmi_display_off(struct sec_mmi_data *data)
 	if (data->power_off_suspend)
 		sec_ts_irq_enable(ts, false);
 	else
-		sec_ts_set_lowpowermode(ts, TO_SLEEP_MODE);
-
+		sec_ts_set_lowpowermode(ts,
+			data->gestures_enabled ?
+				TO_LOWPOWER_MODE : TO_SLEEP_MODE);
 	cancel_delayed_work_sync(&data->resume_work);
 
 	if (ts->lowpower_mode)
@@ -727,60 +738,46 @@ static int inline sec_mmi_display_off(struct sec_mmi_data *data)
 static int sec_mmi_panel_cb(struct notifier_block *nb,
 		unsigned long event, void *evd)
 {
-	struct msm_drm_notifier *evdata = evd;
 	struct sec_mmi_data *data =
 		container_of(nb, struct sec_mmi_data, panel_nb);
+	struct sec_ts_data *ts = data->ts_ptr;
 
-	if (!evdata || (evdata->id != data->ctrl_dsi)) {
-		dev_dbg(DEV_MMI, "%s: drm notification: id(%d) != ctrl_dsi(%d)\n",
-				__func__, evdata->id, data->ctrl_dsi);
-		return 0;
-	}
+	/* entering suspend upon early blank event */
+	/* to ensure shared power supply is still on */
+	/* for in-cell design touch solutions */
+	switch (event) {
+	case PANEL_EVENT_PRE_DISPLAY_OFF:
+			/* put in reset first */
+			if (data->power_off_suspend)
+				sec_ts_pinctrl_configure(ts, false);
+			sec_mmi_display_off(data);
+				break;
 
-	if ((event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK) &&
-		 evdata && evdata->data && data) {
-		struct sec_ts_data *ts = data->ts_ptr;
-		int *blank = evdata->data;
+	case PANEL_EVENT_DISPLAY_OFF:
+			if (data->power_off_suspend) {
+				/* then proceed with de-powering */
+				sec_ts_power((void *)ts, false);
+				dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
+			}
+				break;
 
-		dev_dbg(DEV_MMI, "%s: drm notification: event = %lu blank = %d\n",
-				__func__, event, *blank);
-		/* entering suspend upon early blank event */
-		/* to ensure shared power supply is still on */
-		/* for in-cell design touch solutions */
-		switch (event) {
-			case MSM_DRM_EARLY_EVENT_BLANK:
-				if (*blank == MSM_DRM_BLANK_POWERDOWN) {
-					/* put in reset first */
-					if (data->power_off_suspend)
-						sec_ts_pinctrl_configure(ts, false);
+	case PANEL_EVENT_PRE_DISPLAY_ON:
+			if (data->power_off_suspend) {
+				/* powering on early */
+				sec_ts_power((void *)ts, true);
+				dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
+			} else if (data->reset) {
+				dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
+				data->reset_func(ts->mmi_ptr, data->reset);
+			}
+				break;
 
-					sec_mmi_display_off(data);
-
-				} else if (data->power_off_suspend) {
-					/* powering on early */
-					sec_ts_power((void *)ts, true);
-					dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
-				} else if (data->reset) {
-					dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
-					data->reset_func(ts->mmi_ptr, data->reset);
-				}
-					break;
-
-			case MSM_DRM_EVENT_BLANK:
-				if (*blank == MSM_DRM_BLANK_UNBLANK) {
-					/* out of reset to allow wait for boot complete */
-					if (data->power_off_suspend)
-						sec_ts_pinctrl_configure(ts, true);
-
-					sec_mmi_display_on(data);
-
-				} else if (data->power_off_suspend) {
-					/* then proceed with de-powering */
-					sec_ts_power((void *)ts, false);
-					dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
-				}
-					break;
-		}
+	case PANEL_EVENT_DISPLAY_ON:
+			/* out of reset to allow wait for boot complete */
+			if (data->power_off_suspend)
+				sec_ts_pinctrl_configure(ts, true);
+			sec_mmi_display_on(data);
+				break;
 	}
 
 	return 0;
@@ -817,7 +814,7 @@ static int sec_mmi_register_notifiers(
 
 	if (enable) {
 		data->panel_nb.notifier_call = sec_mmi_panel_cb;
-		rc = msm_drm_register_client(&data->panel_nb);
+		rc = panel_register_notifier(&data->panel_nb);
 
 		if (data->usb_detection) {
 			data->ps_notif.notifier_call = sec_mmi_ps_notify_callback;
@@ -830,7 +827,8 @@ static int sec_mmi_register_notifiers(
 				&dsi_freq_head, &data->freq_nb);
 		}
 	} else {
-		rc = msm_drm_unregister_client(&data->panel_nb);
+		rc = panel_unregister_notifier(&data->panel_nb);
+
 		if (data->usb_detection)
 			power_supply_unreg_notifier(&data->ps_notif);
 
@@ -848,6 +846,42 @@ static int sec_mmi_register_notifiers(
 				__func__, enable ? "" : "un");
 
 	return rc;
+}
+
+void sec_mmi_gesture_handler(void *data)
+{
+	struct sec_ts_gesture_status *gs =
+		(struct sec_ts_gesture_status *)data;
+
+	if (gs->eid != SEC_TS_GESTURE_EVENT) {
+		pr_info("%s: invalid gesture ID\n", __func__);
+		return;
+	}
+
+	pr_info("%s: GESTURE %x %x %x %x %x %x %x %x\n", __func__,
+		gs->eid | (gs->stype << 4) | (gs->sf << 6),
+		gs->gesture_id,
+		gs->gesture_data_1,
+		gs->gesture_data_2,
+		gs->gesture_data_3,
+		gs->gesture_data_4,
+		gs->reserved_1,
+		gs->left_event_5_0 | (gs->reserved_2 << 6));
+
+	switch (gs->gesture_id) {
+	case 1:
+		pr_info("%s: single tap\n", __func__);
+			break;
+	case 2:
+		pr_info("%s: zero tap; x=%x, y=%x, w=%x, p=%x\n", __func__,
+			gs->gesture_data_1+((gs->gesture_data_3 & 0x0f) << 8),
+			gs->gesture_data_2+((gs->gesture_data_3 & 0xf0) << 8),
+			gs->gesture_data_4,
+			gs->reserved_1);
+			break;
+	default:
+		pr_info("%s: unknown id=%\n", __func__, gs->gesture_id);
+	}
 }
 
 static ssize_t sec_mmi_panel_supplier_show(struct device *dev,
@@ -1239,6 +1273,9 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		/* register charging detection before sec_mmi_enable_touch enabling touch */
 		if (data->usb_detection)
 			INIT_WORK(&data->ps_notify_work, sec_mmi_ps_work);
+
+		if (data->gpio_config)
+			sec_mmi_ic_reset(data, 1);
 
 		data->task = MMI_TASK_INIT;
 		schedule_delayed_work(&data->work, msecs_to_jiffies(50));
