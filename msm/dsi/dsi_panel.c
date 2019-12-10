@@ -10,6 +10,17 @@
 #include <linux/pwm.h>
 #include <video/mipi_display.h>
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#include <linux/panel_notifier.h>
+
+#define PANEL_NOTIFY(note) { \
+	int idx = dsi_panel_get_index(panel); \
+	panel_notify(note, (void *)&idx); \
+}
+#else
+#define PANEL_NOTIFY(...)
+#endif
+
 #include "dsi_display.h"
 #include "dsi_panel.h"
 #include "dsi_ctrl_hw.h"
@@ -4926,6 +4937,19 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	return rc;
 }
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+static inline int dsi_panel_get_index(struct dsi_panel *panel)
+{
+	struct dsi_display *dsi_display =
+			container_of(panel->host, struct dsi_display, host);
+
+	if (unlikely(dsi_display == NULL))
+		return -EINVAL;
+
+	return dsi_display->display_idx;
+}
+#endif
+
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -4975,6 +4999,9 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		DSI_INFO("-: no_panel_on_read_support is set\n");
 
 	panel->panel_initialized = true;
+
+	PANEL_NOTIFY(PANEL_EVENT_PRE_DISPLAY_ON);
+
 err:
 
 	mutex_unlock(&panel->panel_lock);
@@ -4998,6 +5025,9 @@ int dsi_panel_post_enable(struct dsi_panel *panel)
 		       panel->name, rc);
 		goto error;
 	}
+
+	PANEL_NOTIFY(PANEL_EVENT_DISPLAY_ON);
+
 error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
@@ -5020,6 +5050,8 @@ int dsi_panel_pre_disable(struct dsi_panel *panel)
 		       panel->name, rc);
 		goto error;
 	}
+
+	PANEL_NOTIFY(PANEL_EVENT_PRE_DISPLAY_OFF);
 
 error:
 	mutex_unlock(&panel->panel_lock);
@@ -5064,6 +5096,8 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	}
 	panel->panel_initialized = false;
 	panel->power_mode = SDE_MODE_DPMS_OFF;
+
+	PANEL_NOTIFY(PANEL_EVENT_DISPLAY_OFF);
 
 	mutex_unlock(&panel->panel_lock);
 	return rc;
