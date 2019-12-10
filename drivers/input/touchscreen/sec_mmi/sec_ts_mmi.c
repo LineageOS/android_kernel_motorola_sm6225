@@ -893,7 +893,7 @@ void sec_mmi_gesture_handler(void *data)
 			gs->reserved_1);
 			break;
 	default:
-		pr_info("%s: unknown id=%\n", __func__, gs->gesture_id);
+		pr_info("%s: unknown id=%x\n", __func__, gs->gesture_id);
 	}
 }
 
