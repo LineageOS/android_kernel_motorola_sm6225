@@ -7,8 +7,10 @@
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#include <linux/panel_notifier.h>
+#endif
 #if defined(CONFIG_DRM)
-#include <linux/msm_drm_notify.h>
 extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 #endif
 
@@ -38,6 +40,8 @@ struct sec_mmi_data {
 
 	atomic_t touch_stopped;
 
+	bool gpio_config;
+	bool gestures_enabled;
 	bool power_off_suspend;
 	unsigned int reset;
 	bool usb_detection;
@@ -60,6 +64,7 @@ struct sec_mmi_data {
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable);
+void sec_mmi_gesture_handler(void *data);
 
 #define DEV_MMI (&data->i2c_client->dev)
 #define DEV_TS  (&ts->client->dev)
