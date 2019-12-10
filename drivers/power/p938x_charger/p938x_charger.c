@@ -50,6 +50,7 @@
 #include <linux/power_supply.h>
 #include <linux/firmware.h>
 #include <linux/limits.h>
+#include <linux/thermal.h>
 
 #define CHIP_ID_REG			0x0000
 #define HW_VER_REG			0x0002
@@ -279,6 +280,8 @@ struct p938x_charger {
 	int	fod_array_tx_len;
 	bool 	use_q_factor;
 	u8	q_factor;
+
+	struct thermal_cooling_device *tcd;
 };
 
 #define WLS_FLAG_BOOST_ENABLED 0
@@ -287,6 +290,7 @@ struct p938x_charger {
 #define WLS_FLAG_TX_MODE_EN    3
 #define WLS_FLAG_USB_CONNECTED 4
 #define WLS_FLAG_USB_KEEP_ON   5
+#define WLS_FLAG_OVERHEAT      6
 
 /* Send our notications to the battery */
 static char *pm_wls_supplied_to[] = {
@@ -816,6 +820,11 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			return;
 		}
 
+		if (test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
+			p938x_dbg(chip, PR_IMPORTANT, "Device too hot to enable tx mode\n");
+			return;
+		}
+
 		/* Force dc in off so system doesn't see charger attached */
 		/* TODO are both dc_en and dc suspend needed? */
 		p938x_set_dc_suspend(chip, 1);
@@ -877,6 +886,47 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
 	}
 }
+
+static int p938x_tcd_get_max_state(struct thermal_cooling_device *tcd,
+	unsigned long *state)
+{
+	*state = 1;
+
+	return 0;
+}
+
+static int p938x_tcd_get_cur_state(struct thermal_cooling_device *tcd,
+	unsigned long *state)
+{
+	struct p938x_charger *chip = tcd->devdata;
+
+	*state = test_bit(WLS_FLAG_OVERHEAT, &chip->flags);
+
+	return 0;
+}
+
+static int p938x_tcd_set_cur_state(struct thermal_cooling_device *tcd,
+	unsigned long state)
+{
+	struct p938x_charger *chip = tcd->devdata;
+
+	p938x_dbg(chip, PR_MOTO, "Setting tcd to state %lu\n", state);
+
+	if (state && !test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
+		set_bit(WLS_FLAG_OVERHEAT, &chip->flags);
+		p938x_set_tx_mode(chip, 0);
+	} else if (!state) {
+		clear_bit(WLS_FLAG_OVERHEAT, &chip->flags);
+	}
+
+	return 0;
+}
+
+static const struct thermal_cooling_device_ops p938x_tcd_ops = {
+	.get_max_state = p938x_tcd_get_max_state,
+	.get_cur_state = p938x_tcd_get_cur_state,
+	.set_cur_state = p938x_tcd_set_cur_state,
+};
 
 static int p938x_program_mtp_downloader(struct p938x_charger *chip)
 {
@@ -1980,6 +2030,8 @@ static void show_dump_flags(struct seq_file *m,
 		test_bit(WLS_FLAG_USB_CONNECTED, &chip->flags));
 	seq_printf(m, "WLS_FLAG_USB_KEEP_ON: %d\n",
 		test_bit(WLS_FLAG_USB_KEEP_ON, &chip->flags));
+	seq_printf(m, "WLS_FLAG_OVERHEAT: %d\n",
+		test_bit(WLS_FLAG_OVERHEAT, &chip->flags));
 }
 
 static int show_dump_regs(struct seq_file *m, void *data)
@@ -2514,6 +2566,10 @@ static int p938x_charger_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
+	/* Register thermal zone cooling device */
+	chip->tcd = thermal_of_cooling_device_register(dev_of_node(chip->dev),
+		"p938x_charger", chip, &p938x_tcd_ops);
+
 	/* Reset the chip to in case we inserted the module with a transmitter attached
 	 * in order to force the right irqs to run
 	 */
@@ -2545,6 +2601,8 @@ static int p938x_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&chip->heartbeat_work);
 	cancel_delayed_work_sync(&chip->tx_mode_work);
 	debugfs_remove_recursive(chip->debug_root);
+	if(chip->tcd)
+		thermal_cooling_device_unregister(chip->tcd);
 
 	return 0;
 }
