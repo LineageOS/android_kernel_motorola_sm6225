@@ -883,6 +883,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				/*							*/
 				/*  Gesture event handling 	*/
 				/*						   	*/
+				sec_mmi_gesture_handler((void *)event_buff);
 				break;
 			case SEC_TS_GESTURE_CODE_DOUBLE_TAP:
 				/*							*/
@@ -2108,7 +2109,10 @@ int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 		}
 		#endif
 
-		data = (ts->lowpower_mode & SEC_TS_MODE_LOWPOWER_FLAG) >> 1;
+		//data = (ts->lowpower_mode & SEC_TS_MODE_LOWPOWER_FLAG) >> 1;
+		data = 0x1;
+		input_err(true, &ts->client->dev, "%s: setting gesture mode (%X)\n",
+			__func__, data);
 		ret = sec_ts_i2c_write(ts, SEC_TS_CMD_WAKEUP_GESTURE_MODE, &data, 1);
 		if (ret < 0) {
 			input_err(true, &ts->client->dev, "%s: Failed to set\n", __func__);
