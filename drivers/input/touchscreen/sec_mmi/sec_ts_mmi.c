@@ -875,7 +875,7 @@ void sec_mmi_gesture_handler(void *data)
 	case 2:
 		pr_info("%s: zero tap; x=%x, y=%x, w=%x, p=%x\n", __func__,
 			gs->gesture_data_1+((gs->gesture_data_3 & 0x0f) << 8),
-			gs->gesture_data_2+((gs->gesture_data_3 & 0xf0) << 8),
+			gs->gesture_data_2+((gs->gesture_data_3 & 0xf0) << 4),
 			gs->gesture_data_4,
 			gs->reserved_1);
 			break;
