@@ -61,6 +61,8 @@ struct touch_event_data {
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
+	/* vendor specific attribute group */
+	int	(*extend_attribute_group)(struct device *dev, struct attribute_group **group);
 };
 
 #define TO_CHARP(dp)	((char*)(dp))
@@ -115,6 +117,7 @@ struct ts_mmi_dev {
 	int			drv_irq;
 	int			poweron;
 	int			flashprog;
+	struct attribute_group	*extern_group;
 	struct list_head	node;
 	/*
 	 * vendor provided
@@ -124,6 +127,8 @@ struct ts_mmi_dev {
 
 #define DEV_MMI (touch_cdev->class_dev)
 #define DEV_TS  (touch_cdev->dev)
+#define MMI_DEV_TO_TS_DEV(cdev) (((struct ts_mmi_dev *)dev_get_drvdata(dev))->dev)
+
 
 extern int ts_mmi_panel_register(struct ts_mmi_dev *touch_cdev);
 extern void ts_mmi_panel_unregister(struct ts_mmi_dev *touch_cdev);
