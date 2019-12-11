@@ -89,8 +89,10 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		}
 		dev_info(DEV_TS, "%s: mmi,panel_name %s\n", __func__, supplier);
 
+		s = (char *)supplier;
 		/* skip dsi_ part */
-		s = (char *)supplier + 4;
+		if (!strncmp(supplier, "dsi_", 4))
+			s += 4;
 		d = touch_cdev->panel_supplier;
 		while (*s != '_') *d++ = *s++;
 
