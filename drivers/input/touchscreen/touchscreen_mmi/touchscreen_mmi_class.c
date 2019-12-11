@@ -336,6 +336,17 @@ int ts_mmi_dev_register(struct device *parent,
 	if (ret)
 		goto CLASS_DEVICE_ATTR_CREATE_FAILED;
 
+	if (touch_cdev->mdata->extend_attribute_group) {
+		touch_cdev->mdata->extend_attribute_group(DEV_TS,
+			&touch_cdev->extern_group);
+		if (touch_cdev->extern_group) {
+			ret = sysfs_create_group(&DEV_MMI->kobj,
+				touch_cdev->extern_group);
+			if (ret)
+				goto CLASS_DEVICE_EXT_ATTR_CREATE_FAILED;
+		}
+	}
+
 	ret = ts_mmi_panel_register(touch_cdev);
 	if (ret < 0) {
 		dev_err(DEV_TS, "%s: Register panel failed. %d\n",
@@ -348,6 +359,9 @@ int ts_mmi_dev_register(struct device *parent,
 	return 0;
 
 PANEL_INIT_FAILED:
+	if (touch_cdev->extern_group)
+		sysfs_remove_group(&DEV_MMI->kobj, touch_cdev->extern_group);
+CLASS_DEVICE_EXT_ATTR_CREATE_FAILED:
 	sysfs_remove_group(&DEV_MMI->kobj, &sysfs_class_group);
 CLASS_DEVICE_ATTR_CREATE_FAILED:
 	down_write(&touchscreens_list_lock);
@@ -395,6 +409,8 @@ void ts_mmi_dev_unregister(struct device *parent)
 	dev_info(DEV_TS, "%s: delete device\n", __func__);
 
 	dev_set_drvdata(DEV_TS, NULL);
+	if (touch_cdev->extern_group)
+		sysfs_remove_group(&DEV_MMI->kobj, touch_cdev->extern_group);
 	sysfs_remove_group(&DEV_MMI->kobj, &sysfs_class_group);
 	device_unregister(DEV_MMI);
 	DEV_MMI = NULL;
