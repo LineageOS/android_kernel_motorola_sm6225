@@ -823,7 +823,7 @@ static int sec_mmi_refresh_rate(struct notifier_block *nb,
 static int sec_mmi_register_notifiers(
 	struct sec_mmi_data *data, bool enable)
 {
-	int rc;
+	int rc = 0;
 
 	if (enable) {
 		data->panel_nb.notifier_call = sec_mmi_panel_cb;
