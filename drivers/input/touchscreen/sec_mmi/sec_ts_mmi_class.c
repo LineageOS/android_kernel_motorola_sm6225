@@ -423,6 +423,47 @@ static int sec_mmi_methods_reset(struct device *dev, int type) {
 	return 0;
 }
 
+static int sec_mmi_methods_power(struct device *dev, int on) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	return sec_ts_power((void *)ts, on == TS_MMI_POWER_ON);
+}
+
+static int sec_mmi_methods_refresh_rate(struct device *dev, int freq) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int ret;
+	unsigned char f = freq & 0xff;
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	dev_info(dev, "%s: writing refresh rate %dhz\n", __func__, freq);
+	ret = ts->sec_ts_i2c_write(ts, 0x4C, &f, 1);
+	if (ret < 0) {
+		dev_err(dev, "%s: failed refresh_rate (%d)\n", __func__, ret);
+		return ret;
+	}
+	return 0;
+}
+
+static int sec_mmi_methods_pinctrl(struct device *dev, int on) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	return sec_ts_pinctrl_configure(ts, on == TS_MMI_PINCTL_ON);
+}
+
 static int sec_mmi_firmware_update(struct device *dev, char *fwname) {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	const struct firmware *fw_entry;
@@ -495,6 +536,104 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 	return 0;
 }
 
+static int sec_mmi_panel_state(struct device *dev,
+	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	switch (to) {
+	case TS_MMI_PM_DEEPSLEEP:
+		return sec_ts_set_lowpowermode(ts, TO_SLEEP_MODE);
+	case TS_MMI_PM_GESTURE:
+		return sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
+	case TS_MMI_PM_ACTIVE:
+		return sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
+	default:
+		dev_warn(dev, "panel mode %d is invalid.\n", to);
+		return -EINVAL;
+	}
+}
+
+static int sec_mmi_wait_for_ready(struct device *dev) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	return sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+}
+
+static int sec_mmi_pre_suspend(struct device *dev) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	unsigned long start_wait_jiffies = jiffies;
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	do {
+		if (!ts->wakelock.active)
+			break;
+		usleep_range(1000, 1000);
+	} while (1);
+
+	if ((jiffies - start_wait_jiffies))
+		dev_info(dev, "%s: entering suspend delayed for %ums\n",
+			__func__, jiffies_to_msecs(jiffies - start_wait_jiffies));
+
+	return 0;
+}
+
+static int sec_mmi_post_suspend(struct device *dev) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	if (ts->lowpower_mode)
+		reinit_completion(&ts->resume_done);
+
+	return 0;
+}
+
+static int sec_mmi_post_resume(struct device *dev) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int ret;
+	unsigned char buffer = 0;
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	dev_dbg(dev, "%s: sending sense_on...\n", __func__);
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
+	if (ret < 0)
+		dev_err(dev, "%s: failed sense_on (%d)\n", __func__, ret);
+
+	if (ts->lowpower_mode)
+		complete_all(&ts->resume_done);
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
+					&buffer, sizeof(buffer));
+	if (ret < 0)
+		dev_err(dev, "%s: failed to read boot status (%d)\n", __func__, ret);
+
+	ts->fw_invalid = buffer == SEC_TS_STATUS_BOOT_MODE;
+
+	return 0;
+}
+
 static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.get_vendor = sec_mmi_methods_get_vendor,
 	.get_productinfo = sec_mmi_methods_get_productinfo,
@@ -508,11 +647,20 @@ static struct ts_mmi_methods sec_ts_mmi_methods = {
 	/* SET methods */
 	.reset =  sec_mmi_methods_reset,
 	.drv_irq = sec_mmi_methods_drv_irq,
+	.power = sec_mmi_methods_power,
+	.pinctrl = sec_mmi_methods_pinctrl,
+	.refresh_rate = sec_mmi_methods_refresh_rate,
 	/* Firmware */
 	.firmware_update = sec_mmi_firmware_update,
 	.firmware_erase = sec_mmi_firmware_erase,
 	/* vendor specific attribute group */
 	.extend_attribute_group = sec_mmi_extend_attribute_group,
+	/* PM callback */
+	.panel_state = sec_mmi_panel_state,
+	.wait_for_ready = sec_mmi_wait_for_ready,
+	.post_resume = sec_mmi_post_resume,
+	.pre_suspend = sec_mmi_pre_suspend,
+	.post_suspend = sec_mmi_post_suspend,
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
