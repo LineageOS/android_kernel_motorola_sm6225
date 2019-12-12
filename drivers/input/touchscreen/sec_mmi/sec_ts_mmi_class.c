@@ -61,6 +61,10 @@ static struct attribute_group factory_attr_group = {
 	.attrs = factory_attributes,
 };
 
+void __weak sec_mmi_gesture_handler(void *data) {
+	pr_info("%s: not implemented yet.\n");
+}
+
 static void sec_mmi_ic_reset(struct sec_ts_data *ts, int mode)
 {
 	if (!gpio_is_valid(ts->plat_data->rst_gpio) ||
