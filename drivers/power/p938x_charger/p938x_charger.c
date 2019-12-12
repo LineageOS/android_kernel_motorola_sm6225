@@ -216,6 +216,11 @@ module_param_named(
 	debug_mask, __debug_mask, int, S_IRUSR | S_IWUSR
 );
 
+struct p938x_limits {
+	u32 tx_capability_mw;
+	u32 idc_max_ma;
+};
+
 struct p938x_charger {
 	const char		*name;
 	int			*debug_mask;
@@ -257,6 +262,12 @@ struct p938x_charger {
 	struct wakeup_source wls_wake_source;
 	bool	epp_mode;
 
+	u32 bpp_current_limit;
+	struct p938x_limits *epp_current_limits;
+	int epp_limit_num;
+	u32 bpp_voltage;
+	u32 epp_voltage;
+
 	u8	fod_array_bpp[FOD_MAX_LEN];
 	u8	fod_array_epp[FOD_MAX_LEN];
 	u8	fod_array_tx[FOD_MAX_LEN];
@@ -266,20 +277,6 @@ struct p938x_charger {
 	bool 	use_q_factor;
 	u8	q_factor;
 };
-
-struct p938x_limits {
-	unsigned int tx_capability_mw;
-	unsigned long idc_max_ma;
-};
-
-/* Lowest mW first, highest mW last */
-static struct p938x_limits p938x_epp_limits[] = {
-	{10000, 850},
-	{15000, 1250},
-};
-
-static const int p938x_epp_limit_num =
-	sizeof(p938x_epp_limits) / sizeof(struct p938x_limits);
 
 #define WLS_FLAG_BOOST_ENABLED 0
 #define WLS_FLAG_TX_ATTACHED   1
@@ -770,13 +767,27 @@ static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
 {
 	union power_supply_propval val;
 
-	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
+	p938x_dbg(chip, PR_MOTO, "Setting IDC max to %u mA\n", idc);
 
 	idc *= 1000; /* Convert to uA */
 	val.intval = idc;
 
 	return p938x_set_dc_psp_prop(chip,
 		POWER_SUPPLY_PROP_CURRENT_MAX,
+		val);
+}
+
+static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc)
+{
+	union power_supply_propval val;
+
+	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
+
+	idc *= 1000; /* Convert to uA */
+	val.intval = idc;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_CURRENT_NOW,
 		val);
 }
 
@@ -1182,7 +1193,7 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 	u8 mode = 0;
 	int tx_guaranteed;
 	int tx_potential;
-	struct p938x_limits epp_limit = p938x_epp_limits[0];
+	struct p938x_limits epp_limit;
 
 	rc = p938x_read_buffer(chip, SYS_MODE_REG, &mode, 1);
 	if (rc < 0)
@@ -1200,7 +1211,8 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 			p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_EXTENDED\n");
 			chip->epp_mode = true;
 
-			if (!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential)) {
+			if (chip->epp_limit_num &&
+					!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential)) {
 				p938x_dbg(chip, PR_INTERRUPT, "EPP GUARANTEED %dmW, POTENTIAL %dmW\n",
 					tx_guaranteed, tx_potential);
 
@@ -1208,28 +1220,29 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 				 * and go backwards, if we find one more appropriate use that one
 				 * instead
 				 */
-				for(i=p938x_epp_limit_num-1; i >= 0; i--) {
-					if(tx_potential >= p938x_epp_limits[i].tx_capability_mw) {
-						epp_limit = p938x_epp_limits[i];
+				epp_limit = chip->epp_current_limits[0];
+				for(i=chip->epp_limit_num-1; i >= 0; i--) {
+					if(tx_guaranteed >= chip->epp_current_limits[i].tx_capability_mw) {
+						epp_limit = chip->epp_current_limits[i];
 						break;
 					}
 				}
 
-				p938x_dbg(chip, PR_INTERRUPT, "EPP LIMIT is %d mW -> %lu mA\n",
+				p938x_dbg(chip, PR_INTERRUPT, "EPP LIMIT is %d mW -> %d mA\n",
 					epp_limit.tx_capability_mw, epp_limit.idc_max_ma);
 
 				p938x_set_dc_max_icl_ma(chip, epp_limit.idc_max_ma);
 			} else
 				p938x_set_dc_max_icl_ma(chip, EPP_MAX_IDC);
 
-			p938x_set_rx_vout(chip, EPP_MAX_VOUT);
+			p938x_set_rx_vout(chip, chip->epp_voltage);
 			p938x_set_rx_ocl(chip, EPP_MAX_IOUT);
 			p938x_program_fod(chip, chip->fod_array_epp,
 				chip->fod_array_epp_len);
 		} else {
 			chip->epp_mode = false;
-			p938x_set_dc_max_icl_ma(chip, BPP_MAX_IDC);
-			p938x_set_rx_vout(chip, BPP_MAX_VOUT);
+			p938x_set_dc_max_icl_ma(chip, chip->bpp_current_limit);
+			p938x_set_rx_vout(chip, chip->bpp_voltage);
 			p938x_set_rx_ocl(chip, BPP_MAX_IOUT);
 			p938x_program_fod(chip, chip->fod_array_bpp,
 				chip->fod_array_bpp_len);
@@ -1501,6 +1514,7 @@ static ssize_t force_idc_store(struct device *dev,
 	/* Store to persist change */
 	chip->wls_idc_max = value;
 
+	p938x_set_dc_now_icl_ma(chip, value);
 	p938x_set_dc_max_icl_ma(chip, value);
 
 	return r ? r : count;
@@ -1822,7 +1836,8 @@ static ssize_t tx_capability_show(struct device *dev,
 
 	if (chip->epp_mode) {
 		if (!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential))
-			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP %dmW\n", tx_potential);
+			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP %dmW (Potential %dmW)\n",
+				tx_guaranteed, tx_potential);
 		else
 			return scnprintf(buf, WLS_SHOW_MAX_SIZE, "EPP Unknown\n");
 	} else
@@ -2054,6 +2069,8 @@ static int p938x_parse_dt(struct p938x_charger *chip)
 	struct device_node *node = chip->dev->of_node;
 	int rc;
 	unsigned tmp;
+	int byte_len;
+	int i;
 
 	if (!node) {
 		p938x_err(chip, "device tree info. missing\n");
@@ -2132,6 +2149,45 @@ static int p938x_parse_dt(struct p938x_charger *chip)
 		chip->use_q_factor = true;
 		chip->q_factor = tmp;
 	}
+
+	if (of_find_property(node, "epp-current-table", &byte_len)) {
+		chip->epp_current_limits = (struct p938x_limits *)
+			devm_kzalloc(chip->dev, byte_len, GFP_KERNEL);
+
+		if (chip->epp_current_limits == NULL)
+			return -ENOMEM;
+
+		rc = of_property_read_u32_array(node,
+				"epp-current-table",
+				(u32 *)chip->epp_current_limits,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			p938x_err(chip, "Couldn't read epp current limits rc = %d\n", rc);
+			return rc;
+		}
+
+		chip->epp_limit_num =
+			byte_len / sizeof(struct p938x_limits);
+
+		p938x_dbg(chip, PR_IMPORTANT, "epp current limits: Num: %d\n", chip->epp_limit_num);
+		for (i = 0; i < chip->epp_limit_num; i++) {
+			p938x_dbg(chip, PR_IMPORTANT, "epp current limit: %dW, %dmA",
+				chip->epp_current_limits[i].tx_capability_mw / 1000,
+				chip->epp_current_limits[i].idc_max_ma);
+		}
+	}
+
+	rc = of_property_read_u32(node, "epp-voltage", &chip->epp_voltage);
+	if (rc)
+		chip->epp_voltage = EPP_MAX_VOUT;
+
+	rc = of_property_read_u32(node, "bpp-current", &chip->bpp_current_limit);
+	if (rc)
+		chip->bpp_current_limit = BPP_MAX_IDC;
+
+	rc = of_property_read_u32(node, "bpp-voltage", &chip->bpp_voltage);
+	if (rc)
+		chip->bpp_voltage = BPP_MAX_VOUT;
 
 	return 0;
 }
