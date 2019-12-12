@@ -452,6 +452,7 @@ static int aw8697_haptic_play_mode(struct aw8697 *aw8697,
 				   unsigned char play_mode)
 {
 	pr_debug("%s enter\n", __func__);
+	pr_debug("%s: play_mode=%d\n", __func__, play_mode);
 
 	switch (play_mode) {
 	case AW8697_HAPTIC_STANDBY_MODE:
@@ -1579,8 +1580,8 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 		return;
 	}
 	aw8697->rtp_init = 0;
-	kfree(aw8697_rtp);
-	aw8697_rtp = kzalloc(rtp_file->size+sizeof(int), GFP_KERNEL);
+	vfree(aw8697_rtp);
+	aw8697_rtp = vzalloc(rtp_file->size+sizeof(int));
 	if (!aw8697_rtp) {
 		release_firmware(rtp_file);
 		pr_err("%s: error allocating memory\n", __func__);
@@ -2620,6 +2621,8 @@ static ssize_t aw8697_duration_store(struct device *dev,
 	if (val <= 0)
 		return count;
 
+	pr_debug("%s: duration=%d\n", __func__, val);
+
 	aw8697->duration = val;
 
 	return count;
@@ -2888,6 +2891,7 @@ static ssize_t aw8697_seq_store(struct device *dev,
 	mutex_lock(&aw8697->lock);
 	for (i = 0; i < AW8697_WAV_SEQ_SIZE; i++) {
 		aw8697->seq[i] = (val >> ((AW8697_WAV_SEQ_SIZE-i-1) * 8)) & 0xFF;
+		pr_debug("%s: seq[%d]=%d\n", __func__, i, aw8697->seq[i]);
 		aw8697_haptic_set_wav_seq(aw8697, i, aw8697->seq[i]);
 	}
 	mutex_unlock(&aw8697->lock);
