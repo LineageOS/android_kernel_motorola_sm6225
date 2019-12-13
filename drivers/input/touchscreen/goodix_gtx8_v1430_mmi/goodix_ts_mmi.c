@@ -14,7 +14,14 @@
 #include <linux/touchscreen_mmi.h>
 #include "goodix_ts_mmi.h"
 #include "goodix_cfg_bin.h"
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
+#include <linux/input/mt.h>
+#define INPUT_TYPE_B_PROTOCOL
+#endif
+
+
 extern int goodix_ts_unregister_notifier(struct notifier_block *nb);
+extern struct goodix_module goodix_modules;
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
@@ -175,6 +182,250 @@ static int goodix_ts_firmware_update(struct device *dev, char *fwname) {
 	return 0;
 }
 
+static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	if (on == TS_MMI_POWER_ON)
+		return goodix_ts_power_on(core_data);
+	else if(on == TS_MMI_POWER_OFF)
+		return goodix_ts_power_off(core_data);
+	else {
+		ts_err("Invalid power parameter %d.\n", on);
+		return -EINVAL;
+	}
+}
+
+#ifdef CONFIG_PINCTRL
+static int goodix_ts_mmi_methods_pinctrl(struct device *dev, int on) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	if (on == TS_MMI_PINCTL_ON) {
+		if (core_data->pinctrl)
+			return pinctrl_select_state(core_data->pinctrl,
+						 core_data->pin_sta_active);
+	} else if(on == TS_MMI_PINCTL_OFF) {
+		if (core_data->pinctrl)
+			return pinctrl_select_state(core_data->pinctrl,
+					core_data->pin_sta_suspend);
+	} else {
+		ts_err("Invalid power parameter %d.\n", on);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
+
+static int goodix_ts_mmi_panel_state(struct device *dev,
+	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_device *ts_dev;
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+	ts_dev = core_data->ts_dev;
+
+	switch (to) {
+	case TS_MMI_PM_GESTURE:
+	case TS_MMI_PM_DEEPSLEEP:
+		/* let touch ic work in sleep mode */
+		if (ts_dev && ts_dev->hw_ops->suspend)
+			ts_dev->hw_ops->suspend(ts_dev);
+		atomic_set(&core_data->suspended, 1);
+		break;
+	case TS_MMI_PM_ACTIVE:
+		atomic_set(&core_data->suspended, 0);
+		/* resume device */
+		if (ts_dev && ts_dev->hw_ops->resume)
+			ts_dev->hw_ops->resume(ts_dev);
+		break;
+	default:
+		ts_err("Invalid power state parameter %d.\n", to);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int goodix_ts_mmi_pre_resume(struct device *dev) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ext_module *ext_module, *next;
+	struct input_dev *input_dev;
+	struct input_mt *mt;
+	int i;
+	int r = 0;
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	input_dev = core_data->input_dev;
+	mt = input_dev->mt;
+
+	if (mt) {
+		for (i = 0; i < mt->num_slots; i++) {
+			input_mt_slot(input_dev, i);
+			input_mt_report_slot_state(input_dev,
+					MT_TOOL_FINGER,
+					false);
+		}
+		input_report_key(input_dev, BTN_TOUCH, 0);
+		input_mt_sync_frame(input_dev);
+		input_sync(input_dev);
+	}
+
+	mutex_lock(&goodix_modules.mutex);
+	if (!list_empty(&goodix_modules.head)) {
+		list_for_each_entry_safe(ext_module, next,
+					 &goodix_modules.head, list) {
+			if (!ext_module->funcs->before_resume)
+				continue;
+
+			r = ext_module->funcs->before_resume(core_data,
+							     ext_module);
+			if (r == EVT_CANCEL_RESUME) {
+				mutex_unlock(&goodix_modules.mutex);
+				ts_info("Canceled by module:%s",
+					ext_module->name);
+				goto out;
+			}
+		}
+	}
+	mutex_unlock(&goodix_modules.mutex);
+
+out:
+	return r;
+}
+
+static int goodix_ts_mmi_post_resume(struct device *dev) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ext_module *ext_module, *next;
+	int r = 0;
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	mutex_lock(&goodix_modules.mutex);
+	if (!list_empty(&goodix_modules.head)) {
+		list_for_each_entry_safe(ext_module, next,
+					 &goodix_modules.head, list) {
+			if (!ext_module->funcs->after_resume)
+				continue;
+
+			r = ext_module->funcs->after_resume(core_data,
+							    ext_module);
+			if (r == EVT_CANCEL_RESUME) {
+				mutex_unlock(&goodix_modules.mutex);
+				ts_info("Canceled by module:%s",
+					ext_module->name);
+				goto out;
+			}
+		}
+	}
+	mutex_unlock(&goodix_modules.mutex);
+	/*
+	 * notify resume event, inform the esd protector
+	 * and charger detector to turn on the work
+	 */
+	ts_info("try notify resume");
+	goodix_ts_blocking_notify(NOTIFY_RESUME, NULL);
+
+out:
+	ts_debug("Resume end");
+	return r;
+}
+
+static int goodix_ts_mmi_pre_suspend(struct device *dev) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ext_module *ext_module, *next;
+	int r = 0;
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	/*
+	 * notify suspend event, inform the esd protector
+	 * and charger detector to turn off the work
+	 */
+	goodix_ts_blocking_notify(NOTIFY_SUSPEND, NULL);
+
+	/* inform external module */
+	mutex_lock(&goodix_modules.mutex);
+	if (!list_empty(&goodix_modules.head)) {
+		list_for_each_entry_safe(ext_module, next,
+					 &goodix_modules.head, list) {
+			if (!ext_module->funcs->before_suspend)
+				continue;
+
+			r = ext_module->funcs->before_suspend(core_data,
+							      ext_module);
+			if (r == EVT_CANCEL_SUSPEND) {
+				mutex_unlock(&goodix_modules.mutex);
+				ts_info("Canceled by module:%s",
+					ext_module->name);
+				goto out;
+			}
+		}
+	}
+	mutex_unlock(&goodix_modules.mutex);
+
+out:
+	return r;
+}
+
+static int goodix_ts_mmi_post_suspend(struct device *dev) {
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ext_module *ext_module, *next;
+	int r = 0;
+
+	if (!core_data) {
+		ts_err("Failed to get driver data");
+		return -ENODEV;
+	}
+
+	/* inform exteranl modules */
+	mutex_lock(&goodix_modules.mutex);
+	if (!list_empty(&goodix_modules.head)) {
+		list_for_each_entry_safe(ext_module, next,
+					 &goodix_modules.head, list) {
+			if (!ext_module->funcs->after_suspend)
+				continue;
+
+			r = ext_module->funcs->after_suspend(core_data,
+							     ext_module);
+			if (r == EVT_CANCEL_SUSPEND) {
+				mutex_unlock(&goodix_modules.mutex);
+				ts_info("Canceled by module:%s",
+					ext_module->name);
+				goto out;
+			}
+		}
+	}
+	mutex_unlock(&goodix_modules.mutex);
+
+out:
+	ts_info("Suspend end");
+	return r;
+}
+
 static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.get_vendor = goodix_ts_mmi_methods_get_vendor,
 	.get_productinfo = goodix_ts_mmi_methods_get_productinfo,
@@ -188,8 +439,18 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	/* SET methods */
 	.reset =  goodix_ts_mmi_methods_reset,
 	.drv_irq = goodix_ts_mmi_methods_drv_irq,
+	.power = goodix_ts_mmi_methods_power,
+#ifdef CONFIG_PINCTRL
+	.pinctrl = goodix_ts_mmi_methods_pinctrl,
+#endif
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
+	/* PM callback */
+	.panel_state = goodix_ts_mmi_panel_state,
+	.pre_resume = goodix_ts_mmi_pre_resume,
+	.post_resume = goodix_ts_mmi_post_resume,
+	.pre_suspend = goodix_ts_mmi_pre_suspend,
+	.post_suspend = goodix_ts_mmi_post_suspend,
 };
 
 static int mmi_notifier_callback(struct notifier_block *nb,
