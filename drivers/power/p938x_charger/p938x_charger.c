@@ -777,20 +777,6 @@ static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
 		val);
 }
 
-static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc)
-{
-	union power_supply_propval val;
-
-	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
-
-	idc *= 1000; /* Convert to uA */
-	val.intval = idc;
-
-	return p938x_set_dc_psp_prop(chip,
-		POWER_SUPPLY_PROP_CURRENT_NOW,
-		val);
-}
-
 static int p938x_program_fod(struct p938x_charger *chip,
 	u8 *array, int array_len)
 {
@@ -1495,6 +1481,20 @@ static ssize_t boost_show(struct device *dev,
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
 		p938x_get_boost(chip));
+}
+
+static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc)
+{
+	union power_supply_propval val;
+
+	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
+
+	idc *= 1000; /* Convert to uA */
+	val.intval = idc;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_CURRENT_NOW,
+		val);
 }
 
 static ssize_t force_idc_store(struct device *dev,
