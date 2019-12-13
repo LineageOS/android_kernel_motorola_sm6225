@@ -33,6 +33,22 @@ struct touch_event_data {
 	int x, y, w, p, m;	/* X, Y, area, pressure and major */
 };
 
+struct gesture_event_data {
+	 union {
+		int evcode;
+		struct touch_event_data evdata;
+	};
+};
+
+/**
+ * struct touchscreen_mmi_class_methods - export class methods to vendor
+ *
+ * @report_gesture:    report gesture event
+ */
+struct ts_mmi_class_methods {
+	int     (*report_gesture)(struct gesture_event_data *gev);
+};
+
 enum ts_mmi_pm_mode {
 	TS_MMI_PM_DEEPSLEEP = 0,
 	TS_MMI_PM_GESTURE,
@@ -92,6 +108,10 @@ enum ts_mmi_pm_mode {
 	int	(*post_resume)(struct device *dev);
 	int	(*pre_suspend)(struct device *dev);
 	int	(*post_suspend)(struct device *dev);
+	/*
+	 * class exported methods
+	 */
+	struct ts_mmi_class_methods exports;
 };
 
 #define TO_CHARP(dp)	((char*)(dp))
@@ -187,5 +207,7 @@ extern int ts_mmi_dev_register(struct device *parent,
 			struct ts_mmi_methods *mdata);
 extern void ts_mmi_dev_unregister(struct device *parent);
 extern int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev, struct device_node *of_node);
+extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
+extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
 
 #endif		/* __LINUX_TOUCHSCREEN_MMI_H_ */
