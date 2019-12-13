@@ -354,10 +354,19 @@ int ts_mmi_dev_register(struct device *parent,
 		goto PANEL_INIT_FAILED;
 	}
 
+	ret = ts_mmi_notifiers_register(touch_cdev);
+	if (ret < 0) {
+		dev_err(DEV_TS, "%s: Register notifiers failed. %d\n",
+			__func__, ret);
+		goto NOTIFIER_INIT_FAILED;
+	}
+
 	dev_info(DEV_TS, "Registered touchscreen device: %s.\n", class_fname);
 
 	return 0;
 
+NOTIFIER_INIT_FAILED:
+	ts_mmi_panel_unregister(touch_cdev);
 PANEL_INIT_FAILED:
 	if (touch_cdev->extern_group)
 		sysfs_remove_group(&DEV_MMI->kobj, touch_cdev->extern_group);
@@ -405,6 +414,7 @@ void ts_mmi_dev_unregister(struct device *parent)
 		dev_err(parent, "%s: device not registered before.\n", __func__);
 		return;
 	}
+	ts_mmi_notifiers_unregister(touch_cdev);
 	ts_mmi_panel_unregister(touch_cdev);
 	dev_info(DEV_TS, "%s: delete device\n", __func__);
 

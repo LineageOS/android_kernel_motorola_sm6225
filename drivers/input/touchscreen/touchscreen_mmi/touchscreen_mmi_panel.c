@@ -71,6 +71,16 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		}
 	}
 
+	if (of_property_read_bool(of_node, "mmi,enable-gestures")) {
+		dev_info(DEV_TS, "%s: using enable gestures\n", __func__);
+		ppdata->gestures_enabled = true;
+	}
+
+	if (of_property_read_bool(of_node, "mmi,refresh-rate-update")) {
+		dev_info(DEV_TS, "%s: using refresh rate update\n", __func__);
+		ppdata->update_refresh_rate = true;
+	}
+
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;
