@@ -14,6 +14,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/usb.h>
+#include <linux/power_supply.h>
 #include <linux/touchscreen_mmi.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
@@ -35,10 +37,18 @@ extern struct blocking_notifier_head dsi_freq_head;
 #define unregister_dynamic_refresh_rate_notifier(...)
 #endif
 
+enum ts_mmi_work {
+	TS_MMI_DO_RESUME,
+	TS_MMI_DO_PS,
+	TS_MMI_DO_REFRESH_RATE
+};
+
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 	if (atomic_cmpxchg(&touch_cdev->touch_stopped, 0, 1) == 1)
 		return 0;
+
+	atomic_set(&touch_cdev->resume_should_stop, 1);
 
 	TRY_TO_CALL(pre_suspend);
 
@@ -51,7 +61,6 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 		else
 			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_DEEPSLEEP);
 	}
-	cancel_delayed_work_sync(&touch_cdev->resume_work);
 
 	TRY_TO_CALL(post_suspend);
 
@@ -61,9 +70,11 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 }
 
 static int inline ts_mmi_panel_on(struct ts_mmi_dev *touch_cdev) {
+	atomic_set(&touch_cdev->resume_should_stop, 0);
+	kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_RESUME);
 	/* schedule_delayed_work returns true if work has been scheduled */
 	/* and false otherwise, thus return 0 on success to comply POSIX */
-	return schedule_delayed_work(&touch_cdev->resume_work, 0) == false;
+	return schedule_delayed_work(&touch_cdev->work, 0) == false;
 }
 
 #endif
@@ -131,13 +142,8 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	return 0;
 }
 
-static void ts_mmi_queued_resume(struct work_struct *w)
+static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 {
-	struct delayed_work *dw =
-		container_of(w, struct delayed_work, work);
-	struct ts_mmi_dev *touch_cdev =
-		container_of(dw, struct ts_mmi_dev, resume_work);
-
 	bool wait4_boot_complete = true;
 
 	if (atomic_cmpxchg(&touch_cdev->touch_stopped, 1, 0) == 0)
@@ -174,6 +180,38 @@ static void ts_mmi_queued_resume(struct work_struct *w)
 	dev_info(DEV_MMI, "%s: done\n", __func__);
 }
 
+static void ts_mmi_worker_func(struct work_struct *w)
+{
+	struct delayed_work *dw =
+		container_of(w, struct delayed_work, work);
+	struct ts_mmi_dev *touch_cdev =
+		container_of(dw, struct ts_mmi_dev, work);
+	int cmd, rc;
+
+	while (kfifo_get(&touch_cdev->cmd_pipe, &cmd)) {
+		switch (cmd) {
+		case TS_MMI_DO_RESUME:
+			rc = atomic_read(&touch_cdev->resume_should_stop);
+			if (rc) {
+				dev_info(DEV_MMI, "%s: resume cancelled\n", __func__);
+				break;
+			}
+			ts_mmi_queued_resume(touch_cdev);
+				break;
+
+		case TS_MMI_DO_PS:
+			TRY_TO_CALL(charger_mode, (int)touch_cdev->ps_is_present);
+				break;
+
+		case TS_MMI_DO_REFRESH_RATE:
+			TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
+				break;
+		default:
+			dev_dbg(DEV_MMI, "%s: unknown command\n", __func__);
+		}
+	}
+}
+
 static int ts_mmi_refresh_rate_cb(struct notifier_block *nb,
 		unsigned long refresh_rate, void *ptr)
 {
@@ -190,13 +228,61 @@ static int ts_mmi_refresh_rate_cb(struct notifier_block *nb,
 		do_calibration = true;
 	}
 
-	if (do_calibration)
-		TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
+	if (do_calibration) {
+		kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_REFRESH_RATE);
+		schedule_delayed_work(&touch_cdev->work, 0);
+	}
 
 	return 0;
 }
 
-int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev) {
+static int ts_mmi_ps_get_state(struct power_supply *psy, bool *present)
+{
+	union power_supply_propval pval = {0};
+	int ret;
+
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &pval);
+	if (ret)
+		return ret;
+	*present = !pval.intval ? false : true;
+	return 0;
+}
+
+static int ts_mmi_charger_cb(struct notifier_block *self,
+				unsigned long event, void *ptr)
+{
+	struct ts_mmi_dev *touch_cdev = container_of(
+					self, struct ts_mmi_dev, ps_notif);
+	struct power_supply *psy = ptr;
+	int ret;
+	bool present;
+
+	if (!((event == PSY_EVENT_PROP_CHANGED) && psy &&
+			psy->desc->get_property && psy->desc->name &&
+			!strncmp(psy->desc->name, "usb", sizeof("usb"))))
+		return 0;
+
+	ret = ts_mmi_ps_get_state(psy, &present);
+	if (ret) {
+		dev_err(DEV_MMI, "%s: failed to get usb status: %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	dev_dbg(DEV_MMI, "%s: event=%lu, usb status: cur=%d, prev=%d\n",
+				__func__, event, present, touch_cdev->ps_is_present);
+
+	if (touch_cdev->ps_is_present != present) {
+		touch_cdev->ps_is_present = present;
+		kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_PS);
+		schedule_delayed_work(&touch_cdev->work, 0);
+	}
+
+	return 0;
+}
+
+int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
+{
 	int ret = 0;
 
 	if (!touch_cdev->class_dev) {
@@ -205,11 +291,24 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev) {
 
 	dev_info(DEV_TS, "%s: Start notifiers init.\n", __func__);
 
-	INIT_DELAYED_WORK(&touch_cdev->resume_work, ts_mmi_queued_resume);
+	INIT_DELAYED_WORK(&touch_cdev->work, ts_mmi_worker_func);
+	ret = kfifo_alloc(&touch_cdev->cmd_pipe,
+				sizeof(unsigned int)* 10, GFP_KERNEL);
+	if (ret)
+		goto FIFO_ALLOC_FAILED;
+
+	if (touch_cdev->pdata.usb_detection) {
+		touch_cdev->ps_notif.notifier_call = ts_mmi_charger_cb;
+		ret = power_supply_reg_notifier(&touch_cdev->ps_notif);
+		if (ret)
+			goto PS_NOTIF_REGISTER_FAILED;
+	}
+
 	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb;
 	ret = register_panel_notifier(&touch_cdev->panel_nb);
 	if (ret)
 		goto PANEL_NOTIF_REGISTER_FAILED;
+
 	if (touch_cdev->pdata.update_refresh_rate) {
 		touch_cdev->freq_nb.notifier_call = ts_mmi_refresh_rate_cb;
 		ret = register_dynamic_refresh_rate_notifier(&touch_cdev->freq_nb);
@@ -223,19 +322,28 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev) {
 FREQ_NOTIF_REGISTER_FAILED:
 	unregister_panel_notifier(&touch_cdev->panel_nb);
 PANEL_NOTIF_REGISTER_FAILED:
-	cancel_delayed_work(&touch_cdev->resume_work);
+	cancel_delayed_work(&touch_cdev->work);
+PS_NOTIF_REGISTER_FAILED:
+	kfifo_free(&touch_cdev->cmd_pipe);
+FIFO_ALLOC_FAILED:
 	return ret;
 }
 
-void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev) {
-	if(touch_cdev->class_dev == NULL) {
+void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev)
+{
+	if (touch_cdev->class_dev == NULL) {
 		dev_err(DEV_MMI, "%s:touch_cdev->class_dev == NULL", __func__);
-	} else {
-		if (touch_cdev->pdata.update_refresh_rate) {
-			unregister_dynamic_refresh_rate_notifier(&touch_cdev->freq_nb);
-		}
-		unregister_panel_notifier(&touch_cdev->panel_nb);
-		cancel_delayed_work(&touch_cdev->resume_work);
-		dev_info(DEV_MMI, "%s:notifiers_unregister finish", __func__);
+		return;
 	}
+
+	if (touch_cdev->pdata.update_refresh_rate)
+		unregister_dynamic_refresh_rate_notifier(&touch_cdev->freq_nb);
+
+	if (touch_cdev->pdata.usb_detection)
+		power_supply_unreg_notifier(&touch_cdev->ps_notif);
+
+	unregister_panel_notifier(&touch_cdev->panel_nb);
+	cancel_delayed_work(&touch_cdev->work);
+	kfifo_free(&touch_cdev->cmd_pipe);
+	dev_info(DEV_MMI, "%s:notifiers_unregister finish", __func__);
 }

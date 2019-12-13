@@ -16,6 +16,7 @@
 
 #include <linux/list.h>
 #include <linux/device.h>
+#include <linux/kfifo.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
@@ -96,6 +97,7 @@ enum ts_mmi_pm_mode {
 	int	(*power)(struct device *dev, int on);
 	int	(*pinctrl)(struct device *dev, int on);
 	int	(*refresh_rate)(struct device *dev, int freq);
+	int	(*charger_mode)(struct device *dev, int mode);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -157,7 +159,10 @@ struct ts_mmi_dev {
 	struct notifier_block	panel_nb;
 	atomic_t		touch_stopped;
 	enum ts_mmi_pm_mode	pm_mode;
-	struct delayed_work	resume_work;
+
+	atomic_t		resume_should_stop;
+	struct delayed_work	work;
+	struct kfifo		cmd_pipe;
 
 	struct notifier_block	freq_nb;
 	unsigned char		refresh_rate;
