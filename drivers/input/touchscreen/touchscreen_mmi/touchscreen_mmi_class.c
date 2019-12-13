@@ -361,10 +361,21 @@ int ts_mmi_dev_register(struct device *parent,
 		goto NOTIFIER_INIT_FAILED;
 	}
 
+	if (touch_cdev->pdata.gestures_enabled) {
+		ret = ts_mmi_gesture_init(touch_cdev);
+		if (ret < 0) {
+			dev_err(DEV_TS, "%s: Register gesture failed. %d\n",
+				__func__, ret);
+			goto GESTURE_INIT_FAILED;
+		}
+	}
+
 	dev_info(DEV_TS, "Registered touchscreen device: %s.\n", class_fname);
 
 	return 0;
 
+GESTURE_INIT_FAILED:
+	ts_mmi_notifiers_unregister(touch_cdev);
 NOTIFIER_INIT_FAILED:
 	ts_mmi_panel_unregister(touch_cdev);
 PANEL_INIT_FAILED:
@@ -414,6 +425,8 @@ void ts_mmi_dev_unregister(struct device *parent)
 		dev_err(parent, "%s: device not registered before.\n", __func__);
 		return;
 	}
+	if (touch_cdev->pdata.gestures_enabled)
+		ts_mmi_gesture_remove(touch_cdev);
 	ts_mmi_notifiers_unregister(touch_cdev);
 	ts_mmi_panel_unregister(touch_cdev);
 	dev_info(DEV_TS, "%s: delete device\n", __func__);

@@ -10,4 +10,4 @@ ifneq ($(filter m y, $(CONFIG_DRM_DYNAMIC_REFRESH_RATE)),)
 endif
 
 obj-m := touchscreen_mmi.o
-touchscreen_mmi-objs := touchscreen_mmi_class.o touchscreen_mmi_panel.o touchscreen_mmi_notif.o
+touchscreen_mmi-objs := touchscreen_mmi_class.o touchscreen_mmi_panel.o touchscreen_mmi_notif.o touchscreen_mmi_gesture.o
