@@ -131,6 +131,22 @@ static void sec_mmi_ic_reset(struct sec_ts_data *ts, int mode)
 
 static void sec_mmi_enable_touch(struct sec_ts_data *ts)
 {
+	int ret;
+	unsigned char buffer[8];
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_IMG_VERSION, buffer, sizeof(buffer));
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			"%s: failed to read fw version (%d)\n",
+			__func__, ret);
+	} else {
+		if (buffer[0] == 0x17) {
+			ts->device_id[3] = 0x7C;
+			input_info(true, &ts->client->dev,
+				"%s: set device_id[3] is 0x7C\n",
+				__func__, ret);
+		}
+	}
 	sec_ts_integrity_check(ts);
 	sec_ts_sense_on(ts);
 	dev_dbg(&ts->client->dev, "%s: touch sensing ready\n", __func__);
