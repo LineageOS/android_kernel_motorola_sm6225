@@ -650,6 +650,35 @@ static int sec_mmi_post_resume(struct device *dev) {
 	return 0;
 }
 
+static int sec_mmi_charger_mode(struct device *dev, int mode)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int ret;
+	unsigned char cval = 0;
+	unsigned char bitval = 1;
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	/* plugged in USB should change value to 2 */
+	if (mode)
+		bitval++;
+
+	ret = ts->sec_ts_i2c_read(ts, SET_TS_CMD_SET_CHARGER_MODE,
+					&cval, sizeof(cval));
+	if (ret < 0) {
+		dev_err(dev, "%s: failed to read charger mode\n", __func__);
+	}
+
+	if (cval != bitval)
+		sec_ts_set_charger(ts, mode);
+	else
+		dev_dbg(dev, "%s: charger mode already %d\n", __func__, cval);
+	return 0;
+}
+
 static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.get_vendor = sec_mmi_methods_get_vendor,
 	.get_productinfo = sec_mmi_methods_get_productinfo,
@@ -666,6 +695,7 @@ static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.power = sec_mmi_methods_power,
 	.pinctrl = sec_mmi_methods_pinctrl,
 	.refresh_rate = sec_mmi_methods_refresh_rate,
+	.charger_mode = sec_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = sec_mmi_firmware_update,
 	.firmware_erase = sec_mmi_firmware_erase,
