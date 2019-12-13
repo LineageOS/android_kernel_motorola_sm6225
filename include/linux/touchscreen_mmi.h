@@ -17,6 +17,10 @@
 #include <linux/list.h>
 #include <linux/device.h>
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#include <linux/panel_notifier.h>
+#endif
+
 #define TS_MMI_MAX_FW_PATH		64
 #define TS_MMI_MAX_ID_LEN		16
 #define TS_MMI_MAX_VENDOR_LEN		16
@@ -28,6 +32,21 @@ struct touch_event_data {
 	int type;			/* TS_TOUCH, TS_RELEASE */
 	int x, y, w, p, m;	/* X, Y, area, pressure and major */
 };
+
+enum ts_mmi_pm_mode {
+	TS_MMI_PM_DEEPSLEEP = 0,
+	TS_MMI_PM_GESTURE,
+	TS_MMI_PM_ACTIVE,
+};
+
+#define TS_MMI_RESET_SOFT	0
+#define TS_MMI_RESET_HARD	1
+#define TS_MMI_POWER_OFF	0
+#define TS_MMI_POWER_ON		1
+#define TS_MMI_PINCTL_OFF	0
+#define TS_MMI_PINCTL_ON	1
+#define TS_MMI_IRQ_OFF		0
+#define TS_MMI_IRQ_ON		1
 
 /**
  * struct touchscreen_mmi_methods - hold vendor provided functions
@@ -58,11 +77,21 @@ struct touch_event_data {
 	/* SET methods */
 	int	(*reset)(struct device *dev, int type);
 	int	(*drv_irq)(struct device *dev, int state);
+	int	(*power)(struct device *dev, int on);
+	int	(*pinctrl)(struct device *dev, int on);
+	int	(*refresh_rate)(struct device *dev, int freq);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
 	/* vendor specific attribute group */
 	int	(*extend_attribute_group)(struct device *dev, struct attribute_group **group);
+	/* PM callback */
+	int	(*panel_state)(struct device *dev, enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to);
+	int	(*wait_for_ready)(struct device *dev);
+	int	(*pre_resume)(struct device *dev);
+	int	(*post_resume)(struct device *dev);
+	int	(*pre_suspend)(struct device *dev);
+	int	(*post_suspend)(struct device *dev);
 };
 
 #define TO_CHARP(dp)	((char*)(dp))
@@ -74,6 +103,8 @@ struct touch_event_data {
 struct ts_mmi_dev_pdata {
 	bool		power_off_suspend;
 	bool		usb_detection;
+	bool		update_refresh_rate;
+	bool		gestures_enabled;
 	int 		ctrl_dsi;
 	int		reset;
 	const char	*class_entry_name;
@@ -103,6 +134,18 @@ struct ts_mmi_dev {
 	int 			class_dev_minor;
 	int			forcereflash;
 	struct ts_mmi_dev_pdata	pdata;
+	struct notifier_block	panel_nb;
+	atomic_t		touch_stopped;
+	enum ts_mmi_pm_mode	pm_mode;
+	struct delayed_work	resume_work;
+
+	struct notifier_block	freq_nb;
+	unsigned char		refresh_rate;
+
+	struct work_struct	ps_notify_work;
+	struct notifier_block	ps_notif;
+	bool			ps_is_present;
+
 	/*
 	 * sys entey variable
 	 */
@@ -128,8 +171,16 @@ struct ts_mmi_dev {
 #define DEV_MMI (touch_cdev->class_dev)
 #define DEV_TS  (touch_cdev->dev)
 #define MMI_DEV_TO_TS_DEV(cdev) (((struct ts_mmi_dev *)dev_get_drvdata(dev))->dev)
+#define TRY_TO_CALL(_method, ...) \
+do { \
+	if (touch_cdev->mdata->_method) { \
+		touch_cdev->mdata->_method(DEV_TS, ##__VA_ARGS__); \
+	} \
+} while (0)
 
 
+extern int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev);
+extern void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev);
 extern int ts_mmi_panel_register(struct ts_mmi_dev *touch_cdev);
 extern void ts_mmi_panel_unregister(struct ts_mmi_dev *touch_cdev);
 extern int ts_mmi_dev_register(struct device *parent,
