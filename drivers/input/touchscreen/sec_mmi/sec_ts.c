@@ -555,7 +555,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	u8 read_event_buff[MAX_EVENT_COUNT][SEC_TS_EVENT_BUFF_SIZE] = { { 0 } };
 	u8 *event_buff;
 	struct sec_ts_event_coordinate *p_event_coord;
-	struct sec_ts_gesture_status *p_gesture_status;
+	struct sec_ts_gesture_status *gs;
 	struct sec_ts_event_status *p_event_status;
 	int curr_pos;
 	int remain_event_count = 0;
@@ -876,19 +876,38 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 			break;
 
 		case SEC_TS_GESTURE_EVENT:
-			p_gesture_status = (struct sec_ts_gesture_status *)event_buff;
-
-			switch (p_gesture_status->stype) {
+			gs = (struct sec_ts_gesture_status *)event_buff;
+			input_info(true, &ts->client->dev, "%s: GESTURE %x %x %x %x %x %x %x %x\n", __func__,
+						gs->eid | (gs->stype << 4) | (gs->sf << 6),
+						gs->gesture_id, gs->gesture_data_1, gs->gesture_data_2,
+						gs->gesture_data_3, gs->gesture_data_4, gs->reserved_1,
+						gs->left_event_5_0 | (gs->reserved_2 << 6));
+			switch (gs->stype) {
 			case SEC_TS_GESTURE_CODE_SPAY:
-				/*							*/
+				/*				*/
 				/*  Gesture event handling 	*/
-				/*						   	*/
-				sec_mmi_gesture_handler((void *)event_buff);
+				/*				*/
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+				if (ts->imports && ts->imports->report_gesture) {
+					struct gesture_event_data event;
+
+					input_dbg(true, &ts->client->dev,
+						"%s: invoke imported report gesture function\n", __func__);
+					/* extract X and Y coordinates */
+					event.evcode = gs->gesture_id;
+					event.evdata.x = gs->gesture_data_1 + ((gs->gesture_data_3 & 0x0f) << 8);
+					event.evdata.y = gs->gesture_data_2 + ((gs->gesture_data_3 & 0xf0) << 4);
+					/* call class method */
+					ret = ts->imports->report_gesture(&event);
+					if (!ret)
+						__pm_wakeup_event(&ts->wakelock, 5000);
+				}
+#endif
 				break;
 			case SEC_TS_GESTURE_CODE_DOUBLE_TAP:
-				/*							*/
+				/*				*/
 				/*  Gesture event handling 	*/
-				/*						   	*/
+				/*				*/
 				break;
 			}
 
@@ -1300,6 +1319,8 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->support_sidegesture = of_property_read_bool(np, "sec,support_sidegesture");
 	pdata->support_dex = of_property_read_bool(np, "support_dex_mode");
 
+	pdata->poweron_calibration = of_property_read_bool(np, "sec,poweron-calibration");
+
 #ifdef CONFIG_SEC_FACTORY
 	pdata->support_mt_pressure = true;
 #endif
@@ -1598,7 +1619,11 @@ int sec_ts_integrity_check(struct sec_ts_data *ts)
 		return -EIO;
 	}
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	if (ts->plat_data->poweron_calibration) {
+#else
 	if (ts->force_calibration) {
+#endif
 		sec_ts_irq_enable(ts, false);
 		ret = sec_ts_execute_force_calibration(ts, OFFSET_CAL_SET);
 		if (ret < 0)
