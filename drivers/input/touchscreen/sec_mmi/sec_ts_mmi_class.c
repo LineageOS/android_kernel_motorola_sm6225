@@ -688,6 +688,10 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			dev_err(&ts->client->dev, "Failed to register ts mmi\n");
 			return ret;
 		}
+
+		/* initialize class imported methods */
+		ts->imports = &sec_ts_mmi_methods.exports;
+
 		if (ts->fw_invalid == false) {
 			sec_mmi_enable_touch(ts);
 		} else /* stuck in BL mode, update productinfo to report 'se77c' */
