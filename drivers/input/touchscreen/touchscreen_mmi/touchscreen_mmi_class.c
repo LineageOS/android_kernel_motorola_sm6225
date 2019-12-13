@@ -316,8 +316,7 @@ int ts_mmi_dev_register(struct device *parent,
 		touch_cdev->mdata->get_class_entry_name(DEV_TS,
 			&touch_cdev->class_entry_name);
 		class_fname = touch_cdev->class_entry_name;
-	} else if (touch_cdev->productinfo[0] != 0)
-		class_fname = touch_cdev->productinfo;
+	}
 	dev_info(DEV_TS, "class entry name %s\n", class_fname);
 
 	DEV_MMI = device_create(touchscreens_class,
