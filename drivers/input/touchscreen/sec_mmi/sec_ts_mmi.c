@@ -861,42 +861,6 @@ static int sec_mmi_register_notifiers(
 	return rc;
 }
 
-void sec_mmi_gesture_handler(void *data)
-{
-	struct sec_ts_gesture_status *gs =
-		(struct sec_ts_gesture_status *)data;
-
-	if (gs->eid != SEC_TS_GESTURE_EVENT) {
-		pr_info("%s: invalid gesture ID\n", __func__);
-		return;
-	}
-
-	pr_info("%s: GESTURE %x %x %x %x %x %x %x %x\n", __func__,
-		gs->eid | (gs->stype << 4) | (gs->sf << 6),
-		gs->gesture_id,
-		gs->gesture_data_1,
-		gs->gesture_data_2,
-		gs->gesture_data_3,
-		gs->gesture_data_4,
-		gs->reserved_1,
-		gs->left_event_5_0 | (gs->reserved_2 << 6));
-
-	switch (gs->gesture_id) {
-	case 1:
-		pr_info("%s: single tap\n", __func__);
-			break;
-	case 2:
-		pr_info("%s: zero tap; x=%x, y=%x, w=%x, p=%x\n", __func__,
-			gs->gesture_data_1+((gs->gesture_data_3 & 0x0f) << 8),
-			gs->gesture_data_2+((gs->gesture_data_3 & 0xf0) << 4),
-			gs->gesture_data_4,
-			gs->reserved_1);
-			break;
-	default:
-		pr_info("%s: unknown id=%x\n", __func__, gs->gesture_id);
-	}
-}
-
 static ssize_t sec_mmi_panel_supplier_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {

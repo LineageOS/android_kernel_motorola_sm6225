@@ -37,6 +37,10 @@
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
+
 #include "sec_cmd.h"
 
 #ifdef CONFIG_INPUT_BOOSTER
@@ -722,6 +726,10 @@ struct sec_ts_data {
 	struct sec_mmi_data *mmi_ptr;
 	bool fw_invalid;
 	bool irq_enabled;
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	struct ts_mmi_class_methods *imports;
+#endif
 };
 
 struct sec_ts_plat_data {
@@ -761,6 +769,7 @@ struct sec_ts_plat_data {
 	bool support_mt_pressure;
 	bool support_dex;
 	bool support_sidegesture;
+	bool poweron_calibration;
 };
 
 typedef struct {

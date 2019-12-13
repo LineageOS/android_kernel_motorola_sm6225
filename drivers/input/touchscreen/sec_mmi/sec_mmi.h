@@ -64,7 +64,6 @@ struct sec_mmi_data {
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable);
-void sec_mmi_gesture_handler(void *data);
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #define DEV_MMI (&data->i2c_client->dev)
