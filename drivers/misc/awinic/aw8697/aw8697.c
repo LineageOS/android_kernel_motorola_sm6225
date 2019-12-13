@@ -2467,6 +2467,7 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 				break;
 		case HAPTIC_LONG:
 			aw8697->duration = value;
+			aw8697->activate_mode = AW8697_HAPTIC_ACTIVATE_RAM_MODE;
 			/* wav index config */
 			aw8697->index = 0x02;
 			aw8697_haptic_set_repeat_wav_seq(aw8697, aw8697->index);
