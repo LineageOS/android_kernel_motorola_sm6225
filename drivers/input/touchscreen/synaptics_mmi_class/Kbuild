@@ -1,0 +1,16 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_mmi_class
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI -DCONFIG_PANEL_NOTIFICATIONS
+
+synaptics_mmi-objs = synaptics_dsx_i2c.o synaptics_mmi_class.o synaptics_dsx_instance.o
+
+obj-m += synaptics_mmi.o
+obj-m += synaptics_dsx_fw_update.o
+obj-m += synaptics_dsx_rmi_dev.o
+obj-m += synaptics_dsx_test_reporting.o
+
+endif
