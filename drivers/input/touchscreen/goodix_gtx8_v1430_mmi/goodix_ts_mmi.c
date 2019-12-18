@@ -33,7 +33,14 @@ static int goodix_ts_mmi_methods_get_build_id(struct device *dev, void *cdata) {
 	int ret;
 	struct goodix_ts_version fw_ver;
 	struct goodix_ts_device *ts_dev;
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -56,7 +63,14 @@ static int goodix_ts_mmi_methods_get_config_id(struct device *dev, void *cdata) 
 	int ret;
 	struct goodix_ts_version fw_ver;
 	struct goodix_ts_device *ts_dev;
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -80,7 +94,14 @@ static int goodix_ts_mmi_methods_get_bus_type(struct device *dev, void *idata) {
 }
 static int goodix_ts_mmi_methods_get_irq_status(struct device *dev, void *idata) {
 	struct goodix_ts_board_data *ts_bdata;
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -94,7 +115,14 @@ static int goodix_ts_mmi_methods_get_irq_status(struct device *dev, void *idata)
 	return 0;
 }
 static int goodix_ts_mmi_methods_get_drv_irq(struct device *dev, void *idata) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -103,7 +131,14 @@ static int goodix_ts_mmi_methods_get_drv_irq(struct device *dev, void *idata) {
 	return 0;
 }
 static int goodix_ts_mmi_methods_get_poweron(struct device *dev, void *idata) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -112,7 +147,14 @@ static int goodix_ts_mmi_methods_get_poweron(struct device *dev, void *idata) {
 	return 0;
 }
 static int goodix_ts_mmi_methods_get_flashprog(struct device *dev, void *idata) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -124,7 +166,14 @@ static int goodix_ts_mmi_methods_get_flashprog(struct device *dev, void *idata) 
 	return 0;
 }
 static int goodix_ts_mmi_methods_drv_irq(struct device *dev, int state) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -140,7 +189,14 @@ static int goodix_ts_mmi_methods_drv_irq(struct device *dev, int state) {
 static int goodix_ts_mmi_methods_reset(struct device *dev, int type) {
 	int ret = -ENODEV;
 	struct goodix_ts_device *ts_dev;
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -152,7 +208,14 @@ static int goodix_ts_mmi_methods_reset(struct device *dev, int type) {
 }
 static int goodix_ts_firmware_update(struct device *dev, char *fwname) {
 	struct goodix_ts_board_data *ts_bdata;
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -183,8 +246,14 @@ static int goodix_ts_firmware_update(struct device *dev, char *fwname) {
 }
 
 static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -202,8 +271,14 @@ static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
 
 #ifdef CONFIG_PINCTRL
 static int goodix_ts_mmi_methods_pinctrl(struct device *dev, int on) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -229,9 +304,15 @@ static int goodix_ts_mmi_methods_pinctrl(struct device *dev, int on) {
 static int goodix_ts_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ts_device *ts_dev;
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -261,13 +342,19 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 }
 
 static int goodix_ts_mmi_pre_resume(struct device *dev) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ext_module *ext_module, *next;
 	struct input_dev *input_dev;
 	struct input_mt *mt;
 	int i;
 	int r = 0;
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -312,10 +399,16 @@ out:
 }
 
 static int goodix_ts_mmi_post_resume(struct device *dev) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ext_module *ext_module, *next;
 	int r = 0;
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -352,10 +445,16 @@ out:
 }
 
 static int goodix_ts_mmi_pre_suspend(struct device *dev) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ext_module *ext_module, *next;
 	int r = 0;
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -392,10 +491,16 @@ out:
 }
 
 static int goodix_ts_mmi_post_suspend(struct device *dev) {
-	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ext_module *ext_module, *next;
 	int r = 0;
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	if (!pdev) {
+		ts_err("Failed to get platform device");
+		return -ENODEV;
+	}
+	core_data = platform_get_drvdata(pdev);
 	if (!core_data) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
@@ -487,7 +592,7 @@ int goodix_ts_mmi_dev_register(struct platform_device *pdev) {
 	}
 	core_data->ts_mmi_info.mmi_notifier.notifier_call = mmi_notifier_callback;
 	goodix_ts_register_notifier(&core_data->ts_mmi_info.mmi_notifier);
-	ret = ts_mmi_dev_register(&pdev->dev, &goodix_ts_mmi_methods);
+	ret = ts_mmi_dev_register(core_data->ts_dev->dev, &goodix_ts_mmi_methods);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register ts mmi\n");
 		return ret;
