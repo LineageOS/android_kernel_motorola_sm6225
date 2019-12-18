@@ -708,10 +708,28 @@ static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.pre_suspend = sec_mmi_pre_suspend,
 	.post_suspend = sec_mmi_post_suspend,
 };
+static int sec_mmi_class_fname(struct sec_ts_data *ts)
+{
+	int ret;
+	char buffer[128] = "samsung_mmi";
+	const char* fname = NULL;
+	static char *input_dev_name;
+
+	if (ts->imports && ts->imports->get_class_fname) {
+		ret = ts->imports->get_class_fname(&ts->client->dev, &fname);
+		if (!ret)
+			scnprintf(buffer, sizeof(buffer), "samsung_mmi.%s", fname);
+	}
+
+	input_dev_name = kstrdup(buffer, GFP_KERNEL);
+	ts->input_dev->name = input_dev_name;
+	return 0;
+}
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 {
 	int ret;
+
 	if (enable) {
 		ret = ts_mmi_dev_register(&ts->client->dev, &sec_ts_mmi_methods);
 		if (ret) {
@@ -726,6 +744,8 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			sec_mmi_enable_touch(ts);
 		} else /* stuck in BL mode, update productinfo to report 'se77c' */
 			ts->device_id[3] = 0x7C;
+
+		sec_mmi_class_fname(ts);
 	} else
 		ts_mmi_dev_unregister(&ts->client->dev);
 
