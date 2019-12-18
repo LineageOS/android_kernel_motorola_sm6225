@@ -270,6 +270,28 @@ static int ts_mmi_get_vendor_info(
 	return 0;
 }
 
+static struct ts_mmi_dev *ts_mmi_dev_to_cdev(struct device *parent)
+{
+	struct ts_mmi_dev *touch_cdev = NULL;
+
+	down_write(&touchscreens_list_lock);
+	list_for_each_entry(touch_cdev, &touchscreens_list, node) {
+		if(DEV_TS == parent)
+			break;
+	}
+	up_write(&touchscreens_list_lock);
+	return touch_cdev;
+}
+
+static int get_class_fname_handler(struct device *parent, const char **pfname)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+	if (!touch_cdev)
+		return -ENODEV;
+	*pfname = dev_name(touch_cdev->class_dev);
+	return 0;
+}
+
 /**
  * ts_mmi_dev_register - register a new object of ts_mmi_dev class.
  * @parent: The device to register.
@@ -326,6 +348,7 @@ int ts_mmi_dev_register(struct device *parent,
 		ret = PTR_ERR(DEV_MMI);
 		goto CLASS_DEVICE_CREATE_FAILED;
 	}
+	touch_cdev->mdata->exports.get_class_fname = get_class_fname_handler;
 
 	down_write(&touchscreens_list_lock);
 	list_add_tail(&touch_cdev->node, &touchscreens_list);
