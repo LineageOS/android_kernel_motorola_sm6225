@@ -1866,6 +1866,8 @@ static int goodix_i2c_probe(struct i2c_client *client,
 	if (!goodix_pdev)
 		return -ENOMEM;
 
+	i2c_set_clientdata(client, goodix_pdev);
+
 	goodix_pdev->name = GOODIX_CORE_DRIVER_NAME;
 	goodix_pdev->id = 0;
 	goodix_pdev->num_resources = 0;
@@ -1898,6 +1900,7 @@ err_pdriver:
 err_pdev:
 	kfree(goodix_pdev);
 	goodix_pdev = NULL;
+	i2c_set_clientdata(client, NULL);
 	ts_info("i2c probe out, %d", r);
 	return r;
 }
