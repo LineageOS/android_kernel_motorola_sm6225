@@ -96,6 +96,9 @@ TOUCH_MMI_GET_ATTR_RO(flashprog, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_RO(irq_status, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(drv_irq, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_WO(reset);
+TOUCH_MMI_GET_ATTR_WO(pinctrl);
+TOUCH_MMI_GET_ATTR_WO(refresh_rate);
+TOUCH_MMI_GET_ATTR_WO(charger_mode);
 
 static ssize_t path_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -234,6 +237,26 @@ static ssize_t ts_mmi_doreflash_store(struct device *dev,
 }
 static DEVICE_ATTR(doreflash, (S_IWUSR | S_IWGRP), NULL, ts_mmi_doreflash_store);
 
+static ssize_t pwr_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+	unsigned long value = 0;
+	int err = 0;
+	err = kstrtoul(buf, 10, &value);
+	if (err < 0) {
+		dev_err(dev, "%s: Failed to convert value\n", __func__);
+		return -EINVAL;
+	}
+	if (!touch_cdev || !touch_cdev->mdata->power) {
+		dev_err(dev, "%s: invalid pointer\n", __func__);
+		return -EINVAL;
+	}
+	touch_cdev->mdata->power(DEV_TS, value);
+	return size;
+}
+static DEVICE_ATTR(pwr, (S_IWUSR | S_IWGRP), NULL, pwr_store);
+
 static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_path.attr,
 	&dev_attr_vendor.attr,
@@ -250,6 +273,10 @@ static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_reset.attr,
 	&dev_attr_forcereflash.attr,
 	&dev_attr_doreflash.attr,
+	&dev_attr_pwr.attr,
+	&dev_attr_pinctrl.attr,
+	&dev_attr_refresh_rate.attr,
+	&dev_attr_charger_mode.attr,
 	NULL,
 };
 
