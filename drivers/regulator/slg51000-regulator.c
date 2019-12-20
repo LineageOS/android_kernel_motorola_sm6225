@@ -47,6 +47,7 @@ struct slg51000 {
 	struct regulator_dev *rdev[SLG51000_MAX_REGULATORS];
 	int chip_irq;
 	int chip_cs_pin;
+	int use_default_voltage;
 };
 
 struct slg51000_evt_sta {
@@ -203,6 +204,15 @@ static int slg51000_regulator_is_enabled(struct regulator_dev *rdev)
 		return 0;
 }
 
+static int slg51000_regulator_set_voltage_sel(struct regulator_dev *rdev, unsigned sel) {
+	struct slg51000 *chip = rdev_get_drvdata(rdev);
+
+	if (chip->use_default_voltage) {
+		return 0;
+	}
+	return regulator_set_voltage_sel_regmap(rdev, sel);
+}
+
 static struct regulator_ops slg51000_regl_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -210,7 +220,7 @@ static struct regulator_ops slg51000_regl_ops = {
 	.list_voltage = regulator_list_voltage_linear,
 	.map_voltage = regulator_map_voltage_linear,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
-	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.set_voltage_sel = slg51000_regulator_set_voltage_sel,
 };
 
 static struct regulator_ops slg51000_switch_ops = {
@@ -477,6 +487,8 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 
 		chip->chip_cs_pin = cs_gpio;
 	}
+
+	chip->use_default_voltage = of_property_read_bool(dev->of_node, "use-default-voltage");
 
 	i2c_set_clientdata(client, chip);
 	chip->chip_irq = client->irq;
