@@ -878,15 +878,12 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 		case SEC_TS_GESTURE_EVENT:
 			gs = (struct sec_ts_gesture_status *)event_buff;
 			input_info(true, &ts->client->dev, "%s: GESTURE %x %x %x %x %x %x %x %x\n", __func__,
-						gs->eid | (gs->stype << 4) | (gs->sf << 6),
+						gs->eid | (gs->stype << 2) | (gs->sf << 6),
 						gs->gesture_id, gs->gesture_data_1, gs->gesture_data_2,
 						gs->gesture_data_3, gs->gesture_data_4, gs->reserved_1,
 						gs->left_event_5_0 | (gs->reserved_2 << 6));
 			switch (gs->stype) {
-			case SEC_TS_GESTURE_CODE_SPAY:
-				/*				*/
-				/*  Gesture event handling 	*/
-				/*				*/
+			case SEC_TS_GESTURE_CODE_VENDOR:
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 				if (ts->imports && ts->imports->report_gesture) {
 					struct gesture_event_data event;
@@ -904,6 +901,11 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				}
 #endif
 				break;
+			case SEC_TS_GESTURE_CODE_SPAY:
+				/*				*/
+				/*  Gesture event handling 	*/
+				/*				*/
+				break;
 			case SEC_TS_GESTURE_CODE_DOUBLE_TAP:
 				/*				*/
 				/*  Gesture event handling 	*/
@@ -911,8 +913,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				break;
 			}
 
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 			input_sync(ts->input_dev);
 			input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 0);
+#endif
 			break;
 		default:
 			input_err(true, &ts->client->dev, "%s: unknown event %x %x %x %x %x %x\n", __func__,
