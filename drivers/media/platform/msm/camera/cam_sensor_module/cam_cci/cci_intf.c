@@ -99,9 +99,22 @@ static int32_t cci_intf_xfer(
 			goto release;
 		}
 		addr = xfer->reg.addr;
-		for (i = 0; i < xfer->data.count; i++) {
+		for (i = 0; i < xfer->data.count; i += xfer->data.width) {
 			reg_conf_tbl[i].reg_addr = addr++;
-			reg_conf_tbl[i].reg_data = xfer->data.buf[i];
+			if(xfer->data.width == 4) {
+				reg_conf_tbl[i].reg_data =
+					((uint32_t)(xfer->data.buf[i]) << 24) |
+					((uint32_t)(xfer->data.buf[i+1]) << 16) |
+					((uint32_t)(xfer->data.buf[i+2]) << 8) |
+					((uint32_t)(xfer->data.buf[i+3]));
+				pr_err("%s: cci writing %x", __func__, reg_conf_tbl[i].reg_data);
+			} else if(xfer->data.width == 2) {
+				reg_conf_tbl[i].reg_data =
+					((uint32_t)(xfer->data.buf[i]) << 8) |
+					((uint32_t)(xfer->data.buf[i+1]));
+			} else {
+				reg_conf_tbl[i].reg_data = xfer->data.buf[i];
+			}
 			reg_conf_tbl[i].delay = 0;
 		}
 		cci_ctrl.cmd = MSM_CCI_I2C_WRITE;
@@ -110,8 +123,7 @@ static int32_t cci_intf_xfer(
 			(xfer->reg.width == 1 ?
 				CAMERA_SENSOR_I2C_TYPE_BYTE :
 				CAMERA_SENSOR_I2C_TYPE_WORD);
-		cci_ctrl.cfg.cci_i2c_write_cfg.data_type =
-			CAMERA_SENSOR_I2C_TYPE_BYTE;
+		cci_ctrl.cfg.cci_i2c_write_cfg.data_type = xfer->data.width;
 		cci_ctrl.cfg.cci_i2c_write_cfg.size = xfer->data.count;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
 		rc = v4l2_subdev_call(cam_cci_get_subdev(xfer->cci_device),
