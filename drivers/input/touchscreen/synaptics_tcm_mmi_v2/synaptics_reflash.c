@@ -2536,14 +2536,13 @@ static int reflash_remove(struct syna_tcm_hcd *tcm_hcd)
 	flush_workqueue(reflash_hcd->workqueue);
 	destroy_workqueue(reflash_hcd->workqueue);
 #endif
-
-	kfree(reflash_hcd->image_buf);
+	if (reflash_hcd->image_buf)
+		kfree(reflash_hcd->image_buf);
 
 	RELEASE_BUFFER(reflash_hcd->read);
 	RELEASE_BUFFER(reflash_hcd->resp);
 	RELEASE_BUFFER(reflash_hcd->out);
-
-	kfree(reflash_hcd);
+	vfree(reflash_hcd);
 	reflash_hcd = NULL;
 
 exit:

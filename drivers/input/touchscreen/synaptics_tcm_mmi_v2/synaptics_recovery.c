@@ -1267,9 +1267,8 @@ static int recovery_remove(struct syna_tcm_hcd *tcm_hcd)
 
 		kobject_put(recovery_hcd->sysfs_dir);
 	}
-
 	kfree(recovery_hcd->data_buf);
-	kfree(recovery_hcd->ihex_buf);
+	vfree(recovery_hcd->ihex_buf);
 	kfree(recovery_hcd);
 	recovery_hcd = NULL;
 
