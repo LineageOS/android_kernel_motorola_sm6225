@@ -94,7 +94,8 @@
 
 #define INIT_BUFFER(buffer, is_clone) \
 	mutex_init(&buffer.buf_mutex); \
-	buffer.clone = is_clone
+	buffer.clone = is_clone; \
+	buffer.buf_size = 0
 
 #define LOCK_BUFFER(buffer) \
 	mutex_lock(&buffer.buf_mutex)
@@ -104,7 +105,7 @@
 
 #define RELEASE_BUFFER(buffer) \
 	do { \
-		if (buffer.clone == false) { \
+		if (buffer.clone == false && (buffer.buf_size != 0)) { \
 			kfree(buffer.buf); \
 			buffer.buf_size = 0; \
 			buffer.data_length = 0; \
