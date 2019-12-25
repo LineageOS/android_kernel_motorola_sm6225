@@ -27,7 +27,8 @@ struct msm_cci_intf_register {
 
 struct msm_cci_intf_data {
 	unsigned short count; /* between 1 and CCI_INTF_MAX_XFER */
-	unsigned char  buf[MSM_CCI_INTF_MAX_XFER];
+	unsigned short width;
+	uint8_t buf[MSM_CCI_INTF_MAX_XFER];
 };
 
 struct msm_cci_intf_xfer {
