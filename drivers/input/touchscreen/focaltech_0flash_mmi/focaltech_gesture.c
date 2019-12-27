@@ -301,12 +301,21 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
             FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
             return;
         }
-        input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
-                         ABS_DISTANCE, ++report_cnt);
+        if (fts_data->pdata->report_gesture_key) {
+            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+            ++report_cnt;
+        } else {
+            input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
+                            ABS_DISTANCE, ++report_cnt);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+        }
         FTS_INFO("input report: %d", report_cnt);
         if (report_cnt >= REPORT_MAX_COUNT)
             report_cnt = 0;
-        input_sync(fts_data->sensor_pdata->input_sensor_dev);
+
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
@@ -359,10 +368,17 @@ static int fts_sensor_init(struct fts_ts_data *data)
     }
     data->sensor_pdata = sensor_pdata;
 
-    __set_bit(EV_ABS, sensor_input_dev->evbit);
+    if (data->pdata->report_gesture_key) {
+        __set_bit(EV_KEY, sensor_input_dev->evbit);
+        __set_bit(KEY_F1, sensor_input_dev->keybit);
+    }
+    else {
+        __set_bit(EV_ABS, sensor_input_dev->evbit);
+        input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+                                0, REPORT_MAX_COUNT, 0, 0);
+    }
     __set_bit(EV_SYN, sensor_input_dev->evbit);
-    input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
-                         0, REPORT_MAX_COUNT, 0, 0);
+
     sensor_input_dev->name = "double-tap";
     data->sensor_pdata->input_sensor_dev = sensor_input_dev;
 
