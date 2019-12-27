@@ -137,6 +137,7 @@ struct fts_ts_platform_data {
     u32 reset_gpio_flags;
     bool always_on_vio;
     bool dlfw_in_resume;
+    bool report_gesture_key;
     bool share_reset_gpio;
     bool have_key;
     u32 key_number;

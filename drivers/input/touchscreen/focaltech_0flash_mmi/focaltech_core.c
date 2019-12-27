@@ -1579,6 +1579,10 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     if (pdata->dlfw_in_resume)
         FTS_INFO("Reset touch when firmware abnormal in resume.");
 
+    pdata->report_gesture_key = of_property_read_bool(np, "focaltech,report_gesture_key");
+    if (pdata->report_gesture_key)
+        FTS_INFO("Report tap gesture as key.");
+
     pdata->irq_gpio = of_get_named_gpio_flags(np, "focaltech,irq-gpio",
                       0, &pdata->irq_gpio_flags);
     if (pdata->irq_gpio < 0)
