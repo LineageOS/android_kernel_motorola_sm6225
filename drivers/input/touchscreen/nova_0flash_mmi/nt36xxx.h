@@ -176,6 +176,7 @@ struct nvt_ts_data {
 	struct mt_chip_conf spi_ctrl;
 #endif
 	uint32_t charger_detection_enable;
+	uint32_t report_gesture_key;
 	struct usb_charger_detection *charger_detection;
 #ifdef CONFIG_SPI_MT65XX
     struct mtk_chip_config spi_ctrl;
