@@ -1019,14 +1019,22 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			NVT_LOG("Gesture got but wakeable not set. Skip this gesture.");
 			return;
 		}
-		input_report_abs(ts->sensor_pdata->input_sensor_dev,
-				ABS_DISTANCE,
-				++report_cnt);
+		if (ts->report_gesture_key) {
+			input_report_key(ts->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+			input_sync(ts->sensor_pdata->input_sensor_dev);
+			input_report_key(ts->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+			input_sync(ts->sensor_pdata->input_sensor_dev);
+			++report_cnt;
+		} else {
+			input_report_abs(ts->sensor_pdata->input_sensor_dev,
+					ABS_DISTANCE,
+					++report_cnt);
+			input_sync(ts->sensor_pdata->input_sensor_dev);
+		}
 		NVT_LOG("input report: %d", report_cnt);
 		if (report_cnt >= REPORT_MAX_COUNT) {
 			report_cnt = 0;
 		}
-		input_sync(ts->sensor_pdata->input_sensor_dev);
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
@@ -1122,6 +1130,12 @@ static int32_t nvt_parse_dt(struct device *dev)
 		ts->charger_detection_enable = 0;
 	}
 
+	if (of_property_read_bool(np, "novatek,report_gesture_key")) {
+		NVT_LOG("novatek,report_gesture_key set");
+		ts->report_gesture_key = 1;
+	} else {
+		ts->report_gesture_key = 0;
+	}
 	return ret;
 }
 #else
@@ -1590,10 +1604,16 @@ static int nvt_sensor_init(struct nvt_ts_data *data)
 	}
 	data->sensor_pdata = sensor_pdata;
 
-	__set_bit(EV_ABS, sensor_input_dev->evbit);
+	if (data->report_gesture_key) {
+		__set_bit(EV_KEY, sensor_input_dev->evbit);
+		__set_bit(KEY_F1, sensor_input_dev->keybit);
+	} else {
+		__set_bit(EV_ABS, sensor_input_dev->evbit);
+		input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+				0, REPORT_MAX_COUNT, 0, 0);
+	}
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
-	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
-			0, REPORT_MAX_COUNT, 0, 0);
+
 	sensor_input_dev->name = "double-tap";
 	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
 
