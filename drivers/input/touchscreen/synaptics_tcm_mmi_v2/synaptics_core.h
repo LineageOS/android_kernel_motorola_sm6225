@@ -516,6 +516,9 @@ struct syna_tcm_hcd {
 			struct syna_tcm_buffer *output);
 	void (*report_touch)(void);
 	void (*update_watchdog)(struct syna_tcm_hcd *tcm_hcd, bool en);
+
+	int (*do_fw_update)(void);
+	int (*set_fw_name)(const char* fw_name);
 };
 
 struct syna_tcm_module_cb {
