@@ -1,6 +1,10 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
+ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+	KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
+endif
+
 ifeq ($(DLKM_INSTALL_TO_VENDOR_OUT),true)
 SYNA_TCM_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules/
 else

@@ -430,6 +430,8 @@ static int syna_tcm_i2c_probe(struct i2c_client *i2c,
 		return -ENOMEM;
 	}
 
+	i2c_set_clientdata(i2c, syna_tcm_i2c_device);
+
 #ifdef CONFIG_OF
 	hw_if.bdata = devm_kzalloc(&i2c->dev, sizeof(*hw_if.bdata), GFP_KERNEL);
 	if (!hw_if.bdata) {

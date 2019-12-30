@@ -1178,7 +1178,7 @@ static int recovery_init(struct syna_tcm_hcd *tcm_hcd)
 		return -ENOMEM;
 	}
 
-	recovery_hcd->ihex_buf = vmalloc(IHEX_BUF_SIZE);
+	recovery_hcd->ihex_buf = vzalloc(IHEX_BUF_SIZE);
 	if (!recovery_hcd->ihex_buf) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to allocate memory for recovery_hcd->ihex_buf\n");
