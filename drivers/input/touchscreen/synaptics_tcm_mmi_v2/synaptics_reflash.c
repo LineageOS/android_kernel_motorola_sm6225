@@ -198,6 +198,7 @@ struct reflash_hcd {
 	struct syna_tcm_buffer resp;
 	struct syna_tcm_buffer read;
 	struct syna_tcm_hcd *tcm_hcd;
+	char fw_name[64];
 };
 
 DECLARE_COMPLETION(reflash_remove_complete);
@@ -309,6 +310,34 @@ static struct bin_attribute bin_attrs[] = {
 		.read = reflash_sysfs_cs_show,
 	},
 };
+
+static int syna_ts_set_fwname(const char* fw_name) {
+	if (fw_name != NULL) {
+		strlcpy(reflash_hcd->fw_name, fw_name,
+			sizeof(reflash_hcd->fw_name));
+		return 0;
+	}
+	LOGI(reflash_hcd->tcm_hcd->pdev->dev.parent,
+		"set fw name = %s", reflash_hcd->fw_name);
+	return -EINVAL;
+}
+
+static int syna_ts_do_reflash(void)
+{
+	int retval;
+	struct syna_tcm_hcd *tcm_hcd = reflash_hcd->tcm_hcd;
+
+	mutex_lock(&reflash_hcd->reflash_mutex);
+	reflash_hcd->force_update = true;
+	retval = reflash_do_reflash();
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent, "Failed to do reflash\n");
+	}
+	reflash_hcd->force_update = FORCE_REFLASH;
+	mutex_unlock(&reflash_hcd->reflash_mutex);
+
+	return retval;
+}
 
 static ssize_t reflash_sysfs_reflash_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -860,8 +889,16 @@ static int reflash_get_fw_image(void)
 	struct syna_tcm_hcd *tcm_hcd = reflash_hcd->tcm_hcd;
 
 	if (reflash_hcd->image == NULL) {
-		if (reflash_hcd->reflash_by_manual == false) {
+		if (reflash_hcd->fw_name[0] != 0) {
+			LOGN(tcm_hcd->pdev->dev.parent, "Request firmware %s\n", reflash_hcd->fw_name);
+			retval = request_firmware(&reflash_hcd->fw_entry,
+				reflash_hcd->fw_name, tcm_hcd->pdev->dev.parent);
+			if (retval < 0) {
+				LOGE(tcm_hcd->pdev->dev.parent, "Failed to request %s\n", reflash_hcd->fw_name);
+				return retval;
+			}
 
+		} else if (reflash_hcd->reflash_by_manual == false) {
 			retval = request_firmware(&reflash_hcd->fw_entry,
 				FW_IMAGE_NAME, tcm_hcd->pdev->dev.parent);
 			if (retval < 0) {
@@ -2388,7 +2425,7 @@ static int reflash_init(struct syna_tcm_hcd *tcm_hcd)
 	if (tcm_hcd->in_hdl_mode)
 		return 0;
 
-	reflash_hcd = vmalloc(sizeof(*reflash_hcd));
+	reflash_hcd = vzalloc(sizeof(*reflash_hcd));
 	if (!reflash_hcd) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to allocate memory for reflash_hcd\n");
@@ -2405,6 +2442,8 @@ static int reflash_init(struct syna_tcm_hcd *tcm_hcd)
 	reflash_hcd->tcm_hcd = tcm_hcd;
 
 	reflash_hcd->force_update = FORCE_REFLASH;
+	tcm_hcd->set_fw_name = syna_ts_set_fwname;
+	tcm_hcd->do_fw_update = syna_ts_do_reflash;
 
 	mutex_init(&reflash_hcd->reflash_mutex);
 

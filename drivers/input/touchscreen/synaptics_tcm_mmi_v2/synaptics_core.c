@@ -40,6 +40,11 @@
 #include <linux/regulator/consumer.h>
 #include "synaptics_core.h"
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+extern int syna_ts_mmi_dev_register(struct syna_tcm_hcd *tcm_hcd);
+extern void syna_ts_mmi_dev_unregister(struct syna_tcm_hcd *tcm_hcd);
+#endif
+
 /* #define RESET_ON_RESUME */
 
 /* #define RESUME_EARLY_UNBLANK */
@@ -3922,6 +3927,10 @@ prepare_modules:
 	mod_pool.queue_work = true;
 	queue_work(mod_pool.workqueue, &mod_pool.work);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	syna_ts_mmi_dev_register(tcm_hcd);
+#endif
+
 	return 0;
 
 err_enable_irq:
@@ -4005,6 +4014,9 @@ static int syna_tcm_remove(struct platform_device *pdev)
 	struct syna_tcm_hcd *tcm_hcd = platform_get_drvdata(pdev);
 	const struct syna_tcm_board_data *bdata = tcm_hcd->hw_if->bdata;
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	syna_ts_mmi_dev_unregister(tcm_hcd);
+#endif
 	touch_remove(tcm_hcd);
 
 	mutex_lock(&mod_pool.mutex);

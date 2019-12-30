@@ -14,3 +14,7 @@ obj-m += synaptics_testing.o
 obj-m += synaptics_zeroflash.o
 
 synaptics_core_module-objs := synaptics_core.o synaptics_touch.o
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+	synaptics_core_module-objs += synaptics_ts_mmi.o
+endif
