@@ -48,6 +48,7 @@ static u8 checksum_h;
 static u8 checksum_h_bin;
 static u8 checksum_l;
 static u8 checksum_l_bin;
+static u32 abov_channel_number = 0;
 
 #define IDLE 0
 #define ACTIVE 1
@@ -85,6 +86,7 @@ static void ForcetoTouched(pabovXX_t this)
 {
 	pabov_t pDevice = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 	struct _buttonInfo *pCurrentButton  = NULL;
@@ -95,17 +97,27 @@ static void ForcetoTouched(pabovXX_t this)
 
 		pCurrentButton = pDevice->pbuttonInformation->buttons;
 		input_top = pDevice->pbuttonInformation->input_top;
-		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+			input_bottom = pDevice->pbuttonInformation->input_bottom;
+		else {
+			input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+			input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+		}
 		pCurrentButton->state = ACTIVE;
 		last_val = 1;
 		if (mEnabled) {
 			input_report_abs(input_top, ABS_DISTANCE, 1);
 			input_sync(input_top);
-			input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
-			input_sync(input_bottom_left);
-			input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
-			input_sync(input_bottom_right);
+			if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+				input_report_abs(input_bottom, ABS_DISTANCE, 1);
+				input_sync(input_bottom);
+			}
+			else {
+				input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
+				input_sync(input_bottom_left);
+				input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
+				input_sync(input_bottom_right);
+			}
 		}
 		LOG_INFO("Leaving ForcetoTouched()\n");
 	}
@@ -303,6 +315,7 @@ static void touchProcess(pabovXX_t this)
 	pabov_t pDevice = NULL;
 	struct _buttonInfo *buttons = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 	struct _buttonInfo *pCurrentButton  = NULL;
@@ -316,13 +329,23 @@ static void touchProcess(pabovXX_t this)
 
 		buttons = pDevice->pbuttonInformation->buttons;
 		input_top = pDevice->pbuttonInformation->input_top;
-		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+			input_bottom = pDevice->pbuttonInformation->input_bottom;
+		else {
+			input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+			input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+		}
 		numberOfButtons = pDevice->pbuttonInformation->buttonSize;
-
-		if (unlikely((buttons == NULL) || (input_top == NULL) || (input_bottom_left == NULL) || (input_bottom_right == NULL))) {
-			LOG_DBG("ERROR!! buttons or input NULL!!!\n");
-			return;
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			if (unlikely((buttons == NULL) || (input_top == NULL) || (input_bottom == NULL))) {
+				LOG_DBG("ERROR!! buttons or input NULL!!!\n");
+				return;
+			}
+		} else {
+			if (unlikely((buttons == NULL) || (input_top == NULL) || (input_bottom_left == NULL) || (input_bottom_right == NULL))) {
+				LOG_DBG("ERROR!! buttons or input NULL!!!\n");
+				return;
+			}
 		}
 
 		for (counter = 0; counter < numberOfButtons; counter++) {
@@ -337,30 +360,51 @@ static void touchProcess(pabovXX_t this)
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
 					LOG_INFO("CS %d State=BODY.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 2);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 2);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 2);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 2);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 2);
+							input_sync(input_bottom);
+						}
+					} else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 2);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 2);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 2);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
 				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x15)) {
 					LOG_INFO("CS %d State=PROX.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 1);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 1);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 1);
+							input_sync(input_bottom);
+						}
+					}
+					else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 1);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = S_PROX;
 					last_val = 0;
@@ -373,15 +417,25 @@ static void touchProcess(pabovXX_t this)
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
 					LOG_INFO("CS %d State=BODY.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 2);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 2);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 2);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 2);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 2);
+							input_sync(input_bottom);
+						}
+					} else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 2);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 2);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 2);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
@@ -391,15 +445,25 @@ static void touchProcess(pabovXX_t this)
 				} else{
 					LOG_INFO("CS %d State=IDLE.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 0);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 0);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 0);
+							input_sync(input_bottom);
+						}
+					} else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 0);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = IDLE;
 					last_val = 0;
@@ -412,30 +476,50 @@ static void touchProcess(pabovXX_t this)
 				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x15)) {
 					LOG_INFO("CS %d State=PROX.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 1);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 1);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 1);
+							input_sync(input_bottom);
+						}
+					} else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 1);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 1);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 1);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = S_PROX;
 					last_val = 1;
 				} else{
 					LOG_INFO("CS %d State=IDLE.\n",
 							counter);
-					if (board->cap_channel_top == counter) {
-						input_report_abs(input_top, ABS_DISTANCE, 0);
-						input_sync(input_top);
-					} else if (board->cap_channel_bottom_left == counter) {
-						input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-						input_sync(input_bottom_left);
-					} else if (board->cap_channel_bottom_right == counter) {
-						input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-						input_sync(input_bottom_right);
+					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 0);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom == counter) {
+							input_report_abs(input_bottom, ABS_DISTANCE, 0);
+							input_sync(input_bottom);
+						}
+					} else {
+						if (board->cap_channel_top == counter) {
+							input_report_abs(input_top, ABS_DISTANCE, 0);
+							input_sync(input_top);
+						} else if (board->cap_channel_bottom_left == counter) {
+							input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+							input_sync(input_bottom_left);
+						} else if (board->cap_channel_bottom_right == counter) {
+							input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+							input_sync(input_bottom_right);
+						}
 					}
 					pCurrentButton->state = IDLE;
 					last_val = 0;
@@ -506,17 +590,32 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 		pabov_platform_data_t pplatData)
 {
 	struct device_node *np = client->dev.of_node;
-	u32 cap_channel_top, cap_channel_bottom_left, cap_channel_bottom_right;
+	u32 cap_channel_top;
+	u32 cap_channel_bottom;
+	u32 cap_channel_bottom_left, cap_channel_bottom_right;
 	int ret;
 
 	client->irq = of_get_gpio(np, 0);
 	pplatData->irq_gpio = client->irq;
+
+	ret = of_property_read_u32(np, "cap,channel_number", &abov_channel_number);
+	if (ret < 0) {
+		LOG_DBG("get cap,channel number node error!\n");
+	}
 	ret = of_property_read_u32(np, "cap,use_channel_top", &cap_channel_top);
-	ret = of_property_read_u32(np, "cap,use_channel_bottom_left", &cap_channel_bottom_left);
-	ret = of_property_read_u32(np, "cap,use_channel_bottom_right", &cap_channel_bottom_right);
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		ret = of_property_read_u32(np, "cap,use_channel_bottom", &cap_channel_bottom);
+	else {
+		ret = of_property_read_u32(np, "cap,use_channel_bottom_left", &cap_channel_bottom_left);
+		ret = of_property_read_u32(np, "cap,use_channel_bottom_right", &cap_channel_bottom_right);
+	}
 	pplatData->cap_channel_top = (int)cap_channel_top;
-	pplatData->cap_channel_bottom_left = (int)cap_channel_bottom_left;
-	pplatData->cap_channel_bottom_right = (int)cap_channel_bottom_right;
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		pplatData->cap_channel_bottom = (int)cap_channel_bottom;
+	else {
+		pplatData->cap_channel_bottom_left = (int)cap_channel_bottom_left;
+		pplatData->cap_channel_bottom_right = (int)cap_channel_bottom_right;
+	}
 
 	pplatData->get_is_nirq_low = abov_get_nirq_state;
 	pplatData->init_platform_hw = NULL;
@@ -552,13 +651,18 @@ static ssize_t reset_store(struct class *class,
 	pabovXX_t this = abov_sar_ptr;
 	pabov_t pDevice = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 
 	pDevice = this->pDevice;
 	input_top = pDevice->pbuttonInformation->input_top;
-	input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-	input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		input_bottom = pDevice->pbuttonInformation->input_bottom;
+	else {
+		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	}
 
 	if (!count || (this == NULL))
 		return -EINVAL;
@@ -568,10 +672,15 @@ static ssize_t reset_store(struct class *class,
 
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
-	input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-	input_sync(input_bottom_left);
-	input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-	input_sync(input_bottom_right);
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+		input_report_abs(input_bottom, ABS_DISTANCE, 0);
+		input_sync(input_bottom);
+	} else {
+		input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+		input_sync(input_bottom_left);
+		input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+		input_sync(input_bottom_right);
+	}
 
 	return count;
 }
@@ -592,13 +701,18 @@ static ssize_t enable_store(struct class *class,
 	pabovXX_t this = abov_sar_ptr;
 	pabov_t pDevice = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 
 	pDevice = this->pDevice;
 	input_top = pDevice->pbuttonInformation->input_top;
-	input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-	input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		input_bottom = pDevice->pbuttonInformation->input_bottom;
+	else {
+		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	}
 
 	if (!count || (this == NULL))
 		return -EINVAL;
@@ -609,10 +723,15 @@ static ssize_t enable_store(struct class *class,
 
 		input_report_abs(input_top, ABS_DISTANCE, 0);
 		input_sync(input_top);
-		input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-		input_sync(input_bottom_left);
-		input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-		input_sync(input_bottom_right);
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			input_report_abs(input_bottom, ABS_DISTANCE, 0);
+			input_sync(input_bottom);
+		} else {
+			input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+			input_sync(input_bottom_left);
+			input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+			input_sync(input_bottom_right);
+		}
 		mEnabled = 1;
 	} else if (!strncmp(buf, "0", 1)) {
 		LOG_DBG("disable cap sensor\n");
@@ -621,10 +740,15 @@ static ssize_t enable_store(struct class *class,
 
 		input_report_abs(input_top, ABS_DISTANCE, -1);
 		input_sync(input_top);
-		input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
-		input_sync(input_bottom_left);
-		input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
-		input_sync(input_bottom_right);
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			input_report_abs(input_bottom, ABS_DISTANCE, -1);
+			input_sync(input_bottom);
+		} else {
+			input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
+			input_sync(input_bottom_left);
+			input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
+			input_sync(input_bottom_right);
+		}
 		mEnabled = 0;
 	} else {
 		LOG_DBG("unknown enable symbol\n");
@@ -639,13 +763,18 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	pabovXX_t this = abov_sar_ptr;
 	pabov_t pDevice = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 
 	pDevice = this->pDevice;
 	input_top = pDevice->pbuttonInformation->input_top;
-	input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-	input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		input_bottom = pDevice->pbuttonInformation->input_bottom;
+	else {
+		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	}
 
 	if (enable == 1) {
 		LOG_DBG("enable cap sensor: %s\n",sensors_cdev->name);
@@ -653,36 +782,58 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 			initialize(this);
 			mEnabled = 1;
 		}
-
-		if(!strcmp(sensors_cdev->name, "capsense_top")){
-			input_report_abs(input_top, ABS_DISTANCE, 0);
-			input_sync(input_top);
-			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_TOP;
-		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
-			input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-			input_sync(input_bottom_left);
-			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
-		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
-			input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-			input_sync(input_bottom_right);
-			this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			if(!strcmp(sensors_cdev->name, "capsense_top")){
+				input_report_abs(input_top, ABS_DISTANCE, 0);
+				input_sync(input_top);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_TOP;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom")){
+				input_report_abs(input_bottom, ABS_DISTANCE, 0);
+				input_sync(input_bottom);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM;
+			}
+		} else {
+			if(!strcmp(sensors_cdev->name, "capsense_top")){
+				input_report_abs(input_top, ABS_DISTANCE, 0);
+				input_sync(input_top);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_TOP;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+				input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+				input_sync(input_bottom_left);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+				input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+				input_sync(input_bottom_right);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+			}
 		}
 	} else if (enable == 0) {
 		LOG_DBG("disable cap sensor: %s\n",sensors_cdev->name);
-		if(!strcmp(sensors_cdev->name, "capsense_top")){
-			input_report_abs(input_top, ABS_DISTANCE, -1);
-			input_sync(input_top);
-			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_TOP;
-		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
-			input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
-			input_sync(input_bottom_left);
-			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
-		}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
-			input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
-			input_sync(input_bottom_right);
-			this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			if(!strcmp(sensors_cdev->name, "capsense_top")){
+				input_report_abs(input_top, ABS_DISTANCE, -1);
+				input_sync(input_top);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_TOP;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom")){
+				input_report_abs(input_bottom, ABS_DISTANCE, -1);
+				input_sync(input_bottom);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM;
+			}
+		} else {
+			if(!strcmp(sensors_cdev->name, "capsense_top")){
+				input_report_abs(input_top, ABS_DISTANCE, -1);
+				input_sync(input_top);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_TOP;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+				input_report_abs(input_bottom_left, ABS_DISTANCE, -1);
+				input_sync(input_bottom_left);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT;
+			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+				input_report_abs(input_bottom_right, ABS_DISTANCE, -1);
+				input_sync(input_bottom_right);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT;
+			}
 		}
-
 		if(!(this->enable_flag &0x07)){
 			mEnabled = 0;
 			write_register(this, ABOV_CTRL_MODE_REG, 0x02);
@@ -760,14 +911,19 @@ static void ps_notify_callback_work(struct work_struct *work)
 	pabovXX_t this = container_of(work, abovXX_t, ps_notify_work);
 	pabov_t pDevice = NULL;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 	int ret = 0;
 
 	pDevice = this->pDevice;
 	input_top = pDevice->pbuttonInformation->input_top;
-	input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
-	input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		input_bottom = pDevice->pbuttonInformation->input_bottom;
+	else {
+		input_bottom_left = pDevice->pbuttonInformation->input_bottom_left;
+		input_bottom_right = pDevice->pbuttonInformation->input_bottom_right;
+	}
 
 	LOG_INFO("Usb insert,going to force calibrate\n");
 	ret = write_register(this, ABOV_RECALI_REG, 0x01);
@@ -776,10 +932,15 @@ static void ps_notify_callback_work(struct work_struct *work)
 
 	input_report_abs(input_top, ABS_DISTANCE, 0);
 	input_sync(input_top);
-	input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
-	input_sync(input_bottom_left);
-	input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
-	input_sync(input_bottom_right);
+	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+		input_report_abs(input_bottom, ABS_DISTANCE, 0);
+		input_sync(input_bottom);
+	} else {
+		input_report_abs(input_bottom_left, ABS_DISTANCE, 0);
+		input_sync(input_bottom_left);
+		input_report_abs(input_bottom_right, ABS_DISTANCE, 0);
+		input_sync(input_bottom_right);
+	}
 }
 
 static int ps_get_state(struct power_supply *psy, bool *present)
@@ -1390,6 +1551,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	bool isForceUpdate = false;
 	int ret;
 	struct input_dev *input_top = NULL;
+	struct input_dev *input_bottom = NULL;
 	struct input_dev *input_bottom_left = NULL;
 	struct input_dev *input_bottom_right = NULL;
 	struct power_supply *psy = NULL;
@@ -1507,35 +1669,53 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				LOG_INFO("add top cap touch unsuccess\n");
 				return -ENOMEM;
 			}
-			/* Create the input device */
-			input_bottom_left = input_allocate_device();
-			if (!input_bottom_left)
-				return -ENOMEM;
-			/* Set all the keycodes */
-			__set_bit(EV_ABS, input_bottom_left->evbit);
-			input_set_abs_params(input_bottom_left, ABS_DISTANCE, -1, 100, 0, 0);
-			/* save the input pointer and finish initialization */
-			pDevice->pbuttonInformation->input_bottom_left = input_bottom_left;
-			/* save the input pointer and finish initialization */
-			input_bottom_left->name = "ABOV Cap Touch bottom_left";
-			if (input_register_device(input_bottom_left)) {
-				LOG_INFO("add bottom_left cap touch unsuccess\n");
-				return -ENOMEM;
-			}
-			/* Create the input device */
-			input_bottom_right = input_allocate_device();
-			if (!input_bottom_right)
-				return -ENOMEM;
-			/* Set all the keycodes */
-			__set_bit(EV_ABS, input_bottom_right->evbit);
-			input_set_abs_params(input_bottom_right, ABS_DISTANCE, -1, 100, 0, 0);
-			/* save the input pointer and finish initialization */
-			pDevice->pbuttonInformation->input_bottom_right = input_bottom_right;
-			/* save the input pointer and finish initialization */
-			input_bottom_right->name = "ABOV Cap Touch bottom_right";
-			if (input_register_device(input_bottom_right)) {
-				LOG_INFO("add bottom_right cap touch unsuccess\n");
-				return -ENOMEM;
+			if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+				/* Create the input device */
+				input_bottom = input_allocate_device();
+				if (!input_bottom)
+					return -ENOMEM;
+				/* Set all the keycodes */
+				__set_bit(EV_ABS, input_bottom->evbit);
+				input_set_abs_params(input_bottom, ABS_DISTANCE, -1, 100, 0, 0);
+				/* save the input pointer and finish initialization */
+				pDevice->pbuttonInformation->input_bottom = input_bottom;
+				/* save the input pointer and finish initialization */
+				input_bottom->name = "ABOV Cap Touch bottom";
+				if (input_register_device(input_bottom)) {
+					LOG_INFO("add bottom cap touch unsuccess\n");
+					return -ENOMEM;
+				}
+			} else {
+				/* Create the input device */
+				input_bottom_left = input_allocate_device();
+				if (!input_bottom_left)
+					return -ENOMEM;
+				/* Set all the keycodes */
+				__set_bit(EV_ABS, input_bottom_left->evbit);
+				input_set_abs_params(input_bottom_left, ABS_DISTANCE, -1, 100, 0, 0);
+				/* save the input pointer and finish initialization */
+				pDevice->pbuttonInformation->input_bottom_left = input_bottom_left;
+				/* save the input pointer and finish initialization */
+				input_bottom_left->name = "ABOV Cap Touch bottom_left";
+				if (input_register_device(input_bottom_left)) {
+					LOG_INFO("add bottom_left cap touch unsuccess\n");
+					return -ENOMEM;
+				}
+				/* Create the input device */
+				input_bottom_right = input_allocate_device();
+				if (!input_bottom_right)
+					return -ENOMEM;
+				/* Set all the keycodes */
+				__set_bit(EV_ABS, input_bottom_right->evbit);
+				input_set_abs_params(input_bottom_right, ABS_DISTANCE, -1, 100, 0, 0);
+				/* save the input pointer and finish initialization */
+				pDevice->pbuttonInformation->input_bottom_right = input_bottom_right;
+				/* save the input pointer and finish initialization */
+				input_bottom_right->name = "ABOV Cap Touch bottom_right";
+				if (input_register_device(input_bottom_right)) {
+					LOG_INFO("add bottom_right cap touch unsuccess\n");
+					return -ENOMEM;
+				}
 			}
 		}
 
@@ -1583,16 +1763,24 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		ret = sensors_classdev_register(&input_top->dev, &sensors_capsensor_top_cdev);
 		if (ret < 0)
 			LOG_DBG("create top cap sensor_class  file failed (%d)\n", ret);
-		sensors_capsensor_bottom_left_cdev.sensors_enable = capsensor_set_enable;
-		sensors_capsensor_bottom_left_cdev.sensors_poll_delay = NULL;
-		ret = sensors_classdev_register(&input_bottom_left->dev, &sensors_capsensor_bottom_left_cdev);
-		if (ret < 0)
-			LOG_DBG("create bottom_left cap sensor_class file failed (%d)\n", ret);
-		sensors_capsensor_bottom_right_cdev.sensors_enable = capsensor_set_enable;
-		sensors_capsensor_bottom_right_cdev.sensors_poll_delay = NULL;
-		ret = sensors_classdev_register(&input_bottom_right->dev, &sensors_capsensor_bottom_right_cdev);
-		if (ret < 0)
-			LOG_DBG("create bottom_right cap sensor_class file failed (%d)\n", ret);
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
+			sensors_capsensor_bottom_cdev.sensors_enable = capsensor_set_enable;
+			sensors_capsensor_bottom_cdev.sensors_poll_delay = NULL;
+			ret = sensors_classdev_register(&input_bottom->dev, &sensors_capsensor_bottom_cdev);
+			if (ret < 0)
+				LOG_DBG("create bottom cap sensor_class file failed (%d)\n", ret);
+		} else {
+			sensors_capsensor_bottom_left_cdev.sensors_enable = capsensor_set_enable;
+			sensors_capsensor_bottom_left_cdev.sensors_poll_delay = NULL;
+			ret = sensors_classdev_register(&input_bottom_left->dev, &sensors_capsensor_bottom_left_cdev);
+			if (ret < 0)
+				LOG_DBG("create bottom_left cap sensor_class file failed (%d)\n", ret);
+			sensors_capsensor_bottom_right_cdev.sensors_enable = capsensor_set_enable;
+			sensors_capsensor_bottom_right_cdev.sensors_poll_delay = NULL;
+			ret = sensors_classdev_register(&input_bottom_right->dev, &sensors_capsensor_bottom_right_cdev);
+			if (ret < 0)
+				LOG_DBG("create bottom_right cap sensor_class file failed (%d)\n", ret);
+		}
 #endif
 
 		abovXX_sar_init(this);
@@ -1648,8 +1836,12 @@ free_ps_notifier:
 err_vdd_defer:
 	LOG_DBG("%s input free device.\n", __func__);
 	input_free_device(input_top);
-	input_free_device(input_bottom_left);
-	input_free_device(input_bottom_right);
+	if(abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+		input_free_device(input_bottom);
+	else {
+		input_free_device(input_bottom_left);
+		input_free_device(input_bottom_right);
+	}
 
 	return ret;
 }
@@ -1670,13 +1862,20 @@ static int abov_remove(struct i2c_client *client)
 	if (this && pDevice) {
 #ifdef USE_SENSORS_CLASS
 		sensors_classdev_unregister(&sensors_capsensor_top_cdev);
-		sensors_classdev_unregister(&sensors_capsensor_bottom_left_cdev);
-		sensors_classdev_unregister(&sensors_capsensor_bottom_right_cdev);
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+			sensors_classdev_unregister(&sensors_capsensor_bottom_cdev);
+		else {
+			sensors_classdev_unregister(&sensors_capsensor_bottom_left_cdev);
+			sensors_classdev_unregister(&sensors_capsensor_bottom_right_cdev);
+		}
 #endif
 		input_unregister_device(pDevice->pbuttonInformation->input_top);
-		input_unregister_device(pDevice->pbuttonInformation->input_bottom_left);
-		input_unregister_device(pDevice->pbuttonInformation->input_bottom_right);
-
+		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
+			input_unregister_device(pDevice->pbuttonInformation->input_bottom);
+		else {
+			input_unregister_device(pDevice->pbuttonInformation->input_bottom_left);
+			input_unregister_device(pDevice->pbuttonInformation->input_bottom_right);
+		}
 		if (this->board->cap_svdd_en) {
 			regulator_disable(this->board->cap_svdd);
 			regulator_put(this->board->cap_svdd);
