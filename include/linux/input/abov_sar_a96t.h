@@ -42,7 +42,7 @@
 #define ABOV_CH2_DIFF_LSB_REG		0x39
 #define ABOV_TH_LEVEL_EN_REG		0x3F
 #define ABOV_RECALI_REG				0xFB
-
+#define ABOV_CHANNEL_NUMBER_TWO     0x02
 
 /* enable body stat */
 #define ABOV_TCHCMPSTAT_TCHSTAT0_FLAG   0x03
@@ -78,6 +78,7 @@ struct _totalButtonInformation {
 	struct _buttonInfo *buttons;
 	int buttonSize;
 	struct input_dev *input_top;
+	struct input_dev *input_bottom;
 	struct input_dev *input_bottom_left;
 	struct input_dev *input_bottom_right;
 };
@@ -130,6 +131,7 @@ struct abov_platform_data {
 	unsigned irq_gpio;
 	/* used for custom setting for channel and scan period */
 	int cap_channel_top;
+	int cap_channel_bottom;
 	int cap_channel_bottom_left;
 	int cap_channel_bottom_right;
 	pbuttonInformation_t pbuttonInformation;
@@ -145,6 +147,22 @@ typedef struct abov_platform_data *pabov_platform_data_t;
 #ifdef USE_SENSORS_CLASS
 static struct sensors_classdev sensors_capsensor_top_cdev = {
 	.name = "capsense_top",
+	.vendor = "abov",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_CAPSENSE,
+	.max_range = "5",
+	.resolution = "5.0",
+	.sensor_power = "3",
+	.min_delay = 0, /* in microseconds */
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 100,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
+static struct sensors_classdev sensors_capsensor_bottom_cdev = {
+	.name = "capsense_bottom",
 	.vendor = "abov",
 	.version = 1,
 	.type = SENSOR_TYPE_MOTO_CAPSENSE,
@@ -191,12 +209,12 @@ static struct sensors_classdev sensors_capsensor_bottom_right_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
-
 #endif
 
 
 typedef enum{
 	CAPSENSOR_ENABLE_FLAG_TOP,
+	CAPSENSOR_ENABLE_FLAG_BOTTOM,
 	CAPSENSOR_ENABLE_FLAG_BOTTOM_LEFT,
 	CAPSENSOR_ENABLE_FLAG_BOTTOM_RIGHT,
 	CAPSENSOR_ENABLE_FLAG_MAX
