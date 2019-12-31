@@ -24,6 +24,8 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/pinctrl/consumer.h>
+
 
 #define DRIVER_VERSION "0.0.1"
 
