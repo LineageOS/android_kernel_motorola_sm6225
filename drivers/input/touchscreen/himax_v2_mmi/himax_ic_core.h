@@ -64,6 +64,11 @@
 #define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
 #endif
 
+#if defined(__HIMAX_HX83102D_MOD__)
+#define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
+#define HX83102D
+#endif
+
 #if defined(__HIMAX_HX83103_MOD__)
 #define HX_MOD_KSYM_HX83103            HX_MOD_KSYM_HX83103
 #endif
@@ -473,12 +478,23 @@ struct hx_guest_info {
 	#define zf_data_activ_in								0xEC
 
 #if defined(HX_CODE_OVERLAY)
+#if defined(HX83102D)
+	#define ovl_section_num      3
+	#define ovl_gesture_request  0x11
+	#define ovl_gesture_reply    0x22
+	#define ovl_border_request   0x55
+	#define ovl_border_reply     0x66
+	#define ovl_sorting_request  0x99
+	#define ovl_sorting_reply    0xAA
+	#define ovl_fault            0xFF
+#else
 	#define ovl_isram_addr                                  0x20008CE0
 	#define ovl_handshaking_addr                            0x10007FFC
 	#define ovl_gesture_request                             0x11
 	#define ovl_gesture_reply                               0x22
 	#define ovl_border_request                              0x55
 	#define ovl_border_reply                                0x66
+#endif
 #endif
 
 struct zf_info {
@@ -945,6 +961,9 @@ struct himax_core_fp {
 	int (*fp_0f_op_file_dirly)(char *file_name);
 	void (*fp_0f_operation)(struct work_struct *work);
 	int (*fp_0f_esd_check)(void);
+#if defined(HX83102D)
+	void (*fp_0f_reload_to_active)(void);
+#endif
 #ifdef HX_0F_DEBUG
 	void (*fp_read_sram_0f)(const struct firmware *fw_entry, uint8_t *addr, int start_index, int read_len);
 	void (*fp_read_all_sram)(uint8_t *addr, int read_len);

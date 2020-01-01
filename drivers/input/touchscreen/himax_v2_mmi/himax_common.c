@@ -3154,6 +3154,10 @@ GET_TOUCH_FAIL:
 #else
 	g_core_fp.fp_system_reset();
 #endif
+#if defined(HX_ZERO_FLASH) && defined(HX83102D)
+	if (g_core_fp.fp_0f_reload_to_active)
+		g_core_fp.fp_0f_reload_to_active();
+#endif
 END_FUNCTION:
 	if (debug_data != NULL)
 		debug_data->fp_ts_dbg_func(ts, HX_FINGER_LEAVE);

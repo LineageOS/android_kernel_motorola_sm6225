@@ -461,7 +461,7 @@ struct himax_ts_data {
 	struct workqueue_struct *himax_diag_wq;
 	struct delayed_work himax_diag_delay_wrok;
 
-#ifdef HX_SMART_WAKEUP
+#if defined (HX_SMART_WAKEUP) || defined (HX_CODE_OVERLAY)
 	uint8_t SMWP_enable;
 	uint8_t gesture_cust_en[26];
 	struct wakeup_source ts_SMWP_wake_lock;

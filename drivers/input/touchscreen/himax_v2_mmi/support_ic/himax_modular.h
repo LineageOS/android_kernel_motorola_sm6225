@@ -107,6 +107,13 @@ static unsigned char *kp_IC_CHECKSUM;
 static u8 *kp_HX_ESD_RESET_ACTIVATE;
 #endif
 
+#if defined(HX_ZERO_FLASH) && defined(HX_CODE_OVERLAY)
+#if defined(CONFIG_TOUCHSCREEN_HIMAX_INCELL)
+extern uint8_t *ovl_idx;
+static uint8_t **kp_ovl_idx;
+#endif
+#endif
+
 static unsigned long *kp_FW_VER_MAJ_FLASH_ADDR;
 static unsigned long *kp_FW_VER_MIN_FLASH_ADDR;
 static unsigned long *kp_CFG_VER_MAJ_FLASH_ADDR;
@@ -254,6 +261,12 @@ static int32_t himax_ic_setup_external_symbols(void)
 
 #ifdef HX_ESD_RECOVERY
 	assert_on_symbol(HX_ESD_RESET_ACTIVATE);
+#endif
+
+#if defined(HX_ZERO_FLASH) && defined(HX_CODE_OVERLAY)
+#if defined(CONFIG_TOUCHSCREEN_HIMAX_INCELL)
+	assert_on_symbol(ovl_idx);
+#endif
 #endif
 	return ret;
 }

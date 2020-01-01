@@ -1858,7 +1858,7 @@ static int himax_chip_self_test(void)
 	uint8_t tmp_addr[DATA_LEN_4] = {0x94, 0x72, 0x00, 0x10};
 	uint8_t tmp_data[DATA_LEN_4] = {0x01, 0x00, 0x00, 0x00};
 
-#ifdef HIMAX_V2_MULTI_BIN
+#if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
 	uint8_t normalfw[32] = "Himax_firmware.bin";
 	uint8_t mpapfw[32] = "Himax_mpfw.bin";
 	if (private_ts->pdata->panel_supplier) {
@@ -1871,7 +1871,7 @@ static int himax_chip_self_test(void)
 
 	private_ts->suspend_resume_done = 0;
 
-#ifdef HIMAX_V2_MULTI_BIN
+#if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
 	g_core_fp.fp_0f_op_file_dirly(mpapfw);
 	g_core_fp.fp_reload_disable(0);
 	g_core_fp.fp_sense_on(0x00);
@@ -2176,7 +2176,7 @@ static int himax_chip_self_test(void)
 		usleep_range(1000, 1001);
 #endif
 
-#ifdef HIMAX_V2_MULTI_BIN
+#if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
 	private_ts->in_self_test = 0;
 	g_core_fp.fp_0f_op_file_dirly(normalfw);
 	hx_turn_on_mp_func(0);
