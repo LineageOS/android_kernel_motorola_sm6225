@@ -30,6 +30,10 @@ EXPORT_SYMBOL(pdriver_op);
 #ifdef HX_ZERO_FLASH
 struct zf_operation *pzf_op;
 EXPORT_SYMBOL(pzf_op);
+#if defined(HX_CODE_OVERLAY) && defined(HX83102D)
+uint8_t *ovl_idx;
+EXPORT_SYMBOL(ovl_idx);
+#endif
 #endif
 
 void (*himax_mcu_cmd_struct_free)(void);
@@ -2610,6 +2614,149 @@ int himax_sram_write_crc_check(const struct firmware *fw_entry, uint8_t *addr, i
 
 	return crc;
 }
+#if defined(HX83102D)
+int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_info_arr, uint8_t *FW_buf, uint8_t *sram_min)
+{
+	int part_num = 0;
+	int i = 0;
+	uint8_t buf[16];
+	int i_max = 0;
+	int i_min = 0;
+	uint32_t dsram_base = 0xFFFFFFFF;
+	uint32_t dsram_max = 0;
+	int cfg_sz = 0;
+#if defined(HX_CODE_OVERLAY)
+	uint8_t j = 0;
+	int allovlidx = 0;
+
+	if (ovl_idx == NULL) {
+		ovl_idx = kzalloc(ovl_section_num, GFP_KERNEL);
+		if (ovl_idx == NULL) {
+			E("%s, ovl_idx alloc failed!\n",
+				__func__);
+			return -ENOMEM;
+		}
+	} else {
+		memset(ovl_idx, 0, ovl_section_num);
+	}
+#endif
+	/*1. get number of partition*/
+		part_num = fw_entry->data[HX64K + 12];
+	I("%s, Number of partition is %d\n", __func__, part_num);
+	if (part_num <= 1) {
+		E("%s, size of cfg part failed! part_num = %d\n",
+			__func__, part_num);
+		return LENGTH_FAIL;
+	}
+
+	/* i = 0 is fw entity, it need to update by itself*/
+	for (i = 1; i < part_num; i++) {
+		/*3. get all partition*/
+		memcpy(buf, &fw_entry->data[i * 0x10 + HX64K], 16);
+		memcpy(zf_info_arr[i].sram_addr, buf, 4);
+		zf_info_arr[i].write_size = buf[7] << 24
+					| buf[6] << 16
+					| buf[5] << 8
+					| buf[4];
+		zf_info_arr[i].fw_addr = buf[11] << 24
+					| buf[10] << 16
+					| buf[9] << 8
+					| buf[8];
+		zf_info_arr[i].cfg_addr = zf_info_arr[i].sram_addr[0];
+		zf_info_arr[i].cfg_addr += zf_info_arr[i].sram_addr[1] << 8;
+		zf_info_arr[i].cfg_addr += zf_info_arr[i].sram_addr[2] << 16;
+		zf_info_arr[i].cfg_addr += zf_info_arr[i].sram_addr[3] << 24;
+
+#if defined(HX_CODE_OVERLAY)
+		/*overlay section*/
+
+		if ((buf[15] == 0x55 && buf[14] == 0x66)
+		|| (buf[3] == 0x20 && buf[2] == 0x00
+		&& buf[1] == 0x8C && buf[0] == 0xE0)) {
+			I("%s: catch overlay section in index %d\n",
+				__func__, i);
+
+			/* record index of overlay section */
+			allovlidx |= 1<<i;
+
+			if (buf[15] == 0x55 && buf[14] == 0x66) {
+				/* current mechanism */
+				j = buf[13];
+				if (j < ovl_section_num)
+					ovl_idx[j] = i;
+			} else {
+				/* previous mechanism */
+				if (j < ovl_section_num)
+					ovl_idx[j++] = i;
+			}
+
+			continue;
+		}
+#endif
+
+		if (dsram_base > zf_info_arr[i].cfg_addr) {
+			dsram_base = zf_info_arr[i].cfg_addr;
+			i_min = i;
+		}
+		if (dsram_max < zf_info_arr[i].cfg_addr) {
+			dsram_max = zf_info_arr[i].cfg_addr;
+			i_max = i;
+		}
+	}
+	for (i = 0; i < ADDR_LEN_4; i++)
+		sram_min[i] = zf_info_arr[i_min].sram_addr[i];
+
+	cfg_sz = (dsram_max - dsram_base) + zf_info_arr[i_max].write_size;
+	if (cfg_sz % 16 != 0)
+		cfg_sz = cfg_sz + 16 - (cfg_sz % 16);
+
+	I("%s, cfg_sz = %d!, dsram_base = %X, dsram_max = %X\n", __func__,
+			cfg_sz, dsram_base, dsram_max);
+	if (cfg_sz <= FW_BIN_16K_SZ)
+		memset(FW_buf, 0x00, sizeof(uint8_t) * cfg_sz);
+	else
+		memset(FW_buf, 0x00, sizeof(uint8_t) * FW_BIN_16K_SZ);
+	for (i = 1; i < part_num; i++) {
+		if (zf_info_arr[i].cfg_addr % 4 != 0)
+			zf_info_arr[i].cfg_addr = zf_info_arr[i].cfg_addr
+				- (zf_info_arr[i].cfg_addr % 4);
+
+		I("%s,[%d]SRAM addr=%08X,[%d]fw_addr=%08X,[%d]write_size=%d\n",
+			__func__,
+			i, zf_info_arr[i].cfg_addr,
+			i, zf_info_arr[i].fw_addr,
+			i, zf_info_arr[i].write_size);
+
+#if defined(HX_CODE_OVERLAY)
+		/*overlay section*/
+		if (allovlidx & (1<<i)) {
+			I("%s: skip overlay section %d\n", __func__, i);
+			continue;
+		}
+#endif
+
+		memcpy(&FW_buf[zf_info_arr[i].cfg_addr - dsram_base],
+				&fw_entry->data[zf_info_arr[i].fw_addr],
+				zf_info_arr[i].write_size);
+	}
+	/* debug info */
+	/* for (i = 1; i < part_num; i++) {
+	 *	different = 0;
+	 *	I("--cfg_addr = 0x%08X\n",zf_info_arr[i].cfg_addr);
+	 *	I("--bin_addr = 0x%08X\n",zf_info_arr[i].fw_addr);
+	 *	I("--write size = %d\n",zf_info_arr[i].write_size);
+	 *	for ( j = 0; j < zf_info_arr[i].write_size; j++) {
+	 *		if(FW_buf[zf_info_arr[i].cfg_addr - dsram_base + j] !=
+			fw_entry->data[zf_info_arr[i].fw_addr + j])
+	 *			different++;
+	 *	}
+	 *	I("--There are %d different\n", different);
+	 * }
+	 */
+
+	return cfg_sz;
+}
+#else
 int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_info_arr, uint8_t *FW_buf, uint8_t *sram_min, uint8_t *ovl_sidx)
 {
 	int part_num = 0;
@@ -2708,6 +2855,8 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 
 	return cfg_sz;
 }
+#endif
+
 int himax_zf_part_info(const struct firmware *fw_entry)
 {
 	int part_num = fw_entry->data[HX64K + 12];
@@ -2722,11 +2871,20 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 	int retry = 3;
 
 	uint8_t ovl_sidx = 0;
+#if defined(HX83102D)
+	uint8_t ovl_idx_t;
+#if defined(HX_SMART_WAKEUP) || defined(HX_CODE_OVERLAY)
+	uint8_t tmp_addr[4] = {0xFC, 0x7F, 0x00, 0x10};
+	uint8_t send_data[4] = {0};
+	uint8_t recv_data[4] = {0};
+#endif
+#else
 #ifdef HX_CODE_OVERLAY
 #ifdef HX_SMART_WAKEUP
 	uint8_t tmp_addr[4] = {0xFC, 0x7F, 0x00, 0x10};
 	uint8_t send_data[4] = {0};
 	uint8_t recv_data[4] = {0};
+#endif
 #endif
 #endif
 
@@ -2753,7 +2911,11 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 
 	/*3. Find the data in the bin file */
 	/*CFG*/
+#if defined(HX83102D)
+	cfg_sz = hx_parse_bin_cfg_data(fw_entry, zf_info_arr, FW_buf, sram_min);
+#else
 	cfg_sz = hx_parse_bin_cfg_data(fw_entry, zf_info_arr, FW_buf, sram_min, &ovl_sidx);
+#endif
 	I("Now cfg_sz=%d\n", cfg_sz);
 	if (cfg_sz < 0) {
 		ret = LENGTH_FAIL;
@@ -2788,6 +2950,28 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 		} while (cfg_crc_hw != cfg_crc_sw && retry-- > 0);
 
 #ifdef HX_CODE_OVERLAY
+#if defined(HX83102D)
+		/* ovl_idx[0] - sorting */
+		/* ovl_idx[1] - gesture */
+		/* ovl_idx[2] - border  */
+
+		ovl_idx_t = ovl_idx[0];
+		send_data[0] = ovl_sorting_reply;
+
+		if (private_ts->in_self_test == 0) {
+#if defined(HX_SMART_WAKEUP)
+			if (private_ts->suspended && private_ts->SMWP_enable) {
+				ovl_idx_t = ovl_idx[1];
+				send_data[0] = ovl_gesture_reply;
+			} else {
+				ovl_idx_t = ovl_idx[2];
+				send_data[0] = ovl_border_reply;
+			}
+#else
+			ovl_idx_t = ovl_idx[2];
+			send_data[0] = ovl_border_reply;
+#endif
+#else
 		/*do nothing when self testing ??*/
 		if (private_ts->in_self_test == 0) {
 #ifdef HX_SMART_WAKEUP
@@ -2801,6 +2985,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 #else
 			ovl_sidx = ovl_sidx + 2;
 #endif
+#endif
 
 			if (himax_sram_write_crc_check(fw_entry, zf_info_arr[ovl_sidx].sram_addr, zf_info_arr[ovl_sidx].fw_addr, zf_info_arr[ovl_sidx].write_size) != 0)
 				E("%s, Overlay HW CRC FAIL\n", __func__);
@@ -2812,6 +2997,35 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 			g_core_fp.fp_resend_cmd_func(private_ts->suspended);
 #endif
 
+#if defined(HX83102D)
+		}
+		I("%s: prepare upgrade overlay section = %d\n",
+				__func__, ovl_idx_t);
+
+		if (zf_info_arr[ovl_idx_t].write_size == 0) {
+			send_data[0] = ovl_fault;
+			E("%s, WRONG overlay section, plese check FW!\n",
+					__func__);
+		} else {
+			if (himax_sram_write_crc_check(fw_entry,
+			zf_info_arr[ovl_idx_t].sram_addr,
+			zf_info_arr[ovl_idx_t].fw_addr,
+			zf_info_arr[ovl_idx_t].write_size) != 0) {
+				send_data[0] = ovl_fault;
+				E("%s, Overlay HW CRC FAIL\n", __func__);
+			} else {
+				I("%s, Overlay HW CRC PASS\n", __func__);
+			}
+		}
+
+				retry = 0;
+
+				do {
+					g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, send_data, 0);
+					g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, recv_data, 0);
+					retry++;
+				} while ((send_data[3] != recv_data[3] || send_data[2] != recv_data[2] || send_data[1] != recv_data[1]  || send_data[0] != recv_data[0]) && retry < HIMAX_REG_RETRY_TIMES);
+#else
 #if defined(HX_SMART_WAKEUP)
 			/* write overlay handshaking password */
 			if (private_ts->SMWP_enable) {
@@ -2831,7 +3045,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 #endif
 		}
 #endif
-
+#endif
 	} else {
 		g_core_fp.fp_clean_sram_0f(zf_info_arr[0].sram_addr, zf_info_arr[0].write_size, 2);
 	}
