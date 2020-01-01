@@ -1578,6 +1578,10 @@ static ssize_t himax_reset_write(char *buf, size_t len)
 	/* else if (buf[0] == '5') */
 	/*	ESD_HW_REST(); */
 #endif
+#if defined(HX_ZERO_FLASH) && defined(HX83102D)
+	if (g_core_fp.fp_0f_reload_to_active)
+		g_core_fp.fp_0f_reload_to_active();
+#endif
 	return len;
 }
 
@@ -2338,6 +2342,10 @@ static ssize_t himax_debug_write(struct file *file, const char *buff,
 #else
 		g_core_fp.fp_system_reset();
 #endif
+#if defined(HX_ZERO_FLASH) && defined(HX83102D)
+		if (g_core_fp.fp_0f_reload_to_active)
+			g_core_fp.fp_0f_reload_to_active();
+#endif
 		himax_int_enable(1);
 		/* himax_check_chip_version(); */
 		return len;
@@ -2503,6 +2511,10 @@ static ssize_t himax_debug_write(struct file *file, const char *buff,
 		return len;
 	} else if (buf[0] == 'x') {
 		g_core_fp.fp_system_reset();
+#if defined(HX_ZERO_FLASH) && defined(HX83102D)
+		if (g_core_fp.fp_0f_reload_to_active)
+			g_core_fp.fp_0f_reload_to_active();
+#endif
 		return len;
 #endif
 	} else if (buf[0] == 'l' && buf[1] == 'o' && buf[2] == 't') {
@@ -2522,6 +2534,10 @@ firmware_upgrade_done:
 	g_core_fp.fp_touch_information();
 #ifdef HX_RST_PIN_FUNC
 	g_core_fp.fp_ic_reset(true, false);
+#if defined(HX_ZERO_FLASH) && defined(HX83102D)
+	if (g_core_fp.fp_0f_reload_to_active)
+		g_core_fp.fp_0f_reload_to_active();
+#endif
 #else
 	g_core_fp.fp_sense_on(0x00);
 #endif
