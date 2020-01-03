@@ -19,6 +19,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+#include <linux/pinctrl/consumer.h>
 #include "slg5bm43670-regulator.h"
 
 #define SLG51000_SCTL_EVT               7
@@ -42,6 +43,8 @@ struct slg51000 {
 	struct regulator_dev *rdev[SLG51000_MAX_REGULATORS];
 	int chip_irq;
 	int chip_cs_pin;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *gpio_state_default;
 };
 
 struct slg51000_evt_sta {
@@ -63,6 +66,9 @@ static const struct slg51000_evt_sta es_reg[SLG51000_MAX_EVT_REGISTER] = {
 static const struct regmap_range slg51000_writeable_ranges[] = {
 	regmap_reg_range(SLG51000_SYSCTL_MATRIX_CONF_A,
 			 SLG51000_SYSCTL_MATRIX_CONF_A),
+	regmap_reg_range(0x1119, 0x111D),
+	regmap_reg_range(SLG51000_IO_GPIO1_CONF, SLG51000_IO_GPIO1_CONF),
+	regmap_reg_range(SLG51000_MUXARRAY_INPUT_SEL_16, SLG51000_MUXARRAY_INPUT_SEL_16),
 	regmap_reg_range(SLG51000_LDO1_VSEL, SLG51000_LDO1_VSEL),
 	regmap_reg_range(SLG51000_LDO1_VSEL_RANGE_MASK_MIN,
 			 SLG51000_LDO1_VSEL_RANGE_MASK_MAX),
@@ -103,6 +109,7 @@ static const struct regmap_range slg51000_readable_ranges[] = {
 	regmap_reg_range(SLG51000_SYSCTL_REFGEN_CONF_C,
 			 SLG51000_SYSCTL_UVLO_CONF_A),
 	regmap_reg_range(SLG51000_SYSCTL_FAULT_LOG1, SLG51000_SYSCTL_IRQ_MASK),
+	regmap_reg_range(0x1119, 0x111D),
 	regmap_reg_range(SLG51000_IO_GPIO1_CONF, SLG51000_IO_GPIO_STATUS),
 	regmap_reg_range(SLG51000_LUTARRAY_LUT_VAL_0,
 			 SLG51000_LUTARRAY_LUT_VAL_11),
@@ -285,6 +292,72 @@ static struct regulator_desc regls_desc[SLG51000_MAX_REGULATORS] = {
 	SLG51000_REGL_DESC(LDO7, ldo7, "vin7", 1200000, 10000),
 };
 
+//=======================================
+// Added by Aaron Wang on Dec 27th 2019
+// Call this function to upgrade the firmware
+// to the revision.
+// CS must be high and wait 10ms
+// Just a reference, need to fully re program this part.
+//=======================================
+static int upgrade_firmware(struct slg51000 *chip)
+{
+	unsigned int val;
+
+	if (regmap_write(chip->regmap, 0x111A, 0x45) < 0)
+		dev_err(chip->dev, "regmap_write val 0x45 to reg 0x111A fail...");
+
+	if (regmap_write(chip->regmap, 0x111B, 0x53) < 0)
+		dev_err(chip->dev, "regmap_write val 0x53 to reg 0x111B fail...");
+
+	if (regmap_write(chip->regmap, 0x111C, 0x54) < 0)
+		dev_err(chip->dev, "regmap_write val 0x54 to reg 0x111C fail...");
+
+	if (regmap_write(chip->regmap, 0x111D, 0x4D) < 0)
+		dev_err(chip->dev, "regmap_write val 0x4D to reg 0x111D fail...");
+
+	/* If the 3rd bit is set to 1, then SLG51000 device is in test mode. */
+	if (regmap_read(chip->regmap, 0x1119, &val) < 0)
+		dev_err(chip->dev, "regmap_read reg 0x1119 fail...");
+
+	dev_info(chip->dev, "Is test mode: (0x%X)%s\n", val, (val & 0x4) ? "TRUE" : "FALSE");
+
+	if (regmap_read(chip->regmap, SLG51000_IO_GPIO1_CONF, &val) < 0)
+		dev_err(chip->dev, "regmap_read reg SLG51000_IO_GPIO1_CONF fail...");
+
+	dev_info(chip->dev, "GPIO1 Value: 0x%X\n", val);
+
+	val |= (SLG51000_GPIO_DIR_MASK | SLG51000_GPIO_BYP_MASK);
+	if (regmap_write(chip->regmap, SLG51000_IO_GPIO1_CONF, val) < 0)
+		dev_err(chip->dev, "regmap_write val 0x%x to reg SLG51000_IO_GPIO1_CONF fail...", val);
+
+	/* To make sure it has been written successfully */
+	if (regmap_read(chip->regmap, SLG51000_IO_GPIO1_CONF, &val) < 0)
+		dev_err(chip->dev, "regmap_read reg 0x1500 fail...");
+
+	dev_info(chip->dev, "GPIO1 Config value: 0x%X\n", val);
+
+	if (regmap_write(chip->regmap, SLG51000_MUXARRAY_INPUT_SEL_16, 0x2A) < 0)
+		dev_err(chip->dev, "regmap_write val 0x%x to reg SLG51000_MUXARRAY_INPUT_SEL_16 fail...", val);
+
+	if (regmap_read(chip->regmap, SLG51000_MUXARRAY_INPUT_SEL_16, &val) < 0)
+		dev_err(chip->dev, "regmap_read reg SLG51000_MUXARRAY_INPUT_SEL_16 fail...");
+
+	dev_info(chip->dev, "MUXARRAY_INPUT_SEL_16: 0x%X\n", val);
+
+	if (regmap_write(chip->regmap, 0x1119, 0x0) < 0)
+		dev_err(chip->dev, "regmap_write val 0x0 to reg 0x1119 fail...");
+
+	if (regmap_read(chip->regmap, 0x1119, &val) < 0)
+		dev_err(chip->dev, "regmap_read reg 0x1119 fail...");
+
+	if (val) {
+		if (regmap_write(chip->regmap, 0x1119, 0x00) < 0)
+			dev_err(chip->dev, "regmap_write val 0x00 to reg 0x1119 fail...");
+	}
+
+	return 1;       // always return 1. But should add false or true return later.
+}
+
 static int slg51000_regulator_init(struct slg51000 *chip)
 {
 	struct regulator_config config = { };
@@ -301,6 +374,8 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 		SLG51000_LDO6_VSEL_RANGE_MASK_MIN,
 		SLG51000_LDO7_VSEL_RANGE_MASK_MIN,
 	};
+
+	upgrade_firmware(chip);          // upgrade the firmware during initial
 
 	for (id = 0; id < SLG51000_MAX_REGULATORS; id++) {
 		chip->rdesc[id] = &regls_desc[id];
@@ -430,6 +505,8 @@ static void slg51000_clear_fault_log(struct slg51000 *chip)
 		return;
 	}
 
+	dev_info(chip->dev, "SLG51000_SYSCTL_FAULT_LOG1(0x1115)'s val = 0x%X\n", val);
+
 	if (val & SLG51000_FLT_OVER_TEMP_MASK)
 		dev_dbg(chip->dev, "Fault log: FLT_OVER_TEMP\n");
 	if (val & SLG51000_FLT_POWER_SEQ_CRASH_REQ_MASK)
@@ -469,6 +546,19 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		chip->chip_cs_pin = cs_gpio;
 	}
 
+	chip->pinctrl = devm_pinctrl_get(dev);
+	if (!IS_ERR_OR_NULL(chip->pinctrl)) {
+		chip->gpio_state_default = pinctrl_lookup_state(chip->pinctrl, "pmic_default");
+	} else
+		dev_err(dev, "Getting pinctrl handle failed\n");
+
+	if (!IS_ERR_OR_NULL(chip->gpio_state_default)) {
+		pinctrl_select_state(chip->pinctrl, chip->gpio_state_default);
+		dev_err(dev, "Setting pinctrl handle successfully\n");
+	}
+
+	mdelay(10); //must delay 10ms, wait camera pmic stable.
+
 	i2c_set_clientdata(client, chip);
 	chip->chip_irq = client->irq;
 	chip->dev = dev;
@@ -480,7 +570,6 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		return error;
 	}
 
-	mdelay(10);
 	ret = slg51000_regulator_init(chip);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to init regulator(%d)\n", ret);
