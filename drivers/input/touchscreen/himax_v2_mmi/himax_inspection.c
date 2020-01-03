@@ -327,7 +327,7 @@ static int himax_get_rawdata(uint32_t RAW[], uint32_t datalen)
 	/* Copy Data*/
 	for (i = 0; i < ic_data->HX_TX_NUM*ic_data->HX_RX_NUM; i++)
 		RAW[i] = tmp_rawdata[(i * 2) + 1] * 256 + tmp_rawdata[(i * 2)];
-
+        /* don't output these logs, reduce factory test time
 	for (j = 0; j < ic_data->HX_RX_NUM; j++) {
 		if (j == 0)
 			PI("      RX%2d", j + 1);
@@ -335,9 +335,10 @@ static int himax_get_rawdata(uint32_t RAW[], uint32_t datalen)
 			PI("  RX%2d", j + 1);
 	}
 	PI("\n");
+        ******* delete these logs *********************/
 
 	for (i = 0; i < ic_data->HX_TX_NUM; i++) {
-		PI("TX%2d", i + 1);
+		/*PI("TX%2d", i + 1);*/
 		for (j = 0; j < ic_data->HX_RX_NUM; j++) {
 			PI("%5d ", RAW[index]);
 			if (RAW[index] > Max_DATA)
@@ -348,7 +349,7 @@ static int himax_get_rawdata(uint32_t RAW[], uint32_t datalen)
 
 			index++;
 		}
-		PI("\n");
+		/*PI("\n");*/
 	}
 	I("Max = %5d, Min = %5d\n", Max_DATA, Min_DATA);
 DIRECT_END:
@@ -1871,17 +1872,17 @@ static int himax_chip_self_test(void)
 
 	private_ts->suspend_resume_done = 0;
 
-#if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
-	g_core_fp.fp_0f_op_file_dirly(mpapfw);
-	g_core_fp.fp_reload_disable(0);
-	g_core_fp.fp_sense_on(0x00);
-#endif
-
 	ret = himax_self_test_data_init();
 	if (ret != HX_INSPECT_OK) {
 		E("%s: himax_self_test_data_init fail!\n", __func__);
 		goto END_FUNC;
 	}
+
+#if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
+	g_core_fp.fp_0f_op_file_dirly(mpapfw);
+	g_core_fp.fp_reload_disable(0);
+	g_core_fp.fp_sense_on(0x00);
+#endif
 
 	if (g_inspt_crtra_flag[IDX_OPENMIN] == 1 &&
 	  g_inspt_crtra_flag[IDX_OPENMAX] == 1) {
