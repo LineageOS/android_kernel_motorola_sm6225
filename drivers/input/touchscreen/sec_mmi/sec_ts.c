@@ -892,8 +892,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						"%s: invoke imported report gesture function\n", __func__);
 					/* extract X and Y coordinates */
 					event.evcode = gs->gesture_id;
-					event.evdata.x = gs->gesture_data_1 + ((gs->gesture_data_3 & 0x0f) << 8);
-					event.evdata.y = gs->gesture_data_2 + ((gs->gesture_data_3 & 0xf0) << 4);
+					event.evdata.x = gs->gesture_data_1 + ((gs->gesture_data_3 & 0xf0) << 4);
+					event.evdata.y = gs->gesture_data_2 + ((gs->gesture_data_3 & 0x0f) << 8);
 					/* call class method */
 					ret = ts->imports->report_gesture(&event);
 					if (!ret)
