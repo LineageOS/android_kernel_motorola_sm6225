@@ -3262,7 +3262,9 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 
 	if (psy &&
 	    ((strcmp(psy->desc->name, "usb") == 0) ||
-		(strcmp(psy->desc->name, "wireless") == 0))) {
+		(strcmp(psy->desc->name, "wireless") == 0) ||
+		(strcmp(psy->desc->name, "dc") == 0))) {
+
 		cancel_delayed_work(&chip->heartbeat_work);
 		schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(0));
