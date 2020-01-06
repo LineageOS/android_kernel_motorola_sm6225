@@ -82,10 +82,22 @@ static int inline ts_mmi_panel_on(struct ts_mmi_dev *touch_cdev) {
 static int ts_mmi_panel_cb(struct notifier_block *nb,
 		unsigned long event, void *evd)
 {
+	int idx = evd ? *(int *)evd : -1;
 	struct ts_mmi_dev *touch_cdev =
 		container_of(nb, struct ts_mmi_dev, panel_nb);
 
 	if (!touch_cdev)
+		return 0;
+
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+	dev_dbg(DEV_MMI,"%s: %s event(%lu), ctrl_dsi=%d, idx=%d\n", __func__,
+		event == PANEL_EVENT_PRE_DISPLAY_OFF ? "PANEL_EVENT_PRE_DISPLAY_OFF" :
+		(event == PANEL_EVENT_DISPLAY_OFF ? "PANEL_EVENT_DISPLAY_OFF" :
+		(event == PANEL_EVENT_PRE_DISPLAY_ON ? "PANEL_EVENT_PRE_DISPLAY_ON" :
+		(event == PANEL_EVENT_DISPLAY_ON ? "PANEL_EVENT_DISPLAY_ON" : "Unknown"))),
+		event, touch_cdev->pdata.ctrl_dsi, idx);
+#endif
+	if (touch_cdev->pdata.ctrl_dsi != idx)
 		return 0;
 
 	/* entering suspend upon early blank event */
