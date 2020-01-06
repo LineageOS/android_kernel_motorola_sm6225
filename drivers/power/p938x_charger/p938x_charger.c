@@ -1650,7 +1650,7 @@ static int fod_store(struct p938x_charger *chip, const char *buf,
 	}
 
 	if (sum > 0 && sum <= FOD_MAX_LEN) {
-		memcpy(fod_array, fod_array_temp, sizeof(sum));
+		memcpy(fod_array, fod_array_temp, sum);
 		*fod_array_len = sum;
 		p938x_program_fod(chip, fod_array, *fod_array_len);
 	}
