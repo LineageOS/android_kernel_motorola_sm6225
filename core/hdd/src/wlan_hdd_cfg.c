@@ -60,6 +60,7 @@
 #define MACSTRLEN 12
 #define MACSTRCOLON 58
 #define MACADDRESSUSED 2
+#define MACSERIALADDR 1
 
 struct sdesc {
    struct shash_desc shash;
@@ -118,9 +119,10 @@ QDF_STATUS hdd_update_mac_serial(struct hdd_context *hdd_ctx)
         qdf_status = QDF_STATUS_E_FAILURE;
         goto config_exit;
     }
-    hdd_ctx->num_provisioned_addr = MACADDRESSUSED;
+    hdd_ctx->num_provisioned_addr = MACSERIALADDR;
     qdf_mem_copy(&hdd_ctx->provisioned_mac_addr[0].bytes[0],
                        (uint8_t *)computedMac, QDF_MAC_ADDR_SIZE);
+    hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - MACSERIALADDR);
     //pHddCtx->num_derived_addr++;
 
 config_exit:
