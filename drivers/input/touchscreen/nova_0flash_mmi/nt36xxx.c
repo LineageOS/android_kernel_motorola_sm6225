@@ -41,6 +41,13 @@
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+#define register_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_unregister_notifier
+#else
+#define register_panel_notifier(...) rc
+#define unregister_panel_notifier(...) rc
+#endif
 
 #ifdef NVT_SENSOR_EN
 #ifdef CONFIG_HAS_WAKELOCK
@@ -105,6 +112,10 @@ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long e
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
+#endif
+
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+static int nvt_panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #endif
 
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
@@ -2090,6 +2101,16 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_register_fb_notif_failed;
 	}
 #endif
+
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	ts->panel_notif.notifier_call = nvt_panel_notifier_callback;
+	ret = register_panel_notifier(&ts->panel_notif);
+	if(ret) {
+		NVT_ERR("register panel_notifier failed. ret=%d\n", ret);
+		goto err_register_fb_notif_failed;
+	}
+#endif
+
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
 	ts->early_suspend.suspend = nvt_ts_early_suspend;
@@ -2218,6 +2239,11 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
 
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	if (unregister_panel_notifier(&ts->panel_notif))
+		NVT_ERR("Error occurred while unregistering panel_notifier.\n");
+#endif
+
 #if NVT_TOUCH_MP
 	nvt_mp_proc_deinit();
 #endif
@@ -2294,6 +2320,11 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts->early_suspend);
+#endif
+
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	if (unregister_panel_notifier(&ts->panel_notif))
+		NVT_ERR("Error occurred while unregistering panel_notifier.\n");
 #endif
 
 #if NVT_TOUCH_MP
@@ -2507,6 +2538,30 @@ static int32_t nvt_ts_resume(struct device *dev)
 	return 0;
 }
 
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+static int nvt_panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	struct nvt_ts_data *ts =
+		container_of(self, struct nvt_ts_data, panel_notif);
+
+	switch (event) {
+	case PANEL_EVENT_PRE_DISPLAY_OFF:
+			NVT_LOG("event=%lu\n", event);
+			nvt_ts_suspend(&ts->client->dev);
+				break;
+
+	case PANEL_EVENT_PRE_DISPLAY_ON:
+			NVT_LOG("event=%lu\n", event);
+			nvt_ts_resume(&ts->client->dev);
+				break;
+	default:	/* use DEV_TS here to avoid unused variable */
+			NVT_LOG("%s: function not implemented event %lu\n", __func__, event);
+				break;
+	}
+
+	return 0;
+}
+#endif
 
 #if defined(CONFIG_FB)
 #ifdef _MSM_DRM_NOTIFY_H_
