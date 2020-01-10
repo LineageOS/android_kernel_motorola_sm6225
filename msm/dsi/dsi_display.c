@@ -6378,6 +6378,7 @@ int dsi_display_get_info(struct drm_connector *connector,
 
 	info->panel_id = display->panel->panel_id;
 	info->panel_ver = display->panel->panel_ver;
+	info->panel_regDA = display->panel->panel_regDA;
 	strncpy(info->panel_name, display->panel->panel_name,
 				sizeof(display->panel->panel_name));
 
