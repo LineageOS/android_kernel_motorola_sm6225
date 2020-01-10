@@ -208,6 +208,12 @@ enum {
 	PROGRAM_FW_FAIL,
 };
 
+enum {
+	TX_MODE_OVERHEAT = -1,
+	TX_MODE_NOT_CONNECTED = 0,
+	TX_MODE_POWER_SHARE = 2,
+};
+
 enum print_reason {
 	PR_INTERRUPT    = BIT(0),
 	PR_IMPORTANT	= BIT(1),
@@ -932,6 +938,8 @@ static int p938x_tcd_set_cur_state(struct thermal_cooling_device *tcd,
 		clear_bit(WLS_FLAG_OVERHEAT, &chip->flags);
 	}
 
+	sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
+
 	return 0;
 }
 
@@ -1480,6 +1488,9 @@ static void p938x_tx_mode_work(struct work_struct *work)
 				p938x_check_status(chip);
 			}
 		}
+
+		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
+
 		schedule_delayed_work(&chip->tx_mode_work,
 			msecs_to_jiffies(TXMODEWORK_INTERVAL_MS));
 	}
@@ -1957,12 +1968,14 @@ static ssize_t rx_connected_show(struct device *dev,
 	struct p938x_charger *chip = dev_get_drvdata(dev);
 	int rx_connected;
 
-	if ((chip->stat & ST_RX_CONN) && p938x_get_rx_iout(chip))
-		rx_connected = 2;
-	else if ((chip->stat & ST_RX_CONN) && !p938x_get_rx_iout(chip))
-		rx_connected = 1;
+	if (test_bit(WLS_FLAG_OVERHEAT, &chip->flags))
+		rx_connected = TX_MODE_OVERHEAT;
+	else if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags) &&
+			(chip->stat & ST_RX_CONN) &&
+			p938x_get_rx_iout(chip))
+		rx_connected = TX_MODE_POWER_SHARE;
 	else
-		rx_connected = 0;
+		rx_connected = TX_MODE_NOT_CONNECTED;
 
 	return scnprintf(buf, WLS_SHOW_MAX_SIZE, "%d\n",
 		rx_connected);
