@@ -27,6 +27,10 @@
 #include <linux/sensors.h>
 #endif
 
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
+#endif
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -150,6 +154,9 @@ struct nvt_ts_data {
 #endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
+#endif
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	struct notifier_block panel_notif;
 #endif
 	uint8_t fw_ver;
 	uint8_t x_num;
