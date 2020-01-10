@@ -529,6 +529,7 @@ struct msm_resource_caps_info {
  * @is_connected:       Set to true if display is connected
  * @panel_id
  * @panel_ver
+ * @panel_regDA
  * @panel_name[MSM_DISP_NAME_LEN_MAX];
  * @width_mm:           Physical width
  * @height_mm:          Physical height
@@ -556,6 +557,7 @@ struct msm_display_info {
 
 	uint64_t panel_id;
 	uint64_t panel_ver;
+	uint32_t panel_regDA;
 	char panel_name[MSM_DISP_NAME_LEN_MAX];
 
 	unsigned int width_mm;

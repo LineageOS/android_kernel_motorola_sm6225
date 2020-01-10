@@ -308,6 +308,7 @@ struct dsi_panel {
 	bool esd_utag_enable;
 	u64 panel_id;
 	u64 panel_ver;
+	u32 panel_regDA;
 	char panel_name[DSI_PANEL_MAX_PANEL_LEN];
 
 	u32 disp_on_chk_val;
