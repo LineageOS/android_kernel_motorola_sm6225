@@ -34,6 +34,18 @@
 #include "sec_ts.h"
 #include "sec_mmi.h"
 
+#define GET_TS_DATA(dev) { \
+	ts = dev_get_drvdata(dev); \
+	if (!ts) { \
+		dev_err(dev, "%s: Failed to get drv data\n", __func__); \
+		return -ENODEV; \
+	} \
+}
+
+static ssize_t sec_mmi_suppression_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_suppression_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_address_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_size_store(struct device *dev,
@@ -43,23 +55,54 @@ static ssize_t sec_mmi_write_store(struct device *dev,
 static ssize_t sec_mmi_data_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
-
 static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_mmi_address_store);
 static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_mmi_size_store);
 static DEVICE_ATTR(write, (S_IWUSR | S_IWGRP), NULL, sec_mmi_write_store);
 static DEVICE_ATTR(data, S_IRUGO, sec_mmi_data_show, NULL);
+static DEVICE_ATTR(suppression, (S_IRUGO | S_IWUSR | S_IWGRP),
+		sec_mmi_suppression_show, sec_mmi_suppression_store);
 
-static struct attribute *factory_attributes[] = {
-	&dev_attr_address.attr,
-	&dev_attr_size.attr,
-	&dev_attr_data.attr,
-	&dev_attr_write.attr,
-	NULL,
+#define MAX_ATTRS_ENTRIES 10
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
 };
 
-static struct attribute_group factory_attr_group = {
-	.attrs = factory_attributes,
-};
+static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	struct sec_ts_data *ts;
+	int idx = 0;
+
+	GET_TS_DATA(dev);
+
+	if (ts->plat_data->suppression_ctrl)
+		ADD_ATTR(suppression);
+
+	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
+		ADD_ATTR(address);
+		ADD_ATTR(size);
+		ADD_ATTR(data);
+		ADD_ATTR(write);
+	}
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
 
 void sec_mmi_gesture_handler(void *data) {
 	struct sec_ts_gesture_status *gs =
@@ -150,6 +193,61 @@ static void sec_mmi_enable_touch(struct sec_ts_data *ts)
 	sec_ts_integrity_check(ts);
 	sec_ts_sense_on(ts);
 	dev_dbg(&ts->client->dev, "%s: touch sensing ready\n", __func__);
+}
+
+static ssize_t sec_mmi_suppression_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts;
+	unsigned char buffer;
+	int error;
+	unsigned long value;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	error = kstrtoul(buf, 0, &value);
+	if (error)
+		return -EINVAL;
+
+	buffer = (unsigned char)value;
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
+
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_GRIP_SUPPRESSION_INFO, &buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to write suppression info (%d)\n",
+				__func__, error);
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO, &buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to read suppression info (%d)\n",
+				__func__, error);
+	else
+		dev_dbg(dev, "%s: suppression info 0x%02x\n", __func__, (unsigned int)buffer);
+
+	return size;
+}
+
+static ssize_t sec_mmi_suppression_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts;
+	unsigned char buffer;
+	ssize_t blen = 0;
+	int error;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO, &buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to read suppression info (%d)\n",
+				__func__, error);
+	else {
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)buffer);
+	}
+
+	return blen;
 }
 
 #define MAX_DATA_SZ	1024
@@ -543,15 +641,6 @@ static int sec_mmi_firmware_erase(struct device *dev)
 	return 0;
 }
 
-static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
-{
-	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0)
-		*group = &factory_attr_group;
-	else
-		*group = NULL;
-	return 0;
-}
-
 static int sec_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
@@ -708,6 +797,7 @@ static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.pre_suspend = sec_mmi_pre_suspend,
 	.post_suspend = sec_mmi_post_suspend,
 };
+
 static int sec_mmi_class_fname(struct sec_ts_data *ts)
 {
 	int ret;
