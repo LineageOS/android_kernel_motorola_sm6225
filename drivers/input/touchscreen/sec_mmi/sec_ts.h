@@ -218,6 +218,7 @@
 #define SEC_TS_CMD_SELFTEST		0xAE
 #define SEC_TS_READ_FORCE_RECAL_COUNT	0xB0
 #define SEC_TS_READ_FORCE_SIG_MAX_VAL	0xB1
+#define SEC_TS_GRIP_SUPPRESSION_INFO	0xBC
 
 /* SEC_TS FLASH COMMAND */
 #define SEC_TS_CMD_FLASH_READ_ADDR	0xD0
@@ -771,6 +772,7 @@ struct sec_ts_plat_data {
 	bool support_dex;
 	bool support_sidegesture;
 	bool poweron_calibration;
+	bool suppression_ctrl;
 };
 
 typedef struct {

@@ -1322,6 +1322,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->regulator_boot_on = of_property_read_bool(np, "sec,regulator_boot_on");
 	pdata->support_sidegesture = of_property_read_bool(np, "sec,support_sidegesture");
 	pdata->support_dex = of_property_read_bool(np, "support_dex_mode");
+	pdata->suppression_ctrl = of_property_read_bool(np, "sec,suppression-control");
 
 	pdata->poweron_calibration = of_property_read_bool(np, "sec,poweron-calibration");
 
