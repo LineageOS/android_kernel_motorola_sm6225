@@ -24,6 +24,7 @@
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/version.h>
 
 
 #ifdef FP_SPI_DEBUG

@@ -210,7 +210,23 @@ static DECLARE_WAIT_QUEUE_HEAD(interrupt_waitq);
  *	EXIT PARAMETERS.
  *		Function Return
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+static void interrupt_timer_routine(struct timer_list *t)
+{
+	struct interrupt_desc *bdata = from_timer (bdata, t, timer);
 
+	DEBUG_PRINT("FPS interrupt count = %d", bdata->int_count);
+	if (bdata->int_count >= bdata->detect_threshold) {
+		bdata->finger_on = 1;
+		DEBUG_PRINT("FPS triggered !!!!!!!\n");
+	} else {
+		DEBUG_PRINT("FPS not triggered !!!!!!!\n");
+	}
+
+	bdata->int_count = 0;
+	wake_up_interruptible(&interrupt_waitq);
+}
+#else
 void interrupt_timer_routine(unsigned long _data)
 {
 	struct interrupt_desc *bdata = (struct interrupt_desc *)_data;
@@ -226,6 +242,7 @@ void interrupt_timer_routine(unsigned long _data)
 	bdata->int_count = 0;
 	wake_up_interruptible(&interrupt_waitq);
 }
+#endif
 
 #ifdef CONFIG_DISPLAY_SPEED_UP
 extern void ext_dsi_display_early_power_on(void);
@@ -843,7 +860,7 @@ static int etspi_create_sysfs(struct etspi_data *etspi, bool create) {
 			}
 		}
 		class_dev = device_create(fingerprint_class, NULL, MAJOR(dev_no),
-			etspi, etspi_driver.driver.name);
+			etspi, "et320");
 		if (IS_ERR(class_dev)) {
 			dev_err(dev, "%s create fingerprint class device failed.\n", __func__);
 			rc = PTR_ERR(class_dev);
@@ -1023,8 +1040,13 @@ static int etspi_probe(struct platform_device *pdev)
 	etspi_reset(etspi);
 
 	/* the timer is for ET310 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+	timer_setup(&fps_ints.timer, interrupt_timer_routine, 0);
+#else
 	setup_timer(&fps_ints.timer, interrupt_timer_routine, (unsigned long)&fps_ints);
 	add_timer(&fps_ints.timer);
+#endif
+
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&ets_wake_lock, WAKE_LOCK_SUSPEND, "ets_wake_lock");
 #else
