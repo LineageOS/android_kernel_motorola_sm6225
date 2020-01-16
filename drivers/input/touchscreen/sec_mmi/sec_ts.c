@@ -1200,6 +1200,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	struct sec_ts_plat_data *pdata = dev->platform_data;
 	struct device_node *np = dev->of_node;
 	u32 coords[2];
+	u32 finger_size[2];
 	int ret = 0;
 	int count = 0;
 	u32 ic_match_value;
@@ -1274,6 +1275,14 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	} else {
 		pdata->max_x = coords[0] - 1;
 		pdata->max_y = coords[1] - 1;
+	}
+
+	if (of_property_read_u32_array(np, "sec,max_finger_size", finger_size, 2)) {
+		pdata->max_major = 255;
+		pdata->max_minor = 255;
+	} else {
+		pdata->max_major = finger_size[0] - 1;
+		pdata->max_minor = finger_size[1] - 1;
 	}
 
 	pdata->tsp_id = of_get_named_gpio(np, "sec,tsp-id_gpio", 0);
@@ -1427,8 +1436,8 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 
 	input_set_abs_params(dev, ABS_MT_POSITION_X, 0, ts->plat_data->max_x, 0, 0);
 	input_set_abs_params(dev, ABS_MT_POSITION_Y, 0, ts->plat_data->max_y, 0, 0);
-	input_set_abs_params(dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
-	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, 255, 0, 0);
+	input_set_abs_params(dev, ABS_MT_TOUCH_MAJOR, 0, ts->plat_data->max_major, 0, 0);
+	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, ts->plat_data->max_minor, 0, 0);
 	input_set_abs_params(dev, ABS_MT_CUSTOM, 0, 0xFFFFFFFF, 0, 0);
 	if (ts->plat_data->support_mt_pressure)
 		input_set_abs_params(dev, ABS_MT_PRESSURE, 0, 255, 0, 0);

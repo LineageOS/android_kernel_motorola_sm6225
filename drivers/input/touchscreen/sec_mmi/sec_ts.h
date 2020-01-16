@@ -737,6 +737,8 @@ struct sec_ts_data {
 struct sec_ts_plat_data {
 	int max_x;
 	int max_y;
+	int max_major;
+	int max_minor;
 	unsigned rst_gpio;
 	unsigned irq_gpio;
 	int irq_type;
