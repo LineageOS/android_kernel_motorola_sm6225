@@ -80,14 +80,16 @@
 #define EPP_TX_GUARANTEED	0x0084
 #define EPP_TX_POTENTIAL	0x0085
 
+#define EPT_REASON_REG	0x00BE
 #define FOD_CFG_REG		0x0070
+#define TX_FOD_CFG_REG		0x00AC
 #define SYS_TM_MODE_REG	0x0069
 #define ST_TM_MODE_EN 3
 #define ST_TM_MODE_DIS 0
 
-#define ST_TX_FOD_FAULT	BIT(15)
 #define ST_TX_CONFLICT	BIT(14)
 #define ST_RX_CONN		BIT(13)
+#define ST_EPT_TYPE_INT	BIT(12)
 #define ST_ADT_ERR		BIT(11)
 #define ST_ADT_RCV		BIT(9)
 #define ST_ADT_SENT		BIT(8)
@@ -100,6 +102,7 @@
 
 #define SYS_MODE_RAMCODE	BIT(6)
 #define SYS_MODE_EXTENDED	BIT(3)
+#define SYS_MODE_TX	        BIT(2)
 #define SYS_MODE_WPCMODE	BIT(0)
 
 #define CMD_TX_RM_POWER_TOGGLE	BIT(10)
@@ -111,6 +114,14 @@
 #define CMD_RX_CFG_TABLE	BIT(2)
 #define CMD_RX_TOGGLE_LDO	BIT(1)
 #define CMD_RX_SEND_RX_DATA	BIT(0)
+
+#define EPT_POCP BIT(15)
+#define EPT_OTP  BIT(14)
+#define EPT_FOD  BIT(13)
+#define EPT_LVP  BIT(12)
+#define EPT_OVP  BIT(11)
+#define EPT_OCP  BIT(10)
+#define EPT_CMD  BIT(0)
 
 #define WAIT_FOR_AUTH_MS 1000
 #define WAIT_FOR_RCVD_TIMEOUT_MS 1000
@@ -130,6 +141,12 @@
 #define MAX_IOUT_SET 3000
 
 #define FOD_MAX_LEN 16
+#define TX_FOD_WRITE_LEN 6
+#define TX_FOD_REG_LEN 13
+
+#define MAX_EPT_FOD_COUNT 3
+#define MAX_EPT_POCP_COUNT 3
+#define MAX_TX_MODE_RECOVER 10
 
 #define WLS_SHOW_MAX_SIZE 32
 
@@ -283,12 +300,15 @@ struct p938x_charger {
 
 	u8	fod_array_bpp[FOD_MAX_LEN];
 	u8	fod_array_epp[FOD_MAX_LEN];
-	u8	fod_array_tx[FOD_MAX_LEN];
+	u8	fod_array_tx[TX_FOD_WRITE_LEN];
 	int	fod_array_bpp_len;
 	int	fod_array_epp_len;
 	int	fod_array_tx_len;
 	bool 	use_q_factor;
 	u8	q_factor;
+	u8	ept_fod_count;
+	u8 	ept_pocp_count;
+	u8	tx_mode_recover_cnt;
 
 	struct thermal_cooling_device *tcd;
 };
@@ -579,6 +599,14 @@ static inline int p938x_get_boost(struct p938x_charger *chip)
 	return gpio_get_value(chip->wchg_boost.gpio);
 }
 
+static void p938x_toggle_power(struct p938x_charger *chip, int extra_delay_ms)
+{
+	p938x_set_boost(chip, 0);
+	msleep(100 + extra_delay_ms);
+	p938x_set_boost(chip, 1);
+	msleep(100);
+}
+
 static int p938x_update_supplies_status(struct p938x_charger *chip)
 {
 	int rc;
@@ -793,13 +821,33 @@ static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
 		val);
 }
 
+static int p938x_program_tx_fod(struct p938x_charger *chip,
+	u8 *array, int array_len)
+{
+	int rc;
+
+	if (array_len <= 0 || array_len > TX_FOD_WRITE_LEN) {
+		p938x_dbg(chip, PR_MOTO, "FOD length is not valid: %d\n", array_len);
+		return 1;
+	}
+
+	rc = p938x_write_buffer(chip, TX_FOD_CFG_REG,
+			array, array_len);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to program fod: %d\n", rc);
+		return 1;
+	}
+
+	return 0;
+}
+
 static int p938x_program_fod(struct p938x_charger *chip,
 	u8 *array, int array_len)
 {
 	int rc;
 
 	if (array_len <= 0 || array_len > FOD_MAX_LEN) {
-		p938x_err(chip, "FOD length is not valid: %d\n", array_len);
+		p938x_dbg(chip, PR_MOTO, "FOD length is not valid: %d\n", array_len);
 		return 1;
 	}
 
@@ -811,6 +859,28 @@ static int p938x_program_fod(struct p938x_charger *chip,
 	}
 
 	return 0;
+}
+
+static void p938x_configure_tx_mode(struct p938x_charger *chip)
+{
+	u16 buf = 0;
+	int rc;
+
+	p938x_dbg(chip, PR_MOTO, "Configuring tx mode\n");
+
+	/* Configure the TX FOD parameters */
+	p938x_program_tx_fod(chip, chip->fod_array_tx,
+		chip->fod_array_tx_len);
+
+	/* Set to disable on tx error */
+	rc = p938x_read_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+			SYS_CMD_REG, rc);
+		buf = 0;
+	}
+	buf = buf | CMD_TX_RM_POWER_TOGGLE;
+	p938x_write_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
 }
 
 static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
@@ -853,20 +923,12 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			p938x_set_dc_en_override(chip, 0);
 			p938x_set_dc_suspend(chip, 0);
 		} else {
-			rc = p938x_read_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
-			if (rc < 0) {
-				p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
-					SYS_CMD_REG, rc);
-				buf = 0;
-			}
-			buf = buf | CMD_TX_RM_POWER_TOGGLE;
-			p938x_write_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
-
 			p938x_dbg(chip, PR_MOTO, "tx mode enabled OK\n");
 			set_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
-			p938x_program_fod(chip, chip->fod_array_tx,
-				chip->fod_array_tx_len);
 			sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
+			chip->ept_fod_count = 0;
+			chip->ept_pocp_count = 0;
+			chip->tx_mode_recover_cnt = 0;
 			cancel_delayed_work(&chip->tx_mode_work);
 			schedule_delayed_work(&chip->tx_mode_work,
 				msecs_to_jiffies(TXMODEWORK_INTERVAL_MS));
@@ -876,6 +938,11 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 			p938x_dbg(chip, PR_MOTO, "Tx mode already disabled\n");
 			return;
 		}
+
+		/* Make sure it won't accidently get re-enabled, there is a small
+		 * window where there is a chance if we don't cancel this
+		 */
+		cancel_delayed_work_sync(&chip->tx_mode_work);
 
 		rc = p938x_write_reg(chip, SYS_TM_MODE_REG, ST_TM_MODE_DIS);
 		if (rc < 0)
@@ -901,7 +968,6 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 
 		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
 		sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
-
 		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
 	}
 }
@@ -929,16 +995,16 @@ static int p938x_tcd_set_cur_state(struct thermal_cooling_device *tcd,
 {
 	struct p938x_charger *chip = tcd->devdata;
 
-	p938x_dbg(chip, PR_MOTO, "Setting tcd to state %lu\n", state);
+	p938x_dbg(chip, PR_IMPORTANT, "Setting thermal state to %lu\n", state);
 
 	if (state && !test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
 		set_bit(WLS_FLAG_OVERHEAT, &chip->flags);
 		p938x_set_tx_mode(chip, 0);
-	} else if (!state) {
+		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
+	} else if (!state && test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
 		clear_bit(WLS_FLAG_OVERHEAT, &chip->flags);
+		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	}
-
-	sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 
 	return 0;
 }
@@ -1240,6 +1306,74 @@ static int p938x_get_tx_capability(struct p938x_charger *chip, int *guaranteed,
 	return 0;
 }
 
+static void p938x_check_ept_reason(struct p938x_charger *chip)
+{
+	u16 ept_reason = 0;
+	int rc;
+
+	/* Set to disable on tx error */
+	rc = p938x_read_buffer(chip, EPT_REASON_REG, (u8 *)&ept_reason, 2);
+	if (rc < 0) {
+		p938x_err(chip,
+			"Failed to read 0x%04x. Shutting off tx mode, rc=%d\n",
+			EPT_REASON_REG, rc);
+		p938x_set_tx_mode(chip, 0);
+	}
+
+	cancel_delayed_work_sync(&chip->tx_mode_work);
+
+	if (ept_reason & EPT_POCP) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_POCP\n");
+		chip->ept_pocp_count++;
+		if(chip->ept_pocp_count == MAX_EPT_POCP_COUNT) {
+			p938x_set_tx_mode(chip, 0);
+			p938x_err(chip, "EPT_POCP triggered %d times. Disabled tx mode.\n",
+				MAX_EPT_POCP_COUNT);
+		} else
+			p938x_toggle_power(chip, 1000);
+	}
+
+	if (ept_reason & EPT_OTP) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_OTP\n");
+		p938x_set_tx_mode(chip, 0);
+		p938x_err(chip, "EPT_OTP triggered. Disabled tx mode.\n");
+	}
+
+	if (ept_reason & EPT_FOD) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_FOD\n");
+		chip->ept_fod_count++;
+		if(chip->ept_fod_count == MAX_EPT_FOD_COUNT) {
+			p938x_set_tx_mode(chip, 0);
+			p938x_err(chip, "EPT_FOD triggered %d times. Disabled tx mode.\n",
+				MAX_EPT_FOD_COUNT);
+		} else
+			p938x_toggle_power(chip, 5000);
+	}
+
+	if (ept_reason & EPT_LVP) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_LVP\n");
+		p938x_toggle_power(chip, 1000);
+	}
+
+	if (ept_reason & EPT_OVP) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_OVP\n");
+		p938x_toggle_power(chip, 1000);
+	}
+
+	if (ept_reason & EPT_OCP) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_OCP\n");
+		p938x_toggle_power(chip, 2000);
+	}
+
+	if (ept_reason & EPT_CMD) {
+		p938x_dbg(chip, PR_INTERRUPT, "EPT: EPT_CMD\n");
+		p938x_toggle_power(chip, 1000);
+	}
+
+	schedule_delayed_work(&chip->tx_mode_work,
+		msecs_to_jiffies(0));
+}
+
 static int p938x_check_system_mode(struct p938x_charger *chip)
 {
 	int rc;
@@ -1262,8 +1396,10 @@ static int p938x_check_system_mode(struct p938x_charger *chip)
 
 	if (mode & SYS_MODE_RAMCODE)
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_RAMCODE\n");
-	if (tx_mode == ST_TM_MODE_EN)
+	if (mode & SYS_MODE_TX) {
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_TXMODE\n");
+		p938x_configure_tx_mode(chip);
+	}
 	if (mode & SYS_MODE_WPCMODE) {
 		p938x_dbg(chip, PR_INTERRUPT, "MODE: SYS_MODE_WPCMODE\n");
 		if (mode & SYS_MODE_EXTENDED) {
@@ -1347,12 +1483,12 @@ static int p938x_get_status(struct p938x_charger *chip, u16 *stat, u16 *irq_stat
 
 static void p938x_debug_status(struct p938x_charger *chip, u16 status)
 {
-	if (status & ST_TX_FOD_FAULT)
-		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_TX_FOD_FAULT\n");
 	if (status & ST_TX_CONFLICT)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_TX_CONFLICT\n");
 	if (status & ST_RX_CONN)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_RX_CONN\n");
+	if (status & ST_EPT_TYPE_INT)
+		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_EPT_TYPE_INT\n");
 	if (status & ST_ADT_ERR)
 		p938x_dbg(chip, PR_INTERRUPT, "STATUS: ST_ADT_ERR\n");
 	if (status & ST_ADT_RCV)
@@ -1375,12 +1511,12 @@ static void p938x_debug_status(struct p938x_charger *chip, u16 status)
 
 static void p938x_debug_irq(struct p938x_charger *chip, u16 irq_status)
 {
-	if (irq_status & ST_TX_FOD_FAULT)
-		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_TX_FOD_FAULT\n");
 	if (irq_status & ST_TX_CONFLICT)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_TX_CONFLICT\n");
 	if (irq_status & ST_RX_CONN)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_RX_CONN\n");
+	if (irq_status & ST_EPT_TYPE_INT)
+		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_EPT_TYPE_INT\n");
 	if (irq_status & ST_ADT_ERR)
 		p938x_dbg(chip, PR_INTERRUPT, "IRQ: ST_ADT_ERR\n");
 	if (irq_status & ST_ADT_RCV)
@@ -1422,6 +1558,10 @@ static int p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_IMPORTANT, "Tx mode conflict. Disabled tx mode\n");
 	}
 
+	if ((irq_status & ST_EPT_TYPE_INT) &&
+			test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags))
+		p938x_check_ept_reason(chip);
+
 	if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	}
@@ -1455,6 +1595,16 @@ static int p938x_check_status(struct p938x_charger *chip)
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
 	}
 
+	if ((irq_status & ST_MODE_CHANGE) &&
+			test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless mode changed\n");
+		if(chip->tx_mode_recover_cnt >= MAX_TX_MODE_RECOVER) {
+			p938x_err(chip, "Tx mode recovered too many times. Turning off.\n");
+			p938x_set_tx_mode(chip, 0);
+		} else
+			p938x_check_system_mode(chip);
+	}
+
 	p938x_clear_irq(chip, irq_status);
 
 	return 0;
@@ -1477,16 +1627,21 @@ static void p938x_tx_mode_work(struct work_struct *work)
 			if (buf != ST_TM_MODE_EN) {
 				p938x_dbg(chip, PR_INTERRUPT,
 					"Tx mode is off and it should be on, turning back on.\n");
+				chip->tx_mode_recover_cnt++;
+
 				rc = p938x_write_reg(chip, SYS_TM_MODE_REG,
 										ST_TM_MODE_EN);
 				if (rc < 0) {
 					p938x_err(chip, "Failed to write 0x%04x(%d), rc=%d\n",
 						SYS_TM_MODE_REG, ST_TM_MODE_EN, rc);
-				} else
-					p938x_program_fod(chip, chip->fod_array_tx,
-						chip->fod_array_tx_len);
-				p938x_check_status(chip);
+				}
 			}
+		} else {
+			/* If we are in tx mode and we can't read the register, something is wrong
+			 * so force a reset
+			 */
+			p938x_err(chip, "Something went wrong, resetting IC...");
+			p938x_toggle_power(chip, 0);
 		}
 
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
@@ -1709,9 +1864,26 @@ static ssize_t fod_tx_store(struct device *dev,
 		const char *buf, size_t count)
 {
 	struct p938x_charger *chip = dev_get_drvdata(dev);
+	int i = 0, ret = 0, sum = 0;
+	char *buffer;
+	unsigned int temp;
+	u8 fod_array_temp[TX_FOD_WRITE_LEN];
 
-	fod_store(chip, buf, chip->fod_array_tx,
-		&chip->fod_array_tx_len);
+	buffer = (char *)buf;
+
+	for (i = 0; i < TX_FOD_WRITE_LEN; i++) {
+		ret = sscanf((const char *)buffer, "%x,%s", &temp, buffer);
+		fod_array_temp[i] = temp;
+		sum++;
+		if (ret != 2)
+			break;
+	}
+
+	if (sum > 0 && sum <= TX_FOD_WRITE_LEN) {
+		memcpy(chip->fod_array_tx, fod_array_temp, sum);
+		chip->fod_array_tx_len = sum;
+		p938x_program_tx_fod(chip, chip->fod_array_tx, chip->fod_array_tx_len);
+	}
 
 	return count;
 }
@@ -2113,7 +2285,7 @@ static int show_dump_regs(struct seq_file *m, void *data)
 	seq_printf(m, "EPP_TX_POTENTIAL: 0x%02x\n", buf[0]);
 	p938x_read_reg(chip, EPP_QFACTOR_REG, &buf[0]);
 	seq_printf(m, "EPP_QFACTOR_REG: 0x%02x\n", buf[0]);
-	p938x_read_buffer(chip, FOD_CFG_REG, buf, 16);
+	p938x_read_buffer(chip, FOD_CFG_REG, buf, FOD_MAX_LEN);
 	seq_printf(m, "FOD_CFG_REG: %02X%02X %02X%02X "
 		"%02X%02X %02X%02X "
 		"%02X%02X %02X%02X "
@@ -2122,6 +2294,15 @@ static int show_dump_regs(struct seq_file *m, void *data)
 		buf[4], buf[5], buf[6], buf[7],
 		buf[8], buf[9], buf[10], buf[11],
 		buf[12], buf[13], buf[14], buf[15]);
+	p938x_read_buffer(chip, TX_FOD_CFG_REG, buf, TX_FOD_REG_LEN);
+	seq_printf(m, "TX_FOD_CFG_REG: %02X%02X %02X%02X "
+		"%02X%02X %02X%02X "
+		"%02X%02X %02X "
+		"%02X%02X\n",
+		buf[0], buf[1], buf[2], buf[3],
+		buf[4], buf[5], buf[6], buf[7],
+		buf[8], buf[9], buf[10], buf[11],
+		buf[12]);
 
 	show_dump_flags(m, chip);
 
@@ -2600,8 +2781,6 @@ static int p938x_charger_probe(struct i2c_client *client,
 	 * in order to force the right irqs to run
 	 */
 	p938x_reset(chip);
-
-	/* TODO Consider enabling mode change IRQ */
 
 	create_debugfs_entries(chip);
 	if (sysfs_create_groups(&chip->dev->kobj, p938x_groups))
