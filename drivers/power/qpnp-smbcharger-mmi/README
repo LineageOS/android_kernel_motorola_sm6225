@@ -135,7 +135,9 @@ charging.
 
 Current is always tapered when voltage achieves maximum voltage specification
 (which is generally 4.4V, but may have a different value, depending a product
-battery specs). It is tapered to 97mA, as IEEE specifies.
+battery specs). It is tapered to some small value, possibly around 100mA,
+which is based on product specifications and capacity testing, defined by
+EE (Electrical Engineering) Team/Hardware.
 
 If temperature is below -20 degC or above 60 degC, it should automatically
 stop charging device.
@@ -162,12 +164,12 @@ any commercial product that has a lithium-ion battery embedded or plugged to
 it).
 
 NOTE2: taper current mostly refers to when battery is above maximum allowed
-voltage on a specific temperature region, based on rules above (which is 97mA
-as current specification). So be aware that the rest of this document may
-refer as "taper" to a current that is limiting the maximum value, but before
-achieving a staget in which current is limited to 97mA (so an intermediate
-stage). Also "taper voltage" will refer to a voltage level in which this
-mentioned "taper" current (intermediate current level) is triggered.
+voltage on a specific temperature region, based on rules above. So be aware
+that the rest of this document may refer as "taper" to a current that is
+limiting the maximum value, but before achieving a stage in which current
+is limited to something around 100mA (so an intermediate stage). Also
+"taper voltage" will refer to a voltage level in which this mentioned
+"taper" current (intermediate current level) is triggered.
 
 
 =========================================
@@ -228,7 +230,7 @@ STEP_NONE:  no charger present
 STEP_STOP:  in zone hot or zone cold, which limits charging considerably
 STEP_NORM:  limits current to some value
 STEP_MAX:   allows maximum current value, when in between 0 and 45 degC
-STEP_FULL:  battery is almost or completely full, tapering to 97mA
+STEP_FULL:  battery is almost or completely full, tapering to a small current
 STEP_FLOAT: TODO
 
 Important to note that even when moving from one state to another, temperature
@@ -240,7 +242,8 @@ range device is.
 sysfs).
 "taper_ma" is "fcc_norm_ma" in case is in STATE_MAX, which means battery is
 above taper voltage. If in any other state, it will refer to "chrg_iterm",
-which is equal to 97mA as current standards.
+which will depend on device specifications (4.4V batteries have 97mA as
+current standards, and 4.45V batteries have 121mA as taper current).
 
 Now, let's check the algorithms for a bit:
 
