@@ -57,6 +57,8 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.sensor_power = "1",
 	.min_delay = -1,
 	.max_delay = 0,
+	/* WAKE_UP & SPECIAL_REPORT */
+	.flags = 1 | 6,
 	.fifo_reserved_event_count = 0,
 	.fifo_max_event_count = 0,
 	.enabled = 0,
