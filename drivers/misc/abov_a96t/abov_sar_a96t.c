@@ -1591,6 +1591,28 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
                                  "on" : "off");
         }
 
+	pplatData->cap_svdd = regulator_get(&client->dev, "cap_svdd");
+        if (IS_ERR(pplatData->cap_svdd)) {
+                if (PTR_ERR(pplatData->cap_svdd) == -EPROBE_DEFER) {
+                        ret = PTR_ERR(pplatData->cap_svdd);
+                        goto err_svdd_error;
+                }
+                LOG_ERR("%s: Failed to get regulator\n", __func__);
+        } else {
+                ret = regulator_enable(pplatData->cap_svdd);
+
+                if (ret) {
+                        regulator_put(pplatData->cap_svdd);
+                        LOG_ERR("%s: Error %d enable regulator\n",
+                                         __func__, ret);
+                        goto err_svdd_error;
+                }
+                pplatData->cap_svdd_en = true;
+                LOG_INFO("cap_svdd regulator is %s\n",
+                                 regulator_is_enabled(pplatData->cap_svdd) ?
+                                 "on" : "off");
+        }
+
 	/* detect if abov exist or not */
 	ret = abov_detect(client);
 	if (ret == 0) {
@@ -1828,10 +1850,10 @@ free_ps_notifier:
     regulator_disable(pplatData->cap_svdd);
     regulator_put(pplatData->cap_svdd);
 
-/*err_svdd_error:
+err_svdd_error:
 	LOG_DBG("%s svdd defer.\n", __func__);
 	regulator_disable(pplatData->cap_vdd);
-	regulator_put(pplatData->cap_vdd);*/
+	regulator_put(pplatData->cap_vdd);
 
 err_vdd_defer:
 	LOG_DBG("%s input free device.\n", __func__);
