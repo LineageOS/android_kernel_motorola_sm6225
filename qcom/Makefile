@@ -9,6 +9,11 @@ dtbo-$(CONFIG_GUAM_DTB) += \
 		bengal-guam-evt-overlay.dtbo
 
 bengal-guam-evt-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_GUAMP_DTB) += \
+		bengal-guamp-evt-overlay.dtbo
+
+bengal-guamp-evt-overlay.dtbo-base := bengal-moto-base.dtb
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_KONA) += \
