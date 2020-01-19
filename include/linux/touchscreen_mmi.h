@@ -216,4 +216,7 @@ extern int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev, struct device_node *of
 extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
 
+/*sensor*/
+extern bool ts_mmi_is_sensor_enable(void);
+
 #endif		/* __LINUX_TOUCHSCREEN_MMI_H_ */
