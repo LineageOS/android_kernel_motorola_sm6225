@@ -60,6 +60,17 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 	return 0;
 }
 
+bool ts_mmi_is_sensor_enable(void)
+{
+	struct ts_mmi_dev *touch_cdev;
+	if (sensor_pdata != NULL) {
+		touch_cdev = sensor_pdata->touch_cdev;
+		return !!sensor_pdata->sensor_opened;
+	}
+	else
+		return false;
+}
+
 static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
@@ -67,7 +78,7 @@ static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 			sensors_cdev, struct ts_mmi_sensor_platform_data, ps_cdev);
 	struct ts_mmi_dev *touch_cdev = sensor_pdata->touch_cdev;
 
-	dev_info(DEV_TS, "%s: Gesture set enable %d!", __func__, enable);
+	sensor_pdata->sensor_opened = enable;
 	if (enable == 1) {
 		dev_info(DEV_TS, "%s: sensor ENABLE\n", __func__);
 	} else if (enable == 0) {
