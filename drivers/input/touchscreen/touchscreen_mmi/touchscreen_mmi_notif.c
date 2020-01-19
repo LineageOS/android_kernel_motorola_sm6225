@@ -37,6 +37,20 @@ extern struct blocking_notifier_head dsi_freq_head;
 #define unregister_dynamic_refresh_rate_notifier(...)
 #endif
 
+#define IS_GESTURE_MODE (touch_cdev->pm_mode == TS_MMI_PM_GESTURE ? 1 : 0)
+#define IS_DEEPSLEEP_MODE (touch_cdev->pm_mode == TS_MMI_PM_DEEPSLEEP ? 1 : 0)
+#define IS_ACTIVE_MODE (touch_cdev->pm_mode == TS_MMI_PM_ACTIVE ? 1 : 0)
+#define NEED_TO_SET_PINCTRL \
+					(touch_cdev->pdata.power_off_suspend && \
+					touch_cdev->mdata->pinctrl && \
+					IS_DEEPSLEEP_MODE)
+#define NEED_TO_SET_POWER \
+					(touch_cdev->pdata.power_off_suspend && \
+					touch_cdev->mdata->power && \
+					IS_DEEPSLEEP_MODE)
+
+
+
 enum ts_mmi_work {
 	TS_MMI_DO_RESUME,
 	TS_MMI_DO_PS,
@@ -51,15 +65,19 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 	atomic_set(&touch_cdev->resume_should_stop, 1);
 
 	TRY_TO_CALL(pre_suspend);
-
-	if (touch_cdev->pdata.power_off_suspend)
+	if (touch_cdev->pdata.gestures_enabled) {
+		if(ts_mmi_is_sensor_enable()) {
+			dev_info(DEV_MMI, "%s: try to enter Gesture mode\n", __func__);
+			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE);
+			touch_cdev->pm_mode = TS_MMI_PM_GESTURE;
+		 }
+	}
+	if (IS_ACTIVE_MODE) {
 		/* IC power is off. IRQ pin status is floated. So disable IRQ. */
 		TRY_TO_CALL(drv_irq, TS_MMI_IRQ_OFF);
-	else {
-		if (touch_cdev->pdata.gestures_enabled)
-			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE);
-		else
-			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_DEEPSLEEP);
+		dev_info(DEV_MMI, "%s: try to enter Deepsleep mode\n", __func__);
+		TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_DEEPSLEEP);
+		touch_cdev->pm_mode = TS_MMI_PM_DEEPSLEEP;
 	}
 
 	TRY_TO_CALL(post_suspend);
@@ -106,16 +124,15 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	switch (event) {
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 	case PANEL_EVENT_PRE_DISPLAY_OFF:
-	/* put in reset first */
-		if (touch_cdev->pdata.power_off_suspend &&
-			touch_cdev->mdata->pinctrl)
-			touch_cdev->mdata->pinctrl(DEV_TS, TS_MMI_PINCTL_OFF);
 		ts_mmi_panel_off(touch_cdev);
+		if (NEED_TO_SET_PINCTRL) {
+			dev_dbg(DEV_MMI, "%s: touch pinctrl off\n", __func__);
+			touch_cdev->mdata->pinctrl(DEV_TS, TS_MMI_PINCTL_OFF);
+		}
 		break;
 
 	case PANEL_EVENT_DISPLAY_OFF:
-		if (touch_cdev->pdata.power_off_suspend &&
-			touch_cdev->mdata->power) {
+		if (NEED_TO_SET_POWER) {
 			/* then proceed with de-powering */
 			touch_cdev->mdata->power(DEV_TS, TS_MMI_POWER_OFF);
 			dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
@@ -123,8 +140,7 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 		break;
 
 	case PANEL_EVENT_PRE_DISPLAY_ON:
-		if (touch_cdev->pdata.power_off_suspend &&
-			touch_cdev->mdata->power) {
+		if (NEED_TO_SET_POWER) {
 			/* powering on early */
 			touch_cdev->mdata->power(DEV_TS, TS_MMI_POWER_ON);
 			dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
@@ -140,9 +156,10 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 
 	case PANEL_EVENT_DISPLAY_ON:
 		/* out of reset to allow wait for boot complete */
-		if (touch_cdev->pdata.power_off_suspend &&
-			touch_cdev->mdata->pinctrl)
+		if (NEED_TO_SET_PINCTRL) {
 			touch_cdev->mdata->pinctrl(DEV_TS, TS_MMI_PINCTL_ON);
+			dev_dbg(DEV_MMI, "%s: touch pinctrl_on\n", __func__);
+		}
 		ts_mmi_panel_on(touch_cdev);
 		break;
 #endif
@@ -162,7 +179,8 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 		return;
 
 	TRY_TO_CALL(pre_resume);
-	if (touch_cdev->pdata.power_off_suspend) {
+
+	if (NEED_TO_SET_POWER) {
 		/* power turn on in PANEL_EVENT_PRE_DISPLAY_ON.
 		 * IC need some time to boot up.
 		 * Check IC is ready or not.
@@ -184,6 +202,9 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 		if (touch_cdev->pdata.power_off_suspend)
 			TRY_TO_CALL(drv_irq, TS_MMI_IRQ_ON);
 	}
+
+	if (IS_DEEPSLEEP_MODE)
+		TRY_TO_CALL(drv_irq, TS_MMI_IRQ_ON);
 
 	TRY_TO_CALL(post_resume);
 
