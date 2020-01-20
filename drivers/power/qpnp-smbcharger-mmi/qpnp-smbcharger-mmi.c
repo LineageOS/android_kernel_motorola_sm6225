@@ -1946,6 +1946,10 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
 	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+	else if ((prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_WEAK) &&
+			(chrg_cm_ma > WEAK_CHRG_THRSH) &&
+			(chrg_cs_ma >= WEAK_CHRG_THRSH))
+		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
 
 end_rate_check:
 	if (prev_chg_rate != chg->charger_rate) {
