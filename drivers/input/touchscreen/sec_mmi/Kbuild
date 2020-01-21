@@ -1,25 +1,20 @@
 # add -Wall to try to catch everything we can.
 # EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += \
+EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS \
 		-I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
 
 ifneq (,$(filter racer% burton%,$(TARGET_PRODUCT)))
-# NOTE: USE_STUBS option will go away when touchscreen_mmi class introduced, but
-#       CONFIG_DRM_DYNAMIC_REFRESH_RATE is staying!!!
-EXTRA_CFLAGS += -DUSE_STUBS -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
-endif
-
-ifneq (,$(filter burton%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
+    EXTRA_CFLAGS += -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
 endif
 
 obj-m := sec_mmi.o
 sec_mmi-objs = sec_ts.o sec_ts_fn.o sec_ts_fw.o sec_cmd.o sec_ts_only_vendor.o
 
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
-	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
-	sec_mmi-objs += sec_ts_mmi_class.o
+    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+    sec_mmi-objs += sec_ts_mmi_class.o
 else
-	sec_mmi-objs += sec_ts_mmi.o
+    EXTRA_CFLAGS += -DUSE_STUBS
+    sec_mmi-objs += sec_ts_mmi.o
 endif
