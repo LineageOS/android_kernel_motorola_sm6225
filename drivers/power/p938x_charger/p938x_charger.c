@@ -995,13 +995,13 @@ static int p938x_tcd_set_cur_state(struct thermal_cooling_device *tcd,
 {
 	struct p938x_charger *chip = tcd->devdata;
 
-	p938x_dbg(chip, PR_IMPORTANT, "Setting thermal state to %lu\n", state);
-
 	if (state && !test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger overtemp\n");
 		set_bit(WLS_FLAG_OVERHEAT, &chip->flags);
 		p938x_set_tx_mode(chip, 0);
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	} else if (!state && test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger temp OK\n");
 		clear_bit(WLS_FLAG_OVERHEAT, &chip->flags);
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	}
