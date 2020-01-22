@@ -51,6 +51,7 @@
 #include <linux/firmware.h>
 #include <linux/limits.h>
 #include <linux/thermal.h>
+#include <linux/mutex.h>
 
 #define CHIP_ID_REG			0x0000
 #define HW_VER_REG			0x0002
@@ -311,6 +312,7 @@ struct p938x_charger {
 	u8	tx_mode_recover_cnt;
 
 	struct thermal_cooling_device *tcd;
+	struct mutex disconnect_lock;
 };
 
 #define WLS_FLAG_BOOST_ENABLED 0
@@ -381,6 +383,8 @@ static void p938x_pm_set_awake(struct p938x_charger *chip, int awake)
 	}
 }
 
+static int p938x_check_status(struct p938x_charger *chip);
+
 static void p938x_handle_wls_removal(struct p938x_charger *chip)
 {
 	if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
@@ -391,16 +395,13 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 		chip->stat = 0;
 		chip->irq_stat = 0;
 
-		/* Try to reset the chip to guard against false positives, we want
-		* don't want to end up in a broken state if we triggered disconnect
-		* accidentally
-		*/
-		if (!test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags)) {
+		if (!test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags))
 			p938x_pm_set_awake(chip, 0);
-			p938x_reset(chip);
-		}
 
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is removed\n");
+
+		/* Just in case we aren't disconnected */
+		p938x_check_status(chip);
 	}
 }
 
@@ -1543,7 +1544,7 @@ static int p938x_check_status(struct p938x_charger *chip)
 	u16 irq_status;
 
 	if (p938x_get_status(chip, &status, &irq_status)) {
-		p938x_err(chip, "Could not read status registers");
+		p938x_dbg(chip, PR_MOTO, "Could not read status registers");
 		return 1;
 	}
 
@@ -1566,15 +1567,6 @@ static int p938x_check_status(struct p938x_charger *chip)
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	}
 
-	if (irq_status & status & ST_VOUT_ON) {
-		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger ldo is on\n");
-		p938x_check_system_mode(chip);
-		cancel_delayed_work(&chip->heartbeat_work);
-		schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(0));
-		power_supply_changed(chip->wls_psy);
-	}
-
 	if (irq_status & status & ST_VRECT_ON) {
 		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
@@ -1593,6 +1585,15 @@ static int p938x_check_status(struct p938x_charger *chip)
 		schedule_delayed_work(&chip->heartbeat_work,
 				msecs_to_jiffies(2000));
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
+	}
+
+	if (irq_status & status & ST_VOUT_ON) {
+		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger ldo is on\n");
+		p938x_check_system_mode(chip);
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				msecs_to_jiffies(0));
+		power_supply_changed(chip->wls_psy);
 	}
 
 	if ((irq_status & ST_MODE_CHANGE) &&
@@ -1665,6 +1666,8 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
+	mutex_lock(&chip->disconnect_lock);
+
 	if (p938x_check_status(chip)) {
 		p938x_err(chip,
 			"Error checking status. Check charging pad alignment\n");
@@ -1672,16 +1675,24 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 		sysfs_notify(&chip->dev->kobj, NULL, "error_cnt");
 	}
 
+	mutex_unlock(&chip->disconnect_lock);
+
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t p938x_det_irq_handler(int irq, void *dev_id)
 {
 	struct p938x_charger *chip = dev_id;
-	int tx_detected = gpio_get_value(chip->wchg_det.gpio);
+	int tx_detected;
+
+	mutex_lock(&chip->disconnect_lock);
+
+	tx_detected = gpio_get_value(chip->wchg_det.gpio);
 
 	if (!tx_detected)
 		p938x_handle_wls_removal(chip);
+
+	mutex_unlock(&chip->disconnect_lock);
 
 	return IRQ_HANDLED;
 }
@@ -2743,6 +2754,8 @@ static int p938x_charger_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
+	mutex_init(&chip->disconnect_lock);
+
 	/* This IRQ handler is the primary one, and detects when a wireless charger
 	 * is attached
 	 */
@@ -2776,11 +2789,6 @@ static int p938x_charger_probe(struct i2c_client *client,
 	/* Register thermal zone cooling device */
 	chip->tcd = thermal_of_cooling_device_register(dev_of_node(chip->dev),
 		"p938x_charger", chip, &p938x_tcd_ops);
-
-	/* Reset the chip to in case we inserted the module with a transmitter attached
-	 * in order to force the right irqs to run
-	 */
-	p938x_reset(chip);
 
 	create_debugfs_entries(chip);
 	if (sysfs_create_groups(&chip->dev->kobj, p938x_groups))
