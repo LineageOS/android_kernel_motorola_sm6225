@@ -126,7 +126,8 @@
 
 #define WAIT_FOR_AUTH_MS 1000
 #define WAIT_FOR_RCVD_TIMEOUT_MS 1000
-#define HEARTBEAT_INTERVAL_MS 60000
+#define HEARTBEAT_INTERVAL_MS 3000
+#define HEARTBEAT_REPORT_INTERVAL 60000
 #define TXMODEWORK_INTERVAL_MS 2000
 
 #define BPP_MAX_VOUT 5000
@@ -277,6 +278,8 @@ struct p938x_charger {
 
 	struct delayed_work	heartbeat_work;
 	struct delayed_work	tx_mode_work;
+	struct delayed_work	removal_work;
+	int heartbeat_count;
 
 	u32			peek_poke_address;
 	struct dentry		*debug_root;
@@ -383,26 +386,45 @@ static void p938x_pm_set_awake(struct p938x_charger *chip, int awake)
 	}
 }
 
-static int p938x_check_status(struct p938x_charger *chip);
+static int p938x_get_rx_vrect(struct p938x_charger *chip);
 
 static void p938x_handle_wls_removal(struct p938x_charger *chip)
 {
+	if (!mutex_trylock(&chip->disconnect_lock)) {
+		cancel_delayed_work(&chip->removal_work);
+		schedule_delayed_work(&chip->removal_work, msecs_to_jiffies(500));
+		return;
+	}
+
 	if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
+		/* Make sure we aren't actually connect */
+		if (p938x_get_rx_vrect(chip) > 0)
+			goto unlock;
+
 		clear_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 		power_supply_changed(chip->wls_psy);
 		cancel_delayed_work(&chip->heartbeat_work);
 
 		chip->stat = 0;
 		chip->irq_stat = 0;
+		chip->heartbeat_count = 0;
 
 		if (!test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags))
 			p938x_pm_set_awake(chip, 0);
 
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is removed\n");
-
-		/* Just in case we aren't disconnected */
-		p938x_check_status(chip);
 	}
+
+unlock:
+	mutex_unlock(&chip->disconnect_lock);
+}
+
+static void p938x_removal_work(struct work_struct *work)
+{
+	struct p938x_charger *chip = container_of(work,
+				struct p938x_charger, tx_mode_work.work);
+
+	p938x_handle_wls_removal(chip);
 }
 
 static int p938x_read_buffer(struct p938x_charger *chip, u16 reg,
@@ -666,25 +688,43 @@ static void p938x_heartbeat_work(struct work_struct *work)
 	int vrect = 0;
 
 	if (p938x_is_tx_connected(chip)) {
+		/* Check if we disconnected */
+		vrect = p938x_get_rx_vrect(chip);
+		if (vrect <= 0) {
+			p938x_err(chip, "Detected wireless charger is not connected.\n");
+			p938x_handle_wls_removal(chip);
+			return;
+		}
+
 		if (!p938x_is_ldo_on(chip)) {
 			p938x_dbg(chip, PR_MOTO, "LDO is not on yet\n");
-			cancel_delayed_work(&chip->heartbeat_work);
-			schedule_delayed_work(&chip->heartbeat_work,
-					msecs_to_jiffies(2000));
-			return;
+			/* This is where we will trigger it after the first VRECT_ON, so
+			 * first indication to system we have a power supply attached is VRECT_ON
+			 * + initial delay to hb
+			 */
+			power_supply_changed(chip->wls_psy);
+			chip->heartbeat_count = 0;
+			goto schedule_hb;
 		}
 
 		vout = p938x_get_rx_vout(chip);
 		vout_set = p938x_get_rx_vout_set(chip);
-		vrect = p938x_get_rx_vrect(chip);
 		iout = p938x_get_rx_iout(chip);
 		iout_limit = p938x_get_rx_ocl(chip);
 
-		p938x_dbg(chip, PR_IMPORTANT,
-			"mode=%s vout=%d vout_set=%d vrect=%d iout=%d ocl=%d\n",
-			chip->epp_mode ? "epp" : "bpp",
-			vout, vout_set, vrect, iout, iout_limit);
+		if (!chip->heartbeat_count) {
+			p938x_dbg(chip, PR_IMPORTANT,
+				"mode=%s vout=%d vout_set=%d vrect=%d iout=%d ocl=%d\n",
+				chip->epp_mode ? "epp" : "bpp",
+				vout, vout_set, vrect, iout, iout_limit);
+		}
 
+		chip->heartbeat_count++;
+		if (HEARTBEAT_INTERVAL_MS * chip->heartbeat_count >=
+				HEARTBEAT_REPORT_INTERVAL)
+			chip->heartbeat_count = 0;
+
+schedule_hb:
 		schedule_delayed_work(&chip->heartbeat_work,
 			msecs_to_jiffies(HEARTBEAT_INTERVAL_MS));
 	}
@@ -1567,7 +1607,8 @@ static int p938x_check_status(struct p938x_charger *chip)
 		sysfs_notify(&chip->dev->kobj, NULL, "rx_connected");
 	}
 
-	if (irq_status & status & ST_VRECT_ON) {
+	if ((irq_status & status & ST_VRECT_ON) ||
+		(!test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags) && (status & ST_VRECT_ON))) {
 		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 			p938x_dbg(chip, PR_IMPORTANT, "Connected to tx pad. Disabling tx mode\n");
 			p938x_set_tx_mode(chip, 0);
@@ -1577,13 +1618,21 @@ static int p938x_check_status(struct p938x_charger *chip)
 			p938x_write_reg(chip, EPP_QFACTOR_REG, chip->q_factor);
 
 		set_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
+		/* Call p938x_pm_set_awake before update supplies status.  Update supplies
+		 * status will turn it back off if we have a cable attached
+		 */
+		p938x_pm_set_awake(chip, 1);
 		/* Update usb status incase we powered on with it connected */
 		p938x_update_supplies_status(chip);
-		p938x_pm_set_awake(chip, 1);
 
 		cancel_delayed_work(&chip->heartbeat_work);
+		/* The power_supply_changed call is in the heartbeat.  This delay is how long
+		 * we wait for a disconnect before changing the state to charging.  Without this
+		 * we might report we are charging even if the connection is not stable enough
+		 * to charge
+		 */
 		schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(2000));
+				msecs_to_jiffies(1500));
 		p938x_dbg(chip, PR_IMPORTANT, "Wireless charger is inserted\n");
 	}
 
@@ -1683,16 +1732,10 @@ static irqreturn_t p938x_irq_handler(int irq, void *dev_id)
 static irqreturn_t p938x_det_irq_handler(int irq, void *dev_id)
 {
 	struct p938x_charger *chip = dev_id;
-	int tx_detected;
-
-	mutex_lock(&chip->disconnect_lock);
-
-	tx_detected = gpio_get_value(chip->wchg_det.gpio);
+	int tx_detected = gpio_get_value(chip->wchg_det.gpio);
 
 	if (!tx_detected)
 		p938x_handle_wls_removal(chip);
-
-	mutex_unlock(&chip->disconnect_lock);
 
 	return IRQ_HANDLED;
 }
@@ -2717,6 +2760,7 @@ static int p938x_charger_probe(struct i2c_client *client,
 	chip->debug_mask = &__debug_mask;
 	INIT_DELAYED_WORK(&chip->heartbeat_work, p938x_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->tx_mode_work, p938x_tx_mode_work);
+	INIT_DELAYED_WORK(&chip->removal_work, p938x_removal_work);
 	device_init_wakeup(chip->dev, true);
 
 	chip->regmap = regmap_init_i2c(client, &p938x_regmap_config);
