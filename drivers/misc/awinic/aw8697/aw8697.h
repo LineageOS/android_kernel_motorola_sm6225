@@ -309,6 +309,7 @@ struct aw8697 {
 	struct hrtimer timer;
 	struct work_struct vibrator_work;
 	struct work_struct rtp_work;
+	struct work_struct rtp_update_work;
 	struct delayed_work ram_work;
 #ifdef TIMED_OUTPUT
 	struct timed_output_dev to_dev;
@@ -359,6 +360,7 @@ struct aw8697 {
 	unsigned char rtp_init;
 	unsigned char ram_init;
 	unsigned char rtp_routine_on;
+	atomic_t rtp_update_routine_on;
 
 	unsigned int f0;
 	unsigned int cont_f0;

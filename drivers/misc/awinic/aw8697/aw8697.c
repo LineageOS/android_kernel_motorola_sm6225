@@ -1654,6 +1654,48 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 	mutex_unlock(&aw8697->lock);
 }
 
+static void aw8697_rtp_update_work_routine(struct work_struct *work)
+{
+	unsigned int buf_len;
+	struct aw8697 *aw8697 = container_of(work, struct aw8697, rtp_update_work);
+
+	atomic_set(&aw8697->rtp_update_routine_on, true);
+
+	while ((!aw8697_haptic_rtp_get_fifo_afi(aw8697)) &&
+	       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE)) {
+		mutex_lock(&aw8697->rtp_lock);
+		pr_info("%s: aw8697 rtp mode fifo update, cnt=%d\n", __func__, aw8697->rtp_cnt);
+		if (!aw8697_rtp) {
+			pr_warn("%s:aw8697_rtp is null break\n", __func__);
+			mutex_unlock(&aw8697->rtp_lock);
+			break;
+		}
+		if ((aw8697_rtp->len - aw8697->rtp_cnt) <
+		    (aw8697->ram.base_addr >> 2)) {
+			buf_len = aw8697_rtp->len - aw8697->rtp_cnt;
+		} else {
+			buf_len = (aw8697->ram.base_addr >> 2);
+		}
+		aw8697->rtpupdate_flag = aw8697_i2c_writes(aw8697,
+		                                           AW8697_REG_RTP_DATA,
+		                                           &aw8697_rtp->data[aw8697->rtp_cnt],
+		                                           buf_len);
+		aw8697->rtp_cnt += buf_len;
+		if (aw8697->rtp_cnt >= aw8697_rtp->len) {
+			aw8697_op_clean_status(aw8697);
+			pr_info("%s: rtp update complete\n", __func__);
+			aw8697_haptic_set_rtp_aei(aw8697, false);
+			aw8697->rtp_cnt = 0;
+			aw8697->rtp_init = 0;
+			mutex_unlock(&aw8697->rtp_lock);
+			break;
+		}
+		mutex_unlock(&aw8697->rtp_lock);
+	}
+
+	atomic_set(&aw8697->rtp_update_routine_on, false);
+}
+
 
 /*****************************************************
  *
@@ -4089,12 +4131,15 @@ static int aw8697_vibrator_init(struct aw8697 *aw8697)
 #endif
 	hrtimer_init(&aw8697->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	aw8697->timer.function = aw8697_vibrator_timer_func;
-	INIT_WORK(&aw8697->vibrator_work, aw8697_vibrator_work_routine);
 
+	INIT_WORK(&aw8697->vibrator_work, aw8697_vibrator_work_routine);
 	INIT_WORK(&aw8697->rtp_work, aw8697_rtp_work_routine);
+	INIT_WORK(&aw8697->rtp_update_work, aw8697_rtp_update_work_routine);
 
 	mutex_init(&aw8697->lock);
 	mutex_init(&aw8697->rtp_lock);
+
+	atomic_set(&aw8697->rtp_update_routine_on, false);
 
 	return 0;
 }
@@ -4150,7 +4195,6 @@ static irqreturn_t aw8697_irq(int irq, void *data)
 	struct aw8697 *aw8697 = data;
 	unsigned char reg_val = 0;
 	unsigned char dbg_val = 0;
-	unsigned int buf_len = 0;
 
 	pr_debug("%s enter\n", __func__);
 
@@ -4183,43 +4227,10 @@ static irqreturn_t aw8697_irq(int irq, void *data)
 	if (reg_val & AW8697_BIT_SYSINT_FF_AEI) {
 		pr_info("%s: aw8697 rtp fifo almost empty int\n", __func__);
 		if (aw8697->rtp_init) {
-			while ((!aw8697_haptic_rtp_get_fifo_afi(aw8697)) &&
-			       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE)) {
-				mutex_lock(&aw8697->rtp_lock);
-				pr_info
-				("%s: aw8697 rtp mode fifo update, cnt=%d\n",
-				 __func__, aw8697->rtp_cnt);
-				if (!aw8697_rtp) {
-					pr_info("%s:aw8697_rtp is null break\n",
-						__func__);
-					mutex_unlock(&aw8697->rtp_lock);
-					break;
-				}
-				if ((aw8697_rtp->len - aw8697->rtp_cnt) <
-				    (aw8697->ram.base_addr >> 2)) {
-					buf_len =
-					    aw8697_rtp->len - aw8697->rtp_cnt;
-				} else {
-					buf_len = (aw8697->ram.base_addr >> 2);
-				}
-				aw8697->rtpupdate_flag = aw8697_i2c_writes(
-					aw8697, AW8697_REG_RTP_DATA,
-					&aw8697_rtp->data[aw8697->rtp_cnt],
-					buf_len);
-				aw8697->rtp_cnt += buf_len;
-				if (aw8697->rtp_cnt == aw8697_rtp->len) {
-					aw8697_op_clean_status(aw8697);
-					pr_info("%s: rtp update complete\n",
-					       __func__);
-					aw8697_haptic_set_rtp_aei(aw8697,
-								  false);
-					aw8697->rtp_cnt = 0;
-					aw8697->rtp_init = 0;
-					mutex_unlock(&aw8697->rtp_lock);
-					break;
-				}
-				mutex_unlock(&aw8697->rtp_lock);
-			}
+			if (!atomic_read(&aw8697->rtp_update_routine_on))
+				schedule_work(&aw8697->rtp_update_work);
+			else
+				pr_info("%s: aw8697 rtp fifo update in progress\n", __func__);
 		} else {
 			pr_info("%s: aw8697 rtp init = %d, init error\n",
 			       __func__, aw8697->rtp_init);
