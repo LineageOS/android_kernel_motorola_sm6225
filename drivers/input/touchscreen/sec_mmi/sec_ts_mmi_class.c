@@ -601,7 +601,7 @@ static int sec_mmi_firmware_update(struct device *dev, char *fwname) {
 	__pm_stay_awake(&ts->wakelock);
 
 	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size,
-					0, true, 0);
+				0, false, 0); /* do not run calibration!!! */
 	if (ts->fw_invalid == false)
 		sec_mmi_enable_touch(ts);
 
