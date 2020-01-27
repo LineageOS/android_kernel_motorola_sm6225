@@ -344,7 +344,7 @@ static inline int p938x_is_chip_on(struct p938x_charger *chip)
 
 static inline int p938x_is_tx_connected(struct p938x_charger *chip)
 {
-	return (p938x_is_chip_on(chip) && (chip->stat & ST_VRECT_ON));
+	return (p938x_is_chip_on(chip) && (chip->stat & ST_VOUT_ON));
 }
 
 static inline int p938x_is_ldo_on(struct p938x_charger *chip)
