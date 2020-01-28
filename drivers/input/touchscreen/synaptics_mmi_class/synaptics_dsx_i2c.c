@@ -18,8 +18,6 @@
  */
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
-#define DEBUG 511
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
