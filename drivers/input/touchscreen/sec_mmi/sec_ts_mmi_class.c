@@ -672,6 +672,9 @@ static int sec_mmi_wait_for_ready(struct device *dev) {
 		return -ENODEV;
 	}
 
+	if (!ts->plat_data->regulator_boot_on)
+		sec_ts_delay(70);
+
 	return sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 }
 
