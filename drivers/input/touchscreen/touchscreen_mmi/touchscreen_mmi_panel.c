@@ -34,6 +34,13 @@ static const struct attribute_group sysfs_panel_group = {
         .attrs = sysfs_panel_attrs,
 };
 
+#define PRIM_PANEL_NAME	"mmi,panel_name"
+#define PRIM_PANEL_VER	"mmi,panel_ver"
+#define PRIM_PANEL_ID	"mmi,panel_id"
+#define SEC_PANEL_NAME	PRIM_PANEL_NAME"_s"
+#define SEC_PANEL_VER	PRIM_PANEL_VER"_s"
+#define SEC_PANEL_ID	PRIM_PANEL_ID"_s"
+
 int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 	struct device_node *of_node)
 {
@@ -85,20 +92,33 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 	if (chosen) {
 		struct device_node *child;
 		struct device_node *np;
+		const char *panel_name_prop;
+		const char *panel_ver_prop;
+		const char *panel_id_prop;
 		const char *supplier;
 		char *s, *d;
 		int rc;
 		u64 panel_ver, panel_id;
 
-		rc = of_property_read_string(chosen, "mmi,panel_name",
+		if (!ppdata->ctrl_dsi) {
+			panel_name_prop = PRIM_PANEL_NAME;
+			panel_ver_prop = PRIM_PANEL_VER;
+			panel_id_prop = PRIM_PANEL_ID;
+		} else {
+			panel_name_prop = SEC_PANEL_NAME;
+			panel_ver_prop = SEC_PANEL_VER;
+			panel_id_prop = SEC_PANEL_ID;
+		}
+
+		rc = of_property_read_string(chosen, panel_name_prop,
 					(const char **)&supplier);
 		if (rc) {
-			dev_err(DEV_TS, "%s: cannot read mmi,panel_name %d\n",
-					__func__, rc);
+			dev_err(DEV_TS, "%s: cannot read %s %d\n",
+					__func__, panel_name_prop, rc);
 			goto done;
 		}
-		dev_info(DEV_TS, "%s: mmi,panel_name %s\n", __func__, supplier);
-
+		dev_info(DEV_TS, "%s: %s %s\n",
+					__func__, panel_name_prop, supplier);
 		s = (char *)supplier;
 		/* skip dsi_ part */
 		if (!strncmp(supplier, "dsi_", 4))
@@ -106,14 +126,16 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		d = touch_cdev->panel_supplier;
 		while (*s != '_') *d++ = *s++;
 
-		rc = of_property_read_u64(chosen, "mmi,panel_id", &panel_id);
+		rc = of_property_read_u64(chosen, panel_id_prop, &panel_id);
 		if (rc) {
-			dev_err(DEV_TS, "%s: cannot read mmi,panel_id %d\n", __func__, rc);
+			dev_err(DEV_TS, "%s: cannot read %s %d\n",
+					__func__, panel_id_prop, rc);
 			goto done;
 		}
-		rc = of_property_read_u64(chosen, "mmi,panel_ver", &panel_ver);
+		rc = of_property_read_u64(chosen, panel_ver_prop, &panel_ver);
 		if (rc) {
-			dev_err(DEV_TS, "%s: cannot read mmi,panel_ver %d\n", __func__, rc);
+			dev_err(DEV_TS, "%s: cannot read %s %d\n",
+					__func__, panel_ver_prop, rc);
 			goto done;
 		}
 		of_node_put(chosen);
@@ -122,7 +144,7 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 
 		np = of_find_node_by_name(of_node, "mmi,panel-mappings");
 		if (!np) {
-			dev_err(DEV_TS, "%s: cannot read mmi,panel-mappings\n", __func__);
+			dev_info(DEV_TS, "%s: no panel mappings\n", __func__);
 			goto done;
 		}
 
