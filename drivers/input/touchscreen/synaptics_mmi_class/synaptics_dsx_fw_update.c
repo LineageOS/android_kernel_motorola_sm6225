@@ -3631,7 +3631,7 @@ exit:
 }
 #endif
 
-static int synaptics_fw_updater(
+static int synaptics_fw_updater_local(
 			struct synaptics_rmi4_fwu_handle *fwu,
 			const unsigned char *fw_data)
 {
@@ -3654,7 +3654,6 @@ static int synaptics_fw_updater(
 
 	return retval;
 }
-//EXPORT_SYMBOL(synaptics_fw_updater);
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS_MMI
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
@@ -3777,10 +3776,10 @@ static int synaptics_dsx_firmware_update(struct device *dev,
 		}
 	}
 
-	strlcpy(fwu->image_name, fwname, strlen(fwname));
+	strlcpy(fwu->image_name, fwname, MAX_IMAGE_NAME_LEN);
 	dev_dbg(dev, "%s: FW filename: %s\n", __func__, fwu->image_name);
 
-	retval = synaptics_fw_updater(fwu, fwu->ext_data_source);
+	retval = synaptics_fw_updater_local(fwu, NULL);
 	if (retval < 0) {
 		dev_err(dev, "%s: Failed to do reflash\n", __func__);
 		goto exit;
