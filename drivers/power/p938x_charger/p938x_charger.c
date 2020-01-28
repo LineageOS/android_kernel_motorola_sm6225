@@ -316,6 +316,7 @@ struct p938x_charger {
 
 	struct thermal_cooling_device *tcd;
 	struct mutex disconnect_lock;
+	struct mutex txmode_lock;
 };
 
 #define WLS_FLAG_BOOST_ENABLED 0
@@ -398,7 +399,7 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 
 	if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
 		/* Make sure we aren't actually connect */
-		if (p938x_get_rx_vrect(chip) > 0)
+		if (p938x_get_rx_vrect(chip) > 0 || gpio_get_value(chip->wchg_det.gpio))
 			goto unlock;
 
 		clear_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
@@ -422,7 +423,7 @@ unlock:
 static void p938x_removal_work(struct work_struct *work)
 {
 	struct p938x_charger *chip = container_of(work,
-				struct p938x_charger, tx_mode_work.work);
+				struct p938x_charger, removal_work.work);
 
 	p938x_handle_wls_removal(chip);
 }
@@ -924,25 +925,74 @@ static void p938x_configure_tx_mode(struct p938x_charger *chip)
 	p938x_write_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
 }
 
+static int p938x_disable_tx_mode(struct p938x_charger *chip)
+{
+	int rc;
+	u16 buf = 0;
+
+	if (!test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
+		p938x_dbg(chip, PR_MOTO, "Tx mode already disabled\n");
+		return 1;
+	}
+
+	/* Make sure it won't accidently get re-enabled, there is a small
+	 * window where there is a chance if we don't cancel this
+	 */
+	cancel_delayed_work_sync(&chip->tx_mode_work);
+
+	rc = p938x_write_reg(chip, SYS_TM_MODE_REG, ST_TM_MODE_DIS);
+	if (rc < 0)
+		p938x_err(chip, "Failed to write 0x%04x(%d), rc=%d\n",
+			SYS_TM_MODE_REG, ST_TM_MODE_EN, rc);
+
+	rc = p938x_read_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
+	if (rc < 0) {
+		p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
+			SYS_CMD_REG, rc);
+		buf = 0;
+	}
+
+	buf = buf & ~ CMD_TX_RM_POWER_TOGGLE;
+	p938x_write_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
+	if (rc < 0)
+		p938x_err(chip, "Failed to write 0x%04x, rc=%d\n",
+			SYS_CMD_REG, rc);
+
+	p938x_set_boost(chip, 0);
+	p938x_set_dc_en_override(chip, 0);
+	p938x_set_dc_suspend(chip, 0);
+
+	clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
+	sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
+
+	return 0;
+}
+
 static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 {
-	u16 buf = 0;
 	int rc;
+
+	if (chip->program_fw_stat == PROGRAM_FW_PENDING) {
+		p938x_err(chip, "Tx mode request rejected, fw programming.\n");
+		return;
+	}
+
+	mutex_lock(&chip->txmode_lock);
 
 	if (test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
 		p938x_err(chip, "Tx mode request rejected, charger is attached.\n");
-		return;
+		goto unlock;
 	}
 
 	if (val) {
 		if (test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
 			p938x_dbg(chip, PR_MOTO, "Tx mode already enabled\n");
-			return;
+			goto unlock;
 		}
 
 		if (test_bit(WLS_FLAG_OVERHEAT, &chip->flags)) {
 			p938x_dbg(chip, PR_IMPORTANT, "Device too hot to enable tx mode\n");
-			return;
+			goto unlock;
 		}
 
 		/* Force dc in off so system doesn't see charger attached */
@@ -975,42 +1025,12 @@ static inline void p938x_set_tx_mode(struct p938x_charger *chip, int val)
 				msecs_to_jiffies(TXMODEWORK_INTERVAL_MS));
 		}
 	} else {
-		if (!test_bit(WLS_FLAG_TX_MODE_EN, &chip->flags)) {
-			p938x_dbg(chip, PR_MOTO, "Tx mode already disabled\n");
-			return;
-		}
-
-		/* Make sure it won't accidently get re-enabled, there is a small
-		 * window where there is a chance if we don't cancel this
-		 */
-		cancel_delayed_work_sync(&chip->tx_mode_work);
-
-		rc = p938x_write_reg(chip, SYS_TM_MODE_REG, ST_TM_MODE_DIS);
-		if (rc < 0)
-			p938x_err(chip, "Failed to write 0x%04x(%d), rc=%d\n",
-				SYS_TM_MODE_REG, ST_TM_MODE_EN, rc);
-
-		rc = p938x_read_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
-		if (rc < 0) {
-			p938x_err(chip, "Failed to read 0x%04x, rc=%d\n",
-				SYS_CMD_REG, rc);
-			buf = 0;
-		}
-
-		buf = buf & ~ CMD_TX_RM_POWER_TOGGLE;
-		p938x_write_buffer(chip, SYS_CMD_REG, (u8 *)&buf, 2);
-		if (rc < 0)
-			p938x_err(chip, "Failed to write 0x%04x, rc=%d\n",
-				SYS_CMD_REG, rc);
-
-		p938x_set_boost(chip, 0);
-		p938x_set_dc_en_override(chip, 0);
-		p938x_set_dc_suspend(chip, 0);
-
-		clear_bit(WLS_FLAG_TX_MODE_EN, &chip->flags);
-		sysfs_notify(&chip->dev->kobj, NULL, "tx_mode");
-		p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
+		if (!p938x_disable_tx_mode(chip))
+			p938x_dbg(chip, PR_MOTO, "tx mode disabled\n");
 	}
+
+unlock:
+	mutex_unlock(&chip->txmode_lock);
 }
 
 static int p938x_tcd_get_max_state(struct thermal_cooling_device *tcd,
@@ -1295,6 +1315,13 @@ static int p938x_program_fw(struct p938x_charger *chip)
 		return rc;
 	}
 
+	mutex_lock(&chip->disconnect_lock);
+	mutex_lock(&chip->txmode_lock);
+
+	/* Make sure tx mode is off or we'll fail */
+	p938x_disable_tx_mode(chip);
+	msleep(100);
+
 	/* Turn on the boost so i2c works */
 	p938x_set_boost(chip, 1);
 
@@ -1324,6 +1351,8 @@ static int p938x_program_fw(struct p938x_charger *chip)
 	p938x_dbg(chip, PR_IMPORTANT, "Programming FW success\n");
 
 release_fw:
+	mutex_unlock(&chip->txmode_lock);
+	mutex_unlock(&chip->disconnect_lock);
 	release_firmware(fw);
 	p938x_set_boost(chip, 0);
 	return rc;
@@ -2799,6 +2828,11 @@ static int p938x_charger_probe(struct i2c_client *client,
 	}
 
 	mutex_init(&chip->disconnect_lock);
+	mutex_init(&chip->txmode_lock);
+
+	/* In case we are already powered on */
+	p938x_check_status(chip);
+	p938x_check_system_mode(chip);
 
 	/* This IRQ handler is the primary one, and detects when a wireless charger
 	 * is attached
@@ -2839,6 +2873,8 @@ static int p938x_charger_probe(struct i2c_client *client,
 		p938x_err(chip, "Failed to create sysfs attributes\n");
 
 	pr_info("p938x wireless receiver initialized successfully\n");
+
+	power_supply_changed(chip->wls_psy);
 
 	return 0;
 
