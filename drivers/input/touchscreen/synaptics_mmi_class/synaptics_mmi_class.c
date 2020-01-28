@@ -51,7 +51,7 @@ static int synaptics_mmi_get_build_id(struct device *dev, void *cdata) {
 	rmi = &(ts->rmi4_mod_info);
 	batohui(&firmware_id, rmi->build_id, sizeof(rmi->build_id));
 
-	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%x\n", firmware_id);
+	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%x", firmware_id);
 }
 
 static int synaptics_mmi_get_config_id(struct device *dev, void *cdata) {
@@ -63,7 +63,7 @@ static int synaptics_mmi_get_config_id(struct device *dev, void *cdata) {
 	rmi = &(ts->rmi4_mod_info);
 	batohui(&config_id, rmi->config_id, sizeof(rmi->config_id));
 
-	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%08x\n", config_id);
+	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%08x", config_id);
 }
 
 static int synaptics_mmi_get_bus_type(struct device *dev, void *idata) {
