@@ -1343,6 +1343,43 @@ static unsigned char aw8697_haptic_rtp_get_fifo_afs(struct aw8697 *aw8697)
 }
 */
 
+static bool aw8697_check_error(struct aw8697 *aw8697)
+{
+	unsigned char reg_val;
+	bool ret = false;
+
+	aw8697_i2c_read(aw8697, AW8697_REG_SYSST, &reg_val);
+	if (ret < 0)
+		return true;
+
+	if (reg_val & AW8697_BIT_SYSST_UVLS) {
+		pr_err("%s: ERROR: Under-Voltage Lock-Out!!\n", __func__);
+		ret = true;
+	}
+
+	if (reg_val & AW8697_BIT_SYSST_OVS) {
+		pr_err("%s: ERROR: Wave data overflow or DPWM DC error!!\n", __func__);
+		ret = true;
+	}
+
+	if (reg_val & AW8697_BIT_SYSST_BSTERRS) {
+		pr_err("%s: ERROR: Boost SCP/OVP error!!\n", __func__);
+		ret = true;
+	}
+
+	if (reg_val & AW8697_BIT_SYSST_OCDS) {
+		pr_err("%s: ERROR: Over-current!!\n", __func__);
+		ret = true;
+	}
+
+	if (reg_val & AW8697_BIT_SYSST_OTS) {
+		pr_err("%s: ERROR: Over-temperature!!\n", __func__);
+		ret = true;
+	}
+
+	return ret;
+}
+
 /*****************************************************
  *
  * rtp
@@ -1357,7 +1394,8 @@ static int aw8697_haptic_rtp_init(struct aw8697 *aw8697)
 	aw8697->rtp_cnt = 0;
 	mutex_lock(&aw8697->rtp_lock);
 	while ((!aw8697_haptic_rtp_get_fifo_afi(aw8697)) &&
-	       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE)) {
+	       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE) &&
+	       (!aw8697_check_error(aw8697))) {
 		pr_info("%s rtp cnt = %d\n", __func__, aw8697->rtp_cnt);
 		if (!aw8697_rtp) {
 			pr_info("%s:aw8697_rtp is null break\n", __func__);
@@ -1662,7 +1700,8 @@ static void aw8697_rtp_update_work_routine(struct work_struct *work)
 	atomic_set(&aw8697->rtp_update_routine_on, true);
 
 	while ((!aw8697_haptic_rtp_get_fifo_afi(aw8697)) &&
-	       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE)) {
+	       (aw8697->play_mode == AW8697_HAPTIC_RTP_MODE) &&
+	       (!aw8697_check_error(aw8697))) {
 		mutex_lock(&aw8697->rtp_lock);
 		pr_info("%s: aw8697 rtp mode fifo update, cnt=%d\n", __func__, aw8697->rtp_cnt);
 		if (!aw8697_rtp) {
