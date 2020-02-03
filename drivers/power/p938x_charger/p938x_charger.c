@@ -345,12 +345,13 @@ static inline int p938x_is_chip_on(struct p938x_charger *chip)
 
 static inline int p938x_is_tx_connected(struct p938x_charger *chip)
 {
-	return (p938x_is_chip_on(chip) && (chip->stat & ST_VOUT_ON));
+	return test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
 }
 
 static inline int p938x_is_ldo_on(struct p938x_charger *chip)
 {
-	return (p938x_is_chip_on(chip) && (chip->stat & ST_VOUT_ON));
+	return (p938x_is_chip_on(chip) && (chip->stat & ST_VOUT_ON)
+		&& gpio_get_value(chip->wchg_det.gpio));
 }
 
 static int p938x_read_reg(struct p938x_charger *chip, u16 reg, u8 *val)
@@ -388,6 +389,7 @@ static void p938x_pm_set_awake(struct p938x_charger *chip, int awake)
 }
 
 static int p938x_get_rx_vrect(struct p938x_charger *chip);
+static int p938x_set_dc_en_override(struct p938x_charger *chip, int en);
 
 static void p938x_handle_wls_removal(struct p938x_charger *chip)
 {
@@ -399,7 +401,7 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 
 	if(test_bit(WLS_FLAG_TX_ATTACHED, &chip->flags)) {
 		/* Make sure we aren't actually connect */
-		if (p938x_get_rx_vrect(chip) > 0 || gpio_get_value(chip->wchg_det.gpio))
+		if (gpio_get_value(chip->wchg_det.gpio))
 			goto unlock;
 
 		clear_bit(WLS_FLAG_TX_ATTACHED, &chip->flags);
@@ -409,6 +411,8 @@ static void p938x_handle_wls_removal(struct p938x_charger *chip)
 		chip->stat = 0;
 		chip->irq_stat = 0;
 		chip->heartbeat_count = 0;
+
+		p938x_set_dc_en_override(chip, 0);
 
 		if (!test_bit(WLS_FLAG_BOOST_ENABLED, &chip->flags))
 			p938x_pm_set_awake(chip, 0);
@@ -692,7 +696,7 @@ static void p938x_heartbeat_work(struct work_struct *work)
 		/* Check if we disconnected */
 		vrect = p938x_get_rx_vrect(chip);
 		if (vrect <= 0) {
-			p938x_err(chip, "Detected wireless charger is not connected.\n");
+			p938x_err(chip, "Detected wireless charger is not attached.\n");
 			p938x_handle_wls_removal(chip);
 			return;
 		}
@@ -1763,8 +1767,14 @@ static irqreturn_t p938x_det_irq_handler(int irq, void *dev_id)
 	struct p938x_charger *chip = dev_id;
 	int tx_detected = gpio_get_value(chip->wchg_det.gpio);
 
-	if (!tx_detected)
+	if (tx_detected) {
+		p938x_dbg(chip, PR_IMPORTANT, "Detected an attach event.\n");
+		/* Force dcin-en on */
+		p938x_set_dc_en_override(chip, 2);
+	} else {
+		p938x_dbg(chip, PR_IMPORTANT, "Detected a detach event.\n");
 		p938x_handle_wls_removal(chip);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -2631,10 +2641,10 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = p938x_is_tx_connected(chip);
+		val->intval = p938x_is_ldo_on(chip);
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = p938x_is_tx_connected(chip);
+		val->intval = p938x_is_ldo_on(chip);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = p938x_get_rx_iout(chip) * 1000;
@@ -2856,7 +2866,7 @@ static int p938x_charger_probe(struct i2c_client *client,
 	 */
 	rc = devm_request_threaded_irq(&client->dev, chip->wchg_det_irq, NULL,
 			p938x_det_irq_handler,
-			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 			"p938x_det_irq", chip);
 	if (rc) {
 		p938x_err(chip, "Failed irq=%d request rc = %d\n",
