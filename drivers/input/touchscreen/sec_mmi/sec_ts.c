@@ -795,8 +795,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 						input_report_abs(ts->input_dev, ABS_MT_POSITION_X, ts->coord[t_id].x);
 						input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, ts->coord[t_id].y);
-						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, ts->coord[t_id].major);
-						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR, ts->coord[t_id].minor);
+						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
+							(ts->coord[t_id].major * ts->plat_data->size_to_pixel_multiple_factor) >> 7);
+						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR,
+							(ts->coord[t_id].minor * ts->plat_data->size_to_pixel_multiple_factor) >> 7);
 						if (ts->brush_mode)
 							input_report_abs(ts->input_dev, ABS_MT_CUSTOM, (ts->coord[t_id].z << 1) | ts->coord[t_id].palm);
 						else
@@ -841,8 +843,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 						input_report_abs(ts->input_dev, ABS_MT_POSITION_X, ts->coord[t_id].x);
 						input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, ts->coord[t_id].y);
-						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, ts->coord[t_id].major);
-						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR, ts->coord[t_id].minor);
+						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
+							(ts->coord[t_id].major * ts->plat_data->size_to_pixel_multiple_factor) >> 7);
+						input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR,
+							(ts->coord[t_id].minor * ts->plat_data->size_to_pixel_multiple_factor) >> 7);
 						if (ts->brush_mode)
 							input_report_abs(ts->input_dev, ABS_MT_CUSTOM, (ts->coord[t_id].z << 1) | ts->coord[t_id].palm);
 						else
@@ -1284,6 +1288,12 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 		pdata->max_major = finger_size[0] - 1;
 		pdata->max_minor = finger_size[1] - 1;
 	}
+
+	if (of_property_read_u32(np, "sec,size_to_pixel_multiple_factor", &pdata->size_to_pixel_multiple_factor))
+		/* multiple_factor not set in device_tree. Set as default value.
+		 * report major and minor value = raw value * size_to_pixel_multiple_factor / 128
+		 */
+		pdata->size_to_pixel_multiple_factor = 128;
 
 	pdata->tsp_id = of_get_named_gpio(np, "sec,tsp-id_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_id))

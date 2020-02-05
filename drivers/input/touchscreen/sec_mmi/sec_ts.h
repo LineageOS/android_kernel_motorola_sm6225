@@ -739,6 +739,7 @@ struct sec_ts_plat_data {
 	int max_y;
 	int max_major;
 	int max_minor;
+	int size_to_pixel_multiple_factor;
 	unsigned rst_gpio;
 	unsigned irq_gpio;
 	int irq_type;
