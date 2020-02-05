@@ -50,11 +50,19 @@
 #include <linux/workqueue.h>
 
 #ifdef ATL_4000MAH_8A_BATTERY_PROFILE
-#include "lenovo_atl_df1_gmfs.h"
+#include "battery_profile/imported/lenovo_atl_df1_gmfs.h"
 #endif
 
 #ifdef SCUD_4000MAH_8A_BATTERY_PROFILE
-#include "bq27426_gmfs_coslight.h"
+#include "battery_profile/imported/lenovo_scud_df1_gmfs.h"
+#endif
+
+#ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
+#include "battery_profile/imported/smith_battery_main_0426_2_02-bq27426G1-2767.gm.fs.h"
+#endif
+
+#ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
+#include "battery_profile/imported/smith_battery_flip_0426_2_02-bq27426G1-2766.gm.fs.h"
 #endif
 
 #undef pr_debug
@@ -188,7 +196,15 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef SCUD_4000MAH_8A_BATTERY_PROFILE
-	{"KG50_SCUD_4000MAH",bqfs_coslight, ARRAY_SIZE(bqfs_coslight), 5, 0},
+	{"KG50_SCUD_4000MAH",scud_bqfs_image, ARRAY_SIZE(scud_bqfs_image), 9824, 1},
+#endif
+
+#ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
+	{"LS30_ATL_1255MAH",smith_main_bqfs_image, ARRAY_SIZE(smith_main_bqfs_image), 2767, 1},
+#endif
+
+#ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
+	{"LS40_ATL_1545MAH",smith_flip_bqfs_image, ARRAY_SIZE(smith_flip_bqfs_image), 2766, 1},
 #endif
 
 };
