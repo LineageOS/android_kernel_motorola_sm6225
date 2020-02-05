@@ -337,6 +337,13 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 			goto PS_NOTIF_REGISTER_FAILED;
 	}
 
+	/*
+	Because the touch pm_mode default is TS_MMI_PM_DEEPSLEEP, when the first suspend occurs,
+	the interrupt will not be turned off, which results in I2C error.
+	Need to set the initial pm_mode of the touch to PM_ACTIVE.
+	*/
+	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
+
 	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb;
 	ret = register_panel_notifier(&touch_cdev->panel_nb);
 	if (ret)
