@@ -1,0 +1,390 @@
+/*****************************************************************************
+* Copyright 2010 Texas Instruments Corporation, All Rights Reserved.
+* TI makes NO WARRANTY as to software products, which are supplied "AS-IS"
+*****************************************************************************/
+
+/*****************************************************************************
+*     This code is automatically generated from bqfs/dffs file.              *
+*          DO NOT MODIFY THIS FILE DIRECTLY                                  *
+*****************************************************************************/
+
+//this file is generated from smith_battery_flip_0426_2_02-bq27426G1-2766.gm.fs at Wed Feb  5 16:23:52 2020
+
+#ifndef __FLIP_BQFS_FILE__
+#define __FLIP_BQFS_FILE__
+
+#include "bqfs_cmd_type.h"
+
+const bqfs_cmd_t smith_flip_bqfs_image[] = {
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x01, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x26, 0x04}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x02, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x02, 0x02}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x13, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 1100},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x53, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0x27, 0x66, 0x11, 0x59, 0xE2, 0xE1, 0xE4, 0xE3, 0xE0, 0xE1, 0xDF, 0xE1, 0xE1, 0xE2, 0xE2, 0xE4, 0xE4, 0xE6, 0xE7, 0xE6, 0xE7, 0xE2, 0xE3, 0xEF, 0xEF, 0xF3, 0xF4, 0xF6, 0xF6, 0xFA, 0xF8, 0xFD}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x91}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x53, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x91}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x53, 0x01}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0xF9, 0xF6, 0xF5, 0xF3, 0xF0, 0xEE, 0xF3, 0xFE, 0xFC, 0xE0, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xFD}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x53, 0x01}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xFD}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x54, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0xFF, 0x4D, 0x03, 0xEA, 0x00, 0xFD, 0x00, 0x05, 0x00, 0x05, 0xFF, 0x01, 0x03, 0x01, 0x05, 0x0A, 0x0E, 0x13, 0x02, 0xFA, 0x07, 0x00, 0x09, 0x0C, 0x03, 0xF7, 0x00, 0x01, 0xF3, 0xEF, 0x9D, 0xBB}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x3E}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x54, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x3E}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x54, 0x01}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0xBB, 0xF2, 0x27, 0x10, 0xD3, 0x59, 0x00, 0xE2, 0x8D, 0x81, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xFF}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x54, 0x01}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xFF}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x55, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0xFF, 0x71, 0x02, 0x01, 0x01, 0xFF, 0xFD, 0x08, 0x01, 0x00, 0x01, 0x01, 0xFF, 0x01, 0x0F, 0x61, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x02}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x55, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x02}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x6C, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0xFE, 0xCE, 0x02, 0x03, 0x04, 0x00, 0x12, 0xF0, 0x07, 0xEC, 0x00, 0x00, 0x00, 0xFA, 0xE7, 0xB6, 0xF7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xA7}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x6C, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0xA7}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x59, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0x00, 0x22, 0x00, 0x22, 0x00, 0x25, 0x00, 0x2D, 0x00, 0x38, 0x00, 0x23, 0x00, 0x2B, 0x00, 0x23, 0x00, 0x23, 0x00, 0x23, 0x00, 0x26, 0x00, 0x27, 0x00, 0x2E, 0x00, 0x42, 0x00, 0xA0, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x1D}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x59, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x1D}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x6D, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x40,
+		.data		= {.bytes = {0x06, 0x3E, 0x0E, 0xE3, 0x0E, 0xBD, 0x11, 0x59, 0x11, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		.data_len	= 32,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x5D}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 10},
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x3E,
+		.data		= {.bytes = {0x6D, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_C,
+		.addr		= 0xAA,
+		.reg		= 0x60,
+		.data		= {.bytes = {0x5D}},
+		.data_len	= 1,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x00, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_W,
+		.addr		= 0xAA,
+		.reg		= 0x00,
+		.data		= {.bytes = {0x42, 0x00}},
+		.data_len	= 2,
+	},
+	{
+		.cmd_type	= CMD_X,
+		.data		= {.delay = 2000},
+	},
+};
+//end of const bqfs_cmd_t bqfs_image[]
+#endif
