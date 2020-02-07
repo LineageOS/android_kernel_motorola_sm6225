@@ -2486,14 +2486,34 @@ out:
 	return ret;
 }
 
-#if defined(CONFIG_PM) && !defined(CONFIG_DRM)
+#if defined(CONFIG_PM)
 static int sec_ts_pm_suspend(struct device *dev)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
+	input_dbg(true, &ts->client->dev, "%s:Into PM suspend\n", __func__);
+
+#if !defined(CONFIG_DRM)
 	if (ts->lowpower_mode)
 		reinit_completion(&ts->resume_done);
+#endif
 
+	if (ts->power_status == SEC_TS_STATE_LPM) {
+		input_dbg(true, &ts->client->dev, "%s: Disable-irq\n", __func__);
+		sec_ts_irq_enable(ts, false);
+	}
+	return 0;
+}
+
+static int sec_ts_pm_suspend_noirq(struct device *dev)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	input_dbg(true, &ts->client->dev, "%s: Into PM suspend_noirq\n", __func__);
+	if (ts->power_status == SEC_TS_STATE_LPM) {
+		input_dbg(true, &ts->client->dev, "%s: Enable-irq\n", __func__);
+		sec_ts_irq_enable(ts, true);
+	}
 	return 0;
 }
 
@@ -2501,9 +2521,28 @@ static int sec_ts_pm_resume(struct device *dev)
 {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
+	input_dbg(true, &ts->client->dev, "%s: Into PM resume\n", __func__);
+	if (ts->power_status == SEC_TS_STATE_LPM) {
+		input_dbg(true, &ts->client->dev, "%s: Enable-irq\n", __func__);
+		sec_ts_irq_enable(ts, true);
+	}
+
+#if !defined(CONFIG_DRM)
 	if (ts->lowpower_mode)
 		complete_all(&ts->resume_done);
+#endif
+	return 0;
+}
 
+static int sec_ts_pm_resume_noirq(struct device *dev)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	input_dbg(true, &ts->client->dev, "%s: Into PM resume_noirq\n", __func__);
+	if (ts->power_status == SEC_TS_STATE_LPM) {
+		input_dbg(true, &ts->client->dev, "%s: Disable-irq\n", __func__);
+		sec_ts_irq_enable(ts, false);
+	}
 	return 0;
 }
 #endif
@@ -2513,10 +2552,12 @@ static const struct i2c_device_id sec_ts_id[] = {
 	{ },
 };
 
-#if defined(CONFIG_PM) && !defined(CONFIG_DRM)
+#if defined(CONFIG_PM)
 static const struct dev_pm_ops sec_ts_dev_pm_ops = {
 	.suspend = sec_ts_pm_suspend,
+	.suspend_noirq = sec_ts_pm_suspend_noirq,
 	.resume = sec_ts_pm_resume,
+	.resume_noirq = sec_ts_pm_resume_noirq,
 };
 #endif
 
@@ -2540,7 +2581,7 @@ static struct i2c_driver sec_ts_driver = {
 #ifdef CONFIG_OF
 		.of_match_table = sec_ts_match_table,
 #endif
-#if defined(CONFIG_PM) && !defined(CONFIG_DRM)
+#if defined(CONFIG_PM)
 		.pm = &sec_ts_dev_pm_ops,
 #endif
 	},
