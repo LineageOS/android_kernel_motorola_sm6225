@@ -337,7 +337,7 @@ exit:
 	return retval;
 }
 
-static int syna_ts_mmi_pre_resume(struct device *dev)
+static int syna_ts_mmi_post_resume(struct device *dev)
 {
 	int retval;
 	struct syna_tcm_hcd *tcm_hcd;
@@ -431,7 +431,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	/* PM callback */
-	.pre_resume = syna_ts_mmi_pre_resume,
+	.post_resume = syna_ts_mmi_post_resume,
 	.pre_suspend = syna_ts_mmi_pre_suspend,
 	.post_suspend = syna_ts_mmi_post_suspend,
 };
