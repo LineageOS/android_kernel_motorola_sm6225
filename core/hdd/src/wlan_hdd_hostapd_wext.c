@@ -3133,6 +3133,13 @@ static const struct iw_priv_args hostapd_private_args[] = {
 	}
 	,
 #endif /* FW_THERMAL_THROTTLE_SUPPORT */
+	/* for moto SAR feature */
+	{
+		WE_SET_MIMO_TX_POWER,
+		IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
+		0, "setTxPowerM"
+	}
+	,
 	/* handlers for main ioctl */
 	{
 		QCSAP_IOCTL_MODIFY_ACL,
