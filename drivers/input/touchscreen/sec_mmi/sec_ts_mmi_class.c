@@ -46,6 +46,10 @@ static ssize_t sec_mmi_suppression_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_suppression_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_pill_region_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_pill_region_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t sec_mmi_address_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_size_store(struct device *dev,
@@ -61,6 +65,8 @@ static DEVICE_ATTR(write, (S_IWUSR | S_IWGRP), NULL, sec_mmi_write_store);
 static DEVICE_ATTR(data, S_IRUGO, sec_mmi_data_show, NULL);
 static DEVICE_ATTR(suppression, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_suppression_show, sec_mmi_suppression_store);
+static DEVICE_ATTR(pill_region, (S_IRUGO | S_IWUSR | S_IWGRP),
+		sec_mmi_pill_region_show, sec_mmi_pill_region_store);
 
 #define MAX_ATTRS_ENTRIES 10
 #define ADD_ATTR(name) { \
@@ -87,6 +93,9 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->plat_data->suppression_ctrl)
 		ADD_ATTR(suppression);
+
+	if (ts->plat_data->pill_region_ctrl)
+		ADD_ATTR(pill_region);
 
 	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(address);
@@ -249,6 +258,82 @@ static ssize_t sec_mmi_suppression_show(struct device *dev,
 
 	return blen;
 }
+
+#define REQ_ARGS_NUM 3
+
+static ssize_t sec_mmi_pill_region_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts;
+	unsigned int args[3] = {0};
+	unsigned char buffer[5];
+	int error;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	error = sscanf(buf, "0x%x 0x%x 0x%x", &args[0], &args[1], &args[2]);
+	if (error < REQ_ARGS_NUM)
+		return -EINVAL;
+
+	buffer[0] = (unsigned char)args[0];
+	buffer[1] = (unsigned char)((args[1] >> 8) & 0xff);
+	buffer[2] = (unsigned char)(args[1] & 0xff);
+	buffer[3] = (unsigned char)((args[2] >> 8) & 0xff);
+	buffer[4] = (unsigned char)(args[2] & 0xff);
+	dev_dbg(dev, "%s: program pill region 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n", __func__,
+		(unsigned int)buffer[0], (unsigned int)buffer[1],
+		(unsigned int)buffer[2], (unsigned int)buffer[3],
+		(unsigned int)buffer[4]);
+
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_PILL_REGION, buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to write pill region (%d)\n",
+				__func__, error);
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION, buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to read pill region (%d)\n",
+				__func__, error);
+	else {
+		dev_dbg(dev, "%s: pill region 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n", __func__,
+		(unsigned int)buffer[0], (unsigned int)buffer[1],
+		(unsigned int)buffer[2], (unsigned int)buffer[3],
+		(unsigned int)buffer[4]);
+	}
+
+	return size;
+}
+
+static ssize_t sec_mmi_pill_region_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts;
+	unsigned char buffer[5] = {0};
+	ssize_t blen = 0;
+	int error;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION, buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to read pill region (%d)\n",
+				__func__, error);
+	else {
+		dev_dbg(dev, "%s: pill region 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n", __func__,
+			(unsigned int)buffer[0], (unsigned int)buffer[1],
+			(unsigned int)buffer[2], (unsigned int)buffer[3],
+			(unsigned int)buffer[4]);
+
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x 0x%x 0x%x", (unsigned int)buffer[0],
+			(unsigned int)buffer[2] | (buffer[1] << 8),
+			(unsigned int)buffer[4] | (buffer[3] << 8));
+	}
+
+	return blen;
+}
+
 
 #define MAX_DATA_SZ	1024
 static u8 reg_address;
