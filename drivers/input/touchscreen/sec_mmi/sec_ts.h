@@ -345,6 +345,7 @@
 #define SEC_TS_CMD_EDGE_AREA		0xAB
 #define SEC_TS_CMD_DEAD_ZONE		0xAC
 #define SEC_TS_CMD_LANDSCAPE_MODE	0xAD
+#define SEC_TS_CMD_PILL_REGION		0xAD
 
 enum grip_write_mode {
 	G_NONE				= 0,
@@ -776,6 +777,7 @@ struct sec_ts_plat_data {
 	bool support_sidegesture;
 	bool poweron_calibration;
 	bool suppression_ctrl;
+	bool pill_region_ctrl;
 };
 
 typedef struct {
