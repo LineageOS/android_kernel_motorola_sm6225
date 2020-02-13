@@ -294,6 +294,7 @@ struct smb_mmi_params {
 	struct smb_mmi_chg_param	fv;
 	struct smb_mmi_chg_param	usb_icl;
 	struct smb_mmi_chg_param	dc_icl;
+	struct smb_mmi_chg_param	aicl_cont_threshold;
 };
 
 struct mmi_sm_params {
@@ -386,7 +387,7 @@ struct smb_mmi_charger {
 	bool			*debug_enabled;
 	void			*ipc_log;
 
-	bool			force_hvdcp_5v;
+	int			hvdcp_power_max;
 	int			inc_hvdcp_cnt;
 };
 
@@ -394,6 +395,50 @@ struct smb_mmi_charger {
 #define CHGR_FLOAT_VOLTAGE_CFG_REG		(CHGR_BASE + 0x70)
 #define USBIN_CURRENT_LIMIT_CFG_REG		(USBIN_BASE + 0x70)
 #define DCIN_CURRENT_LIMIT_CFG_REG		(DCIN_BASE + 0x70)
+#define USBIN_CONT_AICL_THRESHOLD_REG		(USBIN_BASE + 0x84)
+
+#define AICL_RANGE2_MIN_MV		5600
+#define AICL_RANGE2_STEP_DELTA_MV	200
+#define AICL_RANGE2_OFFSET		16
+int smblib_get_aicl_cont_threshold(struct smb_mmi_chg_param *param, u8 val_raw)
+{
+	int base = param->min_u;
+	u8 reg = val_raw;
+	int step = param->step_u;
+
+
+	if (val_raw >= AICL_RANGE2_OFFSET) {
+		reg = val_raw - AICL_RANGE2_OFFSET;
+		base = AICL_RANGE2_MIN_MV;
+		step = AICL_RANGE2_STEP_DELTA_MV;
+	}
+
+	return base + (reg * step);
+}
+
+int smblib_set_aicl_cont_threshold(struct smb_mmi_chg_param *param,
+				int val_u, u8 *val_raw)
+{
+	int base = param->min_u;
+	int offset = 0;
+	int step = param->step_u;
+
+	if (val_u > param->max_u)
+		val_u = param->max_u;
+	if (val_u < param->min_u)
+		val_u = param->min_u;
+
+	if (val_u >= AICL_RANGE2_MIN_MV) {
+		base = AICL_RANGE2_MIN_MV;
+		step = AICL_RANGE2_STEP_DELTA_MV;
+		offset = AICL_RANGE2_OFFSET;
+	};
+
+	*val_raw = ((val_u - base) / step) + offset;
+
+	return 0;
+}
+
 static struct smb_mmi_params smb5_pm8150b_params = {
 	.fcc			= {
 		.name   = "fast charge current",
@@ -422,6 +467,15 @@ static struct smb_mmi_params smb5_pm8150b_params = {
 		.min_u  = 0,
 		.max_u  = 1500000,
 		.step_u = 50000,
+	},
+	.aicl_cont_threshold		= {
+		.name   = "AICL CONT threshold",
+		.reg    = USBIN_CONT_AICL_THRESHOLD_REG,
+		.min_u  = 4000,
+		.max_u  = 11800,
+		.step_u = 100,
+		.get_proc = smblib_get_aicl_cont_threshold,
+		.set_proc = smblib_set_aicl_cont_threshold,
 	},
 };
 
@@ -1317,6 +1371,55 @@ static bool mmi_factory_check(int type)
 	return factory;
 }
 
+#define CHARGER_POWER_15W 15000
+#define CHARGER_POWER_18W 18000
+#define CHARGER_POWER_20W 20000
+static void mmi_charger_power_support(struct smb_mmi_charger *chg)
+{
+	struct device_node *np = chg->dev->of_node;
+	const char *charger_ability = NULL;
+	int retval;
+
+	if (of_property_read_bool(np, "qcom,force-hvdcp-5v")) {
+		chg->hvdcp_power_max = CHARGER_POWER_15W;
+		return;
+	}
+
+	retval = of_property_read_u32(np, "qcom,hvdcp-power-max",
+				  &chg->hvdcp_power_max);
+	if (retval) {
+		chg->hvdcp_power_max = 0;
+		return;
+	}
+
+	np = of_find_node_by_path("/chosen");
+
+	if (!np)
+		return;
+
+	retval = of_property_read_string(np, "mmi,charger",
+						 &charger_ability);
+
+	if ((retval == -EINVAL) || !charger_ability) {
+		mmi_err(chg, "mmi,charger unused\n");
+		of_node_put(np);
+		return;
+
+	} else
+		mmi_info(chg, "charger = %s\n", charger_ability);
+
+	if (strstr(charger_ability, "15W"))
+		chg->hvdcp_power_max = CHARGER_POWER_15W;
+	else if (strstr(charger_ability, "18W"))
+		chg->hvdcp_power_max = CHARGER_POWER_18W;
+	else if (strstr(charger_ability, "20W"))
+		chg->hvdcp_power_max = CHARGER_POWER_20W;
+
+	of_node_put(np);
+
+	return;
+}
+
 static enum power_supply_property smb_mmi_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -1781,11 +1884,74 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 	return rc;
 }
 
-#define HVDCP_VOLTAGE_NOM 5000
-#define HVDCP_VOLTAGE_MAX 5400
-#define HVDCP_VOLTAGE_MIN 4000
-#define HVDCP_VOLTAGE_TARGET 5200
-#define HVDCP_PULSE_COUNT_MAX 4
+#define HVDCP_VOLTAGE_BASIC		(this_chip->hvdcp_power_max / 3)
+#define HVDCP_VOLTAGE_NOM		(HVDCP_VOLTAGE_BASIC - 200)
+#define HVDCP_VOLTAGE_MAX		(HVDCP_VOLTAGE_BASIC + 200)
+#define HVDCP_VOLTAGE_MIN		4000
+#define HVDCP_PULSE_COUNT_MAX 	((HVDCP_VOLTAGE_BASIC - 5000) / 200 + 2)
+static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
+{
+	int rc = -EINVAL;
+	union power_supply_propval val = {0, };
+	int pulse_cnt;
+
+	rc = power_supply_get_property(chg->qcom_psy,
+			POWER_SUPPLY_PROP_DP_DM, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
+		return cur_mv;
+	} else {
+		mmi_info(chg, "DP DM pulse count = %d\n", val.intval);
+		pulse_cnt = val.intval;
+	}
+
+	/* Maintain vbus voltage for QC3.0 power/3A charging */
+	if (pulse_cnt == 0) {
+
+		vote(chg->chg_dis_votable, MMI_HB_VOTER, true, 0);
+
+		while (cur_mv < HVDCP_VOLTAGE_NOM && pulse_cnt < chg->inc_hvdcp_cnt) {
+			val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
+			rc = power_supply_set_property(chg->qcom_psy,
+					POWER_SUPPLY_PROP_DP_DM, &val);
+			if (rc < 0) {
+				mmi_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
+				break;
+			}
+
+			msleep(100);
+
+			rc = get_prop_usb_voltage_now(chg, &val);
+			if (rc < 0) {
+				mmi_err(chg, "Error getting USB Voltage rc = %d\n", rc);
+				break;
+			} else
+				cur_mv = val.intval / 1000;
+
+			rc = power_supply_get_property(chg->qcom_psy,
+					POWER_SUPPLY_PROP_DP_DM, &val);
+			if (rc < 0) {
+				mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
+				break;
+			} else {
+				pulse_cnt = val.intval;
+			}
+
+			mmi_info(chg, "pulse count = %d, cur_mv = %d\n", pulse_cnt, cur_mv);
+		}
+
+		rc = smblib_set_charge_param(chg, &chg->param.aicl_cont_threshold,
+					     HVDCP_VOLTAGE_NOM - 1000);
+		if (rc < 0) {
+			mmi_err(chg, "Couldn't set aicl cont threshold to 9V rc=%d\n", rc);
+		}
+
+		vote(chg->chg_dis_votable, MMI_HB_VOTER, false, 0);
+	}
+
+	return cur_mv;
+}
+
 static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 {
 	int rc = -EINVAL;
@@ -1815,13 +1981,20 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 	if (val.intval != POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		return;
 
+	if (chg->hvdcp_power_max > CHARGER_POWER_15W) {
+		mmi_increase_vbus_power(chg, cur_mv);
+		return;
+	}
+
 	/* Maintain vbus voltage for QC3.0 5V/3A 15W charging */
 	rc = power_supply_get_property(chg->qcom_psy,
 			POWER_SUPPLY_PROP_DP_DM, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
 		return;
-	}
+	} else
+		mmi_info(chg, "DP DM pulse count = %d\n", val.intval);
+
 	if (cur_mv < HVDCP_VOLTAGE_NOM && val.intval < chg->inc_hvdcp_cnt)
 		val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
 	else if (cur_mv > HVDCP_VOLTAGE_MAX && val.intval > 0)
@@ -1842,7 +2015,7 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 static void mmi_chrg_input_config(struct smb_mmi_charger *chg,
 				  struct smb_mmi_chg_status *stat)
 {
-	if (chg->force_hvdcp_5v)
+	if (chg->hvdcp_power_max)
 		mmi_chrg_usb_vin_config(chg, stat->usb_mv);
 }
 
@@ -3490,7 +3663,7 @@ static int batt_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_DP_DM:
 		/* Skip the hvdcp request from hvdcp daemon */
-		if (chip->force_hvdcp_5v)
+		if (chip->hvdcp_power_max)
 			break;
 	default:
 		rc = power_supply_set_property(chip->qcom_psy, prop, val);
@@ -3623,7 +3796,8 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->dc_cl_ma = -EINVAL;
 
-	chg->force_hvdcp_5v = of_property_read_bool(node, "qcom,force-hvdcp-5v");
+	mmi_charger_power_support(chg);
+
 	rc = of_property_read_u32(node, "qcom,inc-hvdcp-cnt",
 				  &chg->inc_hvdcp_cnt);
 	if (rc)
@@ -4033,7 +4207,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	 * Only 5V is allowed for QC2.0 and QC3.0, so set pulse count max
 	 * accordingly to limit voltage increment.
 	 */
-	if (chip->force_hvdcp_5v) {
+	if (chip->hvdcp_power_max) {
 		rc = smblib_masked_write_mmi(chip, HVDCP_PULSE_COUNT_MAX_REG,
 					    HVDCP_PULSE_COUNT_MAX_QC2_MASK |
 					    HVDCP_PULSE_COUNT_MAX_QC3_MASK,
