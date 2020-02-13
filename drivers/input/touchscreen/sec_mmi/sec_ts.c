@@ -1210,6 +1210,16 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	u32 ic_match_value;
 	int lcdtype = 0;
 
+	if (of_property_read_string(np, "sec,regulator_dvdd", &pdata->regulator_dvdd)) {
+		input_err(true, dev, "%s: Failed to get regulator_dvdd name property\n", __func__);
+		return -EINVAL;
+	}
+
+	if (of_property_read_string(np, "sec,regulator_avdd", &pdata->regulator_avdd)) {
+		input_err(true, dev, "%s: Failed to get regulator_avdd name property\n", __func__);
+		return -EINVAL;
+	}
+
 	pdata->tsp_icid = of_get_named_gpio(np, "sec,tsp-icid_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_icid)) {
 		input_info(true, dev, "%s: TSP_ICID : %d\n", __func__, gpio_get_value(pdata->tsp_icid));
@@ -1222,8 +1232,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			input_err(true, dev, "%s: Do not match TSP_ICID\n", __func__);
 			return -EINVAL;
 		}
-	} else {
-		input_err(true, dev, "%s: Failed to get tsp-icid gpio\n", __func__);
+		input_info(true, dev, "%s: using tsp-icid gpio %d\n", __func__, pdata->tsp_icid);
 	}
 
 	pdata->rst_gpio = of_get_named_gpio(np, "sec,rst_gpio", 0);
@@ -1239,8 +1248,8 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			gpio_set_value(pdata->rst_gpio, 1);
 			input_dbg(true, &client->dev, "%s: rst gpio is %d\n", __func__, gpio_get_value(pdata->rst_gpio));
 		}
-	} else
-		input_info(true, &client->dev, "%s: has no rst gpio\n", __func__);
+		input_info(true, &client->dev, "%s: using rst gpio %d\n", __func__, pdata->rst_gpio);
+	}
 
 	pdata->tsp_vsync = of_get_named_gpio(np, "sec,tsp_vsync_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_vsync))
@@ -1254,6 +1263,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			input_err(true, &client->dev, "%s: Unable to request tsp_int [%d]\n", __func__, pdata->irq_gpio);
 			return -EINVAL;
 		}
+		input_info(true, &client->dev, "%s: using irq gpio %d\n", __func__, pdata->irq_gpio);
 	} else {
 		input_err(true, &client->dev, "%s: Failed to get irq gpio\n", __func__);
 		return -EINVAL;
@@ -1298,8 +1308,6 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->tsp_id = of_get_named_gpio(np, "sec,tsp-id_gpio", 0);
 	if (gpio_is_valid(pdata->tsp_id))
 		input_info(true, dev, "%s: TSP_ID : %d\n", __func__, gpio_get_value(pdata->tsp_id));
-	else
-		input_err(true, dev, "%s: Failed to get tsp-id gpio\n", __func__);
 
 	count = of_property_count_strings(np, "sec,firmware_name");
 	if (count <= 0) {
@@ -1311,21 +1319,11 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			of_property_read_string_index(np, "sec,firmware_name", 0, &pdata->firmware_name);
 	}
 
-	if (of_property_read_string_index(np, "sec,project_name", 0, &pdata->project_name))
-		input_err(true, &client->dev, "%s: skipped to get project_name property\n", __func__);
+	if (!of_property_read_string_index(np, "sec,project_name", 0, &pdata->project_name))
+		input_info(true, &client->dev, "%s: using project_name %s\n", __func__, pdata->project_name);
 
-	if (of_property_read_string_index(np, "sec,project_name", 1, &pdata->model_name))
-		input_err(true, &client->dev, "%s: skipped to get model_name property\n", __func__);
-
-	if (of_property_read_string(np, "sec,regulator_dvdd", &pdata->regulator_dvdd)) {
-		input_err(true, dev, "%s: Failed to get regulator_dvdd name property\n", __func__);
-		return -EINVAL;
-	}
-
-	if (of_property_read_string(np, "sec,regulator_avdd", &pdata->regulator_avdd)) {
-		input_err(true, dev, "%s: Failed to get regulator_avdd name property\n", __func__);
-		return -EINVAL;
-	}
+	if (!of_property_read_string_index(np, "sec,project_name", 1, &pdata->model_name))
+		input_info(true, &client->dev, "%s: using model_name %s\n", __func__, pdata->model_name);
 
 	pdata->power = sec_ts_power;
 
