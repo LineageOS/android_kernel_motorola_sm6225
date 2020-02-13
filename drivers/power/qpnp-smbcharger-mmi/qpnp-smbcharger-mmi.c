@@ -164,6 +164,7 @@ enum {
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
 #define DEMO_VOTER			"DEMO_VOTER"
+#define ADAPTIVE_CHARGING_VOTER		"ADAPTIVE_CHARGING_VOTER"
 #define HYST_STEP_MV 50
 #define HYST_STEP_FLIP_MV (HYST_STEP_MV*2)
 #define DEMO_MODE_HYS_SOC 5
@@ -252,6 +253,7 @@ enum mmi_chrg_step {
 	STEP_FULL,
 	STEP_FLOAT,
 	STEP_DEMO,
+	STEP_ADAPT,
 	STEP_STOP,
 	STEP_NONE = 0xFF,
 };
@@ -262,6 +264,7 @@ static char *stepchg_str[] = {
 	[STEP_FULL]		= "FULL",
 	[STEP_FLOAT]		= "FLOAT",
 	[STEP_DEMO]		= "DEMO",
+	[STEP_ADAPT]		= "ADAPTIVE",
 	[STEP_STOP]		= "STOP",
 	[STEP_NONE]		= "NONE",
 };
@@ -391,6 +394,11 @@ struct smb_mmi_charger {
 
 	int			hvdcp_power_max;
 	int			inc_hvdcp_cnt;
+
+	/* Adaptive Charging */
+	bool			adaptive_charging_suspend;
+	int			adaptive_charging_upper;
+	int			adaptive_charging_lower;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -730,6 +738,121 @@ static ssize_t force_demo_mode_show(struct device *dev,
 static DEVICE_ATTR(force_demo_mode, 0644,
 		force_demo_mode_show,
 		force_demo_mode_store);
+
+
+/*  A battery SoC has a wide range of charge, so as soon as a specific SoC value
+ *  is achieved, it is actually closer to its previous value than its current
+ *  (like as soon as it achieves 80%, it will lose some charge and fall back to
+ *  79%. Since this drop will always happen, make sure to be in (upper_soc + 1),
+ *  so battery SoC will drop to upper_soc SoC.
+ */
+#define ADAPTIVE_CHARGING_HYSTERESIS   1
+static ssize_t adaptive_charging_upper_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	long mode;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	r = kstrtol(buf, 0, &mode);
+	if (r) {
+		pr_err("SMBMMI: Can't set Adaptive Charging with value = %ld\n", mode);
+		return -EINVAL;
+	}
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	// -1 on both variables deactivate Adaptive Charging mode
+	if (mmi_chip->adaptive_charging_lower == -1 &&
+	    mode == -1) {
+		mmi_chip->adaptive_charging_upper = -1;
+	} else if (mode > 0 && mode <= 100 &&
+		   mode > mmi_chip->adaptive_charging_lower) {
+		mmi_chip->adaptive_charging_upper = mode;
+	} else {
+		mmi_chip->adaptive_charging_upper = 100;
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t adaptive_charging_upper_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = mmi_chip->adaptive_charging_upper;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(adaptive_charging_upper, 0644,
+		adaptive_charging_upper_show,
+		adaptive_charging_upper_store);
+
+static ssize_t adaptive_charging_lower_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	long mode;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	r = kstrtol(buf, 0, &mode);
+	if (r) {
+		pr_err("SMBMMI: Can't set Adaptive Charging with value = %ld\n", mode);
+		return -EINVAL;
+	}
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	if (mode >= -1 &&
+	    mode < mmi_chip->adaptive_charging_upper) {
+		mmi_chip->adaptive_charging_lower = mode;
+	} else
+		mmi_chip->adaptive_charging_lower = -1;
+
+	return r ? r : count;
+}
+
+static ssize_t adaptive_charging_lower_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int state;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = mmi_chip->adaptive_charging_lower;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(adaptive_charging_lower, 0644,
+		adaptive_charging_lower_show,
+		adaptive_charging_lower_store);
 
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
@@ -2275,8 +2398,10 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 		chip->pres_chrg_step = STEP_STOP;
 	} else if (chg->demo_mode) { /* Demo Mode */
 		chip->pres_chrg_step = STEP_DEMO;
-	} else if ((chip->pres_chrg_step == STEP_NONE) ||
-		   (chip->pres_chrg_step == STEP_STOP)) {
+	} else if (chg->adaptive_charging_upper != -1) { /* Adaptive Charging */
+		chip->pres_chrg_step = STEP_ADAPT;
+	} else if ((chip->pres_chrg_step == STEP_NONE)  ||
+		   (chip->pres_chrg_step == STEP_STOP))  {
 		if (zone->norm_mv && (stat->batt_mv >= zone->norm_mv)) {
 			if (zone->fcc_norm_ma)
 				chip->pres_chrg_step = STEP_NORM;
@@ -2328,6 +2453,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 
 	/* Take State actions */
 	switch (chip->pres_chrg_step) {
+	case STEP_ADAPT:
 	case STEP_FLOAT:
 	case STEP_MAX:
 		if (!zone->norm_mv)
@@ -2563,6 +2689,87 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fv = DEMO_MODE_VOLTAGE;
 		target_fcc = main_p->target_fcc;
 		goto vote_now;
+	/* Check for Adaptive Charging */
+	} else if ((main_p->pres_chrg_step == STEP_ADAPT) ||
+	    (flip_p->pres_chrg_step == STEP_ADAPT)) {
+		mmi_info(chg, "Battery in Adaptive Charging Mode");
+
+		if (chg->adaptive_charging_lower == -1) {
+			// If no lower limit is defined, we are in Auto Mode
+			mmi_info(chg, "Charging limited to %d%%\n",
+				chg->adaptive_charging_upper);
+
+			target_fv = main_p->target_fv;
+			target_fcc = main_p->target_fcc;
+
+			if (chg->adaptive_charging_suspend == false &&
+			    chg->last_reported_soc > chg->adaptive_charging_upper + ADAPTIVE_CHARGING_HYSTERESIS) {
+				vote(chg->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				vote(chg->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				chg->adaptive_charging_suspend = true;
+				main_p->chrg_taper_cnt = 0;
+				flip_p->chrg_taper_cnt = 0;
+				for (i = 0; i < MAX_NUM_STEPS; i++) {
+					main_p->ocp[i] = 0;
+					flip_p->ocp[i] = 0;
+				}
+			} else if (chg->last_reported_soc == chg->adaptive_charging_upper + ADAPTIVE_CHARGING_HYSTERESIS) {
+				main_p->pres_chrg_step = STEP_FULL;
+				flip_p->pres_chrg_step = STEP_FULL;
+				chg->sm_param[BASE_BATT].pres_chrg_step = STEP_FULL;
+				target_fcc = -EINVAL;
+				target_fv = chg->base_fv_mv;
+				sched_time = HEARTBEAT_DELAY_MS;
+				chg->last_reported_status = POWER_SUPPLY_STATUS_FULL;
+				pval.intval = POWER_SUPPLY_STATUS_FULL;
+				chg->adaptive_charging_suspend = false;
+			} else if (chg->adaptive_charging_suspend == true &&
+				   chg->last_reported_soc < chg->adaptive_charging_upper) {
+				vote(chg->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				vote(chg->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				chg->adaptive_charging_suspend = false;
+				main_p->chrg_taper_cnt = 0;
+				flip_p->chrg_taper_cnt = 0;
+				for (i = 0; i < MAX_NUM_STEPS; i++) {
+					main_p->ocp[i] = 0;
+					flip_p->ocp[i] = 0;
+				}
+			}
+		} else {
+			// This is Manual Mode
+			// If in between upper and lower limits, do nothing: keep doing what you were doing
+			mmi_info(chg, "Charging limited to between %d%% and %d%%\n",
+				chg->adaptive_charging_lower, chg->adaptive_charging_upper);
+
+			target_fv = main_p->target_fv;
+			target_fcc = main_p->target_fcc;
+
+			if (chg->adaptive_charging_suspend == false &&
+			    chg->last_reported_soc >= chg->adaptive_charging_upper) {
+				vote(chg->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				vote(chg->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				chg->adaptive_charging_suspend = true;
+				main_p->chrg_taper_cnt = 0;
+				flip_p->chrg_taper_cnt = 0;
+				for (i = 0; i < MAX_NUM_STEPS; i++) {
+					main_p->ocp[i] = 0;
+					flip_p->ocp[i] = 0;
+				}
+			} else if (chg->adaptive_charging_suspend == true &&
+				chg->last_reported_soc <= chg->adaptive_charging_lower) {
+				vote(chg->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				vote(chg->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				chg->adaptive_charging_suspend = false;
+				main_p->chrg_taper_cnt = 0;
+				flip_p->chrg_taper_cnt = 0;
+				for (i = 0; i < MAX_NUM_STEPS; i++) {
+					main_p->ocp[i] = 0;
+					flip_p->ocp[i] = 0;
+				}
+			}
+		}
+
+		goto vote_now;
 	/* Check for Charge FULL from each */
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
 		   (flip_p->pres_chrg_step == STEP_FULL)) {
@@ -2700,6 +2907,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	int target_fcc;
 	int target_fv;
 	int max_fv_mv;
+	union power_supply_propval pval;
 	struct mmi_temp_zone *zone;
 	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
 	bool voltage_full;
@@ -2766,6 +2974,50 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			chip->demo_mode_usb_suspend = false;
 			prm->chrg_taper_cnt = 0;
 		}
+	} else if (chip->adaptive_charging_upper != -1) { /* Check for Adaptive Charging */
+		prm->pres_chrg_step = STEP_ADAPT;
+		mmi_info(chip, "Battery in Adaptive Charging Mode");
+
+		if (chip->adaptive_charging_lower == -1) {
+			// If no lower limit is defined, we are in Auto Mode
+			mmi_info(chip, "Charging limited to %d%%\n",
+				chip->adaptive_charging_upper);
+
+			if (chip->adaptive_charging_suspend == false &&
+			    stat->batt_soc > chip->adaptive_charging_upper + ADAPTIVE_CHARGING_HYSTERESIS) {
+				vote(chip->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				vote(chip->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				chip->adaptive_charging_suspend = true;
+			} else if (stat->batt_soc == chip->adaptive_charging_upper + ADAPTIVE_CHARGING_HYSTERESIS) {
+				prm->pres_chrg_step = STEP_FULL;
+				pval.intval = POWER_SUPPLY_STATUS_FULL;
+				prm->chrg_taper_cnt = 0;
+				chip->adaptive_charging_suspend = false;
+			} else if (chip->adaptive_charging_suspend == true &&
+				   stat->batt_soc < chip->adaptive_charging_upper) {
+				vote(chip->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				vote(chip->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				chip->adaptive_charging_suspend = false;
+				prm->chrg_taper_cnt = 0;
+			}
+		} else {
+			// This is Manual Mode
+			// If in between upper and lower limits, do nothing: keep doing what you were doing
+			mmi_info(chip, "Charging limited to between %d%% and %d%%\n",
+				chip->adaptive_charging_lower, chip->adaptive_charging_upper);
+
+			if (chip->adaptive_charging_suspend == false &&
+			    stat->batt_soc >= chip->adaptive_charging_upper) {
+				vote(chip->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				vote(chip->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, true, 0);
+				chip->adaptive_charging_suspend = true;
+			} else if (chip->adaptive_charging_suspend == true &&
+				   stat->batt_soc <= chip->adaptive_charging_lower) {
+				vote(chip->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				vote(chip->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+				chip->adaptive_charging_suspend = false;
+			}
+		}
 	} else if ((prm->pres_chrg_step == STEP_NONE) ||
 		   (prm->pres_chrg_step == STEP_STOP)) {
 		if (zone->norm_mv && ((stat->batt_mv + HYST_STEP_MV) >= zone->norm_mv)) {
@@ -2829,6 +3081,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 
 	/* Take State actions */
 	switch (prm->pres_chrg_step) {
+	case STEP_ADAPT:
 	case STEP_FLOAT:
 	case STEP_MAX:
 		if (!zone->norm_mv)
@@ -3797,6 +4050,10 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->inc_hvdcp_cnt = HVDCP_PULSE_COUNT_MAX;
 
+	// Default value for Adaptive Charging feature
+	chg->adaptive_charging_upper = -1;
+	chg->adaptive_charging_lower = -1;
+
 	return rc;
 }
 
@@ -4266,6 +4523,18 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	rc = power_supply_reg_notifier(&chip->mmi_psy_notifier);
 	if (rc)
 		mmi_err(chip, "Failed to reg notifier: %d\n", rc);
+
+	/* Add Adaptive Charging feature */
+	rc = device_create_file(chip->dev,
+				&dev_attr_adaptive_charging_upper);
+	if (rc) {
+		mmi_err(chip, "Couldn't create adaptive_charging_upper\n");
+	}
+	rc = device_create_file(chip->dev,
+				&dev_attr_adaptive_charging_lower);
+	if (rc) {
+		mmi_err(chip, "Couldn't create adaptive_charging_lower\n");
+	}
 
 	if (chip->factory_mode) {
 		mmi_info(chip, "Entering Factory Mode SMB!\n");
