@@ -110,6 +110,7 @@ static char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
 	{"aw8697_rtp_Solarium.bin"},
 	{"aw8697_rtp_Sparse.bin"},
 	{"aw8697_rtp_Terrabytes.bin"},
+	{"aw8697_rtp_Zero_Hour.bin"},
 };
 
 struct aw8697_container *aw8697_rtp;
