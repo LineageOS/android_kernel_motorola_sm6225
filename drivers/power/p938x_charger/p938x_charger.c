@@ -156,6 +156,10 @@
 #define MAX_CHIP_VERS 0x9389
 #define CHIP_VENDOR "idt"
 
+#define IDC_THERMAL_RESTORE_TIME 300000 /* 5 minutes */
+#define IDC_THERMAL_BACKOFF_MA 100
+#define IDC_THERMAL_MIN_CURRENT 400
+
 #define DETACH_ON_READ_FAILURE
 
 #define p938x_err(chip, fmt, ...)		\
@@ -279,6 +283,7 @@ struct p938x_charger {
 	struct delayed_work	heartbeat_work;
 	struct delayed_work	tx_mode_work;
 	struct delayed_work	removal_work;
+	struct delayed_work	restore_idc_work;
 	int heartbeat_count;
 
 	u32			peek_poke_address;
@@ -287,6 +292,9 @@ struct p938x_charger {
 	struct power_supply	*usb_psy;
 	struct power_supply *wls_psy;
 	struct power_supply *dc_psy;
+	struct power_supply *batt_psy;
+
+	bool	batt_hot;
 
 	char			fw_name[NAME_MAX];
 	int			program_fw_stat;
@@ -335,6 +343,7 @@ static char *pm_wls_supplied_to[] = {
 /* Get notifications from supplies */
 static char *pm_wls_supplied_from[] = {
 	"usb",
+	"battery",
 };
 
 static inline int p938x_is_chip_on(struct p938x_charger *chip)
@@ -635,11 +644,16 @@ static void p938x_toggle_power(struct p938x_charger *chip, int extra_delay_ms)
 	msleep(100);
 }
 
+static int p938x_get_dc_now_icl_ma(struct p938x_charger *chip, unsigned int *idc);
+static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc);
+
 static int p938x_update_supplies_status(struct p938x_charger *chip)
 {
 	int rc;
 	union power_supply_propval prop = {0,};
 	int wired_connection;
+	unsigned int dc_current_now;
+	unsigned int dc_current_new;
 
 	if (!chip->usb_psy)
 		chip->usb_psy = power_supply_get_by_name("usb");
@@ -670,6 +684,47 @@ static int p938x_update_supplies_status(struct p938x_charger *chip)
 	else {
 		clear_bit(WLS_FLAG_USB_CONNECTED, &chip->flags);
 		gpio_set_value(chip->wchg_en_n.gpio, 0);
+	}
+
+	if (!chip->batt_psy)
+		chip->batt_psy = power_supply_get_by_name("battery");
+	if (!chip->batt_psy) {
+		pr_debug("batt psy not found\n");
+		return -EINVAL;
+	}
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_HOT_TEMP, &prop);
+	if (rc) {
+		p938x_err(chip, "Couldn't read batt temp zone prop, rc=%d\n", rc);
+		return rc;
+	}
+
+	if (!chip->batt_hot && prop.intval) {
+		/* If the battery is too hot, lower the current
+		 * setting to try to keep us in optimal temp zone
+		 */
+		cancel_delayed_work(&chip->restore_idc_work);
+		chip->batt_hot = 1;
+
+		rc = p938x_get_dc_now_icl_ma(chip, &dc_current_now);
+		if (rc) {
+			p938x_err(chip, "Couldn't read dc current, rc=%d\n", rc);
+			return rc;
+		}
+
+		dc_current_new = dc_current_now - IDC_THERMAL_BACKOFF_MA;
+		if (dc_current_new < IDC_THERMAL_MIN_CURRENT)
+			dc_current_new = IDC_THERMAL_MIN_CURRENT;
+
+		p938x_set_dc_now_icl_ma(chip, dc_current_new);
+		p938x_dbg(chip, PR_IMPORTANT, "Reduced dc current to %u mA due to hot battery\n",
+			dc_current_new);
+	} else if (chip->batt_hot && !prop.intval) {
+		/* Set work to restore original current settings */
+		chip->batt_hot = 0;
+		cancel_delayed_work(&chip->restore_idc_work);
+		schedule_delayed_work(&chip->restore_idc_work,
+			msecs_to_jiffies(IDC_THERMAL_RESTORE_TIME));
 	}
 
 	return 0;
@@ -865,6 +920,60 @@ static int p938x_set_dc_max_icl_ma(struct p938x_charger *chip, unsigned int idc)
 	return p938x_set_dc_psp_prop(chip,
 		POWER_SUPPLY_PROP_CURRENT_MAX,
 		val);
+}
+
+static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc)
+{
+	union power_supply_propval val;
+
+	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
+
+	idc *= 1000; /* Convert to uA */
+	val.intval = idc;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_CURRENT_NOW,
+		val);
+}
+
+static int p938x_get_dc_now_icl_ma(struct p938x_charger *chip, unsigned int *idc)
+{
+	union power_supply_propval prop = {0,};
+	int rc = 1;
+
+	if (chip->dc_psy) {
+		rc = power_supply_get_property(chip->dc_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+		if (rc) {
+			p938x_err(chip, "Couldn't read batt temp zone prop, rc=%d\n", rc);
+			return rc;
+		}
+
+		*idc = prop.intval / 1000;
+	}
+
+	return rc;
+}
+
+static int p938x_set_dc_aicl_rerun(struct p938x_charger *chip)
+{
+	union power_supply_propval val;
+
+	/* unused */
+	val.intval = 1;
+
+	return p938x_set_dc_psp_prop(chip,
+		POWER_SUPPLY_PROP_RERUN_AICL,
+		val);
+}
+
+static void p938x_restore_idc_work(struct work_struct *work)
+{
+	struct p938x_charger *chip = container_of(work,
+			struct p938x_charger, restore_idc_work.work);
+
+	p938x_dbg(chip, PR_IMPORTANT, "Running AICL to get back to max dc current\n");
+	p938x_set_dc_aicl_rerun(chip);
 }
 
 static int p938x_program_tx_fod(struct p938x_charger *chip,
@@ -1846,20 +1955,6 @@ static ssize_t boost_show(struct device *dev,
 		p938x_get_boost(chip));
 }
 
-static int p938x_set_dc_now_icl_ma(struct p938x_charger *chip, unsigned int idc)
-{
-	union power_supply_propval val;
-
-	p938x_dbg(chip, PR_MOTO, "Setting IDC to %u mA\n", idc);
-
-	idc *= 1000; /* Convert to uA */
-	val.intval = idc;
-
-	return p938x_set_dc_psp_prop(chip,
-		POWER_SUPPLY_PROP_CURRENT_NOW,
-		val);
-}
-
 static ssize_t force_idc_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
@@ -2800,6 +2895,7 @@ static int p938x_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->heartbeat_work, p938x_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->tx_mode_work, p938x_tx_mode_work);
 	INIT_DELAYED_WORK(&chip->removal_work, p938x_removal_work);
+	INIT_DELAYED_WORK(&chip->restore_idc_work, p938x_restore_idc_work);
 	device_init_wakeup(chip->dev, true);
 
 	chip->regmap = regmap_init_i2c(client, &p938x_regmap_config);
