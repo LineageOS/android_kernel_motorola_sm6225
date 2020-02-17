@@ -3372,6 +3372,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	POWER_SUPPLY_PROP_HOT_TEMP,
 };
 
 static int batt_get_prop(struct power_supply *psy,
@@ -3425,6 +3426,23 @@ static int batt_get_prop(struct power_supply *psy,
 			rc = 0;
 			val->intval = -EINVAL;
 		}
+		break;
+	case POWER_SUPPLY_PROP_HOT_TEMP:
+		if (chip->max_main_psy && chip->max_flip_psy) {
+			if (chip->sm_param[MAIN_BATT].pres_temp_zone ==
+					(chip->sm_param[MAIN_BATT].num_temp_zones - 1) ||
+					chip->sm_param[MAIN_BATT].pres_temp_zone == ZONE_HOT)
+				val->intval = 1;
+			else if (chip->sm_param[FLIP_BATT].pres_temp_zone ==
+					(chip->sm_param[FLIP_BATT].num_temp_zones - 1) ||
+					chip->sm_param[FLIP_BATT].pres_temp_zone == ZONE_HOT)
+				val->intval = 1;
+		} else if (chip->sm_param[BASE_BATT].pres_temp_zone ==
+				(chip->sm_param[BASE_BATT].num_temp_zones - 1) ||
+				chip->sm_param[BASE_BATT].pres_temp_zone == ZONE_HOT)
+			val->intval = 1;
+		else
+			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
