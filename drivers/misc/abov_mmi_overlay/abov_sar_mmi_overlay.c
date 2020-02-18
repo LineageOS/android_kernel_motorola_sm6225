@@ -743,25 +743,25 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 			mEnabled = 1;
 		}
 		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
-			if(!strcmp(sensors_cdev->name, "capsense_top")){
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, 0);
 				input_sync(input_ch0);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH0;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
 				input_report_abs(input_ch1, ABS_DISTANCE, 0);
 				input_sync(input_ch1);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH1;
 			}
 		} else {
-			if(!strcmp(sensors_cdev->name, "capsense_top")){
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, 0);
 				input_sync(input_ch0);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH0;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
 				input_report_abs(input_ch1, ABS_DISTANCE, 0);
 				input_sync(input_ch1);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH1;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch2_name)){
 				input_report_abs(input_ch2, ABS_DISTANCE, 0);
 				input_sync(input_ch2);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH2;
@@ -770,25 +770,25 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	} else if (enable == 0) {
 		LOG_INFO("disable cap sensor: %s\n",sensors_cdev->name);
 		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
-			if(!strcmp(sensors_cdev->name, "capsense_top")){
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, -1);
 				input_sync(input_ch0);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH0;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
 				input_report_abs(input_ch1, ABS_DISTANCE, -1);
 				input_sync(input_ch1);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH1;
 			}
 		} else {
-			if(!strcmp(sensors_cdev->name, "capsense_top")){
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, -1);
 				input_sync(input_ch0);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH0;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_left")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
 				input_report_abs(input_ch1, ABS_DISTANCE, -1);
 				input_sync(input_ch1);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH1;
-			}else if(!strcmp(sensors_cdev->name, "capsense_bottom_right")){
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch2_name)){
 				input_report_abs(input_ch2, ABS_DISTANCE, -1);
 				input_sync(input_ch2);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH2;
