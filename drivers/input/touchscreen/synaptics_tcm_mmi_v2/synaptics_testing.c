@@ -58,9 +58,10 @@ static ssize_t testing_sysfs_##t_name##_show(struct device *dev, \
 		goto exit; \
 	} \
 \
-	retval = snprintf(buf, PAGE_SIZE, \
-			"%s\n", \
-			testing_hcd->result ? "Passed" : "Failed"); \
+	LOCK_BUFFER(testing_hcd->resp); \
+	memcpy(buf, testing_hcd->resp.buf, testing_hcd->resp.data_length); \
+	retval = testing_hcd->resp.data_length; \
+	UNLOCK_BUFFER(testing_hcd->resp); \
 \
 exit: \
 	mutex_unlock(&tcm_hcd->extif_mutex); \
@@ -812,7 +813,6 @@ static int testing_pt01_trx_trx_short(void)
 	bool do_pin_test = false;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-	unsigned int size;
 	unsigned char limit;
 	unsigned char *buf;
 	unsigned char data;
@@ -823,7 +823,6 @@ static int testing_pt01_trx_trx_short(void)
 
 	LOGN(tcm_hcd->pdev->dev.parent,
 			"Start testing\n");
-	testing_hcd->result = false;
 
 	app_info = &tcm_hcd->app_info;
 
@@ -878,19 +877,7 @@ static int testing_pt01_trx_trx_short(void)
 
 	LOCK_BUFFER(testing_hcd->resp);
 
-	size =
-		sizeof(pt1_limits) / sizeof(pt1_limits[0]);
-
-	if (size < testing_hcd->resp.data_length) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
 	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
 
 	for (i = 0; i < testing_hcd->resp.data_length; i++) {
 
@@ -923,7 +910,6 @@ static int testing_pt01_trx_trx_short(void)
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 
-exit:
 #ifdef PT1_GET_PIN_ASSIGNMENT
 	kfree(satic_cfg_buf);
 #endif
@@ -935,26 +921,14 @@ exit:
 		}
 	}
 
-	LOGN(tcm_hcd->pdev->dev.parent,
-			"Result = %s\n", (testing_hcd->result)?"pass":"fail");
 	return retval;
 }
 
 static int testing_pt05_full_raw(void)
 {
 	int retval;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
-	unsigned int frame_size;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-	unsigned short data;
 
 	LOGN(tcm_hcd->pdev->dev.parent,
 			"Start testing\n");
@@ -962,80 +936,12 @@ static int testing_pt05_full_raw(void)
 
 	app_info = &tcm_hcd->app_info;
 
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	frame_size = rows * cols * 2;
-
 	retval = testing_run_prod_test_item(TEST_PT5_FULL_RAW_CAP);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to run test\n");
 		goto exit;
 	}
-
-	LOCK_BUFFER(testing_hcd->resp);
-
-	if (frame_size != testing_hcd->resp.data_length) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Frame size mismatch\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows =
-		sizeof(pt5_hi_limits) / sizeof(pt5_hi_limits[0]);
-	limits_cols =
-		sizeof(pt5_hi_limits[0]) / sizeof(pt5_hi_limits[0][0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows =
-		sizeof(pt5_lo_limits) / sizeof(pt5_lo_limits[0]);
-	limits_cols =
-		sizeof(pt5_lo_limits[0]) / sizeof(pt5_lo_limits[0][0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
-
-	idx = 0;
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-
-			data = (unsigned short)(buf[idx] & 0xff) |
-					(unsigned short)(buf[idx+1] << 8);
-
-			if (data  > pt5_hi_limits[row][col] ||
-					data  < pt5_lo_limits[row][col]) {
-
-				LOGE(tcm_hcd->pdev->dev.parent,
-					"fail at (%2d, %2d) data = %5d, limit = (%4d, %4d)\n",
-					row, col, data, pt5_lo_limits[row][col],
-					pt5_hi_limits[row][col]);
-
-				testing_hcd->result = false;
-			}
-
-			idx += 2;
-		}
-	}
-
-	UNLOCK_BUFFER(testing_hcd->resp);
 
 	retval = 0;
 
@@ -1047,8 +953,6 @@ exit:
 		}
 	}
 
-	LOGN(tcm_hcd->pdev->dev.parent,
-			"Result = %s\n", (testing_hcd->result)?"pass":"fail");
 	return retval;
 }
 
@@ -1166,15 +1070,6 @@ exit:
 static int testing_pt10_noise(void)
 {
 	int retval;
-	short data;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
 	unsigned int frame_size_words;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
@@ -1185,9 +1080,6 @@ static int testing_pt10_noise(void)
 
 	app_info = &tcm_hcd->app_info;
 
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
 	testing_get_frame_size_words(&frame_size_words, true);
 
 	retval = testing_run_prod_test_item(TEST_PT10_DELTA_NOISE);
@@ -1196,50 +1088,6 @@ static int testing_pt10_noise(void)
 				"Failed to run test\n");
 		goto exit;
 	}
-
-	LOCK_BUFFER(testing_hcd->resp);
-
-	if (frame_size_words != testing_hcd->resp.data_length / 2) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Frame size mismatch\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows =
-		sizeof(pt10_limits) / sizeof(pt10_limits[0]);
-	limits_cols =
-		sizeof(pt10_limits[0]) / sizeof(pt10_limits[0][0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data > pt10_limits[row][col]) {
-
-				LOGE(tcm_hcd->pdev->dev.parent,
-					"fail at (%2d, %2d) data = %5d, limit = %4d\n",
-					row, col, data, pt10_limits[row][col]);
-
-				testing_hcd->result = false;
-			}
-			idx++;
-		}
-	}
-
-	UNLOCK_BUFFER(testing_hcd->resp);
 
 	testing_standard_frame_output(false);
 
@@ -1253,8 +1101,6 @@ exit:
 		}
 	}
 
-	LOGN(tcm_hcd->pdev->dev.parent,
-			"Result = %s\n", (testing_hcd->result)?"pass":"fail");
 	return retval;
 }
 
