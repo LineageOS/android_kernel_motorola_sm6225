@@ -497,12 +497,44 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 	return rc;
 }
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+static bool panel_power_is_alway_on(struct dsi_panel *panel)
+{
+	int touch_state = 0;
+	bool rc = 0;
+
+	struct dsi_display *dsi_display =
+		container_of(panel->host, struct dsi_display, host);
+
+	if (unlikely(dsi_display == NULL))
+		return rc;
+
+	if( check_touch_state(&touch_state, dsi_display->display_idx) == 0)
+	{
+		panel->tp_state = touch_state;
+		rc = touch_state ? 1: 0;
+	}
+
+	return rc;
+}
+#else
+static bool panel_power_is_alway_on(struct dsi_panel *panel)
+{
+	return 0;
+}
+#endif
 
 static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
 	DSI_INFO("(%s)+\n", panel->name);
+
+	if ((panel->tp_state_check_enable) && (panel->tp_state)) {
+		pr_info("%s: (%s)+power is alway on \n", __func__, panel->name);
+		goto exit;
+	}
+
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
@@ -530,6 +562,14 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	int rc = 0;
 
 	DSI_INFO("(%s)+\n", panel->name);
+
+	if (panel->tp_state_check_enable) {
+			if (panel_power_is_alway_on (panel)) {
+			pr_info("%s: (%s)+power is alway on \n", __func__, panel->name);
+			goto exit;
+		}
+	}
+
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
@@ -558,6 +598,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
 				panel->name, rc);
 
+exit:
 	return rc;
 }
 static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
@@ -3777,6 +3818,9 @@ static int dsi_panel_parse_mot_panel_config(struct dsi_panel *panel,
 
 	panel->no_panel_on_read_support = of_property_read_bool(of_node,
 				"qcom,mdss-dsi-no-panel-on-read-support");
+
+	panel->tp_state_check_enable = of_property_read_bool(of_node,
+				"qcom,tp_state_check_enable");
 	return rc;
 }
 
