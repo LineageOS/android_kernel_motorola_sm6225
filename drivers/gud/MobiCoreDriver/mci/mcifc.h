@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2013-2014 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -26,23 +27,23 @@
 
 #if (defined(CONFIG_ARM64) && !defined(MC_ARMV7_FC)) || (defined(MC_AARCH32_FC))
 
-#define FASTCALL_OWNER_TZOS_32  (0xBF000000) /**Trusted OS Fastcalls SMC32 */
-
+#define FASTCALL_OWNER_TZOS          (0x3F000000)
+#define FASTCALL_ATOMIC_MASK         BIT(31)
+/**Trusted OS Fastcalls SMC32 */
+#define MC_FC_STD32_BASE \
+			((u32)(FASTCALL_OWNER_TZOS | FASTCALL_ATOMIC_MASK))
 /* SMC32 Trusted OS owned Fastcalls */
-#define MC_FC_STD32_BASE	((u32)FASTCALL_OWNER_TZOS_32)
 #define MC_FC_STD32(x)	((u32)(MC_FC_STD32_BASE + (x)))
 
 #define MC_FC_INIT	MC_FC_STD32(1)  /**< Initializing FastCall. */
 #define MC_FC_INFO	MC_FC_STD32(2)  /**< Info FastCall. */
 #define MC_FC_MEM_TRACE	MC_FC_STD32(10)  /**< Enable SWd tracing via memory */
-#define MC_FC_SWAP_CPU	MC_FC_STD32(54)  /**< Change new active Core */
 
 #else
 
 #define MC_FC_INIT	((u32)(-1))  /**< Initializing FastCall. */
 #define MC_FC_INFO	((u32)(-2))  /**< Info FastCall. */
 #define MC_FC_MEM_TRACE	((u32)(-31))  /**< Enable SWd tracing via memory */
-#define MC_FC_SWAP_CPU	((u32)(0x84000005))  /**< Change new active Core */
 
 #endif
 
@@ -127,6 +128,10 @@
 #define MC_EXT_INFO_ID_MC_EXC_UUID1	24
 #define MC_EXT_INFO_ID_MC_EXC_UUID2	25
 #define MC_EXT_INFO_ID_MC_EXC_UUID3	26
+/**< MobiCore exception handler last crashing task offset */
+#define MC_EXT_INFO_ID_TASK_OFFSET	27
+/**< MobiCore exception handler last crashing task's mclib offset */
+#define MC_EXT_INFO_ID_MCLIB_OFFSET	28
 
 /** @} */
 
@@ -139,6 +144,8 @@
 #define MC_FC_RET_ERR_INVALID			1
 /**< MobiCore has already been initialized. */
 #define MC_FC_RET_ERR_ALREADY_INITIALIZED	5
+/**< Call is not allowed. */
+#define TEE_FC_RET_ERR_NOABILITY            6
 /** @} */
 
 /** @name Init FastCall flags

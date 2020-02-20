@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
@@ -15,8 +16,8 @@
 #ifndef _MC_USER_H_
 #define _MC_USER_H_
 
-#define MCDRVMODULEAPI_VERSION_MAJOR 6
-#define MCDRVMODULEAPI_VERSION_MINOR 3
+#define MCDRVMODULEAPI_VERSION_MAJOR 7
+#define MCDRVMODULEAPI_VERSION_MINOR 0
 
 #include <linux/types.h>
 
@@ -29,22 +30,20 @@
 /** Maximum length of MobiCore product ID string. */
 #define MC_PRODUCT_ID_LEN		64
 
-/** Flags for session */
-#define MC_IO_SESSION_REMOTE_BUFFERS	BIT(0)
-#define MC_IO_SESSION_NO_MULTIMAP	BIT(1)
-
 /** Number of buffers that can be mapped at once */
 #define MC_MAP_MAX			4
 
 /* Max length for buffers */
-#define BUFFER_LENGTH_MAX		0x100000
+#define MC_MAX_TCI_LEN			0x100000
+#define BUFFER_LENGTH_MAX		0x40000000
+
+/* Max length for objects */
+#define OBJECT_LENGTH_MAX		0x8000000
 
 /* Flags for buffers to map (aligned on GP) */
 #define MC_IO_MAP_INPUT			BIT(0)
 #define MC_IO_MAP_OUTPUT		BIT(1)
 #define MC_IO_MAP_INPUT_OUTPUT		(MC_IO_MAP_INPUT | MC_IO_MAP_OUTPUT)
-/** Extra flags for buffers to map (proprietary) */
-#define MC_IO_MAP_PERSISTENT		BIT(20)
 
 /*
  * Universally Unique Identifier (UUID) according to ISO/IEC 11578.
@@ -90,7 +89,6 @@ struct mc_ioctl_open_session {
 	__u64		tci;		/* tci buffer pointer */
 	__u32		tcilen;		/* tci length */
 	struct mc_identity identity;	/* GP TA identity */
-	__s32		client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -103,7 +101,6 @@ struct mc_ioctl_open_trustlet {
 	__u32		tlen;		/* binary length  */
 	__u64		tci;		/* tci buffer pointer */
 	__u32		tcilen;		/* tci length */
-	__s32		client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -138,7 +135,6 @@ struct mc_ioctl_buffer {
  */
 struct mc_ioctl_map {
 	__u32		sid;		/* session id */
-	__s32		client_fd;	/* client, when using proxy */
 	struct mc_ioctl_buffer buf;	/* buffers info */
 };
 
@@ -220,7 +216,6 @@ struct mc_ioctl_gp_initialize_context {
 struct mc_ioctl_gp_register_shared_mem {
 	struct gp_shared_memory	memref;
 	struct gp_return	ret;		/* return origin/value (out) */
-	__s32			client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -239,7 +234,6 @@ struct mc_ioctl_gp_open_session {
 	struct gp_operation	operation;	/* set of parameters */
 	struct gp_return	ret;		/* return origin/value (out) */
 	__u32			session_id;	/* session id (out) */
-	__s32			client_fd;	/* client, when using proxy */
 };
 
 /*
@@ -257,7 +251,6 @@ struct mc_ioctl_gp_invoke_command {
 	__u32			session_id;	/* session id */
 	__u32			command_id;	/* ID of the command */
 	struct gp_return	ret;		/* return origin/value (out) */
-	__s32			client_fd;	/* client, when using proxy */
 };
 
 /*

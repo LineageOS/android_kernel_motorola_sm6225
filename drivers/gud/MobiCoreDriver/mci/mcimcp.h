@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
@@ -124,6 +125,8 @@ enum cmd_id {
 	MC_MCP_CMD_LOAD_TOKEN		= 0x0B,
 	/** Check that TA can be loaded */
 	MC_MCP_CMD_CHECK_LOAD_TA	= 0x0C,
+	/** Load a decryption key */
+	MC_MCP_CMD_LOAD_SYSENC_KEY_SO = 0x0D,
 };
 
 /*
@@ -131,8 +134,9 @@ enum cmd_id {
  */
 #define WSM_TYPE_MASK		0xFF
 #define WSM_INVALID		0	/** Invalid memory type */
-#define WSM_L2			2	/** Buffer mapping uses L2/L3 table */
 #define WSM_L1			3	/** Buffer mapping uses fake L1 table */
+/**< Bitflag indicating that the buffer should be uncached */
+#define WSM_UNCACHED		0x100
 
 /*
  * Magic number used to identify if Open Command supports GP client
@@ -290,7 +294,7 @@ struct rsp_open {
 struct cmd_check_load {
 	struct cmd_header cmd_header;	/** Command header */
 	struct mc_uuid_t uuid;	/** Service UUID */
-	u8      unused[4];      /** Padding to be 64-bit aligned */
+	u8		unused[4];	/** Padding to be 64-bit aligned */
 	u64		adr_load_data;	/** Physical address of the data */
 	u32		wsm_data_type;	/** Type of MMU */
 	u32		ofs_load_data;	/** Offset to the data */
@@ -330,7 +334,7 @@ struct rsp_close {
  * Map a portion of memory to a session.
  * The MAP command provides a block of memory to the context of a service.
  * The memory then becomes world-shared memory (WSM).
- * The only allowed memory type here is WSM_L2.
+ * The only allowed memory type here is WSM_L1.
  */
 
 /** Map Command */
@@ -397,6 +401,25 @@ struct rsp_load_token {
 	struct rsp_header rsp_header;	/** Response header */
 };
 
+/** @defgroup MCPLOADKEYSO
+ * Load a key SO from the normal world and share it with the TEE
+ * If something fails, the device attestation functionality will be disabled
+ */
+
+/** Load key SO */
+struct cmd_load_key_so {
+	struct cmd_header cmd_header;	/** Command header */
+	u32		wsm_data_type;	/** Type of MMU */
+	u64		adr_load_data;	/** Physical address of the MMU */
+	u64		ofs_load_data;	/** Offset to the data */
+	u64		len_load_data;	/** Length of the data */
+};
+
+/** Load key SO Command Response */
+struct rsp_load_key_so {
+	struct rsp_header rsp_header;	/** Response header */
+};
+
 /** Structure of the MCP buffer */
 union mcp_message {
 	struct init_values	init_values;	/** Initialisation values */
@@ -420,16 +443,17 @@ union mcp_message {
 	struct rsp_load_token	rsp_load_token;
 	struct cmd_check_load	cmd_check_load;	/** TA load check */
 	struct rsp_check_load	rsp_check_load;
+	struct cmd_load_key_so	cmd_load_key_so;/** Load key SO */
+	struct rsp_load_key_so	rsp_load_key_so;
 };
-
-/** Minimum MCP buffer length (in bytes) */
-#define MIN_MCP_LEN         sizeof(mcp_message_t)
 
 #define MC_FLAG_NO_SLEEP_REQ   0
 #define MC_FLAG_REQ_TO_SLEEP   1
 
 #define MC_STATE_NORMAL_EXECUTION 0
 #define MC_STATE_READY_TO_SLEEP   1
+
+#define MC_STATE_FLAG_TEE_HALT_MASK BIT(0)
 
 struct sleep_mode {
 	u16		sleep_req;	/** Ask SWd to get ready to sleep */
@@ -438,13 +462,15 @@ struct sleep_mode {
 
 /** MobiCore status flags */
 struct mcp_flags {
-	/** If not MC_FLAG_SCHEDULE_IDLE, MobiCore needsscheduling */
+	/** If not MC_FLAG_SCHEDULE_IDLE, MobiCore needs scheduling */
 	u32		schedule;
 	struct sleep_mode sleep_mode;
 	/** Secure-world sleep timeout in milliseconds */
 	s32		timeout_ms;
-	/** Reserved for future use: Must not be interpreted */
-	u32		RFU3;
+	/** TEE flags */
+	u8		tee_flags;
+	/** Reserved for future use */
+	u8		RFU_padding[3];
 };
 
 /** MobiCore is idle. No scheduling required */

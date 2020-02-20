@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2013-2016 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,8 +18,21 @@
 
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
 
-/* FIXME to be in .c file, renamed */
+/** Max number of interworld session allocated in MCI buffer */
+#define MAX_IW_SESSION 256
+
+enum nq_notif_state {
+	NQ_NOTIF_IDLE,		/* Nothing happened yet */
+	NQ_NOTIF_QUEUED,	/* Notification in overflow queue */
+	NQ_NOTIF_SENT,		/* Notification in send queue */
+	NQ_NOTIF_RECEIVED,	/* Notification received */
+	NQ_NOTIF_CONSUMED,	/* Notification reported to CA */
+	NQ_NOTIF_DEAD,		/* Error reported to CA */
+};
+
+/* FIXME to be renamed */
 struct nq_session {
 	/* Notification id */
 	u32			id;
@@ -29,68 +43,41 @@ struct nq_session {
 	/* Notification debug mutex */
 	struct mutex		mutex;
 	/* Current notification/session state */
-	enum nq_notif_state {
-		NQ_NOTIF_IDLE,		/* Nothing happened yet */
-		NQ_NOTIF_QUEUED,	/* Notification in overflow queue */
-		NQ_NOTIF_SENT,		/* Notification in send queue */
-		NQ_NOTIF_RECEIVED,	/* Notification received */
-		NQ_NOTIF_CONSUMED,	/* Notification reported to CA */
-		NQ_NOTIF_DEAD,		/* Error reported to CA */
-	}			state;
+	enum nq_notif_state	state;
 	/* Time at notification state change */
 	u64			cpu_clk;
 	/* This TA is of Global Platform type, set by upper layer */
-	bool			is_gp;
+	int			is_gp;
 };
 
-/* Initialisation/cleanup */
-int nq_init(void);
-void nq_exit(void);
+/* Notification queue channel */
+void nq_session_init(struct nq_session *session, bool is_gp);
+void nq_session_exit(struct nq_session *session);
+void nq_session_state_update(struct nq_session *session,
+			     enum nq_notif_state state);
+int nq_session_notify(struct nq_session *session, u32 id, u32 payload);
+const char *nq_session_state(const struct nq_session *session, u64 *cpu_clk);
+
+/* Services */
+union mcp_message *nq_get_mcp_buffer(void);
+struct interworld_session *nq_get_iwp_buffer(void);
+void nq_set_version_ptr(char *version);
+void nq_register_notif_handler(void (*handler)(u32 id, u32 payload), bool iwp);
+int nq_register_tee_stop_notifier(struct notifier_block *nb);
+int nq_unregister_tee_stop_notifier(struct notifier_block *nb);
+ssize_t nq_get_stop_message(char __user *buffer, size_t size);
+void nq_signal_tee_hung(void);
+
+/* SWd suspend/resume */
+int nq_suspend(void);
+int nq_resume(void);
 
 /* Start/stop TEE */
 int nq_start(void);
 void nq_stop(void);
 
-/* SWd suspend/resume */
-int nq_suspend(void);
-int nq_resume(void);
-bool nq_suspended(void);
-
-/*
- * Get the requested SWd sleep timeout value (ms)
- * - if the timeout is -1, wait indefinitely
- * - if the timeout is 0, re-schedule immediately (timeouts in µs in the SWd)
- * - otherwise sleep for the required time
- * returns true if sleep is required, false otherwise
- */
-bool nq_get_idle_timeout(s32 *timeout);
-void nq_reset_idle_timeout(void);
-
-/* Services */
-/* Callback to scheduler registration */
-enum nq_scheduler_commands {
-	MC_NQ_YIELD,
-	MC_NQ_NSIQ,
-};
-
-void nq_register_scheduler(int (*scheduler_cb)(enum nq_scheduler_commands));
-void nq_register_crash_handler(void (*crashhandler_cb)(void));
-void nq_dump_status(void);
-void nq_update_time(void);
-/* Accessors for MCP/IWP contexts */
-union mcp_message *nq_get_mcp_message(void);
-struct interworld_session *nq_get_iwp_buffer(void);
-void nq_register_notif_handler(void (*handler)(u32 id, u32 payload), bool iwp);
-
-/* Notifications */
-void nq_session_init(struct nq_session *session, bool is_gp);
-bool nq_session_is_gp(const struct nq_session *session);
-u64 nq_session_notif_cpu_clk(const struct nq_session *session);
-void nq_session_exit(struct nq_session *session);
-void nq_session_state_update(struct nq_session *session,
-			     enum nq_notif_state state);
-const char *nq_session_state_string(struct nq_session *session);
-int nq_session_notify(struct nq_session *session, u32 id, u32 payload);
-bool nq_notifications_flush(void);
+/* Initialisation/cleanup */
+int nq_init(void);
+void nq_exit(void);
 
 #endif /* _MC_NQ_H_ */
