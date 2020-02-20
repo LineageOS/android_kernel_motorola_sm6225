@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2013-2018 TRUSTONIC LIMITED
  * All Rights Reserved.
@@ -139,10 +140,9 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_open_session(client, &session.sid, &session.uuid,
-					  session.tci, session.tcilen,
-					  session.is_gp_uuid,
-					  &session.identity, -1);
+		ret = client_mc_open_session(client, &session.uuid,
+					     session.tci, session.tcilen,
+					     &session.sid);
 		if (ret)
 			break;
 
@@ -161,9 +161,10 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_open_trustlet(client, &trustlet.sid, trustlet.spid,
-					   trustlet.buffer, trustlet.tlen,
-					   trustlet.tci, trustlet.tcilen, -1);
+		ret = client_mc_open_trustlet(client, trustlet.spid,
+					      trustlet.buffer, trustlet.tlen,
+					      trustlet.tci, trustlet.tcilen,
+					      &trustlet.sid);
 		if (ret)
 			break;
 
@@ -205,14 +206,13 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_map_session_wsms(client, map.sid, &map.buf, -1);
+		ret = client_mc_map(client, map.sid, NULL, &map.buf);
 		if (ret)
 			break;
 
 		/* Fill in return struct */
 		if (copy_to_user(uarg, &map, sizeof(map))) {
 			ret = -EFAULT;
-			client_unmap_session_wsms(client, map.sid, &map.buf);
 			break;
 		}
 		break;
@@ -225,7 +225,7 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_unmap_session_wsms(client, map.sid, &map.buf);
+		ret = client_mc_unmap(client, map.sid, &map.buf);
 		break;
 	}
 	case MC_IO_ERR: {
@@ -287,9 +287,9 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_gp_register_shared_mem(client,
+		ret = client_gp_register_shared_mem(client, NULL, NULL,
 						    &shared_mem.memref,
-						    &shared_mem.ret, -1);
+						    &shared_mem.ret);
 
 		if (copy_to_user(uarg, &shared_mem, sizeof(shared_mem))) {
 			ret = -EFAULT;
@@ -316,10 +316,10 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 			break;
 		}
 
-		ret = client_gp_open_session(client, &session.session_id,
-					     &session.uuid, &session.operation,
+		ret = client_gp_open_session(client, &session.uuid,
+					     &session.operation,
 					     &session.identity,
-					     &session.ret, -1);
+					     &session.ret, &session.session_id);
 
 		if (copy_to_user(uarg, &session, sizeof(session))) {
 			ret = -EFAULT;
@@ -349,7 +349,7 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 		ret = client_gp_invoke_command(client, command.session_id,
 					       command.command_id,
 					       &command.operation,
-					       &command.ret, -1);
+					       &command.ret);
 
 		if (copy_to_user(uarg, &command, sizeof(command))) {
 			ret = -EFAULT;
@@ -371,8 +371,8 @@ static long user_ioctl(struct file *file, unsigned int id, unsigned long arg)
 		break;
 	}
 	default:
-		mc_dev_err("unsupported command no %d", id);
 		ret = -ENOIOCTLCMD;
+		mc_dev_err(ret, "unsupported command no %d", id);
 	}
 
 	return ret;
@@ -385,8 +385,11 @@ static int user_mmap(struct file *file, struct vm_area_struct *vmarea)
 {
 	struct tee_client *client = get_client(file);
 
-	if ((vmarea->vm_end - vmarea->vm_start) > BUFFER_LENGTH_MAX)
+	if ((vmarea->vm_end - vmarea->vm_start) > BUFFER_LENGTH_MAX) {
+		mc_dev_err(-EINVAL, "buffer size %lu too big",
+			   vmarea->vm_end - vmarea->vm_start);
 		return -EINVAL;
+	}
 
 	/* Alloc contiguous buffer for this client */
 	return client_cbuf_create(client,

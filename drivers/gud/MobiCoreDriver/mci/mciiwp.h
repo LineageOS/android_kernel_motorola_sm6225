@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2016 TRUSTONIC LIMITED
+ * Copyright (c) 2016-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -16,9 +17,6 @@
 #define MCIIWP_H_
 
 #include "public/GP/tee_client_types.h" /* teec_uuid FIXME it's all mixed up! */
-
-/** Max number of interworld session allocated in MCI buffer */
-#define MAX_IW_SESSION 256
 
 /** Session ID for notifications for the Dragon CA-to-TA communication protocol
  *
@@ -74,7 +72,7 @@ struct interworld_parameter_memref {
  * Inside the shared pages, the buffer starts at address 'offset'
  * and ends after 'size' bytes.
  *
- * - wsm_type parameter may be WSM_CONTIGUOUS, WSM_L1 or WSM_L2.
+ * - wsm_type parameter may be WSM_CONTIGUOUS or WSM_L1.
  * - offset must be less than the page size (4096).
  * - size must be less than 0xfffff000.
  */

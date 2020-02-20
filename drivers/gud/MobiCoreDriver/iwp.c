@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -27,6 +28,10 @@
 #include <linux/freezer.h>
 #include <asm/barrier.h>
 #include <linux/irq.h>
+#include <linux/version.h>
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
+#include <linux/sched/clock.h>	/* local_clock */
+#endif
 
 #include "public/GP/tee_client_api.h"	/* GP error codes/origins FIXME move */
 #include "public/mc_user.h"
@@ -38,11 +43,11 @@
 #include "mci/mcitime.h"	/* struct mcp_time */
 #include "mci/mciiwp.h"
 
-#include "platform.h"		/* IRQ number */
 #include "main.h"
-#include "fastcall.h"
-#include "logging.h"
+#include "admin.h"              /* tee_object* for 'blob' */
+#include "mmu.h"                /* MMU for 'blob' */
 #include "nq.h"
+#include "xen_fe.h"
 #include "iwp.h"
 
 #define IWP_RETRIES		5
@@ -57,10 +62,11 @@
 
 struct iws {
 	struct list_head list;
-	u32 offset;
+	u64 slot;
 };
 
 static struct {
+	bool iwp_dead;
 	struct interworld_session *iws;
 	/* Interworld lists lock */
 	struct mutex		iws_list_lock;
@@ -71,6 +77,28 @@ static struct {
 	/* Sessions */
 	struct mutex		sessions_lock;
 	struct list_head	sessions;
+	/* TEE bad state detection */
+	struct notifier_block	tee_stop_notifier;
+	/* Log of last commands */
+#define LAST_CMDS_SIZE 256
+	struct mutex		last_cmds_mutex;	/* Log protection */
+	struct command_info {
+		u64			cpu_clk;	/* Kernel time */
+		pid_t			pid;		/* Caller PID */
+		u32			id;		/* IWP command ID */
+		u32			session_id;
+		char			uuid_str[34];
+		enum state {
+			UNUSED,		/* Unused slot */
+			PENDING,	/* Previous command in progress */
+			SENT,		/* Waiting for response */
+			COMPLETE,	/* Got result */
+			FAILED,		/* Something went wrong */
+		}			state;	/* Command processing state */
+		struct gp_return	result;	/* Command result */
+		int			errno;	/* Return code */
+	}				last_cmds[LAST_CMDS_SIZE];
+	int				last_cmds_index;
 } l_ctx;
 
 static void iwp_notif_handler(u32 id, u32 payload)
@@ -79,8 +107,7 @@ static void iwp_notif_handler(u32 id, u32 payload)
 
 	mutex_lock(&l_ctx.sessions_lock);
 	list_for_each_entry(candidate, &l_ctx.sessions, list) {
-		mc_dev_devel("candidate->slot [%08x]",
-			     candidate->slot);
+		mc_dev_devel("candidate->slot [%08llx]", candidate->slot);
 		/* If id is SID_CANCEL_OPERATION, there is pseudo session */
 		if (candidate->slot == payload &&
 		    (id != SID_CANCEL_OPERATION || candidate->sid == id)) {
@@ -91,13 +118,14 @@ static void iwp_notif_handler(u32 id, u32 payload)
 	mutex_unlock(&l_ctx.sessions_lock);
 
 	if (!iwp_session) {
-		mc_dev_err("IWP no session found for id=0x%x slot=0x%x",
+		mc_dev_err(-ENXIO, "IWP no session found for id=0x%x slot=0x%x",
 			   id, payload);
 		return;
 	}
 
 	mc_dev_devel("IWP: iwp_session [%p] id [%08x] slot [%08x]",
 		     iwp_session, id, payload);
+	nq_session_state_update(&iwp_session->nq_session, NQ_NOTIF_RECEIVED);
 	complete(&iwp_session->completion);
 }
 
@@ -106,80 +134,172 @@ void iwp_session_init(struct iwp_session *iwp_session,
 {
 	nq_session_init(&iwp_session->nq_session, true);
 	iwp_session->sid = SID_INVALID;
-	iwp_session->slot = (u32)-1;		/* 0 is a valid slot */
+	iwp_session->slot = INVALID_IWS_SLOT;
 	INIT_LIST_HEAD(&iwp_session->list);
 	mutex_init(&iwp_session->notif_wait_lock);
 	init_completion(&iwp_session->completion);
-	mutex_init(&iwp_session->exit_code_lock);
-	iwp_session->exit_code = 0;
 	mutex_init(&iwp_session->iws_lock);
 	iwp_session->state = IWP_SESSION_RUNNING;
 	if (identity)
 		iwp_session->client_identity = *identity;
 }
 
-static u32 iws_slot_get(void)
+static u64 iws_slot_get(void)
 {
 	struct iws *iws;
-	u32 ret = INVALID_IWS_SLOT;
+	u64 slot = INVALID_IWS_SLOT;
+
+	if (is_xen_domu())
+		return (uintptr_t)kzalloc(sizeof(*iws), GFP_KERNEL);
 
 	mutex_lock(&l_ctx.iws_list_lock);
 	if (!list_empty(&l_ctx.free_iws)) {
 		iws = list_first_entry(&l_ctx.free_iws, struct iws, list);
-		ret = iws->offset;
+		slot = iws->slot;
 		list_move(&iws->list, &l_ctx.allocd_iws);
 		atomic_inc(&g_ctx.c_slots);
+		mc_dev_devel("got slot %llu", slot);
 	}
 	mutex_unlock(&l_ctx.iws_list_lock);
-	return ret;
+	return slot;
 }
 
 /* Passing INVALID_IWS_SLOT is supported */
-static void iws_slot_put(u32 offset)
+static void iws_slot_put(u64 slot)
 {
 	struct iws *iws;
+	bool found = false;
+
+	if (is_xen_domu()) {
+		kfree((void *)(uintptr_t)slot);
+		return;
+	}
 
 	mutex_lock(&l_ctx.iws_list_lock);
 	list_for_each_entry(iws, &l_ctx.allocd_iws, list) {
-		if (offset == iws->offset) {
+		if (slot == iws->slot) {
 			list_move(&iws->list, &l_ctx.free_iws);
 			atomic_dec(&g_ctx.c_slots);
+			found = true;
+			mc_dev_devel("put slot %llu", slot);
 			break;
 		}
 	}
 	mutex_unlock(&l_ctx.iws_list_lock);
+
+	if (!found)
+		mc_dev_err(-EINVAL, "slot %llu not found", slot);
 }
 
-static inline struct interworld_session *slot_to_iws(u32 slot)
+static inline struct interworld_session *slot_to_iws(u64 slot)
 {
-	return (struct interworld_session *)((uintptr_t)l_ctx.iws + slot);
+	if (is_xen_domu())
+		return (struct interworld_session *)(uintptr_t)slot;
+
+	return (struct interworld_session *)((uintptr_t)l_ctx.iws + (u32)slot);
 }
 
 /*
  * IWP command functions
  */
-static int iwp_cmd(struct iwp_session *iwp_session, u32 id)
+static int iwp_cmd(struct iwp_session *iwp_session, u32 id,
+		   struct teec_uuid *uuid, bool killable)
 {
-	struct completion *completion;
+	struct command_info *cmd_info;
 	int ret;
+
+	/* Initialize MCP log */
+	mutex_lock(&l_ctx.last_cmds_mutex);
+	cmd_info = &l_ctx.last_cmds[l_ctx.last_cmds_index];
+	memset(cmd_info, 0, sizeof(*cmd_info));
+	cmd_info->cpu_clk = local_clock();
+	cmd_info->pid = current->pid;
+	cmd_info->id = id;
+	if (id == SID_OPEN_SESSION || id == SID_OPEN_TA) {
+		/* Keep UUID because it's an 'open session' cmd */
+		const char *cuuid = (const char *)uuid;
+		size_t i;
+
+		cmd_info->uuid_str[0] = ' ';
+		for (i = 0; i < sizeof(*uuid); i++) {
+			snprintf(&cmd_info->uuid_str[1 + i * 2], 3, "%02x",
+				 cuuid[i]);
+		}
+	} else if (id == SID_CANCEL_OPERATION) {
+		struct interworld_session *iws = slot_to_iws(iwp_session->slot);
+
+		if (iws)
+			cmd_info->session_id = iws->session_handle;
+		else
+			cmd_info->session_id = 0;
+	} else {
+		cmd_info->session_id = iwp_session->sid;
+	}
+
+	cmd_info->state = PENDING;
+	iwp_set_ret(0, &cmd_info->result);
+	if (++l_ctx.last_cmds_index >= LAST_CMDS_SIZE)
+		l_ctx.last_cmds_index = 0;
+	mutex_unlock(&l_ctx.last_cmds_mutex);
+
+	if (l_ctx.iwp_dead)
+		return -EHOSTUNREACH;
 
 	mc_dev_devel("psid [%08x], sid [%08x]", id, iwp_session->sid);
 	ret = nq_session_notify(&iwp_session->nq_session, id,
 				iwp_session->slot);
 	if (ret) {
-		mc_dev_err("sid [%08x]: sending failed, ret = %d",
-			   iwp_session->sid, ret);
+		mc_dev_err(ret, "sid [%08x]: sending failed", iwp_session->sid);
+		mutex_lock(&l_ctx.last_cmds_mutex);
+		cmd_info->errno = ret;
+		cmd_info->state = FAILED;
+		mutex_unlock(&l_ctx.last_cmds_mutex);
 		return ret;
 	}
 
-	completion = &iwp_session->completion;
+	/* Update MCP log */
+	mutex_lock(&l_ctx.last_cmds_mutex);
+	cmd_info->state = SENT;
+	mutex_unlock(&l_ctx.last_cmds_mutex);
 
 	/*
 	 * NB: Wait cannot be interruptible as we need an answer from SWd. It's
 	 * up to the user-space to request a cancellation (for open session and
 	 * command invocation operations.)
+	 *
+	 * We do provide a way out to make applications killable in some cases
+	 * though.
 	 */
-	wait_for_completion(completion);
+	if (killable) {
+		ret = wait_for_completion_killable(&iwp_session->completion);
+		if (ret) {
+			iwp_request_cancellation(iwp_session->slot);
+			/* Make sure the SWd did not die in the meantime */
+			if (l_ctx.iwp_dead)
+				return -EHOSTUNREACH;
+
+			wait_for_completion(&iwp_session->completion);
+		}
+	} else {
+		wait_for_completion(&iwp_session->completion);
+	}
+
+	if (l_ctx.iwp_dead)
+		return -EHOSTUNREACH;
+
+	/* Update MCP log */
+	mutex_lock(&l_ctx.last_cmds_mutex);
+	{
+		struct interworld_session *iws = slot_to_iws(iwp_session->slot);
+
+		cmd_info->result.origin = iws->return_origin;
+		cmd_info->result.value = iws->status;
+		if (id == SID_OPEN_SESSION || id == SID_OPEN_TA)
+			cmd_info->session_id = iws->session_handle;
+	}
+	cmd_info->state = COMPLETE;
+	mutex_unlock(&l_ctx.last_cmds_mutex);
+	nq_session_state_update(&iwp_session->nq_session, NQ_NOTIF_CONSUMED);
 	return 0;
 }
 
@@ -224,6 +344,10 @@ int iwp_set_ret(int ret, struct gp_return *gp_ret)
 	case -ENOMEM:
 		gp_ret->value = TEEC_ERROR_OUT_OF_MEMORY;
 		break;
+	case -EHOSTUNREACH:
+		/* Tee crashed */
+		gp_ret->value = TEEC_ERROR_TARGET_DEAD;
+		break;
 	case -ENXIO:
 		/* Session not found or not running */
 		gp_ret->value = TEEC_ERROR_BAD_STATE;
@@ -234,12 +358,17 @@ int iwp_set_ret(int ret, struct gp_return *gp_ret)
 	return -ECHILD;
 }
 
-int iwp_register_shared_mem(struct mcp_buffer_map *map,
+int iwp_register_shared_mem(struct tee_mmu *mmu, u32 *sva,
 			    struct gp_return *gp_ret)
 {
-	int ret = 0;
+	int ret;
 
-	ret = mcp_map(SID_MEMORY_REFERENCE, map);
+#ifdef TRUSTONIC_XEN_DOMU
+	if (is_xen_domu())
+		return xen_gp_register_shared_mem(mmu, sva, gp_ret);
+#endif
+
+	ret = mcp_map(SID_MEMORY_REFERENCE, mmu, sva);
 	/* iwp_set_ret would override the origin if called after */
 	ret = iwp_set_ret(ret, gp_ret);
 	if (ret)
@@ -250,6 +379,11 @@ int iwp_register_shared_mem(struct mcp_buffer_map *map,
 
 int iwp_release_shared_mem(struct mcp_buffer_map *map)
 {
+#ifdef TRUSTONIC_XEN_DOMU
+	if (is_xen_domu())
+		return xen_gp_release_shared_mem(map);
+#endif
+
 	return mcp_unmap(SID_MEMORY_REFERENCE, map);
 }
 
@@ -281,9 +415,19 @@ static int iwp_operation_to_iws(struct gp_operation *operation,
 		case TEEC_MEMREF_TEMP_OUTPUT:
 		case TEEC_MEMREF_TEMP_INOUT:
 			if (operation->params[i].tmpref.buffer) {
+				struct gp_temp_memref *tmpref;
+
+				tmpref = &operation->params[i].tmpref;
 				/* Prepare buffer to map */
-				bufs[i].va = operation->params[i].tmpref.buffer;
-				bufs[i].len = operation->params[i].tmpref.size;
+				bufs[i].va = tmpref->buffer;
+				if (tmpref->size > BUFFER_LENGTH_MAX) {
+					mc_dev_err(-EINVAL,
+						   "buffer size %llu too big",
+						   tmpref->size);
+					return -EINVAL;
+				}
+
+				bufs[i].len = tmpref->size;
 				if (param_type == TEEC_MEMREF_TEMP_INPUT)
 					bufs[i].flags = MC_IO_MAP_INPUT;
 				else if (param_type == TEEC_MEMREF_TEMP_OUTPUT)
@@ -329,7 +473,7 @@ static int iwp_operation_to_iws(struct gp_operation *operation,
 static inline void iwp_iws_set_tmpref(struct interworld_session *iws, int i,
 				      const struct mcp_buffer_map *map)
 {
-	iws->params[i].tmpref.physical_address = map->phys_addr;
+	iws->params[i].tmpref.physical_address = map->addr;
 	iws->params[i].tmpref.size = map->length;
 	iws->params[i].tmpref.offset = map->offset;
 	iws->params[i].tmpref.wsm_type = map->type;
@@ -349,7 +493,7 @@ static inline void iwp_iws_set_refs(struct interworld_session *iws,
 	for (i = 0; i < _TEEC_PARAMETER_NUMBER; i++)
 		if (maps[i].sva)
 			iwp_iws_set_memref(iws, i, maps[i].sva);
-		else if (maps[i].map.phys_addr)
+		else if (maps[i].map.addr)
 			iwp_iws_set_tmpref(iws, i, &maps[i].map);
 }
 
@@ -410,34 +554,130 @@ static inline void mcuuid_to_tee_uuid(const struct mc_uuid_t *in,
 	memcpy(out->clock_seq_and_node, in->value + 8, 8);
 }
 
+static const char *origin_to_string(u32 origin)
+{
+	switch (origin) {
+	case TEEC_ORIGIN_API:
+		return "API";
+	case TEEC_ORIGIN_COMMS:
+		return "COMMS";
+	case TEEC_ORIGIN_TEE:
+		return "TEE";
+	case TEEC_ORIGIN_TRUSTED_APP:
+		return "TRUSTED_APP";
+	}
+	return "UNKNOWN";
+}
+
+static const char *value_to_string(u32 value)
+{
+	switch (value) {
+	case TEEC_SUCCESS:
+		return "SUCCESS";
+	case TEEC_ERROR_GENERIC:
+		return "GENERIC";
+	case TEEC_ERROR_ACCESS_DENIED:
+		return "ACCESS_DENIED";
+	case TEEC_ERROR_CANCEL:
+		return "CANCEL";
+	case TEEC_ERROR_ACCESS_CONFLICT:
+		return "ACCESS_CONFLICT";
+	case TEEC_ERROR_EXCESS_DATA:
+		return "EXCESS_DATA";
+	case TEEC_ERROR_BAD_FORMAT:
+		return "BAD_FORMAT";
+	case TEEC_ERROR_BAD_PARAMETERS:
+		return "BAD_PARAMETERS";
+	case TEEC_ERROR_BAD_STATE:
+		return "BAD_STATE";
+	case TEEC_ERROR_ITEM_NOT_FOUND:
+		return "ITEM_NOT_FOUND";
+	case TEEC_ERROR_NOT_IMPLEMENTED:
+		return "NOT_IMPLEMENTED";
+	case TEEC_ERROR_NOT_SUPPORTED:
+		return "NOT_SUPPORTED";
+	case TEEC_ERROR_NO_DATA:
+		return "NO_DATA";
+	case TEEC_ERROR_OUT_OF_MEMORY:
+		return "OUT_OF_MEMORY";
+	case TEEC_ERROR_BUSY:
+		return "BUSY";
+	case TEEC_ERROR_COMMUNICATION:
+		return "COMMUNICATION";
+	case TEEC_ERROR_SECURITY:
+		return "SECURITY";
+	case TEEC_ERROR_SHORT_BUFFER:
+		return "SHORT_BUFFER";
+	case TEEC_ERROR_TARGET_DEAD:
+		return "TARGET_DEAD";
+	case TEEC_ERROR_STORAGE_NO_SPACE:
+		return "STORAGE_NO_SPACE";
+	}
+	return NULL;
+}
+
+static const char *cmd_to_string(u32 id)
+{
+	switch (id) {
+	case SID_OPEN_SESSION:
+		return "open session";
+	case SID_INVOKE_COMMAND:
+		return "invoke command";
+	case SID_CLOSE_SESSION:
+		return "close session";
+	case SID_CANCEL_OPERATION:
+		return "cancel operation";
+	case SID_MEMORY_REFERENCE:
+		return "memory reference";
+	case SID_OPEN_TA:
+		return "open TA";
+	case SID_REQ_TA:
+		return "request TA";
+	}
+	return "unknown";
+}
+
+static const char *state_to_string(enum iwp_session_state state)
+{
+	switch (state) {
+	case IWP_SESSION_RUNNING:
+		return "running";
+	case IWP_SESSION_CLOSE_REQUESTED:
+		return "close requested";
+	case IWP_SESSION_CLOSED:
+		return "closed";
+	}
+	return "error";
+}
+
 int iwp_open_session_prepare(
 	struct iwp_session *iwp_session,
-	const struct tee_object *obj,
 	struct gp_operation *operation,
 	struct mc_ioctl_buffer *bufs,
 	struct gp_shared_memory **parents,
 	struct gp_return *gp_ret)
 {
 	struct interworld_session *iws;
-	union mclf_header *header;
-	u32 slot, temp_slot;
-	int ret;
+	u64 slot, op_slot;
+	int ret = 0;
 
 	/* Get session final slot */
 	slot = iws_slot_get();
-	mc_dev_devel("slot [%08x]", slot);
+	mc_dev_devel("slot [%08llx]", slot);
 	if (slot == INVALID_IWS_SLOT) {
-		mc_dev_err("can't get slot");
-		return iwp_set_ret(-ENOMEM, gp_ret);
+		ret = -ENOMEM;
+		mc_dev_err(ret, "can't get slot");
+		return iwp_set_ret(ret, gp_ret);
 	}
 
 	/* Get session temporary slot */
-	temp_slot = iws_slot_get();
-	mc_dev_devel("temp_slot [%08x]", temp_slot);
-	if (temp_slot == INVALID_IWS_SLOT) {
-		mc_dev_err("can't get temp_slot");
+	op_slot = iws_slot_get();
+	mc_dev_devel("op_slot [%08llx]", op_slot);
+	if (op_slot == INVALID_IWS_SLOT) {
+		ret = -ENOMEM;
+		mc_dev_err(ret, "can't get op_slot");
 		iws_slot_put(slot);
-		return iwp_set_ret(-ENOMEM, gp_ret);
+		return iwp_set_ret(ret, gp_ret);
 	}
 
 	mutex_lock(&iwp_session->iws_lock);
@@ -446,30 +686,25 @@ int iwp_open_session_prepare(
 	iwp_session->slot = slot;
 	iws = slot_to_iws(slot);
 	memset(iws, 0, sizeof(*iws));
-	iws->command_id = temp_slot;
 
 	/* Prepare temporary session */
-	iws = slot_to_iws(temp_slot);
+	iwp_session->op_slot = op_slot;
+	iws = slot_to_iws(op_slot);
 	memset(iws, 0, sizeof(*iws));
-	header = (union mclf_header *)(obj->data + obj->header_length);
-	mcuuid_to_tee_uuid(&header->mclf_header_v2.uuid, &iws->target_uuid);
-	iws->login = iwp_session->client_identity.login_type;
-	mc_dev_devel("iws->login [%08x]", iws->login);
-	memcpy(&iws->client_uuid, iwp_session->client_identity.login_data,
-	       sizeof(iws->client_uuid));
-	ret = iwp_operation_to_iws(operation, iws, bufs, parents);
-	if (ret)
-		iwp_open_session_abort(iwp_session);
+
+	if (operation) {
+		ret = iwp_operation_to_iws(operation, iws, bufs, parents);
+		if (ret)
+			iwp_open_session_abort(iwp_session);
+	}
 
 	return iwp_set_ret(ret, gp_ret);
 }
 
 void iwp_open_session_abort(struct iwp_session *iwp_session)
 {
-	struct interworld_session *iws = slot_to_iws(iwp_session->slot);
-
-	iws_slot_put(iws->command_id);
 	iws_slot_put(iwp_session->slot);
+	iws_slot_put(iwp_session->op_slot);
 	mutex_unlock(&iwp_session->iws_lock);
 }
 
@@ -478,30 +713,92 @@ void iwp_open_session_abort(struct iwp_session *iwp_session)
  */
 int iwp_open_session(
 	struct iwp_session *iwp_session,
+	const struct mc_uuid_t *uuid,
 	struct gp_operation *operation,
-	struct mcp_buffer_map *ta_map,
 	const struct iwp_buffer_map *maps,
+	struct interworld_session *iws_in,
+	struct tee_mmu **mmus,
 	struct gp_return *gp_ret)
 {
 	struct interworld_session *iws = slot_to_iws(iwp_session->slot);
-	/* command_id is zero'd by the SWd */
-	u32 temp_slot = iws->command_id;
-	struct interworld_session *temp_iws = slot_to_iws(temp_slot);
+	struct interworld_session *op_iws = slot_to_iws(iwp_session->op_slot);
+	struct tee_object *obj = NULL;
+	struct tee_mmu *obj_mmu = NULL;
+	struct mcp_buffer_map obj_map;
 	int ret;
 
-	/* Put ingoing operation in temporary IWS */
-	iwp_iws_set_refs(temp_iws, maps);
+	/* Operation is NULL when called from Xen BE */
+	if (operation) {
+		/* Login info */
+		op_iws->login = iwp_session->client_identity.login_type;
+		mc_dev_devel("iws->login [%08x]", op_iws->login);
+		memcpy(&op_iws->client_uuid,
+		       iwp_session->client_identity.login_data,
+		       sizeof(op_iws->client_uuid));
+
+		/* Put ingoing operation in temporary IWS */
+		iwp_iws_set_refs(op_iws, maps);
+	} else {
+		struct mcp_buffer_map map;
+		int i;
+
+		*op_iws = *iws_in;
+
+		/* Insert correct mapping in operation */
+		for (i = 0; i < 4; i++) {
+			if (!mmus[i])
+				continue;
+
+			tee_mmu_buffer(mmus[i], &map);
+			iwp_iws_set_tmpref(op_iws, i, &map);
+		}
+	}
+
+	/* For the SWd to find the TA slot from the main one */
+	iws->command_id = (u32)iwp_session->op_slot;
 
 	/* TA blob handling */
-	iws->param_types = TEEC_MEMREF_TEMP_INPUT;
-	iws->session_handle = 0;
-	iwp_iws_set_tmpref(iws, 0, ta_map);
+	if (!is_xen_domu()) {
+		union mclf_header *header;
 
-	mc_dev_devel("wsm_type [%04x], offset [%04x]", ta_map->type,
-		     ta_map->offset);
-	mc_dev_devel("size [%08x], physical_address [%08x %08x]",
-		     ta_map->length, (u32)(ta_map->phys_addr >> 32),
-		     (u32)(ta_map->phys_addr & 0xFFFFFFFF));
+		obj = tee_object_get(uuid, true);
+		if (IS_ERR(obj)) {
+			/* Tell SWd to load TA from SFS as not in registry */
+			if (PTR_ERR(obj) == -ENOENT)
+				obj = tee_object_select(uuid);
+
+			if (IS_ERR(obj))
+				return PTR_ERR(obj);
+		}
+
+		/* Convert UUID */
+		header = (union mclf_header *)(&obj->data[obj->header_length]);
+		mcuuid_to_tee_uuid(&header->mclf_header_v2.uuid,
+				   &op_iws->target_uuid);
+
+		/* Create mapping for blob (alloc'd by driver => task = NULL) */
+		{
+			struct mc_ioctl_buffer buf = {
+				.va = (uintptr_t)obj->data,
+				.len = obj->length,
+				.flags = MC_IO_MAP_INPUT,
+			};
+
+			obj_mmu = tee_mmu_create(NULL, &buf);
+			if (IS_ERR(obj_mmu)) {
+				ret = PTR_ERR(obj_mmu);
+				goto err_mmu;
+			}
+
+			iws->param_types = TEEC_MEMREF_TEMP_INPUT;
+			tee_mmu_buffer(obj_mmu, &obj_map);
+			iwp_iws_set_tmpref(iws, 0, &obj_map);
+			mc_dev_devel("wsm_type [%04x], offset [%04x]",
+				     obj_map.type, obj_map.offset);
+			mc_dev_devel("size [%08x], physical_address [%08llx]",
+				     obj_map.length, obj_map.addr);
+		}
+	}
 
 	/* Add to local list of sessions so we can receive the notification */
 	mutex_lock(&l_ctx.sessions_lock);
@@ -509,9 +806,17 @@ int iwp_open_session(
 	mutex_unlock(&l_ctx.sessions_lock);
 
 	/* Send IWP open command */
-	ret = iwp_cmd(iwp_session, SID_OPEN_TA);
+#ifdef TRUSTONIC_XEN_DOMU
+	if (is_xen_domu())
+		ret = xen_gp_open_session(iwp_session, uuid, maps, iws, op_iws,
+					  gp_ret);
+	else
+#endif
+		ret = iwp_cmd(iwp_session, SID_OPEN_TA, &op_iws->target_uuid,
+			      true);
+
 	/* Temporary slot is not needed any more */
-	iws_slot_put(temp_slot);
+	iws_slot_put(iwp_session->op_slot);
 	/* Treat remote errors as errors, just use a specific errno */
 	if (!ret && iws->status != TEEC_SUCCESS) {
 		gp_ret->origin = iws->return_origin;
@@ -523,17 +828,33 @@ int iwp_open_session(
 		/* set unique identifier for list search */
 		iwp_session->sid = iws->session_handle;
 		/* Get outgoing operation from main IWS */
-		iwp_iws_to_operation(iws, operation);
+		if (operation)
+			iwp_iws_to_operation(iws, operation);
+		else
+			*iws_in = *iws;
+
 	} else {
 		/* Remove from list of sessions */
 		mutex_lock(&l_ctx.sessions_lock);
 		list_del(&iwp_session->list);
 		mutex_unlock(&l_ctx.sessions_lock);
 		iws_slot_put(iwp_session->slot);
-		mc_dev_devel("failed with ret [%08x]", ret);
+		mc_dev_devel("failed: %s from %s, ret %d",
+			     value_to_string(gp_ret->value),
+			     origin_to_string(gp_ret->origin), ret);
 	}
 
 	mutex_unlock(&iwp_session->iws_lock);
+
+	/* Blob not needed as re-mapped by the SWd */
+	if (obj_mmu)
+		tee_mmu_put(obj_mmu);
+
+err_mmu:
+	/* Delete secure object */
+	if (obj)
+		tee_object_free(obj);
+
 	return iwp_set_ret(ret, gp_ret);
 }
 
@@ -559,19 +880,24 @@ static void iwp_session_release(
 int iwp_close_session(
 	struct iwp_session *iwp_session)
 {
-	int ret;
+	int ret = 0;
 
-	/* state is either IWP_SESSION_RUNNING or IWP_SESSION_CLOSING_GP */
-	mutex_lock(&iwp_session->iws_lock);
-	if (iwp_session->state == IWP_SESSION_RUNNING)
+	if (is_xen_domu()) {
+#ifdef TRUSTONIC_XEN_DOMU
+		ret = xen_gp_close_session(iwp_session);
+#endif
+	} else {
+		mutex_lock(&iwp_session->iws_lock);
 		iwp_session->state = IWP_SESSION_CLOSE_REQUESTED;
 
-	/* Send IWP open command */
-	ret = iwp_cmd(iwp_session, SID_CLOSE_SESSION);
-	mutex_unlock(&iwp_session->iws_lock);
+		/* Send IWP open command */
+		ret = iwp_cmd(iwp_session, SID_CLOSE_SESSION, NULL, false);
+		mutex_unlock(&iwp_session->iws_lock);
+	}
+
 	iwp_session_release(iwp_session);
-	mc_dev_devel("close session %x ret %d state %d", iwp_session->sid,
-		     ret, iwp_session->state);
+	mc_dev_devel("close session %x ret %d state %s", iwp_session->sid,
+		     ret, state_to_string(iwp_session->state));
 	return ret;
 }
 
@@ -584,7 +910,7 @@ int iwp_invoke_command_prepare(
 	struct gp_return *gp_ret)
 {
 	struct interworld_session *iws;
-	int ret;
+	int ret = 0;
 
 	if (iwp_session->state != IWP_SESSION_RUNNING)
 		return iwp_set_ret(-EBADFD, gp_ret);
@@ -593,10 +919,12 @@ int iwp_invoke_command_prepare(
 	iws = slot_to_iws(iwp_session->slot);
 	memset(iws, 0, sizeof(*iws));
 	iws->session_handle = iwp_session->sid;
-	iws->command_id = command_id;
-	ret = iwp_operation_to_iws(operation, iws, bufs, parents);
-	if (ret)
-		iwp_invoke_command_abort(iwp_session);
+	if (operation) {
+		iws->command_id = command_id;
+		ret = iwp_operation_to_iws(operation, iws, bufs, parents);
+		if (ret)
+			iwp_invoke_command_abort(iwp_session);
+	}
 
 	return iwp_set_ret(ret, gp_ret);
 }
@@ -611,19 +939,49 @@ int iwp_invoke_command(
 	struct iwp_session *iwp_session,
 	struct gp_operation *operation,
 	const struct iwp_buffer_map *maps,
+	struct interworld_session *iws_in,
+	struct tee_mmu **mmus,
 	struct gp_return *gp_ret)
 {
 	struct interworld_session *iws = slot_to_iws(iwp_session->slot);
 	int ret = 0;
 
-	/* Update IWS with operation maps */
-	iwp_iws_set_refs(iws, maps);
-	ret = iwp_cmd(iwp_session, SID_INVOKE_COMMAND);
+	/* Operation is NULL when called from Xen BE */
+	if (operation) {
+		/* Update IWS with operation maps */
+		iwp_iws_set_refs(iws, maps);
+	} else {
+		struct mcp_buffer_map map;
+		int i;
+
+		*iws = *iws_in;
+
+		/* Insert correct mapping in operation */
+		for (i = 0; i < 4; i++) {
+			if (!mmus[i])
+				continue;
+
+			tee_mmu_buffer(mmus[i], &map);
+			iwp_iws_set_tmpref(iws, i, &map);
+		}
+	}
+
+#ifdef TRUSTONIC_XEN_DOMU
+	if (is_xen_domu())
+		ret = xen_gp_invoke_command(iwp_session, maps, iws, gp_ret);
+	else
+#endif
+		ret = iwp_cmd(iwp_session, SID_INVOKE_COMMAND, NULL, true);
+
 	/* Treat remote errors as errors, just use a specific errno */
 	if (!ret && iws->status != TEEC_SUCCESS)
 		ret = -ECHILD;
 
-	iwp_iws_to_operation(iws, operation);
+	if (operation)
+		iwp_iws_to_operation(iws, operation);
+	else
+		*iws_in = *iws;
+
 	if (ret && (ret != -ECHILD)) {
 		ret = iwp_set_ret(ret, gp_ret);
 		mc_dev_devel("failed with ret [%08x]", ret);
@@ -631,16 +989,23 @@ int iwp_invoke_command(
 		gp_ret->origin = iws->return_origin;
 		gp_ret->value = iws->status;
 	}
+
 	mutex_unlock(&iwp_session->iws_lock);
 	return ret;
 }
 
 int iwp_request_cancellation(
-	u32 slot)
+	u64 slot)
 {
 	/* Pseudo IWP session for cancellation */
 	struct iwp_session iwp_session;
 	int ret;
+
+#ifdef TRUSTONIC_XEN_DOMU
+	if (is_xen_domu())
+		return xen_gp_request_cancellation(
+			(uintptr_t)slot_to_iws(slot));
+#endif
 
 	iwp_session_init(&iwp_session, NULL);
 	/* sid is local. Set is to SID_CANCEL_OPERATION to make things clear */
@@ -649,19 +1014,163 @@ int iwp_request_cancellation(
 	mutex_lock(&l_ctx.sessions_lock);
 	list_add_tail(&iwp_session.list, &l_ctx.sessions);
 	mutex_unlock(&l_ctx.sessions_lock);
-	ret = iwp_cmd(&iwp_session, SID_CANCEL_OPERATION);
+	ret = iwp_cmd(&iwp_session, SID_CANCEL_OPERATION, NULL, false);
 	mutex_lock(&l_ctx.sessions_lock);
 	list_del(&iwp_session.list);
 	mutex_unlock(&l_ctx.sessions_lock);
 	return ret;
 }
 
+static int debug_sessions(struct kasnprintf_buf *buf)
+{
+	struct iwp_session *session;
+	int ret;
+
+	/* Header */
+	ret = kasnprintf(buf, "%20s %4s %-15s %-11s %7s\n",
+			 "CPU clock", "ID", "state", "notif state", "slot");
+	if (ret < 0)
+		return ret;
+
+	mutex_lock(&l_ctx.sessions_lock);
+	list_for_each_entry(session, &l_ctx.sessions, list) {
+		const char *state_str;
+		u64 cpu_clk;
+
+		state_str = nq_session_state(&session->nq_session, &cpu_clk);
+		ret = kasnprintf(buf, "%20llu %4x %-15s %-11s %7llu\n", cpu_clk,
+				 session->sid == SID_INVALID ? 0 : session->sid,
+				 state_to_string(session->state), state_str,
+				 session->slot);
+		if (ret < 0)
+			break;
+	}
+	mutex_unlock(&l_ctx.sessions_lock);
+	return ret;
+}
+
+static ssize_t debug_sessions_read(struct file *file, char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	return debug_generic_read(file, user_buf, count, ppos,
+				  debug_sessions);
+}
+
+static const struct file_operations debug_sessions_ops = {
+	.read = debug_sessions_read,
+	.llseek = default_llseek,
+	.open = debug_generic_open,
+	.release = debug_generic_release,
+};
+
+static inline int show_log_entry(struct kasnprintf_buf *buf,
+				 struct command_info *cmd_info)
+{
+	const char *state_str = "unknown";
+	const char *value_str = value_to_string(cmd_info->result.value);
+	char value[16];
+
+	switch (cmd_info->state) {
+	case UNUSED:
+		state_str = "unused";
+		break;
+	case PENDING:
+		state_str = "pending";
+		break;
+	case SENT:
+		state_str = "sent";
+		break;
+	case COMPLETE:
+		state_str = "complete";
+		break;
+	case FAILED:
+		state_str = "failed";
+		break;
+	}
+
+	if (!value_str) {
+		snprintf(value, sizeof(value), "%08x", cmd_info->result.value);
+		value_str = value;
+	}
+
+	return kasnprintf(buf, "%20llu %5d %-16s %5x %-8s %5d %-11s %-17s%s\n",
+			  cmd_info->cpu_clk, cmd_info->pid,
+			  cmd_to_string(cmd_info->id), cmd_info->session_id,
+			  state_str, cmd_info->errno,
+			  origin_to_string(cmd_info->result.origin), value_str,
+			  cmd_info->uuid_str);
+}
+
+static int debug_last_cmds(struct kasnprintf_buf *buf)
+{
+	struct command_info *cmd_info;
+	int i, ret = 0;
+
+	/* Initialize MCP log */
+	mutex_lock(&l_ctx.last_cmds_mutex);
+	ret = kasnprintf(buf, "%20s %5s %-16s %5s %-8s %5s %-11s %-17s%s\n",
+			 "CPU clock", "PID", "command", "S-ID",
+			 "state", "errno", "origin", "value", "UUID");
+	if (ret < 0)
+		goto out;
+
+	cmd_info = &l_ctx.last_cmds[l_ctx.last_cmds_index];
+	if (cmd_info->state != UNUSED)
+		/* Buffer has wrapped around, dump end (oldest records) */
+		for (i = l_ctx.last_cmds_index; i < LAST_CMDS_SIZE; i++) {
+			ret = show_log_entry(buf, cmd_info++);
+			if (ret < 0)
+				goto out;
+		}
+
+	/* Dump first records */
+	cmd_info = &l_ctx.last_cmds[0];
+	for (i = 0; i < l_ctx.last_cmds_index; i++) {
+		ret = show_log_entry(buf, cmd_info++);
+		if (ret < 0)
+			goto out;
+	}
+
+out:
+	mutex_unlock(&l_ctx.last_cmds_mutex);
+	return ret;
+}
+
+static ssize_t debug_last_cmds_read(struct file *file, char __user *user_buf,
+				    size_t count, loff_t *ppos)
+{
+	return debug_generic_read(file, user_buf, count, ppos, debug_last_cmds);
+}
+
+static const struct file_operations debug_last_cmds_ops = {
+	.read = debug_last_cmds_read,
+	.llseek = default_llseek,
+	.open = debug_generic_open,
+	.release = debug_generic_release,
+};
+
+static inline void mark_iwp_dead(void)
+{
+	struct iwp_session *session;
+
+	l_ctx.iwp_dead = true;
+	/* Signal all potential waiters that SWd is going away */
+	mutex_lock(&l_ctx.sessions_lock);
+	list_for_each_entry(session, &l_ctx.sessions, list)
+		complete(&session->completion);
+	mutex_unlock(&l_ctx.sessions_lock);
+}
+
+static int tee_stop_notifier_fn(struct notifier_block *nb, unsigned long event,
+				void *data)
+{
+	mark_iwp_dead();
+	return 0;
+}
+
 int iwp_init(void)
 {
 	int i;
-#ifdef TA2TA_READY
-	u32 first_iws = INVALID_IWS_SLOT;
-#endif /*TA2TA_READY*/
 
 	l_ctx.iws = nq_get_iwp_buffer();
 	INIT_LIST_HEAD(&l_ctx.free_iws);
@@ -671,43 +1180,36 @@ int iwp_init(void)
 	if (!l_ctx.iws_list_pool)
 		return -ENOMEM;
 
-#ifndef TA2TA_READY
 	for (i = 0; i < MAX_IW_SESSION; i++) {
-		l_ctx.iws_list_pool[i].offset =
+		l_ctx.iws_list_pool[i].slot =
 			i * sizeof(struct interworld_session);
 		list_add(&l_ctx.iws_list_pool[i].list, &l_ctx.free_iws);
 	}
-#else
-	for (i = MAX_IW_SESSION - 1; i >= 0; i--) {
-		l_ctx.iws_list_pool[i].offset =
-			i * sizeof(struct interworld_session);
-		list_add(&l_ctx.iws_list_pool[i].list, &l_ctx.free_iws);
-	}
-#endif /*TA2TA_READY*/
 
 	mutex_init(&l_ctx.iws_list_lock);
 	INIT_LIST_HEAD(&l_ctx.sessions);
 	mutex_init(&l_ctx.sessions_lock);
-
-#ifdef TA2TA_READY
-	/* allocate special session for request from SWd */
-	first_iws = iws_slot_get();
-	if (first_iws != 0) {
-		mc_dev_err("first_iws [%08x]", first_iws);
-		return -ERANGE;
-	}
-#endif /*TA2TA_READY*/
-
 	nq_register_notif_handler(iwp_notif_handler, true);
+	l_ctx.tee_stop_notifier.notifier_call = tee_stop_notifier_fn;
+	nq_register_tee_stop_notifier(&l_ctx.tee_stop_notifier);
+	/* Debugfs */
+	mutex_init(&l_ctx.last_cmds_mutex);
 	return 0;
 }
 
 void iwp_exit(void)
 {
+	mark_iwp_dead();
+	nq_unregister_tee_stop_notifier(&l_ctx.tee_stop_notifier);
 }
 
 int iwp_start(void)
 {
+	/* Create debugfs sessions and last commands entries */
+	debugfs_create_file("iwp_sessions", 0400, g_ctx.debug_dir, NULL,
+			    &debug_sessions_ops);
+	debugfs_create_file("last_iwp_commands", 0400, g_ctx.debug_dir, NULL,
+			    &debug_last_cmds_ops);
 	return 0;
 }
 
