@@ -37,8 +37,9 @@ mcDrvModule-y := \
 	mcp.o \
 	mmu.o \
 	nq.o \
-	pm.o \
-	scheduler.o \
 	session.o \
 	teeclientapi.o \
-	user.o
+	user.o \
+	xen_be.o \
+	xen_common.o \
+	xen_fe.o

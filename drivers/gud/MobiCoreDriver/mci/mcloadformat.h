@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2017 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,6 +18,14 @@
 /** Trustlet Blob length info */
 #define MC_TLBLOBLEN_MAGIC	0x7672746C	/* Magic for SWd: vrtl */
 #define MAX_SO_CONT_SIZE	512		/* Max size for a container */
+
+/** MCLF magic */
+/**< "MCLF" in big endian integer representation */
+#define MC_SERVICE_HEADER_MAGIC_BE \
+	((uint32_t)('M' | ('C' << 8) | ('L' << 16) | ('F' << 24)))
+/**< "MCLF" in little endian integer representation */
+#define MC_SERVICE_HEADER_MAGIC_LE \
+	((uint32_t)(('M' << 24) | ('C' << 16) | ('L' << 8) | 'F'))
 
 /** MCLF flags */
 /**< Loaded service cannot be unloaded from MobiCore. */
