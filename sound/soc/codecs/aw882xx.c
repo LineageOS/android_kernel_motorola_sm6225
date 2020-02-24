@@ -1,7 +1,7 @@
 /*
  * aw882xx.c   aw882xx codec module
  *
- * Version: v0.1.7
+ * Version: v0.1.8
  *
  * keep same with AW882XX_VERSION
  *
@@ -47,7 +47,7 @@
  ******************************************************/
 #define AW882XX_I2C_NAME "aw882xx_smartpa"
 
-#define AW882XX_VERSION "v0.1.7"
+#define AW882XX_VERSION "v0.1.8"
 
 #define AW882XX_RATES SNDRV_PCM_RATE_8000_48000
 #define AW882XX_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
@@ -89,7 +89,9 @@ static int aw_adm_param_enable(int port_id, int copp_idx, int module_id, int par
 
 static int aw882xx_get_cali_re_form_nv(int32_t *cali_re);
 static int aw882xx_set_cali_re(struct aw882xx *aw882xx, int32_t cali_re);
+static int aw882xx_load_profile_params(struct aw882xx *aw882xx);
 static void aw882xx_skt_set_dsp(int value);
+static int aw882xx_send_profile_params_to_dsp(struct aw882xx *aw882xx, int profile_id);
 
 /*monitor  voltage and temperature table*/
 static struct aw882xx_low_vol vol_down_table[] = {
@@ -279,6 +281,25 @@ static void aw882xx_run_mute(struct aw882xx *aw882xx, bool mute)
 	}
 }
 
+static bool aw882xx_get_power_status(struct aw882xx *aw882xx)
+{
+	unsigned int reg_value = 0;
+	int ret = 0;
+	pr_debug("%s: enter\n", __func__);
+
+	ret = aw882xx_i2c_read(aw882xx, AW882XX_SYSCTRL_REG, &reg_value);
+	if (ret < 0) {
+		pr_err("%s: read reg %d failed \n", __func__, AW882XX_SYSCTRL_REG);
+		return false;
+	}
+	/*bit 0: 1 power off, 0 power on*/
+	if (reg_value & 0x01) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
 static void aw882xx_run_pwd(struct aw882xx *aw882xx, bool pwd)
 {
 	pr_debug("%s: enter\n", __func__);
@@ -455,6 +476,11 @@ static void aw882xx_start(struct aw882xx *aw882xx)
 		(aw882xx->spk_rcv_mode == AW882XX_SPEAKER_MODE)) {
 		aw882xx_monitor_start(&aw882xx->monitor);
 	}
+	ret = aw882xx_send_profile_params_to_dsp(aw882xx, aw882xx->profile.cur_profile);
+	if (ret) {
+		pr_err("%s: set profile %d failed \n", __func__,aw882xx->profile.cur_profile);
+		aw882xx->profile.cur_profile = 0;
+	}
 	mutex_unlock(&aw882xx->lock);
 }
 
@@ -465,6 +491,7 @@ static void aw882xx_stop(struct aw882xx *aw882xx)
 	mutex_lock(&aw882xx->lock);
 	aw882xx_run_mute(aw882xx, true);
 	aw882xx_run_pwd(aw882xx, true);
+	aw882xx->profile.cur_profile = 0;
 	if (aw882xx->monitor.is_enable)
 		aw882xx_monitor_stop(&aw882xx->monitor);
 	mutex_unlock(&aw882xx->lock);
@@ -589,7 +616,7 @@ static void aw882xx_reg_loaded(const struct firmware *cont, void *context)
 	}
 	mutex_unlock(&aw882xx->lock);
 	kfree(aw882xx_cfg);
-
+	aw882xx_load_profile_params(aw882xx);
 	aw882xx_start(aw882xx);
 }
 
@@ -648,6 +675,12 @@ static void aw882xx_smartpa_cfg(struct aw882xx *aw882xx, bool flag)
 static const char *const spk_function[] = { "Off", "On" };
 static const char *const rcv_function[] = { "Off", "On" };
 static const char *const awinic_algo[] = { "Disable", "Enable" };
+static const char *const awinic_profile[AW_PROFILE_MAX] = {
+"Music", "Ringtone", "Notification", "Voice"};
+static const char *const awinic_profile_param_file_name[] = {
+		"aw882xx_afe_params.bin",
+	};
+
 static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 50, 0);
 
 struct soc_mixer_control aw882xx_mixer = {
@@ -852,6 +885,187 @@ static int aw882xx_tx_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int aw882xx_profile_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_codec_get_drvdata(codec);
+
+	pr_debug("%s: profile : %s \n", __func__,
+			awinic_profile[aw882xx->profile.cur_profile]);
+	ucontrol->value.integer.value[0] = aw882xx->profile.cur_profile;
+	return 0;
+}
+static int aw882xx_profile_firmware_parse(struct aw882xx *aw882xx, const struct firmware *cont)
+{
+	aw_afe_params_hdr_t *hdr;
+	char *fw_data = NULL;
+	uint8_t sum = 0;
+	uint32_t param_size = 0;
+	char *param_data = NULL;
+	int i;
+	pr_info("%s: loaded %s - size: %zu\n", __func__,
+		awinic_profile_param_file_name[0], cont ? cont->size : 0);
+
+	if (cont->size == 0) {
+		goto load_failed;
+	}
+
+	fw_data = kzalloc(cont->size, GFP_KERNEL);
+	if (fw_data == NULL) {
+		pr_err("%s: alloc memory failed \n", __func__);
+		goto load_failed;
+	}
+	memcpy(fw_data, cont->data, cont->size);
+
+	/*output bin info*/
+	hdr = (aw_afe_params_hdr_t *)fw_data;
+	pr_info("%s: fw v_%d.%d.%d \n", __func__,
+		hdr->fw[0], hdr->fw[1], hdr->fw[2]);
+	pr_info("%s: param v_%d.%d.%d \n", __func__,
+		hdr->cfg[0], hdr->cfg[1], hdr->cfg[2]);
+	pr_info("%s: project name : %s \n", __func__, hdr->project);
+	pr_info("%s: param len: %d", __func__, hdr->params_len);
+
+	param_data = fw_data + sizeof(aw_afe_params_hdr_t);
+	param_size = cont->size - sizeof(aw_afe_params_hdr_t);
+
+	for (i = 0; i < param_size; i++) {
+		sum += param_data[i];
+	}
+	if (sum != hdr->check_sum) {
+		pr_err("%s:data check sum failed : %d -- %d \n", __func__,
+			sum, hdr->check_sum);
+		kfree(fw_data);
+		goto load_failed;
+	}
+
+	if (hdr->profile_num <  AW_PROFILE_MAX) {
+		pr_err("%s: profile num is not match %d -- %d ", __func__,
+			hdr->profile_num, AW_PROFILE_MAX);
+		kfree(fw_data);
+		goto load_failed;
+	}
+
+	if (hdr->params_len != (param_size / hdr->profile_num)) {
+		pr_err("%s: profile params len  is not match %d ", __func__,
+			hdr->params_len);
+		kfree(fw_data);
+		goto load_failed;
+	}
+
+	mutex_lock(&aw882xx->profile.lock);
+	param_data = fw_data + sizeof(aw_afe_params_hdr_t);
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		aw882xx->profile.data[i] =  kzalloc(hdr->params_len, GFP_KERNEL);
+		if (aw882xx->profile.data[i] == NULL) {
+			pr_err("%s: alloc failed !", __func__);
+			kfree(fw_data);
+			mutex_unlock(&aw882xx->profile.lock);
+			goto load_failed;
+		}
+		memcpy(aw882xx->profile.data[i], param_data , hdr->params_len);
+		param_data += hdr->params_len;
+	}
+	aw882xx->profile.len = hdr->params_len;
+	aw882xx->profile.status = AW882XX_INIT_OK;
+	mutex_unlock(&aw882xx->profile.lock);
+	kfree(fw_data);
+	return 0;
+
+load_failed:
+	mutex_lock(&aw882xx->profile.lock);
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		if (aw882xx->profile.data[i]) {
+			kfree(aw882xx->profile.data[i]);
+			aw882xx->profile.data[i] = NULL;
+		}
+	}
+	aw882xx->profile.status = AW882XX_INIT_NG;
+	aw882xx->profile.len = 0;
+	mutex_unlock(&aw882xx->profile.lock);
+	pr_err("%s: load params bin failed !", __func__);
+	return 0;
+}
+
+static int aw882xx_load_profile_params(struct aw882xx *aw882xx)
+{
+	const struct firmware *fw = NULL;
+	int ret;
+	pr_info("%s: enter\n", __func__);
+
+	ret = request_firmware(&fw,
+		awinic_profile_param_file_name[0],
+		aw882xx->dev);
+	if (ret) {
+		pr_err("%s: load profile params failed !", __func__);
+		return -EINVAL;
+	}
+
+	ret = aw882xx_profile_firmware_parse(aw882xx, fw);
+	return ret;
+}
+
+static int aw882xx_send_profile_params_to_dsp(struct aw882xx *aw882xx, int profile_id)
+{
+	int ret ;
+	int32_t params_id = AFE_PARAM_ID_AWDSP_RX_PARAMS;
+
+	mutex_lock(&aw882xx->profile.lock);
+	if (aw882xx->profile.data[profile_id] == NULL) {
+		pr_err("%s: profile %s not data is NULL \n", __func__,
+			awinic_profile[profile_id]);
+		mutex_unlock(&aw882xx->profile.lock);
+		return -EINVAL;
+	}
+	ret = aw_send_afe_cal_apr(params_id,
+			aw882xx->profile.data[profile_id],
+			aw882xx->profile.len, true);
+	if (ret) {
+		pr_err("%s: dsp_msg_write error: 0x%x\n",
+			__func__, params_id);
+		mutex_unlock(&aw882xx->profile.lock);
+		return ret;
+	}
+	mutex_unlock(&aw882xx->profile.lock);
+
+	pr_debug("%s: set params done", __func__);
+	return 0;
+}
+
+static int aw882xx_profile_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_codec_get_drvdata(codec);
+	unsigned int ctl_value = 0;
+	int ret;
+	ctl_value = ucontrol->value.integer.value[0];
+
+	if (ctl_value >= AW_PROFILE_MAX) {
+		pr_err("%s: unsuport profile %d", __func__, ctl_value);
+		return -EINVAL;
+	}
+	pr_debug("%s: profile switch to %s \n",
+		__func__, awinic_profile[ctl_value]);
+
+	if (aw882xx->profile.cur_profile != ctl_value) {
+		/*PA have power on ,set params direct*/
+		if (aw882xx_get_power_status(aw882xx)) {
+			ret = aw882xx_send_profile_params_to_dsp(aw882xx, ctl_value);
+			if (ret < 0) {
+				return -EINVAL;
+			}
+			aw882xx_send_cali_re_to_dsp(aw882xx);
+			aw882xx->profile.cur_profile = ctl_value;
+		} else {
+			/*PA power only set params status*/
+			aw882xx->profile.cur_profile = ctl_value;
+		}
+	}
+	return 0;
+}
+
 static int aw882xx_skt_disable_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -895,6 +1109,7 @@ static const struct soc_enum aw882xx_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(spk_function), spk_function),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(rcv_function), rcv_function),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(awinic_algo), awinic_algo),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(awinic_profile), awinic_profile),
 };
 
 static struct snd_kcontrol_new aw882xx_controls[] = {
@@ -906,6 +1121,8 @@ static struct snd_kcontrol_new aw882xx_controls[] = {
 		aw882xx_algo_get, aw882xx_algo_set),
 	SOC_ENUM_EXT("aw882xx_tx_switch", aw882xx_snd_enum[2],
 		aw882xx_tx_get, aw882xx_tx_set),
+	SOC_ENUM_EXT("aw882xx_profile_switch", aw882xx_snd_enum[3],
+		aw882xx_profile_get, aw882xx_profile_set),
 	SOC_ENUM_EXT("aw882xx_skt_disable", aw882xx_snd_enum[0],
 		aw882xx_skt_disable_get, aw882xx_skt_disable_set),
 };
@@ -2281,6 +2498,7 @@ static int aw882xx_i2c_probe(struct i2c_client *i2c,
 	struct device_node *np = i2c->dev.of_node;
 	int irq_flags = 0;
 	int ret = -1;
+	int i;
 
 	pr_info("%s: enter\n", __func__);
 
@@ -2401,6 +2619,15 @@ static int aw882xx_i2c_probe(struct i2c_client *i2c,
 
 	init_aw882xx_misc_driver(aw882xx);
 	g_aw882xx = aw882xx;
+
+	/*init profile*/
+	mutex_init(&aw882xx->profile.lock);
+	aw882xx->profile.cur_profile = 0;
+	aw882xx->profile.status = AW882XX_INIT_ST;
+	aw882xx->profile.len = 0;
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		aw882xx->profile.data[i] = NULL;
+	}
 	pr_info("%s: probe completed successfully!\n", __func__);
 
 	return 0;
