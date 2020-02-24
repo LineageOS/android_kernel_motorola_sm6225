@@ -167,6 +167,36 @@ struct aw882xx_monitor{
 #endif
 };
 
+enum AWINIC_PROFILE{
+	AW_PROFILE_MUSIC = 0,
+	AW_PROFILE_RINGTONE,
+	AW_PROFILE_NOTIFICATION,
+	AW_PROFILE_VOICE,
+	AW_PROFILE_MAX,
+};
+
+#define VERSION_MAX 4
+#define PROJECT_NAME_MAX 24
+
+typedef struct awinic_afe_param_header{
+	uint8_t fw[VERSION_MAX];
+	uint8_t cfg[VERSION_MAX];
+	uint8_t project[PROJECT_NAME_MAX];
+	uint32_t start;
+	uint32_t params_len;
+	uint8_t check_sum;
+	uint8_t profile_num;
+	uint8_t reserve[2];
+}aw_afe_params_hdr_t;
+
+struct  profile_info {
+	struct mutex lock;
+	int cur_profile;
+	int status;
+	int len;
+	char* data[AW_PROFILE_MAX];
+};
+
 struct aw882xx {
 	struct regmap *regmap;
 	struct i2c_client *i2c;
@@ -191,6 +221,7 @@ struct aw882xx {
 	unsigned int spk_rcv_mode;
 	int32_t cali_re;
 	unsigned int cfg_num;
+	struct  profile_info profile;
 };
 
 struct aw882xx_container {
