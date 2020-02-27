@@ -755,16 +755,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	else
 		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 
-	if (panel->is_hbm_using_51_cmd) {
-		panel->bl_lvl_during_hbm = bl_lvl;
-
-		if (panel->is_hbm_on) {
-			DSI_DEBUG("HBM is on.. ignore setting backlight. bl_vl=%d\n",
-						panel->bl_lvl_during_hbm);
-			return 0;
-		}
-	}
-
 	if (bl->bl_2bytes_enable)
 		rc = mipi_dsi_dcs_set_display_brightness_2bytes(dsi, bl_lvl);
 	else
@@ -827,12 +817,69 @@ error:
 	return rc;
 }
 
+static bool dsi_panel_param_is_supported(u32 param_idx)
+{
+
+	struct panel_param *param = NULL;
+
+	param = &dsi_panel_param[0][param_idx];
+
+	if (param_idx < PARAM_ID_NUM && param && param->is_supported)
+		return true;
+	return false;
+}
+
+static bool dsi_panel_param_is_hbm_on(struct dsi_panel *panel)
+{
+	struct panel_param *panel_param;
+
+	panel_param = &dsi_panel_param[0][PARAM_HBM_ID];
+	if (!panel_param) {
+		pr_err("%s: invalid panel_param.\n", __func__);
+		return false;
+	}
+
+	if(panel_param->is_supported && panel_param->value != HBM_OFF_STATE)
+		return true;
+
+	return false;
+}
+
+static bool dsi_panel_set_hbm_backlight(struct dsi_panel *panel, u32 *bl_lvl)
+{
+	u32 bl_level;
+
+	if (!dsi_panel_param_is_supported(PARAM_HBM_ID))
+		return false;
+
+	bl_level = *bl_lvl;
+
+	if (bl_level == BRIGHTNESS_HBM_ON && panel->hbm_type == HBM_TYPE_OLED) {
+		return true;
+	} else if (bl_level == BRIGHTNESS_HBM_ON || bl_level == BRIGHTNESS_HBM_OFF) {
+		*bl_lvl = bl_level == BRIGHTNESS_HBM_ON ?
+			panel->bl_config.bl_max_level : panel->bl_lvl_during_hbm;
+		return false;
+	} else {
+		panel->bl_lvl_during_hbm = bl_level;
+		if (dsi_panel_param_is_hbm_on(panel)) {
+			DSI_INFO("HBM is on.. ignore setting backlight. bl_vl=%d\n",
+				panel->bl_lvl_during_hbm);
+			return true;
+		}
+	}
+	return false;
+}
+
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
 	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
+	if (dsi_panel_set_hbm_backlight(panel, &bl_lvl))
 		return 0;
 
 	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
@@ -983,38 +1030,19 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
                         struct msm_param_info *param_info)
 {
 	int rc = 0;
-	u32 tmp_bklt_lvl = 0;
-	bool old_hbm_on;
 
 	pr_info("Set HBM to (%d)\n", param_info->value);
+
 	rc = dsi_panel_send_param_cmd(panel, param_info);
-	if (rc < 0)
+	if (rc < 0) {
 		DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
-	else {
-		mutex_lock(&panel->panel_lock);
-		if (!panel->is_hbm_using_51_cmd) {
-			mutex_unlock(&panel->panel_lock);
-			return rc;
-		}
-
-		old_hbm_on = panel->is_hbm_on ;
-		panel->is_hbm_on = param_info->value;
-		if (!panel->is_hbm_on) {
-			tmp_bklt_lvl= panel->bl_lvl_during_hbm;
-			panel->bl_lvl_during_hbm = 0;
-		}
-		mutex_unlock(&panel->panel_lock);
-
-		if (param_info->value == 0 && old_hbm_on && tmp_bklt_lvl) {
-			rc = dsi_panel_set_backlight(panel, tmp_bklt_lvl);
-			if (rc)
-				DSI_ERR("unable to set backlight\n");
-			else
-				tmp_bklt_lvl = 0;
-		}
+	} else {
+		rc = dsi_panel_set_backlight(panel, HBM_BRIGHTNESS(param_info->value));
+		if (rc)
+			DSI_ERR("unable to set backlight\n");
 	}
 
-        return rc;
+	return rc;
 };
 
 static int dsi_panel_set_acl(struct dsi_panel *panel,
@@ -3721,6 +3749,7 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 	enum dsi_cmd_set_type type;
 	const char *prop;
 	struct dsi_parser_utils *utils = &panel->utils;
+	const char *data;
 
 	panel->panel_hbm_fod = of_property_read_bool(of_node,
 				"qcom,mdss-dsi-hbm-fod");
@@ -3731,6 +3760,26 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 		if (!param) {
 			pr_err("Invalid param\n");
 			goto err;
+		}
+
+		if (i == PARAM_HBM_ID){
+			panel->panel_hbm_fod = of_property_read_bool(of_node,
+				"qcom,mdss-dsi-hbm-fod");
+
+			data = of_get_property(of_node, "qcom,mdss-dsi-hbm-type", NULL);
+			if (data && !strcmp(data, "lcd-dcs-wled"))
+				panel->hbm_type = HBM_TYPE_LCD_DCS_WLED;
+			else if (data && !strcmp(data, "lcd-dcs-only"))
+				panel->hbm_type = HBM_TYPE_LCD_DCS_ONLY;
+			else if (data && !strcmp(data, "lcd-wled-only"))
+				panel->hbm_type = HBM_TYPE_LCD_WLED_ONLY;
+			else if (data && !strcmp(data, "lcd-dcs-gpio"))
+				panel->hbm_type = HBM_TYPE_LCD_DCS_GPIO;
+			else
+				panel->hbm_type = HBM_TYPE_OLED;
+
+			panel->bl_lvl_during_hbm = panel->bl_config.bl_max_level;
+
 		}
 
 		rc = -EINVAL;
@@ -3779,11 +3828,6 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 			}
 		}
 	}
-
-	panel->is_hbm_using_51_cmd = of_property_read_bool(of_node,
-				"qcom,mdss-dsi-panel-hbm-is-51cmd");
-	if (panel->is_hbm_using_51_cmd)
-		DSI_INFO("HBM command is using 0x51 command\n");
 
 err:
 	return rc;
