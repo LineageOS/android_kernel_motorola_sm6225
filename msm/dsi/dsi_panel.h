@@ -38,6 +38,35 @@
 #define DSI_PANEL_MAX_PANEL_LEN        128
 #define MAX_PARAM_NAME 10
 
+#define BRIGHTNESS_HBM_ON	0xFFFFFFFE
+#define BRIGHTNESS_HBM_OFF	(BRIGHTNESS_HBM_ON - 1)
+#define HBM_BRIGHTNESS(value) ((value) == HBM_ON_STATE ?\
+			BRIGHTNESS_HBM_ON : BRIGHTNESS_HBM_OFF)
+
+/* HBM implementation is different, depending on display and backlight hardware
+ * design, which is classified into the following types:
+ * HBM_TYPE_OLED: OLED panel, HBM is controlled by DSI register only, which
+ *     is independent on brightness.
+ * HBM_TYPE_LCD_DCS_WLED: LCD panel, HBM is controlled by DSI register, and
+ *     brightness is decided by WLED IC on I2C/SPI bus.
+ * HBM_TYPE_LCD_DCS_ONLY: LCD panel, brightness/HBM is controlled by DSI
+ *     register only.
+ * HBM_TYPE_LCD_WLED_ONLY: LCD panel, brightness/HBM is controlled by WLED
+ *     IC only.
+ * HBM_TYPE_LCD_DCS_GPIO: LCD panel, HBM  is controlled by GPIO, and brightness
+ *     is controlled by DSI register.
+ *
+ * Note: brightness must be at maximum while enabling HBM for all LCD panels
+ */
+
+enum panel_hbm_type {
+	HBM_TYPE_OLED = 0,
+	HBM_TYPE_LCD_DCS_WLED,
+	HBM_TYPE_LCD_DCS_ONLY,
+	HBM_TYPE_LCD_WLED_ONLY,
+	HBM_TYPE_LCD_DCS_GPIO
+};
+
 enum dsi_panel_rotation {
 	DSI_PANEL_ROTATE_NONE = 0,
 	DSI_PANEL_ROTATE_HV_FLIP,
@@ -284,8 +313,7 @@ struct dsi_panel {
 	u32 disp_on_chk_val;
 	bool no_panel_on_read_support;
 
-	bool is_hbm_using_51_cmd;
-	bool is_hbm_on;
+	enum panel_hbm_type hbm_type;
 	u32  bl_lvl_during_hbm;
 	bool panel_hbm_fod;
 
