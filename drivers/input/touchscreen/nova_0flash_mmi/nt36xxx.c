@@ -44,6 +44,10 @@
 #ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
 #define register_panel_notifier panel_register_notifier
 #define unregister_panel_notifier panel_unregister_notifier
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
 #else
 #define register_panel_notifier(...) rc
 #define unregister_panel_notifier(...) rc
@@ -2279,6 +2283,9 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 #endif
 
 	nvt_irq_enable(false);
@@ -2548,9 +2555,17 @@ static int nvt_panel_notifier_callback(struct notifier_block *self, unsigned lon
 	case PANEL_EVENT_PRE_DISPLAY_OFF:
 			NVT_LOG("event=%lu\n", event);
 			nvt_ts_suspend(&ts->client->dev);
+#ifdef NVT_SENSOR_EN
+			if (ts->should_enable_gesture) {
+				NVT_LOG("double tap gesture suspend\n");
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			} else {
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			}
+#endif
 				break;
 
-	case PANEL_EVENT_PRE_DISPLAY_ON:
+	case PANEL_EVENT_DISPLAY_ON:
 			NVT_LOG("event=%lu\n", event);
 			nvt_ts_resume(&ts->client->dev);
 				break;
