@@ -177,6 +177,7 @@ enum {
 #define HEARTBEAT_DELAY_MS 5000
 #define HEARTBEAT_DUAL_DELAY_MS 10000
 #define HEARTBEAT_FACTORY_MS 1000
+#define HEARTBEAT_DISCHARGE_MS 60000
 
 #define EMPTY_CYCLES 101
 
@@ -3277,7 +3278,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	struct smb_mmi_charger *chip = container_of(work,
 						struct smb_mmi_charger,
 						heartbeat_work.work);
-	int hb_resch_time;
+	int hb_resch_time = HEARTBEAT_DELAY_MS;
 	union power_supply_propval pval;
 	int rc, usb_suspend;
 	int batt_cap = 0;
@@ -3309,10 +3310,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	alarm_try_to_cancel(&chip->heartbeat_alarm);
 
 	mmi_dbg(chip, "Heartbeat!\n");
-	if (chip->factory_mode)
-		hb_resch_time = HEARTBEAT_FACTORY_MS;
-	else
-		hb_resch_time = HEARTBEAT_DELAY_MS;
 
 	chg_stat.charger_present = false;
 	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
@@ -3384,6 +3381,13 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		return;
 	} else
 		chg_stat.charger_present = pval.intval & chg_stat.vbus_present;
+
+	if (chip->factory_mode)
+		hb_resch_time = HEARTBEAT_FACTORY_MS;
+	else if (chg_stat.charger_present || chg_stat.dc_present)
+		hb_resch_time = HEARTBEAT_DELAY_MS;
+	else
+		hb_resch_time = HEARTBEAT_DISCHARGE_MS;
 
 	mmi_chrg_rate_check(chip);
 
