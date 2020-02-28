@@ -544,7 +544,7 @@ static int aw8697_haptic_play_mode(struct aw8697 *aw8697,
 				      AW8697_BIT_SYSCTRL_PLAY_MODE_RAM);
 		aw8697_i2c_write_bits(aw8697, AW8697_REG_SYSCTRL,
 				      AW8697_BIT_SYSCTRL_BST_MODE_MASK,
-				      AW8697_BIT_SYSCTRL_BST_MODE_BOOST);
+				      AW8697_BIT_SYSCTRL_BST_MODE_BYPASS);
 		if (aw8697->auto_boost) {
 			aw8697_i2c_write_bits(aw8697, AW8697_REG_BST_AUTO,
 					AW8697_BIT_BST_AUTO_BST_RAM_MASK,
@@ -4105,7 +4105,7 @@ static void aw8697_vibrator_work_routine(struct work_struct *work)
 	aw8697_haptic_upload_lra(aw8697, 1);
 	if (aw8697->state) {
 		if (aw8697->activate_mode == AW8697_HAPTIC_ACTIVATE_RAM_MODE) {
-			aw8697_haptic_ram_vbat_comp(aw8697, false);
+			aw8697_haptic_ram_vbat_comp(aw8697, true);
 			aw8697_haptic_play_repeat_seq(aw8697, true);
 		} else if (aw8697->activate_mode ==
 			   AW8697_HAPTIC_ACTIVATE_CONT_MODE) {
