@@ -901,7 +901,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					/* call class method */
 					ret = ts->imports->report_gesture(&event);
 					if (!ret)
-						__pm_wakeup_event(&ts->wakelock, 5000);
+						__pm_wakeup_event(&ts->gesture_wakelock, 3000);
 				}
 #endif
 				break;
@@ -1771,6 +1771,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	mutex_init(&ts->modechange);
 
 	wakeup_source_init(&ts->wakelock, "tsp_wakelock");
+	wakeup_source_init(&ts->gesture_wakelock, "tsp_gesture_wakelock");
 	init_completion(&ts->resume_done);
 	complete_all(&ts->resume_done);
 
@@ -1884,6 +1885,7 @@ err_irq:
 	}
 err_input_register_device:
 	kfree(ts->pFrame);
+	wakeup_source_trash(&ts->gesture_wakelock);
 	wakeup_source_trash(&ts->wakelock);
 	sec_ts_power(ts, false);
 	if (ts->plat_data->support_dex) {
@@ -2314,6 +2316,7 @@ static int sec_ts_remove(struct i2c_client *client)
 	p_ghost_check = NULL;
 #endif
 	device_init_wakeup(&client->dev, false);
+	wakeup_source_trash(&ts->gesture_wakelock);
 	wakeup_source_trash(&ts->wakelock);
 
 	ts->lowpower_mode = false;
