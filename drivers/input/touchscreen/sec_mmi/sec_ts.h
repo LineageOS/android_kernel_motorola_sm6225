@@ -646,6 +646,7 @@ struct sec_ts_data {
 #endif
 	struct completion resume_done;
 	struct wakeup_source wakelock;
+	struct wakeup_source gesture_wakelock;
 	struct sec_cmd_data sec;
 	short *pFrame;
 
