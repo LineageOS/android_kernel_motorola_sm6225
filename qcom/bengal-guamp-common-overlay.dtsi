@@ -16,6 +16,7 @@
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-guam-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
 
 &qupv3_se4_2uart {
 	status = "ok";
@@ -127,6 +128,3 @@
 &sde_dsi {
     qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
 };
-
-
-
