@@ -439,6 +439,9 @@ static int stmvl53l1_parse_tree(struct device *dev, struct i2c_data *i2c_data)
 		}
 
 		get_dt_xtalk_data(dev->of_node, i2c_data->vl53l1_data);
+
+		i2c_data->vl53l1_data->force_device_on_en_default =
+			of_property_read_bool(dev->of_node, "force-device-on-en-default");
 	}
 
 	/* configure gpios */

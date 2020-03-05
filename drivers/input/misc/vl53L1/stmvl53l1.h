@@ -223,6 +223,7 @@ struct stmvl53l1_data {
 	int crosstalk_enable;	/*!< is crosstalk compensation is enable */
 	int output_mode;	/*!< output mode of the device */
 	bool force_device_on_en;/*!< keep device active when stopped */
+	bool force_device_on_en_default;
 	int sar_mode; /*!< is sar mode enable/disabled */
 	int cam_mode; /*!< is camera mode enable/disabled */
 	VL53L1_Error last_error;/*!< last device internal error */
