@@ -2771,6 +2771,16 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		}
 
 		goto vote_now;
+	/* Don't get stuck in adaptive mode */
+	} else if (chg->adaptive_charging_upper == -1 &&
+			(main_p->pres_chrg_step == STEP_ADAPT ||
+			flip_p->pres_chrg_step == STEP_ADAPT)) {
+		mmi_info(chg, "Battery is leaving Adaptive Charging Mode");
+		main_p->pres_chrg_step = STEP_NONE;
+		flip_p->pres_chrg_step = STEP_NONE;
+		vote(chg->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+		vote(chg->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+		chg->adaptive_charging_suspend = false;
 	/* Check for Charge FULL from each */
 	} else if ((main_p->pres_chrg_step == STEP_FULL) &&
 		   (flip_p->pres_chrg_step == STEP_FULL)) {
@@ -3019,6 +3029,14 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 				chip->adaptive_charging_suspend = false;
 			}
 		}
+	/* Don't get stuck in adaptive mode */
+	} else if (chip->adaptive_charging_upper == -1 &&
+			prm->pres_chrg_step == STEP_ADAPT) {
+		mmi_info(chip, "Battery is leaving Adaptive Charging Mode");
+		prm->pres_chrg_step = STEP_NONE;
+		vote(chip->usb_icl_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+		vote(chip->dc_suspend_votable, ADAPTIVE_CHARGING_VOTER, false, 0);
+		chip->adaptive_charging_suspend = false;
 	} else if ((prm->pres_chrg_step == STEP_NONE) ||
 		   (prm->pres_chrg_step == STEP_STOP)) {
 		if (zone->norm_mv && ((stat->batt_mv + HYST_STEP_MV) >= zone->norm_mv)) {
