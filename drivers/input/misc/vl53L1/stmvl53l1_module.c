@@ -4451,6 +4451,8 @@ int stmvl53l1_setup(struct stmvl53l1_data *data)
 	/* init ipp side */
 	stmvl53l1_ipp_setup(data);
 
+	if (data->force_device_on_en_default)
+		force_device_on_en_default = true;
 	data->force_device_on_en = force_device_on_en_default;
 	data->reset_state = 1;
 	data->is_calibrating = false;
