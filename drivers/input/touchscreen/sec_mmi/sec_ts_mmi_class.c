@@ -42,8 +42,6 @@
 	} \
 }
 
-#define WAKELOCK_CHECKING_TIMEOUT_MS 300
-
 static ssize_t sec_mmi_suppression_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_suppression_show(struct device *dev,
@@ -768,7 +766,6 @@ static int sec_mmi_wait_for_ready(struct device *dev) {
 static int sec_mmi_pre_suspend(struct device *dev) {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 	unsigned long start_wait_jiffies = jiffies;
-	unsigned int timeout = 0;
 
 	if (!ts) {
 		dev_err(dev, "Failed to get driver data");
@@ -778,11 +775,6 @@ static int sec_mmi_pre_suspend(struct device *dev) {
 	do {
 		if (!ts->wakelock.active)
 			break;
-		if (++timeout > WAKELOCK_CHECKING_TIMEOUT_MS) {
-			dev_err(dev, "%s: %d ms timeout of checking wakelock\n",
-				__func__, WAKELOCK_CHECKING_TIMEOUT_MS);
-			return -ETIMEDOUT;
-		}
 		usleep_range(1000, 1000);
 	} while (1);
 
