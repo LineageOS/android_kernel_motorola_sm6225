@@ -855,10 +855,14 @@ static bool dsi_panel_set_hbm_backlight(struct dsi_panel *panel, u32 *bl_lvl)
 	bl_level = *bl_lvl;
 
 	if (bl_level == BRIGHTNESS_HBM_ON && panel->hbm_type == HBM_TYPE_OLED) {
+		DSI_INFO("OLED HBM is on.. ignore setting backlight. bl_level=%d\n",
+				bl_level);
 		return true;
 	} else if (bl_level == BRIGHTNESS_HBM_ON || bl_level == BRIGHTNESS_HBM_OFF) {
 		*bl_lvl = bl_level == BRIGHTNESS_HBM_ON ?
 			panel->bl_config.bl_max_level : panel->bl_lvl_during_hbm;
+		DSI_INFO("HBM set  bl_level=%d bl_max_level = %d bl_lvl_during_hbm = %d\n",
+				bl_level, panel->bl_config.bl_max_level, panel->bl_lvl_during_hbm);
 		return false;
 	} else {
 		panel->bl_lvl_during_hbm = bl_level;
@@ -882,7 +886,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	if (dsi_panel_set_hbm_backlight(panel, &bl_lvl))
 		return 0;
 
-	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+	DSI_INFO("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
