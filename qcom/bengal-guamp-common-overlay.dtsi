@@ -15,6 +15,7 @@
 #include "bengal-guam-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-guam-audio-overlay.dtsi"
+#include "bengal-guam-touchscreen-overlay.dtsi"
 
 &qupv3_se4_2uart {
 	status = "ok";
