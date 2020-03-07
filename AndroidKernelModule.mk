@@ -154,12 +154,12 @@ ifneq ($(USE_CLANG_FOR_MODULES),)
 $(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
 	@mkdir -p $(kbuild_out_dir)
 	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
-	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options) ANDROID_BUILD_TOP=$$(pwd)
+	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options) ANDROID_BUILD_TOP=$$(pwd) TOP=$$(pwd)
 else
 $(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
 	@mkdir -p $(kbuild_out_dir)
 	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
-	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules $(kbuild_options)
+	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules $(kbuild_options) TOP=$$(pwd)
 endif
 
 # Once the KBUILD_OPTIONS variable has been used for the target
