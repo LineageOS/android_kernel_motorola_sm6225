@@ -80,7 +80,6 @@
 				qcom,mdss-dsi-v-front-porch = <186>;
 				qcom,mdss-dsi-v-pulse-width = <2>;
 				qcom,mdss-dsi-panel-framerate = <60>;
-				qcom,mdss-dsi-panel-clockrate = <544000000>;
 				qcom,mdss-dsi-on-command = [
 				39 00 00 00 00 00 04 B9 83 10 2D
 		 		05 01 00 00 0A 00 01 11
@@ -97,7 +96,6 @@
 					15 01 00 00 00 00 02 B1 01];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
-				qcom,mdss-dsi-panel-timings = [ 00 14 05 05 1F 1F 05 05 03 02 04 00];
                         };
                 };
 	};
