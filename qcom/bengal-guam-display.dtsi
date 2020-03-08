@@ -24,9 +24,6 @@
 	qcom,mdss-dsi-panel-status-value = <0x80 0x73 0x04>;
 	qcom,mdss-dsi-panel-status-read-length = <3>;
 	qcom,mdss-dsi-no-panel-on-read-support;
-	qcom,dsi-dyn-clk-enable;
-	qcom,dsi-dyn-clk-list =
-		<976190400 959920560 963988024 968055480 972122944>;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
