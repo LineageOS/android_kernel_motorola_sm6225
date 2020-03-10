@@ -613,6 +613,13 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 		LOG_ERR("firmware name read error!\n");
 		return;
 	}
+
+	ret = of_property_read_u32(np, "cap,fw_mode_ret", &pplatData->fw_mode_ret);
+	if (ret < 0) {
+		LOG_ERR("get cap,fw_mode_ret error,set default value.\n");
+		pplatData->fw_mode_ret = ABOV_DF_FW_MODE;
+	}
+
 }
 
 static ssize_t reset_show(struct class *class,
@@ -1071,6 +1078,7 @@ static int abov_tk_fw_mode_enter(struct i2c_client *client)
 {
 	int ret = 0;
 	unsigned char buf[40] = {0, };
+	pabovXX_t this = abov_sar_ptr;
 
 	buf[0] = 0xAC;
 	buf[1] = 0x5B;
@@ -1083,8 +1091,8 @@ static int abov_tk_fw_mode_enter(struct i2c_client *client)
 	SLEEP(5);
 
 	ret = i2c_master_recv(client, buf, 1);
-	if (buf[0] != 0x39) {
-		LOG_ERR("Enter fw mode fail ...device id:0x%02x\n", buf[0]);
+	if (buf[0] != this->board->fw_mode_ret) {
+		LOG_ERR("Enter fw mode fail,device id:0x%02x\n", buf[0]);
 		return -EIO;
 	}
 

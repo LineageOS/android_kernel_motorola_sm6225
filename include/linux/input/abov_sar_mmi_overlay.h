@@ -51,6 +51,11 @@
 /* enable body stat */
 #define ABOV_TCHCMPSTAT_TCHSTAT2_FLAG   0x30
 
+/*
+ * A96T346DF FW MODE:0x39, A96T346HW FW MODE:0x3A
+ */
+#define ABOV_DF_FW_MODE 0x39
+#define ABOV_HW_FW_MODE 0x3A
 
 /**************************************
 * define platform data
@@ -137,6 +142,7 @@ struct abov_platform_data {
 	const char *cap_ch2_name;
 	pbuttonInformation_t pbuttonInformation;
 	const char *fw_name;
+	int fw_mode_ret;
 
 	int (*get_is_nirq_low)(unsigned irq_gpio);
 	int (*init_platform_hw)(void);
