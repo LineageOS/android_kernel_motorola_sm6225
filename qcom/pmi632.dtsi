@@ -343,9 +343,11 @@
 
 			qcom,pmic-revid = <&pmi632_revid>;
 			io-channels = <&pmi632_vadc ADC_BAT_THERM_PU2>,
-				      <&pmi632_vadc ADC_BAT_ID_PU2>;
+				      <&pmi632_vadc ADC_BAT_ID_PU2>,
+					<&pmi632_vadc ADC_BAT_THERM_PU1>;
 			io-channel-names = "batt-therm",
-					   "batt-id";
+					   "batt-id",
+					   "batt-therm-ntc-10k";
 
 			qcom,qgauge@4800 {
 				status = "okay";
