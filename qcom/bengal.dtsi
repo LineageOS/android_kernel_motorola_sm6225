@@ -41,6 +41,7 @@
 		swr0 = &swr0;
 		swr1 = &swr1;
 		ufshc1 = &ufshc_mem; /* Embedded UFS slot */
+		i2c1 = &qupv3_se1_i2c;
 	};
 
 	cpus {
