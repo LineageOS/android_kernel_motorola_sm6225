@@ -17,7 +17,7 @@
 #include "bengal-guam-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guam-overlay.dtsi"
-
+#include "bengal-guam-fps.dtsi"
 &qupv3_se4_2uart {
 	status = "ok";
 };
