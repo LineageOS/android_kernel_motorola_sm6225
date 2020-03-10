@@ -252,6 +252,7 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= wsa883x/
 	obj-y	+= sdm660_cdc/
 	obj-y	+= awinic/
+	obj-y	+= foursemi/
 endif
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
@@ -292,6 +293,16 @@ endif
 obj-$(CONFIG_SND_SMARTPA_AW882XX) += aw882xx_dlkm.o
 aw882xx_dlkm-y := $(SND_SOC_AW882XX_OBJS)
 #Add awinic driver end
+
+#Add fs1818 driver begain
+ifdef CONFIG_SND_SOC_FS16XX
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx.o
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx_preset.o
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx_calibration.o
+endif
+obj-$(CONFIG_SND_SOC_FS16XX) += fs16xx_dlkm.o
+fs16xx_dlkm-y := $(SND_SOC_FS16XX_OBJS)
+#Add fs1818 driver end
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
