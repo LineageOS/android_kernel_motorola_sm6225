@@ -383,6 +383,7 @@ struct smb_mmi_charger {
 	int 			last_reported_status;
 	struct regulator	*vbus;
 	bool			vbus_enabled;
+	int			prev_chg_rate;
 	int 			charger_rate;
 	int 			age;
 	int 			cycles;
@@ -2186,7 +2187,6 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	int chrg_v_mv = 0;
 	int chrg_cm_ma = 0;
 	int chrg_cs_ma = 0;
-	int prev_chg_rate = chg->charger_rate;
 	int rc = -EINVAL;
 
 	if (!chg->usb_psy) {
@@ -2195,6 +2195,8 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	}
 
 	val.intval = 0;
+	chg->prev_chg_rate = chg->charger_rate;
+
 	rc = get_prop_charger_present(chg, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Error getting Charger Present rc = %d\n", rc);
@@ -2243,15 +2245,15 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 			(chrg_cs_ma < WEAK_CHRG_THRSH) &&
 			test_bit(EVENT_WEAK_CHARGER_WAIT, &chg->flags))
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
-	else if (prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
+	else if (chg->prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
-	else if ((prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_WEAK) &&
+	else if ((chg->prev_chg_rate == POWER_SUPPLY_CHARGE_RATE_WEAK) &&
 			(chrg_cm_ma > WEAK_CHRG_THRSH) &&
 			(chrg_cs_ma >= WEAK_CHRG_THRSH))
 		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
 
 end_rate_check:
-	if (prev_chg_rate != chg->charger_rate) {
+	if (chg->prev_chg_rate != chg->charger_rate) {
 		clear_bit(EVENT_WEAK_CHARGER_WAIT, &chg->flags);
 		cancel_delayed_work(&chg->weakcharger_work);
 		if(chg->charger_rate == POWER_SUPPLY_CHARGE_RATE_NORMAL)
@@ -3275,7 +3277,9 @@ static int __smb_mmi_ps_changed(struct device *dev, void *data)
 static void smb_mmi_power_supply_changed(struct power_supply *psy,
 					 char *envp_ext[])
 {
-	dev_err(&psy->dev, "SMBMMI: %s: %s\n", __func__, envp_ext[0]);
+	if (this_chip && this_chip->prev_chg_rate != this_chip->charger_rate) {
+		dev_err(&psy->dev, "SMBMMI: %s: %s\n", __func__, envp_ext[0]);
+	}
 
 	class_for_each_device(power_supply_class, NULL, psy,
 			      __smb_mmi_ps_changed);
