@@ -128,3 +128,13 @@
 &sde_dsi {
     qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
 };
+
+&soc {
+	qcom,tz_gpio {
+	compatible = "qcom,tz_gpio";
+		tlmm-tz = <14>,
+		<15>,
+		<16>,
+		<17>;
+	};
+};
