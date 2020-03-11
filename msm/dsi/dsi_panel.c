@@ -732,23 +732,12 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 error:
 	return rc;
 }
-//temp solution for TP, tinno 20200229 start
-#include <linux/notifier.h>
-BLOCKING_NOTIFIER_HEAD(backlight_state_notifier_list);
-//temp solution for TP, tinno 20200229 end
+
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-//temp solution for TP, tinno 20200229 start
-	static u32 last_bl_lvl = 0;
-	if ((bl_lvl == 0) || (last_bl_lvl == 0))
-	{
-		blocking_notifier_call_chain(&backlight_state_notifier_list, bl_lvl, NULL);
-	}
-	last_bl_lvl = bl_lvl;
-//temp solution for TP, tinno 20200229 end
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
 
