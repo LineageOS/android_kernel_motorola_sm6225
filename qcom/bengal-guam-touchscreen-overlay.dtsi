@@ -102,6 +102,7 @@
 
 &qupv3_se2_spi {
 	status = "ok";
+	qcom,spi-touch-active="himax,hxcommon";
 	pinctrl-1 = <&qupv3_se2_spi_sleep &qupv3_se2_cs_sleep>;
 	himax_0flash_ts@0 {
 		compatible = "himax,hxcommon";
@@ -121,6 +122,7 @@
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		panel = <&dsi_hlt_hx83102d_video>;
 	};
 /*	nova_0flash_ts@1 {
 		compatible = "novatek,NVT-ts-spi";
