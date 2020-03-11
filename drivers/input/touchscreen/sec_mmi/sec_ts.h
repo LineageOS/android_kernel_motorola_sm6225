@@ -210,10 +210,12 @@
 #define SEC_TS_CMD_MIS_CAL_CHECK	0xA7
 #define SEC_TS_CMD_MIS_CAL_READ		0xA8
 #define SEC_TS_CMD_MIS_CAL_SPEC		0xA9
+/* obsolete
 #define SEC_TS_CMD_DEADZONE_RANGE	0xAA
 #define SEC_TS_CMD_LONGPRESSZONE_RANGE	0xAB
 #define SEC_TS_CMD_LONGPRESS_DROP_AREA	0xAC
 #define SEC_TS_CMD_LONGPRESS_DROP_DIFF	0xAD
+*/
 #define SEC_TS_READ_TS_STATUS		0xAF
 #define SEC_TS_CMD_SELFTEST		0xAE
 #define SEC_TS_READ_FORCE_RECAL_COUNT	0xB0
@@ -342,9 +344,11 @@
 #define SEC_TS_STATUS_CALIBRATION_SEC	0xA2
 
 #define SEC_TS_CMD_EDGE_HANDLER		0xAA
-#define SEC_TS_CMD_EDGE_AREA		0xAB
-#define SEC_TS_CMD_DEAD_ZONE		0xAC
-#define SEC_TS_CMD_LANDSCAPE_MODE	0xAD
+#define SEC_TS_CMD_EDGE_AREA		0xAB /* compiled off in our FW */
+#define SEC_TS_CMD_HOLD_DISTANCE	0xAB
+#define SEC_TS_CMD_DEAD_ZONE		0xAC /* compiled off in our FW */
+#define SEC_TS_CMD_GRIP_SUPP_AREA	0xAC
+#define SEC_TS_CMD_LANDSCAPE_MODE	0xAD /* compiled off in our FW */
 #define SEC_TS_CMD_PILL_REGION		0xAD
 
 enum grip_write_mode {
@@ -779,6 +783,7 @@ struct sec_ts_plat_data {
 	bool poweron_calibration;
 	bool suppression_ctrl;
 	bool pill_region_ctrl;
+	bool hold_distance_ctrl;
 };
 
 typedef struct {
