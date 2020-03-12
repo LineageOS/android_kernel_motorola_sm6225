@@ -213,7 +213,7 @@
 	eeprom_front: qcom,eeprom1 {
 		cell-index = <1>;
 		reg = <0x1>;
-		compatible = "qcom,cam-sensor";
+		compatible = "qcom,eeprom";
 		cam_vio-supply = <&L7P>;
 		cam_vana-supply = <&L6P>;
 		cam_vdig-supply = <&L1P>;
