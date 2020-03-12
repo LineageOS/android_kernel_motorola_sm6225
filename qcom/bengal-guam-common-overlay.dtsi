@@ -197,6 +197,12 @@
         qcom,s3-exit-ibat-ua = <35000>;
 };
 
+&pmi632_rgb {
+       red {
+           label = "charging";
+       };
+};
+
 &pmi632_charger {
         qcom,iterm-ma = <146>;
         qcom,fcc-max-ua = <2000000>;
