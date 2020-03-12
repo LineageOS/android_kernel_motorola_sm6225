@@ -203,3 +203,63 @@
 		cap,channel_number = <0x02>;
 	};
 };
+
+&soc{
+        mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+                df-serialnum = "SB18C71813";
+                #include "qg-batterydata-lg50-amperex-5000mah.dtsi"
+        };
+};
+
+&pmi632_qg {
+        qcom,qg-iterm-ma = <250>;
+        qcom,vbatt-cutoff-mv = <3350>;
+        qcom,vbatt-empty-mv = <3000>;
+        qcom,vbatt-low-mv = <3400>;
+        qcom,vbatt-low-cold-mv = <3500>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,rbat-conn-mohm = <10>;
+        qcom,cl-feedback-on;
+        qcom,cl-min-start-soc = <0>;
+        qcom,cl-max-start-soc = <5>;
+        qcom,cl-min-temp = <150>;
+        qcom,cl-max-temp = <450>;
+        qcom,cl-max-increment = <5>;
+        qcom,cl-max-decrement = <10>;
+        qcom,cl-min-limit = <200>;
+        qcom,cl-max-limit = <30>;
+        qcom,s3-entry-ibat-ua = <15000>;
+        qcom,s3-exit-ibat-ua = <35000>;
+};
+
+&pmi632_charger {
+        qcom,iterm-ma = <146>;
+        qcom,fcc-max-ua = <3000000>;
+        qcom,fv-max-uv = <4400000>;
+        qcom,usb-icl-ua = <3000000>;
+        qcom,thermal-mitigation = <3000>,
+                                   <2600>,
+                                   <2300>,
+                                   <1800>,
+                                   <1500>,
+                                   <1000>,
+                                   <600>,
+                                   <300>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,mmi-temp-zones = <0 4200 1000 0>,
+                                <10 4200 1000 1000>,
+                                <15 0 1000 1000>,
+                                <45 4200 3000 2000>,
+                                <60 4200 2000 0>;
+        qcom,enable-charging-limit;
+        qcom,upper-limit-capacity = <75>;
+        qcom,lower-limit-capacity = <60>;
+        qcom,otg-cl-ua = <1000000>;
+};
+
+&pmi632_rgb {
+       red {
+           label = "charging";
+       };
+};
