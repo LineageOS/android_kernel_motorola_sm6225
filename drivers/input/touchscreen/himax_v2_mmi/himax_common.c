@@ -3613,7 +3613,11 @@ FW_force_upgrade:
 		E("%s: create ts_resume workqueue failed\n", __func__);
 		goto err_create_ts_resume_wq_failed;
 	}
+#if defined(__HIMAX_HX83102D_MOD__)
+	INIT_DELAYED_WORK(&ts->ts_int_work, himax_resume_work_func);
+#else
 	INIT_WORK(&ts->ts_int_work, himax_resume_work_func);
+#endif
 #endif
 	/*Himax Power On and Load Config*/
 	if (himax_loadSensorConfig(pdata)) {
@@ -3758,7 +3762,11 @@ err_input_register_device_failed:
 	input_free_device(ts->input_dev);
 err_detect_failed:
 #ifdef HX_RESUME_SET_FW
+#if defined(__HIMAX_HX83102D_MOD__)
+	cancel_delayed_work_sync(&ts->ts_int_work);
+#else
 	cancel_work_sync(&ts->ts_int_work);
+#endif
 	destroy_workqueue(ts->ts_int_workqueue);
 err_create_ts_resume_wq_failed:
 #endif
