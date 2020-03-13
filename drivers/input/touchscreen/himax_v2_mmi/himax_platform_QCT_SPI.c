@@ -874,7 +874,12 @@ void himax_resume_thread_func(void)
 {
 	struct himax_ts_data *ts = private_ts;
 	I("%s: TP resume from thread\n", __func__);
+#if defined(__HIMAX_HX83102D_MOD__)
+	queue_delayed_work(ts->ts_int_workqueue,
+				&ts->ts_int_work, msecs_to_jiffies(60));
+#else
 	queue_work(ts->ts_int_workqueue, &ts->ts_int_work);
+#endif
 	return;
 }
 #endif
@@ -936,6 +941,12 @@ int drm_notifier_callback(struct notifier_block *self,
 			}
 #endif
 			break;
+#if defined(__HIMAX_HX83102D_MOD__)
+		case MSM_DRM_BLANK_UNBLANK:
+			D("DRM_EARLY_EVENT_BLANK resume.\n");
+			himax_common_resume(ts->dev);
+			return 0;
+#endif
 		}
 	}
 

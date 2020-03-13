@@ -455,7 +455,11 @@ struct himax_ts_data {
 #endif
 #ifdef HX_RESUME_SET_FW
 	struct workqueue_struct *ts_int_workqueue;
+#if defined(__HIMAX_HX83102D_MOD__)
+	struct delayed_work ts_int_work;
+#else
 	struct work_struct ts_int_work;
+#endif
 #endif
 
 	struct workqueue_struct *himax_diag_wq;
