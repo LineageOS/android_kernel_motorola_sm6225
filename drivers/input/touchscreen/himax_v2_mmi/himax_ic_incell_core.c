@@ -2026,13 +2026,21 @@ static void himax_mcu_pin_reset(void)
 	I("%s: Now reset the Touch chip,private_ts->vdd_1v8_always_on = %d \n",
 		__func__,private_ts->vdd_1v8_always_on);
 	himax_rst_gpio_set(private_ts->rst_gpio, 0);
+#if defined(__HIMAX_HX83102_MOD__)
+	msleep(5);
+#else
 	if(private_ts->vdd_1v8_always_on)
 		msleep(10);
 	else
 		msleep(20);
+#endif
 	himax_rst_gpio_set(private_ts->rst_gpio, 1);
 #ifdef HX_ZERO_FLASH
+#if defined(__HIMAX_HX83102_MOD__)
+ 	msleep(2);
+#else
 		msleep(10);
+#endif
 #else
 		msleep(50);
 #endif
