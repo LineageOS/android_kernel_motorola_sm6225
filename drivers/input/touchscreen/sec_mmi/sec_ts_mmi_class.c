@@ -62,6 +62,10 @@ static ssize_t sec_mmi_write_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_data_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_gs_distance_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_gs_distance_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_mmi_address_store);
 static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_mmi_size_store);
@@ -73,6 +77,8 @@ static DEVICE_ATTR(pill_region, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_pill_region_show, sec_mmi_pill_region_store);
 static DEVICE_ATTR(hold_distance, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_hold_distance_show, sec_mmi_hold_distance_store);
+static DEVICE_ATTR(gs_distance, (S_IRUGO | S_IWUSR | S_IWGRP),
+		sec_mmi_gs_distance_show, sec_mmi_gs_distance_store);
 
 #define MAX_ATTRS_ENTRIES 10
 #define ADD_ATTR(name) { \
@@ -105,6 +111,9 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->plat_data->hold_distance_ctrl)
 		ADD_ATTR(hold_distance);
+
+	if (ts->plat_data->gs_distance_ctrl)
+		ADD_ATTR(gs_distance);
 
 	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(address);
@@ -420,6 +429,66 @@ static ssize_t sec_mmi_hold_distance_show(struct device *dev,
 	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE, &buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to read hold distance info (%d)\n",
+				__func__, error);
+	else {
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)buffer);
+	}
+
+	return blen;
+}
+
+static ssize_t sec_mmi_gs_distance_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts;
+	unsigned char buffer;
+	unsigned long value;
+	int error;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	error = kstrtoul(buf, 0, &value);
+	if (error)
+		return -EINVAL;
+
+	buffer = (unsigned char)value;
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
+
+	ts->gs_distance_data = buffer;
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		return size;
+	}
+
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_GRIP_SUPP_AREA, &buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to write grip suppression distance (%d)\n",
+				__func__, error);
+
+	return size;
+}
+
+static ssize_t sec_mmi_gs_distance_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts;
+	unsigned char buffer;
+	ssize_t blen = 0;
+	int error;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)(ts->gs_distance_data));
+		return blen;
+	}
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_GRIP_SUPP_AREA, &buffer, sizeof(buffer));
+	if (error < 0)
+		dev_err(dev, "%s: failed to read grip suppression distance info (%d)\n",
 				__func__, error);
 	else {
 		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)buffer);
@@ -939,6 +1008,14 @@ static int sec_mmi_post_resume(struct device *dev) {
 					__func__, ret);
 	}
 
+	if(ts->plat_data->gs_distance_ctrl) {
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_GRIP_SUPP_AREA,
+						&ts->gs_distance_data, sizeof(ts->gs_distance_data));
+		if (ret < 0)
+			dev_err(dev, "%s: failed to write grip supp distance (%d)\n",
+					__func__, ret);
+	}
+
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
 					&buffer, sizeof(buffer));
 	if (ret < 0)
@@ -1068,7 +1145,15 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE,
 							&ts->hold_distance_data, sizeof(ts->hold_distance_data));
 			if (ret < 0)
-				dev_err(&ts->client->dev, "%s: failed to write pill region (%d)\n",
+				dev_err(&ts->client->dev, "%s: failed to write hold distance (%d)\n",
+						__func__, ret);
+		}
+
+		if(ts->plat_data->gs_distance_ctrl) {
+			ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_GRIP_SUPP_AREA,
+							&ts->gs_distance_data, sizeof(ts->gs_distance_data));
+			if (ret < 0)
+				dev_err(&ts->client->dev, "%s: failed to write grip supp distance (%d)\n",
 						__func__, ret);
 		}
 	} else

@@ -714,6 +714,7 @@ struct sec_ts_data {
 	unsigned char suppression_data;
 	unsigned char pill_region_data[5];
 	unsigned char hold_distance_data;
+	unsigned char gs_distance_data;
 
 	/* for factory - factory_cmd_result_all() */
 	short cm_raw_set_p2p_min;			//CM_RAW_SET_P2P
@@ -787,6 +788,7 @@ struct sec_ts_plat_data {
 	bool suppression_ctrl;
 	bool pill_region_ctrl;
 	bool hold_distance_ctrl;
+	bool gs_distance_ctrl;
 };
 
 typedef struct {
