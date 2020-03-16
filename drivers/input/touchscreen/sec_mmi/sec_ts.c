@@ -1342,6 +1342,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->suppression_ctrl = of_property_read_bool(np, "sec,suppression-control");
 	pdata->pill_region_ctrl = of_property_read_bool(np, "sec,pill-region-control");
 	pdata->hold_distance_ctrl = of_property_read_bool(np, "sec,hold-distance-control");
+	pdata->gs_distance_ctrl = of_property_read_bool(np, "sec,gs-distance-control");
 	pdata->poweron_calibration = of_property_read_bool(np, "sec,poweron-calibration");
 
 #ifdef CONFIG_SEC_FACTORY
