@@ -133,4 +133,14 @@
 		pinctrl-0 = <&fps_rst_active &fps_int_active &fps_ido3_en_active>;
 		pinctrl-1 = <&fps_rst_suspend &fps_int_suspend &fps_ido3_en_suspend>;
 	};
+
+	fpc: fpc_fpc1020 {
+		compatible = "fpc,fpc1020";
+		status = "ok";
+		irq = <&tlmm 65 0>;
+		rst = <&tlmm 104 0>;
+		pinctrl-names = "default", "suspend";
+		pinctrl-0 = <&fps_rst_active &fps_int_active>;
+		pinctrl-1 = <&fps_rst_suspend &fps_int_suspend>;
+	};
 };
