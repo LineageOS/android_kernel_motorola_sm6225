@@ -916,7 +916,7 @@ static int sec_mmi_post_resume(struct device *dev) {
 		complete_all(&ts->resume_done);
 
 	if (ts->plat_data->suppression_ctrl) {
-		ret = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO,
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_GRIP_SUPPRESSION_INFO,
 						&ts->suppression_data, sizeof(ts->suppression_data));
 		if (ret < 0)
 			dev_err(dev, "%s: failed to write suppression info (%d)\n",
@@ -924,7 +924,7 @@ static int sec_mmi_post_resume(struct device *dev) {
 	}
 
 	if(ts->plat_data->pill_region_ctrl) {
-		ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION,
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_PILL_REGION,
 						ts->pill_region_data, sizeof(ts->pill_region_data));
 		if (ret < 0)
 			dev_err(dev, "%s: failed to write pill region (%d)\n",
@@ -932,7 +932,7 @@ static int sec_mmi_post_resume(struct device *dev) {
 	}
 
 	if(ts->plat_data->hold_distance_ctrl) {
-		ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE,
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_HOLD_DISTANCE,
 						&ts->hold_distance_data, sizeof(ts->hold_distance_data));
 		if (ret < 0)
 			dev_err(dev, "%s: failed to write hold distance (%d)\n",
