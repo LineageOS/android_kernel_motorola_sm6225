@@ -56,6 +56,34 @@
 		};
 	};
 
+	cam_sensor_mclk3_active: cam_sensor_mclk3_active {
+		/* MCLK 3*/
+		mux {
+			pins = "gpio28";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio28";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_mclk3_suspend: cam_sensor_mclk3_suspend {
+		/* MCLK 3*/
+		mux {
+			pins = "gpio28";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio28";
+			bias-pull-down;
+			drive-strength = <2>;
+		};
+	};
+
 	cam_sensor_rear0_reset_active: cam_sensor_rear0_reset_active {
 		mux {
 			pins = "gpio18";
@@ -104,6 +132,33 @@
 
 		config {
 			pins = "gpio24";
+			bias-pull-down; /* PULL DOWN */
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+
+	cam_sensor_rear2_reset_active: cam_sensor_rear2_reset_active {
+		mux {
+			pins = "gpio68";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio68";
+			bias-disable; /* No PULL */
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_rear2_reset_suspend: cam_sensor_rear2_reset_suspend {
+		mux {
+			pins = "gpio68";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio68";
 			bias-pull-down; /* PULL DOWN */
 			drive-strength = <2>;
 			output-low;
@@ -267,6 +322,43 @@
 		cci-master = <1>;
 		status = "ok";
 		clocks = <&gcc GCC_CAMSS_MCLK2_CLK>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <24000000>;
+	};
+
+	 /* ov02b1b */
+	qcom,cam-sensor@2 {
+		cell-index = <2>;
+		compatible = "qcom,cam-sensor";
+		csiphy-sd-index = <1>;
+		sensor-position-roll = <90>;
+		sensor-position-pitch = <0>;
+		sensor-position-yaw = <180>;
+		cam_vio-supply = <&L7P>;
+		cam_vana-supply = <&L3P>;
+		cam_clk-supply = <&gcc_camss_top_gdsc>;
+		regulator-names = "cam_vio", "cam_vana", "cam_clk";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <1800000 2800000 0>;
+		rgltr-max-voltage = <1800000 2800000 0>;
+		rgltr-load-current = <120000 80000 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk3_active
+				&cam_sensor_rear2_reset_active>;
+		pinctrl-1 = <&cam_sensor_mclk3_suspend
+				&cam_sensor_rear2_reset_suspend>;
+		gpios = <&tlmm 28 0>,
+			<&tlmm 68 0>;
+		gpio-reset = <1>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK3",
+					"CAM_PWDN";
+		cci-master = <1>;
+		status = "ok";
+		clocks = <&gcc GCC_CAMSS_MCLK3_CLK>;
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
