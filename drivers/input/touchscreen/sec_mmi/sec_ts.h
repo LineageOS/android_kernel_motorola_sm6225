@@ -711,6 +711,9 @@ struct sec_ts_data {
 	unsigned char pressure_cal_base;
 	unsigned char pressure_cal_delta;
 
+	unsigned char suppression_data;
+	unsigned char pill_region_data[5];
+	unsigned char hold_distance_data;
 
 	/* for factory - factory_cmd_result_all() */
 	short cm_raw_set_p2p_min;			//CM_RAW_SET_P2P
