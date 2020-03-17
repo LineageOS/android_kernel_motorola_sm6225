@@ -231,6 +231,12 @@ static ssize_t sec_mmi_suppression_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		ts->suppression_data = buffer;
+		return size;
+	}
+
 	error = ts->sec_ts_i2c_write(ts, SEC_TS_GRIP_SUPPRESSION_INFO, &buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to write suppression info (%d)\n",
@@ -257,6 +263,11 @@ static ssize_t sec_mmi_suppression_show(struct device *dev,
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_TS_DATA(dev);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)(ts->suppression_data));
+		return blen;
+	}
 	error = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO, &buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to read suppression info (%d)\n",
@@ -295,6 +306,12 @@ static ssize_t sec_mmi_pill_region_store(struct device *dev,
 		(unsigned int)buffer[2], (unsigned int)buffer[3],
 		(unsigned int)buffer[4]);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		memcpy(ts->pill_region_data, buffer, sizeof(ts->pill_region_data));
+		return size;
+	}
+
 	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_PILL_REGION, buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to write pill region (%d)\n",
@@ -325,6 +342,14 @@ static ssize_t sec_mmi_pill_region_show(struct device *dev,
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_TS_DATA(dev);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		memcpy(buffer, ts->pill_region_data, sizeof(buffer));
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x 0x%x 0x%x", (unsigned int)buffer[0],
+			(unsigned int)buffer[2] | (buffer[1] << 8),
+			(unsigned int)buffer[4] | (buffer[3] << 8));
+		return blen;
+	}
 	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION, buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to read pill region (%d)\n",
@@ -361,6 +386,12 @@ static ssize_t sec_mmi_hold_distance_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		ts->hold_distance_data = buffer;
+		return size;
+	}
+
 	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_HOLD_DISTANCE, &buffer, sizeof(buffer));
 	if (error < 0)
 		dev_err(dev, "%s: failed to write hold distance (%d)\n",
@@ -379,6 +410,12 @@ static ssize_t sec_mmi_hold_distance_show(struct device *dev,
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_TS_DATA(dev);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		dev_dbg(dev, "%s: power off state\n", __func__);
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)(ts->hold_distance_data));
+		return blen;
+	}
 
 	error = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE, &buffer, sizeof(buffer));
 	if (error < 0)
@@ -686,6 +723,11 @@ static int sec_mmi_methods_power(struct device *dev, int on) {
 		return -ENODEV;
 	}
 
+	if (on)
+		ts->power_status = SEC_TS_STATE_POWER_ON;
+	else
+		ts->power_status = SEC_TS_STATE_POWER_OFF;
+
 	return sec_ts_power((void *)ts, on == TS_MMI_POWER_ON);
 }
 
@@ -873,6 +915,30 @@ static int sec_mmi_post_resume(struct device *dev) {
 	if (ts->lowpower_mode)
 		complete_all(&ts->resume_done);
 
+	if (ts->plat_data->suppression_ctrl) {
+		ret = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO,
+						&ts->suppression_data, sizeof(ts->suppression_data));
+		if (ret < 0)
+			dev_err(dev, "%s: failed to write suppression info (%d)\n",
+					__func__, ret);
+	}
+
+	if(ts->plat_data->pill_region_ctrl) {
+		ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION,
+						ts->pill_region_data, sizeof(ts->pill_region_data));
+		if (ret < 0)
+			dev_err(dev, "%s: failed to write pill region (%d)\n",
+					__func__, ret);
+	}
+
+	if(ts->plat_data->hold_distance_ctrl) {
+		ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE,
+						&ts->hold_distance_data, sizeof(ts->hold_distance_data));
+		if (ret < 0)
+			dev_err(dev, "%s: failed to write hold distance (%d)\n",
+					__func__, ret);
+	}
+
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
 					&buffer, sizeof(buffer));
 	if (ret < 0)
@@ -980,6 +1046,31 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			ts->device_id[3] = 0x7C;
 
 		sec_mmi_class_fname(ts);
+
+		/*initialize value*/
+		if (ts->plat_data->suppression_ctrl) {
+			ret = ts->sec_ts_i2c_read(ts, SEC_TS_GRIP_SUPPRESSION_INFO,
+							&ts->suppression_data, sizeof(ts->suppression_data));
+			if (ret < 0)
+				dev_err(&ts->client->dev, "%s: failed to write suppression info (%d)\n",
+						__func__, ret);
+		}
+
+		if(ts->plat_data->pill_region_ctrl) {
+			ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_PILL_REGION,
+							ts->pill_region_data, sizeof(ts->pill_region_data));
+			if (ret < 0)
+				dev_err(&ts->client->dev, "%s: failed to write pill region (%d)\n",
+						__func__, ret);
+		}
+
+		if(ts->plat_data->hold_distance_ctrl) {
+			ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_HOLD_DISTANCE,
+							&ts->hold_distance_data, sizeof(ts->hold_distance_data));
+			if (ret < 0)
+				dev_err(&ts->client->dev, "%s: failed to write pill region (%d)\n",
+						__func__, ret);
+		}
 	} else
 		ts_mmi_dev_unregister(&ts->client->dev);
 
