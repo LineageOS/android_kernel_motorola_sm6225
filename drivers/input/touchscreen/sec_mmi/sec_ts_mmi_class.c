@@ -231,9 +231,9 @@ static ssize_t sec_mmi_suppression_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	ts->suppression_data = buffer;
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
-		ts->suppression_data = buffer;
 		return size;
 	}
 
@@ -306,9 +306,9 @@ static ssize_t sec_mmi_pill_region_store(struct device *dev,
 		(unsigned int)buffer[2], (unsigned int)buffer[3],
 		(unsigned int)buffer[4]);
 
+	memcpy(ts->pill_region_data, buffer, sizeof(ts->pill_region_data));
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
-		memcpy(ts->pill_region_data, buffer, sizeof(ts->pill_region_data));
 		return size;
 	}
 
@@ -386,9 +386,9 @@ static ssize_t sec_mmi_hold_distance_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	ts->hold_distance_data = buffer;
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
-		ts->hold_distance_data = buffer;
 		return size;
 	}
 
