@@ -295,7 +295,7 @@
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <0>;
-		//eeprom-src = <&eeprom_front>;
+		eeprom-src = <&eeprom_front>;
 		cam_vio-supply = <&L7P>;
 		cam_vana-supply = <&L6P>;
 		cam_vdig-supply = <&L1P>;
