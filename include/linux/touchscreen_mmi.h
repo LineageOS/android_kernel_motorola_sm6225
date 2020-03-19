@@ -49,6 +49,7 @@ struct gesture_event_data {
 struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
+	struct kobject *kobj_notify;
 };
 
 enum ts_mmi_pm_mode {
