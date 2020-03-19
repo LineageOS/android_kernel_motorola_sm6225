@@ -545,6 +545,7 @@ void sec_ts_reinit(struct sec_ts_data *ts)
 	return;
 }
 
+#define STATUS_ID_HOLD_GRIP 0x69
 #define MAX_EVENT_COUNT 32
 static void sec_ts_read_event(struct sec_ts_data *ts)
 {
@@ -644,6 +645,14 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 						event_buff[0], event_buff[1], event_buff[2],
 						event_buff[3], event_buff[4], event_buff[5],
 						event_buff[6], event_buff[7]);
+
+			/* hold grip change status event */
+			if ((p_event_status->status_id == STATUS_ID_HOLD_GRIP) &&
+				ts->plat_data->hold_grip_ctrl) {
+				sec_mmi_sysfs_notify(ts, p_event_status->status_data_1);
+				/* no further processing needed */
+				break;
+			}
 
 			/* watchdog reset -> send SENSEON command */
 			if ((p_event_status->stype == TYPE_STATUS_EVENT_INFO) &&
@@ -1343,6 +1352,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->pill_region_ctrl = of_property_read_bool(np, "sec,pill-region-control");
 	pdata->hold_distance_ctrl = of_property_read_bool(np, "sec,hold-distance-control");
 	pdata->gs_distance_ctrl = of_property_read_bool(np, "sec,gs-distance-control");
+	pdata->hold_grip_ctrl = of_property_read_bool(np, "sec,hold-grip-control");
 	pdata->poweron_calibration = of_property_read_bool(np, "sec,poweron-calibration");
 
 #ifdef CONFIG_SEC_FACTORY
