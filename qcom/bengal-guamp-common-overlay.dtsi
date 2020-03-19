@@ -17,6 +17,7 @@
 #include "bengal-guam-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
+#include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
 
 &qupv3_se4_2uart {
