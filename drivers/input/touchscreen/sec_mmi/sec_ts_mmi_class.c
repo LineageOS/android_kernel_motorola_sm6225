@@ -66,6 +66,10 @@ static ssize_t sec_mmi_gs_distance_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_gs_distance_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_hold_grip_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t sec_mmi_hold_grip_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_mmi_address_store);
 static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_mmi_size_store);
@@ -79,6 +83,8 @@ static DEVICE_ATTR(hold_distance, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_hold_distance_show, sec_mmi_hold_distance_store);
 static DEVICE_ATTR(gs_distance, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_gs_distance_show, sec_mmi_gs_distance_store);
+static DEVICE_ATTR(hold_grip, (S_IRUGO | S_IWUSR | S_IWGRP),
+		sec_mmi_hold_grip_show, sec_mmi_hold_grip_store);
 
 #define MAX_ATTRS_ENTRIES 10
 #define ADD_ATTR(name) { \
@@ -114,6 +120,9 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->plat_data->gs_distance_ctrl)
 		ADD_ATTR(gs_distance);
+
+	if (ts->plat_data->hold_grip_ctrl)
+		ADD_ATTR(hold_grip);
 
 	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(address);
@@ -286,6 +295,41 @@ static ssize_t sec_mmi_suppression_show(struct device *dev,
 	}
 
 	return blen;
+}
+
+int sec_mmi_sysfs_notify(struct sec_ts_data *ts, unsigned char state)
+{
+	if (state != 0xff)
+		ts->hold_grip_data = state;
+
+	sysfs_notify(ts->imports->kobj_notify, NULL, "hold_grip");
+	dev_dbg(&ts->client->dev, "%s: triggered HAL with 0x%02x\n", __func__, state);
+
+	return 0;
+}
+
+static ssize_t sec_mmi_hold_grip_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sec_ts_data *ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	sec_mmi_sysfs_notify(ts, 0xff);
+
+	return size;
+}
+
+static ssize_t sec_mmi_hold_grip_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)(ts->hold_grip_data));
 }
 
 #define REQ_ARGS_NUM 3
@@ -1156,6 +1200,9 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 				dev_err(&ts->client->dev, "%s: failed to write grip supp distance (%d)\n",
 						__func__, ret);
 		}
+
+		if (ts->plat_data->hold_grip_ctrl)
+			ts->hold_grip_data = SEC_HOLD_GRIP_NOGRIP;
 	} else
 		ts_mmi_dev_unregister(&ts->client->dev);
 
