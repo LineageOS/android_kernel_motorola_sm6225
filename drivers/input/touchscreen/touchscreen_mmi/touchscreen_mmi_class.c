@@ -376,6 +376,7 @@ int ts_mmi_dev_register(struct device *parent,
 		goto CLASS_DEVICE_CREATE_FAILED;
 	}
 	touch_cdev->mdata->exports.get_class_fname = get_class_fname_handler;
+	touch_cdev->mdata->exports.kobj_notify = &DEV_MMI->kobj;
 
 	down_write(&touchscreens_list_lock);
 	list_add_tail(&touch_cdev->node, &touchscreens_list);
