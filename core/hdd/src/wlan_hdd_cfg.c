@@ -58,9 +58,6 @@
 #define WIFI_MAC_BOOTARG "wifimacaddr="
 #define DEVICE_SERIALNO_BOOTARG "androidboot.serialno="
 #define MACSTRLEN 12
-#define MACSTRCOLON 58
-#define MACADDRESSUSED 2
-#define MACSERIALADDR 1
 
 struct sdesc {
    struct shash_desc shash;
@@ -78,6 +75,7 @@ QDF_STATUS hdd_update_mac_serial(struct hdd_context *hdd_ctx)
     char *bufferPtr = NULL;
     char *computedMac = NULL;
     const char *cmd_line = NULL;
+    tSirMacAddr mac_addr;
 
     struct device_node *chosen_node = NULL;
     computedMac = (char*)qdf_mem_malloc(QDF_MAC_ADDR_SIZE);
@@ -119,12 +117,13 @@ QDF_STATUS hdd_update_mac_serial(struct hdd_context *hdd_ctx)
         qdf_status = QDF_STATUS_E_FAILURE;
         goto config_exit;
     }
-    hdd_ctx->num_provisioned_addr = MACSERIALADDR;
     qdf_mem_copy(&hdd_ctx->provisioned_mac_addr[0].bytes[0],
                        (uint8_t *)computedMac, QDF_MAC_ADDR_SIZE);
-    hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - MACSERIALADDR);
-    //pHddCtx->num_derived_addr++;
-
+    qdf_mem_copy(&mac_addr, &hdd_ctx->provisioned_mac_addr[0].bytes[0],
+		    sizeof(tSirMacAddr));
+    hdd_ctx->num_provisioned_addr = 1; // Only one address was generated
+    hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - 1);
+    sme_set_custom_mac_addr(mac_addr);
 config_exit:
     qdf_mem_free(computedMac);
     return qdf_status;
@@ -494,11 +493,11 @@ config_exit:
 QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
 {
 	int len = 0;
-	int iteration = 0;
-
+	int i = 0;
+	int intf = 0;
 	char *bufferPtr = NULL;
-	char buffer_temp[MACSTRLEN];
-	char buffer_mac2[MACSTRLEN];
+	char name[QDF_MAX_CONCURRENCY_PERSONA][16] = {{0}};
+	char buffer_temp[QDF_MAX_CONCURRENCY_PERSONA][MACSTRLEN+1] = {{0}};
 	const char *cmd_line = NULL;
 	struct device_node *chosen_node = NULL;
 	char *buffer = NULL;
@@ -510,76 +509,71 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
 
 	memset(macTable, 0, sizeof(macTable));
 
-    /*Implemenation of QCOM is to read the MAC address from the predefined*/
-    /*location where WLAN MMAC File have the MAC Address                  */
-    /* Read MACs from bootparams. */
-    chosen_node = of_find_node_by_name(NULL, "chosen");
-    hdd_err("%s: get chosen node \n", __func__);
-    if (!chosen_node)
-    {
-        hdd_err("%s: get chosen node read failed \n", __func__);
-        goto config_exit;
-    } else {
-        cmd_line = of_get_property(chosen_node, "bootargs", &len);
+	/*Implemenation of QCOM is to read the MAC address from the predefined*/
+	/*location where WLAN MMAC File have the MAC Address                  */
+	/* Read MACs from bootparams. */
+	chosen_node = of_find_node_by_name(NULL, "chosen");
+	hdd_err("%s: get chosen node \n", __func__);
+	if (!chosen_node)
+	{
+		hdd_err("%s: get chosen node read failed \n", __func__);
+		goto config_exit;
+	} else {
+		cmd_line = of_get_property(chosen_node, "bootargs", &len);
 
-        if (!cmd_line || len <= 0) {
-            hdd_err("%s: get wlan MACs bootargs failed \n", __func__);
-		    qdf_status = QDF_STATUS_E_FAILURE;
-            goto config_exit;
-        } else {
-            buffer = strstr(cmd_line, WIFI_MAC_BOOTARG);
-            if (buffer == NULL) {
-                hdd_err("%s: " WIFI_MAC_BOOTARG " bootarg cmd line is null", __func__);
-		        qdf_status = QDF_STATUS_E_FAILURE;
-                goto config_exit;
-            } else {
-                buffer += strlen(WIFI_MAC_BOOTARG);
-                bufferPtr = buffer;
-            }
-        }
-    }
-    /* Mac address data format used by qcom:
-     * Intf0MacAddress=00AA00BB00CC
-     * Intf1MacAddress=00AA00BB00CD
-     * xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-     * From bootarg we need to strip off : from macaddress
-     */
-    for (iteration = 0; iteration < MACSTRLEN; iteration++) {
-        if (*bufferPtr != MACSTRCOLON) {
-            buffer_temp[iteration] = *bufferPtr;
-        } else {
-            iteration = iteration - 1;
-        }
-        bufferPtr++;
-    }
-    if( *bufferPtr == ',' || *bufferPtr == '-') {
-        bufferPtr++;
-    }
-    for (iteration = 0; iteration < MACSTRLEN; iteration++) {
-        if (*bufferPtr != MACSTRCOLON) {
-            buffer_mac2[iteration] = *bufferPtr;
-        } else {
-            iteration = iteration - 1;
-        }
-        bufferPtr++;
-    }
-    /* Mac address data format used by qcom:
-     * Intf0MacAddress used for 1 macaddress
-     * if gp2pdeviceAdmistered is set to 1
-     * if s020deviceAdmisnited is set to 0
-     * it will use Intf1MacAddress for P2P seprately
-     * Motorola decided to use gp2pdeviceAdmistered = 1 i.e use
-     * locally gerated bin MAC addr for P2P
-     */
-    macTable[0].name = "Intf0MacAddress";
-    macTable[0].value = &buffer_temp[0];
-    macTable[1].value = &buffer_mac2[0];
-    update_mac_from_string(hdd_ctx, &macTable[0], MACADDRESSUSED);
-    hdd_ctx->num_provisioned_addr = MACADDRESSUSED;
-    hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - MACADDRESSUSED);
-    qdf_mem_copy(&customMacAddr,
-             &hdd_ctx->provisioned_mac_addr[0].bytes[0],
-             sizeof(tSirMacAddr));
+		if (!cmd_line || len <= 0) {
+			hdd_err("%s: get wlan MACs bootargs failed \n", __func__);
+			qdf_status = QDF_STATUS_E_FAILURE;
+			goto config_exit;
+		} else {
+			buffer = strstr(cmd_line, WIFI_MAC_BOOTARG);
+			if (buffer == NULL) {
+				hdd_err("%s: " WIFI_MAC_BOOTARG " bootarg cmd line is null", __func__);
+				qdf_status = QDF_STATUS_E_FAILURE;
+				goto config_exit;
+			} else {
+				buffer += strlen(WIFI_MAC_BOOTARG);
+				bufferPtr = buffer;
+			}
+		}
+	}
+	/* Mac address data format used by qcom:
+	* Intf0MacAddress=00AA00BB00CC
+	* Intf1MacAddress=00AA00BB00CD
+	* xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	* Intf0MacAddress used for 1 macaddress
+	* if gp2pdeviceAdmistered is set to 1
+	* if s020deviceAdmisnited is set to 0
+	* it will use Intf1MacAddress for P2P seprately
+	* Motorola decided to use gp2pdeviceAdmistered = 1 i.e use
+	* locally gerated bin MAC addr for P2P
+	* From bootarg we need to strip off : from macaddress
+	*/
+	while (*bufferPtr != '\0' && *bufferPtr != ' ') {
+		if (*bufferPtr != ':' && *bufferPtr != ',') {
+			buffer_temp[intf][i++] = *bufferPtr;
+			if (i == MACSTRLEN) {
+				buffer_temp[intf][i] = '\0';
+				sprintf(name[intf], "Intf%dMacAddress", intf);
+				macTable[intf].name = name[intf];
+				macTable[intf].value = buffer_temp[intf];
+				i = 0;
+				intf++;
+				hdd_ctx->num_provisioned_addr++;
+				if (intf >= QDF_MAX_CONCURRENCY_PERSONA)
+					break;
+			}
+		}
+		bufferPtr++;
+	}
+
+	for (i = 0; i < intf; i++)
+		hdd_err("Mac address table from utag: [%s][%s]", macTable[i].name, macTable[i].value);
+
+	update_mac_from_string(hdd_ctx, &macTable[0], intf);
+	hdd_populate_random_mac_addr(hdd_ctx, QDF_MAX_CONCURRENCY_PERSONA - intf);
+	qdf_mem_copy(&customMacAddr, &hdd_ctx->provisioned_mac_addr[0].bytes[0],
+			sizeof(tSirMacAddr));
 	sme_set_custom_mac_addr(customMacAddr);
 
 config_exit:
