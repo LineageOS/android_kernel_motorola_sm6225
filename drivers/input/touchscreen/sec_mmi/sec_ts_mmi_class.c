@@ -249,6 +249,10 @@ static ssize_t sec_mmi_suppression_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	if (ts->suppression_data == buffer) {
+		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
+		return size;
+	}
 	ts->suppression_data = buffer;
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
@@ -359,6 +363,11 @@ static ssize_t sec_mmi_pill_region_store(struct device *dev,
 		(unsigned int)buffer[2], (unsigned int)buffer[3],
 		(unsigned int)buffer[4]);
 
+	if (!strncmp(buffer, ts->pill_region_data, sizeof(buffer))) {
+		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
+		return size;
+	}
+
 	memcpy(ts->pill_region_data, buffer, sizeof(ts->pill_region_data));
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
@@ -439,6 +448,10 @@ static ssize_t sec_mmi_hold_distance_store(struct device *dev,
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
 
+	if (ts->hold_distance_data == buffer) {
+		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
+		return size;
+	}
 	ts->hold_distance_data = buffer;
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
@@ -495,6 +508,11 @@ static ssize_t sec_mmi_gs_distance_store(struct device *dev,
 	error = kstrtoul(buf, 0, &value);
 	if (error)
 		return -EINVAL;
+
+	if (ts->gs_distance_data == buffer) {
+		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
+		return size;
+	}
 
 	buffer = (unsigned char)value;
 	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
