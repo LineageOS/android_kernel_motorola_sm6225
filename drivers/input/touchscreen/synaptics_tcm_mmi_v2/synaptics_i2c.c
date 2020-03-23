@@ -185,6 +185,21 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		bdata->tpio_reset_gpio = -1;
 	}
 
+	prop = of_find_property(np, "synaptics,size_to_pixel_multiple_factor", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,size_to_pixel_multiple_factor",
+				&value);
+		if (retval < 0) {
+			LOGE(dev,
+					"Unable to read synaptics,size_to_pixel_multiple_factor property\n");
+			return retval;
+		} else {
+			bdata->size_to_pixel_multiple_factor = value;
+		}
+	} else {
+			bdata->size_to_pixel_multiple_factor = 128;
+	}
+
 	prop = of_find_property(np, "synaptics,x-flip", NULL);
 	bdata->x_flip = prop > 0 ? true : false;
 
