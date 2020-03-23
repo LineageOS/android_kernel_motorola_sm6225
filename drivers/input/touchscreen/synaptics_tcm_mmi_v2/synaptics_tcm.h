@@ -40,6 +40,7 @@ struct syna_tcm_board_data {
 	bool x_flip;
 	bool y_flip;
 	bool swap_axes;
+	int size_to_pixel_multiple_factor;
 	int irq_gpio;
 	int irq_on_state;
 	int power_gpio;

@@ -632,6 +632,8 @@ static void touch_report(void)
 	unsigned int idx;
 	unsigned int x;
 	unsigned int y;
+	unsigned int major;
+	unsigned int minor;
 	unsigned int temp;
 	unsigned int status;
 	unsigned int touch_count;
@@ -697,6 +699,8 @@ static void touch_report(void)
 		case GLOVED_FINGER:
 			x = object_data[idx].x_pos;
 			y = object_data[idx].y_pos;
+			minor = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
+			major = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
 			if (bdata->swap_axes) {
 				temp = x;
 				x = y;
@@ -719,12 +723,16 @@ static void touch_report(void)
 					ABS_MT_POSITION_X, x);
 			input_report_abs(touch_hcd->input_dev,
 					ABS_MT_POSITION_Y, y);
+			input_report_abs(touch_hcd->input_dev,
+					ABS_MT_TOUCH_MAJOR, major);
+			input_report_abs(touch_hcd->input_dev,
+					ABS_MT_TOUCH_MINOR, minor);
 #ifndef TYPE_B_PROTOCOL
 			input_mt_sync(touch_hcd->input_dev);
 #endif
 			LOGD(tcm_hcd->pdev->dev.parent,
-					"Finger %d: x = %d, y = %d\n",
-					idx, x, y);
+					"Finger %d: x = %d, y = %d, x_width = %d, y_width = %d\n",
+					idx, x, y, object_data[idx].x_width, object_data[idx].y_width);
 			touch_count++;
 			break;
 		default:
@@ -767,6 +775,10 @@ static int touch_set_input_params(void)
 			ABS_MT_POSITION_X, 0, touch_hcd->max_x, 0, 0);
 	input_set_abs_params(touch_hcd->input_dev,
 			ABS_MT_POSITION_Y, 0, touch_hcd->max_y, 0, 0);
+	input_set_abs_params(touch_hcd->input_dev,
+			ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
+	input_set_abs_params(touch_hcd->input_dev,
+			ABS_MT_TOUCH_MINOR, 0, 255, 0, 0);
 
 	input_mt_init_slots(touch_hcd->input_dev, touch_hcd->max_objects,
 			INPUT_MT_DIRECT);
