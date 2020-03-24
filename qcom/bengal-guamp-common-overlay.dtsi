@@ -41,14 +41,15 @@
 &tlmm{
 	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
 		mux {
-			pins = "gpio96", "gpio97";
+			pins = "gpio36";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio96", "gpio97";
+			pins = "gpio36";
 			drive-strength = <2>;
 			bias-pull-up;
+			input-enable;
 		};
 	};
 };
@@ -182,6 +183,12 @@
 	};
 };
 
+&L21A {
+	regulator-min-microvolt = <2700000>;
+	regulator-max-microvolt = <3600000>;
+	qcom,init-voltage = <2800000>;
+};
+
 &qupv3_se0_i2c {
 	status = "ok";
 	abov_sar@20 {
@@ -189,7 +196,6 @@
 		compatible = "abov,abov_sar_mmi_overlay";
 		reg = <0x20>;
 		cap_vdd-supply = <&L21A>;
-		cap_svdd-supply = <&L21A>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <36 0x2>;
 		gpios = <&tlmm 36 0x2>;
@@ -203,6 +209,7 @@
 		ch1_name = "capsense_bottom";
 		label = "AbovCapSense";
 		cap,channel_number = <0x02>;
+		cap,fw_mode_ret = <0x3A>;
 	};
 };
 
