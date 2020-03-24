@@ -363,7 +363,7 @@ static ssize_t sec_mmi_pill_region_store(struct device *dev,
 		(unsigned int)buffer[2], (unsigned int)buffer[3],
 		(unsigned int)buffer[4]);
 
-	if (!strncmp(buffer, ts->pill_region_data, sizeof(buffer))) {
+	if (!memcmp(buffer, ts->pill_region_data, sizeof(buffer))) {
 		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
 		return size;
 	}
@@ -509,14 +509,13 @@ static ssize_t sec_mmi_gs_distance_store(struct device *dev,
 	if (error)
 		return -EINVAL;
 
+	buffer = (unsigned char)value;
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
+
 	if (ts->gs_distance_data == buffer) {
 		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
 		return size;
 	}
-
-	buffer = (unsigned char)value;
-	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)buffer);
-
 	ts->gs_distance_data = buffer;
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		dev_dbg(dev, "%s: power off state\n", __func__);
@@ -1217,6 +1216,12 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 			if (ret < 0)
 				dev_err(&ts->client->dev, "%s: failed to write grip supp distance (%d)\n",
 						__func__, ret);
+
+			if (ts->gs_distance_data == 0xFF || ret < 0) {
+				dev_err(&ts->client->dev, "%s: previous firmware dose not support gs-distance, set default value\n",
+                        __func__);
+				ts->gs_distance_data = 0x1E;
+			}
 		}
 
 		if (ts->plat_data->hold_grip_ctrl)
