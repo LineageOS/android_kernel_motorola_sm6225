@@ -64,11 +64,15 @@ struct sec_mmi_data {
 };
 
 int sec_mmi_data_init(struct sec_ts_data *ts, bool enable);
-int sec_mmi_sysfs_notify(struct sec_ts_data *ts, unsigned char state);
 
-#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+int sec_mmi_sysfs_notify(struct sec_ts_data *ts, unsigned char state);
+#else
 #define DEV_MMI (&data->i2c_client->dev)
 #define DEV_TS  (&ts->client->dev)
+static int inline sec_mmi_sysfs_notify(struct sec_ts_data *ts, unsigned char state) {
+	return -ENOSYS;
+}
 #endif
 
 extern struct class *get_touchscreen_class_ptr(void);
