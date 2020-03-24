@@ -245,20 +245,28 @@ static ssize_t st21nfc_dev_read(struct file *filp, char __user *buf,
 
 	pr_debug("reading %zu bytes.\n", count);
 
-	mutex_lock(&st21nfc_dev->platform_data.read_mutex);
+	ret = gpio_get_value(st21nfc_dev->platform_data.irq_gpio);
+	if (ret <= 0) {
+		/* The CLF has nothing to send */
+		memset(tmp, 0x7E, count);
+		ret = count;
+	} else {
+		mutex_lock(&st21nfc_dev->platform_data.read_mutex);
 
-	/* Read data */
-	ret = i2c_master_recv(st21nfc_dev->platform_data.client, tmp, count);
-	mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
+		/* Read data */
+		ret = i2c_master_recv(st21nfc_dev->platform_data.client, tmp, count);
+		mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
 
-	if (ret < 0) {
-		pr_err("i2c_master_recv returned %d\n", ret);
-		return ret;
+		if (ret < 0) {
+			pr_err("i2c_master_recv returned %d\n", ret);
+			return ret;
+		}
+		if (ret > count) {
+			pr_err("received too many bytes from i2c (%d)\n", ret);
+			return -EIO;
+		}
 	}
-	if (ret > count) {
-		pr_err("received too many bytes from i2c (%d)\n", ret);
-		return -EIO;
-	}
+
 	if (copy_to_user(buf, tmp, ret)) {
 		pr_warn("failed to copy to user space\n");
 		return -EFAULT;
@@ -419,6 +427,7 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 			msleep(20);
 			gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
 			1);
+			msleep(20);
 			pr_info("done Double Pulse Request\n");
 			if (st21nfc_st54spi_cb != 0)
 				(*st21nfc_st54spi_cb)(ST54SPI_CB_RESET_END,
