@@ -13,15 +13,20 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 &qupv3_se1_i2c {
-        status = "ok";
-        fs16xx@34 {
-                compatible = "foursemi,fs16xx";
-                reg = <0x34>;
-                fs,fs-dev = "left";
-                /* 1V8 supplied by LDO */
-                vddcore-supply = <&L9A>;
-                status = "okay";
-        };
+	status = "ok";
+
+	/* AWINIC AW882XX mono Smart PA */
+	aw882xx_smartpa@34 {
+		compatible = "awinic,aw882xx_smartpa";
+		reg = <0x34>;
+		reset-gpio = <&tlmm 97 0>;
+		/*irq-gpio = <&tlmm 136 0x2008>; */
+		monitor-flag = <1>;
+		monitor-timer-val = <3000>;
+		aw-cali-mode = "aw_misc";
+		status = "okay";
+	};
+	/* AWINIC AW882XX mono Smart PA End */
 };
 
 /* Add pinctrl for MI2S0 */
@@ -52,8 +57,8 @@
 
 
 &bengal_snd {
-        qcom,model = "bengal-fs-snd-card";
-	fs,have-16xx = <1>;
+        qcom,model = "bengal-awinic-snd-card";
+	aw,have-882xx = <1>;
 
 	qcom,mi2s-audio-intf = <1>;
 	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
