@@ -14,7 +14,6 @@
 #include "bengal-moto-common-overlay.dtsi"
 #include "bengal-guam-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
-#include "bengal-guam-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
