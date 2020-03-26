@@ -1078,7 +1078,7 @@ static int abov_tk_fw_mode_enter(struct i2c_client *client)
 {
 	int ret = 0;
 	unsigned char buf[40] = {0, };
-	pabovXX_t this = abov_sar_ptr;
+	pabov_platform_data_t pplatData = client->dev.platform_data;
 
 	buf[0] = 0xAC;
 	buf[1] = 0x5B;
@@ -1091,7 +1091,7 @@ static int abov_tk_fw_mode_enter(struct i2c_client *client)
 	SLEEP(5);
 
 	ret = i2c_master_recv(client, buf, 1);
-	if (buf[0] != this->board->fw_mode_ret) {
+	if (buf[0] != pplatData->fw_mode_ret) {
 		LOG_ERR("Enter fw mode fail,device id:0x%02x\n", buf[0]);
 		return -EIO;
 	}
