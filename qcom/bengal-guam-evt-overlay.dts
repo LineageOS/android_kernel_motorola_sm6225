@@ -14,6 +14,7 @@
 /plugin/;
 
 #include "bengal-guam-common-overlay.dtsi"
+#include "bengal-guam-audio-overlay.dtsi"
 
 / {
 	model = "guam";
