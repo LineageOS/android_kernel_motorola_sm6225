@@ -21,6 +21,10 @@ ifeq ($(DISPLAY_SPEED_UP), true)
 	KERNEL_CFLAGS += CONFIG_DISPLAY_SPEED_UP=y
 endif
 
+ifeq ($(FPS_ENABLE_DOUBLE_TAP), true)
+	KERNEL_CFLAGS += CONFIG_NAV_DOUBLE_TAP=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := ets_fps_mmi.ko
 LOCAL_MODULE_TAGS := optional

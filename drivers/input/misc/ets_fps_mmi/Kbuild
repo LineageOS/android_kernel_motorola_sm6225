@@ -38,3 +38,7 @@ endif
 ifneq ($(filter m y, $(CONFIG_DISPLAY_SPEED_UP)),)
 EXTRA_CFLAGS += -DCONFIG_DISPLAY_SPEED_UP
 endif
+
+ifneq ($(filter m y, $(CONFIG_NAV_DOUBLE_TAP)),)
+EXTRA_CFLAGS += -DCONFIG_NAV_DOUBLE_TAP
+endif
