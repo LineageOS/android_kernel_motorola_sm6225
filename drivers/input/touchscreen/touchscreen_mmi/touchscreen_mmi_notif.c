@@ -208,8 +208,12 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 
 	TRY_TO_CALL(post_resume);
 
-	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
+	if (touch_cdev->pdata.usb_detection)
+		TRY_TO_CALL(charger_mode, (int)touch_cdev->ps_is_present);
+	if (touch_cdev->pdata.update_refresh_rate)
+		TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
 
+	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 	dev_info(DEV_MMI, "%s: done\n", __func__);
 }
 
