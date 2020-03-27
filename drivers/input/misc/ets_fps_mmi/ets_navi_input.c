@@ -174,8 +174,12 @@ static unsigned int prev_keycode;
  * @ ENABLE_TRANSLATED_LONG_TOUCH
  *     ENABLE/DISABLE : enable/disable long-touch event.
  */
-#define ENABLE_TRANSLATED_SINGLE_CLICK	DISABLE
+#ifdef CONFIG_NAV_DOUBLE_TAP
+#define ENABLE_TRANSLATED_DOUBLE_CLICK	ENABLE
+#else
 #define ENABLE_TRANSLATED_DOUBLE_CLICK	DISABLE
+#endif
+#define ENABLE_TRANSLATED_SINGLE_CLICK	DISABLE
 #define ENABLE_TRANSLATED_LONG_TOUCH	DISABLE
 
 
@@ -206,8 +210,8 @@ static unsigned int prev_keycode;
  *   KEY_PRESS_RELEASE : Combined action of press-then-release
  */
 #define LONGTOUCH_INTERVAL          400
-#define SINGLECLICK_INTERVAL        150
-#define DOUBLECLICK_INTERVAL        150
+#define SINGLECLICK_INTERVAL        200
+#define DOUBLECLICK_INTERVAL        500
 
 
 #define	KEYEVENT_CLICK              KEY_FPS_TAP /* 0x232 */
@@ -399,7 +403,7 @@ void translated_command_converter(char cmd, struct etspi_data *etspi)
 
 	case NAVI_EVENT_ON: /* finger down */
 		g_KeyEventRaised = false;
-#if ENABLE_TRANSLATED_SINGLE_CLICK
+#if ENABLE_TRANSLATED_SINGLE_CLICK || ENABLE_TRANSLATED_DOUBLE_CLICK
 		g_SingleClickJiffies = jiffies;
 #endif
 
@@ -418,10 +422,12 @@ void translated_command_converter(char cmd, struct etspi_data *etspi)
 			pr_info("Egis : g_SingleClick %u tap interval =%u double tap interval = %u time= %u",
 				g_SingleClick, jiffies_to_msecs(jiffies - g_SingleClickJiffies),
 				jiffies_to_msecs(jiffies - g_DoubleClickJiffies), jiffies_to_msecs(jiffies));
-#if ENABLE_TRANSLATED_SINGLE_CLICK
+#if ENABLE_TRANSLATED_SINGLE_CLICK || ENABLE_TRANSLATED_DOUBLE_CLICK
 			if ((jiffies - g_SingleClickJiffies) < (HZ * SINGLECLICK_INTERVAL / 1000)) {
 				/* Click event */
+#if ENABLE_TRANSLATED_SINGLE_CLICK
 				send_key_event(etspi, KEYEVENT_CLICK, KEYEVENT_CLICK_ACTION);
+#endif
 				g_SingleClick++;
 				if (g_SingleClick == 1) {
 					g_DoubleClickJiffies = jiffies;
