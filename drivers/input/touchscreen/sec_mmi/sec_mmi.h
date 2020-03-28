@@ -11,6 +11,7 @@
 #include <linux/panel_notifier.h>
 #endif
 #if defined(CONFIG_DRM)
+#include <linux/msm_drm_notify.h>
 extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 #endif
 

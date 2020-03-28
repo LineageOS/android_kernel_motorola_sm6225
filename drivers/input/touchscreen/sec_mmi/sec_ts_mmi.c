@@ -47,6 +47,9 @@ extern struct blocking_notifier_head dsi_freq_head;
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #define register_panel_notifier panel_register_notifier
 #define unregister_panel_notifier panel_unregister_notifier
+#elif defined(CONFIG_DRM)
+#define register_panel_notifier msm_drm_register_client
+#define unregister_panel_notifier msm_drm_unregister_client
 #else
 #define register_panel_notifier(...) rc
 #define unregister_panel_notifier(...) rc
@@ -749,6 +752,30 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 	struct sec_mmi_data *data =
 		container_of(nb, struct sec_mmi_data, panel_nb);
 	struct sec_ts_data *ts = data->ts_ptr;
+	int idx = -1;
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+	if (evd)
+		idx = *(int *)evd;
+#elif defined (CONFIG_DRM)
+	struct msm_drm_notifier *evdata = evd;
+	int *blank;
+
+	if (!(evdata && evdata->data && data)) {
+			dev_dbg(DEV_MMI, "%s: Invalid evdata \n",
+				__func__);
+			return 0;
+	}
+
+	idx = evdata->id;
+	blank = (int *)evdata->data;
+  	dev_dbg(DEV_MMI, "%s: drm notification: event = %lu blank = %d\n",
+			__func__, event, *blank);
+#endif
+	if ((idx != data->ctrl_dsi)) {
+		dev_dbg(DEV_MMI, "%s: ctrl_dsi notification: id(%d) != ctrl_dsi(%d)\n",
+				__func__, idx, data->ctrl_dsi);
+		return 0;
+	}
 
 	/* entering suspend upon early blank event */
 	/* to ensure shared power supply is still on */
@@ -786,6 +813,39 @@ static int sec_mmi_panel_cb(struct notifier_block *nb,
 			if (data->power_off_suspend)
 				sec_ts_pinctrl_configure(ts, true);
 			sec_mmi_display_on(data);
+				break;
+#elif defined(CONFIG_DRM)
+	case MSM_DRM_EARLY_EVENT_BLANK:
+			if (*blank == MSM_DRM_BLANK_POWERDOWN) {
+				/* put in reset first */
+				if (data->power_off_suspend)
+					sec_ts_pinctrl_configure(ts, false);
+
+				sec_mmi_display_off(data);
+
+			} else if (data->power_off_suspend) {
+				/* powering on early */
+				sec_ts_power((void *)ts, true);
+				dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
+			} else if (data->reset) {
+				dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
+				data->reset_func(ts->mmi_ptr, data->reset);
+			}
+				break;
+
+	case MSM_DRM_EVENT_BLANK:
+			if (*blank == MSM_DRM_BLANK_UNBLANK) {
+				/* out of reset to allow wait for boot complete */
+				if (data->power_off_suspend)
+					sec_ts_pinctrl_configure(ts, true);
+
+				sec_mmi_display_on(data);
+
+			} else if (data->power_off_suspend) {
+				/* then proceed with de-powering */
+				sec_ts_power((void *)ts, false);
+				dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
+			}
 				break;
 #endif
 	default:	/* use DEV_TS here to avoid unused variable */
