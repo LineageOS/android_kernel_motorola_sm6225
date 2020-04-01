@@ -285,6 +285,15 @@
 		status = "ok";
 	};
 
+	led_flash_macro: qcom,camera-flash@1 {
+		cell-index = <1>;
+		compatible = "qcom,camera-flash";
+		flash-source  = <&pmi632_flash0>;
+		torch-source  = <&pmi632_torch0>;
+		switch-source = <&pmi632_switch0>;
+		status = "ok";
+	};
+
 	macro_actuator_vdd_ldo: gpio-regulator@0 {
 		compatible = "regulator-fixed";
 		reg = <0x00 0x00>;
@@ -563,6 +572,7 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		actuator-src = <&actuator_macro>;
+		led-flash-src = <&led_flash_macro>;
 		eeprom-src = <&eeprom_macro>;
 		cam_vio-supply = <&L7P>;
 		cam_vana-supply = <&L3P>;
