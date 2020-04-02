@@ -153,6 +153,7 @@ struct mmi_charger_manager {
 	bool			factory_mode;
 	bool			suspended;
 	bool			awake;
+	bool			cp_disable;
 
 	int *debug_mask;
 	int mmi_pd_pdo_idx;	/*request the pdo idx of PD*/
