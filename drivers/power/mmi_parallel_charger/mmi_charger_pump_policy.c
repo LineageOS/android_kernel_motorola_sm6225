@@ -273,6 +273,45 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 	return;
 }
 
+void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
+{
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	bool enable = !!val;
+
+	mmi_chrg_dbg(chip, PR_MOTO,"enable all cp = %d\n", enable);
+	if (enable) {
+		if (chip->cp_disable == false)
+			return;
+
+		cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
+		mmi_chrg_sm_move_state(chip, PM_STATE_CHRG_PUMP_ENTRY);
+		chip->cp_disable = false;
+		schedule_delayed_work(&chip->mmi_chrg_sm_work,
+				msecs_to_jiffies(0));
+
+	} else {
+		if(chrg_list->cp_master
+			&& !chrg_list->chrg_dev[CP_MASTER]->charger_enabled)
+			return;
+
+		cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
+
+		chip->cp_disable = true;
+		if (chrg_list->cp_slave
+			&& chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
+		}
+
+		if (chrg_list->cp_master
+			&& chrg_list->chrg_dev[CP_MASTER]->charger_enabled) {
+			mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
+		}
+
+		mmi_chrg_sm_move_state(chip, PM_STATE_RECOVERY_SW);
+		schedule_delayed_work(&chip->mmi_chrg_sm_work,
+				msecs_to_jiffies(0));
+	}
+}
 
 #define HEARTBEAT_SHORT_DELAY_MS 1000
 #define HEARTBEAT_lOOP_WAIT_MS 3000
@@ -611,6 +650,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		break;
 	case PM_STATE_SW_LOOP:
 		if (chip->pd_pps_support
+			&& chip->cp_disable == false
 			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& chrg_step->chrg_step_cc_curr >=

@@ -600,6 +600,7 @@ static enum power_supply_property mmi_chrg_mgr_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 	POWER_SUPPLY_PROP_NUM_SYSTEM_TEMP_LEVELS,
+	POWER_SUPPLY_PROP_CP_ENABLE,
 };
 
 static int mmi_chrg_mgr_get_property(struct power_supply *psy,
@@ -657,6 +658,9 @@ static int mmi_chrg_mgr_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_NUM_SYSTEM_TEMP_LEVELS:
 		val->intval = chip->thermal_levels;
 		break;
+	case POWER_SUPPLY_PROP_CP_ENABLE:
+		val->intval = !chip->cp_disable;
+		break;
 	default:
 		return -EINVAL;
 
@@ -695,7 +699,11 @@ static int mmi_chrg_mgr_set_property(struct power_supply *psy,
 			return -EINVAL;
 		chip->pd_volt_max= val->intval;
 		break;
-
+	case POWER_SUPPLY_PROP_CP_ENABLE:
+		if (chip->pd_pps_support
+			&& !chip->factory_mode)
+			mmi_chrg_enable_all_cp(chip, val->intval);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -712,6 +720,7 @@ static int mmi_chrg_mgr_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_PD_VOLTAGE_MAX:
+	case POWER_SUPPLY_PROP_CP_ENABLE:
 		ret = 1;
 		break;
 	default:
