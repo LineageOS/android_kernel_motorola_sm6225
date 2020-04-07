@@ -70,11 +70,14 @@ static ssize_t sec_mmi_hold_grip_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t sec_mmi_hold_grip_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t sec_mmi_mutual_range_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(address, (S_IWUSR | S_IWGRP), NULL, sec_mmi_address_store);
 static DEVICE_ATTR(size, (S_IWUSR | S_IWGRP), NULL, sec_mmi_size_store);
 static DEVICE_ATTR(write, (S_IWUSR | S_IWGRP), NULL, sec_mmi_write_store);
 static DEVICE_ATTR(data, S_IRUGO, sec_mmi_data_show, NULL);
+static DEVICE_ATTR(mutual_range, S_IRUGO, sec_mmi_mutual_range_show, NULL);
 static DEVICE_ATTR(suppression, (S_IRUGO | S_IWUSR | S_IWGRP),
 		sec_mmi_suppression_show, sec_mmi_suppression_store);
 static DEVICE_ATTR(pill_region, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -129,6 +132,7 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 		ADD_ATTR(size);
 		ADD_ATTR(data);
 		ADD_ATTR(write);
+		ADD_ATTR(mutual_range);
 	}
 
 	if (idx) {
@@ -556,6 +560,86 @@ static ssize_t sec_mmi_gs_distance_show(struct device *dev,
 	}
 
 	return blen;
+}
+
+static ssize_t sec_mmi_mutual_range_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	unsigned char ostate = STATE_MANAGE_OFF;
+	unsigned char tmode[2] = { TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH };
+	int i, error;
+	short p, min = 1, max = -1;
+	struct sec_ts_data *ts;
+	unsigned int readbytes;
+	unsigned char *pRead;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF)
+		goto not_ready;
+
+	readbytes = ts->rx_count * ts->rx_count * 2;
+	pRead = kzalloc(readbytes, GFP_KERNEL);
+	if (!pRead)
+		return -ENOMEM;
+
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_STATEMANAGE_ON, &ostate, sizeof(ostate));
+	if (error < 0) {
+		dev_err(dev, "%s: cannot set manage state: %d\n", __func__, error);
+		goto free_and_leave;
+	}
+	sec_ts_delay(20);
+
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_CHG_SYSMODE, tmode, sizeof(tmode));
+	if (error < 0) {
+		dev_err(dev, "%s: cannot set sysmode: %d\n", __func__, error);
+		goto restore_mode;
+	}
+	sec_ts_delay(20);
+
+	ostate = TYPE_AMBIENT_DATA;
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_MUTU_RAW_TYPE, &ostate, sizeof(ostate));
+	if (error < 0) {
+		dev_err(dev, "%s: cannot set rawdata type: %d\n", __func__, error);
+		goto restore_mode;
+	}
+	sec_ts_delay(50);
+
+	error = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TOUCH_RAWDATA, pRead, readbytes);
+	if (error < 0) {
+		dev_err(dev, "%s: cannot set rawdata type: %d\n", __func__, error);
+		goto release_afe;
+	}
+	sec_ts_delay(50);
+
+	for (i = 0; i < readbytes; i+=2) {
+		p = pRead[i + 1] + (pRead[i] << 8);
+		if (!i) {
+			min = max = p;
+			continue;
+		}
+		if (p < min)
+			min = p;
+		else if (p > max)
+			max = p;
+	}
+
+release_afe:
+	ostate = TYPE_INVALID_DATA;
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_MUTU_RAW_TYPE, &ostate, sizeof(ostate));
+	if (error < 0)
+		dev_err(dev, "%s: cannot restore rawdata type: %d\n", __func__, error);
+restore_mode:
+	ostate = STATE_MANAGE_ON;
+	error = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_STATEMANAGE_ON, &ostate, sizeof(ostate));
+	if (error < 0)
+		dev_err(dev, "%s: cannot restore manage state: %d\n", __func__, error);
+	sec_ts_delay(20);
+free_and_leave:
+	kfree(pRead);
+not_ready:
+	return scnprintf(buf, PAGE_SIZE, "%d,%d", min, max);
 }
 
 #define MAX_DATA_SZ	1024
