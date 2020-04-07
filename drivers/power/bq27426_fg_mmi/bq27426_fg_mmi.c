@@ -21,7 +21,7 @@
 /*
  * Datasheets:
  */
-#define pr_fmt(fmt)	"bq27426- %s: " fmt, __func__
+#define pr_fmt(fmt)	"bq27426-[%s]: " fmt, __func__
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/jiffies.h>
@@ -46,6 +46,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/gpio.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
@@ -73,21 +74,21 @@
 #define dev_dbg dev_err
 
 #define mmi_fg_err(chip, fmt, ...)		\
-	pr_err("%s: %s: " fmt, chip->name,	\
-		__func__, ##__VA_ARGS__)	\
+	pr_err("%s: " fmt, chip->name,	\
+		##__VA_ARGS__)	\
 
 #define mmi_fg_info(chip, fmt, ...)		\
-	pr_info("%s: %s: " fmt, chip->name,	\
-		__func__, ##__VA_ARGS__)	\
+	pr_info("%s: " fmt, chip->name,	\
+		##__VA_ARGS__)	\
 
 #define mmi_fg_dbg(chip, reason, fmt, ...)			\
 	do {							\
 		if (*chip->debug_mask & (reason))		\
-			pr_info("%s: %s: " fmt, chip->name,	\
-				__func__, ##__VA_ARGS__);	\
+			pr_info("%s: " fmt, chip->name,	\
+				##__VA_ARGS__);	\
 		else						\
-			pr_debug("%s: %s: " fmt, chip->name,	\
-				__func__, ##__VA_ARGS__);	\
+			pr_debug("%s: " fmt, chip->name,	\
+				##__VA_ARGS__);	\
 	} while (0)
 
 enum print_reason {
@@ -192,19 +193,19 @@ static struct batt_chem_id batt_chem_id_arr[] = {
 static const struct fg_batt_profile bqfs_image[] = {
 
 #ifdef ATL_4000MAH_8A_BATTERY_PROFILE
-	{"KG50_ATL_4000MAH",  atl_bqfs_image, ARRAY_SIZE(atl_bqfs_image), 2542, 2},
+	{.batt_type_str = "KG50_ATL_4000MAH", .bqfs_image = atl_bqfs_image, .array_size = ARRAY_SIZE(atl_bqfs_image), .chem_id = 2542, .dm_ver = 2},
 #endif
 
 #ifdef SCUD_4000MAH_8A_BATTERY_PROFILE
-	{"KG50_SCUD_4000MAH",scud_bqfs_image, ARRAY_SIZE(scud_bqfs_image), 9824, 1},
+	{.batt_type_str = "KG50_SCUD_4000MAH", .bqfs_image = scud_bqfs_image, .array_size = ARRAY_SIZE(scud_bqfs_image), .chem_id = 9824, .dm_ver = 1},
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-	{"LS30_ATL_1255MAH",smith_main_bqfs_image, ARRAY_SIZE(smith_main_bqfs_image), 2767, 1},
+	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 0},
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-	{"LS40_ATL_1545MAH",smith_flip_bqfs_image, ARRAY_SIZE(smith_flip_bqfs_image), 2766, 1},
+	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 0},
 #endif
 
 };
@@ -241,17 +242,6 @@ static u8 bq27426_regs[NUM_REGS] = {
 };
 
 struct bq_fg_chip;
-
-enum {
-	BATTERY_PROFILE_A,
-	BATTERY_PROFILE_B,
-	BATTERY_PROFILE_MAX,
-};
-
-struct bq_fg_battery_info {
-	int chem_id;
-	const char *serialnum;
-};
 
 struct bq_fg_chip {
 	struct device		*dev;
@@ -306,11 +296,9 @@ struct bq_fg_chip {
 
 
 	struct work_struct update_work;
-	const char *df_serialnum;
-	const char *dev_serialnum;
-	struct bq_fg_battery_info *battery_list;
-	int battery_num;
 	unsigned long last_update;
+	const char *batt_profile_name;
+	const char *batt_name;
 
 	/* debug */
 	int	skip_reads;
@@ -329,6 +317,7 @@ struct bq_fg_chip {
 	u32	connected_rid;
 
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
+	struct workqueue_struct *heartbeat_wq;
 };
 
 static void fg_check_soc(struct bq_fg_chip *bq);
@@ -586,7 +575,7 @@ static int fg_check_init_completed(struct bq_fg_chip *bq)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 								FG_SUBCMD_CTRL_STATUS);
 	if (ret < 0) {
-		pr_err("Failed to write control status cmd, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to write control status cmd, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -598,7 +587,7 @@ static int fg_check_init_completed(struct bq_fg_chip *bq)
 			return 0;
 		msleep(100);
 	}
-	pr_err("wait for FG INITCOMP timeout\n");
+	mmi_fg_err(bq, "wait for FG INITCOMP timeout\n");
 	return ret;
 }
 
@@ -610,7 +599,7 @@ static int fg_get_seal_state(struct bq_fg_chip *bq)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 								FG_SUBCMD_CTRL_STATUS);
 	if (ret < 0) {
-		pr_err("Failed to write control status cmd, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to write control status cmd, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -618,10 +607,10 @@ static int fg_get_seal_state(struct bq_fg_chip *bq)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_CTRL], &status);
 	if (ret < 0) {
-		pr_err("Failed to read control status, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to read control status, ret = %d\n", ret);
 		return ret;
 	}
-	pr_err("control_status = 0x%04X", status);
+	pr_debug("control_status = 0x%04X", status);
 	if (status & 0x2000)
 		bq->seal_state = SEAL_STATE_SEALED;
 	else
@@ -641,12 +630,12 @@ static int fg_unseal(struct bq_fg_chip *bq, u32 key)
 	if (bq->seal_state == SEAL_STATE_UNSEALED)
 		return 0;
 
-	pr_info(":key - 0x%08X\n", key);
+	mmi_fg_info(bq, ":key - 0x%08X\n", key);
 
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 									key & 0xFFFF);
 	if (ret < 0) {
-		pr_err("unable to write unseal key step 1, ret = %d\n", ret);
+		mmi_fg_err(bq, "unable to write unseal key step 1, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -655,7 +644,7 @@ static int fg_unseal(struct bq_fg_chip *bq, u32 key)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 									(key >> 16) & 0xFFFF);
 	if (ret < 0) {
-		pr_err("unable to write unseal key step 2, ret = %d\n", ret);
+		mmi_fg_err(bq, "unable to write unseal key step 2, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -678,12 +667,12 @@ static int fg_unseal_fa(struct bq_fg_chip *bq, u32 key)
 	int ret;
 	int retry = 0;
 
-	pr_info(":key - %d\n", key);
+	mmi_fg_info(bq, ":key - %d\n", key);
 
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 									key & 0xFFFF);
 	if (ret < 0) {
-		pr_err("unable to write unseal key step 1, ret = %d\n", ret);
+		mmi_fg_err(bq, "unable to write unseal key step 1, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -692,7 +681,7 @@ static int fg_unseal_fa(struct bq_fg_chip *bq, u32 key)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 									(key >> 16) & 0xFFFF);
 	if (ret < 0) {
-		pr_err("unable to write unseal key step 2, ret = %d\n", ret);
+		mmi_fg_err(bq, "unable to write unseal key step 2, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -724,7 +713,7 @@ static int fg_seal(struct bq_fg_chip *bq)
 									FG_SUBCMD_SEAL);
 
 	if (ret < 0) {
-		pr_err("Failed to send seal command\n");
+		mmi_fg_err(bq, "Failed to send seal command\n");
 		return ret;
 	}
 
@@ -779,7 +768,7 @@ static int fg_read_dm_version(struct bq_fg_chip* bq, u8 *ver)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL],
 								FG_SUBCMD_DM_CODE);
 	if (ret < 0) {
-		pr_err("Failed to write control status cmd, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to write control status cmd, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -818,7 +807,7 @@ static int fg_dm_pre_access(struct bq_fg_chip *bq)
 		msleep(400);
 	}
 
-	pr_err("Failed to enter cfgupdate mode\n");
+	mmi_fg_err(bq, "Failed to enter cfgupdate mode\n");
 
 	return -1;
 }
@@ -845,7 +834,7 @@ static int fg_dm_post_access(struct bq_fg_chip *bq)
 	}
 
 	if (i == CFG_UPDATE_POLLING_RETRY_LIMIT) {
-		pr_err("Failed to exit cfgupdate mode\n");
+		mmi_fg_err(bq, "Failed to exit cfgupdate mode\n");
 		return -1;
 	} else {
 		return fg_seal(bq);
@@ -879,7 +868,7 @@ static int fg_dm_exit_cfg_mode(struct bq_fg_chip *bq)
 	}
 
 	if (i == CFG_UPDATE_POLLING_RETRY_LIMIT) {
-		pr_err("Failed to exit cfgupdate mode\n");
+		mmi_fg_err(bq, "Failed to exit cfgupdate mode\n");
 		return -1;
 	} else {
 		return fg_seal(bq);
@@ -903,7 +892,7 @@ static int fg_dm_read_block(struct bq_fg_chip *bq, u8 classid,
 	u8 cksum_calc, cksum;
 	u8 blk_offset = offset >> 5;
 
-	pr_info("subclass:%d, offset:%d\n", classid, offset);
+	mmi_fg_info(bq, "subclass:%d, offset:%d\n", classid, offset);
 
 	ret = fg_write_byte(bq, DM_ACCESS_BLOCK_DATA_CTRL, 0);
 	if (ret < 0)
@@ -941,7 +930,7 @@ static int fg_dm_write_block(struct bq_fg_chip *bq, u8 classid,
 	u8 buf[64];
 	u8 blk_offset = offset >> 5;
 
-	pr_info("subclass:%d, offset:%d\n", classid, offset);
+	mmi_fg_info(bq, "subclass:%d, offset:%d\n", classid, offset);
 
 	ret = fg_write_byte(bq, DM_ACCESS_BLOCK_DATA_CTRL, 0);
 	if (ret < 0)
@@ -965,7 +954,7 @@ static int fg_dm_write_block(struct bq_fg_chip *bq, u8 classid,
 	cksum = checksum(data, 32);
 	ret = fg_write_byte(bq, DM_ACCESS_BLOCK_DATA_CHKSUM, cksum);
 	if (ret < 0) {
-		pr_info("write checksum failed\n");
+		mmi_fg_info(bq, "write checksum failed\n");
 		return ret;
 	}
 	msleep(5);
@@ -979,7 +968,7 @@ static int fg_dm_write_block(struct bq_fg_chip *bq, u8 classid,
 		return ret;
 	fg_print_buf(__func__, buf, 32);
 	if (memcmp(data, buf, 32)) {
-		pr_err("Error updating subclass %d offset %d\n",
+		mmi_fg_err(bq, "Error updating subclass %d offset %d\n",
 				classid, offset);
 		return 1;
 	}
@@ -996,7 +985,7 @@ static int fg_read_fw_version(struct bq_fg_chip *bq)
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL], 0x0002);
 
 	if (ret < 0) {
-		pr_err("Failed to send firmware version subcommand:%d\n", ret);
+		mmi_fg_err(bq, "Failed to send firmware version subcommand:%d\n", ret);
 		return ret;
 	}
 
@@ -1004,7 +993,7 @@ static int fg_read_fw_version(struct bq_fg_chip *bq)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_CTRL], &version);
 	if (ret < 0) {
-		pr_err("Failed to read firmware version:%d\n", ret);
+		mmi_fg_err(bq, "Failed to read firmware version:%d\n", ret);
 		return ret;
 	}
 
@@ -1044,7 +1033,7 @@ static int fg_read_rsoc(struct bq_fg_chip *bq)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_SOC], &soc);
 	if (ret < 0) {
-		pr_err("could not read RSOC, ret = %d\n", ret);
+		mmi_fg_err(bq, "could not read RSOC, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1059,7 +1048,7 @@ static int fg_read_temperature(struct bq_fg_chip *bq)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_TEMP], &temp);
 	if (ret < 0) {
-		pr_err("could not read temperature, ret = %d\n", ret);
+		mmi_fg_err(bq, "could not read temperature, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1074,7 +1063,7 @@ static int fg_read_volt(struct bq_fg_chip *bq)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_VOLT], &volt);
 	if (ret < 0) {
-		pr_err("could not read voltage, ret = %d\n", ret);
+		mmi_fg_err(bq, "could not read voltage, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1089,7 +1078,7 @@ static int fg_read_current(struct bq_fg_chip *bq, int *curr)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_AI], &avg_curr);
 	if (ret < 0) {
-		pr_err("could not read current, ret = %d\n", ret);
+		mmi_fg_err(bq, "could not read current, ret = %d\n", ret);
 		return ret;
 	}
 	*curr = (int)((s16)avg_curr);
@@ -1103,14 +1092,14 @@ static int fg_read_fcc(struct bq_fg_chip *bq)
 	u16 fcc;
 
 	if (bq->regs[BQ_FG_REG_FCC] == INVALID_REG_ADDR) {
-		pr_err("FCC command not supported!\n");
+		mmi_fg_err(bq, "FCC command not supported!\n");
 		return 0;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_FCC], &fcc);
 
 	if (ret < 0) {
-		pr_err("could not read FCC, ret=%d\n", ret);
+		mmi_fg_err(bq, "could not read FCC, ret=%d\n", ret);
 	}
 
 	return fcc;
@@ -1123,14 +1112,14 @@ static int fg_read_dc(struct bq_fg_chip *bq)
 	u16 dc;
 
 	if (bq->regs[BQ_FG_REG_DC] == INVALID_REG_ADDR) {
-		pr_err("DesignCapacity command not supported!\n");
+		mmi_fg_err(bq, "DesignCapacity command not supported!\n");
 		return 0;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_DC], &dc);
 
 	if (ret < 0) {
-		pr_err("could not read DC, ret=%d\n", ret);
+		mmi_fg_err(bq, "could not read DC, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -1144,14 +1133,14 @@ static int fg_read_rm(struct bq_fg_chip *bq)
 	u16 rm;
 
 	if (bq->regs[BQ_FG_REG_RM] == INVALID_REG_ADDR) {
-		pr_err("RemainingCapacity command not supported!\n");
+		mmi_fg_err(bq, "RemainingCapacity command not supported!\n");
 		return 0;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_RM], &rm);
 
 	if (ret < 0) {
-		pr_err("could not read DC, ret=%d\n", ret);
+		mmi_fg_err(bq, "could not read DC, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -1165,14 +1154,14 @@ static int fg_read_cyclecount(struct bq_fg_chip *bq)
 	u16 cc;
 
 	if (bq->regs[BQ_FG_REG_CC] == INVALID_REG_ADDR) {
-		pr_err("Cycle Count not supported!\n");
+		mmi_fg_err(bq, "Cycle Count not supported!\n");
 		return -1;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_CC], &cc);
 
 	if (ret < 0) {
-		pr_err("could not read Cycle Count, ret=%d\n", ret);
+		mmi_fg_err(bq, "could not read Cycle Count, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -1185,14 +1174,14 @@ static int fg_read_tte(struct bq_fg_chip *bq)
 	u16 tte;
 
 	if (bq->regs[BQ_FG_REG_TTE] == INVALID_REG_ADDR) {
-		pr_err("Time To Empty not supported!\n");
+		mmi_fg_err(bq, "Time To Empty not supported!\n");
 		return -1;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_TTE], &tte);
 
 	if (ret < 0) {
-		pr_err("could not read Time To Empty, ret=%d\n", ret);
+		mmi_fg_err(bq, "could not read Time To Empty, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -1454,11 +1443,11 @@ static void fg_external_power_changed(struct power_supply *psy) // TODO replace
 
 }
 
-static int fg_psy_register(struct bq_fg_chip *bq, const char* name)
+static int fg_psy_register(struct bq_fg_chip *bq)
 {
 	struct power_supply_config fg_cfg = {};
 
-	bq->fg_psy_desc.name = name;
+	bq->fg_psy_desc.name = bq->batt_name;
 	bq->fg_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
 	bq->fg_psy_desc.properties = fg_props;
 	bq->fg_psy_desc.num_properties = ARRAY_SIZE(fg_props);
@@ -1475,7 +1464,7 @@ static int fg_psy_register(struct bq_fg_chip *bq, const char* name)
 						  &bq->fg_psy_desc,
 						  &fg_cfg);
 	if (IS_ERR(bq->fg_psy)) {
-		pr_err("Couldn't register FG power supply\n");
+		mmi_fg_err(bq, "Couldn't register FG power supply\n");
 		return PTR_ERR(bq->fg_psy);
 	}
 
@@ -1495,7 +1484,7 @@ static int fg_read_chem_id(struct bq_fg_chip *bq, u16 *chem_id)
 
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL], FG_SUBCMD_CHEM_ID);
 	if (ret < 0) {
-		pr_err("Failed to write chemid subcmd, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to write chemid subcmd, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1515,7 +1504,7 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL], FG_SUBCMD_CHEM_ID);
 	if (ret < 0) {
-		pr_err("Failed to write chemid subcmd, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to write chemid subcmd, ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1523,12 +1512,12 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_CTRL], &old_id);
 	if (ret < 0) {
-		pr_err("Failed to read control status, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to read control status, ret = %d\n", ret);
 		return ret;
 	}
 
 	if (new_id == old_id) {
-		pr_info("new chemid is same as old one, skip change\n");
+		mmi_fg_info(bq, "new chemid is same as old one, skip change\n");
 		return 0;
 	}
 
@@ -1538,7 +1527,7 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 	}
 
 	if (i == ARRAY_SIZE(batt_chem_id_arr)) {
-		pr_err("not supported chem_id %d\n", new_id);
+		mmi_fg_err(bq, "not supported chem_id %d\n", new_id);
 		return -1;
 	}
 
@@ -1549,7 +1538,7 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 	msleep(5);
 	ret = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL], batt_chem_id_arr[i].cmd);
 	if (ret < 0) {
-		pr_err("Failed to send chem_id command, ret=%d\n", ret);
+		mmi_fg_err(bq, "Failed to send chem_id command, ret=%d\n", ret);
 		fg_dm_post_access(bq);
 		return ret;
 	}
@@ -1563,12 +1552,12 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 	/* Read back checm id to confirm  */
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_CTRL], &old_id);
 	if (ret < 0) {
-		pr_err("Failed to read control status, ret = %d\n", ret);
+		mmi_fg_err(bq, "Failed to read control status, ret = %d\n", ret);
 		return ret;
 	}
 
 	if (new_id == old_id) {
-		pr_info("chem ID changed successfully\n");
+		mmi_fg_info(bq, "chem ID changed successfully\n");
 		return 0;
 	} else {
 		return -1;
@@ -1586,18 +1575,18 @@ static int fg_check_update_necessary(struct bq_fg_chip *bq)
 		return UPDATE_REASON_FG_RESET;
 
 	ret = fg_read_chem_id(bq, &chem_id);
-	pr_info("chem id is  %d\n", chem_id);
+	mmi_fg_info(bq, "chem id is  %d\n", chem_id);
 	if (!ret && chem_id != bqfs_image[bq->batt_id].chem_id) {
-		pr_info("dm chem id %d, different from bqfs_image chem id %d\n",
+		mmi_fg_info(bq, "dm chem id %d, different from bqfs_image chem id %d\n",
 			chem_id,
 			bqfs_image[bq->batt_id].chem_id);
 		return UPDATE_REASON_NEW_VERSION;
 	}
 
 	ret = fg_read_dm_version(bq, &dm_ver);
-	pr_info("dm ver is  %d\n", dm_ver);
+	mmi_fg_info(bq, "dm ver is  %d\n", dm_ver);
 	if (!ret && dm_ver < bqfs_image[bq->batt_id].dm_ver) {
-		pr_info("dm ver: %d is less than bqfs_image dm ver %d\n",
+		mmi_fg_info(bq, "dm ver: %d is less than bqfs_image dm ver %d\n",
 			dm_ver,
 			bqfs_image[bq->batt_id].dm_ver);
 		return UPDATE_REASON_NEW_VERSION;
@@ -1632,9 +1621,9 @@ static bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
 		if (fg_read_block(bq, cmd->reg, tmp_buf, cmd->data_len) < 0)
 			return false;
 		if (memcmp(tmp_buf, cmd->data.bytes, cmd->data_len)) {
-			pr_info("CMD_C failed at line %d\n", cmd->line_num);
+			mmi_fg_info(bq, "CMD_C failed at line %d\n", cmd->line_num);
 			for(i = 0; i < cmd->data_len; i++) {
-				pr_err("Read: %02X, Cmp:%02X", tmp_buf[i], cmd->data.bytes[i]);
+				mmi_fg_err(bq, "Read: %02X, Cmp:%02X", tmp_buf[i], cmd->data.bytes[i]);
 			}
 			return false;
 		}
@@ -1646,7 +1635,7 @@ static bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
 		return true;
 		break;
 	default:
-		pr_err("Unsupported command at line %d\n", cmd->line_num);
+		mmi_fg_err(bq, "Unsupported command at line %d\n", cmd->line_num);
 		return false;
 	}
 
@@ -1658,68 +1647,29 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 	int i;
 	const bqfs_cmd_t *image;
 	int reason = 0;
-	bool df_batt_exist =false, dev_batt_exist = false;
-	int df_batt_idx = -1, dev_batt_idx = -1;
+	bool found_profile = false;
 
-	pr_info("df_serialnum %s, dev_seralnum %s, batt num %d\n",
-			bq->df_serialnum,
-			bq->dev_serialnum,
-			bq->battery_num);
-
-	if (bq->df_serialnum) {
-		for (i = 0; i < bq->battery_num; i++) {
-		if (!strcmp(bq->df_serialnum, bq->battery_list[i].serialnum)) {
-			df_batt_exist = true;
-			df_batt_idx = i;
-			pr_err("df serialnum battery match batt list, %s\n",
-					bq->df_serialnum);
-			break;
-			}
-		}
-	}
-
-	if (bq->dev_serialnum) {
-		for (i = 0; i < bq->battery_num; i++) {
-		if (!strcmp(bq->dev_serialnum, bq->battery_list[i].serialnum)) {
-			dev_batt_exist = true;
-			dev_batt_idx = i;
-			pr_err("dev serialnum battery match batt list, %s\n",
-					bq->dev_serialnum);
-			break;
-			}
-		}
-	}
-
-	if (dev_batt_exist) {
-		for (i = 0; i < bq->battery_num; i++) {
-
-			if (bq->battery_list[dev_batt_idx].chem_id ==
-						bqfs_image[i].chem_id) {
-				bq->batt_id = i;
-				pr_info("find the right battery profile, "
-					"chem_id %d, batt_id %d\n",
-				bqfs_image[i].chem_id, bq->batt_id);
-			break;
-			}
-		}
-	} else if (df_batt_exist) {
-		for (i = 0; i < bq->battery_num; i++) {
-
-			if (bq->battery_list[df_batt_idx].chem_id ==
-						bqfs_image[i].chem_id) {
-				bq->batt_id = i;
-				pr_info("find the right battery profile, "
-					"chem_id %d, batt_id %d\n",
-				bqfs_image[i].chem_id, bq->batt_id);
-			break;
-			}
-		}
-	} else {
-		pr_err("Can't find a corresponding battery profile\n");
+	if (!bq->batt_profile_name) {
+		mmi_fg_err(bq, "Battery profile name is not set!\n");
 		return;
 	}
 
-	pr_info("Find the battery profile , batt id is %d\n", bq->batt_id);
+	for (i = 0; i < ARRAY_SIZE(bqfs_image); i++) {
+		if (strncmp(bq->batt_profile_name, bqfs_image[i].batt_type_str,
+				strlen(bqfs_image[i].batt_type_str)) == 0) {
+			bq->batt_id = i;
+			pr_info("Found the right battery profile: "
+					"chem_id %d, batt_id %d\n",
+			bqfs_image[i].chem_id, bq->batt_id);
+			found_profile = true;
+			break;
+		}
+	}
+
+	if (!found_profile) {
+		mmi_fg_err(bq, "Couldn't find battery profile!\n");
+		return;
+	}
 
 	if (bq->force_update == ~BQFS_UPDATE_KEY)
 		reason = UPDATE_REASON_FORCED;
@@ -1727,21 +1677,16 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 		reason = fg_check_update_necessary(bq);
 
 	if (!reason) {
-		pr_info("Fuel Gauge parameter no need update, ignored\n");
+		mmi_fg_info(bq, "Fuel gauge update not required, ignored\n");
 		return;
 	}
 
-	if (bq->batt_id >= ARRAY_SIZE(bqfs_image) ||
-		bq->batt_id < 0) {
-		pr_err("batt_id is out of range");
-		return;
-	}
 	/* TODO:if unseal, enter cfg update mode cmd sequence are in gmfs file,
 	   no need to do explicitly */
 	fg_dm_pre_access(bq);
 
-	pr_err("Fuel Gauge parameter update, reason:%s, "
-			"chem_id:%d, batt_id=%d Start...\n",
+	mmi_fg_err(bq, "Fuel gauge update required, reason:%s, "
+			"chem_id:%d, batt_id=%d Starting...\n",
 			update_reason_str[reason - 1],
 			bqfs_image[bq->batt_id].chem_id,
 			bq->batt_id);
@@ -1751,7 +1696,7 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 	for (i = 0; i < bqfs_image[bq->batt_id].array_size; i++) {
 		if (!fg_update_bqfs_execute_cmd(bq, &image[i])) {
 			mutex_unlock(&bq->update_lock);
-			pr_err("Failed at command: %d\n", i);
+			mmi_fg_err(bq, "Failed at command: %d\n", i);
 			fg_dm_post_access(bq);
 			return;
 		}
@@ -1759,7 +1704,7 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 	}
 	mutex_unlock(&bq->update_lock);
 
-	pr_err("Done!\n");
+	mmi_fg_err(bq, "Done!\n");
 
 	/* TODO:exit cfg update mode and seal device if these are not handled in gmfs file */
 	fg_dm_post_access(bq);
@@ -1819,9 +1764,9 @@ static const struct file_operations reg_debugfs_ops = {
 
 static void create_debugfs_entry(struct bq_fg_chip *bq)
 {
-	bq->debug_root = debugfs_create_dir("bq_fg", NULL);
+	bq->debug_root = debugfs_create_dir(bq->name, NULL);
 	if (!bq->debug_root)
-		pr_err("Failed to create debug dir\n");
+		mmi_fg_err(bq, "Failed to create debug dir\n");
 
 	if (bq->debug_root) {
 
@@ -2053,11 +1998,11 @@ static int fg_set_term_curr(struct bq_fg_chip *bq, int val)
 		curr = 200;
 	break;
 	default:
-		pr_err("Unsupported curr setting %d\n", val);
+		mmi_fg_err(bq, "Unsupported curr setting %d\n", val);
 		return ret;
 	}
 
-	pr_info("set term curr %dmA\n", val);
+	mmi_fg_info(bq, "set term curr %dmA\n", val);
 	memset(rd_buf, 0, 64);
 	mutex_lock(&bq->update_lock);
 	ret = fg_dm_enter_cfg_mode(bq);
@@ -2165,10 +2110,6 @@ static void fg_dump_registers(struct bq_fg_chip *bq)
 	for (i = 0; i < ARRAY_SIZE(fg_dump_regs); i++) {
 		msleep(5);
 		ret = fg_read_word(bq, fg_dump_regs[i], &val);
-		if (!ret)
-			mmi_fg_dbg(bq, PR_MOTO, "Reg[%02X] = 0x%04X\n",
-			fg_dump_regs[i], val);
-
 	}
 }
 
@@ -2190,7 +2131,6 @@ static void debug_fg_dump_registers(struct bq_fg_chip *bq)
 			sprintf(buf + desc, "Reg[%02X] = %d, ", debug_fg_dump_regs[i], val);
 		}
 	}
-	mmi_fg_dbg(bq, PR_DEBUG, "%s\n", buf);
 }
 
 #define ITERM 200
@@ -2215,7 +2155,7 @@ static void fg_check_soc(struct bq_fg_chip *bq)
 		&& bq->batt_curr < ITERM
 		&& (batt_status == POWER_SUPPLY_STATUS_NOT_CHARGING
 			|| batt_status == POWER_SUPPLY_STATUS_CHARGING)) {
-		pr_err("Force report soc 100, batt curr %d, batt status %d\n",
+		mmi_fg_err(bq, "Force report soc 100, batt curr %d, batt status %d\n",
 				bq->batt_curr, batt_status);
 		bq->batt_soc = 100;
 	}
@@ -2226,11 +2166,11 @@ static irqreturn_t fg_irq_thread(int irq, void *dev_id)
 	struct bq_fg_chip *bq = dev_id;
 	int ret = 0;
 	bool last_batt_present;
-	pr_info("------ bq27426 IRQ triggered ------\n");
+	mmi_fg_info(bq, "------ bq27426 IRQ triggered ------\n");
 	mutex_lock(&bq->irq_complete);
 	bq->irq_waiting = true;
 	if (!bq->resume_completed) {
-		pr_info("IRQ triggered before device resume\n");
+		mmi_fg_info(bq, "IRQ triggered before device resume\n");
 		if (!bq->irq_disabled) {
 			disable_irq_nosync(irq);
 			bq->irq_disabled = true;
@@ -2248,15 +2188,15 @@ static irqreturn_t fg_irq_thread(int irq, void *dev_id)
 
 	fg_dump_registers(bq);
 	debug_fg_dump_registers(bq);
-	pr_info("itpor=%d, cfg_mode = %d, "
+	mmi_fg_info(bq, "itpor=%d, cfg_mode = %d, "
 			"seal_state=%d, batt_present=%d",
 			bq->itpor, bq->cfg_update_mode,
 			bq->seal_state, bq->batt_present);
 
 	if (!last_batt_present && bq->batt_present ) {/* battery inserted */
-		pr_info("Battery inserted\n");
+		mmi_fg_info(bq, "Battery inserted\n");
 	} else if (last_batt_present && !bq->batt_present) {/* battery removed */
-		pr_info("Battery removed\n");
+		mmi_fg_info(bq, "Battery removed\n");
 		bq->batt_soc	= -ENODATA;
 		bq->batt_fcc	= -ENODATA;
 		bq->batt_rm		= -ENODATA;
@@ -2278,7 +2218,7 @@ static irqreturn_t fg_irq_thread(int irq, void *dev_id)
 		bq->batt_rm = fg_read_rm(bq);
 
 		mutex_unlock(&bq->update_lock);
-		pr_err("RSOC:%d, Volt:%d, Current:%d, "
+		mmi_fg_err(bq, "RSOC:%d, Volt:%d, Current:%d, "
 				"Temperature:%d, connected_rid = %d\n",
 				bq->batt_soc, bq->batt_volt,
 				bq->batt_curr, bq->batt_temp - 2730,
@@ -2303,144 +2243,33 @@ static void determine_initial_status(struct bq_fg_chip *bq)
 	fg_dodateoc_delta_t(bq);
 	fg_irq_thread(bq->client->irq, bq);
 	bq->device_initial = true;
-	pr_info("Device initialization successfully completed!\n");
+	mmi_fg_info(bq, "Device initialization successfully completed!\n");
 }
 
 #define SMB_VTG_MIN_UV		1800000
 #define SMB_VTG_MAX_UV		1800000
 
-static const char *get_battery_serialnumber(void)
+static int bq_parse_dt(struct bq_fg_chip *bq)
 {
-	struct device_node *np = of_find_node_by_path("/chosen");
-	const char *battsn_buf;
-	int retval;
-
-	battsn_buf = NULL;
-
-	if (np)
-		retval = of_property_read_string(np, "mmi,battid",
-						 &battsn_buf);
-	else
-		return NULL;
-
-	if ((retval == -EINVAL) || !battsn_buf) {
-		pr_err("Battsn unused\n");
-		of_node_put(np);
-		return NULL;
-
-	} else
-		pr_err("Battsn = %s\n", battsn_buf);
-
-	of_node_put(np);
-
-	return battsn_buf;
-}
-
-static const char* battery = "fg_battery";
-static const char* main_battery = "fg_main_battery";
-static const char* flip_battery = "fg_flip_battery";
-
-static int bq_parse_dt(struct bq_fg_chip *bq, const char* batt_name)
-{
-	struct device_node *node = bq->dev->of_node, *child;
-	int rc = 0, byte_len = 0, i = 0, batt_idx = 0;
+	struct device_node *node = bq->dev->of_node;
+	int rc = 0;
 
 	if (!node)
 		return -1;
 
-	rc = of_property_read_bool(node, "mmi,max-batt-main");
-	if (!rc)
-		batt_name = main_battery;
-	else {
-		rc = of_property_read_bool(node, "mmi,max-flip-main");
-		if (!rc)
-			batt_name = flip_battery;
-		else
-			batt_name = battery;
-	}
+	rc = of_property_read_string(node, "mmi,fg-psy-name", &bq->batt_name);
+	if (rc)
+		bq->batt_name = "fg_battery";
+	bq->name = bq->batt_name;
 
-	rc = of_property_read_u32(node,	"design-capacity",
-				&bq->batt_dc_conf);
+	rc = of_property_read_string(node, "mmi,batt-profile-name", &bq->batt_profile_name);
+	if (rc)
+		bq->batt_profile_name = NULL;
+
+	rc = of_property_read_u32(node,	"design-capacity", &bq->batt_dc_conf);
 	if (rc < 0)
 		bq->batt_dc_conf = 0;;
 
-	bq->dev_serialnum= NULL;
-	bq->df_serialnum= NULL;
-
-	bq->dev_serialnum = get_battery_serialnumber();
-
-	byte_len = of_property_count_strings(node, "df-serialnum");
-	if (byte_len <= 0) {
-		pr_err("Cannot parse df-serialnum: %d\n", byte_len);
-		return byte_len;
-	}
-
-	for (i = 0; i < byte_len; i++) {
-		rc = of_property_read_string_index(node, "df-serialnum",
-				i, &bq->df_serialnum);
-		if (rc < 0) {
-			pr_err("Cannot parse df_serialnum\n");
-			return rc;
-		}
-	}
-
-	if (bq->dev_serialnum)
-		pr_err("the dev serialnum %s", bq->dev_serialnum);
-
-	if (bq->df_serialnum)
-		pr_err("the df serialnum %s", bq->df_serialnum);
-
-	for_each_child_of_node(node, child)
-		bq->battery_num++;
-
-	if (!bq->battery_num) {
-		pr_err("Don't configure battery profile !\n");
-		return -ENODEV;
-	}
-
-	pr_err("g_battery num %d\n", (int)(sizeof(bqfs_image) /sizeof(struct fg_batt_profile)));
-	if (bq->battery_num != (int)(sizeof(bqfs_image) /sizeof(struct fg_batt_profile))) {
-		pr_err("the battery number in dtsi don't equal to bqfs_image battery\n");
-		return -ENODEV;
-	}
-
-	bq->battery_list = (struct bq_fg_battery_info*)devm_kzalloc(bq->dev,
-					sizeof(struct bq_fg_battery_info) *
-					bq->battery_num, GFP_KERNEL);
-	if (!bq->battery_list) {
-		pr_err("No memory for mmi charger device name list !\n");
-		goto cleanup;
-	}
-
-	for_each_child_of_node(node, child) {
-		byte_len = of_property_count_strings(child, "serialnum");
-		if (byte_len <= 0) {
-			pr_err("Cannot parse chrg-name: %d\n", byte_len);
-			goto cleanup;
-		}
-
-		for (i = 0; i < byte_len; i++) {
-			rc = of_property_read_string_index(child, "serialnum",
-					i, &bq->battery_list[batt_idx].serialnum);
-			if (rc < 0) {
-				pr_err("Cannot parse chrg-name\n");
-				goto cleanup;
-			}
-		}
-
-		of_property_read_u32(child, "chem_id",
-			&bq->battery_list[batt_idx].chem_id);
-
-		pr_err("chem_id: %d, serialnum %s\n",
-					bq->battery_list[batt_idx].chem_id,
-					bq->battery_list[batt_idx].serialnum);
-		batt_idx++;
-	}
-
-	return rc;
-cleanup:
-	bq->battery_num= 0;
-	devm_kfree(bq->dev, bq->battery_list);
 	return rc;
 }
 
@@ -2456,8 +2285,9 @@ static void bq_heartbeat_work(struct work_struct *work)
 				struct bq_fg_chip, heartbeat_work.work);
 	determine_initial_status(chip);
 	debug_fg_dump_registers(chip);
-	schedule_delayed_work(&chip->heartbeat_work,
-			      msecs_to_jiffies(1000));
+	queue_delayed_work(chip->heartbeat_wq,
+			&chip->heartbeat_work,
+			msecs_to_jiffies(1000));
 }
 
 static int bq_fg_probe(struct i2c_client *client,
@@ -2466,7 +2296,6 @@ static int bq_fg_probe(struct i2c_client *client,
 	int ret;
 	struct bq_fg_chip *bq;
 	u8 *regs;
-	const char* batt_name;
 	pr_err("--- bq27426 probe--\n");
 
 	bq = devm_kzalloc(&client->dev, sizeof(struct bq_fg_chip), GFP_KERNEL);
@@ -2521,20 +2350,28 @@ static int bq_fg_probe(struct i2c_client *client,
 		goto free_mem;
 	}
 
-	ret = bq_parse_dt(bq, batt_name);
+	ret = bq_parse_dt(bq);
 	if (ret < 0) {
 		dev_err(&client->dev, "Unable to parse DT nodes\n");
+		goto free_mem;
 	}
 
+	bq->heartbeat_wq = alloc_workqueue("%s", WQ_UNBOUND, 1, bq->name);
+	if (!bq->heartbeat_wq) {
+		dev_err(&client->dev, "Could not create workqueue\n");
+		goto free_mem;
+	}
+
+	//mmi_fg_err(bq, "I2C adapter is %s\n", dev_name(&bq->client->adapter->dev));
 	INIT_WORK(&bq->update_work, fg_update_bqfs_workfunc);
 
 	if (client->irq) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq, NULL,
 			fg_irq_thread,
 			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-			"bq fuel gauge irq", bq);
+			bq->batt_name, bq);
 		if (ret < 0) {
-			pr_err("request irq for irq=%d failed, ret = %d\n", client->irq, ret);
+			mmi_fg_err(bq, "request irq for irq=%d failed, ret = %d\n", client->irq, ret);
 			goto free_irq;
 		}
 		enable_irq_wake(client->irq);
@@ -2542,21 +2379,22 @@ static int bq_fg_probe(struct i2c_client *client,
 
 	device_init_wakeup(bq->dev, 1);
 	bq->fw_ver = fg_read_fw_version(bq);
-	fg_psy_register(bq, batt_name);
+	fg_psy_register(bq);
 
 	create_debugfs_entry(bq);
 	ret = sysfs_create_group(&bq->dev->kobj, &fg_attr_group);
 	if (ret) {
-		pr_err("Failed to register sysfs, err:%d\n", ret);
+		mmi_fg_err(bq, "Failed to register sysfs, err:%d\n", ret);
 		goto free_psy;
 	}
 
 	fg_irq_thread(bq->client->irq, bq);
 	INIT_DELAYED_WORK(&bq->heartbeat_work, bq_heartbeat_work);
-	schedule_delayed_work(&bq->heartbeat_work,
-			      msecs_to_jiffies(1000));
+	queue_delayed_work(bq->heartbeat_wq,
+			&bq->heartbeat_work,
+			msecs_to_jiffies(1000));
 	power_supply_changed(bq->fg_psy);
-	pr_err("bq fuel gauge probe successfully, %s FW ver:%d\n",
+	mmi_fg_err(bq, "bq fuel gauge probe successfully, %s FW ver:%d\n",
 			device2str[bq->chip], bq->fw_ver);
 
 	return 0;
