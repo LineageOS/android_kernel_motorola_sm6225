@@ -46,7 +46,11 @@ static int32_t cci_intf_xfer(
 			__func__, cmd, xfer->cci_bus, xfer->slave_addr,
 			xfer->reg.width, xfer->reg.addr, xfer->data.count);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
 	if (xfer->cci_device > 1 || xfer->cci_bus > 1 || xfer->slave_addr > 0x7F ||
+#else
+	if (xfer->cci_bus > 1 || xfer->slave_addr > 0x7F ||
+#endif
 			xfer->reg.width < 1 || xfer->reg.width > 2 ||
 			xfer->reg.addr > ((1<<(8*xfer->reg.width))-1) ||
 			xfer->data.count < 1 ||
