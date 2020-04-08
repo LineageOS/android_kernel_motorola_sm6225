@@ -3069,7 +3069,6 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
 
-
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-level-align", &val);
 	if (rc) {
 		DSI_DEBUG("[%s] bl_level_align unspecified, defaulting to normal, no special algin\n",
@@ -3077,6 +3076,15 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.bl_level_align = DSI_BACKLIGHT_LEVEL_ALIGN_NORMAL;
 	} else {
 		panel->bl_config.bl_level_align = val;
+	}
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-default-level", &val);
+	if (rc) {
+		panel->bl_config.brightness_default_level =
+			panel->bl_config.brightness_max_level;
+		pr_debug("set default brightness to max level\n");
+	} else {
+		panel->bl_config.brightness_default_level = val;
 	}
 
 	panel->bl_config.bl_2bytes_enable = utils->read_bool(utils->data,
