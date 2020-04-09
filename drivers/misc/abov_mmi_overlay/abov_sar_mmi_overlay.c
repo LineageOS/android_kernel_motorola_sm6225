@@ -1327,7 +1327,7 @@ static ssize_t update_fw_show(struct class *class,
 
 	read_register(this, ABOV_VERSION_REG, &fw_version);
 
-	return snprintf(buf, 16, "ABOV CapSensor Firmware Version:0x%02x\n", fw_version);
+	return snprintf(buf, 37, "ABOV CapSensor Firmware Version:0x%02x\n", fw_version);
 }
 
 static ssize_t update_fw_store(struct class *class,
@@ -1376,7 +1376,7 @@ static ssize_t force_update_fw_show(struct class *class,
 
 	read_register(this, ABOV_VERSION_REG, &fw_version);
 
-	return snprintf(buf, 16, "ABOV CapSensor Firmware Version:0x%02x\n", fw_version);
+	return snprintf(buf, 37, "ABOV CapSensor Firmware Version:0x%02x\n", fw_version);
 }
 
 static ssize_t force_update_fw_store(struct class *class,
