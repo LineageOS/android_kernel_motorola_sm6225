@@ -172,9 +172,12 @@
 
 &soc{
 	mtp_batterydata: qcom,battery-data {
-  	      qcom,batt-id-range-pct = <15>;
-        	df-serialnum = "SB18C71813";
-        	#include "qg-batterydata-lg50-amperex-5000mah.dtsi"
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C77591";
+              #include "qg-batterydata-jk50-atl-4850mah.dtsi"
+              #include "qg-batterydata-jk50-scud-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-flex-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-unicoba-4850mah.dtsi"
 	};
 };
 
@@ -199,6 +202,8 @@
         qcom,s3-exit-ibat-ua = <35000>;
 	qcom,vbatt-empty-cold-mv = <3000>;
 	qcom,ignore-shutdown-soc-secs = <1800>;
+	qcom.hold-soc-while-full;
+	qcom,linearize-soc;
 };
 
 &pmi632_rgb {
@@ -236,6 +241,7 @@
 	qcom,usbeb-unsupported;
 	qcom,disable-suspend-on-collapse;
 	dpdm-supply = <&qusb_phy0>;
+	qcom,auto-recharge-soc = <99>;
 };
 
 &qupv3_se0_i2c {
