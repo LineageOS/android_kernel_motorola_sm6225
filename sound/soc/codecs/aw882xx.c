@@ -203,7 +203,9 @@ static int aw882xx_i2c_write(struct aw882xx *aw882xx,
 
 	buf[0] = (reg_data&0xff00)>>8;
 	buf[1] = (reg_data&0x00ff)>>0;
-
+	if (aw882xx->monitor.sysctrl) {
+		pr_info("%s: 0x%x <= 0x%x\n", __func__, reg_addr, reg_data);
+	}
 	while (cnt < AW_I2C_RETRIES) {
 		ret = aw882xx_i2c_writes(aw882xx, reg_addr, buf, 2);
 		if (ret < 0)
@@ -250,6 +252,21 @@ static int aw882xx_i2c_write_bits(struct aw882xx *aw882xx,
 		pr_err("%s: i2c read error, ret=%d\n", __func__, ret);
 		return ret;
 	}
+
+	if (aw882xx->monitor.sysctrl) {
+		if ((reg_addr == AW882XX_SYSCTRL_REG) && ((reg_val & 0x40) == 0)) {
+			pr_err("%s: 0x04 => 0x%x, I2SEN wrong!\n", __func__, reg_val);
+			reg_val &= 0xFFC7;
+			reg_val |= 0x4440; // init value in bin
+			pr_info("%s: errata 0x04 => 0x%x\n", __func__, reg_val);
+		} else if ((reg_addr == AW882XX_I2SCTRL_REG) && ((reg_val & 0x1000) == 0)) {
+			pr_err("%s: 0x06 => 0x%x, I2SRXEN wrong!\n", __func__, reg_val);
+			reg_val &= 0x3FFF;
+			reg_val |= 0x1408; // init value in bin
+			pr_info("%s: errata 0x06 => 0x%x\n", __func__, reg_val);
+		}
+	}
+
 	reg_val &= mask;
 	reg_val |= reg_data;
 	ret = aw882xx_i2c_write(aw882xx, reg_addr, reg_val);
@@ -291,6 +308,9 @@ static bool aw882xx_get_power_status(struct aw882xx *aw882xx)
 	if (ret < 0) {
 		pr_err("%s: read reg %d failed \n", __func__, AW882XX_SYSCTRL_REG);
 		return false;
+	}
+	if (aw882xx->monitor.sysctrl) {
+		pr_info("%s: 0x04 => 0x%x\n", __func__, reg_value);
 	}
 	/*bit 0: 1 power off, 0 power on*/
 	if (reg_value & 0x01) {
@@ -1522,6 +1542,15 @@ static int aw882xx_parse_dt(struct device *dev, struct aw882xx *aw882xx,
 	} else {
 		dev_info(dev, "%s: monitor-timer-val = %d\n",
 			__func__, monitor->timer_val);
+	}
+
+	ret = of_property_read_u32(np, "monitor-sysctrl", &monitor->sysctrl);
+	if (ret) {
+		monitor->timer_val = AW882XX_MONITOR_SYSCTRL;
+		dev_err(dev, "%s: monitor-sysctrl get failed,user default value!\n", __func__);
+	} else {
+		dev_info(dev, "%s: monitor-sysctrl = %d\n",
+			__func__, monitor->sysctrl);
 	}
 	return 0;
 }
