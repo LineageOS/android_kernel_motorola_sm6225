@@ -132,6 +132,7 @@ enum aw882xx_vmax_percentage {
 };
 
 #define AW882XX_MONITOR_DEFAULT_FLAG 0
+#define AW882XX_MONITOR_SYSCTRL 0
 #define AW882XX_MONITOR_DEFAULT_TIMER_VAL 30000
 #define AW882XX_MONITOR_VBAT_RANGE 6025
 #define AW882XX_MONITOR_INT_10BIT 1023
@@ -159,6 +160,7 @@ struct aw882xx_monitor{
 	uint32_t timer_val;
 	struct work_struct work;
 	uint32_t is_enable;
+	uint32_t sysctrl;
 	uint16_t pre_vol;
 	int16_t pre_temp;
 #ifdef AW_DEBUG
