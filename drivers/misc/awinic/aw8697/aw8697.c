@@ -1347,10 +1347,11 @@ static unsigned char aw8697_haptic_rtp_get_fifo_afs(struct aw8697 *aw8697)
 static bool aw8697_check_error(struct aw8697 *aw8697)
 {
 	unsigned char reg_val;
+	int rc;
 	bool ret = false;
 
-	aw8697_i2c_read(aw8697, AW8697_REG_SYSST, &reg_val);
-	if (ret < 0)
+	rc = aw8697_i2c_read(aw8697, AW8697_REG_SYSST, &reg_val);
+	if (rc < 0)
 		return true;
 
 	if (reg_val & AW8697_BIT_SYSST_UVLS) {
@@ -2529,17 +2530,17 @@ static void __maybe_unused aw8697_haptic_context(
 	case HAPTIC_RTP:
 		if (aw8697->info.rtp_gain)
 			aw8697->gain = aw8697->info.rtp_gain;
-			break;
+		break;
 	case HAPTIC_SHORT:
 		if (aw8697->info.short_gain)
 			aw8697->gain = aw8697->info.short_gain;
-			break;
+		break;
 	case HAPTIC_LONG:
 		if (aw8697->info.long_gain_reduced)
 			aw8697->gain = aw8697->info.long_gain_reduced;
-			break;
+		break;
 	default:
-			break;
+		break;
 	}
 }
 
