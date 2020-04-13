@@ -729,7 +729,7 @@ static int goodix_read_version(struct goodix_ts_device *dev,
 	}
 
 	/*check checksum*/
-	if (dev->reg.version_base && dev->reg.version_len < sizeof(temp_buf)) {
+	if (dev->reg.version_base) {
 		r = goodix_i2c_read(dev, dev->reg.version_base,
 				temp_buf, dev->reg.version_len);
 		if (r < 0) {
