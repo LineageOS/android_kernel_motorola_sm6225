@@ -62,7 +62,7 @@
 #define TOUCH_INPUT_NAME "synaptics_tcm_touch"
 #define TOUCH_INPUT_PHYS_PATH "synaptics_tcm/touch_input"
 
-#define WAKEUP_GESTURE (0)
+#define WAKEUP_GESTURE (1)
 
 #define RD_CHUNK_SIZE 256 /* read length limit in bytes, 0 = unlimited */
 #define WR_CHUNK_SIZE 256 /* write length limit in bytes, 0 = unlimited */
@@ -524,6 +524,7 @@ struct syna_tcm_hcd {
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	int (*do_fw_update)(void);
 	int (*set_fw_name)(const char* fw_name);
+	struct ts_mmi_class_methods *imports;
 #endif
 };
 

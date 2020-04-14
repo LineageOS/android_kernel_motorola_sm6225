@@ -54,6 +54,8 @@ enum touch_status {
 enum gesture_id {
 	NO_GESTURE_DETECTED = 0,
 	GESTURE_DOUBLE_TAP = 0X01,
+	GESTURE_SINGLE_TAP = 0x10,
+	GESTURE_ZERO_TAP = 0x11,
 };
 
 enum touch_report_code {
@@ -109,6 +111,12 @@ struct input_params {
 	unsigned int max_objects;
 };
 
+struct gesture_data {
+	unsigned int x_pos;
+	unsigned int y_pos;
+	unsigned int z_pos;
+};
+
 struct touch_data {
 	struct object_data *object_data;
 	unsigned int timestamp;
@@ -126,6 +134,7 @@ struct touch_data {
 	unsigned int fd_data;
 	unsigned int force_data;
 	unsigned int fingerprint_area_meet;
+	struct gesture_data gesture_data;
 };
 
 struct touch_hcd {
@@ -143,6 +152,7 @@ struct touch_hcd {
 	struct syna_tcm_buffer out;
 	struct syna_tcm_buffer resp;
 	struct syna_tcm_hcd *tcm_hcd;
+	struct wakeup_source gesture_wakelock;
 };
 
 static struct touch_hcd *touch_hcd;
@@ -271,11 +281,13 @@ static int touch_parse_report(void)
 	unsigned char *config_data;
 	struct touch_data *touch_data;
 	struct object_data *object_data;
+	struct gesture_data *gesture_data;
 	struct syna_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
 	static unsigned int end_of_foreach;
 
 	touch_data = &touch_hcd->touch_data;
 	object_data = touch_hcd->touch_data.object_data;
+	gesture_data = &touch_hcd->touch_data.gesture_data;
 
 	config_data = tcm_hcd->config.buf;
 	config_size = tcm_hcd->config.data_length;
@@ -558,7 +570,32 @@ static int touch_parse_report(void)
 			break;
 		case TOUCH_GESTURE_DATA:
 			bits = config_data[idx++];
-			offset += bits;
+			retval = touch_get_report_data(offset, bits/3, &data);
+			if (retval < 0) {
+				LOGE(tcm_hcd->pdev->dev.parent,
+						"Failed to get number of active objects\n");
+				return retval;
+			}
+			gesture_data->x_pos = data;
+			offset += (bits/3);
+
+			retval = touch_get_report_data(offset, bits/3, &data);
+			if (retval < 0) {
+				LOGE(tcm_hcd->pdev->dev.parent,
+						"Failed to get number of active objects\n");
+				return retval;
+			}
+			gesture_data->y_pos = data;
+			offset += (bits/3);
+
+			retval = touch_get_report_data(offset, bits/3, &data);
+			if (retval < 0) {
+				LOGE(tcm_hcd->pdev->dev.parent,
+						"Failed to get number of active objects\n");
+				return retval;
+			}
+			gesture_data->z_pos = data;
+			offset += (bits/3);
 			break;
 		case TOUCH_NUM_OF_ACTIVE_OBJECTS:
 			bits = config_data[idx++];
@@ -639,6 +676,7 @@ static void touch_report(void)
 	unsigned int touch_count;
 	struct touch_data *touch_data;
 	struct object_data *object_data;
+	struct gesture_data *gesture_data;
 	struct syna_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
 	const struct syna_tcm_board_data *bdata = tcm_hcd->hw_if->bdata;
 
@@ -662,8 +700,39 @@ static void touch_report(void)
 
 	touch_data = &touch_hcd->touch_data;
 	object_data = touch_hcd->touch_data.object_data;
+	gesture_data = &touch_hcd->touch_data.gesture_data;
 
 #if WAKEUP_GESTURE
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	if (touch_data->gesture_id == GESTURE_SINGLE_TAP &&
+			tcm_hcd->in_suspend &&
+			tcm_hcd->wakeup_gesture_enabled) {
+		if (tcm_hcd->imports && tcm_hcd->imports->report_gesture) {
+			struct gesture_event_data event;
+			event.evcode = 1;
+			event.evdata.x = gesture_data->x_pos;
+			event.evdata.y = gesture_data->y_pos;
+			retval = tcm_hcd->imports->report_gesture(&event);
+			if (!retval)
+				__pm_wakeup_event(&touch_hcd->gesture_wakelock, 3000);
+		}
+	}
+
+	if (touch_data->gesture_id == GESTURE_ZERO_TAP &&
+			tcm_hcd->in_suspend &&
+			tcm_hcd->wakeup_gesture_enabled) {
+		if (tcm_hcd->imports && tcm_hcd->imports->report_gesture) {
+			struct gesture_event_data event;
+			event.evcode = 2;
+			event.evdata.x = gesture_data->x_pos;
+			event.evdata.y = gesture_data->y_pos;
+			retval = tcm_hcd->imports->report_gesture(&event);
+			if (!retval)
+				__pm_wakeup_event(&touch_hcd->gesture_wakelock, 3000);
+		}
+	}
+#endif
+
 	if (touch_data->gesture_id == GESTURE_DOUBLE_TAP &&
 			 tcm_hcd->in_suspend &&
 			 tcm_hcd->wakeup_gesture_enabled) {
@@ -955,6 +1024,8 @@ static int touch_set_report_config(void)
 #if WAKEUP_GESTURE
 	touch_hcd->out.buf[idx++] = TOUCH_GESTURE_ID;
 	touch_hcd->out.buf[idx++] = 8;
+	touch_hcd->out.buf[idx++] = TOUCH_GESTURE_DATA;
+	touch_hcd->out.buf[idx++] = 48;
 #endif
 	touch_hcd->out.buf[idx++] = TOUCH_FOREACH_ACTIVE_OBJECT;
 	touch_hcd->out.buf[idx++] = TOUCH_OBJECT_N_INDEX;
@@ -1118,6 +1189,7 @@ int touch_init(struct syna_tcm_hcd *tcm_hcd)
 	}
 
 	touch_hcd->tcm_hcd = tcm_hcd;
+	wakeup_source_init(&touch_hcd->gesture_wakelock, "syna_gesture_wakelock");
 
 	mutex_init(&touch_hcd->report_mutex);
 
@@ -1142,6 +1214,7 @@ err_set_input_reporting:
 	RELEASE_BUFFER(touch_hcd->resp);
 	RELEASE_BUFFER(touch_hcd->out);
 
+	wakeup_source_trash(&touch_hcd->gesture_wakelock);
 	kfree(touch_hcd);
 	touch_hcd = NULL;
 
@@ -1164,6 +1237,7 @@ int touch_remove(struct syna_tcm_hcd *tcm_hcd)
 	RELEASE_BUFFER(touch_hcd->resp);
 	RELEASE_BUFFER(touch_hcd->out);
 
+	wakeup_source_trash(&touch_hcd->gesture_wakelock);
 	kfree(touch_hcd);
 	touch_hcd = NULL;
 
