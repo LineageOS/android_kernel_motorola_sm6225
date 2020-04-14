@@ -70,13 +70,13 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 			dev_info(DEV_MMI, "%s: try to enter Gesture mode\n", __func__);
 			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE);
 			touch_cdev->pm_mode = TS_MMI_PM_GESTURE;
-		 }
+		}
 	}
 	if (IS_ACTIVE_MODE) {
 		/* IC power is off. IRQ pin status is floated. So disable IRQ. */
-		TRY_TO_CALL(drv_irq, TS_MMI_IRQ_OFF);
 		dev_info(DEV_MMI, "%s: try to enter Deepsleep mode\n", __func__);
 		TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_DEEPSLEEP);
+		TRY_TO_CALL(drv_irq, TS_MMI_IRQ_OFF);
 		touch_cdev->pm_mode = TS_MMI_PM_DEEPSLEEP;
 	}
 
