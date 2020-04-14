@@ -15,12 +15,14 @@
 #include <linux/preempt.h>
 #include <linux/module.h>
 #include <linux/debugfs.h>
+#include <linux/kallsyms.h>
 #include <soc/qcom/watchdog.h>
 
 static struct dentry *dbgfs_fire_softlockup;
 static struct dentry *dbgfs_fire_watchdog;
 
-#ifndef CONFIG_QCOM_WATCHDOG_V2
+static void (*trigger_wdog_bite)(void);
+
 struct completion wdt_timeout_complete;
 static void wdt_timeout_work(struct work_struct *work)
 {
@@ -31,20 +33,19 @@ static void wdt_timeout_work(struct work_struct *work)
 	complete(&wdt_timeout_complete);
 }
 static DECLARE_WORK(wdt_timeout_work_struct, wdt_timeout_work);
-#endif
 
 static int fire_watchdog_reset_set(void *data, u64 val)
 {
 
 	printk(KERN_WARNING "Fire hardware watchdog reset.\n");
 	printk(KERN_WARNING "Please wait ...\n");
-#ifdef CONFIG_QCOM_WATCHDOG_V2
-	msm_trigger_wdog_bite();
-#else
-	init_completion(&wdt_timeout_complete);
-	schedule_work_on(0, &wdt_timeout_work_struct);
-	wait_for_completion(&wdt_timeout_complete);
-#endif
+	if (trigger_wdog_bite) {
+		trigger_wdog_bite();
+	} else {
+		init_completion(&wdt_timeout_complete);
+		schedule_work_on(0, &wdt_timeout_work_struct);
+		wait_for_completion(&wdt_timeout_complete);
+	}
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(fire_watchdog_reset_fops,
@@ -69,6 +70,10 @@ static int watchdog_test_init(void)
 		0200, NULL, NULL, &fire_softlockup_reset_fops);
 	dbgfs_fire_watchdog = debugfs_create_file("fire_watchdog_reset",
 		0200, NULL, NULL, &fire_watchdog_reset_fops);
+
+	trigger_wdog_bite = (void *)kallsyms_lookup_name("msm_trigger_wdog_bite");
+	if (!trigger_wdog_bite)
+		printk(KERN_ERR "Failed to get msm_trigger_wdog_bite address\n");
 	return 0;
 }
 
