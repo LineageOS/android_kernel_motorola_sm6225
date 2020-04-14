@@ -3296,7 +3296,7 @@ static void syna_tcm_helper_work(struct work_struct *work)
 }
 
 #if defined(CONFIG_PM) || defined(CONFIG_FB)
-static int syna_tcm_resume(struct device *dev)
+int syna_tcm_resume(struct device *dev)
 {
 	int retval;
 	struct syna_tcm_module_handler *mod_handler;
@@ -3395,7 +3395,7 @@ exit:
 	return retval;
 }
 
-static int syna_tcm_suspend(struct device *dev)
+int syna_tcm_suspend(struct device *dev)
 {
 	struct syna_tcm_module_handler *mod_handler;
 	struct syna_tcm_hcd *tcm_hcd = dev_get_drvdata(dev);
@@ -3429,7 +3429,7 @@ static int syna_tcm_suspend(struct device *dev)
 #endif
 
 #ifdef CONFIG_FB
-static int syna_tcm_early_suspend(struct device *dev)
+int syna_tcm_early_suspend(struct device *dev)
 {
 	int retval;
 	struct syna_tcm_module_handler *mod_handler;
