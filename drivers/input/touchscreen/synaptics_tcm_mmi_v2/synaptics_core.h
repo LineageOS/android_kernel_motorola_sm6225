@@ -49,6 +49,10 @@
 #include <linux/notifier.h>
 #endif
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
+
 #define SYNAPTICS_TCM_ID_PRODUCT (1 << 0)
 #define SYNAPTICS_TCM_ID_VERSION 0x0200
 #define SYNAPTICS_TCM_ID_SUBVERSION 0
@@ -517,8 +521,10 @@ struct syna_tcm_hcd {
 	void (*report_touch)(void);
 	void (*update_watchdog)(struct syna_tcm_hcd *tcm_hcd, bool en);
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	int (*do_fw_update)(void);
 	int (*set_fw_name)(const char* fw_name);
+#endif
 };
 
 struct syna_tcm_module_cb {
@@ -581,6 +587,10 @@ int touch_reinit(struct syna_tcm_hcd *tcm_hcd);
 int touch_early_suspend(struct syna_tcm_hcd *tcm_hcd);
 int touch_suspend(struct syna_tcm_hcd *tcm_hcd);
 int touch_resume(struct syna_tcm_hcd *tcm_hcd);
+
+int syna_tcm_resume(struct device *dev);
+int syna_tcm_suspend(struct device *dev);
+int syna_tcm_early_suspend(struct device *dev);
 
 static inline int syna_tcm_rmi_read(struct syna_tcm_hcd *tcm_hcd,
 		unsigned short addr, unsigned char *data, unsigned int length)
