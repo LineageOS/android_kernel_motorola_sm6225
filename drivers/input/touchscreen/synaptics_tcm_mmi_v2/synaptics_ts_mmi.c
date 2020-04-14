@@ -327,6 +327,10 @@ int syna_ts_mmi_dev_register(struct syna_tcm_hcd *tcm_hcd) {
 		dev_err(tcm_hcd->pdev->dev.parent, "Failed to register ts mmi\n");
 		return ret;
 	}
+
+	/* initialize class imported methods */
+	tcm_hcd->imports = &syna_ts_mmi_methods.exports;
+
 	return 0;
 }
 
