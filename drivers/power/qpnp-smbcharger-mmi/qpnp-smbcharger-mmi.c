@@ -3597,7 +3597,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
 
-	mmi_dbg(chip, "batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
+	mmi_err(chip, "SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
 		 chg_stat.batt_mv, chg_stat.usb_mv,
 		 prev_vbus_mv, chg_stat.batt_ma);
 
@@ -4671,9 +4671,9 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	smb_mmi_create_debugfs(chip);
 	cancel_delayed_work(&chip->heartbeat_work);
 	schedule_delayed_work(&chip->heartbeat_work,
-			      msecs_to_jiffies(0));
+			      msecs_to_jiffies(10000));
 
-	mmi_info(chip, "SMBMMI probed successfully!\n");
+	mmi_info(chip, "QPNP SMB MMI probed successfully!\n");
 
 	return rc;
 }
