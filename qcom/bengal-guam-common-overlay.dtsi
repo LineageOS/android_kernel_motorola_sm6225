@@ -234,6 +234,7 @@
         qcom,enable-charging-limit;
         qcom,upper-limit-capacity = <75>;
         qcom,lower-limit-capacity = <60>;
+        qcom,dr_supported;
 	qcom,hvdcp-disable;
 	qcom,otg-cl-ua = <1000000>;
 	qcom,dc-unsupported;
