@@ -220,33 +220,6 @@
 		};
 	};
 
-	cam_sensor_rear_macro_dvdd_active: cam_sensor_rear_macro_dvdd_active {
-		mux {
-			pins = "gpio93";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio93";
-			bias-disable; /* No PULL */
-			drive-strength = <2>;
-		};
-	};
-
-	cam_sensor_rear_macro_dvdd_suspend: cam_sensor_rear_macro_dvdd_suspend {
-		mux {
-			pins = "gpio93";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio93";
-			bias-pull-down; /* PULL DOWN */
-			drive-strength = <2>;
-			output-low;
-		};
-	};
-
 	cam_sensor_rear_macro_afvdd_active: cam_sensor_rear_macro_afvdd_active {
 		mux {
 			pins = "gpio103";
@@ -298,8 +271,8 @@
 		compatible = "regulator-fixed";
 		reg = <0x00 0x00>;
 		regulator-name = "macro_actuator_vdd_ldo";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
 		regulator-enable-ramp-delay = <135>;
 		enable-active-high;
 		gpio = <&tlmm 103 0>;
@@ -332,8 +305,8 @@
 		cam_vaf-supply = <&macro_actuator_vdd_ldo>;
 		regulator-names = "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000>;
-		rgltr-max-voltage = <1800000>;
+		rgltr-min-voltage = <2800000>;
+		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <100000>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -585,11 +558,9 @@
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk1_active
-				&cam_sensor_rear3_reset_active
-                &cam_sensor_rear_macro_dvdd_active>;
+				&cam_sensor_rear3_reset_active>;
 		pinctrl-1 = <&cam_sensor_mclk1_suspend
-				&cam_sensor_rear3_reset_suspend
-                &cam_sensor_rear_macro_dvdd_suspend>;
+				&cam_sensor_rear3_reset_suspend>;
 		gpios = <&tlmm 21 0>,
 				<&tlmm 19 0>;
 		gpio-reset = <1>;
