@@ -2157,7 +2157,7 @@ static void mmi_weakcharger_work(struct work_struct *work)
 	schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(100));
 
-	mmi_err(chip, "Weak timer expired\n");
+	mmi_dbg(chip, "Weak timer expired\n");
 }
 
 int is_wls_online(struct smb_mmi_charger *chg)
@@ -2353,7 +2353,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 						    struct smb_mmi_charger,
 						    heartbeat_alarm);
 
-	mmi_err(chip, "HB alarm fired\n");
+	mmi_dbg(chip, "HB alarm fired\n");
 
 	__pm_stay_awake(&chip->smb_mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
@@ -3331,7 +3331,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	smb_mmi_awake_vote(chip, true);
 	alarm_try_to_cancel(&chip->heartbeat_alarm);
 
-	mmi_err(chip, "Heartbeat!\n");
+	mmi_dbg(chip, "Heartbeat!\n");
 
 	chg_stat.charger_present = false;
 	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
@@ -3597,7 +3597,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_basic_charge_sm(chip, &chg_stat);
 	}
 
-	mmi_err(chip, "SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
+	mmi_dbg(chip, "SMBMMI: batt_mv %d, usb_mv %d, prev_usb_mv %d batt_ma %d\n",
 		 chg_stat.batt_mv, chg_stat.usb_mv,
 		 prev_vbus_mv, chg_stat.batt_ma);
 
@@ -3612,7 +3612,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (((chg_stat.usb_mv < REV_BST_THRESH) &&
 		    ((prev_vbus_mv - REV_BST_DROP) > chg_stat.usb_mv)) ||
 		    (chg_stat.batt_ma > REV_BST_MA)) {
-			mmi_err(chip, "Reverse Boosted: Clear, USB Suspend\n");
+			mmi_err(chip, "Reverse Boosted: Clear, USB Suspend. usb_mv: %d prev_vbus_mv: %d batt_ma: %d \n", chg_stat.usb_mv, prev_vbus_mv, chg_stat.batt_ma);
 			if (chip->factory_mode)
 				smblib_set_usb_suspend(chip, true);
 			else
@@ -3648,7 +3648,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
-		mmi_err(chip, "Factory Kill check pc %d, usb %d, susp %d\n",
+		mmi_dbg(chip, "Factory Kill check pc %d, usb %d, susp %d\n",
 			 pc_online, pval.intval, usb_suspend);
 		if (pc_online ||
 		    pval.intval ||
@@ -3716,9 +3716,10 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 		(strcmp(psy->desc->name, "wireless") == 0) ||
 		(strcmp(psy->desc->name, "dc") == 0))) {
 
-		mmi_err(chip, "Psy notifier call %s\n", psy->desc->name);
-		if(first_boot)
+		mmi_info(chip, "Psy notifier call %s\n", psy->desc->name);
+		if(first_boot && chip->factory_mode)
 		{
+			//In factory mode for the first heartbeat make sure to wait 10 second until boot is complete
 			cancel_delayed_work(&chip->heartbeat_work);
 			schedule_delayed_work(&chip->heartbeat_work,
 					      msecs_to_jiffies(10000));
@@ -3729,6 +3730,7 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 			cancel_delayed_work(&chip->heartbeat_work);
 			schedule_delayed_work(&chip->heartbeat_work,
 					      msecs_to_jiffies(0));
+			first_boot = false;
 		}
 	}
 
@@ -4682,8 +4684,17 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	smb_mmi_create_debugfs(chip);
 	cancel_delayed_work(&chip->heartbeat_work);
-	schedule_delayed_work(&chip->heartbeat_work,
-			      msecs_to_jiffies(10000));
+	if(chip->factory_mode)
+	{
+		//delay heartbeat in factory mode until after boot
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(10000));
+	}
+	else
+	{
+		schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(0));
+	}
 
 	mmi_info(chip, "QPNP SMB MMI probed successfully!\n");
 
