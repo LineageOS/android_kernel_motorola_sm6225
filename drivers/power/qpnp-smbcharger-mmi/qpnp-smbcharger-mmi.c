@@ -2157,7 +2157,7 @@ static void mmi_weakcharger_work(struct work_struct *work)
 	schedule_delayed_work(&chip->heartbeat_work,
 				      msecs_to_jiffies(100));
 
-	mmi_dbg(chip, "Weak timer expired\n");
+	mmi_err(chip, "Weak timer expired\n");
 }
 
 int is_wls_online(struct smb_mmi_charger *chg)
@@ -2353,7 +2353,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 						    struct smb_mmi_charger,
 						    heartbeat_alarm);
 
-	mmi_info(chip, "HB alarm fired\n");
+	mmi_err(chip, "HB alarm fired\n");
 
 	__pm_stay_awake(&chip->smb_mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
@@ -3331,7 +3331,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	smb_mmi_awake_vote(chip, true);
 	alarm_try_to_cancel(&chip->heartbeat_alarm);
 
-	mmi_dbg(chip, "Heartbeat!\n");
+	mmi_err(chip, "Heartbeat!\n");
 
 	chg_stat.charger_present = false;
 	rc = get_prop_batt_voltage_now(chip, chip->bms_psy, &pval);
@@ -3648,7 +3648,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0)
 			goto sch_hb;
 
-		mmi_dbg(chip, "Factory Kill check pc %d, usb %d, susp %d\n",
+		mmi_err(chip, "Factory Kill check pc %d, usb %d, susp %d\n",
 			 pc_online, pval.intval, usb_suspend);
 		if (pc_online ||
 		    pval.intval ||
@@ -3701,6 +3701,7 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 	struct smb_mmi_charger *chip = container_of(nb,
 				struct smb_mmi_charger, mmi_psy_notifier);
 	struct power_supply *psy = v;
+	static bool first_boot = true;
 
 	if (!chip) {
 		pr_err("SMBMMI: called before chip valid!\n");
@@ -3715,9 +3716,20 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 		(strcmp(psy->desc->name, "wireless") == 0) ||
 		(strcmp(psy->desc->name, "dc") == 0))) {
 
-		cancel_delayed_work(&chip->heartbeat_work);
-		schedule_delayed_work(&chip->heartbeat_work,
-				      msecs_to_jiffies(0));
+		mmi_err(chip, "Psy notifier call %s\n", psy->desc->name);
+		if(first_boot)
+		{
+			cancel_delayed_work(&chip->heartbeat_work);
+			schedule_delayed_work(&chip->heartbeat_work,
+					      msecs_to_jiffies(10000));
+			first_boot = false;
+		}
+		else
+		{
+			cancel_delayed_work(&chip->heartbeat_work);
+			schedule_delayed_work(&chip->heartbeat_work,
+					      msecs_to_jiffies(0));
+		}
 	}
 
 	return NOTIFY_OK;
