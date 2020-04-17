@@ -62,15 +62,6 @@
 #define HX_MOD_KSYM_HX852xH            HX_MOD_KSYM_HX852xH
 #endif
 
-#if defined(__HIMAX_HX83102_MOD__)
-#define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
-#endif
-
-#if defined(__HIMAX_HX83102D_MOD__)
-#define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
-#define HX83102D
-#endif
-
 #if defined(__HIMAX_HX83103_MOD__)
 #define HX_MOD_KSYM_HX83103            HX_MOD_KSYM_HX83103
 #endif
