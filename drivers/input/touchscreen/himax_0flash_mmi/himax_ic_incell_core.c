@@ -2209,6 +2209,14 @@ static void himax_mcu_touch_information(void)
 		if (err_cnt > 0)
 			E("TP Info from IC is wrong, err_cnt = 0x%X", err_cnt);
 	}
+#else
+	ic_data->HX_RX_NUM = FIX_HX_RX_NUM;
+	ic_data->HX_TX_NUM = FIX_HX_TX_NUM;
+	ic_data->HX_MAX_PT = FIX_HX_MAX_PT;
+	ic_data->HX_XY_REVERSE = FIX_HX_XY_REVERSE;
+	ic_data->HX_Y_RES = FIX_HX_X_RES;
+	ic_data->HX_X_RES = FIX_HX_Y_RES;
+	ic_data->HX_INT_IS_EDGE = FIX_HX_INT_IS_EDGE;
 
 #endif
 	I("%s:HX_RX_NUM =%d,HX_TX_NUM =%d,HX_MAX_PT=%d\n", __func__, ic_data->HX_RX_NUM, ic_data->HX_TX_NUM, ic_data->HX_MAX_PT);
@@ -2708,7 +2716,6 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 		memset(ovl_idx, 0, ovl_section_num);
 	}
 #endif
-	I("wj 83102D %s\n", __func__);
 	/*1. get number of partition*/
 		part_num = fw_entry->data[HX64K + 12];
 	I("%s, Number of partition is %d\n", __func__, part_num);
