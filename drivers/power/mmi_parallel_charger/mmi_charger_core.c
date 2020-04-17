@@ -1531,6 +1531,9 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 	chip->extrn_sense = of_property_read_bool(node,
 			"mmi,extrn-sense");
 
+	chip->dont_rerun_aicl= of_property_read_bool(node,
+			"mmi,dont-rerun-aicl");
+
 	rc = of_property_read_u32(node,
 				"mmi,pps-volt-steps",
 				&chip->pps_volt_steps);

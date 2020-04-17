@@ -615,10 +615,12 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 		}
 
-		mmi_chrg_info(chip, "Do an rerun usb AICL for PMIC-SW\n");
-		mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
-		msleep(100);
-		mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
+		if (!chip->dont_rerun_aicl) {
+			mmi_chrg_info(chip, "Do an rerun usb AICL for PMIC-SW\n");
+			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
+			msleep(100);
+			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
+		}
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
@@ -1183,10 +1185,12 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 							DISABLE_CHRG_LIMIT);
 			chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 
-			mmi_chrg_info(chip,"Do an rerun usb AICL for PMIC-SW\n");
-			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
-			msleep(100);
-			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
+			if (!chip->dont_rerun_aicl) {
+				mmi_chrg_info(chip,"Do an rerun usb AICL for PMIC-SW\n");
+				mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], false);
+				msleep(100);
+				mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
+			}
 			chip->recovery_pmic_chrg = true;
 			chrg_cv_taper_tunning_cnt = 0;
 		}
