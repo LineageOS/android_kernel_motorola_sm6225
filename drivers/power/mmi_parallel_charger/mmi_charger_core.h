@@ -197,6 +197,7 @@ struct mmi_charger_manager {
 	const char	*extrn_fg_name;
 	bool extrn_sense;
 	bool recovery_pmic_chrg;
+	bool dont_rerun_aicl;
 
 	bool sys_therm_cooling;
 	bool sys_therm_force_pmic_chrg;
