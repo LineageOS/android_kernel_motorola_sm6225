@@ -7,6 +7,7 @@
  * (See Linux kernel documentation: Documentation/i2c/writing-clients)
 */
 #define MAX_I2C_BUFFER_SIZE					65536
+#define AW882XX_I2C_READ_MSG_NUM		2
 
 #define AW882XX_FLAG_START_ON_MUTE			(1 << 0)
 #define AW882XX_FLAG_SKIP_INTERRUPTS		(1 << 1)
@@ -25,6 +26,7 @@
 
 
 #define DEFAULT_CALI_VALUE (7)
+#define ERRO_CALI_VALUE (0)
 #define AFE_PARAM_ID_AWDSP_RX_SET_ENABLE        (0x10013D11)
 #define AFE_PARAM_ID_AWDSP_RX_PARAMS            (0x10013D12)
 #define AFE_PARAM_ID_AWDSP_TX_SET_ENABLE        (0x10013D13)
