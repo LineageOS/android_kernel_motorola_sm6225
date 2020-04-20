@@ -29,6 +29,339 @@
 	} \
 }
 
+static ssize_t syna_ts_pill_region_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t syna_ts_pill_region_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t syna_ts_gs_distance_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t syna_ts_gs_distance_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR(pill_region, (S_IRUGO | S_IWUSR | S_IWGRP),
+		syna_ts_pill_region_show, syna_ts_pill_region_store);
+static DEVICE_ATTR(gs_distance, (S_IRUGO | S_IWUSR | S_IWGRP),
+		syna_ts_gs_distance_show, syna_ts_gs_distance_store);
+
+#define MAX_ATTRS_ENTRIES 10
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
+static int syna_ts_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+	const struct syna_tcm_hw_interface *hw_if;
+	const struct syna_tcm_board_data *bdata;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	LOGN(dev, "syna_ts_extend_attribute_group\n");
+	GET_SYNA_DATA(dev);
+	hw_if = tcm_hcd->hw_if;
+	if (!hw_if) {
+		LOGE(dev, "Hardware interface not found\n");
+		return -ENODEV;
+	}
+	bdata = hw_if->bdata;
+
+	if (bdata->pill_region_ctrl)
+		ADD_ATTR(pill_region);
+
+	if (bdata->gs_distance_ctrl)
+		ADD_ATTR(gs_distance);
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
+static ssize_t syna_ts_gs_distance_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int retval;
+	unsigned long value;
+	unsigned short buffer;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_SYNA_DATA(dev);
+
+	retval = kstrtoul(buf, 0, &value);
+	if (retval)
+		return -EINVAL;
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	buffer = (unsigned short)value;
+	dev_info(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)value);
+
+	if (tcm_hcd->gs_distance_data == buffer) {
+		dev_dbg(dev, "%s: value is same,so not write.\n", __func__);
+		retval = size;
+		goto exit;
+	}
+
+	tcm_hcd->gs_distance_data = buffer;
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_SUPP_X_WIDTH,
+		buffer);
+
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to enable wakeup gesture mode\n");
+		goto exit;
+	}
+	retval = size;
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+
+}
+
+static ssize_t syna_ts_gs_distance_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int retval;
+	unsigned short value;
+	ssize_t blen = 0;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd, DC_SUPP_X_WIDTH, &value);
+	if (retval < 0)
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to read gs_distance (%d)\n",retval );
+	else
+		blen += scnprintf(buf, PAGE_SIZE, "0x%02x", (unsigned int)value);
+
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return blen;
+}
+
+static int syna_ts_get_pill_region(struct syna_tcm_hcd *tcm_hcd)
+{
+	int retval;
+	struct pill_region_data *region_data;
+	region_data = &tcm_hcd->region_data;
+
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd,
+			DC_SUPP_Y_START_L, &region_data->y_start_l);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to read LEFT_Y_START (%d)\n", retval);
+
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd,
+			DC_SUPP_Y_END_L, &region_data->y_end_l);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to read LEFT_Y_END (%d)\n", retval);
+
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd,
+			DC_SUPP_Y_START_R, &region_data->y_start_r);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to read RIGHT_Y_START (%d)\n", retval);
+
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd,
+			DC_SUPP_Y_END_R, &region_data->y_end_r);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to read RIGHT_Y_END (%d)\n", retval);
+
+	return retval;
+}
+
+static int syna_ts_set_pill_region(struct syna_tcm_hcd *tcm_hcd)
+{
+	int retval;
+	struct pill_region_data *region_data;
+	region_data = &tcm_hcd->region_data;
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_SUPP_Y_START_L, region_data->y_start_l);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to set LEFT_Y_START of pill_region\n");
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_SUPP_Y_END_L, region_data->y_end_l);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to set LEFT_Y_END of pill_region\n");
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_SUPP_Y_START_R, region_data->y_start_r);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to set RIGHT_Y_START of pill_region\n");
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_SUPP_Y_END_R, region_data->y_end_r);
+	if (retval < 0)
+		LOGD(tcm_hcd->pdev->dev.parent,
+			"Failed to set RIGHT_Y_END of pill_region\n");
+
+	return retval;
+}
+
+#define REQ_ARGS_NUM 3
+static ssize_t syna_ts_pill_region_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int retval;
+	unsigned short args[3] = {0};
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+	struct pill_region_data *region_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	region_data = &tcm_hcd->region_data;
+
+	retval = sscanf(buf, "0x%hx 0x%hx 0x%hx", &args[0], &args[1], &args[2]);
+	if (retval < REQ_ARGS_NUM) {
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	dev_info(dev, "%s: program pill region:0x%02hx 0x%04hx 0x%04hx\n",
+		__func__, args[0], args[1], args[2]);
+
+	region_data->region_side = args[0];
+	switch (region_data->region_side) {
+		case 0:
+			if (!region_data->y_start_l && !region_data->y_end_l
+					&& !region_data->y_start_r && !region_data->y_end_r) {
+				dev_info(dev, "%s: The value of region side is same, so not write.\n",
+					__func__);
+				retval = size;
+				goto exit;
+			}
+			region_data->y_start_l = 0x00;
+			region_data->y_end_l = 0x00;
+			region_data->y_start_r = 0x00;
+			region_data->y_end_r = 0x00;
+			break;
+
+		case 1:
+			if (region_data->y_start_l ==  args[1] && region_data->y_end_l == args[2]) {
+				dev_info(dev, "%s: The values of left region are same, so not write.\n", __func__);
+				retval = size;
+				goto exit;
+			}
+			region_data->y_start_l = args[1];
+			region_data->y_end_l = args[2];
+			region_data->y_start_r = 0x00;
+			region_data->y_end_r = 0x00;
+			break;
+
+		case 2:
+			if (region_data->y_start_r ==  args[1] && region_data->y_end_r == args[2]) {
+				dev_info(dev, "%s: The values of right region are same, so not write.\n", __func__);
+				retval = size;
+				goto exit;
+			}
+			region_data->y_start_l = 0x00;
+			region_data->y_end_l = 0x00;
+			region_data->y_start_r = args[1];
+			region_data->y_end_r = args[2];
+			break;
+
+		default:
+			LOGE(dev, "The commond is not support!\n");
+			retval = -EINVAL;
+			goto exit;
+	}
+
+	retval = syna_ts_set_pill_region(tcm_hcd);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to set pill_region none\n");
+		goto exit;
+	}
+	retval = size;
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
+static ssize_t syna_ts_pill_region_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int retval;
+	ssize_t blen = 0;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+	struct pill_region_data *region_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_SYNA_DATA(dev);
+	dev_info(dev, "%s: program pill region show",__func__);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	region_data = &tcm_hcd->region_data;
+
+	retval = syna_ts_get_pill_region(tcm_hcd);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to get pill_region value (%d)\n", retval);
+		goto exit;
+	}
+
+	switch (region_data->region_side) {
+		case 0:
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%02x ", 0);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_start_r);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_end_r);
+			break;
+
+		case 1:
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%02x ", 1);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_start_l);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_end_l);
+			break;
+
+		case 2:
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%02x ", 2);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_start_r);
+			blen += scnprintf(buf+blen, PAGE_SIZE, "0x%hx ", region_data->y_end_r);
+			break;
+
+		default:
+			LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to read the pill_region (%d)\n", retval);
+	}
+	retval = blen;
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
 static int syna_ts_mmi_methods_get_vendor(struct device *dev, void *cdata)
 {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "synaptics");
@@ -315,6 +648,8 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.power = syna_ts_mmi_methods_power,
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
+	 /* vendor specific attribute group */
+	.extend_attribute_group = syna_ts_extend_attribute_group,
 	/* PM callback */
 	.panel_state = syna_ts_mmi_panel_state,
 	.post_resume = syna_ts_mmi_post_resume,
@@ -322,6 +657,8 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 
 int syna_ts_mmi_dev_register(struct syna_tcm_hcd *tcm_hcd) {
 	int ret;
+	const struct syna_tcm_board_data *bdata = tcm_hcd->hw_if->bdata;
+
 	ret = ts_mmi_dev_register(tcm_hcd->pdev->dev.parent, &syna_ts_mmi_methods);
 	if (ret) {
 		dev_err(tcm_hcd->pdev->dev.parent, "Failed to register ts mmi\n");
@@ -330,6 +667,30 @@ int syna_ts_mmi_dev_register(struct syna_tcm_hcd *tcm_hcd) {
 
 	/* initialize class imported methods */
 	tcm_hcd->imports = &syna_ts_mmi_methods.exports;
+
+	if(bdata->pill_region_ctrl) {
+		ret = syna_ts_get_pill_region(tcm_hcd);
+		if (ret < 0)
+			dev_err(tcm_hcd->pdev->dev.parent, "%s: failed to read pill region (%d)\n",
+					__func__, ret);
+			dev_err(tcm_hcd->pdev->dev.parent, "%s: pill region is set to default value\n", __func__);
+			tcm_hcd->region_data.region_side = 0x00;
+			tcm_hcd->region_data.y_start_l = 0x00;
+			tcm_hcd->region_data.y_end_l = 0x00;
+			tcm_hcd->region_data.y_start_r = 0x00;
+			tcm_hcd->region_data.y_end_r = 0x00;
+	}
+
+	if(bdata->gs_distance_ctrl) {
+		ret = tcm_hcd->get_dynamic_config(tcm_hcd, DC_SUPP_X_WIDTH,
+						&tcm_hcd->gs_distance_data);
+		if (ret < 0) {
+			dev_err(tcm_hcd->pdev->dev.parent, "%s: failed to read grip supp distance (%d)\n",
+					__func__, ret);
+			dev_err(tcm_hcd->pdev->dev.parent, "%s: gs-distance is set to default value\n", __func__);
+			tcm_hcd->gs_distance_data = 0x1E;
+		}
+	}
 
 	return 0;
 }
