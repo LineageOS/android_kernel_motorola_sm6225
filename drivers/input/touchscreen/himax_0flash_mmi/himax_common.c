@@ -1551,11 +1551,19 @@ static void himax_wake_event_report(void)
 
 	if (KEY_EVENT) {
 #ifdef HIMAX_V2_SENSOR_EN
-		input_report_abs(private_ts->sensor_pdata->input_sensor_dev, ABS_DISTANCE, ++report_cnt);
+		if (private_ts->report_gesture_key) {
+			input_report_key(private_ts->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+			input_sync(private_ts->sensor_pdata->input_sensor_dev);
+			input_report_key(private_ts->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+			input_sync(private_ts->sensor_pdata->input_sensor_dev);
+			++report_cnt;
+		} else {
+			input_report_abs(private_ts->sensor_pdata->input_sensor_dev, ABS_DISTANCE, ++report_cnt);
+			input_sync(private_ts->sensor_pdata->input_sensor_dev);
+		}
 		I("input report: %d", report_cnt);
 		if (report_cnt >= REPORT_MAX_COUNT)
 			report_cnt = 0;
-		input_sync(private_ts->sensor_pdata->input_sensor_dev);
 #else
 		I(" %s SMART WAKEUP KEY event %d press\n", __func__, KEY_EVENT);
 		input_report_key(private_ts->input_dev, KEY_EVENT, 1);
@@ -3072,10 +3080,16 @@ static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
 	}
 	data->sensor_pdata = sensor_pdata;
 
-	__set_bit(EV_ABS, sensor_input_dev->evbit);
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
-	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
-			0, REPORT_MAX_COUNT, 0, 0);
+
+	if (data->report_gesture_key) {
+		__set_bit(EV_KEY, sensor_input_dev->evbit);
+		__set_bit(KEY_F1, sensor_input_dev->keybit);
+	} else {
+		__set_bit(EV_ABS, sensor_input_dev->evbit);
+		input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+				0, REPORT_MAX_COUNT, 0, 0);
+	}
 	sensor_input_dev->name = "double-tap";
 	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
 

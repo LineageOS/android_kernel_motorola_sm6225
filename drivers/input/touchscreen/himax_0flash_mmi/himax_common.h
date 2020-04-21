@@ -430,6 +430,7 @@ struct himax_ts_data {
 	int (*power)(int on);
 	int pre_finger_data[10][2];
 	bool vdd_1v8_always_on;
+	uint32_t report_gesture_key;
 
 	struct device *dev;
 	struct workqueue_struct *himax_wq;
