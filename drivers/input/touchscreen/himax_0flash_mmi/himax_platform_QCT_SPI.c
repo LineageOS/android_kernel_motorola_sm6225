@@ -201,6 +201,13 @@ int himax_parse_dt(struct himax_ts_data *ts,
 		I(" DT:vdd_1v8_always_on=%d\n", ts->vdd_1v8_always_on);
 	}
 
+	if (of_property_read_bool(dt, "himax,report_gesture_key")) {
+		I("novatek,report_gesture_key set");
+		ts->report_gesture_key = 1;
+	} else {
+		ts->report_gesture_key = 0;
+	}
+
 	himax_vk_parser(dt, pdata);
 
 	chosen = of_find_node_by_name(NULL, "chosen");
