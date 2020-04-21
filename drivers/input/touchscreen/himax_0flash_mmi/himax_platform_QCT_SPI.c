@@ -1060,7 +1060,9 @@ int panel_notifier_callback(struct notifier_block *self, unsigned long event, vo
 #ifdef HIMAX_V2_SENSOR_EN
 			if (ts->SMWP_enable) {
 				I("%s: tap detection is enabled", __func__);
-				return 1;
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			} else {
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
 			}
 #endif
 				break;
