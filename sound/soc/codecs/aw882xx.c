@@ -1570,7 +1570,7 @@ static int aw882xx_parse_dt(struct device *dev, struct aw882xx *aw882xx,
 
 	ret = of_property_read_u32(np, "monitor-sysctrl", &monitor->sysctrl);
 	if (ret) {
-		monitor->timer_val = AW882XX_MONITOR_SYSCTRL;
+		monitor->sysctrl = AW882XX_MONITOR_SYSCTRL;
 		dev_err(dev, "%s: monitor-sysctrl get failed,user default value!\n", __func__);
 	} else {
 		dev_info(dev, "%s: monitor-sysctrl = %d\n",
