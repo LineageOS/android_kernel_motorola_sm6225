@@ -2030,6 +2030,8 @@ static int sde_connector_get_panel_vendor_info(struct drm_connector *connector)
 	connector->display_info.panel_regDA = info.panel_regDA;
 	strncpy(connector->display_info.panel_name, info.panel_name,
 					sizeof(info.panel_name));
+	strncpy(connector->display_info.panel_supplier, info.panel_supplier,
+					sizeof(info.panel_supplier));
 
 	return 0;
 }
