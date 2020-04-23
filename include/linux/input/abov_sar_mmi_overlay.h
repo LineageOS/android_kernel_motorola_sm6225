@@ -249,6 +249,8 @@ struct abovXX {
 	int read_flag;
 	int irq;
 	int irqTimeout;
+	/* interrupt check flag */
+	int int_state;
 	char irq_disabled;
 	/* whether irq should be ignored.. cases if enable/disable irq is not used
 	 * or does not work properly */
@@ -262,6 +264,7 @@ struct abovXX {
 	struct notifier_block ps_notif;
 	bool ps_is_present;
 	bool loading_fw;
+	int fw_dl_status;
 
 	struct work_struct fw_update_work;
 
