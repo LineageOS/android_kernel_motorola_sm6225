@@ -6381,6 +6381,8 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->panel_regDA = display->panel->panel_regDA;
 	strncpy(info->panel_name, display->panel->panel_name,
 				sizeof(display->panel->panel_name));
+	strncpy(info->panel_supplier, display->panel->panel_supplier,
+				sizeof(display->panel->panel_supplier));
 
 	switch (display->panel->panel_mode) {
 	case DSI_OP_VIDEO_MODE:
