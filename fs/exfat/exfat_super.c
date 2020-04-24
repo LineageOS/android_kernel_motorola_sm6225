@@ -2079,7 +2079,7 @@ static void exfat_free_super(struct exfat_sb_info *sbi)
 	/* mutex_init is in exfat_fill_super function. only for 3.7+ */
 	mutex_destroy(&sbi->s_lock);
 #endif
-	kvfree(sbi);
+	kfree(sbi);
 }
 
 static void exfat_put_super(struct super_block *sb)
@@ -2506,7 +2506,7 @@ static int exfat_fill_super(struct super_block *sb, void *data, int silent)
 	 * the filesystem, since we're only just about to mount
 	 * it and have no inodes etc active!
 	 */
-	sbi = kvzalloc(sizeof(struct exfat_sb_info), GFP_KERNEL);
+	sbi = kzalloc(sizeof(struct exfat_sb_info), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
