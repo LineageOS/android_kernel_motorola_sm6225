@@ -132,6 +132,7 @@ enum bq_fg_reg_idx {
 	BQ_FG_REG_CC,		/* Cycle Count */
 	BQ_FG_REG_SOC,		/* Relative State of Charge */
 	BQ_FG_REG_SOH,		/* State of Health */
+	BQ_FG_REG_VOCV,		/* OCV voltage*/
 	BQ_FG_REG_DC,		/* Design Capacity */
 	NUM_REGS,
 };
@@ -238,6 +239,7 @@ static u8 bq27426_regs[NUM_REGS] = {
 	0xFF,	/* CycleCount */
 	0x1C,	/* State of Charge */
 	0x20,	/* State of Health */
+	0x24,	/* OCV voltage*/
 	0xFF,	/* Design Capacity */
 };
 
@@ -291,6 +293,7 @@ struct bq_fg_chip {
 	int	batt_volt;
 	int	batt_temp;
 	int	batt_curr;
+	int	batt_vocv;
 
 	int batt_cyclecnt;	/* cycle count */
 
@@ -1056,6 +1059,21 @@ static int fg_read_temperature(struct bq_fg_chip *bq)
 
 }
 
+static int fg_read_ocv_voltage(struct bq_fg_chip *bq)
+{
+	int ret;
+	u16 vocv = 0;
+
+	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_VOCV], &vocv);
+	if (ret < 0) {
+		mmi_fg_err(bq, "could not read ocv voltage, ret = %d\n", ret);
+		return ret;
+	}
+
+	return vocv;
+
+}
+
 static int fg_read_volt(struct bq_fg_chip *bq)
 {
 	int ret;
@@ -1258,6 +1276,7 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
+	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 };
 
 static int fg_get_property(struct power_supply *psy,
@@ -1380,6 +1399,14 @@ static int fg_get_property(struct power_supply *psy,
 			val->strval = bqfs_image[bq->batt_id].batt_type_str;
 		else val->strval = "No battery type";
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+		ret = fg_read_ocv_voltage(bq);
+		mutex_lock(&bq->data_lock);
+		if (ret >= 0)
+			bq->batt_vocv= ret;
+		val->intval = bq->batt_vocv * 1000;
+		mutex_unlock(&bq->data_lock);
+		break;
 	default:
 		mutex_unlock(&bq->update_lock);
 		return -EINVAL;
@@ -1423,6 +1450,7 @@ static int fg_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
+	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		ret = 1;
 		break;
 	default:
