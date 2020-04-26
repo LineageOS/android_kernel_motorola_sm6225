@@ -68,3 +68,11 @@
         qcom,wsa-max-devs = <0>;
         qcom,wsa-devs = <0>;
 };
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
