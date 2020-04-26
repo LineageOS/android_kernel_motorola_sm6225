@@ -768,8 +768,13 @@ static void touch_report(void)
 		case GLOVED_FINGER:
 			x = object_data[idx].x_pos;
 			y = object_data[idx].y_pos;
-			minor = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
-			major = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
+			if (object_data[idx].x_width > object_data[idx].y_width) {
+				minor = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
+				major = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
+			} else {
+				minor = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
+				major = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
+			}
 			if (bdata->swap_axes) {
 				temp = x;
 				x = y;
