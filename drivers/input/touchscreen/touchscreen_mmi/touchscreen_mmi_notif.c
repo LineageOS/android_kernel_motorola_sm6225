@@ -124,6 +124,7 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	switch (event) {
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 	case PANEL_EVENT_PRE_DISPLAY_OFF:
+		cancel_delayed_work_sync(&touch_cdev->work);
 		ts_mmi_panel_off(touch_cdev);
 		if (NEED_TO_SET_PINCTRL) {
 			dev_dbg(DEV_MMI, "%s: touch pinctrl off\n", __func__);
