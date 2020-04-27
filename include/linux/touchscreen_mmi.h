@@ -28,6 +28,7 @@
 #define TS_MMI_MAX_INFO_LEN		16
 #define TS_MMI_MAX_CLASS_NAME_LEN	16
 #define TS_MMI_MAX_PANEL_LEN		16
+#define TS_MMI_PILL_REGION_REQ_ARGS_NUM	3
 
 struct touch_event_data {
 	int type;			/* TS_TOUCH, TS_RELEASE */
@@ -93,6 +94,11 @@ enum ts_mmi_pm_mode {
 	int	(*get_drv_irq)(struct device *dev, void *idata);
 	int	(*get_poweron)(struct device *dev, void *idata);
 	int	(*get_flashprog)(struct device *dev, void *idata);
+	int	(*get_suppression)(struct device *dev, void *idata);
+	int	(*get_hold_grip)(struct device *dev, void *idata);
+	int	(*get_pill_region)(struct device *dev, void *uiadata);
+	int	(*get_hold_distance)(struct device *dev, void *idata);
+	int	(*get_gs_distance)(struct device *dev, void *idata);
 	/* SET methods */
 	int	(*reset)(struct device *dev, int type);
 	int	(*drv_irq)(struct device *dev, int state);
@@ -100,6 +106,11 @@ enum ts_mmi_pm_mode {
 	int	(*pinctrl)(struct device *dev, int on);
 	int	(*refresh_rate)(struct device *dev, int freq);
 	int	(*charger_mode)(struct device *dev, int mode);
+	int	(*suppression)(struct device *dev, int state);
+	int	(*hold_grip)(struct device *dev, int state);
+	int	(*pill_region)(struct device *dev, int *region_array);
+	int	(*hold_distance)(struct device *dev, int dis);
+	int	(*gs_distance)(struct device *dev, int dis);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -129,6 +140,11 @@ struct ts_mmi_dev_pdata {
 	bool		usb_detection;
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
+	bool		suppression_ctrl;
+	bool		pill_region_ctrl;
+	bool		hold_distance_ctrl;
+	bool		gs_distance_ctrl;
+	bool		hold_grip_ctrl;
 	int 		ctrl_dsi;
 	int		reset;
 	const char	*class_entry_name;
@@ -187,6 +203,11 @@ struct ts_mmi_dev {
 	int			drv_irq;
 	int			poweron;
 	int			flashprog;
+	int			suppression;
+	unsigned int		pill_region[TS_MMI_PILL_REGION_REQ_ARGS_NUM];
+	int			hold_distance;
+	int			gs_distance;
+	int			hold_grip;
 	struct attribute_group	*extern_group;
 	struct list_head	node;
 	/*
@@ -202,6 +223,13 @@ struct ts_mmi_dev {
 do { \
 	if (touch_cdev->mdata->_method) { \
 		touch_cdev->mdata->_method(DEV_TS, ##__VA_ARGS__); \
+	} \
+} while (0)
+#define TRY_TO_GET(_method, ...) \
+do { \
+	ret = ret; \
+	if (touch_cdev->mdata->_method) { \
+		ret = touch_cdev->mdata->get_##_method(DEV_TS, ##__VA_ARGS__); \
 	} \
 } while (0)
 
