@@ -30,6 +30,7 @@
 
 #define FMT_STRING	"%s"
 #define FMT_INTEGER	"%d"
+#define FMT_HEX_INTEGER	"0x%02x"
 
 #define TOUCH_MMI_SHOW(name, fmt) \
 static ssize_t name##_show(struct device *dev, \
@@ -55,7 +56,7 @@ static ssize_t name##_store(struct device *dev, \
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev); \
 	unsigned long value = 0; \
 	int err = 0; \
-	err = kstrtoul(buf, 10, &value); \
+	err = kstrtoul(buf, 0, &value); \
 	if (err < 0) { \
 		dev_err(dev, "%s: Failed to convert value\n", #name); \
 		return -EINVAL; \
@@ -95,6 +96,10 @@ TOUCH_MMI_GET_ATTR_RO(poweron, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_RO(flashprog, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_RO(irq_status, FMT_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(drv_irq, FMT_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(suppression, FMT_HEX_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(hold_grip, FMT_HEX_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(hold_distance, FMT_HEX_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(gs_distance, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_WO(reset);
 TOUCH_MMI_GET_ATTR_WO(pinctrl);
 TOUCH_MMI_GET_ATTR_WO(refresh_rate);
@@ -284,6 +289,144 @@ static const struct attribute_group sysfs_class_group = {
         .attrs = sysfs_class_attrs,
 };
 
+/*
+ * pill_region input value is much different between others sys entry
+ * override default functions
+ */
+
+static ssize_t pill_region_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (!touch_cdev || !touch_cdev->mdata->get_pill_region) {
+		dev_err(dev, "get_pill_region: invalid pointer\n");
+		return (ssize_t)0;
+	}
+	ret = touch_cdev->mdata->get_pill_region(DEV_TS, &touch_cdev->pill_region);
+	if (ret < 0) {
+		dev_err(dev, "get_pill_region: return error %d\n", ret);
+		return (ssize_t)0;
+	}
+	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%x 0x%x",
+		touch_cdev->pill_region[0], touch_cdev->pill_region[1], touch_cdev->pill_region[2]);
+
+}
+static ssize_t pill_region_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+	unsigned int args[TS_MMI_PILL_REGION_REQ_ARGS_NUM] = {0};
+	int err = 0;
+	int i = TS_MMI_PILL_REGION_REQ_ARGS_NUM;
+
+	err = sscanf(buf, "0x%x 0x%x 0x%x", &args[0], &args[1], &args[2]);
+	if (err < TS_MMI_PILL_REGION_REQ_ARGS_NUM) {
+		dev_err(dev, "pill_region: Failed to convert value\n");
+		return -EINVAL;
+	}
+
+	if (!touch_cdev || !touch_cdev->mdata->pill_region) {
+		dev_err(dev, "pill_region: invalid pointer\n");
+		return -EINVAL;
+	}
+	while (i--)
+		touch_cdev->pill_region[i] = args[i];
+	touch_cdev->mdata->pill_region(DEV_TS, touch_cdev->pill_region);
+	return size;
+}
+static DEVICE_ATTR(pill_region, (S_IWUSR | S_IWGRP | S_IRUGO), pill_region_show, pill_region_store);
+
+static int ts_mmi_sysfs_create_edge_entries(struct ts_mmi_dev *touch_cdev, bool create) {
+	int ret = 0;
+
+	if (create) {
+		/*initialize value*/
+		if (touch_cdev->pdata.suppression_ctrl) {
+			TRY_TO_GET(suppression, &touch_cdev->suppression);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: failed to read suppression info (%d)\n",
+						__func__, ret);
+			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_suppression.attr);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: failed to create suppression entry (%d)\n",
+						__func__, ret);
+				goto CREATE_SUPPRESSION_FAILED;
+			}
+		}
+		if (touch_cdev->pdata.pill_region_ctrl) {
+			TRY_TO_GET(pill_region, &touch_cdev->pill_region);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: failed to read pill_region info (%d)\n",
+						__func__, ret);
+			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_pill_region.attr);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: failed to create pill_region entry (%d)\n",
+						__func__, ret);
+				goto CREATE_PILL_REGION_FAILED;
+			}
+		}
+		if (touch_cdev->pdata.hold_distance_ctrl) {
+			TRY_TO_GET(hold_distance, &touch_cdev->hold_distance);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: failed to read hold_distance info (%d)\n",
+						__func__, ret);
+			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_hold_distance.attr);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: failed to create hold_distance entry (%d)\n",
+						__func__, ret);
+				goto CREATE_HOLD_DISTANCE_FAILED;
+			}
+		}
+		if (touch_cdev->pdata.gs_distance_ctrl) {
+			TRY_TO_GET(gs_distance, &touch_cdev->gs_distance);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: failed to read gs_distance info (%d)\n",
+						__func__, ret);
+			else
+				/* Set default gs distance value */
+				touch_cdev->gs_distance = 0x1E;
+			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_gs_distance.attr);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: failed to create gs_distance entry (%d)\n",
+						__func__, ret);
+				goto CREATE_GS_DISTANCE_FAILED;
+			}
+		}
+		if (touch_cdev->pdata.hold_grip_ctrl) {
+			TRY_TO_GET(hold_grip, &touch_cdev->hold_grip);
+			if (ret < 0)
+				dev_err(DEV_TS, "%s: failed to read hold_grip info (%d)\n",
+						__func__, ret);
+			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_hold_grip.attr);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: failed to create hold_grip entry (%d)\n",
+						__func__, ret);
+				goto CREATE_HOLD_GRIP_FAILED;
+			}
+		}
+		return 0;
+	}
+
+	if (touch_cdev->pdata.hold_grip_ctrl)
+		sysfs_remove_file(&DEV_MMI->kobj, &dev_attr_hold_grip.attr);
+CREATE_HOLD_GRIP_FAILED:
+	if (touch_cdev->pdata.gs_distance_ctrl)
+		sysfs_remove_file(&DEV_MMI->kobj, &dev_attr_gs_distance.attr);
+CREATE_GS_DISTANCE_FAILED:
+	if (touch_cdev->pdata.hold_distance_ctrl)
+		sysfs_remove_file(&DEV_MMI->kobj, &dev_attr_hold_distance.attr);
+CREATE_HOLD_DISTANCE_FAILED:
+	if (touch_cdev->pdata.pill_region_ctrl)
+		sysfs_remove_file(&DEV_MMI->kobj, &dev_attr_pill_region.attr);
+CREATE_PILL_REGION_FAILED:
+	if (touch_cdev->pdata.suppression_ctrl)
+		sysfs_remove_file(&DEV_MMI->kobj, &dev_attr_suppression.attr);
+CREATE_SUPPRESSION_FAILED:
+	return ret;
+}
+
 static int ts_mmi_get_vendor_info(
 	struct ts_mmi_dev *touch_cdev) {
 	struct ts_mmi_methods *mdata = touch_cdev->mdata;
@@ -397,6 +540,13 @@ int ts_mmi_dev_register(struct device *parent,
 		}
 	}
 
+	ret = ts_mmi_sysfs_create_edge_entries(touch_cdev, true);
+	if (ret < 0) {
+		dev_err(DEV_TS, "%s: Create edge sys entries failed. %d\n",
+			__func__, ret);
+		goto CLASS_DEVICE_EDGE_ATTR_CREATE_FAILED;
+	}
+
 	ret = ts_mmi_panel_register(touch_cdev);
 	if (ret < 0) {
 		dev_err(DEV_TS, "%s: Register panel failed. %d\n",
@@ -429,6 +579,8 @@ GESTURE_INIT_FAILED:
 NOTIFIER_INIT_FAILED:
 	ts_mmi_panel_unregister(touch_cdev);
 PANEL_INIT_FAILED:
+	ts_mmi_sysfs_create_edge_entries(touch_cdev, false);
+CLASS_DEVICE_EDGE_ATTR_CREATE_FAILED:
 	if (touch_cdev->extern_group)
 		sysfs_remove_group(&DEV_MMI->kobj, touch_cdev->extern_group);
 CLASS_DEVICE_EXT_ATTR_CREATE_FAILED:
@@ -482,6 +634,7 @@ void ts_mmi_dev_unregister(struct device *parent)
 	dev_info(DEV_TS, "%s: delete device\n", __func__);
 
 	dev_set_drvdata(DEV_TS, NULL);
+	ts_mmi_sysfs_create_edge_entries(touch_cdev, false);
 	if (touch_cdev->extern_group)
 		sysfs_remove_group(&DEV_MMI->kobj, touch_cdev->extern_group);
 	sysfs_remove_group(&DEV_MMI->kobj, &sysfs_class_group);
