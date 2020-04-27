@@ -632,6 +632,48 @@ static int syna_ts_mmi_panel_state(struct device *dev,
 	return 0;
 }
 
+static int syna_ts_mmi_charger_mode(struct device *dev, int mode)
+{
+	int retval;
+	unsigned short cval = 0;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	if (tcm_hcd->irq_enabled == false) {
+		dev_info(dev, "%s, Interrupt is closed, so cannot access CHARGER_CONNECTED\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd, DC_CHARGER_CONNECTED, &cval);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to get charger_connected mode\n");
+		goto exit;
+	}
+
+	dev_dbg(dev, "%s: Set charger mode:%d, charger current mode:%d\n",
+				__func__, mode, cval);
+
+	if (cval != mode) {
+		retval = tcm_hcd->set_dynamic_config(tcm_hcd, DC_CHARGER_CONNECTED, mode);
+		if (retval < 0) {
+			LOGE(tcm_hcd->pdev->dev.parent,
+					"Failed to set charger_connected mode\n");
+			goto exit;
+		}
+	} else
+		dev_info(dev, "%s: charger mode already %d\n", __func__, cval);
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return 0;
+}
+
 static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_vendor = syna_ts_mmi_methods_get_vendor,
 	.get_productinfo = syna_ts_mmi_methods_get_productinfo,
@@ -646,6 +688,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.reset =  syna_ts_mmi_methods_reset,
 	.drv_irq = syna_ts_mmi_methods_drv_irq,
 	.power = syna_ts_mmi_methods_power,
+	.charger_mode = syna_ts_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	 /* vendor specific attribute group */
