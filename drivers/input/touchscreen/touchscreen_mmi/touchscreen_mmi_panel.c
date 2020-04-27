@@ -88,6 +88,31 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->update_refresh_rate = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,suppression-control")) {
+		dev_info(DEV_TS, "%s: using suppression\n", __func__);
+		ppdata->suppression_ctrl = true;
+	}
+
+	if (of_property_read_bool(of_node, "mmi,pill-region-control")) {
+		dev_info(DEV_TS, "%s: using pill region\n", __func__);
+		ppdata->pill_region_ctrl = true;
+	}
+
+	if (of_property_read_bool(of_node, "mmi,hold-distance-control")) {
+		dev_info(DEV_TS, "%s: using hold distance\n", __func__);
+		ppdata->hold_distance_ctrl = true;
+	}
+
+	if (of_property_read_bool(of_node, "mmi,gs-distance-control")) {
+		dev_info(DEV_TS, "%s: using gs distance\n", __func__);
+		ppdata->gs_distance_ctrl = true;
+	}
+
+	if (of_property_read_bool(of_node, "mmi,hold-grip-control")) {
+		dev_info(DEV_TS, "%s: using hold grip\n", __func__);
+		ppdata->hold_grip_ctrl = true;
+	}
+
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;

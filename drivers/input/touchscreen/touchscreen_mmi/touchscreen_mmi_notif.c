@@ -213,6 +213,14 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 		TRY_TO_CALL(charger_mode, (int)touch_cdev->ps_is_present);
 	if (touch_cdev->pdata.update_refresh_rate)
 		TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
+	if (touch_cdev->pdata.suppression_ctrl)
+		TRY_TO_CALL(suppression, (int)touch_cdev->suppression);
+	if (touch_cdev->pdata.pill_region_ctrl)
+		TRY_TO_CALL(pill_region, (unsigned int *)touch_cdev->pill_region);
+	if (touch_cdev->pdata.hold_distance_ctrl)
+		TRY_TO_CALL(hold_distance, (int)touch_cdev->hold_distance);
+	if (touch_cdev->pdata.gs_distance_ctrl)
+		TRY_TO_CALL(gs_distance, (int)touch_cdev->gs_distance);
 
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 	dev_info(DEV_MMI, "%s: done\n", __func__);
