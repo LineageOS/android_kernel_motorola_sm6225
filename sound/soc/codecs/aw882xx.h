@@ -181,6 +181,10 @@ enum AWINIC_PROFILE{
 
 #define VERSION_MAX 4
 #define PROJECT_NAME_MAX 24
+#define VOLUME_STEP_DB  (6)
+#define VOLUME_MIN_NEG_90_DB  (90)
+#define FADE_STEP_DB   (6)
+
 
 typedef struct awinic_afe_param_header{
 	uint8_t fw[VERSION_MAX];
