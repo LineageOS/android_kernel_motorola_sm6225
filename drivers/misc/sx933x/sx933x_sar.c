@@ -533,8 +533,6 @@ static int initialize(psx93XX_t this)
 		msleep(100);
 		ret = sx933x_global_variable_init(this);
 		sx933x_reg_init(this);
-		msleep(100); /* make sure everything is running */
-		manual_offset_calibration(this);
 
 		/* re-enable interrupt handling */
 		enable_irq(this->irq);
