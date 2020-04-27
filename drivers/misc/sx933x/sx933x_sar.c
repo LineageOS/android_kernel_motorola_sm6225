@@ -632,6 +632,60 @@ static void touchProcess(psx93XX_t this)
 	}
 }
 
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+static int read_dt_regs(struct device *dev, const char *dt_field, int *num_regs, struct smtc_reg_data **regs)
+{
+	int byte_len;
+	int rc;
+	struct device_node *node = dev->of_node;
+
+	if (of_find_property(node, dt_field, &byte_len)) {
+		*regs = (struct smtc_reg_data *)
+			devm_kzalloc(dev, byte_len, GFP_KERNEL);
+
+		if (*regs == NULL)
+			return -ENOMEM;
+
+		*num_regs = byte_len / sizeof(struct smtc_reg_data);
+
+		rc = of_property_read_u32_array(node,
+			dt_field,
+			(u32 *)*regs,
+			byte_len / sizeof(u32));
+
+		if (rc < 0) {
+			LOG_ERR("Couldn't read %s regs rc = %d\n", dt_field, rc);
+			return -ENODEV;
+		}
+
+		if (*num_regs)
+			return 0;
+	}
+	return 1;
+}
+
+static bool parse_flip_dt_params(struct sx933x_platform_data *pdata, struct device *dev)
+{
+	struct device_node *node = dev->of_node;
+
+	if (of_property_read_u32(node,"flip-gpio-when-open",
+			&pdata->phone_flip_open_val))
+		return false;
+
+	if (read_dt_regs(dev, "flip-open-regs",
+			&pdata->num_flip_open_regs, &pdata->flip_open_regs))
+		return false;
+
+	if (read_dt_regs(dev, "flip-closed-regs",
+			&pdata->num_flip_closed_regs, &pdata->flip_closed_regs))
+		return false;
+
+	LOG_INFO("Parsed reg update on open/close OK\n");
+
+	return true;
+}
+#endif
+
 static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *dev)
 {
 	struct device_node *dNode = dev->of_node;
@@ -697,6 +751,9 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 		if (of_property_read_u32_array(dNode,"Semtech,reg-init",(u32*)&(pdata->pi2c_reg[0]),sizeof(struct smtc_reg_data)*pdata->i2c_reg_num/sizeof(u32)))
 			return -ENOMEM;
 	}
+#endif
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+	pdata->phone_flip_update_regs = parse_flip_dt_params(pdata, dev);
 #endif
 	LOG_INFO("-[%d] parse_dt complete\n", pdata->irq_gpio);
 	return 0;
@@ -893,6 +950,37 @@ static int ps_notify_callback(struct notifier_block *self,
 }
 
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
+static void write_flip_regs(int num_regs, struct smtc_reg_data *regs)
+{
+	int i;
+
+	for(i=0; i < num_regs; i++)
+	{
+		/* Write all registers/values contained in i2c_reg */
+		LOG_DBG("Going to Write Reg from dts: 0x%x Value: 0x%x\n",
+				regs[i].reg, regs[i].val);
+		sx933x_i2c_write_16bit(global_sx933x,
+			regs[i].reg, regs[i].val);
+	}
+}
+
+static void update_flip_regs(struct sx933x_platform_data *data, unsigned long state)
+{
+	if (data->phone_flip_update_regs) {
+		if (state == data->phone_flip_open_val) {
+			/* Flip open */
+			LOG_DBG("Writing %d regs on open\n",
+				data->num_flip_open_regs);
+			write_flip_regs(data->num_flip_open_regs, data->flip_open_regs);
+		} else {
+			/* Flip closed */
+			LOG_DBG("Writing %d regs on close\n",
+				data->num_flip_closed_regs);
+			write_flip_regs(data->num_flip_closed_regs, data->flip_closed_regs);
+		}
+	}
+}
+
 static int flip_notify_callback(struct notifier_block *self,
 		unsigned long state, void *p)
 {
@@ -902,6 +990,7 @@ static int flip_notify_callback(struct notifier_block *self,
 
 	if(data->ext_flip_det == edev) {
 		if(data->phone_flip_state != state) {
+			update_flip_regs(data, state);
 			data->phone_flip_state = state;
 			schedule_work(&data->ps_notify_work);
 		}
@@ -1150,10 +1239,12 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				if(extcon_register_notifier(pplatData->ext_flip_det,
 					EXTCON_MECHANICAL, &pplatData->flip_notif))
 					LOG_ERR("failed to register extcon flip dev notifier\n");
-				else
+				else {
 					pplatData->phone_flip_state =
 						extcon_get_state(pplatData->ext_flip_det,
 							EXTCON_MECHANICAL);
+					update_flip_regs(pplatData, pplatData->phone_flip_state);
+				}
 			}
 		} else
 			LOG_ERR("extcon not in dev tree!\n");

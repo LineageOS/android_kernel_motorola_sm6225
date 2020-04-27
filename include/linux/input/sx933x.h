@@ -718,6 +718,12 @@ struct sx933x_platform_data
 	struct notifier_block flip_notif;
 	struct extcon_dev *ext_flip_det;
 	bool phone_flip_state;
+	bool phone_flip_update_regs;
+	int phone_flip_open_val;
+	int num_flip_closed_regs;
+	int num_flip_open_regs;
+	struct smtc_reg_data *flip_open_regs;
+	struct smtc_reg_data *flip_closed_regs;
 #endif
 #endif
 	pbuttonInformation_t pbuttonInformation;
