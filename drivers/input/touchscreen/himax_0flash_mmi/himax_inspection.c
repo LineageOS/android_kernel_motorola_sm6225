@@ -340,7 +340,7 @@ static int himax_get_rawdata(uint32_t RAW[], uint32_t datalen)
 	for (i = 0; i < ic_data->HX_TX_NUM; i++) {
 		/*PI("TX%2d", i + 1);*/
 		for (j = 0; j < ic_data->HX_RX_NUM; j++) {
-			PI("%5d ", RAW[index]);
+			PD("%5d ", RAW[index]);
 			if (RAW[index] > Max_DATA)
 				Max_DATA = RAW[index];
 
