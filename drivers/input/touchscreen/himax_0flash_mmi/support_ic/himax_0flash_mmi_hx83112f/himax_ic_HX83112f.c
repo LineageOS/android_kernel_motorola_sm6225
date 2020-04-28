@@ -361,16 +361,12 @@ static void himax_hx83112f_reload_to_active(void)
 
 static void himax_hx83112f_resume_ic_action(void)
 {
-#if !defined(HX_RESUME_HW_RESET)
 	himax_hx83112f_reload_to_active();
-#endif
 }
 
 static void himax_hx83112f_suspend_ic_action(void)
 {
-#if !defined(HX_RESUME_HW_RESET)
 	himax_hx83112f_reload_to_active();
-#endif
 }
 
 static void himax_hx83112f_sense_on(uint8_t FlashMode)
