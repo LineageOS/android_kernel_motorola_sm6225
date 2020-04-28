@@ -59,6 +59,8 @@ enum ts_mmi_work {
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
+	int ret = 0;
+
 	if (atomic_cmpxchg(&touch_cdev->touch_stopped, 0, 1) == 1)
 		return 0;
 
@@ -103,6 +105,7 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	int idx = evd ? *(int *)evd : -1;
 	struct ts_mmi_dev *touch_cdev =
 		container_of(nb, struct ts_mmi_dev, panel_nb);
+	int ret = 0;
 
 	if (!touch_cdev)
 		return 0;
@@ -128,14 +131,14 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 		ts_mmi_panel_off(touch_cdev);
 		if (NEED_TO_SET_PINCTRL) {
 			dev_dbg(DEV_MMI, "%s: touch pinctrl off\n", __func__);
-			touch_cdev->mdata->pinctrl(DEV_TS, TS_MMI_PINCTL_OFF);
+			TRY_TO_CALL(pinctrl, TS_MMI_PINCTL_OFF);
 		}
 		break;
 
 	case PANEL_EVENT_DISPLAY_OFF:
 		if (NEED_TO_SET_POWER) {
 			/* then proceed with de-powering */
-			touch_cdev->mdata->power(DEV_TS, TS_MMI_POWER_OFF);
+			TRY_TO_CALL(power, TS_MMI_POWER_OFF);
 			dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
 		}
 		break;
@@ -143,7 +146,7 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	case PANEL_EVENT_PRE_DISPLAY_ON:
 		if (NEED_TO_SET_POWER) {
 			/* powering on early */
-			touch_cdev->mdata->power(DEV_TS, TS_MMI_POWER_ON);
+			TRY_TO_CALL(power, TS_MMI_POWER_ON);
 			dev_dbg(DEV_MMI, "%s: touch powered on\n", __func__);
 		} else if (touch_cdev->pdata.reset &&
 			touch_cdev->mdata->reset) {
@@ -151,14 +154,14 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 			 * But need reset IC in resume.
 			 */
 			dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
-			touch_cdev->mdata->reset(DEV_TS, TS_MMI_RESET_HARD);
+			TRY_TO_CALL(reset, TS_MMI_RESET_HARD);
 		}
 		break;
 
 	case PANEL_EVENT_DISPLAY_ON:
 		/* out of reset to allow wait for boot complete */
 		if (NEED_TO_SET_PINCTRL) {
-			touch_cdev->mdata->pinctrl(DEV_TS, TS_MMI_PINCTL_ON);
+			TRY_TO_CALL(pinctrl, TS_MMI_PINCTL_ON);
 			dev_dbg(DEV_MMI, "%s: touch pinctrl_on\n", __func__);
 		}
 		ts_mmi_panel_on(touch_cdev);
@@ -174,6 +177,8 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 
 static inline void ts_mmi_restore_settings(struct ts_mmi_dev *touch_cdev)
 {
+	int ret = 0;
+
 	if (touch_cdev->pdata.usb_detection)
 		TRY_TO_CALL(charger_mode, (int)touch_cdev->ps_is_present);
 	if (touch_cdev->pdata.update_refresh_rate)
@@ -193,6 +198,7 @@ static inline void ts_mmi_restore_settings(struct ts_mmi_dev *touch_cdev)
 static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 {
 	bool wait4_boot_complete = true;
+	int ret = 0;
 
 	if (atomic_cmpxchg(&touch_cdev->touch_stopped, 1, 0) == 0)
 		return;
@@ -243,13 +249,13 @@ static void ts_mmi_worker_func(struct work_struct *w)
 		container_of(w, struct delayed_work, work);
 	struct ts_mmi_dev *touch_cdev =
 		container_of(dw, struct ts_mmi_dev, work);
-	int rc, cmd = 0;
+	int ret, cmd = 0;
 
 	while (kfifo_get(&touch_cdev->cmd_pipe, &cmd)) {
 		switch (cmd) {
 		case TS_MMI_DO_RESUME:
-			rc = atomic_read(&touch_cdev->resume_should_stop);
-			if (rc) {
+			ret = atomic_read(&touch_cdev->resume_should_stop);
+			if (ret) {
 				dev_info(DEV_MMI, "%s: resume cancelled\n", __func__);
 				break;
 			}
