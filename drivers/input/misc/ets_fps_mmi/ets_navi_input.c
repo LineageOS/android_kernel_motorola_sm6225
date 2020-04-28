@@ -758,7 +758,6 @@ void uinput_egis_destroy(struct etspi_data *etspi)
 
 	if (etspi->input_dev != NULL) {
 		input_unregister_device(etspi->input_dev);
-		input_free_device(etspi->input_dev);
 		etspi->input_dev = NULL;
 	}
 
