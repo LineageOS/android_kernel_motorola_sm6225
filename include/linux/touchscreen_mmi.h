@@ -232,7 +232,8 @@ do { \
 		ret = touch_cdev->mdata->get_##_method(DEV_TS, ##__VA_ARGS__); \
 	} \
 } while (0)
-
+#define is_touch_stopped	(atomic_read(&touch_cdev->touch_stopped) == 1)
+#define is_touch_active		(touch_cdev->pm_mode == TS_MMI_PM_ACTIVE)
 
 extern int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev);
 extern void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev);
