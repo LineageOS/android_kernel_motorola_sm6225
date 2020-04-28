@@ -38,13 +38,13 @@ static ssize_t name##_show(struct device *dev, \
 { \
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev); \
 	int ret = 0; \
-	if (!touch_cdev || !touch_cdev->mdata->get_##name) { \
+	if (!touch_cdev) { \
 		dev_err(dev, "get_%s: invalid pointer\n", #name); \
 		return (ssize_t)0; \
 	} \
 	mutex_lock(&touch_cdev->extif_mutex); \
 	if (!chk_tp_status || is_touch_active) { \
-		ret = touch_cdev->mdata->get_##name(DEV_TS, &touch_cdev->name); \
+		TRY_TO_GET(name, &touch_cdev->name); \
 		if (ret < 0) { \
 			dev_err(dev, "get_%s: return error %d\n", #name, ret); \
 			ret = 0; \
@@ -63,27 +63,29 @@ static ssize_t name##_store(struct device *dev, \
 { \
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev); \
 	unsigned long value = 0; \
-	int err = 0; \
-	err = kstrtoul(buf, 0, &value); \
-	if (err < 0) { \
+	int ret = 0; \
+	ret = kstrtoul(buf, 0, &value); \
+	if (ret < 0) { \
 		dev_err(dev, "%s: Failed to convert value\n", #name); \
 		return -EINVAL; \
 	} \
-	if (!touch_cdev || !touch_cdev->mdata->name) { \
+	if (!touch_cdev) { \
 		dev_err(dev, "%s: invalid pointer\n", #name); \
 		return -EINVAL; \
 	} \
 	mutex_lock(&touch_cdev->extif_mutex); \
+	mutex_lock(&touch_cdev->method_mutex); \
 	touch_cdev->name = value; \
 	if (!chk_tp_status || is_touch_active) { \
-		err = touch_cdev->mdata->name(DEV_TS, touch_cdev->name); \
-		if (err < 0) { \
-			dev_err(dev, "%s: return error %d\n", #name, err); \
+		_TRY_TO_CALL(name, touch_cdev->name); \
+		if (ret < 0) { \
+			dev_err(dev, "%s: return error %d\n", #name, ret); \
 			goto TOUCH_MMI_STORE_OUT; \
 		} \
 	}  else \
 		dev_dbg(dev, "%s: write to cache data.\n", #name); \
 TOUCH_MMI_STORE_OUT: \
+	mutex_unlock(&touch_cdev->method_mutex); \
 	mutex_unlock(&touch_cdev->extif_mutex); \
 	return size; \
 } \
@@ -214,7 +216,7 @@ static ssize_t ts_mmi_doreflash_store(struct device *dev,
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
 	char fw_path[TS_MMI_MAX_FW_PATH];
 	char template[TS_MMI_MAX_FW_PATH];
-	int err;
+	int ret = 0;
 
 	if (size > TS_MMI_MAX_FW_PATH) {
 		dev_err(dev, "%s: FW filename is too long\n", __func__);
@@ -222,7 +224,7 @@ static ssize_t ts_mmi_doreflash_store(struct device *dev,
 	}
 
 	if (!touch_cdev->forcereflash) {
-		touch_cdev->mdata->get_vendor(DEV_TS, &touch_cdev->vendor);
+		TRY_TO_GET(vendor, &touch_cdev->vendor);
 		if (strncmp(buf, touch_cdev->vendor,
 			strnlen(touch_cdev->vendor, TS_MMI_MAX_VENDOR_LEN))) {
 			dev_err(dev,
@@ -231,7 +233,7 @@ static ssize_t ts_mmi_doreflash_store(struct device *dev,
 			return -EINVAL;
 		}
 
-		touch_cdev->mdata->get_productinfo(DEV_TS, &touch_cdev->productinfo);
+		TRY_TO_GET(productinfo, &touch_cdev->productinfo);
 		snprintf(template, sizeof(template), "-%s-", touch_cdev->productinfo);
 		if (!strnstr(buf + strnlen(touch_cdev->vendor, TS_MMI_MAX_VENDOR_LEN),
 			template, size)) {
@@ -243,19 +245,15 @@ static ssize_t ts_mmi_doreflash_store(struct device *dev,
 
 	strlcpy(fw_path, buf, size);
 	dev_dbg(dev, "%s: FW filename: %s\n", __func__, fw_path);
-	if (!touch_cdev->mdata->firmware_update) {
-		dev_err(dev,
-			"%s: firmware_update method not exist.\n", __func__);
-		return -EINVAL;
-	}
-	err = touch_cdev->mdata->firmware_update(DEV_TS, fw_path);
-	if (err < 0) {
-		dev_err(dev, "%s: firmware_update failed %d.\n", __func__, err);
+
+	TRY_TO_CALL(firmware_update, fw_path);
+	if (ret < 0) {
+		dev_err(dev, "%s: firmware_update failed %d.\n", __func__, ret);
 		return -EINVAL;
 	}
 
 	dev_info(dev, "%s: update fw from %s, return %d\n",
-		__func__, fw_path, err);
+		__func__, fw_path, ret);
 
 	return size;
 }
@@ -266,17 +264,17 @@ static ssize_t pwr_store(struct device *dev,
 {
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
 	unsigned long value = 0;
-	int err = 0;
-	err = kstrtoul(buf, 10, &value);
-	if (err < 0) {
+	int ret = 0;
+	ret = kstrtoul(buf, 10, &value);
+	if (ret < 0) {
 		dev_err(dev, "%s: Failed to convert value\n", __func__);
 		return -EINVAL;
 	}
-	if (!touch_cdev || !touch_cdev->mdata->power) {
+	if (!touch_cdev) {
 		dev_err(dev, "%s: invalid pointer\n", __func__);
 		return -EINVAL;
 	}
-	touch_cdev->mdata->power(DEV_TS, value);
+	TRY_TO_CALL(power, value);
 	return size;
 }
 static DEVICE_ATTR(pwr, (S_IWUSR | S_IWGRP), NULL, pwr_store);
@@ -319,13 +317,13 @@ static ssize_t pill_region_show(struct device *dev,
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
 	int ret = 0;
 
-	if (!touch_cdev || !touch_cdev->mdata->get_pill_region) {
+	if (!touch_cdev) {
 		dev_err(dev, "get_pill_region: invalid pointer\n");
 		return (ssize_t)0;
 	}
 	mutex_lock(&touch_cdev->extif_mutex);
 	if (is_touch_active) {
-		ret = touch_cdev->mdata->get_pill_region(DEV_TS, &touch_cdev->pill_region);
+		TRY_TO_GET(pill_region, &touch_cdev->pill_region);
 		if (ret < 0) {
 			dev_err(dev, "get_pill_region: return error %d\n", ret);
 			ret = 0;
@@ -346,26 +344,28 @@ static ssize_t pill_region_store(struct device *dev,
 {
 	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
 	unsigned int args[TS_MMI_PILL_REGION_REQ_ARGS_NUM] = {0};
-	int err = 0;
+	int ret = 0;
 	int i = TS_MMI_PILL_REGION_REQ_ARGS_NUM;
 
-	err = sscanf(buf, "0x%x 0x%x 0x%x", &args[0], &args[1], &args[2]);
-	if (err < TS_MMI_PILL_REGION_REQ_ARGS_NUM) {
+	ret = sscanf(buf, "0x%x 0x%x 0x%x", &args[0], &args[1], &args[2]);
+	if (ret < TS_MMI_PILL_REGION_REQ_ARGS_NUM) {
 		dev_err(dev, "pill_region: Failed to convert value\n");
 		return -EINVAL;
 	}
 
-	if (!touch_cdev || !touch_cdev->mdata->pill_region) {
+	if (!touch_cdev) {
 		dev_err(dev, "pill_region: invalid pointer\n");
 		return -EINVAL;
 	}
 	mutex_lock(&touch_cdev->extif_mutex);
+	mutex_lock(&touch_cdev->method_mutex); \
 	while (i--)
 		touch_cdev->pill_region[i] = args[i];
 	if (is_touch_active)
-		touch_cdev->mdata->pill_region(DEV_TS, touch_cdev->pill_region);
+		_TRY_TO_CALL(pill_region, touch_cdev->pill_region);
 	else
 		dev_dbg(dev, "pill_region: write to cache data.\n");
+	mutex_unlock(&touch_cdev->method_mutex); \
 	mutex_unlock(&touch_cdev->extif_mutex);
 	return size;
 }
@@ -462,14 +462,12 @@ CREATE_SUPPRESSION_FAILED:
 
 static int ts_mmi_get_vendor_info(
 	struct ts_mmi_dev *touch_cdev) {
-	struct ts_mmi_methods *mdata = touch_cdev->mdata;
+	int ret = 0;
 
-	if (mdata->get_productinfo)
-		mdata->get_productinfo(DEV_TS, &touch_cdev->productinfo);
-	if (mdata->get_vendor)
-		mdata->get_vendor(DEV_TS, &touch_cdev->vendor);
-	if (mdata->get_bus_type)
-		mdata->get_bus_type(DEV_TS, &touch_cdev->bus_type);
+	TRY_TO_GET(productinfo, &touch_cdev->productinfo);
+	TRY_TO_GET(vendor, &touch_cdev->vendor);
+	TRY_TO_GET(bus_type, &touch_cdev->bus_type);
+
 	return 0;
 }
 
@@ -519,6 +517,7 @@ int ts_mmi_dev_register(struct device *parent,
 	DEV_TS = parent;
 	touch_cdev->mdata = mdata;
 	mutex_init(&touch_cdev->extif_mutex);
+	mutex_init(&touch_cdev->method_mutex);
 
 	ret = ts_mmi_parse_dt(touch_cdev, DEV_TS->of_node);
 	if (ret < 0) {

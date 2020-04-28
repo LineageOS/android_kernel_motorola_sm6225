@@ -176,6 +176,7 @@ struct ts_mmi_dev {
 	struct ts_mmi_dev_pdata	pdata;
 	struct notifier_block	panel_nb;
 	struct mutex		extif_mutex;
+	struct mutex		method_mutex;
 
 	atomic_t		touch_stopped;
 	enum ts_mmi_pm_mode	pm_mode;
@@ -190,7 +191,6 @@ struct ts_mmi_dev {
 	struct work_struct	ps_notify_work;
 	struct notifier_block	ps_notif;
 	bool			ps_is_present;
-
 	/*
 	 * sys entey variable
 	 */
@@ -224,17 +224,27 @@ struct ts_mmi_dev {
 #define DEV_MMI (touch_cdev->class_dev)
 #define DEV_TS  (touch_cdev->dev)
 #define MMI_DEV_TO_TS_DEV(cdev) (((struct ts_mmi_dev *)dev_get_drvdata(dev))->dev)
-#define TRY_TO_CALL(_method, ...) \
+/* call this after hold method mutex */
+#define _TRY_TO_CALL(_method, ...) \
 do { \
 	if (touch_cdev->mdata->_method) { \
-		touch_cdev->mdata->_method(DEV_TS, ##__VA_ARGS__); \
+		ret = touch_cdev->mdata->_method(DEV_TS, ##__VA_ARGS__); \
 	} \
+} while (0)
+#define TRY_TO_CALL(_method, ...) \
+do { \
+	ret = ret; \
+	mutex_lock(&touch_cdev->method_mutex); \
+	_TRY_TO_CALL(_method, ##__VA_ARGS__); \
+	mutex_unlock(&touch_cdev->method_mutex); \
 } while (0)
 #define TRY_TO_GET(_method, ...) \
 do { \
 	ret = ret; \
-	if (touch_cdev->mdata->_method) { \
+	if (touch_cdev->mdata->get_##_method) { \
+		mutex_lock(&touch_cdev->method_mutex); \
 		ret = touch_cdev->mdata->get_##_method(DEV_TS, ##__VA_ARGS__); \
+		mutex_unlock(&touch_cdev->method_mutex); \
 	} \
 } while (0)
 #define is_touch_stopped	(atomic_read(&touch_cdev->touch_stopped) == 1)
