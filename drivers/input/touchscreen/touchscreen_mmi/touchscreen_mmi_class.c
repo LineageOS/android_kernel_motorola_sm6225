@@ -32,7 +32,7 @@
 #define FMT_INTEGER	"%d"
 #define FMT_HEX_INTEGER	"0x%02x"
 
-#define TOUCH_MMI_SHOW(name, fmt) \
+#define TOUCH_MMI_SHOW(name, chk_tp_status, fmt) \
 static ssize_t name##_show(struct device *dev, \
 			struct device_attribute *attr, char *buf) \
 { \
@@ -42,14 +42,22 @@ static ssize_t name##_show(struct device *dev, \
 		dev_err(dev, "get_%s: invalid pointer\n", #name); \
 		return (ssize_t)0; \
 	} \
-	ret = touch_cdev->mdata->get_##name(DEV_TS, &touch_cdev->name); \
-	if (ret < 0) { \
-		dev_err(dev, "get_%s: return error %d\n", #name, ret); \
-		return (ssize_t)0; \
-	} \
-	return (ssize_t)scnprintf(buf, PAGE_SIZE, fmt, touch_cdev->name); \
+	mutex_lock(&touch_cdev->extif_mutex); \
+	if (!chk_tp_status || is_touch_active) { \
+		ret = touch_cdev->mdata->get_##name(DEV_TS, &touch_cdev->name); \
+		if (ret < 0) { \
+			dev_err(dev, "get_%s: return error %d\n", #name, ret); \
+			ret = 0; \
+			goto TOUCH_MMI_SHOW_OUT; \
+		} \
+	} else \
+		dev_dbg(dev, "get_%s: read from cache data.\n", #name); \
+	ret = scnprintf(buf, PAGE_SIZE, fmt, touch_cdev->name); \
+TOUCH_MMI_SHOW_OUT: \
+	mutex_unlock(&touch_cdev->extif_mutex); \
+	return (ssize_t)ret; \
 }
-#define TOUCH_MMI_STORE(name, fmt) \
+#define TOUCH_MMI_STORE(name, chk_tp_status, fmt) \
 static ssize_t name##_store(struct device *dev, \
 			struct device_attribute *attr, const char *buf, size_t size) \
 { \
@@ -65,21 +73,32 @@ static ssize_t name##_store(struct device *dev, \
 		dev_err(dev, "%s: invalid pointer\n", #name); \
 		return -EINVAL; \
 	} \
-	touch_cdev->mdata->name(DEV_TS, value); \
+	mutex_lock(&touch_cdev->extif_mutex); \
+	touch_cdev->name = value; \
+	if (!chk_tp_status || is_touch_active) { \
+		err = touch_cdev->mdata->name(DEV_TS, touch_cdev->name); \
+		if (err < 0) { \
+			dev_err(dev, "%s: return error %d\n", #name, err); \
+			goto TOUCH_MMI_STORE_OUT; \
+		} \
+	}  else \
+		dev_dbg(dev, "%s: write to cache data.\n", #name); \
+TOUCH_MMI_STORE_OUT: \
+	mutex_unlock(&touch_cdev->extif_mutex); \
 	return size; \
 } \
 
 #define TOUCH_MMI_GET_ATTR_RO(name, fmt) \
-TOUCH_MMI_SHOW(name, fmt) \
+TOUCH_MMI_SHOW(name, false, fmt) \
 static DEVICE_ATTR(name, S_IRUGO, name##_show, NULL)
 
 #define TOUCH_MMI_GET_ATTR_WO(name) \
-TOUCH_MMI_STORE(name, fmt) \
+TOUCH_MMI_STORE(name, false, fmt) \
 static DEVICE_ATTR(name, (S_IWUSR | S_IWGRP), NULL, name##_store)
 
 #define TOUCH_MMI_GET_ATTR_RW(name, fmt) \
-TOUCH_MMI_SHOW(name, fmt) \
-TOUCH_MMI_STORE(name, fmt) \
+TOUCH_MMI_SHOW(name, true, fmt) \
+TOUCH_MMI_STORE(name, true, fmt) \
 static DEVICE_ATTR(name, (S_IWUSR | S_IWGRP | S_IRUGO), name##_show, name##_store)
 
 static struct class *touchscreens_class;
@@ -304,13 +323,22 @@ static ssize_t pill_region_show(struct device *dev,
 		dev_err(dev, "get_pill_region: invalid pointer\n");
 		return (ssize_t)0;
 	}
-	ret = touch_cdev->mdata->get_pill_region(DEV_TS, &touch_cdev->pill_region);
-	if (ret < 0) {
-		dev_err(dev, "get_pill_region: return error %d\n", ret);
-		return (ssize_t)0;
-	}
-	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%x 0x%x",
+	mutex_lock(&touch_cdev->extif_mutex);
+	if (is_touch_active) {
+		ret = touch_cdev->mdata->get_pill_region(DEV_TS, &touch_cdev->pill_region);
+		if (ret < 0) {
+			dev_err(dev, "get_pill_region: return error %d\n", ret);
+			ret = 0;
+			goto PILL_REGION_SHOW_OUT;
+		}
+	} else
+		dev_dbg(dev, "get_pill_region: read from cache data.\n");
+
+	ret = scnprintf(buf, PAGE_SIZE, "0x%02x 0x%x 0x%x",
 		touch_cdev->pill_region[0], touch_cdev->pill_region[1], touch_cdev->pill_region[2]);
+PILL_REGION_SHOW_OUT:
+	mutex_unlock(&touch_cdev->extif_mutex);
+	return (ssize_t)ret;
 
 }
 static ssize_t pill_region_store(struct device *dev,
@@ -331,9 +359,14 @@ static ssize_t pill_region_store(struct device *dev,
 		dev_err(dev, "pill_region: invalid pointer\n");
 		return -EINVAL;
 	}
+	mutex_lock(&touch_cdev->extif_mutex);
 	while (i--)
 		touch_cdev->pill_region[i] = args[i];
-	touch_cdev->mdata->pill_region(DEV_TS, touch_cdev->pill_region);
+	if (is_touch_active)
+		touch_cdev->mdata->pill_region(DEV_TS, touch_cdev->pill_region);
+	else
+		dev_dbg(dev, "pill_region: write to cache data.\n");
+	mutex_unlock(&touch_cdev->extif_mutex);
 	return size;
 }
 static DEVICE_ATTR(pill_region, (S_IWUSR | S_IWGRP | S_IRUGO), pill_region_show, pill_region_store);
@@ -485,6 +518,7 @@ int ts_mmi_dev_register(struct device *parent,
 	dev_info(parent, "%s: new device\n", __func__);
 	DEV_TS = parent;
 	touch_cdev->mdata = mdata;
+	mutex_init(&touch_cdev->extif_mutex);
 
 	ret = ts_mmi_parse_dt(touch_cdev, DEV_TS->of_node);
 	if (ret < 0) {
