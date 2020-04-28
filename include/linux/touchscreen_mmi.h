@@ -175,6 +175,8 @@ struct ts_mmi_dev {
 	int			forcereflash;
 	struct ts_mmi_dev_pdata	pdata;
 	struct notifier_block	panel_nb;
+	struct mutex		extif_mutex;
+
 	atomic_t		touch_stopped;
 	enum ts_mmi_pm_mode	pm_mode;
 
@@ -208,6 +210,9 @@ struct ts_mmi_dev {
 	int			hold_distance;
 	int			gs_distance;
 	int			hold_grip;
+	int			charger_mode;
+	int			reset;
+	int			pinctrl;
 	struct attribute_group	*extern_group;
 	struct list_head	node;
 	/*
