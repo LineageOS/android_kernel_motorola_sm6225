@@ -24,6 +24,7 @@
 #define HX_RSLT_OUT_PATH "/sdcard/"
 #define HX_RSLT_OUT_FILE "hx_test_result.txt"
 #define PI(x...) pr_info(x)
+#define PD(x...) pr_debug(x)
 
 #ifdef HX_ESD_RECOVERY
 	extern u8 HX_ESD_RESET_ACTIVATE;
