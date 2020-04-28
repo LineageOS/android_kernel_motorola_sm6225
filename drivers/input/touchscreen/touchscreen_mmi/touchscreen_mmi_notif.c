@@ -271,7 +271,8 @@ static int ts_mmi_refresh_rate_cb(struct notifier_block *nb,
 	if (!touch_cdev->refresh_rate ||
 		(touch_cdev->refresh_rate != (refresh_rate & 0xFF))) {
 		touch_cdev->refresh_rate = refresh_rate & 0xFF;
-		do_calibration = true;
+		if (is_touch_active)
+			do_calibration = true;
 	}
 
 	if (do_calibration) {
@@ -320,8 +321,10 @@ static int ts_mmi_charger_cb(struct notifier_block *self,
 
 	if (touch_cdev->ps_is_present != present) {
 		touch_cdev->ps_is_present = present;
-		kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_PS);
-		schedule_delayed_work(&touch_cdev->work, 0);
+		if (is_touch_active) {
+			kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_PS);
+			schedule_delayed_work(&touch_cdev->work, 0);
+		}
 	}
 
 	return 0;
