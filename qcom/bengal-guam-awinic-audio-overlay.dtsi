@@ -60,6 +60,45 @@
         qcom,model = "bengal-awinic-snd-card";
 	aw,have-882xx = <1>;
 
+	qcom,audio-routing =
+		"AMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Analog Mic1",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Analog Mic2",
+		"AMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic3",
+		"AMIC4", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic4",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"IN3_AUX", "AUX_OUT",
+		"SpkrMono WSA_IN", "AUX",
+		"TX SWR_MIC0", "ADC1_OUTPUT",
+		"TX SWR_MIC4", "ADC2_OUTPUT",
+		"TX SWR_MIC5", "ADC3_OUTPUT",
+		"TX SWR_MIC0", "VA_TX_SWR_CLK",
+		"TX SWR_MIC1", "VA_TX_SWR_CLK",
+		"TX SWR_MIC2", "VA_TX_SWR_CLK",
+		"TX SWR_MIC3", "VA_TX_SWR_CLK",
+		"TX SWR_MIC4", "VA_TX_SWR_CLK",
+		"TX SWR_MIC5", "VA_TX_SWR_CLK",
+		"TX SWR_MIC6", "VA_TX_SWR_CLK",
+		"TX SWR_MIC7", "VA_TX_SWR_CLK",
+		"TX SWR_MIC8", "VA_TX_SWR_CLK",
+		"TX SWR_MIC9", "VA_TX_SWR_CLK",
+		"TX SWR_MIC10", "VA_TX_SWR_CLK",
+		"TX SWR_MIC11", "VA_TX_SWR_CLK",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"TX_AIF1 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF2 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF3 CAP", "VA_TX_SWR_CLK",
+		"VA SWR_MIC0", "ADC1_OUTPUT",
+		"VA SWR_MIC4", "ADC2_OUTPUT",
+		"VA SWR_MIC5", "ADC3_OUTPUT";
+
 	qcom,mi2s-audio-intf = <1>;
 	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
         /delete-property/ qcom,cdc-dmic01-gpios;
