@@ -151,6 +151,7 @@ enum bq_fg_subcmd {
 	FG_SUBCMD_CHEM_A		= 0x0030,
 	FG_SUBCMD_CHEM_B		= 0x0031,
 	FG_SUBCMD_CHEM_C		= 0x0032,
+	FG_SUBCMD_RESET		= 0x0041,
 	FG_SUBCMD_SOFT_RESET	= 0x0042,
 	FG_SUBCMD_EXIT_CFGMODE	= 0x0043,
 };
@@ -282,6 +283,8 @@ struct bq_fg_chip {
 	bool cfg_update_mode;
 	bool itpor;
 	bool device_initial;
+	bool factory_mode;
+	bool factory_build;
 
 	int	seal_state; /* 0 - Full Access, 1 - Unsealed, 2 - Sealed */
 	int batt_tte;
@@ -2301,6 +2304,64 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	return rc;
 }
 
+enum {
+	MMI_FACTORY_MODE,
+	MMI_FACTORY_BUILD,
+};
+
+static bool mmi_factory_check(int type)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory = false;
+	const char *bootargs = NULL;
+	char *bl_version = NULL;
+
+	if (!np)
+		return factory;
+
+
+	switch (type) {
+	case MMI_FACTORY_MODE:
+		factory = of_property_read_bool(np, "mmi,factory-cable");
+		break;
+	case MMI_FACTORY_BUILD:
+		if (!of_property_read_string(np, "bootargs", &bootargs)) {
+			bl_version = strstr(bootargs, "androidboot.bootloader=");
+			if (bl_version && strstr(bl_version, "factory"))
+				factory = true;
+		}
+		break;
+	default:
+		factory = false;
+	}
+	of_node_put(np);
+
+	return factory;
+}
+
+static int bq_perform_reset(struct bq_fg_chip *bq)
+{
+	int rc = -1;
+
+	fg_get_seal_state(bq);
+
+	if (bq->seal_state != SEAL_STATE_UNSEALED) {
+		mmi_fg_info(bq, "Full fuel gauge reset requested - un-sealing fuel gauge\n");
+		rc = fg_unseal(bq, FG_DFT_UNSEAL_KEY1);
+		if (rc < 0) {
+			mmi_fg_info(bq, "Unable to un-seal fuel gauge\n");
+			return rc;
+		}
+	}
+
+	mmi_fg_info(bq, "Performing full fuel gauge reset\n");
+	rc = fg_write_word(bq, bq->regs[BQ_FG_REG_CTRL], FG_SUBCMD_RESET);
+	if (rc < 0)
+		mmi_fg_info(bq, "Unable to reset fuel gauge\n");
+
+	return rc;
+}
+
 static const struct regmap_config bq27426_regmap_config = {
 	.reg_bits = 16,
 	.val_bits = 8,
@@ -2348,6 +2409,9 @@ static int bq_fg_probe(struct i2c_client *client,
 	bq->fake_soc 	= -EINVAL;
 	bq->fake_temp	= -EINVAL;
 
+	bq->factory_mode  = mmi_factory_check(MMI_FACTORY_MODE);
+	bq->factory_build = mmi_factory_check(MMI_FACTORY_BUILD);
+
 	if (bq->chip == BQ27426) {
 		regs = bq27426_regs;
 	} else {
@@ -2389,6 +2453,9 @@ static int bq_fg_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Could not create workqueue\n");
 		goto free_mem;
 	}
+
+	if (bq->factory_mode || bq->factory_build)
+		bq_perform_reset(bq);
 
 	//mmi_fg_err(bq, "I2C adapter is %s\n", dev_name(&bq->client->adapter->dev));
 	INIT_WORK(&bq->update_work, fg_update_bqfs_workfunc);
