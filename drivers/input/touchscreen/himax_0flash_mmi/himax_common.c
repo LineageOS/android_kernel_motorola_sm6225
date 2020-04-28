@@ -4027,6 +4027,7 @@ int _himax_chip_common_suspend(struct himax_ts_data *ts)
 	}
 
 	himax_int_enable(0);
+	himax_rst_gpio_set(ts->rst_gpio, 0);
 	himax_report_all_leave_event(ts);
 	/*if (g_core_fp.fp_suspend_ic_action != NULL)*/
 		/*g_core_fp.fp_suspend_ic_action();*/
@@ -4114,35 +4115,45 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 #endif
 
 #ifdef HX_112F_SET
-I("%s:0x7fD0<-0x00000000\n", __func__);
-do {
-	himax_in_parse_assign_cmd(0x10007fd0, tmp_addr, sizeof(tmp_addr));
-	himax_in_parse_assign_cmd(0x00000000, tmp_data, sizeof(tmp_data));
-	g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, 0);
-	usleep_range(1000, 1001);
+#ifdef HX_SMART_WAKEUP
+	if (ts->SMWP_enable) {
+		I("%s:0x7fD0<-0x00000000\n", __func__);
+		do {
+			himax_in_parse_assign_cmd(0x10007fd0, tmp_addr, sizeof(tmp_addr));
+			himax_in_parse_assign_cmd(0x00000000, tmp_data, sizeof(tmp_data));
+			g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, 0);
+			usleep_range(1000, 1001);
 
-	g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, rec_data, 0);
-	I("%s: Now retry=%d, data=0x%02X%02X%02X%02X\n", __func__, retry,
-		rec_data[3], rec_data[2], rec_data[1], rec_data[0]);
-} while((retry++ < 10) && (rec_data[3] != 0x00 && rec_data[2] != 0x00 && rec_data[1] != 0x00 && rec_data[0] != 0x00 ));
+			g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, rec_data, 0);
+			I("%s: Now retry=%d, data=0x%02X%02X%02X%02X\n", __func__, retry,
+				rec_data[3], rec_data[2], rec_data[1], rec_data[0]);
+		} while((retry++ < 10) && (rec_data[3] != 0x00 && rec_data[2] != 0x00 && rec_data[1] != 0x00 && rec_data[0] != 0x00 ));
+	}
+#endif
 #endif
 
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 #ifdef HX_SMART_WAKEUP
 	if (!ts->SMWP_enable) {
 #endif
-	I("It will update fw after resume in zero flash mode!\n");
-	if (g_core_fp.fp_0f_operation_dirly != NULL) {
-		result = g_core_fp.fp_0f_operation_dirly();
-		if (result) {
-			E("Something is wrong! Skip Update with zero flash!\n");
-			goto ESCAPE_0F_UPDATE;
+		himax_rst_gpio_set(ts->rst_gpio, 1);
+		msleep(2);
+		himax_rst_gpio_set(ts->rst_gpio, 0);
+		msleep(5);
+		himax_rst_gpio_set(ts->rst_gpio, 1);
+		msleep(2);
+		I("It will update fw after resume in zero flash mode!\n");
+		if (g_core_fp.fp_0f_operation_dirly != NULL) {
+			result = g_core_fp.fp_0f_operation_dirly();
+			if (result) {
+				E("Something is wrong! Skip Update with zero flash!\n");
+				goto ESCAPE_0F_UPDATE;
+			}
 		}
-	}
-	if (g_core_fp.fp_reload_disable != NULL)
-		g_core_fp.fp_reload_disable(0);
-	if (g_core_fp.fp_sense_on != NULL)
-		g_core_fp.fp_sense_on(0x00);
+		if (g_core_fp.fp_reload_disable != NULL)
+			g_core_fp.fp_reload_disable(0);
+		if (g_core_fp.fp_sense_on != NULL)
+			g_core_fp.fp_sense_on(0x00);
 #ifdef HX_SMART_WAKEUP
 	}
 #endif
@@ -4152,8 +4163,10 @@ do {
 		g_core_fp.fp_resend_cmd_func(ts->suspended);
 
 #ifdef HX_CODE_OVERLAY
-	if (ts->SMWP_enable && ts->in_self_test == 0)
+	if (ts->SMWP_enable && ts->in_self_test == 0) {
+		I("%s: enter overlay mode", __func__);
 		g_core_fp.fp_0f_overlay(3, 0);
+	}
 #endif
 #endif
 	himax_report_all_leave_event(ts);
