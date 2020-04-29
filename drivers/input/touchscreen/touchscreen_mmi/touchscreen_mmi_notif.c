@@ -224,7 +224,7 @@ static void ts_mmi_worker_func(struct work_struct *w)
 		container_of(w, struct delayed_work, work);
 	struct ts_mmi_dev *touch_cdev =
 		container_of(dw, struct ts_mmi_dev, work);
-	int cmd, rc;
+	int rc, cmd = 0;
 
 	while (kfifo_get(&touch_cdev->cmd_pipe, &cmd)) {
 		switch (cmd) {
