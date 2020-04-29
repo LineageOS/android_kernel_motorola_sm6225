@@ -60,8 +60,6 @@ struct syna_tcm_board_data {
 	unsigned long irq_flags;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
-	bool pill_region_ctrl;
-	bool gs_distance_ctrl;
 };
 
 #endif
