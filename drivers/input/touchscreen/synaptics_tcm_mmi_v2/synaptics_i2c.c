@@ -200,12 +200,6 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 			bdata->size_to_pixel_multiple_factor = 128;
 	}
 
-	prop = of_find_property(np, "synaptics,pill-region-control", NULL);
-	bdata->pill_region_ctrl = prop > 0 ? true : false;
-
-	prop = of_find_property(np, "synaptics,gs-distance-control", NULL);
-	bdata->gs_distance_ctrl = prop > 0 ? true : false;
-
 	prop = of_find_property(np, "synaptics,x-flip", NULL);
 	bdata->x_flip = prop > 0 ? true : false;
 

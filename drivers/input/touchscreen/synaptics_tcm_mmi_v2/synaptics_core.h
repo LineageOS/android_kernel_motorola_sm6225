@@ -441,14 +441,6 @@ struct syna_tcm_features {
 	unsigned char byte_2_reserved:7;
 } __packed;
 
-struct pill_region_data {
-	unsigned short region_side;
-	unsigned short y_start_l;
-	unsigned short y_end_l;
-	unsigned short y_start_r;
-	unsigned short y_end_r;
-};
-
 struct syna_tcm_hcd {
 	pid_t isr_pid;
 	atomic_t command_status;
@@ -476,10 +468,6 @@ struct syna_tcm_hcd {
 	unsigned int rd_chunk_size;
 	unsigned int wr_chunk_size;
 	unsigned int app_status;
-
-	/*edge gesture*/
-	unsigned short gs_distance_data;
-	struct pill_region_data region_data;
 
 	struct platform_device *pdev;
 	struct regulator *pwr_reg;
