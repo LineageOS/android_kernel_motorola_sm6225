@@ -762,6 +762,8 @@ static void touch_report(void)
 			input_mt_slot(touch_hcd->input_dev, idx);
 			input_mt_report_slot_state(touch_hcd->input_dev,
 					MT_TOOL_FINGER, 0);
+			LOGI(tcm_hcd->pdev->dev.parent,
+					"[R]Finger %d: UP\n", idx);
 #endif
 			break;
 		case FINGER:
@@ -808,6 +810,11 @@ static void touch_report(void)
 					"Finger %d: x = %d, y = %d, x_width = %d, y_width = %d\n",
 					idx, x, y, object_data[idx].x_width, object_data[idx].y_width);
 			touch_count++;
+
+			if (object_data[idx].status != touch_hcd->prev_status[idx])
+				LOGI(tcm_hcd->pdev->dev.parent,
+						"[P]Finger %d: x=%d, y=%d, x_width=%d, y_width=%d\n",
+						idx, x, y, object_data[idx].x_width, object_data[idx].y_width);
 			break;
 		default:
 			break;
