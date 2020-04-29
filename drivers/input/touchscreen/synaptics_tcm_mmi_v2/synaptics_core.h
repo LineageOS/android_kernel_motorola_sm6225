@@ -457,6 +457,7 @@ struct syna_tcm_hcd {
 	wait_queue_head_t hdl_wq;
 	wait_queue_head_t reflash_wq;
 	int irq;
+	bool power_status;
 	bool do_polling;
 	bool in_suspend;
 	bool irq_enabled;
