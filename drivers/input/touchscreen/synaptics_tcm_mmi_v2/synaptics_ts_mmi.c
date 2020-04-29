@@ -457,7 +457,7 @@ static int syna_ts_mmi_methods_get_poweron(struct device *dev, void *idata)
 	struct platform_device *pdev;
 
 	GET_SYNA_DATA(dev);
-	TO_INT(idata) = tcm_hcd->in_suspend == 0 ? 1 : 0;
+	TO_INT(idata) = tcm_hcd->power_status == 0 ? 1 : 0;
 	return 0;
 }
 
@@ -576,6 +576,7 @@ static int syna_ts_mmi_methods_power(struct device *dev, int on)
 		}
 		msleep(bdata->power_delay_ms);
 	}
+	tcm_hcd->power_status = true;
 	return 0;
 
 disable_pwr_reg:
@@ -585,6 +586,7 @@ disable_bus_reg:
 	if (tcm_hcd->bus_reg)
 		regulator_disable(tcm_hcd->bus_reg);
 exit:
+	tcm_hcd->power_status = false;
 	return retval;
 }
 
