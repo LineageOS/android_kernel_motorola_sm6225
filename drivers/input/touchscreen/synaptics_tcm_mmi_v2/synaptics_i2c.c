@@ -284,11 +284,14 @@ static int syna_tcm_i2c_rmi_read(struct syna_tcm_hcd *tcm_hcd,
 			retval = length;
 			goto exit;
 		}
-		LOGE(&i2c->dev,
+		LOGD(&i2c->dev,
 				"Transfer attempt %d failed\n",
 				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
+			LOGE(&i2c->dev,
+					"Transfer attempt %d failed, exceeding the maximum number of attempts\n",
+					attempt + 1);
 			retval = -EIO;
 			goto exit;
 		}
@@ -345,11 +348,14 @@ static int syna_tcm_i2c_rmi_write(struct syna_tcm_hcd *tcm_hcd,
 			retval = length;
 			goto exit;
 		}
-		LOGE(&i2c->dev,
+		LOGD(&i2c->dev,
 				"Transfer attempt %d failed\n",
 				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
+			LOGE(&i2c->dev,
+					"Transfer attempt %d failed, exceeding the maximum number of attempts\n",
+					attempt + 1);
 			retval = -EIO;
 			goto exit;
 		}
@@ -383,11 +389,14 @@ static int syna_tcm_i2c_read(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 			retval = length;
 			goto exit;
 		}
-		LOGE(&i2c->dev,
+		LOGD(&i2c->dev,
 				"Transfer attempt %d failed\n",
 				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
+			LOGE(&i2c->dev,
+					"Transfer attempt %d failed, exceeding the maximum number of attempts\n",
+					attempt + 1);
 			retval = -EIO;
 			goto exit;
 		}
@@ -421,11 +430,14 @@ static int syna_tcm_i2c_write(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 			retval = length;
 			goto exit;
 		}
-		LOGE(&i2c->dev,
+		LOGD(&i2c->dev,
 				"Transfer attempt %d failed\n",
 				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
+			LOGE(&i2c->dev,
+					"Transfer attempt %d failed, exceeding the maximum number of attempts\n",
+					attempt + 1);
 			retval = -EIO;
 			goto exit;
 		}
