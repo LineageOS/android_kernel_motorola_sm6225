@@ -1789,6 +1789,7 @@ static int utag_get_bootarg(char *key, char **value)
 	char *kvpair = NULL;
 	int err = 1;
 	struct device_node *n = of_find_node_by_path("/chosen");
+	size_t bootargs_ptr_len = 0;
 
 	if (n == NULL)
 		goto err;
@@ -1796,13 +1797,14 @@ static int utag_get_bootarg(char *key, char **value)
 	if (of_property_read_string(n, "bootargs", &bootargs_ptr) != 0)
 		goto err_putnode;
 
+	bootargs_ptr_len = strlen(bootargs_ptr);
 	if (!bootargs_str) {
 		/* Following operations need a non-const version of bootargs */
-		bootargs_str = kzalloc(strlen(bootargs_ptr) + 1, GFP_KERNEL);
+		bootargs_str = kzalloc(bootargs_ptr_len + 1, GFP_KERNEL);
 		if (!bootargs_str)
 			goto err_putnode;
 	}
-	strlcpy(bootargs_str, bootargs_ptr, strlen(bootargs_ptr) + 1);
+	strlcpy(bootargs_str, bootargs_ptr, bootargs_ptr_len + 1);
 
 	idx = strnstr(bootargs_str, key, strlen(bootargs_str));
 	if (idx) {
