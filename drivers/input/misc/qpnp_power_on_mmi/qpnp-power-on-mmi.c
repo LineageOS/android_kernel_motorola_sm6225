@@ -40,27 +40,7 @@ struct qpnp_pon_mmi {
 	struct platform_device	*pdev;
 	struct delayed_work	kpd_bark_work;
 	u32 			kpd_bark_irq;
-	u32 			kpd_hw_warmreset;
 };
-
-static bool is_hw_warmreset_enabled()
-{
-	struct device_node *np = of_find_node_by_path("/chosen");
-	bool value = false;
-	const char *bootargs = NULL;
-
-	if (!np)
-		return false;
-
-	if ((!of_property_read_string(np, "bootargs", &bootargs))
-		&& (strstr(bootargs, "hw_warmreset_enable=1"))) {
-		value = true;
-	}
-
-	of_node_put(np);
-
-	return value;
-}
 
 static bool mmi_kungpow_check(void)
 {
@@ -78,79 +58,16 @@ static bool mmi_kungpow_check(void)
 	return has_kungpow;
 }
 
-static unsigned int get_boot_seq(void)
-{
-	unsigned int boot_seq = 0;
-	struct device_node *n = of_find_node_by_path("/chosen");
-
-	if (n == NULL)
-		return 0;
-
-	of_property_read_u32(n, "mmi,boot_seq", &boot_seq);
-	of_node_put(n);
-
-	return boot_seq;
-}
-
-static int print_blocked_tasks()
-{
-	mm_segment_t fs;
-	char cmd;
-	size_t written;
-	loff_t pos = 0;
-	struct file *filep;
-	int rc = 0;
-
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	filep = filp_open("/proc/sysrq-trigger", O_WRONLY, 0200);
-	if (IS_ERR_OR_NULL(filep)) {
-		rc = PTR_ERR(filep);
-		pr_err("opening sysrq errno=%d\n", rc);
-		set_fs(fs);
-		return rc;
-	}
-
-	pr_info("set default console loglevel\n");
-	cmd = '7';
-	written = vfs_write(filep, &cmd, 1, &pos);
-	if (written < 1) {
-		pr_err("failed to write sysrq\n");
-		rc = -EIO;
-	}
-
-	pr_info("start to print block task\n");
-	cmd = 'w';
-	written = vfs_write(filep, &cmd, 1, &pos);
-	if (written < 1) {
-		pr_err("failed to write sysrq\n");
-		rc = -EIO;
-	}
-
-	set_fs(fs);
-	filp_close(filep, NULL);
-
-	return rc;
-}
-
 static void kpd_bark_work_func(struct work_struct *work)
 {
 	struct qpnp_pon_mmi *pon =
 		container_of(work, struct qpnp_pon_mmi, kpd_bark_work.work);
 
-	if (pon->kpd_hw_warmreset) {
-		pr_err("trigger hw_warmreset, BOOT_SEQ=%d\n", get_boot_seq());
-		/* print blocked tasks */
-		print_blocked_tasks();
-		kernel_restart("hw_warmreset");
-	} else {
-		dev_err(&pon->pdev->dev, "HW User Reset! 2 sec to Reset!\n");
-		qpnp_pon_store_extra_reset_info(RESET_EXTRA_RESET_KUNPOW_REASON,
-			mmi_kungpow_check() ? 0 : RESET_EXTRA_RESET_KUNPOW_REASON);
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
-		kernel_halt();
-	}
+	dev_err(&pon->pdev->dev, "HW User Reset! 2 sec to Reset!\n");
+	qpnp_pon_store_extra_reset_info(RESET_EXTRA_RESET_KUNPOW_REASON,
+		mmi_kungpow_check() ? 0 : RESET_EXTRA_RESET_KUNPOW_REASON);
+	qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+	kernel_halt();
 }
 
 static irqreturn_t qpnp_kpdpwr_bark_irq(int irq, void *_pon)
@@ -195,11 +112,6 @@ static int qpnp_pon_mmi_probe(struct platform_device *pdev)
 			"Can't request %d IRQ\n",
 			pon->kpd_bark_irq);
 		return rc;
-	}
-
-	if (is_hw_warmreset_enabled()) {
-		pon->kpd_hw_warmreset = 1;
-		pr_info("hw_warmreset feature is enabled\n");
 	}
 
 	return 0;
