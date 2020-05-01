@@ -2448,6 +2448,14 @@ static int bq_fg_probe(struct i2c_client *client,
 		goto free_mem;
 	}
 
+	ret = fg_read_fw_version(bq);
+	if (ret < 0) {
+		mmi_fg_err(bq, "could not read fg version (maybe no fg connected?) ret = %d\n", ret);
+		ret = -EPROBE_DEFER; // Queue probe to try again
+		goto free_mem;
+	}
+	bq->fw_ver = ret;
+
 	bq->heartbeat_wq = alloc_workqueue("%s", WQ_UNBOUND, 1, bq->name);
 	if (!bq->heartbeat_wq) {
 		dev_err(&client->dev, "Could not create workqueue\n");
@@ -2473,7 +2481,6 @@ static int bq_fg_probe(struct i2c_client *client,
 	}
 
 	device_init_wakeup(bq->dev, 1);
-	bq->fw_ver = fg_read_fw_version(bq);
 	fg_psy_register(bq);
 
 	create_debugfs_entry(bq);
