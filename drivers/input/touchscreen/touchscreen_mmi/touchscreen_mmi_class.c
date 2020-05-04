@@ -74,17 +74,18 @@ static ssize_t name##_store(struct device *dev, \
 		return -EINVAL; \
 	} \
 	mutex_lock(&touch_cdev->extif_mutex); \
-	if (touch_cdev->name != value) { \
-		mutex_lock(&touch_cdev->method_mutex); \
-		touch_cdev->name = value; \
-		if (!chk_tp_status || is_touch_active) { \
-			_TRY_TO_CALL(name, touch_cdev->name); \
-			if (ret < 0) \
-				dev_err(dev, "%s: return error %d\n", #name, ret); \
-		} else \
-			dev_dbg(dev, "%s: write to cache data.\n", #name); \
-		mutex_unlock(&touch_cdev->method_mutex); \
-	} \
+	mutex_lock(&touch_cdev->method_mutex); \
+	touch_cdev->name = value; \
+	if (!chk_tp_status || is_touch_active) { \
+		_TRY_TO_CALL(name, touch_cdev->name); \
+		if (ret < 0) { \
+			dev_err(dev, "%s: return error %d\n", #name, ret); \
+			goto TOUCH_MMI_STORE_OUT; \
+		} \
+	}  else \
+		dev_dbg(dev, "%s: write to cache data.\n", #name); \
+TOUCH_MMI_STORE_OUT: \
+	mutex_unlock(&touch_cdev->method_mutex); \
 	mutex_unlock(&touch_cdev->extif_mutex); \
 	return size; \
 } \
@@ -345,7 +346,6 @@ static ssize_t pill_region_store(struct device *dev,
 	unsigned int args[TS_MMI_PILL_REGION_REQ_ARGS_NUM] = {0};
 	int ret = 0;
 	int i = TS_MMI_PILL_REGION_REQ_ARGS_NUM;
-	bool need_update = false;
 
 	ret = sscanf(buf, "0x%x 0x%x 0x%x", &args[0], &args[1], &args[2]);
 	if (ret < TS_MMI_PILL_REGION_REQ_ARGS_NUM) {
@@ -358,27 +358,14 @@ static ssize_t pill_region_store(struct device *dev,
 		return -EINVAL;
 	}
 	mutex_lock(&touch_cdev->extif_mutex);
-
+	mutex_lock(&touch_cdev->method_mutex);
 	while (i--)
-		if (touch_cdev->pill_region[i] != args[i]) {
-			need_update = true;
-			break;
-		}
-
-	if (need_update) {
-		mutex_lock(&touch_cdev->method_mutex);
-		i = TS_MMI_PILL_REGION_REQ_ARGS_NUM;
-		while (i--)
-			touch_cdev->pill_region[i] = args[i];
-		if (is_touch_active) {
-			_TRY_TO_CALL(pill_region, touch_cdev->pill_region);
-			if (ret < 0) {
-				dev_err(dev, "pill_region: return error %d\n", ret);
-			}
-		} else
-			dev_dbg(dev, "pill_region: write to cache data.\n");
-		mutex_unlock(&touch_cdev->method_mutex);
-	}
+		touch_cdev->pill_region[i] = args[i];
+	if (is_touch_active)
+		_TRY_TO_CALL(pill_region, touch_cdev->pill_region);
+	else
+		dev_dbg(dev, "pill_region: write to cache data.\n");
+	mutex_unlock(&touch_cdev->method_mutex);
 	mutex_unlock(&touch_cdev->extif_mutex);
 	return size;
 }
