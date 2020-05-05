@@ -2184,6 +2184,7 @@ int is_wls_online(struct smb_mmi_charger *chg)
 void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 {
 	union power_supply_propval val;
+	union power_supply_propval wls_val;
 	int chrg_v_mv = 0;
 	int chrg_cm_ma = 0;
 	int chrg_cs_ma = 0;
@@ -2204,7 +2205,12 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 	}
 
 	if (val.intval && is_wls_online(chg)) {
-		chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+		rc = power_supply_get_property(chg->wls_psy,
+				POWER_SUPPLY_PROP_CHARGE_TYPE, &wls_val);
+		if (rc >= 0 && wls_val.intval == POWER_SUPPLY_CHARGE_TYPE_FAST)
+			chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+		else
+			chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
 		goto end_rate_check;
 	}
 
