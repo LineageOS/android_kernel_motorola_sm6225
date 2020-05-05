@@ -160,6 +160,8 @@
 #define IDC_THERMAL_BACKOFF_MA 100
 #define IDC_THERMAL_MIN_CURRENT 400
 
+#define FAST_CHARGE_MW 15000
+
 #define DETACH_ON_READ_FAILURE
 
 #define p938x_err(chip, fmt, ...)		\
@@ -2733,6 +2735,8 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		union power_supply_propval *val)
 {
 	struct p938x_charger *chip = power_supply_get_drvdata(psy);
+	int tx_guaranteed;
+	int tx_potential;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -2762,7 +2766,9 @@ static int p938x_wls_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		if (p938x_is_ldo_on(chip)) {
-			if (chip->epp_mode)
+			if (chip->epp_mode &&
+					!p938x_get_tx_capability(chip, &tx_guaranteed, &tx_potential) &&
+					tx_guaranteed >= FAST_CHARGE_MW)
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
 			else
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
