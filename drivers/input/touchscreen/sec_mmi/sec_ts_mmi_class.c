@@ -226,8 +226,7 @@ static void sec_mmi_enable_touch(struct sec_ts_data *ts)
 		if (buffer[0] == 0x17) {
 			ts->device_id[3] = 0x7C;
 			input_info(true, &ts->client->dev,
-				"%s: set device_id[3] is 0x7C\n",
-				__func__, ret);
+				"%s: set device_id[3] to 0x7C\n", __func__);
 		}
 	}
 	sec_ts_integrity_check(ts);
