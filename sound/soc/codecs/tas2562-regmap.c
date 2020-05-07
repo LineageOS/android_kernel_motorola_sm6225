@@ -708,6 +708,19 @@ static void irq_work_routine(struct work_struct *work)
 				TAS2562_POWERCONTROL_OPERATIONALMODE10_ACTIVE);
 			if (n_result < 0)
 				goto reload;
+			// Let the Power Up complete
+			msleep(2);
+			// Enable Comparator Hystersis
+			if (p_tas2562->icn_enable_left) {
+				n_result = p_tas2562->write(p_tas2562, channel_left,
+						TAS2562_REG(0x0, 0x01, 0x21), 0x08);
+				dev_info(p_tas2562->dev, "ICN enabled for Left\n");
+			}
+			if (p_tas2562->icn_enable_right) {
+				n_result = p_tas2562->write(p_tas2562, channel_right,
+						TAS2562_REG(0x0, 0x01, 0x21), 0x08);
+				dev_info(p_tas2562->dev, "ICN enabled for Right\n");
+			}
 
 			dev_info(p_tas2562->dev, "set ICN to -80dB\n");
 			n_result = p_tas2562->bulk_write(p_tas2562, chn,
