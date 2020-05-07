@@ -291,6 +291,53 @@ static ssize_t capsense_reset_store(struct class *class,
 	return count;
 }
 
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+static ssize_t capsense_headset_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t count)
+{
+	u32 reg_temp = 0;
+	int i;
+	psx933x_t pDevice = global_sx933x->pDevice;
+	psx933x_platform_data_t pdata = pDevice->hw;
+
+	sx933x_i2c_read_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, &reg_temp);
+	if (!count || pdata == NULL)
+		return -EINVAL;
+
+	if (!strncmp(buf, "1", 1)) {
+		LOG_INFO("headset in update reg num:%d\n", pdata->headset_operate_reg_num);
+		for (i = 0; i < pdata->headset_operate_reg_num; i++)
+		{
+			sx933x_i2c_write_16bit(global_sx933x, pdata->headset_operate_reg[i].reg, pdata->headset_operate_reg[i].val);
+			LOG_INFO("set Reg 0x%x Value: 0x%x\n",
+					pdata->headset_operate_reg[i].reg,pdata->headset_operate_reg[i].val);
+		}
+		//cal sensor
+		if (reg_temp & 0x0000001F) {
+			LOG_DBG("Going to refresh baseline\n");
+			manual_offset_calibration(global_sx933x);
+		}
+	}
+
+	if (!strncmp(buf, "0", 1)) {
+		LOG_INFO("headset out back reg num:%d\n", pdata->headset_operate_reg_num);
+		for (i = 0; i < pdata->headset_operate_reg_num; i++)
+		{
+			sx933x_i2c_write_16bit(global_sx933x, pdata->headset_operate_reg_bck[i].reg, pdata->headset_operate_reg_bck[i].val);
+			LOG_INFO("set Reg 0x%x Value: 0x%x\n",
+					pdata->headset_operate_reg_bck[i].reg,pdata->headset_operate_reg_bck[i].val);
+		}
+		//cal sensor
+		if (reg_temp & 0x0000001F) {
+			LOG_DBG("Going to refresh baseline\n");
+			manual_offset_calibration(global_sx933x);
+		}
+	}
+	return count;
+}
+#endif
+
 static ssize_t capsense_raw_data_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
@@ -404,6 +451,10 @@ static ssize_t sx933x_int_state_show(struct class *class,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
 static struct class_attribute class_attr_reset =
 	__ATTR(reset, 0660, NULL, capsense_reset_store);
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+static struct class_attribute class_attr_headset =
+        __ATTR(headset, 0660, NULL, capsense_headset_store);
+#endif
 static struct class_attribute class_attr_raw_data =
 	__ATTR(raw_data, 0660, capsense_raw_data_show, NULL);
 static struct class_attribute class_attr_register_write =
@@ -419,6 +470,9 @@ static struct class_attribute class_attr_int_state =
 
 static struct attribute *capsense_class_attrs[] = {
 	&class_attr_reset.attr,
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+	&class_attr_headset.attr,
+#endif
 	&class_attr_raw_data.attr,
 	&class_attr_register_write.attr,
 	&class_attr_register_read.attr,
@@ -495,6 +549,17 @@ static void sx933x_reg_init(psx93XX_t this)
 				i++;
 			}
 		}
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+		i = 0;
+		LOG_INFO("set headset reg num:%d", pdata->headset_operate_reg_num);
+		while ( i < pdata->headset_operate_reg_num)
+		{
+			sx933x_i2c_read_16bit(this, pdata->headset_operate_reg_bck[i].reg,&(pdata->headset_operate_reg_bck[i].val));
+			LOG_ERR("Read Headset init Reg : 0x%x Value: 0x%x\n",
+						pdata->headset_operate_reg_bck[i].reg,pdata->headset_operate_reg_bck[i].val);
+			i++;
+		}
+#endif
 #endif
 		/*******************************************************************************/
 		sx933x_i2c_write_16bit(this, SX933X_CMD_REG,SX933X_PHASE_CONTROL);  //enable phase control
@@ -751,6 +816,32 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 		if (of_property_read_u32_array(dNode,"Semtech,reg-init",(u32*)&(pdata->pi2c_reg[0]),sizeof(struct smtc_reg_data)*pdata->i2c_reg_num/sizeof(u32)))
 			return -ENOMEM;
 	}
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+	of_property_read_u32(dNode,"Semtech,headset-reg-num",&pdata->headset_operate_reg_num);
+	LOG_INFO("size of headset operate reg elements %d \n", pdata->headset_operate_reg_num);
+	if (pdata->headset_operate_reg_num > 0)
+	{
+		pdata->headset_operate_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->headset_operate_reg_num, GFP_KERNEL);
+		if (unlikely(pdata->headset_operate_reg == NULL))
+		{
+			LOG_ERR("size of elements %d alloc error\n", pdata->headset_operate_reg_num);
+			return -ENOMEM;
+		}
+		pdata->headset_operate_reg_bck = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->headset_operate_reg_num, GFP_KERNEL);
+		if (unlikely(pdata->headset_operate_reg_bck == NULL))
+		{
+			LOG_ERR("size of elements %d alloc error\n", pdata->headset_operate_reg_num);
+			return -ENOMEM;
+		}
+
+		if (of_property_read_u32_array(dNode,"Semtech,headset-reg",(u32*)&(pdata->headset_operate_reg[0]),
+					sizeof(struct smtc_reg_data)*pdata->headset_operate_reg_num/sizeof(u32)))
+			return -ENOMEM;
+		if (of_property_read_u32_array(dNode,"Semtech,headset-reg",(u32*)&(pdata->headset_operate_reg_bck[0]),
+					sizeof(struct smtc_reg_data)*pdata->headset_operate_reg_num/sizeof(u32)))
+			return -ENOMEM;
+	}
+#endif
 #endif
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 	pdata->phone_flip_update_regs = parse_flip_dt_params(pdata, dev);
