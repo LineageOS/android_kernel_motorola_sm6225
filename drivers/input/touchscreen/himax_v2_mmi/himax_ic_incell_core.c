@@ -1177,13 +1177,16 @@ static void himax_mcu_idle_mode(int disable)
 
 static void himax_mcu_reload_disable(int disable)
 {
+	int ret = 0;
 	I("%s:entering\n", __func__);
 
 	if (disable) { /*reload disable*/
-		g_core_fp.fp_register_write(pdriver_op->addr_fw_define_flash_reload, DATA_LEN_4, pdriver_op->data_fw_define_flash_reload_dis, 0);
+		ret= g_core_fp.fp_register_write(pdriver_op->addr_fw_define_flash_reload, DATA_LEN_4, pdriver_op->data_fw_define_flash_reload_dis, 0);
 	} else { /*reload enable*/
-		g_core_fp.fp_register_write(pdriver_op->addr_fw_define_flash_reload, DATA_LEN_4, pdriver_op->data_fw_define_flash_reload_en, 0);
+		ret= g_core_fp.fp_register_write(pdriver_op->addr_fw_define_flash_reload, DATA_LEN_4, pdriver_op->data_fw_define_flash_reload_en, 0);
 	}
+	if (ret != 0)
+		atomic_set(&private_ts->resume_update_fail, 1);
 
 	I("%s: setting OK!\n", __func__);
 }
