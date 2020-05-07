@@ -140,6 +140,9 @@ int g_f_0f_updat;
 #endif
 
 struct himax_ts_data *private_ts;
+#if defined(__HIMAX_HX83102D_MOD__)
+extern struct zf_operation *pzf_op;
+#endif
 EXPORT_SYMBOL(private_ts);
 
 struct himax_ic_data *ic_data;
@@ -3434,11 +3437,38 @@ static int charger_notifier_callback(struct notifier_block *nb,
 }
 #endif
 
+#if defined(__HIMAX_HX83102D_MOD__)
+#define TP_CHECK_TIMES 30
+#define TP_CHECK_INTERVAL 10
+void himax_resume_thread_check(void)
+{
+	uint8_t cycle = 0;
+
+	while (true) {
+		if(cycle++ > TP_CHECK_TIMES)
+			break;
+
+		if (atomic_read(&private_ts->resume_thread_is_runing))
+			msleep(TP_CHECK_INTERVAL);
+		else
+			break;
+	}
+	I("cycle:%d",cycle);
+	return;
+}
+#endif
+
 #if defined(HX_RESUME_SET_FW)
 void himax_resume_work_func(struct work_struct *work)
 {
 	struct himax_ts_data *ts = private_ts;
+#if defined(__HIMAX_HX83102D_MOD__)
+	atomic_set(&private_ts->resume_thread_is_runing, 1);
+#endif
 	himax_chip_common_resume(ts);
+#if defined(__HIMAX_HX83102D_MOD__)
+	atomic_set(&private_ts->resume_thread_is_runing, 0);
+#endif
 	return;
 }
 #endif
@@ -3644,6 +3674,8 @@ FW_force_upgrade:
 	pdata->cable_config[1]             = 0x00;
 #endif
 	ts->suspended                      = false;
+	atomic_set(&ts->resume_update_fail, 0);
+	atomic_set(&ts->resume_thread_is_runing, 0);
 	mutex_init(&ts->suspend_resume_mutex);
 #if defined(HX_USB_DETECT_CALLBACK) || defined(HX_USB_DETECT_GLOBAL)
 	ts->usb_connected = 0x00;
@@ -3948,6 +3980,9 @@ END:
 int himax_chip_common_suspend(struct himax_ts_data *ts)
 {
 	int ret = 0;
+#if defined(__HIMAX_HX83102D_MOD__)
+	himax_resume_thread_check();
+#endif
 	mutex_lock(&ts->suspend_resume_mutex);
 	ret = _himax_chip_common_suspend(ts);
 	mutex_unlock(&ts->suspend_resume_mutex);
@@ -3960,14 +3995,28 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 	int result = 0;
 #endif
+#if defined(__HIMAX_HX83102D_MOD__)
+	uint8_t tmp_data[DATA_LEN_4] = {0};
+#endif
 	I("%s: enter\n", __func__);
 
+#if defined(__HIMAX_HX83102D_MOD__)
+	if (atomic_read(&ts->resume_update_fail)) {
+		I("%s:Last time update Fail!\n", __func__);
+		atomic_set(&ts->resume_update_fail, 0);
+		ts->suspended = false;
+		goto START_RESUME;
+	}
+#endif
 	if (ts->suspended == false) {
 		I("%s: It had entered resume, skip this step\n", __func__);
 		goto END;
 	} else {
 		ts->suspended = false;
 	}
+#if defined(__HIMAX_HX83102D_MOD__)
+START_RESUME:
+#endif
 
 #ifdef HX_ESD_RECOVERY
 		/* continuous N times record, not total N times. */
@@ -4003,6 +4052,9 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 		result = g_core_fp.fp_0f_operation_dirly();
 		if (result) {
 			E("Something is wrong! Skip Update with zero flash!\n");
+#if defined(__HIMAX_HX83102D_MOD__)
+			atomic_set(&ts->resume_update_fail, 1);
+#endif
 			goto ESCAPE_0F_UPDATE;
 		}
 	}
@@ -4010,6 +4062,11 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 		g_core_fp.fp_reload_disable(0);
 	if (g_core_fp.fp_sense_on != NULL)
 		g_core_fp.fp_sense_on(0x00);
+#if defined(__HIMAX_HX83102D_MOD__)
+	g_core_fp.fp_register_read(pzf_op->addr_sts_chk, DATA_LEN_4, tmp_data, 0);
+	if (tmp_data[0] != 0x05)
+		atomic_set(&ts->resume_update_fail, 1);
+#endif
 #ifdef HX_SMART_WAKEUP
 	}
 #endif
