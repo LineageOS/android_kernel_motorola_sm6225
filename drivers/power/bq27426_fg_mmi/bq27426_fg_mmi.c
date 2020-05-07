@@ -1893,6 +1893,8 @@ static ssize_t fg_attr_show_qmax_ratable(struct device *dev,
 	return idx;
 }
 
+static int mmi_perform_reset(struct bq_fg_chip *bq);
+
 static ssize_t fg_attr_store_update(struct device *dev,
 				struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -1905,6 +1907,11 @@ static ssize_t fg_attr_store_update(struct device *dev,
 	if (key == BQFS_UPDATE_KEY) {
 		bq->force_update = ~key;
 		schedule_work(&bq->update_work);
+	} else if (key == 0xFF) {
+		mmi_perform_reset(bq);
+		bq->device_initial = false;
+		cancel_delayed_work(&bq->heartbeat_work);
+		queue_delayed_work(bq->heartbeat_wq, &bq->heartbeat_work, msecs_to_jiffies(100));
 	}
 	return count;
 }
@@ -2339,7 +2346,7 @@ static bool mmi_factory_check(int type)
 	return factory;
 }
 
-static int bq_perform_reset(struct bq_fg_chip *bq)
+static int mmi_perform_reset(struct bq_fg_chip *bq)
 {
 	int rc = -1;
 
@@ -2461,9 +2468,6 @@ static int bq_fg_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Could not create workqueue\n");
 		goto free_mem;
 	}
-
-	if (bq->factory_mode || bq->factory_build)
-		bq_perform_reset(bq);
 
 	//mmi_fg_err(bq, "I2C adapter is %s\n", dev_name(&bq->client->adapter->dev));
 	INIT_WORK(&bq->update_work, fg_update_bqfs_workfunc);
