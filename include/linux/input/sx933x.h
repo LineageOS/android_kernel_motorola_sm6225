@@ -707,6 +707,12 @@ struct sx933x_platform_data
 	int eldo_gpio;
 	bool eldo_vdd_en;
 	sx933x_power_supply_type_t power_supply_type;
+#ifdef CONFIG_CAPSENSE_HEADSET_STATE
+	int headset_operate_reg_num;
+	struct smtc_reg_data *headset_operate_reg;
+	struct smtc_reg_data *headset_operate_reg_bck;
+#endif
+
 #ifdef CONFIG_CAPSENSE_USB_CAL
 	struct work_struct ps_notify_work;
 	struct notifier_block ps_notif;

@@ -44,8 +44,13 @@ ifneq (,$(filter burton%,$(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
 endif
 
-ifneq (,$(filter smith% racer% nairo%,$(TARGET_PRODUCT)))
+ifneq (,$(filter smith% nairo%,$(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
+endif
+
+ifneq (,$(filter racer%,$(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
+EXTRA_CFLAGS += -DCONFIG_CAPSENSE_HEADSET_STATE
 endif
 
 ifneq (,$(KERNEL_DIR_PATH))
