@@ -963,6 +963,26 @@ static int sec_mmi_methods_refresh_rate(struct device *dev, int freq) {
 	return 0;
 }
 
+static int sec_mmi_update_baseline(struct device *dev, int mode) {
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	int ret;
+	unsigned char d = (mode == TS_MMI_UPDATE_BASELINE_ON) ? 0x01 : 0x00;
+
+	if (!ts) {
+		dev_err(dev, "Failed to get driver data");
+		return -ENODEV;
+	}
+
+	dev_info(dev, "%s: update baseline %s\n", __func__,
+		(mode == TS_MMI_UPDATE_BASELINE_ON) ? "enable" : "disable");
+	ret = ts->sec_ts_i2c_write(ts, 0x5f, &d, 1);
+	if (ret < 0) {
+		dev_err(dev, "%s: failed set baseline update (%d)\n", __func__, ret);
+		return ret;
+	}
+	return 0;
+}
+
 static int sec_mmi_methods_pinctrl(struct device *dev, int on) {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
@@ -1216,6 +1236,7 @@ static struct ts_mmi_methods sec_ts_mmi_methods = {
 	.pinctrl = sec_mmi_methods_pinctrl,
 	.refresh_rate = sec_mmi_methods_refresh_rate,
 	.charger_mode = sec_mmi_charger_mode,
+	.update_baseline = sec_mmi_update_baseline,
 	/* Firmware */
 	.firmware_update = sec_mmi_firmware_update,
 	.firmware_erase = sec_mmi_firmware_erase,
