@@ -6,23 +6,28 @@ endif
 
 # Motorola Device Trees
 dtbo-$(CONFIG_GUAM_DTB) += \
-		bengal-guam-evt-overlay.dtbo \
-		bengal-guam-dvt-overlay.dtbo
+        bengal-guam-evt-overlay.dtbo \
+        bengal-guam-dvt-overlay.dtbo
 
 bengal-guam-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guam-dvt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_GUAMP_DTB) += \
-		bengal-guamp-evt-overlay.dtbo \
-		bengal-guamp-dvt-overlay.dtbo
+        bengal-guamp-evt-overlay.dtbo \
+        bengal-guamp-dvt-overlay.dtbo
 
 bengal-guamp-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-dvt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_GUAMNA_DTB) += \
-		bengal-guamna-evt-overlay.dtbo
+        bengal-guamna-evt-overlay.dtbo
 
 bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_BORNEO_DTB) += \
+        bengal-borneo-evt-overlay.dtbo
+
+bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base.dtb
 
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
