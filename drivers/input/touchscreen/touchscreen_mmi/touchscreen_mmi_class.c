@@ -126,6 +126,7 @@ TOUCH_MMI_GET_ATTR_WO(reset);
 TOUCH_MMI_GET_ATTR_WO(pinctrl);
 TOUCH_MMI_GET_ATTR_WO(refresh_rate);
 TOUCH_MMI_GET_ATTR_WO(charger_mode);
+TOUCH_MMI_GET_ATTR_WO(update_baseline);
 
 static ssize_t path_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -300,6 +301,7 @@ static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_pinctrl.attr,
 	&dev_attr_refresh_rate.attr,
 	&dev_attr_charger_mode.attr,
+	&dev_attr_update_baseline.attr,
 	NULL,
 };
 

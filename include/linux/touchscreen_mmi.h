@@ -156,6 +156,8 @@ enum ts_mmi_pm_mode {
 #define TS_MMI_PINCTL_ON	1
 #define TS_MMI_IRQ_OFF		0
 #define TS_MMI_IRQ_ON		1
+#define TS_MMI_UPDATE_BASELINE_OFF	0
+#define TS_MMI_UPDATE_BASELINE_ON	1
 
 /**
  * struct touchscreen_mmi_methods - hold vendor provided functions
@@ -200,6 +202,7 @@ enum ts_mmi_pm_mode {
 	int	(*pill_region)(struct device *dev, int *region_array);
 	int	(*hold_distance)(struct device *dev, int dis);
 	int	(*gs_distance)(struct device *dev, int dis);
+	int	(*update_baseline)(struct device *dev, int enable);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -305,6 +308,7 @@ struct ts_mmi_dev {
 	int			charger_mode;
 	int			reset;
 	int			pinctrl;
+	int			update_baseline;
 	struct attribute_group	*extern_group;
 	struct list_head	node;
 	/*
