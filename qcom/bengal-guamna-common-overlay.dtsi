@@ -15,7 +15,6 @@
 #include "bengal-guam-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
-#include "camera/bengal-camera-sensor-mot-guam-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
 
@@ -40,16 +39,18 @@
 &tlmm{
 	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
 		mux {
-			pins = "gpio96", "gpio97";
+			pins = "gpio36";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio96", "gpio97";
+			pins = "gpio36";
 			drive-strength = <2>;
 			bias-pull-up;
+			input-enable;
 		};
 	};
+
 	tlmm_gpio_key {
 		gpio_key_active: gpio_key_active {
 			mux {
@@ -277,4 +278,11 @@
 		<16>,
 		<17>;
 	};
+};
+
+&pm8008_8 {
+	status = "disabled";
+};
+&pm8008_9 {
+	status = "disabled";
 };
