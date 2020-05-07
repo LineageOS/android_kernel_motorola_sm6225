@@ -53,6 +53,7 @@
 #define TAS2562_MSLEEP 0xFFFFFFFD
 #define TAS2562_IVSENSER_ENABLE  1
 #define TAS2562_IVSENSER_DISABLE 0
+#define MAX_STRING 200
 /* #define TAS2558_CODEC */
 
 static char const *iv_enable_text[] = {"Off", "On"};
@@ -390,11 +391,71 @@ static int tas2562_brownout_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int tas2562_icn_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct tas2562_priv *p_tas2562 = NULL;
+
+	if (codec == NULL) {
+		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
+		return 0;
+	}
+
+	if (strnstr(ucontrol->id.name, "RIGHT", MAX_STRING)) {
+		ucontrol->value.integer.value[0] = p_tas2562->icn_enable_right;
+	} else { /*Assumed Left*/
+		ucontrol->value.integer.value[0] = p_tas2562->icn_enable_left;
+	}
+
+	dev_err(p_tas2562->dev, "icn enable %d\n", (int)ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int tas2562_icn_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct tas2562_priv *p_tas2562 = NULL;
+
+	if (codec == NULL) {
+		pr_err("%s:codec is NULL\n", __func__);
+		return 0;
+	}
+
+	p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	if (p_tas2562 == NULL) {
+		pr_err("%s:p_tas2562 is NULL\n", __func__);
+		return 0;
+	}
+
+	if (strnstr(ucontrol->id.name, "RIGHT", MAX_STRING)) {
+		p_tas2562->icn_enable_right = ucontrol->value.integer.value[0];
+	} else { /*Assumed Left*/
+		p_tas2562->icn_enable_left = ucontrol->value.integer.value[0];
+	}
+
+	pr_debug("%s: icn_enable = %d\n", __func__, (int)ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
 static const struct snd_kcontrol_new tas2562_controls[] = {
 SOC_ENUM_EXT("TAS2562 IVSENSE ENABLE", tas2562_enum[0],
 			tas2562iv_get, tas2562iv_put),
 SOC_ENUM_EXT("TAS2562 BROWNOUT PROTECT ENABLE", tas2562_enum[1],
 			tas2562_brownout_get, tas2562_brownout_put),
+SOC_ENUM_EXT("TAS2562 ICN ENABLE LEFT", tas2562_enum[1],
+			tas2562_icn_get, tas2562_icn_put),
+SOC_ENUM_EXT("TAS2562 ICN ENABLE RIGHT", tas2562_enum[1],
+			tas2562_icn_get, tas2562_icn_put),
 };
 
 static int tas2562_codec_write(struct snd_soc_codec *codec, unsigned int reg,
@@ -554,6 +615,9 @@ static int tas2562_set_power_state(struct tas2562_priv *p_tas2562,
 		break;
 
 	case TAS2562_POWER_SHUTDOWN:
+        // Disable Comparator Hystersis befor Power Down.
+		n_result = p_tas2562->write(p_tas2562, chn,
+						TAS2562_REG(0x0, 0x01, 0x21), 0x0);
 
 		n_result = p_tas2562->update_bits(p_tas2562, chn,
 			TAS2562_POWERCONTROL,
