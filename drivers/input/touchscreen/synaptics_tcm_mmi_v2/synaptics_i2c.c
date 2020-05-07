@@ -185,6 +185,9 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		bdata->tpio_reset_gpio = -1;
 	}
 
+	/* If multiple_factor not set in device_tree. Set as default value.
+	 * report major and minor value = raw value * size_to_pixel_multiple_factor / 128
+	 */
 	prop = of_find_property(np, "synaptics,size_to_pixel_multiple_factor", NULL);
 	if (prop && prop->length) {
 		retval = of_property_read_u32(np, "synaptics,size_to_pixel_multiple_factor",
