@@ -2513,6 +2513,9 @@ static int bq_fg_probe(struct i2c_client *client,
 		goto free_mem;
 	}
 
+	if (bq->factory_mode || bq->factory_build)
+		mmi_perform_reset(bq);
+
 	//mmi_fg_err(bq, "I2C adapter is %s\n", dev_name(&bq->client->adapter->dev));
 	INIT_WORK(&bq->update_work, fg_update_bqfs_workfunc);
 
