@@ -18,14 +18,6 @@
 #include <linux/power_supply.h>
 #include <linux/touchscreen_mmi.h>
 
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
-#define register_panel_notifier panel_register_notifier
-#define unregister_panel_notifier panel_unregister_notifier
-#else
-#define register_panel_notifier(...) ret
-#define unregister_panel_notifier(...)
-#endif
-
 #if defined(CONFIG_DRM_DYNAMIC_REFRESH_RATE)
 extern struct blocking_notifier_head dsi_freq_head;
 #define register_dynamic_refresh_rate_notifier(_nb) \
@@ -49,15 +41,12 @@ extern struct blocking_notifier_head dsi_freq_head;
 					touch_cdev->mdata->power && \
 					IS_DEEPSLEEP_MODE)
 
-
-
 enum ts_mmi_work {
 	TS_MMI_DO_RESUME,
 	TS_MMI_DO_PS,
 	TS_MMI_DO_REFRESH_RATE
 };
 
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
 static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 	int ret = 0;
 
@@ -97,53 +86,46 @@ static int inline ts_mmi_panel_on(struct ts_mmi_dev *touch_cdev) {
 	return schedule_delayed_work(&touch_cdev->work, 0) == false;
 }
 
-#endif
-
 static int ts_mmi_panel_cb(struct notifier_block *nb,
 		unsigned long event, void *evd)
 {
-	int idx = evd ? *(int *)evd : -1;
+	int idx = -1;
 	struct ts_mmi_dev *touch_cdev =
 		container_of(nb, struct ts_mmi_dev, panel_nb);
 	int ret = 0;
 
+	GET_CONTROL_DSI_INDEX;
+
 	if (!touch_cdev)
 		return 0;
 
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
 	dev_dbg(DEV_MMI,"%s: %s event(%lu), ctrl_dsi=%d, idx=%d\n", __func__,
-		event == PANEL_EVENT_PRE_DISPLAY_OFF ? "PANEL_EVENT_PRE_DISPLAY_OFF" :
-		(event == PANEL_EVENT_DISPLAY_OFF ? "PANEL_EVENT_DISPLAY_OFF" :
-		(event == PANEL_EVENT_PRE_DISPLAY_ON ? "PANEL_EVENT_PRE_DISPLAY_ON" :
-		(event == PANEL_EVENT_DISPLAY_ON ? "PANEL_EVENT_DISPLAY_ON" : "Unknown"))),
+		EVENT_PRE_DISPLAY_OFF ? "EVENT_PRE_DISPLAY_OFF" :
+		(EVENT_DISPLAY_OFF ?     "EVENT_DISPLAY_OFF" :
+		(EVENT_PRE_DISPLAY_ON ?   "EVENT_PRE_DISPLAY_ON" :
+		(EVENT_DISPLAY_ON ?       "EVENT_DISPLAY_ON" : "Unknown"))),
 		event, touch_cdev->pdata.ctrl_dsi, idx);
-#endif
+
 	if (touch_cdev->pdata.ctrl_dsi != idx)
 		return 0;
 
 	/* entering suspend upon early blank event */
 	/* to ensure shared power supply is still on */
 	/* for in-cell design touch solutions */
-	switch (event) {
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
-	case PANEL_EVENT_PRE_DISPLAY_OFF:
+	if (EVENT_PRE_DISPLAY_OFF) {
 		cancel_delayed_work_sync(&touch_cdev->work);
 		ts_mmi_panel_off(touch_cdev);
 		if (NEED_TO_SET_PINCTRL) {
 			dev_dbg(DEV_MMI, "%s: touch pinctrl off\n", __func__);
 			TRY_TO_CALL(pinctrl, TS_MMI_PINCTL_OFF);
 		}
-		break;
-
-	case PANEL_EVENT_DISPLAY_OFF:
+	} else if (EVENT_DISPLAY_OFF) {
 		if (NEED_TO_SET_POWER) {
 			/* then proceed with de-powering */
 			TRY_TO_CALL(power, TS_MMI_POWER_OFF);
 			dev_dbg(DEV_MMI, "%s: touch powered off\n", __func__);
 		}
-		break;
-
-	case PANEL_EVENT_PRE_DISPLAY_ON:
+	} else if (EVENT_PRE_DISPLAY_ON) {
 		if (NEED_TO_SET_POWER) {
 			/* powering on early */
 			TRY_TO_CALL(power, TS_MMI_POWER_ON);
@@ -156,20 +138,15 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 			dev_dbg(DEV_MMI, "%s: resetting...\n", __func__);
 			TRY_TO_CALL(reset, TS_MMI_RESET_HARD);
 		}
-		break;
-
-	case PANEL_EVENT_DISPLAY_ON:
+	} else if (EVENT_DISPLAY_ON) {
 		/* out of reset to allow wait for boot complete */
 		if (NEED_TO_SET_PINCTRL) {
 			TRY_TO_CALL(pinctrl, TS_MMI_PINCTL_ON);
 			dev_dbg(DEV_MMI, "%s: touch pinctrl_on\n", __func__);
 		}
 		ts_mmi_panel_on(touch_cdev);
-		break;
-#endif
-	default:/* use DEV_TS here to avoid unused variable */
+	} else {
 		dev_dbg(DEV_TS, "%s: function not implemented\n", __func__);
-		break;
 	}
 
 	return 0;
@@ -270,7 +247,7 @@ static void ts_mmi_worker_func(struct work_struct *w)
 			TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
 				break;
 		default:
-			dev_dbg(DEV_MMI, "%s: unknown command\n", __func__);
+			dev_dbg(DEV_MMI, "%s: unknown command %d\n", __func__, cmd);
 		}
 	}
 }

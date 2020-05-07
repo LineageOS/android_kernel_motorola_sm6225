@@ -17,10 +17,89 @@
 #include <linux/list.h>
 #include <linux/device.h>
 #include <linux/kfifo.h>
+#include <linux/version.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
+
 #include <linux/panel_notifier.h>
-#endif
+
+#define register_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_register_notifier
+
+#define GET_CONTROL_DSI_INDEX { \
+	if (evd) \
+		idx = *(int *)evd; \
+}
+
+#define EVENT_PRE_DISPLAY_OFF \
+	(event == PANEL_EVENT_PRE_DISPLAY_OFF)
+
+#define EVENT_DISPLAY_OFF \
+	(event == PANEL_EVENT_DISPLAY_OFF)
+
+#define EVENT_PRE_DISPLAY_ON \
+	(event == PANEL_EVENT_PRE_DISPLAY_ON)
+
+#define EVENT_DISPLAY_ON \
+	(event == PANEL_EVENT_DISPLAY_ON)
+
+#else /* CONFIG_PANEL_NOTIFICATIONS */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4,14,0)
+#if defined(CONFIG_DRM_MSM)
+
+#include <linux/msm_drm_notify.h>
+
+#define register_panel_notifier msm_drm_register_client
+#define unregister_panel_notifier msm_drm_unregister_client
+
+#define GET_CONTROL_DSI_INDEX \
+int *blank; \
+struct msm_drm_notifier *evdata = evd; \
+{ \
+	if (!(evdata && evdata->data)) { \
+		dev_dbg(DEV_MMI, "%s: invalid evdata\n", __func__); \
+		return 0; \
+	} \
+	idx = evdata->id; \
+	blank = (int *)evdata->data; \
+	dev_dbg(DEV_MMI, "%s: drm notification: event = %lu, blank = %d\n", \
+			__func__, event, *blank); \
+}
+
+#define EVENT_PRE_DISPLAY_OFF \
+	((event == MSM_DRM_EARLY_EVENT_BLANK) && \
+	 (*blank == MSM_DRM_BLANK_POWERDOWN))
+
+#define EVENT_DISPLAY_OFF \
+	((event == MSM_DRM_EVENT_BLANK) && \
+	 (*blank == MSM_DRM_BLANK_POWERDOWN))
+
+#define EVENT_PRE_DISPLAY_ON \
+	((event == MSM_DRM_EARLY_EVENT_BLANK) && \
+	 (*blank == MSM_DRM_BLANK_UNBLANK))
+
+#define EVENT_DISPLAY_ON \
+	((event == MSM_DRM_EVENT_BLANK) && \
+	 (*blank == MSM_DRM_BLANK_UNBLANK))
+
+/* enable internal config option to refernece in the code */
+#define CONFIG_MSM_DRM_NOTIFICATIONS
+
+#else /* CONFIG_DRM_MSM */
+
+#warning That isn't supposed to happen!!!
+#define register_panel_notifier(...) ret
+#define unregister_panel_notifier(...)
+
+#endif /* CONFIG_DRM_MSM */
+#else /* LINUX_VERSION_CODE */
+
+#warning Panel notifier undefined!!!
+#define register_panel_notifier(...) ret
+#define unregister_panel_notifier(...)
+
+#endif /* LINUX_VERSION_CODE */
+#endif /* CONFIG_PANEL_NOTIFICATIONS */
 
 #define TS_MMI_MAX_FW_PATH		64
 #define TS_MMI_MAX_ID_LEN		16
