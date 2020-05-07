@@ -771,11 +771,11 @@ static void touch_report(void)
 			x = object_data[idx].x_pos;
 			y = object_data[idx].y_pos;
 			if (object_data[idx].x_width > object_data[idx].y_width) {
-				minor = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
-				major = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
+				minor = (object_data[idx].y_width * bdata->size_to_pixel_multiple_factor) >> 7;
+				major = (object_data[idx].x_width * bdata->size_to_pixel_multiple_factor) >> 7;
 			} else {
-				minor = object_data[idx].x_width * bdata->size_to_pixel_multiple_factor;
-				major = object_data[idx].y_width * bdata->size_to_pixel_multiple_factor;
+				minor = (object_data[idx].x_width * bdata->size_to_pixel_multiple_factor) >> 7;
+				major = (object_data[idx].y_width * bdata->size_to_pixel_multiple_factor) >> 7;
 			}
 			if (bdata->swap_axes) {
 				temp = x;
