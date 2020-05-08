@@ -734,6 +734,8 @@ void uinput_egis_init(struct etspi_data *etspi)
 
 
 	etspi->input_dev->name = "uinput-egis";
+	etspi->input_dev->id.vendor = 0x1f; //common vendorid
+
 
 	init_event_enable(etspi);
 
