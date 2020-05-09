@@ -8,6 +8,9 @@ endif
 ifneq ($(filter m y, $(CONFIG_DRM_DYNAMIC_REFRESH_RATE)),)
 	EXTRA_CFLAGS += -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
 endif
+ifneq ($(filter m y, $(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)),)
+	EXTRA_CFLAGS += -DCONFIG_TOUCHCLASS_MMI_DEBUG_INFO
+endif
 
 obj-m := touchscreen_mmi.o
 touchscreen_mmi-objs := touchscreen_mmi_class.o touchscreen_mmi_panel.o touchscreen_mmi_notif.o touchscreen_mmi_gesture.o

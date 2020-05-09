@@ -109,9 +109,18 @@ struct msm_drm_notifier *evdata = evd; \
 #define TS_MMI_MAX_PANEL_LEN		16
 #define TS_MMI_PILL_REGION_REQ_ARGS_NUM	3
 
+enum touch_event_mode {
+	TS_COORDINATE_ACTION_NONE = 0,
+	TS_COORDINATE_ACTION_PRESS,
+	TS_COORDINATE_ACTION_RELEASE,
+	TS_COORDINATE_ACTION_MOVE
+};
+
 struct touch_event_data {
-	int type;			/* TS_TOUCH, TS_RELEASE */
-	int x, y, w, p, m;	/* X, Y, area, pressure and major */
+	enum touch_event_mode type;		/* TS_TOUCH, TS_RELEASE */
+	int id;             			/* Finger id */
+	int x, y, w, p;        			/* X, Y, Area, Pressure */
+	int major, minor;   			/* Major, Minor */
 };
 
 struct gesture_event_data {
@@ -129,6 +138,7 @@ struct gesture_event_data {
 struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
+	int     (*report_touch_event)(struct touch_event_data *tev);
 	struct kobject *kobj_notify;
 };
 
