@@ -19,16 +19,9 @@
 #include "himax_ic_core.h"
 
 #define TO_STR(VAR)	#VAR
-
-enum modular_table {
-	MODULE_NOT_FOUND = -1,
-	MODULE_FOUND,
-	MODULE_EMPTY,
-};
-
-#if defined(HX_USE_KSYM)
-#define DECLARE(sym) struct himax_chip_entry sym; \
+#define DECLARE(sym)	struct himax_chip_entry sym; \
 			EXPORT_SYMBOL(sym)
+
 static const char * const himax_ksym_lookup[] = {
 	#if defined(HX_MOD_KSYM_HX852xG)
 	TO_STR(HX_MOD_KSYM_HX852xG),
@@ -54,9 +47,6 @@ static const char * const himax_ksym_lookup[] = {
 	#if defined(HX_MOD_KSYM_HX83113)
 	TO_STR(HX_MOD_KSYM_HX83113),
 	#endif
-	#if defined(HX_MOD_KSYM_HX83192)
-	TO_STR(HX_MOD_KSYM_HX83192),
-	#endif
 	#if defined(HX_MOD_KSYM_HX83191)
 	TO_STR(HX_MOD_KSYM_HX83191),
 	#endif
@@ -67,6 +57,12 @@ static struct himax_chip_entry *get_chip_entry_by_index(int32_t idx)
 {
 	return  (void *)kallsyms_lookup_name(himax_ksym_lookup[idx]);
 }
+
+enum modular_table {
+	MODULE_NOT_FOUND = -1,
+	MODULE_FOUND,
+	MODULE_EMPTY,
+};
 
 /*
  * Return 1 when specified entry is empty, 0 when not, -1 when index error
@@ -115,42 +111,5 @@ static int32_t himax_get_ksym_idx(void)
 	/*incorrect use state, means no ic defined*/
 	return MODULE_NOT_FOUND;
 }
-
-#else
-#define DECLARE(sym)
-extern struct himax_chip_entry himax_ksym_lookup;
-
-static struct himax_chip_entry *get_chip_entry_by_index(int32_t idx)
-{
-	return  &himax_ksym_lookup;
-}
-
-static int32_t isEmpty(int32_t idx)
-{
-	struct himax_chip_entry *entry;
-
-	if (idx < 0)
-		return MODULE_NOT_FOUND;
-
-	entry = get_chip_entry_by_index(idx);
-	if (entry)
-		return (entry->core_chip_dt == NULL)?MODULE_EMPTY:MODULE_FOUND;
-
-	return MODULE_NOT_FOUND;
-}
-
-static int32_t himax_get_ksym_idx(void)
-{
-	int32_t size;
-
-	size = himax_ksym_lookup.hx_ic_dt_num;
-
-	I("%s: symtable size: %d\n", __func__, size);
-	return 0;
-}
-
-#endif
-
-
 
 #endif
