@@ -15,7 +15,7 @@
 #include "bengal-borneo-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-borneo-touchscreen-overlay.dtsi"
-#include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-borneo-overlay.dtsi"
 #include "bengal-borneo-fps.dtsi"
 #include "bengal-borneo-moto-thermal.dtsi"
 
@@ -278,4 +278,12 @@
        red {
            label = "charging";
        };
+};
+
+&pm8008_8 {
+	status = "disabled";
+};
+
+&pm8008_9 {
+	status = "disabled";
 };
