@@ -60,6 +60,30 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 	return 0;
 }
 
+static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
+{
+	switch (tev->type) {
+	case TS_COORDINATE_ACTION_PRESS:
+#if defined(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)
+		pr_info("%s: [P]Finger %d: Down, x=%d, y=%d, major=%d, minor=%d",
+				__func__, tev->id, tev->x, tev->y, tev->major, tev->minor);
+#endif
+		break;
+
+	case TS_COORDINATE_ACTION_RELEASE:
+#if defined(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)
+		pr_info("%s: [R]Finger %d: UP", __func__, tev->id);
+#endif
+		break;
+
+	default:
+		pr_info("%s: unsupport type=%d\n", __func__, tev->type);
+
+	}
+
+	return 0;
+}
+
 bool ts_mmi_is_sensor_enable(void)
 {
 	struct ts_mmi_dev *touch_cdev;
@@ -156,6 +180,8 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 
 	/* export report gesture function to vendor */
 	touch_cdev->mdata->exports.report_gesture = ts_mmi_gesture_handler;
+	/* export report touch event function to vendor */
+	touch_cdev->mdata->exports.report_touch_event = ts_mmi_touch_event_handler;
 
 	return 0;
 
