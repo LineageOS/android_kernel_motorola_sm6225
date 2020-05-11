@@ -41,6 +41,7 @@
 #include <linux/fb.h>
 #include <linux/pm_qos.h>
 #include <linux/cpufreq.h>
+#include <linux/fingerprint_mmi.h>
 #include "gf_spi.h"
 
 #if defined(USE_SPI_BUS)
@@ -91,6 +92,12 @@ static struct gf_key_map maps[] = {
 #endif
 };
 
+struct FPS_data {
+	unsigned int enabled;
+	unsigned int state;
+	struct blocking_notifier_head nhead;
+} *fpsData;
+
 static void gf_enable_irq(struct gf_dev *gf_dev)
 {
 	if (gf_dev->irq_enabled) {
@@ -110,6 +117,108 @@ static void gf_disable_irq(struct gf_dev *gf_dev)
 		pr_warn("IRQ has been disabled.\n");
 	}
 }
+
+struct FPS_data *FPS_init(struct device *dev)
+{
+	struct FPS_data *mdata = devm_kzalloc(dev,
+			sizeof(struct FPS_data), GFP_KERNEL);
+	if (mdata) {
+		BLOCKING_INIT_NOTIFIER_HEAD(&mdata->nhead);
+		pr_debug("%s: FPS notifier data structure init-ed\n", __func__);
+	}
+	return mdata;
+}
+
+int FPS_register_notifier(struct notifier_block *nb,
+	unsigned long stype, bool report)
+{
+	int error;
+	struct FPS_data *mdata = fpsData;
+
+	if (!mdata)
+		return -ENODEV;
+
+	mdata->enabled = (unsigned int)stype;
+	pr_info("%s: FPS sensor %lu notifier enabled\n", __func__, stype);
+
+	error = blocking_notifier_chain_register(&mdata->nhead, nb);
+	if (!error && report) {
+		int state = mdata->state;
+		/* send current FPS state on register request */
+		blocking_notifier_call_chain(&mdata->nhead,
+				stype, (void *)&state);
+		pr_debug("%s: FPS reported state %d\n", __func__, state);
+	}
+	return error;
+}
+EXPORT_SYMBOL_GPL(FPS_register_notifier);
+
+int FPS_unregister_notifier(struct notifier_block *nb,
+		unsigned long stype)
+{
+	int error;
+	struct FPS_data *mdata = fpsData;
+
+	if (!mdata)
+		return -ENODEV;
+
+	error = blocking_notifier_chain_unregister(&mdata->nhead, nb);
+	pr_debug("%s: FPS sensor %lu notifier unregister\n", __func__, stype);
+
+	if (!mdata->nhead.head) {
+		mdata->enabled = 0;
+		pr_info("%s: FPS sensor %lu no clients\n", __func__, stype);
+	}
+
+	return error;
+}
+EXPORT_SYMBOL_GPL(FPS_unregister_notifier);
+
+void FPS_notify(unsigned long stype, int state)
+{
+	struct FPS_data *mdata = fpsData;
+
+	pr_debug("%s: Enter", __func__);
+
+	if (!mdata) {
+		pr_err("%s: FPS notifier not initialized yet\n", __func__);
+		return;
+	} else if (!mdata->enabled) {
+		pr_debug("%s: !mdata->enabled", __func__);
+		return;
+	}
+
+	pr_debug("%s: FPS current state %d -> (0x%x)\n", __func__,
+	       mdata->state, state);
+
+	if (mdata->state != state) {
+		mdata->state = state;
+		blocking_notifier_call_chain(&mdata->nhead,
+					     stype, (void *)&state);
+		pr_debug("%s: FPS notification sent\n", __func__);
+	} else
+		pr_warn("%s: mdata->state==state", __func__);
+}
+
+static ssize_t dev_enable_set(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int state = (*buf == '1') ? 1 : 0;
+
+	FPS_notify(0xbeef, state);
+	dev_dbg(dev, "%s state = %d\n", __func__, state);
+	return count;
+}
+static DEVICE_ATTR(dev_enable, S_IWUSR | S_IWGRP, NULL, dev_enable_set);
+
+static struct attribute *attributes[] = {
+	&dev_attr_dev_enable.attr,
+	NULL
+};
+
+static const struct attribute_group attribute_group = {
+	.attrs = attributes,
+};
 
 #ifdef AP_CONTROL_CLK
 static long spi_clk_max_rate(struct clk *clk, unsigned long rate)
@@ -355,6 +464,7 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #endif
 	int retval = 0;
 	u8 netlink_route = NETLINK_TEST;
+	u8 dev_enable = 0;
 	struct gf_ioc_chip_info info;
 
 	if (_IOC_TYPE(cmd) != GF_IOC_MAGIC)
@@ -467,6 +577,16 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		pr_info("vendor_id : 0x%x\n", info.vendor_id);
 		pr_info("mode : 0x%x\n", info.mode);
 		pr_info("operation: 0x%x\n", info.operation);
+		break;
+	case GF_IOC_ENABLE_DEV:
+		pr_debug("%s GF_IOC_ENABLE_DEV\n", __func__);
+		if (copy_from_user(&dev_enable, (void __user *)arg, sizeof(uint8_t))) {
+			pr_err("failed to copy dev enable status from user to kernel\n");
+			retval = -EFAULT;
+			break;
+		}
+		FPS_notify(0xbeef, (dev_enable == 0)? 0: 1);
+		pr_debug("%s device enable status %d\n", __func__, dev_enable);
 		break;
 
 	default:
@@ -741,12 +861,23 @@ static int gf_probe(struct platform_device *pdev)
 	gf_disable_irq(gf_dev);
 	device_init_wakeup(dev, true);
 
+	fpsData = FPS_init(dev);
+	status = sysfs_create_group(&dev->kobj, &attribute_group);
+
+	if (status) {
+		pr_err("failed to create sysfs group. %d\n", status);
+		goto err_sysfs;
+	}
+
 	pr_info("version V%d.%d.%02d.%02d\n", VER_MAJOR,
 		VER_MINOR, PATCH_LEVEL, EXTEND_VER);
 	pr_info("gf_probe: status = %d\n", status);
 
 	return status;
-
+err_sysfs:
+	device_init_wakeup(dev, false);
+	if (gf_dev->irq)
+		free_irq(gf_dev->irq, gf_dev);
 err_irq:
 		input_unregister_device(gf_dev->input);
 #ifdef AP_CONTROL_CLK
@@ -783,6 +914,7 @@ static int gf_remove(struct platform_device *pdev)
 	struct gf_dev *gf_dev = &gf;
 	struct device *dev = &gf_dev->spi->dev;
 
+	sysfs_remove_group(&dev->kobj, &attribute_group);
 	device_init_wakeup(dev, false);
 	/* make sure ops on existing fds can abort cleanly */
 	if (gf_dev->irq)
