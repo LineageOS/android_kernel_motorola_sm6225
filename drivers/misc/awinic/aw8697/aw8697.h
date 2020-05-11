@@ -50,9 +50,9 @@
 
 /* trig config */
 #define AW8697_TRIG_NUM                     3
-#define AW8697_TRG1_ENABLE                  1
-#define AW8697_TRG2_ENABLE                  1
-#define AW8697_TRG3_ENABLE                  1
+#define AW8697_TRG1_ENABLE                  0
+#define AW8697_TRG2_ENABLE                  0
+#define AW8697_TRG3_ENABLE                  0
 
 /*
  * trig default high level
