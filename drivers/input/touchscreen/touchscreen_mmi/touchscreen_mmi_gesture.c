@@ -26,7 +26,12 @@ struct ts_mmi_sensor_platform_data {
 	struct ts_mmi_dev *touch_cdev;
 };
 
+struct ts_mmi_touch_events_data {
+	struct ts_mmi_dev *touch_cdev;
+};
+
 static struct ts_mmi_sensor_platform_data *sensor_pdata;
+static struct ts_mmi_touch_events_data *events_data;
 
 static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 {
@@ -62,6 +67,9 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 
 static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
 {
+	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
+	int ret = 0;
+
 	switch (tev->type) {
 	case TS_COORDINATE_ACTION_PRESS:
 #if defined(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)
@@ -74,6 +82,13 @@ static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
 #if defined(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)
 		pr_info("%s: [R]Finger %d: UP", __func__, tev->id);
 #endif
+
+		if (touch_cdev->pdata.fps_detection) {
+			if (touch_cdev->delay_baseline_update) {
+				TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_ON);
+				touch_cdev->delay_baseline_update = false;
+			}
+		}
 		break;
 
 	default:
@@ -148,8 +163,15 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 			sizeof(struct ts_mmi_sensor_platform_data), GFP_KERNEL);
 	if (!sensor_pdata) {
 		dev_err(DEV_TS, "%s: Failed to allocate memory", __func__);
+		goto free_sensor_input_dev;
+	}
+	events_data = devm_kzalloc(DEV_TS,
+			sizeof(struct ts_mmi_touch_events_data), GFP_KERNEL);
+	if (!events_data) {
+		dev_err(DEV_TS, "%s: Failed to allocate memory", __func__);
 		goto free_sensor_pdata;
 	}
+	events_data->touch_cdev = touch_cdev;
 
 	__set_bit(EV_KEY, sensor_input_dev->evbit);
 	__set_bit(KEY_F1, sensor_input_dev->keybit);
@@ -166,7 +188,7 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 	err = input_register_device(sensor_input_dev);
 	if (err) {
 		dev_err(DEV_TS, "%s: Unable to register device, err=%d", __func__, err);
-		goto free_sensor_input_dev;
+		goto free_touch_events_data;
 	}
 
 	sensor_pdata->ps_cdev = sensors_touch_cdev;
@@ -187,10 +209,12 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 
 unregister_sensor_input_device:
 	input_unregister_device(sensor_input_dev);
-free_sensor_input_dev:
-	input_free_device(sensor_input_dev);
+free_touch_events_data:
+	devm_kfree(DEV_TS, events_data);
 free_sensor_pdata:
 	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+free_sensor_input_dev:
+	input_free_device(sensor_input_dev);
 exit:
 	return 1;
 }
@@ -200,6 +224,8 @@ int ts_mmi_gesture_remove(struct ts_mmi_dev *touch_cdev)
 	sensors_classdev_unregister(&sensor_pdata->ps_cdev);
 	input_unregister_device(sensor_pdata->input_sensor_dev);
 	devm_kfree(&sensor_pdata->input_sensor_dev->dev, sensor_pdata);
+	devm_kfree(DEV_TS, events_data);
+	input_free_device(sensor_pdata->input_sensor_dev);
 	sensor_pdata = NULL;
 
 	return 0;

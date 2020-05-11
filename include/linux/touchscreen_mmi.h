@@ -229,6 +229,7 @@ enum ts_mmi_pm_mode {
 
 struct ts_mmi_dev_pdata {
 	bool		power_off_suspend;
+	bool		fps_detection;
 	bool		usb_detection;
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
@@ -286,6 +287,12 @@ struct ts_mmi_dev {
 	struct work_struct	ps_notify_work;
 	struct notifier_block	ps_notif;
 	bool			ps_is_present;
+
+	struct notifier_block	fps_notif;
+	bool is_fps_registered;	/* FPS notif registration might be delayed */
+	bool fps_state;
+	bool delay_baseline_update;
+
 	/*
 	 * sys entey variable
 	 */
