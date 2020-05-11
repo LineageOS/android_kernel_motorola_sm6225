@@ -17,6 +17,7 @@
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #include <linux/touchscreen_mmi.h>
+#include <linux/fingerprint_mmi.h>
 
 #if defined(CONFIG_DRM_DYNAMIC_REFRESH_RATE)
 extern struct blocking_notifier_head dsi_freq_head;
@@ -44,7 +45,8 @@ extern struct blocking_notifier_head dsi_freq_head;
 enum ts_mmi_work {
 	TS_MMI_DO_RESUME,
 	TS_MMI_DO_PS,
-	TS_MMI_DO_REFRESH_RATE
+	TS_MMI_DO_REFRESH_RATE,
+	TS_MMI_DO_FPS,
 };
 
 static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
@@ -182,6 +184,21 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 
 	TRY_TO_CALL(pre_resume);
 
+	/* touch IC baseline update always done when IC resume.
+	 * So touchscreen class need let vendor driver know baseline update work need to be done
+	 * or not before vendor resume is called.
+	 */
+	if (touch_cdev->pdata.fps_detection) {
+		if (touch_cdev->fps_state) {
+			TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_OFF);
+			touch_cdev->delay_baseline_update = true;
+		}
+		if (!touch_cdev->fps_state) {
+			TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_ON);
+			touch_cdev->delay_baseline_update = false;
+		}
+	}
+
 	if (NEED_TO_SET_POWER) {
 		/* power turn on in PANEL_EVENT_PRE_DISPLAY_ON.
 		 * IC need some time to boot up.
@@ -245,6 +262,17 @@ static void ts_mmi_worker_func(struct work_struct *w)
 
 		case TS_MMI_DO_REFRESH_RATE:
 			TRY_TO_CALL(refresh_rate, (int)touch_cdev->refresh_rate);
+				break;
+		case TS_MMI_DO_FPS:
+			if (touch_cdev->fps_state) {/* on */
+				TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_OFF);
+				touch_cdev->delay_baseline_update = true;
+			} else { /* off */
+				if (touch_cdev->delay_baseline_update) {
+					TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_ON);
+					touch_cdev->delay_baseline_update = false;
+				}
+			}
 				break;
 		default:
 			dev_dbg(DEV_MMI, "%s: unknown command %d\n", __func__, cmd);
@@ -324,6 +352,57 @@ static int ts_mmi_charger_cb(struct notifier_block *self,
 	return 0;
 }
 
+static int ts_mmi_fps_cb(struct notifier_block *self,
+				unsigned long event, void *p)
+{
+	int fps_state = *(int *)p;
+	struct ts_mmi_dev *touch_cdev = container_of(
+					self, struct ts_mmi_dev, fps_notif);
+
+	if (touch_cdev && event == 0xBEEF && fps_state != touch_cdev->fps_state) {
+		touch_cdev->fps_state = fps_state;
+		dev_info(DEV_MMI, "FPS: state is %s\n", touch_cdev->fps_state ? "ON" : "OFF");
+		if (is_touch_active) {
+			kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_FPS);
+			schedule_delayed_work(&touch_cdev->work, 0);
+		}
+	}
+
+	return 0;
+}
+
+static int ts_mmi_fps_notifier_register(struct ts_mmi_dev *touch_cdev, bool enable) {
+	int (*register_link)(struct notifier_block *nb, unsigned long stype, bool report);
+	int (*unregister_link)(struct notifier_block *nb, unsigned long stype);
+	int ret;
+
+	if (enable) {
+		register_link = symbol_get(FPS_register_notifier);
+		if (register_link) {
+			touch_cdev->fps_notif.notifier_call = ts_mmi_fps_cb;
+			ret = register_link(&touch_cdev->fps_notif, 0xBEEF, false);
+			symbol_put(FPS_register_notifier);
+			if (ret < 0) {
+				dev_err(DEV_TS,
+					"Failed to register fps_notifier: %d\n", ret);
+				return ret;
+			}
+			touch_cdev->is_fps_registered = true;
+			dev_info(DEV_TS, "Register fps_notifier OK\n");
+		} else
+			dev_err(DEV_TS, "no FPS_register_notifier exported.\n");
+	} else if (touch_cdev->is_fps_registered) {
+		unregister_link = symbol_get(FPS_unregister_notifier);
+		if (unregister_link)
+			unregister_link(&touch_cdev->fps_notif, 0xBEEF);
+		else
+			dev_err(DEV_TS, "no FPS_unregister_notifier exported.\n");
+		touch_cdev->is_fps_registered = false;
+	}
+
+	return 0;
+}
+
 int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 {
 	int ret = 0;
@@ -366,6 +445,13 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 			goto FREQ_NOTIF_REGISTER_FAILED;
 	}
 
+	if (touch_cdev->pdata.fps_detection) {
+		ret = ts_mmi_fps_notifier_register(touch_cdev, true);
+		if (ret < 0)
+			dev_err(DEV_TS,
+				"Failed to register fps_notifier: %d\n", ret);
+	}
+
 	dev_info(DEV_TS, "%s: Notifiers init OK.\n", __func__);
 	return 0;
 
@@ -385,6 +471,9 @@ void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev)
 		dev_err(DEV_MMI, "%s:touch_cdev->class_dev == NULL", __func__);
 		return;
 	}
+
+	if (touch_cdev->pdata.fps_detection)
+		ts_mmi_fps_notifier_register(touch_cdev, false);
 
 	if (touch_cdev->pdata.update_refresh_rate)
 		unregister_dynamic_refresh_rate_notifier(&touch_cdev->freq_nb);

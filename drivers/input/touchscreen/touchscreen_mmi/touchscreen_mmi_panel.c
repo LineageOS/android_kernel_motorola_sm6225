@@ -113,6 +113,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->hold_grip_ctrl = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,fps_detection")) {
+		dev_info(DEV_TS, "%s: using fps detection\n", __func__);
+		ppdata->fps_detection = true;
+	}
+
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;
