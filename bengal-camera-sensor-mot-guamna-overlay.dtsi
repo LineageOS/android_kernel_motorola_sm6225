@@ -373,9 +373,9 @@
 	led_flash_main: qcom,camera-flash@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera-flash";
-		flash-source  = <&pmi632_flash0>;
-		torch-source  = <&pmi632_torch0>;
-		switch-source = <&pmi632_switch0>;
+		flash-source  = <&pmi632_flash0 &pmi632_flash1>;
+		torch-source  = <&pmi632_torch0 &pmi632_torch1>;
+		switch-source = <&pmi632_switch0 &pmi632_switch0>;
 		status = "ok";
 	};
 
