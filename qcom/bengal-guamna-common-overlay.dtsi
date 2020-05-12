@@ -12,12 +12,15 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "bengal-moto-common-overlay.dtsi"
+#include "bengal-guamna-pinctrl-overlay.dtsi"
 #include "bengal-guam-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-guam-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamna-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
+
+#define GUAMNA_RADIO_GWLC 2
 
 &qupv3_se4_2uart {
 	status = "ok";
