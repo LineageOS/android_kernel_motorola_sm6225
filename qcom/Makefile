@@ -20,9 +20,11 @@ bengal-guamp-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-dvt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_GUAMNA_DTB) += \
+        bengal-guamna-gwlc-evt-overlay.dtbo \
         bengal-guamna-evt-overlay.dtbo
 
 bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_BORNEO_DTB) += \
         bengal-borneo-evt-overlay.dtbo
