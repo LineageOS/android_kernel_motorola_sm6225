@@ -878,7 +878,10 @@ static bool dsi_panel_set_hbm_backlight(struct dsi_panel *panel, u32 *bl_lvl)
 			panel->bl_config.bl_max_level : panel->bl_lvl_during_hbm;
 		DSI_INFO("HBM set  bl_level=%d bl_max_level = %d bl_lvl_during_hbm = %d\n",
 				bl_level, panel->bl_config.bl_max_level, panel->bl_lvl_during_hbm);
-		return false;
+		if(panel->is_hbm_using_51_cmd && dsi_panel_param_is_hbm_on(panel))
+			return true;
+		else
+			return false;
 	} else {
 		panel->bl_lvl_during_hbm = bl_level;
 		if (dsi_panel_param_is_hbm_on(panel)) {
@@ -1026,6 +1029,9 @@ static int dsi_panel_send_param_cmd(struct dsi_panel *panel,
 		if (param_map_state->cmds->state == DSI_CMD_SET_STATE_LP)
 			cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM |
 						MIPI_DSI_MSG_LASTCOMMAND;
+		if (cmds->last_command)
+			cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+
 		len = ops->transfer(panel->host, &cmds->msg);
 		if (len < 0) {
 			rc = len;
@@ -3823,6 +3829,10 @@ static int dsi_panel_parse_param_prop(struct dsi_panel *panel,
 
 			panel->bl_lvl_during_hbm = panel->bl_config.bl_max_level;
 
+			panel->is_hbm_using_51_cmd = of_property_read_bool(of_node,
+						"qcom,mdss-dsi-panel-hbm-is-51cmd");
+			if (panel->is_hbm_using_51_cmd)
+				DSI_INFO("HBM command is using 0x51 command\n");
 		}
 
 		rc = -EINVAL;

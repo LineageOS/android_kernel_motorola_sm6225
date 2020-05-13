@@ -317,6 +317,7 @@ struct dsi_panel {
 	u32  bl_lvl_during_hbm;
 	bool panel_hbm_fod;
 	int hbm_en_gpio;
+	bool is_hbm_using_51_cmd;
 	struct panel_param *param_cmds;
 
 	enum touch_state tp_state;
