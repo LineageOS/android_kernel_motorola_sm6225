@@ -27,6 +27,7 @@
 #include <linux/string.h>
 #include <linux/major.h>
 #include <linux/slab.h>
+#include <linux/pinctrl/consumer.h>
 
 #define FMT_STRING	"%s"
 #define FMT_INTEGER	"%d"
@@ -493,6 +494,28 @@ static int get_class_fname_handler(struct device *parent, const char **pfname)
 	return 0;
 }
 
+static int ts_mmi_default_pinctrl(struct device *parent, int on)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+
+	if (!touch_cdev)
+		return -ENODEV;
+
+	dev_info(DEV_TS, "%s: %s\n", __func__, on ? "ACTIVE" : "SUSPEND");
+
+	if (on) {
+		if (!IS_ERR_OR_NULL(touch_cdev->pinctrl_on_state))
+			pinctrl_select_state(touch_cdev->pinctrl_node,
+				touch_cdev->pinctrl_on_state);
+	} else {
+		if (!IS_ERR_OR_NULL(touch_cdev->pinctrl_off_state))
+			pinctrl_select_state(touch_cdev->pinctrl_node,
+				touch_cdev->pinctrl_off_state);
+	}
+
+	return 0;
+}
+
 /**
  * ts_mmi_dev_register - register a new object of ts_mmi_dev class.
  * @parent: The device to register.
@@ -523,6 +546,19 @@ int ts_mmi_dev_register(struct device *parent,
 	if (ret < 0) {
 		dev_err(DEV_TS, "%s: init panel failed. %d\n", __func__, ret);
 		goto PANEL_PARSE_DT_FAILED;
+	}
+
+	touch_cdev->pinctrl_node = devm_pinctrl_get(DEV_TS);
+	if (IS_ERR_OR_NULL(touch_cdev->pinctrl_node)) {
+		dev_info(DEV_TS, "%s: No pinctrl defined\n", __func__);
+	} else if (!touch_cdev->mdata->pinctrl) {
+		touch_cdev->pinctrl_on_state = pinctrl_lookup_state(touch_cdev->pinctrl_node, "ts_mmi_on_state");
+		touch_cdev->pinctrl_off_state = pinctrl_lookup_state(touch_cdev->pinctrl_node, "ts_mmi_off_state");
+		if (!IS_ERR_OR_NULL(touch_cdev->pinctrl_on_state) ||
+			!IS_ERR_OR_NULL(touch_cdev->pinctrl_off_state)) {
+			dev_info(DEV_TS, "%s: No pinctrl method add default\n", __func__);
+			touch_cdev->mdata->pinctrl = ts_mmi_default_pinctrl;
+		}
 	}
 
 	ts_mmi_get_vendor_info(touch_cdev);

@@ -266,6 +266,9 @@ struct ts_mmi_dev {
 	struct notifier_block	panel_nb;
 	struct mutex		extif_mutex;
 	struct mutex		method_mutex;
+	struct pinctrl		*pinctrl_node;
+	struct pinctrl_state		*pinctrl_on_state;
+	struct pinctrl_state		*pinctrl_off_state;
 
 	atomic_t		touch_stopped;
 	enum ts_mmi_pm_mode	pm_mode;
