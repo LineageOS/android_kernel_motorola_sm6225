@@ -483,6 +483,22 @@ exit:
 	return retval;
 }
 
+static int syna_ts_mmi_wait_for_ready(struct device *dev)
+{
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	msleep(RESET_ON_RESUME_DELAY_MS);
+
+#ifdef WATCHDOG_SW
+	tcm_hcd->update_watchdog(tcm_hcd, true);
+#endif
+
+	return 0;
+}
+
 static int syna_ts_mmi_post_resume(struct device *dev)
 {
 	struct platform_device *pdev;
@@ -591,6 +607,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	/* PM callback */
+	.wait_for_ready = syna_ts_mmi_wait_for_ready,
 	.panel_state = syna_ts_mmi_panel_state,
 	.post_resume = syna_ts_mmi_post_resume,
 };

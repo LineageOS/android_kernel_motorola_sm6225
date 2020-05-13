@@ -49,8 +49,6 @@ extern void syna_ts_mmi_dev_unregister(struct syna_tcm_hcd *tcm_hcd);
 
 /* #define RESUME_EARLY_UNBLANK */
 
-#define RESET_ON_RESUME_DELAY_MS 50
-
 #define PREDICTIVE_READING
 
 #define MIN_READ_LENGTH 9

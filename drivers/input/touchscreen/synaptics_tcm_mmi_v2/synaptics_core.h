@@ -71,6 +71,8 @@
 #define MESSAGE_MARKER 0xa5
 #define MESSAGE_PADDING 0x5a
 
+#define RESET_ON_RESUME_DELAY_MS 50
+
 /*
 #define REPORT_NOTIFIER
 */
