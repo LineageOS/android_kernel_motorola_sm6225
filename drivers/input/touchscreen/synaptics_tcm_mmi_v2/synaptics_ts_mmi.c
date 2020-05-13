@@ -36,6 +36,56 @@ struct pill_region_data {
        unsigned short y_end_r;
 };
 
+static int syna_ts_mmi_methods_suppression(struct device *dev, int value)
+{
+	int retval;
+	unsigned short buffer;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	buffer = (unsigned short)value;
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)value);
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_GRIP_SUPPRESSION_INFO,
+		buffer);
+
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to write suppression info (%d)\n", retval);
+		goto exit;
+	}
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
+static int syna_ts_mmi_methods_get_suppression(struct device *dev, void *idata)
+{
+	int retval;
+	unsigned short value;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd, DC_GRIP_SUPPRESSION_INFO, &value);
+	if (retval < 0)
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to read suppression info (%d)\n", retval);
+	else
+		TO_INT(idata) = value;
+
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)value);
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
 static int syna_ts_mmi_methods_gs_distance(struct device *dev, int value)
 {
 	int retval;
@@ -77,7 +127,7 @@ static int syna_ts_mmi_methods_get_gs_distance(struct device *dev, void *idata)
 	retval = tcm_hcd->get_dynamic_config(tcm_hcd, DC_SUPP_X_WIDTH, &value);
 	if (retval < 0)
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to read gs_distance (%d)\n",retval );
+			"Failed to read gs_distance (%d)\n", retval);
 	else
 		TO_INT(idata) = value;
 
@@ -595,6 +645,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_drv_irq = syna_ts_mmi_methods_get_drv_irq,
 	.get_flashprog = syna_ts_mmi_methods_get_flashprog,
 	.get_poweron = syna_ts_mmi_methods_get_poweron,
+	.get_suppression = syna_ts_mmi_methods_get_suppression,
 	.get_gs_distance = syna_ts_mmi_methods_get_gs_distance,
 	.get_pill_region = syna_ts_mmi_methods_get_pill_region,
 	/* SET methods */
@@ -602,6 +653,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.drv_irq = syna_ts_mmi_methods_drv_irq,
 	.power = syna_ts_mmi_methods_power,
 	.charger_mode = syna_ts_mmi_charger_mode,
+	.suppression = syna_ts_mmi_methods_suppression,
 	.gs_distance = syna_ts_mmi_methods_gs_distance,
 	.pill_region = syna_ts_mmi_methods_pill_region,
 	/* Firmware */
