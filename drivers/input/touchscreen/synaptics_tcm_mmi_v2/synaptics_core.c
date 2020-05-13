@@ -3420,6 +3420,7 @@ int syna_tcm_suspend(struct device *dev)
 	if (!tcm_hcd->wakeup_gesture_enabled)
 		tcm_hcd->enable_irq(tcm_hcd, false, true);
 
+	touch_free_objects();
 	tcm_hcd->in_suspend = true;
 
 	return 0;
