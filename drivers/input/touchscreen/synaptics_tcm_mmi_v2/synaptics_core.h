@@ -241,6 +241,7 @@ enum dynamic_config_id {
 	DC_SUPP_Y_START_R = 0xd9,
 	DC_SUPP_Y_END_R = 0xda,
 	DC_GRIP_SUPPRESSION_INFO = 0xdb,
+	DC_HOLD_DISTANCE = 0xdc,
 };
 
 enum command {
