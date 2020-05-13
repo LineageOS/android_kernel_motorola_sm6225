@@ -598,6 +598,7 @@ int touch_reinit(struct syna_tcm_hcd *tcm_hcd);
 int touch_early_suspend(struct syna_tcm_hcd *tcm_hcd);
 int touch_suspend(struct syna_tcm_hcd *tcm_hcd);
 int touch_resume(struct syna_tcm_hcd *tcm_hcd);
+void touch_free_objects(void);
 
 int syna_tcm_resume(struct device *dev);
 int syna_tcm_suspend(struct device *dev);
