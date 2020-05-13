@@ -23,6 +23,7 @@
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -63,6 +64,7 @@
 	//qcom,bklt-dcs-2bytes-enabled;
 	qcom,mdss-brightness-max-level = <255>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -102,6 +104,7 @@
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,mdss-brightness-max-level = <4095>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	//qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
