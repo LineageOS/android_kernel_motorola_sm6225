@@ -36,6 +36,56 @@ struct pill_region_data {
        unsigned short y_end_r;
 };
 
+static int syna_ts_mmi_methods_hold_distance(struct device *dev, int value)
+{
+	int retval;
+	unsigned short buffer;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	buffer = (unsigned short)value;
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)value);
+
+	retval = tcm_hcd->set_dynamic_config(tcm_hcd,
+		DC_HOLD_DISTANCE,
+		buffer);
+
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to write hold distance (%d)\n", retval);
+		goto exit;
+	}
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
+static int syna_ts_mmi_methods_get_hold_distance(struct device *dev, void *idata)
+{
+	int retval;
+	unsigned short value;
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+	retval = tcm_hcd->get_dynamic_config(tcm_hcd, DC_HOLD_DISTANCE, &value);
+	if (retval < 0)
+		LOGE(tcm_hcd->pdev->dev.parent,
+			"Failed to read hold distance info (%d)\n", retval);
+	else
+		TO_INT(idata) = value;
+
+	dev_dbg(dev, "%s: program value 0x%02x\n", __func__, (unsigned int)value);
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
 static int syna_ts_mmi_methods_suppression(struct device *dev, int value)
 {
 	int retval;
@@ -648,6 +698,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_suppression = syna_ts_mmi_methods_get_suppression,
 	.get_gs_distance = syna_ts_mmi_methods_get_gs_distance,
 	.get_pill_region = syna_ts_mmi_methods_get_pill_region,
+	.get_hold_distance = syna_ts_mmi_methods_get_hold_distance,
 	/* SET methods */
 	.reset =  syna_ts_mmi_methods_reset,
 	.drv_irq = syna_ts_mmi_methods_drv_irq,
@@ -656,6 +707,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.suppression = syna_ts_mmi_methods_suppression,
 	.gs_distance = syna_ts_mmi_methods_gs_distance,
 	.pill_region = syna_ts_mmi_methods_pill_region,
+	.hold_distance = syna_ts_mmi_methods_hold_distance,
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	/* PM callback */
