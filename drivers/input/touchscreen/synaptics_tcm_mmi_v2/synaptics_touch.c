@@ -162,7 +162,7 @@ static struct touch_hcd *touch_hcd;
  *
  * Report finger lift events to the input subsystem for all touch objects.
  */
-static void touch_free_objects(void)
+void touch_free_objects(void)
 {
 #ifdef TYPE_B_PROTOCOL
 	unsigned int idx;
