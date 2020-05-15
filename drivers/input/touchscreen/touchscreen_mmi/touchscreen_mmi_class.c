@@ -558,6 +558,9 @@ int ts_mmi_dev_register(struct device *parent,
 			!IS_ERR_OR_NULL(touch_cdev->pinctrl_off_state)) {
 			dev_info(DEV_TS, "%s: No pinctrl method add default\n", __func__);
 			touch_cdev->mdata->pinctrl = ts_mmi_default_pinctrl;
+			if (!IS_ERR_OR_NULL(touch_cdev->pinctrl_on_state))
+				pinctrl_select_state(touch_cdev->pinctrl_node,
+					touch_cdev->pinctrl_on_state);
 		}
 	}
 
