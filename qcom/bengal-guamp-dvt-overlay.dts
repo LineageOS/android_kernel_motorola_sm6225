@@ -26,3 +26,7 @@
 /*
  * Guam HW rev specific changes go here
  */
+
+&sar_abov {
+	/delete-property/ cap_vdd-supply;
+};
