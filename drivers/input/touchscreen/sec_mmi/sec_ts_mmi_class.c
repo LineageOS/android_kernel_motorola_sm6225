@@ -878,6 +878,25 @@ static int sec_mmi_methods_get_poweron(struct device *dev, void *idata) {
 	return 0;
 }
 
+static void sec_mmi_print_version(struct sec_ts_data *ts)
+{
+	char prod_info[TS_MMI_MAX_INFO_LEN];
+	char build_id[TS_MMI_MAX_ID_LEN];
+	char config_id[TS_MMI_MAX_ID_LEN];
+
+	sec_mmi_methods_get_productinfo(&ts->client->dev, prod_info);
+	if (ts->fw_invalid == true) {
+		dev_info(&ts->client->dev, "Product %s in bootloader mode\n",
+			prod_info);
+		return;
+	}
+
+	sec_mmi_methods_get_build_id(&ts->client->dev, build_id);
+	sec_mmi_methods_get_config_id(&ts->client->dev, config_id);
+	dev_info(&ts->client->dev, "Product %s, firmware id: %s, config_id: %s\n",
+		prod_info, build_id, config_id);
+}
+
 static int sec_mmi_methods_get_flashprog(struct device *dev, void *idata) {
 	struct sec_ts_data *ts = dev_get_drvdata(dev);
 
@@ -1020,6 +1039,8 @@ static int sec_mmi_firmware_update(struct device *dev, char *fwname) {
 				0, false, 0); /* do not run calibration!!! */
 	if (ts->fw_invalid == false)
 		sec_mmi_enable_touch(ts);
+
+	sec_mmi_print_version(ts);
 
 	mutex_unlock(&ts->modechange);
 	sec_ts_irq_enable(ts, true);
@@ -1287,6 +1308,7 @@ int sec_mmi_data_init(struct sec_ts_data *ts, bool enable)
 		} else /* stuck in BL mode, update productinfo to report 'se77c' */
 			ts->device_id[3] = 0x7C;
 
+		sec_mmi_print_version(ts);
 		sec_mmi_class_fname(ts);
 
 		/*initialize value*/
