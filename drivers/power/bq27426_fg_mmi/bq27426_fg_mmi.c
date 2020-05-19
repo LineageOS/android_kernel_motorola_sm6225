@@ -59,11 +59,11 @@
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_main_0426_2_02-bq27426G1-2767.gm.fs.h"
+#include "battery_profile/imported/smith_battery_main_0518-bq27426G1-2767.gm.fs.h"
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_flip_0426_2_02-bq27426G1-2766.gm.fs.h"
+#include "battery_profile/imported/smith_battery_flip_0518-bq27426G1-2766.gm.fs.h"
 #endif
 
 #undef pr_debug
@@ -203,11 +203,11 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 0},
+	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 1},
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 0},
+	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 1},
 #endif
 
 };
@@ -2017,6 +2017,50 @@ static int fg_set_term_voltage(struct bq_fg_chip *bq, int volt)
 }
 EXPORT_SYMBOL_GPL(fg_set_term_voltage);
 
+/* temporary function for hard-coding CC_Gain */
+static int fg_set_cc_gain(struct bq_fg_chip *bq)
+{
+	int ret;
+	u8 rd_buf[64];
+	// using 5mohm sense instead of 10mohm, need to double cc_gain
+	// 0.476 (2 * default gain) in proprietary TI floating point format
+	int cc_gain = 0x7F73B646;
+
+	memset(rd_buf, 0, 64);
+
+	mutex_lock(&bq->update_lock);
+	ret = fg_dm_enter_cfg_mode(bq);
+	if (ret) {
+	        mutex_unlock(&bq->update_lock);
+	        return ret;
+	}
+
+	ret = fg_dm_read_block(bq, 105, 4, rd_buf);
+	if (ret) {
+	        fg_dm_exit_cfg_mode(bq);
+	        mutex_unlock(&bq->update_lock);
+	        return ret;
+	}
+
+	rd_buf[4] = (cc_gain >> 24) & 0xFF;
+	rd_buf[5] = (cc_gain >> 16) & 0xFF;
+	rd_buf[6] = (cc_gain >> 8) & 0xFF;
+	rd_buf[7] = cc_gain & 0xFF;
+
+	ret = fg_dm_write_block(bq, 105, 4, rd_buf);
+	if (ret) {
+	        fg_dm_exit_cfg_mode(bq);
+	        mutex_unlock(&bq->update_lock);
+	        return ret;
+	}
+
+	fg_dm_exit_cfg_mode(bq);
+
+	mutex_unlock(&bq->update_lock);
+
+	return ret;
+}
+
 static int fg_set_term_curr(struct bq_fg_chip *bq, int val)
 {
 	int ret = -1, curr = 0;
@@ -2277,7 +2321,7 @@ static void determine_initial_status(struct bq_fg_chip *bq)
 
 	fg_update_bqfs(bq);
 	fg_select_external_temp(bq);
-	fg_set_term_curr(bq, 500);
+	fg_set_cc_gain(bq); // temporary
 	fg_dodateoc_delta_t(bq);
 	fg_irq_thread(bq->client->irq, bq);
 	bq->device_initial = true;
