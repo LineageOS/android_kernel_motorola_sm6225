@@ -694,6 +694,7 @@ static void himax_hx83102d_reload_to_active(void)
 	uint8_t addr[DATA_LEN_4] = {0};
 	uint8_t data[DATA_LEN_4] = {0};
 	uint8_t retry_cnt = 0;
+	int ret = 0;
 
 	addr[3] = 0x90;
 	addr[2] = 0x00;
@@ -705,12 +706,14 @@ static void himax_hx83102d_reload_to_active(void)
 		data[2] = 0x00;
 		data[1] = 0x00;
 		data[0] = 0xEC;
-		kp_g_core_fp->fp_register_write(addr, DATA_LEN_4, data, 0);
+		ret = kp_g_core_fp->fp_register_write(addr, DATA_LEN_4, data, 0);
 		usleep_range(1000, 1100);
-		kp_g_core_fp->fp_register_read(addr, DATA_LEN_4, data, 0);
-		I("%s: data[1]=%d, data[0]=%d, retry_cnt=%d\n", __func__, data[1], data[0], retry_cnt);
+		ret = kp_g_core_fp->fp_register_read(addr, DATA_LEN_4, data, 0);
+		I("%s: data[1]=%d, data[0]=%d, reload_to_active_cnt=%d\n", __func__, data[1], data[0], retry_cnt);
 		retry_cnt++;
 	} while ((data[1] != 0x01 || data[0] != 0xEC) && retry_cnt < HIMAX_REG_RETRY_TIMES);
+	if (ret != 0)
+		atomic_set(&(*kp_private_ts)->resume_update_fail, 1);
 }
 
 static void himax_hx83102d_resume_ic_action(void)
