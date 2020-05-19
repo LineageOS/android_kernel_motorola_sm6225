@@ -364,6 +364,8 @@ struct himax_report_data {
 struct himax_ts_data {
 	bool initialized;
 	bool suspended;
+	atomic_t resume_update_fail;
+	atomic_t resume_thread_is_runing;
 	atomic_t suspend_mode;
 	struct mutex suspend_resume_mutex;
 	uint8_t x_channel;
