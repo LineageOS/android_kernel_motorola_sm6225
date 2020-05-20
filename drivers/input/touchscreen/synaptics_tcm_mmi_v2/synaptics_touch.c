@@ -759,17 +759,22 @@ static void touch_report(void)
 		switch (status) {
 		case LIFT:
 #ifdef TYPE_B_PROTOCOL
-			input_mt_slot(touch_hcd->input_dev, idx);
-			input_mt_report_slot_state(touch_hcd->input_dev,
-					MT_TOOL_FINGER, 0);
-
 			if (tcm_hcd->imports && tcm_hcd->imports->report_touch_event) {
 				struct touch_event_data touch_event;
 				memset(&touch_event, 0, sizeof(touch_event));
 				touch_event.type = TS_COORDINATE_ACTION_RELEASE;
 				touch_event.id = idx;
-				tcm_hcd->imports->report_touch_event(&touch_event);
+				tcm_hcd->imports->report_touch_event(&touch_event, touch_hcd->input_dev);
+				if (touch_event.skip_report) {
+					/* input event is reported by touchscreen class.
+					 * vendor touch event may need update based on touch_event
+					 */
+					 break;
+				}
 			}
+			input_mt_slot(touch_hcd->input_dev, idx);
+			input_mt_report_slot_state(touch_hcd->input_dev,
+					MT_TOOL_FINGER, 0);
 #endif
 			break;
 		case FINGER:
@@ -792,6 +797,29 @@ static void touch_report(void)
 				x = touch_hcd->input_params.max_x - x;
 			if (bdata->y_flip)
 				y = touch_hcd->input_params.max_y - y;
+
+			if (tcm_hcd->imports && tcm_hcd->imports->report_touch_event) {
+				struct touch_event_data touch_event;
+				memset(&touch_event, 0, sizeof(touch_event));
+				touch_event.type = (object_data[idx].status != touch_hcd->prev_status[idx])?
+					TS_COORDINATE_ACTION_PRESS : TS_COORDINATE_ACTION_MOVE;
+				touch_event.id = idx;
+				touch_event.x = x;
+				touch_event.y = y;
+				touch_event.major = major;
+				touch_event.minor = minor;
+				tcm_hcd->imports->report_touch_event(&touch_event, touch_hcd->input_dev);
+				if (touch_event.skip_report) {
+					/* input event is reported by touchscreen class.
+					 * vendor touch event may need update based on touch_event
+					 */
+					 if ((touch_event.type == TS_COORDINATE_ACTION_PRESS) ||
+						(touch_event.type == TS_COORDINATE_ACTION_MOVE))
+						touch_count++;
+					 break;
+				}
+			}
+
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(touch_hcd->input_dev, idx);
 			input_mt_report_slot_state(touch_hcd->input_dev,
@@ -816,20 +844,6 @@ static void touch_report(void)
 					"Finger %d: x = %d, y = %d, x_width = %d, y_width = %d\n",
 					idx, x, y, object_data[idx].x_width, object_data[idx].y_width);
 			touch_count++;
-
-			if (object_data[idx].status != touch_hcd->prev_status[idx]) {
-				if (tcm_hcd->imports && tcm_hcd->imports->report_touch_event) {
-					struct touch_event_data touch_event;
-					memset(&touch_event, 0, sizeof(touch_event));
-					touch_event.type = TS_COORDINATE_ACTION_PRESS;
-					touch_event.id = idx;
-					touch_event.x = x;
-					touch_event.y = y;
-					touch_event.major = major;
-					touch_event.minor = minor;
-					tcm_hcd->imports->report_touch_event(&touch_event);
-			}
-		}
 			break;
 		default:
 			break;
