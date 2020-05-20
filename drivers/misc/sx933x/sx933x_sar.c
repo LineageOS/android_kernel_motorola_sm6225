@@ -1044,6 +1044,11 @@ static int ps_notify_callback(struct notifier_block *self,
 static void write_flip_regs(int num_regs, struct smtc_reg_data *regs)
 {
 	int i;
+	u32 temp = 0;
+
+	/* Disable if we are on */
+	sx933x_i2c_read_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, &temp);
+	sx933x_i2c_write_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, temp & 0xFFFFFFE0);
 
 	for(i=0; i < num_regs; i++)
 	{
@@ -1052,6 +1057,14 @@ static void write_flip_regs(int num_regs, struct smtc_reg_data *regs)
 				regs[i].reg, regs[i].val);
 		sx933x_i2c_write_16bit(global_sx933x,
 			regs[i].reg, regs[i].val);
+	}
+
+	/* If one of the sensors is on, re-enable it */
+	for (i=0; i < ARRAY_SIZE(psmtcButtons); i++) {
+		if (psmtcButtons[i].enabled) {
+			sx933x_i2c_write_16bit(global_sx933x, SX933X_GNRLCTRL2_REG, temp | 0x0000001F);
+			break;
+		}
 	}
 }
 
