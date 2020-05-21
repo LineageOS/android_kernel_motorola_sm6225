@@ -57,6 +57,10 @@
 
 #define AW8695_MAX_FIRMWARE_LOAD_CNT 20
 #define AW8695_SEQ_NO_RTP_BASE 102
+#define AW8695_SEQ_NO_RTP_REPEAT 100
+#define AW8695_SEQ_NO_RTP_STOP 120000
+
+#define AW8695_REPEAT_RTP_PLAYING
 /******************************************************
  *
  * variable
@@ -1864,6 +1868,20 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 		if (seq >= AW8695_SEQ_NO_RTP_BASE) {
 			aw8695->haptic_mode = HAPTIC_RTP;
 			aw8695->gain = 0x80;
+#ifdef AW8695_REPEAT_RTP_PLAYING
+			if (seq >= AW8695_SEQ_NO_RTP_BASE + AW8695_SEQ_NO_RTP_REPEAT) {
+				aw8695->haptic_mode = HAPTIC_RTP_LOOP;
+				seq -= AW8695_SEQ_NO_RTP_REPEAT;
+
+				value = AW8695_SEQ_NO_RTP_STOP;
+				__pm_wakeup_event(aw8695->ws, value + 100);
+				/* run ms timer */
+				hrtimer_cancel(&aw8695->timer);
+				hrtimer_start(&aw8695->timer,
+					ktime_set(value / 1000, (value % 1000) * 1000000),
+					HRTIMER_MODE_REL);
+			}
+#endif
 		} else if (value < 100 || seq > 2) {
 			aw8695->haptic_mode = HAPTIC_SHORT;
 			aw8695->gain = 0x80;
@@ -1881,6 +1899,7 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 		switch (aw8695->haptic_mode) {
 
 		case HAPTIC_RTP:
+		case HAPTIC_RTP_LOOP:
 			aw8695_rtp_play(aw8695, seq - AW8695_SEQ_NO_RTP_BASE);
 			break;
 		case HAPTIC_SHORT:
@@ -3187,6 +3206,10 @@ static void aw8695_vibrator_work_routine(struct work_struct *work)
 
 	mutex_lock(&aw8695->lock);
 
+#ifdef AW8695_REPEAT_RTP_PLAYING
+	if (aw8695->haptic_mode == HAPTIC_RTP_LOOP)
+		aw8695->haptic_mode = HAPTIC_RTP;
+#endif
 	aw8695_haptic_stop(aw8695);
 	if (aw8695->state) {
 		if (aw8695->activate_mode == AW8695_HAPTIC_ACTIVATE_RAM_MODE) {
@@ -3348,6 +3371,10 @@ static irqreturn_t aw8695_irq(int irq, void *data)
 					aw8695_haptic_set_rtp_aei(aw8695, false);
 					aw8695->rtp_cnt = 0;
 					aw8695->rtp_init = 0;
+#ifdef AW8695_REPEAT_RTP_PLAYING
+					if (aw8695->haptic_mode == HAPTIC_RTP_LOOP)
+						aw8695_rtp_play(aw8695, aw8695->rtp_file_num);
+#endif
 					break;
 				}
 			}
