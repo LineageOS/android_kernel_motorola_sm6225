@@ -1343,12 +1343,10 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				if(extcon_register_notifier(pplatData->ext_flip_det,
 					EXTCON_MECHANICAL, &pplatData->flip_notif))
 					LOG_ERR("failed to register extcon flip dev notifier\n");
-				else {
+				else
 					pplatData->phone_flip_state =
 						extcon_get_state(pplatData->ext_flip_det,
 							EXTCON_MECHANICAL);
-					update_flip_regs(pplatData, pplatData->phone_flip_state);
-				}
 			}
 		} else
 			LOG_ERR("extcon not in dev tree!\n");
@@ -1376,6 +1374,9 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	global_sx933x = this;
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+	update_flip_regs(pplatData, pplatData->phone_flip_state);
+#endif
 	LOG_INFO("sx933x_probe() Done\n");
 	return 0;
 }
