@@ -209,12 +209,16 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 
 unregister_sensor_input_device:
 	input_unregister_device(sensor_input_dev);
+	sensor_input_dev = NULL;
 free_touch_events_data:
-	devm_kfree(DEV_TS, events_data);
+	if (events_data)
+		devm_kfree(DEV_TS, events_data);
 free_sensor_pdata:
-	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+	if (sensor_input_dev && sensor_pdata)
+		devm_kfree(&sensor_input_dev->dev, sensor_pdata);
 free_sensor_input_dev:
-	input_free_device(sensor_input_dev);
+	if (sensor_input_dev)
+		input_free_device(sensor_input_dev);
 exit:
 	return 1;
 }
@@ -223,9 +227,7 @@ int ts_mmi_gesture_remove(struct ts_mmi_dev *touch_cdev)
 {
 	sensors_classdev_unregister(&sensor_pdata->ps_cdev);
 	input_unregister_device(sensor_pdata->input_sensor_dev);
-	devm_kfree(&sensor_pdata->input_sensor_dev->dev, sensor_pdata);
 	devm_kfree(DEV_TS, events_data);
-	input_free_device(sensor_pdata->input_sensor_dev);
 	sensor_pdata = NULL;
 
 	return 0;
