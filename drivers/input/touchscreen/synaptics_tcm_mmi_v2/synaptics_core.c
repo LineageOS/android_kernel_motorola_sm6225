@@ -3284,6 +3284,15 @@ static void syna_tcm_helper_work(struct work_struct *work)
 	case HELP_SEND_ROMBOOT_HDL:
 		syna_tcm_check_hdl(tcm_hcd, REPORT_HDL_ROMBOOT);
 		break;
+
+	case HELP_SEND_REZERO_COMMAND:
+		retval = syna_tcm_rezero(tcm_hcd);
+		if (retval < 0) {
+			LOGE(tcm_hcd->pdev->dev.parent,
+					"Failed to re-zero for baseline update\n");
+		}
+		break;
+
 	default:
 		break;
 	}
@@ -3343,11 +3352,18 @@ int syna_tcm_resume(struct device *dev)
 		goto exit;
 	}
 
-	retval = syna_tcm_rezero(tcm_hcd);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to rezero\n");
-		goto exit;
+	/* When delay_baseline_update is true, the baseline is not updated,
+	 * so syna_tcm_rezero function is not run.
+	 */
+	if (!tcm_hcd->delay_baseline_update) {
+		LOGD(tcm_hcd->pdev->dev.parent,
+				"Enter into rezero function to update baseline \n");
+		retval = syna_tcm_rezero(tcm_hcd);
+		if (retval < 0) {
+			LOGE(tcm_hcd->pdev->dev.parent,
+					"Failed to rezero\n");
+			goto exit;
+		}
 	}
 
 	goto mod_resume;

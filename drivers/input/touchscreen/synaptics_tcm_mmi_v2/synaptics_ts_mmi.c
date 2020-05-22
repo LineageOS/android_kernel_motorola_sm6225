@@ -685,6 +685,36 @@ exit:
 	return 0;
 }
 
+static int syna_ts_mmi_update_baseline(struct device *dev, int mode)
+{
+	struct syna_tcm_hcd *tcm_hcd;
+	struct platform_device *pdev;
+	int retval;
+
+	GET_SYNA_DATA(dev);
+
+	mutex_lock(&tcm_hcd->extif_mutex);
+
+	if (mode && tcm_hcd->delay_baseline_update) {
+		if (atomic_read(&tcm_hcd->helper.task) == HELP_NONE) {
+			dev_info(dev, "%s: Start to update baseline\n", __func__);
+			atomic_set(&tcm_hcd->helper.task,
+					HELP_SEND_REZERO_COMMAND);
+			queue_work(tcm_hcd->helper.workqueue,
+					&tcm_hcd->helper.work);
+		} else {
+			retval = -EINVAL;
+			goto exit;
+		}
+	}
+	retval = 0;
+	tcm_hcd->delay_baseline_update = !mode;
+
+exit:
+	mutex_unlock(&tcm_hcd->extif_mutex);
+	return retval;
+}
+
 static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_vendor = syna_ts_mmi_methods_get_vendor,
 	.get_productinfo = syna_ts_mmi_methods_get_productinfo,
@@ -707,6 +737,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.suppression = syna_ts_mmi_methods_suppression,
 	.gs_distance = syna_ts_mmi_methods_gs_distance,
 	.pill_region = syna_ts_mmi_methods_pill_region,
+	.update_baseline = syna_ts_mmi_update_baseline,
 	.hold_distance = syna_ts_mmi_methods_hold_distance,
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,

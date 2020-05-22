@@ -340,6 +340,7 @@ enum helper_task {
 	HELP_SEND_REINIT_NOTIFICATION,
 	HELP_TOUCH_REINIT,
 	HELP_SEND_ROMBOOT_HDL,
+	HELP_SEND_REZERO_COMMAND,
 };
 
 struct syna_tcm_helper {
@@ -460,6 +461,7 @@ struct syna_tcm_hcd {
 	bool in_hdl_mode;
 	bool is_detected;
 	bool wakeup_gesture_enabled;
+	bool delay_baseline_update;
 	unsigned char sensor_type;
 	unsigned char fb_ready;
 	unsigned char command;
