@@ -417,12 +417,13 @@ static int ts_mmi_sysfs_create_edge_entries(struct ts_mmi_dev *touch_cdev, bool 
 		}
 		if (touch_cdev->pdata.gs_distance_ctrl) {
 			TRY_TO_GET(gs_distance, &touch_cdev->gs_distance);
-			if (ret < 0)
+			if (ret < 0) {
 				dev_err(DEV_TS, "%s: failed to read gs_distance info (%d)\n",
 						__func__, ret);
-			else
 				/* Set default gs distance value */
 				touch_cdev->gs_distance = 0x1E;
+			}
+
 			ret = sysfs_create_file(&DEV_MMI->kobj, &dev_attr_gs_distance.attr);
 			if (ret < 0) {
 				dev_err(DEV_TS, "%s: failed to create gs_distance entry (%d)\n",
