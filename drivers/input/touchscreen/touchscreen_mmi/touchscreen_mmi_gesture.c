@@ -84,9 +84,11 @@ static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
 #endif
 
 		if (touch_cdev->pdata.fps_detection) {
-			if (touch_cdev->delay_baseline_update) {
-				TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_ON);
+			if ((touch_cdev->delay_baseline_update) &&
+				mutex_trylock(&touch_cdev->method_mutex)) {
+				_TRY_TO_CALL(update_baseline, TS_MMI_UPDATE_BASELINE_ON);
 				touch_cdev->delay_baseline_update = false;
+				mutex_unlock(&touch_cdev->method_mutex);
 			}
 		}
 		break;
