@@ -115,3 +115,8 @@
 &cdc_dmic23_gpios {
 	status = "disabled";
 };
+
+/* Modify headset's BIAS voltage to 2.6V */
+&wcd937x_codec {
+	qcom,cdc-micbias2-mv = <2600>;
+};
