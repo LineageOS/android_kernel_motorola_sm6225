@@ -5,6 +5,10 @@
 #include "dsi-panel-moto-nt36525b-djn-hdplus-video.dtsi"
 #include "dsi-panel-moto-icnl9911s-tm-hdplus-video.dtsi"
 
+&sde_dsi {
+    qcom,platform-mot-ext-feature-enable;
+    qcom,platform-mot-early-power-enable;
+};
 
 &dsi_hlt_hx83102d_video {
 	qcom,mdss-dsi-t-clk-post = <0x0a>;
