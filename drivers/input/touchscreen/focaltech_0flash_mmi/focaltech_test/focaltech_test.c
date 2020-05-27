@@ -47,6 +47,9 @@ struct test_funcs *test_func_list[] = {
 #ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719
     &test_func_ft8719,
 #endif
+#ifdef CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA
+    &test_func_ft8006sp,
+#endif
 #if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
 	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
     &test_func_ft8756,
