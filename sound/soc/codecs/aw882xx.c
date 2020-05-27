@@ -486,9 +486,8 @@ static void aw882xx_start(struct aw882xx *aw882xx)
 
 	ret = aw882xx_get_cali_re_form_nv(&cali_re);
 	if (ret < 0) {
-		cali_re = ERRO_CALI_VALUE;
-		pr_err("%s: use default vaule %d",
-			__func__ , ERRO_CALI_VALUE);
+		cali_re = 29900; /* 7.3*4096 */
+		pr_err("%s: use default vaule", __func__);
 	}
 	ret = aw882xx_set_cali_re(aw882xx, cali_re);
 	if (ret < 0)
