@@ -1,71 +1,106 @@
 
 &tlmm {
-	fps_rst_active: fps_rst_active {
-		/* active state */
-		mux {
-			pins = "gpio104";
-			function = "gpio";
-		};
+	ets {
+		ets_int_active: ets_int_active {
+			/* INTERRUPT */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
 
-		config {
-			pins = "gpio104";
-			drive-strength = <2>; /* 2 MA */
-			output-low;
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				input-enable;
+			};
 		};
-	};
+		ets_int_suspend: ets_int_suspend {
+			/* INTERRUPT */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
 
-	fps_rst_suspend: fps_rst_suspend {
-		/* sleep state */
-		mux {
-			pins = "gpio104";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio104";
-			drive-strength = <2>; /* 2 MA */
-		};
-	};
-
-	fps_int_active: fps_int_active {
-		/* active state */
-		mux {
-			pins = "gpio65";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio65";
-			drive-strength = <2>; /* 2 MA */
-			bias-disable;
-			input-enable;
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				input-enable;
+			};
 		};
 	};
 
-	fps_int_suspend: fps_int_suspend {
-		/* sleep state */
-		mux {
-			pins = "gpio65";
-			function = "gpio";
+	fpc {
+		rst_active: fps_rst_active {
+			/* active state */
+			mux {
+				pins = "gpio104";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio104";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable;
+				output-low;
+			};
 		};
 
-		config {
-			pins = "gpio65";
-			drive-strength = <2>; /* 2 MA */
-			bias-disable;
-			input-enable;
+		rst_suspend: fps_rst_suspend {
+			/* sleep state */
+			mux {
+				pins = "gpio104";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio104";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+				output-high;
+
+			};
+		};
+
+		int_active: fps_int_active {
+			/* active state */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+				input-enable;
+			};
+		};
+
+		int_suspend: fps_int_suspend {
+			/* sleep state */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+				input-enable;
+			};
 		};
 	};
 
 	fps_ido3_en_active: ldo3_en_active {
 		/* active state */
 		mux {
-			pins = "gpio34";
+			pins = "gpio102";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio34";
+			pins = "gpio102";
 			drive-strength = <2>; /* 2 MA */
 			bias-pull-up;
 			output-high;
@@ -75,12 +110,12 @@
 	fps_ido3_en_suspend: ldo3_en_suspend {
 		/* suspend state */
 		mux {
-			pins = "gpio34";
+			pins = "gpio102";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio34";
+			pins = "gpio102";
 			drive-strength = <2>; /* 2 MA */
 			bias-pull-up;
 			output-high;
@@ -90,12 +125,12 @@
 	fps_ido1p8_en_active: ldo1p8_en_active {
 		/* active state */
 		mux {
-			pins = "gpio106";
+			pins = "gpio105";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio106";
+			pins = "gpio105";
 			drive-strength = <2>; /* 2 MA */
 			bias-pull-up;
 			output-high;
@@ -105,12 +140,12 @@
 	fps_ido1p8_en_suspend: ldo1p8_en_suspend {
 		/* suspend state */
 		mux {
-			pins = "gpio106";
+			pins = "gpio105";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio106";
+			pins = "gpio105";
 			drive-strength = <2>; /* 2 MA */
 			bias-pull-up;
 			output-high;
@@ -119,28 +154,27 @@
 };
 
 &soc {
-	goodix_fingerprint{
-		//status = "/chosen", "mmi,fps", "true";
+	et528: et528 {
+		compatible = "egistec,et516";
 		status = "ok";
-		compatible = "goodix,fingerprint";
-		fp-gpio-reset = <&tlmm 104 0x00>;
-		fp-gpio-irq = <&tlmm 65  0x00>;
-		fp-gpio-ven = <&tlmm 34 0x00>;
+		reg = <0>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <65 0>;
-		interrupt-controller;
+		interrupts = <97 0x0>;
+		egistec,gpio_irq = <&tlmm 97 0x2>;
+		egistec,gpio_rst = <&tlmm 104 0x2>;
+
 		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&fps_rst_active &fps_int_active &fps_ido3_en_active>;
-		pinctrl-1 = <&fps_rst_suspend &fps_int_suspend &fps_ido3_en_suspend>;
+		pinctrl-0 = <&ets_int_active &fps_ido3_en_active &fps_ido1p8_en_active>;
+		pinctrl-1 = <&ets_int_suspend &fps_ido3_en_suspend &fps_ido1p8_en_suspend>;
 	};
 
 	fpc: fpc_fpc1020 {
 		compatible = "fpc,fpc1020";
 		status = "ok";
-		irq = <&tlmm 65 0>;
+		irq = <&tlmm 97 0>;
 		rst = <&tlmm 104 0>;
 		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&fps_rst_active &fps_int_active>;
-		pinctrl-1 = <&fps_rst_suspend &fps_int_suspend>;
+		pinctrl-0 = <&rst_active &int_active &fps_ido3_en_active &fps_ido1p8_en_active>;
+		pinctrl-1 = <&rst_suspend &int_suspend &fps_ido3_en_suspend &fps_ido1p8_en_suspend>;
 	};
 };
