@@ -53,6 +53,7 @@
 #define _FT8302             0x83020816
 #define _FT8009             0x80090817
 #define _FT8656             0x86560818
+#define _FT8006S_AA         0x86320819
 
 #define _FT5416             0x54160402
 #define _FT5426             0x54260402
@@ -128,6 +129,9 @@
 #if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756)
 #define FTS_CHIP_TYPE   _FT8756
 #define FTS_CHIP_NAME   "ft8756"
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA)
+#define FTS_CHIP_TYPE   _FT8006S_AA
+#define FTS_CHIP_NAME   "ft8006s_aa"
 #elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
 #define FTS_CHIP_TYPE   _FT8719
 #define FTS_CHIP_NAME   "ft8719"

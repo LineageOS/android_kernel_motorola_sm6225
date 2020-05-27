@@ -607,6 +607,11 @@ static int fts_read_touchdata(struct fts_ts_data *data)
     buf[0] = 0x01;
     ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
     if ((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3]))
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA)
+    buf[0] = 0x01;
+    ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
+    if (((0xEF == buf[2]) && (0xEF == buf[3]) && (0xEF == buf[4]))
+    || ((ret < 0) && (0xEF == buf[1])))
 #elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
     ret = fts_read(NULL, 0, buf + 1, data->pnt_buf_size - 1);
     if ((0xEF == buf[2]) && (0xEF == buf[3]) && (0xEF == buf[4]))
@@ -2336,6 +2341,7 @@ static int fts_ts_probe(struct spi_device *spi)
 
     FTS_INFO("Touch Screen(SPI BUS) driver prboe...");
 #if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA) || \
 	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
     spi->mode = SPI_MODE_0;
 #elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8719)
