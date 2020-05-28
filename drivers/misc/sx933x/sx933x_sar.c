@@ -960,6 +960,12 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 	return 0;
 }
 
+static int capsensor_set_poll_delay(struct sensors_classdev *sensors_cdev, unsigned int val)
+{
+	LOG_DBG("Dummy poll_delay called with %d\n", val);
+	return 0;
+}
+
 #ifdef CONFIG_CAPSENSE_USB_CAL
 static void ps_notify_callback_work(struct work_struct *work)
 {
@@ -1248,7 +1254,7 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 					input_sync(pButtonInformationData->buttons[i].input_dev);
 
 					pButtonInformationData->buttons[i].sensors_capsensor_cdev.sensors_enable = capsensor_set_enable;
-					pButtonInformationData->buttons[i].sensors_capsensor_cdev.sensors_poll_delay = NULL;
+					pButtonInformationData->buttons[i].sensors_capsensor_cdev.sensors_poll_delay = capsensor_set_poll_delay; /* Dummy function */
 					pButtonInformationData->buttons[i].sensors_capsensor_cdev.name = pButtonInformationData->buttons[i].name;
 					pButtonInformationData->buttons[i].sensors_capsensor_cdev.vendor = "semtech";
 					pButtonInformationData->buttons[i].sensors_capsensor_cdev.version = 1;
