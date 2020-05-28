@@ -11,6 +11,9 @@ endif
 ifneq ($(filter m y, $(CONFIG_TOUCHCLASS_MMI_DEBUG_INFO)),)
 	EXTRA_CFLAGS += -DCONFIG_TOUCHCLASS_MMI_DEBUG_INFO
 endif
+ifneq ($(filter m y, $(CONFIG_TOUCHCLASS_MMI_GESTURE_POISON_EVENT)),)
+	EXTRA_CFLAGS += -DTS_MMI_TOUCH_GESTURE_POISON_EVENT
+endif
 
 obj-m := touchscreen_mmi.o
 touchscreen_mmi-objs := touchscreen_mmi_class.o touchscreen_mmi_panel.o touchscreen_mmi_notif.o touchscreen_mmi_gesture.o

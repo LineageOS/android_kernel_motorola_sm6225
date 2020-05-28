@@ -73,6 +73,9 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 		touch_cdev->pm_mode = TS_MMI_PM_DEEPSLEEP;
 	}
 
+#ifdef TS_MMI_TOUCH_EDGE_GESTURE
+	ts_mmi_gesture_suspend(touch_cdev);
+#endif
 	TRY_TO_CALL(post_suspend);
 
 	dev_info(DEV_MMI, "%s: done\n", __func__);

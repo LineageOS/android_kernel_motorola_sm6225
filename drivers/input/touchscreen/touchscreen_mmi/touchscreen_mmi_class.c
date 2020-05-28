@@ -122,6 +122,11 @@ TOUCH_MMI_GET_ATTR_RW(suppression, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(hold_grip, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(hold_distance, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(gs_distance, FMT_HEX_INTEGER);
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+TOUCH_MMI_GET_ATTR_RW(poison_timeout, FMT_HEX_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(poison_distance, FMT_HEX_INTEGER);
+TOUCH_MMI_GET_ATTR_RW(poison_trigger_distance, FMT_HEX_INTEGER);
+#endif
 TOUCH_MMI_GET_ATTR_WO(reset);
 TOUCH_MMI_GET_ATTR_WO(pinctrl);
 TOUCH_MMI_GET_ATTR_WO(refresh_rate);
@@ -302,6 +307,11 @@ static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_refresh_rate.attr,
 	&dev_attr_charger_mode.attr,
 	&dev_attr_update_baseline.attr,
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+	&dev_attr_poison_timeout.attr,
+	&dev_attr_poison_distance.attr,
+	&dev_attr_poison_trigger_distance.attr,
+#endif
 	NULL,
 };
 
@@ -443,6 +453,13 @@ static int ts_mmi_sysfs_create_edge_entries(struct ts_mmi_dev *touch_cdev, bool 
 				goto CREATE_HOLD_GRIP_FAILED;
 			}
 		}
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+		if (touch_cdev->pdata.poison_slot_ctrl) {
+			touch_cdev->poison_distance = TOUCHSCREEN_MMI_DEFAULT_POISON_DISTANCE;
+			touch_cdev->poison_trigger_distance = TOUCHSCREEN_MMI_DEFAULT_POISON_TRIGGER_DISTANCE;
+			touch_cdev->poison_timeout = TOUCHSCREEN_MMI_DEFAULT_POISON_TIMEOUT_MS;
+		}
+#endif
 		return 0;
 	}
 

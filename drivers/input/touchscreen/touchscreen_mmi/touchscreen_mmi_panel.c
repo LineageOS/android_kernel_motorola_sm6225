@@ -46,6 +46,7 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 {
 	struct device_node *chosen;
 	struct ts_mmi_dev_pdata *ppdata = &touch_cdev->pdata;
+	u32 coords[2];
 
 	dev_info(DEV_TS, "%s: Start parse touchscreen mmi device tree.\n", __func__);
 	if (!of_property_read_string(of_node, "mmi,class-entry-name", &ppdata->class_entry_name))
@@ -113,9 +114,20 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->hold_grip_ctrl = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,poison-slot-control")) {
+		dev_info(DEV_TS, "%s: using poison slot\n", __func__);
+		ppdata->poison_slot_ctrl = true;
+	}
+
 	if (of_property_read_bool(of_node, "mmi,fps_detection")) {
 		dev_info(DEV_TS, "%s: using fps detection\n", __func__);
 		ppdata->fps_detection = true;
+	}
+
+	if (!of_property_read_u32_array(of_node, "mmi,max_coords", coords, 2)) {
+		dev_info(DEV_TS, "%s: get max_coords property\n", __func__);
+		ppdata->max_x = coords[0] - 1;
+		ppdata->max_y = coords[1] - 1;
 	}
 
 	chosen = of_find_node_by_name(NULL, "chosen");
