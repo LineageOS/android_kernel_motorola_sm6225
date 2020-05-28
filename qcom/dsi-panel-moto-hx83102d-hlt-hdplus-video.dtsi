@@ -21,6 +21,7 @@
 	dsi_hlt_hx83102d_video:qcom,mdss_dsi_hx83102d_hlt_video {
 		qcom,mdss-dsi-panel-name ="mipi_mot_vid_hlt_720p_652";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-supplier = "holitech";
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;

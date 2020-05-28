@@ -21,6 +21,7 @@
 	dsi_tm_icnl9911s_video:qcom,mdss_dsi_icnl9911s_tm_video {
 		qcom,mdss-dsi-panel-name ="mipi_mot_vid_tm_720p_652";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-supplier = "tianma";
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
