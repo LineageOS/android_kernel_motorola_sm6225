@@ -1,0 +1,17 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/ilitek_0flash_mmi
+
+ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_ILITEK_CHIPSET)),)
+	obj-m += ilitek_0flash_mmi.o
+endif
+
+ilitek_0flash_mmi-objs += ilitek.o
+ilitek_0flash_mmi-objs += ilitek_spi.o
+ilitek_0flash_mmi-objs += ilitek_qcom.o
+ilitek_0flash_mmi-objs += ilitek_ic.o
+ilitek_0flash_mmi-objs += ilitek_touch.o
+ilitek_0flash_mmi-objs += ilitek_mp.o
+ilitek_0flash_mmi-objs += ilitek_hostdl.o
+ilitek_0flash_mmi-objs += ilitek_node.o
