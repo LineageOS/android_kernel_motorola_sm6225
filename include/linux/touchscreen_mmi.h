@@ -18,6 +18,8 @@
 #include <linux/device.h>
 #include <linux/kfifo.h>
 #include <linux/version.h>
+#include <linux/kernel.h>
+#include <linux/input.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 
@@ -101,6 +103,34 @@ struct msm_drm_notifier *evdata = evd; \
 #endif /* LINUX_VERSION_CODE */
 #endif /* CONFIG_PANEL_NOTIFICATIONS */
 
+
+#if defined (TS_MMI_TOUCH_GESTURE_POISON_EVENT)
+#ifndef TS_MMI_TOUCH_EDGE_GESTURE
+#define TS_MMI_TOUCH_EDGE_GESTURE
+#endif
+#endif
+
+
+#define NANO_SEC	1000000000
+#define SEC_TO_MSEC	1000
+#define NANO_TO_MSEC	1000000
+
+static inline unsigned long long timediff_ms(
+		struct timespec start, struct timespec end)
+{
+	struct timespec temp;
+
+	if ((end.tv_nsec - start.tv_nsec) < 0) {
+		temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+		temp.tv_nsec = NANO_SEC + end.tv_nsec - start.tv_nsec;
+	} else {
+		temp.tv_sec = end.tv_sec - start.tv_sec;
+		temp.tv_nsec = end.tv_nsec - start.tv_nsec;
+	}
+	return (temp.tv_sec * SEC_TO_MSEC) + (temp.tv_nsec / NANO_TO_MSEC);
+}
+
+#define TS_MMI_MAX_POINT_NUM		10
 #define TS_MMI_MAX_FW_PATH		64
 #define TS_MMI_MAX_ID_LEN		16
 #define TS_MMI_MAX_VENDOR_LEN		16
@@ -117,6 +147,7 @@ enum touch_event_mode {
 };
 
 struct touch_event_data {
+	bool skip_report;
 	enum touch_event_mode type;		/* TS_TOUCH, TS_RELEASE */
 	int id;             			/* Finger id */
 	int x, y, w, p;        			/* X, Y, Area, Pressure */
@@ -138,7 +169,7 @@ struct gesture_event_data {
 struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
-	int     (*report_touch_event)(struct touch_event_data *tev);
+	int     (*report_touch_event)(struct touch_event_data *tev, struct input_dev *input_dev);
 	struct kobject *kobj_notify;
 };
 
@@ -158,6 +189,15 @@ enum ts_mmi_pm_mode {
 #define TS_MMI_IRQ_ON		1
 #define TS_MMI_UPDATE_BASELINE_OFF	0
 #define TS_MMI_UPDATE_BASELINE_ON	1
+
+#define TS_MMI_DISABLE_SUPPRESSION_NONE	0
+#define TS_MMI_DISABLE_SUPPRESSION_ALL		1
+#define TS_MMI_DISABLE_SUPPRESSION_LEFT	2
+#define TS_MMI_DISABLE_SUPPRESSION_RIGHT	3
+#define TOUCHSCREEN_MMI_DEFAULT_GS_DISTANCE	0x1E
+#define TOUCHSCREEN_MMI_DEFAULT_POISON_TIMEOUT_MS	800
+#define TOUCHSCREEN_MMI_DEFAULT_POISON_TRIGGER_DISTANCE	120
+#define TOUCHSCREEN_MMI_DEFAULT_POISON_DISTANCE	25
 
 /**
  * struct touchscreen_mmi_methods - hold vendor provided functions
@@ -190,6 +230,9 @@ enum ts_mmi_pm_mode {
 	int	(*get_pill_region)(struct device *dev, void *uiadata);
 	int	(*get_hold_distance)(struct device *dev, void *idata);
 	int	(*get_gs_distance)(struct device *dev, void *idata);
+	int	(*get_poison_timeout)(struct device *dev, void *idata);
+	int	(*get_poison_distance)(struct device *dev, void *idata);
+	int	(*get_poison_trigger_distance)(struct device *dev, void *idata);
 	/* SET methods */
 	int	(*reset)(struct device *dev, int type);
 	int	(*drv_irq)(struct device *dev, int state);
@@ -202,6 +245,9 @@ enum ts_mmi_pm_mode {
 	int	(*pill_region)(struct device *dev, int *region_array);
 	int	(*hold_distance)(struct device *dev, int dis);
 	int	(*gs_distance)(struct device *dev, int dis);
+	int	(*poison_timeout)(struct device *dev, int timeout);
+	int	(*poison_distance)(struct device *dev, int dis);
+	int	(*poison_trigger_distance)(struct device *dev, int dis);
 	int	(*update_baseline)(struct device *dev, int enable);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
@@ -238,6 +284,9 @@ struct ts_mmi_dev_pdata {
 	bool		hold_distance_ctrl;
 	bool		gs_distance_ctrl;
 	bool		hold_grip_ctrl;
+	bool		poison_slot_ctrl;
+	int		max_x;
+	int		max_y;
 	int 		ctrl_dsi;
 	int		reset;
 	const char	*class_entry_name;
@@ -312,6 +361,9 @@ struct ts_mmi_dev {
 	int			hold_distance;
 	int			gs_distance;
 	int			hold_grip;
+	int			poison_timeout;
+	int			poison_distance;
+	int			poison_trigger_distance;
 	int			charger_mode;
 	int			reset;
 	int			pinctrl;
@@ -363,6 +415,9 @@ extern void ts_mmi_dev_unregister(struct device *parent);
 extern int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev, struct device_node *of_node);
 extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
+#ifdef TS_MMI_TOUCH_EDGE_GESTURE
+extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
+#endif
 
 /*sensor*/
 extern bool ts_mmi_is_sensor_enable(void);
