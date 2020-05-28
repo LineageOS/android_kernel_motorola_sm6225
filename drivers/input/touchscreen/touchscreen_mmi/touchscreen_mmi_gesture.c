@@ -15,8 +15,36 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/input.h>
+#include <linux/input/mt.h>
 #include <linux/touchscreen_mmi.h>
 #include <linux/sensors.h>
+
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+/* Declare depended feature */
+#ifndef TS_MMI_TOUCH_GESTURE_LOG_EVENT
+#define TS_MMI_TOUCH_GESTURE_LOG_EVENT
+#endif
+
+#ifndef TS_MMI_TOUCH_GESTURE_REPORT_TOUCH_EVENT
+#define TS_MMI_TOUCH_GESTURE_REPORT_TOUCH_EVENT
+#endif
+
+#ifndef TS_MMI_TOUCH_GESTURE_SUPPRESSION
+#define TS_MMI_TOUCH_GESTURE_SUPPRESSION
+#endif
+
+#ifndef TS_MMI_TOUCH_GESTURE_GS_DISTANCE
+#define TS_MMI_TOUCH_GESTURE_GS_DISTANCE
+#endif
+#endif /* TS_MMI_TOUCH_GESTURE_POISON_EVENT */
+
+#ifdef TS_MMI_TOUCH_GESTURE_SUPPRESSION
+/* Declare depended feature */
+#ifndef TS_MMI_TOUCH_GESTURE_GS_DISTANCE
+#define TS_MMI_TOUCH_GESTURE_GS_DISTANCE
+#endif
+#endif /* TS_MMI_TOUCH_GESTURE_SUPPRESSION */
+
 
 struct ts_mmi_sensor_platform_data {
 	struct input_dev *input_sensor_dev;
@@ -26,12 +54,158 @@ struct ts_mmi_sensor_platform_data {
 	struct ts_mmi_dev *touch_cdev;
 };
 
+#ifdef TS_MMI_TOUCH_GESTURE_LOG_EVENT
+struct touch_event_with_time_data {
+	struct touch_event_data event;
+	ktime_t time;
+};
+#endif
+
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+struct touch_event_slot_poison_data {
+	struct touch_event_with_time_data center;
+	bool is_slot_poisoned;
+};
+#endif
+
 struct ts_mmi_touch_events_data {
 	struct ts_mmi_dev *touch_cdev;
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+	/* Touch slot is poisoned, do not report this slot point until slot release or IC resumed. */
+	struct touch_event_slot_poison_data poison_events[TS_MMI_MAX_POINT_NUM];
+#endif
 };
 
 static struct ts_mmi_sensor_platform_data *sensor_pdata;
 static struct ts_mmi_touch_events_data *events_data;
+
+#ifdef TS_MMI_TOUCH_GESTURE_LOG_EVENT
+static inline void ts_mmi_touch_log_event(struct touch_event_with_time_data *dst, const struct touch_event_data *src)
+{
+	memcpy(&dst->event, src, sizeof(struct touch_event_data));
+	dst->time = ktime_get();
+}
+
+static inline void ts_mmi_touch_clear_event(struct touch_event_with_time_data *dst)
+{
+	memset(dst, 0, sizeof(struct touch_event_with_time_data));
+}
+#endif /* TS_MMI_TOUCH_GESTURE_LOG_EVENT */
+
+#ifdef TS_MMI_TOUCH_GESTURE_REPORT_TOUCH_EVENT
+static inline void ts_mmi_touch_event_report_event_release(int index, struct input_dev *input_dev)
+{
+	input_mt_slot(input_dev, index);
+	input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 0);
+}
+#endif
+
+#ifdef TS_MMI_TOUCH_GESTURE_GS_DISTANCE
+static inline bool ts_mmi_touch_can_handle_gs_distance(void)
+{
+	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
+
+	return (touch_cdev->pdata.gs_distance_ctrl);
+}
+
+static inline int ts_mmi_touch_event_get_gs_distance(struct ts_mmi_dev *touch_cdev)
+{
+	return (ts_mmi_touch_can_handle_gs_distance()) ? touch_cdev->gs_distance : TOUCHSCREEN_MMI_DEFAULT_GS_DISTANCE;
+}
+#endif /* TS_MMI_TOUCH_GESTURE_GS_DISTANCE */
+
+#ifdef TS_MMI_TOUCH_GESTURE_SUPPRESSION
+static inline bool ts_mmi_touch_can_handle_suppression(void)
+{
+	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
+
+	return ((touch_cdev->pdata.suppression_ctrl) &&
+		(touch_cdev->pdata.gs_distance_ctrl) &&
+		(touch_cdev->pdata.max_x > 0) &&
+		(touch_cdev->pdata.max_y > 0));
+}
+
+static inline bool ts_mmi_touch_event_is_in_suppression(struct touch_event_data *tev, struct ts_mmi_dev *touch_cdev)
+{
+	int gs_distance = ts_mmi_touch_event_get_gs_distance(touch_cdev);
+
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_ALL)
+		return false;
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_LEFT)
+		return (tev->x > (touch_cdev->pdata.max_x - gs_distance)) ? true : false;
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_RIGHT)
+		return (tev->x < gs_distance) ? true : false;
+
+	return ((tev->x < gs_distance) || (tev->x > (touch_cdev->pdata.max_x - gs_distance))) ? true : false;
+}
+#endif /* TS_MMI_TOUCH_GESTURE_SUPPRESSION */
+
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+static inline bool ts_mmi_touch_event_rescue_slot(int slot_id)
+{
+	if (events_data->poison_events[slot_id].is_slot_poisoned) {
+		ts_mmi_touch_clear_event(&events_data->poison_events[slot_id].center);
+		events_data->poison_events[slot_id].is_slot_poisoned = false;
+		return true;
+	}
+	return false;
+}
+
+static inline bool ts_mmi_touch_can_handle_poison_slot(void)
+{
+	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
+
+	return ((touch_cdev->pdata.suppression_ctrl) &&
+		(touch_cdev->pdata.gs_distance_ctrl) &&
+		(touch_cdev->pdata.poison_slot_ctrl) &&
+		(touch_cdev->pdata.max_x > 0) &&
+		(touch_cdev->pdata.max_y > 0));
+}
+
+static inline bool ts_mmi_touch_event_is_in_poison_trigger(struct touch_event_data *tev, struct ts_mmi_dev *touch_cdev)
+{
+	int trigger_distance = touch_cdev->poison_trigger_distance;
+
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_ALL)
+		return false;
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_LEFT)
+		return (tev->x > (touch_cdev->pdata.max_x - trigger_distance)) ? true : false;
+	if (touch_cdev->suppression == TS_MMI_DISABLE_SUPPRESSION_RIGHT)
+		return (tev->x < trigger_distance) ? true : false;
+
+	return ((tev->x < trigger_distance) || (tev->x > (touch_cdev->pdata.max_x - trigger_distance))) ? true : false;
+}
+
+static inline bool need_handle_poison_event(int id)
+{
+	return ((events_data->poison_events[id].center.event.type == TS_COORDINATE_ACTION_PRESS) ||
+		(events_data->poison_events[id].center.event.type == TS_COORDINATE_ACTION_MOVE));
+}
+
+static inline bool is_far_from_poison_center(struct touch_event_data *tev)
+{
+	int delta_y = abs(tev->y - events_data->poison_events[tev->id].center.event.y);
+	return (delta_y > events_data->touch_cdev->poison_distance) ? true : false;
+}
+
+static inline bool is_stack_at_poison_center(struct touch_event_data *tev)
+{
+	if (events_data->poison_events[tev->id].center.time) {
+		unsigned long long duration = timediff_ms(
+			ktime_to_timespec(events_data->poison_events[tev->id].center.time),
+			ktime_to_timespec(ktime_get()));
+
+		return (duration > events_data->touch_cdev->poison_timeout) ? true : false;
+	}
+
+	return false;
+}
+
+static inline void update_poison_center(struct touch_event_data *tev)
+{
+	return ts_mmi_touch_log_event(&events_data->poison_events[tev->id].center, tev);
+}
+#endif /* TS_MMI_TOUCH_GESTURE_POISON_EVENT */
 
 static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 {
@@ -65,10 +239,66 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 	return 0;
 }
 
-static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
+
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+static int ts_mmi_touch_event_poison_slot_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
+{
+	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
+
+	if (tev->type == TS_COORDINATE_ACTION_PRESS) {
+		if (ts_mmi_touch_event_is_in_poison_trigger(tev, touch_cdev)) {
+			update_poison_center(tev);
+		}
+	} else if (tev->type == TS_COORDINATE_ACTION_RELEASE) {
+		if (need_handle_poison_event(tev->id)) {
+			if (events_data->poison_events[tev->id].is_slot_poisoned) {
+				if (ts_mmi_touch_event_rescue_slot(tev->id))
+					pr_info("%s: Poison slot(%d) rescued\n", __func__, tev->id);
+				tev->skip_report = true;
+				tev->type = TS_COORDINATE_ACTION_NONE;
+			}
+		}
+	} else if (tev->type == TS_COORDINATE_ACTION_MOVE) {
+		if (need_handle_poison_event(tev->id)) {
+			if (events_data->poison_events[tev->id].is_slot_poisoned) {
+				dev_dbg(DEV_TS, "%s: slot(%d) is poisoned\n", __func__, tev->id);
+				tev->skip_report = true;
+				tev->type = TS_COORDINATE_ACTION_NONE;
+			} else if (is_far_from_poison_center(tev) && ts_mmi_touch_event_is_in_suppression(tev, touch_cdev)) {
+				update_poison_center(tev);
+			} else if (is_stack_at_poison_center(tev) && ts_mmi_touch_event_is_in_suppression(tev, touch_cdev)) {
+				dev_info(DEV_TS, "%s: slot(%d) is stacked near poison center. Mark this slot poisoned\n", __func__, tev->id);
+				ts_mmi_touch_event_report_event_release(tev->id, input_dev);
+				events_data->poison_events[tev->id].is_slot_poisoned = true;
+				tev->skip_report = true;
+				tev->type = TS_COORDINATE_ACTION_NONE;
+			}
+		}
+	}
+	return 0;
+}
+#endif /* TS_MMI_TOUCH_GESTURE_POISON_EVENT */
+
+#ifdef TS_MMI_TOUCH_EDGE_GESTURE
+static int ts_mmi_touch_event_edge_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
+{
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+	if (ts_mmi_touch_can_handle_poison_slot())
+		ts_mmi_touch_event_poison_slot_handler(tev, input_dev);
+#endif
+
+	return 0;
+}
+#endif
+
+static int ts_mmi_touch_event_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
 {
 	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
 	int ret = 0;
+
+#ifdef TS_MMI_TOUCH_EDGE_GESTURE
+	ts_mmi_touch_event_edge_handler(tev, input_dev);
+#endif
 
 	switch (tev->type) {
 	case TS_COORDINATE_ACTION_PRESS:
@@ -76,6 +306,7 @@ static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
 		pr_info("%s: [P]Finger %d: Down, x=%d, y=%d, major=%d, minor=%d",
 				__func__, tev->id, tev->x, tev->y, tev->major, tev->minor);
 #endif
+	case TS_COORDINATE_ACTION_MOVE:
 		break;
 
 	case TS_COORDINATE_ACTION_RELEASE:
@@ -92,7 +323,8 @@ static int ts_mmi_touch_event_handler(struct touch_event_data *tev)
 			}
 		}
 		break;
-
+	case TS_COORDINATE_ACTION_NONE:
+		break;
 	default:
 		pr_info("%s: unsupport type=%d\n", __func__, tev->type);
 
@@ -149,6 +381,19 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
+
+#ifdef TS_MMI_TOUCH_EDGE_GESTURE
+int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev)
+{
+#ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
+	int i;
+	for (i = 0; i < TS_MMI_MAX_POINT_NUM; i++)
+		if (ts_mmi_touch_event_rescue_slot(i))
+			pr_info("%s: Poison slot(%d) rescued\n", __func__, i);
+#endif
+	return 0;
+}
+#endif
 
 int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 {
