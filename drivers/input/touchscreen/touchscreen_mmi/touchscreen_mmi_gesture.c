@@ -261,9 +261,14 @@ static int ts_mmi_touch_event_poison_slot_handler(struct touch_event_data *tev, 
 	} else if (tev->type == TS_COORDINATE_ACTION_MOVE) {
 		if (need_handle_poison_event(tev->id)) {
 			if (events_data->poison_events[tev->id].is_slot_poisoned) {
-				dev_dbg(DEV_TS, "%s: slot(%d) is poisoned\n", __func__, tev->id);
-				tev->skip_report = true;
-				tev->type = TS_COORDINATE_ACTION_NONE;
+				if (ts_mmi_touch_event_is_in_poison_trigger(tev, touch_cdev)) {
+					dev_dbg(DEV_TS, "%s: slot(%d) is poisoned\n", __func__, tev->id);
+					tev->skip_report = true;
+					tev->type = TS_COORDINATE_ACTION_NONE;
+				} else {
+					events_data->poison_events[tev->id].is_slot_poisoned = false;
+					pr_info("%s: Poison slot(%d) temperary rescued because outof trigger area\n", __func__, tev->id);
+				}
 			} else if (is_far_from_poison_center(tev) && ts_mmi_touch_event_is_in_suppression(tev, touch_cdev)) {
 				update_poison_center(tev);
 			} else if (is_stack_at_poison_center(tev) && ts_mmi_touch_event_is_in_suppression(tev, touch_cdev)) {
