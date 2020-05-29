@@ -34,7 +34,7 @@ static inline int cts_is_charger_attached(struct chipone_ts_data *cts_data,
 {
     return -ENODEV;
 }
-#endif /*CONFIG_CTS_CHARGER_DETECT */
+#endif /* CONFIG_CTS_CHARGER_DETECT */
 
 #endif /* CTS_CHARGER_DETECT_H */
 

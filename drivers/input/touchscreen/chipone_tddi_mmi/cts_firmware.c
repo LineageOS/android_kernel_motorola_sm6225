@@ -1070,9 +1070,12 @@ out:
 	}
 
 #ifdef CONFIG_CTS_CHARGER_DETECT
-	if (cts_is_charger_exist(cts_dev)) {
-		cts_charger_plugin(cts_dev);
-	}
+    if (cts_is_charger_exist(cts_dev)) {
+        int r = cts_set_dev_charger_attached(cts_dev, true);
+        if (r) {
+            cts_err("Set dev charger attached failed %d", r);
+        }
+    }
 #endif /* CONFIG_CTS_CHARGER_DETECT */
 
 #ifdef CONFIG_CTS_GLOVE
