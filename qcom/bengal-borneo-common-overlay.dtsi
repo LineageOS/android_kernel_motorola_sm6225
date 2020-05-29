@@ -51,6 +51,18 @@
 			input-enable;
 		};
 	};
+
+	tps61280_en_default: tps61280_en_default {
+		mux {
+			pins = "gpio47";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio47";
+			drive-strength = <8>;
+			output-high;
+		};
+	};
 };
 
 &soc {
@@ -187,21 +199,16 @@
 	status = "ok";
 	#address-cells = <1>;
 	#size-cells = <0>;
-	nq@28 {
-		compatible = "qcom,nq-nci";
-		reg = <0x28>;
-		qcom,nq-irq = <&tlmm 70 0x00>;
-		qcom,nq-ven = <&tlmm 69 0x00>;
-		qcom,nq-firm = <&tlmm 31 0x00>;
-		qcom,nq-clkreq = <&tlmm 86 0x00>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <70 0>;
-		interrupt-names = "nfc_irq";
-		pinctrl-names = "nfc_active", "nfc_suspend";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active
-				&nfc_clk_req_active>;
-		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
-				&nfc_clk_req_suspend>;
+
+	tps61280@75 {
+		compatible = "ti,tps61280";
+		reg = <0x75>;
+		ti,config = <0x0D>;
+		ti,vout-floor = <0x0D>;
+		ti,vout-roof = <0x1F>;/*0x1F*/
+		ti,ilim = <0x0F>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&tps61280_en_default>;
 	};
 };
 
