@@ -847,7 +847,8 @@ static void __exit cts_driver_exit(void)
 #endif
 }
 
-module_init(cts_driver_init);
+//module_init(cts_driver_init);
+late_initcall(cts_driver_init);
 module_exit(cts_driver_exit);
 
 MODULE_DESCRIPTION("Chipone TDDI touchscreen Driver for QualComm platform");

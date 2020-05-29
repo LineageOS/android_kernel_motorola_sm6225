@@ -975,9 +975,12 @@ int cts_reset_test(struct cts_device *cts_dev)
 		cts_err("Device is offline while reset is high");
 	}
 #ifdef CONFIG_CTS_CHARGER_DETECT
-	if (cts_is_charger_exist(cts_dev)) {
-		cts_charger_plugin(cts_dev);
-	}
+    if (cts_is_charger_exist(cts_dev)) {
+        int r = cts_set_dev_charger_attached(cts_dev, true);
+        if (r) {
+            cts_err("Set dev charger attached failed %d", r);
+        }
+    }
 #endif /* CONFIG_CTS_CHARGER_DETECT */
 
 #ifdef CONFIG_CTS_GLOVE
@@ -1152,7 +1155,6 @@ int cts_compensate_cap_test(struct cts_device *cts_dev, u8 min_thres,
 {
 	u8 *cap = NULL;
 	int ret = 0;
-	bool data_valid = false;
 
 	cts_info("Compensate cap, threshold [%u, %u]", min_thres, max_thres);
 
@@ -1165,36 +1167,19 @@ int cts_compensate_cap_test(struct cts_device *cts_dev, u8 min_thres,
 	}
 
 	cts_lock_device(cts_dev);
-	ret = cts_enable_get_compensate_cap(cts_dev);
-	if (ret) {
-		cts_err("Enable get compensate cap failed %d", ret);
-		goto unlock_device;
-	}
-
-	mdelay(10);
-
 	ret = cts_get_compensate_cap(cts_dev, cap);
+	cts_unlock_device(cts_dev);
 	if (ret) {
 		cts_err("Get compensate cap failed %d", ret);
-		goto unlock_device;
+        goto free_cap;
 	}
 
-	ret = cts_disable_get_compensate_cap(cts_dev);
-	if (ret) {
-		cts_err("Disable get compensate cap failed %d", ret);
-		goto unlock_device;
-	}
+	dump_compensate_cap(cts_dev, cap);
+	ret =
+	    validate_compensate_cap(cts_dev, "Compensate-Cap", cap,
+				    min_thres, max_thres);
 
-	data_valid = true;
-unlock_device:
-	cts_unlock_device(cts_dev);
-
-	if (data_valid) {
-		dump_compensate_cap(cts_dev, cap);
-		ret =
-		    validate_compensate_cap(cts_dev, "Compensate-Cap", cap,
-					    min_thres, max_thres);
-	}
+free_cap:
 	kfree(cap);
 
 	cts_info("Compensate-Cap test %s", ret == 0 ? "PASS" : "FAIL");
