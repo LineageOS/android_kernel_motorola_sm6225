@@ -4,19 +4,19 @@
 #include "cts_config.h"
 
 enum cts_dev_hw_reg {
-	CTS_DEV_HW_REG_HARDWARE_ID = 0x30000u,
-	CTS_DEV_HW_REG_CLOCK_GATING = 0x30004u,
-	CTS_DEV_HW_REG_RESET_CONFIG = 0x30008u,
-	CTS_DEV_HW_REG_BOOT_MODE = 0x30010u,
-	CTS_DEV_HW_REG_CURRENT_MODE = 0x30011u,
+    CTS_DEV_HW_REG_HARDWARE_ID = 0x30000u,
+    CTS_DEV_HW_REG_CLOCK_GATING = 0x30004u,
+    CTS_DEV_HW_REG_RESET_CONFIG = 0x30008u,
+    CTS_DEV_HW_REG_BOOT_MODE = 0x30010u,
+    CTS_DEV_HW_REG_CURRENT_MODE = 0x30011u,
 };
 
 enum cts_dev_boot_mode {
-	CTS_DEV_BOOT_MODE_FLASH = 1,
-	CTS_DEV_BOOT_MODE_I2C_PROGRAM = 2,
-	CTS_DEV_BOOT_MODE_SRAM = 3,
-	CTS_DEV_BOOT_MODE_SPI_PROGRAM = 5,
-	CTS_DEV_BOOT_MODE_MASK = 7,
+    CTS_DEV_BOOT_MODE_FLASH = 1,
+    CTS_DEV_BOOT_MODE_I2C_PROGRAM = 2,
+    CTS_DEV_BOOT_MODE_SRAM = 3,
+    CTS_DEV_BOOT_MODE_SPI_PROGRAM = 5,
+    CTS_DEV_BOOT_MODE_MASK = 7,
 };
 
 /** I2C addresses(7bits), transfer size and bitrate */
@@ -29,88 +29,103 @@ enum cts_dev_boot_mode {
 
 /** Chipone firmware register addresses under normal mode */
 enum cts_device_fw_reg {
-	CTS_DEVICE_FW_REG_WORK_MODE = 0x0000,
-	CTS_DEVICE_FW_REG_DATA_READY = 0x0002,
-	CTS_DEVICE_FW_REG_CMD = 0x0004,
-	CTS_DEVICE_FW_REG_CHIP_TYPE = 0x000A,
-	CTS_DEVICE_FW_REG_VERSION = 0x000C,
-	CTS_DEVICE_FW_REG_FW_LIB_MAIN_VERSION = 0x09,
-	CTS_DEVICE_FW_REG_DDI_VERSION = 0x0010,
-	CTS_DEVICE_FW_REG_GET_WORK_MODE = 0x003F,
-	CTS_DEVICE_FW_REG_FW_LIB_SUB_VERSION = 0x0047,
+    CTS_DEVICE_FW_REG_WORK_MODE = 0x0000,
+    CTS_DEVICE_FW_REG_SYS_BUSY = 0x0001,
+    CTS_DEVICE_FW_REG_DATA_READY = 0x0002,
+    CTS_DEVICE_FW_REG_CMD = 0x0004,
+    CTS_DEVICE_FW_REG_POWER_MODE = 0x0005,
+    CTS_DEVICE_FW_REG_FW_LIB_MAIN_VERSION = 0x0009,
+    CTS_DEVICE_FW_REG_CHIP_TYPE = 0x000A,
+    CTS_DEVICE_FW_REG_VERSION = 0x000C,
+    CTS_DEVICE_FW_REG_DDI_VERSION = 0x0010,
+    CTS_DEVICE_FW_REG_GET_WORK_MODE = 0x003F,
+    CTS_DEVICE_FW_REG_FW_LIB_SUB_VERSION =  0x0047,
+    CTS_DEVICE_FW_REG_COMPENSATE_CAP_READY =  0x004E,
 
-	CTS_DEVICE_FW_REG_TOUCH_INFO = 0x1000,
-	CTS_DEVICE_FW_REG_RAW_DATA = 0x2000,
-	CTS_DEVICE_FW_REG_DIFF_DATA = 0x3000,
-	CTS_DEVICE_FW_REG_GESTURE_INFO = 0x7000,
+    CTS_DEVICE_FW_REG_TOUCH_INFO = 0x1000,
+    CTS_DEVICE_FW_REG_RAW_DATA = 0x2000,
+    CTS_DEVICE_FW_REG_DIFF_DATA = 0x3000,
+    CTS_DEVICE_FW_REG_GESTURE_INFO = 0x7000,
 
-	CTS_DEVICE_FW_REG_PANEL_PARAM = 0x8000,
-	CTS_DEVICE_FW_REG_X_RESOLUTION = 0x8090,
-	CTS_DEVICE_FW_REG_Y_RESOLUTION = 0x8092,
-	CTS_DEVICE_FW_REG_NUM_TX = 0x8007,
-	CTS_DEVICE_FW_REG_NUM_RX = 0x8008,
+    CTS_DEVICE_FW_REG_PANEL_PARAM = 0x8000,
+    CTS_DEVICE_FW_REG_NUM_TX = 0x8007,
+    CTS_DEVICE_FW_REG_NUM_RX = 0x8008,
+    CTS_DEVICE_FW_REG_INT_KEEP_TIME = 0x8047,   /* Unit us */
+    CTS_DEVICE_FW_REG_RAWDATA_TARGET = 0x8049,
+    CTS_DEVICE_FW_REG_X_RESOLUTION = 0x8090,
+    CTS_DEVICE_FW_REG_Y_RESOLUTION = 0x8092,
+    CTS_DEVICE_FW_REG_SWAP_AXES = 0x8094,
+    CTS_DEVICE_FW_REG_GLOVE_MODE = 0x8095,
+    CTS_DEVICE_FW_REG_TEST_WITH_DISPLAY_ON = 0x80A3,
+    CTS_DEVICE_FW_REG_INT_MODE = 0x80D8,
+    CTS_DEVICE_FW_REG_EARJACK_DETECT_SUPP = 0x8113,
+    CTS_DEVICE_FW_REG_AUTO_COMPENSATE_EN = 0x8114,
+    CTS_DEVICE_FW_REG_ESD_PROTECTION = 0x8156, /* RW */
+    CTS_DEVICE_FW_REG_FLAG_BITS = 0x8158,
 
-	CTS_DEVICE_FW_REG_COMPENSATE_CAP = 0xA000,
-	CTS_DEVICE_FW_REG_DEBUG_INTF = 0xF000,
+    CTS_DEVICE_FW_REG_COMPENSATE_CAP = 0xA000,
+    CTS_DEVICE_FW_REG_DEBUG_INTF = 0xF000,
 };
 
 /** Hardware IDs, read from hardware id register */
 enum cts_dev_hwid {
-	CTS_DEV_HWID_ICNL9911 = 0x990100u,
-	CTS_DEV_HWID_ICNL9911S = 0x990110u,
+    CTS_DEV_HWID_ICNL9911 = 0x990100u,
+    CTS_DEV_HWID_ICNL9911S = 0x990110u,
 
-	CTS_DEV_HWID_ANY = 0,
-	CTS_DEV_HWID_INVALID = 0xFFFFFFFFu,
+    CTS_DEV_HWID_ANY = 0,
+    CTS_DEV_HWID_INVALID = 0xFFFFFFFFu,
 };
 
 /* Firmware IDs, read from firmware register @ref CTS_DEV_FW_REG_CHIP_TYPE
    under normal mode */
 enum cts_dev_fwid {
-	CTS_DEV_FWID_ICNL9911 = 0x9911u,
-	CTS_DEV_FWID_ICNL9911S = 0x9964u,
+    CTS_DEV_FWID_ICNL9911 = 0x9911u,
+    CTS_DEV_FWID_ICNL9911S = 0x9964u,
 
-	CTS_DEV_FWID_ANY = 0u,
-	CTS_DEV_FWID_INVALID = 0xFFFFu
+    CTS_DEV_FWID_ANY = 0u,
+    CTS_DEV_FWID_INVALID = 0xFFFFu
 };
 
 /** Commands written to firmware register @ref CTS_DEVICE_FW_REG_CMD under normal mode */
 enum cts_firmware_cmd {
-	CTS_CMD_RESET = 1,
-	CTS_CMD_SUSPEND = 2,
-	CTS_CMD_ENTER_WRITE_PARA_TO_FLASH_MODE = 3,
-	CTS_CMD_WRITE_PARA_TO_FLASH = 4,
-	CTS_CMD_WRTITE_INT_HIGH = 5,
-	CTS_CMD_WRTITE_INT_LOW = 6,
-	CTS_CMD_RELASE_INT_TEST = 7,
-	CTS_CMD_RECOVERY_TX_VOL = 0x10,
-	CTS_CMD_DEC_TX_VOL_1 = 0x11,
-	CTS_CMD_DEC_TX_VOL_2 = 0x12,
-	CTS_CMD_DEC_TX_VOL_3 = 0x13,
-	CTS_CMD_DEC_TX_VOL_4 = 0x14,
-	CTS_CMD_DEC_TX_VOL_5 = 0x15,
-	CTS_CMD_DEC_TX_VOL_6 = 0x16,
-	CTS_CMD_ENABLE_READ_RAWDATA = 0x20,
-	CTS_CMD_DISABLE_READ_RAWDATA = 0x21,
-	CTS_CMD_SUSPEND_WITH_GESTURE = 0x40,
-	CTS_CMD_QUIT_GESTURE_MONITOR = 0x41,
-	CTS_CMD_CHARGER_PLUG_IN = 0x55,
-	CTS_CMD_CHARGER_PLUG_OUT = 0x66,
-	CTS_CMD_ENABLE_FW_LOG_REDIRECT = 0x86,
-	CTS_CMD_DISABLE_FW_LOG_REDIRECT = 0x87,
-	CTS_CMD_ENABLE_READ_CNEG = 0x88,
-	CTS_CMD_DISABLE_READ_CNEG = 0x89,
-	CTS_CMD_FW_LOG_SHOW_FINISH = 0xE0,
+    CTS_CMD_RESET = 1,
+    CTS_CMD_SUSPEND = 2,
+    CTS_CMD_ENTER_WRITE_PARA_TO_FLASH_MODE = 3,
+    CTS_CMD_WRITE_PARA_TO_FLASH = 4,
+    CTS_CMD_WRTITE_INT_HIGH = 5,
+    CTS_CMD_WRTITE_INT_LOW = 6,
+    CTS_CMD_RELASE_INT_TEST = 7,
+    CTS_CMD_RECOVERY_TX_VOL = 0x10,
+    CTS_CMD_DEC_TX_VOL_1 = 0x11,
+    CTS_CMD_DEC_TX_VOL_2 = 0x12,
+    CTS_CMD_DEC_TX_VOL_3 = 0x13,
+    CTS_CMD_DEC_TX_VOL_4 = 0x14,
+    CTS_CMD_DEC_TX_VOL_5 = 0x15,
+    CTS_CMD_DEC_TX_VOL_6 = 0x16,
+    CTS_CMD_ENABLE_READ_RAWDATA = 0x20,
+    CTS_CMD_DISABLE_READ_RAWDATA = 0x21,
+    CTS_CMD_SUSPEND_WITH_GESTURE = 0x40,
+    CTS_CMD_QUIT_GESTURE_MONITOR = 0x41,
+    CTS_CMD_CHARGER_ATTACHED = 0x55,
+    CTS_CMD_EARJACK_ATTACHED = 0x57,
+    CTS_CMD_EARJACK_DETACHED = 0x58,
+    CTS_CMD_CHARGER_DETACHED = 0x66,
+    CTS_CMD_ENABLE_FW_LOG_REDIRECT = 0x86,
+    CTS_CMD_DISABLE_FW_LOG_REDIRECT = 0x87,
+    CTS_CMD_ENABLE_READ_CNEG   = 0x88,
+    CTS_CMD_DISABLE_READ_CNEG  = 0x89,
+    CTS_CMD_FW_LOG_SHOW_FINISH = 0xE0,
 
 };
 
 #pragma pack(1)
 /** Touch message read back from chip */
 struct cts_device_touch_msg {
-	u8 id;
-	__le16 x;
-	__le16 y;
-	u8 pressure;
-	u8 event;
+    u8      id;
+    __le16  x;
+    __le16  y;
+    u8      pressure;
+    u8      event;
 
 #define CTS_DEVICE_TOUCH_EVENT_NONE         (0)
 #define CTS_DEVICE_TOUCH_EVENT_DOWN         (1)
@@ -122,23 +137,23 @@ struct cts_device_touch_msg {
 
 /** Touch information read back from chip */
 struct cts_device_touch_info {
-	u8 vkey_state;
-	u8 num_msg;
+    u8  vkey_state;
+    u8  num_msg;
 
-	struct cts_device_touch_msg msgs[CFG_CTS_MAX_TOUCH_NUM];
+    struct cts_device_touch_msg msgs[CFG_CTS_MAX_TOUCH_NUM];
 };
 
 /** Gesture trace point read back from chip */
 struct cts_device_gesture_point {
-	__le16 x;
-	__le16 y;
-	u8 pressure;
-	u8 event;
+    __le16  x;
+    __le16  y;
+    u8      pressure;
+    u8      event;
 };
 
 /** Gesture information read back from chip */
 struct cts_device_gesture_info {
-	u8 gesture_id;
+    u8    gesture_id;
 #define CTS_GESTURE_UP                  (0x11)
 #define CTS_GESTURE_C                   (0x12)
 #define CTS_GESTURE_O                   (0x13)
@@ -155,68 +170,71 @@ struct cts_device_gesture_info {
 #define CTS_GESTURE_V                   (0x1E)
 #define CTS_GESTURE_D_TAP               (0x50)
 
-	u8 num_points;
+    u8  num_points;
 
 #define CTS_CHIP_MAX_GESTURE_TRACE_POINT    (64u)
-	struct cts_device_gesture_point
-	    points[CTS_CHIP_MAX_GESTURE_TRACE_POINT];
+    struct cts_device_gesture_point points[CTS_CHIP_MAX_GESTURE_TRACE_POINT];
 
 };
 #pragma pack()
 
+
 struct cts_device;
 
 enum cts_crc_type {
-	CTS_CRC16 = 1,
-	CTS_CRC32 = 2,
+    CTS_CRC16 = 1,
+    CTS_CRC32 = 2,
 };
 
 /** Chip hardware data, will never change */
 struct cts_device_hwdata {
-	const char *name;
-	u32 hwid;
-	u16 fwid;
-	u8 num_row;
-	u8 num_col;
-	u32 sram_size;
+    const char *name;
+    u32 hwid;
+    u16 fwid;
+    u8  num_row;
+    u8  num_col;
+    u32 sram_size;
 
-	/* Address width under program mode */
-	u8 program_addr_width;
+    /* Address width under program mode */
+    u8  program_addr_width;
 
-	const struct cts_sfctrl *sfctrl;
+    const struct cts_sfctrl *sfctrl;
 
 };
 
 /** Chip firmware data */
 struct cts_device_fwdata {
-	u16 version;
-	u16 res_x;
-	u16 res_y;
-	u8 rows;
-	u8 cols;
-	u8 ddi_version;
-	u8 int_mode;
-	u8 esd_method;
-	u16 lib_version;
-	u16 int_keep_time;
-	u16 rawdata_target;
+    u16 version;
+    u16 res_x;
+    u16 res_y;
+    u8  rows;
+    u8  cols;
+    bool flip_x;
+    bool flip_y;
+    bool swap_axes;
+    u8  ddi_version;
+    u8  int_mode;
+    u8  esd_method;
+    u16 lib_version;
+    u16 int_keep_time;
+    u16 rawdata_target;
 };
 
 /** Chip runtime data */
 struct cts_device_rtdata {
-	u8 slave_addr;
-	int addr_width;
-	bool program_mode;
-	bool has_flash;
+    u8   slave_addr;
+    int  addr_width;
+    bool program_mode;
+    bool has_flash;
 
-	bool suspended;
-	bool updating;
-	bool testing;
+    bool suspended;
+    bool updating;
+    bool testing;
 
-	bool gesture_wakeup_enabled;
-	bool charger_exist;
-	bool fw_log_redirect_enabled;
-	bool glove_mode_enabled;
+    bool gesture_wakeup_enabled;
+    bool charger_exist;
+    bool fw_log_redirect_enabled;
+    bool glove_mode_enabled;
 };
 
 struct cts_device {
@@ -236,18 +254,18 @@ struct cts_platform_data;
 
 struct chipone_ts_data {
 #ifdef CONFIG_CTS_I2C_HOST
-	struct i2c_client *i2c_client;
+    struct i2c_client *i2c_client;
 #else
-	struct spi_device *spi_client;
-#endif				/* CONFIG_CTS_I2C_HOST */
-	struct device *device;
-	struct cts_device cts_dev;
-	struct cts_platform_data *pdata;
-	struct workqueue_struct *workqueue;
-	struct delayed_work fw_upgrade_work;
-	struct work_struct ts_resume_work;
+    struct spi_device *spi_client;
+#endif /* CONFIG_CTS_I2C_HOST */
+    struct device *device;
+    struct cts_device cts_dev;
+    struct cts_platform_data *pdata;
+    struct workqueue_struct *workqueue;
+    struct delayed_work fw_upgrade_work;
+    struct work_struct ts_resume_work;
 #ifdef CONFIG_CTS_CHARGER_DETECT
-	void *cd_data;
+    void *charger_detect_data;
 #endif /* CONFIG_CTS_CHARGER_DETECT */
 
 #ifdef CONFIG_CTS_ESD_PROTECTION
@@ -255,11 +273,11 @@ struct chipone_ts_data {
 	struct delayed_work esd_work;
 	bool esd_enabled;
 	int esd_check_fail_cnt;
-#endif				/* CONFIG_CTS_ESD_PROTECTION */
+#endif /* CONFIG_CTS_ESD_PROTECTION */
 
 #ifdef CONFIG_CTS_LEGACY_TOOL
 	struct proc_dir_entry *procfs_entry;
-#endif				/* CONFIG_CTS_LEGACY_TOOL */
+#endif /* CONFIG_CTS_LEGACY_TOOL */
 
 	bool force_reflash;
 
@@ -574,11 +592,9 @@ extern int cts_get_num_rows(const struct cts_device *cts_dev, u8 *num_rows);
 extern int cts_get_num_cols(const struct cts_device *cts_dev, u8 *num_cols);
 extern int cts_enable_get_rawdata(const struct cts_device *cts_dev);
 extern int cts_disable_get_rawdata(const struct cts_device *cts_dev);
-extern int cts_enable_get_compensate_cap(const struct cts_device *cts_dev);
-extern int cts_disable_get_compensate_cap(const struct cts_device *cts_dev);
 extern int cts_get_rawdata(const struct cts_device *cts_dev, void *buf);
 extern int cts_get_diffdata(const struct cts_device *cts_dev, void *buf);
-extern int cts_get_compensate_cap(const struct cts_device *cts_dev, u8 *cap);
+extern int cts_get_compensate_cap(struct cts_device *cts_dev, u8 *cap);
 extern int cts_get_fwid(struct cts_device *cts_dev, u16 *fwid);
 extern int cts_get_hwid(struct cts_device *cts_dev, u32 *hwid);
 
@@ -636,20 +652,14 @@ static inline int cts_is_glove_enabled(const struct cts_device *cts_dev)
 
 #ifdef CONFIG_CTS_CHARGER_DETECT
 extern bool cts_is_charger_exist(struct cts_device *cts_dev);
-extern int cts_charger_plugin(struct cts_device *cts_dev);
-extern int cts_charger_plugout(struct cts_device *cts_dev);
+extern int cts_set_dev_charger_attached(struct cts_device *cts_dev, bool attached);
 #else /* CONFIG_CTS_CHARGER_DETECT */
 static inline bool cts_is_charger_exist(struct cts_device *cts_dev)
 {
 	return false;
 }
 
-static inline int cts_charger_plugin(struct cts_device *cts_dev)
-{
-	return 0;
-}
-
-static inline int cts_charger_plugout(struct cts_device *cts_dev)
+static inline int cts_set_dev_charger_attached(struct cts_device *cts_dev, bool attached)
 {
 	return 0;
 }
@@ -682,10 +692,11 @@ extern int cts_fw_log_show_finish(struct cts_device *cts_dev);
 
 #ifdef CFG_CTS_UPDATE_CRCCHECK
 extern int cts_sram_writesb_boot_crc_retry(const struct cts_device *cts_dev,
-					   size_t len, u32 crc, int retry);
+        size_t len, u32 crc, int retry);
 #endif
 
 extern const char *cts_dev_boot_mode2str(u8 boot_mode);
 extern bool cts_is_fwid_valid(u16 fwid);
 
 #endif /* CTS_CORE_H */
+
