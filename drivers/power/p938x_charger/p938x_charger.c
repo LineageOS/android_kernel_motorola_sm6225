@@ -2942,6 +2942,8 @@ static int p938x_charger_probe(struct i2c_client *client,
 	mutex_init(&chip->disconnect_lock);
 	mutex_init(&chip->txmode_lock);
 
+	wakeup_source_init(&chip->wls_wake_source, "p938x wireless charger");
+
 	/* In case we are already powered on */
 	p938x_check_status(chip);
 	p938x_check_system_mode(chip);
@@ -2960,7 +2962,6 @@ static int p938x_charger_probe(struct i2c_client *client,
 	}
 
 	enable_irq_wake(client->irq);
-	wakeup_source_init(&chip->wls_wake_source, "p938x wireless charger");
 
 	/* This IRQ handler is for detachment only.  The chip is powered off when
 	 * the transmitter is removed, so we need to rely on a separate IRQ to
@@ -2974,6 +2975,16 @@ static int p938x_charger_probe(struct i2c_client *client,
 		p938x_err(chip, "Failed irq=%d request rc = %d\n",
 				chip->wchg_det_irq, rc);
 		goto free_psy;
+	}
+
+	/* Force dc-en on if we boot attached, see p938x_det_irq_handler */
+	if (gpio_get_value(chip->wchg_det.gpio)) {
+		p938x_dbg(chip, PR_IMPORTANT, "Detected attached at probe.\n");
+		p938x_set_dc_en_override(chip, 2);
+		/* Without a dc-in interrupt, the qcom driver will not set the current
+		 * so re-run aicl to get the correct max current
+		 */
+		p938x_set_dc_aicl_rerun(chip);
 	}
 
 	/* Register thermal zone cooling device */
