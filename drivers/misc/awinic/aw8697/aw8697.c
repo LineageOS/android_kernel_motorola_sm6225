@@ -423,6 +423,11 @@ static void aw8697_ram_loaded(const struct firmware *cont, void *context)
 
 	aw8697_haptic_trig_enable_config(aw8697);
 
+#ifdef CONFIG_AW8697_BOOT_VIBRATION
+	aw8697_vibrate(aw8697, 1000); /* Boot-up vibration */
+#endif
+
+
 	aw8697_rtp_update(aw8697);
 }
 
