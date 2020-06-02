@@ -542,6 +542,11 @@ struct himax_ts_data {
 
 #ifdef HIMAX_V2_SENSOR_EN
 	struct himax_tap_sensor_platform_data *sensor_pdata;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock tap_gesture_wakelock;
+#else
+	struct wakeup_source tap_gesture_wakelock;
+#endif
 #endif
 
 };
