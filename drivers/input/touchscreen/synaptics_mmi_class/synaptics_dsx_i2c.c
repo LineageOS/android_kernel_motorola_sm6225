@@ -1662,10 +1662,6 @@ static void synaptics_dsx_release_all(struct synaptics_rmi4_data *rmi4_data);
 extern bool dsi_display_is_panel_enable(int id, int *probe_status, char **pname);
 #endif
 
-static int synaptics_rmi4_suspend(struct device *dev);
-
-static int synaptics_rmi4_resume(struct device *dev);
-
 static ssize_t synaptics_rmi4_ud_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
@@ -6888,7 +6884,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
  * This function stops finger data acquisition and puts the sensor to
  * sleep, disables the interrupt, and turns off the power to the sensor.
  */
-static int synaptics_rmi4_suspend(struct device *dev)
+int synaptics_rmi4_suspend(struct device *dev)
 {
 	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data =
@@ -6951,7 +6947,7 @@ static int synaptics_rmi4_suspend(struct device *dev)
  * from sleep, enables the interrupt, and starts finger data
  * acquisition.
  */
-static int synaptics_rmi4_resume(struct device *dev)
+int synaptics_rmi4_resume(struct device *dev)
 {
 	int retval;
 	int reset = RMI4_HW_RESET;

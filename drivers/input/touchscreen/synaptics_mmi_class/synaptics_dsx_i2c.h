@@ -1025,6 +1025,10 @@ void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
 int synaptics_dsx_ic_reset(struct synaptics_rmi4_data *rmi4_data, int reset);
 int synaptics_dsx_charger_mode(struct synaptics_rmi4_data *rmi4_data, int state);
 
+/* suspend resume */
+int synaptics_rmi4_suspend(struct device *dev);
+int synaptics_rmi4_resume(struct device *dev);
+
 /* end of class */
 
 struct synaptics_rmi4_exp_fn_ptr {
