@@ -1564,6 +1564,11 @@ static void himax_wake_event_report(void)
 		I("input report: %d", report_cnt);
 		if (report_cnt >= REPORT_MAX_COUNT)
 			report_cnt = 0;
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_timeout(&private_ts->tap_gesture_wakelock, msecs_to_jiffies(5000));
+#else
+		__pm_wakeup_event(&private_ts->tap_gesture_wakelock, 5000);
+#endif
 #else
 		I(" %s SMART WAKEUP KEY event %d press\n", __func__, KEY_EVENT);
 		input_report_key(private_ts->input_dev, KEY_EVENT, 1);
@@ -3108,6 +3113,12 @@ static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
 	if (err)
 		goto unregister_sensor_input_device;
 
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_init(&data->tap_gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
+#else
+	wakeup_source_init(&data->tap_gesture_wakelock, "dt-wake-lock");
+#endif
+
 	return 0;
 
 unregister_sensor_input_device:
@@ -3127,6 +3138,11 @@ int himax_tap_detect_sensor_remove(struct himax_ts_data *data)
 	input_unregister_device(data->sensor_pdata->input_sensor_dev);
 	devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
 		data->sensor_pdata);
+#ifdef CONFIG_HAS_WAKELOCK
+	wake_lock_destroy(&data->tap_gesture_wakelock);
+#else
+	wakeup_source_trash(&data->tap_gesture_wakelock);
+#endif
 	data->sensor_pdata = NULL;
 	return 0;
 }
