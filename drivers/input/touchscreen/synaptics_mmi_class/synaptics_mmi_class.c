@@ -146,12 +146,23 @@ static int synaptics_mmi_reset(struct device *dev, int type)
 	return 0;
 }
 
-static int synaptics_mmi_pre_suspend(struct device *dev)
+static int synaptics_mmi_panel_state(struct device *dev,
+		enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
 	struct synaptics_rmi4_data *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
-	dev_dbg(dev, "%s\n", __func__);
-	synaptics_dsx_sensor_state(ts, STATE_SUSPEND);
+	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
+	switch (to) {
+	case TS_MMI_PM_GESTURE:
+	case TS_MMI_PM_DEEPSLEEP:
+		synaptics_rmi4_suspend(dev);
+			break;
+	case TS_MMI_PM_ACTIVE:
+			break;
+	default:
+		dev_warn(dev, "invalid panel state %d\n", to);
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -160,8 +171,7 @@ static int synaptics_mmi_post_resume(struct device *dev)
 	struct synaptics_rmi4_data *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
-	synaptics_dsx_sensor_ready_state(ts, false);
-	ts->flash_enabled = true;
+	synaptics_rmi4_resume(dev);
 	return 0;
 }
 
@@ -215,8 +225,8 @@ static struct ts_mmi_methods synaptics_mmi_methods = {
 	.firmware_erase = synaptics_mmi_fw_erase,
 	/* vendor specific attribute group */
 	/* PM callback */
+	.panel_state = synaptics_mmi_panel_state,
 	.post_resume = synaptics_mmi_post_resume,
-	.pre_suspend = synaptics_mmi_pre_suspend,
 };
 
 int synaptics_mmi_data_init(struct synaptics_rmi4_data *ts, bool enable)
