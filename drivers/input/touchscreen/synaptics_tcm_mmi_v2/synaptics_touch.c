@@ -178,6 +178,7 @@ void touch_free_objects(void)
 		input_mt_slot(touch_hcd->input_dev, idx);
 		input_mt_report_slot_state(touch_hcd->input_dev,
 				MT_TOOL_FINGER, 0);
+		touch_hcd->prev_status[idx] = LIFT;
 	}
 #endif
 	input_report_key(touch_hcd->input_dev,
@@ -1331,8 +1332,6 @@ int touch_early_suspend(struct syna_tcm_hcd *tcm_hcd)
 	else
 		touch_hcd->suspend_touch = true;
 
-	touch_free_objects();
-
 	return 0;
 }
 
@@ -1344,8 +1343,6 @@ int touch_suspend(struct syna_tcm_hcd *tcm_hcd)
 		return 0;
 
 	touch_hcd->suspend_touch = true;
-
-	touch_free_objects();
 
 	if (tcm_hcd->wakeup_gesture_enabled) {
 		if (!touch_hcd->irq_wake) {
@@ -1382,7 +1379,6 @@ int touch_resume(struct syna_tcm_hcd *tcm_hcd)
 			disable_irq_wake(tcm_hcd->irq);
 			touch_hcd->irq_wake = false;
 		}
-
 		retval = tcm_hcd->set_dynamic_config(tcm_hcd,
 				DC_IN_WAKEUP_GESTURE_MODE,
 				0);
