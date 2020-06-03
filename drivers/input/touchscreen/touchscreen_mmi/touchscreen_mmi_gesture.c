@@ -255,7 +255,6 @@ static int ts_mmi_touch_event_poison_slot_handler(struct touch_event_data *tev, 
 				if (ts_mmi_touch_event_rescue_slot(tev->id))
 					pr_info("%s: Poison slot(%d) rescued\n", __func__, tev->id);
 				tev->skip_report = true;
-				tev->type = TS_COORDINATE_ACTION_NONE;
 			}
 		}
 	} else if (tev->type == TS_COORDINATE_ACTION_MOVE) {
