@@ -74,7 +74,8 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 	}
 
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
-	ts_mmi_gesture_suspend(touch_cdev);
+	if (touch_cdev->pdata.gestures_enabled)
+		ts_mmi_gesture_suspend(touch_cdev);
 #endif
 	TRY_TO_CALL(post_suspend);
 
