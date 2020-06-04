@@ -111,6 +111,7 @@ struct cam_eeprom_cmm_t {
  *
  */
 struct cam_eeprom_i2c_info_t {
+	char eeprom_name[MAX_OIS_NAME_SIZE];
 	uint16_t slave_addr;
 	uint8_t i2c_freq_mode;
 };
