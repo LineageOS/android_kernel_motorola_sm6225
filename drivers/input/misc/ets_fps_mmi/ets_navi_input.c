@@ -211,7 +211,7 @@ static unsigned int prev_keycode;
  */
 #define LONGTOUCH_INTERVAL          400
 #define SINGLECLICK_INTERVAL        200
-#define DOUBLECLICK_INTERVAL        500
+#define DOUBLECLICK_INTERVAL        300
 
 
 #define	KEYEVENT_CLICK              KEY_FPS_TAP /* 0x232 */
