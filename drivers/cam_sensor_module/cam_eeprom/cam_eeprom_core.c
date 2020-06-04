@@ -34,6 +34,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	struct cam_eeprom_memory_map_t    *emap = block->map;
 	struct cam_eeprom_soc_private     *eb_info = NULL;
 	uint8_t                           *memptr = block->mapdata;
+	uint32_t                           sz, sz_read;
 
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
@@ -104,17 +105,32 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 		}
 
 		if (emap[j].mem.valid_size) {
-			rc = camera_io_dev_read_seq(&e_ctrl->io_master_info,
-				emap[j].mem.addr, memptr,
-				emap[j].mem.addr_type,
-				emap[j].mem.data_type,
-				emap[j].mem.valid_size);
-			if (rc < 0) {
-				CAM_ERR(CAM_EEPROM, "read failed rc %d",
-					rc);
-				return rc;
+			if (0 == strcmp(eb_info->i2c_info.eeprom_name, "mot_hi556_otp")) {
+				for (sz = 0; sz < emap[j].mem.valid_size; sz++) {
+					rc = camera_io_dev_read(&e_ctrl->io_master_info,
+						emap[j].mem.addr, &sz_read,
+						emap[j].mem.addr_type,
+						emap[j].mem.data_type);
+					if (rc) {
+						CAM_ERR(CAM_EEPROM, "read failed rc %d", rc);
+						return rc;
+					}
+					*memptr = (uint8_t)sz_read;
+					memptr++;
+				}
+			} else {
+				rc = camera_io_dev_read_seq(&e_ctrl->io_master_info,
+					emap[j].mem.addr, memptr,
+					emap[j].mem.addr_type,
+					emap[j].mem.data_type,
+					emap[j].mem.valid_size);
+				if (rc) {
+					CAM_ERR(CAM_EEPROM, "read failed rc %d",
+						rc);
+					return rc;
+				}
+				memptr += emap[j].mem.valid_size;
 			}
-			memptr += emap[j].mem.valid_size;
 		}
 
 		if (emap[j].pageen.valid_size) {
@@ -391,6 +407,9 @@ static int32_t cam_eeprom_update_slaveInfo(struct cam_eeprom_ctrl_t *e_ctrl,
 	cmd_i2c_info = (struct cam_cmd_i2c_info *)cmd_buf;
 	soc_private->i2c_info.slave_addr = cmd_i2c_info->slave_addr;
 	soc_private->i2c_info.i2c_freq_mode = cmd_i2c_info->i2c_freq_mode;
+	if (strlen(cmd_i2c_info->eeprom_name) != 0) {
+		strcpy(soc_private->i2c_info.eeprom_name, cmd_i2c_info->eeprom_name);
+	}
 
 	rc = cam_eeprom_update_i2c_info(e_ctrl,
 		&soc_private->i2c_info);
