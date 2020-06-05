@@ -1,35 +1,6 @@
 
 &tlmm {
-	ets {
-		ets_int_active: ets_int_active {
-			/* INTERRUPT */
-			mux {
-				pins = "gpio97";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio97";
-				drive-strength = <2>; /* 2 MA */
-				input-enable;
-			};
-		};
-		ets_int_suspend: ets_int_suspend {
-			/* INTERRUPT */
-			mux {
-				pins = "gpio97";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio97";
-				drive-strength = <2>; /* 2 MA */
-				input-enable;
-			};
-		};
-	};
-
-	fpc {
+	fps {
 		rst_active: fps_rst_active {
 			/* active state */
 			mux {
@@ -164,8 +135,8 @@
 		egistec,gpio_rst = <&tlmm 104 0x2>;
 
 		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&ets_int_active &fps_ido3_en_active &fps_ido1p8_en_active>;
-		pinctrl-1 = <&ets_int_suspend &fps_ido3_en_suspend &fps_ido1p8_en_suspend>;
+		pinctrl-0 = <&int_active &rst_active &fps_ido3_en_active>;
+		pinctrl-1 = <&int_suspend &rst_suspend &fps_ido3_en_suspend>;
 	};
 
 	fpc: fpc_fpc1020 {
@@ -174,7 +145,7 @@
 		irq = <&tlmm 97 0>;
 		rst = <&tlmm 104 0>;
 		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&rst_active &int_active &fps_ido3_en_active &fps_ido1p8_en_active>;
-		pinctrl-1 = <&rst_suspend &int_suspend &fps_ido3_en_suspend &fps_ido1p8_en_suspend>;
+		pinctrl-0 = <&rst_active &int_active  &fps_ido1p8_en_active>;
+		pinctrl-1 = <&rst_suspend &int_suspend &fps_ido1p8_en_suspend>;
 	};
 };
