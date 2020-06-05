@@ -29,8 +29,8 @@ dtbo-$(CONFIG_GUAMNA_DTB) += \
         bengal-guamna-gwlc-evt-overlay.dtbo \
         bengal-guamna-evt-overlay.dtbo
 
-bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base.dtb
-bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamna-evt-overlay.dtbo-base := bengal-moto-low-ram-base.dtb
+bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-low-ram-base.dtb
 
 dtbo-$(CONFIG_BORNEO_DTB) += \
         bengal-borneo-evt-overlay.dtbo
