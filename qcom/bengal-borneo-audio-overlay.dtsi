@@ -95,6 +95,7 @@
 	qcom,mi2s-audio-intf = <1>;
 	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
 	aw,have-882xx = <1>;
+	qcom,ext-hac-gpio = <&tlmm 68 0>;
 	qcom,wsa-max-devs = <0>;
 	/delete-property/ qcom,wsa-devs;
 	/delete-property/ qcom,wsa-aux-dev-prefix;
