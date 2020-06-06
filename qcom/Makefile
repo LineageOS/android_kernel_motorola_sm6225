@@ -35,7 +35,7 @@ bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base.dtb
 dtbo-$(CONFIG_BORNEO_DTB) += \
         bengal-borneo-evt-overlay.dtbo
 
-bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base-borneo.dtb
 
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
