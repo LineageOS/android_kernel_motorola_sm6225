@@ -431,6 +431,8 @@ struct himax_ts_data {
 	int pre_finger_data[10][2];
 	bool vdd_1v8_always_on;
 	uint32_t report_gesture_key;
+	uint32_t build_id;
+	uint32_t config_id;
 
 	struct device *dev;
 	struct workqueue_struct *himax_wq;

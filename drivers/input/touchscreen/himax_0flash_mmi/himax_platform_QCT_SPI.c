@@ -196,6 +196,20 @@ int himax_parse_dt(struct himax_ts_data *ts,
 		I(" DT:protocol_type=%d\n", pdata->protocol_type);
 	}
 
+	if (of_property_read_u32(dt, "himax,def-build-id", &ts->build_id)) {
+		ts->build_id = 0;
+		I("himax,build_id undefined.\n");
+	} else {
+		I("himax,build_id=0x%04X\n", ts->build_id);
+	}
+
+	if (of_property_read_u32(dt, "himax,def-config-id", &ts->config_id)) {
+		ts->config_id = 0;
+		I("himax,config_id undefined.\n");
+	} else {
+		I("himax,config_id=0x%04X\n", ts->config_id);
+	}
+
 	ts->vdd_1v8_always_on = of_property_read_bool(dt, "himax,vdd_1v8_always_on");
 	if (ts->vdd_1v8_always_on){
 		I(" DT:vdd_1v8_always_on=%d\n", ts->vdd_1v8_always_on);
