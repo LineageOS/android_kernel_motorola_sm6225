@@ -12,10 +12,9 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "bengal-moto-common-overlay.dtsi"
-#include "bengal-guam-display.dtsi"
+#include "bengal-cebu-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-cebu-awinic-audio-overlay.dtsi"
-#include "bengal-guam-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
@@ -167,10 +166,6 @@
 	qcom,vddp-ref-clk-max-uV = <1232000>;
 
 	status = "ok";
-};
-
-&sde_dsi {
-    qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
 };
 
 &soc {
