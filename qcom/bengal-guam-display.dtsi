@@ -113,6 +113,7 @@
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
 	qcom,mdss-dsi-panel-status-read-length = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+	qcom,mdss-dsi-reset-always-high;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;

@@ -109,9 +109,12 @@
 					05 01 00 00 14 00 02 29 00
 					15 01 00 00 00 00 02 26 01];
 				qcom,mdss-dsi-off-command = [
+					39 01 00 00 00 00 03 F0 5A 59
+					39 01 00 00 00 00 03 F1 A5 A6
 					15 01 00 00 00 00 02 26 08
 					05 01 00 00 14 00 02 28 00
-					05 01 00 00 78 00 02 10 00];
+					05 01 00 00 78 00 02 10 00
+					15 01 00 00 00 00 02 CC 01];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
                         };
