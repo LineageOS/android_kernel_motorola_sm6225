@@ -686,7 +686,7 @@ info_retry:
 	ts->abs_x_max = (uint16_t)((buf[5] << 8) | buf[6]);
 	ts->abs_y_max = (uint16_t)((buf[7] << 8) | buf[8]);
 	ts->max_button_num = buf[11];
-
+	ts->fw_type = buf[14];
 	//---clear x_num, y_num if fw info is broken---
 	if ((buf[1] + buf[2]) != 0xFF) {
 		NVT_ERR("FW info is broken! fw_ver=0x%02X, ~fw_ver=0x%02X\n", buf[1], buf[2]);
@@ -696,6 +696,7 @@ info_retry:
 		ts->abs_x_max = TOUCH_DEFAULT_MAX_WIDTH;
 		ts->abs_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
 		ts->max_button_num = TOUCH_KEY_NUM;
+		ts->fw_type = 1;
 
 		if(retry_count < 3) {
 			retry_count++;
@@ -1129,6 +1130,22 @@ static int32_t nvt_parse_dt(struct device *dev)
 		ts->abs_y_max = TOUCH_DEFAULT_MAX_HEIGHT;
 	}
 	NVT_LOG("novatek,def-max-resolution=%d,%d\n", ts->abs_x_max, ts->abs_y_max);
+
+	ret = of_property_read_u32(np, "novatek,def-build-id", &ts->build_id);
+	if (ret) {
+		ts->build_id = 0;
+		NVT_LOG("novatek,build_id undefined.\n");
+	} else {
+		NVT_LOG("novatek,build_id=0x%04X\n", ts->build_id);
+	}
+
+	ret = of_property_read_u32(np, "novatek,def-config-id", &ts->config_id);
+	if (ret) {
+		ts->config_id = 0;
+		NVT_LOG("novatek,config_id undefined.\n");
+	} else {
+		NVT_LOG("novatek,config_id=0x%04X\n", ts->config_id);
+	}
 
 	ret = of_property_read_u32(np, "novatek,spi-rd-fast-addr", &SPI_RD_FAST_ADDR);
 	if (ret) {
@@ -1566,6 +1583,7 @@ static int8_t nvt_ts_check_chip_ver_trim(void)
 				ts->mmap = trim_id_table[list].mmap;
 				ts->carrier_system = trim_id_table[list].hwinfo->carrier_system;
 				ts->hw_crc = trim_id_table[list].hwinfo->hw_crc;
+				strncpy(ts->product_id, trim_id_table[list].trim_id, 10);
 				ret = 0;
 				goto out;
 			} else {
@@ -1697,9 +1715,22 @@ static ssize_t vendor_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "novatek_ts");
 }
 
+static ssize_t ic_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int buildid;
+
+	buildid = ts->fw_ver << 8 | ts->fw_type;
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x\n%s%04x\n",
+			"Product ID: ", ts->product_id,
+			"Build ID: ", buildid ? buildid : ts->build_id,
+			"Config ID: ", ts->nvt_pid ? ts->nvt_pid : ts->config_id);
+}
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
+	__ATTR_RO(ic_ver),
 	__ATTR_NULL
 };
 

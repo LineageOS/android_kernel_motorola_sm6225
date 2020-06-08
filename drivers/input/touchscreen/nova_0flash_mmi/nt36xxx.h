@@ -196,6 +196,10 @@ struct nvt_ts_data {
 	struct mutex state_mutex;
 	struct nvt_sensor_platform_data *sensor_pdata;
 #endif
+	char product_id[10];
+	uint8_t fw_type;
+	uint32_t build_id;
+	uint32_t config_id;
 };
 
 #if NVT_TOUCH_PROC
