@@ -3337,9 +3337,25 @@ static ssize_t vendor_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "himax");
 }
 
+/* Attribute: vendor (RO) */
+static ssize_t ic_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = dev_get_drvdata(dev);
+	int buildid;
+
+	buildid = (ic_data->vendor_cid_maj_ver << 8 |
+				ic_data->vendor_cid_min_ver);
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x\n%s%04x\n",
+			"Product ID: ", ts->chip_name,
+			"Build ID: ", buildid ? buildid : ts->build_id,
+			"Config ID: ", ic_data->vendor_touch_cfg_ver ? ic_data->vendor_touch_cfg_ver : ts->config_id);
+}
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
+	__ATTR_RO(ic_ver),
 	__ATTR_NULL
 };
 
