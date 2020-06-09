@@ -1007,6 +1007,9 @@ static bool mmi_factory_check(void)
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
+	union power_supply_propval val;
+	int ret;
+
 	if (!chip->sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"launch mmi chrg sm work\n");
@@ -1014,6 +1017,11 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
 		chip->sm_work_running = true;
+		val.intval = true;
+		ret = power_supply_set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_CP_ENABLE, &val);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to enable CP: %d\n", ret);
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg sm work already existed\n");
@@ -1021,10 +1029,18 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
+	union power_supply_propval val;
+	int ret;
+
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
+	val.intval = false;
+	ret = power_supply_set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_CP_ENABLE, &val);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to disable CP: %d\n", ret);
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
