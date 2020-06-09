@@ -2561,9 +2561,22 @@ static ssize_t vendor_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "chipone");
 }
 
+/* Attribute: vendor (RO) */
+static ssize_t ic_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct chipone_ts_data *ts = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x\n%s%04x\n",
+			"Product ID: ", ts->cts_dev.hwdata->name,
+			"Build ID: ", ts->cts_dev.fwdata.version,
+			"Config ID: ", ts->cts_dev.fwdata.ddi_version);
+}
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
+	__ATTR_RO(ic_ver),
 	__ATTR_NULL
 };
 
