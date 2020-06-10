@@ -223,6 +223,7 @@
 	qcom,disable-suspend-on-collapse;
 	dpdm-supply = <&qusb_phy0>;
 	qcom,auto-recharge-soc = <99>;
+	qcom,support-2a-dcp;
 };
 
 &qupv3_se0_i2c {
