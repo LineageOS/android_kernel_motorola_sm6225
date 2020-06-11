@@ -2565,6 +2565,12 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 	int seq;
 
 	mutex_lock(&aw8697->lock);
+#ifdef AW8697_REPEAT_RTP_PLAYING
+	if (aw8697->haptic_mode == HAPTIC_RTP_LOOP) {
+		aw8697->haptic_mode = HAPTIC_RTP;
+		hrtimer_cancel(&aw8697->timer);
+	}
+#endif
 	aw8697_haptic_stop(aw8697);
 	if (aw8697->index == 0x02)
 		__pm_relax(aw8697->ws);
