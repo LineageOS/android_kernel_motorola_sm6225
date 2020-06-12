@@ -2569,8 +2569,8 @@ static ssize_t ic_ver_show(struct device *dev,
 
 	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x\n%s%04x\n",
 			"Product ID: ", ts->cts_dev.hwdata->name,
-			"Build ID: ", ts->cts_dev.fwdata.version,
-			"Config ID: ", ts->cts_dev.fwdata.ddi_version);
+			"Build ID: ", ts->cts_dev.fwdata.version ? ts->cts_dev.fwdata.version : ts->pdata->build_id,
+			"Config ID: ", ts->cts_dev.fwdata.ddi_version ? ts->cts_dev.fwdata.ddi_version : ts->pdata->config_id);
 }
 
 static struct device_attribute touchscreen_attributes[] = {
