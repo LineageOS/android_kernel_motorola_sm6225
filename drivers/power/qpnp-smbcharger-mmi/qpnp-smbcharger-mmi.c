@@ -1349,6 +1349,7 @@ static bool mmi_factory_check(int type)
 	bool factory = false;
 	const char *bootargs = NULL;
 	char *bl_version = NULL;
+	char *end = NULL;
 
 	if (!np)
 		return factory;
@@ -1359,12 +1360,16 @@ static bool mmi_factory_check(int type)
 					"mmi,factory-cable");
 		break;
 	case MMI_FACTORY_BUILD:
-		if (!of_property_read_string(np,
-					"bootargs", &bootargs)) {
-			bl_version = strstr(bootargs,
-					"androidboot.bootloader=");
-			if (bl_version && strstr(bl_version, "factory"))
+		if (!of_property_read_string(np, "bootargs", &bootargs)) {
+			bl_version = strstr(bootargs, "androidboot.bootloader=");
+			if (bl_version) {
+				end = strpbrk(bl_version, " ");
+				bl_version = strpbrk(bl_version, "=");
+			}
+			if (bl_version && end > bl_version &&
+			    strnstr(bl_version, "factory", end - bl_version)) {
 				factory = true;
+			}
 		}
 		break;
 	default:
