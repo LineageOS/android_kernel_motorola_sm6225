@@ -27,6 +27,7 @@
 #include <linux/debugfs.h>
 #include <linux/miscdevice.h>
 #include <asm/uaccess.h>
+#include <linux/pm_qos.h>
 #include <linux/syscalls.h>
 #include <linux/power_supply.h>
 #include "aw8695.h"
@@ -61,6 +62,10 @@
 #define AW8695_SEQ_NO_RTP_STOP 120000
 
 #define AW8695_REPEAT_RTP_PLAYING
+
+#define PM_QOS_VALUE_VB 400
+struct pm_qos_request pm_qos_req_vb;
+
 /******************************************************
  *
  * variable
@@ -1146,6 +1151,7 @@ static int aw8695_haptic_rtp_init(struct aw8695 *aw8695)
 	unsigned char reg_val = 0;
 
 	pr_info("%s enter\n", __func__);
+	pm_qos_add_request(&pm_qos_req_vb, PM_QOS_CPU_DMA_LATENCY, PM_QOS_VALUE_VB);
 
 	aw8695->rtp_cnt = 0;
 
@@ -1156,7 +1162,14 @@ static int aw8695_haptic_rtp_init(struct aw8695 *aw8695)
 			pr_info("%s:aw8695_rtp is null break\n", __func__);
 			break;
 		}
-		if ((aw8695_rtp->len - aw8695->rtp_cnt) < (aw8695->ram.base_addr >> 2)) {
+
+		if ((aw8695->rtp_cnt < aw8695->ram.base_addr)) {
+			if((aw8695_rtp->len-aw8695->rtp_cnt) < (aw8695->ram.base_addr)){
+				buf_len = aw8695_rtp->len-aw8695->rtp_cnt;
+			} else {
+				buf_len = (aw8695->ram.base_addr);
+			}
+		} else if ((aw8695_rtp->len - aw8695->rtp_cnt) < (aw8695->ram.base_addr >> 2)) {
 			buf_len = aw8695_rtp->len - aw8695->rtp_cnt;
 		} else {
 			buf_len = (aw8695->ram.base_addr >> 2);
@@ -1169,6 +1182,7 @@ static int aw8695_haptic_rtp_init(struct aw8695 *aw8695)
 		if ((aw8695->rtp_cnt == aw8695_rtp->len) || ((reg_val & 0x0f) == 0x00)) {
 			pr_info("%s: rtp update complete\n", __func__);
 			aw8695->rtp_cnt = 0;
+			pm_qos_remove_request(&pm_qos_req_vb);
 			return 0;
 		}
 	}
@@ -1176,7 +1190,7 @@ static int aw8695_haptic_rtp_init(struct aw8695 *aw8695)
 	if (aw8695->play_mode == AW8695_HAPTIC_RTP_MODE) {
 		aw8695_haptic_set_rtp_aei(aw8695, true);
 	}
-
+	pm_qos_remove_request(&pm_qos_req_vb);
 	pr_info("%s exit\n", __func__);
 
 	return 0;
