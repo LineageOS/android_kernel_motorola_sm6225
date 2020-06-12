@@ -1416,7 +1416,15 @@ static int aw8697_haptic_rtp_init(struct aw8697 *aw8697)
 			mutex_unlock(&aw8697->rtp_lock);
 			break;
 		}
-		if ((aw8697_rtp->len - aw8697->rtp_cnt) <
+
+		if ((aw8697->rtp_cnt < aw8697->ram.base_addr)) {
+			if((aw8697_rtp->len-aw8697->rtp_cnt) < (aw8697->ram.base_addr)){
+				buf_len = aw8697_rtp->len-aw8697->rtp_cnt;
+			} else {
+				buf_len = (aw8697->ram.base_addr);
+			}
+		}
+		else if ((aw8697_rtp->len - aw8697->rtp_cnt) <
 		    (aw8697->ram.base_addr >> 2)) {
 			buf_len = aw8697_rtp->len - aw8697->rtp_cnt;
 		} else {
@@ -1428,6 +1436,7 @@ static int aw8697_haptic_rtp_init(struct aw8697 *aw8697)
 		if (aw8697->rtp_cnt == aw8697_rtp->len) {
 			pr_info("%s: rtp update complete\n", __func__);
 			aw8697->rtp_cnt = 0;
+			pm_qos_remove_request(&pm_qos_req_vb);
 			mutex_unlock(&aw8697->rtp_lock);
 			return 0;
 		}
