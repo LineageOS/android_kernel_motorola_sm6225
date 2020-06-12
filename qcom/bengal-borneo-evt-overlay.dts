@@ -14,7 +14,6 @@
 /plugin/;
 
 #include "bengal-borneo-common-overlay.dtsi"
-#include "bengal-borneo-audio-overlay.dtsi"
 
 / {
 	model = "borneo";

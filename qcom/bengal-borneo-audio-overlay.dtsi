@@ -12,21 +12,96 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_reset_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk {
+	status = "disabled";
+};
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
+
+&tlmm {
+	/*delete-node*/ spkr_1_sd_n;
+
+	aw882xx_reset: aw882xx_reset {
+		mux {
+			pins = "gpio106";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio106";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	aw882xx_irq: aw882xx_irq {
+		mux {
+			pins = "gpio107";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio107";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	hac_ctrl: hac_ctrl {
+		mux {
+			pins = "gpio68";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio68";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
 &qupv3_se1_i2c {
 	status = "ok";
 	aw882xx_smartpa@34 {
 		compatible = "awinic,aw882xx_smartpa";
 		reg = <0x34>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&aw882xx_reset>, <&aw882xx_irq>;
 		reset-gpio = <&tlmm 106 0>;
 		irq-gpio = <&tlmm 107 0x2008>;
 		monitor-flag = <1>;
 		monitor-timer-val = <3000>;
-		aw-cali-mode = "aw_misc";
 		status = "okay";
 	};
 };
 
-&soc {
+&q6core {
 	cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
 		compatible = "qcom,msm-cdc-pinctrl";
 		pinctrl-names = "aud_active", "aud_sleep";
@@ -51,6 +126,7 @@
 };
 
 &bengal_snd {
+	compatible = "qcom,bengal-asoc-snd";
 	qcom,model = "bengal-awinic-snd-card";
 
 	qcom,audio-routing =
@@ -60,27 +136,16 @@
 		"MIC BIAS2", "Analog Mic2",
 		"AMIC3", "MIC BIAS3",
 		"MIC BIAS3", "Analog Mic3",
-		"AMIC4", "MIC BIAS3",
-		"MIC BIAS3", "Analog Mic4",
 		"IN1_HPHL", "HPHL_OUT",
 		"IN2_HPHR", "HPHR_OUT",
 		"IN3_AUX", "AUX_OUT",
-		"SpkrMono WSA_IN", "AUX",
 		"TX SWR_MIC0", "ADC1_OUTPUT",
 		"TX SWR_MIC4", "ADC2_OUTPUT",
-		"TX SWR_MIC5", "ADC3_OUTPUT",
 		"TX SWR_MIC0", "VA_TX_SWR_CLK",
 		"TX SWR_MIC1", "VA_TX_SWR_CLK",
 		"TX SWR_MIC2", "VA_TX_SWR_CLK",
 		"TX SWR_MIC3", "VA_TX_SWR_CLK",
 		"TX SWR_MIC4", "VA_TX_SWR_CLK",
-		"TX SWR_MIC5", "VA_TX_SWR_CLK",
-		"TX SWR_MIC6", "VA_TX_SWR_CLK",
-		"TX SWR_MIC7", "VA_TX_SWR_CLK",
-		"TX SWR_MIC8", "VA_TX_SWR_CLK",
-		"TX SWR_MIC9", "VA_TX_SWR_CLK",
-		"TX SWR_MIC10", "VA_TX_SWR_CLK",
-		"TX SWR_MIC11", "VA_TX_SWR_CLK",
 		"RX_TX DEC0_INP", "TX DEC0 MUX",
 		"RX_TX DEC1_INP", "TX DEC1 MUX",
 		"RX_TX DEC2_INP", "TX DEC2 MUX",
@@ -89,8 +154,7 @@
 		"TX_AIF2 CAP", "VA_TX_SWR_CLK",
 		"TX_AIF3 CAP", "VA_TX_SWR_CLK",
 		"VA SWR_MIC0", "ADC1_OUTPUT",
-		"VA SWR_MIC4", "ADC2_OUTPUT",
-		"VA SWR_MIC5", "ADC3_OUTPUT";
+		"VA SWR_MIC4", "ADC2_OUTPUT";
 
 	qcom,mi2s-audio-intf = <1>;
 	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
@@ -104,14 +168,6 @@
 };
 
 &fsa4480 {
-	status = "disabled";
-};
-
-&cdc_dmic01_gpios {
-	status = "disabled";
-};
-
-&cdc_dmic23_gpios {
 	status = "disabled";
 };
 
