@@ -14,6 +14,7 @@
 #include "bengal-moto-common-overlay.dtsi"
 #include "bengal-borneo-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
+#include "bengal-borneo-audio-overlay.dtsi"
 #include "bengal-borneo-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-borneo-overlay.dtsi"
 #include "bengal-borneo-fps.dtsi"
