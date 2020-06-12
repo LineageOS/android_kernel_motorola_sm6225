@@ -114,6 +114,8 @@
 	/*	himax,touch_info = <32 18 0 720 1600 10 0 1>;*/
 		himax,irq-gpio = <&tlmm 67 0x2008>;
 		himax,rst-gpio = <&tlmm 66 0x00>;
+		himax,def-build-id = <0x1203>;
+		himax,def-config-id = <0x0002>;
 		report_type = <1>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
@@ -153,6 +155,8 @@
 		chipone,irq-gpio = <&tlmm 67 0x2008>;
 		chipone,x-res = <720>;
 		chipone,y-res = <1600>;
+		chipone,def-build-id = <0x010a>;
+		chipone,def-config-id = <0x0001>;
 		panel = <&dsi_tm_icnl9911s_video>;
          };
 };
