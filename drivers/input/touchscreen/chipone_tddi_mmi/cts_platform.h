@@ -87,6 +87,8 @@ struct cts_platform_data {
 #ifdef CFG_CTS_FW_UPDATE_SYS
 	const char *panel_supplier;
 #endif
+	u32 build_id;
+	u32 config_id;
 
 	struct cts_device *cts_dev;
 
