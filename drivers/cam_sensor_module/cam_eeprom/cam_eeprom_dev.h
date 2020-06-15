@@ -63,6 +63,7 @@ struct cam_eeprom_map_t {
  * @pageen          :   pageen memory
  * @poll            :   poll memory
  * @mem             :   mem
+ * @mem_rl          :   mem_rl: used for operation READ_LOOP
  * @saddr           :   slave addr
  *
  */
@@ -71,6 +72,7 @@ struct cam_eeprom_memory_map_t {
 	struct cam_eeprom_map_t pageen;
 	struct cam_eeprom_map_t poll;
 	struct cam_eeprom_map_t mem;
+	struct cam_eeprom_map_t mem_rl;
 	uint32_t saddr;
 };
 
@@ -111,7 +113,6 @@ struct cam_eeprom_cmm_t {
  *
  */
 struct cam_eeprom_i2c_info_t {
-	char eeprom_name[MAX_OIS_NAME_SIZE];
 	uint16_t slave_addr;
 	uint8_t i2c_freq_mode;
 };
