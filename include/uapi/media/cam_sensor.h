@@ -102,7 +102,6 @@ struct cam_cmd_i2c_info {
 	uint32_t    slave_addr;
 	uint8_t     i2c_freq_mode;
 	uint8_t     cmd_type;
-	char        eeprom_name[MAX_OIS_NAME_SIZE];
 	uint16_t    reserved;
 } __attribute__((packed));
 
