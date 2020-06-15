@@ -119,6 +119,9 @@ static char aw8695_rtp_name[][AW8695_RTP_NAME_MAX] = {
 	{"aw8695_rtp_Sparse.bin"},
 	{"aw8695_rtp_Terrabytes.bin"},
 	{"aw8695_rtp_Zero_Hour.bin"},
+	{"aw8695_rtp_Play.bin"},
+	{"aw8695_rtp_TJINGLE.bin"},
+	{"aw8695_rtp_Verizon_Airwaves.bin"},
 };
 
 struct aw8695_container *aw8695_rtp;
