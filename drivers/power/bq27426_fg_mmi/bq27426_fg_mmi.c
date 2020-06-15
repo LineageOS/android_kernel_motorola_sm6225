@@ -59,11 +59,11 @@
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_main_0518-bq27426G1-2767.gm.fs.h"
+#include "battery_profile/imported/smith_battery_main_LS30_0615-bq27426G1-2767.gm.fs.h"
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_flip_0518-bq27426G1-2766.gm.fs.h"
+#include "battery_profile/imported/smith_battery_flip_LS40_0629-bq27426G1-2766.gm.fs.h"
 #endif
 
 #undef pr_debug
