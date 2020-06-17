@@ -133,13 +133,6 @@ static int aw99703_gpio_init(struct aw99703_data *drvdata)
 			pr_err("failed to request gpio\n");
 			return -1;
 		}
-		ret = gpio_direction_output(drvdata->hwen_gpio, 0);
-		pr_info(" request gpio init\n");
-		if (ret < 0) {
-			pr_err("failed to set output");
-			gpio_free(drvdata->hwen_gpio);
-			return ret;
-		}
 		pr_info("gpio is valid %d!\n",drvdata->hwen_gpio);
 		aw99703_hwen_pin_ctrl(drvdata, 1);
 	}
