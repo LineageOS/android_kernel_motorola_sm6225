@@ -19,7 +19,7 @@
 	model = "borneo";
 	compatible = "qcom,bengal-borneo", "qcom,bengal-moto", "qcom,bengal";
 	qcom,msm-id = <444 0x10000>;
-	qcom,board-id = <0 0xA200>;
+	qcom,board-id = <0 0xA100>;
 };
 
 /*
