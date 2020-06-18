@@ -33,8 +33,10 @@ bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_BORNEO_DTB) += \
+        bengal-borneo-evb-overlay.dtbo \
         bengal-borneo-evt-overlay.dtbo
 
+bengal-borneo-evb-overlay.dtbo-base := bengal-moto-base-borneo.dtb
 bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base-borneo.dtb
 
 else
