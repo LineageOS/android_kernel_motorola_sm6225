@@ -3806,13 +3806,13 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_packet_reg *reg_data_1 =
 			&rmi4_data->f12_data_registers_ptr->regs[F12_D1_IDX];
 	static int print_xy = -1;
-/*
+
 	if (unlikely(print_xy == -1)) {
 		print_xy = 0;
 		if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0)
 			print_xy = 1;
 	}
-*/
+
 	if (atomic_read(&rmi4_data->panel_off_flag))
 		return 0;
 
@@ -6004,9 +6004,10 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 
 					dev_info(dev, "%s: driver removed\n", __func__);
 				} else if (f34_inserted) {
-					synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
-					dev_info(dev, "%s: drm panel ready\n", __func__);
-					dev_err(dev, "%s: touch_stopped=%d, flash_enabled=%d\n",
+					state = synaptics_dsx_get_state_safe(rmi4_data);
+					if (state != STATE_SUSPEND)
+						synaptics_rmi4_resume(&(rmi4_data->i2c_client->dev));
+					dev_info(dev, "%s: panel ready; touch_stopped=%d, flash_enabled=%d\n",
 							__func__,
 							atomic_read(&rmi4_data->touch_stopped),
 							rmi4_data->flash_enabled);
