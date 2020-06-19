@@ -3306,6 +3306,34 @@ static void himax_fb_register(struct work_struct *work)
 		E("Unable to register fb_notifier: %d\n", ret);
 }
 #endif
+static ssize_t himax_productinfo_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct himax_ts_data *ts = dev_get_drvdata(dev);
+	if (!ts) {
+		pr_err("cannot get himax_ts_data pointer\n");
+		return (ssize_t)0;
+	}
+	return scnprintf(buf, PAGE_SIZE, "%s\n", ts->chip_name);
+}
+static ssize_t buildid_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x%2.2X\n",ic_data->vendor_fw_ver);
+}
+
+static DEVICE_ATTR(buildid, S_IRUGO, buildid_show, NULL);
+static DEVICE_ATTR(productinfo, S_IRUGO, himax_productinfo_show, NULL);
+
+static struct attribute *himax_attributes[] = {
+    &dev_attr_buildid.attr,
+    &dev_attr_productinfo.attr,
+    NULL
+};
+
+static struct attribute_group himax_attribute_group = {
+      .attrs = himax_attributes
+};
 
 #include <linux/major.h>
 #include <linux/kdev_t.h>
@@ -3406,6 +3434,24 @@ device_destroy:
 	pr_err("error creating touchscreen class\n");
 
 	return -ENODEV;
+}
+
+int himax_create_sysfs(struct himax_ts_data *ts_data)
+{
+	int ret = 0;
+	ret = sysfs_create_group(&ts_data->dev->kobj, &himax_attribute_group);
+	if (ret) {
+		E("[EX]: sysfs_create_group() failed!!");
+		sysfs_remove_group(&ts_data->dev->kobj, &himax_attribute_group);
+		return -ENOMEM;
+	}
+	return ret;
+}
+
+int himax_remove_sysfs(struct himax_ts_data *ts_data)
+{
+	sysfs_remove_group(&ts_data->dev->kobj, &himax_attribute_group);
+	return 0;
 }
 
 #if defined(HX_USB_DETECT_GLOBAL)
@@ -3734,6 +3780,10 @@ FW_force_upgrade:
 		E(" %s: himax_common proc_init failed!\n", __func__);
 		goto err_creat_proc_file_failed;
 	}
+	err = himax_create_sysfs(ts);
+	if (err) {
+		E(" %s: create sysfs node fail!\n", __func__);
+	}
 	himax_sysfs_touchscreen(ts, true);
 
 #if defined(HX_USB_DETECT_CALLBACK)
@@ -3846,6 +3896,7 @@ void himax_chip_common_deinit(void)
 
 	himax_ts_unregister_interrupt();
 
+	himax_remove_sysfs(ts);
 	himax_sysfs_touchscreen(ts, false);
 
 #ifdef CONFIG_TOUCHSCREEN_HIMAX_INSPECT
