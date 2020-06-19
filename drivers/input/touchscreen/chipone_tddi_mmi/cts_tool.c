@@ -248,6 +248,9 @@ static ssize_t cts_tool_read(struct file *file,
 			case CTS_DEV_HWID_ICNL9911S:
 				cmd->data[0] = 0x91;
 				break;
+			case CTS_DEV_HWID_ICNL9911C:
+				cmd->data[0] = 0x91;
+				break;
 			default:
 				cmd->data[0] = 0x00;
 				break;
