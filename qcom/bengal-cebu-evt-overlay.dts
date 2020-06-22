@@ -14,7 +14,6 @@
 /plugin/;
 
 #include "bengal-cebu-common-overlay.dtsi"
-#include "bengal-guam-audio-overlay.dtsi"
 
 / {
 	model = "cebu";
