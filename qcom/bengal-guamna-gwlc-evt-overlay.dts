@@ -14,7 +14,7 @@
 /plugin/;
 
 #include "bengal-guamna-common-overlay.dtsi"
-#include "bengal-guam-awinic-audio-overlay.dtsi"
+#include "bengal-guamna-awinic-audio-overlay.dtsi"
 
 / {
 	model = "guamna";
