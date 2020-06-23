@@ -2627,24 +2627,18 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	else
 		target_fv = flip_p->target_fv;
 
-	if (chg_stat_main.batt_ma < 0) {
-		chg_stat_main.batt_ma *= -1;
-		if (chg_stat_main.batt_ma > main_p->target_fcc) {
-			ocp = chg_stat_main.batt_ma - main_p->target_fcc;
-			main_p->ocp[main_p->pres_temp_zone] += ocp;
-			mmi_info(chg, "Main Exceed by %d mA\n",
-				main_p->ocp[main_p->pres_temp_zone]);
-		}
+	if (chg_stat_main.batt_ma > main_p->target_fcc) {
+		ocp = chg_stat_main.batt_ma - main_p->target_fcc;
+		main_p->ocp[main_p->pres_temp_zone] += ocp;
+		mmi_info(chg, "Main Exceed by %d mA\n",
+			main_p->ocp[main_p->pres_temp_zone]);
 	}
 
-	if (chg_stat_flip.batt_ma < 0) {
-		chg_stat_flip.batt_ma *= -1;
-		if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
-			ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
-			flip_p->ocp[flip_p->pres_temp_zone] += ocp;
-			mmi_info(chg, "Flip Exceed by %d mA\n",
-				flip_p->ocp[flip_p->pres_temp_zone]);
-		}
+	if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
+		ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
+		flip_p->ocp[flip_p->pres_temp_zone] += ocp;
+		mmi_info(chg, "Flip Exceed by %d mA\n",
+			flip_p->ocp[flip_p->pres_temp_zone]);
 	}
 
 	target_fcc = main_p->target_fcc + flip_p->target_fcc;
@@ -3233,8 +3227,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		    ((report_cap != batt_cap) &&
 		     (report_cap <= (batt_cap + MONOTONIC_SOC)) &&
 		     (report_cap >= (batt_cap - MONOTONIC_SOC)))) {
-			mmi_info(chip, "Updating Reported Capacity to %d\n",
-				report_cap);
+			mmi_info(chip, "Updating Reported Capacity to %d, main_cap= %d, flip_cap= %d, main_cap_full= %d, flip_cap_full= %d\n",
+				report_cap, main_cap, flip_cap, main_cap_full, flip_cap_full);
 			chip->last_reported_soc = report_cap;
 		}else if ((batt_cap < 100) && (report_cap > (batt_cap + MONOTONIC_SOC))) {
 			chip->last_reported_soc++;
