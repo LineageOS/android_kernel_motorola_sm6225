@@ -5788,6 +5788,8 @@ skip_f12_single_i2c_setup:
 		synaptics_rmi4_scan_f01_reg_info(rmi4_data);
 	}
 
+	atomic_set(&rmi4_data->query_done, 1);
+
 	return 0;
 }
 
@@ -6894,6 +6896,11 @@ int synaptics_rmi4_suspend(struct device *dev)
 			*platform_data = &rmi4_data->board;
 	static char ud_stats[PAGE_SIZE];
 
+	if (atomic_read(&rmi4_data->query_done) == 0) {
+		pr_warn("called before ic queried\n");
+		return 0;
+	}
+
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 0, 1) == 1)
 		return 0;
 
@@ -6957,6 +6964,11 @@ int synaptics_rmi4_resume(struct device *dev)
 					i2c_get_clientdata(to_i2c_client(dev));
 	struct synaptics_dsx_platform_data
 			*platform_data = &rmi4_data->board;
+
+	if (atomic_read(&rmi4_data->query_done) == 0) {
+		pr_warn("called before ic queried\n");
+		return 0;
+	}
 
 	if (atomic_cmpxchg(&rmi4_data->touch_stopped, 1, 0) == 0)
 		return 0;

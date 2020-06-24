@@ -115,6 +115,8 @@ static int synaptics_mmi_drv_irq(struct device *dev, int state)
 
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
 	switch (state) {
 	case 0: /* Disable irq */
 		synaptics_rmi4_irq_enable(ts, false);
@@ -137,6 +139,8 @@ static int synaptics_mmi_reset(struct device *dev, int type)
 
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
 	ret = synaptics_dsx_ic_reset(ts, type);
 	if (ret > 0)
 		dev_dbg(dev,"%s: successful reset took %dms\n", __func__, ret);
@@ -152,6 +156,8 @@ static int synaptics_mmi_panel_state(struct device *dev,
 	struct synaptics_rmi4_data *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
 	case TS_MMI_PM_DEEPSLEEP:
@@ -171,6 +177,8 @@ static int synaptics_mmi_post_resume(struct device *dev)
 	struct synaptics_rmi4_data *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
 	synaptics_rmi4_resume(dev);
 	return 0;
 }
@@ -183,7 +191,12 @@ static int synaptics_mmi_fw_update(struct device *dev, char *fwname)
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
 	fwu = ts->fwu_data;
-	return (fwu && fwu->firmware_update) ? fwu->firmware_update(dev, name) : -ENOSYS;
+	if (!fwu || !fwu->firmware_update)
+		return -ENOSYS;
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
+	atomic_set(&ts->query_done, 0);
+	return fwu->firmware_update(dev, name);
 }
 
 static int synaptics_mmi_fw_erase(struct device *dev)
@@ -193,7 +206,11 @@ static int synaptics_mmi_fw_erase(struct device *dev)
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
 	fwu = ts->fwu_data;
-	return (fwu && fwu->firmware_erase) ? fwu->firmware_erase(dev) : -ENOSYS;
+	if (!fwu || !fwu->firmware_erase)
+		return -ENOSYS;
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
+	return fwu->firmware_erase(dev);
 }
 
 static int synaptics_mmi_charger_mode(struct device *dev, int mode)
@@ -201,6 +218,8 @@ static int synaptics_mmi_charger_mode(struct device *dev, int mode)
 	struct synaptics_rmi4_data *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+	if (atomic_read(&ts->query_done) != 1)
+		return -EBUSY;
 	synaptics_dsx_charger_mode(ts, mode);
 	return 0;
 }
