@@ -13,6 +13,7 @@
 #define KEY_CAP_CS0              0x270
 #define KEY_CAP_CS1              0x271
 #define KEY_CAP_CS2              0x272
+#define KEY_CAP_CS3              0x273
 #define KEY_CAP_COMB             0x272
 /*
  *  I2C Registers
@@ -50,6 +51,8 @@
 #define ABOV_TCHCMPSTAT_TCHSTAT1_FLAG   0x0C
 /* enable body stat */
 #define ABOV_TCHCMPSTAT_TCHSTAT2_FLAG   0x30
+/* enable body stat */
+#define ABOV_TCHCMPSTAT_TCHSTAT3_FLAG   0xC0
 
 /*
  * A96T346DF FW MODE:0x39, A96T346HW FW MODE:0x3A
@@ -85,6 +88,7 @@ struct _totalButtonInformation {
 	struct input_dev *input_ch0;
 	struct input_dev *input_ch1;
 	struct input_dev *input_ch2;
+	struct input_dev *input_ch3;
 };
 
 typedef struct _totalButtonInformation buttonInformation_t;
@@ -123,6 +127,10 @@ static struct _buttonInfo psmtcButtons[] = {
 		.keycode = KEY_CAP_CS2,
 		.mask = ABOV_TCHCMPSTAT_TCHSTAT2_FLAG,
 	},
+	{
+		.keycode = KEY_CAP_CS3,
+		.mask = ABOV_TCHCMPSTAT_TCHSTAT3_FLAG,
+	},
 };
 
 struct abov_platform_data {
@@ -137,12 +145,16 @@ struct abov_platform_data {
 	int cap_channel_ch0;
 	int cap_channel_ch1;
 	int cap_channel_ch2;
+	int cap_channel_ch3;
+
 	const char *cap_ch0_name;
 	const char *cap_ch1_name;
 	const char *cap_ch2_name;
+	const char *cap_ch3_name;
 	pbuttonInformation_t pbuttonInformation;
 	const char *fw_name;
 	int fw_mode_ret;
+	int cap_button_mask;
 
 	int (*get_is_nirq_low)(unsigned irq_gpio);
 	int (*init_platform_hw)(void);
@@ -200,6 +212,22 @@ static struct sensors_classdev sensors_capsensor_ch2_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
+static struct sensors_classdev sensors_capsensor_ch3_cdev = {
+	//.name = "capsense_bottom_left",
+	.vendor = "abov",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_CAPSENSE,
+	.max_range = "5",
+	.resolution = "5.0",
+	.sensor_power = "3",
+	.min_delay = 0, /* in microseconds */
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 100,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
 #endif
 
 
@@ -207,6 +235,7 @@ typedef enum{
 	CAPSENSOR_ENABLE_FLAG_CH0,
 	CAPSENSOR_ENABLE_FLAG_CH1,
 	CAPSENSOR_ENABLE_FLAG_CH2,
+	CAPSENSOR_ENABLE_FLAG_CH3,
 	CAPSENSOR_ENABLE_FLAG_MAX
 }capsensor_enable_flag_t;
 /***************************************
