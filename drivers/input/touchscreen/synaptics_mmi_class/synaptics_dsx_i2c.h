@@ -546,6 +546,7 @@ struct synaptics_rmi4_data {
 	int sensor_max_y;
 	bool irq_enabled;
 	atomic_t touch_stopped;
+	atomic_t query_done;
 	bool splash_screen_mode;
 	bool flash_enabled;
 	bool ic_on;
