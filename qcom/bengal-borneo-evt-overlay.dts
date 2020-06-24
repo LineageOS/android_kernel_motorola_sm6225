@@ -31,3 +31,11 @@
         aw99703,bl-channel = <3>;
     };
 };
+
+&qupv3_se0_i2c {
+    abov_sar@20 {
+        ch2_name = "capsense_top";
+        label = "AbovCapSense";
+        cap,channel_number = <0x03>;
+    };
+};
