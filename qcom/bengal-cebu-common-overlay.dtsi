@@ -17,7 +17,7 @@
 #include "bengal-cebu-pinctrl-overlay.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-cebu-awinic-audio-overlay.dtsi"
-#include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-cebu-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
 
