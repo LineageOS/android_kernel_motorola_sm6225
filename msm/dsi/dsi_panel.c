@@ -445,7 +445,24 @@ int dsi_panel_reset(struct dsi_panel *panel)
 		}
 	}
 
+	if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
+		rc = gpio_request(r_config->tp_rst_gpio, "tp_rst_gpio");
+		if (rc) {
+			DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
+		}
+	}
+
 	for (i = 0; i < r_config->count; i++) {
+		/* set tp rst before lcd rst */
+		if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
+			DSI_DEBUG("dsp dbg: set tp_rst_gpio to %d\n", r_config->sequence[i].level);
+			gpio_set_value(r_config->tp_rst_gpio, r_config->sequence[i].level);
+
+			if (r_config->tp_rst_post_sleep && r_config->tp_rst_post_sleep < 200) {
+				usleep_range(r_config->tp_rst_post_sleep*1000, (r_config->tp_rst_post_sleep*1000 + 10));
+			}
+		}
+
 		gpio_set_value(r_config->reset_gpio,
 			       r_config->sequence[i].level);
 
@@ -453,6 +470,11 @@ int dsi_panel_reset(struct dsi_panel *panel)
 		if (r_config->sequence[i].sleep_ms)
 			usleep_range(r_config->sequence[i].sleep_ms * 1000,
 				(r_config->sequence[i].sleep_ms * 1000) + 100);
+	}
+
+	if (gpio_is_valid(r_config->tp_rst_gpio)) {
+		gpio_free(r_config->tp_rst_gpio);
+		DSI_DEBUG("dsp dbg: gpio_free tp_rst_gpio\n");
 	}
 
 	if (gpio_is_valid(panel->bl_config.en_gpio)) {
@@ -542,12 +564,32 @@ static bool panel_power_is_alway_on(struct dsi_panel *panel)
 static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
+	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 
 	DSI_INFO("(%s)+\n", panel->name);
 
 	if ((panel->tp_state_check_enable) && (panel->tp_state)) {
 		pr_info("%s: (%s)+power is alway on \n", __func__, panel->name);
 		goto exit;
+	}
+
+	if (r_config->panel_on_rst_pull_down) {
+		/* need pull down lcd/tp rst first */
+		if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
+			rc = gpio_request(r_config->tp_rst_gpio, "tp_rst_gpio");
+			if (rc) {
+				DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
+			} else {
+				DSI_DEBUG("dsp dbg: set tp_rst_gpio to 0\n");
+				gpio_set_value(r_config->tp_rst_gpio, 0);
+				usleep_range(5500, 5500 + 100);
+			}
+			gpio_free(r_config->tp_rst_gpio);
+		}
+
+		if (gpio_is_valid(r_config->reset_gpio)) {
+			gpio_set_value(r_config->reset_gpio, 0);
+		}
 	}
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
@@ -2521,6 +2563,27 @@ static int dsi_panel_parse_reset_sequence(struct dsi_panel *panel)
 		goto error;
 	}
 
+
+	panel->reset_config.panel_on_tp_rst_enable = utils->read_bool(utils->data,
+			"qcom,mdss-panel-on-tp-rst-enable");
+
+	DSI_DEBUG("[%s] panel_on_tp_rst_enable=%d\n", panel->name,
+						panel->reset_config.panel_on_tp_rst_enable);
+
+	if (panel->reset_config.panel_on_tp_rst_enable) {
+		panel->reset_config.panel_on_rst_pull_down = utils->read_bool(utils->data,
+				"qcom,mdss-panel-on-rst-pull-down");
+
+		rc = utils->read_u32(utils->data,
+						"qcom,mdss-dsi-tp-rst-post-ms", &panel->reset_config.tp_rst_post_sleep);
+		if (rc) {
+			panel->reset_config.tp_rst_post_sleep = 0;
+		} else {
+			DSI_DEBUG("[%s] tp_rst_gpio=%d, tp_rst_post_sleep=%d\n", panel->name,
+						panel->reset_config.tp_rst_gpio, panel->reset_config.tp_rst_post_sleep);
+		}
+	}
+
 	rc = utils->read_u32_array(utils->data, "qcom,mdss-dsi-reset-sequence",
 					arr_32, length);
 	if (rc) {
@@ -2676,6 +2739,9 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 		DSI_ERR("[%s] failed get reset gpio, rc=%d\n", panel->name, rc);
 		goto error;
 	}
+
+	panel->reset_config.tp_rst_gpio = utils->get_named_gpio(utils->data,
+					"qcom,mdss-dsi-tp-rst-gpio", 0);
 
 	panel->reset_config.disp_en_gpio = utils->get_named_gpio(utils->data,
 						"qcom,5v-boost-gpio",
