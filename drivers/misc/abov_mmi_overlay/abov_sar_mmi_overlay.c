@@ -82,6 +82,7 @@ static void ForcetoTouched(pabovXX_t this)
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 	struct _buttonInfo *pCurrentButton  = NULL;
 
 	pDevice = this->pDevice;
@@ -91,8 +92,12 @@ static void ForcetoTouched(pabovXX_t this)
 		pCurrentButton = pDevice->pbuttonInformation->buttons;
 		input_ch0 = pDevice->pbuttonInformation->input_ch0;
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+		if (abov_channel_number == 3)
 			input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		else if (abov_channel_number == 4) {
+			input_ch2 = pDevice->pbuttonInformation->input_ch2;
+			input_ch3 = pDevice->pbuttonInformation->input_ch3;
+		}
 		pCurrentButton->state = ACTIVE;
 		last_val = 1;
 		if (mEnabled) {
@@ -100,9 +105,14 @@ static void ForcetoTouched(pabovXX_t this)
 			input_sync(input_ch0);
 			input_report_abs(input_ch1, ABS_DISTANCE, 1);
 			input_sync(input_ch1);
-			if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+			if (abov_channel_number == 3) {
 				input_report_abs(input_ch2, ABS_DISTANCE, 1);
 				input_sync(input_ch2);
+			} else if (abov_channel_number == 4) {
+				input_report_abs(input_ch2, ABS_DISTANCE, 1);
+				input_sync(input_ch2);
+				input_report_abs(input_ch3, ABS_DISTANCE, 1);
+				input_sync(input_ch3);
 			}
 		}
 		LOG_DBG("Leaving ForcetoTouched()\n");
@@ -303,6 +313,7 @@ static void touchProcess(pabovXX_t this)
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 	struct _buttonInfo *pCurrentButton  = NULL;
 	struct abov_platform_data *board;
 
@@ -315,16 +326,25 @@ static void touchProcess(pabovXX_t this)
 		buttons = pDevice->pbuttonInformation->buttons;
 		input_ch0 = pDevice->pbuttonInformation->input_ch0;
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+		if (abov_channel_number == 3)
 			input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		else if (abov_channel_number == 4) {
+			input_ch2 = pDevice->pbuttonInformation->input_ch2;
+			input_ch3 = pDevice->pbuttonInformation->input_ch3;
+		}
 		numberOfButtons = pDevice->pbuttonInformation->buttonSize;
 		if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
 			if (unlikely((buttons == NULL) || (input_ch0 == NULL) || (input_ch1 == NULL))) {
 				LOG_ERR("ERROR!! buttons or input NULL!!!\n");
 				return;
 			}
-		} else {
+		} else if (abov_channel_number == 3) {
 			if (unlikely((buttons == NULL) || (input_ch0 == NULL) || (input_ch1 == NULL) || (input_ch2 == NULL))) {
+				LOG_ERR("ERROR!! buttons or input NULL!!!\n");
+				return;
+			}
+		} else if (abov_channel_number == 4) {
+			if (unlikely((buttons == NULL) || (input_ch0 == NULL) || (input_ch1 == NULL) || (input_ch2 == NULL) || (input_ch3 == NULL))) {
 				LOG_ERR("ERROR!! buttons or input NULL!!!\n");
 				return;
 			}
@@ -350,7 +370,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 2);
 							input_sync(input_ch1);
 						}
-					} else {
+					} else if (abov_channel_number == 3) {
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 2);
 							input_sync(input_ch0);
@@ -361,10 +381,24 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch2, ABS_DISTANCE, 2);
 							input_sync(input_ch2);
 						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 2);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 2);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 2);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 2);
+							input_sync(input_ch3);
+						}
 					}
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
-				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x15)) {
+				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & board->cap_button_mask )) {
 					LOG_DBG("CS %d State=PROX.\n",
 							counter);
 					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
@@ -375,8 +409,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 1);
 							input_sync(input_ch1);
 						}
-					}
-					else {
+					} else if (abov_channel_number == 3) {
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 1);
 							input_sync(input_ch0);
@@ -386,6 +419,20 @@ static void touchProcess(pabovXX_t this)
 						} else if (board->cap_channel_ch2 == counter) {
 							input_report_abs(input_ch2, ABS_DISTANCE, 1);
 							input_sync(input_ch2);
+						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 1);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 1);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 1);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 1);
+							input_sync(input_ch3);
 						}
 					}
 					pCurrentButton->state = S_PROX;
@@ -407,7 +454,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 2);
 							input_sync(input_ch1);
 						}
-					} else {
+					} else if (abov_channel_number == 3) {
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 2);
 							input_sync(input_ch0);
@@ -418,10 +465,24 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch2, ABS_DISTANCE, 2);
 							input_sync(input_ch2);
 						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 2);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 2);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 2);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 2);
+							input_sync(input_ch3);
+						}
 					}
 					pCurrentButton->state = S_BODY;
 					last_val = 2;
-				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x15)) {
+				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & board->cap_button_mask)) {
 					LOG_DBG("CS %d still in PROX State.\n",
 							counter);
 				} else{
@@ -435,7 +496,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 0);
 							input_sync(input_ch1);
 						}
-					} else {
+					} else if (abov_channel_number == 3) {
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 0);
 							input_sync(input_ch0);
@@ -446,6 +507,20 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch2, ABS_DISTANCE, 0);
 							input_sync(input_ch2);
 						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 0);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 0);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 0);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 0);
+							input_sync(input_ch3);
+						}
 					}
 					pCurrentButton->state = IDLE;
 					last_val = 0;
@@ -455,7 +530,7 @@ static void touchProcess(pabovXX_t this)
 				if ((i & pCurrentButton->mask) == pCurrentButton->mask) {
 					LOG_DBG("CS %d still in BODY State.\n",
 							counter);
-				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & 0x15)) {
+				} else if ((i & pCurrentButton->mask) == (pCurrentButton->mask & board->cap_button_mask)) {
 					LOG_DBG("CS %d State=PROX.\n",
 							counter);
 					if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
@@ -466,7 +541,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 1);
 							input_sync(input_ch1);
 						}
-					} else {
+					} else if (abov_channel_number == 3) {
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 1);
 							input_sync(input_ch0);
@@ -476,6 +551,20 @@ static void touchProcess(pabovXX_t this)
 						} else if (board->cap_channel_ch2 == counter) {
 							input_report_abs(input_ch2, ABS_DISTANCE, 1);
 							input_sync(input_ch2);
+						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 1);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 1);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 1);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 1);
+							input_sync(input_ch3);
 						}
 					}
 					pCurrentButton->state = S_PROX;
@@ -491,7 +580,7 @@ static void touchProcess(pabovXX_t this)
 							input_report_abs(input_ch1, ABS_DISTANCE, 0);
 							input_sync(input_ch1);
 						}
-					} else {
+					} else if (abov_channel_number == 3){
 						if (board->cap_channel_ch0 == counter) {
 							input_report_abs(input_ch0, ABS_DISTANCE, 0);
 							input_sync(input_ch0);
@@ -501,6 +590,20 @@ static void touchProcess(pabovXX_t this)
 						} else if (board->cap_channel_ch2 == counter) {
 							input_report_abs(input_ch2, ABS_DISTANCE, 0);
 							input_sync(input_ch2);
+						}
+					} else if (abov_channel_number == 4) {
+						if (board->cap_channel_ch0 == counter) {
+							input_report_abs(input_ch0, ABS_DISTANCE, 0);
+							input_sync(input_ch0);
+						} else if (board->cap_channel_ch1 == counter) {
+							input_report_abs(input_ch1, ABS_DISTANCE, 0);
+							input_sync(input_ch1);
+						} else if (board->cap_channel_ch2 == counter) {
+							input_report_abs(input_ch2, ABS_DISTANCE, 0);
+							input_sync(input_ch2);
+						} else if (board->cap_channel_ch3 == counter) {
+							input_report_abs(input_ch3, ABS_DISTANCE, 0);
+							input_sync(input_ch3);
 						}
 					}
 					pCurrentButton->state = IDLE;
@@ -572,7 +675,7 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 		pabov_platform_data_t pplatData)
 {
 	struct device_node *np = client->dev.of_node;
-	u32 cap_channel_ch0,cap_channel_ch1,cap_channel_ch2;
+	u32 cap_channel_ch0,cap_channel_ch1,cap_channel_ch2,cap_channel_ch3;
 	int ret;
 
 	client->irq = of_get_gpio(np, 0);
@@ -586,14 +689,23 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 	ret = of_property_read_string(np, "ch0_name", &pplatData->cap_ch0_name);
 	ret = of_property_read_u32(np, "cap,use_channel_ch1", &cap_channel_ch1);
 	ret = of_property_read_string(np, "ch1_name", &pplatData->cap_ch1_name);
-	if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+	if (abov_channel_number == 3) {
 		ret = of_property_read_u32(np, "cap,use_channel_ch2", &cap_channel_ch2);
 		ret = of_property_read_string(np, "ch2_name", &pplatData->cap_ch2_name);
+	} else if (abov_channel_number == 4) {
+		ret = of_property_read_u32(np, "cap,use_channel_ch2", &cap_channel_ch2);
+		ret = of_property_read_string(np, "ch2_name", &pplatData->cap_ch2_name);
+		ret = of_property_read_u32(np, "cap,use_channel_ch3", &cap_channel_ch3);
+		ret = of_property_read_string(np, "ch3_name", &pplatData->cap_ch3_name);
 	}
 	pplatData->cap_channel_ch0 = (int)cap_channel_ch0;
 	pplatData->cap_channel_ch1 = (int)cap_channel_ch1;
-	if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+	if (abov_channel_number == 3)
 		pplatData->cap_channel_ch2 = (int)cap_channel_ch2;
+	else if (abov_channel_number == 4) {
+		pplatData->cap_channel_ch2 = (int)cap_channel_ch2;
+		pplatData->cap_channel_ch3 = (int)cap_channel_ch3;
+	}
 
 	pplatData->get_is_nirq_low = abov_get_nirq_state;
 	pplatData->init_platform_hw = NULL;
@@ -619,7 +731,11 @@ static void abov_platform_data_of_init(struct i2c_client *client,
 		LOG_ERR("get cap,fw_mode_ret error,set default value.\n");
 		pplatData->fw_mode_ret = ABOV_DF_FW_MODE;
 	}
-
+	ret = of_property_read_u32(np, "button_mask", &pplatData->cap_button_mask);
+	if (ret < 0) {
+		LOG_ERR("get button_mask,set default value.\n");
+		pplatData->cap_button_mask = 0x15;
+	}
 }
 
 static ssize_t reset_show(struct class *class,
@@ -638,14 +754,19 @@ static ssize_t reset_store(struct class *class,
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 
 	pDevice = this->pDevice;
 	input_ch0 = pDevice->pbuttonInformation->input_ch0;
 	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
-	else {
+	else if (abov_channel_number == 3) {
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
 		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+	} else if (abov_channel_number == 4) {
+		input_ch1 = pDevice->pbuttonInformation->input_ch1;
+		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		input_ch3 = pDevice->pbuttonInformation->input_ch3;
 	}
 
 	if (!count || (this == NULL))
@@ -658,9 +779,14 @@ static ssize_t reset_store(struct class *class,
 	input_sync(input_ch0);
 	input_report_abs(input_ch1, ABS_DISTANCE, 0);
 	input_sync(input_ch1);
-	if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+	if (abov_channel_number == 3) {
 		input_report_abs(input_ch2, ABS_DISTANCE, 0);
 		input_sync(input_ch2);
+	} else if (abov_channel_number == 4) {
+		input_report_abs(input_ch2, ABS_DISTANCE, 0);
+		input_sync(input_ch2);
+		input_report_abs(input_ch3, ABS_DISTANCE, 0);
+		input_sync(input_ch3);
 	}
 
 	return count;
@@ -704,12 +830,17 @@ static ssize_t enable_store(struct class *class,
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 
 	pDevice = this->pDevice;
 	input_ch0 = pDevice->pbuttonInformation->input_ch0;
 	input_ch1 = pDevice->pbuttonInformation->input_ch1;
-	if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+	if (abov_channel_number == 3)
 		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+	else if (abov_channel_number == 4) {
+		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		input_ch3 = pDevice->pbuttonInformation->input_ch3;
+	}
 
 	if (!count || (this == NULL))
 		return -EINVAL;
@@ -722,9 +853,14 @@ static ssize_t enable_store(struct class *class,
 		input_sync(input_ch0);
 		input_report_abs(input_ch1, ABS_DISTANCE, 0);
 		input_sync(input_ch1);
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+		if (abov_channel_number == 3) {
 			input_report_abs(input_ch2, ABS_DISTANCE, 0);
 			input_sync(input_ch2);
+		} else if (abov_channel_number == 4) {
+			input_report_abs(input_ch2, ABS_DISTANCE, 0);
+			input_sync(input_ch2);
+			input_report_abs(input_ch3, ABS_DISTANCE, 0);
+			input_sync(input_ch3);
 		}
 		mEnabled = 1;
 	} else if (!strncmp(buf, "0", 1)) {
@@ -736,9 +872,14 @@ static ssize_t enable_store(struct class *class,
 		input_sync(input_ch0);
 		input_report_abs(input_ch1, ABS_DISTANCE, -1);
 		input_sync(input_ch1);
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+		if (abov_channel_number == 3) {
 			input_report_abs(input_ch2, ABS_DISTANCE, -1);
 			input_sync(input_ch2);
+		} else if (abov_channel_number == 4) {
+			input_report_abs(input_ch2, ABS_DISTANCE, -1);
+			input_sync(input_ch2);
+			input_report_abs(input_ch3, ABS_DISTANCE, -1);
+			input_sync(input_ch3);
 		}
 		mEnabled = 0;
 	} else {
@@ -756,12 +897,17 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 
 	pDevice = this->pDevice;
 	input_ch0 = pDevice->pbuttonInformation->input_ch0;
 	input_ch1 = pDevice->pbuttonInformation->input_ch1;
-	if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+	if (abov_channel_number == 3)
 		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+	else if (abov_channel_number == 4) {
+		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		input_ch3 = pDevice->pbuttonInformation->input_ch3;
+	}
 
 	if (enable == 1) {
 		LOG_INFO("enable cap sensor: %s\n",sensors_cdev->name);
@@ -779,7 +925,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 				input_sync(input_ch1);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH1;
 			}
-		} else {
+		} else if(abov_channel_number == 3){
 			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, 0);
 				input_sync(input_ch0);
@@ -792,6 +938,24 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 				input_report_abs(input_ch2, ABS_DISTANCE, 0);
 				input_sync(input_ch2);
 				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH2;
+			}
+		} else if(abov_channel_number == 4) {
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
+				input_report_abs(input_ch0, ABS_DISTANCE, 0);
+				input_sync(input_ch0);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH0;
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
+				input_report_abs(input_ch1, ABS_DISTANCE, 0);
+				input_sync(input_ch1);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH1;
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch2_name)){
+				input_report_abs(input_ch2, ABS_DISTANCE, 0);
+				input_sync(input_ch2);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH2;
+			} else if(!strcmp(sensors_cdev->name, this->board->cap_ch3_name)){
+				input_report_abs(input_ch3, ABS_DISTANCE, 0);
+				input_sync(input_ch3);
+				this->enable_flag |= CAPSENSOR_ENABLE_FLAG_CH3;
 			}
 		}
 	} else if (enable == 0) {
@@ -806,7 +970,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 				input_sync(input_ch1);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH1;
 			}
-		} else {
+		} else if(abov_channel_number == 3){
 			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
 				input_report_abs(input_ch0, ABS_DISTANCE, -1);
 				input_sync(input_ch0);
@@ -820,8 +984,26 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 				input_sync(input_ch2);
 				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH2;
 			}
+		} else if (abov_channel_number == 4){
+			if(!strcmp(sensors_cdev->name, this->board->cap_ch0_name)){
+				input_report_abs(input_ch0, ABS_DISTANCE, -1);
+				input_sync(input_ch0);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH0;
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch1_name)){
+				input_report_abs(input_ch1, ABS_DISTANCE, -1);
+				input_sync(input_ch1);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH1;
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch2_name)){
+				input_report_abs(input_ch2, ABS_DISTANCE, -1);
+				input_sync(input_ch2);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH2;
+			}else if(!strcmp(sensors_cdev->name, this->board->cap_ch3_name)){
+				input_report_abs(input_ch3, ABS_DISTANCE, -1);
+				input_sync(input_ch3);
+				this->enable_flag &= ~CAPSENSOR_ENABLE_FLAG_CH3;
+			}
 		}
-		if(!(this->enable_flag &0x07)){
+		if(!(this->enable_flag &0x0F)){
 			mEnabled = 0;
 			write_register(this, ABOV_CTRL_MODE_REG, 0x02);
 			LOG_INFO("all cap sensor disable,change to STOP mode.\n");
@@ -851,13 +1033,13 @@ static ssize_t reg_show(struct class *class,
 		return (p-buf);
 	}
 
-	for (i = 0; i < 0x40; i++) {
+	for (i = 0; i < 0x50; i++) {
 		read_register(this, i, &reg_value);
 		p += snprintf(p, PAGE_SIZE, "(0x%02x)=0x%02x\n",
 				i, reg_value);
 	}
 
-	for (i = 0x80; i < 0x8C; i++) {
+	for (i = 0x80; i < 0xB0; i++) {
 		read_register(this, i, &reg_value);
 		p += snprintf(p, PAGE_SIZE, "(0x%02x)=0x%02x\n",
 				i, reg_value);
@@ -900,15 +1082,20 @@ static void ps_notify_callback_work(struct work_struct *work)
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 	int ret = 0;
 
 	pDevice = this->pDevice;
 	input_ch0 = pDevice->pbuttonInformation->input_ch0;
 	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO)
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
-	else {
+	else if (abov_channel_number == 3) {
 		input_ch1 = pDevice->pbuttonInformation->input_ch1;
 		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+	} else if (abov_channel_number == 4) {
+		input_ch1 = pDevice->pbuttonInformation->input_ch1;
+		input_ch2 = pDevice->pbuttonInformation->input_ch2;
+		input_ch3 = pDevice->pbuttonInformation->input_ch3;
 	}
 
 	LOG_INFO("Usb insert,going to force calibrate\n");
@@ -921,11 +1108,18 @@ static void ps_notify_callback_work(struct work_struct *work)
 	if (abov_channel_number == ABOV_CHANNEL_NUMBER_TWO) {
 		input_report_abs(input_ch1, ABS_DISTANCE, 0);
 		input_sync(input_ch1);
-	} else {
+	} else if (abov_channel_number == 3) {
 		input_report_abs(input_ch1, ABS_DISTANCE, 0);
 		input_sync(input_ch1);
 		input_report_abs(input_ch2, ABS_DISTANCE, 0);
 		input_sync(input_ch2);
+	} else if (abov_channel_number == 4) {
+		input_report_abs(input_ch1, ABS_DISTANCE, 0);
+		input_sync(input_ch1);
+		input_report_abs(input_ch2, ABS_DISTANCE, 0);
+		input_sync(input_ch2);
+		input_report_abs(input_ch3, ABS_DISTANCE, 0);
+		input_sync(input_ch3);
 	}
 }
 
@@ -1545,6 +1739,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct input_dev *input_ch0 = NULL;
 	struct input_dev *input_ch1 = NULL;
 	struct input_dev *input_ch2 = NULL;
+	struct input_dev *input_ch3 = NULL;
 	struct power_supply *psy = NULL;
 
 	LOG_INFO("abov_probe() start\n");
@@ -1697,7 +1892,7 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				LOG_INFO("add ch1 cap touch unsuccess\n");
 				return -ENOMEM;
 			}
-			if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+			if (abov_channel_number == 3) {
 				/* Create the input device */
 				input_ch2 = input_allocate_device();
 				if (!input_ch2)
@@ -1711,6 +1906,36 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				input_ch2->name = this->board->cap_ch2_name;
 				if (input_register_device(input_ch2)) {
 					LOG_ERR("add ch2t cap touch unsuccess\n");
+					return -ENOMEM;
+				}
+			} else if (abov_channel_number == 4) {
+				/* Create the input device */
+				input_ch2 = input_allocate_device();
+				if (!input_ch2)
+					return -ENOMEM;
+				/* Set all the keycodes */
+				__set_bit(EV_ABS, input_ch2->evbit);
+				input_set_abs_params(input_ch2, ABS_DISTANCE, -1, 100, 0, 0);
+				/* save the input pointer and finish initialization */
+				pDevice->pbuttonInformation->input_ch2 = input_ch2;
+				/* save the input pointer and finish initialization */
+				input_ch2->name = this->board->cap_ch2_name;
+				if (input_register_device(input_ch2)) {
+					LOG_ERR("add ch2t cap touch unsuccess\n");
+					return -ENOMEM;
+				}
+				input_ch3 = input_allocate_device();
+				if (!input_ch3)
+					return -ENOMEM;
+				/* Set all the keycodes */
+				__set_bit(EV_ABS, input_ch3->evbit);
+				input_set_abs_params(input_ch3, ABS_DISTANCE, -1, 100, 0, 0);
+				/* save the input pointer and finish initialization */
+				pDevice->pbuttonInformation->input_ch3 = input_ch3;
+				/* save the input pointer and finish initialization */
+				input_ch3->name = this->board->cap_ch3_name;
+				if (input_register_device(input_ch3)) {
+					LOG_ERR("add ch3t cap touch unsuccess\n");
 					return -ENOMEM;
 				}
 			}
@@ -1781,13 +2006,27 @@ static int abov_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		if (ret < 0)
 			LOG_ERR("create ch1 cap sensor_class file failed (%d)\n", ret);
 
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO) {
+		if (abov_channel_number == 3) {
 			sensors_capsensor_ch2_cdev.sensors_enable = capsensor_set_enable;
 			sensors_capsensor_ch2_cdev.sensors_poll_delay = NULL;
 			sensors_capsensor_ch2_cdev.name = this->board->cap_ch2_name;
 			ret = sensors_classdev_register(&input_ch2->dev, &sensors_capsensor_ch2_cdev);
 			if (ret < 0)
 				LOG_ERR("create ch2 cap sensor_class file failed (%d)\n", ret);
+		} else if (abov_channel_number == 4) {
+			sensors_capsensor_ch2_cdev.sensors_enable = capsensor_set_enable;
+			sensors_capsensor_ch2_cdev.sensors_poll_delay = NULL;
+			sensors_capsensor_ch2_cdev.name = this->board->cap_ch2_name;
+			ret = sensors_classdev_register(&input_ch2->dev, &sensors_capsensor_ch2_cdev);
+			if (ret < 0)
+				LOG_ERR("create ch2 cap sensor_class file failed (%d)\n", ret);
+
+			sensors_capsensor_ch3_cdev.sensors_enable = capsensor_set_enable;
+			sensors_capsensor_ch3_cdev.sensors_poll_delay = NULL;
+			sensors_capsensor_ch3_cdev.name = this->board->cap_ch3_name;
+			ret = sensors_classdev_register(&input_ch3->dev, &sensors_capsensor_ch3_cdev);
+			if (ret < 0)
+				LOG_ERR("create ch3 cap sensor_class file failed (%d)\n", ret);
 		}
 #endif
 
@@ -1846,8 +2085,12 @@ err_vdd_defer:
 	LOG_ERR("%s input free device.\n", __func__);
 	input_free_device(input_ch0);
 	input_free_device(input_ch1);
-	if(abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+	if (abov_channel_number == 3)
 		input_free_device(input_ch2);
+	else if (abov_channel_number == 4) {
+		input_free_device(input_ch2);
+		input_free_device(input_ch3);
+	}
 
 	return ret;
 }
@@ -1869,13 +2112,21 @@ static int abov_remove(struct i2c_client *client)
 #ifdef USE_SENSORS_CLASS
 		sensors_classdev_unregister(&sensors_capsensor_ch0_cdev);
 		sensors_classdev_unregister(&sensors_capsensor_ch1_cdev);
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+		if (abov_channel_number == 3)
 			sensors_classdev_unregister(&sensors_capsensor_ch2_cdev);
+		else if (abov_channel_number == 4) {
+			sensors_classdev_unregister(&sensors_capsensor_ch2_cdev);
+			sensors_classdev_unregister(&sensors_capsensor_ch3_cdev);
+		}
 #endif
 		input_unregister_device(pDevice->pbuttonInformation->input_ch0);
 		input_unregister_device(pDevice->pbuttonInformation->input_ch1);
-		if (abov_channel_number > ABOV_CHANNEL_NUMBER_TWO)
+		if (abov_channel_number == 3)
 			input_unregister_device(pDevice->pbuttonInformation->input_ch2);
+		else if (abov_channel_number == 4) {
+			input_unregister_device(pDevice->pbuttonInformation->input_ch2);
+			input_unregister_device(pDevice->pbuttonInformation->input_ch3);
+		}
 
 		if (this->board->cap_svdd_en) {
 			regulator_disable(this->board->cap_svdd);
