@@ -28,3 +28,6 @@
 	hw: hw { };
 };
 
+&mdss_dsi0_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+};
