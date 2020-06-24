@@ -48,7 +48,12 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-lp11-init;
-		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-reset-always-high;
+		qcom,mdss-panel-on-tp-rst-enable;
+		qcom,mdss-panel-on-rst-pull-down;
+		qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
+		qcom,mdss-dsi-tp-rst-post-ms = <3>;
+		qcom,mdss-dsi-reset-sequence = <1 35>, <1 5>;
 		qcom,mdss-pan-physical-width-dimension = <69>;
 		qcom,mdss-pan-physical-height-dimension = <158>;
 
@@ -197,7 +202,10 @@
 					39 01 00 00 0A 00 02 55 00];
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 14 00 02 28 00
-					05 01 00 00 78 00 02 10 00];
+					05 01 00 00 78 00 02 10 00
+					39 01 00 00 00 00 02 17 5A
+					39 01 00 00 96 00 02 18 5A
+					];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 			};
@@ -214,7 +222,6 @@
 				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <62000>;
 				qcom,supply-disable-load = <80>;
-				qcom,supply-post-on-sleep = <20>;
 			};
 
 			qcom,panel-supply-entry@1 {
@@ -233,7 +240,6 @@
 				qcom,supply-max-voltage = <6000000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
-				qcom,supply-post-on-sleep = <20>;
 			};
 		};
 	};
