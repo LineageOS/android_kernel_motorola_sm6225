@@ -2237,11 +2237,11 @@ void wlansap_extend_to_acs_range(mac_handle_t mac_handle,
 	}
 
 	if (*end_ch_freq <= wlan_reg_ch_to_freq(CHAN_ENUM_2484)) {
-		*bandEndChannel = CHAN_ENUM_2484;
+		*bandEndChannel = CHAN_ENUM_2472;
 		tmp_end_ch_freq = (*end_ch_freq + ACS_2G_EXTEND) <=
-					wlan_reg_ch_to_freq(CHAN_ENUM_2484) ?
+					wlan_reg_ch_to_freq(CHAN_ENUM_2472) ?
 					(*end_ch_freq + ACS_2G_EXTEND) :
-					wlan_reg_ch_to_freq(CHAN_ENUM_2484);
+					wlan_reg_ch_to_freq(CHAN_ENUM_2472);
 	} else if (*end_ch_freq <= wlan_reg_ch_to_freq(CHAN_ENUM_5865)) {
 		*bandEndChannel = CHAN_ENUM_5865;
 		tmp_end_ch_freq = (*end_ch_freq + ACS_5G_EXTEND) <=
