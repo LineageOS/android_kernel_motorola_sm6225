@@ -106,6 +106,13 @@
 #include <linux/msm_drm_notify.h>
 #endif
 
+#ifdef ILI_SENSOR_EN
+#include <linux/sensors.h>
+#endif
+#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
+#endif
+
 #define DRIVER_VERSION			"3.0.2.0.200512"
 
 /* Options */
@@ -128,7 +135,11 @@
 #define MT_PRESSURE			DISABLE
 #define ENABLE_WQ_ESD			DISABLE
 #define ENABLE_WQ_BAT			DISABLE
+#ifdef ILI_SENSOR_EN
+#define ENABLE_GESTURE			ENABLE
+#else
 #define ENABLE_GESTURE			DISABLE
+#endif
 #define REGULATOR_POWER			DISABLE
 #define TP_SUSPEND_PRIO			ENABLE
 #define RESUME_BY_DDI			DISABLE
@@ -732,6 +743,23 @@ struct gesture_symbol {
 #define TDDI_CHIP_RESET_ADDR				0x40050
 #define RAWDATA_NO_BK_SHIFT				8192
 
+#ifdef ILI_SENSOR_EN
+/* display state */
+enum display_state {
+	SCREEN_UNKNOWN,
+	SCREEN_OFF,
+	SCREEN_ON,
+};
+struct ili_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	int sensor_opened;
+	char sensor_data; /* 0 near, 1 far */
+	struct ilitek_ts_data *data;
+};
+#define REPORT_MAX_COUNT 10000
+#endif
+
 struct ilitek_ts_data {
 	struct i2c_client *i2c;
 	struct spi_device *spi;
@@ -750,6 +778,10 @@ struct ilitek_ts_data {
 	struct notifier_block notifier_fb;
 #else
 	struct early_suspend early_suspend;
+#endif
+
+#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
+	struct notifier_block panel_notif;
 #endif
 
 	struct mutex touch_mutex;
@@ -869,6 +901,21 @@ struct ilitek_ts_data {
 	atomic_t tp_sw_mode;
 	atomic_t cmd_int_check;
 	atomic_t esd_stat;
+
+#ifdef ILI_SENSOR_EN
+	bool wakeable;
+	bool should_enable_gesture;
+	bool gesture_enabled;
+	uint32_t report_gesture_key;
+	enum display_state screen_state;
+	struct mutex state_mutex;
+	struct ili_sensor_platform_data *sensor_pdata;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock gesture_wakelock;
+#else
+	struct wakeup_source gesture_wakelock;
+#endif
+#endif
 
 	/* Event for driver test */
 	struct completion esd_done;
