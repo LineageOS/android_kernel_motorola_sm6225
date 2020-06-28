@@ -7,6 +7,13 @@ ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_ILITEK_CHIPSET)),)
 	obj-m += ilitek_0flash_mmi.o
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DILI_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS)),)
+EXTRA_CFLAGS += -DILI_CONFIG_PANEL_NOTIFICATIONS
+endif
+
 ilitek_0flash_mmi-objs += ilitek.o
 ilitek_0flash_mmi-objs += ilitek_spi.o
 ilitek_0flash_mmi-objs += ilitek_qcom.o
