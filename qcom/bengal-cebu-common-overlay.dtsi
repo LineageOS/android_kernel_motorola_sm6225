@@ -14,6 +14,7 @@
 #include "bengal-moto-common-overlay.dtsi"
 #include "bengal-cebu-display.dtsi"
 #include "bengal-cebu-touchscreen-overlay.dtsi"
+#include "bengal-cebu-pinctrl-overlay.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-cebu-awinic-audio-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
