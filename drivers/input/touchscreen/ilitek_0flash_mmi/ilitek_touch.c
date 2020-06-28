@@ -1100,8 +1100,13 @@ void ili_report_gesture_mode(u8 *buf, int len)
 	int i, lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
 	u8 ges[P5_X_GESTURE_INFO_LENGTH] = {0};
 	struct gesture_coordinate *gc = ilits->gcoord;
+#ifndef ILI_SENSOR_EN
 	struct input_dev *input = ilits->input;
+#endif
 	bool transfer = ilits->trans_xy;
+#ifdef ILI_SENSOR_EN
+	static int report_cnt = 0;
+#endif
 
 	for (i = 0; i < len; i++)
 		ges[i] = buf[i];
@@ -1129,10 +1134,38 @@ void ili_report_gesture_mode(u8 *buf, int len)
 	switch (gc->code) {
 	case GESTURE_DOUBLECLICK:
 		ILI_INFO("Double Click key event\n");
+#ifdef ILI_SENSOR_EN
+		if (!(ilits->wakeable && ilits->should_enable_gesture)) {
+			ILI_INFO("Gesture got but wakeable not set. Skip this gesture.");
+			return;
+		}
+		if (ilits->report_gesture_key) {
+			input_report_key(ilits->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+			input_sync(ilits->sensor_pdata->input_sensor_dev);
+			input_report_key(ilits->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+			input_sync(ilits->sensor_pdata->input_sensor_dev);
+			++report_cnt;
+		} else {
+			input_report_abs(ilits->sensor_pdata->input_sensor_dev,
+					ABS_DISTANCE,
+					++report_cnt);
+			input_sync(ilits->sensor_pdata->input_sensor_dev);
+		}
+		ILI_INFO("input report: %d", report_cnt);
+		if (report_cnt >= REPORT_MAX_COUNT) {
+			report_cnt = 0;
+		}
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_timeout(&(ilits->gesture_wakelock), msecs_to_jiffies(5000));
+#else
+		__pm_wakeup_event(&(ilits->gesture_wakelock), 5000);
+#endif
+#else
 		input_report_key(input, KEY_GESTURE_POWER, 1);
 		input_sync(input);
 		input_report_key(input, KEY_GESTURE_POWER, 0);
 		input_sync(input);
+#endif
 		gc->type  = GESTURE_DOUBLECLICK;
 		gc->clockwise = 1;
 		gc->pos_end.x = gc->pos_start.x;
