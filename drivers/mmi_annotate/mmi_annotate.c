@@ -28,6 +28,7 @@
 #include <linux/mmi_annotate.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>
+#include <linux/version.h>
 
 #define MAX_USER_STR 1024
 #define DEFAULT_MEM_SIZE 4096
@@ -99,6 +100,47 @@ static const struct file_operations mmi_annotate_operations = {
 	.release	= single_release,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+static void* mmi_annotate_ram_vmap(phys_addr_t start, size_t size)
+{
+	struct page **pages;
+	phys_addr_t page_start;
+	unsigned int page_count;
+	unsigned int i;
+	void *vaddr;
+
+	page_start = start - offset_in_page(start);
+	page_count = DIV_ROUND_UP(size + offset_in_page(start), PAGE_SIZE);
+
+	pages = kmalloc_array(page_count, sizeof(struct page *), GFP_KERNEL);
+	if (!pages) {
+		pr_err("%s: Failed to allocate array for %u pages\n",
+		       __func__, page_count);
+		return NULL;
+	}
+
+	for (i = 0; i < page_count; i++) {
+		phys_addr_t addr = page_start + i * PAGE_SIZE;
+		pages[i] = pfn_to_page(addr >> PAGE_SHIFT);
+	}
+	vaddr = vmap(pages, page_count, VM_MAP, PAGE_KERNEL);
+	kfree(pages);
+
+	if (!vaddr) {
+		pr_err("%s: Failed to vmap the %d pages\n",
+		       __func__, page_count);
+		return NULL;
+	}
+
+	/*
+	 * Since vmap() uses page granularity, we must add the offset
+	 * into the page here, to get the byte granularity address
+	 * into the mapping to represent the actual "start" location.
+	 */
+	return vaddr + offset_in_page(start);
+}
+#endif
+
 static int mmi_annotate_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -140,8 +182,12 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	persist_data = mmi_annotate_ram_vmap(pdata->mem_address, pdata->mem_size);
+#else
 	persist_data = dma_remap(dev, NULL, pdata->mem_address,
 					pdata->mem_size, 0);
+#endif
 	if (!persist_data) {
 		dev_err(dev, "Cannot remap buffer %pa size %zx\n",
 				&pdata->mem_address, pdata->mem_size);
