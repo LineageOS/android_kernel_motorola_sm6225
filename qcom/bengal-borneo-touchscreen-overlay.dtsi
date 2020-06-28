@@ -115,6 +115,7 @@
 		spi-max-frequency = <12000000>;
 		touch,reset-gpio = <&tlmm 66 0x00>;
 		touch,irq-gpio = <&tlmm 67 0x2002>;
+		ilitek,report_gesture_key;
 		panel = <&dsi_tm_ili9881x_video>;
 	};
 	nova_0flash_ts@1 {
@@ -127,6 +128,7 @@
 		novatek,irq-gpio = <&tlmm 67 0x2008>;
 		novatek,reset-gpio = <&tlmm 66  0x00>;
 		report_type = <1>;
+		novatek,report_gesture_key;
 		novatek,def-max-resolution = <720 1600>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
