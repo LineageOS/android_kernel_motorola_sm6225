@@ -8,3 +8,5 @@ mmi_info-objs += mmi_unit_info.o
 mmi_info-objs += mmi_boot_info.o
 mmi_info-objs += mmi_info_main.o
 obj-m += mmi_info.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_annotate/Module.symvers
