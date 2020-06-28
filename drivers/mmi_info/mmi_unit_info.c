@@ -67,7 +67,7 @@ static void mmi_bootarg_setup(void)
 
 static int unitinfo_seq_show(struct seq_file *f, void *ptr)
 {
-	seq_printf(f, "Hardware\t: %s\n", arch_read_hardware_id());
+	/*seq_printf(f, "Hardware\t: %s\n", arch_read_hardware_id());*/
 	seq_printf(f, "Revision\t: %04x\n", mmi_chosen_data.system_rev);
 	seq_printf(f, "Serial\t\t: %08x%08x\n",
 		mmi_chosen_data.system_serial_high,
