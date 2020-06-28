@@ -9,6 +9,12 @@
     qcom,dsi-default-panel = <&dsi_tm_ili9881x_video &dsi_djn_nt36672a_video>;
 };
 
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@2 {
+		qcom,supply-pre-off-sleep = <2>;
+	};
+};
+
 &dsi_tm_ili9881x_video {
 	qcom,mdss-dsi-t-clk-post = <0x0F>;
 	qcom,mdss-dsi-t-clk-pre = <0x37>;
@@ -24,8 +30,9 @@
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,tp_state_check_enable;
+	qcom,mdss-dsi-reset-always-high;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
-	qcom,5v-boost-gpio = <&tlmm 86 1>;
 
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
@@ -60,8 +67,9 @@
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,tp_state_check_enable;
+	qcom,mdss-dsi-reset-always-high;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
-	qcom,5v-boost-gpio = <&tlmm 86 1>;
 
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
