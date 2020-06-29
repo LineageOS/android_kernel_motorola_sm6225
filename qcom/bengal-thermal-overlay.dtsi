@@ -55,6 +55,8 @@
 	};
 };
 
+/*
 &mdss_mdp {
 	#cooling-cells = <2>;
 };
+*/
