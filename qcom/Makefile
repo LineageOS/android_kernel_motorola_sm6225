@@ -43,7 +43,7 @@ bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base-borneo.dtb
 dtbo-$(CONFIG_CEBU_DTB) += \
         bengal-cebu-evt-overlay.dtbo
 
-bengal-cebu-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-cebu-evt-overlay.dtbo-base := bengal-moto-base-cebu.dtb
 
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
