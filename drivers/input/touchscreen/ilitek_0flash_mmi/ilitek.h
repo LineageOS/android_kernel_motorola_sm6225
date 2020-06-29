@@ -142,7 +142,11 @@
 #endif
 #define REGULATOR_POWER			DISABLE
 #define TP_SUSPEND_PRIO			ENABLE
+#ifdef ILI_CONFIG_RESUME_BY_DDI
+#define RESUME_BY_DDI			ENABLE
+#else
 #define RESUME_BY_DDI			DISABLE
+#endif
 #define BOOT_FW_UPDATE			ENABLE
 #define MP_INT_LEVEL			DISABLE
 #define Pll_Clk_Wakeup_TP_Resume ENABLE
