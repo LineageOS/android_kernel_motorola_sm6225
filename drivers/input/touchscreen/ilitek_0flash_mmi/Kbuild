@@ -13,6 +13,9 @@ endif
 ifneq ($(filter m y,$(CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS)),)
 EXTRA_CFLAGS += -DILI_CONFIG_PANEL_NOTIFICATIONS
 endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_RESUME_BY_DDI)),)
+EXTRA_CFLAGS += -DILI_CONFIG_RESUME_BY_DDI
+endif
 
 ilitek_0flash_mmi-objs += ilitek.o
 ilitek_0flash_mmi-objs += ilitek_spi.o

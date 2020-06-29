@@ -480,6 +480,7 @@ int ili_check_default_tp(struct device_node *dt, const char *prop)
 	return ret;
 }
 
+#ifndef ILI_CONFIG_PANEL_NOTIFICATIONS
 static int drm_notifier_callback(struct notifier_block *self,
                                  unsigned long event, void *data)
 {
@@ -525,6 +526,7 @@ static int drm_notifier_callback(struct notifier_block *self,
 
     return 0;
 }
+#endif
 #endif
 #if defined(CONFIG_DRM_MSM)
 static int drm_notifier_callback(struct notifier_block *self,
@@ -704,7 +706,13 @@ static int ili_panel_notifier_callback(struct notifier_block *self, unsigned lon
 			ILI_INFO("event=%lu\n", event);
 			if (ili_sleep_handler(TP_RESUME) < 0)
 				ILI_ERR("TP resume failed\n");
-				break;
+			break;
+	case PANEL_EVENT_DISPLAY_ON_PREPARE:
+			ILI_INFO("event=%lu\n", event);
+#if RESUME_BY_DDI
+			ili_resume_by_ddi();
+#endif
+			break;
 	default:	/* use DEV_TS here to avoid unused variable */
 			ILI_INFO("%s: function not implemented event %lu\n", __func__, event);
 			break;
@@ -728,6 +736,13 @@ static void ilitek_plat_sleep_init(void)
 			ILI_ERR("Unable to register notifier_fb\n");
 	#endif /* CONFIG_PLAT_SPRD */
 #endif
+#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
+	ilits->panel_notif.notifier_call = ili_panel_notifier_callback;
+	ret = register_panel_notifier(&ilits->panel_notif);
+	if(ret) {
+		ILI_ERR("register panel_notifier failed. ret=%d\n", ret);
+	}
+#else
 #if defined(CONFIG_DRM)
     	ilits->notifier_fb.notifier_call = drm_notifier_callback;
 	#if defined(CONFIG_DRM_PANEL)
@@ -744,12 +759,6 @@ static void ilitek_plat_sleep_init(void)
 	}
 	#endif
 #endif/* CONFIG_DRM */
-#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
-	ilits->panel_notif.notifier_call = ili_panel_notifier_callback;
-	ret = register_panel_notifier(&ilits->panel_notif);
-	if(ret) {
-		ILI_ERR("register panel_notifier failed. ret=%d\n", ret);
-	}
 #endif
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 	ILI_ERR("Init eqarly_suspend struct\n");
