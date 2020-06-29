@@ -185,27 +185,43 @@
 	qcom,init-voltage = <2800000>;
 };
 
-&qupv3_se0_i2c {
+&pm6125_l9 {
+             regulator-min-microvolt = <1800000>;
+             regulator-max-microvolt = <2000000>;
+             qcom,init-voltage = <1800000>;
+};
+
+&pm6125_l21 {
+             regulator-min-microvolt = <2400000>;
+             regulator-max-microvolt = <3600000>;
+             qcom,init-voltage = <2400000>;
+};
+
+
+
+&qupv3_se2_i2c {
 	status = "ok";
 	sar_abov: abov_sar@20 {
 		status = "ok";
 		compatible = "abov,abov_sar_mmi_overlay";
 		reg = <0x20>;
-		cap_vdd-supply = <&L21A>;
+		cap_vdd-supply = <&pm6125_l21>;
+		cap_svdd-supply =<&pm6125_l9>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <36 0x2>;
 		gpios = <&tlmm 36 0x2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&capsense_sar_gpio_pins>;
 		reg_array_len = <0x03>;
-		reg_array_val = <0x07 0x00 0x08 0x1B 0xFB 0x01>;
-		cap,use_channel_ch1 = <0x00>;
-		cap,use_channel_ch0 = <0x01>;
-		ch0_name = "capsense_top";
-		ch1_name = "capsense_bottom";
+		reg_array_val = <0x07 0x00 0x08 0x1F 0xFB 0x01>;
+		cap,use_channel_ch0 = <0x00>;
+		cap,use_channel_ch1 = <0x01>;
+		cap,use_channel_ch2 = <0x02>;
+		ch0_name = "capsense_bottom_right";
+		ch1_name = "capsense_bottom_left";
+		ch2_name = "capsense_top";
 		label = "AbovCapSense";
-		cap,channel_number = <0x02>;
-		cap,fw_mode_ret = <0x3A>;
+		cap,channel_number = <0x03>;
 	};
 };
 
