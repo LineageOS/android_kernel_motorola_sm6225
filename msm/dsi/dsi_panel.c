@@ -259,6 +259,19 @@ int dsi_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc, char *buf,
 	return 128;
 }
 
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+static inline int dsi_panel_get_index(struct dsi_panel *panel)
+{
+	struct dsi_display *dsi_display =
+			container_of(panel->host, struct dsi_display, host);
+
+	if (unlikely(dsi_display == NULL))
+		return -EINVAL;
+
+	return dsi_display->display_idx;
+}
+#endif
+
 static int dsi_panel_vreg_get(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -4891,6 +4904,8 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 		goto error_disable_gpio;
 	}
 
+	PANEL_NOTIFY(PANEL_EVENT_DISPLAY_ON_PREPARE);
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_ON);
 	if (rc) {
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_PRE_ON cmds, rc=%d\n",
@@ -5202,19 +5217,6 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
-
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
-static inline int dsi_panel_get_index(struct dsi_panel *panel)
-{
-	struct dsi_display *dsi_display =
-			container_of(panel->host, struct dsi_display, host);
-
-	if (unlikely(dsi_display == NULL))
-		return -EINVAL;
-
-	return dsi_display->display_idx;
-}
-#endif
 
 int dsi_panel_enable(struct dsi_panel *panel)
 {
