@@ -414,7 +414,7 @@ int ili_sleep_handler(int mode)
 			ili_irq_enable();
 			ilits->wakeable = true;
 		} else {
-			if (ili_ic_func_ctrl("sleep", SLEEP_IN) < 0)
+			if (ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0)
 				ILI_ERR("Write sleep in cmd failed\n");
 			ilits->wakeable = false;
 		}
@@ -424,7 +424,7 @@ int ili_sleep_handler(int mode)
 			enable_irq_wake(ilits->irq_num);
 			ili_irq_enable();
 		} else {
-			if (ili_ic_func_ctrl("sleep", SLEEP_IN) < 0)
+			if (ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0)
 				ILI_ERR("Write sleep in cmd failed\n");
 		}
 #endif
