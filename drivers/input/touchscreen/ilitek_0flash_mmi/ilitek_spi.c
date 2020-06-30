@@ -31,7 +31,7 @@ struct ilitek_ts_data *ilits;
 
 #if SPI_DMA_TRANSFER_SPLIT
 #define DMA_TRANSFER_MAX_CHUNK		64   // number of chunks to be transferred.
-#define DMA_TRANSFER_MAX_LEN		1024 // length of a chunk.
+#define DMA_TRANSFER_MAX_LEN		4096 // length of a chunk.
 
 int ili_spi_write_then_read_split(struct spi_device *spi,
 		const void *txbuf, unsigned n_tx,
