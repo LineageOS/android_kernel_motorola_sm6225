@@ -18,7 +18,7 @@
 #include "bengal-cebu-awinic-audio-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-cebu-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
-#include "bengal-guam-moto-thermal.dtsi"
+#include "bengal-cebu-moto-thermal.dtsi"
 
 &qupv3_se4_2uart {
 	status = "ok";
