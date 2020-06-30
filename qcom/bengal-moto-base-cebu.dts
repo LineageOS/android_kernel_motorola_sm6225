@@ -36,3 +36,7 @@
         /delete-node/ cam_sensor_csi_mux_sel_active;
         /delete-node/ cam_sensor_csi_mux_sel_suspend;
 };
+
+&mdss_dsi0_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+};
