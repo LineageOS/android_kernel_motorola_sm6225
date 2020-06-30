@@ -11,8 +11,8 @@
 };
 
 &dsi_hlt_hx83102d_video {
-	qcom,mdss-dsi-t-clk-post = <0x0a>;
-	qcom,mdss-dsi-t-clk-pre = <0x21>;
+	qcom,mdss-dsi-t-clk-post = <0x0B>;
+	qcom,mdss-dsi-t-clk-pre = <0x23>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
@@ -40,11 +40,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[1F 1B 05 06 03 03 04 a0
-				1F 1B 05 06 03 03 04 a0
-				1F 1B 05 06 03 03 04 a0
-				1F 1B 05 06 03 03 04 a0
-				1F 10 04 06 03 03 04 a0];
+				[1F 1C 05 06 03 02 04 a0
+				1F 1C 05 06 03 02 04 a0
+				1F 1C 05 06 03 02 04 a0
+				1F 1C 05 06 03 02 04 a0
+				1F 11 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -121,11 +121,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[1F 1C 04 06 03 03 04 a0
-				1F 1C 04 06 03 03 04 a0
-				1F 1C 04 06 03 03 04 a0
-				1F 1C 04 06 03 03 04 a0
-				1F 0F 04 06 03 03 04 a0];
+				[1F 1C 04 06 03 02 04 a0
+				1F 1C 04 06 03 02 04 a0
+				1F 1C 04 06 03 02 04 a0
+				1F 1C 04 06 03 02 04 a0
+				1F 0F 04 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
