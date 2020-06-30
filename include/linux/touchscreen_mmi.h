@@ -26,7 +26,7 @@
 #include <linux/panel_notifier.h>
 
 #define register_panel_notifier panel_register_notifier
-#define unregister_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_unregister_notifier
 
 #define GET_CONTROL_DSI_INDEX { \
 	if (evd) \
