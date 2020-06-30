@@ -273,6 +273,37 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 	return;
 }
 
+static void chrg_policy_error_clear(struct mmi_charger_manager *chip,
+					struct mmi_cp_policy_dev *chrg_list)
+{
+	int chrg_num = 0, i = 0;
+	struct mmi_charger_device *chrg_dev;
+	chrg_num = chip->mmi_chrg_dev_num;
+
+	for (i = 0; i < chrg_num; i++) {
+		switch (i) {
+			case PMIC_SW:
+				break;
+
+			case CP_MASTER:
+				if (is_charger_exist(dev_ops[CP_MASTER].dev_name)) {
+					chrg_dev = chrg_list->chrg_dev[CP_MASTER];
+					mmi_clear_charger_error(chrg_dev);
+				}
+				break;
+
+			case CP_SLAVE:
+				break;
+
+			default:
+				mmi_chrg_err(chip,"mmi_chrg_dev not found %d !\n",i);
+				break;
+		}
+	}
+
+	return;
+}
+
 void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 {
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
@@ -746,6 +777,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
 		mmi_chrg_info(chip,"pps init , volt %dmV, curr %dmA, volt comp %dmv\n",
 			chip->pd_request_volt, chip->pd_request_curr, chip->pps_volt_comp);
+		chrg_policy_error_clear(chip, chrg_list);
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		break;
 	case PM_STATE_SINGLE_CP_ENTRY:
