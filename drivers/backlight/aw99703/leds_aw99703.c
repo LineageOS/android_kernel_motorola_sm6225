@@ -648,7 +648,7 @@ static int aw99703_probe(struct i2c_client *client,
 
 #ifdef KERNEL_ABOVE_4_14
 	memset(&props, 0, sizeof(struct backlight_properties));
-	props.type = BACKLIGHT_RAW;
+	props.type = BACKLIGHT_PLATFORM;
 	props.brightness = MAX_BRIGHTNESS;
 	props.max_brightness = MAX_BRIGHTNESS;
 	bl_dev = backlight_device_register(AW99703_NAME, &client->dev,
