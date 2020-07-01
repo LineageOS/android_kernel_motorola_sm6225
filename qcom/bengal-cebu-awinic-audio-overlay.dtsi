@@ -44,11 +44,44 @@
 	status = "disabled";
 };
 
+&tlmm {
+	/*delete-node*/ spkr_1_sd_n;
+
+	aw882xx_reset: aw882xx_reset {
+		mux {
+			pins = "gpio97";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio97";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	aw882xx_irq: aw882xx_irq {
+		mux {
+			pins = "gpio112";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio112";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+		};
+	};
+};
+
 &qupv3_se1_i2c {
 	status = "ok";
 	aw882xx_smartpa@34 {
 		compatible = "awinic,aw882xx_smartpa";
 		reg = <0x34>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&aw882xx_reset>, <&aw882xx_irq>;
+
 		reset-gpio = <&tlmm 97 0>;
 		irq-gpio = <&tlmm 112 0x2008>;
 		monitor-flag = <1>;
@@ -71,16 +104,16 @@
 
 /* Configure MI2S0 SD0&SD1 */
 &dai_mi2s0 {
-        /* SD0 line for playback */
-        qcom,msm-mi2s-rx-lines = <1>;
-        /* SD1 line for recording(SmartPA EC) */
-        qcom,msm-mi2s-tx-lines = <2>;
+	/* SD0 line for playback */
+	qcom,msm-mi2s-rx-lines = <1>;
+	/* SD1 line for recording(SmartPA EC) */
+	qcom,msm-mi2s-tx-lines = <2>;
 };
 
 /* Modify btfmslim_codec's compatible */
 &btfmslim_codec {
-        compatible = "btfmslim_slave";
-        status = "ok";
+	compatible = "btfmslim_slave";
+	status = "ok";
 };
 
 
