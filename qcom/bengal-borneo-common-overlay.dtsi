@@ -220,7 +220,8 @@
         mtp_batterydata: qcom,battery-data {
               qcom,batt-id-range-pct = <15>;
               df-serialnum = "SB18C77591";
-              #include "qg-batterydata-jk50-atl-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-5000mah.dtsi"
+	      #include "qg-batterydata-jk50-scud-5000mah.dtsi"
         };
 };
 
