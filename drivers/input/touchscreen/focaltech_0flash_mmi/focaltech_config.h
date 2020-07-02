@@ -178,7 +178,11 @@
  * ESD check & protection
  * default: disable
  */
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA)
+#define FTS_ESDCHECK_EN                         1
+#else
 #define FTS_ESDCHECK_EN                         0
+#endif
 
 /*
  * Production test enable
