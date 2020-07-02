@@ -29,6 +29,7 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
+	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 	qcom,tp_state_check_enable;
 	qcom,mdss-dsi-reset-always-high;
 	qcom,mdss-dsi-reset-force-pull-low;
@@ -66,6 +67,7 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
+	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 	qcom,tp_state_check_enable;
 	qcom,mdss-dsi-reset-always-high;
 	qcom,mdss-dsi-reset-force-pull-low;
