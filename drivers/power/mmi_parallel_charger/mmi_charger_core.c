@@ -1334,7 +1334,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			if ((chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_AUGMENTED)
 				&& chip->mmi_pdo_info[i].uv_max >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& chip->mmi_pdo_info[i].ua >= TYPEC_MIDDLE_CURRENT_UA) {
+				&& chip->mmi_pdo_info[i].ua >= chip->typec_middle_current) {
 					chip->mmi_pd_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
 					mmi_chrg_info(chip,
 							"pd charger support pps, pdo %d, "
@@ -1448,7 +1448,7 @@ static void psy_changed_work_func(struct work_struct *work)
 			if ((chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_AUGMENTED)
 				&& chip->mmi_pdo_info[i].uv_max >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& chip->mmi_pdo_info[i].ua >= TYPEC_MIDDLE_CURRENT_UA) {
+				&& chip->mmi_pdo_info[i].ua >= chip->typec_middle_current) {
 					chip->mmi_pd_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
 					mmi_chrg_info(chip,
 							"pd charger support pps, pdo %d, "
@@ -1549,6 +1549,13 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 
 	chip->dont_rerun_aicl= of_property_read_bool(node,
 			"mmi,dont-rerun-aicl");
+
+	rc = of_property_read_u32(node,
+				"mmi,typec-middle-current",
+				&chip->typec_middle_current);
+	if (rc < 0)
+		chip->typec_middle_current =
+				TYPEC_MIDDLE_CURRENT_UA;
 
 	rc = of_property_read_u32(node,
 				"mmi,pps-volt-steps",
