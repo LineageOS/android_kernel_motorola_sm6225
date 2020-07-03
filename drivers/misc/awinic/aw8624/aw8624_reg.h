@@ -127,8 +127,8 @@
  * Register Access
  *******************************************/
 #define REG_NONE_ACCESS 0
-#define REG_RD_ACCESS  1 << 0
-#define REG_WR_ACCESS  1 << 1
+#define REG_RD_ACCESS  (1 << 0)
+#define REG_WR_ACCESS  (1 << 1)
 
 
 const unsigned char aw8624_reg_access[AW8624_REG_MAX] = {
@@ -455,6 +455,11 @@ const unsigned char aw8624_reg_access[AW8624_REG_MAX] = {
 #define AW8624_BIT_DBGCTRL_INTN_TRG_SEL_MASK        (~(1<<5))
 #define AW8624_BIT_DBGCTRL_INTN_SEL_ENABLE           (1<<5)
 #define AW8624_BIT_DBGCTRL_TRG_SEL_ENABLE           (0<<5)
+#define AW8624_BIT_DBGCTRL_INT_MODE_MASK		(~(3<<2))
+#define AW8624_BIT_DBGCTRL_INTN_LEVEL_MODE		(0<<2)
+#define AW8624_BIT_DBGCTRL_INT_MODE_EDGE		(1<<2)
+#define AW8624_BIT_DBGCTRL_INTN_POSEDGE_MODE		(2<<2)
+#define AW8624_BIT_DBGCTRL_INTN_BOTH_EDGE_MODE		(3<<2)
 
 /*
  * DATCTRL
@@ -522,8 +527,8 @@ const unsigned char aw8624_reg_access[AW8624_REG_MAX] = {
 #define AW8624_BIT_CONT_CTRL_AUTO_BRK_ENABLE     (1<<0)
 #define AW8624_BIT_CONT_CTRL_AUTO_BRK_DISABLE    (0<<0)
 
-#define AW8624_BIT_D2SCFG_CLK_ADC_MASK  (~(7<<4))
-#define AW8624_BIT_D2SCFG_CLK_ASC_1P5MHZ     (3<<4)
+#define AW8624_BIT_D2SCFG_CLK_ADC_MASK  (~(7<<5))
+#define AW8624_BIT_D2SCFG_CLK_ASC_1P5MHZ     (3<<5)
 
 /*
  * DETCTRL
@@ -590,6 +595,10 @@ const unsigned char aw8624_reg_access[AW8624_REG_MAX] = {
 #define AW8624_BIT_PRTIME_PRTIME_MASK       (~(0xff<<0))
 
 #define AW8624_BIT_BEMF_NUM_BRK_MASK            (~(0xf<<0))
+
+/*
+ *TD_H 0x4b TD_brake
+ */
 #define AW8624_BIT_TDH_TD_BRAKE_MASK          (~(0xF<<4))
 #define AW8624_BIT_R_SPARE_MASK			(~(1<<7))
 #define AW8624_BIT_R_SPARE_ENABLE			(1<<7)
