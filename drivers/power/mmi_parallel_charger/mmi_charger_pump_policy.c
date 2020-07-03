@@ -743,7 +743,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			if ((chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_AUGMENTED)
 				&& chip->mmi_pdo_info[i].uv_max >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& chip->mmi_pdo_info[i].ua >= TYPEC_MIDDLE_CURRENT_UA) {
+				&& chip->mmi_pdo_info[i].ua >= chip->typec_middle_current) {
 					chip->mmi_pd_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
 					mmi_chrg_info(chip,
 							"Pd charger support pps, pdo %d, "
@@ -774,7 +774,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		chip->pd_request_volt = 2 * vbatt_volt - chip->pd_request_volt
 							+ chip->pps_volt_comp;
 		chip->pd_request_curr =
-					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+					min(chip->pd_curr_max, chip->typec_middle_current);
 		mmi_chrg_info(chip,"pps init , volt %dmV, curr %dmA, volt comp %dmv\n",
 			chip->pd_request_volt, chip->pd_request_curr, chip->pps_volt_comp);
 		chrg_policy_error_clear(chip, chrg_list);
@@ -820,7 +820,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 		}else if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
 			if (chip->pd_request_curr - chip->pps_curr_steps
-				> TYPEC_MIDDLE_CURRENT_UA)
+				> chip->typec_middle_current)
 				chip->pd_request_curr -= chip->pps_curr_steps;
 			mmi_chrg_sm_move_state(chip,
 						PM_STATE_CP_CC_LOOP);
@@ -971,7 +971,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 					CC_POWER_COUNT) {
 				if (chip->pd_pps_balance
 					&& (chip->pd_request_curr - chip->pps_curr_steps)
-						> TYPEC_MIDDLE_CURRENT_UA) {
+						> chip->typec_middle_current) {
 					chip->pd_request_curr -=
 						chip->pps_curr_steps;
 					chip->pd_request_volt +=
@@ -1296,7 +1296,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		} else if (batt_temp > chrg_step->temp_c) {
 				cooling_curr =
-					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+					min(chip->pd_curr_max, chip->typec_middle_current);
 				if (chip->pd_request_curr > cooling_curr) {
 					chip->pd_request_curr -= COOLING_DELTA_POWER;
 				} else {
@@ -1382,7 +1382,7 @@ schedule:
 			chip->thermal_mitigation[chip->system_thermal_level]
 			+ CC_CURR_DEBOUNCE) {
 			if (chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR >=
-				TYPEC_MIDDLE_CURRENT_UA) {
+				chip->typec_middle_current) {
 				chip->pd_sys_therm_curr -= THERMAL_TUNNING_CURR;
 				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, decrease pps curr %d\n",
 								chip->pd_sys_therm_curr);
@@ -1392,7 +1392,7 @@ schedule:
 								"pd_sys_therm_curr %dmA was less than %dmA, "
 								"Give up thermal mitigation!",
 								chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR,
-								TYPEC_MIDDLE_CURRENT_UA);
+								chip->typec_middle_current);
 			}
 		} else if (ibatt_curr <
 			chip->thermal_mitigation[chip->system_thermal_level]
@@ -1435,7 +1435,7 @@ schedule:
 
 		} else if (batt_temp > chrg_step->temp_c) {
 				cooling_curr =
-					min(chip->pd_curr_max, TYPEC_MIDDLE_CURRENT_UA);
+					min(chip->pd_curr_max, chip->typec_middle_current);
 				cooling_volt = (2 * vbatt_volt) % 20000;
 				cooling_volt = 2 * vbatt_volt - cooling_volt
 						+ chip->pps_volt_comp;
@@ -1443,7 +1443,7 @@ schedule:
 					&& chip->pd_batt_therm_curr > cooling_curr) {
 
 					if (chip->pd_batt_therm_curr - COOLING_DELTA_POWER >=
-						TYPEC_MIDDLE_CURRENT_UA)
+						chip->typec_middle_current)
 						chip->pd_batt_therm_curr -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
 						"pd_batt_therm_curr %dmA, "
@@ -1546,7 +1546,7 @@ schedule:
 								chip->pd_batt_therm_curr);
 
 	if (chip->pd_target_volt < SWITCH_CHARGER_PPS_VOLT
-		|| chip->pd_target_curr < TYPEC_MIDDLE_CURRENT_UA) {
+		|| chip->pd_target_curr < chip->typec_middle_current) {
 
 		if (sm_state == PM_STATE_PPS_TUNNING_CURR
 			|| sm_state == PM_STATE_PPS_TUNNING_VOLT
