@@ -165,6 +165,8 @@ struct mmi_charger_manager {
 	int batt_ovp_lmt;	/*the battery over current limitation*/
 	int pl_chrg_vbatt_min;	/*the minimum battery voltage to enable parallel charging*/
 
+	int typec_middle_current;
+
 	int pps_volt_comp;
 	int pd_request_volt;
 	int pd_request_curr;
