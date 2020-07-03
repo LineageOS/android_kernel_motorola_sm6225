@@ -749,7 +749,8 @@ out:
 	return ret;
 
 fail:
-	ili_ice_mode_ctrl(DISABLE, ON);
+	ili_reset_ctrl(TP_HW_RST_ONLY);
+	ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
 	return ret;
 }
 
