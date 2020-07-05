@@ -349,7 +349,6 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define HEARTBEAT_PPS_TUNNING_MS 100
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANCEL -1
-#define STEP_FIREST_CURR_COMP 300000
 #define CC_CURR_DEBOUNCE 100000
 #define CV_TAPPER_COUNT 3
 #define CC_POWER_COUNT 3
@@ -887,7 +886,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 				<= chip->pd_volt_max
 				&& vbatt_volt < chrg_step->chrg_step_cv_volt
 				&& ibatt_curr < ((chrg_step->pres_chrg_step == STEP_FIRST) ?
-				chrg_step->chrg_step_cc_curr + STEP_FIREST_CURR_COMP :
+				chrg_step->chrg_step_cc_curr + chip->step_first_curr_comp:
 				chrg_step->chrg_step_cc_curr)) {
 				chip->pd_request_volt += chip->pps_volt_steps;
 				mmi_chrg_dbg(chip, PR_MOTO, "Increase pps volt %d\n",

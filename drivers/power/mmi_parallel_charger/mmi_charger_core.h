@@ -131,6 +131,7 @@ struct mmi_chrg_dts_info {
 #define PD_SRC_PDO_TYPE_BATTERY		1
 #define PD_SRC_PDO_TYPE_VARIABLE	2
 #define PD_SRC_PDO_TYPE_AUGMENTED	3
+#define STEP_FIREST_CURR_COMP 		300000
 #define TYPEC_HIGH_CURRENT_UA		3000000
 #define TYPEC_MIDDLE_CURRENT_UA		2000000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
@@ -166,7 +167,7 @@ struct mmi_charger_manager {
 	int pl_chrg_vbatt_min;	/*the minimum battery voltage to enable parallel charging*/
 
 	int typec_middle_current;
-
+	int step_first_curr_comp;
 	int pps_volt_comp;
 	int pd_request_volt;
 	int pd_request_curr;
