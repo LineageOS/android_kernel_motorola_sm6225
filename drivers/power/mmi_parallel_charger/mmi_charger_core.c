@@ -1558,6 +1558,13 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 				TYPEC_MIDDLE_CURRENT_UA;
 
 	rc = of_property_read_u32(node,
+				"mmi,step-first-current-comp",
+				&chip->step_first_curr_comp);
+	if (rc < 0)
+		chip->step_first_curr_comp =
+				STEP_FIREST_CURR_COMP;
+
+	rc = of_property_read_u32(node,
 				"mmi,pps-volt-steps",
 				&chip->pps_volt_steps);
 	if (rc < 0)
