@@ -194,7 +194,7 @@
 &pm6125_l21 {
              regulator-min-microvolt = <2400000>;
              regulator-max-microvolt = <3600000>;
-             qcom,init-voltage = <2400000>;
+             qcom,init-voltage = <2800000>;
 };
 
 
