@@ -1346,6 +1346,7 @@ static struct attribute_group fts_attribute_group = {
     .attrs = fts_attributes
 };
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #include <linux/major.h>
 #include <linux/kdev_t.h>
 
@@ -1379,10 +1380,12 @@ static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(vendor),
 	__ATTR_NULL
 };
+#endif
 
 #define TSDEV_MINOR_BASE 128
 #define TSDEV_MINOR_MAX 32
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_sysfs_class(void *_data, bool create)
 {
 	struct fts_ts_data *data = _data;
@@ -1447,6 +1450,7 @@ device_destroy:
 
 	return -ENODEV;
 }
+#endif
 
 int fts_create_sysfs(struct fts_ts_data *ts_data)
 {
@@ -1458,6 +1462,7 @@ int fts_create_sysfs(struct fts_ts_data *ts_data)
         sysfs_remove_group(&ts_data->dev->kobj, &fts_attribute_group);
         return -ENOMEM;
     }
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
     ret = fts_sysfs_class(ts_data, true);
     if (ret) {
         FTS_ERROR("[EX]: fts_sysfs_class() failed!!");
@@ -1465,6 +1470,7 @@ int fts_create_sysfs(struct fts_ts_data *ts_data)
         return -ENOMEM;
     }
     FTS_INFO("[EX]: sysfs_create_group() succeeded!!");
+#endif
 
     return ret;
 }
@@ -1472,6 +1478,8 @@ int fts_create_sysfs(struct fts_ts_data *ts_data)
 int fts_remove_sysfs(struct fts_ts_data *ts_data)
 {
     sysfs_remove_group(&ts_data->dev->kobj, &fts_attribute_group);
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
     fts_sysfs_class(ts_data, false);
+#endif
     return 0;
 }
