@@ -206,6 +206,9 @@ struct dts201a_data {
 	*/
 	int i2c_pwren_gpio;
 	bool vdd_en;
+#if defined(CONFIG_DRM)
+    struct notifier_block fb_notif;
+#endif
 };
 
 
