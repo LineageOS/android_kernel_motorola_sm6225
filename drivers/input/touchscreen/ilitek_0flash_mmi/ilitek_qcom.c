@@ -720,6 +720,13 @@ static int ili_panel_notifier_callback(struct notifier_block *self, unsigned lon
 
 	return 0;
 }
+
+void ilitek_panel_notifier_unregister(void)
+{
+	if (register_panel_notifier(&ilits->panel_notif)) {
+		ILI_ERR("unregister panel_notifier failed\n");
+	}
+}
 #endif
 
 static void ilitek_plat_sleep_init(void)
