@@ -75,6 +75,18 @@
 			};
 		};
 	};
+	ts_int_pull_up: ts_int_pull_up {
+		mux {
+			pins = "gpio67";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio67";
+			drive-strength = <6>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
 };
 
 &qupv3_se2_spi_pins {
@@ -115,6 +127,8 @@
 		spi-max-frequency = <12000000>;
 		touch,reset-gpio = <&tlmm 66 0x00>;
 		touch,irq-gpio = <&tlmm 67 0x2002>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_pull_up>;
 		ilitek,report_gesture_key;
 		panel = <&dsi_tm_ili9881x_video>;
 	};
