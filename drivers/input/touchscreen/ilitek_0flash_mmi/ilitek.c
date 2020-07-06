@@ -1040,6 +1040,39 @@ void ili_dev_remove(void)
 	ili_interface_dev_exit(ilits);
 }
 
+void ilitek_spi_shutdown(struct spi_device *spi)
+{
+	ILI_INFO("Shutdown driver...\n");
+
+	ili_irq_disable();
+
+#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
+	ilitek_panel_notifier_unregister();
+#endif
+
+	if (esd_wq != NULL) {
+		cancel_delayed_work_sync(&esd_work);
+		flush_workqueue(esd_wq);
+		destroy_workqueue(esd_wq);
+	}
+	if (bat_wq != NULL) {
+		cancel_delayed_work_sync(&bat_work);
+		flush_workqueue(bat_wq);
+		destroy_workqueue(bat_wq);
+	}
+
+	if (ilits->ws)
+		wakeup_source_unregister(ilits->ws);
+
+	ilits->gesture = DISABLE;
+
+	if(gpio_is_valid(ilits->tp_rst)) {
+		gpio_direction_output(ilits->tp_rst, 0);
+		mdelay(1);
+		gpio_set_value(ilits->tp_rst, 0);
+	}
+}
+
 int ili_dev_init(struct ilitek_hwif_info *hwif)
 {
 	ILI_INFO("TP Interface: %s\n", (hwif->bus_type == BUS_I2C) ? "I2C" : "SPI");

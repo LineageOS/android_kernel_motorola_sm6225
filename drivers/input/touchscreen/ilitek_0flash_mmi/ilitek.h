@@ -1130,6 +1130,10 @@ extern int ili_get_tp_recore_ctrl(int data);
 extern int ili_get_tp_recore_data(void);
 extern void ili_demo_debug_info_mode(u8 *buf, size_t rlen);
 extern void ili_demo_debug_info_id0(u8 *buf, size_t len);
+#ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
+extern void ilitek_panel_notifier_unregister(void);
+#endif
+extern void ilitek_spi_shutdown(struct spi_device *spi);
 
 static inline void ipio_kfree(void **mem)
 {
