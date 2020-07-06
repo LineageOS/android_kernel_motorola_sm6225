@@ -49,6 +49,12 @@
 #include <linux/sensors.h>
 
 #include "dts201a-cci.h"
+//do not use kernel PM
+#undef CONFIG_PM
+
+#ifdef CONFIG_DRM
+	#include <linux/msm_drm_notify.h>
+#endif
 //#undef DTS201A_DEBUG
 #define	DTS201A_DEBUG
 #define	DTS201A_TEST
@@ -271,74 +277,6 @@ err_resume_state:
 	return err;
 }
 
-#ifdef DTS201A_MAVG
-u32 dts201a_moving_o_avg(struct dts201a_data *ther, u32 o_adc)
-{
-	u8 i;
-	u32 ret;
-	u32 therm_tot = 0;
-
-	if( (o_avg_cnt&0x7f) >= DTS100A_MOVING_OAVG ) {
-		o_avg_cnt = 0;
-		o_avg_cnt |= 0x80;
-	}
-
-	if( o_avg_cnt&0x80 ) {
-		ther->out.therm_avg[(o_avg_cnt&0x7f)] = o_adc;
-		o_avg_cnt = (o_avg_cnt&0x7f)+1;
-		o_avg_cnt |= 0x80;
-
-		for(i=0; i<DTS100A_MOVING_OAVG; i++)
-			therm_tot += ther->out.therm_avg[i];
-
-		ret = (therm_tot/DTS100A_MOVING_OAVG);
-	} else {
-		ther->out.therm_avg[(o_avg_cnt&0x7f)] = o_adc;
-		o_avg_cnt++;
-
-		for(i=0; i<o_avg_cnt; i++)
-			therm_tot += ther->out.therm_avg[i];
-
-		ret = (therm_tot/o_avg_cnt);
-	}
-
-	return ret;
-}
-
-u32 dts201a_moving_a_avg(struct dts201a_data *ther, u32 a_adc)
-{
-	u8 i;
-	u32 ret;
-	u32 ambient_tot = 0;
-
-	if( (a_avg_cnt&0x7f) >= DTS100A_MOVING_AAVG ) {
-		a_avg_cnt = 0;
-		a_avg_cnt |= 0x80;
-	}
-
-	if( a_avg_cnt&0x80 ) {
-		ther->out.ambient_avg[(a_avg_cnt&0x7f)] = a_adc;
-		a_avg_cnt = (a_avg_cnt&0x7f)+1;
-		a_avg_cnt |= 0x80;
-
-		for(i=0; i<DTS100A_MOVING_AAVG; i++)
-			ambient_tot += ther->out.ambient_avg[i];
-
-		ret = (ambient_tot/DTS100A_MOVING_AAVG);
-	} else {
-		ther->out.ambient_avg[(a_avg_cnt&0x7f)] = a_adc;
-		a_avg_cnt++;
-
-		for(i=0; i<a_avg_cnt; i++)
-			ambient_tot += ther->out.ambient_avg[i];
-
-		ret = (ambient_tot/a_avg_cnt);
-	}
-
-	return ret;
-}
-#endif
-
 static int dts201a_get_thermtemp_data(struct dts201a_data *ther)
 {
 	int err = 0, i = 0;
@@ -346,7 +284,6 @@ static int dts201a_get_thermtemp_data(struct dts201a_data *ther)
 	u32 thermopile = 0;
 	u32 temperature = 0;
 	u8 status = 0;
-
 
 #ifdef CAMERA_CCI
 	memset(rbuf,0,sizeof(rbuf));
@@ -364,34 +301,28 @@ static int dts201a_get_thermtemp_data(struct dts201a_data *ther)
 	if (err < 0) goto i2c_error;
 #endif
 	status = rbuf[0];
-#ifdef DTS201A_MAVG
-	//average in kernel queue
-	thermopile = dts201a_moving_o_avg(ther, (rbuf[1] << 16) | (rbuf[2] << 8) | rbuf[3]);
-	temperature = dts201a_moving_a_avg(ther, (rbuf[4] << 16) | (rbuf[5] << 8) | rbuf[6]);
-#endif
-	{
-		thermopile = (rbuf[1] << 16) | (rbuf[2] << 8) | rbuf[3];
-		temperature = (rbuf[4] << 16) | (rbuf[5] << 8) | rbuf[6];
-		//average in i2c
-		if(i2c_mavg > 0) {
-			for(i=0; i<i2c_mavg; i++) {
+
+	thermopile = (rbuf[1] << 16) | (rbuf[2] << 8) | rbuf[3];
+	temperature = (rbuf[4] << 16) | (rbuf[5] << 8) | rbuf[6];
+	//average in i2c if i2c_mavg> 0
+	if(i2c_mavg > 0) {
+		for(i=0; i<i2c_mavg; i++) {
 #ifdef CAMERA_CCI
-				memset(rbuf,0,sizeof(rbuf));
-				err= dts201a_cci_write(ther, DTS_MEASURE8,rbuf,2,0);
-				if (err < 0) goto i2c_error;
-				msleep(DTS_CONVERSION_TIME);
-				err= dts201a_cci_read(ther, 0,rbuf,7);
+			memset(rbuf,0,sizeof(rbuf));
+			err= dts201a_cci_write(ther, DTS_MEASURE8,rbuf,2,0);
+			if (err < 0) goto i2c_error;
+			msleep(DTS_CONVERSION_TIME);
+			err= dts201a_cci_read(ther, 0,rbuf,7);
 #else
-				err = dts201a_i2c_write(ther, DTS_MEASURE8, 0x0);
-				if (err < 0) goto i2c_error;
-				msleep(DTS_CONVERSION_TIME);
-				err = dts201a_i2c_read(ther, rbuf, 7);
+			err = dts201a_i2c_write(ther, DTS_MEASURE8, 0x0);
+			if (err < 0) goto i2c_error;
+			msleep(DTS_CONVERSION_TIME);
+			err = dts201a_i2c_read(ther, rbuf, 7);
 #endif
-				if (err < 0) goto i2c_error;
-				status = rbuf[0];
-				thermopile = (thermopile + ((rbuf[1] << 16) | (rbuf[2] << 8) | rbuf[3]))/2;
-				temperature = (temperature + ((rbuf[4] << 16) | (rbuf[5] << 8) | rbuf[6]))/2;
-			}
+			if (err < 0) goto i2c_error;
+			status = rbuf[0];
+			thermopile = (thermopile + ((rbuf[1] << 16) | (rbuf[2] << 8) | rbuf[3]))/2;
+			temperature = (temperature + ((rbuf[4] << 16) | (rbuf[5] << 8) | rbuf[6]))/2;
 		}
 	}
 #ifdef DTS201A_DEBUG
@@ -420,22 +351,12 @@ i2c_error :
 
 int dts201a_enable(struct dts201a_data *ther)
 {
-#ifdef DTS201A_MAVG
-	u8 i;
-#endif
 	int err = 0;
-
 	if (!atomic_cmpxchg(&ther->enabled, 0, 1)) {
 		hrtimer_start(&ther->timer, ther->poll_delay, HRTIMER_MODE_REL);
-#ifdef DTS201A_MAVG
-		o_avg_cnt = 0;
-		for(i=0; i<DTS100A_MOVING_OAVG; i++)ther->out.therm_avg[i]=0;
-		a_avg_cnt = 0;
-		for(i=0; i<DTS100A_MOVING_AAVG; i++)ther->out.ambient_avg[i]=0;
-#endif
 	}
 #ifdef DTS201A_DEBUG
-	pr_info("\t[dts201a] %s = %d\n", __func__,  atomic_read(&ther->enabled));
+	pr_info("%s = %d\n", __func__,  atomic_read(&ther->enabled));
 #endif
 	return err;
 }
@@ -447,10 +368,10 @@ int dts201a_disable(struct dts201a_data *ther)
 	if (atomic_cmpxchg(&ther->enabled, 1, 0)) {
 		hrtimer_cancel(&ther->timer);
 		cancel_work_sync(&ther->work_thermopile);
-		pr_info("\t[dts201a] %s  cancel work\n", __func__);
+		pr_info("%s  cancel work\n", __func__);
 	}
 #ifdef DTS201A_DEBUG
-	pr_info("\t[dts201a] %s = %d\n", __func__,  atomic_read(&ther->enabled));
+	pr_info("%s = %d\n", __func__,  atomic_read(&ther->enabled));
 #endif
 	return err;
 }
@@ -556,13 +477,13 @@ static ssize_t dts201a_enable_show(struct device *dev,
 }
 
 static ssize_t dts201a_data2read_show( struct device *dev,
-                                       struct device_attribute *attr, char *buf )
+		 struct device_attribute *attr, char *buf )
 {
-    struct dts201a_data *ther = dev_get_drvdata( dev );
+	struct dts201a_data *ther = dev_get_drvdata( dev );
 
-    dts201a_get_thermtemp_data ( ther );
+	dts201a_get_thermtemp_data ( ther );
 
-    return sprintf( buf, "%d %d\n", ther->out.therm, ther->out.temp );
+	return sprintf( buf, "%d %d\n", ther->out.therm, ther->out.temp );
 }
 
 
@@ -918,10 +839,59 @@ static DEVICE_ATTR(coefficient_reg, 0440, coefficient_reg_show, NULL);
 static DEVICE_ATTR(dts201a_data2read, 0440, dts201a_data2read_show, NULL );
 static DEVICE_ATTR(i2c_avg, (S_IWUSR|S_IRUSR | S_IWGRP|S_IRGRP), i2c_avg_show, i2c_avg_store);
 static DEVICE_ATTR(i2c_register_read, (S_IWUSR|S_IRUSR | S_IWGRP|S_IRGRP), i2c_register_read_show, i2c_register_read_store);
-static DEVICE_ATTR(i2c_register_write, (S_IWUSR|S_IRUSR | S_IWGRP|S_IRGRP), NULL, i2c_register_write_store);
+static DEVICE_ATTR(i2c_register_write, (S_IWUSR| S_IWGRP), NULL, i2c_register_write_store);
 #endif
 
+#ifdef CONFIG_DRM
+int dts201a_drm_notifier_callback(struct notifier_block *self,
+	unsigned long event, void *data)
+{
+	struct msm_drm_notifier *evdata = data;
+	int *blank;
+	int ret = 0;
+	struct dts201a_data *ther =  g_dts201a_data;
 
+	if(!ther) {
+		pr_info("%s g_dts201a_data is NULL\n", __func__);
+		return 0;
+	}
+	if (!evdata || (evdata->id != 0)) {
+		return 0;
+	}
+
+	if (!(event == MSM_DRM_EARLY_EVENT_BLANK || event == MSM_DRM_EVENT_BLANK)) {
+		pr_info("%s event(%lu) do not need process\n",__func__, event);
+		return 0;
+	}
+	blank = evdata->data;
+	pr_info("%s DRM event:%lu,blank:%d", __func__,event, *blank);
+	switch (*blank) {
+		case MSM_DRM_BLANK_UNBLANK:
+			if (MSM_DRM_EARLY_EVENT_BLANK == event) {
+				pr_debug("%s resume: event = %lu, not care\n", __func__, event);
+			} else if (MSM_DRM_EVENT_BLANK == event) {
+				pr_debug("%s resume: event = %lu ,display wake up\n", __func__,event);
+			}
+		break;
+		case MSM_DRM_BLANK_POWERDOWN:
+			if (MSM_DRM_EARLY_EVENT_BLANK == event) {
+				if (atomic_read(&ther->enabled)) {
+				ret = dts201a_disable(ther);
+				if (ret < 0)
+					pr_info("%s: could not disable\n", __func__);
+				}
+			} else if (MSM_DRM_EVENT_BLANK == event) {
+				pr_debug("%s suspend: event = %lu, not care\n", __func__,event);
+			}
+		break;
+		default:
+			pr_info("%s DAM BLANK(%d) do not need process\n", __func__, *blank);
+		break;
+	}
+
+	return 0;
+}
+#endif
 static enum hrtimer_restart dts201a_timer_func(struct hrtimer *timer)
 {
 	struct dts201a_data *ther =  g_dts201a_data;
@@ -1094,6 +1064,14 @@ int dts201a_setup(struct device *dev,struct dts201a_data *data)
 		goto err_device_create_file8;
 	}
 #endif
+#ifdef CONFIG_DRM
+
+	ther->fb_notif.notifier_call = dts201a_drm_notifier_callback;
+	err = msm_drm_register_client(&ther->fb_notif);
+	if (err) {
+		dts201a_errmsg(" [DRM]Unable to register fb_notifier: %d\n", err);
+	}
+#endif
 	g_dts201a_data  = ther;
 	dts201a_info("     done");
 	return 0;
@@ -1156,7 +1134,10 @@ int dts201a_cleanup(struct dts201a_data *ther)
 #ifdef DTS201A_DEBUG
 	pr_info("\t[dts201a] %s = %d\n", __func__, 0);
 #endif
-
+#ifdef CONFIG_DRM
+    if (msm_drm_unregister_client(&ther->fb_notif))
+        pr_info("%s Error occurred while unregistering fb_notifier \n", __func__);
+#endif
 #ifdef DTS201A_TEST
 	device_remove_file(ther->dev, &dev_attr_i2c_register_write);
 	device_remove_file(ther->dev, &dev_attr_i2c_register_read);
