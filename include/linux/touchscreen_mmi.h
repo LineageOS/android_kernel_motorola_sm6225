@@ -285,6 +285,7 @@ struct ts_mmi_dev_pdata {
 	bool		gs_distance_ctrl;
 	bool		hold_grip_ctrl;
 	bool		poison_slot_ctrl;
+	bool		notify_to_display;
 	int		max_x;
 	int		max_y;
 	int 		ctrl_dsi;

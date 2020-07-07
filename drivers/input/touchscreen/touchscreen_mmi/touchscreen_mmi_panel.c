@@ -124,6 +124,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->fps_detection = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,notify_to_display")) {
+		dev_info(DEV_TS, "%s: using notify to display\n", __func__);
+		ppdata->notify_to_display = true;
+	}
+
 	if (!of_property_read_u32_array(of_node, "mmi,max_coords", coords, 2)) {
 		dev_info(DEV_TS, "%s: get max_coords property\n", __func__);
 		ppdata->max_x = coords[0] - 1;
