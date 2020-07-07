@@ -2607,7 +2607,7 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 					HRTIMER_MODE_REL);
 			}
 #endif
-		} else if (value < 100 || seq > 2) {
+		} else if (value <= 100 || seq > 2) {
 			aw8697->haptic_mode = HAPTIC_SHORT;
 			if (aw8697->info.short_gain)
 				aw8697->gain = aw8697->info.short_gain;
