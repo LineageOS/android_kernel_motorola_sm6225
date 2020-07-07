@@ -99,6 +99,7 @@
 		focaltech,name = "ft8006ss_aa";
 		focaltech,panel-supplier = "dsbj";
 		focaltech,dlfw_in_resume;
+                panel = <&dsi_dsbj_ft8006s_video>;
 		/*
 		focaltech,have-key;
 		focaltech,key-number = <3>;
