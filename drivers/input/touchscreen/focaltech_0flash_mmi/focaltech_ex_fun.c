@@ -671,6 +671,33 @@ static ssize_t fts_productinfo_show(struct device *dev, struct device_attribute 
     return scnprintf(buf, PAGE_SIZE, "%s\n", FTS_CHIP_NAME);
 }
 
+static ssize_t fts_ic_ver_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    u8 val = 0;
+    struct input_dev *input_dev = fts_data->input_dev;
+    mutex_lock(&input_dev->mutex);
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(1);
+#endif
+    fts_read_reg(FTS_REG_VENDOR_ID, &val);
+    count += snprintf(buf + count, PAGE_SIZE, "Product ID: 0x%02x\n", val);
+    fts_read_reg(FTS_REG_FW_VER, &val);
+    count += snprintf(buf + count, PAGE_SIZE, "Build ID: 0000-%02x\n", val);
+    count += scnprintf(buf + count, PAGE_SIZE, "IC: %s\n", FTS_CHIP_NAME);
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(0);
+#endif
+    mutex_unlock(&input_dev->mutex);
+    return count;
+}
+
+static ssize_t fts_name_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "focaltech");
+}
 /* fts_tpfwver interface */
 static ssize_t fts_tpfwver_show(
     struct device *dev, struct device_attribute *attr, char *buf)
@@ -1315,6 +1342,8 @@ static DEVICE_ATTR(flashprog, S_IRUGO, flashprog_show, NULL);
 static DEVICE_ATTR(doreflash, S_IWUSR | S_IWGRP, NULL, doreflash_store);
 static DEVICE_ATTR(poweron, S_IRUGO, fts_poweron_show, NULL);
 static DEVICE_ATTR(productinfo, S_IRUGO, fts_productinfo_show, NULL);
+static DEVICE_ATTR(ic_ver, S_IRUGO, fts_ic_ver_show, NULL);
+static DEVICE_ATTR(name, S_IRUGO, fts_name_show, NULL);
 
 /* add your attr in here*/
 static struct attribute *fts_attributes[] = {
@@ -1338,6 +1367,8 @@ static struct attribute *fts_attributes[] = {
     &dev_attr_doreflash.attr,
     &dev_attr_poweron.attr,
     &dev_attr_productinfo.attr,
+    &dev_attr_ic_ver.attr,
+    &dev_attr_name.attr,
     &dev_attr_panel_supplier.attr,
     NULL
 };
