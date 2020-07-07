@@ -117,12 +117,12 @@ static int calc_hw_dma_crc(u32 start_addr, u32 block_size)
 	/* dma crc */
 	if (ili_ice_mode_write(0x041017, 0x03, 1) < 0)
 		ILI_ERR("Write dma 1 crc failed\n");
+	/* Dma1 stop */
+	if (ili_ice_mode_write(0x072100, 0x02000000, 4) < 0)
+		ILI_ERR("Write dma1 stop failed\n");
 	/* crc on */
 	if (ili_ice_mode_write(0x041016, 0x01, 1) < 0)
 		ILI_ERR("Write crc on failed\n");
-	/* Dma1 stop */
-	if (ili_ice_mode_write(0x072100, 0x00000000, 4) < 0)
-		ILI_ERR("Write dma1 stop failed\n");
 	/* clr int */
 	if (ili_ice_mode_write(0x048006, 0x2, 1) < 0)
 		ILI_ERR("Write clr int failed\n");
