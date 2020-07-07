@@ -185,6 +185,16 @@
 #endif
 
 /*
+ * FTS CONFIG_DRM_PANEL check & protection
+ * default: disable
+ */
+#if defined(CONFIG_DRM_PANEL) && defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA)
+#define FTS_CONFIG_DRM_PANEL                    1
+#else
+#define FTS_CONFIG_DRM_PANEL                    0
+#endif
+
+/*
  * Production test enable
  * 1: enable, 0:disable(default)
  */
