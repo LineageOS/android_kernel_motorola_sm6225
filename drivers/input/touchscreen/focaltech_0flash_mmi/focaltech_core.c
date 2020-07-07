@@ -41,8 +41,13 @@
 #ifdef FOCALTECH_PEN_NOTIFIER
 #include <linux/pen_detection_notify.h>
 #endif
+#include "focaltech_config.h"
 #ifdef CONFIG_DRM
+#if FTS_CONFIG_DRM_PANEL
+	#include <drm/drm_panel.h>
+#else
 	#include <linux/msm_drm_notify.h>
+#endif
 #elif defined(CONFIG_FB)
 	#include <linux/notifier.h>
 	#include <linux/fb.h>
@@ -1666,6 +1671,124 @@ static int pen_notifier_callback(struct notifier_block *self,
 #endif
 
 #ifdef CONFIG_DRM
+#if FTS_CONFIG_DRM_PANEL
+struct drm_panel *active_panel;
+static int drm_check_dt(struct device_node *np)
+{
+    int i = 0;
+    int count = 0;
+    struct device_node *node = NULL;
+    struct drm_panel *panel = NULL;
+
+    count = of_count_phandle_with_args(np, "panel", NULL);
+    if (count <= 0) {
+        FTS_ERROR("find drm_panel count(%d) fail", count);
+        return -ENODEV;
+    }
+
+    for (i = 0; i < count; i++) {
+        node = of_parse_phandle(np, "panel", i);
+        panel = of_drm_find_panel(node);
+        of_node_put(node);
+        if (!IS_ERR(panel)) {
+            FTS_INFO("find drm_panel successfully");
+            active_panel = panel;
+            return 0;
+        }
+    }
+
+    FTS_ERROR("no find drm_panel");
+    return -ENODEV;
+}
+
+static int fts_ts_check_default_tp(struct device_node *dt, const char *prop)
+{
+    const char **active_tp = NULL;
+    int count, tmp, score = 0;
+    const char *active;
+    int ret, i;
+
+    count = of_property_count_strings(dt->parent, prop);
+    if (count <= 0 || count > 3)
+        return -ENODEV;
+
+    active_tp = kcalloc(count, sizeof(char *),  GFP_KERNEL);
+    if (!active_tp) {
+        FTS_ERROR("FTS alloc failed\n");
+        return -ENOMEM;
+    }
+
+    ret = of_property_read_string_array(dt->parent, prop,
+            active_tp, count);
+    if (ret < 0) {
+        FTS_ERROR("fail to read %s %d\n", prop, ret);
+        ret = -ENODEV;
+        goto out;
+    }
+
+    for (i = 0; i < count; i++) {
+        active = active_tp[i];
+        if (active != NULL) {
+            tmp = of_device_is_compatible(dt, active);
+            if (tmp > 0)
+                score++;
+        }
+    }
+
+    if (score <= 0) {
+        FTS_ERROR("not match this driver\n");
+        ret = -ENODEV;
+        goto out;
+    }
+    ret = 0;
+out:
+    kfree(active_tp);
+    return ret;
+}
+
+int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	struct drm_panel_notifier *evdata = data;
+	int *blank = NULL;
+	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data, fb_notif);
+
+	if (!evdata) {
+		FTS_ERROR("evdata is null");
+		return 0;
+	}
+
+	if (!((event == DRM_PANEL_EARLY_EVENT_BLANK )
+		  || (event == DRM_PANEL_EVENT_BLANK))) {
+		FTS_INFO("event(%lu) do not need process\n", event);
+		return 0;
+	}
+
+	blank = evdata->data;
+	FTS_INFO("DRM event:%lu,blank:%d", event, *blank);
+	switch (*blank) {
+	case DRM_PANEL_BLANK_UNBLANK:
+		if (DRM_PANEL_EARLY_EVENT_BLANK == event) {
+			FTS_INFO("resume: event = %lu, not care\n", event);
+		} else if (DRM_PANEL_EVENT_BLANK == event) {
+			queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+		}
+		break;
+	case DRM_PANEL_BLANK_POWERDOWN:
+		if (DRM_PANEL_EARLY_EVENT_BLANK == event) {
+			cancel_work_sync(&fts_data->resume_work);
+			fts_ts_suspend(ts_data->dev);
+		} else if (DRM_PANEL_EVENT_BLANK == event) {
+			FTS_INFO("suspend: event = %lu, not care\n", event);
+		}
+		break;
+	default:
+		FTS_INFO("DRM BLANK(%d) do not need process\n", *blank);
+		break;
+	}
+
+	return 0;
+}
+#else
 int drm_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
@@ -1719,6 +1842,7 @@ int drm_notifier_callback(struct notifier_block *self,
 
 	return 0;
 }
+#endif
 #elif defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
                                 unsigned long event, void *data)
@@ -1809,6 +1933,9 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 {
     int ret = 0;
     int pdata_size = sizeof(struct fts_ts_platform_data);
+#if FTS_CONFIG_DRM_PANEL
+	struct device_node *dp = ts_data->dev->of_node;
+#endif
 
     FTS_FUNC_ENTER();
     FTS_INFO("%s", FTS_DRIVER_VERSION);
@@ -1822,6 +1949,16 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         ret = fts_parse_dt(ts_data->dev, ts_data->pdata);
         if (ret)
             FTS_ERROR("device-tree parse fail");
+#if FTS_CONFIG_DRM_PANEL
+	if (drm_check_dt(dp)) {
+		FTS_ERROR("parse drm-panel fail");
+		if (!fts_ts_check_default_tp(dp, "qcom,spi-touch-active"))
+			ret = -EPROBE_DEFER;
+		else
+			ret = -ENODEV;
+		return ret;
+	}
+#endif
     } else {
         if (ts_data->dev->platform_data) {
             memcpy(ts_data->pdata, ts_data->dev->platform_data, pdata_size);
@@ -1968,10 +2105,20 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
     }
     ts_data->fb_notif.notifier_call = drm_notifier_callback;
+#if FTS_CONFIG_DRM_PANEL
+    if (active_panel) {
+        ret = drm_panel_notifier_register(active_panel, &ts_data->fb_notif);
+        if (ret)
+            FTS_ERROR("[DRM]drm_panel_notifier_register fail: %d\n", ret);
+    } else {
+        FTS_ERROR("[DRM]drm_panel_notifier_register fail: active_panel NULL!\n");
+    }
+#else
     ret = msm_drm_register_client(&ts_data->fb_notif);
     if (ret) {
         FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
     }
+#endif
 #elif defined(CONFIG_FB)
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
@@ -2094,8 +2241,15 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("Error occurred while unregistering pen_notifier.\n");
 #endif
 #ifdef CONFIG_DRM
+#if FTS_CONFIG_DRM_PANEL
+    if (active_panel) {
+        if(drm_panel_notifier_unregister(active_panel, &ts_data->fb_notif))
+            FTS_ERROR("Error occurred while unregistering panel fb_notifier.\n");
+    }
+#else
     if (msm_drm_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
+#endif
 #elif defined(CONFIG_FB)
     if (fb_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
