@@ -36,7 +36,7 @@
 		qcom,mdss-dsi-underflow-color = <0xff>;
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-h-sync-pulse = <1>;
-		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
@@ -81,6 +81,12 @@
 				qcom,mdss-dsi-v-pulse-width = <2>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command = [
+					29 01 00 00 00 00 02 FF 25
+					29 01 00 00 00 00 02 FB 01
+					29 01 00 00 00 00 02 18 96
+					29 01 00 00 00 00 02 FF 10
+					29 01 00 00 00 00 02 FB 01
+					29 01 00 00 00 00 02 B0 01
 					29 01 00 00 00 00 02 FF 23
 					29 01 00 00 00 00 02 FB 01
 					29 01 00 00 00 00 02 00 80
