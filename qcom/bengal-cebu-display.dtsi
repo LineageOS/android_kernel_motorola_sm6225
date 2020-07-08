@@ -1,6 +1,7 @@
 #include <dt-bindings/clock/mdss-14nm-pll-clk.h>
 #include "bengal-sde-display.dtsi"
 #include "bengal-leds-aw99703.dtsi"
+#include "bengal-leds-ktd3136.dtsi"
 #include "dsi-panel-mot-dummy-qhd-video.dtsi"
 #include "dsi-panel-moto-ft8006s-dsbj-hdplus-video.dtsi"
 
