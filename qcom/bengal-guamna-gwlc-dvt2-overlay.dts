@@ -1,0 +1,44 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "bengal-guamna-common-overlay.dtsi"
+#include "bengal-guamna-awinic-audio-overlay.dtsi"
+#include "bengal-hbm-display.dtsi"
+
+/ {
+	model = "guamna";
+	compatible = "qcom,bengal-guamna", "qcom,bengal-moto", "qcom,bengal";
+	qcom,msm-id = <417 0x10000>;
+	qcom,board-id = <(GUAMNA_RADIO_GWLC << 8) 0xB200>;
+};
+
+/*
+ * Guam NA HW rev specific changes go here
+ */
+&qupv3_se1_i2c {
+	status = "okay";
+
+	tps61280@75 {
+		compatible = "ti,tps61280";
+		reg = <0x75>;
+		ti,config = <0x0D>;
+		ti,vout-floor = <0x0D>;
+		ti,vout-roof = <0x1F>;/*0x1F*/
+		ti,ilim = <0x0F>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&tps61280_en_default>;
+	};
+};
+
