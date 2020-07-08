@@ -29,7 +29,9 @@ bengal-guamp-pvt-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_GUAMNA_DTB) += \
         bengal-guamna-gwlc-evt-overlay.dtbo \
-        bengal-guamna-evt-overlay.dtbo
+        bengal-guamna-evt-overlay.dtbo \
+	bengal-guamna-gwlc-dvt2-overlay.dtbo \
+	bengal-guamna-dvt2-overlay.dtbo
 
 bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
 bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
