@@ -4179,7 +4179,7 @@ static int aw8697_vibrator_init(struct aw8697 *aw8697)
 
 	pr_info("%s enter\n", __func__);
 
-	aw8697->ws = wakeup_source_register("vibrator");
+	aw8697->ws = wakeup_source_register(aw8697->dev, "vibrator");
 	if (!aw8697->ws)
 		return -ENOMEM;
 
