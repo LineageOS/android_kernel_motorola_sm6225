@@ -152,7 +152,7 @@ struct touch_hcd {
 	struct syna_tcm_buffer out;
 	struct syna_tcm_buffer resp;
 	struct syna_tcm_hcd *tcm_hcd;
-	struct wakeup_source gesture_wakelock;
+	struct wakeup_source *gesture_wakelock;
 };
 
 static struct touch_hcd *touch_hcd;
@@ -715,7 +715,7 @@ static void touch_report(void)
 			event.evdata.y = gesture_data->y_pos;
 			retval = tcm_hcd->imports->report_gesture(&event);
 			if (!retval)
-				__pm_wakeup_event(&touch_hcd->gesture_wakelock, 3000);
+				__pm_wakeup_event(touch_hcd->gesture_wakelock, 3000);
 		}
 	}
 
@@ -729,7 +729,7 @@ static void touch_report(void)
 			event.evdata.y = gesture_data->y_pos;
 			retval = tcm_hcd->imports->report_gesture(&event);
 			if (!retval)
-				__pm_wakeup_event(&touch_hcd->gesture_wakelock, 3000);
+				__pm_wakeup_event(touch_hcd->gesture_wakelock, 3000);
 		}
 	}
 #endif
@@ -1231,7 +1231,15 @@ int touch_init(struct syna_tcm_hcd *tcm_hcd)
 	}
 
 	touch_hcd->tcm_hcd = tcm_hcd;
-	wakeup_source_init(&touch_hcd->gesture_wakelock, "syna_gesture_wakelock");
+	touch_hcd->gesture_wakelock = wakeup_source_register(
+			&tcm_hcd->pdev->dev, "syna_gesture_wakelock");
+	if (!touch_hcd->gesture_wakelock) {
+                LOGE(tcm_hcd->pdev->dev.parent,
+                                "Failed to allocate wakeup source\n");
+		kfree(touch_hcd);
+		touch_hcd = NULL;
+                return -ENOMEM;
+        }
 
 	mutex_init(&touch_hcd->report_mutex);
 
@@ -1256,7 +1264,7 @@ err_set_input_reporting:
 	RELEASE_BUFFER(touch_hcd->resp);
 	RELEASE_BUFFER(touch_hcd->out);
 
-	wakeup_source_trash(&touch_hcd->gesture_wakelock);
+	wakeup_source_unregister(touch_hcd->gesture_wakelock);
 	kfree(touch_hcd);
 	touch_hcd = NULL;
 
@@ -1279,7 +1287,7 @@ int touch_remove(struct syna_tcm_hcd *tcm_hcd)
 	RELEASE_BUFFER(touch_hcd->resp);
 	RELEASE_BUFFER(touch_hcd->out);
 
-	wakeup_source_trash(&touch_hcd->gesture_wakelock);
+	wakeup_source_unregister(touch_hcd->gesture_wakelock);
 	kfree(touch_hcd);
 	touch_hcd = NULL;
 
