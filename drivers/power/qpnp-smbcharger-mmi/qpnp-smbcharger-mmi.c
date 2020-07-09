@@ -372,7 +372,7 @@ struct smb_mmi_charger {
 	struct mmi_sm_params	sm_param[3];
 	int			base_fv_mv;
 	int			vfloat_comp_mv;
-	struct wakeup_source	smb_mmi_hb_wake_source;
+	struct wakeup_source	*smb_mmi_hb_wake_source;
 	struct alarm		heartbeat_alarm;
 	int			suspended;
 	bool			awake;
@@ -2243,7 +2243,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 
 	mmi_dbg(chip, "HB alarm fired\n");
 
-	__pm_stay_awake(&chip->smb_mmi_hb_wake_source);
+	__pm_stay_awake(chip->smb_mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
 	/* Delay by 500 ms to allow devices to resume. */
 	schedule_delayed_work(&chip->heartbeat_work,
@@ -3430,7 +3430,7 @@ sch_hb:
 
 	kfree(chrg_rate_string);
 
-	__pm_relax(&chip->smb_mmi_hb_wake_source);
+	__pm_relax(chip->smb_mmi_hb_wake_source);
 }
 
 static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
@@ -4121,8 +4121,13 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
-	wakeup_source_init(&chip->smb_mmi_hb_wake_source,
-			   "smb_mmi_hb_wake");
+
+	chip->smb_mmi_hb_wake_source = wakeup_source_register(chip->dev, "smb_mmi_hb_wake");
+	if (!chip->smb_mmi_hb_wake_source) {
+		mmi_err(chip, "failed to allocate wakeup source\n");
+		return -ENOMEM;
+	}
+
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
 		   mmi_heartbeat_alarm_cb);
 
@@ -4444,7 +4449,7 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 	if (chip->max_flip_psy)
 		power_supply_put(chip->max_flip_psy);
 
-	wakeup_source_trash(&chip->smb_mmi_hb_wake_source);
+	wakeup_source_unregister(chip->smb_mmi_hb_wake_source);
 
 	return;
 }
