@@ -563,7 +563,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	int pre_ttype = 0;
 
 	if (ts->power_status == SEC_TS_STATE_LPM) {
-		//wake_lock_timeout(&ts->wakelock, msecs_to_jiffies(500));
+		//wake_lock_timeout(ts->wakelock, msecs_to_jiffies(500));
 
 		/* waiting for blsp block resuming, if not occurs i2c error */
 		ret = wait_for_completion_interruptible_timeout(&ts->resume_done, msecs_to_jiffies(500));
@@ -910,7 +910,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					/* call class method */
 					ret = ts->imports->report_gesture(&event);
 					if (!ret)
-						__pm_wakeup_event(&ts->gesture_wakelock, 3000);
+						__pm_wakeup_event(ts->gesture_wakelock, 3000);
 				}
 #endif
 				break;
@@ -1782,8 +1782,21 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	mutex_init(&ts->eventlock);
 	mutex_init(&ts->modechange);
 
-	wakeup_source_init(&ts->wakelock, "tsp_wakelock");
-	wakeup_source_init(&ts->gesture_wakelock, "tsp_gesture_wakelock");
+	ts->wakelock = wakeup_source_register(ts->dev, "tsp_wakelock");
+	if (!ts->wakelock) {
+		input_err(true, &ts->client->dev,
+				"%s: allocate wakeup source err!\n", __func__);
+		ret = -ENOMEM;
+		goto err_register_wakelock;
+        }
+	ts->gesture_wakelock = wakeup_source_register
+				(ts->dev, "tsp_gesture_wakelock");
+	if (!ts->gesture_wakelock) {
+		input_err(true, &ts->client->dev,
+				"%s: allocate gesture wakeup source err!\n", __func__);
+		ret = -ENOMEM;
+		goto err_register_gesture_wakelock;
+	}
 	init_completion(&ts->resume_done);
 	complete_all(&ts->resume_done);
 
@@ -1897,8 +1910,10 @@ err_irq:
 	}
 err_input_register_device:
 	kfree(ts->pFrame);
-	wakeup_source_trash(&ts->gesture_wakelock);
-	wakeup_source_trash(&ts->wakelock);
+	wakeup_source_unregister(ts->gesture_wakelock);
+err_register_gesture_wakelock:
+	wakeup_source_unregister(ts->wakelock);
+err_register_wakelock:
 	sec_ts_power(ts, false);
 	if (ts->plat_data->support_dex) {
 		if (ts->input_dev_pad)
@@ -2052,7 +2067,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 	}
 
 	mutex_lock(&ts->modechange);
-	__pm_stay_awake(&ts->wakelock);
+	__pm_stay_awake(ts->wakelock);
 
 	ts->reset_is_on_going = true;
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2069,7 +2084,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 		schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 		mutex_unlock(&ts->modechange);
 
-		__pm_relax(&ts->wakelock);
+		__pm_relax(ts->wakelock);
 
 		return;
 	}
@@ -2085,7 +2100,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 				cancel_delayed_work(&ts->reset_work);
 				schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
 				mutex_unlock(&ts->modechange);
-				__pm_relax(&ts->wakelock);
+				__pm_relax(ts->wakelock);
 				return;
 			}
 		} else {
@@ -2116,7 +2131,7 @@ static void sec_ts_reset_work(struct work_struct *work)
 	ts->reset_is_on_going = false;
 	mutex_unlock(&ts->modechange);
 
-	__pm_relax(&ts->wakelock);
+	__pm_relax(ts->wakelock);
 }
 #endif
 
@@ -2328,8 +2343,8 @@ static int sec_ts_remove(struct i2c_client *client)
 	p_ghost_check = NULL;
 #endif
 	device_init_wakeup(&client->dev, false);
-	wakeup_source_trash(&ts->gesture_wakelock);
-	wakeup_source_trash(&ts->wakelock);
+	wakeup_source_unregister(ts->gesture_wakelock);
+	wakeup_source_unregister(ts->wakelock);
 
 	ts->lowpower_mode = false;
 	ts->probe_done = false;
