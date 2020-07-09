@@ -543,7 +543,7 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 		!gpio_get_value(ts->plat_data->rst_gpio))
 		return;
 
-	__pm_stay_awake(&ts->wakelock);
+	__pm_stay_awake(ts->wakelock);
 	mutex_lock(&ts->modechange);
 	/* disable irq to ensure getting boot complete */
 	sec_ts_irq_enable(ts, false);
@@ -565,7 +565,7 @@ static void sec_mmi_ic_reset(struct sec_mmi_data *data, int mode)
 	sec_ts_irq_enable(ts, true);
 
 	mutex_unlock(&ts->modechange);
-	__pm_relax(&ts->wakelock);
+	__pm_relax(ts->wakelock);
 
 	dev_dbg(DEV_MMI, "%s: hw reset done\n", __func__);
 }
@@ -576,7 +576,7 @@ static void sec_mmi_wait4idle(struct sec_mmi_data *data)
 	unsigned long start_wait_jiffies = jiffies;
 
 	do {
-		if (!ts->wakelock.active)
+		if (!ts->wakelock->active)
 			break;
 		usleep_range(1000, 1000);
 	} while (1);
@@ -1008,12 +1008,12 @@ static ssize_t sec_mmi_erase_store(struct device *dev,
 
 	mutex_lock(&ts->modechange);
 	sec_ts_irq_enable(ts, false);
-	__pm_stay_awake(&ts->wakelock);
+	__pm_stay_awake(ts->wakelock);
 
 	ts->fw_invalid = true;
 
 	mutex_unlock(&ts->modechange);
-	__pm_relax(&ts->wakelock);
+	__pm_relax(ts->wakelock);
 
 	return size;
 }
@@ -1099,7 +1099,7 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 
 	mutex_lock(&ts->modechange);
 	sec_ts_irq_enable(ts, false);
-	__pm_stay_awake(&ts->wakelock);
+	__pm_stay_awake(ts->wakelock);
 
 	result = sec_ts_firmware_update(ts, fw_entry->data, fw_entry->size,
 					0, data->force_calibration, 0);
@@ -1110,7 +1110,7 @@ static ssize_t sec_mmi_doreflash_store(struct device *dev,
 
 	mutex_unlock(&ts->modechange);
 	sec_ts_irq_enable(ts, true);
-	__pm_relax(&ts->wakelock);
+	__pm_relax(ts->wakelock);
 
 err_request_fw:
 	release_firmware(fw_entry);
