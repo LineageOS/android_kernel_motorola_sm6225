@@ -78,6 +78,7 @@ static int sx933x_get_nirq_state(void)
 	return  !gpio_get_value(irq_gpio_num);
 }
 
+static void sx933x_reinitialize(psx93XX_t this);
 
 /*! \fn static int sx933x_i2c_write_16bit(psx93XX_t this, u8 address, u8 value)
  * \brief Sends a write register to the device
@@ -110,9 +111,10 @@ static int sx933x_i2c_write_16bit(psx93XX_t this, u16 reg_addr, u32 buf)
 		msg.buf = (u8 *)w_buf;
 
 		ret = i2c_transfer(i2c->adapter, &msg, 1);
-		if (ret < 0)
+		if (ret < 0) {
 			LOG_ERR(" i2c write reg 0x%x error %d\n", reg_addr, ret);
-
+			sx933x_reinitialize(this);
+		}
 	}
 	return ret;
 }
@@ -150,11 +152,12 @@ static int sx933x_i2c_read_16bit(psx93XX_t this, u16 reg_addr, u32 *data32)
 		msg[1].buf = (u8 *)buf;
 
 		ret = i2c_transfer(i2c->adapter, msg, 2);
-		if (ret < 0)
+		if (ret < 0) {
 			LOG_ERR("i2c read reg 0x%x error %d\n", reg_addr, ret);
+			sx933x_reinitialize(this);
+		}
 
 		data32[0] = ((u32)buf[0]<<24) | ((u32)buf[1]<<16) | ((u32)buf[2]<<8) | ((u32)buf[3]);
-
 	}
 	return ret;
 }
@@ -448,6 +451,17 @@ static ssize_t sx933x_int_state_show(struct class *class,
 	return sprintf(buf, "%d\n", this->int_state);
 }
 
+static ssize_t sx933x_reinitialize_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t count)
+{
+	psx93XX_t this = global_sx933x;
+
+	sx933x_reinitialize(this);
+
+	return count;
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
 static struct class_attribute class_attr_reset =
 	__ATTR(reset, 0660, NULL, capsense_reset_store);
@@ -466,6 +480,8 @@ static struct class_attribute class_attr_manual_calibrate =
 	manual_offset_calibration_store);
 static struct class_attribute class_attr_int_state =
 	__ATTR(int_state, 0440, sx933x_int_state_show, NULL);
+static struct class_attribute class_attr_reinitialize =
+	__ATTR(reinitialize, 0660, NULL, sx933x_reinitialize_store);
 
 
 static struct attribute *capsense_class_attrs[] = {
@@ -478,6 +494,7 @@ static struct attribute *capsense_class_attrs[] = {
 	&class_attr_register_read.attr,
 	&class_attr_manual_calibrate.attr,
 	&class_attr_int_state.attr,
+	&class_attr_reinitialize.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(capsense_class);
@@ -489,6 +506,7 @@ static struct class_attribute capsense_class_attributes[] = {
 	__ATTR(register_read,0660, NULL,sx933x_register_read_store),
 	__ATTR(manual_calibrate, 0660, manual_offset_calibration_show,manual_offset_calibration_store),
 	__ATTR(int_state, 0440, sx933x_int_state_show, NULL),
+	__ATTR(reinitialize, 0660, NULL, sx933x_reinitialize_store),
 	__ATTR_NULL,
 };
 #endif
@@ -846,6 +864,8 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 	pdata->phone_flip_update_regs = parse_flip_dt_params(pdata, dev);
 #endif
+	pdata->reinit_on_i2c_failure = of_property_read_bool(dNode, "reinit-on-i2c-failure");
+
 	LOG_INFO("-[%d] parse_dt complete\n", pdata->irq_gpio);
 	return 0;
 }
@@ -1380,6 +1400,7 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	global_sx933x = this;
+	this->initialize_done = 1;
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 	update_flip_regs(pplatData, pplatData->phone_flip_state);
 #endif
@@ -1625,4 +1646,73 @@ int sx93XX_IRQ_init(psx93XX_t this)
 		LOG_INFO("registered with irq (%d)\n", this->irq);
 	}
 	return -ENOMEM;
+}
+
+static void sx933x_reinitialize(psx93XX_t this)
+{
+	psx933x_t pDevice = 0;
+	psx933x_platform_data_t pdata = 0;
+	u32 temp;
+	int err;
+	int i=0;
+	int retry;
+
+	if (this && (pDevice = this->pDevice) && (pdata = pDevice->hw)) {
+		if (!this->initialize_done || !pdata->reinit_on_i2c_failure)
+			return;
+
+		if (!atomic_add_unless(&this->init_busy, 1, 1))
+			return;
+
+		this->initialize_done = 0;
+		disable_irq(this->irq);
+
+		regulator_disable(pdata->cap_vdd);
+		msleep(100);
+		err = regulator_enable(pdata->cap_vdd);
+		if (err)
+			LOG_ERR("Error %d enable regulator\n", err);
+		msleep(100);
+
+		/* perform a reset */
+		for ( retry = 10; retry > 0; retry-- ) {
+			if (sx933x_i2c_write_16bit(this, SX933X_RESET_REG, I2C_SOFTRESET_VALUE) >= 0)
+				break;
+			LOG_INFO("SX933x write SX933X_RESET_REG retry:%d\n", 11 - retry);
+			msleep(10);
+		}
+		/* wait until the reset has finished by monitoring NIRQ */
+		LOG_INFO("Sent Software Reset. Waiting until device is back from reset to continue.\n");
+		/* just sleep for awhile instead of using a loop with reading irq status */
+		msleep(100);
+
+		sx933x_reg_init(this);
+
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+		update_flip_regs(pdata, pdata->phone_flip_state);
+#endif
+
+		/* re-enable interrupt handling */
+		enable_irq(this->irq);
+
+		/* make sure no interrupts are pending since enabling irq will only
+		 * work on next falling edge */
+		read_regStat(this);
+
+		/* If one of the sensors is on, re-enable it */
+		sx933x_i2c_read_16bit(this, SX933X_GNRLCTRL2_REG, &temp);
+		for (i=0; i < ARRAY_SIZE(psmtcButtons); i++) {
+			if (psmtcButtons[i].enabled) {
+				sx933x_i2c_write_16bit(this, SX933X_GNRLCTRL2_REG, temp | 0x0000001F);
+				break;
+			}
+		}
+
+		manual_offset_calibration(this);
+
+		this->initialize_done = 1;
+		atomic_set(&this->init_busy, 0);
+
+		LOG_ERR("reinitialized sx933x, count %d\n", this->reset_count++);
+	}
 }
