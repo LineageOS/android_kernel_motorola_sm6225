@@ -46,6 +46,9 @@
 		monitor-timer-val = <3000>;
 		status = "okay";
 
+		afe-rx-portid = <0x1000>;
+		afe-tx-portid = <0x1001>;
+
 		low-vol-table-down = <3650 9 3 3750 9 2 3900 9 1>;
 		low-vol-table-up = <4000 9 0 3800 9 1 3700 9 2>;
 
