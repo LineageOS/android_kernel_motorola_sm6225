@@ -2215,7 +2215,7 @@ static void debug_fg_dump_registers(struct bq_fg_chip *bq)
 	}
 }
 
-#define ITERM 200
+#define ITERM 80
 static void fg_check_soc(struct bq_fg_chip *bq)
 {
 	int batt_status = 0;
