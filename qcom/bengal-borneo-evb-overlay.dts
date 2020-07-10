@@ -33,3 +33,9 @@
         cap,channel_number = <0x03>;
     };
 };
+
+&qupv3_se1_i2c {
+    aw99703-bl@36 {
+        aw99703,bl-channel = <2>;
+    };
+};
