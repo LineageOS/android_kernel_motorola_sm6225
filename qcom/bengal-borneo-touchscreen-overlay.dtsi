@@ -92,12 +92,12 @@
 &qupv3_se2_spi_pins {
        qupv3_se2_spi_sleep: qupv3_se2_spi_sleep {
                mux {
-                       pins = "gpio6", "gpio7","gpio71";
+                       pins = "gpio6", "gpio7";
                        function = "gpio";
                };
 
                config {
-                       pins = "gpio6", "gpio7","gpio71";
+                       pins = "gpio6", "gpio7";
                        drive-strength = <6>;
                        bias-disable;
                };
@@ -114,12 +114,24 @@
                        bias-pull-up;
                };
        };
+       qupv3_se2_clk_sleep: qupv3_se2_clk_sleep {
+               mux {
+                       pins = "gpio71";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio71";
+                       drive-strength = <6>;
+                       output-low;
+               };
+       };
 };
 
 &qupv3_se2_spi {
 	status = "ok";
 	qcom,spi-touch-active="tchip,ilitek";
-	pinctrl-1 = <&qupv3_se2_spi_sleep &qupv3_se2_cs_sleep>;
+	pinctrl-1 = <&qupv3_se2_spi_sleep &qupv3_se2_cs_sleep &qupv3_se2_clk_sleep>;
 	ilitek@0{
 		compatible = "tchip,ilitek";
 		reg = <0x0>;
