@@ -3173,6 +3173,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0) {
 			mmi_err(chip, "Couldn't get maxim main capacity\n");
 			cap_err = rc;
+		} else if (pval.intval <0) {
+			cap_err = -EAGAIN;			// TI FG RESET may return neg cap prior to init, so delay
 		} else
 			main_cap = pval.intval;
 
@@ -3191,6 +3193,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		if (rc < 0) {
 			mmi_err(chip, "Couldn't get maxim flip capacity\n");
 			cap_err = rc;
+		} else if (pval.intval <0) {
+			cap_err = -EAGAIN;			// TI FG RESET may return neg cap prior to init, so delay
 		} else
 			flip_cap = pval.intval;
 
