@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * SLG51000 High PSRR, Multi-Output Regulators
- * Copyright (C) 2019  Dialog Semiconductor
+ * Copyright (C) 2020  Dialog Semiconductor
  *
  * Author: Eric Jeong, Dialog Semiconductor
  */
@@ -20,6 +20,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/version.h>
 #include "slg5bm43670-regulator.h"
 
 #define SLG51000_SCTL_EVT               7
@@ -194,42 +195,6 @@ static const struct regmap_config slg51000_regmap_config = {
 	.volatile_table = &slg51000_volatile_table,
 };
 
-static int slg51000_get_status(struct regulator_dev *rdev)
-{
-	struct slg51000 *chip = rdev_get_drvdata(rdev);
-	int ret, id = rdev_get_id(rdev);
-	unsigned int status;
-
-	ret = regulator_is_enabled_regmap(rdev);
-	if (ret < 0) {
-		dev_err(chip->dev, "Failed to read enable register(%d)\n",
-			ret);
-		return ret;
-	}
-
-	if (!ret)
-		return REGULATOR_STATUS_OFF;
-
-	ret = regmap_read(chip->regmap, es_reg[id].sreg, &status);
-	if (ret < 0) {
-		dev_err(chip->dev, "Failed to read status register(%d)\n",
-			ret);
-		return ret;
-	}
-
-	if (!(status & SLG51000_STA_ILIM_FLAG_MASK) &&
-	    (status & SLG51000_STA_VOUT_OK_FLAG_MASK)) {
-		if (rdev->desc->n_voltages == 0 &&
-		    (id == SLG51000_REGULATOR_LDO5 ||
-		     id == SLG51000_REGULATOR_LDO6))
-			return REGULATOR_STATUS_BYPASS;
-		else
-			return REGULATOR_STATUS_ON;
-	} else {
-		return REGULATOR_STATUS_ERROR;
-	}
-}
-
 static const struct regulator_ops slg51000_regl_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -238,14 +203,12 @@ static const struct regulator_ops slg51000_regl_ops = {
 	.map_voltage = regulator_map_voltage_linear,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
 	.set_voltage_sel = regulator_set_voltage_sel_regmap,
-	.get_status = slg51000_get_status,
 };
 
 static const struct regulator_ops slg51000_switch_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
 	.is_enabled = regulator_is_enabled_regmap,
-	.get_status = slg51000_get_status,
 };
 
 static int slg51000_of_parse_cb(struct device_node *np,
@@ -255,8 +218,8 @@ static int slg51000_of_parse_cb(struct device_node *np,
 	int ena_gpio;
 
 	ena_gpio = of_get_named_gpio(np, "enable-gpios", 0);
-	if (ena_gpio)
-		config->ena_gpio = ena_gpio;
+	if (gpio_is_valid(ena_gpio))
+		config->ena_gpiod = gpio_to_desc(ena_gpio);
 
 	return 0;
 }
@@ -460,12 +423,19 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 	for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 		if (!(evt[i][R2] & SLG51000_IRQ_ILIM_FLAG_MASK) &&
 		    (evt[i][R0] & SLG51000_EVT_ILIM_FLAG_MASK)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+			regulator_lock(chip->rdev[i]);
+#else
 			mutex_lock(&chip->rdev[i]->mutex);
+#endif
 			regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_CURRENT,
 						NULL);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+			regulator_unlock(chip->rdev[i]);
+#else
 			mutex_unlock(&chip->rdev[i]->mutex);
-
+#endif
 			if (evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK)
 				dev_warn(chip->dev,
 					 "Over-current limit(ldo%d)\n", i + 1);
@@ -478,11 +448,19 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 		for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 			if (!(evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK) &&
 			    (evt[i][R1] & SLG51000_STA_VOUT_OK_FLAG_MASK)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+				regulator_lock(chip->rdev[i]);
+#else
 				mutex_lock(&chip->rdev[i]->mutex);
+#endif
 				regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_TEMP,
 						NULL);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+				regulator_unlock(chip->rdev[i]);
+#else
 				mutex_unlock(&chip->rdev[i]->mutex);
+#endif
 			}
 		}
 		handled = IRQ_HANDLED;
