@@ -94,6 +94,16 @@
 
 extern int stmvl53l1_enable_debug;
 
+#ifndef do_gettimeofday
+#define do_gettimeofday(target_time, ...) \
+	do { \
+		struct timespec64 now_time; \
+		ktime_get_real_ts64(&now_time); \
+		(target_time)->tv_sec = now_time.tv_sec; \
+		(target_time)->tv_usec = now_time.tv_nsec/1000; \
+	} while (0)
+#endif
+
 #ifdef DEBUG
 #	ifdef FORCE_CONSOLE_DEBUG
 #define vl53l1_dbgmsg(str, ...) do { \
