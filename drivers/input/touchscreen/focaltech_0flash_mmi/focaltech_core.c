@@ -1598,6 +1598,10 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     if (pdata->report_gesture_key)
         FTS_INFO("Report tap gesture as key.");
 
+    pdata->notify_to_panel = of_property_read_bool(np, "focaltech,notify_to_panel");
+    if (pdata->notify_to_panel)
+        FTS_INFO("Notify touch status to panel.");
+
     pdata->irq_gpio = of_get_named_gpio_flags(np, "focaltech,irq-gpio",
                       0, &pdata->irq_gpio_flags);
     if (pdata->irq_gpio < 0)
