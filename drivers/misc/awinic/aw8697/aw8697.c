@@ -133,6 +133,8 @@ static int aw8697_haptic_trig_enable_config(struct aw8697 *aw8697);
 static void aw8697_vibrate(struct aw8697 *aw8697, int value);
 static void aw8697_rtp_play(struct aw8697 *aw8697, int value);
 
+#undef AW8697_I2C_DEBUG
+
  /******************************************************
  *
  * aw8697 i2c write/read
@@ -157,7 +159,10 @@ static int aw8697_i2c_write(struct aw8697 *aw8697,
 		usleep_range(AW_I2C_RETRY_DELAY * 1000,
 			     AW_I2C_RETRY_DELAY * 1000 + 500);
 	}
-
+#ifdef AW8697_I2C_DEBUG
+	pr_info("aw8697 W: addr=%02X, data=%02X",
+		(0x000000ff & reg_addr), (0x000000ff & reg_data));
+#endif
 	return ret;
 }
 
@@ -180,7 +185,10 @@ static int aw8697_i2c_read(struct aw8697 *aw8697,
 		usleep_range(AW_I2C_RETRY_DELAY * 1000,
 			     AW_I2C_RETRY_DELAY * 1000 + 500);
 	}
-
+#ifdef AW8697_I2C_DEBUG
+	pr_info("aw8697 R: addr=%02X, data=%02X",
+		(0x000000ff & reg_addr), (0x000000ff & *reg_data));
+#endif
 	return ret;
 }
 
@@ -210,7 +218,20 @@ static int aw8697_i2c_writes(struct aw8697 *aw8697,
 		pr_err("%s: can not allocate memory\n", __func__);
 		return -ENOMEM;
 	}
+#ifdef AW8697_I2C_DEBUG
+	if (1) {
+		int i, blen = 0;
+		char buffer[256];
+		unsigned char *val = buf;
 
+		for (i = 0; i < len; i++, val++) {
+			blen += scnprintf(buffer+blen, 255-blen, "%02x",
+				(0x000000ff & *val));
+		}
+		pr_info("aw8697 W: addr=%02X, data=%s",
+			(0x000000ff & reg_addr), buffer);
+	}
+#endif
 	data[0] = reg_addr;
 	memcpy(&data[1], buf, len);
 
