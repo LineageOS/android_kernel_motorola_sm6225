@@ -62,6 +62,9 @@
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
 #include "focaltech_common.h"
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
 #ifdef FTS_USB_DETECT_EN
 #include <linux/power_supply.h>
 #endif
@@ -140,6 +143,7 @@ struct fts_ts_platform_data {
     bool report_gesture_key;
     bool share_reset_gpio;
     bool have_key;
+    bool notify_to_panel;
     u32 key_number;
     u32 keys[FTS_MAX_KEYS];
     u32 key_y_coords[FTS_MAX_KEYS];
@@ -264,6 +268,10 @@ struct fts_ts_data {
 #else
     struct wakeup_source palm_gesture_read_wakelock;
 #endif
+#endif
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+    struct ts_mmi_class_methods *imports;
 #endif
 };
 

@@ -194,10 +194,12 @@ static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 static int fts_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
+	struct fts_ts_platform_data *pdata;
 	struct fts_ts_data *ts_data;
 	int ret = 0;
 
 	GET_TS_DATA(dev);
+	pdata = ts_data->pdata;
 
 #ifdef FOCALTECH_SENSOR_EN
 	mutex_lock(&ts_data->state_mutex);
@@ -205,6 +207,10 @@ static int fts_mmi_panel_state(struct device *dev,
 
 	switch (to) {
 		case TS_MMI_PM_DEEPSLEEP:
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+			if (pdata->notify_to_panel)
+				touch_set_state(TS_MMI_PM_DEEPSLEEP, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 			ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP_VALUE);
 			if (ret < 0)
 				FTS_ERROR("set TP to sleep mode fail, ret=%d", ret);
@@ -214,6 +220,10 @@ static int fts_mmi_panel_state(struct device *dev,
 			break;
 
 		case TS_MMI_PM_GESTURE:
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+			if (pdata->notify_to_panel)
+				touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 #if FTS_GESTURE_EN
 			if (fts_gesture_suspend(ts_data) == 0) {
 			/* Enter into gesture mode(suspend) */
@@ -347,7 +357,9 @@ static int fts_mmi_post_suspend(struct device *dev)
 			gpio_direction_output(ts_data->pdata->reset_gpio, 0);
 		}
 		fts_release_all_finger();
+#ifdef FOCALTECH_SENSOR_EN
 	}
+#endif
 
 	ts_data->suspended = true;
 	FTS_FUNC_EXIT();
@@ -393,6 +405,9 @@ int fts_mmi_dev_register(struct fts_ts_data *ts_data) {
 		dev_err(ts_data->dev, "Failed to register ts mmi\n");
 		return ret;
 	}
+
+	/* initialize class imported methods */
+	ts_data->imports = &fts_mmi_methods.exports;
 
 	return 0;
 }
