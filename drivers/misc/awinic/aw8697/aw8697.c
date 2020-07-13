@@ -2649,10 +2649,12 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 			aw8697_rtp_play(aw8697, seq - AW8697_SEQ_NO_RTP_BASE);
 				break;
 		case HAPTIC_SHORT:
-			if (aw8697->seq[0] == 0)
-				aw8697->seq[0] = 0x01;
+			if (seq == 0) {
+				/* seq[0] expected from aw8697_seq_store */
+				/* when implicit seq, use wave form 0x01 */
+				aw8697_haptic_set_wav_seq(aw8697, 0x00, 0x01);
+			}
 			aw8697->index = 0x01;
-			aw8697_haptic_set_wav_seq(aw8697, 0x00, aw8697->seq[0]);
 			aw8697_haptic_set_wav_loop(aw8697, 0x00, 0x00);
 			aw8697_haptic_ram_vbat_comp(aw8697, false);
 			aw8697_haptic_play_wav_seq(aw8697, 0x01);
@@ -3073,6 +3075,7 @@ static ssize_t aw8697_seq_store(struct device *dev,
 	struct aw8697 *aw8697 = container_of(cdev, struct aw8697, cdev);
 #endif
 	unsigned int i, val = 0;
+	unsigned char data[AW8697_WAV_SEQ_SIZE];
 	int rc;
 
 	rc = kstrtouint(buf, 0, &val);
@@ -3080,13 +3083,13 @@ static ssize_t aw8697_seq_store(struct device *dev,
 		return rc;
 
 	pr_debug("%s: value=%d\n", __func__, val);
-
-	mutex_lock(&aw8697->lock);
 	for (i = 0; i < AW8697_WAV_SEQ_SIZE; i++) {
 		aw8697->seq[i] = (val >> ((AW8697_WAV_SEQ_SIZE-i-1) * 8)) & 0xFF;
-		pr_debug("%s: seq[%d]=%d\n", __func__, i, aw8697->seq[i]);
-		aw8697_haptic_set_wav_seq(aw8697, i, aw8697->seq[i]);
+		data[i] = aw8697->seq[i];
 	}
+
+	mutex_lock(&aw8697->lock);
+	aw8697_i2c_writes(aw8697, AW8697_REG_WAVSEQ1, data, AW8697_WAV_SEQ_SIZE);
 	mutex_unlock(&aw8697->lock);
 
 	return count;
