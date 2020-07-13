@@ -449,7 +449,7 @@ static void usbnet_if_config(struct work_struct *work)
 
 	sin->sin_addr.s_addr = context->ip_addr;
 	saved_fs = get_fs();
-	set_fs(get_ds());
+	set_fs(KERNEL_DS);
 	err = inet_ioctl(&sock, SIOCSIFADDR, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFADDR\n", __func__);
