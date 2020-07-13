@@ -63,8 +63,6 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 			dev_info(DEV_MMI, "%s: try to enter Gesture mode\n", __func__);
 			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE);
 			touch_cdev->pm_mode = TS_MMI_PM_GESTURE;
-			if (touch_cdev->pdata.notify_to_display)
-				touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
 		}
 	}
 	if (IS_ACTIVE_MODE) {
@@ -73,8 +71,6 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 		TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_DEEPSLEEP);
 		TRY_TO_CALL(drv_irq, TS_MMI_IRQ_OFF);
 		touch_cdev->pm_mode = TS_MMI_PM_DEEPSLEEP;
-		if (touch_cdev->pdata.notify_to_display)
-			touch_set_state(TS_MMI_PM_DEEPSLEEP, TOUCH_PANEL_IDX_PRIMARY);
 	}
 
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
