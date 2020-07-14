@@ -1782,15 +1782,23 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	mutex_init(&ts->eventlock);
 	mutex_init(&ts->modechange);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	ts->wakelock = wakeup_source_register(ts->dev, "tsp_wakelock");
+#else
+	ts->wakelock = wakeup_source_register("tsp_wakelock");
+#endif
 	if (!ts->wakelock) {
 		input_err(true, &ts->client->dev,
 				"%s: allocate wakeup source err!\n", __func__);
 		ret = -ENOMEM;
 		goto err_register_wakelock;
         }
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	ts->gesture_wakelock = wakeup_source_register
 				(ts->dev, "tsp_gesture_wakelock");
+#else
+	ts->gesture_wakelock = wakeup_source_register("tsp_gesture_wakelock");
+#endif
 	if (!ts->gesture_wakelock) {
 		input_err(true, &ts->client->dev,
 				"%s: allocate gesture wakeup source err!\n", __func__);
