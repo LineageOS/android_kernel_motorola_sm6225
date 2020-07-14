@@ -102,13 +102,13 @@ typedef struct {
 	u32 sec1_size;	/* /< dimension of section 1 (Config) in .ftb file */
 	u32 sec2_size;	/* /< dimension of section 2 (Cx) in .ftb file */
 	u32 sec3_size;	/* /< dimension of section 3 (TBD) in .ftb file */
-	u8 fw_code_size; /* /< size of fw code in pages in 
+	u8 fw_code_size; /* /< size of fw code in pages in
 			 .ftb file */
-	u8 panel_config_size;/* /< size of panel area in pages in 
+	u8 panel_config_size;/* /< size of panel area in pages in
 			 .ftb file */
-	u8 cx_area_size;/* /< size of cx area in pages in 
+	u8 cx_area_size;/* /< size of cx area in pages in
 			 .ftb file */
-	u8 fw_config_size;/* /< size of fw config in pages in 
+	u8 fw_config_size;/* /< size of fw config in pages in
 			 .ftb file */
 	u32 code_start_addr;  /* start addr for fw code */
 	u32 cx_start_addr; /* start addr for cx area */

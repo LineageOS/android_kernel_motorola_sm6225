@@ -66,6 +66,8 @@ int initCore(struct fts_ts_info *info)
 {
 	int ret = OK;
 
+	info->sysinfo = &systemInfo;
+
 	logError(0, "%s %s: Initialization of the Core...\n", tag, __func__);
 	ret |= openChannel(info->client);
 	ret |= resetErrorList();
@@ -406,9 +408,13 @@ int setScanMode(u8 mode, u8 settings)
   */
 int setFeatures(u8 feat, u8 *settings, int size)
 {
-	u8 cmd[2 + size];
+	u8 *cmd;
 	int i = 0;
 	int ret;
+
+	cmd = (u8 *)kzalloc(2 + size, GFP_KERNEL);
+	if (!cmd)
+		return ret | ERROR_SET_FEATURE_FAIL;
 
 	logError(0, "%s %s: Setting feature: feat = %02X !\n", tag, __func__,
 		 feat);
@@ -429,6 +435,7 @@ int setFeatures(u8 feat, u8 *settings, int size)
 		return ret | ERROR_SET_FEATURE_FAIL;
 	}
 	logError(0, "%s %s: Setting feature OK!\n", tag, __func__);
+	kfree(cmd);
 	return OK;
 }
 /** @}*/
@@ -448,8 +455,12 @@ int setFeatures(u8 feat, u8 *settings, int size)
   */
 int writeSysCmd(u8 sys_cmd, u8 *sett, int size)
 {
-	u8 cmd[2 + size];
+	u8 *cmd;
 	int ret;
+
+	cmd = (u8 *)kzalloc(2 + size, GFP_KERNEL);
+	if (!cmd)
+		return ret | ERROR_SET_FEATURE_FAIL;
 
 	cmd[0] = FTS_CMD_SYSTEM;
 	cmd[1] = sys_cmd;
@@ -470,6 +481,7 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size)
 		else {
 			logError(1, "%s %s: No setting argument! ERROR %08X\n",
 				 tag, __func__, ERROR_OP_NOT_ALLOW);
+			kfree(cmd);
 			return ERROR_OP_NOT_ALLOW;
 		}
 	}
@@ -478,6 +490,7 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size)
 
 	else
 		logError(0, "%s %s: FINISHED!\n", tag, __func__);
+	kfree(cmd);
 
 	return ret;
 }
@@ -923,6 +936,11 @@ int fts_resetDisableIrqCount(void)
 {
 	disable_irq_count = 0;
 	return OK;
+}
+
+int fts_is_InterruptEnabled(void)
+{
+	return !disable_irq_count ? 1 : 0;
 }
 
 /**

@@ -72,7 +72,7 @@
 #include "fts_lib/ftsTime.h"
 #include "fts_lib/ftsTool.h"
 
-
+#include "fts_mmi.h"
 
 /**
   * Event handler installer helpers
@@ -2823,6 +2823,7 @@ int fts_fw_update(struct fts_ts_info *info)
 	int crc_status = 0;
 	int error = 0;
 	int init_type = NO_INIT;
+	const char *firmware_name;
 
 #if defined(PRE_SAVED_METHOD) || defined (COMPUTE_INIT_METHOD)
 	int keep_cx = 1;
@@ -2844,15 +2845,20 @@ int fts_fw_update(struct fts_ts_info *info)
 			 "%s %s: NO CRC Error or Impossible to read CRC register!\n",
 			 tag, __func__);
 	}
+	/* support arbitrary firmware file */
+	if (info->fw_file)
+		firmware_name = info->fw_file;
+	else
+		firmware_name = PATH_FILE_FW;
 
-	retval = flashProcedure(PATH_FILE_FW, crc_status, keep_cx);
+	retval = flashProcedure(firmware_name, crc_status, keep_cx);
 	if ((retval & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 		logError(1,
 			 "%s %s: firmware update failed and retry! ERROR %08X\n",
 			 tag,
 			 __func__, retval);
 		fts_chip_powercycle(info);	/* power reset */
-		retval1 = flashProcedure(PATH_FILE_FW, crc_status, keep_cx);
+		retval1 = flashProcedure(firmware_name, crc_status, keep_cx);
 		if ((retval1 & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 			logError(1,
 				 "%s %s: firmware update failed again!  ERROR %08X\n",
@@ -3448,29 +3454,33 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 	return res;
 }
 
+void fts_resume_func(struct fts_ts_info *info)
+{
+	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
+	info->resume_bit = 1;
+	fts_system_reset();
+	release_all_touches(info);
+	fts_mode_handler(info, 0);
+	info->sensor_sleep = false;
+	fts_enableInterrupt();
+}
+
 /**
   * Resume work function which perform a system reset, clean all the touches
   *from the linux input system and prepare the ground for enabling the sensing
   */
-static void fts_resume_work(struct work_struct *work)
+static void inline fts_resume_work(struct work_struct *work)
 {
-	struct fts_ts_info *info;
+	fts_resume_func(container_of(work, struct fts_ts_info, resume_work));
+}
 
-
-	info = container_of(work, struct fts_ts_info, resume_work);
-
+void fts_suspend_func(struct fts_ts_info *info)
+{
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
-
-	info->resume_bit = 1;
-
-	fts_system_reset();
-
-	release_all_touches(info);
-
+	info->resume_bit = 0;
 	fts_mode_handler(info, 0);
-
-	info->sensor_sleep = false;
-
+	release_all_touches(info);
+	info->sensor_sleep = true;
 	fts_enableInterrupt();
 }
 
@@ -3478,23 +3488,9 @@ static void fts_resume_work(struct work_struct *work)
   * Suspend work function which clean all the touches from Linux input system
   *and prepare the ground to disabling the sensing or enter in gesture mode
   */
-static void fts_suspend_work(struct work_struct *work)
+static void inline fts_suspend_work(struct work_struct *work)
 {
-	struct fts_ts_info *info;
-
-	info = container_of(work, struct fts_ts_info, suspend_work);
-
-	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
-
-	info->resume_bit = 0;
-
-	fts_mode_handler(info, 0);
-
-	release_all_touches(info);
-
-	info->sensor_sleep = true;
-
-	fts_enableInterrupt();
+	fts_suspend_func(container_of(work, struct fts_ts_info, suspend_work));
 }
 /** @}*/
 
@@ -4050,6 +4046,9 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_6;
 	}
 
+	/* register touchscreen class if provisioned */
+	fts_mmi_init(info, true);
+
 #if defined(FW_UPDATE_ON_PROBE) && defined(FW_H_FILE)
 	logError(1, "%s FW Update and Sensing Initialization:\n", tag);
 	error = fts_fw_update(info);
@@ -4097,6 +4096,8 @@ static int fts_probe(struct spi_device *client)
 
 
 ProbeErrorExit_7:
+	fts_mmi_init(info, false);
+
 #ifdef FW_UPDATE_ON_PROBE
 	fb_unregister_client(&info->notifier);
 #endif
@@ -4168,6 +4169,8 @@ static int fts_remove(struct spi_device *client)
 
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);
+
+	fts_mmi_init(info, false);
 
 	/* free all */
 	kfree(info);
