@@ -233,6 +233,7 @@ struct fts_hw_platform_data {
   * Forward declaration
   */
 struct fts_ts_info;
+struct fts_sys_info;
 extern char tag[8];	/* /< forward the definition of the label used
 			  * to print the log in the kernel log */
 
@@ -340,8 +341,10 @@ struct fts_ts_info {
 				 * when allowed */
 	int grip_enabled;	/* /< if set, the grip mode mode will be enabled
 				 * when allowed */
-};
 
+	struct fts_sys_info *sysinfo;
+	const char *fw_file;
+};
 
 
 int fts_chip_powercycle(struct fts_ts_info *info);
