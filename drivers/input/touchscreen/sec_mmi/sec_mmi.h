@@ -6,6 +6,7 @@
 #include <linux/notifier.h>
 #include <linux/usb.h>
 #include <linux/power_supply.h>
+#include <linux/version.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
