@@ -4179,7 +4179,11 @@ static int aw8697_vibrator_init(struct aw8697 *aw8697)
 
 	pr_info("%s enter\n", __func__);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	aw8697->ws = wakeup_source_register(aw8697->dev, "vibrator");
+#else
+	aw8697->ws = wakeup_source_register("vibrator");
+#endif
 	if (!aw8697->ws)
 		return -ENOMEM;
 
