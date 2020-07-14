@@ -46,6 +46,26 @@
 #define ESDCHECK_WAIT_TIME              1000    /* ms */
 #define LCD_ESD_PATCH                   0
 
+#if (!FTS_DEBUG_EN)
+#if FTS_DEBUG_ESD_EN
+#undef FTS_DEBUG
+#undef FTS_FUNC_ENTER
+#undef FTS_FUNC_EXIT
+#define FTS_DEBUG(fmt, args...) do { \
+    printk("[FTS_TS]%s:"fmt"\n", __func__, ##args); \
+} while (0)
+
+#define FTS_FUNC_ENTER() do { \
+    printk("[FTS_TS]%s: Enter\n", __func__); \
+} while (0)
+
+#define FTS_FUNC_EXIT() do { \
+    printk("[FTS_TS]%s: Exit(%d)\n", __func__, __LINE__); \
+} while (0)
+
+#endif
+#endif
+
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
@@ -283,6 +303,7 @@ static void esdcheck_func(struct work_struct *work)
             fts_read_reg(FTS_REG_ESDCHECK_DISABLE, &val);
             if (0xA5 == val) {
                 fts_esdcheck_data.mode = DISABLE;
+                FTS_DEBUG("[ESD]: is_incell, read REG 0x%x=0x%x\n, return", FTS_REG_ESDCHECK_DISABLE, val);
                 return;
             }
         }

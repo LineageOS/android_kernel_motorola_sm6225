@@ -30,6 +30,7 @@ ifneq ($(filter ft8756,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 endif
 ifneq ($(filter ft8006s_aa,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA
+	EXTRA_CFLAGS += -DFOCALTECH_ESD_EN
 	focaltech_0flash_mmi-objs += focaltech_test/supported_ic/focaltech_test_ft8006sp.o
 	focaltech_0flash_mmi-objs += focaltech_flash_ft8006s.o
 	focaltech_0flash_mmi-objs += focaltech_spi_v1_1_1.o
