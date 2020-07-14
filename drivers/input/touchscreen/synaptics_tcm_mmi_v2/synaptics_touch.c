@@ -1231,8 +1231,14 @@ int touch_init(struct syna_tcm_hcd *tcm_hcd)
 	}
 
 	touch_hcd->tcm_hcd = tcm_hcd;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	touch_hcd->gesture_wakelock = wakeup_source_register(
 			&tcm_hcd->pdev->dev, "syna_gesture_wakelock");
+#else
+	touch_hcd->gesture_wakelock = wakeup_source_register(
+			"syna_gesture_wakelock");
+#endif
 	if (!touch_hcd->gesture_wakelock) {
                 LOGE(tcm_hcd->pdev->dev.parent,
                                 "Failed to allocate wakeup source\n");
