@@ -26,6 +26,7 @@
 #include <linux/ipc_logging.h>
 #include <linux/debugfs.h>
 #include <linux/string.h>
+#include <linux/version.h>
 
 #define MODULE_LOG "SMBMMI"
 
@@ -4122,7 +4123,11 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	chip->smb_mmi_hb_wake_source = wakeup_source_register(chip->dev, "smb_mmi_hb_wake");
+#else
+	chip->smb_mmi_hb_wake_source = wakeup_source_register("smb_mmi_hb_wake");
+#endif
 	if (!chip->smb_mmi_hb_wake_source) {
 		mmi_err(chip, "failed to allocate wakeup source\n");
 		return -ENOMEM;

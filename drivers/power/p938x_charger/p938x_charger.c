@@ -52,6 +52,7 @@
 #include <linux/limits.h>
 #include <linux/thermal.h>
 #include <linux/mutex.h>
+#include <linux/version.h>
 
 #define CHIP_ID_REG			0x0000
 #define HW_VER_REG			0x0002
@@ -2942,7 +2943,11 @@ static int p938x_charger_probe(struct i2c_client *client,
 	mutex_init(&chip->disconnect_lock);
 	mutex_init(&chip->txmode_lock);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
 	chip->wls_wake_source = wakeup_source_register(chip->dev, "p938x wireless charger");
+#else
+	chip->wls_wake_source = wakeup_source_register("p938x wireless charger");
+#endif
 
 	if (!chip->wls_wake_source) {
 		p938x_err(chip, "failed to allocate wakeup source\n");
