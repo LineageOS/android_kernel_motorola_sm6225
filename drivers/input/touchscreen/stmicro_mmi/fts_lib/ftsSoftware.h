@@ -28,10 +28,10 @@
 
 
 /* unsigned types */
-typedef uint8_t u8;	/* /< basic type that represent one byte (or 8 bits) */
-typedef uint16_t u16;	/* /< basic type that represent 2 bytes (or 16 bits) */
-typedef uint32_t u32;	/* /< basic type that represent 4 bytes (or 32 bits) */
-typedef uint64_t u64;	/* /< basic type that represent 8 bytes (or 64 bits) */
+#define u8 uint8_t	/* /< basic type that represent one byte (or 8 bits) */
+#define u16 uint16_t	/* /< basic type that represent 2 bytes (or 16 bits) */
+#define u32 uint32_t	/* /< basic type that represent 4 bytes (or 32 bits) */
+#define u64 uint64_t	/* /< basic type that represent 8 bytes (or 64 bits) */
 
 /* signed type */
 typedef signed char i8;	/* /< basic type that represent one signed byte (or 8

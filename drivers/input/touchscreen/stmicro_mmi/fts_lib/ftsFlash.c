@@ -503,9 +503,9 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 			 fwData->fw_code_size, fwData->panel_config_size,
 			fwData->cx_area_size, fwData->fw_config_size);
 
-		if((fwData->fw_code_size == 0) || 
+		if((fwData->fw_code_size == 0) ||
 			(fwData->panel_config_size == 0) ||
-			(fwData->cx_area_size == 0) || 
+			(fwData->cx_area_size == 0) ||
 			(fwData->fw_config_size == 0))
 		{
 			logError(0, "%s Using default flash Address\n", tag);

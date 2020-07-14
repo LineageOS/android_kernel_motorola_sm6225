@@ -80,7 +80,7 @@ typedef enum {
   * Struct which contains fundamental informations about the chip and its
   *configuration
   */
-typedef struct {
+struct fts_sys_info {
 	u16 u16_apiVer_rev;	/* /< API revision version */
 	u8 u8_apiVer_minor;	/* /< API minor version */
 	u8 u8_apiVer_major;	/* /< API major version */
@@ -187,7 +187,9 @@ typedef struct {
 					 * frame */
 	u16 u16_ssDetBaselineAddr;	/* /< Offset of SS detect baseline
 					 * frame */
-} SysInfo;
+};
+
+typedef struct fts_sys_info SysInfo;
 
 /** @}*/
 
@@ -212,6 +214,7 @@ int fts_disableInterrupt(void);
 int fts_disableInterruptNoSync(void);
 int fts_resetDisableIrqCount(void);
 int fts_enableInterrupt(void);
+int fts_is_InterruptEnabled(void);
 int fts_crc_check(void);
 int requestSyncFrame(u8 type);
 int saveMpFlag(u8 mpflag);

@@ -476,9 +476,13 @@ int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1, int
 int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int
 		  dataSize)
 {
-	u8 finalCmd[1 + addrSize + WRITE_CHUNK];
+	u8 *finalCmd;
 	int remaining = dataSize;
 	int toWrite = 0, i = 0;
+
+	finalCmd = (u8 *)kzalloc(1 + addrSize + WRITE_CHUNK, GFP_KERNEL);
+	if (!finalCmd)
+		return ERROR_ALLOC;
 
 	if (addrSize <= sizeof(u64)) {
 		while (remaining > 0) {
@@ -506,6 +510,7 @@ int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int
 			if (fts_write(finalCmd, 1 + addrSize + toWrite) < OK) {
 				logError(1, "%s %s: ERROR %08X\n", tag,
 					 __func__, ERROR_BUS_W);
+				kfree(finalCmd);
 				return ERROR_BUS_W;
 			}
 
@@ -517,7 +522,7 @@ int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int
 		logError(1,
 			 "%s %s: address size bigger than max allowed %ld... ERROR %08X\n",
 			 tag, __func__, sizeof(u64), ERROR_OP_NOT_ALLOW);
-
+	kfree(finalCmd);
 	return OK;
 }
 
@@ -537,10 +542,14 @@ int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int
 int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *outBuf, int
 		      byteToRead, int hasDummyByte)
 {
-	u8 finalCmd[1 + addrSize];
+	u8 *finalCmd;
 	u8 buff[READ_CHUNK + 1];/* worst case has dummy byte */
 	int remaining = byteToRead;
 	int toRead = 0, i = 0;
+
+	finalCmd = (u8 *)kzalloc(1 + addrSize, GFP_KERNEL);
+	if (!finalCmd)
+		return ERROR_ALLOC;
 
 	while (remaining > 0) {
 		if (remaining >= READ_CHUNK) {
@@ -563,6 +572,7 @@ int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *outBuf, int
 					 "%s %s: read error... ERROR %08X\n",
 					 tag,
 					 __func__, ERROR_BUS_WR);
+				kfree(finalCmd);
 				return ERROR_BUS_WR;
 			}
 			memcpy(outBuf, buff + 1, toRead);
@@ -573,6 +583,7 @@ int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *outBuf, int
 					 "%s %s: read error... ERROR %08X\n",
 					 tag,
 					 __func__, ERROR_BUS_WR);
+				kfree(finalCmd);
 				return ERROR_BUS_WR;
 			}
 			memcpy(outBuf, buff, toRead);
@@ -582,7 +593,7 @@ int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *outBuf, int
 
 		outBuf += toRead;
 	}
-
+	kfree(finalCmd);
 	return OK;
 }
 
@@ -604,10 +615,20 @@ int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *outBuf, int
 int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize
 			       addrSize2, u64 address, u8 *data, int dataSize)
 {
-	u8 finalCmd1[1 + addrSize1];
-	u8 finalCmd2[1 + addrSize2 + WRITE_CHUNK];
+	u8 *finalCmd1;
+	u8 *finalCmd2;
 	int remaining = dataSize;
 	int toWrite = 0, i = 0;
+
+	finalCmd1 = (u8 *)kzalloc(1 + addrSize1, GFP_KERNEL);
+	if (!finalCmd1)
+		return ERROR_ALLOC;
+
+	finalCmd2 = (u8 *)kzalloc(1 + addrSize2 + WRITE_CHUNK, GFP_KERNEL);
+	if (!finalCmd2) {
+		kfree(finalCmd1);
+		return ERROR_ALLOC;
+	}
 
 	while (remaining > 0) {
 		if (remaining >= WRITE_CHUNK) {
@@ -636,6 +657,8 @@ int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize
 		if (fts_write(finalCmd1, 1 + addrSize1) < OK) {
 			logError(1, "%s %s: first write error... ERROR %08X\n",
 				 tag, __func__, ERROR_BUS_W);
+			kfree(finalCmd1);
+			kfree(finalCmd2);
 			return ERROR_BUS_W;
 		}
 
@@ -644,6 +667,8 @@ int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize
 				 "%s %s: second write error... ERROR %08X\n",
 				 tag,
 				 __func__, ERROR_BUS_W);
+			kfree(finalCmd1);
+			kfree(finalCmd2);
 			return ERROR_BUS_W;
 		}
 
@@ -651,7 +676,8 @@ int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize
 
 		data += toWrite;
 	}
-
+	kfree(finalCmd1);
+	kfree(finalCmd2);
 	return OK;
 }
 
@@ -676,12 +702,21 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 				   AddrSize addrSize2, u64 address, u8 *outBuf,
 				   int byteToRead, int hasDummyByte)
 {
-	u8 finalCmd1[1 + addrSize1];
-	u8 finalCmd2[1 + addrSize2];
+	u8 *finalCmd1;
+	u8 *finalCmd2;
 	u8 buff[READ_CHUNK + 1];/* worst case has dummy byte */
 	int remaining = byteToRead;
 	int toRead = 0, i = 0;
 
+	finalCmd1 = (u8 *)kzalloc(1 + addrSize1, GFP_KERNEL);
+	if (!finalCmd1)
+		return ERROR_ALLOC;
+
+	finalCmd2 = (u8 *)kzalloc(1 + addrSize2, GFP_KERNEL);
+	if (!finalCmd2) {
+		kfree(finalCmd1);
+		return ERROR_ALLOC;
+	}
 
 	while (remaining > 0) {
 		if (remaining >= READ_CHUNK) {
@@ -711,6 +746,8 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 		if (fts_write(finalCmd1, 1 + addrSize1) < OK) {
 			logError(1, "%s %s: first write error... ERROR %08X\n",
 				 tag, __func__, ERROR_BUS_W);
+			kfree(finalCmd1);
+			kfree(finalCmd2);
 			return ERROR_BUS_W;
 		}
 
@@ -721,6 +758,8 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 					 "%s %s: read error... ERROR %08X\n",
 					 tag,
 					 __func__, ERROR_BUS_WR);
+				kfree(finalCmd1);
+				kfree(finalCmd2);
 				return ERROR_BUS_WR;
 			}
 			memcpy(outBuf, buff + 1, toRead);
@@ -731,6 +770,8 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 					 "%s %s: read error... ERROR %08X\n",
 					 tag,
 					 __func__, ERROR_BUS_WR);
+				kfree(finalCmd1);
+				kfree(finalCmd2);
 				return ERROR_BUS_WR;
 			}
 			memcpy(outBuf, buff, toRead);
@@ -740,6 +781,7 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 
 		outBuf += toRead;
 	}
-
+	kfree(finalCmd1);
+	kfree(finalCmd2);
 	return OK;
 }
