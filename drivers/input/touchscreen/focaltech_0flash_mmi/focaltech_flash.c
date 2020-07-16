@@ -366,7 +366,7 @@ int fts_fw_recovery(void)
         }
 
 #if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8756) || \
-	defined (DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA) || \
+	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA) || \
 	defined (CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8009)
         if (boot_state != 0x01) {
 #else
