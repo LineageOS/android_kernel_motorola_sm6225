@@ -440,7 +440,7 @@ int dsi_panel_reset(struct dsi_panel *panel)
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int i;
 
-	DSI_DEBUG("++\n");
+	DSI_INFO("++\n");
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
 		rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
 		if (rc) {
@@ -468,7 +468,7 @@ int dsi_panel_reset(struct dsi_panel *panel)
 	for (i = 0; i < r_config->count; i++) {
 		/* set tp rst before lcd rst */
 		if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
-			DSI_DEBUG("dsp dbg: set tp_rst_gpio to %d\n", r_config->sequence[i].level);
+			DSI_INFO("dsp dbg: set tp_rst_gpio to %d\n", r_config->sequence[i].level);
 			gpio_set_value(r_config->tp_rst_gpio, r_config->sequence[i].level);
 
 			if (r_config->tp_rst_post_sleep && r_config->tp_rst_post_sleep < 200) {
@@ -593,7 +593,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 			if (rc) {
 				DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
 			} else {
-				DSI_DEBUG("dsp dbg: set tp_rst_gpio to 0\n");
+				DSI_INFO("dsp dbg: set tp_rst_gpio to 0\n");
 				gpio_set_value(r_config->tp_rst_gpio, 0);
 				usleep_range(5500, 5500 + 100);
 			}
@@ -3645,8 +3645,10 @@ static bool dsi_panel_parse_esd_status_len(struct dsi_parser_utils *utils,
 {
 	int tmp;
 
-	if (!utils->find_property(utils->data, prop_key, &tmp))
+	if (!utils->find_property(utils->data, prop_key, &tmp)) {
+		DSI_ERR("find_property return false!\n");
 		return false;
+	}
 
 	tmp /= sizeof(u32);
 	if (tmp != cmd_cnt) {
