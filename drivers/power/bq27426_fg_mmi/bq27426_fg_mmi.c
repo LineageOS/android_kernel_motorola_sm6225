@@ -203,11 +203,11 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 2},
+	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 3},
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 2},
+	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 3},
 #endif
 
 };
@@ -1642,6 +1642,7 @@ static bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
 			return true;
 		break;
 	case CMD_W:
+		//mmi_fg_info(bq, "WRT CMD: %02X\n", cmd->reg);
 		ret = fg_write_block(bq, cmd->reg, (u8 *)&cmd->data.bytes, cmd->data_len);
 		if (ret < 0)
 			return false;
