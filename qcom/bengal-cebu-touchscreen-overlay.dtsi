@@ -77,9 +77,41 @@
 	};
 };
 
+&qupv3_se0_spi_pins {
+	qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
+		mux {
+			pins = "gpio0", "gpio1",
+					"gpio2", "gpio3";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio0", "gpio1",
+					"gpio2", "gpio3";
+			drive-strength = <6>;
+			bias-disable;
+		};
+	};
+
+       qupv3_se0_cs_sleep: qupv3_se0_cs_sleep {
+               mux {
+                       pins = "gpio3";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio3";
+                       drive-strength = <6>;
+                       bias-pull-up;
+                       output-high;
+               };
+       };
+};
+
 &qupv3_se0_spi {
 	status = "ok";
 	qcom,spi-touch-active="focaltech,fts";
+	pinctrl-1 = <&qupv3_se0_spi_sleep &qupv3_se0_cs_sleep>;
 	focaltech@0 {
 		compatible = "focaltech,fts";
 		reg = <0>;
