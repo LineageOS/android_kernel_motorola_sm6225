@@ -2356,36 +2356,15 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	return rc;
 }
 
-enum {
-	MMI_FACTORY_MODE,
-	MMI_FACTORY_BUILD,
-};
-
-static bool mmi_factory_check(int type)
+static bool mmi_factory_check()
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
 	bool factory = false;
-	const char *bootargs = NULL;
-	char *bl_version = NULL;
 
 	if (!np)
 		return factory;
 
-
-	switch (type) {
-	case MMI_FACTORY_MODE:
-		factory = of_property_read_bool(np, "mmi,factory-cable");
-		break;
-	case MMI_FACTORY_BUILD:
-		if (!of_property_read_string(np, "bootargs", &bootargs)) {
-			bl_version = strstr(bootargs, "androidboot.bootloader=");
-			if (bl_version && strstr(bl_version, "factory"))
-				factory = true;
-		}
-		break;
-	default:
-		factory = false;
-	}
+	factory = of_property_read_bool(np, "mmi,factory-cable");
 	of_node_put(np);
 
 	return factory;
@@ -2461,8 +2440,7 @@ static int bq_fg_probe(struct i2c_client *client,
 	bq->fake_soc 	= -EINVAL;
 	bq->fake_temp	= -EINVAL;
 
-	bq->factory_mode  = mmi_factory_check(MMI_FACTORY_MODE);
-	bq->factory_build = mmi_factory_check(MMI_FACTORY_BUILD);
+	bq->factory_mode  = mmi_factory_check();
 
 	if (bq->chip == BQ27426) {
 		regs = bq27426_regs;
