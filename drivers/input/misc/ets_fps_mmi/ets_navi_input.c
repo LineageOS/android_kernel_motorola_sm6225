@@ -210,7 +210,8 @@ static unsigned int prev_keycode;
  *   KEY_PRESS_RELEASE : Combined action of press-then-release
  */
 #define LONGTOUCH_INTERVAL          400
-#define SINGLECLICK_INTERVAL        200
+#define SINGLECLICK_INTERVAL        150
+#define SINGLECLICK_INTERVAL_MIN    5
 #define DOUBLECLICK_INTERVAL        300
 
 
@@ -423,7 +424,8 @@ void translated_command_converter(char cmd, struct etspi_data *etspi)
 				g_SingleClick, jiffies_to_msecs(jiffies - g_SingleClickJiffies),
 				jiffies_to_msecs(g_SingleClickJiffies - g_DoubleClickJiffies), jiffies_to_msecs(jiffies));
 #if ENABLE_TRANSLATED_SINGLE_CLICK || ENABLE_TRANSLATED_DOUBLE_CLICK
-			if ((jiffies - g_SingleClickJiffies) < (HZ * SINGLECLICK_INTERVAL / 1000)) {
+			if ((jiffies - g_SingleClickJiffies) < (HZ * SINGLECLICK_INTERVAL / 1000)
+			        && (jiffies - g_SingleClickJiffies) > (HZ * SINGLECLICK_INTERVAL_MIN / 1000)) {
 				/* Click event */
 #if ENABLE_TRANSLATED_SINGLE_CLICK
 				send_key_event(etspi, KEYEVENT_CLICK, KEYEVENT_CLICK_ACTION);
