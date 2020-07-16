@@ -474,6 +474,25 @@ static int fts_input_report_b(struct fts_ts_data *data)
         input_mt_slot(data->input_dev, events[i].id);
 
         if (EVENT_DOWN(events[i].flag)) {
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+            if ( FTS_TOUCH_DOWN == events[i].flag && data->imports
+                    && data->imports->report_touch_event) {
+                struct touch_event_data touch_event;
+                memset(&touch_event, 0, sizeof(touch_event));
+                touch_event.type = TS_COORDINATE_ACTION_PRESS;
+                touch_event.id = events[i].id;
+                touch_event.x = events[i].x;
+                touch_event.y = events[i].y;
+                touch_event.major = events[i].area;
+                data->imports->report_touch_event(&touch_event, data->input_dev);
+                if (touch_event.skip_report) {
+                    /* input event is reported by touchscreen class.
+                     * vendor touch event may need update based on touch_event
+                     */
+                    continue;
+                }
+            }
+#endif
             input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, true);
 
 #if FTS_REPORT_PRESSURE_EN
@@ -501,6 +520,21 @@ static int fts_input_report_b(struct fts_ts_data *data)
             }
         } else {
             uppoint++;
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+            if (data->imports && data->imports->report_touch_event) {
+                struct touch_event_data touch_event;
+                memset(&touch_event, 0, sizeof(touch_event));
+                touch_event.type = TS_COORDINATE_ACTION_RELEASE;
+                touch_event.id = events[i].id;
+                data->imports->report_touch_event(&touch_event, data->input_dev);
+                if (touch_event.skip_report) {
+                    /* input event is reported by touchscreen class.
+                     * vendor touch event may need update based on touch_event
+                     */
+                    continue;
+                }
+            }
+#endif
             input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
             data->touchs &= ~BIT(events[i].id);
             if (data->log_level >= 1) {
