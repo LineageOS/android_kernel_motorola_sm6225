@@ -109,8 +109,10 @@ static struct sensors_classdev __maybe_unused palm_sensors_touch_cdev = {
 #ifdef FOCALTECH_PEN_NOTIFIER
 static int fts_mcu_pen_detect_set(uint8_t pen_detect);
 #endif
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
+#endif
 
 /*****************************************************************************
 *  Name: fts_wait_tp_to_valid
@@ -1670,6 +1672,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_FB) || defined(CONFIG_DRM)
 static void fts_resume_work(struct work_struct *work)
 {
@@ -1678,6 +1681,7 @@ static void fts_resume_work(struct work_struct *work)
 
     fts_ts_resume(ts_data->dev);
 }
+#endif
 #endif
 
 #ifdef FOCALTECH_PEN_NOTIFIER
@@ -1708,6 +1712,7 @@ static int pen_notifier_callback(struct notifier_block *self,
 }
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef CONFIG_DRM
 #if FTS_CONFIG_DRM_PANEL
 struct drm_panel *active_panel;
@@ -1937,6 +1942,7 @@ static void fts_ts_late_resume(struct early_suspend *handler)
     fts_ts_resume(ts_data->dev);
 }
 #endif
+#endif
 
 #if FTS_USB_DETECT_EN
 static int fts_charger_notifier_callback(struct notifier_block *nb,
@@ -2138,6 +2144,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     }
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef CONFIG_DRM
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
@@ -2171,6 +2178,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     ts_data->early_suspend.suspend = fts_ts_early_suspend;
     ts_data->early_suspend.resume = fts_ts_late_resume;
     register_early_suspend(&ts_data->early_suspend);
+#endif
 #endif
 
 #if FTS_USB_DETECT_EN
@@ -2278,6 +2286,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (pen_detection_unregister_client(&ts_data->pen_notif))
         FTS_ERROR("Error occurred while unregistering pen_notifier.\n");
 #endif
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef CONFIG_DRM
 #if FTS_CONFIG_DRM_PANEL
     if (active_panel) {
@@ -2293,6 +2302,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("Error occurred while unregistering fb_notifier.\n");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&ts_data->early_suspend);
+#endif
 #endif
 
     if (gpio_is_valid(ts_data->pdata->reset_gpio))
@@ -2316,6 +2326,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int _fts_ts_suspend(struct device *dev)
 {
     int ret = 0;
@@ -2535,6 +2546,7 @@ static int fts_ts_resume(struct device *dev)
 
     return ret;
 }
+#endif
 
 /*****************************************************************************
 * TP Driver
