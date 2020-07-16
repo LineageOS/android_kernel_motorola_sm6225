@@ -1,0 +1,54 @@
+AWINIC AW882xx smartPA
+
+Required properties:
+- compatible: must be "awinic,aw882xx_smartpa"
+- reg: Physical i2c address of the smartPA.
+- reset-gpio: reset pin of the smartPA.
+- irq-gpio: irq pin of the smartPA.
+
+- monitor-flag: low voltage and low temperature monitor control flag,
+    1: enable monitor,
+    0:disablemonitor.
+
+- monitor-timer-val: schedule duration of low voltage and low temperature monitor function, ms
+
+-low-vol-table-down:low voltage table of monitor when voltage is going down.
+    format:<voltage ipeak gain>
+
+-low-vol-table-up:low voltage table of monitor when voltage is going up.
+    format:<voltage ipeak gain>
+
+-low-temp-table-down:low temperature table of monitor when temperature is going down.
+    format:<temperature ipeak gain vmax>
+
+-low-temp-table-up:low temperature table of monitor when temperature is going up.
+    format:<temperature ipeak gain vmax>
+
+- afe-profile: music\voice\notification\ringtone profile setting in afe module,
+    1:enable param profile setting in afe
+    0:disable param profile setting in afe
+
+- afe-rx-portid: afe port id of I2S RX.
+- afe-tx-portid: afe port id of I2S TX.
+
+
+Example:
+
+	aw882xx:aw882xx_smartpa@34 {
+		compatible = "awinic,aw882xx_smartpa";
+		reg = <0x34>;
+                	pinctrl-names = "default";
+                	pinctrl-0 = <&aw882xx_irq_default>, <&aw882xx_reset_default>;
+                	reset-gpio = <&tlmm 90 0>;
+                	irq-gpio = <&tlmm 56 0x2008>;
+		monitor-flag = <1>;
+		afe-profile = <1>;
+		monitor-timer-val = <3000>;
+		afe-rx-portid = <0x1000>;
+		afe-tx-portid = <0x1001>;
+		low-vol-table-down = <3650 9 3 3750 9 2 3900 9 1>;
+		low-vol-table-up = <4000 9 0 3800 9 1 3700 9 2>;
+		low-temp-table-down = <0xFFFFFFFB 0x4 0x10 0xFFBEAE7E 0x0 0x5 0x9 0xFFD80505 0x5 0x6 0x6 0xFFED714D>;
+		low-temp-table-up = <0x7 0x9 0x0 0x00000000 0x2 0x6 0x06 0xFFED714D 0xFFFFFFE 0x05 0x09 0xFFD80505>;
+		status = "okay";
+	};
