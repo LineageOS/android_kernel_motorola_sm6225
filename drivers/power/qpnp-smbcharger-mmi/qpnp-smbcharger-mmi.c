@@ -1916,8 +1916,9 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 	}
 
 	/* Maintain vbus voltage for QC3.0 power/3A charging */
-	if (pulse_cnt == 0) {
+	if (pulse_cnt == 0 || chg->inc_hvdcp_cnt != HVDCP_PULSE_COUNT_MAX) {
 
+		chg->inc_hvdcp_cnt = HVDCP_PULSE_COUNT_MAX;
 		vote(chg->chg_dis_votable, MMI_HB_VOTER, true, 0);
 
 		while (cur_mv < HVDCP_VOLTAGE_NOM && pulse_cnt < chg->inc_hvdcp_cnt) {
@@ -1961,6 +1962,72 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 
 	return cur_mv;
 }
+
+static ssize_t force_hvdcp_power_max_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long power;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	r = kstrtoul(buf, 0, &power);
+	if (r) {
+		pr_err("SMBMMI: Invalid hvdcp_power_max value = %lu\n", power);
+		return -EINVAL;
+	}
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	if ((power >= CHARGER_POWER_15W) &&
+	    (power <= CHARGER_POWER_20W) &&
+	    (mmi_chip->hvdcp_power_max != power)) {
+		mmi_chip->hvdcp_power_max = power;
+
+		r = smblib_masked_write_mmi(mmi_chip, HVDCP_PULSE_COUNT_MAX_REG,
+					    HVDCP_PULSE_COUNT_MAX_QC2_MASK |
+					    HVDCP_PULSE_COUNT_MAX_QC3_MASK,
+					    HVDCP_PULSE_COUNT_MAX);
+		if (r < 0) {
+			mmi_err(mmi_chip, "Could not set HVDCP pulse count max\n");
+			return r;
+		}
+		cancel_delayed_work(&mmi_chip->heartbeat_work);
+		schedule_delayed_work(&mmi_chip->heartbeat_work,
+					      msecs_to_jiffies(100));
+		mmi_info(mmi_chip, "Reset hvdcp power max as %d, "
+					"Reschedule heartbeat\n",
+					mmi_chip->hvdcp_power_max);
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t force_hvdcp_power_max_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int power;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	if (!mmi_chip) {
+		pr_err("SMBMMI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	power = mmi_chip->hvdcp_power_max;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", power);
+}
+
+static DEVICE_ATTR(force_hvdcp_power_max, 0644,
+		force_hvdcp_power_max_show,
+		force_hvdcp_power_max_store);
 
 static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 {
@@ -4301,6 +4368,11 @@ static int smb_mmi_probe(struct platform_device *pdev)
 				&dev_attr_factory_charge_upper);
 	if (rc)
 		mmi_err(chip, "Couldn't create factory_charge_upper\n");
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_force_hvdcp_power_max);
+	if (rc)
+		mmi_err(chip, "Couldn't create force_hvdcp_power_max\n");
 
 	/* Register the notifier for the psy updates*/
 	chip->mmi_psy_notifier.notifier_call = mmi_psy_notifier_call;
