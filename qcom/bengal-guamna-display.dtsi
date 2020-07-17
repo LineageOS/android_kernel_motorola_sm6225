@@ -10,6 +10,12 @@
     qcom,platform-mot-early-power-enable;
 };
 
+&dsi_panel_pwr_supply {
+        qcom,panel-supply-entry@2 {
+                qcom,supply-pre-off-sleep = <2>;
+        };
+};
+
 &dsi_hlt_hx83102d_video {
 	qcom,mdss-dsi-t-clk-post = <0x0B>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
