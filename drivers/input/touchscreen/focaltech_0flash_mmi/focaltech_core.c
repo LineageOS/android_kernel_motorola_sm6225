@@ -2390,7 +2390,10 @@ static int _fts_ts_suspend(struct device *dev)
 #endif
 #endif
 
+#if (!FTS_SUSPEND_IRQ_EN)
     fts_irq_disable();
+#endif
+
     /* TP enter sleep mode */
     ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP_VALUE);
     if (ret < 0)
@@ -2465,7 +2468,9 @@ static int _fts_ts_resume(struct device *dev)
         fts_reset_proc(200);
     }
 
+#if (!FTS_SUSPEND_IRQ_EN)
     fts_irq_enable();
+#endif
 
     if (ts_data->pdata->dlfw_in_resume) {
         ret = fts_wait_tp_to_valid();
