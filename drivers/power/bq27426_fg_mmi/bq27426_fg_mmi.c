@@ -1262,6 +1262,20 @@ static int fg_get_batt_health(struct bq_fg_chip *bq)
 
 }
 
+static int fg_read_soh(struct bq_fg_chip *bq)
+{
+	int ret;
+	u16 soh = 0;
+
+	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_SOH], &soh);
+	if (ret < 0) {
+		mmi_fg_err(bq, "could not read state of health, ret = %d\n", ret);
+		return ret;
+	}
+
+	return soh;
+}
+
 static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
@@ -1278,6 +1292,7 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+	POWER_SUPPLY_PROP_SOH,
 };
 
 static int fg_get_property(struct power_supply *psy,
@@ -1407,6 +1422,9 @@ static int fg_get_property(struct power_supply *psy,
 			bq->batt_vocv= ret;
 		val->intval = bq->batt_vocv * 1000;
 		mutex_unlock(&bq->data_lock);
+		break;
+	case POWER_SUPPLY_PROP_SOH:
+		val->intval = fg_read_soh(bq);
 		break;
 	default:
 		mutex_unlock(&bq->update_lock);
