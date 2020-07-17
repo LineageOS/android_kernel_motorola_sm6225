@@ -190,6 +190,16 @@
 #endif
 
 /*
+ * irq enable when fts suspend
+ * default: disable
+ */
+#ifdef FOCALTECH_SUSPEND_IRQ_ENABLE
+#define FTS_SUSPEND_IRQ_EN					1
+#else
+#define FTS_SUSPEND_IRQ_EN					0
+#endif
+
+/*
  * FTS CONFIG_DRM_PANEL check & protection
  * default: disable
  */
