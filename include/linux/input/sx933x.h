@@ -795,9 +795,10 @@ struct sx93XX
 	struct delayed_work dworker; /* work struct for worker function */
 	u8 phaseselect;
 
-	int initialize_done;
 	int reset_count;
 	atomic_t init_busy;
+	struct delayed_work i2c_watchdog_work;
+	int suspended;
 };
 
 int sx93XX_IRQ_init(psx93XX_t this);

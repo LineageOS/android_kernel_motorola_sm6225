@@ -59,6 +59,9 @@
 #define SX933x_CONN_ERROR	3
 #define SX933x_I2C_ERROR	4
 
+#define SX933X_I2C_WATCHDOG_TIME 10000
+#define SX933X_I2C_WATCHDOG_TIME_ERR 2000
+
 /*! \struct sx933x
  * Specialized struct containing input event data, platform data, and
  * last cap state read if needed.
@@ -111,10 +114,8 @@ static int sx933x_i2c_write_16bit(psx93XX_t this, u16 reg_addr, u32 buf)
 		msg.buf = (u8 *)w_buf;
 
 		ret = i2c_transfer(i2c->adapter, &msg, 1);
-		if (ret < 0) {
+		if (ret < 0)
 			LOG_ERR(" i2c write reg 0x%x error %d\n", reg_addr, ret);
-			sx933x_reinitialize(this);
-		}
 	}
 	return ret;
 }
@@ -152,10 +153,8 @@ static int sx933x_i2c_read_16bit(psx93XX_t this, u16 reg_addr, u32 *data32)
 		msg[1].buf = (u8 *)buf;
 
 		ret = i2c_transfer(i2c->adapter, msg, 2);
-		if (ret < 0) {
+		if (ret < 0)
 			LOG_ERR("i2c read reg 0x%x error %d\n", reg_addr, ret);
-			sx933x_reinitialize(this);
-		}
 
 		data32[0] = ((u32)buf[0]<<24) | ((u32)buf[1]<<16) | ((u32)buf[2]<<8) | ((u32)buf[3]);
 	}
@@ -1131,6 +1130,8 @@ static int flip_notify_callback(struct notifier_block *self,
 #endif
 #endif
 
+static void sx933x_i2c_watchdog_work(struct work_struct *work);
+
 /*! \fn static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *id)
  * \brief Probe function
  * \param client pointer to i2c_client
@@ -1400,7 +1401,13 @@ static int sx933x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	global_sx933x = this;
-	this->initialize_done = 1;
+
+	if(pplatData->reinit_on_i2c_failure) {
+		INIT_DELAYED_WORK(&this->i2c_watchdog_work, sx933x_i2c_watchdog_work);
+		schedule_delayed_work(&this->i2c_watchdog_work,
+			msecs_to_jiffies(SX933X_I2C_WATCHDOG_TIME));
+	}
+
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 	update_flip_regs(pplatData, pplatData->phone_flip_state);
 #endif
@@ -1465,6 +1472,7 @@ static int sx933x_suspend(struct device *dev)
 		sx933x_i2c_write_16bit(this,SX933X_CMD_REG,0xD);//make sx933x in Sleep mode
 		LOG_DBG(LOG_TAG "sx933x suspend:disable irq!\n");
 		disable_irq(this->irq);
+		this->suspended = 1;
 	}
 	return 0;
 }
@@ -1477,6 +1485,7 @@ static int sx933x_resume(struct device *dev)
 		sx93XX_schedule_work(this,0);
 		enable_irq(this->irq);
 		sx933x_i2c_write_16bit(this,SX933X_CMD_REG,0xC);//Exit from Sleep mode
+		this->suspended = 0;
 	}
 	return 0;
 }
@@ -1648,6 +1657,40 @@ int sx93XX_IRQ_init(psx93XX_t this)
 	return -ENOMEM;
 }
 
+/* Read i2c every 10 seconds, if there is an error, schedule again in 2 seconds
+ * and if it fails a few more times we can assume there is a device error and reset
+ */
+static void sx933x_i2c_watchdog_work(struct work_struct *work)
+{
+	static int err_cnt = 0;
+	psx93XX_t this = container_of(work, sx93XX_t, i2c_watchdog_work.work);
+	int ret;
+	u32 temp;
+	int delay = SX933X_I2C_WATCHDOG_TIME;
+
+	LOG_DBG("sx933x_i2c_watchdog_work");
+
+	if(!this->suspended) {
+		ret = sx933x_i2c_read_16bit(this, SX933X_INFO_REG, &temp);
+		if (ret < 0) {
+			err_cnt++;
+			LOG_ERR("sx933x_i2c_watchdog_work err_cnt: %d", err_cnt);
+			delay = SX933X_I2C_WATCHDOG_TIME_ERR;
+		} else
+			err_cnt = 0;
+
+		if (err_cnt >= 3) {
+			err_cnt = 0;
+			sx933x_reinitialize(this);
+			delay = SX933X_I2C_WATCHDOG_TIME;
+		}
+	} else
+		LOG_DBG("sx933x_i2c_watchdog_work before resume.");
+
+	schedule_delayed_work(&this->i2c_watchdog_work,
+		msecs_to_jiffies(delay));
+}
+
 static void sx933x_reinitialize(psx93XX_t this)
 {
 	psx933x_t pDevice = 0;
@@ -1658,13 +1701,12 @@ static void sx933x_reinitialize(psx93XX_t this)
 	int retry;
 
 	if (this && (pDevice = this->pDevice) && (pdata = pDevice->hw)) {
-		if (!this->initialize_done || !pdata->reinit_on_i2c_failure)
+		if (!pdata->reinit_on_i2c_failure)
 			return;
 
 		if (!atomic_add_unless(&this->init_busy, 1, 1))
 			return;
 
-		this->initialize_done = 0;
 		disable_irq(this->irq);
 
 		regulator_disable(pdata->cap_vdd);
@@ -1709,10 +1751,7 @@ static void sx933x_reinitialize(psx93XX_t this)
 		}
 
 		manual_offset_calibration(this);
-
-		this->initialize_done = 1;
 		atomic_set(&this->init_busy, 0);
-
 		LOG_ERR("reinitialized sx933x, count %d\n", this->reset_count++);
 	}
 }
