@@ -283,8 +283,6 @@ struct bq_fg_chip {
 	bool cfg_update_mode;
 	bool itpor;
 	bool device_initial;
-	bool factory_mode;
-	bool factory_build;
 
 	int	seal_state; /* 0 - Full Access, 1 - Unsealed, 2 - Sealed */
 	int batt_tte;
@@ -2356,20 +2354,6 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	return rc;
 }
 
-static bool mmi_factory_check()
-{
-	struct device_node *np = of_find_node_by_path("/chosen");
-	bool factory = false;
-
-	if (!np)
-		return factory;
-
-	factory = of_property_read_bool(np, "mmi,factory-cable");
-	of_node_put(np);
-
-	return factory;
-}
-
 static int mmi_perform_reset(struct bq_fg_chip *bq)
 {
 	int rc = -1;
@@ -2440,8 +2424,6 @@ static int bq_fg_probe(struct i2c_client *client,
 	bq->fake_soc 	= -EINVAL;
 	bq->fake_temp	= -EINVAL;
 
-	bq->factory_mode  = mmi_factory_check();
-
 	if (bq->chip == BQ27426) {
 		regs = bq27426_regs;
 	} else {
@@ -2491,9 +2473,6 @@ static int bq_fg_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Could not create workqueue\n");
 		goto free_mem;
 	}
-
-	if (bq->factory_mode || bq->factory_build)
-		mmi_perform_reset(bq);
 
 	//mmi_fg_err(bq, "I2C adapter is %s\n", dev_name(&bq->client->adapter->dev));
 	INIT_WORK(&bq->update_work, fg_update_bqfs_workfunc);
