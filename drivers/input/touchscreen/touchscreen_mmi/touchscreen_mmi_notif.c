@@ -309,7 +309,7 @@ static int ts_mmi_refresh_rate_cb(struct notifier_block *nb,
 	return 0;
 }
 
-static int ts_mmi_ps_get_state(struct power_supply *psy, bool *present)
+static inline int ts_mmi_ps_get_state(struct power_supply *psy, bool *present)
 {
 	union power_supply_propval pval = {0};
 	int ret;
@@ -424,10 +424,25 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 		goto FIFO_ALLOC_FAILED;
 
 	if (touch_cdev->pdata.usb_detection) {
+		struct power_supply *psy = NULL;
+		bool present;
 		touch_cdev->ps_notif.notifier_call = ts_mmi_charger_cb;
 		ret = power_supply_reg_notifier(&touch_cdev->ps_notif);
 		if (ret)
 			goto PS_NOTIF_REGISTER_FAILED;
+
+		psy = power_supply_get_by_name("usb");
+		if (psy) {
+			ret = ts_mmi_ps_get_state(psy, &present);
+			if (!ret) {
+				touch_cdev->ps_is_present = present;
+				kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_PS);
+				schedule_delayed_work(&touch_cdev->work, 0);
+			}
+			power_supply_put(psy);
+			dev_info(DEV_MMI, "%s: USB initial status=%d\n",
+				__func__, touch_cdev->ps_is_present);
+		}
 	}
 
 	/*
