@@ -6042,6 +6042,16 @@ static void synaptics_rmi4_detection_work(struct work_struct *work)
 				__func__, synaptics_dsx_state_name(state),
 				rmi4_data->in_bootloader ? "true" : "false");
 
+		/* postpone loading test reporting while firmware */
+		/* update still in progress */
+		if (f34_inserted && (state == STATE_INIT ||
+			state == STATE_FLASH || state == STATE_UNKNOWN)) {
+			dev_dbg(dev, "%s: firmware update in progress\n",
+					__func__);
+			scheduled_delay = 1000;
+			continue;
+		}
+
 		if (exp_fhandler->mode == IC_MODE_UI) {
 			if (rmi4_data->in_bootloader) {
 				dev_dbg(dev, "%s: handler %d requires UI mode\n",
