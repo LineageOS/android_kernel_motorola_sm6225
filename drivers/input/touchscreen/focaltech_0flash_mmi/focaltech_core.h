@@ -240,6 +240,7 @@ struct fts_ts_data {
 #endif
 
 #if FTS_USB_DETECT_EN
+	bool usb_detect_flag;
 	uint8_t usb_connected;
 	struct notifier_block charger_notif;
 #endif
