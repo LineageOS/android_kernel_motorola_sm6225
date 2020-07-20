@@ -52,7 +52,7 @@
 		qcom,mdss-panel-on-tp-rst-enable;
 		qcom,mdss-panel-on-rst-pull-down;
 		qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
-		qcom,mdss-dsi-tp-rst-post-ms = <3>;
+		qcom,mdss-dsi-tp-rst-post-ms = <5>;
 		qcom,mdss-dsi-reset-sequence = <1 35>, <1 5>;
 		qcom,mdss-pan-physical-width-dimension = <69>;
 		qcom,mdss-pan-physical-height-dimension = <158>;
@@ -104,37 +104,6 @@
 			};
 		};
 
-		qcom,panel-supply-entries {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			qcom,panel-supply-entry@0 {
-				reg = <0>;
-				qcom,supply-name = "vddio";
-				qcom,supply-min-voltage = <1800000>;
-				qcom,supply-max-voltage = <1800000>;
-				qcom,supply-enable-load = <62000>;
-				qcom,supply-disable-load = <80>;
-			};
-
-			qcom,panel-supply-entry@1 {
-				reg = <1>;
-				qcom,supply-name = "lab";
-				qcom,supply-min-voltage = <6000000>;
-				qcom,supply-max-voltage = <6000000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-
-			qcom,panel-supply-entry@2 {
-				reg = <2>;
-				qcom,supply-name = "ibb";
-				qcom,supply-min-voltage = <6000000>;
-				qcom,supply-max-voltage = <6000000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-		};
 	};
 };
 
