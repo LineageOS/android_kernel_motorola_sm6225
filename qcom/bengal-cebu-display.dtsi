@@ -19,6 +19,21 @@
 	};
 };
 
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@0 {
+		qcom,supply-post-on-sleep = <0>;
+	};
+
+	qcom,panel-supply-entry@1 {
+		qcom,supply-min-voltage = <6000000>;
+	};
+
+	qcom,panel-supply-entry@2 {
+		qcom,supply-min-voltage = <6000000>;
+		qcom,supply-post-on-sleep = <0>;
+	};
+};
+
 &dsi_dsbj_ft8006s_video {
 	qcom,mdss-dsi-t-clk-post = <0x0b>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
