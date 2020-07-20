@@ -48,7 +48,7 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-lp11-init;
-		qcom,mdss-dsi-reset-always-high;
+		qcom,platform-reset-gpio-always-on;
 		qcom,mdss-panel-on-tp-rst-enable;
 		qcom,mdss-panel-on-rst-pull-down;
 		qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
