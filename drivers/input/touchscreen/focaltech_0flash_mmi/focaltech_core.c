@@ -68,9 +68,6 @@ extern void fts_mmi_dev_unregister(struct fts_ts_data *ts_data);
 #define FTS_DRIVER_NAME                     "fts_ts"
 #define INTERVAL_READ_REG                   200  /* unit:ms */
 #define TIMEOUT_READ_REG                    1000 /* unit:ms */
-#if FTS_USB_DETECT_EN
-bool 	FTS_USB_detect_flag;
-#endif
 #if FTS_POWER_SOURCE_CUST_EN
 #define FTS_VTG_MIN_UV                      2800000
 #define FTS_VTG_MAX_UV                      3300000
@@ -852,7 +849,7 @@ void fts_cable_detect_func(bool force_renew)
 {
 	struct fts_ts_data *ts_data = fts_data;
 	uint8_t connect_status = 0;
-	connect_status = FTS_USB_detect_flag;
+	connect_status = ts_data->usb_detect_flag;
 
 	if ((connect_status != ts_data->usb_connected) || force_renew) {
 		if (connect_status) {
@@ -1944,6 +1941,7 @@ static void fts_ts_late_resume(struct early_suspend *handler)
 #endif
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if FTS_USB_DETECT_EN
 static int fts_charger_notifier_callback(struct notifier_block *nb,
 								unsigned long val, void *v) {
@@ -1964,13 +1962,14 @@ static int fts_charger_notifier_callback(struct notifier_block *nb,
 				FTS_ERROR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
 				return ret;
 			} else {
-				FTS_USB_detect_flag = prop.intval;
+				ts->usb_detect_flag = prop.intval;
 				//FTS_ERROR("usb prop.intval =%d\n", prop.intval);
 			}
 		}
 	}
 	return 0;
 }
+#endif
 #endif
 
 static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
@@ -2181,6 +2180,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 #endif
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if FTS_USB_DETECT_EN
 	ts_data->usb_connected = 0x00;
 	ts_data->charger_notif.notifier_call = fts_charger_notifier_callback;
@@ -2190,6 +2190,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 		goto err_register_charger_notify_failed;
 	}
 #endif
+#endif
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
     fts_mmi_dev_register(ts_data);
@@ -2198,10 +2199,12 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     FTS_FUNC_EXIT();
     return 0;
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if FTS_USB_DETECT_EN
 err_register_charger_notify_failed:
 if (ts_data->charger_notif.notifier_call)
 	power_supply_unreg_notifier(&ts_data->charger_notif);
+#endif
 #endif
 
 err_irq_req:
@@ -2238,9 +2241,11 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     fts_mmi_dev_unregister(ts_data);
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if FTS_USB_DETECT_EN
 	if (ts_data->charger_notif.notifier_call)
 		power_supply_unreg_notifier(&ts_data->charger_notif);
+#endif
 #endif
 
 #if FTS_POINT_REPORT_CHECK_EN

@@ -191,6 +191,18 @@ static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 	return 0;
 }
 
+#if FTS_USB_DETECT_EN
+static int fts_mmi_charger_mode(struct device *dev, int mode)
+{
+	struct fts_ts_data *ts_data;
+
+	GET_TS_DATA(dev);
+	ts_data->usb_detect_flag = !!mode;
+
+	return 0;
+}
+#endif
+
 static int fts_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
@@ -385,6 +397,9 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.drv_irq = fts_mmi_methods_drv_irq,
 #if FTS_POWER_SOURCE_CUST_EN
 	.power = fts_mmi_methods_power,
+#endif
+#if FTS_USB_DETECT_EN
+	.charger_mode = fts_mmi_charger_mode,
 #endif
 	/* Firmware */
 	.firmware_update = fts_mmi_firmware_update,
