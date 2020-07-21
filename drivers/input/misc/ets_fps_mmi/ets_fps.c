@@ -50,6 +50,8 @@
 #include <linux/pm_wakeup.h>
 #endif
 
+#include <linux/version.h>
+
 #include "ets_fps.h"
 #include "ets_navi_input.h"
 
@@ -65,7 +67,7 @@
 #ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock ets_wake_lock;
 #else
-static struct wakeup_source ets_wake_lock;
+static struct wakeup_source *ets_wake_lock;
 #endif
 /*
  * FPS interrupt table
@@ -258,7 +260,7 @@ static irqreturn_t fp_eint_func(int irq, void *dev_id)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
-	__pm_wakeup_event(&ets_wake_lock, 1500);
+	__pm_wakeup_event(ets_wake_lock, 1500);
 #endif
 #ifdef CONFIG_DISPLAY_SPEED_UP
 	if (is_auth_ready) {
@@ -282,7 +284,7 @@ static irqreturn_t fp_eint_func_ll(int irq, void *dev_id)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&ets_wake_lock, msecs_to_jiffies(1500));
 #else
-	__pm_wakeup_event(&ets_wake_lock, 1500);
+	__pm_wakeup_event(ets_wake_lock, 1500);
 #endif
 	return IRQ_RETVAL(IRQ_HANDLED);
 }
@@ -968,7 +970,7 @@ static int etspi_remove(struct platform_device *pdev)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&ets_wake_lock);
 #else
-	wakeup_source_trash(&ets_wake_lock);
+	wakeup_source_unregister(ets_wake_lock);
 #endif
 	del_timer_sync(&fps_ints.timer);
 	etspi_create_device(etspi, false);
@@ -1050,7 +1052,16 @@ static int etspi_probe(struct platform_device *pdev)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&ets_wake_lock, WAKE_LOCK_SUSPEND, "ets_wake_lock");
 #else
-	wakeup_source_init(&ets_wake_lock, "ets_wake_lock");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+	ets_wake_lock = wakeup_source_register(dev, "ets_wake_lock");
+#else
+	ets_wake_lock = wakeup_source_register("ets_wake_lock");
+#endif
+        if (!ets_wake_lock) {
+		pr_err("%s : failed to allocate wakeup source\n", __func__);
+		status = -ENOMEM;
+		goto etspi_register_wake_lock_failed;
+	}
 #endif
 	DEBUG_PRINT("  add_timer ---- \n");
 	DEBUG_PRINT("%s : initialize success %d\n",
@@ -1076,7 +1087,10 @@ etspi_create_group_failed:
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&ets_wake_lock);
 #else
-	wakeup_source_trash(&ets_wake_lock);
+	wakeup_source_unregister(ets_wake_lock);
+#endif
+#ifndef CONFIG_HAS_WAKELOCK
+etspi_register_wake_lock_failed:
 #endif
 	del_timer_sync(&fps_ints.timer);
 	etspi_create_device(etspi, false);
