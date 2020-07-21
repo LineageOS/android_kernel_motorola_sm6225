@@ -25,6 +25,7 @@
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 #include <linux/power_supply.h>
+#include <linux/version.h>
 
 #if defined(CONFIG_FB)
 #ifdef CONFIG_DRM_MSM
@@ -57,7 +58,7 @@ enum touch_state {
 #ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock gesture_wakelock;
 #else
-static struct wakeup_source gesture_wakelock;
+static struct wakeup_source *gesture_wakelock;
 #endif
 static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 
@@ -1054,7 +1055,7 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
-		__pm_wakeup_event(&gesture_wakelock, 5000);
+		__pm_wakeup_event(gesture_wakelock, 5000);
 #endif
 #else
 		input_report_key(ts->input_dev, keycode, 1);
@@ -2010,7 +2011,15 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
 #else
-		wakeup_source_init(&gesture_wakelock, "dt-wake-lock");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+        	gesture_wakelock = wakeup_source_register(&client->dev, "dt-wake-lock");
+#else
+	        gesture_wakelock = wakeup_source_register("dt-wake-lock");
+#endif
+		if (!gesture_wakelock) {
+			NVT_ERR("failed to allocate wakeup source\n");
+			goto err_wakeup_source_register_failed;
+		}
 #endif
 		if (!nvt_sensor_init(ts))
 			initialized_sensor = true;
@@ -2226,6 +2235,9 @@ err_register_charger_notify_failed:
 err_charger_detection_alloc_failed:
 err_charger_notify_wq_failed:
 	free_irq(client->irq, ts);
+#ifndef CONFIG_HAS_WAKELOCK
+err_wakeup_source_register_failed:
+#endif
 err_int_request_failed:
 	input_unregister_device(ts->input_dev);
 	ts->input_dev = NULL;
