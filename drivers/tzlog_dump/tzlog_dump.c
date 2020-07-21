@@ -31,6 +31,7 @@
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/mmi_boot_info.h>
 #include <linux/mmi_annotate.h>
+#include <linux/version.h>
 
 /* Check memory_dump.h to verify this is not going over the max or
  * conflicting with another entry. Also must match BL
@@ -286,8 +287,12 @@ static int tzlog_dump_probe(struct platform_device *pdev)
 
 	tzlog_dump_table_register(dev, pdata);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	tzdbg_data = ioremap_wc(pdata->mem_address, pdata->mem_size);
+#else
 	tzdbg_data = dma_remap(dev, NULL, pdata->mem_address,
 					pdata->mem_size, 0);
+#endif
 
 	if (!tzdbg_data) {
 		dev_err(dev, "Cannot remap buffer %pa size %zx\n",
