@@ -101,7 +101,7 @@ static struct fts_gesture_st fts_gesture_data;
 #ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock gesture_wakelock;
 #else
-static struct wakeup_source gesture_wakelock;
+static struct wakeup_source *gesture_wakelock;
 #endif
 static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
     .name = "dt-gesture",
@@ -340,7 +340,7 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
-        __pm_wakeup_event(&gesture_wakelock, 5000);
+        __pm_wakeup_event(gesture_wakelock, 5000);
 #endif
         }
 #else
@@ -651,7 +651,15 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
 #else
-        wakeup_source_init(&gesture_wakelock, "ets_wake_lock");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+        gesture_wakelock = wakeup_source_register(ts_data->dev, "poll-wake-lock");
+#else
+        gesture_wakelock = wakeup_source_register("poll-wake-lock");
+#endif
+        if (!gesture_wakelock) {
+            FTS_ERROR("failed to allocate wakeup source\n");
+            return -ENOMEM;
+        }
 #endif
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
         if (!fts_sensor_init(ts_data))
