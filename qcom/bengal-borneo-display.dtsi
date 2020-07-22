@@ -116,7 +116,7 @@
 
 &qupv3_se1_i2c {
     aw99703-bl@36 {
-	aw99703,bl-fscal-led = <0x19>;/*default 25mA*/
+	aw99703,bl-fscal-led = <0x15>;/*default 21mA*/
         aw99703,bl-channel = <3>;
     };
 };
