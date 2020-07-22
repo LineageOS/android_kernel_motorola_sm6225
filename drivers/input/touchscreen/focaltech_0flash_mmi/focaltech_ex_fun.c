@@ -1131,6 +1131,7 @@ static ssize_t doreflash_store(struct device *dev,
 
     memset(fwname, 0, sizeof(fwname));
     scnprintf(fwname, sizeof(fwname), "%s", buf);
+    fwname[count - 1] = '\0';
 
     mutex_lock(&input_dev->mutex);
     fts_fw_update_vendor_name(fwname);
