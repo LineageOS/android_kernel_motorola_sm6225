@@ -1,0 +1,28 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/ili9882_mmi \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/ili9882_mmi/firmware
+
+ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_ILITEK_CHIPSET)),)
+	obj-m += ili9882_mmi.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DILI_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS)),)
+EXTRA_CFLAGS += -DILI_CONFIG_PANEL_NOTIFICATIONS
+endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_RESUME_BY_DDI)),)
+EXTRA_CFLAGS += -DILI_CONFIG_RESUME_BY_DDI
+endif
+
+ili9882_mmi-objs += ili9882.o
+ili9882_mmi-objs += ili9882_spi.o
+ili9882_mmi-objs += ili9882_qcom.o
+ili9882_mmi-objs += ili9882_ic.o
+ili9882_mmi-objs += ili9882_touch.o
+ili9882_mmi-objs += ili9882_mp.o
+ili9882_mmi-objs += ili9882_hostdl.o
+ili9882_mmi-objs += ili9882_node.o
