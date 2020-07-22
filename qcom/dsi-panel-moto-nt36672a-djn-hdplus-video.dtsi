@@ -76,9 +76,9 @@
 				qcom,mdss-dsi-h-back-porch = <80>;
 				qcom,mdss-dsi-h-pulse-width = <12>;
 				qcom,mdss-dsi-h-sync-skew = <0>;
-				qcom,mdss-dsi-v-back-porch = <18>;
+				qcom,mdss-dsi-v-back-porch = <12>;
 				qcom,mdss-dsi-v-front-porch = <20>;
-				qcom,mdss-dsi-v-pulse-width = <2>;
+				qcom,mdss-dsi-v-pulse-width = <8>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command = [
 					29 01 00 00 00 00 02 FF 25
