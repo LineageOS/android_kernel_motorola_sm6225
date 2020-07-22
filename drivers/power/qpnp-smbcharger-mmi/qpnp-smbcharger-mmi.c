@@ -176,6 +176,8 @@ enum {
 
 #define HEARTBEAT_DELAY_MS 5000
 #define HEARTBEAT_DUAL_DELAY_MS 10000
+#define HEARTBEAT_DUAL_DELAY_OCP_MS 750
+#define MAX_ALLOWED_OCP 10
 #define HEARTBEAT_FACTORY_MS 1000
 #define HEARTBEAT_DISCHARGE_MS 60000
 
@@ -2697,6 +2699,8 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	if (chg_stat_main.batt_ma > main_p->target_fcc) {
 		ocp = chg_stat_main.batt_ma - main_p->target_fcc;
+		if (ocp > MAX_ALLOWED_OCP)
+			sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		main_p->ocp[main_p->pres_temp_zone] += ocp;
 		mmi_info(chg, "Main Exceed by %d mA\n",
 			main_p->ocp[main_p->pres_temp_zone]);
@@ -2704,6 +2708,8 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
 		ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
+		if (ocp > MAX_ALLOWED_OCP)
+			sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		flip_p->ocp[flip_p->pres_temp_zone] += ocp;
 		mmi_info(chg, "Flip Exceed by %d mA\n",
 			flip_p->ocp[flip_p->pres_temp_zone]);
