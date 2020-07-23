@@ -27,6 +27,8 @@
 /******************************************************************************
  Revision 1.0.0 2013/Nov/22:
 	first release
+ Revision 2.0. 2020/July/02:
+  update for coefficient read and add the emissivity caculation equation.
 
 ******************************************************************************/
 
@@ -112,7 +114,7 @@
 #define	STX_M1 0x13
 #define	ETX_M1 0x15
 #define	STX_H2 0x28
-#define	ETX_H2 0x2C
+#define	ETX_H2 0x35
 #define	STX_M2 0x36
 #define	ETX_M2 0x38
 #endif
@@ -160,6 +162,7 @@
 //#define	COEFFICIENT_FILE_PATH		"/efs/FactoryApp/coefficient"
 #define	COEFFICIENT_FILE_PATH		"/sdcard/Download/coefficient"
 
+#define VDD_VOLTAGE  1800000
 struct outputdata {
 #ifdef DTS201A_MAVG
 	u32 therm_avg[DTS100A_MOVING_OAVG];
@@ -205,6 +208,7 @@ struct dts201a_data {
 	 * if -1 no gpio if vdd not avl pwr is not controllable
 	*/
 	int i2c_pwren_gpio;
+	int i2c_vdd_voltage;
 	bool vdd_en;
 #if defined(CONFIG_DRM)
     struct notifier_block fb_notif;

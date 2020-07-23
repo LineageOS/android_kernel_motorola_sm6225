@@ -29,7 +29,8 @@
     first release
  Revision 1.0.1 2017/Nov/30:
   update for sysfs raw data and coefficient
-
+ Revision 2.0.0 2020/Jul/03:
+  update for coefficient read and add the emissivity caculation equation
 ******************************************************************************/
 
 #include <linux/err.h>
@@ -38,6 +39,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
+#include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/device.h>
 #include <linux/slab.h>
@@ -72,7 +74,7 @@ static u8 a_avg_cnt = 0;
 static struct dts201a_data *g_dts201a_data  = NULL;
 
 static u8  i2c_mavg = 0;
-static int dts201a_power_onoff(struct dts201a_data *ther, bool on );
+static int dts201a_power_on(struct dts201a_data *ther, bool on );
 static int dts201a_read_coefficient_reg( struct dts201a_data *ther );
 #define	USE_SENSORS_CLASS
 struct sensors_classdev  sensors_thermopile_cdev = {
@@ -249,7 +251,9 @@ static int dts201a_hw_init(struct dts201a_data *ther)
 	if ( err < 0 ) 	goto error_firstread;
 	custom_id[1] = ( ( rbuf[1] << 8 ) | rbuf[2] );
 	dts201a_dbgmsg("status = 0x%02x: custom_id: 0x%04x_%04x\n", rbuf[0], custom_id[0],custom_id[1]);
-	if ( custom_id[1] != DTS201A_ID1 && custom_id[0] != DTS201A_ID0 ) {
+	/* register DTS201A_ID1 will be used for other purpose */
+	if (custom_id[0] != DTS201A_ID0)
+	{
 		err = -ENODEV;
 		goto error_unknown_device;
 	}
@@ -352,6 +356,7 @@ i2c_error :
 int dts201a_enable(struct dts201a_data *ther)
 {
 	int err = 0;
+	dts201a_power_on(ther,true);
 	if (!atomic_cmpxchg(&ther->enabled, 0, 1)) {
 		hrtimer_start(&ther->timer, ther->poll_delay, HRTIMER_MODE_REL);
 	}
@@ -373,6 +378,7 @@ int dts201a_disable(struct dts201a_data *ther)
 #ifdef DTS201A_DEBUG
 	pr_info("%s = %d\n", __func__,  atomic_read(&ther->enabled));
 #endif
+	dts201a_power_on(ther,false);
 	return err;
 }
 
@@ -480,10 +486,15 @@ static ssize_t dts201a_data2read_show( struct device *dev,
 		 struct device_attribute *attr, char *buf )
 {
 	struct dts201a_data *ther = dev_get_drvdata( dev );
-
-	dts201a_get_thermtemp_data ( ther );
-
-	return sprintf( buf, "%d %d\n", ther->out.therm, ther->out.temp );
+	bool current_vdd = ther->vdd_en;
+	if(!current_vdd)
+		dts201a_power_on(ther,true);
+	mutex_lock(&ther->lock);
+	dts201a_get_thermtemp_data(ther);
+	mutex_unlock(&ther->lock);
+	if(!current_vdd)
+		dts201a_power_on(ther,false);
+	return sprintf( buf, "%d %d %d\n", ther->out.therm, ther->out.temp ,ther->out.status );
 }
 
 
@@ -624,10 +635,6 @@ static int dts201a_read_coefficient_reg( struct dts201a_data *ther )
 		}
 		ther->ndata[( i - STX_N1 ) + ( i - STX_N1 )] = rbuf[1];
 		ther->ndata[( ( i - STX_N1 ) + ( i - STX_N1 ) ) + 1] = rbuf[2];
-
-		ther->hdata[( i - STX_N1 ) + ( i - STX_N1 )] = rbuf[1];
-		ther->hdata[( ( i - STX_N1 ) + ( i - STX_N1 ) ) + 1] = rbuf[2];
-
 	}
 	//0x13-0x15
 	for(i=STX_M1; i<=ETX_M1; i++)
@@ -648,7 +655,7 @@ static int dts201a_read_coefficient_reg( struct dts201a_data *ther )
 			return err;
 		}
 		/*modify 11.30*/
-		msleep( 5 ); //msleep(30);
+		msleep( 5 );
 		err = dts201a_i2c_read(ther, rbuf, 3);
 #endif
 		/* add busy bit check */
@@ -658,15 +665,12 @@ static int dts201a_read_coefficient_reg( struct dts201a_data *ther )
 		}
 		ther->ndata[( i - STX_M1 ) + ( i - STX_M1 ) + ( 28 )] = rbuf[1];
 		ther->ndata[( ( i - STX_M1 ) + ( i - STX_M1 ) ) + 1 + ( 28 )] = rbuf[2];
-
-		ther->hdata[( i - STX_M1 ) + ( i - STX_M1 ) + ( 28 )] = rbuf[1];
-		ther->hdata[( ( i - STX_M1 ) + ( i - STX_M1 ) ) + 1 + ( 28 )] = rbuf[2];
 	}
 
 	for(i=0; i<34; i++)
 		dts201a_errmsg("[BODYTEMP] ndata[%d]=0x%02x\n", i,ther->ndata[i]);
-	//0x28-0x2c
-	for(i=STX_H2; i<=ETX_H2; i++) {
+	//0x28-0x38
+	for(i=STX_H2; i<=ETX_M2; i++) {
 #ifdef CAMERA_CCI
 		memset(rbuf,0,sizeof(rbuf));
 		err= dts201a_cci_write(ther, i,rbuf,2,0);
@@ -704,34 +708,6 @@ static int dts201a_read_coefficient_reg( struct dts201a_data *ther )
 		ther->hdata[( ( i - STX_H2 ) + ( i - STX_H2 ) ) + 1] = rbuf[2];
 #endif
 	}
-#ifdef CAMERA_CCI
-	memset(rbuf,0,sizeof(rbuf));
-	err = dts201a_cci_write(ther, STX_M2,rbuf,2,0);
-	if (err < 0) {
-		pr_err("%s: i2c write error\n", __func__);
-		return err;
-	}
-	/*modify 11.30*/
-	msleep( 5 ); //msleep(30);
-	err= dts201a_cci_read(ther, 0,rbuf,3);
-#else
-	err = dts201a_i2c_write(ther, STX_M2, 0x0);
-	if (err < 0) {
-		pr_err("%s: i2c write error\n", __func__);
-		return err;
-	}
-	/*modify 11.30*/
-	msleep( 5 ); //msleep(30);
-	err = dts201a_i2c_read(ther, rbuf, 3);
-#endif
-	/* add busy bit check */
-	if ( (err < 0) || (rbuf[0]&0x20) ) {
-		dts201a_errmsg(" i2c read error=0x%02x, 0x%02x\n",  err, rbuf[0]);
-		return err;
-	}
-
-	ther->hdata[28] = rbuf[1];
-	ther->hdata[29] = rbuf[2];
 	for(i=0; i<34; i++)
 		dts201a_errmsg("[BODYTEMP]  hdata[%d]=0x%02x\n", i,ther->hdata[i]);
 	return 0;
@@ -951,6 +927,7 @@ int dts201a_setup(struct device *dev,struct dts201a_data *data)
 		pr_err( " dts201a_setup failed to allocate memory for module data: %d\n", err);
 		goto err_hw_init_failed;
 	}
+	dts201a_power_on(ther,true);
 	ther->dev = dev;
 	err = dts201a_hw_init(ther);
 	dts201a_errmsg("dts201a_hw_init %d\n",err);
@@ -1073,6 +1050,7 @@ int dts201a_setup(struct device *dev,struct dts201a_data *data)
 	}
 #endif
 	g_dts201a_data  = ther;
+	dts201a_power_on(ther,false);
 	dts201a_info("     done");
 	return 0;
 
@@ -1109,13 +1087,13 @@ err_device_create:
 err_class_create_failed:
 err_hw_init_failed:
 #ifndef CAMERA_CCI
-	dts201a_power_onoff(ther,false);
+	dts201a_power_on(ther,false);
 	if( ther->i2c_power_supply) {
 		regulator_put(ther->i2c_power_supply);
 		ther->i2c_power_supply = NULL;
 	}
 	if (gpio_is_valid(ther->i2c_pwren_gpio )) {
-		gpio_set_value_cansleep(ther->i2c_pwren_gpio, 0);
+		gpio_set_value(ther->i2c_pwren_gpio, 0);
 		devm_gpio_free(ther->dev, ther->i2c_pwren_gpio);
 	}
 #endif
@@ -1172,7 +1150,7 @@ int dts201a_cleanup(struct dts201a_data *ther)
 	kfree(cci_ctrl->io_master_info.cci_client);
 	kfree(cci_ctrl);
 #else
-	dts201a_power_onoff(ther,false);
+	dts201a_power_on(ther,false);
 	if( ther->i2c_power_supply) {
 		regulator_put(ther->i2c_power_supply);
 		ther->i2c_power_supply = NULL;
@@ -1206,24 +1184,24 @@ static int dts201a_of_init(struct i2c_client *client,struct dts201a_data *ther) 
 	//get power supply from dts
 	ther->i2c_pwren_gpio = -1;
 	ther->vdd_en = false;
+	//always on
+	ther->i2c_vdd_voltage = -1;
 	ther->i2c_power_supply = regulator_get(&client->dev, "i2c_vdd");
 	if (IS_ERR(ther->i2c_power_supply)) {
 		ther->i2c_power_supply = NULL;
 		/* try gpio */
-		rc = of_property_read_u32_array(np, "pwren-gpio", &ther->i2c_pwren_gpio, 1);
-		if (rc) {
+		ther->i2c_pwren_gpio = of_get_named_gpio(np, "pwren-gpio",0) ;
+		if (ther->i2c_pwren_gpio < 0) {
 			ther->i2c_pwren_gpio = -1;
 			dts201a_wanrmsg("no regulator, nor power gpio => power ctrl disabled");
 		}
 		dts201a_errmsg("Unable to get i2c power supply");
 	} else {
-		rc = regulator_enable(ther->i2c_power_supply);
+		rc = of_property_read_u32(np, "i2c_vdd-voltage", &ther->i2c_vdd_voltage);
 		if (rc) {
-			//regulator_put(ther->i2c_power_supply);
-			dts201a_errmsg("%s: Error %d enable regulator\n",
-				__func__, rc);
-		} else {
-			ther->vdd_en = true;
+			dts201a_errmsg("not found i2c_vdd-voltage");
+			//always on
+			ther->i2c_vdd_voltage = -1;
 		}
 	}
 
@@ -1232,14 +1210,12 @@ static int dts201a_of_init(struct i2c_client *client,struct dts201a_data *ther) 
 		if (rc) {
 			dts201a_wanrmsg("failed to request pwr gpio, rc = %d\n", rc);
 		}
-		gpio_direction_output(ther->i2c_pwren_gpio, 1);
-		ther->vdd_en = true;
+		//default off
+		gpio_direction_output(ther->i2c_pwren_gpio, 0);
 	}
-	dts201a_errmsg("vdd regulator is %s\n",
-				ther->vdd_en ?	"on" : "off");
 	return 0;
 }
-static int dts201a_power_onoff(struct dts201a_data *ther, bool on ){
+static int dts201a_power_on(struct dts201a_data *ther, bool on ){
 	int rc = 0;
 	if(ther->vdd_en == on) {
 		dts201a_errmsg("vdd regulator is same as current do nothing\n");
@@ -1248,9 +1224,16 @@ static int dts201a_power_onoff(struct dts201a_data *ther, bool on ){
 	if (IS_ERR(ther->i2c_power_supply)) {
 		dts201a_errmsg("vdd regulator is invalid\n");
 		if (gpio_is_valid(ther->i2c_pwren_gpio )) {
-			gpio_set_value_cansleep(ther->i2c_pwren_gpio, on ? 1:0);
+			gpio_set_value(ther->i2c_pwren_gpio, on ? 1:0);
 		}
 	} else {
+		if((ther->i2c_vdd_voltage  > 0) &&
+			(regulator_count_voltages(ther->i2c_power_supply)>0)) {
+			rc = regulator_set_voltage(ther->i2c_power_supply,ther->i2c_vdd_voltage,
+			ther->i2c_vdd_voltage);
+			if (rc)
+				dts201a_info("set  i2c_vdd-voltage to %d failed",ther->i2c_vdd_voltage);
+		}
 		if(on) {
 			rc = regulator_enable(ther->i2c_power_supply);
 		} else {
@@ -1258,6 +1241,7 @@ static int dts201a_power_onoff(struct dts201a_data *ther, bool on ){
 		}
 	}
 	ther->vdd_en = on;
+	mdelay(10);
 	dts201a_errmsg("vdd regulator is %s\n",
 				ther->vdd_en ?	"on" : "off");
 	return 0;
@@ -1292,7 +1276,7 @@ static int dts201a_i2c_probe(struct i2c_client *client,
 		dts201a_errmsg("%d, failed to get dt info rc %d\n", __LINE__, err);
 		goto free_i2c_client;
 	}
-	msleep(10);
+
 	/* setup other stuff */
 	err = dts201a_setup(&client->dev, ther);
 	if (err) {
@@ -1333,8 +1317,8 @@ static int dts201a_i2c_resume(struct device *dev)
 #ifdef DTS201A_DEBUG
 	pr_info("\t[PARTRON] %s = %d\n", __func__, 0);
 #endif
-	dts201a_power_onoff(ther,true);
-	mdelay(10);
+	dts201a_power_on(ther,true);
+
 	if (!atomic_read(&ther->enabled)) {
 		ret = dts201a_enable(ther);
 		if (ret < 0)
@@ -1361,8 +1345,7 @@ static int dts201a_i2c_suspend(struct device *dev)
 		if (ret < 0)
 			pr_err("%s: could not disable\n", __func__);
 	}
-	mdelay(10);
-	dts201a_power_onoff(ther,false);
+	dts201a_power_on(ther,false);
 	return ret;
 }
 #endif  /* CONFIG_PM */
