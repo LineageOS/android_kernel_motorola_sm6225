@@ -185,6 +185,7 @@
 	qcom,ignore-shutdown-soc-secs = <1800>;
 	qcom.hold-soc-while-full;
 	qcom,linearize-soc;
+	qcom,cl-wt-enable;
 };
 
 &pmi632_rgb {
