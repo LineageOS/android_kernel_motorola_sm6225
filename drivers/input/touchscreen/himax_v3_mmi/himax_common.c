@@ -3731,7 +3731,7 @@ FW_force_upgrade:
 	}
 
 	INIT_DELAYED_WORK(&ts->work_att, himax_fb_register);
-	queue_delayed_work(ts->himax_att_wq, &ts->work_att, msecs_to_jiffies(15000));
+	queue_delayed_work(ts->himax_att_wq, &ts->work_att, msecs_to_jiffies(2500));
 #endif
 
 #ifdef HX_SMART_WAKEUP
