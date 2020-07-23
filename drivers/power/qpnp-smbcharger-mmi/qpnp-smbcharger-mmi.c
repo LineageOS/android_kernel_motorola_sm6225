@@ -2718,7 +2718,8 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	target_fcc = main_p->target_fcc + flip_p->target_fcc;
 	target_fcc -= main_p->ocp[main_p->pres_temp_zone];
 	target_fcc -= flip_p->ocp[flip_p->pres_temp_zone];
-	if (target_fcc < main_p->target_fcc) {
+	if ( (target_fcc < main_p->target_fcc) &&
+		(chg_stat_flip.batt_ma < flip_p->target_fcc) ) {
 		mmi_info(chg, "Target FCC adjust too much\n");
 		target_fcc = main_p->target_fcc;
 	}
