@@ -61,13 +61,13 @@ static void dsi_display_early_power_on_work(struct work_struct *work)
 		pr_warning("failed to get mot_ext\n");
 		return;
 	}
-	__pm_wakeup_event(&mot_ext->early_wake_src, 900);
+	__pm_wakeup_event(mot_ext->early_wake_src, 900);
 	display = mot_ext->display;
 	if (!display || !display->panel || !display->is_dsi_mot_primary ||
 	    (display->panel->panel_mode != DSI_OP_VIDEO_MODE) ||
 	    atomic_read(&display->panel->esd_recovery_pending)) {
 		pr_warning("----- Invalid recovery use case, early_power_state: %d\n", mot_ext->early_power_state);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 
@@ -76,7 +76,7 @@ static void dsi_display_early_power_on_work(struct work_struct *work)
 		pr_warning("----- already prepared or set_mode called, early_power_state: %d, is_dsi_display_prepared %d\n",
 			mot_ext->early_power_state, display->is_dsi_display_prepared);
 		mutex_unlock(&display->display_lock);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 	mot_ext->early_power_state = DSI_EARLY_POWER_BEGIN;
@@ -85,7 +85,7 @@ static void dsi_display_early_power_on_work(struct work_struct *work)
 	rc = dsi_display_prepare(display);
 	if (rc) {
 		pr_err("----- DSI display prepare failed, rc=%d. early_power_state %d\n", rc, mot_ext->early_power_state);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 
@@ -94,7 +94,7 @@ static void dsi_display_early_power_on_work(struct work_struct *work)
 		mutex_unlock(&display->display_lock);
 		pr_warning("----- already enabled or set_mode called, early_power_state: %d, panel_initialized %d\n",
 			mot_ext->early_power_state, display->panel->panel_initialized);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 	mot_ext->early_power_state = DSI_EARLY_POWER_PREPARED;
@@ -115,7 +115,7 @@ static void dsi_display_early_power_on_work(struct work_struct *work)
 	mutex_unlock(&display->display_lock);
 
 	//Do not relax wake_lock here to avoid AP enter deep suspend before early_off called, which may cause kernel panic.
-	//__pm_relax(&mot_ext->early_wake_src);
+	//__pm_relax(mot_ext->early_wake_src);
 
 	pr_info("----- early_power_state: %d, g_early_power_count %d\n", mot_ext->early_power_state, g_early_power_count++);
 }
@@ -133,26 +133,26 @@ static void dsi_display_early_power_off_work(struct work_struct *work)
 		pr_warning("failed to get mot_ext\n");
 		return;
 	}
-	__pm_wakeup_event(&mot_ext->early_wake_src, 500);
+	__pm_wakeup_event(mot_ext->early_wake_src, 500);
 	display = mot_ext->display;
 	if (!display || !display->panel ||
 	    (display->panel->panel_mode != DSI_OP_VIDEO_MODE) ||
 	    atomic_read(&display->panel->esd_recovery_pending)) {
 		pr_warning("Invalid recovery use case, early_power_state: %d\n", mot_ext->early_power_state);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 	if (mot_ext->early_power_state != DSI_EARLY_POWER_INITIALIZED) {
 		pr_info("%s ----- no need, return.  early_power_state %d\n", __func__, mot_ext->early_power_state);
 		//mot_ext->early_power_state = DSI_EARLY_POWER_IDLE;
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 
 	rc = dsi_display_disable(display);
 	if (rc) {
 		pr_err("DSI display disable failed, rc=%d. early_power_state %d\n", rc, mot_ext->early_power_state);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 
@@ -161,7 +161,7 @@ static void dsi_display_early_power_off_work(struct work_struct *work)
 		pr_warning("----- set_mode called, early_power_state: %d, is_dsi_display_prepared %d\n",
 			mot_ext->early_power_state, display->is_dsi_display_prepared);
 		mutex_unlock(&display->display_lock);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 	mutex_unlock(&display->display_lock);
@@ -169,7 +169,7 @@ static void dsi_display_early_power_off_work(struct work_struct *work)
 	rc = dsi_display_unprepare(display);
 	if (rc) {
 		pr_err("DSI display unprepare failed, rc=%d. early_power_state %d\n", rc, mot_ext->early_power_state);
-		__pm_relax(&mot_ext->early_wake_src);
+		__pm_relax(mot_ext->early_wake_src);
 		return;
 	}
 
@@ -179,7 +179,7 @@ static void dsi_display_early_power_off_work(struct work_struct *work)
 	}
 	mutex_unlock(&display->display_lock);
 
-	__pm_relax(&mot_ext->early_wake_src);
+	__pm_relax(mot_ext->early_wake_src);
 
 	pr_info("----- early_power_state: %d\n", mot_ext->early_power_state);
 }
@@ -1222,7 +1222,12 @@ int dsi_display_ext_init(struct dsi_display *display)
 		return 0;
 	}
 
-	wakeup_source_init(&g_dsi_mot_ext->early_wake_src, "dsi_early_wakelock");
+	//wakeup_source_init(&g_dsi_mot_ext->early_wake_src, "dsi_early_wakelock");
+	g_dsi_mot_ext->early_wake_src = wakeup_source_register(&display->pdev->dev, "dsi_early_wakelock");
+	if(!g_dsi_mot_ext->early_wake_src){
+		pr_err("failed to create dsi early power workq!\n");
+		return 0;
+	}
 
 	INIT_WORK(&g_dsi_mot_ext->early_on_work,
 				dsi_display_early_power_on_work);
