@@ -2235,8 +2235,10 @@ err_register_charger_notify_failed:
 err_charger_detection_alloc_failed:
 err_charger_notify_wq_failed:
 	free_irq(client->irq, ts);
+#ifdef NVT_SENSOR_EN
 #ifndef CONFIG_HAS_WAKELOCK
 err_wakeup_source_register_failed:
+#endif
 #endif
 err_int_request_failed:
 	input_unregister_device(ts->input_dev);
