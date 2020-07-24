@@ -17,6 +17,11 @@
 		aw99703,bl-channel = <3>;
 		aw99703,bl-fscal-led = <0x19>;/*default 25mA*/
 	};
+
+	ktd3136-bl@36 {
+                ktd,bl-fscal-led = <0xc9>;/*default 25mA*/
+	};
+
 };
 
 &dsi_panel_pwr_supply {
