@@ -14,11 +14,12 @@ else
 # Assign external kernel modules to the DLKM class
 LOCAL_MODULE_CLASS := DLKM
 
-# Set the default install path to vendor/lib/modules
+# Set the default install path to system/lib/modules
 LOCAL_MODULE_PATH := $(strip $(LOCAL_MODULE_PATH))
 ifeq ($(LOCAL_MODULE_PATH),)
-  LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules
+  LOCAL_MODULE_PATH := $(TARGET_OUT)/lib/modules
 endif
+GKI_LOCAL_MODULE := $(LOCAL_MODULE_PATH)/gki/$(LOCAL_MODULE)
 
 # Set the default Kbuild file path to LOCAL_PATH
 KBUILD_FILE := $(strip $(KBUILD_FILE))
@@ -31,6 +32,12 @@ LOCAL_MODULE_KBUILD_NAME := $(strip $(LOCAL_MODULE_KBUILD_NAME))
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
+# Intermediate directory where the kernel modules are created
+# by the kernel build system. Ideally this would be the same
+# directory as LOCAL_BUILT_MODULE, but because we're using
+# relative paths for both O= and M=, we don't have much choice
+KBUILD_OUT_DIR := $(TARGET_OUT_INTERMEDIATES)/$(LOCAL_PATH)
+KBUILD_OUT_DIR_GKI := $(TARGET_OUT_INTERMEDIATES)/$(LOCAL_PATH)/gki
 
 # The kernel build system doesn't support parallel kernel module builds
 # that share the same output directory. Thus, in order to build multiple
@@ -41,47 +48,40 @@ include $(BUILD_SYSTEM)/base_rules.mk
 # Therefore, all kernel modules must depend on the same, unique target
 # that invokes the kernel build system and builds all of the modules
 # for the directory. The $(KBUILD_TARGET) target serves this purpose.
-# To ensure the value of KBUILD_TARGET is unique, it is essentially set
-# to the path of the source directory, i.e. LOCAL_PATH.
-#
-# Since KBUILD_TARGET is used as a target and a variable name, it should
-# not contain characters other than letters, numbers, and underscores.
-KBUILD_TARGET := $(strip            \
-                   $(subst .,_,     \
-                     $(subst -,_,   \
-                       $(subst :,_, \
-                         $(subst /,_,$(LOCAL_PATH))))))
-
-# Intermediate directory where the kernel modules are created
-# by the kernel build system. Ideally this would be the same
-# directory as LOCAL_BUILT_MODULE, but because we're using
-# relative paths for both O= and M=, we don't have much choice
-KBUILD_OUT_DIR := $(TARGET_OUT_INTERMEDIATES)/$(LOCAL_PATH)
+KBUILD_TARGET := $(KBUILD_OUT_DIR)/buildko.timestamp
+KBUILD_TARGET_GKI := $(KBUILD_OUT_DIR_GKI)/buildko.timestamp
 
 # Path to the intermediate location where the kernel build
 # system creates the kernel module.
 KBUILD_MODULE := $(KBUILD_OUT_DIR)/$(LOCAL_MODULE)
+KBUILD_MODULE_GKI := $(KBUILD_OUT_DIR_GKI)/$(LOCAL_MODULE)
+
+# Maintain separate kbuild options for gki compilation.
+# Default back to KBUILD_OPTIONS
+ifeq "$(KBUILD_OPTIONS_GKI)" ""
+KBUILD_OPTIONS_GKI := $(KBUILD_OPTIONS)
+endif
 
 # Since we only invoke the kernel build system once per directory,
 # each kernel module must depend on the same target.
 $(KBUILD_MODULE): kbuild_out := $(KBUILD_OUT_DIR)/$(LOCAL_MODULE_KBUILD_NAME)
 $(KBUILD_MODULE): $(KBUILD_TARGET)
+$(KBUILD_MODULE): $(LOCAL_ADDITIONAL_DEPENDENCIES)
 ifneq "$(LOCAL_MODULE_KBUILD_NAME)" ""
 	mv -f $(kbuild_out) $@
 endif
 
-
 # To ensure KERNEL_OUT and TARGET_PREBUILT_INT_KERNEL are defined,
-# kernel/AndroidKernel.mk (kernel_definitions.mk) must be included. While m and regular
-# make builds will include kernel/AndroidKernel.mk, mm and mmm builds
-# do not. Therefore, we need to explicitly include kernel/AndroidKernel.mk (kernel_definitions.mk).
+# kernel_definitions.mk must be included. While m and regular
+# make builds will include kernel_definitions.mk, mm and mmm builds
+# do not. Therefore, we need to explicitly include kernel_definitions.mk.
 # It is safe to include it more than once because the entire file is
 # guarded by "ifeq ($(TARGET_PREBUILT_KERNEL),) ... endif".
-# If AndroidKernel.mk is not found, fall back to use the kernel_definitions.mk
-ifneq ($(wildcard $(TARGET_KERNEL_SOURCE)/AndroidKernel.mk),)
-TARGET_KERNEL_PATH := $(TARGET_KERNEL_SOURCE)/AndroidKernel.mk
-else
+# If the kernel_definitions.mk is not found, fallback to the AndroidKernel.mk
+ifneq ($(wildcard device/qcom/kernelscripts/kernel_definitions.mk),)
 TARGET_KERNEL_PATH := device/qcom/kernelscripts/kernel_definitions.mk
+else
+TARGET_KERNEL_PATH := $(TARGET_KERNEL_SOURCE)/AndroidKernel.mk
 endif
 include $(TARGET_KERNEL_PATH)
 
@@ -100,33 +100,55 @@ else
   MODPUBKEY := $(KERNEL_OUT)/certs/signing_key.x509
 endif
 
-$(LOCAL_BUILT_MODULE): $(KBUILD_MODULE) | $(ACP)
-ifneq "$(LOCAL_MODULE_DEBUG_ENABLE)" ""
-	mkdir -p $(dir $@)
-	cp $< $<.unstripped
-	$(TARGET_STRIP) --strip-debug $<
-	cp $< $<.stripped
-endif
+# Define a function for signing the module
+define sign_module
+	echo "##########Signing the module:$1 dest:$2 kernel_out:$3 ################"
+	mkdir -p $(dir $2)
+	cp $1 $1.unstripped
+	$(TARGET_STRIP) --strip-debug $1
+	cp $1 $1.stripped
 	@sh -c "\
-	   KMOD_SIG_ALL=`cat $(KERNEL_OUT)/.config | grep CONFIG_MODULE_SIG_ALL | cut -d'=' -f2`; \
-	   KMOD_SIG_HASH=`cat $(KERNEL_OUT)/.config | grep CONFIG_MODULE_SIG_HASH | cut -d'=' -f2 | sed 's/\"//g'`; \
+	   KMOD_SIG_ALL=`cat $3/.config | grep CONFIG_MODULE_SIG_ALL | cut -d'=' -f2`; \
+	   KMOD_SIG_HASH=`cat $3/.config | grep CONFIG_MODULE_SIG_HASH | cut -d'=' -f2 | sed 's/\"//g'`; \
 	   if [ \"\$$KMOD_SIG_ALL\" = \"y\" ] && [ -n \"\$$KMOD_SIG_HASH\" ]; then \
-	      echo \"Signing kernel module: \" `basename $<`; \
-	      cp $< $<.unsigned; \
-	      $(MODULE_SIGN_FILE) \$$KMOD_SIG_HASH $(MODSECKEY) $(MODPUBKEY) $<; \
+	      echo \"Signing kernel module: \" `basename $1`; \
+	      cp $1 $1.unsigned; \
+	      $(MODULE_SIGN_FILE) \$$KMOD_SIG_HASH $(MODSECKEY) $(MODPUBKEY) $1; \
 	   fi; \
 	"
+endef
+
+$(LOCAL_BUILT_MODULE): local_module_gki := $(GKI_LOCAL_MODULE)
+$(LOCAL_BUILT_MODULE): $(KBUILD_MODULE) $(GKI_LOCAL_MODULE) | $(ACP)
+	echo "Local built module copy:$^ to:$@"
+	$(call sign_module, $<, $@, $(KERNEL_OUT))
 	$(transform-prebuilt-to-target)
 
-# This should really be cleared in build/core/clear-vars.mk, but for
-# the time being, we need to clear it ourselves
-LOCAL_MODULE_KBUILD_NAME :=
-LOCAL_MODULE_DEBUG_ENABLE :=
 
 # Ensure the kernel module created by the kernel build system, as
 # well as all the other intermediate files, are removed during a clean.
 $(cleantarget): PRIVATE_CLEAN_FILES := $(PRIVATE_CLEAN_FILES) $(KBUILD_OUT_DIR)
 
+# Add a separate target for gki which can be invoked from
+# kernel_defintions.mk. This target will be invoked to compile gki modules
+# for qgki builds.
+$(GKI_LOCAL_MODULE): kbuild_module_gki := $(KBUILD_MODULE_GKI)
+$(GKI_LOCAL_MODULE): kbuild_out_gki := $(KBUILD_OUT_DIR_GKI)/$(LOCAL_MODULE_KBUILD_NAME)
+$(GKI_LOCAL_MODULE): $(KBUILD_TARGET_GKI)
+ifeq "$(KERNEL_DEFCONFIG)" "vendor/$(TARGET_BOARD_PLATFORM)-qgki_defconfig"
+	echo "GKI Local built module copy and sign:$(kbuild_module_gki) to: $@"
+ifneq "$(LOCAL_MODULE_KBUILD_NAME)" ""
+	echo "KBUILD MODULE GKI called"
+	mv -f $(kbuild_out_gki) $(kbuild_module_gki)
+endif
+	$(call sign_module, $(kbuild_module_gki), $@, $(GKI_KERNEL_OUT))
+	cp -f $(kbuild_module_gki) $@
+endif
+
+# This should really be cleared in build/core/clear-vars.mk, but for
+# the time being, we need to clear it ourselves
+LOCAL_MODULE_KBUILD_NAME :=
+LOCAL_MODULE_DEBUG_ENABLE :=
 
 # Since this file will be included more than once for directories
 # with more than one kernel module, the shared KBUILD_TARGET rule should
@@ -151,20 +173,40 @@ $(KBUILD_TARGET)_RULE := 1
 # NOTE: The following paths are equivalent:
 #         $(KBUILD_OUT_DIR)
 #         $(KERNEL_OUT)/../$(LOCAL_PATH)
-.PHONY: $(KBUILD_TARGET)
+
+
 $(KBUILD_TARGET): local_path     := $(LOCAL_PATH)
-$(KBUILD_TARGET): kbuild_out_dir := $(KBUILD_OUT_DIR)
 $(KBUILD_TARGET): kbuild_options := $(KBUILD_OPTIONS)
-ifneq ($(USE_CLANG_FOR_MODULES),)
-$(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
+$(KBUILD_TARGET): kbuild_out_dir := $(KBUILD_OUT_DIR)
+$(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL) $(GKI_TARGET_PREBUILT_KERNEL) $(LOCAL_ADDITIONAL_DEPENDENCIES) $(KBUILD_TARGET_GKI)
 	@mkdir -p $(kbuild_out_dir)
 	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
-	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options) ANDROID_BUILD_TOP=$$(pwd) TOP=$$(pwd)
-else
-$(KBUILD_TARGET): $(TARGET_PREBUILT_INT_KERNEL)
-	@mkdir -p $(kbuild_out_dir)
+	$(MAKE) -C $(KERNEL_OUT) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options) ANDROID_BUILD_TOP=$$(pwd)
+	touch $@
+
+# Define a target to build buildko.timestamp for gki modules as well.
+# To maintain GKI1.0 compatibility modules are compiled for gki and
+# qgki kernels. This target only runs if qgki kernel is being compiled.
+
+$(KBUILD_TARGET_GKI): local_path     := $(LOCAL_PATH)
+$(KBUILD_TARGET_GKI): local_module     := $(LOCAL_MODULE)
+$(KBUILD_TARGET_GKI): kbuild_out_dir_gki := $(KBUILD_OUT_DIR)/gki
+$(KBUILD_TARGET_GKI): kbuild_options_gki := $(KBUILD_OPTIONS_GKI)
+$(KBUILD_TARGET_GKI): kbuild_out_dir := $(KBUILD_OUT_DIR)
+$(KBUILD_TARGET_GKI): local_depends := $(LOCAL_ADDITIONAL_DEPENDENCIES)
+$(KBUILD_TARGET_GKI): $(TARGET_PREBUILT_INT_KERNEL) $(LOCAL_ADDITIONAL_DEPENDENCIES) $(GKI_TARGET_PREBUILT_KERNEL)
+ifeq "$(KERNEL_DEFCONFIG)" "vendor/$(TARGET_BOARD_PLATFORM)-qgki_defconfig"
+	echo "Current target:$@ and dependency on :$(local_depends)"
+	rm -rf $(kbuild_out_dir)
+	mkdir -p $(kbuild_out_dir)
 	$(hide) cp -f $(local_path)/Kbuild $(kbuild_out_dir)/Kbuild
-	$(MAKE) -C $(TARGET_KERNEL_SOURCE) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) O=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_CFLAGS) modules $(kbuild_options) TOP=$$(pwd)
+	$(MAKE) -C $(GKI_KERNEL_OUT) M=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(local_path) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(real_cc) $(KERNEL_CFLAGS) modules $(kbuild_options_gki) ANDROID_BUILD_TOP=$$(pwd)
+	@mkdir -p $(TARGET_OUT_INTERMEDIATES)/tmp_$(local_module)
+	mv $(kbuild_out_dir)/* $(TARGET_OUT_INTERMEDIATES)/tmp_$(local_module)
+	@mkdir -p $(kbuild_out_dir_gki)
+	mv $(TARGET_OUT_INTERMEDIATES)/tmp_$(local_module)/* $(kbuild_out_dir_gki)
+	rm -rf $(TARGET_OUT_INTERMEDIATES)/tmp_$(local_module)
+	touch $@
 endif
 
 # Once the KBUILD_OPTIONS variable has been used for the target
@@ -173,5 +215,7 @@ endif
 # or the variable would have to be cleared in 'include $(CLEAR_VARS)'
 # which would require a change to build/core.
 KBUILD_OPTIONS :=
+LOCAL_ADDITIONAL_DEPENDENCIES :=
 endif
+KBUILD_OPTIONS_GKI :=
 endif
