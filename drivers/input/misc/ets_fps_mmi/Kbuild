@@ -35,8 +35,8 @@ ifneq ($(filter rav%, $(TARGET_PRODUCT)),)
 EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_POSE=0
 endif
 
-ifneq ($(filter m y, $(CONFIG_DISPLAY_SPEED_UP)),)
-EXTRA_CFLAGS += -DCONFIG_DISPLAY_SPEED_UP
+ifneq ($(filter m y, $(CONFIG_EGIS_DISPLAY_SPEED_UP)),)
+EXTRA_CFLAGS += -DCONFIG_EGIS_DISPLAY_SPEED_UP
 endif
 
 ifneq ($(filter m y, $(CONFIG_NAV_DOUBLE_TAP)),)
