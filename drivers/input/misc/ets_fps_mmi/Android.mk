@@ -17,8 +17,8 @@ ifeq ($(FPS_NAVI_ENABLE),true)
   endif
 endif
 
-ifeq ($(DISPLAY_SPEED_UP), true)
-	KERNEL_CFLAGS += CONFIG_DISPLAY_SPEED_UP=y
+ifeq ($(EGIS_DISPLAY_SPEED_UP), true)
+	KERNEL_CFLAGS += CONFIG_EGIS_DISPLAY_SPEED_UP=y
 endif
 
 ifeq ($(FPS_ENABLE_DOUBLE_TAP), true)
