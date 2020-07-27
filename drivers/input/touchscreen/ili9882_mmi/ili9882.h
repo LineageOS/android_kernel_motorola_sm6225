@@ -154,8 +154,8 @@
 /* Path */
 #define DEBUG_DATA_FILE_SIZE		(10*K)
 #define DEBUG_DATA_FILE_PATH		"/sdcard/ILITEK_log.csv"
-#define CSV_LCM_ON_PATH			"/sdcard/ilitek_mp_lcm_on_log"
-#define CSV_LCM_OFF_PATH		"/sdcard/ilitek_mp_lcm_off_log"
+#define CSV_LCM_ON_PATH			"/sdcard"
+#define CSV_LCM_OFF_PATH		"/sdcard"
 #define POWER_STATUS_PATH		"/sys/class/power_supply/battery/status"
 #define DUMP_FLASH_PATH			"/sdcard/flash_dump"
 #define DUMP_IRAM_PATH			"/sdcard/iram_dump"
