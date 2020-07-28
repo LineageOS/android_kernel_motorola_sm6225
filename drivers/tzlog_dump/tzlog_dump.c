@@ -227,7 +227,14 @@ static void tzlog_dump_table_register(struct device *dev,
 	tz_dump_data->len = pdata->mem_size;
 	dump_entry.id = MSM_DUMP_DATA_TZ_LOG;
 	dump_entry.addr = virt_to_phys(tz_dump_data);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
 	err = msm_dump_data_register(MSM_DUMP_TABLE_APPS, &dump_entry);
+#else
+	//walkaround the compile error in GKI
+#ifdef CONFIG_QGKI
+	err = msm_dump_data_register(MSM_DUMP_TABLE_APPS, &dump_entry);
+#endif
+#endif
 	if (err) {
 		dev_err(dev, "Registering dump data failed.\n");
 		kfree(tz_dump_data);
