@@ -798,6 +798,8 @@ struct sec_ts_plat_data {
 	bool hold_distance_ctrl;
 	bool gs_distance_ctrl;
 	bool hold_grip_ctrl;
+
+	unsigned *clip_area;
 };
 
 typedef struct {

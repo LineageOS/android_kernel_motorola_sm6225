@@ -545,6 +545,11 @@ void sec_ts_reinit(struct sec_ts_data *ts)
 	return;
 }
 
+#define MIN_X 0
+#define MAX_X 1
+#define MIN_Y 2
+#define MAX_Y 3
+
 #define STATUS_ID_HOLD_GRIP 0x69
 #define MAX_EVENT_COUNT 32
 static void sec_ts_read_event(struct sec_ts_data *ts)
@@ -734,6 +739,40 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 				if (ts->coord[t_id].z <= 0)
 					ts->coord[t_id].z = 1;
+
+				if (ts->plat_data->clip_area) {
+					if (unlikely(!((ts->coord[t_id].x >= ts->plat_data->clip_area[MIN_X])
+						&& (ts->coord[t_id].x <= ts->plat_data->clip_area[MAX_X])
+						&& (ts->coord[t_id].y >= ts->plat_data->clip_area[MIN_Y])
+						&& (ts->coord[t_id].y <= ts->plat_data->clip_area[MAX_Y])))) {
+
+						input_dbg(true, &ts->client->dev,
+							"CLIP: tid[%d] type (%02X %02X), action %02X, xy (%02X %02X)\n",
+							t_id, ts->coord[t_id].ttype, pre_ttype,
+							ts->coord[t_id].action, ts->coord[t_id].x, ts->coord[t_id].y);
+
+						if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_MOVE) {
+							/* send release event for the touch entering clip area */
+							input_mt_slot(ts->input_dev, t_id);
+							if (ts->plat_data->support_mt_pressure)
+								input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+							input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+							if (ts->touch_count > 0)
+								ts->touch_count--;
+							if (ts->touch_count == 0) {
+								input_report_key(ts->input_dev, BTN_TOUCH, 0);
+								input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
+								ts->check_multi = 0;
+							}
+						}
+
+						/* cancel further processing */
+						ts->coord[t_id].action = SEC_TS_COORDINATE_ACTION_NONE;
+						ts->coord[t_id].mcount = 0;
+						ts->coord[t_id].palm_count = 0;
+						break;
+					}
+				}
 
 				if ((ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_NORMAL)
 						|| (ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_PALM)
@@ -1214,6 +1253,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	struct device_node *np = dev->of_node;
 	u32 coords[2];
 	u32 finger_size[2];
+	u32 clip_area[4];
 	int ret = 0;
 	int count = 0;
 	u32 ic_match_value;
@@ -1298,6 +1338,15 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	} else {
 		pdata->max_x = coords[0] - 1;
 		pdata->max_y = coords[1] - 1;
+	}
+
+	if (!of_property_read_u32_array(np, "sec,clip-area", clip_area, 4)) {
+		pdata->clip_area = devm_kzalloc(&client->dev, sizeof(clip_area), GFP_KERNEL);
+		if (!pdata->clip_area)
+			return -ENOMEM;
+		memcpy(pdata->clip_area, clip_area, sizeof(clip_area));
+		input_info(true, dev, "%s: clip (%d,%d) (%d,%d)\n", __func__,
+				clip_area[0], clip_area[1], clip_area[2], clip_area[3]);
 	}
 
 	if (of_property_read_u32_array(np, "sec,max_finger_size", finger_size, 2)) {
