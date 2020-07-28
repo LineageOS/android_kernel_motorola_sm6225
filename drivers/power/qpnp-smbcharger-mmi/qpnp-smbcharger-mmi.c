@@ -4199,7 +4199,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
+     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163))
 	chip->smb_mmi_hb_wake_source = wakeup_source_register(chip->dev, "smb_mmi_hb_wake");
 #else
 	chip->smb_mmi_hb_wake_source = wakeup_source_register("smb_mmi_hb_wake");
