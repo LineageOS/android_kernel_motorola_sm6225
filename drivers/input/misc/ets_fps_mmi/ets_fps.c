@@ -1059,7 +1059,8 @@ static int etspi_probe(struct platform_device *pdev)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&ets_wake_lock, WAKE_LOCK_SUSPEND, "ets_wake_lock");
 #else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
+     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163))
 	ets_wake_lock = wakeup_source_register(dev, "ets_wake_lock");
 #else
 	ets_wake_lock = wakeup_source_register("ets_wake_lock");
