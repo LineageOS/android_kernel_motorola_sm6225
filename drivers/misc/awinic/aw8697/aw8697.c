@@ -1480,12 +1480,12 @@ static void aw8697_haptic_upload_lra(struct aw8697 *aw8697, unsigned int flag)
 {
 	switch (flag) {
 	case 1:
-		printk("%s f0_cali_lra=%d\n", __func__, aw8697->f0_calib_data);
+		pr_debug("%s f0_cali_lra=%d\n", __func__, aw8697->f0_calib_data);
 		aw8697_i2c_write(aw8697, AW8697_REG_TRIM_LRA,
 				 (char)aw8697->f0_calib_data);
 		break;
 	case 2:
-		printk("%s rtp_cali_lra=%d\n", __func__, aw8697->lra_calib_data);
+		pr_debug("%s rtp_cali_lra=%d\n", __func__, aw8697->lra_calib_data);
 		aw8697_i2c_write(aw8697, AW8697_REG_TRIM_LRA,
 				 (char)aw8697->lra_calib_data);
 		break;
@@ -2610,7 +2610,8 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 		__pm_relax(aw8697->ws);
 
 	seq = aw8697->seq[0];
-	pr_info("%s: value=%d, seq=%d, index=%x\n", __func__, value, seq, aw8697->index);
+	pr_debug("%s: value=%d, seq=%d, index=%x, duration=%d\n",
+		__func__, value, seq, aw8697->index, aw8697->duration);
 
 	if (value > 0 || seq > 2) {
 		if (seq >= AW8697_SEQ_NO_RTP_BASE) {
@@ -2652,10 +2653,9 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 			aw8697_rtp_play(aw8697, seq - AW8697_SEQ_NO_RTP_BASE);
 				break;
 		case HAPTIC_SHORT:
-			if (seq == 0) {
-				/* seq[0] expected from aw8697_seq_store */
-				/* when implicit seq, use wave form 0x01 */
-				aw8697_haptic_set_wav_seq(aw8697, 0x00, 0x01);
+			if (seq == 0 || aw8697->duration < 0) {
+				/* implicit seq or duration, use weak wave form */
+				aw8697_haptic_set_wav_seq(aw8697, 0x00, 0x05);
 			}
 			aw8697->index = 0x01;
 			aw8697_haptic_set_wav_loop(aw8697, 0x00, 0x00);
@@ -2684,7 +2684,8 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 		/* Restore to default short waveform */
 		if (seq > 2)
 			aw8697->seq[0] = 0;
-	}
+	} else
+		aw8697->duration = -1;
 	mutex_unlock(&aw8697->lock);
 }
 
@@ -3085,7 +3086,7 @@ static ssize_t aw8697_seq_store(struct device *dev,
 	if (rc < 0)
 		return rc;
 
-	pr_debug("%s: value=%d\n", __func__, val);
+	pr_debug("%s: value=%08x\n", __func__, val);
 	for (i = 0; i < AW8697_WAV_SEQ_SIZE; i++) {
 		aw8697->seq[i] = (val >> ((AW8697_WAV_SEQ_SIZE-i-1) * 8)) & 0xFF;
 		data[i] = aw8697->seq[i];
