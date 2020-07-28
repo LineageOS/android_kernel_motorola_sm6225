@@ -651,7 +651,8 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
 #else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
+     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163))
         gesture_wakelock = wakeup_source_register(ts_data->dev, "poll-wake-lock");
 #else
         gesture_wakelock = wakeup_source_register("poll-wake-lock");
