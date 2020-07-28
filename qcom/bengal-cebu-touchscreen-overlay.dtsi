@@ -80,20 +80,18 @@
 &qupv3_se0_spi_pins {
 	qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
 		mux {
-			pins = "gpio0", "gpio1",
-					"gpio2", "gpio3";
+			pins = "gpio0", "gpio1", "gpio2";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio0", "gpio1",
-					"gpio2", "gpio3";
+			pins = "gpio0", "gpio1", "gpio2";
 			drive-strength = <6>;
 			bias-disable;
 		};
 	};
 
-       qupv3_se0_cs_sleep: qupv3_se0_cs_sleep {
+       qupv3_se0_spi_cs_sleep: qupv3_se0_spi_cs_sleep {
                mux {
                        pins = "gpio3";
                        function = "gpio";
@@ -110,7 +108,7 @@
 
 &qupv3_se0_spi {
 	status = "ok";
-	pinctrl-1 = <&qupv3_se0_spi_sleep &qupv3_se0_cs_sleep>;
+	pinctrl-1 = <&qupv3_se0_spi_sleep &qupv3_se0_spi_cs_sleep>;
 	focaltech@0 {
 		compatible = "focaltech,fts";
 		reg = <0>;
