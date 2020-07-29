@@ -2597,6 +2597,10 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	effective_fv = get_effective_result(chg->fv_votable) / 1000;
 	effective_fcc = get_effective_result(chg->fcc_votable);
+	if (effective_fcc >= (main_p->target_fcc + flip_p->target_fcc) *1000 ) {	// Safety check
+		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
+		effective_fcc = effective_fcc *7/10;		// Scale down fcc if too high for init set
+	}
 
 	/* Check for Charge None */
 	if ((main_p->pres_chrg_step == STEP_NONE) ||
@@ -2698,18 +2702,16 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fv = flip_p->target_fv;
 
 	if (chg_stat_main.batt_ma > main_p->target_fcc) {
+		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		ocp = chg_stat_main.batt_ma - main_p->target_fcc;
-		if (ocp > MAX_ALLOWED_OCP)
-			sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		main_p->ocp[main_p->pres_temp_zone] += ocp;
 		mmi_info(chg, "Main Exceed by %d mA\n",
 			main_p->ocp[main_p->pres_temp_zone]);
 	}
 
 	if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
+		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
-		if (ocp > MAX_ALLOWED_OCP)
-			sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		flip_p->ocp[flip_p->pres_temp_zone] += ocp;
 		mmi_info(chg, "Flip Exceed by %d mA\n",
 			flip_p->ocp[flip_p->pres_temp_zone]);
@@ -2721,7 +2723,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	if ( (target_fcc < main_p->target_fcc) &&
 		(chg_stat_flip.batt_ma < flip_p->target_fcc) ) {
 		mmi_info(chg, "Target FCC adjust too much\n");
-		target_fcc = main_p->target_fcc;
+		//target_fcc = main_p->target_fcc;		// temp hack for cold chrg test
 	}
 
 	if (((main_p->pres_chrg_step == STEP_MAX) ||
