@@ -88,3 +88,7 @@
 &usb0 {
         extcon = <&pmi632_charger>, <&eud>;
 };
+
+&bcl_soc {
+       qcom,bcl-not-mitigate-icl = <2500>;
+};
