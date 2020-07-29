@@ -3295,7 +3295,7 @@ static int aw8695_vibrator_init(struct aw8695 *aw8695)
 	INIT_WORK(&aw8695->rtp_work, aw8695_rtp_work_routine);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
-     LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163))
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
 	aw8695->ws = wakeup_source_register(aw8695->dev, "vibrator");
 #else
 	aw8695->ws = wakeup_source_register("vibrator");
