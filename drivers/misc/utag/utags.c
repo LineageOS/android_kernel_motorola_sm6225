@@ -1940,6 +1940,11 @@ static int utags_probe(struct platform_device *pdev)
 	struct ctrl *ctrl;
 	char buf[UTAGS_QNAME_SIZE];
 
+	if (!try_module_get(THIS_MODULE)) {
+		pr_err("Failed to get this utags module\n");
+		return -EIO;
+	}
+
 	ctrl = devm_kzalloc(&pdev->dev, sizeof(struct ctrl), GFP_KERNEL);
 	if (!ctrl)
 		return -ENOMEM;
@@ -1983,6 +1988,12 @@ static int utags_probe(struct platform_device *pdev)
 		pr_err("Failed to create dir entry\n");
 		return -EIO;
 	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	/* force this driver to be unloadable because the proc tree cannot
+	   be removed in GKI 5.4  */
+	module_put(THIS_MODULE);
+#endif
 
 	if (!strncmp(ctrl->dir_name, HW_ROOT, sizeof(HW_ROOT)))
 		ctrl->hwtag = 1;
