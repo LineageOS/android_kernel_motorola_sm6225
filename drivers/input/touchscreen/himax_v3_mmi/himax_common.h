@@ -559,6 +559,7 @@ int himax_chip_common_suspend(struct himax_ts_data *ts);
 int himax_chip_common_resume(struct himax_ts_data *ts);
 
 extern struct filename* (*kp_getname_kernel)(const char *filename);
+extern void (*kp_putname_kernel)(struct filename *name);
 extern struct file * (*kp_file_open_name)(struct filename *name, int flags, umode_t mode);
 
 struct himax_core_fp;

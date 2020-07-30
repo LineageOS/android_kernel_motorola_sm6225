@@ -176,6 +176,7 @@ static void himax_report_all_leave_event(struct himax_ts_data *ts);
 static int		HX_TOUCH_INFO_POINT_CNT;
 
 struct filename* (*kp_getname_kernel)(const char *filename);
+void (*kp_putname_kernel)(struct filename *name);
 struct file* (*kp_file_open_name)(struct filename *name, int flags, umode_t mode);
 
 unsigned long FW_VER_MAJ_FLASH_ADDR;
@@ -3503,6 +3504,11 @@ int himax_chip_common_init(void)
 	if (!kp_getname_kernel) {
 		E("prepare kp_getname_kernel failed!\n");
 		/*goto err_dt_platform_data_fail;*/
+	}
+	kp_putname_kernel = (void *)kallsyms_lookup_name("putname");
+	if (!kp_putname_kernel) {
+		E("prepare kp_putname_kernel failed!\n");
+		/*goto err_xfer_buff_fail;*/
 	}
 	kp_file_open_name = (void *)kallsyms_lookup_name("file_open_name");
 	if (!kp_file_open_name) {
