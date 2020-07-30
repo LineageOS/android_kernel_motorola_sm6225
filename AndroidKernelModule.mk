@@ -1,3 +1,7 @@
+ifneq (,$(findstring gki,$(KERNEL_DEFCONFIG)))
+#GKI product should use Qcom latest dlkm compile file
+include device/qcom/common/dlkm/AndroidKernelModule.mk
+else
 DISABLE_THIS_DLKM := $(strip $(TARGET_KERNEL_DLKM_DISABLE))
 
 ifeq ($(DISABLE_THIS_DLKM),true)
@@ -175,3 +179,4 @@ endif
 KBUILD_OPTIONS :=
 endif
 endif
+endif  #(findstring gki,$(KERNEL_DEFCONFIG))
