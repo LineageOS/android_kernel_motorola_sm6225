@@ -39,7 +39,7 @@
 		config {
 			pins = "gpio21";
 			bias-disable;
-			drive-strength = <2>;
+			drive-strength = <4>;
 		};
 	};
 
@@ -53,7 +53,7 @@
 		config {
 			pins = "gpio21";
 			bias-pull-down;
-			drive-strength = <2>;
+			drive-strength = <4>;
 		};
 	};
 
