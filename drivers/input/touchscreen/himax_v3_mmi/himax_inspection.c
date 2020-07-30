@@ -151,6 +151,10 @@ static int hx_test_data_pop_out(char *rslt_buf, char *filepath)
 		 g_1kind_raw_size * HX_CRITERIA_ITEM * sizeof(char), &pos);
 	if (raw_file != NULL)
 		filp_close(raw_file, NULL);
+	if (!kp_putname_kernel) {
+		E("kp_putname_kernel is NULL, not open file!\n");
+		} else
+		kp_putname_kernel(vts_name);
 
 	set_fs(fs);
 
