@@ -277,6 +277,7 @@
         dpdm-supply = <&qusb_phy0>;
 	qcom,auto-recharge-soc = <99>;
 	qcom,support-2a-dcp;
+	mmi,ext-ovp-greater-12v;
 };
 
 &pmi632_rgb {
