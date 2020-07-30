@@ -59,11 +59,11 @@
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_main_LS30_0615-bq27426G1-2767.gm.fs.h"
+#include "battery_profile/imported/smith_battery_main_LS30_0729-bq27426G1-2767.gm.fs.h"
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-#include "battery_profile/imported/smith_battery_flip_LS40_0629-bq27426G1-2766.gm.fs.h"
+#include "battery_profile/imported/smith_battery_flip_LS40_0726-bq27426G1-2766.gm.fs.h"
 #endif
 
 #undef pr_debug
@@ -203,11 +203,11 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef ATL_LS30_1255MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 3},
+	{.batt_type_str = "LS30_ATL_1255MAH", .bqfs_image = smith_main_bqfs_image, .array_size = ARRAY_SIZE(smith_main_bqfs_image), .chem_id = 0x2767, .dm_ver = 4},
 #endif
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
-	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 3},
+	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 4},
 #endif
 
 };
@@ -1574,7 +1574,7 @@ static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 	}
 
 	if (i == ARRAY_SIZE(batt_chem_id_arr)) {
-		mmi_fg_err(bq, "not supported chem_id %d\n", new_id);
+		mmi_fg_err(bq, "not supported chem_id %x\n", new_id);
 		return -1;
 	}
 
@@ -1622,16 +1622,16 @@ static int fg_check_update_necessary(struct bq_fg_chip *bq)
 		return UPDATE_REASON_FG_RESET;
 
 	ret = fg_read_chem_id(bq, &chem_id);
-	mmi_fg_info(bq, "chem id is  %d\n", chem_id);
+	mmi_fg_info(bq, "chem id is %x\n", chem_id);
 	if (!ret && chem_id != bqfs_image[bq->batt_id].chem_id) {
-		mmi_fg_info(bq, "dm chem id %d, different from bqfs_image chem id %d\n",
+		mmi_fg_info(bq, "dm chem id %x, different from bqfs_image chem id %x\n",
 			chem_id,
 			bqfs_image[bq->batt_id].chem_id);
 		return UPDATE_REASON_NEW_VERSION;
 	}
 
 	ret = fg_read_dm_version(bq, &dm_ver);
-	mmi_fg_info(bq, "dm ver is  %d\n", dm_ver);
+	mmi_fg_info(bq, "dm ver is %d\n", dm_ver);
 	if (!ret && dm_ver < bqfs_image[bq->batt_id].dm_ver) {
 		mmi_fg_info(bq, "dm ver: %d is less than bqfs_image dm ver %d\n",
 			dm_ver,
@@ -1707,7 +1707,7 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 				strlen(bqfs_image[i].batt_type_str)) == 0) {
 			bq->batt_id = i;
 			pr_info("Found the right battery profile: "
-					"chem_id %d, batt_id %d\n",
+					"chem_id %x, batt_id %d\n",
 			bqfs_image[i].chem_id, bq->batt_id);
 			found_profile = true;
 			break;
@@ -1734,7 +1734,7 @@ static void fg_update_bqfs(struct bq_fg_chip *bq)
 	fg_dm_pre_access(bq);
 
 	mmi_fg_err(bq, "Fuel gauge update required, reason:%s, "
-			"chem_id:%d, batt_id=%d Starting...\n",
+			"chem_id:%x, batt_id=%d Starting...\n",
 			update_reason_str[reason - 1],
 			bqfs_image[bq->batt_id].chem_id,
 			bq->batt_id);
@@ -2034,50 +2034,6 @@ static int fg_set_term_voltage(struct bq_fg_chip *bq, int volt)
 }
 EXPORT_SYMBOL_GPL(fg_set_term_voltage);
 
-/* temporary function for hard-coding CC_Gain */
-static int fg_set_cc_gain(struct bq_fg_chip *bq)
-{
-	int ret;
-	u8 rd_buf[64];
-	// using 5mohm sense instead of 10mohm, need to double cc_gain
-	// 0.476 (2 * default gain) in proprietary TI floating point format
-	int cc_gain = 0x7F73B646;
-
-	memset(rd_buf, 0, 64);
-
-	mutex_lock(&bq->update_lock);
-	ret = fg_dm_enter_cfg_mode(bq);
-	if (ret) {
-	        mutex_unlock(&bq->update_lock);
-	        return ret;
-	}
-
-	ret = fg_dm_read_block(bq, 105, 4, rd_buf);
-	if (ret) {
-	        fg_dm_exit_cfg_mode(bq);
-	        mutex_unlock(&bq->update_lock);
-	        return ret;
-	}
-
-	rd_buf[4] = (cc_gain >> 24) & 0xFF;
-	rd_buf[5] = (cc_gain >> 16) & 0xFF;
-	rd_buf[6] = (cc_gain >> 8) & 0xFF;
-	rd_buf[7] = cc_gain & 0xFF;
-
-	ret = fg_dm_write_block(bq, 105, 4, rd_buf);
-	if (ret) {
-	        fg_dm_exit_cfg_mode(bq);
-	        mutex_unlock(&bq->update_lock);
-	        return ret;
-	}
-
-	fg_dm_exit_cfg_mode(bq);
-
-	mutex_unlock(&bq->update_lock);
-
-	return ret;
-}
-
 static int fg_set_term_curr(struct bq_fg_chip *bq, int val)
 {
 	int ret = -1, curr = 0;
@@ -2338,8 +2294,6 @@ static void determine_initial_status(struct bq_fg_chip *bq)
 
 	fg_update_bqfs(bq);
 	fg_select_external_temp(bq);
-	fg_set_cc_gain(bq); // temporary
-	fg_dodateoc_delta_t(bq);
 	fg_irq_thread(bq->client->irq, bq);
 	bq->device_initial = true;
 	mmi_fg_info(bq, "Device initialization successfully completed!\n");
