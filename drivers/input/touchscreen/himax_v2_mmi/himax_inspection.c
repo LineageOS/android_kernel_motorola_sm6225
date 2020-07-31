@@ -1675,7 +1675,7 @@ static int himax_parse_criteria_file(void)
 	if (hx_self_test_file_name == NULL) {
 		E("file name is NULL\n");
 		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
-		if (private_ts->pdata->panel_supplier)
+		if (strlen(private_ts->pdata->panel_supplier))
 			snprintf(hx_self_test_file_name, 60, "%s_hx_criteria.csv", private_ts->pdata->panel_supplier);
 		else
 			snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
@@ -1862,7 +1862,7 @@ static int himax_chip_self_test(void)
 #if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
 	uint8_t normalfw[32] = "Himax_firmware.bin";
 	uint8_t mpapfw[32] = "Himax_mpfw.bin";
-	if (private_ts->pdata->panel_supplier) {
+	if (strlen(private_ts->pdata->panel_supplier)) {
 		snprintf(normalfw, 32, "%s_Himax_firmware.bin", private_ts->pdata->panel_supplier);
 		snprintf(mpapfw, 32, "%s_Himax_mpfw.bin", private_ts->pdata->panel_supplier);
 	}
