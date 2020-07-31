@@ -324,6 +324,7 @@
         qcom,disable-suspend-on-collapse;
         dpdm-supply = <&qusb_phy0>;
 	qcom,auto-recharge-soc = <99>;
+        mmi,ext-ovp-greater-12v;
 };
 
 &pmi632_rgb {
