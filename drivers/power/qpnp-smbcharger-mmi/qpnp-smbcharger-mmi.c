@@ -177,6 +177,7 @@ enum {
 #define HEARTBEAT_DELAY_MS 5000
 #define HEARTBEAT_DUAL_DELAY_MS 10000
 #define HEARTBEAT_DUAL_DELAY_OCP_MS 750
+#define HEARTBEAT_OCP_SETTLE_CNT 10
 #define MAX_ALLOWED_OCP 10
 #define HEARTBEAT_FACTORY_MS 1000
 #define HEARTBEAT_DISCHARGE_MS 60000
@@ -396,6 +397,7 @@ struct smb_mmi_charger {
 
 	int			hvdcp_power_max;
 	int			inc_hvdcp_cnt;
+	int			hb_startup_cnt;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -2510,6 +2512,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	int target_fv;
 	int effective_fv;
 	int effective_fcc;
+	int scaled_fcc;
 	int ocp;
 	int sm_update;
 	bool voltage_full;
@@ -2597,9 +2600,17 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	effective_fv = get_effective_result(chg->fv_votable) / 1000;
 	effective_fcc = get_effective_result(chg->fcc_votable);
-	if (effective_fcc >= (main_p->target_fcc + flip_p->target_fcc) *1000 ) {	// Safety check
+
+	if (chg->hb_startup_cnt) {
+		chg->hb_startup_cnt--;
 		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
-		effective_fcc = effective_fcc *7/10;		// Scale down fcc if too high for init set
+	}
+	else if (effective_fcc >= (main_p->target_fcc + flip_p->target_fcc) *1000 ) {
+		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
+		scaled_fcc = effective_fcc * 40/100;	//scale chrg curr to avoid overshoot
+		effective_fcc -= scaled_fcc;
+		mmi_dbg(chg, "fccScaled: %d, NewFCC: %d\n", scaled_fcc, effective_fcc);
+		chg->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
 	}
 
 	/* Check for Charge None */
@@ -2718,12 +2729,13 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	}
 
 	target_fcc = main_p->target_fcc + flip_p->target_fcc;
+	target_fcc -= scaled_fcc/1000;			// subtract out scaled fcc correction
 	target_fcc -= main_p->ocp[main_p->pres_temp_zone];
 	target_fcc -= flip_p->ocp[flip_p->pres_temp_zone];
 	if ( (target_fcc < main_p->target_fcc) &&
 		(chg_stat_flip.batt_ma < flip_p->target_fcc) ) {
 		mmi_info(chg, "Target FCC adjust too much\n");
-		//target_fcc = main_p->target_fcc;		// temp hack for cold chrg test
+		target_fcc = main_p->target_fcc;
 	}
 
 	if (((main_p->pres_chrg_step == STEP_MAX) ||
@@ -4178,6 +4190,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->awake = false;
 	this_chip = chip;
 	device_init_wakeup(chip->dev, true);
+	chip->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
 
 	smb_mmi_chg_config_init(chip);
 
