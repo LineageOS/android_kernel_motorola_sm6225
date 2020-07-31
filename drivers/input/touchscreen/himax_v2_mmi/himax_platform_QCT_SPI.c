@@ -203,6 +203,7 @@ int himax_parse_dt(struct himax_ts_data *ts,
 
 	himax_vk_parser(dt, pdata);
 
+	memset(pdata->panel_supplier, '\0', 16 * sizeof(char));
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		const char *supplier;
@@ -1068,12 +1069,12 @@ int himax_chip_common_remove(struct spi_device *spi)
 	return 0;
 }
 
-static const struct dev_pm_ops himax_common_pm_ops = {
 #if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
+static const struct dev_pm_ops himax_common_pm_ops = {
 	.suspend = himax_common_suspend,
 	.resume  = himax_common_resume,
-#endif
 };
+#endif
 
 #ifdef CONFIG_OF
 static const struct of_device_id himax_match_table[] = {
