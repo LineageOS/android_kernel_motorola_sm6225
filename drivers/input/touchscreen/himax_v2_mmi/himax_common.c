@@ -3398,7 +3398,7 @@ static int himax_sysfs_touchscreen(
 
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				MKDEV(INPUT_MAJOR, minor),
-				ts, ts->chip_name);
+				ts, "%s", ts->chip_name);
 		if (IS_ERR(ts_class_dev)) {
 			error = PTR_ERR(ts_class_dev);
 			ts_class_dev = NULL;
@@ -3600,7 +3600,7 @@ int himax_chip_common_init(void)
 		E("%s: alloc i_CTPM_firmware_name failed\n", __func__);
 		goto firmware_name_alloc_failed;
 	}
-	if (pdata->panel_supplier)
+	if (strlen(pdata->panel_supplier))
 		snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "%s_Himax_firmware.bin",
 			pdata->panel_supplier);
 	else
