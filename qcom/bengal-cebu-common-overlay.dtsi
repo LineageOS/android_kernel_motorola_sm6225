@@ -315,7 +315,7 @@
                                 <45 0 4000 4000>,
                                 <60 4200 3000 0>;
         qcom,enable-charging-limit;
-        qcom,upper-limit-capacity = <70>;
+        qcom,upper-limit-capacity = <75>;
         qcom,lower-limit-capacity = <60>;
         qcom,otg-cl-ua = <1000000>;
 	qcom,dc-unsupported;
