@@ -26,6 +26,14 @@
  * Borneo HW rev specific changes go here
  */
 
+&qupv3_se0_i2c {
+    abov_sar@20 {
+        ch2_name = "capsense_top";
+        label = "AbovCapSense";
+        cap,channel_number = <0x03>;
+    };
+};
+
 &qupv3_se1_i2c {
     aw99703-bl@36 {
         aw99703,bl-channel = <3>;
