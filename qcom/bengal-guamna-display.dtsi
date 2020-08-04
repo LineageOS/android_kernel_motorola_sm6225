@@ -145,6 +145,21 @@
 			qcom,mdss-dsi-v-pulse-width = <4>;
 			qcom,mdss-dsi-panel-framerate = <60>;
 
+			qcom,mdss-dsi-on-command = [
+                                        39 01 00 00 00 00 03 F0 5A 59
+                                        39 01 00 00 00 00 03 F1 A5 A6
+                                        39 01 00 00 00 00 1B E0 30 29 21 18 11 1F 02 62 DF A0 04 CC 00 FF F6 FF F0 FD FF FD F8 F5 FC FC FD FF
+                                        39 01 00 00 00 00 15 E1 EF FE FE FE FE EE F0 20 33 FF 00 00 6A 90 C0 0D 6A F0 3E FF
+                                        39 01 00 00 00 00 03 F1 5A 59
+                                        39 01 00 00 00 00 03 F0 A5 A6
+                                        15 01 00 00 00 00 02 35 00
+                                        39 01 00 00 00 00 03 51 00 00
+                                        15 01 00 00 00 00 02 53 2C
+                                        15 01 00 00 00 00 02 55 01
+                                        05 01 00 00 78 00 02 11 00
+                                        05 01 00 00 14 00 02 29 00
+                                        15 01 00 00 00 00 02 26 01];
+
 			qcom,mdss-dsi-panel-phy-timings =
 				[1E 1C 04 06 02 02 04 a0
 				1E 1C 04 06 02 02 04 a0
