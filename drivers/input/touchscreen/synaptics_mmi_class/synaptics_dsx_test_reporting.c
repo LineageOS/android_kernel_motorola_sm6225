@@ -5953,6 +5953,10 @@ static void __exit rmi4_f54_module_exit(void)
 
 	while ((next = synaptics_driver_getdata(next)) != NULL) {
 		f54 = (struct synaptics_rmi4_f54_handle *)next->f54_data;
+		/* f54 can be NULL when function */
+		/* has not been inserted yet */
+		if (f54 == NULL)
+			continue;
 		init_completion(&f54->remove_complete);
 		synaptics_rmi4_new_function(next, RMI_F54, false,
 				synaptics_rmi4_f54_init,
