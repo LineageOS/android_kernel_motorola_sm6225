@@ -100,7 +100,7 @@
 		config {
 			pins = "gpio0";
 			drive-strength = <6>;
-			bias-pull-down;
+			bias-pull-up;
 		};
 	};
 
@@ -126,7 +126,7 @@
 		config {
 			pins = "gpio0";
 			drive-strength = <6>;
-			bias-pull-down;
+			bias-pull-up;
 		};
 	};
 
