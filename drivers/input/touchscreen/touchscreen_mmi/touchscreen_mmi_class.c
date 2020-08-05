@@ -562,6 +562,12 @@ int ts_mmi_dev_register(struct device *parent,
 	mutex_init(&touch_cdev->extif_mutex);
 	mutex_init(&touch_cdev->method_mutex);
 
+#ifdef CONFIG_DRM_PANEL
+	ret = ts_mmi_check_drm_panel(DEV_TS->of_node);
+	if (ret < 0)
+		goto PANEL_PARSE_DT_FAILED;
+#endif
+
 	ret = ts_mmi_parse_dt(touch_cdev, DEV_TS->of_node);
 	if (ret < 0) {
 		dev_err(DEV_TS, "%s: init panel failed. %d\n", __func__, ret);

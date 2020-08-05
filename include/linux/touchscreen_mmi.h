@@ -45,7 +45,53 @@
 #define EVENT_DISPLAY_ON \
 	(event == PANEL_EVENT_DISPLAY_ON)
 
-#else /* CONFIG_PANEL_NOTIFICATIONS */
+#else /* CONFIG_DRM_PANEL */
+#if defined(CONFIG_DRM_PANEL)
+
+#include <drm/drm_panel.h>
+extern struct drm_panel *active_panel;
+
+static inline int register_panel_notifier(struct notifier_block *nb)
+{
+	return drm_panel_notifier_register(active_panel, nb);
+}
+
+static inline void unregister_panel_notifier(struct notifier_block *nb)
+{
+	drm_panel_notifier_unregister(active_panel, nb);
+}
+
+#define GET_CONTROL_DSI_INDEX \
+int *blank; \
+struct drm_panel_notifier *evdata = evd; \
+{ \
+	if (!(evdata && evdata->data)) { \
+		dev_dbg(DEV_MMI, "%s: invalid evdata\n", __func__); \
+		return 0; \
+	} \
+	idx = *(int *)evd; \
+	blank = (int *)evdata->data; \
+	dev_dbg(DEV_MMI, "%s: drm notification: event = %lu, blank = %d\n", \
+			__func__, event, *blank); \
+}
+
+#define EVENT_PRE_DISPLAY_OFF \
+	((event == DRM_PANEL_EARLY_EVENT_BLANK) && \
+	 (*blank == DRM_PANEL_BLANK_POWERDOWN))
+
+#define EVENT_DISPLAY_OFF \
+	((event == DRM_PANEL_EVENT_BLANK) && \
+	 (*blank == DRM_PANEL_BLANK_POWERDOWN))
+
+#define EVENT_PRE_DISPLAY_ON \
+	((event == DRM_PANEL_EARLY_EVENT_BLANK) && \
+	 (*blank == DRM_PANEL_BLANK_UNBLANK))
+
+#define EVENT_DISPLAY_ON \
+	((event == DRM_PANEL_EVENT_BLANK) && \
+	 (*blank == DRM_PANEL_BLANK_UNBLANK))
+
+#else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(4,14,0)
 #if defined(CONFIG_DRM_MSM)
 
@@ -101,6 +147,7 @@ struct msm_drm_notifier *evdata = evd; \
 #define unregister_panel_notifier(...)
 
 #endif /* LINUX_VERSION_CODE */
+#endif /* CONFIG_DRM_PANEL */
 #endif /* CONFIG_PANEL_NOTIFICATIONS */
 
 
@@ -417,6 +464,9 @@ extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
+#endif
+#ifdef CONFIG_DRM_PANEL
+int ts_mmi_check_drm_panel(struct device_node *of_node);
 #endif
 
 /*sensor*/
