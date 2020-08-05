@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/touchscreen_mmi.h>
 #include <linux/of.h>
+#include <linux/slab.h>
 
 static ssize_t ts_mmi_panel_supplier_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -223,6 +224,98 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 done:
 	return 0;
 }
+
+#ifdef CONFIG_DRM_PANEL
+struct drm_panel *active_panel;
+
+static int ts_mmi_check_dt(struct device_node *np)
+{
+
+	int i = 0;
+	int count = 0;
+	struct device_node *node = NULL;
+	struct drm_panel *panel = NULL;
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	if (count <= 0) {
+		pr_err("%s: find drm_panel count(%d) fail", __func__, count);
+		return -ENODEV;
+	}
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			pr_info("%s: find drm_panel successfully", __func__);
+			active_panel = panel;
+			return 0;
+		}
+	}
+	pr_err("%s: No find drm_panel", __func__);
+	return -ENODEV;
+}
+
+static int ts_mmi_check_default_tp(struct device_node *dt, const char *prop)
+{
+	const char **active_tp = NULL;
+	int count, tmp, score = 0;
+	const char *active;
+	int ret, i;
+
+	count = of_property_count_strings(dt->parent, prop);
+	if (count <= 0)
+		return -ENODEV;
+
+	active_tp = kcalloc(count, sizeof(char *),  GFP_KERNEL);
+	if (!active_tp) {
+		pr_err("%s: alloc active_tp failed", __func__);
+		return -ENOMEM;
+	}
+
+	ret = of_property_read_string_array(dt->parent, prop,
+			active_tp, count);
+	if (ret < 0) {
+		pr_err("%s: fail to read %s (%d)\n", __func__, prop, ret);
+		ret = -ENODEV;
+		goto out;
+	}
+
+	for (i = 0; i < count; i++) {
+		active = active_tp[i];
+		if (active != NULL) {
+			tmp = of_device_is_compatible(dt, active);
+			if (tmp > 0)
+				score++;
+		}
+	}
+
+	if (score <= 0) {
+		pr_err("%s: Not panel match this driver\n", __func__);
+		ret = -ENODEV;
+		goto out;
+	}
+	ret = 0;
+out:
+	kfree(active_tp);
+	return ret;
+}
+
+int ts_mmi_check_drm_panel(struct device_node *of_node)
+{
+	int ret;
+
+	ret = ts_mmi_check_dt(of_node);
+	if (ret) {
+		pr_err( "%s: parse drm-panel fail\n", __func__);
+		if (!ts_mmi_check_default_tp(of_node, "qcom,mmi-touch-active"))
+			ret = -EPROBE_DEFER;
+		else
+			ret = -ENODEV;
+	}
+	return ret;
+}
+#endif
 
 int ts_mmi_panel_register(struct ts_mmi_dev *touch_cdev) {
 	int ret = 0;
