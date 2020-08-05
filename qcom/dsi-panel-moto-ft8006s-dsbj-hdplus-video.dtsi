@@ -52,8 +52,8 @@
 		qcom,mdss-panel-on-tp-rst-enable;
 		qcom,mdss-panel-on-rst-pull-down;
 		qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
-		qcom,mdss-dsi-tp-rst-post-ms = <5>;
-		qcom,mdss-dsi-reset-sequence = <1 35>, <1 5>;
+		qcom,mdss-dsi-tp-rst-post-ms = <2>;
+		qcom,mdss-dsi-reset-sequence = <1 40>;
 		qcom,mdss-pan-physical-width-dimension = <69>;
 		qcom,mdss-pan-physical-height-dimension = <158>;
 
