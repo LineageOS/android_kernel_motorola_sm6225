@@ -449,6 +449,22 @@ int dsi_panel_reset(struct dsi_panel *panel)
 		}
 	}
 
+	/* set tp rst before lcd rst */
+	if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
+		rc = gpio_request(r_config->tp_rst_gpio, "tp_rst_gpio");
+		if (rc) {
+			DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
+		} else {
+			DSI_INFO("dsp dbg: set tp_rst_gpio to 1 \n");
+			gpio_set_value(r_config->tp_rst_gpio, 1);
+
+			if (r_config->tp_rst_post_sleep && r_config->tp_rst_post_sleep < 200) {
+				usleep_range(r_config->tp_rst_post_sleep*1000, (r_config->tp_rst_post_sleep*1000 + 10));
+			}
+		}
+		gpio_free(r_config->tp_rst_gpio);
+	}
+
 	if (r_config->count) {
 		rc = gpio_direction_output(r_config->reset_gpio,
 			r_config->sequence[0].level);
@@ -458,36 +474,13 @@ int dsi_panel_reset(struct dsi_panel *panel)
 		}
 	}
 
-	if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
-		rc = gpio_request(r_config->tp_rst_gpio, "tp_rst_gpio");
-		if (rc) {
-			DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
-		}
-	}
-
 	for (i = 0; i < r_config->count; i++) {
-		/* set tp rst before lcd rst */
-		if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
-			DSI_INFO("dsp dbg: set tp_rst_gpio to %d\n", r_config->sequence[i].level);
-			gpio_set_value(r_config->tp_rst_gpio, r_config->sequence[i].level);
-
-			if (r_config->tp_rst_post_sleep && r_config->tp_rst_post_sleep < 200) {
-				usleep_range(r_config->tp_rst_post_sleep*1000, (r_config->tp_rst_post_sleep*1000 + 10));
-			}
-		}
-
 		gpio_set_value(r_config->reset_gpio,
 			       r_config->sequence[i].level);
-
 
 		if (r_config->sequence[i].sleep_ms)
 			usleep_range(r_config->sequence[i].sleep_ms * 1000,
 				(r_config->sequence[i].sleep_ms * 1000) + 100);
-	}
-
-	if (gpio_is_valid(r_config->tp_rst_gpio)) {
-		gpio_free(r_config->tp_rst_gpio);
-		DSI_DEBUG("dsp dbg: gpio_free tp_rst_gpio\n");
 	}
 
 	if (gpio_is_valid(panel->bl_config.en_gpio)) {
@@ -601,7 +594,9 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		}
 
 		if (gpio_is_valid(r_config->reset_gpio)) {
+			DSI_INFO("dsp dbg: set lcd reset_gpio to 0\n");
 			gpio_set_value(r_config->reset_gpio, 0);
+			usleep_range(3000, 3000 + 100);
 		}
 	}
 
@@ -3646,7 +3641,6 @@ static bool dsi_panel_parse_esd_status_len(struct dsi_parser_utils *utils,
 	int tmp;
 
 	if (!utils->find_property(utils->data, prop_key, &tmp)) {
-		DSI_ERR("find_property return false!\n");
 		return false;
 	}
 
