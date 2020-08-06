@@ -410,7 +410,7 @@ int setFeatures(u8 feat, u8 *settings, int size)
 {
 	u8 *cmd;
 	int i = 0;
-	int ret;
+	int ret = OK;
 
 	cmd = (u8 *)kzalloc(2 + size, GFP_KERNEL);
 	if (!cmd)
@@ -456,7 +456,7 @@ int setFeatures(u8 feat, u8 *settings, int size)
 int writeSysCmd(u8 sys_cmd, u8 *sett, int size)
 {
 	u8 *cmd;
-	int ret;
+	int ret = OK;
 
 	cmd = (u8 *)kzalloc(2 + size, GFP_KERNEL);
 	if (!cmd)
