@@ -58,13 +58,13 @@
 		qcom,mdss-dsi-bl-max-level = <2047>;
 		qcom,mdss-dsi-bl-default-level = <127>;
 
-		qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 00];
+		qcom,mdss-dsi-cabc-ui-command = [15 01 00 00 00 00 02 55 01];
 		qcom,mdss-dsi-cabc-ui-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 00];
+		qcom,mdss-dsi-cabc-mv-command = [15 01 00 00 00 00 02 55 03];
 		qcom,mdss-dsi-cabc-mv-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
 		qcom,mdss-dsi-cabc-dis-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 07 FF];
+		qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 0F FF];
 		qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 0C CC];
 		qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
@@ -82,15 +82,57 @@
 				qcom,mdss-dsi-v-pulse-width = <2>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command = [
+					15 01 00 00 00 00 02 FF 23
+					15 01 00 00 00 00 02 FB 01
+					15 01 00 00 00 00 02 10 40
+					15 01 00 00 00 00 02 11 00
+					15 01 00 00 00 00 02 12 B8
+					15 01 00 00 00 00 02 15 E3
+					15 01 00 00 00 00 02 16 0B
+					15 01 00 00 00 00 02 29 10
+					15 01 00 00 00 00 02 2A 20
+					15 01 00 00 00 00 02 2B 30
+					15 01 00 00 00 00 02 30 FF
+					15 01 00 00 00 00 02 31 FF
+					15 01 00 00 00 00 02 32 FF
+					15 01 00 00 00 00 02 33 FC
+					15 01 00 00 00 00 02 34 F9
+					15 01 00 00 00 00 02 35 F4
+					15 01 00 00 00 00 02 36 EE
+					15 01 00 00 00 00 02 37 EB
+					15 01 00 00 00 00 02 38 E8
+					15 01 00 00 00 00 02 39 E6
+					15 01 00 00 00 00 02 3A E4
+					15 01 00 00 00 00 02 3B E2
+					15 01 00 00 00 00 02 3D E0
+					15 01 00 00 00 00 02 3F DF
+					15 01 00 00 00 00 02 40 DD
+					15 01 00 00 00 00 02 41 DC
+					15 01 00 00 00 00 02 58 FF
+					15 01 00 00 00 00 02 59 FC
+					15 01 00 00 00 00 02 5A F7
+					15 01 00 00 00 00 02 5B EF
+					15 01 00 00 00 00 02 5C E6
+					15 01 00 00 00 00 02 5D DE
+					15 01 00 00 00 00 02 5E D6
+					15 01 00 00 00 00 02 5F D0
+					15 01 00 00 00 00 02 60 C8
+					15 01 00 00 00 00 02 61 C0
+					15 01 00 00 00 00 02 62 BA
+					15 01 00 00 00 00 02 63 B6
+					15 01 00 00 00 00 02 64 B2
+					15 01 00 00 00 00 02 65 AE
+					15 01 00 00 00 00 02 66 AC
+					15 01 00 00 00 00 02 67 AA
 					15 01 00 00 00 00 02 FF 10
 					15 01 00 00 00 00 02 FB 01
 					15 01 00 00 00 00 02 BA 03
 					15 01 00 00 00 00 02 35 00
 					39 01 00 00 00 00 03 51 0C CC
 					15 01 00 00 00 00 02 53 24
-					15 01 00 00 00 00 02 55 00
-					05 01 00 00 64 00 01 11
-					05 01 00 00 00 00 01 29
+					15 01 00 00 00 00 02 55 01
+					05 01 00 00 78 00 01 11
+					05 01 00 00 14 00 01 29
 					];
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 14 00 01 28
