@@ -75,6 +75,7 @@ struct usbnet_context {
 	u32 subnet_mask;
 	u32 router_ip;
 	u32 iff_flag;
+	struct socket *socket;
 };
 
 
@@ -430,12 +431,13 @@ static void usbnet_if_config(struct work_struct *work)
 	struct sockaddr_in *sin;
 	struct usbnet_context *context = container_of(work,
 				 struct usbnet_context, usbnet_config_wq);
+	struct socket *sock = context->socket;
 
-	/* Dummy sock for ioctl calls */
-	struct socket sock;
-	struct sock sk;
-	sock.sk = &sk;
-	sock_net_set(&sk, dev_net(context->dev));
+	if (!sock) {
+		USBNETDBG(context, "%s: Error, socket is empty\n", __func__);
+		return;
+	}
+	sock_net_set(sock->sk, dev_net(context->dev));
 
 	pr_info("%s : Configuring with config = %d, ip_addr = 0x%08x",
 		__func__, context->config, context->ip_addr);
@@ -450,17 +452,17 @@ static void usbnet_if_config(struct work_struct *work)
 	sin->sin_addr.s_addr = context->ip_addr;
 	saved_fs = get_fs();
 	set_fs(KERNEL_DS);
-	err = inet_ioctl(&sock, SIOCSIFADDR, (unsigned long)&ifr);
+	err = sock->ops->ioctl(sock, SIOCSIFADDR, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFADDR\n", __func__);
 
 	sin->sin_addr.s_addr = context->subnet_mask;
-	err = inet_ioctl(&sock, SIOCSIFNETMASK, (unsigned long)&ifr);
+	err = sock->ops->ioctl(sock, SIOCSIFNETMASK, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFNETMASK\n", __func__);
 
 	sin->sin_addr.s_addr = context->ip_addr | ~(context->subnet_mask);
-	err = inet_ioctl(&sock, SIOCSIFBRDADDR, (unsigned long)&ifr);
+	err = sock->ops->ioctl(sock, SIOCSIFBRDADDR, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFBRDADDR\n", __func__);
 
@@ -469,7 +471,7 @@ static void usbnet_if_config(struct work_struct *work)
 		sizeof(ifr.ifr_ifrn.ifrn_name));
 	ifr.ifr_flags = context->dev->flags & ~IFF_UP;
 	ifr.ifr_flags |= context->iff_flag;
-	err = inet_ioctl(&sock, SIOCSIFFLAGS, (unsigned long)&ifr);
+	err = sock->ops->ioctl(sock, SIOCSIFFLAGS, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFFLAGS\n", __func__);
 	set_fs(saved_fs);
@@ -933,11 +935,24 @@ static void usbnet_free_inst(struct usb_function_instance *f)
 {
 	struct usbnet_opts *opts;
 	struct usbnet_device *dev;
+	struct usbnet_context *context;
+	struct socket *sk;
 
 	opts = container_of(f, struct usbnet_opts, func_inst);
 	dev = opts->dev;
-	if (!IS_ERR(dev))
+	if (!IS_ERR(dev)) {
+		context = (struct usbnet_context *)dev->net_ctxt;
+		if (context) {
+			sk = context->socket;
+			if (sk) {
+				sk->ops->shutdown(sk, SHUT_RDWR);
+				sk->sk->sk_user_data = NULL;
+				sock_release(sk);
+				context->socket = NULL;
+			}
+		}
 		usbnet_cleanup(dev);
+	}
 	kfree(opts->name);
 	kfree(opts);
 }
@@ -995,6 +1010,19 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 	}
 
 	context = netdev_priv(net_dev);
+	ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM,
+					0, &context->socket);
+	if (ret < 0) {
+		pr_err("%s: socket creation error, ret=%d\n", __func__, ret);
+		device_remove_file(&net_dev->dev, &dev_attr_description);
+		unregister_netdev(net_dev);
+		free_netdev(net_dev);
+		kfree(opts);
+		kfree(dev);
+		return ERR_PTR(ret);
+	}
+	context->socket->sk->sk_user_data = context;
+
 	INIT_WORK(&context->usbnet_config_wq, usbnet_if_config);
 	context->config = 0;
 	dev->net_ctxt = context;
