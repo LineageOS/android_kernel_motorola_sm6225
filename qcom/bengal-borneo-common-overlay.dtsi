@@ -260,6 +260,7 @@
                                    <2000>,
                                    <1500>,
                                    <1000>,
+				   <700>,
                                    <500>;
         qcom,battery-data = <&mtp_batterydata>;
 	qcom,mmi-temp-zones = <0 4200 1000 0>,
