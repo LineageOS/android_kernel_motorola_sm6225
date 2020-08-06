@@ -86,6 +86,7 @@
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
 
+	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
