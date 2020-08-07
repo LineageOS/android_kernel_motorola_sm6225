@@ -2004,6 +2004,14 @@ static bool himax_mcu_get_DSRAM_data(uint8_t *info_data, bool DSRAM_Flag)
 		memcpy(info_data, &temp_info_data[4], mutual_data_size * sizeof(uint8_t));
 		/*I("%s checksum PASS\n", __func__);*/
 	}
+
+	/* MPAP debug message ********************************************/
+	for (i = total_size-16; i < total_size-1; i+=2) {
+		check_sum_cal = temp_info_data[i+1]<<8 | temp_info_data[i];
+		I("mpdmsg  %2X\n", check_sum_cal);
+	}
+	/*****************************************************************/
+
 	kfree(temp_info_data);
 	return true;
 FAIL:
