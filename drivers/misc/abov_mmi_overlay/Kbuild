@@ -5,6 +5,10 @@ KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
 
+ifneq (,$(filter borneo%,$(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_CAPSENSE_CONTROL_VDD
+endif
+
 ifneq (,$(KERNEL_DIR_PATH))
         EXTRA_CFLAGS += -I$(TOP)/kernel/$(KERNEL_VERSION_NAME)/drivers/base
 else
