@@ -120,3 +120,12 @@
         aw99703,bl-channel = <3>;
     };
 };
+
+&qupv3_se1_i2c_active {
+	/delete-node/ config;
+	config {
+		pins = "gpio4", "gpio5";
+		drive-strength = <2>;
+		output-high;
+	};
+};
