@@ -1369,6 +1369,13 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_cycle_counts(chip);
 
 	mmi_chrg_rate_check(chip);
+       if (!chip->extrn_fg) {
+		val.intval = chip->charger_rate;
+		ret = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_RATE, &val);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to set charge rate: %d\n", ret);
+       }
 
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
 	if (!chrg_rate_string) {
