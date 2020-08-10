@@ -2579,10 +2579,10 @@ static int dsi_panel_parse_reset_sequence(struct dsi_panel *panel)
 	DSI_DEBUG("[%s] panel_on_tp_rst_enable=%d\n", panel->name,
 						panel->reset_config.panel_on_tp_rst_enable);
 
-	if (panel->reset_config.panel_on_tp_rst_enable) {
-		panel->reset_config.panel_on_rst_pull_down = utils->read_bool(utils->data,
-				"qcom,mdss-panel-on-rst-pull-down");
+	panel->reset_config.panel_on_rst_pull_down = utils->read_bool(utils->data,
+                                "qcom,mdss-panel-on-rst-pull-down");
 
+	if (panel->reset_config.panel_on_tp_rst_enable) {
 		rc = utils->read_u32(utils->data,
 						"qcom,mdss-dsi-tp-rst-post-ms", &panel->reset_config.tp_rst_post_sleep);
 		if (rc) {
