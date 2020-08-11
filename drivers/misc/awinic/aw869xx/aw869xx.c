@@ -34,8 +34,8 @@
 #include <sound/control.h>
 #include <sound/soc.h>
 
-#include <linux/aw869xx_reg.h>
-#include <linux/aw869xx.h>
+#include "aw869xx_reg.h"
+#include "aw869xx.h"
 
 /******************************************************
  *
@@ -74,6 +74,15 @@ static aw_snd_soc_codec_t *aw_get_codec(struct snd_soc_dai *dai)
 #else
 	return dai->codec;
 #endif
+}
+
+static void do_gettimeofday(struct timeval *tv)
+{
+    struct timespec64 now;
+
+    ktime_get_real_ts64(&now);
+    tv->tv_sec = now.tv_sec;
+    tv->tv_usec = now.tv_nsec/1000;
 }
 
 /******************************************************
@@ -4351,7 +4360,7 @@ static int __maybe_unused aw869xx_resume(struct device *dev)
 	return ret;
 }
 
-static SIMPLE_DEV_PM_OPS(aw869xx_pm_ops, aw869xx_suspend, aw869xx_resume);
+// static SIMPLE_DEV_PM_OPS(aw869xx_pm_ops, aw869xx_suspend, aw869xx_resume);
 
 static const struct i2c_device_id aw869xx_i2c_id[] = {
 	{AW869XX_I2C_NAME, 0},
