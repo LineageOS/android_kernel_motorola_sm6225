@@ -1,0 +1,13 @@
+#
+# Mediatek AW869XX Driver
+#
+
+config AW869XX_HAPTIC
+	tristate "Awinic AW869XX haptic driver"
+	depends on I2C
+	help
+	  Say Y here if you have Awinic AW869XX haptic controller
+	  chip in your system.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the
+	  module will be called awinic_haptic.
