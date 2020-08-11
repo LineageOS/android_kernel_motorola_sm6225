@@ -233,7 +233,7 @@
 		cap,channel_number = <0x03>;
 	};
 	partron,dts201a_i2c@3A {
-		status = "okay";
+		status = "/chosen","mmi,fir","true";
 		compatible = "partron,dts201a_i2c";
 		reg = <0x3A>;
 		i2c_vdd-supply = <&L9A>;
