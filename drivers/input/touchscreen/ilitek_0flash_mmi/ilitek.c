@@ -519,6 +519,8 @@ int ili_fw_upgrade_handler(void *data)
 	}
 
 	atomic_set(&ilits->fw_stat, END);
+	if(ilits->charger_detection_enable && ilits->boot && (ilits->charger_notify_wq != NULL))
+		queue_work(ilits->charger_notify_wq, &ilits->charger_notify_work);
 	return ret;
 }
 
@@ -1034,6 +1036,11 @@ void ili_dev_remove(void)
 
 	if (ilits->ws)
 		wakeup_source_unregister(ilits->ws);
+
+	if (ilits->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ilits->charger_notif);
+	if (ilits->charger_notify_wq)
+		destroy_workqueue(ilits->charger_notify_wq);
 
 	kfree(ilits->tr_buf);
 	kfree(ilits->gcoord);

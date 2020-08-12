@@ -807,6 +807,14 @@ static int ilitek_plat_gpio_register(void)
 		ilits->report_gesture_key = 0;
 	}
 #endif
+	ilits->charger_detection_enable = of_property_read_bool(dev_node, "ilitek,usb_charger");
+	if (!ilits->charger_detection_enable) {
+		ILI_ERR("error reading ilitek,usb_charger. ilits->charger_detection_enable = %d\n",
+			ilits->charger_detection_enable);
+	} else {
+		ILI_INFO("ilitek,usb_charger = %d\n", ilits->charger_detection_enable);
+	}
+
 	ilits->tp_int = of_get_named_gpio_flags(dev_node, DTS_INT_GPIO, 0, &flag);
 	ilits->tp_rst = of_get_named_gpio_flags(dev_node, DTS_RESET_GPIO, 0, &flag);
 
@@ -850,6 +858,93 @@ out:
 	return ret;
 }
 
+static int ilitek_charger_notifier_callback(struct notifier_block *nb,
+								unsigned long val, void *v)
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop;
+
+	if(ilits->fw_update_stat != FW_UPDATE_PASS)
+		return 0;
+
+	psy= power_supply_get_by_name("usb");
+	if (!psy) {
+		ILI_ERR("Couldn't get usbpsy\n");
+		return -EINVAL;
+	}
+	if (!strcmp(psy->desc->name, "usb")) {
+		if (psy && val == POWER_SUPPLY_PROP_STATUS) {
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &prop);
+			if (ret < 0) {
+				ILI_ERR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+				return ret;
+			} else {
+				if(prop.intval != ilits->usb_plug_status) {
+					ILI_INFO("usb_plug_status =%d\n", prop.intval);
+					ilits->usb_plug_status = prop.intval;
+					if(ilits->charger_detection_enable && !ilits->tp_suspend &&
+						(ilits->charger_notify_wq != NULL))
+						queue_work(ilits->charger_notify_wq, &ilits->charger_notify_work);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+static void ilitek_charger_notify_work(struct work_struct *work)
+{
+	int ret = 0;
+
+	if (NULL == work) {
+		ILI_ERR("%s:  parameter work are null!\n", __func__);
+		return;
+	}
+	ILI_INFO("enter ilitek_charger_notify_work\n");
+
+	mutex_lock(&ilits->touch_mutex);
+	ret = ili_ic_func_ctrl("plug", !ilits->usb_plug_status);// plug in
+	if(ret<0) {
+		ILI_ERR("Write plug in failed\n");
+	}
+	mutex_unlock(&ilits->touch_mutex);
+}
+
+void ilitek_plat_charger_init(void)
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop;
+
+	ilits->charger_notify_wq = create_singlethread_workqueue("ili_charger_wq");
+	if (!ilits->charger_notify_wq) {
+		ILI_ERR("allocate charger_notify_wq failed\n");
+		return;
+	}
+	INIT_WORK(&ilits->charger_notify_work, ilitek_charger_notify_work);
+	ilits->charger_notif.notifier_call = ilitek_charger_notifier_callback;
+	ret = power_supply_reg_notifier(&ilits->charger_notif);
+	if (ret < 0)
+		ILI_ERR("power_supply_reg_notifier failed\n");
+
+	/* if power supply supplier registered brfore TP
+	* ps_notify_callback will not receive PSY_EVENT_PROP_ADDED
+	* event, and will cause miss to set TP into charger state.
+	* So check PS state in probe.
+	*/
+	psy = power_supply_get_by_name("usb");
+	if (psy) {
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &prop);
+		if (ret < 0) {
+			ILI_ERR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+		} else {
+			ilits->usb_plug_status = prop.intval;
+			ILI_INFO("boot check usb_plug_status = %d\n", prop.intval);
+		}
+	}
+}
+
 static int ilitek_plat_probe(void)
 {
 #ifdef ILI_SENSOR_EN
@@ -864,12 +959,19 @@ static int ilitek_plat_probe(void)
 	if (ilitek_plat_gpio_register() < 0)
 		ILI_ERR("Register gpio failed\n");
 
+	if (ilits->charger_detection_enable)
+		ilitek_plat_charger_init();
+
 	if (ili_tddi_init() < 0) {
 		ILI_ERR("ILITEK Driver probe failed\n");
 		if(gpio_is_valid(ilits->tp_int))
 			gpio_free(ilits->tp_int);
 		if(gpio_is_valid(ilits->tp_rst))
 			gpio_free(ilits->tp_rst);
+		if (ilits->charger_notif.notifier_call)
+			power_supply_unreg_notifier(&ilits->charger_notif);
+		if (ilits->charger_notify_wq)
+			destroy_workqueue(ilits->charger_notify_wq);
 		return -ENODEV;
 	}
 

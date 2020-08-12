@@ -778,6 +778,11 @@ struct ilitek_ts_data {
 	struct regulator *vdd;
 	struct regulator *vcc;
 
+	struct notifier_block charger_notif;
+	struct workqueue_struct *charger_notify_wq;
+	struct work_struct	charger_notify_work;
+	int usb_plug_status;
+
 #ifdef CONFIG_FB
 	struct notifier_block notifier_fb;
 #else
@@ -826,6 +831,7 @@ struct ilitek_ts_data {
 	int irq_num;
 	int irq_gpio;
 	int irq_tirgger_type;
+	bool charger_detection_enable;
 	int tp_rst;
 	int tp_int;
 	int wait_int_timeout;
