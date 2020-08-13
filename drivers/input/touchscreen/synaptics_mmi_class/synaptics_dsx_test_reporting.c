@@ -2386,7 +2386,7 @@ struct synaptics_rmi4_f54_handle {
 	struct synaptics_rmi4_fn55_desc *fn55;
 	struct f55_query_0_2 query_f55_0_2;
 	struct f55_query_3 query_f55_3;
-	struct wakeup_source test_wake_lock;
+	struct wakeup_source *test_wake_lock;
 	struct completion remove_complete;
 	struct f54_kobj_data *f54_kdata;
 };
@@ -3355,7 +3355,7 @@ static void timeout_set_status(struct work_struct *work)
 		f54->report_type = INVALID_REPORT_TYPE;
 		f54->report_size = 0;
 		set_interrupt(f54, false);
-		__pm_relax(&f54->test_wake_lock);
+		PM_RELAX(f54->test_wake_lock);
 	}
 	mutex_unlock(&f54->status_mutex);
 
@@ -3882,7 +3882,7 @@ ssize_t send_get_report_command(struct synaptics_rmi4_f54_handle *f54)
 		return -EBUSY;
 	}
 
-	__pm_stay_awake(&f54->test_wake_lock);
+	PM_STAY_AWAKE(f54->test_wake_lock);
 #if !defined(REPORT_STATUS_POLLING)
 	set_interrupt(f54, true);
 #endif
@@ -3930,7 +3930,7 @@ error_exit:
 #if !defined(REPORT_STATUS_POLLING)
 	set_interrupt(f54, false);
 #endif
-	__pm_relax(&f54->test_wake_lock);
+	PM_RELAX(f54->test_wake_lock);
 	f54->status = retval;
 	mutex_unlock(&f54->status_mutex);
 
@@ -5595,7 +5595,7 @@ error_exit:
 #if !defined(REPORT_STATUS_POLLING)
 	set_interrupt(f54, false);
 #endif
-	__pm_relax(&f54->test_wake_lock);
+	PM_RELAX(f54->test_wake_lock);
 	f54->status = retval;
 	mutex_unlock(&f54->status_mutex);
 	pr_debug("status set to %d\n", f54->status);
@@ -5858,7 +5858,15 @@ found:
 	f54->user_report_type1 = F54_16BIT_IMAGE;
 	f54->user_report_type2 = F54_RAW_16BIT_IMAGE;
 
-	wakeup_source_init(&f54->test_wake_lock, "synaptics_test_report");
+	PM_WAKEUP_REGISTER(&f54->rmi4_data->i2c_client->dev,
+			f54->test_wake_lock, "synaptics_test_report");
+	if(!f54->test_wake_lock) {
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: Allocating synaptics_test_report err\n",
+			__func__);
+		retval = -ENOMEM;
+		goto exit_sysfs;
+	}
 
 #ifdef WATCHDOG_HRTIMER
 	/* Watchdog timer to catch unanswered get report commands */
@@ -5915,7 +5923,7 @@ static void synaptics_rmi4_f54_remove(struct synaptics_rmi4_data *rmi4_data)
 	cancel_delayed_work_sync(&f54->status_work);
 	kfree(f54->fn_ptr);
 
-	wakeup_source_trash(&f54->test_wake_lock);
+	PM_WAKEUP_UNREGISTER(f54->test_wake_lock);
 exit_and_complete:
 	complete(&f54->remove_complete);
 

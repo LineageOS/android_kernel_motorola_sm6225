@@ -3237,7 +3237,7 @@ static int fwu_start_reflash(struct synaptics_rmi4_fwu_handle *fwu)
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(fwu->dev);
 
-	__pm_stay_awake(&fwu->flash_wake_src);
+	PM_STAY_AWAKE(fwu->flash_wake_src);
 	mutex_lock(&rmi4_data->rmi4_exp_init_mutex);
 	pr_notice("%s: Start of reflash process\n", __func__);
 
@@ -3393,7 +3393,7 @@ exit:
 
 	rmi4_data->ready_state(rmi4_data, false);
 	mutex_unlock(&rmi4_data->rmi4_exp_init_mutex);
-	__pm_relax(&fwu->flash_wake_src);
+	PM_RELAX(fwu->flash_wake_src);
 
 	return retval;
 }
@@ -3568,7 +3568,7 @@ static int fwu_start_recovery(
 
 	pr_notice("%s: Start of recovery process\n", __func__);
 
-	__pm_stay_awake(&fwu->flash_wake_src);
+	PM_STAY_AWAKE(fwu->flash_wake_src);
 
 	retval = rmi4_data->irq_enable(rmi4_data, false);
 	if (retval < 0) {
@@ -3619,7 +3619,7 @@ exit:
 	rmi4_data->set_state(rmi4_data, STATE_UNKNOWN);
 	fwu_reset_device(fwu);
 	fwu_irq_enable(fwu, false);
-	__pm_relax(&fwu->flash_wake_src);
+	PM_RELAX(fwu->flash_wake_src);
 
 	pr_notice("%s: End of recovery process\n", __func__);
 
@@ -4098,7 +4098,7 @@ static int synaptics_dsx_firmware_erase(struct device *dev)
 				(struct synaptics_rmi4_fwu_handle *)rmi4_data->fwu_data;
 	int retval;
 
-	__pm_stay_awake(&fwu->flash_wake_src);
+	PM_STAY_AWAKE(fwu->flash_wake_src);
 	mutex_lock(&rmi4_data->rmi4_exp_init_mutex);
 
 	if (!fwu->in_bl_mode) {
@@ -4141,7 +4141,7 @@ reset_and_exit:
 
 	rmi4_data->ready_state(rmi4_data, false);
 	mutex_unlock(&rmi4_data->rmi4_exp_init_mutex);
-	__pm_relax(&fwu->flash_wake_src);
+	PM_RELAX(fwu->flash_wake_src);
 
 	return 0;
 }
@@ -4236,7 +4236,13 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->force_update = FORCE_UPDATE;
 	fwu->do_lockdown = DO_LOCKDOWN;
 
-	wakeup_source_init(&fwu->flash_wake_src, "synaptics_fw_flash");
+	PM_WAKEUP_REGISTER(fwu->dev, fwu->flash_wake_src, "synaptics_fw_flash");
+	if (!fwu->flash_wake_src) {
+		dev_err(LOGDEV,
+			"Failed to allocate wakeup source\n");
+		retval = -ENOMEM;
+		goto exit_free_mem;
+	}
 
 	fwu->initialized = true;
 
@@ -4299,7 +4305,7 @@ static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 	if (!fwu)
 		goto exit;
 
-	wakeup_source_trash(&fwu->flash_wake_src);
+	PM_WAKEUP_UNREGISTER(fwu->flash_wake_src);
 
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		sysfs_remove_file(SYSFS_KOBJ, &attrs[attr_count].attr);
