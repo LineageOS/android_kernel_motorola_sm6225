@@ -189,6 +189,7 @@
 		novatek,reset-gpio = <&tlmm 66 0x00>;
 		report_type = <1>;
 		novatek,def-max-resolution = <720 1640>;
+                novatek,usb_charger;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
