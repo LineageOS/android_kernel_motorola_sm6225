@@ -821,35 +821,6 @@ static ssize_t enable_show(struct class *class,
 	return snprintf(buf, 8, "%d\n", mEnabled);
 }
 
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-static void abov_power(bool on)
-{
-	pabovXX_t this = abov_sar_ptr;
-	int ret;
-
-	if (on) {
-		 ret = regulator_enable(this->board->cap_vdd);
-		 if (ret) {
-			regulator_put(this->board->cap_vdd);
-			LOG_ERR("%s: Error %d enable regulator\n",
-				__func__, ret);
-		}
-		this->board->cap_vdd_en = true;
-		LOG_INFO("cap_vdd regulator is %s\n",
-			regulator_is_enabled(this->board->cap_vdd) ?
-			"on" : "off");
-		SLEEP(100);
-	} else  {
-		regulator_disable(this->board->cap_vdd);
-		//regulator_put(this->board->cap_vdd);
-		this->board->cap_vdd_en = false;
-		LOG_INFO("cap_vdd regulator is %s\n",
-			regulator_is_enabled(this->board->cap_vdd) ?
-			"on" : "off");
-	}
-}
-#endif
-
 static ssize_t enable_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t count)
@@ -876,10 +847,6 @@ static ssize_t enable_store(struct class *class,
 
 	if (!strncmp(buf, "1", 1)) {
 		LOG_INFO("enable cap sensor\n");
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-		if (!this->board->cap_vdd_en)
-			abov_power(true);
-#endif
 		initialize(this);
 
 		input_report_abs(input_ch0, ABS_DISTANCE, 0);
@@ -914,10 +881,6 @@ static ssize_t enable_store(struct class *class,
 			input_report_abs(input_ch3, ABS_DISTANCE, -1);
 			input_sync(input_ch3);
 		}
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-		if (this->board->cap_vdd_en)
-			abov_power(false);
-#endif
 		mEnabled = 0;
 	} else {
 		LOG_ERR("unknown enable symbol\n");
@@ -949,10 +912,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	if (enable == 1) {
 		LOG_INFO("enable cap sensor: %s\n",sensors_cdev->name);
 		if(mEnabled == 0){
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-			if (!this->board->cap_vdd_en)
-				abov_power(true);
-#endif
 			initialize(this);
 			mEnabled = 1;
 		}
@@ -1048,10 +1007,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 			mEnabled = 0;
 			write_register(this, ABOV_CTRL_MODE_REG, 0x02);
 			LOG_INFO("all cap sensor disable,change to STOP mode.\n");
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-			if(this->board->cap_vdd_en)
-				abov_power(false);
-#endif
 		}
 	} else {
 		LOG_ERR("unknown enable symbol\n");
@@ -1701,10 +1656,6 @@ static void capsense_update_work(struct work_struct *work)
 
 	if(mEnabled){
 		initialize(this);
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-	} else if (this->board->cap_vdd_en) {
-		abov_power(false);
-#endif
 	}
 	LOG_INFO("%s: update firmware end\n", __func__);
 }
@@ -1730,10 +1681,6 @@ static void capsense_fore_update_work(struct work_struct *work)
 
 	if(mEnabled){
 		initialize(this);
-#ifdef CONFIG_CAPSENSE_CONTROL_VDD
-	} else if (this->board->cap_vdd_en) {
-		abov_power(false);
-#endif
 	}
 	LOG_INFO("%s: force update firmware end\n", __func__);
 }
