@@ -2488,8 +2488,9 @@ void synaptics_dsx_sensor_state(struct synaptics_rmi4_data *rmi4_data,
 		if (!rmi4_data->in_bootloader)
 			synaptics_dsx_apply_modifiers(rmi4_data, STATE_SUSPEND);
 
-		if (!rmi4_data->suspend_is_wakeable)
+		if (!rmi4_data->suspend_is_wakeable) {
 			synaptics_rmi4_irq_enable(rmi4_data, false);
+		}
 			break;
 
 	case STATE_ACTIVE:

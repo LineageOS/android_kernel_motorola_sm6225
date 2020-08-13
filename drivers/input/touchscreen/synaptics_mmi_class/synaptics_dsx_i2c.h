@@ -43,6 +43,7 @@
 #endif
 
 #include <linux/input/synaptics_dsx_mmi.h>
+#include <linux/mmi_wake_lock.h>
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38))
 #define KERNEL_ABOVE_2_6_38
@@ -972,7 +973,7 @@ struct synaptics_rmi4_fwu_handle {
 	struct work_struct fwu_work;
 	bool irq_enabled;
 	struct semaphore irq_sema;
-	struct wakeup_source flash_wake_src;
+	struct wakeup_source *flash_wake_src;
 	struct completion remove_complete;
 
 	int (*firmware_update)(struct device *dev, const char *fwname);
