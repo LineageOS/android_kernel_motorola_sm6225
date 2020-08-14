@@ -2873,7 +2873,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 	int part_num = fw_entry->data[HX64K + 12];
 	int ret = 0;
 	uint8_t buf[16];
-	struct zf_info zf_info_arr[part_num];
+	struct zf_info *zf_info_arr;
 	uint8_t *FW_buf;
 	uint8_t sram_min[4];
 	int cfg_crc_sw = 0;
@@ -2906,13 +2906,12 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 		part_num = 1;
 
 	/*2. initial struct of array*/
-	/*zf_info_arr = kcalloc(part_num, sizeof(struct zf_info), GFP_KERNEL);*/
+	zf_info_arr = kcalloc(part_num, sizeof(struct zf_info), GFP_KERNEL);
 	if (zf_info_arr == NULL) {
 		E("%s, Allocate ZF info array failed!\n", __func__);
 		ret =  MEM_ALLOC_FAIL;
 		goto ALOC_ZF_INFO_ARR_FAIL;
 	}
-	memset(zf_info_arr, 0x0, part_num * sizeof(struct zf_info));
 	FW_buf = kcalloc(FW_BIN_16K_SZ, sizeof(uint8_t), GFP_KERNEL);
 	if (FW_buf == NULL) {
 		E("%s, Allocate FW_buf array failed!\n", __func__);
@@ -3064,7 +3063,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 END_FUNC:
 	kfree(FW_buf);
 ALOC_FW_BUF_FAIL:
-	/*kfree(zf_info_arr);*/
+	kfree(zf_info_arr);
 ALOC_ZF_INFO_ARR_FAIL:
 	return ret;
 }
