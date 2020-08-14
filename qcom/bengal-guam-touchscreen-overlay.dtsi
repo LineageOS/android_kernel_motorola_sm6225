@@ -149,6 +149,7 @@
 		touch,reset-gpio = <&tlmm 66 0x00>;
 		touch,irq-gpio = <&tlmm 67 0x2008>;
 		panel = <&dsi_hlt_ili9882h_video>;
+		panel2 = <&dsi_tm_ili9882n_video>;
 	};
 	chipone_tddi@2 {
 		compatible = "chipone-tddi";
