@@ -429,7 +429,7 @@ struct report_info_block {
 #define TOUCH_SCREEN_Y_MIN			0
 #define TOUCH_SCREEN_X_MAX			720
 #define TOUCH_SCREEN_Y_MAX			1600
-#define MAX_TOUCH_NUM				5
+#define MAX_TOUCH_NUM				10
 
 /* define the range on panel */
 #define TPD_HEIGHT				2048
