@@ -299,6 +299,3 @@
 	qcom,tune2-efuse-correction = <(-5)>;
 
 };
-&usb0 {
-	qcom,iommu-dma = "fastmap";
-};
