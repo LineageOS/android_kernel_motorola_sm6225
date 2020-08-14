@@ -456,7 +456,17 @@ static int check_dt(struct device_node *np)
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			ili_active_panel = panel;
-			return 0;
+			pr_err("%s: ili9882h HLT actived\n", __func__);
+			return MODEL_HLT;
+		} else {
+			node = of_parse_phandle(np, "panel2", i);
+			panel = of_drm_find_panel(node);
+			of_node_put(node);
+			if (!IS_ERR(panel)) {
+				ili_active_panel = panel;
+				pr_err("%s: ili9882n TM actived\n", __func__);
+				return MODEL_TM;
+			}
 		}
 	}
 	if (node)
@@ -470,6 +480,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	struct touch_bus_info *info =
 	container_of(to_spi_driver(spi->dev.driver),
 		struct touch_bus_info, bus_driver);
+	int tp_module = 0;
 
 	ILI_INFO("ilitek spi probe\n");
 
@@ -481,7 +492,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 #ifdef CONFIG_DRM
 {
 	struct device_node *dp = spi->dev.of_node;
-	if (check_dt(dp)) {
+	if ((tp_module = check_dt(dp)) < 0) {
 		ILI_ERR("%s: %s not actived\n", __func__, dp->name);
 		return -ENODEV;
 	}
@@ -538,6 +549,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->detect_int_stat = ili_ic_check_int_pulse;
 	ilits->int_pulse = true;
 	ilits->mp_retry = false;
+	ilits->tp_module = tp_module;
 
 #if SPI_DMA_TRANSFER_SPLIT
 	ilits->spi_write_then_read = ili_spi_write_then_read_split;
