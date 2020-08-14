@@ -602,58 +602,58 @@ static void irq_work_routine(struct work_struct *work)
  */
 
 		if ((nDevInt1Status &
-	    TAS2562_LATCHEDINTERRUPTREG0_TDMCLOCKERRORSTICKY_INTERRUPT) ||
-		(nDevInt3Status &
-	    TAS2562_LATCHEDINTERRUPTREG0_TDMCLOCKERRORSTICKY_INTERRUPT)) {
+		    TAS2562_LATCHEDINTERRUPTREG0_TDMCLOCKERRORSTICKY_INTERRUPT) ||
+			(nDevInt3Status &
+		    TAS2562_LATCHEDINTERRUPTREG0_TDMCLOCKERRORSTICKY_INTERRUPT)) {
 			p_tas2562->mn_err_code |= ERROR_CLOCK;
 			dev_err(p_tas2562->dev, "TDM clock error!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_OVER_CURRENT;
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_OVER_CURRENT;
 
-	if ((nDevInt1Status &
-		TAS2562_LATCHEDINTERRUPTREG0_OCEFLAGSTICKY_INTERRUPT) ||
-		(nDevInt3Status &
-		TAS2562_LATCHEDINTERRUPTREG0_OCEFLAGSTICKY_INTERRUPT)) {
-		p_tas2562->mn_err_code |= ERROR_OVER_CURRENT;
-		dev_err(p_tas2562->dev, "SPK over current!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_OVER_CURRENT;
+		if ((nDevInt1Status &
+			TAS2562_LATCHEDINTERRUPTREG0_OCEFLAGSTICKY_INTERRUPT) ||
+			(nDevInt3Status &
+			TAS2562_LATCHEDINTERRUPTREG0_OCEFLAGSTICKY_INTERRUPT)) {
+			p_tas2562->mn_err_code |= ERROR_OVER_CURRENT;
+			dev_err(p_tas2562->dev, "SPK over current!\n");
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_OVER_CURRENT;
 
-	if ((nDevInt1Status &
-		TAS2562_LATCHEDINTERRUPTREG0_OTEFLAGSTICKY_INTERRUPT) ||
-		(nDevInt3Status &
-		TAS2562_LATCHEDINTERRUPTREG0_OTEFLAGSTICKY_INTERRUPT)) {
-		p_tas2562->mn_err_code |= ERROR_DIE_OVERTEMP;
-		dev_err(p_tas2562->dev, "die over temperature!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_DIE_OVERTEMP;
+		if ((nDevInt1Status &
+			TAS2562_LATCHEDINTERRUPTREG0_OTEFLAGSTICKY_INTERRUPT) ||
+			(nDevInt3Status &
+			TAS2562_LATCHEDINTERRUPTREG0_OTEFLAGSTICKY_INTERRUPT)) {
+			p_tas2562->mn_err_code |= ERROR_DIE_OVERTEMP;
+			dev_err(p_tas2562->dev, "die over temperature!\n");
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_DIE_OVERTEMP;
 
-	if ((nDevInt2Status &
-	TAS2562_LATCHEDINTERRUPTREG1_VBATOVLOSTICKY_INTERRUPT) ||
-		(nDevInt4Status &
-	TAS2562_LATCHEDINTERRUPTREG1_VBATOVLOSTICKY_INTERRUPT)) {
-		p_tas2562->mn_err_code |= ERROR_OVER_VOLTAGE;
-		dev_err(p_tas2562->dev, "SPK over voltage!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_UNDER_VOLTAGE;
+		if ((nDevInt2Status &
+			TAS2562_LATCHEDINTERRUPTREG1_VBATOVLOSTICKY_INTERRUPT) ||
+			(nDevInt4Status &
+			TAS2562_LATCHEDINTERRUPTREG1_VBATOVLOSTICKY_INTERRUPT)) {
+			p_tas2562->mn_err_code |= ERROR_OVER_VOLTAGE;
+			dev_err(p_tas2562->dev, "SPK over voltage!\n");
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_UNDER_VOLTAGE;
 
-	if ((nDevInt2Status &
-	TAS2562_LATCHEDINTERRUPTREG1_VBATUVLOSTICKY_INTERRUPT) ||
-		(nDevInt4Status &
-	TAS2562_LATCHEDINTERRUPTREG1_VBATUVLOSTICKY_INTERRUPT)) {
-		p_tas2562->mn_err_code |= ERROR_UNDER_VOLTAGE;
-		dev_err(p_tas2562->dev, "SPK under voltage!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_UNDER_VOLTAGE;
+		if ((nDevInt2Status &
+			TAS2562_LATCHEDINTERRUPTREG1_VBATUVLOSTICKY_INTERRUPT) ||
+			(nDevInt4Status &
+			TAS2562_LATCHEDINTERRUPTREG1_VBATUVLOSTICKY_INTERRUPT)) {
+			p_tas2562->mn_err_code |= ERROR_UNDER_VOLTAGE;
+			dev_err(p_tas2562->dev, "SPK under voltage!\n");
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_UNDER_VOLTAGE;
 
-	if ((nDevInt2Status &
-	TAS2562_LATCHEDINTERRUPTREG1_BROWNOUTFLAGSTICKY_INTERRUPT) ||
-		(nDevInt4Status &
-	TAS2562_LATCHEDINTERRUPTREG1_BROWNOUTFLAGSTICKY_INTERRUPT)) {
-		p_tas2562->mn_err_code |= ERROR_BROWNOUT;
-		dev_err(p_tas2562->dev, "brownout!\n");
-	} else
-		p_tas2562->mn_err_code &= ~ERROR_BROWNOUT;
+		if ((nDevInt2Status &
+			TAS2562_LATCHEDINTERRUPTREG1_BROWNOUTFLAGSTICKY_INTERRUPT) ||
+			(nDevInt4Status &
+			TAS2562_LATCHEDINTERRUPTREG1_BROWNOUTFLAGSTICKY_INTERRUPT)) {
+			p_tas2562->mn_err_code |= ERROR_BROWNOUT;
+			dev_err(p_tas2562->dev, "brownout!\n");
+		} else
+			p_tas2562->mn_err_code &= ~ERROR_BROWNOUT;
 
 		goto reload;
 	} else {
