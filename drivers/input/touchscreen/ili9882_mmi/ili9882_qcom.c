@@ -50,7 +50,7 @@ void ili_input_register(void)
 		return;
 	}
 
-	ilits->input->name = ilits->hwif->name;
+	ilits->input->name = ilits->md_name;
 	ilits->input->phys = ilits->phys;
 	ilits->input->dev.parent = ilits->dev;
 	ilits->input->id.bustype = ilits->hwif->bus_type;

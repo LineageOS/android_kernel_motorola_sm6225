@@ -814,8 +814,7 @@ static int ilitek_get_tp_module(void)
 	 * if there are various tp modules been used in projects.
 	 */
 
-	return 0;
-	//return MODEL_HLT;
+	return ilits->tp_module;
 }
 
 static void ili_update_tp_module_info(void)
@@ -880,7 +879,7 @@ static void ili_update_tp_module_info(void)
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD);
 		break;
 	case MODEL_TM:
-		ilits->md_name = "TM";
+		ilits->md_name = "ILITEK_TDDI_TM";
 		ilits->md_fw_filp_path = TM_FW_REQUEST_PATH;
 		ilits->md_fw_rq_path = TM_FW_REQUEST_PATH;
 		ilits->md_ini_path = TM_INI_NAME_PATH;
@@ -889,7 +888,7 @@ static void ili_update_tp_module_info(void)
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM);
 		break;
 	case MODEL_HLT:
-		ilits->md_name = "HLT";
+		ilits->md_name = "ILITEK_TDDI_HLT";
 		ilits->md_fw_filp_path = HLT_FW_REQUEST_PATH;
 		ilits->md_fw_rq_path = HLT_FW_REQUEST_PATH;
 		ilits->md_ini_path = HLT_INI_NAME_PATH;
@@ -901,7 +900,7 @@ static void ili_update_tp_module_info(void)
 		break;
 	}
 
-	if (module == 0 || ilits->md_fw_ili_size < ILI_FILE_HEADER) {
+	if (module == 0) {
 		ILI_ERR("Couldn't find any tp modules, applying default settings\n");
 		ilits->md_name = "DEF";
 		ilits->md_fw_filp_path = DEF_FW_FILP_PATH;
@@ -918,8 +917,6 @@ static void ili_update_tp_module_info(void)
 			ilits->md_fw_filp_path,
 			ilits->md_fw_rq_path,
 			ilits->md_fw_ili_size);
-
-	ilits->tp_module = module;
 }
 
 int ili_tddi_init(void)
