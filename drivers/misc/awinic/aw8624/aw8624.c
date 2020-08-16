@@ -3999,7 +3999,12 @@ aw8624_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 	g_aw8624 = aw8624;
 
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110)) || \
+    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
+	aw8624->ws = wakeup_source_register(aw8624->dev, "vibrator");
+#else
 	aw8624->ws = wakeup_source_register("vibrator");
+#endif
 	if (!aw8624->ws)
 		return -ENOMEM;
 	aw8624_vibrator_init(aw8624);
