@@ -2011,7 +2011,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
 #else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110)) || \
+     (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
         	gesture_wakelock = wakeup_source_register(&client->dev, "dt-wake-lock");
 #else
 	        gesture_wakelock = wakeup_source_register("dt-wake-lock");
