@@ -177,8 +177,8 @@ enum {
 
 #define HEARTBEAT_DELAY_MS 5000
 #define HEARTBEAT_DUAL_DELAY_MS 10000
-#define HEARTBEAT_DUAL_DELAY_OCP_MS 750
-#define MAX_ALLOWED_OCP 10
+#define HEARTBEAT_DUAL_DELAY_OCP_MS 1000
+#define HEARTBEAT_OCP_SETTLE_CNT 7
 #define HEARTBEAT_FACTORY_MS 1000
 #define HEARTBEAT_DISCHARGE_MS 60000
 
@@ -397,6 +397,8 @@ struct smb_mmi_charger {
 
 	int			hvdcp_power_max;
 	int			inc_hvdcp_cnt;
+	int			hb_startup_cnt;
+	bool		ocp_flag;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -2481,6 +2483,8 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			stepchg_str[(int)chip->pres_chrg_step],
 			chip->pres_temp_zone,
 			chip->batt_health);
+		chg->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
+		chg->ocp_flag = true;	// 1x settle per state chng
 		return 1;
 	} else {
 		mmi_dbg(chg, "Batt %d: batt_mv = %d, batt_ma %d, batt_soc %d,"
@@ -2511,6 +2515,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	int target_fv;
 	int effective_fv;
 	int effective_fcc;
+	int scaled_fcc =0;
 	int ocp;
 	int sm_update;
 	bool voltage_full;
@@ -2598,9 +2603,21 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 	effective_fv = get_effective_result(chg->fv_votable) / 1000;
 	effective_fcc = get_effective_result(chg->fcc_votable);
-	if (effective_fcc >= (main_p->target_fcc + flip_p->target_fcc) *1000 ) {	// Safety check
+
+	/* OCP Check - Scale down fcc if too high for initial set */
+	if (chg->hb_startup_cnt > 1) {
+		chg->hb_startup_cnt--;
 		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
-		effective_fcc = effective_fcc *7/10;		// Scale down fcc if too high for init set
+	} else if ( (effective_fcc >= (main_p->target_fcc + flip_p->target_fcc) *1000) &&
+			(chg->ocp_flag) ) {
+		chg->ocp_flag = false;
+		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
+		chg->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
+		scaled_fcc = effective_fcc /10;
+		effective_fcc -= scaled_fcc;
+		mmi_dbg(chg, "fccScaled: %d, AdjFCC: %d\n", scaled_fcc, effective_fcc);
+		main_p->ocp[main_p->pres_temp_zone] =0;
+		flip_p->ocp[flip_p->pres_temp_zone] =0;
 	}
 
 	/* Check for Charge None */
@@ -2673,6 +2690,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fcc = flip_p->target_fcc;
 		target_fv = flip_p->target_fv;
 		mmi_info(chg, "Align Flip to Main FULL\n");
+		sched_time = HEARTBEAT_DUAL_DELAY_MS;
 		goto vote_now;
 	} else if ((flip_p->pres_chrg_step == STEP_FULL) &&
 		   ((main_p->pres_chrg_step == STEP_MAX) ||
@@ -2685,6 +2703,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 		target_fcc = main_p->target_fcc;
 		target_fv = main_p->target_fv;
 		mmi_info(chg, "Align Main to Flip FULL\n");
+		sched_time = HEARTBEAT_DUAL_DELAY_MS;
 		goto vote_now;
 	/* Check for Charge Disable from each */
 	} else if ((main_p->target_fcc < 0) ||
@@ -2702,15 +2721,16 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	else
 		target_fv = flip_p->target_fv;
 
-	if (chg_stat_main.batt_ma > main_p->target_fcc) {
+	if ((chg_stat_main.batt_ma > main_p->target_fcc) &&
+		 chg->hb_startup_cnt %2) { //Allow settle time
 		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		ocp = chg_stat_main.batt_ma - main_p->target_fcc;
 		main_p->ocp[main_p->pres_temp_zone] += ocp;
 		mmi_info(chg, "Main Exceed by %d mA\n",
 			main_p->ocp[main_p->pres_temp_zone]);
 	}
-
-	if (chg_stat_flip.batt_ma > flip_p->target_fcc) {
+	if ((chg_stat_flip.batt_ma > flip_p->target_fcc) &&
+		 chg->hb_startup_cnt %2) { //Allow settle time
 		sched_time = HEARTBEAT_DUAL_DELAY_OCP_MS;
 		ocp = chg_stat_flip.batt_ma - flip_p->target_fcc;
 		flip_p->ocp[flip_p->pres_temp_zone] += ocp;
@@ -2719,12 +2739,19 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 	}
 
 	target_fcc = main_p->target_fcc + flip_p->target_fcc;
+	target_fcc -= scaled_fcc/1000;
 	target_fcc -= main_p->ocp[main_p->pres_temp_zone];
 	target_fcc -= flip_p->ocp[flip_p->pres_temp_zone];
 	if ( (target_fcc < main_p->target_fcc) &&
-		(chg_stat_flip.batt_ma < flip_p->target_fcc) ) {
+		(chg_stat_flip.batt_ma < flip_p->target_fcc *7/10) ) {
 		mmi_info(chg, "Target FCC adjust too much\n");
-		//target_fcc = main_p->target_fcc;		// temp hack for cold chrg test
+		chg->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
+		if (main_p->target_fcc < flip_p->target_fcc)
+			target_fcc = (main_p->target_fcc)*5/2;
+		else
+			target_fcc = (flip_p->target_fcc)*5/2;
+		main_p->ocp[main_p->pres_temp_zone] =0;
+		flip_p->ocp[flip_p->pres_temp_zone] =0;
 	}
 
 	if (((main_p->pres_chrg_step == STEP_MAX) ||
@@ -2768,13 +2795,13 @@ vote_now:
 		mmi_info(chg, "IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 			effective_fv,
 			get_effective_result(chg->chg_dis_votable),
-			effective_fcc,
+			target_fcc,
 			get_effective_result(chg->usb_icl_votable));
 	else
 		mmi_dbg(chg, "IMPOSED: FV = %d, CDIS = %d, FCC = %d, USBICL = %d\n",
 			effective_fv,
 			get_effective_result(chg->chg_dis_votable),
-			effective_fcc,
+			target_fcc,
 			get_effective_result(chg->usb_icl_votable));
 
 	return sched_time;
@@ -4179,6 +4206,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	chip->awake = false;
 	this_chip = chip;
 	device_init_wakeup(chip->dev, true);
+	chip->hb_startup_cnt = HEARTBEAT_OCP_SETTLE_CNT;
+	chip->ocp_flag = true;
 
 	smb_mmi_chg_config_init(chip);
 
