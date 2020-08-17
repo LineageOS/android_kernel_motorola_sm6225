@@ -50,6 +50,7 @@
 #elif defined(USE_PLATFORM_BUS)
 #include <linux/platform_device.h>
 #endif
+#include <linux/version.h>
 
 #define VER_MAJOR   1
 #define VER_MINOR   2
@@ -470,10 +471,20 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	if (_IOC_TYPE(cmd) != GF_IOC_MAGIC)
 		return -ENODEV;
 
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
-	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		retval = !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+	if (_IOC_DIR(cmd) & _IOC_READ){
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		retval = !access_ok((void __user *)arg, _IOC_SIZE(cmd));
+#else
+               retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+#endif
+	}
+	else if (_IOC_DIR(cmd) & _IOC_WRITE){
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		retval = !access_ok((void __user *)arg, _IOC_SIZE(cmd));
+#else
+               retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+#endif
+	}
 	if (retval)
 		return -EFAULT;
 
@@ -708,6 +719,7 @@ static const struct file_operations gf_fops = {
 static int goodix_fb_state_chg_callback(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
+#if 0
 	struct gf_dev *gf_dev;
 	struct fb_event *evdata = data;
 	int blank;
@@ -748,6 +760,7 @@ static int goodix_fb_state_chg_callback(struct notifier_block *nb,
 			break;
 		}
 	}
+#endif
 	return NOTIFY_OK;
 }
 
