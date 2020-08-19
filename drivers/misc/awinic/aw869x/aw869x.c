@@ -1083,7 +1083,7 @@ static ssize_t aw869x_file_write(struct file* filp, const char* buff, size_t len
                 if(ret) {
                     dev_err(aw869x->dev, "%s: copy from user fail\n", __func__);
                 } else {
-                    __pm_stay_awake(aw869x->ws);
+                    PM_STAY_AWAKE(aw869x->ws);
 
                     aw869x_haptic_stop(aw869x);
                     /* RAMINIT Enable */
@@ -1100,7 +1100,7 @@ static ssize_t aw869x_file_write(struct file* filp, const char* buff, size_t len
                     aw869x_i2c_write_bits(aw869x, AW869X_REG_SYSCTRL,
                             AW869X_BIT_SYSCTRL_RAMINIT_MASK, AW869X_BIT_SYSCTRL_RAMINIT_OFF);
 
-                    __pm_relax(aw869x->ws);
+                    PM_RELAX(aw869x->ws);
                 }
                 kfree(pbuff);
             } else {
@@ -1283,7 +1283,7 @@ static void aw869x_vibrate(struct aw869x *aw869x, int value)
 			aw869x->index = 0x02;
 			aw869x_haptic_set_repeat_que_seq(aw869x, aw869x->index);
 
-			__pm_wakeup_event(aw869x->ws, value + 100);
+			PM_WAKEUP_EVENT(aw869x->ws, value + 100);
 			/* run ms timer */
 			hrtimer_cancel(&aw869x->timer);
 			aw869x->state = 0x01;
@@ -2220,7 +2220,7 @@ static int aw869x_vibrator_init(struct aw869x *aw869x)
 
     INIT_WORK(&aw869x->rtp_work, aw869x_rtp_work_routine);
 
-    aw869x->ws = wakeup_source_register("vibrator");
+    PM_WAKEUP_REGISTER(NULL, aw869x->ws, "vibrator");
     if (!aw869x->ws)
         return -ENOMEM;
 
@@ -2703,7 +2703,7 @@ static int aw869x_i2c_remove(struct i2c_client *i2c)
     if (gpio_is_valid(aw869x->reset_gpio))
         devm_gpio_free(&i2c->dev, aw869x->reset_gpio);
 
-    wakeup_source_unregister(aw869x->ws);
+    PM_WAKEUP_UNREGISTER(aw869x->ws);
 
     return 0;
 }
