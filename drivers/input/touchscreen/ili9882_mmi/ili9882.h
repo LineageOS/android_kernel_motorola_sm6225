@@ -106,6 +106,7 @@
 #include "mt_spi.h"
 #include "sync_write.h"
 #endif
+#include <linux/mmi_wake_lock.h>
 
 #define DRIVER_VERSION			"3.0.3.0.200610"
 

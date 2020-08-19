@@ -667,7 +667,7 @@ int ili_report_handler(void)
 	ili_wq_ctrl(WQ_BAT, DISABLE);
 
 	if (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
-		__pm_stay_awake(ilits->ws);
+		PM_STAY_AWAKE(ilits->ws);
 
 		if (ilits->pm_suspend) {
 			/* Waiting for pm resume completed */
@@ -763,7 +763,7 @@ out:
 	}
 
 	if (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE)
-		__pm_relax(ilits->ws);
+		PM_RELAX(ilits->ws);
 	return ret;
 }
 
@@ -1006,9 +1006,11 @@ int ili_tddi_init(void)
 	ilits->boot = true;
 #endif
 
-	ilits->ws = wakeup_source_register("ili_wakelock");
-	if (!ilits->ws)
+	PM_WAKEUP_REGISTER(NULL, ilits->ws, "ili_wakelock");
+	if (!ilits->ws) {
 		ILI_ERR("wakeup source request failed\n");
+		return -ENOMEM;
+	}
 
 	return 0;
 }
@@ -1035,7 +1037,7 @@ void ili_dev_remove(void)
 	}
 
 	if (ilits->ws)
-		wakeup_source_unregister(ilits->ws);
+		PM_WAKEUP_UNREGISTER(ilits->ws);
 
 	if (ilits->charger_notif.notifier_call)
 		power_supply_unreg_notifier(&ilits->charger_notif);
@@ -1069,7 +1071,7 @@ void ilitek_spi_shutdown(struct spi_device *spi)
 	}
 
 	if (ilits->ws)
-		wakeup_source_unregister(ilits->ws);
+		PM_WAKEUP_UNREGISTER(ilits->ws);
 
 	ilits->gesture = DISABLE;
 
