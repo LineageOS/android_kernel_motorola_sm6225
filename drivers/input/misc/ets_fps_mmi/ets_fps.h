@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <linux/version.h>
-
+#include <linux/mmi_wake_lock.h>
 
 #ifdef FP_SPI_DEBUG
 #define DEBUG_PRINT(fmt, args...) pr_err(fmt, ## args)
