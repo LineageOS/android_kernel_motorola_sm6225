@@ -1,7 +1,7 @@
 # add -Wall to try to catch everything we can.
 # EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
 
 ifneq (,$(filter racer% burton%,$(TARGET_PRODUCT)))
     EXTRA_CFLAGS += -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
@@ -14,6 +14,7 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS -DCONFIG_INPUT_TOUCHSCREEN_MMI \
                     -DCONFIG_PM
     sec_mmi-objs += sec_ts_mmi_class.o
+    KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/Module.symvers
 else
     EXTRA_CFLAGS += -DUSE_STUBS
     sec_mmi-objs += sec_ts_mmi.o
