@@ -627,7 +627,11 @@ int ts_mmi_dev_register(struct device *parent,
 
 	ts_mmi_get_vendor_info(touch_cdev);
 
+#if defined(CONFIG_TS_KERNEL_USE_GKI)
+	ret = 256;
+#else
 	ret = input_get_new_minor(-1, 1, true);
+#endif
 	if (ret < 0) {
 		dev_info(DEV_TS, "%s: get minor number failed. %d\n",
 			__func__, ret);
@@ -725,7 +729,9 @@ CLASS_DEVICE_ATTR_CREATE_FAILED:
 	device_unregister(DEV_MMI);
 CLASS_DEVICE_CREATE_FAILED:
 	DEV_MMI = NULL;
+#ifndef CONFIG_TS_KERNEL_USE_GKI
 	input_free_minor(touch_cdev->class_dev_minor);
+#endif
 	touch_cdev->class_dev_minor = 0;
 GET_NEW_MINOT_FAILED:
 	ts_mmi_panel_unregister(touch_cdev);
@@ -773,7 +779,9 @@ void ts_mmi_dev_unregister(struct device *parent)
 	sysfs_remove_group(&DEV_MMI->kobj, &sysfs_class_group);
 	device_unregister(DEV_MMI);
 	DEV_MMI = NULL;
+#ifndef CONFIG_TS_KERNEL_USE_GKI
 	input_free_minor(touch_cdev->class_dev_minor);
+#endif
 	touch_cdev->class_dev_minor = 0;
 	devm_kfree(parent, touch_cdev);
 }
