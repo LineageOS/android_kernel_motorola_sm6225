@@ -112,6 +112,7 @@
 #ifdef ILI_CONFIG_PANEL_NOTIFICATIONS
 #include <linux/panel_notifier.h>
 #endif
+#include <linux/mmi_wake_lock.h>
 
 #define DRIVER_VERSION			"3.0.2.0.200512"
 
