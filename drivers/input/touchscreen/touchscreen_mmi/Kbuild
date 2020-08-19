@@ -1,6 +1,6 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
 ifneq ($(filter m y, $(CONFIG_PANEL_NOTIFICATIONS)),)
 	EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
