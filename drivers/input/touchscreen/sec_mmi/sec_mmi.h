@@ -7,6 +7,7 @@
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #include <linux/version.h>
+#include <linux/mmi_wake_lock.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
