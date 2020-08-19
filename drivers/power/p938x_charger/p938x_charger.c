@@ -53,6 +53,7 @@
 #include <linux/thermal.h>
 #include <linux/mutex.h>
 #include <linux/version.h>
+#include <linux/mmi_wake_lock.h>
 
 #define CHIP_ID_REG			0x0000
 #define HW_VER_REG			0x0002
@@ -392,10 +393,10 @@ static void p938x_reset(struct p938x_charger *chip)
 static void p938x_pm_set_awake(struct p938x_charger *chip, int awake)
 {
 	if(!test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags) && awake) {
-		__pm_stay_awake(chip->wls_wake_source);
+		PM_STAY_AWAKE(chip->wls_wake_source);
 		set_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags);
 	} else if(test_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags) && !awake) {
-		__pm_relax(chip->wls_wake_source);
+		PM_RELAX(chip->wls_wake_source);
 		clear_bit(WLS_FLAG_KEEP_AWAKE, &chip->flags);
 	}
 }
@@ -2943,11 +2944,7 @@ static int p938x_charger_probe(struct i2c_client *client,
 	mutex_init(&chip->disconnect_lock);
 	mutex_init(&chip->txmode_lock);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
-	chip->wls_wake_source = wakeup_source_register(chip->dev, "p938x wireless charger");
-#else
-	chip->wls_wake_source = wakeup_source_register("p938x wireless charger");
-#endif
+	PM_WAKEUP_REGISTER(chip->dev, chip->wls_wake_source, "p938x wireless charger");
 
 	if (!chip->wls_wake_source) {
 		p938x_err(chip, "failed to allocate wakeup source\n");
@@ -3023,7 +3020,7 @@ static int p938x_charger_remove(struct i2c_client *client)
 {
 	struct p938x_charger *chip = i2c_get_clientdata(client);
 
-	wakeup_source_unregister(chip->wls_wake_source);
+	PM_WAKEUP_UNREGISTER(chip->wls_wake_source);
 	sysfs_remove_groups(&chip->dev->kobj, p938x_groups);
 	cancel_delayed_work_sync(&chip->heartbeat_work);
 	cancel_delayed_work_sync(&chip->tx_mode_work);
