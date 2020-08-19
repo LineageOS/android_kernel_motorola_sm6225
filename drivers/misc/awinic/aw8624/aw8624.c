@@ -3446,11 +3446,11 @@ static void aw8624_vibrator_work_routine(struct work_struct *work)
 			ktime_set(aw8624->duration / 1000,
 			(aw8624->duration % 1000) * 1000000),
 			HRTIMER_MODE_REL);
-		__pm_stay_awake(aw8624->ws);
+		PM_STAY_AWAKE(aw8624->ws);
 		aw8624->wk_lock_flag = 1;
 	} else {
 		if (aw8624->wk_lock_flag == 1) {
-			__pm_relax(aw8624->ws);
+			PM_RELAX(aw8624->ws);
 			aw8624->wk_lock_flag = 0;
 		}
 		/*aw8624_haptic_stop(aw8624);*/
@@ -3999,12 +3999,7 @@ aw8624_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 	g_aw8624 = aw8624;
 
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110)) || \
-    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
-	aw8624->ws = wakeup_source_register(aw8624->dev, "vibrator");
-#else
-	aw8624->ws = wakeup_source_register("vibrator");
-#endif
+	PM_WAKEUP_REGISTER(NULL, aw8624->ws, "vibrator");
 	if (!aw8624->ws)
 		return -ENOMEM;
 	aw8624_vibrator_init(aw8624);
@@ -4043,7 +4038,7 @@ static int aw8624_i2c_remove(struct i2c_client *i2c)
 	mutex_destroy(&aw8624->rtp_lock);
 	mutex_destroy(&aw8624->haptic_audio.lock);
 
-	wakeup_source_unregister(aw8624->ws);
+	PM_WAKEUP_UNREGISTER(aw8624->ws);
 
 	sysfs_remove_group(&i2c->dev.kobj, &aw8624_attribute_group);
 	sysfs_remove_group(&i2c->dev.kobj, &aw8624_vibrator_attribute_group);
