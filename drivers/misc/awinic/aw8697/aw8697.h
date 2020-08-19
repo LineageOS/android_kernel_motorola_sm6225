@@ -26,6 +26,7 @@
 #else
 #include <linux/leds.h>
 #endif
+#include <linux/mmi_wake_lock.h>
 
 /*********************************************************
  *
