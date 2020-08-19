@@ -36,6 +36,7 @@
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
+#include <linux/mmi_kernel_common.h>
 
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #include <linux/touchscreen_mmi.h>
@@ -617,8 +618,8 @@ struct sec_ts_data {
 	struct sec_ts_plat_data *plat_data;
 	struct sec_ts_coordinate coord[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 
-	struct timeval time_pressed[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
-	struct timeval time_released[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
+	struct TIME_TYPE time_pressed[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
+	struct TIME_TYPE time_released[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 	long time_longest;
 
 	u8 lowpower_mode;
