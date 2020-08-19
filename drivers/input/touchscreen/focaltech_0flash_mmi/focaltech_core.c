@@ -750,7 +750,7 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
                 wake_lock_timeout(&fts_data->palm_gesture_wakelock,
                                   fts_data->palm_release_delay_ms);
 #else
-                __pm_wakeup_event(&fts_data->palm_gesture_wakelock,
+                PM_WAKEUP_EVENT(fts_data->palm_gesture_wakelock,
                                   fts_data->palm_release_delay_ms);
 #endif
                 return -1;
@@ -1068,7 +1068,7 @@ static int _fts_palm_sensor_set_enable(unsigned int enable)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock(&fts_data->palm_gesture_read_wakelock);
 #else
-        __pm_stay_awake(&fts_data->palm_gesture_read_wakelock);
+        PM_STAY_AWAKE(fts_data->palm_gesture_read_wakelock);
 #endif
         fts_data->palm_detection_enabled = true;
         fts_write_reg(0xB0, 0x01);
@@ -1082,7 +1082,7 @@ static int _fts_palm_sensor_set_enable(unsigned int enable)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_unlock(&fts_data->palm_gesture_read_wakelock);
 #else
-        __pm_relax(&fts_data->palm_gesture_read_wakelock);
+        PM_RELAX(fts_data->palm_gesture_read_wakelock);
 #endif
     } else {
         FTS_INFO("unknown enable symbol\n");
@@ -1159,12 +1159,20 @@ static int fts_palm_sensor_init(struct fts_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
     wake_lock_init(&data->palm_gesture_wakelock, WAKE_LOCK_SUSPEND, "palm_detect_wl");
 #else
-    wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
+    PM_WAKEUP_REGISTER(NULL, data->palm_gesture_wakelock, "palm_detect_wl");
+    if (!data->palm_gesture_wakelock) {
+        FTS_ERROR("Unable to register device, err=%d", err);
+        goto unregister_sensor_input_device;
+    }
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
     wake_lock_init(&data->palm_gesture_read_wakelock, WAKE_LOCK_SUSPEND, "palm_read_wl");
 #else
-    wakeup_source_init(&data->palm_gesture_read_wakelock, "palm_read_wl");
+    PM_WAKEUP_REGISTER(NULL, data->palm_gesture_read_wakelock, "palm_read_wl");
+    if (!data->palm_gesture_wakelock) {
+        FTS_ERROR("Unable to register device, err=%d", err);
+        goto unregister_sensor_input_device;
+    }
 #endif
 
     data->palm_release_fimer.function = fts_palm_sensor_release_timer_handler;
@@ -1193,12 +1201,12 @@ int fts_palm_sensor_remove(struct fts_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
     wake_lock_destroy(&data->palm_gesture_wakelock);
 #else
-    wakeup_source_trash(&data->palm_gesture_wakelock);
+    PM_WAKEUP_UNREGISTER(data->palm_gesture_wakelock);
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
     wake_lock_destroy(&data->palm_gesture_read_wakelock);
 #else
-    wakeup_source_trash(&data->palm_gesture_read_wakelock);
+    PM_WAKEUP_UNREGISTER(data->palm_gesture_read_wakelock);
 #endif
     data->palm_sensor_pdata = NULL;
     data->palm_detection_enabled = false;

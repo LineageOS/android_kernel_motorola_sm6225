@@ -61,6 +61,7 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
+#include <linux/mmi_wake_lock.h>
 #include "focaltech_common.h"
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #include <linux/touchscreen_mmi.h>
@@ -262,12 +263,12 @@ struct fts_ts_data {
 #ifdef CONFIG_HAS_WAKELOCK
     struct wake_lock palm_gesture_wakelock;
 #else
-    struct wakeup_source palm_gesture_wakelock;
+    struct wakeup_source *palm_gesture_wakelock;
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
     struct wake_lock palm_gesture_read_wakelock;
 #else
-    struct wakeup_source palm_gesture_read_wakelock;
+    struct wakeup_source *palm_gesture_read_wakelock;
 #endif
 #endif
 
