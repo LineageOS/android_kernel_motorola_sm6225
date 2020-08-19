@@ -2607,7 +2607,7 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 #endif
 	aw8697_haptic_stop(aw8697);
 	if (aw8697->index == 0x02)
-		__pm_relax(aw8697->ws);
+		PM_RELAX(aw8697->ws);
 
 	seq = aw8697->seq[0];
 	pr_debug("%s: value=%d, seq=%d, index=%x, duration=%d\n",
@@ -2624,7 +2624,7 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 				seq -= AW8697_SEQ_NO_RTP_REPEAT;
 
 				value = AW8697_SEQ_NO_RTP_STOP;
-				__pm_wakeup_event(aw8697->ws, value + 100);
+				PM_WAKEUP_EVENT(aw8697->ws, value + 100);
 				/* run ms timer */
 				hrtimer_cancel(&aw8697->timer);
 				hrtimer_start(&aw8697->timer,
@@ -2668,7 +2668,7 @@ static void aw8697_vibrate(struct aw8697 *aw8697, int value)
 			/* wav index config */
 			aw8697->index = 0x02;
 			aw8697_haptic_set_repeat_wav_seq(aw8697, aw8697->index);
-			__pm_wakeup_event(aw8697->ws, value + 100);
+			PM_WAKEUP_EVENT(aw8697->ws, value + 100);
 			/* run ms timer */
 			hrtimer_cancel(&aw8697->timer);
 			aw8697->state = 0x01;
@@ -4207,11 +4207,7 @@ static int aw8697_vibrator_init(struct aw8697 *aw8697)
 
 	pr_info("%s enter\n", __func__);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110))
-	aw8697->ws = wakeup_source_register(aw8697->dev, "vibrator");
-#else
-	aw8697->ws = wakeup_source_register("vibrator");
-#endif
+	PM_WAKEUP_REGISTER(aw8697->dev, aw8697->ws, "vibrator");
 	if (!aw8697->ws)
 		return -ENOMEM;
 
@@ -4821,7 +4817,7 @@ static int aw8697_i2c_remove(struct i2c_client *i2c)
 	if (gpio_is_valid(aw8697->reset_gpio))
 		devm_gpio_free(&i2c->dev, aw8697->reset_gpio);
 
-	wakeup_source_unregister(aw8697->ws);
+	PM_WAKEUP_UNREGISTER(aw8697->ws);
 
 	devm_kfree(&i2c->dev, aw8697);
 	aw8697 = NULL;
