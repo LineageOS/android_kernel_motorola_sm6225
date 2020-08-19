@@ -340,7 +340,7 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
 #else
-        __pm_wakeup_event(gesture_wakelock, 5000);
+        PM_WAKEUP_EVENT(gesture_wakelock, 5000);
 #endif
         }
 #else
@@ -651,12 +651,7 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
 #ifdef CONFIG_HAS_WAKELOCK
         wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
 #else
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
-    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
-        gesture_wakelock = wakeup_source_register(ts_data->dev, "poll-wake-lock");
-#else
-        gesture_wakelock = wakeup_source_register("poll-wake-lock");
-#endif
+        PM_WAKEUP_REGISTER(ts_data->dev, gesture_wakelock, "poll-wake-lock");
         if (!gesture_wakelock) {
             FTS_ERROR("failed to allocate wakeup source\n");
             return -ENOMEM;
