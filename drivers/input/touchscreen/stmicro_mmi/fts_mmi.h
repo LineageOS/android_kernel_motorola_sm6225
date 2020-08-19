@@ -3,6 +3,7 @@
 
 #include <linux/gpio.h>
 #include <linux/touchscreen_mmi.h>
+#include <linux/mmi_wake_lock.h>
 
 struct fts_ts_info;
 

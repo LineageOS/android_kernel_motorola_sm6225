@@ -2759,7 +2759,7 @@ static void fts_event_handler(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, work);
 
-	__pm_wakeup_event(info->wakesrc, jiffies_to_msecs(HZ));
+	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
 
 	/* read the FIFO and parsing events */
 
@@ -3456,7 +3456,7 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 
 void fts_resume_func(struct fts_ts_info *info)
 {
-	__pm_wakeup_event(info->wakesrc, jiffies_to_msecs(HZ));
+	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
 	info->resume_bit = 1;
 	fts_system_reset();
 	release_all_touches(info);
@@ -3476,7 +3476,7 @@ static void inline fts_resume_work(struct work_struct *work)
 
 void fts_suspend_func(struct fts_ts_info *info)
 {
-	__pm_wakeup_event(info->wakesrc, jiffies_to_msecs(HZ));
+	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
 	info->resume_bit = 0;
 	fts_mode_handler(info, 0);
 	release_all_touches(info);
@@ -3904,7 +3904,13 @@ static int fts_probe(struct spi_device *client)
 
 	logError(1, "%s SET Event Handler:\n", tag);
 
-	info->wakesrc = wakeup_source_register(info->dev, "fts_tp");
+	PM_WAKEUP_REGISTER(info->dev, info->wakesrc, "fts_tp");
+	if (!info->wakesrc) {
+		logError(1, "%s ERROR: Cannot allocate wake lock\n", tag);
+		error = -ENOMEM;
+		goto ProbeErrorExit_2;
+	}
+
 	info->event_wq = alloc_workqueue("fts-event-queue", WQ_UNBOUND |
 					 WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
 	if (!info->event_wq) {
@@ -4115,7 +4121,7 @@ ProbeErrorExit_5:
 
 ProbeErrorExit_4:
 	/* destroy_workqueue(info->fwu_workqueue); */
-	wakeup_source_unregister(info->wakesrc);
+	PM_WAKEUP_UNREGISTER(info->wakesrc);
 
 	fts_enable_reg(info, false);
 
@@ -4163,7 +4169,7 @@ static int fts_remove(struct spi_device *client)
 
 	/* Remove the work thread */
 	destroy_workqueue(info->event_wq);
-	wakeup_source_unregister(info->wakesrc);
+	PM_WAKEUP_UNREGISTER(info->wakesrc);
 #ifndef FW_UPDATE_ON_PROBE
 	destroy_workqueue(info->fwu_workqueue);
 #endif
