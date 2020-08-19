@@ -27,6 +27,7 @@
 #include <linux/debugfs.h>
 #include <linux/string.h>
 #include <linux/version.h>
+#include <linux/mmi_wake_lock.h>
 
 #define MODULE_LOG "SMBMMI"
 
@@ -2313,7 +2314,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 
 	mmi_dbg(chip, "HB alarm fired\n");
 
-	__pm_stay_awake(chip->smb_mmi_hb_wake_source);
+	PM_STAY_AWAKE(chip->smb_mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
 	/* Delay by 500 ms to allow devices to resume. */
 	schedule_delayed_work(&chip->heartbeat_work,
@@ -3507,7 +3508,7 @@ sch_hb:
 
 	kfree(chrg_rate_string);
 
-	__pm_relax(chip->smb_mmi_hb_wake_source);
+	PM_RELAX(chip->smb_mmi_hb_wake_source);
 }
 
 static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
@@ -4199,12 +4200,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 110) || \
-    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 163) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)))
-	chip->smb_mmi_hb_wake_source = wakeup_source_register(chip->dev, "smb_mmi_hb_wake");
-#else
-	chip->smb_mmi_hb_wake_source = wakeup_source_register("smb_mmi_hb_wake");
-#endif
+	PM_WAKEUP_REGISTER(chip->dev, chip->smb_mmi_hb_wake_source, "smb_mmi_hb_wake");
 	if (!chip->smb_mmi_hb_wake_source) {
 		mmi_err(chip, "failed to allocate wakeup source\n");
 		return -ENOMEM;
@@ -4536,7 +4532,7 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 	if (chip->max_flip_psy)
 		power_supply_put(chip->max_flip_psy);
 
-	wakeup_source_unregister(chip->smb_mmi_hb_wake_source);
+	PM_WAKEUP_UNREGISTER(chip->smb_mmi_hb_wake_source);
 
 	return;
 }
