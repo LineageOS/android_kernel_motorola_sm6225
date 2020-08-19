@@ -13,6 +13,10 @@ ifeq ($(TOUCHCLASS_MMI_GESTURE_POISON_EVENT),true)
 	KERNEL_CFLAGS += CONFIG_TOUCHCLASS_MMI_GESTURE_POISON_EVENT=y
 endif
 
+ifneq (,$(findstring gki, $(KERNEL_DEFCONFIG)))
+	 KERNEL_CFLAGS += CONFIG_TS_KERNEL_USE_GKI=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := touchscreen_mmi.ko
 LOCAL_MODULE_TAGS := optional
