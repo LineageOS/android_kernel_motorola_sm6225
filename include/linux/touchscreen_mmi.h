@@ -472,4 +472,5 @@ int ts_mmi_check_drm_panel(struct device_node *of_node);
 /*sensor*/
 extern bool ts_mmi_is_sensor_enable(void);
 
+extern const char *mmi_bl_bootmode(void);
 #endif		/* __LINUX_TOUCHSCREEN_MMI_H_ */
