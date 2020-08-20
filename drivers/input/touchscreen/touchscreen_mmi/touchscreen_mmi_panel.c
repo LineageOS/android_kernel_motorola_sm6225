@@ -225,7 +225,7 @@ done:
 	return 0;
 }
 
-#ifdef CONFIG_DRM_PANEL
+#ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
 struct drm_panel *active_panel;
 
 static int ts_mmi_check_dt(struct device_node *np)
