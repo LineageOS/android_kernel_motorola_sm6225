@@ -1146,7 +1146,7 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	}
 	fp = cb->filep;
 
-	written = vfs_write(fp, datap, tags_size, &pos);
+	written = kernel_write(fp, datap, tags_size, &pos);
 	if (written < tags_size) {
 		pr_err("failed to write file (%s), rc=%zu\n",
 			cb->name, written);
@@ -1161,7 +1161,7 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 		fp = cb->filep;
 		pos = 0;
 
-		written = vfs_write(fp, datap, tags_size, &pos);
+		written = kernel_write(fp, datap, tags_size, &pos);
 		if (written < tags_size)
 			pr_err("failed to write file (%s), rc=%zu\n",
 				cb->name, written);
