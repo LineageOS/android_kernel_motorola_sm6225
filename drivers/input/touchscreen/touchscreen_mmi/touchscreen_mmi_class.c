@@ -597,7 +597,7 @@ int ts_mmi_dev_register(struct device *parent,
 	mutex_init(&touch_cdev->extif_mutex);
 	mutex_init(&touch_cdev->method_mutex);
 
-#ifdef CONFIG_DRM_PANEL
+#ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
 	ret = ts_mmi_check_drm_panel(DEV_TS->of_node);
 	if (ret < 0)
 		goto PANEL_PARSE_DT_FAILED;

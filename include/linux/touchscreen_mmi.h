@@ -45,8 +45,8 @@
 #define EVENT_DISPLAY_ON \
 	(event == PANEL_EVENT_DISPLAY_ON)
 
-#else /* CONFIG_DRM_PANEL */
-#if defined(CONFIG_DRM_PANEL)
+#else /* CONFIG_PANEL_NOTIFICATIONS */
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS)
 
 #include <drm/drm_panel.h>
 extern struct drm_panel *active_panel;
@@ -147,7 +147,7 @@ struct msm_drm_notifier *evdata = evd; \
 #define unregister_panel_notifier(...)
 
 #endif /* LINUX_VERSION_CODE */
-#endif /* CONFIG_DRM_PANEL */
+#endif /* CONFIG_DRM_PANEL_NOTIFICATIONS */
 #endif /* CONFIG_PANEL_NOTIFICATIONS */
 
 
@@ -465,7 +465,7 @@ extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
 #endif
-#ifdef CONFIG_DRM_PANEL
+#ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
 int ts_mmi_check_drm_panel(struct device_node *of_node);
 #endif
 
