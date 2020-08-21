@@ -426,8 +426,8 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 
 	blank = evdata->data;
 
-		switch (*blank) {
-		case DRM_PANEL_BLANK_POWERDOWN:
+	switch (*blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
 /*
 			if (TP_SUSPEND_PRIO) {
 				if (event != MSM_DRM_EARLY_EVENT_BLANK)
@@ -438,22 +438,24 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 			}
 */
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK)
+		{
 			if (ili_sleep_handler(TP_SUSPEND) < 0)
 				ILI_ERR("TP suspend failed\n");
-			break;
-
-		case DRM_PANEL_BLANK_UNBLANK:
-			if (event == DRM_PANEL_EVENT_BLANK)
-			{
-				if (ili_sleep_handler(TP_RESUME) < 0)
-					ILI_ERR("TP resume failed\n");
-
-			}
-			break;
-		default:
-			ILI_ERR("Unknown event, blank = %d\n", *blank);
-			break;
 		}
+		break;
+
+	case DRM_PANEL_BLANK_UNBLANK:
+		if (event == DRM_PANEL_EVENT_BLANK)
+		{
+			if (ili_sleep_handler(TP_RESUME) < 0)
+				ILI_ERR("TP resume failed\n");
+
+		}
+		break;
+	default:
+		ILI_ERR("Unknown event, blank = %d\n", *blank);
+		break;
+	}
 	return NOTIFY_OK;
 }
 #else

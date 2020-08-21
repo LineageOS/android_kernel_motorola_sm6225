@@ -2053,7 +2053,7 @@ static ssize_t jitter_store(struct device *dev,
 
 	ret = kstrtou16(argv[0], 0, &cnt);
 	if (ret == 0) {
-		if (cnt > 2 || cnt < 10000) {
+		if (cnt < 2 || cnt > 10000) {
 			jitter_test_frame = cnt;
 		}
 	}
