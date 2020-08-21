@@ -46,6 +46,8 @@
 #include <linux/platform_data/spi-mt65xx.h>
 #endif
 
+#include <linux/mmi_wake_lock.h>
+
 #define NVT_DEBUG 1
 
 //---GPIO number---
