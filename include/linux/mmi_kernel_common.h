@@ -29,4 +29,10 @@
 
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#define SIGINFO kernel_siginfo
+#else
+#define SIGINFO siginfo
+#endif
+
 #endif    /*_MMI_KERNEL_COMMON_H*/
