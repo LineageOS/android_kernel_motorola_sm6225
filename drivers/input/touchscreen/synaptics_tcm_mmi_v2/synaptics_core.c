@@ -3443,7 +3443,7 @@ int syna_tcm_suspend(struct device *dev)
 }
 #endif
 
-#ifdef CONFIG_FB
+#if defined (CONFIG_FB) || defined (CONFIG_INPUT_TOUCHSCREEN_MMI)
 int syna_tcm_early_suspend(struct device *dev)
 {
 	int retval;
@@ -3491,7 +3491,9 @@ int syna_tcm_early_suspend(struct device *dev)
 
 	return 0;
 }
+#endif
 
+#if defined (CONFIG_FB) || !defined (CONFIG_INPUT_TOUCHSCREEN_MMI)
 static int syna_tcm_fb_notifier_cb(struct notifier_block *nb,
 		unsigned long action, void *data)
 {

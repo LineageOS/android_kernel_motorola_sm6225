@@ -761,6 +761,7 @@ static void touch_report(void)
 		switch (status) {
 		case LIFT:
 #ifdef TYPE_B_PROTOCOL
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 			if (tcm_hcd->imports && tcm_hcd->imports->report_touch_event) {
 				struct touch_event_data touch_event;
 				memset(&touch_event, 0, sizeof(touch_event));
@@ -774,6 +775,7 @@ static void touch_report(void)
 					 break;
 				}
 			}
+#endif
 			input_mt_slot(touch_hcd->input_dev, idx);
 			input_mt_report_slot_state(touch_hcd->input_dev,
 					MT_TOOL_FINGER, 0);
@@ -800,6 +802,7 @@ static void touch_report(void)
 			if (bdata->y_flip)
 				y = touch_hcd->input_params.max_y - y;
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 			if (tcm_hcd->imports && tcm_hcd->imports->report_touch_event) {
 				struct touch_event_data touch_event;
 				memset(&touch_event, 0, sizeof(touch_event));
@@ -821,6 +824,7 @@ static void touch_report(void)
 					 break;
 				}
 			}
+#endif
 
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(touch_hcd->input_dev, idx);

@@ -35,6 +35,8 @@
  */
 
 #include "synaptics_core.h"
+#include <linux/sched/signal.h>
+#include <linux/mmi_kernel_common.h>
 
 #define SYSFS_DIR_NAME "diagnostics"
 
@@ -48,7 +50,7 @@ struct diag_hcd {
 	unsigned char report_type;
 	enum pingpong_state state;
 	struct kobject *sysfs_dir;
-	struct siginfo sigio;
+	struct SIGINFO sigio;
 	struct task_struct *task;
 	struct syna_tcm_buffer ping;
 	struct syna_tcm_buffer pong;
@@ -105,7 +107,7 @@ static ssize_t diag_sysfs_pid_store(struct device *dev,
 	diag_hcd->pid = input;
 
 	if (diag_hcd->pid) {
-		diag_hcd->task = pid_task(find_vpid(diag_hcd->pid),
+		diag_hcd->task = get_pid_task(find_vpid(diag_hcd->pid),
 				PIDTYPE_PID);
 		if (!diag_hcd->task) {
 			LOGE(tcm_hcd->pdev->dev.parent,

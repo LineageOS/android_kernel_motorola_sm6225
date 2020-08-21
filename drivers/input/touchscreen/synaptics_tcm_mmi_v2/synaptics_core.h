@@ -44,6 +44,8 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include "synaptics_tcm.h"
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
 #ifdef CONFIG_FB
 #include <linux/fb.h>
 #include <linux/notifier.h>
