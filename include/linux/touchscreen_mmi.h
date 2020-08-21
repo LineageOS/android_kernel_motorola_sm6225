@@ -468,6 +468,7 @@ extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
 #ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
 int ts_mmi_check_drm_panel(struct device_node *of_node);
 #endif
+extern bool ts_mmi_is_panel_match(const char *panel_node, char *touch_ic_name);
 
 /*sensor*/
 extern bool ts_mmi_is_sensor_enable(void);
