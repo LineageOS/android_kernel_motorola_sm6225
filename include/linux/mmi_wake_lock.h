@@ -13,8 +13,10 @@
 #ifndef _MMI_WAKE_LOCK_H
 #define _MMI_WAKE_LOCK_H
 
+#include <linux/errno.h>
 #include <linux/version.h>
 #include <linux/pm_wakeup.h>
+#include <linux/slab.h>
 
 #define PM_STAY_AWAKE(_wakeup_source) __pm_stay_awake(_wakeup_source);
 #define PM_RELAX(_wakeup_source) __pm_relax(_wakeup_source);
@@ -30,7 +32,8 @@
         _wakeup_source = wakeup_source_register(_name);
 #else
 #define PM_WAKEUP_REGISTER(_dev, _wakeup_source, _name) { \
-        _wakeup_source = (struct wakeup_source *)kmalloc(struct wakeup_source); \
+        _wakeup_source = (struct wakeup_source *)kmalloc(sizeof(struct wakeup_source), GFP_KERNEL); \
+        if(!_wakeup_source) return -ENOMEM; \
         wakeup_source_init(_wakeup_source, _name); \
 }
 #endif
