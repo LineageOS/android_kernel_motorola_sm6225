@@ -787,6 +787,30 @@ void ts_mmi_dev_unregister(struct device *parent)
 }
 EXPORT_SYMBOL(ts_mmi_dev_unregister);
 
+bool ts_mmi_is_panel_match(const char *panel_node, char *touch_ic_name)
+{
+	struct device_node *of_chosen;
+	const char *panel_name;
+
+	of_chosen = of_find_node_by_path("/chosen");
+	if (of_chosen == NULL)
+		of_chosen = of_find_node_by_path("/chosen@0");
+
+	if (of_chosen == NULL)
+		return false;
+
+	if (of_property_read_string(of_chosen, panel_node, &panel_name)) {
+		pr_err("%s: Failed to get %s", __func__, panel_node);
+		return false;
+	}
+
+	if (strstr(panel_name, touch_ic_name))
+			return true;
+
+	return false;
+}
+EXPORT_SYMBOL(ts_mmi_is_panel_match);
+
 static int __init touchscreens_init(void)
 {
 	int error = 0;

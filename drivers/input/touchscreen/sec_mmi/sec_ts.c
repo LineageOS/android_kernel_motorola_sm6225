@@ -2671,6 +2671,11 @@ static int __init sec_ts_init(void)
 		return -ENODEV;
 	}
 #endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	if (!ts_mmi_is_panel_match("mmi,panel_name", "lsi"))
+		return false;
+#endif
 	pr_err("%s\n", __func__);
 
 	return i2c_add_driver(&sec_ts_driver);
