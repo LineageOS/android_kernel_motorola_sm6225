@@ -2228,7 +2228,7 @@ end_rate_check:
 
 #define TAPER_COUNT 2
 #define TAPER_DROP_MA 100
-static bool mmi_has_current_tapered(struct smb_mmi_charger *chg,
+static bool mmi_has_current_tapered(int batt, struct smb_mmi_charger *chg,
 				    struct mmi_sm_params *chip,
 				    int batt_ma, int taper_ma)
 {
@@ -2384,7 +2384,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			chip->pres_chrg_step = STEP_MAX;
 		} else if (!zone->fcc_norm_ma)
 			chip->pres_chrg_step = STEP_FLOAT;
-		else if (mmi_has_current_tapered(chg, chip, stat->batt_ma,
+		else if (mmi_has_current_tapered(batt, chg, chip, stat->batt_ma,
 						 zone->fcc_norm_ma)) {
 			chip->chrg_taper_cnt = 0;
 			for (i = 0; i < MAX_NUM_STEPS; i++)
@@ -2398,7 +2398,7 @@ static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			 (stat->batt_mv + fv_offset) < max_fv_mv) {
 			chip->chrg_taper_cnt = 0;
 			chip->pres_chrg_step = STEP_NORM;
-		} else if (mmi_has_current_tapered(chg, chip, stat->batt_ma,
+		} else if (mmi_has_current_tapered(batt, chg, chip, stat->batt_ma,
 						   chip->chrg_iterm)) {
 				chip->pres_chrg_step = STEP_FULL;
 		}
@@ -2636,7 +2636,7 @@ static int mmi_dual_charge_control(struct smb_mmi_charger *chg,
 
 		voltage_full = ((chg->demo_mode_usb_suspend == false) &&
 		    ((stat->batt_mv + HYST_STEP_MV) >= DEMO_MODE_VOLTAGE)
-		    && mmi_has_current_tapered(chg, main_p, stat->batt_ma,
+		    && mmi_has_current_tapered(MAIN_BATT, chg, main_p, stat->batt_ma,
 					       (main_p->chrg_iterm * 2)));
 
 		if ((chg->demo_mode_usb_suspend == false) &&
@@ -2863,7 +2863,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 
 		voltage_full = ((chip->demo_mode_usb_suspend == false) &&
 		    ((stat->batt_mv + HYST_STEP_MV) >= DEMO_MODE_VOLTAGE)
-		    && mmi_has_current_tapered(chip, prm, stat->batt_ma,
+		    && mmi_has_current_tapered(BASE_BATT, chip, prm, stat->batt_ma,
 			prm->chrg_iterm));
 
 		if ((chip->demo_mode_usb_suspend == false) &&
@@ -2901,7 +2901,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			prm->pres_chrg_step = STEP_MAX;
 		} else if (!zone->fcc_norm_ma)
 			prm->pres_chrg_step = STEP_FLOAT;
-		else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+		else if (mmi_has_current_tapered(BASE_BATT, chip, prm, stat->batt_ma,
 						 zone->fcc_norm_ma)) {
 			prm->chrg_taper_cnt = 0;
 
@@ -2921,7 +2921,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
 			prm->chrg_taper_cnt = 0;
 			prm->pres_chrg_step = STEP_NORM;
-		} else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+		} else if (mmi_has_current_tapered(BASE_BATT, chip, prm, stat->batt_ma,
 						   prm->chrg_iterm)) {
 				prm->pres_chrg_step = STEP_FULL;
 		}
@@ -2935,7 +2935,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		if ((zone->fcc_norm_ma) ||
 		    ((stat->batt_mv + HYST_STEP_MV) < zone->norm_mv))
 			prm->pres_chrg_step = STEP_MAX;
-		else if (mmi_has_current_tapered(chip, prm, stat->batt_ma,
+		else if (mmi_has_current_tapered(BASE_BATT, chip, prm, stat->batt_ma,
 						   prm->chrg_iterm))
 			prm->pres_chrg_step = STEP_STOP;
 	}
