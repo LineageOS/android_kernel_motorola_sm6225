@@ -4156,6 +4156,13 @@ static int __init syna_tcm_module_init(void)
 {
 	int retval;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	if (!ts_mmi_is_panel_match("mmi,panel_name", "syna")) {
+		pr_info("%s failed, the panel is not match the touch driver", __func__);
+		return false;
+	}
+#endif
+
 	retval = syna_tcm_bus_init();
 	if (retval < 0)
 		return retval;
