@@ -2248,7 +2248,12 @@ static bool mmi_has_current_tapered(int batt, struct smb_mmi_charger *chg,
 		target_ma = allowed_fcc - TAPER_DROP_MA;
 
 	if (batt_ma < 0) {
-		batt_ma *= -1;
+		if (chip->chrg_taper_cnt >= TAPER_COUNT) {
+			change_state = true;
+			chip->chrg_taper_cnt = 0;
+		} else
+			chip->chrg_taper_cnt++;
+	} else {
 		if (batt_ma <= target_ma)
 			if (chip->chrg_taper_cnt >= TAPER_COUNT) {
 				change_state = true;
@@ -2257,12 +2262,6 @@ static bool mmi_has_current_tapered(int batt, struct smb_mmi_charger *chg,
 				chip->chrg_taper_cnt++;
 		else
 			chip->chrg_taper_cnt = 0;
-	} else {
-		if (chip->chrg_taper_cnt >= TAPER_COUNT) {
-			change_state = true;
-			chip->chrg_taper_cnt = 0;
-		} else
-			chip->chrg_taper_cnt++;
 	}
 
 	return change_state;
