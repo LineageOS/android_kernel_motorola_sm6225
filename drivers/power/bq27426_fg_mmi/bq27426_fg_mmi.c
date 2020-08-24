@@ -1024,6 +1024,8 @@ static int fg_read_status(struct bq_fg_chip *bq)
 	bq->batt_socf		= !!(flags & FG_FLAGS_SOCF);
 	bq->batt_dsg		= !!(flags & FG_FLAGS_DSG);
 	bq->allow_chg		= !!(flags & FG_FLAGS_CHG);
+	bq->itpor		= !!(flags & FG_FLAGS_ITPOR);
+	bq->cfg_update_mode	= !!(flags & FG_FLAGS_CFGUPMODE);
 	mutex_unlock(&bq->data_lock);
 
 	return 0;
