@@ -34,7 +34,7 @@
  * DOLLARS.
  */
 
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 #include <linux/sched/signal.h>
 #include <linux/mmi_kernel_common.h>
 

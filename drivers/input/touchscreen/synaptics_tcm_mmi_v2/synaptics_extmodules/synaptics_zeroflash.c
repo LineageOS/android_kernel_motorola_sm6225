@@ -37,7 +37,7 @@
 #include <linux/gpio.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 
 
 #define ENABLE_SYS_ZEROFLASH true

@@ -36,7 +36,7 @@
 
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 
 #define XFER_ATTEMPTS 10
 

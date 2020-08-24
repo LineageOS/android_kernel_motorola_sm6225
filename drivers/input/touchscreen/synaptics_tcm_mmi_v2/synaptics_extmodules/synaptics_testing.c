@@ -35,7 +35,7 @@
  */
 
 #include <linux/gpio.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 #include "synaptics_testing.h"
 
 #define SYSFS_DIR_NAME "testing"
