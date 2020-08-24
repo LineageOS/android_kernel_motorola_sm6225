@@ -31,6 +31,7 @@ ifneq (,$(filter astro%, $(TARGET_PRODUCT)))
 EXTRA_CFLAGS += -DCONFIG_AW882XX_CODEC -DCONFIG_AW882XX_DSP
 endif
 
+ifneq (,$(filter surf% ocean%, $(TARGET_PRODUCT)))
 ifeq ($(KDIR),)
 PLMA_HOSTSW_DIR=$(realpath -f $(srctree)/$(src))
 else
@@ -52,6 +53,7 @@ EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
 snd_soc_tfa9874-objs += tfa_debug.o
 endif
 obj-m += snd_soc_tfa9874.o
+endif
 
 tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
 obj-m += tas2560.o
