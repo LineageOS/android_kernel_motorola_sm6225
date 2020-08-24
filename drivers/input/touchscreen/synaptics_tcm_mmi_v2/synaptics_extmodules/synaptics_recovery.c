@@ -34,7 +34,7 @@
  * DOLLARS.
  */
 
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 
 #define SET_UP_RECOVERY_MODE true
 

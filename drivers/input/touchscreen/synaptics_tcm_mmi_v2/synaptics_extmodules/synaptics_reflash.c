@@ -36,7 +36,7 @@
 
 #include <linux/crc32.h>
 #include <linux/firmware.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 /*
 #define STARTUP_REFLASH
 */

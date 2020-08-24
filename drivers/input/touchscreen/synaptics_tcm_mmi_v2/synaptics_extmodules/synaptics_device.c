@@ -37,7 +37,7 @@
 #include <linux/cdev.h>
 #include <linux/gpio.h>
 #include <linux/uaccess.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 
 #define CHAR_DEVICE_NAME "tcm"
 

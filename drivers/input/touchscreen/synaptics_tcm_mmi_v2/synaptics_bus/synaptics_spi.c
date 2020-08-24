@@ -36,7 +36,7 @@
 
 #include <linux/spi/spi.h>
 #include <linux/of_gpio.h>
-#include "synaptics_core.h"
+#include "../synaptics_core/synaptics_core.h"
 
 static unsigned char *buf;
 
