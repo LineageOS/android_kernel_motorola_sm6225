@@ -251,6 +251,7 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= rouleur/
 	obj-y	+= wsa883x/
 	obj-y	+= sdm660_cdc/
+	obj-y	+= awinic/
 endif
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
@@ -283,6 +284,14 @@ mbhc_dlkm-y := $(MBHC_OBJS)
 
 obj-$(CONFIG_SND_SOC_MSM_HDMI_CODEC_RX) += hdmi_dlkm.o
 hdmi_dlkm-y := $(HDMICODEC_OBJS)
+
+#Add awinic driver begain
+ifdef CONFIG_SND_SMARTPA_AW882XX
+	SND_SOC_AW882XX_OBJS += awinic/aw882xx.o
+endif
+obj-$(CONFIG_SND_SMARTPA_AW882XX) += aw882xx_dlkm.o
+aw882xx_dlkm-y := $(SND_SOC_AW882XX_OBJS)
+#Add awinic driver end
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
