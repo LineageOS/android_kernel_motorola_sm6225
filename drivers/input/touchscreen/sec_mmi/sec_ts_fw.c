@@ -894,9 +894,13 @@ static int sec_ts_load_fw_from_ums(struct sec_ts_data *ts)
 			filp_close(fp, NULL);
 			goto open_err;
 		}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		nread = kernel_read(fp, (char __user *)fw_data,
+				fw_size, &fp->f_pos);
+#else
 		nread = vfs_read(fp, (char __user *)fw_data,
 				fw_size, &fp->f_pos);
-
+#endif
 		input_info(true, ts->dev,
 				"%s: start, file path %s, size %ld Bytes\n",
 				__func__, SEC_TS_DEFAULT_UMS_FW, fw_size);
