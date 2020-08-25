@@ -9,6 +9,7 @@ qcom,ATL466271_6000mAh {
 	qcom,battery-therm-kohm = <100>; /* on sub-board 100K */
 	qcom,battery-type = "S88731AA1-qrd-ATL-4V45-6000mah";
 	qcom,qg-batt-profile-ver = <100>;
+        qcom,oem-batt-profile-ver = <1>;
 
 	/*qcom,step-chg-ranges = <3500000  4000000  8000000
 				4000001  4200000  6000000
