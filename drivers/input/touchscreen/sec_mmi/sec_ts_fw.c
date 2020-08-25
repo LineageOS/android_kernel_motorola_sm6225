@@ -894,7 +894,7 @@ static int sec_ts_load_fw_from_ums(struct sec_ts_data *ts)
 			filp_close(fp, NULL);
 			goto open_err;
 		}
-		nread = kernel_read(fp, (char __user *)fw_data,
+		nread = vfs_read(fp, (char __user *)fw_data,
 				fw_size, &fp->f_pos);
 
 		input_info(true, ts->dev,
