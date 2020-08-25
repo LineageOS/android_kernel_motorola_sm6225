@@ -1146,7 +1146,11 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	}
 	fp = cb->filep;
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 	written = kernel_write(fp, datap, tags_size, &pos);
+#else
+	written = vfs_write(fp, datap, tags_size, &pos);
+#endif
 	if (written < tags_size) {
 		pr_err("failed to write file (%s), rc=%zu\n",
 			cb->name, written);
@@ -1161,7 +1165,11 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 		fp = cb->filep;
 		pos = 0;
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 		written = kernel_write(fp, datap, tags_size, &pos);
+#else
+		written = vfs_write(fp, datap, tags_size, &pos);
+#endif
 		if (written < tags_size)
 			pr_err("failed to write file (%s), rc=%zu\n",
 				cb->name, written);
