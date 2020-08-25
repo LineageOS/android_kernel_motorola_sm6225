@@ -378,7 +378,11 @@ static struct dev_config mi2s_rx_cfg[] = {
 };
 
 static struct dev_config mi2s_tx_cfg[] = {
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+#else
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
+#endif
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[QUAT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
@@ -4389,8 +4393,8 @@ static void *def_wcd_mbhc_cal(void)
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
-	btn_high[0] = 75;
-	btn_high[1] = 150;
+	btn_high[0] = 88;//75;
+	btn_high[1] = 138;//150;
 	btn_high[2] = 237;
 	btn_high[3] = 500;
 	btn_high[4] = 500;
@@ -5060,6 +5064,26 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 	},
 };
 
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+static struct snd_soc_dai_link msm_awinic_fe_dai_links[] = {
+        {
+                .name = "Primary MI2S TX_Hostless",
+                .stream_name = "Primary MI2S_TX Hostless Capture",
+                .cpu_dai_name = "PRI_MI2S_TX_HOSTLESS",
+                .platform_name = "msm-pcm-hostless",
+                .dynamic = 1,
+                .dpcm_capture = 1,
+                .trigger = {SND_SOC_DPCM_TRIGGER_POST,
+                                SND_SOC_DPCM_TRIGGER_POST},
+                .no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+                .ignore_suspend = 1,
+                .ignore_pmdown_time = 1,
+                .codec_dai_name = "snd-soc-dummy-dai",
+                .codec_name = "snd-soc-dummy",
+        },
+};
+#endif
+
 static struct snd_soc_dai_link msm_common_be_dai_links[] = {
 	/* Backend AFE DAI Links */
 	{
@@ -5376,6 +5400,41 @@ static struct snd_soc_dai_link msm_wcn_btfm_be_dai_links[] = {
 	},
 };
 
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+static struct snd_soc_dai_link msm_awinic_be_dai_links[] = {
+        {
+                .name = LPASS_BE_PRI_MI2S_RX,
+                .stream_name = "Primary MI2S Playback",
+                .cpu_dai_name = "msm-dai-q6-mi2s.0",
+                .platform_name = "msm-pcm-routing",
+		.codec_name = "aw882xx_smartpa.1-0034",
+                .codec_dai_name = "aw882xx-aif",
+                .no_pcm = 1,
+                .dpcm_playback = 1,
+                .id = MSM_BACKEND_DAI_PRI_MI2S_RX,
+                .be_hw_params_fixup = msm_be_hw_params_fixup,
+                .ops = &msm_mi2s_be_ops,
+                .ignore_suspend = 1,
+                .ignore_pmdown_time = 1,
+        },
+        {
+                .name = LPASS_BE_PRI_MI2S_TX,
+                .stream_name = "Primary MI2S Capture",
+                .cpu_dai_name = "msm-dai-q6-mi2s.0",
+                .platform_name = "msm-pcm-routing",
+		.codec_name = "aw882xx_smartpa.1-0034",
+                .codec_dai_name = "aw882xx-aif",
+                .no_pcm = 1,
+                .dpcm_capture = 1,
+                .id = MSM_BACKEND_DAI_PRI_MI2S_TX,
+                .be_hw_params_fixup = msm_be_hw_params_fixup,
+                .ops = &msm_mi2s_be_ops,
+                .ignore_suspend = 1,
+        },
+};
+#endif
+
+#if !defined(CONFIG_SND_SMARTPA_AW882XX)
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
@@ -5494,6 +5553,7 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ignore_suspend = 1,
 	},
 };
+#endif
 
 static struct snd_soc_dai_link msm_auxpcm_be_dai_links[] = {
 	/* Primary AUX PCM Backend DAI Links */
@@ -5780,12 +5840,18 @@ static struct snd_soc_dai_link msm_bengal_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
 			ARRAY_SIZE(msm_common_misc_fe_dai_links) +
 			ARRAY_SIZE(msm_common_be_dai_links) +
+#if !defined(CONFIG_SND_SMARTPA_AW882XX)
 			ARRAY_SIZE(msm_mi2s_be_dai_links) +
+#endif
 			ARRAY_SIZE(msm_auxpcm_be_dai_links) +
 			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link) +
 			ARRAY_SIZE(msm_wcn_btfm_be_dai_links) +
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+			ARRAY_SIZE(msm_awinic_fe_dai_links) +
+			ARRAY_SIZE(msm_awinic_be_dai_links) +
+#endif
 			ARRAY_SIZE(msm_tdm_be_dai_links)];
 
 static int msm_populate_dai_link_component_of_node(
@@ -6048,13 +6114,18 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	int len_2 = 0;
 	int total_links = 0;
 	int rc = 0;
+#if !defined(CONFIG_SND_SMARTPA_AW882XX)
 	u32 mi2s_audio_intf = 0;
+#endif
 	u32 auxpcm_audio_intf = 0;
 	u32 rxtx_bolero_codec = 0;
 	u32 va_bolero_codec = 0;
 	u32 val = 0;
 	u32 wcn_btfm_intf = 0;
 	const struct of_device_id *match;
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+	u32 has_awinic_pa = 0;
+#endif
 
 	match = of_match_node(bengal_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -6113,6 +6184,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 			}
 		}
 
+#if !defined(CONFIG_SND_SMARTPA_AW882XX)
 		rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
 					  &mi2s_audio_intf);
 		if (rc) {
@@ -6127,6 +6199,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 					ARRAY_SIZE(msm_mi2s_be_dai_links);
 			}
 		}
+#endif
 
 		rc = of_property_read_u32(dev->of_node,
 					  "qcom,auxpcm-audio-intf",
@@ -6178,6 +6251,30 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 					ARRAY_SIZE(msm_wcn_btfm_be_dai_links);
 			}
 		}
+
+#ifdef CONFIG_SND_SMARTPA_AW882XX
+		rc = of_property_read_u32(dev->of_node, "aw,have-882xx",
+				&has_awinic_pa);
+		if (rc) {
+			dev_dbg(dev, "%s: No DT match awinic audio interface\n",
+				__func__);
+		} else {
+			dev_dbg(dev,"%s,aw,has-882xx=%d\n",__func__,has_awinic_pa);
+			if (has_awinic_pa) {
+				memcpy(msm_bengal_dai_links + total_links,
+					msm_awinic_fe_dai_links,
+					sizeof(msm_awinic_fe_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_awinic_fe_dai_links);
+				memcpy(msm_bengal_dai_links + total_links,
+					msm_awinic_be_dai_links,
+					sizeof(msm_awinic_be_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_awinic_be_dai_links);
+			}
+		}
+#endif
+
 		dailink = msm_bengal_dai_links;
 	} else if (!strcmp(match->data, "stub_codec")) {
 		card = &snd_soc_card_stub_msm;
