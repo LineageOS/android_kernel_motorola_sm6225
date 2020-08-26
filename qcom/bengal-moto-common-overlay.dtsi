@@ -91,3 +91,9 @@
 &bcl_soc {
        qcom,bcl-not-mitigate-icl = <2500>;
 };
+
+&sdhc_2 {
+	vdd-io-bias-supply = <&L7A>;
+	qcom,vdd-io-bias-voltage-level = <1256000 1256000>;
+	qcom,vdd-io-bias-current-level = <0 6000>;
+};
