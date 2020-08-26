@@ -142,6 +142,7 @@ struct ctrl {
 	struct work_struct load_work;
 	struct work_struct store_work;
 	struct utag *head;
+	int store_work_result;
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
@@ -1193,6 +1194,7 @@ void store_work_func(struct work_struct *work)
 	rc = store_utags(ctrl, ctrl->head);
 	if (rc)
 		pr_err("error storing utags partition\n");
+	ctrl->store_work_result = rc;
 	complete(&ctrl->store_comp);
 }
 
@@ -1349,6 +1351,8 @@ static ssize_t write_utag(struct file *file, const char __user *buffer,
 
 	queue_work(ctrl->store_queue, &ctrl->store_work);
 	wait_for_completion(&ctrl->store_comp);
+	if (ctrl->store_work_result)
+		count = ctrl->store_work_result;
 free_tags_exit:
 	free_tags(tags);
 free_temp_exit:
@@ -1444,6 +1448,8 @@ static ssize_t delete_utag(struct file *file, const char __user *buffer,
 	/* Store changed partition */
 	queue_work(ctrl->store_queue, &ctrl->store_work);
 	wait_for_completion(&ctrl->store_comp);
+	if (ctrl->store_work_result)
+		count = ctrl->store_work_result;
 	rebuild_utags_directory(ctrl);
 just_leave:
 	free_tags(tags);
@@ -1637,6 +1643,8 @@ static ssize_t new_utag(struct file *file, const char __user *buffer,
 	/* Store changed partition */
 	queue_work(ctrl->store_queue, &ctrl->store_work);
 	wait_for_completion(&ctrl->store_comp);
+	if (ctrl->store_work_result)
+		ret = ctrl->store_work_result;
 just_leave:
 	free_tags(tags);
 	mutex_unlock(&ctrl->access_lock);
