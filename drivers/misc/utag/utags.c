@@ -1143,7 +1143,7 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 
 	if (open_utags(cb)) {
 		rc = -EIO;
-		goto out;
+		goto err_free;
 	}
 	fp = cb->filep;
 
@@ -1161,8 +1161,10 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	/* Only try to use backup partition if it is configured */
 	if (ctrl->backup.name) {
 		cb = &ctrl->backup;
-		if (open_utags(cb))
-			goto out;
+		if (open_utags(cb)) {
+			rc = -EIO;
+			goto err_free;
+		}
 		fp = cb->filep;
 		pos = 0;
 
@@ -1171,13 +1173,16 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 #else
 		written = vfs_write(fp, datap, tags_size, &pos);
 #endif
-		if (written < tags_size)
+		if (written < tags_size) {
 			pr_err("failed to write file (%s), rc=%zu\n",
 				cb->name, written);
+			rc = -EIO;
+		}
 	}
-	vfree(datap);
 
- out:
+err_free:
+	vfree(datap);
+out:
 	set_fs(fs);
 	return rc;
 }
