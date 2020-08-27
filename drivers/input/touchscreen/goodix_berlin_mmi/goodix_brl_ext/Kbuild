@@ -1,0 +1,14 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/goodix_berlin_mmi/include
+
+obj-m += goodix_brl_tools_mmi.o
+goodix_brl_tools_mmi-objs = goodix_ts_tools.o
+
+obj-m += goodix_brl_gesture_mmi.o
+goodix_brl_gesture_mmi-objs = goodix_ts_gesture.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../goodix_brl_core/Module.symvers
+
