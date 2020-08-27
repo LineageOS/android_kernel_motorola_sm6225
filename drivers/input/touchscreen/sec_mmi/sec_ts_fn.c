@@ -778,7 +778,7 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 		strncat(pStr, pTmp, lsize);
 	}
 
-	input_raw_info(true, &ts->client->dev, "%s\n", pStr);
+	input_raw_frame_info(true, &ts->client->dev, "%s\n", pStr);
 	memset(pStr, 0x0, lsize);
 	snprintf(pTmp, sizeof(pTmp), " +");
 	strncat(pStr, pTmp, lsize);
@@ -788,7 +788,7 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 		strncat(pStr, pTmp, lsize);
 	}
 
-	input_raw_info(true, &ts->client->dev, "%s\n", pStr);
+	input_raw_frame_info(true, &ts->client->dev, "%s\n", pStr);
 
 	for (i = 0; i < ts->rx_count; i++) {
 		memset(pStr, 0x0, lsize);
@@ -806,7 +806,7 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 
 			strncat(pStr, pTmp, lsize);
 		}
-		input_raw_info(true, &ts->client->dev, "%s\n", pStr);
+		input_raw_frame_info(true, &ts->client->dev, "%s\n", pStr);
 	}
 	kfree(pStr);
 }

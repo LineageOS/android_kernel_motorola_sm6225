@@ -68,6 +68,14 @@
 #define input_raw_info(f, d, fmt, args...) dev_info(d, fmt, ##args)
 #endif
 
+#ifndef input_raw_frame_info
+#ifdef INPUT_RAW_FRAME_INFO
+#define input_raw_frame_info(f, d, fmt, args...) dev_info(d, fmt, ##args)
+#else
+#define input_raw_frame_info(f, d, fmt, args...) dev_dbg(d, fmt, ##args)
+#endif
+#endif
+
 #define SEC_TS_I2C_NAME		"sec_ts"
 #define SEC_TS_DEVICE_NAME	"SEC_TS"
 
