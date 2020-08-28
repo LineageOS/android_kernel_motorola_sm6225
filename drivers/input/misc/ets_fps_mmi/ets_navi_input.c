@@ -213,7 +213,7 @@ static unsigned int prev_keycode;
 #define SINGLECLICK_INTERVAL        150
 #define SINGLECLICK_INTERVAL_MIN    5
 #define DOUBLECLICK_INTERVAL        300
-
+#define DOUBLECLICK_INTERVAL_MIN    70
 
 #define	KEYEVENT_CLICK              KEY_FPS_TAP /* 0x232 */
 #define	KEYEVENT_CLICK_ACTION       KEY_PRESS_RELEASE
@@ -438,7 +438,8 @@ void translated_command_converter(char cmd, struct etspi_data *etspi)
 #endif
 #if ENABLE_TRANSLATED_DOUBLE_CLICK
 			if (g_SingleClick >= 2) {
-				if ((g_SingleClickJiffies - g_DoubleClickJiffies) < (HZ * DOUBLECLICK_INTERVAL / 1000)) {
+				if (((g_SingleClickJiffies - g_DoubleClickJiffies) < (HZ * DOUBLECLICK_INTERVAL / 1000))
+					&& ((g_SingleClickJiffies - g_DoubleClickJiffies) >= (HZ * DOUBLECLICK_INTERVAL_MIN / 1000))) {
 					/* Double click event */
 					send_key_event(etspi, KEYEVENT_DOUBLECLICK, KEYEVENT_DOUBLECLICK_ACTION);
 					g_SingleClick = 0;
