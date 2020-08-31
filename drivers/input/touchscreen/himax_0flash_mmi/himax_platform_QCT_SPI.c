@@ -1081,7 +1081,7 @@ int panel_notifier_callback(struct notifier_block *self, unsigned long event, vo
 #endif
 				break;
 
-	case PANEL_EVENT_PANEL_PREPARE:
+	case PANEL_EVENT_DISPLAY_ON:
 			I("event=%lu\n", event);
 			himax_common_resume(ts->dev);
 				break;
