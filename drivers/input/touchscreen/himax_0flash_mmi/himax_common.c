@@ -1567,7 +1567,8 @@ static void himax_wake_event_report(void)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&private_ts->tap_gesture_wakelock, msecs_to_jiffies(5000));
 #else
-		__pm_wakeup_event(&private_ts->tap_gesture_wakelock, 5000);
+
+		PM_WAKEUP_EVENT(private_ts->tap_gesture_wakelock, 5000);
 #endif
 #else
 		I(" %s SMART WAKEUP KEY event %d press\n", __func__, KEY_EVENT);
@@ -1891,7 +1892,7 @@ static int himax_touch_get(struct himax_ts_data *ts, uint8_t *buf, int ts_path, 
 
 	/*SMWP*/
 	case HX_REPORT_SMWP_EVENT:
-		__pm_wakeup_event(&ts->ts_SMWP_wake_lock, TS_WAKE_LOCK_TIMEOUT);
+		PM_WAKEUP_EVENT(ts->ts_SMWP_wake_lock, TS_WAKE_LOCK_TIMEOUT);
 		msleep(20);
 		g_core_fp.fp_burst_enable(0);
 
@@ -2806,7 +2807,7 @@ static void himax_report_points(struct himax_ts_data *ts)
 			wake_lock_timeout(&ts->palm_gesture_wakelock,
 				ts->palm_release_delay_ms);
 #else
-			__pm_wakeup_event(&ts->palm_gesture_wakelock,
+			PM_WAKEUP_EVENT(ts->palm_gesture_wakelock,
 				ts->palm_release_delay_ms);
 #endif
 			return;
@@ -2902,7 +2903,7 @@ static int _himax_palm_detect_sensor_set_enable(unsigned int enable)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock(&private_ts->palm_gesture_read_wakelock);
 #else
-		__pm_stay_awake(&private_ts->palm_gesture_read_wakelock);
+		PM_STAY_AWAKE(private_ts->palm_gesture_read_wakelock);
 #endif
 		g_core_fp.fp_palm_detection_function(1);
 		private_ts->palm_detection_enabled = true;
@@ -2916,7 +2917,7 @@ static int _himax_palm_detect_sensor_set_enable(unsigned int enable)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_unlock(&private_ts->palm_gesture_read_wakelock);
 #else
-		__pm_relax(&private_ts->palm_gesture_read_wakelock);
+		PM_RELAX(private_ts->palm_gesture_read_wakelock);
 #endif
 	} else
 		E("unknown enable symbol\n");
@@ -2993,12 +2994,20 @@ static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&data->palm_gesture_wakelock, WAKE_LOCK_SUSPEND, "palm_detect_wl");
 #else
-	wakeup_source_init(&data->palm_gesture_wakelock, "palm_detect_wl");
+    PM_WAKEUP_REGISTER(data->dev, data->palm_gesture_wakelock, "palm_detect_wl")
+	if (!data->palm_gesture_wakelock) {
+		E(" failed to allocate palm_detect_wl wakeup source\n");
+		goto err_wakeup_source_register_failed;
+	}
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&data->palm_gesture_read_wakelock, WAKE_LOCK_SUSPEND, "palm_read_wl");
 #else
-	wakeup_source_init(&data->palm_gesture_read_wakelock, "palm_read_wl");
+	PM_WAKEUP_REGISTER(data->dev, data->palm_gesture_read_wakelock, "palm_read_wl");
+	if (!data->palm_gesture_read_wakelock) {
+		E(" failed to allocate palm_read_wl wakeup source\n");
+		goto err_wakeup_source_register_failed;
+	}
 #endif
 
 	data->palm_release_fimer.function = himax_palm_sensor_release_timer_handler;
@@ -3007,6 +3016,9 @@ static int himax_palm_detect_sensor_init(struct himax_ts_data *data)
 
 	return 0;
 
+#ifndef CONFIG_HAS_WAKELOCK
+err_wakeup_source_register_failed:
+#endif
 unregister_sensor_input_device:
 	input_unregister_device(data->palm_sensor_pdata->input_sensor_dev);
 free_sensor_input_dev:
@@ -3027,12 +3039,12 @@ int himax_palm_detect_sensor_remove(struct himax_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&data->palm_gesture_wakelock);
 #else
-	wakeup_source_trash(&data->palm_gesture_wakelock);
+	PM_WAKEUP_UNREGISTER(data->palm_gesture_wakelock);
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&data->palm_gesture_read_wakelock);
 #else
-	wakeup_source_trash(&data->palm_gesture_read_wakelock);
+	PM_WAKEUP_UNREGISTER(data->palm_gesture_read_wakelock);
 #endif
 	data->palm_sensor_pdata = NULL;
 	data->palm_detection_enabled = false;
@@ -3116,11 +3128,18 @@ static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&data->tap_gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
 #else
-	wakeup_source_init(&data->tap_gesture_wakelock, "dt-wake-lock");
+	PM_WAKEUP_REGISTER(data->dev, data->tap_gesture_wakelock, "dt-wake-lock");
+	if (!data->tap_gesture_wakelock) {
+		E(" failed to allocate dt-wake-lock wakeup source\n");
+		goto err_wakeup_source_register_failed;
+	}
 #endif
 
 	return 0;
 
+#ifndef CONFIG_HAS_WAKELOCK
+err_wakeup_source_register_failed:
+#endif
 unregister_sensor_input_device:
 	input_unregister_device(data->sensor_pdata->input_sensor_dev);
 free_sensor_input_dev:
@@ -3141,7 +3160,7 @@ int himax_tap_detect_sensor_remove(struct himax_ts_data *data)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&data->tap_gesture_wakelock);
 #else
-	wakeup_source_trash(&data->tap_gesture_wakelock);
+	PM_WAKEUP_UNREGISTER(data->tap_gesture_wakelock);
 #endif
 	data->sensor_pdata = NULL;
 	return 0;
@@ -3779,7 +3798,11 @@ FW_force_upgrade:
 
 #ifdef HX_SMART_WAKEUP
 	ts->SMWP_enable = 0;
-	wakeup_source_init(&ts->ts_SMWP_wake_lock, HIMAX_common_NAME);
+	PM_WAKEUP_REGISTER(ts->dev, ts->ts_SMWP_wake_lock, HIMAX_common_NAME);
+	if (!ts->ts_SMWP_wake_lock) {
+		E(" failed to allocate %s wakeup source\n", HIMAX_common_NAME);
+		goto err_wakeup_source_register_failed;
+	}
 #endif
 #ifdef HX_HIGH_SENSE
 	ts->HSEN_enable = 0;
@@ -3844,7 +3867,10 @@ err_creat_proc_file_failed:
 	himax_report_data_deinit();
 err_report_data_init_failed:
 #ifdef HX_SMART_WAKEUP
-	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
+	PM_WAKEUP_UNREGISTER(ts->ts_SMWP_wake_lock);
+#endif
+#ifndef CONFIG_HAS_WAKELOCK
+err_wakeup_source_register_failed:
 #endif
 #ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
 	cancel_delayed_work_sync(&ts->work_panel);
@@ -3926,7 +3952,7 @@ void himax_chip_common_deinit(void)
 	himax_report_data_deinit();
 
 #ifdef HX_SMART_WAKEUP
-	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
+	PM_WAKEUP_UNREGISTER(ts->ts_SMWP_wake_lock);
 #endif
 #if defined(CONFIG_DRM)
 	if (msm_drm_unregister_client(&ts->fb_notif))
