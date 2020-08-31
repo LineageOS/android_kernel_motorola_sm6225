@@ -35,6 +35,7 @@
 #include <linux/fs.h>
 #include <linux/buffer_head.h>
 #include <linux/pm_wakeup.h>
+#include <linux/mmi_wake_lock.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include "himax_platform.h"
@@ -498,7 +499,7 @@ struct himax_ts_data {
 #if defined (HX_SMART_WAKEUP) || defined (HX_CODE_OVERLAY)
 	uint8_t SMWP_enable;
 	uint8_t gesture_cust_en[26];
-	struct wakeup_source ts_SMWP_wake_lock;
+	struct wakeup_source *ts_SMWP_wake_lock;
 #ifdef HX_P_SENSOR
 	bool psensor_flag;
 #endif
@@ -533,12 +534,12 @@ struct himax_ts_data {
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock palm_gesture_wakelock;
 #else
-	struct wakeup_source palm_gesture_wakelock;
+	struct wakeup_source *palm_gesture_wakelock;
 #endif
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock palm_gesture_read_wakelock;
 #else
-	struct wakeup_source palm_gesture_read_wakelock;
+	struct wakeup_source *palm_gesture_read_wakelock;
 #endif
 #endif
 
@@ -547,7 +548,7 @@ struct himax_ts_data {
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock tap_gesture_wakelock;
 #else
-	struct wakeup_source tap_gesture_wakelock;
+	struct wakeup_source *tap_gesture_wakelock;
 #endif
 #endif
 
