@@ -133,6 +133,9 @@
 	qcom,mdss-dsi-no-panel-on-read-support;
 	qcom,platform-reset-gpio-always-on;
 
+	qcom,mdss-dsi-cabc-dis-command-state = "dsi_lp_mode";
+	qcom,mdss-dsi-hbm-off-command-state = "dsi_lp_mode";
+
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
 
@@ -164,6 +167,7 @@
                                         05 01 00 00 78 00 02 11 00
                                         05 01 00 00 14 00 02 29 00
                                         15 01 00 00 00 00 02 26 01];
+			qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 			qcom,mdss-dsi-panel-phy-timings =
 				[1E 1C 04 06 02 02 04 a0
