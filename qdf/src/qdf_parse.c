@@ -24,6 +24,9 @@
 #include "qdf_trace.h"
 #include "qdf_types.h"
 
+#define DEVICE_BOOTARG "androidboot.device="
+#define RADIO_BOOTARG "androidboot.radio="
+
 QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 			 qdf_ini_item_cb item_cb, qdf_ini_section_cb section_cb)
 {
@@ -31,6 +34,10 @@ QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 	char *fbuf;
 	char *cursor;
 	int ini_read_count = 0;
+	char *device_ptr, *radio_ptr = NULL;
+	const char *cmd_line = NULL;
+	struct device_node *chosen_node = NULL;
+	int len = 0;
 
 	status = qdf_file_read(ini_path, &fbuf);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -89,6 +96,47 @@ QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 		}
 
 		key = qdf_str_trim(key);
+
+		qdf_debug("key:%.9s,value_priv:%.2s \n", key,value);
+		if(strncmp(key, "BandCapability", 14) == 0 ){
+			qdf_debug("wifi24g modify enter \n");
+			chosen_node = of_find_node_by_name(NULL, "chosen");
+			qdf_err("%s: get chosen node \n", __func__);
+
+			if (!chosen_node){
+				qdf_err("%s: get chosen node read failed \n", __func__);
+				goto free_fbuf;
+			} else {
+				cmd_line = of_get_property(chosen_node, "bootargs", &len);
+				if (!cmd_line || len <= 0) {
+					qdf_err("%s: get the barcode bootargs failed \n", __func__);
+					status = QDF_STATUS_E_FAILURE;
+					goto free_fbuf;
+				} else {
+					device_ptr = strstr(cmd_line, DEVICE_BOOTARG);
+					radio_ptr = strstr(cmd_line, RADIO_BOOTARG);
+					if ((device_ptr == NULL) || (radio_ptr == NULL)) {
+						qdf_err("%s: " DEVICE_BOOTARG" not present cmd line argc",__func__);
+						status = QDF_STATUS_E_FAILURE;
+						goto free_fbuf;
+					} else {
+						device_ptr += strlen(DEVICE_BOOTARG);
+						radio_ptr += strlen(RADIO_BOOTARG);
+						qdf_debug("device:%.9s, radio:%.9s \n", device_ptr, radio_ptr);
+					}
+				}
+				if(((strncmp(device_ptr, "rav", 3) == 0) ||
+							(strncmp(device_ptr, "sofiar", 6) == 0) ||
+							(strncmp(device_ptr, "astro", 5) == 0))
+							&& (strncmp(radio_ptr, "NA", 2) != 0)) {
+					*value='1'; //wifi BandCapability = 2.4G only
+					qdf_debug("value_new1:%.2s\n",value );
+				}
+				qdf_debug("device:%.5s, radio:%.5s, key:%.9s,value_new2:%.2s \n",
+						device_ptr, radio_ptr, key,value);
+			}
+		}
+
 
 		/*
 		 * Ignoring comments, a valid ini line contains one of:
