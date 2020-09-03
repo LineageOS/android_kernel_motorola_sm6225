@@ -267,6 +267,7 @@
               qcom,batt-id-range-pct = <15>;
               df-serialnum = "SB18C87844";
               #include "qg-batterydata-ATL-4V45_6000mah.dtsi"
+              #include "qg-batterydata-SUNWODA-4V45_6000mah.dtsi"
         };
 };
 
