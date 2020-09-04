@@ -189,10 +189,10 @@
 				"shadow_byte_clk0", "shadow_pixel_clk0";
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-min-level = <4>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1023>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
