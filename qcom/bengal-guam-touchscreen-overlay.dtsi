@@ -28,6 +28,22 @@
 			};
 		};
 	};
+
+	pmx_ts_int_suspend_high {
+		ts_int_suspend_high: ts_int_suspend_high {
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio67";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
 	pmx_ts_reset_active {
 		ts_reset_active: ts_reset_active {
 				 mux {
@@ -148,6 +164,9 @@
                 spi-cpol;
 		touch,reset-gpio = <&tlmm 66 0x00>;
 		touch,irq-gpio = <&tlmm 67 0x2008>;
+		pinctrl-names = "pmx_ts_int_active","pmx_ts_int_suspend_high";
+		pinctrl-0 = <&ts_int_active>;
+		pinctrl-1 = <&ts_int_suspend_high>;
 		panel = <&dsi_hlt_ili9882h_video>;
 		panel2 = <&dsi_tm_ili9882n_video>;
 	};
