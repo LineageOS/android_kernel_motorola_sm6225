@@ -359,6 +359,69 @@ static void ilitek_tddi_wq_init(void)
 	INIT_WORK(&resume_by_ddi_work, ilitek_resume_by_ddi_work);
 #endif
 }
+static int ili_pinctrl_init(struct ilitek_ts_data *ts)
+{
+	int ret = 0;
+
+	ts->pinctrl = devm_pinctrl_get(ts->dev);
+	if (IS_ERR_OR_NULL(ts->pinctrl)) {
+		ILI_ERR("Failed to get pinctrl, please check dts");
+		ret = PTR_ERR(ts->pinctrl);
+		goto err_pinctrl_get;
+	}
+
+	ts->pins_active = pinctrl_lookup_state(ts->pinctrl, "pmx_ts_int_active");
+	if (IS_ERR_OR_NULL(ts->pins_active)) {
+		ILI_ERR("Pin state[active] not found");
+		ret = PTR_ERR(ts->pins_active);
+		goto err_pinctrl_lookup;
+	}
+
+	ts->pins_suspend = pinctrl_lookup_state(ts->pinctrl, "pmx_ts_int_suspend_high");
+	if (IS_ERR_OR_NULL(ts->pins_suspend)) {
+		ILI_ERR("Pin state[suspend] not found");
+		ret = PTR_ERR(ts->pins_suspend);
+	}
+
+	return 0;
+err_pinctrl_lookup:
+	if (ts->pinctrl) {
+		devm_pinctrl_put(ts->pinctrl);
+	}
+err_pinctrl_get:
+	ts->pinctrl = NULL;
+	ts->pins_suspend = NULL;
+	ts->pins_active = NULL;
+	return ret;
+}
+
+static int ili_pinctrl_select_normal(struct ilitek_ts_data *ts)
+{
+	int ret = 0;
+
+	if (ts->pinctrl && ts->pins_active) {
+		ret = pinctrl_select_state(ts->pinctrl, ts->pins_active);
+		if (ret < 0) {
+			ILI_ERR("Set normal pin state error:%d", ret);
+		}
+	}
+
+	return ret;
+}
+
+static int ili_pinctrl_select_suspend(struct ilitek_ts_data *ts)
+{
+	int ret = 0;
+
+	if (ts->pinctrl && ts->pins_suspend) {
+		ret = pinctrl_select_state(ts->pinctrl, ts->pins_suspend);
+		if (ret < 0) {
+			ILI_ERR("Set suspend pin state error:%d", ret);
+		}
+	}
+
+	return ret;
+}
 
 int ili_sleep_handler(int mode)
 {
@@ -405,6 +468,7 @@ int ili_sleep_handler(int mode)
 			enable_irq_wake(ilits->irq_num);
 			ili_irq_enable();
 		} else {
+			ili_pinctrl_select_suspend(ilits);
 			if (ili_ic_func_ctrl("sleep", SLEEP_IN) < 0)
 				ILI_ERR("Write sleep in cmd failed\n");
 		}
@@ -426,6 +490,7 @@ int ili_sleep_handler(int mode)
 			enable_irq_wake(ilits->irq_num);
 			ili_irq_enable();
 		} else {
+			ili_pinctrl_select_suspend(ilits);
 			if (ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0)
 				ILI_ERR("Write deep sleep in cmd failed\n");
 		}
@@ -438,7 +503,8 @@ int ili_sleep_handler(int mode)
 
 		if (ilits->gesture)
 			disable_irq_wake(ilits->irq_num);
-
+		else
+			ili_pinctrl_select_normal(ilits);
 		/* Set tp as demo mode and reload code if it's iram. */
 		ilits->actual_tp_mode = P5_X_FW_AP_MODE;
 		if (ilits->fw_upgrade_mode == UPGRADE_IRAM) {
@@ -945,7 +1011,8 @@ int ili_tddi_init(void)
 
 	ili_ic_init();
 	ilitek_tddi_wq_init();
-
+	ili_pinctrl_init(ilits);
+	ili_pinctrl_select_normal(ilits);
 	/* Must do hw reset once in first time for work normally if tp reset is avaliable */
 #if !TDDI_RST_BIND
 	if (ili_reset_ctrl(ilits->reset) < 0)

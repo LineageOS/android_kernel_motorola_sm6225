@@ -17,6 +17,10 @@ ifeq ($(ILITEK_ESD),true)
 	KERNEL_CFLAGS += CONFIG_ILITEK_ESD=y
 endif
 
+ifeq ($(ILITEK_GESTURE),true)
+	KERNEL_CFLAGS += CONFIG_ILITEK_GESTURE=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := ili9882_mmi.ko
 LOCAL_MODULE_TAGS := optional
