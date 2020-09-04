@@ -25,6 +25,10 @@
 #define DTS_INT_GPIO	"touch,irq-gpio"
 #define DTS_RESET_GPIO	"touch,reset-gpio"
 #define DTS_OF_NAME	"tchip,ilitek"
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
 
 void ili_tp_reset(void)
 {
@@ -441,6 +445,9 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 		{
 			if (ili_sleep_handler(TP_SUSPEND) < 0)
 				ILI_ERR("TP suspend failed\n");
+#ifdef ILI_CONFIG_GESTURE
+			touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 		}
 		break;
 

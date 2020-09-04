@@ -584,7 +584,11 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->wait_int_timeout = AP_INT_TIMEOUT;
 
 #if ENABLE_GESTURE
-	ilits->gesture = DISABLE;
+#ifdef ILI_CONFIG_GESTURE
+	if (MODEL_HLT == tp_module)
+#endif
+	{
+	ilits->gesture = ENABLE;
 	ilits->ges_sym.double_tap = DOUBLE_TAP;
 	ilits->ges_sym.alphabet_line_2_top = ALPHABET_LINE_2_TOP;
 	ilits->ges_sym.alphabet_line_2_bottom = ALPHABET_LINE_2_BOTTOM;
@@ -604,6 +608,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->ges_sym.alphabet_two_line_2_bottom = ALPHABET_TWO_LINE_2_BOTTOM;
 	ilits->ges_sym.alphabet_F = ALPHABET_F;
 	ilits->ges_sym.alphabet_AT = ALPHABET_AT;
+	}
 #endif
 
 	if (ili_core_spi_setup(SPI_CLK) < 0)

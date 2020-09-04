@@ -20,6 +20,9 @@ endif
 ifneq ($(filter m y,$(CONFIG_ILITEK_ESD)),)
 EXTRA_CFLAGS += -DILI_CONFIG_ESD
 endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_GESTURE)),)
+EXTRA_CFLAGS += -DILI_CONFIG_GESTURE
+endif
 
 ili9882_mmi-objs += ili9882.o
 ili9882_mmi-objs += ili9882_spi.o

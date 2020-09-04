@@ -107,6 +107,7 @@
 #include "sync_write.h"
 #endif
 #include <linux/mmi_wake_lock.h>
+#include <linux/panel_notifier.h>
 
 #define DRIVER_VERSION			"3.0.3.0.200610"
 
@@ -134,7 +135,11 @@
 #define ENABLE_WQ_ESD			DISABLE
 #endif
 #define ENABLE_WQ_BAT			DISABLE
+#ifdef ILI_CONFIG_GESTURE
+#define ENABLE_GESTURE			ENABLE
+#else
 #define ENABLE_GESTURE			DISABLE
+#endif
 #define REGULATOR_POWER			DISABLE
 #define TP_SUSPEND_PRIO			ENABLE
 #define RESUME_BY_DDI			DISABLE
@@ -925,6 +930,9 @@ struct ilitek_ts_data {
 	int (*ges_recover)(void);
 	void (*demo_debug_info[5])(u8 *, size_t);
 	int (*detect_int_stat)(bool status);
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_active;
+	struct pinctrl_state *pins_suspend;
 };
 extern struct ilitek_ts_data *ilits;
 
