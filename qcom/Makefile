@@ -62,6 +62,11 @@ dtbo-$(CONFIG_CAPRI_DTB) += \
 
 bengal-capri-evt-overlay.dtbo-base := bengal-moto-base.dtb
 
+dtbo-$(CONFIG_CAPRIP_DTB) += \
+        bengal-caprip-evt-overlay.dtbo
+
+bengal-caprip-evt-overlay.dtbo-base := bengal-moto-base.dtb
+
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_KONA) += \
