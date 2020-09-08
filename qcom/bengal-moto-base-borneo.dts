@@ -12,7 +12,7 @@
 
 /dts-v1/;
 
-#include "bengal.dtsi"
+#include "bengal-moto-base.dtsi"
 
 / {
 	qcom,board-id = <0 0>;
