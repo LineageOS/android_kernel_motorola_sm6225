@@ -26,7 +26,7 @@
 			config {
 				pins = "gpio104";
 				drive-strength = <2>; /* 2 MA */
-				bias-pull-down; /* pull down */
+				bias-disable;
 				output-high;
 
 			};
