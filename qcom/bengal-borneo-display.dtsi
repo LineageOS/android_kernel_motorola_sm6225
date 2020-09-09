@@ -34,6 +34,7 @@
 	qcom,platform-reset-gpio-always-on;
 	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
+	qcom,mdss-dsi-panel-supplier = "tianma";
 
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
@@ -72,6 +73,7 @@
 	qcom,platform-reset-gpio-always-on;
 	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
+	qcom,mdss-dsi-panel-supplier = "djn";
 
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
