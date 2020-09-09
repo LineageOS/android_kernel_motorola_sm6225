@@ -154,6 +154,8 @@
 		novatek,irq-gpio = <&tlmm 67 0x2008>;
 		novatek,reset-gpio = <&tlmm 66  0x00>;
 		report_type = <1>;
+		novatek,def-build-id = <0x0401>;
+		novatek,def-config-id = <0x601e>;
 		novatek,report_gesture_key;
 		novatek,def-max-resolution = <720 1600>;
 		interrupt-parent = <&tlmm>;
