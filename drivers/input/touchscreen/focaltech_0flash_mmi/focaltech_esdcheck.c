@@ -264,7 +264,7 @@ static int esdcheck_algorithm(struct fts_ts_data *ts_data)
     if ( ret < 0 ) {
         fts_esdcheck_data.nack_cnt++;
     } else if ( (reg_value & 0x70) !=  FTS_REG_WORKMODE_WORK_VALUE) {
-        FTS_DEBUG("[ESD]: not in work mode, no check esd, return immediately!!");
+        FTS_INFO("[ESD]: not in work mode(reg=0x%x), no check esd, return immediately!!", reg_value);
         return 0;
     }
 
