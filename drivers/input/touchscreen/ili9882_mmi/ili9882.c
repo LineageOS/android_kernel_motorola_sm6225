@@ -234,7 +234,7 @@ int ili_wq_esd_i2c_check(void)
 static void ilitek_tddi_wq_esd_check(struct work_struct *work)
 {
 	mutex_lock(&ilits->touch_mutex);
-	if (ilits->esd_recover() < 0) {
+	if (!ilits->tp_suspend && ilits->esd_recover() < 0) {
 		ILI_ERR("SPI ACK failed, doing spi recovery\n");
 		ili_spi_recovery();
 	}

@@ -2,6 +2,9 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
 		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/chipone_tddi_mmi
+ifneq ($(filter m y,$(CONFIG_CHIPONE_ESD)),)
+EXTRA_CFLAGS += -DCONFIG_CTS_ESD_PROTECTION
+endif
 
 obj-m := chipone_tddi_mmi.o
 

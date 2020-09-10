@@ -2169,8 +2169,8 @@ int cts_stop_device(struct cts_device *cts_dev)
 int cts_start_device_esdrecover(struct cts_device *cts_dev)
 {
 #ifdef CONFIG_CTS_ESD_PROTECTION
-	struct chipone_ts_data *cts_data =
-	    container_of(cts_dev, struct chipone_ts_data, cts_dev);
+	//struct chipone_ts_data *cts_data =
+	//    container_of(cts_dev, struct chipone_ts_data, cts_dev);
 #endif /* CONFIG_CTS_ESD_PROTECTION */
 	int ret;
 
