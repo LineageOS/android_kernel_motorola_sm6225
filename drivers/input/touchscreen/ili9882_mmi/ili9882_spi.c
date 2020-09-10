@@ -273,7 +273,7 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
 {
 	int ret = 0;
 	int mode = 0, index = 0;
-	u8 wdata[32] = {0};
+	u8 wdata[128] = {0};
 	u8 checksum = 0;
 	bool ice = atomic_read(&ilits->ice_stat);
 
@@ -286,7 +286,7 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
 		/* 3 bytes data consist of length and header */
 		if ((wlen + 3) > sizeof(wdata)) {
 			ILI_ERR("WARNING! wlen(%d) > wdata(%d), using wdata length to transfer\n", wlen, (int)sizeof(wdata));
-			wlen = sizeof(wdata);
+			wlen = sizeof(wdata) - 3;
 		}
 	}
 
@@ -333,9 +333,9 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
 			index = 3;
 		}
 
-		wlen += index;
 
 		ipio_memcpy(&wdata[index], txbuf, wlen, wlen);
+		wlen += index;
 
 		/*
 		* NOTE: If TP driver is doing MP test and commanding 0xF1 to FW, we add a checksum
