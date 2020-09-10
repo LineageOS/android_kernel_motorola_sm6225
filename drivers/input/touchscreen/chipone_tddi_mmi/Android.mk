@@ -6,6 +6,9 @@ CHIPONE_MMI_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules/
 else
 CHIPONE_MMI_MODULE_PATH := $(KERNEL_MODULES_OUT)
 endif
+ifeq ($(CHIPONE_ESD),true)
+	KERNEL_CFLAGS += CONFIG_CHIPONE_ESD=y
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := chipone_tddi_mmi.ko
