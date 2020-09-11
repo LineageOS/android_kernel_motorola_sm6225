@@ -44,12 +44,31 @@
 	status = "disabled";
 };
 
+&tlmm {
+	/*delete-node*/ spkr_1_sd_n;
+
+	aw882xx_reset: aw882xx_reset {
+		mux {
+			pins = "gpio97";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio97";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
 
 &qupv3_se1_i2c {
 	status = "ok";
 	aw882xx_smartpa@34 {
 		compatible = "awinic,aw882xx_smartpa";
 		reg = <0x34>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&aw882xx_reset>;
 
 		reset-gpio = <&tlmm 97 0>;
 		/* irq-gpio = <&tlmm 112 0x2008>; */
