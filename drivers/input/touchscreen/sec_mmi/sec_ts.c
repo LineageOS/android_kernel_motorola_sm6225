@@ -2687,6 +2687,9 @@ static void __exit sec_ts_exit(void)
 }
 
 MODULE_AUTHOR("Hyobae, Ahn<hyobae.ahn@samsung.com>");
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("Samsung Electronics TouchScreen driver");
 MODULE_LICENSE("GPL");
 
