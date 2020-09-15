@@ -1886,10 +1886,10 @@ static ssize_t fg_attr_show_qmax_ratable(struct device *dev,
 		return idx;
 	}
 
-	len = sprintf(&buf[idx], "Ra Table:\n");
+	len = sprintf(&buf[idx], "Ra Table: ");
 	idx += len;
 
-	for (i = 0; i < 15; i += 2) {
+	for (i = 0; i < 29; i += 2) {
 		len = sprintf(&buf[idx], "%d ", rd_buf[i] << 8 | rd_buf[i+1]);
 		idx += len;
 	}
@@ -1902,7 +1902,7 @@ static ssize_t fg_attr_show_qmax_ratable(struct device *dev,
 		return idx;
 	}
 
-	len = sprintf(&buf[idx], "V at Chg Term:%d\n", rd_buf[6] << 8 | rd_buf[7]);
+	len = sprintf(&buf[idx], "\nV at Chg Term:%d\n", rd_buf[6] << 8 | rd_buf[7]);
 	idx += len;
 
 	fg_dm_post_access(bq);
