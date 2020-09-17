@@ -21,6 +21,7 @@
 	dsi_tm_nt36525b_video:qcom,mdss_dsi_nt36525b_tm_video {
 		qcom,mdss-dsi-panel-name ="mipi_mot_vid_tm_720p_678";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+                qcom,mdss-dsi-panel-supplier = "tianma";
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
