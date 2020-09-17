@@ -190,6 +190,8 @@
 		report_type = <1>;
 		novatek,def-max-resolution = <720 1640>;
                 novatek,usb_charger;
+                novatek,def-build-id = <0x0301>;
+                novatek,def-config-id = <0x6026>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
