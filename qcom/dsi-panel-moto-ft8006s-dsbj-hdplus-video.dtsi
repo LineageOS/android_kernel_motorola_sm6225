@@ -21,6 +21,7 @@
 	dsi_dsbj_ft8006s_video:qcom,mdss_dsi_ft8006s_dsbj_video {
 		qcom,mdss-dsi-panel-name ="mipi_mot_vid_dsbj_720p_678";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+                qcom,mdss-dsi-panel-supplier = "dsbj";
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
