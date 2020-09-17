@@ -3499,7 +3499,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
 			mmi_warn(chip, "Factory kill power off\n");
-			orderly_poweroff(true);
+			kernel_power_off();
 		} else
 			chip->factory_kill_armed = false;
 	}
