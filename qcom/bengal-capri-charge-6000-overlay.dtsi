@@ -1,0 +1,44 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc{
+	mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C96996";
+              #include "qg-batterydata-ATL-4V45_6000mah.dtsi"
+	};
+};
+
+&pmi632_qg {
+        qcom,qg-iterm-ma = <400>;
+};
+
+&pmi632_charger {
+        qcom,iterm-ma = <290>;
+        qcom,fcc-max-ua = <3000000>;
+        qcom,fv-max-uv = <4450000>;
+        qcom,usb-icl-ua = <3000000>;
+        qcom,thermal-mitigation = <3000>,
+                                   <2600>,
+                                   <2300>,
+                                   <1800>,
+                                   <1500>,
+                                   <1000>,
+                                   <600>,
+                                   <400>;
+        qcom,mmi-temp-zones = <0 4200 1164 0>,
+                                <10 4200 3000 1164>,
+                                <15 0 3000 3000>,
+                                <45 0 3000 3000>,
+                                <60 4200 3000 0>;
+        mmi,ext-ovp-greater-12v;
+};

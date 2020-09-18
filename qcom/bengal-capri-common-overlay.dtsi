@@ -168,6 +168,7 @@
     qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
 };
 
+/*
 &soc{
 	mtp_batterydata: qcom,battery-data {
               qcom,batt-id-range-pct = <15>;
@@ -179,9 +180,10 @@
               #include "qg-batterydata-jk50-swd-4850mah.dtsi"
 	};
 };
+*/
 
 &pmi632_qg {
-        qcom,qg-iterm-ma = <350>;
+        //qcom,qg-iterm-ma = <350>;
         qcom,vbatt-cutoff-mv = <3200>;
         qcom,vbatt-empty-mv = <3000>;
         qcom,vbatt-low-mv = <3300>;
@@ -212,28 +214,28 @@
 };
 
 &pmi632_charger {
-        qcom,iterm-ma = <100>;
-        qcom,fcc-max-ua = <2000000>;
-        qcom,fv-max-uv = <4400000>;
-        qcom,usb-icl-ua = <2000000>;
-        qcom,thermal-mitigation = <2000>,
-                                   <1800>,
-                                   <1600>,
-                                   <1300>,
-                                   <1100>,
-                                   <900>,
-                                   <600>,
-                                   <400>;
+        //qcom,iterm-ma = <100>;
+        //qcom,fcc-max-ua = <2000000>;
+        //qcom,fv-max-uv = <4400000>;
+        //qcom,usb-icl-ua = <2000000>;
+        //qcom,thermal-mitigation = <2000>,
+        //                           <1800>,
+        //                           <1600>,
+        //                           <1300>,
+        //                           <1100>,
+        //                           <900>,
+        //                           <600>,
+        //                           <400>;
         qcom,battery-data = <&mtp_batterydata>;
-        qcom,mmi-temp-zones = <0 4200 1000 0>,
-                                <10 4200 1000 1000>,
-                                <15 0 1000 1000>,
-                                <45 0 2000 2000>,
-                                <60 4200 2000 0>;
+        //qcom,mmi-temp-zones = <0 4200 1000 0>,
+        //                        <10 4200 1000 1000>,
+        //                        <15 0 1000 1000>,
+        //                        <45 0 2000 2000>,
+        //                        <60 4200 2000 0>;
         qcom,enable-charging-limit;
-        qcom,upper-limit-capacity = <70>;
+        qcom,upper-limit-capacity = <75>;
         qcom,lower-limit-capacity = <60>;
-	qcom,hvdcp-disable;
+	//qcom,hvdcp-disable;
 	qcom,otg-cl-ua = <1000000>;
 	qcom,dc-unsupported;
 	qcom,wireless-unsupported;
@@ -241,7 +243,7 @@
 	qcom,disable-suspend-on-collapse;
 	dpdm-supply = <&qusb_phy0>;
 	qcom,auto-recharge-soc = <99>;
-	qcom,support-microb-dcp;
+	//qcom,support-2a-dcp;
 };
 
 &soc {
