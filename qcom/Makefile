@@ -58,9 +58,11 @@ dtbo-$(CONFIG_CEBU_DTB) += \
 bengal-cebu-evt-overlay.dtbo-base := bengal-moto-base-cebu.dtb
 
 dtbo-$(CONFIG_CAPRI_DTB) += \
-        bengal-capri-evt-overlay.dtbo
+        bengal-capri-evt-overlay.dtbo \
+        bengal-capri-evt-sku5-overlay.dtbo
 
 bengal-capri-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-evt-sku5-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_CAPRIP_DTB) += \
         bengal-caprip-evt-overlay.dtbo
