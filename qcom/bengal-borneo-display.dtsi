@@ -43,11 +43,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 10 05 06 03 02 04 a0];
+				[1F 1D 05 07 03 02 04 a0
+				1F 1D 05 07 03 02 04 a0
+				1F 1D 05 07 03 02 04 a0
+				1F 1D 05 07 03 02 04 a0
+				1F 11 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
