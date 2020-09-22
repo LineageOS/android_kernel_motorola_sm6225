@@ -252,9 +252,9 @@ static int ili_spi_pll_clk_wakeup(void)
 	wdata[1] = wlen >> 8;
 	wdata[2] = wlen & 0xff;
 	index = 3;
-	wlen += index;
 
 	ipio_memcpy(&wdata[index], wakeup, wlen, wlen);
+	wlen += index;
 
 	ILI_INFO("Write dummy to wake up spi pll clk\n");
 	if (ilits->spi_write_then_read(ilits->spi, wdata, wlen, NULL, 0) < 0) {
@@ -282,7 +282,7 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
 		/* 3 bytes data consist of length and header */
 		if ((wlen + 3) > sizeof(wdata)) {
 			ILI_ERR("WARNING! wlen(%d) > wdata(%d), using wdata length to transfer\n", wlen, (int)sizeof(wdata));
-			wlen = sizeof(wdata);
+			wlen = sizeof(wdata) - 3;
 		}
 	}
 
@@ -330,9 +330,8 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
 			index = 3;
 		}
 
-		wlen += index;
-
 		ipio_memcpy(&wdata[index], txbuf, wlen, wlen);
+		wlen += index;
 
 		/*
 		* NOTE: If TP driver is doing MP test and commanding 0xF1 to FW, we add a checksum
