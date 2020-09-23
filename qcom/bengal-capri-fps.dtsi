@@ -119,20 +119,19 @@
 };
 
 &soc {
-	goodix_fingerprint{
-		//status = "/chosen", "mmi,fps", "true";
-		status = "ok";
-		compatible = "goodix,fingerprint";
-		fp-gpio-reset = <&tlmm 104 0x00>;
-		fp-gpio-irq = <&tlmm 65  0x00>;
-		fp-gpio-ven = <&tlmm 34 0x00>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <65 0>;
-		interrupt-controller;
-		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&fps_rst_active &fps_int_active &fps_ido3_en_active>;
-		pinctrl-1 = <&fps_rst_suspend &fps_int_suspend &fps_ido3_en_suspend>;
-	};
+        fpsensor_fp {
+                //status = "/chosen", "mmi,fps", "true";
+                status = "ok";
+                compatible = "qcom,fingerprint-gpio";
+                interrupt-parent = <&tlmm>;
+                interrupts = <65 0>;
+                fp-gpio-power = <&tlmm 34 0x00>;
+                fp-gpio-int    = <&tlmm 65 0x00>;
+                fp-gpio-reset = <&tlmm 104 0x00>;
+                pinctrl-names = "default", "suspend";
+                pinctrl-0 = <&fps_rst_active &fps_int_active &fps_ido3_en_active>;
+                pinctrl-1 = <&fps_rst_suspend &fps_int_suspend &fps_ido3_en_suspend>;
+        };
 
 	fpc: fpc_fpc1020 {
 		compatible = "fpc,fpc1020";
