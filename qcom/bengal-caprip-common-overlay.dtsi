@@ -12,6 +12,7 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "bengal-moto-common-overlay.dtsi"
+#include "bengal-capri-pinctrl-overlay.dtsi"
 #include "bengal-capri-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-capri-awinic-audio-overlay.dtsi"
@@ -61,6 +62,7 @@
 			input-enable;
 		};
 	};
+
 };
 
 &tlmm {
@@ -234,7 +236,7 @@
 		compatible = "qcom,nq-nci";
 		reg = <0x28>;
 		qcom,nq-irq = <&tlmm 70 0x00>;
-		qcom,nq-ven = <&tlmm 69 0x00>;
+		qcom,nq-ven = <&tlmm 2 0x00>;
 		qcom,nq-firm = <&tlmm 31 0x00>;
 		qcom,nq-clkreq = <&tlmm 86 0x00>;
 		interrupt-parent = <&tlmm>;
