@@ -48,7 +48,7 @@
 
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
-	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-min-level = <2>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,mdss-brightness-max-level = <2047>;
@@ -88,7 +88,7 @@
 
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
-	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-min-level = <2>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,mdss-brightness-max-level = <2047>;
