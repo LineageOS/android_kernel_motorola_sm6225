@@ -216,6 +216,11 @@ static int sx933x_Hardware_Check(psx93XX_t this)
 		this->failStatusCode = SX933x_ID_ERROR;
 	}
 
+	if(idCode == SX9338_DFN_WHOAMI_VALUE)
+	{
+		this->failStatusCode = 0;
+	}
+
 	LOG_INFO("sx933x idcode = 0x%x, failcode = 0x%x\n", idCode, this->failStatusCode);
 	return (int)this->failStatusCode;
 }
