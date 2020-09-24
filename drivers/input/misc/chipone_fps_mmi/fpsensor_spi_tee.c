@@ -631,7 +631,7 @@ static int fpsensor_probe(struct platform_device *pdev)
     }
     init_waitqueue_head(&fpsensor_dev->wq_irq_return);
 #if FPSENSOR_WAKEUP_TYPE == FPSENSOR_WAKEUP_SOURCE
-    wakeup_source_init(&g_ttw_wl, "fpsensor_ttw_wl");
+    wakeup_source_init_internal(&g_ttw_wl, "fpsensor_ttw_wl");
 #else
     wake_lock_init(&g_ttw_wl, WAKE_LOCK_SUSPEND, "fpsensor_ttw_wl");
 #endif
@@ -667,7 +667,7 @@ static int fpsensor_remove(struct platform_device *pdev)
     fpsensor_gpio_free(fpsensor_dev);
     fpsensor_dev_cleanup(fpsensor_dev);
 #if FPSENSOR_WAKEUP_TYPE == FPSENSOR_WAKEUP_SOURCE
-    wakeup_source_trash(&g_ttw_wl);
+    wakeup_source_trash_internal(&g_ttw_wl);
 #else
     wake_lock_destroy(&g_ttw_wl);
 #endif
