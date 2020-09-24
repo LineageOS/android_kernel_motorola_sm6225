@@ -244,6 +244,10 @@ struct aw882xx {
 #ifdef AW882XX_RUNIN_TEST
 	struct delayed_work adsp_status;
 #endif
+	struct delayed_work fade_work;
+	int delayed_time;
+	int fade_work_start;
+	int is_fade_in;
 	int sysclk;
 	int rate;
 	int pstream;
