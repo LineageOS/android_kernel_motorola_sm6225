@@ -34,7 +34,7 @@ struct wake_lock {
     struct wakeup_source ws;
 };
 
-static inline void wakeup_source_init(struct wakeup_source *ws,
+static inline void wakeup_source_init_internal(struct wakeup_source *ws,
 				const char *name)
 {
     if(ws){
@@ -47,10 +47,10 @@ static inline void wakeup_source_init(struct wakeup_source *ws,
 static inline void wake_lock_init(struct wake_lock *lock, int type,
                                   const char *name)
 {
-    wakeup_source_init(&lock->ws, name);
+    wakeup_source_init_internal(&lock->ws, name);
 }
 
-static inline void wakeup_source_trash(struct wakeup_source *ws)
+static inline void wakeup_source_trash_internal(struct wakeup_source *ws)
 {
      wakeup_source_remove(ws);
      if(!ws)
@@ -60,7 +60,7 @@ static inline void wakeup_source_trash(struct wakeup_source *ws)
 
 static inline void wake_lock_destroy(struct wake_lock *lock)
 {
-    wakeup_source_trash(&lock->ws);
+    wakeup_source_trash_internal(&lock->ws);
 }
 
 static inline void wake_lock(struct wake_lock *lock)
