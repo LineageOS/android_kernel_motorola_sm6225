@@ -252,6 +252,8 @@
 
 /*      Chip ID 	*/
 #define SX933X_WHOAMI_VALUE                   0x00003113
+#define SX9338_DFN_WHOAMI_VALUE               0x00003817
+
 /*command*/
 #define SX933X_PHASE_CONTROL                  0x0000000F
 #define SX933X_COMPENSATION_CONTROL           0x0000000E
