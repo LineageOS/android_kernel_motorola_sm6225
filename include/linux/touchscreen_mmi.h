@@ -360,7 +360,7 @@ struct ts_mmi_dev {
 	 */
 	struct device		*dev;
 	struct device		*class_dev;
-	int 			class_dev_minor;
+	dev_t			class_dev_no;
 	int			forcereflash;
 	struct ts_mmi_dev_pdata	pdata;
 	struct notifier_block	panel_nb;

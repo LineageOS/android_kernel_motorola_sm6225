@@ -627,17 +627,12 @@ int ts_mmi_dev_register(struct device *parent,
 
 	ts_mmi_get_vendor_info(touch_cdev);
 
-#if defined(CONFIG_TS_KERNEL_USE_GKI)
-	ret = 256;
-#else
-	ret = input_get_new_minor(-1, 1, true);
-#endif
+	ret = alloc_chrdev_region(&touch_cdev->class_dev_no, 0, 1, class_fname);
 	if (ret < 0) {
-		dev_info(DEV_TS, "%s: get minor number failed. %d\n",
+		dev_info(DEV_TS, "%s: get device number failed. %d\n",
 			__func__, ret);
 		goto GET_NEW_MINOT_FAILED;
 	}
-	touch_cdev->class_dev_minor = ret;
 
 	if (touch_cdev->pdata.class_entry_name)
 		class_fname = touch_cdev->pdata.class_entry_name;
@@ -649,7 +644,7 @@ int ts_mmi_dev_register(struct device *parent,
 	dev_info(DEV_TS, "class entry name %s\n", class_fname);
 
 	DEV_MMI = device_create(touchscreens_class,
-		parent, MKDEV(INPUT_MAJOR, touch_cdev->class_dev_minor),
+		parent, touch_cdev->class_dev_no,
 		touch_cdev, "%s", class_fname);
 	if (IS_ERR(DEV_MMI)) {
 		ret = PTR_ERR(DEV_MMI);
@@ -729,10 +724,7 @@ CLASS_DEVICE_ATTR_CREATE_FAILED:
 	device_unregister(DEV_MMI);
 CLASS_DEVICE_CREATE_FAILED:
 	DEV_MMI = NULL;
-#ifndef CONFIG_TS_KERNEL_USE_GKI
-	input_free_minor(touch_cdev->class_dev_minor);
-#endif
-	touch_cdev->class_dev_minor = 0;
+	unregister_chrdev_region(touch_cdev->class_dev_no, 1);
 GET_NEW_MINOT_FAILED:
 	ts_mmi_panel_unregister(touch_cdev);
 PANEL_PARSE_DT_FAILED:
@@ -779,10 +771,7 @@ void ts_mmi_dev_unregister(struct device *parent)
 	sysfs_remove_group(&DEV_MMI->kobj, &sysfs_class_group);
 	device_unregister(DEV_MMI);
 	DEV_MMI = NULL;
-#ifndef CONFIG_TS_KERNEL_USE_GKI
-	input_free_minor(touch_cdev->class_dev_minor);
-#endif
-	touch_cdev->class_dev_minor = 0;
+	unregister_chrdev_region(touch_cdev->class_dev_no, 1);
 	devm_kfree(parent, touch_cdev);
 }
 EXPORT_SYMBOL(ts_mmi_dev_unregister);
