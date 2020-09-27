@@ -39,6 +39,16 @@
 
 #define XDATA_SECTOR_SIZE   256
 
+#define ENABLE_PASSIVE_PEN_MODE_CMD 0x73
+#define DISABLE_PASSIVE_PEN_MODE_CMD 0x74
+#define ENABLE_PALM_GESTURE_MODE_CMD 0x75
+#define DISABLE_PALM_GESTURE_MODE_CMD 0x76
+
+#define ENABLE_DOZE_MODE_CMD 0xB7
+#define DISABLE_DOZE_MODE_CMD 0xB8
+
+static uint8_t monitor_control_status = 1;
+
 static uint8_t xdata_tmp[2048] = {0};
 static int32_t xdata[2048] = {0};
 
@@ -562,10 +572,16 @@ static ssize_t nvt_fwupdate_read(struct file *file, char __user *buff, size_t co
 
 	switch (fwtype) {
 		case FWTYPE_Normal:
-			nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+			if(nvt_boot_firmware_name)
+				nvt_update_firmware(nvt_boot_firmware_name);
+			else
+				nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
 			break;
 		case FWTYPE_MP:
-			nvt_update_firmware(MP_UPDATE_FIRMWARE_NAME);
+			if(nvt_mp_firmware_name)
+				nvt_update_firmware(nvt_mp_firmware_name);
+			else
+				nvt_update_firmware(MP_UPDATE_FIRMWARE_NAME);
 			break;
 		default:
 			NVT_ERR("fwtype error\n");
@@ -586,61 +602,85 @@ static const struct file_operations nvt_fwupdate_fops = {
 	.read = nvt_fwupdate_read,
 };
 
-uint8_t status = 1;
-#define ENABLE_MONITOR 1
-#define DISABLE_MONITOR 0
-#define ENABLE_DOZE_MODE_CMD 0xB7
-#define DISABLE_DOZE_MODE_CMD 0xB8
 
-int32_t nvt_monitor_control(uint8_t status)
+int32_t nvt_cmd_store(uint8_t u8Cmd)
 {
-	uint8_t buf[8] = {0};
+	int i, retry = 5;
+	uint8_t buf[3] = {0};
 	int32_t ret = 0;
 
-	NVT_LOG("set monitor control: %d\n", status);
+	if (mutex_lock_interruptible(&ts->lock)) {
+		return -ERESTARTSYS;
+	}
 
 	//---set xdata index to EVENT BUF ADDR---
 	ret = nvt_set_page(ts->mmap->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
 	if (ret < 0) {
 		NVT_ERR("Set event buffer index fail!\n");
-		goto nvt_monitor_control_out;
+		mutex_unlock(&ts->lock);
+		return ret;
 	}
 
-	if (status == ENABLE_MONITOR) {
+	for (i = 0; i < retry; i++) {
+		//---set cmd status---
 		buf[0] = EVENT_MAP_HOST_CMD;
-		buf[1] = ENABLE_DOZE_MODE_CMD;
-		ret = CTP_SPI_WRITE(ts->client, buf, 2);
-		if (ret < 0) {
-			NVT_ERR("Write enable doze mode command fail!\n");
-			goto nvt_monitor_control_out;
-		} else {
-			NVT_LOG("set enable doze mode cmd succeeded\n");
-		}
-	} else if (status == DISABLE_MONITOR) {
+		buf[1] = u8Cmd;
+		CTP_SPI_WRITE(ts->client, buf, 2);
+		msleep(20);
+
+		//---read cmd status---
 		buf[0] = EVENT_MAP_HOST_CMD;
-		buf[1] = DISABLE_DOZE_MODE_CMD;
-		ret = CTP_SPI_WRITE(ts->client, buf, 2);
-		if (ret < 0) {
-			NVT_ERR("Write disable doze mode command fail!\n");
-			goto nvt_monitor_control_out;
-		} else {
-			NVT_LOG("set disable doze mode cmd succeeded\n");
-		}
+		buf[1] = 0xFF;
+		CTP_SPI_READ(ts->client, buf, 2);
+		if (buf[1] == 0x00)
+			break;
+	}
+
+	if (unlikely(i == retry)) {
+		NVT_LOG("send Cmd 0x%02X failed, buf[1]=0x%02X\n", u8Cmd, buf[1]);
+		ret = -1;
 	} else {
-		NVT_ERR("Invalid monitor_control parameter!\n");
-		ret = -EINVAL;
+		NVT_LOG("send Cmd 0x%02X success, tried %d times\n", u8Cmd, i);
 	}
 
-    nvt_monitor_control_out:
+	mutex_unlock(&ts->lock);
 
 	return ret;
 }
 
+#ifdef NOVATECH_PEN_NOTIFIER
+int nvt_mcu_pen_detect_set(uint8_t pen_detect) {
+	int ret = 0;
+
+	if (pen_detect == PEN_DETECTION_PULL) {
+		ret = nvt_cmd_store(ENABLE_PASSIVE_PEN_MODE_CMD);
+	} else if (pen_detect == PEN_DETECTION_INSERT) {
+		ret = nvt_cmd_store(DISABLE_PASSIVE_PEN_MODE_CMD);
+	}
+
+	return ret;
+}
+#endif
+
+#ifdef PALM_GESTURE
+int nvt_palm_set(bool enabled) {
+	int ret = 0;
+
+	if (enabled) {
+		ret = nvt_cmd_store(ENABLE_PALM_GESTURE_MODE_CMD);
+	} else if (!enabled) {
+		ret = nvt_cmd_store(DISABLE_PALM_GESTURE_MODE_CMD);
+	}
+
+	return ret;
+}
+#endif
+
 static int nvt_monitor_control_show(struct seq_file *sfile, void *v)
 {
-	if(status == ENABLE_MONITOR)
+	if(monitor_control_status == 1)
 		seq_printf(sfile, "Enable Doze MODE!\n");
-	else if (status == DISABLE_MONITOR)
+	else if (monitor_control_status == 0)
 		seq_printf(sfile, "Disable Doze MODE!\n");
 	else
 		seq_printf(sfile, "UNKNOW MODE!\n");
@@ -670,8 +710,17 @@ static ssize_t nvt_monitor_control_store(struct file *file, const char *buffer, 
 		return -EINVAL;
 	}
 
-	status = input;
-	nvt_monitor_control(status);
+	monitor_control_status = input;
+	NVT_LOG("set monitor control: %d\n", monitor_control_status);
+
+	if (monitor_control_status == 1) {
+		nvt_cmd_store(ENABLE_DOZE_MODE_CMD);
+	} else if (monitor_control_status == 0) {
+		nvt_cmd_store(DISABLE_DOZE_MODE_CMD);
+	} else {
+		NVT_ERR("Invalid parameter %d!\n", monitor_control_status);
+	}
+
 	kfree(str);
 
 	return count;

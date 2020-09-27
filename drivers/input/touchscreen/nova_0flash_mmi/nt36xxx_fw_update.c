@@ -34,7 +34,7 @@
 #define NVT_DUMP_PARTITION_LEN  (1024)
 #define NVT_DUMP_PARTITION_PATH "/data/local/tmp"
 
-struct timeval start, end;
+struct TIME_TYPE start, end;
 const struct firmware *fw_entry = NULL;
 static size_t fw_need_write_size = 0;
 static uint8_t *fwbuf = NULL;
@@ -402,7 +402,11 @@ static int32_t nvt_read_ram_and_save_file(uint32_t addr, uint16_t len, char *nam
 	CTP_SPI_READ(ts->client, fbufp, len+1);
 
 	/* Write to file */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	ret = kernel_write(fp, (char __user *)fbufp+1, len, &file_offset);
+#else
 	ret = vfs_write(fp, (char __user *)fbufp+1, len, &file_offset);
+#endif
 	if (ret != len) {
 		NVT_ERR("write file failed\n");
 		goto open_file_fail;
@@ -803,7 +807,7 @@ static int32_t nvt_download_firmware_hw_crc(void)
 	uint8_t retry = 0;
 	int32_t ret = 0;
 
-	do_gettimeofday(&start);
+	GET_TIME_OF_DAY(&start);
 
 	while (1) {
 		/* bootloader reset to reset MCU */
@@ -852,7 +856,7 @@ fail:
 		}
 	}
 
-	do_gettimeofday(&end);
+	GET_TIME_OF_DAY(&end);
 
 	return ret;
 }
@@ -870,7 +874,7 @@ static int32_t nvt_download_firmware(void)
 	uint8_t retry = 0;
 	int32_t ret = 0;
 
-	do_gettimeofday(&start);
+	GET_TIME_OF_DAY(&start);
 
 	while (1) {
 		/*
@@ -931,7 +935,7 @@ fail:
 		}
 	}
 
-	do_gettimeofday(&end);
+	GET_TIME_OF_DAY(&end);
 
 	return ret;
 }
@@ -971,8 +975,13 @@ int32_t nvt_update_firmware(char *firmware_name)
 		goto download_fail;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	NVT_LOG("Update firmware success! <%lld us>\n",
+			(end.tv_sec - start.tv_sec)*1000000L + (end.tv_nsec - start.tv_nsec)/1000);
+#else
 	NVT_LOG("Update firmware success! <%ld us>\n",
 			(end.tv_sec - start.tv_sec)*1000000L + (end.tv_usec - start.tv_usec));
+#endif
 
 	/* Get FW Info */
 	ret = nvt_get_fw_info();
@@ -1002,16 +1011,33 @@ return:
 *******************************************************/
 void Boot_Update_Firmware(struct work_struct *work)
 {
+	int32_t ret = 0;
+
 	mutex_lock(&ts->lock);
-	if (nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME)) {
+
+	if(nvt_boot_firmware_name)
+		ret = nvt_update_firmware(nvt_boot_firmware_name);
+	else
+		ret = nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
+	if (ret) {
 		NVT_ERR("download firmware failed, ignore check fw state\n");
 	} else {
 		nvt_check_fw_reset_state(RESET_STATE_REK);
 	}
+
+	mutex_unlock(&ts->lock);
+
 	if (ts->charger_detection) {
 		queue_work(ts->charger_detection->nvt_charger_notify_wq, &ts->charger_detection->charger_notify_work);
 	}
 
-	mutex_unlock(&ts->lock);
+#ifdef NOVATECH_PEN_NOTIFIER
+	if(!ts->fw_ready_flag)
+		ts->fw_ready_flag = true;
+	nvt_mcu_pen_detect_set(ts->nvt_pen_detect_flag);
+#endif
+#ifdef PALM_GESTURE
+	nvt_palm_set(ts->palm_enabled);
+#endif
 }
 #endif /* BOOT_UPDATE_FIRMWARE */
