@@ -1052,7 +1052,7 @@ static int ft_gpio_configure(struct ft_ts_data *data, bool on)
 	if (gpio_is_valid(data->pdata->reset_gpio))
 		gpio_free(data->pdata->reset_gpio);
 
-		return 0;
+	return 0;
 
 err_reset_gpio_dir:
 	if (gpio_is_valid(data->pdata->reset_gpio))
@@ -2540,7 +2540,7 @@ static int ft_ts_sysfs_class(void *_data, bool create)
 
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				MKDEV(INPUT_MAJOR, minor),
-				data, pdata->name);
+				data, "%s", pdata->name);
 		if (IS_ERR(ts_class_dev)) {
 			error = PTR_ERR(ts_class_dev);
 			ts_class_dev = NULL;
