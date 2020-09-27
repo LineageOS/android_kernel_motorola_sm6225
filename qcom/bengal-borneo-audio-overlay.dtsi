@@ -96,6 +96,7 @@
 		reset-gpio = <&tlmm 106 0>;
 		irq-gpio = <&tlmm 107 0x2008>;
 		monitor-flag = <1>;
+		fade-flag = <1>;
 		monitor-timer-val = <3000>;
 
 		afe-rx-portid = <0x1000>;
