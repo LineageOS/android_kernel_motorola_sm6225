@@ -599,8 +599,10 @@ int ts_mmi_dev_register(struct device *parent,
 
 #ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
 	ret = ts_mmi_check_drm_panel(DEV_TS->of_node);
-	if (ret < 0)
-		goto PANEL_PARSE_DT_FAILED;
+	if (ret < 0) {
+		dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
+		touch_cdev->panel_status = -1;
+	}
 #endif
 
 	ret = ts_mmi_parse_dt(touch_cdev, DEV_TS->of_node);

@@ -452,10 +452,12 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 	*/
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 
-	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb;
-	ret = register_panel_notifier(&touch_cdev->panel_nb);
-	if (ret)
-		goto PANEL_NOTIF_REGISTER_FAILED;
+	if (!touch_cdev->panel_status) {
+		touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb;
+		ret = register_panel_notifier(&touch_cdev->panel_nb);
+		if (ret)
+			goto PANEL_NOTIF_REGISTER_FAILED;
+	}
 
 	if (touch_cdev->pdata.update_refresh_rate) {
 		touch_cdev->freq_nb.notifier_call = ts_mmi_refresh_rate_cb;
@@ -475,7 +477,8 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 	return 0;
 
 FREQ_NOTIF_REGISTER_FAILED:
-	unregister_panel_notifier(&touch_cdev->panel_nb);
+	if (!touch_cdev->panel_status)
+		unregister_panel_notifier(&touch_cdev->panel_nb);
 PANEL_NOTIF_REGISTER_FAILED:
 	cancel_delayed_work(&touch_cdev->work);
 PS_NOTIF_REGISTER_FAILED:
@@ -500,7 +503,9 @@ void ts_mmi_notifiers_unregister(struct ts_mmi_dev *touch_cdev)
 	if (touch_cdev->pdata.usb_detection)
 		power_supply_unreg_notifier(&touch_cdev->ps_notif);
 
-	unregister_panel_notifier(&touch_cdev->panel_nb);
+	if (!touch_cdev->panel_status)
+		unregister_panel_notifier(&touch_cdev->panel_nb);
+
 	cancel_delayed_work(&touch_cdev->work);
 	kfifo_free(&touch_cdev->cmd_pipe);
 	dev_info(DEV_MMI, "%s:notifiers_unregister finish", __func__);
