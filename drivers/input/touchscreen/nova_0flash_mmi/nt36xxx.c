@@ -1962,17 +1962,23 @@ int32_t nvt_fw_class_init(bool create)
 {
 	struct device_attribute *attrs = touchscreen_attributes;
 	int i, error = 0;
+	s32 ret = 0;
 	static struct class *touchscreen_class;
 	static struct device *ts_class_dev;
+	dev_t devno;
 	static int minor;
 
 	if (create) {
-		minor = input_get_new_minor(ts->client->chip_select,
-						1, false);
-		if (minor < 0)
-			minor = input_get_new_minor(TSDEV_MINOR_BASE,
-					TSDEV_MINOR_MAX, true);
-		NVT_LOG("assigned minor %d\n", minor);
+#ifdef PALM_GESTURE
+		ret = alloc_chrdev_region(&devno, 0, 1, NVT_PRIMARY_NAME);
+#else
+		ret = alloc_chrdev_region(&devno, 0, 1, NVT_SPI_NAME);
+#endif
+
+		if (ret) {
+			NVT_ERR("cant`t allocate chrdev\n");
+			return ret;
+		}
 
 		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
 		if (IS_ERR(touchscreen_class)) {
@@ -1982,7 +1988,7 @@ int32_t nvt_fw_class_init(bool create)
 		}
 
 		ts_class_dev = device_create(touchscreen_class, NULL,
-				MKDEV(INPUT_MAJOR, minor),
+				devno,
 #ifdef PALM_GESTURE
 				ts, NVT_PRIMARY_NAME);
 #else
@@ -2019,7 +2025,7 @@ int32_t nvt_fw_class_init(bool create)
 		class_unregister(touchscreen_class);
 	}
 
-	return 0;
+	return ret;
 
 device_destroy:
 	for (--i; i >= 0; --i)
@@ -2462,8 +2468,8 @@ err_create_touchscreen_class_failed:
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
-		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
-		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+		if (drm_panel_notifier_unregister(active_panel, &ts->drm_notif))
+			NVT_ERR("Error occurred while unregistering drm_notifier.\n");
 	}
 err_register_drm_notif_failed:
 #endif
@@ -3252,5 +3258,8 @@ static void __exit nvt_driver_exit(void)
 module_init(nvt_driver_init);
 module_exit(nvt_driver_exit);
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("Novatek Touchscreen Driver");
 MODULE_LICENSE("GPL");
