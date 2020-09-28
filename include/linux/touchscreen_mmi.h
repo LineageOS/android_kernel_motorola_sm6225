@@ -69,7 +69,7 @@ struct drm_panel_notifier *evdata = evd; \
 		dev_dbg(DEV_MMI, "%s: invalid evdata\n", __func__); \
 		return 0; \
 	} \
-	idx = *(int *)evd; \
+	idx = 0;\
 	blank = (int *)evdata->data; \
 	dev_dbg(DEV_MMI, "%s: drm notification: event = %lu, blank = %d\n", \
 			__func__, event, *blank); \
@@ -362,6 +362,7 @@ struct ts_mmi_dev {
 	struct device		*class_dev;
 	dev_t			class_dev_no;
 	int			forcereflash;
+	int			panel_status;
 	struct ts_mmi_dev_pdata	pdata;
 	struct notifier_block	panel_nb;
 	struct mutex		extif_mutex;
