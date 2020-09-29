@@ -77,24 +77,19 @@
 				qcom,mdss-dsi-h-back-porch = <60>;
 				qcom,mdss-dsi-h-pulse-width = <2>;
 				qcom,mdss-dsi-h-sync-skew = <0>;
-				qcom,mdss-dsi-v-back-porch = <4>;
+				qcom,mdss-dsi-v-back-porch = <244>;
 				qcom,mdss-dsi-v-front-porch = <8>;
 				qcom,mdss-dsi-v-pulse-width = <2>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command = [
-					15 01 00 00 00 00 02 FF 23
-					15 01 00 00 00 00 02 FB 01
-					15 01 00 00 00 00 02 00 80
-					15 01 00 00 00 00 02 07 00
-					15 01 00 00 00 00 02 08 01
-					15 01 00 00 00 00 02 09 00
 					15 01 00 00 00 00 02 FF 10
 					15 01 00 00 00 00 02 FB 01
+					39 01 00 00 00 00 03 51 0C CC
+					15 01 00 00 00 00 02 53 2C
+					15 01 00 00 00 00 02 55 02
 					05 01 00 00 78 00 01 11
 					05 01 00 00 14 00 01 29
-					39 01 00 00 00 00 03 51 0F FF
-					15 01 00 00 00 00 02 53 2C
-					15 01 00 00 00 00 02 55 03];
+					];
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 32 00 01 28
 					05 01 00 00 96 00 01 10];
