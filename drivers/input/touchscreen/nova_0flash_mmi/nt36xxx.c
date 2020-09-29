@@ -27,7 +27,7 @@
 #include <linux/power_supply.h>
 #include <linux/version.h>
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 #include <linux/msm_drm_notify.h>
 #include <linux/notifier.h>
@@ -111,7 +111,7 @@ extern void nvt_mp_proc_deinit(void);
 
 struct nvt_ts_data *ts;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static struct drm_panel *active_panel;
 #endif
@@ -126,7 +126,7 @@ extern void Boot_Update_Firmware(struct work_struct *work);
 int nvt_mcu_pen_detect_set(uint8_t pen_detect);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #endif
@@ -1132,7 +1132,7 @@ static int nvt_get_dt_def_coords(struct device *dev, char *name)
 	return rc;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static int nova_check_dt(struct device_node *np)
 {
@@ -2079,7 +2079,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #ifdef NVT_SENSOR_EN
 	static bool initialized_sensor;
 #endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 	struct device_node *dp = client->dev.of_node;
 
 	ret = nova_check_dt(dp);
@@ -2403,7 +2403,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
     }
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	ts->drm_notif.notifier_call = nvt_drm_notifier_callback;
 	if (active_panel &&
@@ -2465,7 +2465,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 	return 0;
 err_create_touchscreen_class_failed:
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		if (drm_panel_notifier_unregister(active_panel, &ts->drm_notif))
@@ -2578,7 +2578,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 	nvt_fw_class_init(false);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
@@ -2677,7 +2677,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 
 	nvt_irq_enable(false);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
@@ -2917,7 +2917,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 	return 0;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
