@@ -1145,12 +1145,14 @@ static int nova_check_dt(struct device_node *np)
 	if (count <= 0)
 		return 0;
 
+	NVT_LOG("nova_check_dt, count=%d\n", count);
 	for (i = 0; i < count; i++) {
 		node = of_parse_phandle(np, "panel", i);
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			active_panel = panel;
+			NVT_LOG("nova_check_dt, active_panel found!\n");
 			return 0;
 		}
 	}
@@ -1694,7 +1696,7 @@ Description:
 return:
 	Executive outcomes. 0---NVT IC. -1---not NVT IC.
 *******************************************************/
-static int8_t nvt_ts_check_chip_ver_trim(void)
+static int8_t nvt_ts_check_chip_ver_trim(uint32_t chip_ver_trim_addr)
 {
 	uint8_t buf[8] = {0};
 	int32_t retry = 0;
@@ -1708,10 +1710,9 @@ static int8_t nvt_ts_check_chip_ver_trim(void)
 
 		nvt_bootloader_reset();
 
-		//---set xdata index to 0x1F600---
-		nvt_set_page(0x1F64E);
+		nvt_set_page(chip_ver_trim_addr);
 
-		buf[0] = 0x4E;
+		buf[0] = chip_ver_trim_addr & 0x7F;
 		buf[1] = 0x00;
 		buf[2] = 0x00;
 		buf[3] = 0x00;
@@ -1719,6 +1720,7 @@ static int8_t nvt_ts_check_chip_ver_trim(void)
 		buf[5] = 0x00;
 		buf[6] = 0x00;
 		CTP_SPI_READ(ts->client, buf, 7);
+		NVT_LOG("nvt_ts_check_chip_ver_trim: buf[0]=0x%02X\n", buf[0]);
 		NVT_LOG("buf[1]=0x%02X, buf[2]=0x%02X, buf[3]=0x%02X, buf[4]=0x%02X, buf[5]=0x%02X, buf[6]=0x%02X\n",
 			buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]);
 
@@ -2174,7 +2176,15 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	msleep(10);
 
 	//---check chip version trim---
-	ret = nvt_ts_check_chip_ver_trim();
+#ifdef NVT_CONFIG_CHIP_VER_1
+	ret = nvt_ts_check_chip_ver_trim(CHIP_VER_TRIM_ADDR_V1);
+	if (ret) {
+		NVT_LOG("try to check from old chip ver trim address\n");
+		ret = nvt_ts_check_chip_ver_trim(CHIP_VER_TRIM_ADDR_V0);
+	}
+#else
+	ret = nvt_ts_check_chip_ver_trim(CHIP_VER_TRIM_ADDR_V0);
+#endif
 	if (ret) {
 		NVT_ERR("chip is not identified\n");
 		ret = -EINVAL;
@@ -2926,6 +2936,7 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 	struct nvt_ts_data *ts =
 		container_of(self, struct nvt_ts_data, drm_notif);
 
+	NVT_LOG("nvt_drm_notifier_callback start\n");
 	if (!evdata)
 		return 0;
 
