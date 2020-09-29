@@ -183,6 +183,25 @@
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		panel = <&dsi_djn_nt36525b_652_video>;
+		panel = <&dsi_djn_nt36525b_652_video &dsi_djn_nt36525b_652_vid_v0>;
+		novatek,panel-supplier = "djn";
+	};
+	 nova_0flash_ts@4 {
+		compatible = "novatek,NVT-ts-spi";
+		reg = <3>;
+		spi-max-frequency = <9600000>;
+		novatek,swrst-n8-addr = <0x03F0FE>;
+		novatek,spi-rd-fast-addr = <0x03F310>;
+		spi-cpha;
+		novatek,irq-gpio = <&tlmm 67 0x2008>;
+		novatek,reset-gpio = <&tlmm 66  0x00>;
+		report_type = <1>;
+		novatek,def-max-resolution = <720 1600>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x02>;
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		panel = <&dsi_djn_nt36525b_video>;
 	};
 };
