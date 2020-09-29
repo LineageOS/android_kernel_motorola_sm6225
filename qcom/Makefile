@@ -36,9 +36,13 @@ dtbo-$(CONFIG_GUAMNA_DTB) += \
 ifeq ($(CONFIG_HIGHMEM),y)
 bengal-guamna-evt-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
 bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-gwlc-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
 else
 bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
 bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
+bengal-guamna-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-gwlc-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
 endif
 
 dtbo-$(CONFIG_BORNEO_DTB) += \
