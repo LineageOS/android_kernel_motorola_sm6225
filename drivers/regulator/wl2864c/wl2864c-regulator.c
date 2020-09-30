@@ -131,8 +131,8 @@ static int wl2864c_of_parse_cb(struct device_node *np,
 	int ena_gpio;
 
 	ena_gpio = of_get_named_gpio(np, "enable-gpios", 0);
-	if (ena_gpio)
-		config->ena_gpio = ena_gpio;
+	if (gpio_is_valid(ena_gpio))
+		config->ena_gpiod = gpio_to_desc(ena_gpio);
 
 	return 0;
 }
