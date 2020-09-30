@@ -79,6 +79,46 @@ static unsigned char CTPM_FW_TXD[] = {
 	0xFF,
 };
 
+#define TXD_9882H_INI_NAME_PATH		"/sdcard/mp_txd_9882h.ini"
+#define TXD_9882H_FW_FILP_PATH		"/sdcard/ILITEK_FW_TXD_9882H"
+#define TXD_9882H_INI_REQUEST_PATH	"mp_txd_9882h.ini"
+#define TXD_9882H_FW_REQUEST_PATH	"ILITEK_FW_TXD_9882H"
+static unsigned char CTPM_FW_TXD_9882N[] = {
+	0xFF,
+};
+
+#define TXD_9882N_INI_NAME_PATH		"/sdcard/mp_txd_9882n.ini"
+#define TXD_9882N_FW_FILP_PATH		"/sdcard/ILITEK_FW_TXD_9882N"
+#define TXD_9882N_INI_REQUEST_PATH	"mp_txd_9882n.ini"
+#define TXD_9882N_FW_REQUEST_PATH	"ILITEK_FW_TXD_9882N"
+static unsigned char CTPM_FW_TXD_9882H[] = {
+	0xFF,
+};
+
+#define TM_9882H_INI_NAME_PATH		"/sdcard/mp_tm_9882h.ini"
+#define TM_9882H_FW_FILP_PATH		"/sdcard/ILITEK_FW_TM_9882H"
+#define TM_9882H_INI_REQUEST_PATH	"mp_tm_9882h.ini"
+#define TM_9882H_FW_REQUEST_PATH	"ILITEK_FW_TM_9882H"
+static unsigned char CTPM_FW_TM_9882N[] = {
+	0xFF,
+};
+
+#define TM_9882N_INI_NAME_PATH		"/sdcard/mp_tm_9882n.ini"
+#define TM_9882N_FW_FILP_PATH		"/sdcard/ILITEK_FW_TM_9882N"
+#define TM_9882N_INI_REQUEST_PATH	"mp_tm_9882n.ini"
+#define TM_9882N_FW_REQUEST_PATH	"ILITEK_FW_TM_9882N"
+static unsigned char CTPM_FW_TM_9882H[] = {
+	0xFF,
+};
+
+#define TIANMA_9882N_INI_NAME_PATH		"/sdcard/mp_tianma_9882n.ini"
+#define TIANMA_9882N_FW_FILP_PATH		"/sdcard/ILITEK_FW_TIANMA_9882N"
+#define TIANMA_9882N_INI_REQUEST_PATH	"mp_tianma_9882n.ini"
+#define TIANMA_9882N_FW_REQUEST_PATH	"ILITEK_FW_TIANMA_9882N"
+static unsigned char CTPM_FW_TIANMA_9882N[] = {
+	0xFF,
+};
+
 #define TM_INI_NAME_PATH		"/sdcard/mp_tm.ini"
 #define TM_FW_FILP_PATH			"/sdcard/ILITEK_FW_TM"
 #define TM_INI_REQUEST_PATH		"mp_tm.ini"
