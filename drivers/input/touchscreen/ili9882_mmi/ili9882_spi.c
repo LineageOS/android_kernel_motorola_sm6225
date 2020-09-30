@@ -23,6 +23,7 @@
 #include "ili9882.h"
 #ifdef CONFIG_DRM
 struct drm_panel *ili_active_panel;
+static const char *active_panel_name = NULL;
 static int check_dt(struct device_node *np);
 #endif
 
@@ -438,6 +439,34 @@ int ili_core_spi_setup(int num)
 	return 0;
 }
 
+#ifdef ILI_FW_PANEL
+static int ili_parse_tp_module()
+{
+   int tp_module = 0;
+	if(active_panel_name) {
+		if (strstr(active_panel_name, "txd")) {
+			if (strstr(active_panel_name, "ili9882h")) {
+				tp_module = MODEL_TXD_9882H;
+			} else if (strstr(active_panel_name, "ili9882n")) {
+				tp_module = MODEL_TXD_9882N;
+			}
+		} else if (strstr(active_panel_name, "tm")) { // || strstr(active_panel_name, "tianma")) {
+			if (strstr(active_panel_name, "ili9882n")) {
+				tp_module = MODEL_TM_9882N;
+			} else if (strstr(active_panel_name, "ili9882h")) {
+				tp_module = MODEL_TM_9882H;
+			}
+		} else if (strstr(active_panel_name, "tianma")) {
+			if (strstr(active_panel_name, "ili9882n")) {
+				tp_module = MODEL_TIANMA_9882N;
+			}
+		}
+	}
+	ILI_INFO("ili_parse_tp_module=%d\n", tp_module);
+	return tp_module;
+}
+#endif //ILI_FW_PANEL
+
 #ifdef CONFIG_DRM
 static int check_dt(struct device_node *np)
 {
@@ -454,6 +483,14 @@ static int check_dt(struct device_node *np)
 		node = of_parse_phandle(np, "panel", i);
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
+#ifdef ILI_FW_PANEL
+		if (!IS_ERR(panel)) {
+			ili_active_panel = panel;
+			active_panel_name = node->name;
+			ILI_INFO("%s: actived\n", active_panel_name);
+			return 0;
+		}
+#else
 		if (!IS_ERR(panel)) {
 			ili_active_panel = panel;
 			pr_err("%s: ili9882h HLT actived\n", __func__);
@@ -468,6 +505,7 @@ static int check_dt(struct device_node *np)
 				return MODEL_TM;
 			}
 		}
+#endif    //ILI_FW_PANEL
 	}
 	if (node)
 		pr_err("%s: %s not actived\n", __func__, node->name);
@@ -539,6 +577,11 @@ static int ilitek_spi_probe(struct spi_device *spi)
 		ILI_ERR("Failed to allocate gresture coordinate buffer\n");
 		return -ENOMEM;
 	}
+
+//---parse tp module---
+#ifdef ILI_FW_PANEL
+	tp_module = ili_parse_tp_module();
+#endif
 
 	ilits->i2c = NULL;
 	ilits->spi = spi;
