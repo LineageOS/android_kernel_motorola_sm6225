@@ -59,11 +59,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 11 05 06 03 03 04 a0];
+				[20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 11 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -100,11 +100,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 1D 05 07 03 03 04 a0
-				20 11 05 06 03 03 04 a0];
+				[20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 1D 05 07 03 02 04 a0
+				20 11 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -113,8 +113,8 @@
 
 //Capri panel#2 txd
 &dsi_txd_ili9882h_652_video {
-    qcom,mdss-dsi-t-clk-post = <0x0D>;
-    qcom,mdss-dsi-t-clk-pre = <0x2E>;
+    qcom,mdss-dsi-t-clk-post = <0x0B>;
+    qcom,mdss-dsi-t-clk-pre = <0x24>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
@@ -141,11 +141,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-	                [23 1F 07 09 05 02 04 a0
-	                23 1F 07 09 05 02 04 a0
-	                23 1F 07 09 05 02 04 a0
-	                23 1F 07 09 05 02 04 a0
-	                23 19 08 08 05 02 04 a0];
+	                [20 1D 05 07 03 02 04 a0
+	                20 1D 05 07 03 02 04 a0
+	                20 1D 05 07 03 02 04 a0
+	                20 1D 05 07 03 02 04 a0
+	                20 12 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
