@@ -944,24 +944,6 @@ static void ili_update_tp_module_info(void)
 		ilits->md_fw_ili = CTPM_FW_TXD;
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD);
 		break;
-	case MODEL_TXD_9882H:
-		ilits->md_name = "TXD_9882H";
-		ilits->md_fw_filp_path = TXD_9882H_FW_FILP_PATH;
-		ilits->md_fw_rq_path = TXD_9882H_FW_REQUEST_PATH;
-		ilits->md_ini_path = TXD_9882H_INI_NAME_PATH;
-		ilits->md_ini_rq_path = TXD_9882H_FW_REQUEST_PATH;
-		ilits->md_fw_ili = CTPM_FW_TXD_9882H;
-		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD_9882H);
-		break;
-	case MODEL_TXD_9882N:
-		ilits->md_name = "TXD_9882N";
-		ilits->md_fw_filp_path = TXD_9882N_FW_FILP_PATH;
-		ilits->md_fw_rq_path = TXD_9882N_FW_REQUEST_PATH;
-		ilits->md_ini_path = TXD_9882N_INI_NAME_PATH;
-		ilits->md_ini_rq_path = TXD_9882N_FW_REQUEST_PATH;
-		ilits->md_fw_ili = CTPM_FW_TXD_9882N;
-		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD_9882N);
-		break;
 	case MODEL_TM:
 		ilits->md_name = "ILITEK_TDDI_TM";
 		ilits->md_fw_filp_path = TM_FW_REQUEST_PATH;
@@ -970,33 +952,6 @@ static void ili_update_tp_module_info(void)
 		ilits->md_ini_rq_path = TM_INI_REQUEST_PATH;
 		ilits->md_fw_ili = CTPM_FW_TM;
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM);
-		break;
-	case MODEL_TM_9882N:
-		ilits->md_name = "TM_9882N";
-		ilits->md_fw_filp_path = TM_9882N_FW_FILP_PATH;
-		ilits->md_fw_rq_path = TM_9882N_FW_REQUEST_PATH;
-		ilits->md_ini_path = TM_9882N_INI_NAME_PATH;
-		ilits->md_ini_rq_path = TM_9882N_FW_REQUEST_PATH;
-		ilits->md_fw_ili = CTPM_FW_TM_9882N;
-		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM_9882N);
-		break;
-	case MODEL_TM_9882H:
-		ilits->md_name = "TM_9882H";
-		ilits->md_fw_filp_path = TM_9882H_FW_FILP_PATH;
-		ilits->md_fw_rq_path = TM_9882H_FW_REQUEST_PATH;
-		ilits->md_ini_path = TM_9882H_INI_NAME_PATH;
-		ilits->md_ini_rq_path = TM_9882H_FW_REQUEST_PATH;
-		ilits->md_fw_ili = CTPM_FW_TM_9882H;
-		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM_9882H);
-		break;
-	case MODEL_TIANMA_9882N:
-		ilits->md_name = "TIANMA_9882N";
-		ilits->md_fw_filp_path = TIANMA_9882N_FW_FILP_PATH;
-		ilits->md_fw_rq_path = TIANMA_9882N_FW_REQUEST_PATH;
-		ilits->md_ini_path = TIANMA_9882N_INI_NAME_PATH;
-		ilits->md_ini_rq_path = TIANMA_9882N_FW_REQUEST_PATH;
-		ilits->md_fw_ili = CTPM_FW_TIANMA_9882N;
-		ilits->md_fw_ili_size = sizeof(CTPM_FW_TIANMA_9882N);
 		break;
 	case MODEL_HLT:
 		ilits->md_name = "ILITEK_TDDI_HLT";
