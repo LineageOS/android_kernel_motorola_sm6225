@@ -13,6 +13,10 @@ ifneq ($(DL_FW_BY_DISPLAY),)
 	KERNEL_CFLAGS += CONFIG_ILITEK_RESUME_BY_DDI=y
 endif
 
+ifeq ($(ILITEK_FW_PANEL),true)
+        KERNEL_CFLAGS += CONFIG_ILITEK_FW_PANEL=y
+endif
+
 ifeq ($(ILITEK_ESD),true)
 	KERNEL_CFLAGS += CONFIG_ILITEK_ESD=y
 endif

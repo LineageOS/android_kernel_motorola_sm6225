@@ -17,6 +17,9 @@ endif
 ifneq ($(filter m y,$(CONFIG_ILITEK_RESUME_BY_DDI)),)
 EXTRA_CFLAGS += -DILI_CONFIG_RESUME_BY_DDI
 endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_FW_PANEL)),)
+EXTRA_CFLAGS += -DILI_FW_PANEL
+endif
 ifneq ($(filter m y,$(CONFIG_ILITEK_ESD)),)
 EXTRA_CFLAGS += -DILI_CONFIG_ESD
 endif
