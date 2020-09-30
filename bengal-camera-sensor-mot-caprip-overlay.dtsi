@@ -381,34 +381,13 @@
 		reg = <0x1>;
 		compatible = "qcom,eeprom";
 		cam_vio-supply = <&L7P>;
-		cam_vana-supply = <&L6P>;
-		cam_vdig-supply = <&L1P>;
-		cam_clk-supply = <&gcc_camss_top_gdsc>;
-		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
-			"cam_clk";
+		regulator-names = "cam_vio";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1200000 0>;
-		rgltr-max-voltage = <1800000 2800000 1200000 0>;
-		rgltr-load-current = <120000 80000 1200000 0>;
-		gpio-no-mux = <0>;
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk2_active
-				&cam_sensor_front_reset_active>;
-		pinctrl-1 = <&cam_sensor_mclk2_suspend
-				&cam_sensor_front_reset_suspend>;
-		gpios = <&tlmm 27 0>,
-			<&tlmm 24 0>;
-		gpio-reset = <1>;
-		gpio-req-tbl-num = <0 1>;
-		gpio-req-tbl-flags = <1 0>;
-		gpio-req-tbl-label = "CAMIF_MCLK2",
-					"CAM_RESET2";
+		rgltr-min-voltage = <1800000>;
+		rgltr-max-voltage = <1800000>;
+		rgltr-load-current = <120000>;
 		cci-master = <1>;
 		status = "ok";
-		clocks = <&gcc GCC_CAMSS_MCLK2_CLK>;
-		clock-names = "cam_clk";
-		clock-cntl-level = "turbo";
-		clock-rates = <24000000>;
 	};
 
 	eeprom_depth: qcom,eeprom2 {
@@ -494,8 +473,8 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//actuator-src = <&actuator_main>;
-		//led-flash-src = <&led_flash_main>;
+		actuator-src = <&actuator_main>;
+		led-flash-src = <&led_flash_main>;
 		eeprom-src = <&eeprom_main>;
 		cam_vio-supply = <&L7P>;
 		cam_vana-supply = <&L4P>;
@@ -554,12 +533,18 @@
 		pinctrl-1 = <&cam_sensor_mclk2_suspend
 				&cam_sensor_front_reset_suspend>;
 		gpios = <&tlmm 27 0>,
-			<&tlmm 24 0>;
+			<&tlmm 24 0>,
+                        <&tlmm 69 0>,
+			<&tlmm 106 0>;
 		gpio-reset = <1>;
-		gpio-req-tbl-num = <0 1>;
-		gpio-req-tbl-flags = <1 0>;
-		gpio-req-tbl-label = "CAMIF_MCLK2",
-					"CAM_RESET2";
+		gpio-custom1 = <2>;
+		gpio-custom2 = <3>;
+		gpio-req-tbl-num = <0 1 2 3>;
+		gpio-req-tbl-flags = <1 0 0 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK1",
+				"CAM_RESET1",
+				"CAM_MIPI_OE1",
+				"CAM_MIPI_SEL1";
 		cci-master = <1>;
 		status = "ok";
 		clocks = <&gcc GCC_CAMSS_MCLK2_CLK>;
