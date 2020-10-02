@@ -16,7 +16,7 @@
 #include "bengal-capri-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
 #include "bengal-capri-awinic-audio-overlay.dtsi"
-#include "bengal-capri-touchscreen-overlay.dtsi"
+#include "bengal-caprip-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-caprip-overlay.dtsi"
 #include "bengal-capri-fps.dtsi"
 #include "bengal-capri-moto-thermal.dtsi"
