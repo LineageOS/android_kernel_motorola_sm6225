@@ -10,7 +10,7 @@
 #include "dsi-panel-mot-tm-ili9882n-652-hdplus-vid.dtsi"
 
 //Capri plus panels
-#include "dsi-panel-mot-djn-nt36525c-652-hdplus-video.dtsi"
+#include "dsi-panel-mot-djn-nt36525c-652-hdplus-vid.dtsi"
 #include "dsi-panel-mot-txd-ili9882n-652-hdplus-vid.dtsi"
 #include "dsi-panel-mot-tianma-ili9882n-652-hdplus-vid.dtsi"
 
