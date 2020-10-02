@@ -117,6 +117,10 @@ static struct drm_panel *active_panel;
 #endif
 #endif
 
+#if defined(NVT_CONFIG_DRM_PANEL)
+static const char *active_panel_name = NULL;
+#endif
+
 #if BOOT_UPDATE_FIRMWARE
 static struct workqueue_struct *nvt_fwu_wq;
 extern void Boot_Update_Firmware(struct work_struct *work);
@@ -1152,7 +1156,12 @@ static int nova_check_dt(struct device_node *np)
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			active_panel = panel;
+#if defined(NVT_CONFIG_DRM_PANEL)
+			active_panel_name = node->name;
+			NVT_LOG("nova_check_dt, active_panel: %s !\n", active_panel_name);
+#else
 			NVT_LOG("nova_check_dt, active_panel found!\n");
+#endif
 			return 0;
 		}
 	}
@@ -1202,6 +1211,32 @@ static int32_t nvt_parse_dt(struct device *dev)
 			ts->panel_supplier);
 		snprintf(nvt_mp_firmware_name, NVT_FILE_NAME_LENGTH, "%s_novatek_ts_mp.bin",
 			ts->panel_supplier);
+
+		//Support FW name with panel & IC info
+#if defined(NVT_CONFIG_DRM_PANEL)
+		if (active_panel_name) {
+			const char *ic_name;
+			int num_of_ic = of_property_count_strings(np, "novatek,fw_ic_info");
+			if (num_of_ic > 0) {
+				int i;
+				NVT_LOG("%s: get novatek,fw_ic_info count=%d", __func__, num_of_ic);
+				for (i = 0; i < num_of_ic; i++) {
+					ret = of_property_read_string_index(np, "novatek,fw_ic_info", i, &ic_name);
+					if (ret < 0) {
+						NVT_LOG("%s: cannot parse fw_ic_info: %d\n", __func__, ret);
+						break;
+					} else if (ic_name && strstr(active_panel_name, ic_name)) {
+						NVT_LOG("%s: matched FW IC: %s", __func__, ic_name);
+						snprintf(nvt_boot_firmware_name, NVT_FILE_NAME_LENGTH, "%s_%s_novatek_ts_fw.bin",
+							ts->panel_supplier, ic_name);
+						snprintf(nvt_mp_firmware_name, NVT_FILE_NAME_LENGTH, "%s_%s_novatek_ts_mp.bin",
+							ts->panel_supplier, ic_name);
+						break;
+					}
+				}
+			}
+		}
+#endif
 	}
 	NVT_LOG("boot firmware %s, mp firmware %s", nvt_boot_firmware_name, nvt_mp_firmware_name);
 
