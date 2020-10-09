@@ -452,7 +452,7 @@ static int32_t nvt_polling_hand_shake_status(void)
 {
 	uint8_t buf[8] = {0};
 	int32_t i = 0;
-	const int32_t retry = 70;
+	const int32_t retry = 250;
 
 	for (i = 0; i < retry; i++) {
 		//---set xdata index to EVENT BUF ADDR---
@@ -1091,11 +1091,7 @@ static int32_t c_show_selftest(struct seq_file *m, void *v)
 	nvt_mp_seq_printf(m, "FW Version: %d\n\n", fw_ver);
 
 	nvt_mp_seq_printf(m, "Short Test");
-	if ((TestResult_Short == 0) || (TestResult_Short == 1)) {
-		print_selftest_result(m, TestResult_Short, RecordResult_Short, RawData_Short, X_Channel, Y_Channel);
-	} else { // TestResult_Short is -1
-		print_selftest_result(m, TestResult_Short, RecordResult_Short, RawData_Short, X_Channel, Y_Channel);
-	}
+	print_selftest_result(m, TestResult_Short, RecordResult_Short, RawData_Short, X_Channel, Y_Channel);
 
 	nvt_mp_seq_printf(m, "Open Test");
 	print_selftest_result(m, TestResult_Open, RecordResult_Open, RawData_Open, X_Channel, Y_Channel);
