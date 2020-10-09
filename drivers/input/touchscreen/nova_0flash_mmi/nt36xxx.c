@@ -262,7 +262,8 @@ static inline int32_t spi_read_write(struct spi_device *client, uint8_t *buf, si
 		.len    = len,
 	};
 
-	memcpy(ts->xbuf, buf, len + DUMMY_BYTES);
+	memset(ts->xbuf, 0, len + DUMMY_BYTES);
+	memcpy(ts->xbuf, buf, len);
 
 	switch (rw) {
 		case NVTREAD:
@@ -2137,11 +2138,15 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	ts->xbuf = (uint8_t *)kzalloc((NVT_TRANSFER_LEN+2), GFP_KERNEL);
 	if(ts->xbuf == NULL) {
 		NVT_ERR("kzalloc for xbuf failed!\n");
-		if (ts) {
-			kfree(ts);
-			ts = NULL;
-		}
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_malloc_xbuf;
+	}
+
+	ts->rbuf = (uint8_t *)kzalloc(NVT_READ_LEN, GFP_KERNEL);
+	if(ts->rbuf == NULL) {
+		NVT_ERR("kzalloc for rbuf failed!\n");
+		ret = -ENOMEM;
+		goto err_malloc_rbuf;
 	}
 
 	ts->client = client;
@@ -2603,6 +2608,16 @@ err_gpio_config_failed:
 err_spi_setup:
 err_ckeck_full_duplex:
 	spi_set_drvdata(client, NULL);
+	if (ts->rbuf) {
+		kfree(ts->rbuf);
+		ts->rbuf = NULL;
+	}
+err_malloc_rbuf:
+	if (ts->xbuf) {
+		kfree(ts->xbuf);
+		ts->xbuf = NULL;
+	}
+err_malloc_xbuf:
 	if (ts) {
 		kfree(ts);
 		ts = NULL;

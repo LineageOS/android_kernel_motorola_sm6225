@@ -85,7 +85,7 @@
 //---Touch info.---
 #define TOUCH_COORDS_ARR_SIZE	2
 #define TOUCH_DEFAULT_MAX_WIDTH 720
-#define TOUCH_DEFAULT_MAX_HEIGHT 1560
+#define TOUCH_DEFAULT_MAX_HEIGHT 1600
 #define TOUCH_MAX_FINGER_NUM 10
 #define TOUCH_KEY_NUM 0
 #if TOUCH_KEY_NUM > 0
@@ -183,7 +183,7 @@ struct nvt_ts_data {
 	uint8_t carrier_system;
 	uint8_t hw_crc;
 	uint16_t nvt_pid;
-	uint8_t rbuf[1025];
+	uint8_t *rbuf;
 	uint8_t *xbuf;
 	struct mutex xbuf_lock;
 	bool irq_enabled;
@@ -265,6 +265,7 @@ typedef enum {
 
 #define DUMMY_BYTES (1)
 #define NVT_TRANSFER_LEN	(63*1024)
+#define NVT_READ_LEN		(2*1024)
 
 typedef enum {
 	NVTWRITE = 0,
