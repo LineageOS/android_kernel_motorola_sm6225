@@ -235,7 +235,7 @@
 };
 
 //Capri plus panel#2
-&dsi_txd_ili9882h_652_video {
+&dsi_txd_ili9882n_652_video {
 	qcom,mdss-dsi-t-clk-post = <0x0A>;
 	qcom,mdss-dsi-t-clk-pre = <0x1E>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
