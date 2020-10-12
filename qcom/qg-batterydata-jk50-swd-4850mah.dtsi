@@ -9,6 +9,7 @@ qcom,jk50-swd-4850mah {
     qcom,battery-therm-kohm = <10>;
     qcom,battery-type = "JK50-SWD-4850MAH";
     qcom,qg-batt-profile-ver = <100>;
+    qcom,oem-batt-profile-ver = <2>;
 
 	qcom,fcc1-temp-lut {
 		qcom,lut-col-legend = <0 10 25 40 50>;
