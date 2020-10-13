@@ -96,9 +96,8 @@
 					15 00 00 00 00 00 02 55 01
 					05 01 00 00 14 00 01 29];
 				qcom,mdss-dsi-off-command = [
-					39 01 00 00 00 00 04 FF 78 07 00
-					05 01 00 00 14 00 02 28 00
-					05 01 00 00 78 00 02 10 00];
+					05 01 00 00 14 00 01 28
+					05 01 00 00 78 00 01 10];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
                         };
