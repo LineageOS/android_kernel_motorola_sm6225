@@ -16,10 +16,82 @@
 #include <linux/of_platform.h>
 #include <linux/ctype.h>
 #include <linux/slab.h>
+#include <linux/mmi_device.h>
 #include "mmi_info.h"
 
 struct mmi_chosen_info mmi_chosen_data;
 static char *bootargs_str;
+
+/**
+ *  mmi_device_is_available - check if a device is available for use
+ *
+ *  @device: Node to check for availability, with locks already held
+ *
+ *  Returns true if the status property
+ *  -- is absent,
+ *  -- refers to another property using string list as following
+ *     mmi,status = <path>, <okay property>, [<contains>,] <value1>[, <value2>...];
+ *     and at least one <value> in the list of values matches
+ *     value of /<path>/<okay property>.
+ *     Partial matches accepted when "contains" provided.
+ *  false otherwise
+ */
+bool mmi_device_is_available(struct device_node *np)
+{
+	bool found;
+	int len, operation;
+	const char *path, *mmi_dts;
+	const char *mmi_dts_val, *val;
+	struct property *prop;
+	struct device_node *mmi_np;
+
+	if (np == NULL)
+		return true;
+
+	prop = of_find_property(np, "mmi,status", &len);
+	if (prop == NULL || len < 0) {
+		return true;
+	}
+	path = prop->value;
+
+	mmi_np = of_find_node_by_path(path);
+	if (mmi_np == NULL)
+		return false;
+
+	mmi_dts = of_prop_next_string(prop, path);
+	if (mmi_dts == NULL)
+		return false;
+
+	mmi_dts_val = of_get_property(mmi_np, mmi_dts, &len);
+	if (mmi_dts_val == NULL || len <= 0)
+		return false;
+
+	val = mmi_dts;
+	operation = 0;
+	found = false;
+	while ((val = of_prop_next_string(prop, val))) {
+		if (val == NULL)
+			return false;
+
+		if (!operation) {
+			operation++;
+			if (!strcmp(val, "contains")) {
+				operation++;
+				continue;
+			}
+		}
+		if (operation == 1) {
+			if (!strcmp(val, mmi_dts_val))
+				found = true;
+		} else if (strstr(mmi_dts_val, val)) {
+			found = true;
+		}
+		if (found)
+			return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(mmi_device_is_available);
 
 int mmi_get_bootarg(char *key, char **value)
 {
