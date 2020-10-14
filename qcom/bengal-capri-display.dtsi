@@ -45,12 +45,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
@@ -86,12 +87,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
@@ -168,12 +170,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
@@ -209,12 +212,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
@@ -250,12 +254,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
@@ -291,12 +296,13 @@
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	//qcom,mdss-dsi-panel-hbm-is-51cmd;
 
-	//qcom,esd-check-enabled;
+	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command =[06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command =[06 01 00 00 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
 	qcom,mdss-dsi-panel-status-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <4>;
+	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
