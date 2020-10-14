@@ -156,6 +156,12 @@
 #define   SX933X_OFFSETPH4_REG            SX933X_AFEPHPH4_REG//bit14:0
 #define   SX933X_OFFSETPH5_REG            SX933X_AFEPHPH5_REG//bit14:0
 
+#define SX933X_REG_DBG_PHASE_SEL          0x81A4
+#define SX933X_REG_PROX_ADC_MIN           0x81A8
+#define SX933X_REG_PROX_ADC_MAX           0x81AC
+#define SX933X_REG_PROX_RAW               0x81B0
+#define SX933X_REG_DLT_VAR                0X81B4
+
 //i2c register bit mask
 #define   MSK_IRQSTAT_RESET               0x00000080
 #define   MSK_IRQSTAT_TOUCH               0x00000040
@@ -706,6 +712,8 @@ struct sx933x_platform_data
 	bool cap_vdd_en;
 	struct smtc_reg_data *pi2c_reg;
 	int irq_gpio;
+	int ref_phase_a;
+	int ref_phase_b;
 	int eldo_gpio;
 	bool eldo_vdd_en;
 	sx933x_power_supply_type_t power_supply_type;
