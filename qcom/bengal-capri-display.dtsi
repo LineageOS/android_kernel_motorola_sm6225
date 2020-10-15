@@ -39,11 +39,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -81,11 +81,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -123,11 +123,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	//qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -164,11 +164,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -206,11 +206,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -248,11 +248,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -290,11 +290,11 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
-	//qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -332,9 +332,9 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
@@ -413,9 +413,9 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
@@ -454,9 +454,9 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
@@ -495,9 +495,9 @@
 
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <16>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-bl-max-level = <1637>;
 	qcom,bklt-dcs-2bytes-enabled;
-	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <1637>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
 
