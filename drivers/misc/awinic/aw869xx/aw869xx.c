@@ -4251,12 +4251,6 @@ static int aw869xx_i2c_probe(struct i2c_client *i2c,
 		goto err_qualify;
 	}
 
-	/* aw869xx device name */
-	if (i2c->dev.of_node)
-		dev_set_name(&i2c->dev, "%s", AW869XX_DEV_NAME);
-	else
-		aw_dev_err(&i2c->dev, "%s failed to set device name: %d\n",
-			   __func__, ret);
 	/* register codec */
 	dai = devm_kzalloc(&i2c->dev, sizeof(aw869xx_dai), GFP_KERNEL);
 	if (!dai)
