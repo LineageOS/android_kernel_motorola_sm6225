@@ -126,9 +126,17 @@ extern const uint16_t gesture_key_array[];
 #define POINT_DATA_CHECKSUM_LEN 65
 #define NVT_FILE_NAME_LENGTH                    128
 //---ESD Protect.---
+#ifdef NVT_CONFIG_ESD_ENABLE
+#define NVT_TOUCH_ESD_PROTECT 1
+#else
 #define NVT_TOUCH_ESD_PROTECT 0
+#endif
 #define NVT_TOUCH_ESD_CHECK_PERIOD 1500	/* ms */
 #define NVT_TOUCH_WDT_RECOVERY 1
+
+#if NVT_TOUCH_ESD_PROTECT
+extern struct delayed_work nvt_esd_check_work;
+#endif
 
 #ifdef NVT_SENSOR_EN
 /* display state */
