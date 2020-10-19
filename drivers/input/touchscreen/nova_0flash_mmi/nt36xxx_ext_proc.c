@@ -562,6 +562,11 @@ static ssize_t nvt_fwupdate_read(struct file *file, char __user *buff, size_t co
 	}
 
 #if NVT_TOUCH_ESD_PROTECT
+	/*
+	 * stop esd check work to avoid case that 0x77 report righ after here to enable esd check again
+	 * finally lead to trigger esd recovery bootloader reset
+	 */
+	cancel_delayed_work_sync(&nvt_esd_check_work);
 	nvt_esd_check_enable(false);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
