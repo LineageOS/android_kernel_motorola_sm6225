@@ -24,6 +24,7 @@
 #include <linux/wakelock.h>
 #else
 #include <linux/pm_wakeup.h>
+#include <linux/mmi_wake_lock.h>
 #endif
 
 #define BU520XX_DBG_ENABLE
@@ -61,7 +62,7 @@ static struct hall_sensor_str {
 	#ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock wake_lock;
 	#else
-	struct wakeup_source wake_lock;
+	struct wakeup_source *wake_lock;
 	#endif
 	struct input_dev *pen_indev;
 	struct input_handler pen_handler;
@@ -326,7 +327,7 @@ static void pen_report_function(struct work_struct *dat)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_timeout(&hall_sensor_dev->wake_lock, msecs_to_jiffies(3000));
 #else
-	__pm_wakeup_event(&hall_sensor_dev->wake_lock, msecs_to_jiffies(3000));
+	PM_WAKEUP_EVENT(hall_sensor_dev->wake_lock,msecs_to_jiffies(3000));
 #endif
 
 	if(!hall_sensor_dev->status)
@@ -453,7 +454,12 @@ static int bu520xx_pen_probe(struct platform_device *pdev)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&hall_sensor_dev->wake_lock, WAKE_LOCK_SUSPEND, "pen_suspend_blocker");
 #else
-	wakeup_source_init(&hall_sensor_dev->wake_lock, "pen_suspend_blocker");
+	PM_WAKEUP_REGISTER(&pdev->dev, hall_sensor_dev->wake_lock, "pen_suspend_blocker");
+	if(!hall_sensor_dev->wake_lock){
+		dev_err(&pdev->dev,"%s: Failed to allocate wakeup source\n",__func__);
+		ret = -ENOMEM;
+		goto fail_wakeup_init;
+	}
 #endif
 	//set irq
 	ret = set_irq_hall_sensor();
@@ -470,8 +476,9 @@ fail_for_irq_hall_sensor:
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&hall_sensor_dev->wake_lock);
 #else
-	wakeup_source_trash(&hall_sensor_dev->wake_lock);
+	PM_WAKEUP_UNREGISTER(hall_sensor_dev->wake_lock);
 #endif
+fail_wakeup_init:
 fail_for_create_input_dev:
     hall_sensor_dev->pen_indev=NULL;
 	gpio_free(hall_sensor_dev->gpio);
@@ -494,7 +501,7 @@ static int bu520xx_pen_remove(struct platform_device *pdev)
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_destroy(&hall_sensor_dev->wake_lock);
 #else
-	wakeup_source_trash(&hall_sensor_dev->wake_lock);
+	PM_WAKEUP_UNREGISTER(hall_sensor_dev->wake_lock);
 #endif
 	hall_sensor_dev->pen_indev=NULL;
 	kfree(hall_sensor_dev);
