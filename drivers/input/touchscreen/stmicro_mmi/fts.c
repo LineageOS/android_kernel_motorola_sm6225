@@ -127,11 +127,7 @@ extern spinlock_t fts_int;
 
 
 static void fts_interrupt_enable(struct fts_ts_info *info);
-static int fts_init_sensing(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
-
-
-static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
 
 
 /**
@@ -1508,15 +1504,14 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			goto END;
 		}
 
-
-
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 		res = fb_unregister_client(&info->notifier);
 		if (res < 0) {
 			logError(1, "%s ERROR: unregister notifier failed!\n",
 				 tag);
 			goto END;
 		}
-
+#endif
 
 		switch (typeOfComand[0]) {
 		/*ITO TEST*/
@@ -1761,10 +1756,10 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	}
 
 
-
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 	if (fb_register_client(&info->notifier) < 0)
 		logError(1, "%s ERROR: register notifier failed!\n", tag);
-
+#endif
 
 END:
 	/* here start the reporting phase, assembling the data
@@ -2974,6 +2969,7 @@ int fts_fw_update(struct fts_ts_info *info)
 	return error;
 }
 
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #ifndef FW_UPDATE_ON_PROBE
 /**
   *	Function called by the delayed workthread executed after the probe in
@@ -2990,6 +2986,7 @@ static void fts_fw_update_auto(struct work_struct *work)
 	fts_fw_update(info);
 }
 #endif
+#endif
 
 /* TODO: define if need to do the full mp at the boot */
 /**
@@ -2997,7 +2994,7 @@ static void fts_fw_update_auto(struct work_struct *work)
   * checking also the resulting data
   *	@see  production_test_main()
   */
-static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
+int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 {
 	int ret2 = 0;
 	int retry;
@@ -3228,25 +3225,23 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 	return error;
 }
 
-
 /**
   * Complete the boot up process, initializing the sensing of the IC according
   * to the current setting chosen by the host
   * Register the notifier for the suspend/resume actions and the event handler
   * @return OK if success or an error code which specify the type of error
   */
-static int fts_init_sensing(struct fts_ts_info *info)
+int fts_init_sensing(struct fts_ts_info *info)
 {
 	int error = 0;
-
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 	error |= fb_register_client(&info->notifier);	/* register the
 							 * suspend/resume
 							 * function */
+#endif
 	error |= fts_interrupt_install(info);	/* register event handler */
-	error |= fts_mode_handler(info, 0);	/* enable the features and
-						 * sensing */
-	/* error |= fts_enableInterrupt(); */	/* enable the interrupt */
-	error |= fts_resetDisableIrqCount();
+	error |= fts_mode_handler(info, 0);
+	fts_resetDisableIrqCount();
 
 	if (error < OK)
 		logError(1, "%s %s Init after Probe error (ERROR = %08X)\n",
@@ -3492,6 +3487,8 @@ static void inline fts_suspend_work(struct work_struct *work)
 {
 	fts_suspend_func(container_of(work, struct fts_ts_info, suspend_work));
 }
+
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 /** @}*/
 
 /**
@@ -3548,6 +3545,7 @@ static int fts_fb_state_chg_callback(struct notifier_block *nb, unsigned long
 static struct notifier_block fts_noti_block = {
 	.notifier_call	= fts_fb_state_chg_callback,
 };
+#endif
 
 /**
   * From the name of the power regulator get/put the actual regulator structs
@@ -3655,6 +3653,7 @@ disable_bus_reg:
 	if (info->vdd_reg)
 		regulator_disable(info->vdd_reg);
 
+	logError(1, "%s %s: Failed to enable regulator(s)\n", tag, __func__);
 exit:
 	return retval;
 }
@@ -4039,8 +4038,9 @@ static int fts_probe(struct spi_device *client)
 	info->grip_enabled = 0;
 
 	info->resume_bit = 1;
+#if !defined(CONFIG_INPUT_TOUCSCREEN_MMI)
 	info->notifier = fts_noti_block;
-
+#endif
 	logError(1, "%s Init Core Lib:\n", tag);
 	initCore(info);
 	/* init hardware device */
@@ -4053,9 +4053,7 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_6;
 	}
 
-	/* register touchscreen class if provisioned */
-	fts_mmi_init(info, true);
-
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #if defined(FW_UPDATE_ON_PROBE) && defined(FW_H_FILE)
 	logError(1, "%s FW Update and Sensing Initialization:\n", tag);
 	error = fts_fw_update(info);
@@ -4078,7 +4076,7 @@ static int fts_probe(struct spi_device *client)
 	}
 	INIT_DELAYED_WORK(&info->fwu_work, fts_fw_update_auto);
 #endif
-
+#endif
 	logError(1, "%s SET Device File Nodes:\n", tag);
 	/* sysfs stuff */
 	info->attrs.attrs = fts_attr_group;
@@ -4093,10 +4091,14 @@ static int fts_probe(struct spi_device *client)
 	if (error < OK)
 		logError(1, "%s Error: can not create /proc file!\n", tag);
 
-#ifndef FW_UPDATE_ON_PROBE
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#ifdef FW_UPDATE_ON_PROBE
 	queue_delayed_work(info->fwu_workqueue, &info->fwu_work,
 			   msecs_to_jiffies(EXP_FN_WORK_DELAY_MS));
 #endif
+#endif
+	/* register touchscreen class if provisioned */
+	fts_mmi_init(info, true);
 
 	logError(1, "%s Probe Finished!\n", tag);
 	return OK;
@@ -4105,8 +4107,10 @@ static int fts_probe(struct spi_device *client)
 ProbeErrorExit_7:
 	fts_mmi_init(info, false);
 
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #ifdef FW_UPDATE_ON_PROBE
 	fb_unregister_client(&info->notifier);
+#endif
 #endif
 
 ProbeErrorExit_6:
@@ -4160,8 +4164,9 @@ static int fts_remove(struct spi_device *client)
 	/* remove interrupt and event handlers */
 	fts_interrupt_uninstall(info);
 
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 	fb_unregister_client(&info->notifier);
-
+#endif
 	/* unregister the device */
 	input_unregister_device(info->input_dev);
 
@@ -4170,10 +4175,11 @@ static int fts_remove(struct spi_device *client)
 	/* Remove the work thread */
 	destroy_workqueue(info->event_wq);
 	PM_WAKEUP_UNREGISTER(info->wakesrc);
+#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
 #ifndef FW_UPDATE_ON_PROBE
 	destroy_workqueue(info->fwu_workqueue);
 #endif
-
+#endif
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);
 

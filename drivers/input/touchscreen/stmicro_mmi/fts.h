@@ -348,6 +348,8 @@ struct fts_ts_info {
 
 
 int fts_chip_powercycle(struct fts_ts_info *info);
+int fts_init_sensing(struct fts_ts_info *info);
+int fts_chip_initialization(struct fts_ts_info *info, int type);
 extern int input_register_notifier_client(struct notifier_block *nb);
 extern int input_unregister_notifier_client(struct notifier_block *nb);
 
