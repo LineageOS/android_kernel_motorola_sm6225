@@ -211,7 +211,7 @@
 };
 
 &sde_dsi {
-    qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
+    qcom,dsi-default-panel = <&dsi_djn_nt36525c_652_video>;
 };
 
 &soc {
