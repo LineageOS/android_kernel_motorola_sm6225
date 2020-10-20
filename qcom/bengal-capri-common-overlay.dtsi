@@ -215,7 +215,7 @@
 };
 
 &sde_dsi {
-    qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
+    qcom,dsi-default-panel = <&dsi_djn_nt36525b_652_video>;
 };
 
 &qupv3_se0_i2c {
