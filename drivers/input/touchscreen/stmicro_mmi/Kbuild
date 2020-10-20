@@ -16,6 +16,10 @@ stmicro_mmi-objs += fts_lib/ftsTest.o
 stmicro_mmi-objs += fts_lib/ftsTime.o
 stmicro_mmi-objs += fts_lib/ftsTool.o
 
+ifneq ($(filter m y,$(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     stmicro_mmi-objs += fts_mmi_class.o
