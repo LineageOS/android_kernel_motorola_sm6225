@@ -265,7 +265,7 @@
 		interrupts = <36 0x02>;
 		interrupt-names = "sx933x_irq";
 		Semtech,nirq-gpio= <&tlmm 36 0x02>;
-		Semtech,button-flag = <0x07>;
+		Semtech,button-flag = <0x03>;
 		Semtech,headset-reg-num = <4>;
 		Semtech,headset-reg = <
 		0x8074 0x08203515
