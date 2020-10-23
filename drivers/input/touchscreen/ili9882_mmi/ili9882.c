@@ -233,6 +233,10 @@ int ili_wq_esd_i2c_check(void)
 
 static void ilitek_tddi_wq_esd_check(struct work_struct *work)
 {
+	if (mutex_is_locked(&ilits->touch_mutex)) {
+		ILI_INFO("touch is locked, ignore\n");
+		return;
+	}
 	mutex_lock(&ilits->touch_mutex);
 	if (!ilits->tp_suspend && ilits->esd_recover() < 0) {
 		ILI_ERR("SPI ACK failed, doing spi recovery\n");
@@ -1045,7 +1049,7 @@ int ili_tddi_init(void)
 	spin_lock_init(&ilits->irq_spin);
 	init_completion(&ilits->esd_done);
 
-	atomic_set(&ilits->irq_stat, DISABLE);
+	//atomic_set(&ilits->irq_stat, DISABLE);
 	atomic_set(&ilits->ice_stat, DISABLE);
 	atomic_set(&ilits->tp_reset, END);
 	atomic_set(&ilits->fw_stat, END);

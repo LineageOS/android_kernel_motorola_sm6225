@@ -259,9 +259,9 @@ static int ili_spi_pll_clk_wakeup(void)
 	wdata[1] = wlen >> 8;
 	wdata[2] = wlen & 0xff;
 	index = 3;
-	wlen += index;
 
 	ipio_memcpy(&wdata[index], wakeup, wlen, wlen);
+	wlen += index;
 
 	ILI_INFO("Write dummy to wake up spi pll clk\n");
 	if (ilits->spi_write_then_read(ilits->spi, wdata, wlen, NULL, 0) < 0) {
