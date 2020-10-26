@@ -271,6 +271,7 @@ struct aw882xx {
 	unsigned int afe_rx_portid;
 	unsigned int afe_tx_portid;
 	unsigned int afe_profile;
+	unsigned int fade_flag;
 	struct  profile_info profile;
 };
 
