@@ -1,7 +1,7 @@
 /*
  * aw882xx.c   aw882xx codec module
  *
- * Version: v0.1.16
+ * Version: v0.1.17
  *
  * keep same with AW882XX_VERSION
  *
@@ -50,7 +50,7 @@
  ******************************************************/
 #define AW882XX_I2C_NAME "aw882xx_smartpa"
 
-#define AW882XX_VERSION "v0.1.16"
+#define AW882XX_VERSION "v0.1.17"
 
 #define AW882XX_RATES SNDRV_PCM_RATE_8000_48000
 #define AW882XX_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
@@ -683,11 +683,10 @@ static void aw882xx_reg_loaded(const struct firmware *cont, void *context)
 	kfree(aw882xx_cfg);
 	if (aw882xx->afe_profile) {
 		aw882xx_load_profile_params(aw882xx);
-		aw882xx->need_fade = 0;
 	}
+	aw882xx->need_fade = 0;
 	aw882xx_start(aw882xx);
-
-	if (aw882xx->afe_profile) {
+	if(aw882xx->afe_profile || aw882xx->fade_flag) {
 		aw882xx->need_fade = 1;
 	}
 }
@@ -1984,6 +1983,15 @@ static int aw882xx_parse_dt(struct device *dev, struct aw882xx *aw882xx,
 	} else {
 		dev_info(dev, "%s: afe-profile = %d\n",
 			__func__, aw882xx->afe_profile);
+	}
+
+	ret = of_property_read_u32(np, "fade-flag", &aw882xx->fade_flag);
+	if (ret) {
+		aw882xx->fade_flag = 0;
+		dev_err(dev, "%s: fade_flag get failed,use default value!\n", __func__);
+	} else {
+		dev_info(dev, "%s: fade_flag = %d\n",
+			__func__, aw882xx->fade_flag);
 	}
 
 	/*get low vol table cfg*/
