@@ -29,3 +29,8 @@
         qcom,mdss-dsi-bl-max-level = <1637>;
         qcom,mdss-brightness-max-level = <1637>;
 };
+
+&dsi_djn_nt36525b_video {
+        qcom,mdss-dsi-bl-max-level = <1740>;
+        qcom,mdss-brightness-max-level = <1740>;
+};
