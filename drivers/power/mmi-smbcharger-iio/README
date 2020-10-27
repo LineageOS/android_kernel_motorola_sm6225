@@ -1,0 +1,382 @@
+Motorola Mobility. SMBMMI Charger Specific Bindings
+
+This is an introduction to qpnp-smbcharger-mmi wrapper/driver. It is a DLKM,
+and messages on kernel logs may be tagged as:
+- "SMBMMI"
+- "SMB_MMI"
+- PMIC model (like "pm8150b_charger", or "pm660")
+- or no tag, if it's happening during probe
+
+It depends on QCOM PMIC driver implementation (located in
+kernel/drivers/power/supply/qcom), and requires different DT properties in order
+to configure itself.
+
+All products rely on parse_mmi_dt() to look for necessary DT properties, and in
+case it has a dual-battery architecture, it uses the additional
+parse_mmi_dual_dt() function.
+
+When dual-battery architecture, references to battery will be "main" and "flip",
+referring to where in the phone battery is physically located. Prefix "max" is
+legacy, since first Fuel Gauge solution was from Maxim Integrated, but other FG
+solutions are possible, like Texas Instruments (TI).
+
+In terms of DT properties, some of them are:
+
+
+- qcom,mmi-temp-zones
+ Usage:      optional
+ Value Type: Array of tuples of <u32>
+ Definition: Unlimited array of arrays. Each internal array needs to have a set
+of 4 bytes, each one representing this sequence: Temperature (in degC), Step
+"Normalized" Voltage (in millivolts), Full Rate "FCC" Current (in milliamps),
+and Taper Rate "FCC Normalized" Current (in milliamps). These values are
+related to charging limitations based on temperature specifications. Note that
+setting a voltage to '0' means that it doesn't matter the battery voltage on
+that defined temperature range to perform necessary tapering. To understand how
+those values are used, please check "IEEE Charging Compliance" section below.
+
+- qcom,iterm-ma
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define taper current on battery (in milliamps). If not
+defined, defaults to 150.
+
+- qcom,vfloat-comp-uv
+ Usage:      optional
+ Value Type: <u32>
+ Definition: This is a tolerance, in uV, for battery floating voltage when
+charging is being limited. Such situation can happen when either battery is
+close to full or when there's thermal mitigation on charging. If not set,
+defaults to 0.
+
+- qcom,enable-charging-limit
+ Usage:      optional
+ Value Type: <empty>
+ Definition: Boolean flag to set capacity limits to battery when plugged on
+a charger and is executing a Factory Image. It will use upper and lower
+capacities defined by the Device Tree.
+
+- qcom,enable-factory-poweroff
+ Usage:      optional
+ Value Type: <empty>
+ Definition: Boolean flag which enables Factory Kill when executing under a
+Factory Image. By default, Factory Kill is a feature only in Factory Mode,
+which turns device off when charger is removed.
+
+- qcom,upper-limit-capacity
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Limits minimum battery SoC (in percentage). In other words, starts
+charging when it reaches this value. Especially useful for factory procedures,
+which needs to limit SoC. Requires qcom,enable-charging-limit. If not defined,
+defaults to 100.
+
+- qcom,lower-limit-capacity
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Limits maximum battery SoC (in percentage). In other words, stop
+charging when it reaches this value. Especially useful for factory procedures,
+which needs to limit SoC. Requires qcom,enable-charging-limit. If not defined,
+defaults to 0.
+
+- qcom,dc-icl-ma
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Set this value to allow ICL for DC current, used by MOD or
+wireless charging. If not set, it won't be used.
+
+- qcom,force-hvdcp-5v
+Usage:      optional
+Value Type: <empty>
+Definition: Boolean flag to maintain USB input to 5V, so no PD or other
+protocols request higher voltages.
+
+- mmi,max-main-psy
+ Usage:      optional
+ Value Type: <string>
+ Definition: Battery name on battery main description defined in FG driver.
+(as an example, see max170xx_battery_mmi.c)
+
+- mmi,max-flip-psy
+ Usage:      optional
+ Value Type: <string>
+ Definition: Battery name on battery flip description defined in FG driver.
+(as an example, see max170xx_battery_mmi.c)
+
+- qcom,mmi-temp-zones-main
+ Usage:      optional
+ Value Type: Array of <u32>
+ Definition: Depends on mmi,max-main-psy. Analoguous to qcom,mmi-temp-zones .
+
+- qcom,iterm-ma-main
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Depends on mmi,max-main-psy. Analoguous to qcom,iterm-ma.
+
+- qcom,mmi-temp-zones-flip
+ Usage:      optional
+ Value Type: Array of <u32>
+ Definition: Depends on mmi,max-main-psy. Analoguous to qcom,mmi-temp-zones.
+
+- qcom,iterm-ma-flip
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Depends on mmi,max-flip-psy. Analoguous to qcom,iterm-ma.
+
+
+==========================
+ IEEE Charging Compliance
+==========================
+
+In order to be compliant to IEEE rules, there are a series of limitations on
+how much a battery can be charged, based on temperature. That will limit how
+much current can be drawn, or maximum battery voltage to be achieved during
+charging.
+
+Current is always tapered when voltage achieves maximum voltage specification
+(which is generally 4.4V, but may have a different value, depending a product
+battery specs). It is tapered to some small value, possibly around 100mA,
+which is based on product specifications and capacity testing, defined by
+EE (Electrical Engineering) Team/Hardware.
+
+If temperature is below -20 degC or above 60 degC, it should automatically
+stop charging device.
+
+If temperature is in between 15 and 45 deg C, it can achieve maximum charging
+current, and such value varies across products. Generally, if it supports PD,
+this will be a much higher current than non-PD products, which will also have
+a much higher current than dual-battery products. Important to note that this
+is a rule-of-thumb, so always check product specification.
+
+If temperature is between 0 and 10 deg C, but battery voltage is above 4.20V,
+current should be tapered to 1000mA.
+
+Finally, if temperature is in between -20 and 0 deg C, current should be
+tapered to 1000mA.
+
+NOTE1: whenever dealing with IEEE certification, most documentation and
+variable notation across bootloader and kernel may refer to JEITA. This is a
+convention on such standards and values to which temperature, voltage and
+current levels are accepted in different scenarios for Li-ion batteries. So
+JEITA can be seen as a general standard, but IEEE enforces it as well as
+provide ways to certify a product according to it (is mandatory to certify
+any commercial product that has a lithium-ion battery embedded or plugged to
+it).
+
+NOTE2: taper current mostly refers to when battery is above maximum allowed
+voltage on a specific temperature region, based on rules above. So be aware
+that the rest of this document may refer as "taper" to a current that is
+limiting the maximum value, but before achieving a stage in which current
+is limited to something around 100mA (so an intermediate stage). Also
+"taper voltage" will refer to a voltage level in which this mentioned
+"taper" current (intermediate current level) is triggered.
+
+
+=========================================
+ How to define qcom,mmi-temp-zones array
+=========================================
+
+When defining qcom,mmi-temp-zones array, it is important to always have in
+mind the IEEE rules described above, as well the battery specifications.
+
+Each tuple in that array represents a different value, as shown here:
+<temperature taper_volt max_cur_below_taper_volt max_cur_above_taper_volt>
+
+"temperature" defines maximum temperature value. So setting "35" means a
+definition to anything below 35 degC.
+
+"taper_volt" means maximum allowed battery voltage in that temperature
+range. So setting "4200" means that tapering will happen once battery
+is above 4.2V and is still charging.
+
+"max_cur_below_taper_volt" defines maximum allowed current value in case
+battery is below "taper_volt" value. So setting it to "700" means that
+current won't go above 700mA, as long as battery is below "taper_volt"
+voltage.
+
+"max_cur_above_taper_volt" defines maximum allowed current value in case
+battery is above "taper_volt" value. So setting it to "0" means that it
+won't charge in case battery is above "taper_volt" voltage.
+
+Here's an example from Voyager:
+
+qcom,mmi-temp-zones-flip = 	<0 4200 250 0>,
+				<10 4200 610 250>,
+				<15 0 610 610>,
+				<45 4200 1225 860>,
+				<60 4200 610 0>;
+
+First line states "If temperature is below 0 degC, and flip battery voltage
+is below 4.2V, device can be charged up to 250mA. But if flip battery voltage
+is above 4.2V, device cannot be charged".
+
+Third line states "If temperature is below 15 degC, flip battery can be charged
+up to 610mA, no matter the battery voltage".
+
+
+=================================================
+ Understanding the IEEE algorithm implementation
+=================================================
+
+Now that IEEE rules were understood, as well as how qcom,mmi-temp-zones is set,
+just to stress out this driver implementation, the thermal charging limitation
+implementation will be described.
+
+mmi_basic_charge_sm() or mmi_dual_charge_sm() are the functions responsible
+to enforce such rules. In that way, before we check the implementation, here
+are some conventions:
+
+STEP_NONE:  no charger present
+STEP_STOP:  in zone hot or zone cold, which limits charging considerably
+STEP_NORM:  limits current to some value
+STEP_MAX:   allows maximum current value, when in between 0 and 45 degC
+STEP_FULL:  battery is almost or completely full, tapering to a small current
+STEP_FLOAT: TODO
+
+Important to note that even when moving from one state to another, temperature
+may change. Hence, taper current and voltage will no longer correspond to such
+state, and so is always necessary to check on every state in which temperature
+range device is.
+
+"batt_ma" refers to battery current (equivalent to current_now on battery
+sysfs).
+"taper_ma" is "fcc_norm_ma" in case is in STATE_MAX, which means battery is
+above taper voltage. If in any other state, it will refer to "chrg_iterm",
+which will depend on device specifications (4.4V batteries have 97mA as
+current standards, and 4.45V batteries have 121mA as taper current).
+
+Now, let's check the algorithms for a bit:
+
+-----------------------------------------------------
+current-step: STEP_NONE | STEP_STOP
+	if norm_mv AND (batt_mv + 50 >= norm_mv) // (1)
+		if fcc_norm_ma			 // (2)
+			-goto STEP_NORM		 // (2)
+		else
+			-goto STEP_STOP		 // (2)
+	else
+		-goto STEP_MAX			 // (1)
+
+(1) are we in a range which has "norm_mv" defined, and battery is above this
+value?
+This corresponds to most temperature ranges, except in between 15 and 45 degC.
+If that's the case, allow charging up to maximum current defined in product
+spec.
+
+(2) is "fcc_norm_ma" a value different than zero?
+This happens if temperature is in range between 0 and 45 degC. Due to previous
+consideration, it is only missing range 0 to 15 degC here. If that's the case,
+limit maximum current. Otherwise, battery is above "norm_mv" (which probably
+is defined as 4.2V), and at that voltage and temperature, limiting charging
+considerably.
+		
+-----------------------------------------------------
+current-step: STEP_MAX
+	if !norm_mv				// (1)
+		taper_cnt = 0
+		if (batt_mv + 50) > max_fv_mv	// (2)
+			-goto STEP_NORM
+		else
+			-goto STEP_MAX
+	else if (batt_mv + 50) < norm_mv	// (1)
+		taper_cnt = 0
+		-goto STEP_MAX
+	else if !fcc_norm_ma			// (3)
+		-goto STEP_FLOAT
+	else if current_has_tapered		// (4)
+		taper_cnt = 0
+		if charge_halted
+			vote chg_dis_votable
+		-goto STEP_NORM
+		
+(1) are we in a range which has "norm_mv" NOT defined, or below taper voltage?
+This is only for 15 to 45 degC region, which has no current tapering.
+
+(2) are we above taper voltage?
+This checks whether taper voltage was achieved, making current to taper to
+defined values, depending on which temperature region battery is at this
+moment.
+
+(3) at current temperature, is taper current defined?
+If there is a taper current value to current temperature region (which is
+usually in between 0 and 15 degC as defined in current implementation), allow
+TODO STEP_FLOAT
+
+(4) has current been limited due to other thermal rules?
+Function mmi_has_current_tapered() requests to power supply votable module
+what is the allowed maximum current. Then such value will be compared to taper
+current value, and the minimum will be chosen. Additionally, it checks whether
+there's still a charger plugged to device or if charging is disabled, and if
+any, mark a flag on system displaying no charging is going on. Finally, move
+to taper current state (STEP_NORM).
+
+-----------------------------------------------------
+current-step: STEP_NORM
+	if !fcc_norm_ma						// (1)
+		-goto STEP_FLOAT
+	else if batt_soc < 100 or (batt_mv + 50) < max_fv_mv	// (2)
+		taper_cnt = 0
+		-goto STEP_NORM
+	else if current_has_tapered				// (2)
+		-goto STEP_FULL
+
+(1) although device is in STEP_NORM, is there a defined taper current for
+current temperature region device is in?
+It may happen that temperature has changed, and device no longer needs to
+be tapered. Hence, move to STEP_FLOAT.
+
+(2) is battery NOT full or below taper voltage?
+Stay on this state, because tapering is still happening. Otherwise, it may
+be the case that battery is above taper voltage, or device is already fully
+charged, forcing it to prepare to stop charging (STEP_FULL).
+
+-----------------------------------------------------
+current-step: STEP_FULL
+	if batt_soc < 99		// (1)
+		taper_cnt = 0
+		goto STEP_NORM
+
+(1) is battery no longer full?
+It may happen that battery device was previously full, but no longer is. So,
+first move to a limited current state for safety, and then in such state, it
+may happen that maximum current levels can be achieved.
+	
+-----------------------------------------------------
+current-step: STEP_FLOAT
+	if fcc_norm_ma or (batt_mv + 50) < norm_mv	// (1)
+		goto STEP_MAX
+	if current_has_tapered				// (2)
+		goto STEP_STOP
+
+(1) does battery temperature allow current to be tapered to something above
+0mA, or battery is below taper voltage?
+This means that temperature is in between 0 and 15 degC. If so, try to achieve
+maximum current value (STEP_MAX).
+
+(2) does current needs to be tapered?
+In case mmi_has_current_tapered() needs to decrease current, it will request
+charger to stop charging.
+
+-----------------------------------------------------
+Setting current values based on state machine:
+
+STEP_FLOAT
+STEP_MAX
+	target_fcc = fcc_max_ma
+	target_fv:
+		if !norm_mv
+			target_fv = max_fv_mv + chip->vfloat_comp_mv
+		else
+			target_fv = norm_mv + chip->vfloat_comp_mv
+	
+STEP_FULL:
+	target_fcc = -EINVAL
+	target_fv = max_fv_mv
+	
+STEP_NORM:
+	target_fcc = fcc_norm_ma
+	target_fv = max_fv_mv + chip->vfloat_comp_mv
+
+STEP_NONE:
+	target_fv = max_fv_mv
+	target_fcc = fcc_norm_ma
