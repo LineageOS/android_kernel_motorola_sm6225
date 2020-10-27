@@ -17,7 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pmic-voter.h>
-#include <linux/qpnp/qpnp-revid.h>
+#include <linux/of_device.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
@@ -28,6 +28,8 @@
 #include <linux/string.h>
 #include <linux/version.h>
 #include <linux/mmi_wake_lock.h>
+#include <linux/iio/consumer.h>
+#include <linux/qti_power_supply.h>
 
 #define MODULE_LOG "SMBMMI"
 
@@ -75,12 +77,12 @@ MODULE_PARM_DESC(debug_enabled, "Enable debug for SMBMMI driver");
 
 static struct smb_mmi_charger *this_chip = NULL;
 
-#ifndef PM8150B_SUBTYPE
-#define PM8150B_SUBTYPE PM855B_SUBTYPE
-#endif
-#ifndef PM7250B_SUBTYPE
-#define PM7250B_SUBTYPE 0x2E
-#endif
+enum pmic_type {
+	PM8150B,
+	PM7250B,
+	PM6150,
+	PMI632,
+};
 
 #define CHGR_BASE	0x1000
 #define DCDC_BASE	0x1100
@@ -334,6 +336,8 @@ struct smb_mmi_charger {
 	char			*name;
 	int			smb_version;
 
+	struct iio_channel	**ext_iio_chans;
+
 	bool			factory_mode;
 	int			demo_mode;
 	struct notifier_block	smb_reboot;
@@ -343,7 +347,6 @@ struct smb_mmi_charger {
 	struct power_supply	*qcom_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*bms_psy;
-	struct power_supply	*main_psy;
 	struct power_supply	*pc_port_psy;
 	struct power_supply	*dc_psy;
 	struct power_supply 	*wls_psy;
@@ -521,36 +524,97 @@ static struct smb_mmi_params smb5_pmi632_params = {
 	},
 };
 
-static struct smb_mmi_params smb2_pm660_params = {
-	.fcc			= {
-		.name	= "fast charge current",
-		.reg	= CHGR_FAST_CHARGE_CURRENT_CFG_REG,
-		.min_u	= 0,
-		.max_u	= 4500000,
-		.step_u	= 25000,
-	},
-	.fv			= {
-		.name	= "float voltage",
-		.reg	= CHGR_FLOAT_VOLTAGE_CFG_REG,
-		.min_u	= 3487500,
-		.max_u	= 4920000,
-		.step_u	= 7500,
-	},
-	.usb_icl		= {
-		.name	= "usb input current limit",
-		.reg	= USBIN_CURRENT_LIMIT_CFG_REG,
-		.min_u	= 0,
-		.max_u	= 4800000,
-		.step_u	= 25000,
-	},
-	.dc_icl			= {
-		.name	= "dc input current limit",
-		.reg	= DCIN_CURRENT_LIMIT_CFG_REG,
-		.min_u	= 0,
-		.max_u	= 6000000,
-		.step_u	= 25000,
-	},
+enum smb_mmi_ext_iio_channels {
+	//smb5
+	SMB5_CTM_CURRENT_MAX = 0,
+	SMB5_CURRENT_MAX,
+	SMB5_TYPEC_MODE,
+	SMB5_DP_DM,
+	SMB5_PD_ACTIVE,
+	SMB5_USB_REAL_TYPE,
+	SMB5_HW_CURRENT_MAX,
+	SMB5_USB_INPUT_CURRENT_SETTLED,
+	SMB5_RERUN_AICL,
+	SMB5_SW_JEITA_ENABLED,
+	//bms
+	SMB5_QG_VOLTAGE_NOW,
+	SMB5_QG_CURRENT_NOW,
+	SMB5_QG_TEMP,
+	SMB5_QG_CAPACITY,
+	SMB5_QG_CHARGE_FULL,
+	SMB5_QG_CHARGE_FULL_DESIGN,
 };
+
+static const char * const smb_mmi_ext_iio_chan_name[] = {
+	//smb5
+	[SMB5_CTM_CURRENT_MAX] = "usb_ctm_current_max",
+	[SMB5_CURRENT_MAX] = "main_current_max",
+	[SMB5_TYPEC_MODE] = "usb_typec_mode",
+	[SMB5_DP_DM] = "battery_dp_dm",
+	[SMB5_PD_ACTIVE] = "usb_pd_active",
+	[SMB5_USB_REAL_TYPE] = "usb_real_type",
+	[SMB5_HW_CURRENT_MAX] = "usb_hw_current_max",
+	[SMB5_USB_INPUT_CURRENT_SETTLED] = "usb_input_current_settled",
+	[SMB5_RERUN_AICL] = "battery_rerun_aicl",
+	[SMB5_SW_JEITA_ENABLED] = "battery_sw_jeita_enabled",
+	//bms
+	[SMB5_QG_VOLTAGE_NOW] = "voltage_now",
+	[SMB5_QG_CURRENT_NOW] = "current_now",
+	[SMB5_QG_TEMP] = "temp",
+	[SMB5_QG_CAPACITY] = "capacity",
+	[SMB5_QG_CHARGE_FULL] = "charge_full",
+	[SMB5_QG_CHARGE_FULL_DESIGN] = "charge_full_design",
+
+};
+
+bool is_chan_valid(struct smb_mmi_charger *chip,
+		enum smb_mmi_ext_iio_channels chan)
+{
+	int rc;
+
+	if (IS_ERR(chip->ext_iio_chans[chan]))
+		return false;
+
+	if (!chip->ext_iio_chans[chan]) {
+		chip->ext_iio_chans[chan] = iio_channel_get(chip->dev,
+					smb_mmi_ext_iio_chan_name[chan]);
+		if (IS_ERR(chip->ext_iio_chans[chan])) {
+			rc = PTR_ERR(chip->ext_iio_chans[chan]);
+			if (rc == -EPROBE_DEFER)
+				chip->ext_iio_chans[chan] = NULL;
+
+			pr_err("Failed to get IIO channel %s, rc=%d\n",
+				smb_mmi_ext_iio_chan_name[chan], rc);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int smb_mmi_read_iio_chan(struct smb_mmi_charger *chip,
+	enum smb_mmi_ext_iio_channels chan, int *val)
+{
+	int rc;
+
+	if (is_chan_valid(chip, chan)) {
+		rc = iio_read_channel_processed(
+				chip->ext_iio_chans[chan], val);
+		return (rc < 0) ? rc : 0;
+	}
+
+	return -EINVAL;
+}
+
+int smb_mmi_write_iio_chan(struct smb_mmi_charger *chip,
+	enum smb_mmi_ext_iio_channels chan, int val)
+{
+	if (is_chan_valid(chip, chan))
+		return iio_write_channel_raw(chip->ext_iio_chans[chan],
+						val);
+
+	return -EINVAL;
+}
 
 int smblib_read_mmi(struct smb_mmi_charger *chg, u16 addr, u8 *val)
 {
@@ -813,10 +877,7 @@ int smblib_get_usb_suspend(struct smb_mmi_charger *chg, int *suspend)
 	int rc = 0;
 	u8 temp = 0;
 
-	if (chg->smb_version == PM660_SUBTYPE) {
-		rc = smblib_read_mmi(chg, MISC_POWER_PATH_STATUS_REG, &temp);
-	} else
-		rc = smblib_read_mmi(chg, POWER_PATH_STATUS_REG, &temp);
+	rc = smblib_read_mmi(chg, POWER_PATH_STATUS_REG, &temp);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read POWER_PATH_STATUS_REG rc=%d\n", rc);
 		return rc;
@@ -1254,9 +1315,9 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 	}
 
 	switch (mmi_chip->smb_version) {
-	case PM8150B_SUBTYPE:
-	case PM7250B_SUBTYPE:
-	case PMI632_SUBTYPE:
+	case PM8150B:
+	case PM7250B:
+	case PMI632:
 		mask = PRE_CHARGE_CURRENT_SETTING_MASK;
 		if (chg_current < PRE_CHARGE_MIN)
 			chg_current = 0;
@@ -1267,15 +1328,6 @@ static ssize_t force_chg_itrick_store(struct device *dev,
 
 		if (chg_current > PRE_CHARGE_MAX)
 			value = PRE_CHARGE_MAX;
-		else
-			value = (u8)chg_current;
-		break;
-	case PM660_SUBTYPE:
-		mask = PRE_CHARGE_SMB2_MAX;
-		chg_current /= PRE_CHARGE_SMB2_CONV_MV;
-
-		if (chg_current > PRE_CHARGE_SMB2_MAX)
-			value = PRE_CHARGE_SMB2_MAX;
 		else
 			value = (u8)chg_current;
 		break;
@@ -1321,15 +1373,11 @@ static ssize_t force_chg_itrick_show(struct device *dev,
 	}
 
 	switch (mmi_chip->smb_version) {
-	case PM8150B_SUBTYPE:
-	case PM7250B_SUBTYPE:
-	case PMI632_SUBTYPE:
+	case PM8150B:
+	case PM7250B:
+	case PMI632:
 		value &= PRE_CHARGE_CURRENT_SETTING_MASK;
 		state = (value * PRE_CHARGE_CONV_MV) + PRE_CHARGE_MIN;
-		break;
-	case PM660_SUBTYPE:
-		value &= PRE_CHARGE_SMB2_MAX;
-		state = value * PRE_CHARGE_SMB2_CONV_MV;
 		break;
 	default:
 		mmi_err(mmi_chip, "Get ITRICK PMIC subtype %d not supported\n",
@@ -1483,35 +1531,21 @@ static int smb_mmi_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		if (val->intval) {
-			rc = power_supply_set_property(chip->usb_psy,
-					       POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
-					       val);
-			rc = power_supply_set_property(chip->main_psy,
-					       POWER_SUPPLY_PROP_CURRENT_MAX,
-					       val);
-			if (chip->smb_version == PM660_SUBTYPE)
-				override = ICL_OVERRIDE_BIT;
-			else
-				override = USBIN_ICL_OVERRIDE_BIT;
+			rc = smb_mmi_write_iio_chan(chip,
+				SMB5_CTM_CURRENT_MAX, val->intval);
+			rc = smb_mmi_write_iio_chan(chip,
+				SMB5_CURRENT_MAX, val->intval);
+			override = USBIN_ICL_OVERRIDE_BIT;
 		}
 		mmi_warn(chip, "Request for ICL to %d uA\n", val->intval);
 
-		if (chip->smb_version == PM660_SUBTYPE) {
-			rc = smblib_masked_write_mmi(chip, CMD_APSD_REG,
-						ICL_OVERRIDE_BIT,
-						override);
-			if (rc < 0)
-				mmi_err(chip,
-					"Couldn't set ICL_OVERRIDE_BIT rc=%d\n", rc);
-		} else  {
-			rc = smblib_masked_write_mmi(chip,
-						USBIN_CMD_ICL_OVERRIDE_REG,
-						USBIN_ICL_OVERRIDE_BIT,
-						override);
-			if (rc < 0)
-				mmi_err(chip,
-					"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
-		}
+		rc = smblib_masked_write_mmi(chip,
+					USBIN_CMD_ICL_OVERRIDE_REG,
+					USBIN_ICL_OVERRIDE_BIT,
+					override);
+		if (rc < 0)
+			mmi_err(chip,
+				"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
 		break;
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		chip->gen_log_rate_s = val->intval;
@@ -1647,7 +1681,10 @@ static int get_prop_batt_voltage_now(struct smb_mmi_charger *chg,
 	if (!psy)
 		return -EINVAL;
 
-	rc = power_supply_get_property(psy,
+	if (!strcmp(psy->desc->name, "bms")) {
+		rc = smb_mmi_read_iio_chan(chg, SMB5_QG_VOLTAGE_NOW, &val->intval);
+	} else
+		rc = power_supply_get_property(psy,
 				       POWER_SUPPLY_PROP_VOLTAGE_NOW, val);
 	return rc;
 }
@@ -1661,7 +1698,10 @@ static int get_prop_batt_current_now(struct smb_mmi_charger *chg,
 	if (!psy)
 		return -EINVAL;
 
-	rc = power_supply_get_property(psy,
+	if (!strcmp(psy->desc->name, "bms")) {
+		rc = smb_mmi_read_iio_chan(chg, SMB5_QG_CURRENT_NOW, &val->intval);
+	} else
+		rc = power_supply_get_property(psy,
 				       POWER_SUPPLY_PROP_CURRENT_NOW, val);
 	return rc;
 }
@@ -1701,7 +1741,10 @@ static int get_prop_batt_temp(struct smb_mmi_charger *chg,
 	if (!psy)
 		return -EINVAL;
 
-	rc = power_supply_get_property(psy,
+	if (!strcmp(psy->desc->name, "bms")) {
+		rc = smb_mmi_read_iio_chan(chg, SMB5_QG_TEMP, &val->intval);
+	} else
+		rc = power_supply_get_property(psy,
 				       POWER_SUPPLY_PROP_TEMP, val);
 	return rc;
 }
@@ -1712,7 +1755,12 @@ static int get_prop_batt_capacity(struct smb_mmi_charger *chg,
 {
 	int rc = -EINVAL;
 
-	if (psy)
+	if (!psy)
+		return -EINVAL;
+
+	if (!strcmp(psy->desc->name, "bms")) {
+		rc = smb_mmi_read_iio_chan(chg, SMB5_QG_CAPACITY, &val->intval);
+	} else
 		rc = power_supply_get_property(psy,
 				POWER_SUPPLY_PROP_CAPACITY, val);
 	return rc;
@@ -1746,7 +1794,7 @@ static int get_prop_dc_present(struct smb_mmi_charger *chg,
 	 * so just return 0 to avoid too much err log and heatbeat_work
 	 * break
 	 */
-	if (chg->smb_version == PMI632_SUBTYPE) {
+	if (chg->smb_version == PMI632) {
 		val->intval = 0;
 		return 0;
 	}
@@ -1787,17 +1835,15 @@ static int get_prop_charger_present(struct smb_mmi_charger *chg,
 			return rc;
 	}
 
-	if (chg->usb_psy) {
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_TYPEC_MODE, val);
-		if (rc < 0)
-			mmi_err(chg, "Couldn't read typec mode rc=%d\n", rc);
-		else if (val->intval == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT ||
-			 val->intval == POWER_SUPPLY_TYPEC_SOURCE_MEDIUM ||
-			 val->intval == POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
-			val->intval = 1;
-			return rc;
-		}
+	rc = smb_mmi_read_iio_chan(chg,
+			SMB5_TYPEC_MODE, &val->intval);
+	if (rc < 0)
+		mmi_err(chg, "Couldn't read typec mode rc=%d\n", rc);
+	else if (val->intval == QTI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT ||
+		 val->intval == QTI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM ||
+		 val->intval == QTI_POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+		val->intval = 1;
+		return rc;
 	}
 
 	if (chg->wls_psy) {
@@ -1827,13 +1873,11 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 	if (chg->factory_mode)
 		return rc;
 
-	if (chg->usb_psy) {
-		val.intval = POWER_SUPPLY_TYPEC_NONE;
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_TYPEC_MODE, &val);
-		if (rc < 0 || val.intval != POWER_SUPPLY_TYPEC_NONE)
-			return rc;
-	}
+	val.intval = QTI_POWER_SUPPLY_TYPEC_NONE;
+	rc = smb_mmi_read_iio_chan(chg,
+			SMB5_TYPEC_MODE, &val.intval);
+	if (rc < 0 || val.intval != QTI_POWER_SUPPLY_TYPEC_NONE)
+		return rc;
 
 	rc = smblib_get_apsd_result(chg, &apsd);
 	if (rc < 0 || apsd == CHG_BC1P2_UNKNOWN)
@@ -1843,27 +1887,17 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 	    (icl == USBIN_900MA || icl <= USBIN_500MA)) {
 		usb51_mode = 0;
 		apsd_override = 0;
-		if (chg->smb_version == PM660_SUBTYPE)
-			icl_override = ICL_OVERRIDE_BIT;
-		else
-			icl_override = USBIN_ICL_OVERRIDE_BIT;
+		icl_override = USBIN_ICL_OVERRIDE_BIT;
 	} else {
 		usb51_mode = USBIN_MODE_CHG_BIT;
 		apsd_override = ICL_OVERRIDE_AFTER_APSD_BIT;
-		if (chg->smb_version == PM660_SUBTYPE)
-			icl_override = ICL_OVERRIDE_BIT;
-		else
-			icl_override = USBIN_ICL_OVERRIDE_BIT;
+		icl_override = USBIN_ICL_OVERRIDE_BIT;
 	}
 
-	if (chg->main_psy) {
-		val.intval = icl;
-		rc = power_supply_set_property(chg->main_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX,
-				&val);
-		if (rc < 0) {
-			mmi_err(chg, "Couldn't set usb icl, rc=%d\n", rc);
-		}
+	rc = smb_mmi_write_iio_chan(chg,
+			SMB5_CURRENT_MAX, icl);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't set usb icl, rc=%d\n", rc);
 	}
 
 	rc = smblib_masked_write_mmi(chg, USBIN_ICL_OPTIONS_REG,
@@ -1873,21 +1907,12 @@ int mmi_usb_icl_override(struct smb_mmi_charger *chg, int icl)
 		mmi_err(chg,
 			"Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
 
-	if (chg->smb_version == PM660_SUBTYPE) {
-		rc = smblib_masked_write_mmi(chg, CMD_APSD_REG,
-				     ICL_OVERRIDE_BIT,
-				     icl_override);
-		if (rc < 0)
-			mmi_err(chg,
-				"Couldn't set ICL_OVERRIDE_BIT rc=%d\n", rc);
-	} else {
-		rc = smblib_masked_write_mmi(chg, USBIN_CMD_ICL_OVERRIDE_REG,
-				     USBIN_ICL_OVERRIDE_BIT,
-				     icl_override);
-		if (rc < 0)
-			mmi_err(chg,
-				"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
-	}
+	rc = smblib_masked_write_mmi(chg, USBIN_CMD_ICL_OVERRIDE_REG,
+			     USBIN_ICL_OVERRIDE_BIT,
+			     icl_override);
+	if (rc < 0)
+		mmi_err(chg,
+			"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
 
 	rc = smblib_masked_write_mmi(chg, USBIN_LOAD_CFG_REG,
 				     ICL_OVERRIDE_AFTER_APSD_BIT,
@@ -1910,8 +1935,7 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 	union power_supply_propval val = {0, };
 	int pulse_cnt;
 
-	rc = power_supply_get_property(chg->qcom_psy,
-			POWER_SUPPLY_PROP_DP_DM, &val);
+	rc = smb_mmi_read_iio_chan(chg, SMB5_DP_DM, &val.intval);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
 		return cur_mv;
@@ -1927,9 +1951,8 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 		vote(chg->chg_dis_votable, MMI_HB_VOTER, true, 0);
 
 		while (cur_mv < HVDCP_VOLTAGE_NOM && pulse_cnt < chg->inc_hvdcp_cnt) {
-			val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
-			rc = power_supply_set_property(chg->qcom_psy,
-					POWER_SUPPLY_PROP_DP_DM, &val);
+			val.intval = QTI_POWER_SUPPLY_DP_DM_DP_PULSE;
+			rc = smb_mmi_write_iio_chan(chg, SMB5_DP_DM, val.intval);
 			if (rc < 0) {
 				mmi_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
 				break;
@@ -1944,8 +1967,7 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 			} else
 				cur_mv = val.intval / 1000;
 
-			rc = power_supply_get_property(chg->qcom_psy,
-					POWER_SUPPLY_PROP_DP_DM, &val);
+			rc = smb_mmi_read_iio_chan(chg, SMB5_DP_DM, &val.intval);
 			if (rc < 0) {
 				mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
 				break;
@@ -2037,7 +2059,7 @@ static DEVICE_ATTR(force_hvdcp_power_max, 0644,
 static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 {
 	int rc = -EINVAL;
-	union power_supply_propval val = {0, };
+	int val = 0;
 
 	if (!chg->usb_psy || !chg->qcom_psy)
 		return;
@@ -2045,22 +2067,20 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 	if (cur_mv < HVDCP_VOLTAGE_MIN)
 		return;
 
-	rc = power_supply_get_property(chg->usb_psy,
-			POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	rc = smb_mmi_read_iio_chan(chg, SMB5_PD_ACTIVE, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read PD active rc=%d\n", rc);
-	} else if (val.intval) {
+	} else if (val) {
 		mmi_dbg(chg, "Skip usb vbus voltage config for PD charger\n");
 		return;
 	}
 
-	rc = power_supply_get_property(chg->usb_psy,
-			POWER_SUPPLY_PROP_REAL_TYPE, &val);
+	rc = smb_mmi_read_iio_chan(chg, SMB5_USB_REAL_TYPE, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read charger type rc=%d\n", rc);
 		return;
 	}
-	if (val.intval != POWER_SUPPLY_TYPE_USB_HVDCP_3)
+	if (val != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		return;
 
 	if (chg->hvdcp_power_max > CHARGER_POWER_15W) {
@@ -2069,24 +2089,22 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 	}
 
 	/* Maintain vbus voltage for QC3.0 5V/3A 15W charging */
-	rc = power_supply_get_property(chg->qcom_psy,
-			POWER_SUPPLY_PROP_DP_DM, &val);
+	rc = smb_mmi_read_iio_chan(chg, SMB5_DP_DM, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
 		return;
 	} else
-		mmi_info(chg, "DP DM pulse count = %d\n", val.intval);
+		mmi_info(chg, "DP DM pulse count = %d\n", val);
 
-	if (cur_mv < HVDCP_VOLTAGE_NOM && val.intval < chg->inc_hvdcp_cnt)
-		val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
-	else if (cur_mv > HVDCP_VOLTAGE_MAX && val.intval > 0)
-		val.intval = POWER_SUPPLY_DP_DM_DM_PULSE;
+	if (cur_mv < HVDCP_VOLTAGE_NOM && val < chg->inc_hvdcp_cnt)
+		val = QTI_POWER_SUPPLY_DP_DM_DP_PULSE;
+	else if (cur_mv > HVDCP_VOLTAGE_MAX && val > 0)
+		val = QTI_POWER_SUPPLY_DP_DM_DM_PULSE;
 	else {
 		mmi_dbg(chg, "No need to change hvdcp voltage\n");
 		return;
 	}
-	rc = power_supply_set_property(chg->qcom_psy,
-			POWER_SUPPLY_PROP_DP_DM, &val);
+	rc = smb_mmi_read_iio_chan(chg, SMB5_DP_DM, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
 		return;
@@ -2171,8 +2189,7 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 
 	if (val.intval) {
 		val.intval = 0;
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
+		rc = smb_mmi_read_iio_chan(chg, SMB5_HW_CURRENT_MAX, &val.intval);
 		if (rc < 0) {
 			mmi_err(chg, "Error getting HW Current Max rc = %d\n", rc);
 			return;
@@ -2180,8 +2197,8 @@ void mmi_chrg_rate_check(struct smb_mmi_charger *chg)
 		chrg_cm_ma = val.intval / 1000;
 
 		val.intval = 0;
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
+		rc = smb_mmi_read_iio_chan(chg,
+				SMB5_USB_INPUT_CURRENT_SETTLED, &val.intval);
 		if (rc < 0) {
 			mmi_err(chg, "Error getting ICL Settled rc = %d\n", rc);
 			return;
@@ -2284,9 +2301,9 @@ bool mmi_charge_halted(struct smb_mmi_charger *chg)
 	}
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
 
-	if (chg->smb_version == PM8150B_SUBTYPE ||
-	    chg->smb_version == PM7250B_SUBTYPE ||
-	    chg->smb_version == PMI632_SUBTYPE) {
+	if (chg->smb_version == PM8150B ||
+	    chg->smb_version == PM7250B ||
+	    chg->smb_version == PMI632) {
 		switch (stat) {
 		case TERMINATE_CHARGE_V5:
 		case INHIBIT_CHARGE_V5:
@@ -2779,9 +2796,8 @@ vote_now:
 
 	/* Rerun AICL to recover USB ICL from recharge */
 	if (is_chg_dis != get_effective_result(chg->chg_dis_votable)) {
-		power_supply_set_property(chg->qcom_psy,
-					  POWER_SUPPLY_PROP_RERUN_AICL,
-					  NULL);
+		smb_mmi_write_iio_chan(chg,
+					  SMB5_RERUN_AICL, 0);
 	}
 
 	if (!stat->charger_present &&
@@ -3013,9 +3029,8 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 
 	/* Rerun AICL to recover USB ICL from recharge */
 	if (is_chg_dis != get_effective_result(chip->chg_dis_votable)) {
-		power_supply_set_property(chip->qcom_psy,
-				POWER_SUPPLY_PROP_RERUN_AICL,
-				NULL);
+		smb_mmi_write_iio_chan(chip,
+				SMB5_RERUN_AICL, 0);
 	}
 
 	if (prm->pres_temp_zone == ZONE_HOT) {
@@ -3415,18 +3430,18 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	} else if (!chip->factory_mode) {
 		cap_err = 0;
-		rc = power_supply_get_property(chip->bms_psy,
-					       POWER_SUPPLY_PROP_CHARGE_FULL,
-					       &pval);
+		rc = smb_mmi_read_iio_chan(chip,
+					       SMB5_QG_CHARGE_FULL,
+					       &pval.intval);
 		if (rc < 0) {
 			mmi_err(chip, "Couldn't get charge full\n");
 			cap_err = rc;
 		} else
 			main_cap = pval.intval;
 
-		rc = power_supply_get_property(chip->bms_psy,
-					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
-					&pval);
+		rc = smb_mmi_read_iio_chan(chip,
+					SMB5_QG_CHARGE_FULL_DESIGN,
+					&pval.intval);
 		if (rc < 0) {
 			mmi_err(chip, "Couldn't get charge full design\n");
 			cap_err = rc;
@@ -3634,7 +3649,7 @@ static int smbchg_reboot(struct notifier_block *nb,
 
 static const struct power_supply_desc mmi_psy_desc = {
 	.name		= "mmi_battery",
-	.type		= POWER_SUPPLY_TYPE_MAIN,
+	.type		= POWER_SUPPLY_TYPE_MAINS,
 	.get_property	= smb_mmi_get_property,
 	.set_property	= smb_mmi_set_property,
 	.properties	= smb_mmi_battery_props,
@@ -3642,42 +3657,28 @@ static const struct power_supply_desc mmi_psy_desc = {
 };
 
 static enum power_supply_property batt_props[] = {
-	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_CHARGER_TEMP,
-	POWER_SUPPLY_PROP_CHARGER_TEMP_MAX,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
-	POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
-	POWER_SUPPLY_PROP_CHARGE_DONE,
-	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
-	POWER_SUPPLY_PROP_SET_SHIP_MODE,
-	POWER_SUPPLY_PROP_DIE_HEALTH,
-	POWER_SUPPLY_PROP_RERUN_AICL,
-	POWER_SUPPLY_PROP_DP_DM,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
-	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
-	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
-	POWER_SUPPLY_PROP_HOT_TEMP,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 };
 
 static int batt_get_prop(struct power_supply *psy,
@@ -3711,17 +3712,11 @@ static int batt_get_prop(struct power_supply *psy,
 		else
 			val->intval = chip->sm_param[BASE_BATT].batt_health;
 		break;
-	case POWER_SUPPLY_PROP_CHARGE_DONE:
-		if (chip->last_reported_status == POWER_SUPPLY_STATUS_FULL)
-			val->intval = 1;
-		else
-			val->intval = 0;
-		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = get_effective_result(chip->fcc_votable);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
-		if (chip->smb_version == PMI632_SUBTYPE) {
+		if (chip->smb_version == PMI632) {
 			val->intval = get_effective_result(chip->fcc_votable);
 			break;
 		}
@@ -3731,23 +3726,6 @@ static int batt_get_prop(struct power_supply *psy,
 			rc = 0;
 			val->intval = -EINVAL;
 		}
-		break;
-	case POWER_SUPPLY_PROP_HOT_TEMP:
-		if (chip->max_main_psy && chip->max_flip_psy) {
-			if (chip->sm_param[MAIN_BATT].pres_temp_zone ==
-					(chip->sm_param[MAIN_BATT].num_temp_zones - 1) ||
-					chip->sm_param[MAIN_BATT].pres_temp_zone == ZONE_HOT)
-				val->intval = 1;
-			else if (chip->sm_param[FLIP_BATT].pres_temp_zone ==
-					(chip->sm_param[FLIP_BATT].num_temp_zones - 1) ||
-					chip->sm_param[FLIP_BATT].pres_temp_zone == ZONE_HOT)
-				val->intval = 1;
-		} else if (chip->sm_param[BASE_BATT].pres_temp_zone ==
-				(chip->sm_param[BASE_BATT].num_temp_zones - 1) ||
-				chip->sm_param[BASE_BATT].pres_temp_zone == ZONE_HOT)
-			val->intval = 1;
-		else
-			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->max_main_psy && chip->max_flip_psy) {
@@ -3793,10 +3771,6 @@ static int batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		chip->cycles += val->intval * 100;
 		break;
-	case POWER_SUPPLY_PROP_DP_DM:
-		/* Skip the hvdcp request from hvdcp daemon */
-		if (chip->hvdcp_power_max)
-			break;
 	default:
 		rc = power_supply_set_property(chip->qcom_psy, prop, val);
 		if (rc < 0) {
@@ -3814,16 +3788,8 @@ static int batt_prop_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
-	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_PARALLEL_DISABLE:
-	case POWER_SUPPLY_PROP_DP_DM:
-	case POWER_SUPPLY_PROP_RERUN_AICL:
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
-	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
-	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
-	case POWER_SUPPLY_PROP_DIE_HEALTH:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		return 1;
@@ -4042,50 +4008,27 @@ static int parse_mmi_dual_dt(struct smb_mmi_charger *chg)
 
 static int smb_mmi_chg_config_init(struct smb_mmi_charger *chip)
 {
-	struct pmic_revid_data *pmic_rev_id;
-	struct device_node *revid_dev_node;
+	int subtype = (u8)of_device_get_match_data(chip->dev);
 
-	revid_dev_node = of_parse_phandle(chip->dev->of_node,
-					  "qcom,pmic-revid", 0);
-	if (!revid_dev_node) {
-		pr_err("SMBMMI: Missing qcom,pmic-revid property\n");
-		return -EINVAL;
-	}
-
-	pmic_rev_id = get_revid_data(revid_dev_node);
-	if (IS_ERR_OR_NULL(pmic_rev_id)) {
-		/*
-		 * the revid peripheral must be registered, any failure
-		 * here only indicates that the rev-id module has not
-		 * probed yet.
-		 */
-		return -EPROBE_DEFER;
-	}
-
-	switch (pmic_rev_id->pmic_subtype) {
-	case PM8150B_SUBTYPE:
-		chip->smb_version = PM8150B_SUBTYPE;
+	switch (subtype) {
+	case PM8150B:
+		chip->smb_version = PM8150B;
 		chip->name = "pm8150b_charger";
 		chip->param = smb5_pm8150b_params;
 		break;
-	case PM7250B_SUBTYPE:
-		chip->smb_version = PM7250B_SUBTYPE;
+	case PM7250B:
+		chip->smb_version = PM7250B;
 		chip->name = "pm7250b_charger";
 		chip->param = smb5_pm8150b_params;
 		break;
-	case PMI632_SUBTYPE:
-		chip->smb_version = PMI632_SUBTYPE;
+	case PMI632:
+		chip->smb_version = PMI632;
 		chip->name = "pmi632_charger";
 		chip->param = smb5_pmi632_params;
 		break;
-	case PM660_SUBTYPE:
-		chip->smb_version = PM660_SUBTYPE;
-		chip->name = "pm660_charger";
-		chip->param = smb2_pm660_params;
-		break;
 	default:
 		pr_err("SMBMMI: PMIC subtype %d not supported\n",
-				pmic_rev_id->pmic_subtype);
+				subtype);
 		return -EINVAL;
 	}
 
@@ -4188,6 +4131,20 @@ static void smb_mmi_create_debugfs(struct smb_mmi_charger *chip)
 {}
 #endif
 
+static int smb_mmi_init_iio_psy(struct smb_mmi_charger *chip,
+				struct platform_device *pdev)
+{
+	int rc = 0;
+	chip->ext_iio_chans = devm_kcalloc(chip->dev,
+				ARRAY_SIZE(smb_mmi_ext_iio_chan_name),
+				sizeof(*chip->ext_iio_chans),
+				GFP_KERNEL);
+	if (!chip->ext_iio_chans)
+		return -ENOMEM;
+
+	return rc;
+}
+
 static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
@@ -4225,6 +4182,8 @@ static int smb_mmi_probe(struct platform_device *pdev)
 		mmi_err(chip, "Parent regmap is missing\n");
 		return -EINVAL;
 	}
+
+	smb_mmi_init_iio_psy(chip, pdev);
 
 	parse_mmi_dt(chip);
 
@@ -4280,7 +4239,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 
 	chip->bms_psy = power_supply_get_by_name("bms");
 	chip->usb_psy = power_supply_get_by_name("usb");
-	chip->main_psy = power_supply_get_by_name("main");
 	chip->pc_port_psy = power_supply_get_by_name("pc_port");
 	chip->dc_psy = power_supply_get_by_name("dc");
 	chip->wls_psy = power_supply_get_by_name("wireless");
@@ -4311,32 +4269,29 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	if (IS_ERR(chip->dc_suspend_votable))
 		chip->dc_suspend_votable = NULL;
 
-	if (chip->smb_version == PM8150B_SUBTYPE) {
+	if (chip->smb_version == PM8150B) {
 		if (smblib_masked_write_mmi(chip, LEGACY_CABLE_CFG_REG,
 					    0xFF, 0))
 			mmi_err(chip, "Could not set Legacy Cable CFG\n");
 	}
 
-	if (chip->smb_version == PM8150B_SUBTYPE ||
-	    chip->smb_version == PM7250B_SUBTYPE ||
-	    chip->smb_version == PMI632_SUBTYPE ||
-	    chip->smb_version == PM660_SUBTYPE) {
+	if (chip->smb_version == PM8150B ||
+	    chip->smb_version == PM7250B ||
+	    chip->smb_version == PMI632) {
 		mmi_err(chip, "DISABLE all QCOM JEITA\n");
 		/* Ensure SW JEITA is DISABLED */
 		pval.intval = 0;
-		power_supply_set_property(chip->qcom_psy,
-					  POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
-					  &pval);
+		smb_mmi_write_iio_chan(chip,
+					  SMB5_SW_JEITA_ENABLED, pval.intval);
 		/* Ensure HW JEITA is DISABLED */
 		if (smblib_masked_write_mmi(chip, PM8150B_JEITA_EN_CFG_REG,
 					    0xFF, 0x00))
 			mmi_err(chip, "Could not disable JEITA CFG\n");
 	}
 
-	if ((chip->smb_version == PM8150B_SUBTYPE) ||
-	    (chip->smb_version == PM7250B_SUBTYPE) ||
-	    (chip->smb_version == PMI632_SUBTYPE) ||
-	    (chip->smb_version == PM660_SUBTYPE))
+	if ((chip->smb_version == PM8150B) ||
+	    (chip->smb_version == PM7250B) ||
+	    (chip->smb_version == PMI632))
 		if (smblib_masked_write_mmi(chip, USBIN_ADAPTER_ALLOW_CFG_REG,
 					    USBIN_ADAPTER_ALLOW_MASK,
 					    USBIN_ADAPTER_ALLOW_5V_TO_9V))
@@ -4376,7 +4331,7 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	}
 
 	if (chip->factory_mode &&
-		(chip->smb_version == PMI632_SUBTYPE)) {
+		(chip->smb_version == PMI632)) {
 		rc = smblib_masked_write_mmi(chip, USBIN_INT_EN_CLR,
 					    0xFF, USBIN_OV_EN_CLR);
 		if (rc) {
@@ -4552,8 +4507,6 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 		power_supply_put(chip->bms_psy);
 	if (chip->usb_psy)
 		power_supply_put(chip->usb_psy);
-	if (chip->main_psy)
-		power_supply_put(chip->main_psy);
 	if (chip->pc_port_psy)
 		power_supply_put(chip->pc_port_psy);
 	if (chip->dc_psy)
@@ -4600,13 +4553,28 @@ static const struct dev_pm_ops smb_mmi_dev_pm_ops = {
 };
 
 static const struct of_device_id match_table[] = {
-	{ .compatible = "qcom,qpnp-smbcharger-mmi", },
+	{
+		.compatible = "qcom,mmi-pm8150-smb5",
+		.data = (void *)PM8150B,
+	},
+	{
+		.compatible = "qcom,mmi-pm7250b-smb5",
+		.data = (void *)PM7250B,
+	},
+	{
+		.compatible = "qcom,mmi-pm6150-smb5",
+		.data = (void *)PM6150,
+	},
+	{
+		.compatible = "qcom,mmi-pmi632-smb5",
+		.data = (void *)PMI632,
+	},
 	{ },
 };
 
 static struct platform_driver smb_mmi_driver = {
 	.driver		= {
-		.name		= "qcom,qpnp-smbcharger-mmi",
+		.name		= "qcom,mmi-smbcharger-iio",
 		.owner		= THIS_MODULE,
 		.pm		= &smb_mmi_dev_pm_ops,
 		.of_match_table	= match_table,
