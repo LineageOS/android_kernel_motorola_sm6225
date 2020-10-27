@@ -1130,11 +1130,16 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 				gpio_direction_output(panel->hbm_en_gpio, 0);
 				pr_info("Set HBM to (%d) with GPIO%d\n", param_info->value, panel->hbm_en_gpio);
 			}
-			} else {
-				DSI_ERR("%s: invalid params\n", __func__);
-				rc = -EINVAL;
-			}
+
+			rc = dsi_panel_set_backlight(panel, HBM_BRIGHTNESS(param_info->value));
+			if (rc)
+				DSI_ERR("Set HBM: unable to set backlight\n");
+
 		} else {
+			DSI_ERR("%s: invalid params\n", __func__);
+			rc = -EINVAL;
+		}
+	} else {
 		rc = dsi_panel_send_param_cmd(panel, param_info);
 		if (rc < 0) {
 			DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
