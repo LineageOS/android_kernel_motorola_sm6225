@@ -1486,15 +1486,16 @@ static void mmi_charger_power_support(struct smb_mmi_charger *chg)
 static enum power_supply_property smb_mmi_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
-	POWER_SUPPLY_PROP_UPDATE_NOW,
-	POWER_SUPPLY_PROP_USB_OTG,
+	/*MMI_STOPSHIP: PMIC: change by IIO*/
+	//POWER_SUPPLY_PROP_UPDATE_NOW,
+	//POWER_SUPPLY_PROP_USB_OTG,
 };
 
 static int smb_mmi_get_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val)
 {
-	struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
+	//struct smb_mmi_charger *chip = power_supply_get_drvdata(psy);
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -1503,7 +1504,7 @@ static int smb_mmi_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		val->intval = -EINVAL;
 		break;
-	case POWER_SUPPLY_PROP_UPDATE_NOW:
+	/*case POWER_SUPPLY_PROP_UPDATE_NOW:
 		val->intval = chip->gen_log_rate_s;
 		break;
 	case POWER_SUPPLY_PROP_USB_OTG:
@@ -1513,7 +1514,7 @@ static int smb_mmi_get_property(struct power_supply *psy,
 			val->intval = 1;
 		else
 			val->intval = 0;
-		break;
+		break;*/
 	default:
 		return -EINVAL;
 	}
@@ -1547,7 +1548,7 @@ static int smb_mmi_set_property(struct power_supply *psy,
 			mmi_err(chip,
 				"Couldn't set USBIN_CMD_ICL_OVERRIDE rc=%d\n", rc);
 		break;
-	case POWER_SUPPLY_PROP_UPDATE_NOW:
+	/*case POWER_SUPPLY_PROP_UPDATE_NOW:
 		chip->gen_log_rate_s = val->intval;
 		power_supply_changed(psy);
 		break;
@@ -1576,7 +1577,7 @@ static int smb_mmi_set_property(struct power_supply *psy,
 		else
 			chip->vbus_enabled = false;
 
-		break;
+		break;*/
 	default:
 		rc = -EINVAL;
 	}
