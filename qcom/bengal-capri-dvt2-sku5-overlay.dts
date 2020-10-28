@@ -15,6 +15,7 @@
 
 #include "bengal-capri-common-overlay.dtsi"
 #include "bengal-capri-charge-6000-overlay.dtsi"
+#include "bengal-capri-hbm-display.dtsi"
 
 / {
 	model = "capri";
