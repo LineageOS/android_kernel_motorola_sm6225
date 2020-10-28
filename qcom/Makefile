@@ -59,15 +59,21 @@ bengal-cebu-evt-overlay.dtbo-base := bengal-moto-base-cebu.dtb
 
 dtbo-$(CONFIG_CAPRI_DTB) += \
         bengal-capri-evt-overlay.dtbo \
-        bengal-capri-evt-sku5-overlay.dtbo
+        bengal-capri-evt-sku5-overlay.dtbo \
+        bengal-capri-dvt2-overlay.dtbo \
+	bengal-capri-dvt2-sku5-overlay.dtbo
 
 bengal-capri-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-capri-evt-sku5-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-dvt2-sku5-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_CAPRIP_DTB) += \
-        bengal-caprip-evt-overlay.dtbo
+        bengal-caprip-evt-overlay.dtbo \
+	bengal-caprip-dvt2-overlay.dtbo
 
 bengal-caprip-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-caprip-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
 
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
