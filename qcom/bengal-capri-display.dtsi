@@ -21,6 +21,36 @@
 };
 */
 
+&tlmm{
+	pmx_sde: pmx_sde {
+		sde_dsi_active: sde_dsi_active {
+			mux {
+				pins = "gpio82", "gpio96";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio82", "gpio96";
+				drive-strength = <8>;
+				bias-disable = <0>;
+			};
+		};
+
+		sde_dsi_suspend: sde_dsi_suspend {
+			mux {
+				pins = "gpio82", "gpio96";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio82", "gpio96";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
 //Capri panel#1
 &dsi_djn_nt36525b_652_video {
 	qcom,mdss-dsi-t-clk-post = <0x0b>;
