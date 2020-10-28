@@ -14,6 +14,7 @@
 /plugin/;
 
 #include "bengal-caprip-common-overlay.dtsi"
+#include "bengal-capri-hbm-display.dtsi"
 
 / {
 	model = "caprip";
