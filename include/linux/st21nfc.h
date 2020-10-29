@@ -18,6 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <linux/mmi_device.h>
+
 #define ST21NFC_MAGIC	0xEA
 
 #define ST21NFC_NAME "st21nfc"
