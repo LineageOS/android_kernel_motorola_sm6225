@@ -511,6 +511,36 @@ static int check_dt(struct device_node *np)
 		pr_err("%s: %s not actived\n", __func__, node->name);
 	return -ENODEV;
 }
+
+static int parse_dt(struct device_node *np)
+{
+	int32_t ret = 0;
+
+#ifdef ILI_CONFIG_PANEL_GESTURE
+	//parse gesture by panel config
+	if (active_panel_name) {
+		const char *panel_gesture;
+		int panel_num = of_property_count_strings(np, "ilitek,gesture_panel");
+		if (panel_num > 0) {
+			int i;
+			ILI_INFO("%s: get ilitek,gesture_panel count=%d", __func__, panel_num);
+			for (i = 0; i < panel_num; i++) {
+				ret = of_property_read_string_index(np, "ilitek,gesture_panel", i, &panel_gesture);
+				if (ret < 0) {
+					ILI_INFO("%s: cannot parse gesture_panel, ret=%d\n", __func__, ret);
+					break;
+				} else if (panel_gesture && strstr(active_panel_name, panel_gesture)) {
+					ILI_INFO("%s: panel %s gesture enabled", __func__, panel_gesture);
+					ilits->panel_gesture_enable = true;
+					break;
+				}
+			}
+		}
+	}
+#endif
+
+  return ret;
+}
 #endif
 
 static int ilitek_spi_probe(struct spi_device *spi)
@@ -626,8 +656,15 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->info_from_hex = ENABLE;
 	ilits->wait_int_timeout = AP_INT_TIMEOUT;
 
+	//---parse dts---
+#ifdef CONFIG_DRM
+	parse_dt(spi->dev.of_node);
+#endif
+
 #if ENABLE_GESTURE
-#ifdef ILI_CONFIG_GESTURE
+#ifdef ILI_CONFIG_PANEL_GESTURE
+  if (ilits->panel_gesture_enable)
+#elif defined(ILI_CONFIG_GESTURE)
 	if (MODEL_HLT == tp_module)
 #endif
 	{
@@ -651,6 +688,8 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->ges_sym.alphabet_two_line_2_bottom = ALPHABET_TWO_LINE_2_BOTTOM;
 	ilits->ges_sym.alphabet_F = ALPHABET_F;
 	ilits->ges_sym.alphabet_AT = ALPHABET_AT;
+
+	ILI_INFO("ilitek: gesture eanble:%d\n", ilits->gesture);
 	}
 #endif
 
