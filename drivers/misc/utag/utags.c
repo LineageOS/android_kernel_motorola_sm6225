@@ -1913,16 +1913,6 @@ static int utags_dt_init(struct platform_device *pdev)
 static int utags_dt_init(struct platform_device *pdev) { return -EINVAL; }
 #endif
 
-static int utags_remove_proc_subtree(const char *name, struct proc_dir_entry *parent)
-{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
-	return remove_proc_subtree(name, parent);
-#else
-	//walkaround the symbol is not in GKI abl list
-	return 0;
-#endif
-};
-
 static void clear_utags_directory(struct ctrl *ctrl)
 {
 	struct proc_node *node, *s = NULL;
@@ -1932,7 +1922,7 @@ static void clear_utags_directory(struct ctrl *ctrl)
 		if (dir_node->parent != ctrl->root)
 			continue;
 		/* remove whole subtree of first level subdir */
-		utags_remove_proc_subtree(dir_node->name, ctrl->root);
+		remove_proc_subtree(dir_node->name, ctrl->root);
 
 		pr_debug("removing subtree [%s]\n", dir_node->name);
 
@@ -2012,7 +2002,7 @@ static int utags_probe(struct platform_device *pdev)
 		pr_err("Failed to create reload entry\n");
 		destroy_workqueue(ctrl->load_queue);
 		destroy_workqueue(ctrl->store_queue);
-		utags_remove_proc_subtree(ctrl->dir_name, NULL);
+		remove_proc_subtree(ctrl->dir_name, NULL);
 		return -EIO;
 	}
 
@@ -2020,7 +2010,7 @@ static int utags_probe(struct platform_device *pdev)
 		pr_err("Failed to create util dir\n");
 		destroy_workqueue(ctrl->load_queue);
 		destroy_workqueue(ctrl->store_queue);
-		utags_remove_proc_subtree(ctrl->dir_name, NULL);
+		remove_proc_subtree(ctrl->dir_name, NULL);
 		return -EFAULT;
 	}
 
@@ -2033,7 +2023,7 @@ static int utags_remove(struct platform_device *pdev)
 	struct ctrl *ctrl = dev_get_drvdata(&pdev->dev);
 
 	clear_utags_directory(ctrl);
-	utags_remove_proc_subtree(ctrl->dir_name, NULL);
+	remove_proc_subtree(ctrl->dir_name, NULL);
 	destroy_workqueue(ctrl->load_queue);
 	destroy_workqueue(ctrl->store_queue);
 	if (ctrl->main.filep)
