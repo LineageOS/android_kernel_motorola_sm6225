@@ -667,6 +667,14 @@ static int st21nfc_probe(struct i2c_client *client,
 	struct st21nfc_dev *st21nfc_dev;
 
 	pr_info("st21nfc_probe\n");
+
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+                pr_err("%s : mmi: device not supported\n", __func__);
+                return -ENODEV;
+        } else {
+                pr_err("%s : supported device found\n", __func__);
+        }
+
 	if (client->dev.of_node) {
 		platform_data = devm_kzalloc(&client->dev,
 			sizeof(struct st21nfc_platform_data), GFP_KERNEL);
