@@ -851,6 +851,9 @@ static void __exit cts_driver_exit(void)
 late_initcall(cts_driver_init);
 module_exit(cts_driver_exit);
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("Chipone TDDI touchscreen Driver for QualComm platform");
 MODULE_VERSION(CFG_CTS_DRIVER_VERSION);
 MODULE_AUTHOR("Miao Defang <dfmiao@chiponeic.com>");

@@ -1,7 +1,7 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/chipone_tddi_mmi
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/chipone_tddi_mmi
 ifneq ($(filter m y,$(CONFIG_CHIPONE_ESD)),)
 EXTRA_CFLAGS += -DCONFIG_CTS_ESD_PROTECTION
 endif
