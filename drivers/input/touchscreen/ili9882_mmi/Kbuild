@@ -27,6 +27,10 @@ ifneq ($(filter m y,$(CONFIG_ILITEK_GESTURE)),)
 EXTRA_CFLAGS += -DILI_CONFIG_GESTURE
 endif
 
+ifneq ($(filter m y,$(CONFIG_ILITEK_PANEL_GESTURE)),)
+EXTRA_CFLAGS += -DILI_CONFIG_PANEL_GESTURE
+endif
+
 ili9882_mmi-objs += ili9882.o
 ili9882_mmi-objs += ili9882_spi.o
 ili9882_mmi-objs += ili9882_qcom.o

@@ -25,6 +25,12 @@ ifeq ($(ILITEK_GESTURE),true)
 	KERNEL_CFLAGS += CONFIG_ILITEK_GESTURE=y
 endif
 
+# enable gesture mode by panel config
+# not all panels need enable gesture mode for some products
+ifeq ($(ILITEK_PANEL_GESTURE),true)
+	KERNEL_CFLAGS += CONFIG_ILITEK_PANEL_GESTURE=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := ili9882_mmi.ko
 LOCAL_MODULE_TAGS := optional
