@@ -135,7 +135,7 @@
 #define ENABLE_WQ_ESD			DISABLE
 #endif
 #define ENABLE_WQ_BAT			DISABLE
-#ifdef ILI_CONFIG_GESTURE
+#if defined(ILI_CONFIG_GESTURE) || defined(ILI_CONFIG_PANEL_GESTURE)
 #define ENABLE_GESTURE			ENABLE
 #else
 #define ENABLE_GESTURE			DISABLE
@@ -864,6 +864,7 @@ struct ilitek_ts_data {
 	bool wq_esd_ctrl;
 	bool wq_bat_ctrl;
 
+	bool panel_gesture_enable;
 	bool netlink;
 	bool report;
 	bool gesture;
