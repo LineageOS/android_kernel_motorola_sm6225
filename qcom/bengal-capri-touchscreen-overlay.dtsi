@@ -163,6 +163,6 @@
 		pinctrl-names = "pmx_ts_int_active","pmx_ts_int_suspend_high";
 		pinctrl-0 = <&ts_int_active>;
 		pinctrl-1 = <&ts_int_suspend_high>;
-		panel = <&dsi_txd_ili9882h_652_video &dsi_txd_ili9882n_652_video>;
+		panel = <&dsi_txd_ili9882h_652_video &dsi_tm_ili9882n_652_video>;
 	};
 };
