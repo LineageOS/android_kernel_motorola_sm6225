@@ -665,7 +665,10 @@ int stmvl53l1_power_up_i2c(void *object)
 		vl53l1_info("slow power on");
 	} else
 		vl53l1_wanrmsg("no power control");
-
+#ifdef TOF_USE_PMIC_WL2864C
+	/* TOF VDD provided by camera pmic wl2864c need more ramp-up time to be stable */
+	usleep_range(5000, 5000 + 10);
+#endif
 	return rc;
 }
 
