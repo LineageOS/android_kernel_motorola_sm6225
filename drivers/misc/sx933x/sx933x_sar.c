@@ -980,6 +980,19 @@ static int sx933x_parse_dt(struct sx933x_platform_data *pdata, struct device *de
 	of_property_read_u32(dNode,"Semtech,button-flag",&pdata->button_used_flag);
 	LOG_INFO("used button 0x%x \n", pdata->button_used_flag);
 
+	pdata->ref_phase_a = -1;
+	pdata->ref_phase_b = -1;
+	if ( of_property_read_u32(dNode,"Semtech,ref-phases-a",&pdata->ref_phase_a) )
+	{
+		LOG_ERR("[SX933x]: %s - get ref-phases error\n", __func__);
+	}
+	if ( of_property_read_u32(dNode,"Semtech,ref-phases-b",&pdata->ref_phase_b) )
+	{
+		LOG_ERR("[SX933x]: %s - get ref-phases-b error\n", __func__);
+	}
+	LOG_INFO("[SX933x]: %s ref_phase_a= %d ref_phase_b= %d\n",
+		__func__, pdata->ref_phase_a, pdata->ref_phase_b);
+
 #ifdef USE_DTS_REG
 	// load in registers from device tree
 	of_property_read_u32(dNode,"Semtech,reg-num",&pdata->i2c_reg_num);
