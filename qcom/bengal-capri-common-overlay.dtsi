@@ -327,6 +327,8 @@
 			0x81A4 0x1D00008
 			0x4280 0x0F
 			>;
+		Semtech,ref-phases-a = <3>;
+		Semtech,ref-phases-b = <4>;
 		status = "ok";
 	};
 };
