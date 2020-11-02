@@ -33,3 +33,8 @@ stmvl53l1-objs		+= src/vl53l1_nvm_debug.o
 ifneq ($(filter m y,$(CONFIG_INPUT_MISC_TOF_USE_VL53L3)),)
 	EXTRA_CFLAGS += -DTOF_USE_VL53L3_EN
 endif
+
+
+ifneq ($(filter m y,$(CONFIG_INPUT_MISC_PMIC_WL2864C)),)
+	EXTRA_CFLAGS += -DTOF_USE_PMIC_WL2864C
+endif
