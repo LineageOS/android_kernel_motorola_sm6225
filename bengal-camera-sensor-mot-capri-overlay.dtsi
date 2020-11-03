@@ -353,6 +353,21 @@
 };
 
 &cam_cci0 {
+	i2c_freq_custom_cci0: qcom,i2c_custom_mode {
+		hw-thigh = <16>;
+		hw-tlow = <22>;
+		hw-tsu-sto = <17>;
+		hw-tsu-sta = <18>;
+		hw-thd-dat = <16>;
+		hw-thd-sta = <15>;
+		hw-tbuf = <24>;
+		hw-scl-stretch-en = <1>;
+		hw-trdhld = <3>;
+		hw-tsp = <3>;
+		cci-clk-src = <37500000>;
+		status = "ok";
+	};
+
 	actuator_main: qcom,actuator0 {
 		cell-index = <0>;
 		compatible = "qcom,actuator";
