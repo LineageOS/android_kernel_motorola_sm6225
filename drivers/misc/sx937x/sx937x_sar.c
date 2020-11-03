@@ -1068,7 +1068,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 			if (enable == 1) {
 				LOG_INFO("enable cap sensor : %s\n", sensors_cdev->name);
 				sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
-				temp = temp | 0x000000FF;
+				temp = temp | 0x000000F7;
 				LOG_DBG("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
 				sx937x_i2c_write_16bit(global_sx937x, SX937X_GENERAL_SETUP, temp);
 				psmtcButtons[i].enabled = true;
@@ -1098,7 +1098,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 		LOG_INFO("disable all chs\n");
 		sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
 		LOG_DBG("read reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
-		temp = temp & 0xFFFFFF00;
+		temp = temp & 0xFFFFFF08;
 		LOG_DBG("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
 		sx937x_i2c_write_16bit(global_sx937x, SX937X_GENERAL_SETUP, temp);
 	}
