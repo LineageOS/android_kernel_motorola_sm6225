@@ -244,6 +244,10 @@
 	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,dsi-supported-dfps-list = <60 90>;
+
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
 
@@ -285,6 +289,10 @@
 	qcom,mdss-dsi-panel-status-read-length = <4>;
 	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+
+        qcom,mdss-dsi-pan-enable-dynamic-fps;
+        qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+        qcom,dsi-supported-dfps-list = <60 90>;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
