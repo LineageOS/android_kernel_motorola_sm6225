@@ -2703,7 +2703,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
-#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+#if defined(NVT_CONFIG_PANEL_NOTIFICATIONS) || defined(NVT_SET_TOUCH_STATE)
 	touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
 #endif
 #endif
@@ -3002,10 +3002,12 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 		if (*blank == MSM_DRM_BLANK_POWERDOWN) {
 			NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
 			nvt_ts_suspend(&ts->client->dev);
-#ifdef NVT_SENSOR_EN
+#if defined(NVT_SENSOR_EN) && defined(NVT_SET_TOUCH_STATE)
 			if (ts->should_enable_gesture) {
 				NVT_LOG("double tap gesture suspend\n");
-				return 1;
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			} else {
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
 			}
 #endif
 		}
