@@ -267,6 +267,19 @@ typedef enum {
     EVENT_MAP_PROJECTID                     = 0x9A,
 } SPI_EVENT_MAP;
 
+#ifdef NVT_SET_TOUCH_STATE
+#define MAX_PANEL_IDX 2
+enum touch_panel_id {
+	TOUCH_PANEL_IDX_PRIMARY = 0,
+	TOUCH_PANEL_MAX_IDX,
+};
+
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
+#endif
+
 //---SPI READ/WRITE---
 #define SPI_WRITE_MASK(a)	(a | 0x80)
 #define SPI_READ_MASK(a)	(a & 0x7F)
@@ -303,6 +316,10 @@ int32_t nvt_clear_fw_status(void);
 int32_t nvt_check_fw_status(void);
 int32_t nvt_set_page(uint32_t addr);
 int32_t nvt_write_addr(uint32_t addr, uint8_t data);
+#ifdef NVT_SET_TOUCH_STATE
+int touch_set_state(int state, int panel_idx);
+int check_touch_state(int *state, int panel_idx);
+#endif
 #if NVT_TOUCH_ESD_PROTECT
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
