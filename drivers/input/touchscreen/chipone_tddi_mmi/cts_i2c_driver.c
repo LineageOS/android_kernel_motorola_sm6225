@@ -231,6 +231,7 @@ static int check_dt(struct device_node *np)
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
+            cts_info("check active_panel");
 			active_panel = panel;
 			return 0;
 		}
@@ -238,6 +239,35 @@ static int check_dt(struct device_node *np)
 	if (node)
 		pr_err("%s: %s not actived\n", __func__, node->name);
 	return -ENODEV;
+}
+
+static int check_default_tp(struct device_node *dt, const char *prop)
+{
+	const char *active_tp;
+	const char *compatible;
+	char *start;
+	int ret;
+
+	ret = of_property_read_string(dt->parent, prop, &active_tp);
+	if (ret) {
+		cts_err(" %s:fail to read %s %d\n", __func__, prop, ret);
+		return -ENODEV;
+	}
+
+	ret = of_property_read_string(dt, "compatible", &compatible);
+	if (ret < 0) {
+		cts_err(" %s:fail to read %s %d\n", __func__, "compatible", ret);
+		return -ENODEV;
+	}
+
+	start = strnstr(active_tp, compatible, strlen(active_tp));
+	if (start == NULL) {
+		cts_err(" %s:no match compatible, %s, %s\n",
+			__func__, compatible, active_tp);
+		ret = -ENODEV;
+	}
+
+	return ret;
 }
 
 #ifdef CONFIG_CTS_I2C_HOST
@@ -253,8 +283,13 @@ static int cts_driver_probe(struct spi_device *client)
 {
 	struct device_node *dp = client->dev.of_node;
 	if (check_dt(dp)) {
+    if (!check_default_tp(dp, "qcom,i2c-touch-active"))
+        ret = -EPROBE_DEFER;
+    else
+        ret = -ENODEV;
+
 		cts_err("%s: %s not actived\n", __func__, dp->name);
-		return -ENODEV;
+    return ret;
 	}
 }
 #ifdef CONFIG_CTS_I2C_HOST
@@ -831,7 +866,7 @@ static int __init cts_driver_init(void)
 #ifdef CONFIG_CTS_I2C_HOST
 	return i2c_add_driver(&cts_i2c_driver);
 #else
-	pr_err("wj---spi");
+	pr_err("cts_driver_init spi");
 	return spi_register_driver(&cts_spi_driver);
 #endif
 }
@@ -847,8 +882,8 @@ static void __exit cts_driver_exit(void)
 #endif
 }
 
-//module_init(cts_driver_init);
-late_initcall(cts_driver_init);
+module_init(cts_driver_init);
+//late_initcall(cts_driver_init);
 module_exit(cts_driver_exit);
 
 #if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
