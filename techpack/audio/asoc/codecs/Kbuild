@@ -90,17 +90,6 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
-	ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
-                INCS    +=  -include $(AUDIO_ROOT)/config/rhodeautoconf.h
-        endif
-
-        ifneq (,$(filter hawao%, $(TARGET_PRODUCT)))
-                INCS    +=  -include $(AUDIO_ROOT)/config/hawaoautoconf.h
-        endif
-
-        ifneq (,$(filter devon%, $(TARGET_PRODUCT)))
-                INCS    +=  -include $(AUDIO_ROOT)/config/devonautoconf.h
-        endif
 endif
 
 # As per target team, build is done as follows:
@@ -262,7 +251,6 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= rouleur/
 	obj-y	+= wsa883x/
 	obj-y	+= sdm660_cdc/
-	obj-y	+= awinic/
 	obj-y	+= foursemi/
 endif
 # Module information used by KBuild framework
@@ -299,7 +287,7 @@ hdmi_dlkm-y := $(HDMICODEC_OBJS)
 
 #Add awinic driver begain
 ifdef CONFIG_SND_SMARTPA_AW882XX
-ifneq (,$(filter rhode% hawao% devon%, $(TARGET_PRODUCT)))
+ifneq (,$(filter y, $(CONFIG_DEVON_DTB) $(CONFIG_HAWAO_DTB) $(CONFIG_RHODE_DTB)))
 	SND_SOC_AW882XX_OBJS += aw88261/aw882xx.o
 	SND_SOC_AW882XX_OBJS += aw88261/aw_init.o
 	SND_SOC_AW882XX_OBJS += aw88261/aw_bin_parse.o
