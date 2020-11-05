@@ -20,6 +20,7 @@
 *
 */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/interrupt.h>
 #ifdef CONFIG_OF
@@ -493,6 +494,9 @@ static struct attribute *attributes[] = {
 static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
+
+static int disp_panel_on = -1;  /* -1 for invalid, 0 for display-off, 1 for display-on */
+
 static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 
@@ -544,6 +548,10 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		goto done;
 #endif
+	case GET_DISP_PANEL_STATUS:
+		if (copy_to_user((int __user *) arg, &disp_panel_on, sizeof(disp_panel_on)))
+			pr_err("%s fail to copy", __func__);
+		goto done;
 	default:
 	retval = -ENOTTY;
 	break;
@@ -1105,6 +1113,23 @@ etspi_probe_parse_dt_failed:
 	return status;
 }
 
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
+static struct notifier_block nb;
+
+static int panel_notifier_cb(struct notifier_block *nb, unsigned long action, void *data)
+{
+	if (action == PANEL_EVENT_DISPLAY_ON) {
+		disp_panel_on = 1;
+		pr_info("%s display panel is on", __func__);
+	} else if (action == PANEL_EVENT_DISPLAY_OFF) {
+		disp_panel_on = 0;
+		pr_info("%s display panel is off", __func__);
+	}
+	return 0;
+}
+#endif
+
 static int __init ets_init(void)
 {
 	int status = 0;
@@ -1138,11 +1163,19 @@ static int __init ets_init(void)
 	status = platform_driver_register(&etspi_driver);
 	DEBUG_PRINT("%s  done\n", __func__);
 
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+	nb.notifier_call = panel_notifier_cb;
+	if (panel_register_notifier(&nb))
+		pr_warn("%s fail to register display panel notifier", __func__);
+#endif
 	return status;
 }
 
 static void __exit ets_exit(void)
 {
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+	panel_unregister_notifier(&nb);
+#endif
 	platform_driver_unregister(&etspi_driver);
 }
 
