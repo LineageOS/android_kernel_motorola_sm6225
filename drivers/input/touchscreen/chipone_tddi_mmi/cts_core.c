@@ -1072,6 +1072,48 @@ int cts_hw_reg_readsb_retry(const struct cts_device *cts_dev,
 	return cts_sram_readsb_retry(cts_dev, reg_addr, dst, len, retry, delay);
 }
 
+#define CTS_DEV_HW_REG_DDI_REG_CTRL     (0x3002Cu)
+
+static int icnl9911s_set_access_ddi_reg(struct cts_device *cts_dev, bool enable)
+{
+    int ret;
+    u8  access_flag;
+
+    cts_info("ICNL9911S %s access ddi reg", enable ? "enable" : "disable");
+
+    ret = cts_hw_reg_readb(cts_dev, CTS_DEV_HW_REG_DDI_REG_CTRL, &access_flag);
+    if (ret) {
+        cts_err("Read HW_REG_DDI_REG_CTRL failed %d", ret);
+        return ret;
+    }
+
+    access_flag = enable ? (access_flag | 0x01) : (access_flag & (~0x01));
+    ret = cts_hw_reg_writeb(cts_dev, CTS_DEV_HW_REG_DDI_REG_CTRL, access_flag);
+    if (ret) {
+        cts_err("Write HW_REG_DDI_REG_CTRL %02x failed %d", access_flag, ret);
+        return ret;
+    }
+
+    ret = cts_hw_reg_writeb(cts_dev, 0x30074, enable ? 1 : 0);
+    if (ret) {
+        cts_err("Write 0x30074 failed %d", ret);
+        return ret;
+    }
+
+    ret = cts_hw_reg_writew(cts_dev, 0x3DFF0, enable ? 0x595A : 0x5A5A);
+    if (ret) {
+        cts_err("Write password to F0 failed %d", ret);
+        return ret;
+    }
+    ret = cts_hw_reg_writew(cts_dev, 0x3DFF4, enable ? 0xA6A5 : 0x5A5A);
+    if (ret) {
+        cts_err("Write password to F1 failed %d", ret);
+        return ret;
+    }
+
+    return 0;
+}
+
 const static struct cts_sfctrl icnl9911_sfctrl = {
 	.reg_base = 0x34000,
 	.xchg_sram_base = (80 - 1) * 1024,
@@ -1129,6 +1171,7 @@ const static struct cts_device_hwdata cts_device_hwdatas[] = {
         .program_addr_width = 3,
 
         .sfctrl = &icnl9911c_sfctrl,
+        .enable_access_ddi_reg = icnl9911s_set_access_ddi_reg,
 	 }
 };
 
@@ -1829,9 +1872,31 @@ int cts_suspend_device(struct cts_device *cts_dev)
 int cts_resume_device(struct cts_device *cts_dev)
 {
 	int ret = 0;
-	const struct cts_firmware *firmware = NULL;
+	int retries = 3;
 
 	cts_info("Resume device");
+
+	/* Check whether device is in normal mode */
+	while (--retries >= 0) {
+#ifdef CFG_CTS_HAS_RESET_PIN
+		cts_plat_reset_device(cts_dev->pdata);
+#endif
+		cts_set_normal_addr(cts_dev);
+#ifdef CONFIG_CTS_I2C_HOST
+		if (cts_plat_is_i2c_online
+		    (cts_dev->pdata, CTS_DEV_NORMAL_MODE_I2CADDR))
+#else
+		if (cts_plat_is_normal_mode(cts_dev->pdata))
+#endif
+		{
+			break;
+		}
+	}
+
+	if (retries < 0) {
+	const struct cts_firmware *firmware = NULL;
+
+		cts_info("Need update firmware when resume");
 
 #ifdef CFG_CTS_FW_UPDATE_FILE_LOAD
 	if (cts_dev->config_fw_name[0] != '\0') {
@@ -1856,6 +1921,7 @@ int cts_resume_device(struct cts_device *cts_dev)
 			"please update manually!!", ret);
 
 		goto err_set_program_mode;
+		}
 	}
 #ifdef CONFIG_CTS_CHARGER_DETECT
     if (cts_is_charger_exist(cts_dev)) {

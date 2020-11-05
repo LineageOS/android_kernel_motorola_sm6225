@@ -583,7 +583,7 @@ int cts_init_platform_data(struct cts_platform_data *pdata,
 	struct input_dev *input_dev;
 	int ret = 0;
 
-	cts_info("Init");
+	cts_info("cts_init_platform_data Init");
 
 #ifdef CONFIG_CTS_OF
 	{

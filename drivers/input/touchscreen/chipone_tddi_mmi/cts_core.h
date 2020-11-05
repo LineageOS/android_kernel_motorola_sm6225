@@ -201,7 +201,7 @@ struct cts_device_hwdata {
     u8  program_addr_width;
 
     const struct cts_sfctrl *sfctrl;
-
+    int (*enable_access_ddi_reg)(struct cts_device *cts_dev, bool enable);
 };
 
 /** Chip firmware data */
@@ -378,6 +378,18 @@ extern int cts_hw_reg_readsb_retry(const struct cts_device *cts_dev,
 				   u32 reg_addr, void *dst, size_t len,
 				   int retry, int delay);
 
+static inline int cts_hw_reg_readb(const struct cts_device *cts_dev, u32 reg_addr, u8 *b)
+{
+    return cts_hw_reg_readb_retry(cts_dev, reg_addr, b, 1, 0);
+}
+static inline int cts_hw_reg_writeb(const struct cts_device *cts_dev, u32 reg_addr, u8 b)
+{
+    return cts_hw_reg_writeb_retry(cts_dev, reg_addr, b, 1, 0);
+}
+static inline int cts_hw_reg_writew(const struct cts_device *cts_dev, u32 reg_addr, u16 w)
+{
+    return cts_hw_reg_writew_retry(cts_dev, reg_addr, w, 1, 0);
+}
 static inline int cts_fw_reg_writeb(const struct cts_device *cts_dev,
 				    u32 reg_addr, u8 b)
 {
