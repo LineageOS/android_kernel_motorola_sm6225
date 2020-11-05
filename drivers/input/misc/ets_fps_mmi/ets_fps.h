@@ -83,6 +83,8 @@
 #define AUTH_STATUS_CAPTURED  3
 #endif
 
+#define GET_DISP_PANEL_STATUS		0xD2
+
 #define DRDY_IRQ_ENABLE				1
 #define DRDY_IRQ_DISABLE			0
 
