@@ -30,7 +30,7 @@ char *argv[MAX_ARG_NUM];
 static int jitter_test_frame = 10;
 static s16 *manualdiff_base;
 
-u16 speed = 6000;
+u16 speed = 9600;
 
 int parse_arg(const char *buf, size_t count)
 {
@@ -2053,7 +2053,7 @@ static ssize_t jitter_store(struct device *dev,
 
 	ret = kstrtou16(argv[0], 0, &cnt);
 	if (ret == 0) {
-		if (cnt < 2 || cnt > 10000) {
+		if (cnt > 2 || cnt < 10000) {
 			jitter_test_frame = cnt;
 		}
 	}
