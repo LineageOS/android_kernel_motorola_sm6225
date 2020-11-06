@@ -2067,9 +2067,12 @@ int cts_enter_normal_mode(struct cts_device *cts_dev)
 		auto_boot = 1;
 	}
 #ifdef CFG_CTS_UPDATE_CRCCHECK
+/*
 	if (cts_dev->hwdata->hwid == CTS_DEV_HWID_ICNL9911S) {
 		auto_boot = 1;
 	}
+*/
+	auto_boot = 1;
 #endif
 	for (retries = 5; retries >= 0; retries--) {
 		if (first_boot == 1 || auto_boot == 0) {
@@ -2109,7 +2112,8 @@ int cts_enter_normal_mode(struct cts_device *cts_dev)
 				retries);
 		} else {
 			if (fwid == CTS_DEV_FWID_ICNL9911
-			    || fwid == CTS_DEV_FWID_ICNL9911S) {
+			    || fwid == CTS_DEV_FWID_ICNL9911S
+			    || fwid == CTS_DEV_FWID_ICNL9911C) {
 				cts_info("Get firmware id successful 0x%02x",
 					 fwid);
 				break;
@@ -2234,10 +2238,8 @@ int cts_stop_device(struct cts_device *cts_dev)
 #ifdef CONFIG_CTS_ESD_PROTECTION
 int cts_start_device_esdrecover(struct cts_device *cts_dev)
 {
-#ifdef CONFIG_CTS_ESD_PROTECTION
 	//struct chipone_ts_data *cts_data =
 	//    container_of(cts_dev, struct chipone_ts_data, cts_dev);
-#endif /* CONFIG_CTS_ESD_PROTECTION */
 	int ret;
 
 	cts_info("Start device...");
