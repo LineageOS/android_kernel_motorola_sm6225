@@ -9,6 +9,8 @@
 #include "cts_firmware.h"
 #include "cts_charger_detect.h"
 
+static DEFINE_RT_MUTEX(dev_lock);
+
 #ifdef CONFIG_CTS_I2C_HOST
 static int cts_i2c_writeb(const struct cts_device *cts_dev,
 			  u32 addr, u8 b, int retry, int delay)
@@ -1197,14 +1199,14 @@ void cts_lock_device(const struct cts_device *cts_dev)
 {
 	cts_dbg("*** Lock ***");
 
-	rt_mutex_lock(&cts_dev->pdata->dev_lock);
+	rt_mutex_lock(&dev_lock);
 }
 
 void cts_unlock_device(const struct cts_device *cts_dev)
 {
 	cts_dbg("### Un-Lock ###");
 
-	rt_mutex_unlock(&cts_dev->pdata->dev_lock);
+	rt_mutex_unlock(&dev_lock);
 }
 
 int cts_set_work_mode(const struct cts_device *cts_dev, u8 mode)

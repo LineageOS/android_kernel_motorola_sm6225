@@ -98,7 +98,6 @@ struct cts_platform_data {
 	struct work_struct ts_irq_work;
 #endif				/* CONFIG_GENERIC_HARDIRQS */
 
-	struct rt_mutex dev_lock;
 	struct spinlock irq_lock;
 	bool irq_is_disable;
 
