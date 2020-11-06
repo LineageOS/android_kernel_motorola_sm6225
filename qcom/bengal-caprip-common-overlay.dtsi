@@ -400,6 +400,10 @@
         };
 };
 
+&pmi632_vib {
+	qcom,vib-ldo-volt-uv = <2600000>;
+};
+
 &pmi632_qg {
         qcom,qg-iterm-ma = <350>;
         qcom,vbatt-cutoff-mv = <3200>;
