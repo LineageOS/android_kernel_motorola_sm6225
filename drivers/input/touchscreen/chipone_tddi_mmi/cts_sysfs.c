@@ -2053,7 +2053,7 @@ static ssize_t jitter_store(struct device *dev,
 
 	ret = kstrtou16(argv[0], 0, &cnt);
 	if (ret == 0) {
-		if (cnt > 2 || cnt < 10000) {
+		if (cnt > 2 && cnt < 10000) {
 			jitter_test_frame = cnt;
 		}
 	}
@@ -2598,26 +2598,21 @@ static int cts_fw_class_init(void *_data, bool create)
 	int i, error = 0;
 	static struct class *touchscreen_class;
 	static struct device *ts_class_dev;
-	static int minor;
+	dev_t devno;
 
 	cts_info("%s touchscreen class files", create ? "Add" : "Remove");
 
 	if (create) {
-#ifdef CONFIG_CTS_I2C_HOST
-		minor = input_get_new_minor(data->i2c_client->addr, 1, false);
-#else
-		minor = input_get_new_minor(data->spi_client->chip_select,
-					    1, false);
-#endif
-		if (minor < 0) {
-			cts_info
-			    ("Alloc input minor num failed %d, use dynamic mode",
-			     minor);
-			minor =
-			    input_get_new_minor(TSDEV_MINOR_BASE,
-						TSDEV_MINOR_MAX, true);
+		if(NULL != data->cts_dev.hwdata->name) {
+			error = alloc_chrdev_region(&devno, 0, 1, data->cts_dev.hwdata->name);
+		} else {
+			error = alloc_chrdev_region(&devno, 0, 1, CFG_CTS_CHIP_NAME);
 		}
-		cts_info("Assigned input device minor %d", minor);
+		if (error) {
+			cts_info
+			    ("Alloc input devno failed %d", error);
+			return error;
+		}
 
 		cts_info("Create class 'touchscreen'");
 		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
@@ -2631,12 +2626,12 @@ static int cts_fw_class_init(void *_data, bool create)
 
 		if(NULL != data->cts_dev.hwdata->name) {
 			ts_class_dev = device_create(touchscreen_class, NULL,
-					     MKDEV(INPUT_MAJOR, minor),
+					     devno,
 					     data, "%s", data->cts_dev.hwdata->name);
 			cts_info("Create device for IC: %s", data->cts_dev.hwdata->name);
 		} else {
 			ts_class_dev = device_create(touchscreen_class, NULL,
-					     MKDEV(INPUT_MAJOR, minor),
+					     devno,
 					     data, "%s", CFG_CTS_CHIP_NAME);
 			cts_info("Create device '" CFG_CTS_CHIP_NAME "'");
 		}
@@ -2681,7 +2676,7 @@ static int cts_fw_class_init(void *_data, bool create)
 device_destroy:
 	for (--i; i >= 0; --i)
 		device_remove_file(ts_class_dev, &attrs[i]);
-	device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));
+	device_destroy(touchscreen_class, devno);
 	ts_class_dev = NULL;
 	class_unregister(touchscreen_class);
 	cts_err("Creating touchscreen class failed %d", error);
