@@ -133,6 +133,10 @@ int nvt_mcu_pen_detect_set(uint8_t pen_detect);
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+#ifdef LCM_FAST_LIGHTUP
+static struct work_struct ts_resume_work;
+static void nova_resume_work_func(struct work_struct *work);
+#endif //end LCM_FAST_LIGHTUP
 #endif
 #else //vension code < 5.4.0
 #if defined(CONFIG_FB)
@@ -2403,7 +2407,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	// please make sure boot update start after display reset(RESX) sequence
 	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
 #endif
-
+#ifdef LCM_FAST_LIGHTUP
+	INIT_WORK(&ts_resume_work, nova_resume_work_func);
+#endif
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
 #if NVT_TOUCH_ESD_PROTECT
 	INIT_DELAYED_WORK(&nvt_esd_check_work, nvt_esd_check_func);
@@ -2979,6 +2985,14 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
+#ifdef LCM_FAST_LIGHTUP
+static void nova_resume_work_func(struct work_struct *work)
+{
+	NVT_LOG("%s\n", __func__);
+	nvt_ts_resume(&ts->client->dev);
+}
+#endif //end LCM_FAST_LIGHTUP
+
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
 	struct msm_drm_notifier *evdata = data;
@@ -3014,7 +3028,17 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 	} else if (event == MSM_DRM_EVENT_BLANK) {
 		if (*blank == MSM_DRM_BLANK_UNBLANK) {
 			NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+#ifdef LCM_FAST_LIGHTUP
+			if (nvt_fwu_wq) {
+				queue_work(nvt_fwu_wq, &ts_resume_work);
+				NVT_LOG("LCM_FAST_LIGHTUP, queue_work\n");
+			} else {
+				NVT_LOG("nvt_fwu_wq null");
+				nvt_ts_resume(&ts->client->dev);
+			}
+#else
 			nvt_ts_resume(&ts->client->dev);
+#endif //LCM_FAST_LIGHTUP
 		}
 	}
 
