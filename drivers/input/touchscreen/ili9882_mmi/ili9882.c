@@ -32,6 +32,7 @@ static struct delayed_work esd_work;
 static struct delayed_work bat_work;
 
 #if RESUME_BY_DDI
+static int ili_pinctrl_select_normal(struct ilitek_ts_data *ts);
 static struct workqueue_struct	*resume_by_ddi_wq;
 static struct work_struct	resume_by_ddi_work;
 
@@ -49,6 +50,8 @@ static void ilitek_resume_by_ddi_work(struct work_struct *work)
 	else
 		ili_reset_ctrl(ilits->reset);
 
+	ili_pinctrl_select_normal(ilits);
+
 	ili_irq_enable();
 	ILI_INFO("TP resume end by wq\n");
 	ili_wq_ctrl(WQ_ESD, ENABLE);
@@ -64,7 +67,7 @@ void ili_resume_by_ddi(void)
 		return;
 	}
 
-	mutex_lock(&ilits->touch_mutex);
+//	mutex_lock(&ilits->touch_mutex);
 
 	ILI_INFO("TP resume start called by ddi\n");
 
@@ -78,8 +81,9 @@ void ili_resume_by_ddi(void)
 	ilits->ddi_rest_done = true;
 	mdelay(5);
 	queue_work(resume_by_ddi_wq, &(resume_by_ddi_work));
+	ILI_INFO("TP resume work queued\n");
 
-	mutex_unlock(&ilits->touch_mutex);
+//	mutex_unlock(&ilits->touch_mutex);
 }
 #endif
 
@@ -523,6 +527,8 @@ int ili_sleep_handler(int mode)
 		ili_wq_ctrl(WQ_BAT, ENABLE);
 		ilits->tp_suspend = false;
 		ILI_INFO("TP resume end\n");
+#else
+		ili_resume_by_ddi();
 #endif
 		ili_irq_enable();
 		break;
