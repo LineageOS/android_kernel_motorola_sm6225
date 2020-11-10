@@ -1180,6 +1180,11 @@ static int32_t nvt_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	int32_t ret = 0;
+#if defined(NVT_CONFIG_DRM_PANEL)
+	int num_of_panel_supplier;
+	int j;
+	const char *panel_supplier;
+#endif
 
 #if NVT_TOUCH_SUPPORT_HW_RST
 	ts->reset_gpio = of_get_named_gpio_flags(np, "novatek,reset-gpio", 0, &ts->reset_flags);
@@ -1196,8 +1201,28 @@ static int32_t nvt_parse_dt(struct device *dev)
 		NVT_LOG("SWRST_N8_ADDR=0x%06X\n", SWRST_N8_ADDR);
 	}
 
+#if defined(NVT_CONFIG_DRM_PANEL)
+	num_of_panel_supplier = of_property_count_strings(np, "novatek,panel-supplier");
+	NVT_LOG("%s: get novatek,panel-supplier count=%d", __func__, num_of_panel_supplier);
+	if (active_panel_name && num_of_panel_supplier > 0) {
+		for (j = 0; j < num_of_panel_supplier; j++) {
+			ret = of_property_read_string_index(np, "novatek,panel-supplier", j, &panel_supplier);
+			if (ret < 0) {
+				NVT_LOG("%s: cannot parse panel-supplier: %d\n", __func__, ret);
+				break;
+			} else if (panel_supplier && strstr(active_panel_name, panel_supplier)) {
+				ts->panel_supplier = panel_supplier;
+				NVT_LOG("%s: matched panel_supplier: %s", __func__, panel_supplier);
+				break;
+			}
+		}
+	} else {
+		ret = -EINVAL;
+	}
+#else
 	ret = of_property_read_string(np, "novatek,panel-supplier",
 		&ts->panel_supplier);
+#endif
 	if (ret < 0) {
 		NVT_LOG("Unable to read panel supplier\n");
 	} else {
