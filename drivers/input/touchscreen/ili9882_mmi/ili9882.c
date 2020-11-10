@@ -56,7 +56,7 @@ static void ilitek_resume_by_ddi_work(struct work_struct *work)
 	ILI_INFO("TP resume end by wq\n");
 	ili_wq_ctrl(WQ_ESD, ENABLE);
 	ili_wq_ctrl(WQ_BAT, ENABLE);
-	ilits->tp_suspend = false;
+
 	mutex_unlock(&ilits->touch_mutex);
 }
 
@@ -70,7 +70,7 @@ void ili_resume_by_ddi(void)
 //	mutex_lock(&ilits->touch_mutex);
 
 	ILI_INFO("TP resume start called by ddi\n");
-
+	ilits->tp_suspend = false;
 	/*
 	 * To match the timing of sleep out, the first of mipi cmd must be sent within 10ms
 	 * after TP reset. We then create a wq doing host download before resume.
@@ -508,6 +508,7 @@ int ili_sleep_handler(int mode)
 	case TP_RESUME:
 #if !RESUME_BY_DDI
 		ILI_INFO("TP resume start\n");
+		ilits->tp_suspend = false;
 
 		if (ilits->gesture)
 			disable_irq_wake(ilits->irq_num);
@@ -525,7 +526,7 @@ int ili_sleep_handler(int mode)
 		}
 		ili_wq_ctrl(WQ_ESD, ENABLE);
 		ili_wq_ctrl(WQ_BAT, ENABLE);
-		ilits->tp_suspend = false;
+
 		ILI_INFO("TP resume end\n");
 #else
 		ili_resume_by_ddi();
