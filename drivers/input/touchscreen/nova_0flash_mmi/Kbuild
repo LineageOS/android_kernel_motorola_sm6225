@@ -29,6 +29,10 @@ ifneq ($(filter m y,$(CONFIG_NOVA_ESD_ENABLE)),)
 	EXTRA_CFLAGS += -DNVT_CONFIG_ESD_ENABLE
 endif
 
+ifneq ($(filter m y,$(CONFIG_NOVA_LCM_FAST_LIGHTUP)),)
+	EXTRA_CFLAGS += -DLCM_FAST_LIGHTUP
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_NOVA_0FLASH_MMI_STYLUS_PALM)),)
 	EXTRA_CFLAGS += -DPALM_GESTURE
 endif
