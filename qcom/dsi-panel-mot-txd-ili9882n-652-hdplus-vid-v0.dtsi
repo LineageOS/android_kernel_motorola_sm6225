@@ -1,0 +1,46 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_txd_ili9882n_652_video:qcom,mdss_dsi_txd_ili9882n_652_video {
+		#include "dsi-panel-mot-txd-ili9882n-652-hdplus-vid.dtsi"
+	};
+};
+
+&dsi_txd_ili9882n_652_video {
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+				qcom,mdss-dsi-on-command = [
+					39 01 00 00 00 00 04 FF 98 82 00
+					39 01 00 00 00 00 03 51 00 0a
+					15 01 00 00 00 00 02 53 2C
+					15 01 00 00 00 00 02 55 01
+					05 01 00 00 3C 00 01 11
+					39 01 00 00 00 00 04 FF 98 82 01
+					15 01 00 00 00 00 02 0C 04
+					15 01 00 00 00 00 02 0D 04
+					39 01 00 00 00 00 04 FF 98 82 05
+					15 01 00 00 00 00 02 0C 00
+					15 01 00 00 00 00 02 0D C9
+					15 01 00 00 00 00 02 5D 07
+					39 01 00 00 00 00 04 FF 98 82 08
+					39 01 00 00 00 00 1C E0 00 24 79 AE EE 55 1F 46 73 96 A5 CD F8 1E 43 AA 6A 9A B9 E2 FF 05 32 6C 9D 03 EC
+					39 01 00 00 00 00 1C E1 00 24 79 AE EE 55 1F 46 73 96 A5 CD F8 1E 43 AA 6A 9A B9 E2 FF 05 32 6C 9D 03 EC
+					39 01 00 00 00 00 04 FF 98 82 02
+					15 01 00 00 00 00 02 4D CE
+					39 01 00 00 00 00 04 FF 98 82 03
+					39 01 00 00 00 00 02 83 B8
+					39 01 00 00 00 00 04 FF 98 82 00
+					05 01 00 00 14 00 01 29];
+		};
+	};
+};
