@@ -131,6 +131,7 @@
 &qupv3_se2_spi {
 	status = "ok";
 	pinctrl-1 = <&qupv3_se2_spi_sleep &qupv3_se2_cs_sleep>;
+	qcom,set-cs-sb-delay = <1>;
 	nova_0flash_ts@0 {
 		compatible = "novatek,NVT-ts-spi";
 		reg = <3>;
