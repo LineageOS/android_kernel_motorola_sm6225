@@ -17,7 +17,7 @@
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #include <linux/touchscreen_mmi.h>
-#include <linux/fingerprint_mmi.h>
+#include <linux/mmi_relay.h>
 
 #if defined(CONFIG_DRM_DYNAMIC_REFRESH_RATE)
 extern struct blocking_notifier_head dsi_freq_head;
@@ -376,34 +376,28 @@ static int ts_mmi_fps_cb(struct notifier_block *self,
 }
 
 static int ts_mmi_fps_notifier_register(struct ts_mmi_dev *touch_cdev, bool enable) {
-	int (*register_link)(struct notifier_block *nb, unsigned long stype, bool report);
-	int (*unregister_link)(struct notifier_block *nb, unsigned long stype);
 	int ret;
 
 	if (enable) {
-		register_link = symbol_get(FPS_register_notifier);
-		if (register_link) {
-			touch_cdev->fps_notif.notifier_call = ts_mmi_fps_cb;
-			ret = register_link(&touch_cdev->fps_notif, 0xBEEF, false);
-			symbol_put(FPS_register_notifier);
-			if (ret < 0) {
-				dev_err(DEV_TS,
-					"Failed to register fps_notifier: %d\n", ret);
-				return ret;
-			}
-			touch_cdev->is_fps_registered = true;
-			dev_info(DEV_TS, "Register fps_notifier OK\n");
-		} else
-			dev_err(DEV_TS, "no FPS_register_notifier exported.\n");
-	} else if (touch_cdev->is_fps_registered) {
-		unregister_link = symbol_get(FPS_unregister_notifier);
-		if (unregister_link)
-			unregister_link(&touch_cdev->fps_notif, 0xBEEF);
-		else
-			dev_err(DEV_TS, "no FPS_unregister_notifier exported.\n");
+		touch_cdev->fps_notif.notifier_call = ts_mmi_fps_cb;
+		/*register a blocking notification to receive FPS events*/
+		ret = relay_register_action(BLOCKING, FPS, &touch_cdev->fps_notif);
+		if (ret < 0) {
+			dev_err(DEV_TS,
+				"Failed to register fps_notifier: %d\n", ret);
+			return ret;
+		}
+		touch_cdev->is_fps_registered = true;
+		dev_info(DEV_TS, "Register fps_notifier OK\n");
+	} else if (touch_cdev->is_fps_registered){
+		ret = relay_unregister_action(BLOCKING, FPS, &touch_cdev->fps_notif);
+		if (ret < 0) {
+			dev_err(DEV_TS,
+				"Failed to unregister fps_notifier: %d\n", ret);
+		}
 		touch_cdev->is_fps_registered = false;
+		dev_info(DEV_TS, "Unregister fps_notifier OK\n");
 	}
-
 	return 0;
 }
 
