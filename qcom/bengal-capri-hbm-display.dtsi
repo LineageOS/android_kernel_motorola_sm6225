@@ -11,8 +11,9 @@
  */
 
 &dsi_djn_nt36525b_652_vid_v0 {
-	qcom,mdss-dsi-bl-max-level = <2047>;
-	qcom,mdss-brightness-max-level = <2047>;
+	qcom,mdss-dsi-bl-min-level = <13>;
+	qcom,mdss-dsi-bl-max-level = <1691>;
+	qcom,mdss-brightness-max-level = <1691>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
 	qcom,platform-hbm-en-gpio = <&tlmm 96 0>;
 	qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 07 FF];
@@ -22,8 +23,9 @@
 };
 
 &dsi_djn_nt36525b_652_video {
-	qcom,mdss-dsi-bl-max-level = <2047>;
-	qcom,mdss-brightness-max-level = <2047>;
+	qcom,mdss-dsi-bl-min-level = <13>;
+	qcom,mdss-dsi-bl-max-level = <1691>;
+	qcom,mdss-brightness-max-level = <1691>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
 	qcom,platform-hbm-en-gpio = <&tlmm 96 0>;
 	qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 07 FF];
@@ -33,6 +35,7 @@
 };
 
 &dsi_txd_ili9882h_652_video {
+	qcom,mdss-dsi-bl-min-level = <16>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,mdss-brightness-max-level = <2047>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
@@ -44,6 +47,7 @@
 };
 
 &dsi_tm_ili9882n_652_video {
+        qcom,mdss-dsi-bl-min-level = <16>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,mdss-brightness-max-level = <2047>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
@@ -55,8 +59,9 @@
 };
 
 &dsi_djn_nt36525c_652_video {
-	qcom,mdss-dsi-bl-max-level = <2047>;
-	qcom,mdss-brightness-max-level = <2047>;
+	qcom,mdss-dsi-bl-min-level = <13>;
+	qcom,mdss-dsi-bl-max-level = <1691>;
+	qcom,mdss-brightness-max-level = <1691>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
 	qcom,platform-hbm-en-gpio = <&tlmm 96 0>;
         qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 07 FF];
@@ -66,6 +71,7 @@
 };
 
 &dsi_txd_ili9882n_652_video {
+        qcom,mdss-dsi-bl-min-level = <16>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,mdss-brightness-max-level = <2047>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
@@ -76,7 +82,21 @@
 	/delete-property/ qcom,mdss-dsi-panel-hbm-is-51cmd;
 };
 
+//Capri plus panel#2 txd_ili9882n v1
+&dsi_txd_ili9882n_652_video_v1 {
+        qcom,mdss-dsi-bl-min-level = <16>;
+        qcom,mdss-dsi-bl-max-level = <2047>;
+        qcom,mdss-brightness-max-level = <2047>;
+        qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
+        qcom,platform-hbm-en-gpio = <&tlmm 96 0>;
+        qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 07 FF];
+        qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 07 FF];
+
+        /delete-property/ qcom,mdss-dsi-panel-hbm-is-51cmd;
+};
+
 &dsi_tianma_ili9882n_652_video {
+        qcom,mdss-dsi-bl-min-level = <16>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
 	qcom,mdss-brightness-max-level = <2047>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-gpio";
