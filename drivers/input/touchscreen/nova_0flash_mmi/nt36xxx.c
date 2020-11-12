@@ -1204,7 +1204,7 @@ static int32_t nvt_parse_dt(struct device *dev)
 #if defined(NVT_CONFIG_DRM_PANEL)
 	num_of_panel_supplier = of_property_count_strings(np, "novatek,panel-supplier");
 	NVT_LOG("%s: get novatek,panel-supplier count=%d", __func__, num_of_panel_supplier);
-	if (active_panel_name && num_of_panel_supplier > 0) {
+	if (active_panel_name && num_of_panel_supplier > 1) {
 		for (j = 0; j < num_of_panel_supplier; j++) {
 			ret = of_property_read_string_index(np, "novatek,panel-supplier", j, &panel_supplier);
 			if (ret < 0) {
@@ -1216,6 +1216,10 @@ static int32_t nvt_parse_dt(struct device *dev)
 				break;
 			}
 		}
+	} else if (1 == num_of_panel_supplier) {
+		//in case the panel-supplier info does not completely contained in panel name.
+		ret = of_property_read_string(np, "novatek,panel-supplier",
+			&ts->panel_supplier);
 	} else {
 		ret = -EINVAL;
 	}
