@@ -41,7 +41,7 @@
 #include <linux/fb.h>
 #include <linux/pm_qos.h>
 #include <linux/cpufreq.h>
-#include <linux/mmi_relay.h>
+#include <linux/fingerprint_mmi.h>
 #include "gf_spi.h"
 
 #if defined(USE_SPI_BUS)
@@ -96,7 +96,7 @@ static struct gf_key_map maps[] = {
 struct FPS_data {
 	unsigned int enabled;
 	unsigned int state;
-	struct notifier_block   relay_notif;
+	struct blocking_notifier_head nhead;
 } *fpsData;
 
 static void gf_enable_irq(struct gf_dev *gf_dev)
@@ -119,39 +119,61 @@ static void gf_disable_irq(struct gf_dev *gf_dev)
 	}
 }
 
-static int fps_mmi_relay_cb(struct notifier_block *self,
-					unsigned long event, void *p)
+struct FPS_data *FPS_init(struct device *dev)
 {
-	struct FPS_data *mdata = container_of(
-			self, struct FPS_data, relay_notif);
+	struct FPS_data *mdata = devm_kzalloc(dev,
+			sizeof(struct FPS_data), GFP_KERNEL);
+	if (mdata) {
+		BLOCKING_INIT_NOTIFIER_HEAD(&mdata->nhead);
+		pr_debug("%s: FPS notifier data structure init-ed\n", __func__);
+	}
+	return mdata;
+}
+
+int FPS_register_notifier(struct notifier_block *nb,
+	unsigned long stype, bool report)
+{
+	int error;
+	struct FPS_data *mdata = fpsData;
 
 	if (!mdata)
 		return -ENODEV;
 
-	if (event == RELAY_NOTIFY_REGISTER) {
+	mdata->enabled = (unsigned int)stype;
+	pr_info("%s: FPS sensor %lu notifier enabled\n", __func__, stype);
+
+	error = blocking_notifier_chain_register(&mdata->nhead, nb);
+	if (!error && report) {
 		int state = mdata->state;
-		mdata->enabled = 1;
 		/* send current FPS state on register request */
-		relay_notifier_fire(BLOCKING, FPS, 0xBEEF, (void *)&state);
-		pr_info("%s: FPS reported state %d\n", __func__, state);
-
-	} else if (event == RELAY_NOTIFY_UNREGISTER)
-		mdata->enabled = 0;
-
-	return 0;
+		blocking_notifier_call_chain(&mdata->nhead,
+				stype, (void *)&state);
+		pr_debug("%s: FPS reported state %d\n", __func__, state);
+	}
+	return error;
 }
+EXPORT_SYMBOL_GPL(FPS_register_notifier);
 
-static struct FPS_data *FPS_init(struct device *dev)
+int FPS_unregister_notifier(struct notifier_block *nb,
+		unsigned long stype)
 {
-	struct FPS_data *mdata = devm_kzalloc(dev,
-			sizeof(struct FPS_data), GFP_KERNEL);
+	int error;
+	struct FPS_data *mdata = fpsData;
 
-	mdata->relay_notif.notifier_call = fps_mmi_relay_cb;
-	/* register a blocking notification to receive notify form MMI_RELAY dev*/
-	relay_register_action(BLOCKING, MMI_RELAY, &mdata->relay_notif);
+	if (!mdata)
+		return -ENODEV;
 
-	return mdata;
+	error = blocking_notifier_chain_unregister(&mdata->nhead, nb);
+	pr_debug("%s: FPS sensor %lu notifier unregister\n", __func__, stype);
+
+	if (!mdata->nhead.head) {
+		mdata->enabled = 0;
+		pr_info("%s: FPS sensor %lu no clients\n", __func__, stype);
+	}
+
+	return error;
 }
+EXPORT_SYMBOL_GPL(FPS_unregister_notifier);
 
 void FPS_notify(unsigned long stype, int state)
 {
@@ -172,7 +194,8 @@ void FPS_notify(unsigned long stype, int state)
 
 	if (mdata->state != state) {
 		mdata->state = state;
-		relay_notifier_fire(BLOCKING, FPS, 0xBEEF, (void *)&state);
+		blocking_notifier_call_chain(&mdata->nhead,
+					     stype, (void *)&state);
 		pr_debug("%s: FPS notification sent\n", __func__);
 	} else
 		pr_warn("%s: mdata->state==state", __func__);
