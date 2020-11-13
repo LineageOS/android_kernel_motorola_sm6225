@@ -243,31 +243,36 @@ static void read_dbg_raw(psx93XX_t this)
 	s32 avg, diff;
 	u16 off;
 	s32 adc_min, adc_max, use_flt_dlt_var;
-	s32 ref_a_use=0, ref_b_use=0;	
-	int ref_ph_a, ref_ph_b;
-	
+	s32 ref_a_use=0, ref_b_use=0, ref_c_use=0;
+	int ref_ph_a, ref_ph_b, ref_ph_c;
+
 	psx937x_t pDevice = NULL;
 	psx937x_platform_data_t pdata = NULL;
-	
+
 	pDevice = this->pDevice;
 	pdata = pDevice->hw;
 	ref_ph_a = pdata->ref_phase_a;
 	ref_ph_b = pdata->ref_phase_b;
-	dev_info(this->pdev, "[SX937x] ref_ph_a= %d ref_ph_b= %d\n", ref_ph_a, ref_ph_b);
-	
+	ref_ph_c = pdata->ref_phase_c;
+
 	sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
 	dev_info(this->pdev, "SX937X_STAT0_REG= 0x%X\n", uData);
-	
-	if(ref_ph_a != 0xFF)
+
+	if(ref_ph_a != -1)
 	{
 		sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_a*4, &uData);
 		ref_a_use = (s32)uData >> 10;
 	}
-	if(ref_ph_b != 0xFF)
+	if(ref_ph_b != -1)
 	{
 		sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_b*4, &uData);
 		ref_b_use = (s32)uData >> 10;
-	}		
+	}
+	if(ref_ph_c != -1)
+	{
+		sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_c*4, &uData);
+		ref_c_use = (s32)uData >> 10;
+	}
 
 	sx937x_i2c_read_16bit(this, SX937X_DEBUG_SETUP, &ph_sel);
 
@@ -294,30 +299,9 @@ static void read_dbg_raw(psx93XX_t this)
 		off = (u16)(uData & 0x7FFF);
 		state = psmtcButtons[ph].state;
 
-		if(ref_ph_a != 0xFF && ref_ph_b != 0xFF)
-		{
-			dev_info(this->pdev,
-			"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
-			ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
-		}
-		else if(ref_ph_a != 0xFF)
-		{
-			dev_info(this->pdev,
-			"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
-			ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
-		}
-		else if(ref_ph_b != 0xFF)
-		{
-			dev_info(this->pdev,
-			"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
-			ph,    ant_use, ant_raw, ref_ph_b, ref_b_use,  state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
-		}
-		else
-		{
-			dev_info(this->pdev,
-			"SMTC_DBG PH= %d USE= %d RAW= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
-			ph,    ant_use, ant_raw, state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
-		}
+		dev_info(this->pdev,
+		"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
+		ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use, ref_ph_c, ref_c_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
 	}
 	else
 	{
@@ -329,35 +313,41 @@ static void read_rawData(psx93XX_t this)
 {
 	u8 csx, index;
 	s32 useful, average, diff;
-	s32 ref_a_use=0, ref_b_use=0;
+	s32 ref_a_use=0, ref_b_use=0, ref_c_use=0;
 	u32 uData;
 	u16 offset;
 	int state;
 	psx937x_t pDevice = NULL;
 	psx937x_platform_data_t pdata = NULL;
-	int ref_ph_a, ref_ph_b;
+	int ref_ph_a, ref_ph_b, ref_ph_c;
 
 	if(this)
-	{		
+	{
 		pDevice = this->pDevice;
     	pdata = pDevice->hw;
 		ref_ph_a = pdata->ref_phase_a;
 		ref_ph_b = pdata->ref_phase_b;
-		dev_info(this->pdev, "[SX937x] ref_ph_a= %d ref_ph_b= %d\n", ref_ph_a, ref_ph_b);
+		ref_ph_c = pdata->ref_phase_c;
+		dev_info(this->pdev, "[SX937x] ref_ph_a= %d ref_ph_b= %d ref_ph_c= %d\n", ref_ph_a, ref_ph_b, ref_ph_c);
 
 		sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
 		dev_info(this->pdev, "SX937X_DEVICE_STATUS_A= 0x%X\n", uData);
 
-		if(ref_ph_a != 0xFF)
+		if(ref_ph_a != -1)
 		{
 			sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_a*4, &uData);
 			ref_a_use = (s32)uData >> 10;
 		}
-		if(ref_ph_b != 0xFF)
+		if(ref_ph_b != -1)
 		{
 			sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_b*4, &uData);
 			ref_b_use = (s32)uData >> 10;
-		}		
+		}
+		if(ref_ph_c != -1)
+		{
+			sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ref_ph_c*4, &uData);
+			ref_c_use = (s32)uData >> 10;
+		}
 
 		for(csx =0; csx<8; csx++)
 		{
@@ -373,34 +363,13 @@ static void read_rawData(psx93XX_t this)
 
 			state = psmtcButtons[csx].state;
 
-			if(ref_ph_a != 0xFF && ref_ph_b != 0xFF)
-			{
-				dev_info(this->pdev,
-				"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
-				csx, diff, useful, ref_ph_a, ref_a_use, ref_ph_b, ref_b_use, state, offset, average);
-			}
-			else if(ref_ph_a != 0xFF)
-			{				
-				dev_info(this->pdev,
-				"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
-				csx, diff, useful, ref_ph_a, ref_a_use, state, offset, average);
-			}
-			else if(ref_ph_b != 0xFF)
-			{				
-				dev_info(this->pdev,
-				"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
-				csx, diff, useful, ref_ph_b, ref_b_use, state, offset, average);
-			}
-			else
-			{			
-				dev_info(this->pdev,
-				"SMTC_DAT PH= %d DIFF= %d USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
-				csx, diff, useful, state, offset, average);
-			}
+			dev_info(this->pdev,
+			"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
+			csx, diff, useful, ref_ph_a, ref_a_use, ref_ph_b, ref_b_use, ref_ph_c, ref_c_use, state, offset, average);
 		}
 
 		read_dbg_raw(this);
-	}	
+	}
 }
 
 static ssize_t capsense_reset_store(struct class *class,
@@ -929,6 +898,7 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 
 	pdata->ref_phase_a = -1;
 	pdata->ref_phase_b = -1;
+	pdata->ref_phase_c = -1;
 	if ( of_property_read_u32(dNode,"Semtech,ref-phases-a",&pdata->ref_phase_a) )
 	{
 		LOG_ERR("[SX937x]: %s - get ref-phases error\n", __func__);
@@ -939,7 +909,13 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 		LOG_ERR("[SX937x]: %s - get ref-phases-b error\n", __func__);
         return -ENODEV;
 	}
-	LOG_INFO("ref_phase_a= %d ref_phase_b= %d\n", pdata->ref_phase_a, pdata->ref_phase_b);
+	if ( of_property_read_u32(dNode,"Semtech,ref-phases-c",&pdata->ref_phase_c) )
+	{
+		LOG_ERR("[SX937x]: %s - get ref-phases-c error\n", __func__);
+        return -ENODEV;
+	}
+	LOG_INFO("[SX937x]: %s ref_phase_a= %d ref_phase_b= %d ref_phase_c= %d\n",
+		__func__, pdata->ref_phase_a, pdata->ref_phase_b, pdata->ref_phase_c);
 
 #ifdef USE_DTS_REG
 	// load in registers from device tree
@@ -1068,7 +1044,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 			if (enable == 1) {
 				LOG_INFO("enable cap sensor : %s\n", sensors_cdev->name);
 				sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
-				temp = temp | 0x000000F7;
+				temp = temp | 0x0000007F;
 				LOG_DBG("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
 				sx937x_i2c_write_16bit(global_sx937x, SX937X_GENERAL_SETUP, temp);
 				psmtcButtons[i].enabled = true;
@@ -1098,7 +1074,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 		LOG_INFO("disable all chs\n");
 		sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
 		LOG_DBG("read reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
-		temp = temp & 0xFFFFFF08;
+		temp = temp & 0xFFFFFF00;
 		LOG_DBG("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
 		sx937x_i2c_write_16bit(global_sx937x, SX937X_GENERAL_SETUP, temp);
 	}

@@ -330,13 +330,13 @@ static const struct smtc_reg_data sx937x_i2c_reg_setup[] =
 	{0x807C, 0x85C}, 		//AFE_PARAM_PH7
 
 	//set CS3 to hiz, because it used as IRQ pin
-	{0x8030, 0xFFF9FD}, 	//REG_AFEPH_PH0		
-	{0x803C, 0xFFF9EF}, 	//REG_AFEPH_PH1		
-	{0x8048, 0xFFF97F}, 	//REG_AFEPH_PH2		
-//	{0x8054, 0xFFFBFF}, 	//REG_AFEPH_PH3		
-	{0x8060, 0xFFD9FF}, 	//REG_AFEPH_PH4		
-	{0x806C, 0xFEF9FF}, 	//REG_AFEPH_PH5		
-	{0x8078, 0xF7F9FF}, 	//REG_AFEPH_PH6		
+	{0x8030, 0xFFF9FD}, 	//REG_AFEPH_PH0
+	{0x803C, 0xFFF9EF}, 	//REG_AFEPH_PH1
+	{0x8048, 0xFFF97F}, 	//REG_AFEPH_PH2
+//	{0x8054, 0xFFFBFF}, 	//REG_AFEPH_PH3
+	{0x8060, 0xFFD9FF}, 	//REG_AFEPH_PH4
+	{0x806C, 0xFEF9FF}, 	//REG_AFEPH_PH5
+	{0x8078, 0xF7F9FF}, 	//REG_AFEPH_PH6
 	{0x8084, 0xBFF9FF}, 	//REG_AFEPH_PH7
 
 	//prox1 5000	0x64
@@ -434,6 +434,7 @@ struct sx937x_platform_data
 	int irq_gpio;
 	int ref_phase_a;
 	int ref_phase_b;
+	int ref_phase_c;
 	int eldo_gpio;
 	bool eldo_vdd_en;
 	sx937x_power_supply_type_t power_supply_type;
