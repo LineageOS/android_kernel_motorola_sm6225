@@ -9,4 +9,5 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules/
 else
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 endif
+KBUILD_OPTIONS_GKI += GKI_OBJ_MODULE_DIR=gki
 include $(DLKM_DIR)/AndroidKernelModule.mk
