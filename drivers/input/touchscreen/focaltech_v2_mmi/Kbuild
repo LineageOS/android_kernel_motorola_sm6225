@@ -1,0 +1,28 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_v2_mmi \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_v2_mmi/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_v2_mmi/focaltech_test
+
+obj-m := focaltech_v2_mmi.o
+focaltech_v2_mmi-objs += focaltech_core.o
+focaltech_v2_mmi-objs += focaltech_ex_fun.o
+focaltech_v2_mmi-objs += focaltech_ex_mode.o
+focaltech_v2_mmi-objs += focaltech_gesture.o
+focaltech_v2_mmi-objs += focaltech_esdcheck.o
+focaltech_v2_mmi-objs += focaltech_point_report_check.o
+focaltech_v2_mmi-objs += focaltech_flash.o
+focaltech_v2_mmi-objs += focaltech_flash/focaltech_upgrade_ft3518u.o
+focaltech_v2_mmi-objs += focaltech_i2c.o
+
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_PALM)),)
+	EXTRA_CFLAGS += -DFOCALTECH_PALM_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_PEN_NOTIFIER)),)
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../misc/pen/Module.symvers
+	EXTRA_CFLAGS += -DFOCALTECH_PEN_NOTIFIER
+endif
