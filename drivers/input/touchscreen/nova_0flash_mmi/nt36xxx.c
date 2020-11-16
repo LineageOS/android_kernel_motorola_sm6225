@@ -114,11 +114,8 @@ struct nvt_ts_data *ts;
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static struct drm_panel *active_panel;
-#endif
-#endif
-
-#if defined(NVT_CONFIG_DRM_PANEL)
 static const char *active_panel_name = NULL;
+#endif
 #endif
 
 #if BOOT_UPDATE_FIRMWARE
@@ -1161,12 +1158,8 @@ static int nova_check_dt(struct device_node *np)
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			active_panel = panel;
-#if defined(NVT_CONFIG_DRM_PANEL)
 			active_panel_name = node->name;
 			NVT_LOG("nova_check_dt, active_panel: %s !\n", active_panel_name);
-#else
-			NVT_LOG("nova_check_dt, active_panel found!\n");
-#endif
 			return 0;
 		}
 	}
@@ -1180,7 +1173,7 @@ static int32_t nvt_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	int32_t ret = 0;
-#if defined(NVT_CONFIG_DRM_PANEL)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 	int num_of_panel_supplier;
 	int j;
 	const char *panel_supplier;
@@ -1201,7 +1194,7 @@ static int32_t nvt_parse_dt(struct device *dev)
 		NVT_LOG("SWRST_N8_ADDR=0x%06X\n", SWRST_N8_ADDR);
 	}
 
-#if defined(NVT_CONFIG_DRM_PANEL)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 	num_of_panel_supplier = of_property_count_strings(np, "novatek,panel-supplier");
 	NVT_LOG("%s: get novatek,panel-supplier count=%d", __func__, num_of_panel_supplier);
 	if (active_panel_name && num_of_panel_supplier > 1) {
@@ -1216,12 +1209,10 @@ static int32_t nvt_parse_dt(struct device *dev)
 				break;
 			}
 		}
-	} else if (1 == num_of_panel_supplier) {
+	} else {
 		//in case the panel-supplier info does not completely contained in panel name.
 		ret = of_property_read_string(np, "novatek,panel-supplier",
 			&ts->panel_supplier);
-	} else {
-		ret = -EINVAL;
 	}
 #else
 	ret = of_property_read_string(np, "novatek,panel-supplier",
@@ -1247,7 +1238,7 @@ static int32_t nvt_parse_dt(struct device *dev)
 			ts->panel_supplier);
 
 		//Support FW name with panel & IC info
-#if defined(NVT_CONFIG_DRM_PANEL)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 		if (active_panel_name) {
 			const char *ic_name;
 			int num_of_ic = of_property_count_strings(np, "novatek,fw_ic_info");
