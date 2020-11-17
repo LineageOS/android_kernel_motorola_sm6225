@@ -151,6 +151,8 @@
 		panel = <&dsi_djn_nt36525c_652_video &dsi_djn_nt36525b_652_video>;
 		novatek,panel-supplier = "djn1";
 		novatek,fw_ic_info = "nt36525c", "nt36525b";
+                novatek,def-build-id = <0x0201>;
+                novatek,def-config-id = <0x602a>;
 	};
 	ilitek@1 {
 		compatible = "tchip,ilitek";
