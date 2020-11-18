@@ -1122,6 +1122,9 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 
 	if (panel->hbm_type == HBM_TYPE_LCD_DCS_GPIO) {
 		if (gpio_is_valid(panel->hbm_en_gpio)) {
+			struct panel_param *panel_param = &dsi_panel_param[0][PARAM_HBM_ID];
+
+			panel_param->value = param_info->value;
 			if (param_info->value) {
 				gpio_direction_output(panel->hbm_en_gpio, 1);
 				pr_info("Set HBM to (%d) with GPIO%d\n", param_info->value, panel->hbm_en_gpio);
@@ -2819,8 +2822,8 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 	if (!gpio_is_valid(panel->hbm_en_gpio))
 		DSI_ERR("%s:%d, HBM enable gpio not specified\n",
 						__func__, __LINE__);
-
-	DSI_ERR("%s:%d, HBM enable gpio not specified, gpio%d\n",
+	else
+		DSI_INFO("%s:%d, HBM enable gpio%d\n",
 					__func__, __LINE__, panel->hbm_en_gpio);
 
 error:
