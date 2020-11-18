@@ -151,6 +151,7 @@
 	qcom,mdss-brightness-max-level = <1740>;
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-only";
 	qcom,mdss-dsi-panel-hbm-is-51cmd;
+	qcom,tp_state_check_enable;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
