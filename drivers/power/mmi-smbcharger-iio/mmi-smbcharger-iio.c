@@ -2105,7 +2105,7 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 		mmi_dbg(chg, "No need to change hvdcp voltage\n");
 		return;
 	}
-	rc = smb_mmi_read_iio_chan(chg, SMB5_DP_DM, &val);
+	rc = smb_mmi_write_iio_chan(chg, SMB5_DP_DM, val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
 		return;
