@@ -260,7 +260,7 @@
 				23 1F 07 09 05 02 04 a0
 				23 1F 07 09 05 02 04 a0
 				23 1F 07 09 05 02 04 a0
-				23 19 08 08 05 02 04 a0];
+				23 1A 07 08 05 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
