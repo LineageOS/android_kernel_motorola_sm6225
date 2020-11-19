@@ -34,6 +34,7 @@
 #include <linux/power_supply.h>
 #include <linux/reboot.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 
 #define RESET_EXTRA_RESET_KUNPOW_REASON        BIT(9)
 
@@ -115,7 +116,11 @@ static int print_blocked_tasks(void)
 
 	pr_info("set default console loglevel\n");
 	cmd = '7';
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+	written = kernel_write(filep, &cmd, 1, &pos);
+#else
 	written = vfs_write(filep, &cmd, 1, &pos);
+#endif
 	if (written < 1) {
 		pr_err("failed to write sysrq\n");
 		rc = -EIO;
@@ -123,7 +128,11 @@ static int print_blocked_tasks(void)
 
 	pr_info("start to print block task\n");
 	cmd = 'w';
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+	written = kernel_write(filep, &cmd, 1, &pos);
+#else
 	written = vfs_write(filep, &cmd, 1, &pos);
+#endif
 	if (written < 1) {
 		pr_err("failed to write sysrq\n");
 		rc = -EIO;
@@ -241,5 +250,8 @@ static void __exit qpnp_pon_mmi_exit(void)
 }
 module_exit(qpnp_pon_mmi_exit);
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("QPNP MMI PMIC POWER-ON driver");
 MODULE_LICENSE("GPL v2");
