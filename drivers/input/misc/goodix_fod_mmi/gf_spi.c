@@ -41,7 +41,9 @@
 #include <linux/fb.h>
 #include <linux/pm_qos.h>
 #include <linux/cpufreq.h>
+#ifdef MMI_RELAY_MODULE
 #include <linux/mmi_relay.h>
+#endif
 #include "gf_spi.h"
 
 #if defined(USE_SPI_BUS)
@@ -92,13 +94,13 @@ static struct gf_key_map maps[] = {
 	{ EV_KEY, GF_NAV_INPUT_HEAVY },
 #endif
 };
-
+#ifdef MMI_RELAY_MODULE
 struct FPS_data {
 	unsigned int enabled;
 	unsigned int state;
 	struct notifier_block   relay_notif;
 } *fpsData;
-
+#endif
 static void gf_enable_irq(struct gf_dev *gf_dev)
 {
 	if (gf_dev->irq_enabled) {
@@ -118,7 +120,7 @@ static void gf_disable_irq(struct gf_dev *gf_dev)
 		pr_warn("IRQ has been disabled.\n");
 	}
 }
-
+#ifdef MMI_RELAY_MODULE
 static int fps_mmi_relay_cb(struct notifier_block *self,
 					unsigned long event, void *p)
 {
@@ -140,6 +142,7 @@ static int fps_mmi_relay_cb(struct notifier_block *self,
 
 	return 0;
 }
+
 
 static struct FPS_data *FPS_init(struct device *dev)
 {
@@ -177,17 +180,20 @@ void FPS_notify(unsigned long stype, int state)
 	} else
 		pr_warn("%s: mdata->state==state", __func__);
 }
-
+#endif
 static ssize_t dev_enable_set(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	int state = (*buf == '1') ? 1 : 0;
-
+#ifdef MMI_RELAY_MODULE
 	FPS_notify(0xbeef, state);
+#endif
 	dev_dbg(dev, "%s state = %d\n", __func__, state);
 	return count;
 }
+
 static DEVICE_ATTR(dev_enable, S_IWUSR | S_IWGRP, NULL, dev_enable_set);
+
 
 static struct attribute *attributes[] = {
 	&dev_attr_dev_enable.attr,
@@ -452,14 +458,14 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 		retval = !access_ok((void __user *)arg, _IOC_SIZE(cmd));
 #else
-               retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+		retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
 #endif
 	}
 	else if (_IOC_DIR(cmd) & _IOC_WRITE){
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 		retval = !access_ok((void __user *)arg, _IOC_SIZE(cmd));
 #else
-               retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+		retval = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
 #endif
 	}
 	if (retval)
@@ -573,7 +579,9 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
+#ifdef MMI_RELAY_MODULE
 		FPS_notify(0xbeef, (dev_enable == 0)? 0: 1);
+#endif
 		pr_debug("%s device enable status %d\n", __func__, dev_enable);
 		break;
 
@@ -850,10 +858,10 @@ static int gf_probe(struct platform_device *pdev)
 	gf_dev->irq_enabled = 1;
 	gf_disable_irq(gf_dev);
 	device_init_wakeup(dev, true);
-
+#ifdef MMI_RELAY_MODULE
 	fpsData = FPS_init(dev);
+#endif
 	status = sysfs_create_group(&dev->kobj, &attribute_group);
-
 	if (status) {
 		pr_err("failed to create sysfs group. %d\n", status);
 		goto err_sysfs;
