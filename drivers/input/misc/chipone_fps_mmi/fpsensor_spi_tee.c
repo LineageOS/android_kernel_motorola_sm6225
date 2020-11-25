@@ -250,11 +250,17 @@ static void fpsensor_dev_cleanup(fpsensor_data_t *fpsensor)
 {
     FUNC_ENTRY();
 
+    if (fpsensor->class == NULL) {
+        fpsensor_debug(INFO_LOG, "Cleanup with fpsensor = NULL\n");
+        goto out;
+    }
     cdev_del(&fpsensor->cdev);
     unregister_chrdev_region(fpsensor->devno, FPSENSOR_NR_DEVS);
     device_destroy(fpsensor->class, fpsensor->devno);
     class_destroy(fpsensor->class);
+    fpsensor->class = NULL;
 
+out:
     FUNC_EXIT();
 }
 
@@ -295,14 +301,18 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
         break;
 
     case FPSENSOR_IOC_EXIT:
-        fpsensor_disable_irq(fpsensor_dev);
-        if (fpsensor_dev->irq) {
-            free_irq(fpsensor_dev->irq, fpsensor_dev);
-            fpsensor_dev->irq_enabled = 0;
+        if(fpsensor_dev->device_available) {
+            fpsensor_disable_irq(fpsensor_dev);
+            if (fpsensor_dev->irq) {
+                devm_free_irq(&g_fpsensor->spi->dev, fpsensor_dev->irq, fpsensor_dev);
+                fpsensor_dev->irq_enabled = 0;
+            }
+            fpsensor_dev->device_available = 0;
+            fpsensor_gpio_free(fpsensor_dev);
+            fpsensor_debug(INFO_LOG, "%s: fpsensor exit finished======\n", __func__);
+        } else {
+            fpsensor_debug(INFO_LOG, "%s: IOC_EXIT with device_available = 0 ======\n", __func__);
         }
-        fpsensor_dev->device_available = 0;
-        fpsensor_gpio_free(fpsensor_dev);
-        fpsensor_debug(INFO_LOG, "%s: fpsensor exit finished======\n", __func__);
         break;
 
     case FPSENSOR_IOC_RESET:
@@ -341,13 +351,17 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
         fpsensor_debug(INFO_LOG, "%s: FPSENSOR_IOC_DISABLE_POWER ======\n", __func__);
         break;
     case FPSENSOR_IOC_REMOVE:
-        fpsensor_disable_irq(fpsensor_dev);
-        if (fpsensor_dev->irq) {
-            free_irq(fpsensor_dev->irq, fpsensor_dev);
-            fpsensor_dev->irq_enabled = 0;
+        if(fpsensor_dev->device_available) {
+            fpsensor_disable_irq(fpsensor_dev);
+            if (fpsensor_dev->irq) {
+                devm_free_irq(&g_fpsensor->spi->dev, fpsensor_dev->irq, fpsensor_dev);
+                fpsensor_dev->irq_enabled = 0;
+            }
+            fpsensor_gpio_free(fpsensor_dev);
+            fpsensor_dev->device_available = 0;
+        } else {
+            fpsensor_debug(INFO_LOG, "%s: IOC_REMOVE with device_available = 0 ======\n", __func__);
         }
-        fpsensor_dev->device_available = 0;
-        fpsensor_gpio_free(fpsensor_dev);
         fpsensor_dev_cleanup(fpsensor_dev);
 #if FP_NOTIFY
         fpsensor_fb_unregister_client(&fpsensor_dev->notifier);
@@ -655,27 +669,43 @@ out:
 static int fpsensor_remove(struct platform_device *pdev)
 {
     fpsensor_data_t *fpsensor_dev = g_fpsensor;
+    int ret = 0;
 
     FUNC_ENTRY();
-    fpsensor_disable_irq(fpsensor_dev);
-    if (fpsensor_dev->irq)
-        free_irq(fpsensor_dev->irq, fpsensor_dev);
+
+    if (g_fpsensor == NULL) {
+        fpsensor_debug(ERR_LOG, "%s with g_fpsensor = NULL\n", __func__);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    if(fpsensor_dev->device_available) {
+        fpsensor_disable_irq(fpsensor_dev);
+        if (fpsensor_dev->irq)
+            devm_free_irq(&g_fpsensor->spi->dev, fpsensor_dev->irq, fpsensor_dev);
+
+        fpsensor_gpio_free(fpsensor_dev);
+        fpsensor_dev->device_available = 0;
+    }
 
 #if FP_NOTIFY
     fpsensor_fb_unregister_client(&fpsensor_dev->notifier);
 #endif
-    fpsensor_gpio_free(fpsensor_dev);
+
     fpsensor_dev_cleanup(fpsensor_dev);
+
 #if FPSENSOR_WAKEUP_TYPE == FPSENSOR_WAKEUP_SOURCE
     wakeup_source_trash_internal(&g_ttw_wl);
 #else
     wake_lock_destroy(&g_ttw_wl);
 #endif
+
     kfree(fpsensor_dev);
     g_fpsensor = NULL;
 
+out:
     FUNC_EXIT();
-    return 0;
+    return ret;
 }
 
 static int fpsensor_suspend(struct platform_device *pdev, pm_message_t state)
