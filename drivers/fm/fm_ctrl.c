@@ -183,6 +183,15 @@ static int fm_ctrl_probe(struct platform_device *pdev)
 			pr_info("fm_ctrl enable elan @ factory mode\n");
 		}
 	}
+	else {
+		ret = pinctrl_select_state(drvdata->pinctrl, drvdata->pstate_default);
+		if(ret) {
+			pr_err("fm_ctrl failed to set pinctrl as default!\n");
+		}
+		else {
+			pr_info("fm_ctrl disable elan as default.\n");
+		}
+	}
 
 	ret = sysfs_create_group(&dev->kobj, &fm_ctrl_sysfs_attr_grp);
 	if (ret) {
