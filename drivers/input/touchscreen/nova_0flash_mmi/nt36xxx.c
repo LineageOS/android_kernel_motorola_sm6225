@@ -2145,7 +2145,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	struct device_node *dp = client->dev.of_node;
 
 	ret = nova_check_dt(dp);
-	if (ret == -EPROBE_DEFER) {
+	if (ret) {
 		NVT_LOG("panel error\n");
 		return ret;
 	}
