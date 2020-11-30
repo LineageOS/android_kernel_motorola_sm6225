@@ -680,6 +680,86 @@ int smblib_get_apsd_result(struct smb_mmi_charger *chg, int *type)
 }
 
 #define CHG_SHOW_MAX_SIZE 50
+static u16 smblib_mmi_address = 0;
+static ssize_t smblib_mmi_address_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long rc;
+	unsigned long mode;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	rc = kstrtoul(buf, 0, &mode);
+	if (rc) {
+		pr_err("SMBMMI: Invalid smblib mmi address value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	smblib_mmi_address = (u16)mode;
+	mmi_info(mmi_chip, "smblib mmi address value = 0x%04x\n", \
+		smblib_mmi_address);
+
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(smblib_mmi_address, 0644,
+		NULL,
+		smblib_mmi_address_store);
+
+static ssize_t smblib_mmi_data_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	u8 data = 0;
+	int rc = 0;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	rc = smblib_read_mmi(mmi_chip, smblib_mmi_address, &data);
+	if (rc) {
+		mmi_err(mmi_chip, "Couldn't read address 0x%x rc=%d\n", \
+			smblib_mmi_address, rc);
+		return rc;
+	}
+
+	mmi_info(mmi_chip, "smblib mmi read data value = 0x%02x\n", data);
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%04x: %02x\n", \
+		smblib_mmi_address, data);
+}
+
+static ssize_t smblib_mmi_data_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long data = 0;
+	int rc = 0;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	rc = kstrtoul(buf, 0, &data);
+	if (rc) {
+		pr_err("SMBMMI: Invalid smblib mmi data value = %lu\n", data);
+		return -EINVAL;
+	}
+
+	rc = smblib_write_mmi(mmi_chip, smblib_mmi_address, (u8)data);
+	if (rc) {
+		mmi_err(mmi_chip, "Couldn't write address 0x%x rc=%d\n", \
+			smblib_mmi_address, rc);
+		return rc;
+	}
+
+	mmi_info(mmi_chip, "smblib mmi write data value = 0x%02x\n", (u8)data);
+
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(smblib_mmi_data, 0644,
+		smblib_mmi_data_show,
+		smblib_mmi_data_store);
+
 static ssize_t factory_image_mode_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
@@ -4382,6 +4462,20 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			mmi_err(chip,
 				"Factory Couldn't set usb icl = 3000 rc=%d\n",
 				(int)rc);
+
+		rc = device_create_file(chip->dev,
+					&dev_attr_smblib_mmi_address);
+		if (rc) {
+			mmi_err(chip,
+				   "Couldn't create smblib_mmi_address\n");
+		}
+
+		rc = device_create_file(chip->dev,
+					&dev_attr_smblib_mmi_data);
+		if (rc) {
+			mmi_err(chip,
+				   "Couldn't create smblib_mmi_data\n");
+		}
 
 		rc = device_create_file(chip->dev,
 					&dev_attr_force_chg_usb_suspend);
