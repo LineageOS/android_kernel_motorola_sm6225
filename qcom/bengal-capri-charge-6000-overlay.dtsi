@@ -14,7 +14,7 @@
 	mtp_batterydata: qcom,battery-data {
               qcom,batt-id-range-pct = <15>;
               df-serialnum = "SB18C96996";
-              #include "qg-batterydata-ATL-4V45_6000mah.dtsi"
+              #include "qg-batterydata-atl4864356_5640mAh.dtsi"
 	};
 };
 
