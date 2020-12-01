@@ -378,8 +378,6 @@ struct smb_mmi_charger {
 	struct mmi_sm_params	sm_param[3];
 	int			base_fv_mv;
 	int			vfloat_comp_mv;
-	struct wakeup_source	*smb_mmi_hb_wake_source;
-	struct alarm		heartbeat_alarm;
 	int			suspended;
 	bool			awake;
 	int 			last_reported_soc;
@@ -2360,24 +2358,6 @@ bool mmi_charge_halted(struct smb_mmi_charger *chg)
 	return flag;
 }
 
-static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
-						      ktime_t now)
-{
-	struct smb_mmi_charger *chip = container_of(alarm,
-						    struct smb_mmi_charger,
-						    heartbeat_alarm);
-
-	mmi_dbg(chip, "HB alarm fired\n");
-
-	PM_STAY_AWAKE(chip->smb_mmi_hb_wake_source);
-	cancel_delayed_work(&chip->heartbeat_work);
-	/* Delay by 500 ms to allow devices to resume. */
-	schedule_delayed_work(&chip->heartbeat_work,
-			      msecs_to_jiffies(500));
-
-	return ALARMTIMER_NORESTART;
-}
-
 static int mmi_dual_charge_sm(struct smb_mmi_charger *chg,
 			      struct smb_mmi_chg_status *stat,
 			      int batt, int fv_offset)
@@ -3123,47 +3103,6 @@ void update_charging_limit_modes(struct smb_mmi_charger *chip, int batt_soc)
 		chip->charging_limit_modes = charging_limit_modes;
 }
 
-static bool __smb_mmi_ps_is_supplied_by(struct power_supply *supplier,
-					struct power_supply *supply)
-{
-	int i;
-
-	if (!supply->supplied_from && !supplier->supplied_to)
-		return false;
-
-	/* Support both supplied_to and supplied_from modes */
-	if (supply->supplied_from) {
-		if (!supplier->desc->name)
-			return false;
-		for (i = 0; i < supply->num_supplies; i++)
-			if (!strcmp(supplier->desc->name,
-				    supply->supplied_from[i]))
-				return true;
-	} else {
-		if (!supply->desc->name)
-			return false;
-		for (i = 0; i < supplier->num_supplicants; i++)
-			if (!strcmp(supplier->supplied_to[i],
-				    supply->desc->name))
-				return true;
-	}
-
-	return false;
-}
-
-static int __smb_mmi_ps_changed(struct device *dev, void *data)
-{
-	struct power_supply *psy = data;
-	struct power_supply *pst = dev_get_drvdata(dev);
-
-	if (__smb_mmi_ps_is_supplied_by(psy, pst)) {
-		if (pst->desc->external_power_changed)
-			pst->desc->external_power_changed(pst);
-	}
-
-	return 0;
-}
-
 static void smb_mmi_power_supply_changed(struct power_supply *psy,
 					 char *envp_ext[])
 {
@@ -3171,19 +3110,12 @@ static void smb_mmi_power_supply_changed(struct power_supply *psy,
 		dev_err(&psy->dev, "SMBMMI: %s: %s\n", __func__, envp_ext[0]);
 	}
 
-	class_for_each_device(power_supply_class, NULL, psy,
-			      __smb_mmi_ps_changed);
-	atomic_notifier_call_chain(&power_supply_notifier,
-			PSY_EVENT_PROP_CHANGED, psy);
 	kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
 }
 
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
-static int suspend_wakeups;
-module_param(suspend_wakeups, int, 0644);
 #define TWO_VOLT 2000000
-#define SMBCHG_HEARTBEAT_INTRVAL_NS	70000000000
 #define MONOTONIC_SOC 2 /* 2 percent */
 static void mmi_heartbeat_work(struct work_struct *work)
 {
@@ -3219,7 +3151,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 
 	smb_mmi_awake_vote(chip, true);
-	alarm_try_to_cancel(&chip->heartbeat_alarm);
 
 	mmi_dbg(chip, "Heartbeat!\n");
 
@@ -3559,9 +3490,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 sch_hb:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
-	if (suspend_wakeups || chg_stat.charger_present)
-		alarm_start_relative(&chip->heartbeat_alarm,
-				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
 
 	if (!chg_stat.charger_present)
 		smb_mmi_awake_vote(chip, false);
@@ -3586,7 +3514,6 @@ sch_hb:
 
 	kfree(chrg_rate_string);
 
-	PM_RELAX(chip->smb_mmi_hb_wake_source);
 }
 
 static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
@@ -4224,15 +4151,6 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
 	INIT_DELAYED_WORK(&chip->weakcharger_work, mmi_weakcharger_work);
 
-	PM_WAKEUP_REGISTER(chip->dev, chip->smb_mmi_hb_wake_source, "smb_mmi_hb_wake");
-	if (!chip->smb_mmi_hb_wake_source) {
-		mmi_err(chip, "failed to allocate wakeup source\n");
-		return -ENOMEM;
-	}
-
-	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
-		   mmi_heartbeat_alarm_cb);
-
 	chip->mmi_psy = devm_power_supply_register(chip->dev, &mmi_psy_desc,
 						   &psy_cfg);
 	if (IS_ERR(chip->mmi_psy)) {
@@ -4563,8 +4481,6 @@ static void smb_mmi_shutdown(struct platform_device *pdev)
 		power_supply_put(chip->max_main_psy);
 	if (chip->max_flip_psy)
 		power_supply_put(chip->max_flip_psy);
-
-	PM_WAKEUP_UNREGISTER(chip->smb_mmi_hb_wake_source);
 
 	return;
 }
