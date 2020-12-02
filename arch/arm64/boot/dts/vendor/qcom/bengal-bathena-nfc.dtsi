@@ -1,0 +1,72 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se1_i2c {
+	nq@28 {
+		qcom,nq-ven = <&tlmm 2 0x00>;
+	};
+};
+
+&soc {
+	tlmm: pinctrl@400000 {
+		nfc {
+			nfc_enable_active: nfc_enable_active {
+				/* active state */
+				mux {
+					/* 2: Enable 31: Firmware */
+					pins = "gpio2", "gpio31";
+				};
+
+				config {
+					pins = "gpio2", "gpio31";
+				};
+			};
+
+			nfc_enable_suspend: nfc_enable_suspend {
+				/* sleep state */
+				mux {
+					/* 2: Enable 31: Firmware */
+					pins = "gpio2", "gpio31";
+				};
+
+				config {
+					pins = "gpio2", "gpio31";
+				};
+			};
+		};
+		qupv3_se0_spi_pins: qupv3_se0_spi_pins {
+			qupv3_se0_spi_active: qupv3_se0_spi_active {
+				mux {
+					pins = "gpio0", "gpio1",
+							"gpio3";
+				};
+
+				config {
+					pins = "gpio0", "gpio1",
+							"gpio3";
+				};
+			};
+
+			qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
+				mux {
+					pins = "gpio0", "gpio1",
+							"gpio3";
+				};
+
+				config {
+					pins = "gpio0", "gpio1",
+							"gpio3";
+				};
+			};
+		};
+	};
+};

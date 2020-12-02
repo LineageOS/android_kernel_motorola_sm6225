@@ -16,6 +16,7 @@
 #include "bengal-guamp-common-overlay.dtsi"
 #include "bengal-guam-awinic-audio-overlay.dtsi"
 #include "bengal-hbm-display.dtsi"
+#include "bengal-bathena-nfc.dtsi"
 
 / {
 	model = "guamp";
