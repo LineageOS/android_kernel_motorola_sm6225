@@ -283,7 +283,7 @@ static void read_dbg_raw(psx93XX_t this)
 	sx937x_i2c_read_16bit(this, SX937X_DEBUG_READBACK_2, &uData);
 	ant_raw = (s32)uData>>10;
 	sx937x_i2c_read_16bit(this, SX937X_DEBUG_READBACK_3, &uData);
-	use_flt_dlt_var = (s32)uData>>3;
+	use_flt_dlt_var = (s32)uData>>4;
 
 	ph = (ph_sel >>= 3) & 0x7;
 	if (ph >=0 && ph <= 7)
