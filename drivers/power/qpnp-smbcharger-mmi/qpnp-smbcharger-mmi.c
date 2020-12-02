@@ -1909,6 +1909,8 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 	int rc = -EINVAL;
 	union power_supply_propval val = {0, };
 	int pulse_cnt;
+	bool usb_present = false;
+	union power_supply_propval charger_val = {0, };
 
 	rc = power_supply_get_property(chg->qcom_psy,
 			POWER_SUPPLY_PROP_DP_DM, &val);
@@ -1951,6 +1953,17 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 				break;
 			} else {
 				pulse_cnt = val.intval;
+			}
+
+			rc = get_prop_usb_present(chg,&charger_val);
+			if (rc < 0){
+				mmi_err(chg, "Couldn't read usb_present rc=%d\n", rc);
+			}else
+				usb_present = charger_val.intval;
+
+			if(cur_mv <= 3000 && usb_present == false ){
+				mmi_err(chg, "%s, charger detect error, exit increase voltage\n", __func__);
+				break;
 			}
 
 			mmi_info(chg, "pulse count = %d, cur_mv = %d\n", pulse_cnt, cur_mv);
