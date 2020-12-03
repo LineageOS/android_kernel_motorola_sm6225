@@ -16,56 +16,54 @@
 	};
 };
 
-&soc {
-	tlmm: pinctrl@400000 {
-		nfc {
-			nfc_enable_active: nfc_enable_active {
-				/* active state */
-				mux {
-					/* 2: Enable 31: Firmware */
-					pins = "gpio2", "gpio31";
-				};
-
-				config {
-					pins = "gpio2", "gpio31";
-				};
+&tlmm {
+	nfc {
+		nfc_enable_active: nfc_enable_active {
+			/* active state */
+			mux {
+				/* 2: Enable 31: Firmware */
+				pins = "gpio2", "gpio31";
 			};
 
-			nfc_enable_suspend: nfc_enable_suspend {
-				/* sleep state */
-				mux {
-					/* 2: Enable 31: Firmware */
-					pins = "gpio2", "gpio31";
-				};
-
-				config {
-					pins = "gpio2", "gpio31";
-				};
+			config {
+				pins = "gpio2", "gpio31";
 			};
 		};
-		qupv3_se0_spi_pins: qupv3_se0_spi_pins {
-			qupv3_se0_spi_active: qupv3_se0_spi_active {
-				mux {
-					pins = "gpio0", "gpio1",
-							"gpio3";
-				};
 
-				config {
-					pins = "gpio0", "gpio1",
-							"gpio3";
-				};
+		nfc_enable_suspend: nfc_enable_suspend {
+			/* sleep state */
+			mux {
+				/* 2: Enable 31: Firmware */
+				pins = "gpio2", "gpio31";
 			};
 
-			qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
-				mux {
-					pins = "gpio0", "gpio1",
-							"gpio3";
-				};
+			config {
+				pins = "gpio2", "gpio31";
+			};
+		};
+	};
+	qupv3_se0_spi_pins: qupv3_se0_spi_pins {
+		qupv3_se0_spi_active: qupv3_se0_spi_active {
+			mux {
+				pins = "gpio0", "gpio1",
+						"gpio3";
+			};
 
-				config {
-					pins = "gpio0", "gpio1",
-							"gpio3";
-				};
+			config {
+				pins = "gpio0", "gpio1",
+						"gpio3";
+			};
+		};
+
+		qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
+			mux {
+				pins = "gpio0", "gpio1",
+						"gpio3";
+			};
+
+			config {
+				pins = "gpio0", "gpio1",
+						"gpio3";
 			};
 		};
 	};
