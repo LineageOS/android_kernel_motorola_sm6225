@@ -342,7 +342,7 @@ struct usb_request *usb_get_xmit_request(int stop_flag, struct net_device *dev)
 	return req;
 }
 
-static int usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
+static netdev_tx_t usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct usbnet_context *context = netdev_priv(dev);
 	struct usb_request *req;
