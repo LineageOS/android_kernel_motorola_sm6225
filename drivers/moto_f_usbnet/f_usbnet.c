@@ -357,14 +357,14 @@ static netdev_tx_t usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev_kfree_skb_any(skb);
 		USBNETDBG(context,
 			 "%s:bulk_in end point is disabled\n", __func__);
-		return 0;
+		return NETDEV_TX_OK;
 	}
 
 	if (!context->bulk_in->enabled) {
 		dev_kfree_skb_any(skb);
 		USBNETDBG(context,
 			 "%s: bulk_in didn't enabled\n", __func__);
-		return 0;
+		return NETDEV_TX_OK;
 	}
 
 	req = usb_get_xmit_request(STOP_QUEUE, dev);
@@ -372,7 +372,7 @@ static netdev_tx_t usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!req) {
 		USBNETDBG(context, "%s: could not obtain tx request\n",
 			__func__);
-		return 1;
+		return NETDEV_TX_BUSY;
 	}
 
 	/* Add 4 bytes CRC */
@@ -400,7 +400,7 @@ static netdev_tx_t usb_ether_xmit(struct sk_buff *skb, struct net_device *dev)
 			  "%s: could not queue tx request\n", __func__);
 	}
 
-	return 0;
+	return NETDEV_TX_OK;
 }
 
 static int usb_ether_open(struct net_device *dev)
