@@ -22,6 +22,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pid.h>
+#include <linux/kprobes.h>
 
 #include <linux/signal.h>
 #include <linux/platform_device.h>
@@ -55,6 +56,9 @@ static struct tracepoint * tracepoint_signal_generate = NULL;
 #endif
 
 static const char stat_nam[] = TASK_STATE_TO_CHAR_STR;
+
+typedef unsigned long(*kallsyms_lookup_name_func_t)(const char *name);
+static kallsyms_lookup_name_func_t kallsyms_lookup_name_func;
 
 /*
  * This portion of the code can be used as template if user want to add specific
@@ -168,8 +172,24 @@ static void probe_death_signal(void *ignore, int sig, struct siginfo *info,
 
 static int __init init_signal_log(void)
 {
+	int ret = -1;
+	struct kprobe kp = {
+		.symbol_name = "kallsyms_lookup_name",
+	};
+
+	ret = register_kprobe(&kp);
+	if (ret < 0) {
+		pr_err("Failed to register kprobe, %d\n", ret);
+		return ret;
+	}
+	unregister_kprobe(&kp);
+	kallsyms_lookup_name_func = (kallsyms_lookup_name_func_t)kp.addr;
+	if (!kallsyms_lookup_name_func) {
+		pr_err("Failed to get kallsyms_lookup_name address\n");
+		return -ENXIO;
+	}
 	//register_trace_signal_generate(probe_death_signal, NULL);
-	tracepoint_signal_generate = (struct tracepoint *)kallsyms_lookup_name("__tracepoint_signal_generate");
+	tracepoint_signal_generate = (struct tracepoint *)kallsyms_lookup_name_func("__tracepoint_signal_generate");
 	if (!tracepoint_signal_generate) {
 		pr_err("Failed to get __tracepoint_signal_generate address\n");
 		return -ENXIO;
