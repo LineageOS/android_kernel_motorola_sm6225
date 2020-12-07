@@ -837,6 +837,21 @@ static int dsi_display_status_check_te(struct dsi_display *display)
 	return rc;
 }
 
+static int dsi_display_status_check_te_video(struct dsi_display *display)
+{
+	int rc = 1;
+	struct dsi_panel *panel = display->panel;
+
+	if((panel->video_te_count - panel->video_te_count_priv) > 1) {
+		panel->video_te_count_priv = panel->video_te_count;
+	} else {
+		DSI_ERR("%s: video TE check ERROR te_count %d, priv =%d\n", __func__, panel->video_te_count, panel->video_te_count_priv);
+		rc = 0;
+	}
+
+	return rc;
+}
+
 int dsi_display_check_status(struct drm_connector *connector, void *display,
 					bool te_check_override)
 {
@@ -895,6 +910,8 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 		rc = dsi_display_status_reg_read(dsi_display);
 	} else if (status_mode == ESD_MODE_SW_BTA) {
 		rc = dsi_display_status_bta_request(dsi_display);
+	} else if (status_mode == ESD_MODE_PANEL_TE_VIDEO) {
+		rc = dsi_display_status_check_te_video(dsi_display);
 	} else if (status_mode == ESD_MODE_PANEL_TE) {
 		rc = dsi_display_status_check_te(dsi_display);
 	} else {
@@ -4055,6 +4072,76 @@ error:
 	return rc;
 }
 
+static void dsi_video_te_irq_work(struct work_struct *work)
+{
+	struct dsi_panel *panel = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+
+	panel = container_of(dw, struct dsi_panel, te_event_work);
+	if (!panel) {
+		DSI_ERR("%s: invalid panel data\n", __func__);
+		return;
+	}
+
+	if(panel->video_te_count%60 == 0)
+		DSI_INFO("%s video te count = %d\n", __func__, panel->video_te_count);
+
+	enable_irq(panel->video_te_irq);
+}
+
+extern u32 interval_video_te;
+static irqreturn_t dsi_video_te_interrupt(int irq, void *data)
+{
+	struct dsi_panel *panel = data;
+
+	disable_irq_nosync(irq);
+
+	if(panel->video_te_count++ < 3000) {
+		enable_irq(irq);
+	} else {
+		queue_delayed_work(panel->workq, &panel->te_event_work, msecs_to_jiffies(interval_video_te/3));
+		//DSI_DEBUG("%s video_te_count=%d\n", __func__, panel->video_te_count);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int dsi_init_video_te_irq(struct dsi_panel *panel)
+{
+	int rc = -1;
+
+	if (gpio_is_valid(panel->video_te_gpio)) {
+		rc = gpio_request(panel->video_te_gpio, "video-te-gpio");
+		if (rc < 0) {
+			DSI_ERR("%s: video te gpio_request fail rc=%d\n", __func__,rc);
+			return rc ;
+		}
+
+		rc = gpio_direction_input(panel->video_te_gpio);
+		if (rc < 0) {
+			DSI_ERR("%s: video te gpio_direction_input fail rc=%d\n", __func__ ,rc);
+			return rc ;
+		}
+
+		panel->video_te_count_priv = 0;
+		panel->video_te_count = 3;
+		panel->video_te_irq = gpio_to_irq(panel->video_te_gpio);
+		DSI_INFO("%s:	irq = %d, gpio=%d\n", __func__, panel->video_te_irq, panel->video_te_gpio);
+
+		rc = request_threaded_irq(panel->video_te_irq, dsi_video_te_interrupt, NULL,
+									 IRQF_TRIGGER_RISING|IRQF_ONESHOT, "video-te-irq", panel);
+		if (rc < 0) {
+			DSI_ERR("%s: video te request_irq fail rc=%d\n",__func__, rc);
+			return rc ;
+		}
+	} else {
+		DSI_ERR("%s: video te irq gpio not provided\n", __func__);
+		return rc ;
+	}
+
+	return 0;
+}
+
 static int dsi_display_res_init(struct dsi_display *display)
 {
 	int rc = 0;
@@ -4115,6 +4202,17 @@ static int dsi_display_res_init(struct dsi_display *display)
 	if (rc) {
 		DSI_ERR("Failed to parse clock data, rc=%d\n", rc);
 		goto error_ctrl_put;
+	}
+
+	if(display->panel->esd_config.status_mode == ESD_MODE_PANEL_TE_VIDEO) {
+		display->panel->workq = create_workqueue("mdss_dsi_video_te");
+		if (!(display->panel->workq)) {
+			DSI_ERR("%s: Error creating video te workqueue\n", __func__);
+			goto error_ctrl_put;
+		}
+
+		INIT_DELAYED_WORK(&(display->panel->te_event_work), dsi_video_te_irq_work);
+		dsi_init_video_te_irq(display->panel);
 	}
 
 	return 0;
