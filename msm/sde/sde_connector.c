@@ -2292,6 +2292,7 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	return ret;
 }
 
+u32 interval_video_te = STATUS_CHECK_INTERVAL_MS;
 static void sde_connector_check_status_work(struct work_struct *work)
 {
 	struct sde_connector *conn;
@@ -2327,6 +2328,9 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		/* If debugfs property is not set then take default value */
 		interval = conn->esd_status_interval ?
 			conn->esd_status_interval : STATUS_CHECK_INTERVAL_MS;
+
+		interval_video_te = interval;
+
 		schedule_delayed_work(&conn->status_work,
 			msecs_to_jiffies(interval));
 		return;

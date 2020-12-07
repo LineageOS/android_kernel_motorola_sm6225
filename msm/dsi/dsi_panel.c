@@ -2760,6 +2760,12 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 	panel->reset_config.tp_rst_gpio = utils->get_named_gpio(utils->data,
 					"qcom,mdss-dsi-tp-rst-gpio", 0);
 
+	panel->video_te_gpio = utils->get_named_gpio(utils->data,
+					"qcom,video-te-gpio", 0);
+	if (panel->video_te_gpio && gpio_is_valid(panel->video_te_gpio)) {
+		DSI_INFO("%s:%d, Video TE gpio is specified\n", __func__, __LINE__);
+	}
+
 	panel->reset_config.disp_en_gpio = utils->get_named_gpio(utils->data,
 						"qcom,5v-boost-gpio",
 						0);
@@ -3828,6 +3834,8 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 			esd_config->status_mode = ESD_MODE_SW_BTA;
 		} else if (!strcmp(string, "reg_read")) {
 			esd_config->status_mode = ESD_MODE_REG_READ;
+		} else if (!strcmp(string, "te_signal_check_video")) {
+			esd_config->status_mode = ESD_MODE_PANEL_TE_VIDEO;
 		} else if (!strcmp(string, "te_signal_check")) {
 			if (panel->panel_mode == DSI_OP_CMD_MODE) {
 				esd_config->status_mode = ESD_MODE_PANEL_TE;
@@ -3857,6 +3865,8 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 		esd_mode = "register_read";
 	} else if (panel->esd_config.status_mode == ESD_MODE_SW_BTA) {
 		esd_mode = "bta_trigger";
+	} else if (panel->esd_config.status_mode == ESD_MODE_PANEL_TE_VIDEO) {
+		esd_mode = "te_check_video";
 	} else if (panel->esd_config.status_mode ==  ESD_MODE_PANEL_TE) {
 		esd_mode = "te_check";
 	}

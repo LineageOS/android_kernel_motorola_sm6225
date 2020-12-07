@@ -196,6 +196,7 @@ enum esd_check_status_mode {
 	ESD_MODE_REG_READ,
 	ESD_MODE_SW_BTA,
 	ESD_MODE_PANEL_TE,
+	ESD_MODE_PANEL_TE_VIDEO,
 	ESD_MODE_SW_SIM_SUCCESS,
 	ESD_MODE_SW_SIM_FAILURE,
 	ESD_MODE_MAX
@@ -290,6 +291,13 @@ struct dsi_panel {
 	struct dsi_pinctrl_info pinctrl;
 	struct drm_panel_hdr_properties hdr_props;
 	struct drm_panel_esd_config esd_config;
+
+	struct workqueue_struct *workq;
+	struct delayed_work te_event_work;
+	int video_te_gpio;
+	u32 video_te_count;
+	u32 video_te_count_priv;
+	int video_te_irq;
 
 	struct dsi_parser_utils utils;
 
