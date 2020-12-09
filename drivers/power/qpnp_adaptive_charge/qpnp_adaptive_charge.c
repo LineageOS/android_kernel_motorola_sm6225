@@ -27,10 +27,22 @@
  */
 #define pr_fmt(fmt)	"qpnp_adap_chg-[%s]: " fmt, __func__
 #include <linux/module.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 61))
+#include <linux/mmi-pmic-voter.h>
+#else
 #include <linux/pmic-voter.h>
+#endif
 #include <linux/power_supply.h>
 #include <linux/notifier.h>
 #include <linux/moduleparam.h>
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 61))
+#define vote(votable, client_str, enabled, val) \
+	mmi_vote(votable, client_str, enabled, val)
+
+#define find_votable(name) mmi_find_votable(name)
+#endif
 
 static struct adap_chg_data {
 	struct power_supply	*batt_psy;

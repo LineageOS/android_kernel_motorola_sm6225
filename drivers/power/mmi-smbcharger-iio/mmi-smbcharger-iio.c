@@ -16,7 +16,12 @@
 #include <linux/reboot.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 61))
+#include <linux/mmi-pmic-voter.h>
+#else
 #include <linux/pmic-voter.h>
+#endif
 #include <linux/of_device.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -32,6 +37,22 @@
 #include <linux/qti_power_supply.h>
 
 #define MODULE_LOG "SMBMMI"
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 61))
+#define get_effective_result(votable) \
+	mmi_get_effective_result(votable)
+
+#define vote(votable, client_str, enabled, val) \
+	mmi_vote(votable, client_str, enabled, val)
+
+#define find_votable(name) mmi_find_votable(name)
+
+#define pmic_vote_force_val_set(votable, val) \
+	mmi_pmic_vote_force_val_set(votable, val)
+
+#define pmic_vote_force_active_set(votable, val) \
+	mmi_pmic_vote_force_active_set(votable, val)
+#endif
 
 #define mmi_err(chg, fmt, ...)					\
 	do {							\
