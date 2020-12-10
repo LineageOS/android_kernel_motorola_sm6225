@@ -681,10 +681,63 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
     return 0;
 }
 
+#if FTS_USB_DETECT_EN
+static void fts_mcu_usb_detect_set(uint8_t usb_connected)
+{
+	uint8_t write_data = 0;
+	uint8_t read_data = 0;
+	uint8_t retry_cnt = 0;
+	int	ret = 0;
+
+	do{
+		if (usb_connected == 0x01) {
+			write_data= 0x01;
+			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, write_data);
+			if (ret < 0)
+				FTS_ERROR("set register USB IN fail, ret=%d", ret);
+			FTS_INFO("%s: USB detect status IN!\n", __func__);
+		} else {
+			write_data= 0x00;
+			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, write_data);
+			if (ret < 0)
+				FTS_ERROR("set register USB OUT fail, ret=%d", ret);
+			FTS_INFO("%s: USB detect status OUT!\n", __func__);
+		}
+
+		ret = fts_read_reg(FTS_REG_CHARGER_MODE_EN, &read_data);
+		if (ret < 0)
+			FTS_ERROR("read 8b register fail, ret=%d", ret);
+		retry_cnt++;
+	}while((write_data != read_data) && retry_cnt < FTS_REG_RETRY_TIMES);
+}
+
+void fts_cable_detect_func(bool force_renew)
+{
+	struct fts_ts_data *ts_data = fts_data;
+	uint8_t connect_status = 0;
+	connect_status = ts_data->usb_detect_flag;
+
+	if ((connect_status != ts_data->usb_connected) || force_renew) {
+		if (connect_status) {
+			ts_data->usb_connected = 0x01;
+		} else {
+			ts_data->usb_connected = 0x00;
+		}
+
+		fts_mcu_usb_detect_set(ts_data->usb_connected);
+		FTS_INFO("%s: Cable status change: 0x%2.2X\n", __func__, ts_data->usb_connected);
+	}
+}
+#endif
+
 static void fts_irq_read_report(void)
 {
     int ret = 0;
     struct fts_ts_data *ts_data = fts_data;
+
+#if FTS_USB_DETECT_EN
+	fts_cable_detect_func(false);
+#endif
 
 #if FTS_ESDCHECK_EN
     fts_esdcheck_set_intr(1);
@@ -1813,6 +1866,10 @@ static int fts_ts_resume(struct device *dev)
     }
 
     ts_data->suspended = false;
+#if FTS_USB_DETECT_EN
+	fts_cable_detect_func(true);
+#endif
+
     FTS_FUNC_EXIT();
     return 0;
 }
