@@ -65,6 +65,9 @@
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #include <linux/touchscreen_mmi.h>
 #endif
+#ifdef FTS_USB_DETECT_EN
+#include <linux/power_supply.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -103,6 +106,9 @@
 
 #define FTX_MAX_COMPATIBLE_TYPE             4
 #define FTX_MAX_COMMMAND_LENGTH             16
+#ifdef FTS_USB_DETECT_EN
+#define FTS_REG_RETRY_TIMES                 5
+#endif
 
 
 /*****************************************************************************
@@ -207,6 +213,11 @@ struct fts_ts_data {
     struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     struct early_suspend early_suspend;
+#endif
+
+#if FTS_USB_DETECT_EN
+	bool usb_detect_flag;
+	uint8_t usb_connected;
 #endif
 
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
