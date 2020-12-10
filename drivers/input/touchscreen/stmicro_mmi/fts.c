@@ -3127,6 +3127,88 @@ static void fts_interrupt_enable(struct fts_ts_info *info)
 static int fts_init(struct fts_ts_info *info)
 {
 	int error;
+	u8 readData[3];
+
+#if !defined(I2C_INTERFACE) && defined(SPI4_WIRE)
+	/* configure manually SPI4 because when no fw is running the chip use
+	 * SPI3 by default */
+	u8 cmd[1] = {0x00};
+
+	logError(0, "%s Setting SPI4 mode...\n", tag);
+	cmd[0] = 0x10;
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			    ADDR_GPIO_DIRECTION, cmd, 1);
+	if (error < OK) {
+		logError(1, "%s can not set gpio dir ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+
+	cmd[0] = 0x02;
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			    ADDR_GPIO_PULLUP, cmd, 1);
+	if (error < OK) {
+		logError(1, "%s can not set gpio pull-up ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+
+#if defined(ALIX) || defined (SALIXP)
+#if defined(ALIX)
+	cmd[0] = 0x70;
+#else
+	cmd[0] = 0x07;
+#endif
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			    ADDR_GPIO_CONFIG_REG3, cmd, 1);
+	if (error < OK) {
+		logError(1, "%s can not set gpio config ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+
+#else
+	cmd[0] = 0x07;
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			    ADDR_GPIO_CONFIG_REG2, cmd, 1);
+	if (error < OK) {
+		logError(1, "%s can not set gpio config ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+#endif
+
+	cmd[0] = 0x30;
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			    ADDR_GPIO_CONFIG_REG0, cmd, 1);
+	if (error < OK) {
+		logError(1, "%s can not set gpio config ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+
+	cmd[0] = SPI4_MASK;
+	error = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG, ADDR_ICR, cmd,
+			    1);
+	if (error < OK) {
+		logError(1, "%s can not set spi4 mode ERROR %08X\n",
+			 tag, error);
+		return error;
+	}
+	msleep(1);	/* wait for the GPIO to stabilize */
+#endif
+	logError(1, "%s Reading chip id\n", tag);
+	error = fts_writeReadU8UX(FTS_CMD_HW_REG_R, ADDR_SIZE_HW_REG,
+					    ADDR_DCHIP_ID, readData, 2, DUMMY_FIFO);
+	logError(1, "%s chip id: %02X %02X!\n",tag, readData[0], readData[1]);
+
+	if((readData[0] != DCHIP_ID_0) || (readData[1] != DCHIP_ID_1))
+	{
+		logError(1, "%s wrong chip id detected!\n", tag);
+		return ERROR_OP_NOT_ALLOW;
+	}
+	else
+		logError(1, "%s chip id read successful!\n", tag);
 
 
 	error = fts_system_reset();
