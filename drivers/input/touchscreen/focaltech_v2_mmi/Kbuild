@@ -16,13 +16,17 @@ focaltech_v2_mmi-objs += focaltech_flash.o
 focaltech_v2_mmi-objs += focaltech_flash/focaltech_upgrade_ft3518u.o
 focaltech_v2_mmi-objs += focaltech_i2c.o
 
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+       EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+       focaltech_v2_mmi-objs += focaltech_ts_mmi.o
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_MMI_ENABLE_DOUBLE_TAP)),)
 	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
 endif
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_PALM)),)
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_MMI_ENABLE_PALM)),)
 	EXTRA_CFLAGS += -DFOCALTECH_PALM_SENSOR_EN
 endif
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_PEN_NOTIFIER)),)
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_MMI_PEN_NOTIFIER)),)
 	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../misc/pen/Module.symvers
 	EXTRA_CFLAGS += -DFOCALTECH_PEN_NOTIFIER
 endif

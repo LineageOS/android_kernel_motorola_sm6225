@@ -52,6 +52,11 @@
 #endif
 #include "focaltech_core.h"
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+extern int fts_mmi_dev_register(struct fts_ts_data *ts_data);
+extern void fts_mmi_dev_unregister(struct fts_ts_data *ts_data);
+#endif
+
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -925,7 +930,7 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 }
 #endif /* FTS_PINCTRL_EN */
 
-static int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
+int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 {
     int ret = 0;
 
@@ -1628,6 +1633,10 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     register_early_suspend(&ts_data->early_suspend);
 #endif
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+    fts_mmi_dev_register(ts_data);
+#endif
+
     FTS_FUNC_EXIT();
     return 0;
 
@@ -1660,6 +1669,10 @@ err_bus_init:
 static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 {
     FTS_FUNC_ENTER();
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+    fts_mmi_dev_unregister(ts_data);
+#endif
 
 #if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
