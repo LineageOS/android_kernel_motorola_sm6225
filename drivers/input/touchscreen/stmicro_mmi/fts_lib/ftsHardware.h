@@ -25,10 +25,18 @@
 
 /* DIGITAL CHIP INFO */
 //#define ALIX
+//#define WALNUT
+//#define SALIXP
 
 #ifdef ALIX
 #define DCHIP_ID_0			0x36	/* /< LSB chip ID for FTM5 */
 #define DCHIP_ID_1			0x48	/* /< MSB chip ID for FTM5 */
+#elif defined(WALNUT)
+#define DCHIP_ID_0			0x36	/* /< LSB chip ID for FTM5 */
+#define DCHIP_ID_1			0x50	/* /< MSB chip ID for FTM5 */
+#elif defined(SALIXP)
+#define DCHIP_ID_0			0x36	/* /< LSB chip ID for FTM5 */
+#define DCHIP_ID_1			0x40	/* /< MSB chip ID for FTM5 */
 #else
 #define DCHIP_ID_0			0x36	/* /< LSB chip ID for FTM5 */
 #define DCHIP_ID_1			0x39	/* /< MSB chip ID for FTM5 */
@@ -106,8 +114,14 @@
 #define FLASH_ERASE_CODE0		0x6A
 #define FLASH_DMA_CODE0			0x71
 #define FLASH_DMA_CONFIG		0x72
+
+#ifdef SALIXP
+#define FLASH_NUM_PAGE			48	/* /< number of pages in main
+						 * flash */
+#else
 #define FLASH_NUM_PAGE			32	/* /< number of pages in main
 						 * flash */
+#endif
 
 #define FLASH_CX_PAGE_START		28	/* /< starting page which
 						 * contain Cx data */
@@ -300,6 +314,10 @@
 #define ADDR_GPIO_CONFIG_REG2	((u64)0x000000002000003F) /* /< address of
 							 *  GPIO config register
 							 */
+#define ADDR_GPIO_CONFIG_REG3	((u64)0x000000002000003E) /* /< address of
+							 *  GPIO config register
+							 */
+
 
 
 /**@}*/
