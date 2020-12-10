@@ -61,6 +61,7 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
+#include <linux/mmi_wake_lock.h>
 #include "focaltech_common.h"
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #include <linux/touchscreen_mmi.h>
@@ -220,6 +221,9 @@ struct fts_ts_data {
 	uint8_t usb_connected;
 #endif
 
+#ifdef FOCALTECH_SENSOR_EN
+    bool wakeable;
+#endif
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
     struct ts_mmi_class_methods *imports;
 #endif

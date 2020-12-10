@@ -327,7 +327,14 @@ static int fts_mmi_post_suspend(struct device *dev)
 	GET_TS_DATA(dev);
 
 	FTS_FUNC_ENTER();
+
+#ifdef FOCALTECH_SENSOR_EN
+	if (!ts_data->wakeable) {
+#endif
 		fts_release_all_finger();
+#ifdef FOCALTECH_SENSOR_EN
+	}
+#endif
 
 	ts_data->suspended = true;
 	FTS_FUNC_EXIT();
