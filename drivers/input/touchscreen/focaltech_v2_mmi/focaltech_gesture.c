@@ -67,6 +67,10 @@
 #define GESTURE_Z                               0x41
 #define GESTURE_C                               0x34
 
+#ifdef FOCALTECH_SENSOR_EN
+#define REPORT_MAX_COUNT 10000
+#endif
+
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
@@ -91,6 +95,13 @@ struct fts_gesture_st {
 * Static variables
 *****************************************************************************/
 static struct fts_gesture_st fts_gesture_data;
+#ifdef FOCALTECH_SENSOR_EN
+#ifdef CONFIG_HAS_WAKELOCK
+static struct wake_lock gesture_wakelock;
+#else
+static struct wakeup_source *gesture_wakelock;
+#endif
+#endif
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
@@ -210,6 +221,10 @@ static int fts_create_gesture_sysfs(struct device *dev)
 static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 {
     int gesture;
+#ifdef FOCALTECH_SENSOR_EN
+    int ret = 0;
+    static int report_cnt = 0;
+#endif
 
     FTS_DEBUG("gesture_id:0x%x", gesture_id);
     switch (gesture_id) {
@@ -262,10 +277,41 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
     /* report event key */
     if (gesture != -1) {
         FTS_DEBUG("Gesture Code=%d", gesture);
+#ifdef FOCALTECH_SENSOR_EN
+        if (!fts_data->wakeable) {
+            FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
+            return;
+        }
+        /* report single tap */
+        if (gesture == KEY_GESTURE_U) {
+            if (fts_data->imports && fts_data->imports->report_gesture) {
+                struct gesture_event_data event;
+
+                FTS_INFO("invoke imported report gesture function\n");
+                event.evcode = 1;
+                /* call class method */
+                ret = fts_data->imports->report_gesture(&event);
+                ++report_cnt;
+            }
+        }
+
+        FTS_INFO("input report: %d", report_cnt);
+        if (report_cnt >= REPORT_MAX_COUNT)
+            report_cnt = 0;
+
+        if (!ret) {
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
+#else
+        PM_WAKEUP_EVENT(gesture_wakelock, 5000);
+#endif
+        }
+#else
         input_report_key(input_dev, gesture, 1);
         input_sync(input_dev);
         input_report_key(input_dev, gesture, 0);
         input_sync(input_dev);
+#endif
     }
 }
 
@@ -409,6 +455,9 @@ int fts_gesture_resume(struct fts_ts_data *ts_data)
 int fts_gesture_init(struct fts_ts_data *ts_data)
 {
     struct input_dev *input_dev = ts_data->input_dev;
+#ifdef FOCALTECH_SENSOR_EN
+    static bool initialized_sensor;
+#endif
 
     FTS_FUNC_ENTER();
     input_set_capability(input_dev, EV_KEY, KEY_POWER);
@@ -441,6 +490,23 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
     __set_bit(KEY_GESTURE_V, input_dev->keybit);
     __set_bit(KEY_GESTURE_C, input_dev->keybit);
     __set_bit(KEY_GESTURE_Z, input_dev->keybit);
+
+#ifdef FOCALTECH_SENSOR_EN
+    if (!initialized_sensor) {
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
+#else
+        PM_WAKEUP_REGISTER(ts_data->dev, gesture_wakelock, "poll-wake-lock");
+        if (!gesture_wakelock) {
+            FTS_ERROR("failed to allocate wakeup source\n");
+            return -ENOMEM;
+        }
+#endif
+
+        initialized_sensor = true;
+
+    }
+#endif
 
     fts_create_gesture_sysfs(ts_data->dev);
 
