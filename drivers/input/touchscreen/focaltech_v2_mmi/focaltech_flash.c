@@ -38,23 +38,20 @@
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
-#define FTS_FW_REQUEST_SUPPORT                      0
+#define FTS_FW_REQUEST_SUPPORT                      1
 /* Example: focaltech_ts_fw_tianma.bin */
-#define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
+#define FTS_FW_NAME_PREX_WITH_REQUEST               ""
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 u8 fw_file[] = {
-#include FTS_UPGRADE_FW_FILE
 };
 
 u8 fw_file2[] = {
-#include FTS_UPGRADE_FW2_FILE
 };
 
 u8 fw_file3[] = {
-#include FTS_UPGRADE_FW3_FILE
 };
 
 struct upgrade_module module_list[] = {
@@ -1879,6 +1876,33 @@ static int fts_fwupg_get_module_info(struct fts_upgrade *upg)
     return 0;
 }
 
+int fts_fw_update_vendor_name(const char* name) {
+    struct fts_upgrade *upg = fwupgrade;
+    char* pos;
+    int len;
+
+    fts_fwupg_get_module_info(fwupgrade);
+
+    if (!upg || !upg->module_info) {
+        FTS_ERROR("upgrade struct not init");
+        return -EINVAL;
+    }
+
+    len = strlen(name);
+    if (len > FILE_NAME_LENGTH) {
+        FTS_ERROR("vendor name is too long");
+        return -EINVAL;
+    }
+    pos = strstr(name, ".bin");
+    if (pos == NULL)
+        snprintf(upg->module_info->vendor_name, FILE_NAME_LENGTH, "%s", name);
+    else {
+        len = len - strlen(".bin");
+        snprintf(upg->module_info->vendor_name, len + 1, "%s", name);
+    }
+    return 0;
+}
+
 static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 {
     int ret = 0;
@@ -1993,6 +2017,41 @@ static void fts_fwupg_init_ic_detail(struct fts_upgrade *upg)
     if (upg && upg->func && upg->func->init) {
         upg->func->init(upg->fw, upg->fw_length);
     }
+}
+
+void fts_fwupg_bin(void)
+{
+    int ret = 0;
+    struct fts_upgrade *upg = fwupgrade;
+
+    FTS_INFO("fw upgrade bin function");
+    if (!upg || !upg->ts_data) {
+        FTS_ERROR("upg/ts_data is null");
+        return ;
+    }
+
+    upg->ts_data->fw_loading = 1;
+    fts_irq_disable();
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_switch(DISABLE);
+#endif
+
+    /* get fw */
+    ret = fts_fwupg_get_fw_file(upg);
+    if (ret < 0) {
+        FTS_ERROR("get file fail, can't upgrade");
+    } else {
+        /* ic init if have */
+        fts_fwupg_init_ic_detail(upg);
+        /* run auto upgrade */
+        fts_fwupg_auto_upgrade(upg);
+    }
+
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_switch(ENABLE);
+#endif
+    fts_irq_enable();
+    upg->ts_data->fw_loading = 0;
 }
 
 /*****************************************************************************
