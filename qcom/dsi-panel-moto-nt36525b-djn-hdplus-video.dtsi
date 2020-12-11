@@ -49,7 +49,7 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-lp11-init;
-		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-reset-sequence = <1 1>, <0 4>, <1 10>, <0 4>, <1 10>;
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <151>;
 
@@ -97,7 +97,7 @@
 					05 01 00 00 14 00 01 29];
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 32 00 01 28
-					05 01 00 00 96 00 01 10];
+					05 01 00 00 50 00 01 10];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
                         };
