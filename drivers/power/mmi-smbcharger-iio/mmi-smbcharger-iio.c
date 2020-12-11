@@ -4203,11 +4203,15 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	} else {
 		chip->qcom_psy = power_supply_get_by_name("battery");
 		chip->batt_psy = NULL;
-
-		rc = sysfs_create_group(&chip->qcom_psy->dev.kobj,
-					&power_supply_mmi_attr_group);
-		if (rc)
-			mmi_err(chip, "Failed: attr create\n");
+		if (chip->qcom_psy) {
+			rc = sysfs_create_group(&chip->qcom_psy->dev.kobj,
+						&power_supply_mmi_attr_group);
+			if (rc)
+				mmi_err(chip, "Failed: attr create\n");
+		} else {
+			mmi_err(chip, "Failed: SMB MMI probed failed, wait SMB5 prob\n");
+			return -EPROBE_DEFER;
+		}
 	}
 
 	chip->bms_psy = power_supply_get_by_name("bms");
