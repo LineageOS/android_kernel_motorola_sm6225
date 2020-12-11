@@ -40,9 +40,8 @@ static int fts_mmi_get_productinfo(struct device *dev, void *cdata) {
 	char buffer[64];
 	ssize_t blen = 0;
 	ASSERT_PTR(ts);
-	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "%02x%02x%02x%02x",
-		ts->sysinfo->u8_dieInfo[0], ts->sysinfo->u8_dieInfo[1],
-		ts->sysinfo->u8_dieInfo[2], ts->sysinfo->u8_dieInfo[3]);
+	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "fts%04x",
+		ts->sysinfo->u16_chip0Id);
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_INFO_LEN, "%s", buffer);
 }
 
