@@ -704,6 +704,15 @@ int ts_mmi_dev_register(struct device *parent,
 		}
 	}
 
+	if (touch_cdev->pdata.palm_enabled) {
+		ret = ts_mmi_palm_init(touch_cdev);
+		if (ret < 0) {
+			dev_err(DEV_TS, "%s: Register plam failed. %d\n",
+				__func__, ret);
+			goto GESTURE_INIT_FAILED;
+		}
+	}
+
 	dev_info(DEV_TS, "Registered touchscreen device: %s.\n", class_fname);
 
 	return 0;
@@ -762,6 +771,8 @@ void ts_mmi_dev_unregister(struct device *parent)
 	}
 	if (touch_cdev->pdata.gestures_enabled)
 		ts_mmi_gesture_remove(touch_cdev);
+	if (touch_cdev->pdata.palm_enabled)
+		ts_mmi_palm_remove(touch_cdev);
 	ts_mmi_notifiers_unregister(touch_cdev);
 	ts_mmi_panel_unregister(touch_cdev);
 	dev_info(DEV_TS, "%s: delete device\n", __func__);

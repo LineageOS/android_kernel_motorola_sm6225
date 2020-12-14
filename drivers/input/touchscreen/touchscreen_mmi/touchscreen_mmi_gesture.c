@@ -77,6 +77,7 @@ struct ts_mmi_touch_events_data {
 };
 
 static struct ts_mmi_sensor_platform_data *sensor_pdata;
+static struct ts_mmi_sensor_platform_data *palm_sensor_pdata;
 static struct ts_mmi_touch_events_data *events_data;
 
 #ifdef TS_MMI_TOUCH_GESTURE_LOG_EVENT
@@ -239,6 +240,24 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 	return 0;
 }
 
+static int ts_mmi_palm_handler(bool value)
+{
+	if (!palm_sensor_pdata->input_sensor_dev)
+		return 0;
+
+	if (value) {
+		input_report_abs(palm_sensor_pdata->input_sensor_dev,
+				ABS_DISTANCE, 1);
+		pr_info("%s: palm report 1\n", __func__);
+	} else {
+	input_report_abs(palm_sensor_pdata->input_sensor_dev,
+				ABS_DISTANCE, 0);
+		pr_info("%s: palm report 0\n", __func__);
+	}
+	input_sync(palm_sensor_pdata->input_sensor_dev);
+	return 0;
+}
+
 
 #ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
 static int ts_mmi_touch_event_poison_slot_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
@@ -366,6 +385,25 @@ static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 	return 0;
 }
 
+static int ts_mmi_palm_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	struct ts_mmi_sensor_platform_data *sensor_pdata = container_of(
+			sensors_cdev, struct ts_mmi_sensor_platform_data, ps_cdev);
+	struct ts_mmi_dev *touch_cdev = sensor_pdata->touch_cdev;
+	int ret = 0;
+
+	TRY_TO_CALL(palm_set_enable, enable);
+	if (enable == 1) {
+		dev_info(DEV_TS, "%s: sensor ENABLE\n", __func__);
+	} else if (enable == 0) {
+		dev_info(DEV_TS, "%s: sensor DISABLE\n", __func__);
+	} else {
+		dev_err(DEV_TS, "%s: unknown enable symbol\n", __func__);
+	}
+	return 0;
+}
+
 static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.name = "dt-gesture",
 	.vendor = "Motorola",
@@ -378,6 +416,24 @@ static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 	.max_delay = 0,
 	/* WAKE_UP & SPECIAL_REPORT */
 	.flags = 1 | 6,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.delay_msec = 200,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
+
+static struct sensors_classdev __maybe_unused palm_sensors_touch_cdev = {
+	.name = "palm-gesture",
+	.vendor = "Motorola",
+	.version = 1,
+	.type = SENSOR_TYPE_MOTO_TOUCH_PALM,
+	.max_range = "5.0",
+	.resolution = "5.0",
+	.sensor_power = "1",
+	.min_delay = 0,
+	.max_delay = 0,
 	.fifo_reserved_event_count = 0,
 	.fifo_max_event_count = 0,
 	.enabled = 0,
@@ -478,8 +534,77 @@ int ts_mmi_gesture_remove(struct ts_mmi_dev *touch_cdev)
 {
 	sensors_classdev_unregister(&sensor_pdata->ps_cdev);
 	input_unregister_device(sensor_pdata->input_sensor_dev);
+	devm_kfree(&sensor_pdata->input_sensor_dev->dev, sensor_pdata);
 	devm_kfree(DEV_TS, events_data);
 	sensor_pdata = NULL;
+	events_data = NULL;
+
+	return 0;
+}
+
+int ts_mmi_palm_init(struct ts_mmi_dev *touch_cdev)
+{
+	struct input_dev *sensor_input_dev;
+	int err;
+
+	sensor_input_dev = input_allocate_device();
+	if (!sensor_input_dev) {
+		dev_err(DEV_TS, "%s: Failed to allocate device", __func__);
+		goto exit;
+	}
+
+	palm_sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+					sizeof(struct ts_mmi_sensor_platform_data),
+					GFP_KERNEL);
+	if (!palm_sensor_pdata) {
+		dev_err(DEV_TS, "%s: Failed to allocate memory", __func__);
+		goto free_sensor_pdata;
+	}
+
+	__set_bit(EV_ABS, sensor_input_dev->evbit);
+	__set_bit(EV_SYN, sensor_input_dev->evbit);
+	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+					0, 5, 0, 0);
+	sensor_input_dev->name = "palm_detect";
+	palm_sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+	err = input_register_device(sensor_input_dev);
+	if (err) {
+		dev_err(DEV_TS, "Unable to register device, err=%d", err);
+		goto free_sensor_input_dev;
+	}
+
+	palm_sensor_pdata->ps_cdev = palm_sensors_touch_cdev;
+	palm_sensor_pdata->ps_cdev.sensors_enable = ts_mmi_palm_set_enable;
+	palm_sensor_pdata->touch_cdev = touch_cdev;
+
+	err = sensors_classdev_register(&sensor_input_dev->dev,
+						&palm_sensor_pdata->ps_cdev);
+	if (err)
+		goto unregister_sensor_input_device;
+
+	/* export report gesture function to vendor */
+	touch_cdev->mdata->exports.report_palm = ts_mmi_palm_handler;
+
+	return 0;
+
+unregister_sensor_input_device:
+	input_unregister_device(sensor_input_dev);
+free_sensor_input_dev:
+	input_free_device(sensor_input_dev);
+free_sensor_pdata:
+	devm_kfree(&sensor_input_dev->dev, palm_sensor_pdata);
+	palm_sensor_pdata = NULL;
+exit:
+	return 1;
+}
+
+int ts_mmi_palm_remove(struct ts_mmi_dev *touch_cdev)
+{
+	sensors_classdev_unregister(&palm_sensor_pdata->ps_cdev);
+	input_unregister_device(palm_sensor_pdata->input_sensor_dev);
+	devm_kfree(&palm_sensor_pdata->input_sensor_dev->dev, palm_sensor_pdata);
+	palm_sensor_pdata = NULL;
 
 	return 0;
 }
