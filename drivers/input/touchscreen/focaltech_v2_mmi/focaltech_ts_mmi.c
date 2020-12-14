@@ -342,6 +342,13 @@ static int fts_mmi_post_suspend(struct device *dev)
 	return 0;
 }
 
+#ifdef FOCALTECH_PALM_SENSOR_EN
+int fts_mmi_palm_set_enable(struct device *dev, unsigned int enable)
+{
+	fts_palm_sensor_set_enable(enable);
+	return 0;
+}
+#endif
 
 static struct ts_mmi_methods fts_mmi_methods = {
 	.get_vendor = fts_mmi_methods_get_vendor,
@@ -361,6 +368,9 @@ static struct ts_mmi_methods fts_mmi_methods = {
 #endif
 #if FTS_USB_DETECT_EN
 	.charger_mode = fts_mmi_charger_mode,
+#endif
+#ifdef FOCALTECH_PALM_SENSOR_EN
+	.palm_set_enable = fts_mmi_palm_set_enable,
 #endif
 	/* Firmware */
 	.firmware_update = fts_mmi_firmware_update,

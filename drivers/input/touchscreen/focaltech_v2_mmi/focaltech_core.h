@@ -158,6 +158,14 @@ struct ts_event {
     int area;
 };
 
+#ifdef FOCALTECH_PALM_SENSOR_EN
+enum palm_sensor_lazy_set {
+    PALM_SENSOR_LAZY_SET_NONE = 0,
+    PALM_SENSOR_LAZY_SET_ENABLE,
+    PALM_SENSOR_LAZY_SET_DISABLE,
+};
+#endif
+
 struct fts_ts_data {
     struct i2c_client *client;
     struct spi_device *spi;
@@ -224,6 +232,24 @@ struct fts_ts_data {
 #ifdef FOCALTECH_SENSOR_EN
     bool wakeable;
 #endif
+
+#ifdef FOCALTECH_PALM_SENSOR_EN
+    bool palm_detection_enabled;
+    enum palm_sensor_lazy_set palm_detection_lazy_set;
+    struct timer_list palm_release_fimer;
+    unsigned int palm_release_delay_ms;
+#ifdef CONFIG_HAS_WAKELOCK
+    struct wake_lock palm_gesture_wakelock;
+#else
+    struct wakeup_source *palm_gesture_wakelock;
+#endif
+#ifdef CONFIG_HAS_WAKELOCK
+    struct wake_lock palm_gesture_read_wakelock;
+#else
+    struct wakeup_source *palm_gesture_read_wakelock;
+#endif
+#endif
+
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
     struct ts_mmi_class_methods *imports;
 #endif
@@ -257,6 +283,10 @@ void fts_gesture_recovery(struct fts_ts_data *ts_data);
 int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *data);
 int fts_gesture_suspend(struct fts_ts_data *ts_data);
 int fts_gesture_resume(struct fts_ts_data *ts_data);
+
+#ifdef FOCALTECH_PALM_SENSOR_EN
+int fts_palm_sensor_set_enable(unsigned int enable);
+#endif
 
 /* Apk and functions */
 int fts_create_apk_debug_channel(struct fts_ts_data *);
