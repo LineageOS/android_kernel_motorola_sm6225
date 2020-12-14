@@ -85,6 +85,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->gestures_enabled = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,enable-palm")) {
+		dev_info(DEV_TS, "%s: using enable palm\n", __func__);
+		ppdata->palm_enabled = true;
+	}
+
 	if (of_property_read_bool(of_node, "mmi,refresh-rate-update")) {
 		dev_info(DEV_TS, "%s: using refresh rate update\n", __func__);
 		ppdata->update_refresh_rate = true;

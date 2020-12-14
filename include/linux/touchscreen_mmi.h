@@ -215,6 +215,7 @@ struct gesture_event_data {
  */
 struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
+	int     (*report_palm)(bool value);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
 	int     (*report_touch_event)(struct touch_event_data *tev, struct input_dev *input_dev);
 	struct kobject *kobj_notify;
@@ -287,6 +288,7 @@ enum ts_mmi_pm_mode {
 	int	(*pinctrl)(struct device *dev, int on);
 	int	(*refresh_rate)(struct device *dev, int freq);
 	int	(*charger_mode)(struct device *dev, int mode);
+	int	(*palm_set_enable)(struct device *dev, unsigned int enable);
 	int	(*suppression)(struct device *dev, int state);
 	int	(*hold_grip)(struct device *dev, int state);
 	int	(*pill_region)(struct device *dev, int *region_array);
@@ -326,6 +328,7 @@ struct ts_mmi_dev_pdata {
 	bool		usb_detection;
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
+	bool		palm_enabled;
 	bool		suppression_ctrl;
 	bool		pill_region_ctrl;
 	bool		hold_distance_ctrl;
@@ -463,6 +466,8 @@ extern void ts_mmi_dev_unregister(struct device *parent);
 extern int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev, struct device_node *of_node);
 extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
+extern int ts_mmi_palm_init(struct ts_mmi_dev *data);
+extern int ts_mmi_palm_remove(struct ts_mmi_dev *data);
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
 #endif
