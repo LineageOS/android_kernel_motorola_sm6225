@@ -14,6 +14,7 @@ struct sec_ts_data *tsp_info;
 
 #include "sec_ts.h"
 #include "sec_mmi.h"
+#include <linux/mmi_device.h>
 
 struct sec_ts_data *ts_dup;
 
@@ -1737,6 +1738,11 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		return -EIO;
 	}
 
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+		input_err(true, &client->dev, "%s mmi: device not supported\n", __func__);
+		return -ENODEV;
+	}
+
 	/* parse dt */
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,
@@ -2670,11 +2676,6 @@ static int __init sec_ts_init(void)
 		pr_err("%s: Do not load driver due to : lpm %d\n", __func__, lpcharge);
 		return -ENODEV;
 	}
-#endif
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	if (!ts_mmi_is_panel_match("mmi,panel_name", "lsi"))
-		return false;
 #endif
 	pr_err("%s\n", __func__);
 

@@ -25,3 +25,5 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
 else
     sec_mmi-objs += sec_ts_mmi.o
 endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/Module.symvers
