@@ -73,6 +73,7 @@
 #include "fts_lib/ftsTool.h"
 
 #include "fts_mmi.h"
+#include <linux/mmi_device.h>
 
 /**
   * Event handler installer helpers
@@ -3897,11 +3898,12 @@ static int fts_probe(struct spi_device *client)
 	u16 bus_type;
 
 	logError(1, "%s %s: driver probe begin!\n", tag, __func__);
-
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+		logError(1, "%s mmi: device not supported\n", tag);
+		return -ENODEV;
+	}
 
 	logError(1, "%s driver ver. %s\n", tag, FTS_TS_DRV_VERSION);
-
-
 	logError(1, "%s SET Bus Functionality :\n", tag);
 #ifdef I2C_INTERFACE
 	logError(1, "%s I2C interface...\n", tag);
