@@ -36,6 +36,7 @@
 
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
+#include <linux/mmi_device.h>
 #include "../synaptics_core/synaptics_core.h"
 
 #define XFER_ATTEMPTS 10
@@ -461,6 +462,11 @@ static int syna_tcm_i2c_probe(struct i2c_client *i2c,
 	}
 
 	i2c_set_clientdata(i2c, syna_tcm_i2c_device);
+
+	if (i2c->dev.of_node && !mmi_device_is_available(i2c->dev.of_node)) {
+		LOGE(&i2c->dev, "%s: mmi: device not supported\n", __func__);
+		return -ENODEV;
+	}
 
 #ifdef CONFIG_OF
 	hw_if.bdata = devm_kzalloc(&i2c->dev, sizeof(*hw_if.bdata), GFP_KERNEL);

@@ -20,6 +20,7 @@ ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
     LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/touchscreen_mmi.ko
 endif
 ifneq ($(findstring synaptics_i2c.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+    LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/mmi_info.ko
     LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/synaptics_i2c.ko
 else
     LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/synaptics_spi.ko
