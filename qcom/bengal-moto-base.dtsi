@@ -24,6 +24,7 @@
 /delete-node/ &pil_ipa_gsi_mem;
 /delete-node/ &pil_gpu_mem;
 /delete-node/ &cdsp_sec_mem;
+/delete-node/ &secure_display_memory;
 
 &reserved_memory {
 	pil_cdsp_mem: cdsp_regions@51a00000 {
@@ -59,6 +60,7 @@
 
 &soc {
 	qcom,ion {
+		/delete-node/ qcom,ion-heap@10;
 		/delete-node/ qcom,ion-heap@14;
 	};
 };
