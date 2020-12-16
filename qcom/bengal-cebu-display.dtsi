@@ -121,8 +121,8 @@
 };
 
 &dsi_dsbj_icnl9911c_video {
-	qcom,mdss-dsi-t-clk-post = <0x0a>;
-	qcom,mdss-dsi-t-clk-pre = <0x21>;
+	qcom,mdss-dsi-t-clk-post = <0x0c>;
+	qcom,mdss-dsi-t-clk-pre = <0x28>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
@@ -148,11 +148,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 1C 05 06 03 02 04 a0
-				1F 0F 05 06 03 02 04 a0];
+				[21 1E 06 08 04 02 04 a0
+				21 1E 06 08 04 02 04 a0
+				21 1E 06 08 04 02 04 a0
+				21 1E 06 08 04 02 04 a0
+				21 15 06 07 04 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
