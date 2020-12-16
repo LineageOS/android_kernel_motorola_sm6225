@@ -73,8 +73,8 @@
 			timing@0{
 				qcom,mdss-dsi-panel-width = <720>;
 				qcom,mdss-dsi-panel-height = <1640>;
-				qcom,mdss-dsi-h-front-porch = <40>;
-				qcom,mdss-dsi-h-back-porch = <40>;
+				qcom,mdss-dsi-h-front-porch = <172>;
+				qcom,mdss-dsi-h-back-porch = <176>;
 				qcom,mdss-dsi-h-pulse-width = <4>;
 				qcom,mdss-dsi-h-sync-skew = <0>;
 				qcom,mdss-dsi-v-back-porch = <12>;
@@ -82,6 +82,11 @@
 				qcom,mdss-dsi-v-pulse-width = <4>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command = [
+					39 01 00 00 01 00 03 F0 5A 59
+					39 01 00 00 01 00 03 F1 A5 A6
+					39 01 00 00 01 00 09 C1 C0 0C 20 7C 04 B0 AC 04
+					39 01 00 00 01 00 03 F1 5A 59
+					39 01 00 00 01 00 03 F0 A5 A6
 					05 01 00 00 00 00 02 35 00
 					39 01 00 00 00 00 03 51 0F FF
 					39 01 00 00 00 00 02 53 2C
