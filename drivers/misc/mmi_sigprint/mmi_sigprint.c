@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/pid.h>
 #include <linux/kprobes.h>
+#include <linux/version.h>
 
 #include <linux/signal.h>
 #include <linux/platform_device.h>
@@ -101,8 +102,13 @@ static void probe_signal_deliver(void *ignore, int sig, struct siginfo *info,
 }
 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
 static void probe_death_signal(void *ignore, int sig, struct siginfo *info,
 		struct task_struct *task, int _group, int result)
+#else
+static void probe_death_signal(void *ignore, int sig, struct kernel_siginfo *info,
+		struct task_struct *task, int _group, int result)
+#endif
 {
 	struct signal_struct *signal = task->signal;
 	unsigned int state;
