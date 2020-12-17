@@ -12,7 +12,7 @@ endif
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
 	synaptics_core_module-objs += synaptics_ts_mmi.o
-	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../touchscreen_mmi/Module.symvers
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
 endif
 
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../synaptics_bus/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../synaptics_bus/$(GKI_OBJ_MODULE_DIR)/Module.symvers
