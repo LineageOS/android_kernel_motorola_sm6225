@@ -14,4 +14,5 @@ ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
 	KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
 	LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/touchscreen_mmi.ko
 endif
+KBUILD_OPTIONS_GKI += GKI_OBJ_MODULE_DIR=gki
 include $(DLKM_DIR)/AndroidKernelModule.mk
