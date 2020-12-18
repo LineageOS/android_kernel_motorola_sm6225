@@ -433,10 +433,13 @@ static int fpc1020_remove(struct platform_device *pdev)
 #endif
 
 	device_init_wakeup(fpc1020->dev, false);
-	devm_free_irq(fpc1020->dev,gpio_to_irq(fpc1020->irq_gpio),fpc1020);
-	if (gpio_is_valid(fpc1020->irq_gpio)) {
-		gpio_free(fpc1020->irq_gpio);
-	}
+	devm_free_irq(fpc1020->dev, gpio_to_irq(fpc1020->irq_gpio),fpc1020);
+
+	if (gpio_is_valid(fpc1020->irq_gpio))
+		devm_gpio_free(fpc1020->dev, fpc1020->irq_gpio);
+	if (gpio_is_valid(fpc1020->rst_gpio))
+		devm_gpio_free(fpc1020->dev, fpc1020->rst_gpio);
+
 	dev_info(&pdev->dev, "%s\n", __func__);
 	return 0;
 }
