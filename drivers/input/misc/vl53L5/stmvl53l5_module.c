@@ -54,14 +54,14 @@
 #define STMVL53L5_DRV_NAME		"stmvl53l5"
 #define STMVL53L5_SLAVE_ADDR		0x29
 
-#define ST_TOF_IOCTL_TRANSFER	   _IOWR('a',0x1, void*)
-
 struct stmvl53l5_comms_struct {
 	__u16   len;
 	__u16   reg_index;
-	__u8    *buf;
+	__u64   buf;
 	__u8    write_not_read;
 };
+
+#define ST_TOF_IOCTL_TRANSFER		_IOWR('a',0x1, struct stmvl53l5_comms_struct)
 
 static struct miscdevice st_tof_miscdev;
 static uint8_t * raw_data_buffer = NULL;
@@ -121,25 +121,25 @@ static int stmvl53l5_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static long stmvl53l5_ioctl(struct file *file,
-		unsigned int cmd, unsigned long arg)
+static int stmvl53l5_ioctl_handler(struct file *file,
+		unsigned int cmd, unsigned long arg, void __user *p)
 {
 	struct i2c_msg st_i2c_message;
 	struct stmvl53l5_comms_struct comms_struct;
-	int32_t ret = 0;
+	int ret = 0;
 	uint16_t index, transfer_size, chunk_size;
 	u8 __user *data_ptr = NULL;
-
 	pr_debug("stmvl53l5_ioctl : cmd = %u\n", cmd);
+
 	switch (cmd) {
 		case ST_TOF_IOCTL_TRANSFER:
 
-			ret = copy_from_user(&comms_struct, (void __user *)arg, sizeof(comms_struct));
+			ret = copy_from_user(&comms_struct, (struct stmvl53l5_comms_struct *)p, sizeof(comms_struct));
 			if (ret) {
 				pr_err("Error at %s(%d)\n", __func__, __LINE__);
 				return -EINVAL;
 			}
-
+			data_ptr = (u8 __user *)(comms_struct.buf);
 			// printk("Transfer. write_not_read = %d, reg_index = 0x%x size = %d\n", comms_struct.write_not_read, comms_struct.reg_index, comms_struct.len);
 
 			if (i2c_not_spi) {
@@ -147,11 +147,6 @@ static long stmvl53l5_ioctl(struct file *file,
 				st_i2c_message.addr = 0x29;
 				// st_i2c_message.buf is the same whatever the transfers to be done
 				st_i2c_message.buf = raw_data_buffer;
-			}
-
-			if (!comms_struct.write_not_read) {
-				data_ptr = (u8 __user *)(comms_struct.buf);
-				comms_struct.buf  = memdup_user(data_ptr,  comms_struct.len);
 			}
 
 			// in case of i2c write, it is a single transfer with read index set in the 2 first bytes
@@ -176,7 +171,7 @@ static long stmvl53l5_ioctl(struct file *file,
 						raw_data_buffer[0] = (uint8_t)(((comms_struct.reg_index + index) & 0xFF00) >> 8);
 						raw_data_buffer[1] = (uint8_t)((comms_struct.reg_index + index) & 0x00FF);
 
-						ret = copy_from_user(&raw_data_buffer[2], comms_struct.buf + index, transfer_size);
+						ret = copy_from_user(&raw_data_buffer[2], data_ptr + index, transfer_size);
 						if (ret) {
 							pr_err("Error at %s(%d)\n", __func__, __LINE__);
 							return -EINVAL;
@@ -184,6 +179,7 @@ static long stmvl53l5_ioctl(struct file *file,
 
 						st_i2c_message.len = transfer_size + 2;
 						st_i2c_message.flags = 0;
+						st_i2c_message.buf = raw_data_buffer;
 						ret = i2c_transfer(stmvl53l5_i2c_client->adapter, &st_i2c_message, 1);
 						if (ret != 1) {
 							pr_err("Error %d at %s(%d)\n",ret,  __func__, __LINE__);
@@ -192,11 +188,12 @@ static long stmvl53l5_ioctl(struct file *file,
 					}
 					// ---- spi
 					else {
-						ret = copy_from_user(raw_data_buffer, comms_struct.buf + index, transfer_size);
+						ret = copy_from_user(raw_data_buffer, data_ptr + index, transfer_size);
 						if (ret) {
 							pr_err("stmvl53l5: Error at %s(%d)\n", __func__, __LINE__);
 							return -EINVAL;
 						}
+
 						ret = stmvl53l5_spi_write(&spi_data, comms_struct.reg_index + index, raw_data_buffer, transfer_size);
 						if (ret) {
 							pr_err("Error %d at %s(%d)\n",ret,  __func__, __LINE__);
@@ -211,6 +208,7 @@ static long stmvl53l5_ioctl(struct file *file,
 						// write reg_index
 						st_i2c_message.len = 2;
 						st_i2c_message.flags = 0;
+						st_i2c_message.buf = raw_data_buffer;
 						raw_data_buffer[0] = (uint8_t)(((comms_struct.reg_index + index) & 0xFF00) >> 8);
 						raw_data_buffer[1] = (uint8_t)((comms_struct.reg_index + index) & 0x00FF);
 
@@ -222,7 +220,7 @@ static long stmvl53l5_ioctl(struct file *file,
 
 						st_i2c_message.len = transfer_size;
 						st_i2c_message.flags = 1;
-
+						st_i2c_message.buf = raw_data_buffer;
 						ret = i2c_transfer(stmvl53l5_i2c_client->adapter, &st_i2c_message, 1);
 						if (ret != 1) {
 							pr_err("Error at %s(%d)\n", __func__, __LINE__);
@@ -240,7 +238,6 @@ static long stmvl53l5_ioctl(struct file *file,
 
 					// copy to user buffer the read transfer
 					ret = copy_to_user(data_ptr + index, raw_data_buffer, transfer_size);
-
 					if (ret) {
 						pr_err("Error at %s(%d)\n", __func__, __LINE__);
 						return -EINVAL;
@@ -257,14 +254,35 @@ static long stmvl53l5_ioctl(struct file *file,
 			return -EINVAL;
 
 	}
-	return 0;
+	return ret;
+}
+
+#ifdef CONFIG_COMPAT
+static long stmvl53l5_compat_ioctl(struct file *file,
+        unsigned int cmd, unsigned long arg)
+{
+	int ret;
+	ret = stmvl53l5_ioctl_handler(file, cmd, arg, compat_ptr(arg));
+	return ret;
+}
+#endif
+
+static long stmvl53l5_ioctl(struct file *file,
+		unsigned int cmd, unsigned long arg)
+{
+	int ret;
+	ret = stmvl53l5_ioctl_handler(file, cmd, arg, (void __user *)arg);
+	return ret;
 }
 
 static const struct file_operations stmvl53l5_ranging_fops = {
-	.owner 			= THIS_MODULE,
+	.owner			= THIS_MODULE,
 	.unlocked_ioctl		= stmvl53l5_ioctl,
-	.open 			= stmvl53l5_open,
-	.release 		= stmvl53l5_release,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl		= stmvl53l5_compat_ioctl,
+#endif
+	.open			= stmvl53l5_open,
+	.release		= stmvl53l5_release,
 };
 
 static int stmvl53l5_init(struct device *dev)
