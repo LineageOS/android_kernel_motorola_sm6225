@@ -306,13 +306,11 @@ static long sr100_dev_ioctl(struct file* filp, unsigned int cmd,
     case SR100_SET_PWR:
       if (arg == PWR_ENABLE) {
         printk(KERN_ALERT " enable power request");
-        //gpio_set_value(sr100_dev->rtc_sync_gpio, 1);
-        gpio_set_value(sr100_dev->ce_gpio, 1);
+        gpio_set_value_cansleep(sr100_dev->ce_gpio, 1);
         msleep(10);
       } else if (arg == PWR_DISABLE) {
         printk(KERN_ALERT "disable power request");
-        gpio_set_value(sr100_dev->ce_gpio, 0);
-        //gpio_set_value(sr100_dev->rtc_sync_gpio, 0);
+        gpio_set_value_cansleep(sr100_dev->ce_gpio, 0);
         sr100_disable_irq(sr100_dev);
         msleep(10);
       } else if (arg == ABORT_READ_PENDING) {
@@ -430,7 +428,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         goto transcive_end;
       }
       retry_count = 0;
-      gpio_set_value(sr100_dev->spi_handshake_gpio, 1);
+      gpio_set_value_cansleep(sr100_dev->spi_handshake_gpio, 1);
       while (gpio_get_value(sr100_dev->irq_gpio)) {
         if (retry_count == 100) {
            break;
@@ -501,7 +499,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         }
       }while(gpio_get_value(sr100_dev->irq_gpio));
       ret = spi_transcive_success;
-      gpio_set_value(sr100_dev->spi_handshake_gpio, 0);
+      gpio_set_value_cansleep(sr100_dev->spi_handshake_gpio, 0);
     }
     break;
     default:
@@ -510,7 +508,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
   }
 transcive_end:
   if(sr100_dev->mode == SR100_READ_MODE){
-    gpio_set_value(sr100_dev->spi_handshake_gpio, 0);
+    gpio_set_value_cansleep(sr100_dev->spi_handshake_gpio, 0);
   }
   mutex_unlock(&sr100_dev->sr100_access_lock);
   return ret;
@@ -750,16 +748,18 @@ static int sr100_hw_setup(struct sr100_spi_platform_data* platform_data,
     goto fail_gpio;
   }
 
-  ret = gpio_request(platform_data->rtc_sync_gpio, "sr100 rtc");
-  if (ret < 0) {
-    pr_info("sr100 - Failed requesting rtc gpio - %d\n", platform_data->rtc_sync_gpio);
-    goto fail_gpio;
-  }
+  if (gpio_is_valid(platform_data->rtc_sync_gpio)) {
+	  ret = gpio_request(platform_data->rtc_sync_gpio, "sr100 rtc");
+	  if (ret < 0) {
+		pr_info("sr100 - Failed requesting rtc gpio - %d\n", platform_data->rtc_sync_gpio);
+		goto fail_gpio;
+	  }
 
-  ret = gpio_direction_output(platform_data->rtc_sync_gpio, 1);
-  if (ret < 0) {
-    pr_info("sr100 - Failed setting rtc gpio - %d\n", platform_data->rtc_sync_gpio);
-    goto fail_gpio;
+	  ret = gpio_direction_output(platform_data->rtc_sync_gpio, 1);
+	  if (ret < 0) {
+		pr_info("sr100 - Failed setting rtc gpio - %d\n", platform_data->rtc_sync_gpio);
+		goto fail_gpio;
+	  }
   }
 #if HVH_VDD_ENABLE
   ret = gpio_request(platform_data->vdd_1v8_gpio, "sup_vdd_1v8");
@@ -877,7 +877,7 @@ static int sr100_parse_dt(struct device* dev,
   }
   pdata->rtc_sync_gpio = of_get_named_gpio(np, "nxp,sr100-rtc", 0);
   if (!gpio_is_valid(pdata->rtc_sync_gpio)) {
-    return -EINVAL;
+	pr_info("Not rtc gpio set\n");
   }
 #if HVH_VDD_ENABLE
   pdata->vdd_1v8_gpio = of_get_named_gpio(np, "nxp,sr100-vdd", 0);
