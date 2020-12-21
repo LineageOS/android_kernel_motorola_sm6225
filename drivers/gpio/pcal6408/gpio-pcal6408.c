@@ -273,6 +273,16 @@ static int pcal6048_direction_in(struct gpio_chip *gc, unsigned offset)
 	return ret;
 }
 
+static void pcal6048_set_gpio(struct gpio_chip *gc, unsigned offset, int value)
+{
+	struct pcal6048_dev *chip = gpiochip_get_data(gc);
+
+	if (value)
+		pcal6048_set_reg(chip, offset, chip->conf->output);
+	else
+		pcal6048_clear_reg(chip, offset, chip->conf->output);
+}
+
 static int pcal6048_direction_out(struct gpio_chip *gc, unsigned offset, int value)
 {
 	struct pcal6048_dev *chip = gpiochip_get_data(gc);
@@ -286,6 +296,8 @@ static int pcal6048_direction_out(struct gpio_chip *gc, unsigned offset, int val
 		ret = pcal6048_set_reg(chip, offset, chip->conf->direction);
 	else
 		ret = pcal6048_clear_reg(chip, offset, chip->conf->direction);
+
+	pcal6048_set_gpio(gc, offset, value);
 
 	return ret;
 }
@@ -308,16 +320,6 @@ static int pcal6048_get_gpio(struct gpio_chip *gc, unsigned offset)
 
 	/* TODO do I need to read twice to make sure it is cleared? (TCA6418e pg 12) */
 	return pcal6048_read_reg(chip, offset, chip->conf->input);
-}
-
-static void pcal6048_set_gpio(struct gpio_chip *gc, unsigned offset, int value)
-{
-	struct pcal6048_dev *chip = gpiochip_get_data(gc);
-
-	if (value)
-		pcal6048_set_reg(chip, offset, chip->conf->output);
-	else
-		pcal6048_clear_reg(chip, offset, chip->conf->output);
 }
 
 static int pcal6048_set_config(struct gpio_chip *gc, unsigned int offset, unsigned long config)
