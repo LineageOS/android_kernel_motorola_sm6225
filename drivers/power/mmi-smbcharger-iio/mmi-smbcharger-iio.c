@@ -3132,6 +3132,7 @@ static void smb_mmi_power_supply_changed(struct power_supply *psy,
 	}
 
 	kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
+	power_supply_changed(psy);
 }
 
 static int factory_kill_disable;
