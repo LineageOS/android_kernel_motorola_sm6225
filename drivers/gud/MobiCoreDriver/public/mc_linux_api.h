@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
- * Copyright (c) 2013-2015 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2019 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,14 +18,13 @@
 #include <linux/types.h>
 
 /*
- * Switch TEE active core to core_num, defined as linux
- * core id
+ * Manage dynamically switch TEE worker threads/TEE affinity to big core only.
+ * Or default core affinity.
+ * Warning: Both PLAT_DEFAULT_TEE_AFFINITY_MASK and
+ * BIG_CORE_SWITCH_AFFINITY_MASK have to be defined
  */
-int mc_switch_core(int core_num);
-
-/*
- * Return TEE active core as Linux core id
- */
-int mc_active_core(void);
+#if defined(BIG_CORE_SWITCH_AFFINITY_MASK)
+void set_tee_worker_threads_on_big_core(bool big_core);
+#endif
 
 #endif /* _MC_LINUX_API_H_ */

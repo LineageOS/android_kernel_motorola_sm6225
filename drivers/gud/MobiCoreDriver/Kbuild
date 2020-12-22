@@ -22,10 +22,6 @@ EXTRA_CFLAGS += -DNDEBUG
 EXTRA_CFLAGS +=  -Wno-declaration-after-statement
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/drivers/gud/MobiCoreDriver
 
-ifneq ($(filter m y,$(RSU_SELECT_SILVER_CORES)),)
- EXTRA_CFLAGS += -DRSU_SELECT_SILVER_CORES
-endif
-
 ifneq ($(filter m y,$(RSU_INTERNAL_CLOCK)),)
  EXTRA_CFLAGS += -DRSU_INTERNAL_CLOCK
 endif

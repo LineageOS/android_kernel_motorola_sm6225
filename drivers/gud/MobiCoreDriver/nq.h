@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2020 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -69,6 +69,10 @@ ssize_t nq_get_stop_message(char __user *buffer, size_t size);
 void nq_signal_tee_hung(void);
 
 /* SWd suspend/resume */
+void add_core_to_mask(unsigned int cpu);
+void remove_core_from_mask(unsigned int cpu);
+int nq_cpu_on(unsigned int cpu);
+int nq_cpu_off(unsigned int cpu);
 int nq_suspend(void);
 int nq_resume(void);
 
