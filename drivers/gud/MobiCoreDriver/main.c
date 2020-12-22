@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2020 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -21,6 +21,7 @@
 #include <linux/of.h>
 #include <linux/reboot.h>
 #include <linux/suspend.h>
+#include <linux/cpu.h>
 
 #include "public/mc_user.h"
 #include "public/mc_admin.h"		/* MC_ADMIN_DEVNODE */
@@ -424,6 +425,10 @@ static int mobicore_start(void)
 		mc_dev_err(ret, "PM notifier register failed");
 		goto err_pm_notif;
 	}
+#if KERNEL_VERSION(4, 6, 0) <= LINUX_VERSION_CODE
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "Trustonic",
+				nq_cpu_on, nq_cpu_off);
+#endif
 #endif
 
 	if (is_xen_dom0()) {

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2020 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@ struct mcp_open_info {
 	size_t			tci_len;
 	struct tee_mmu		*tci_mmu;
 	/* Origin */
-	bool			user;
+	int			user;
 };
 
 /* Structure to hold the TA/driver descriptor to pass to MCP */

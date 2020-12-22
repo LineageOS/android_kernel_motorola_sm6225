@@ -146,15 +146,6 @@ static inline int smc_fastcall(void *fc_generic, size_t size)
  * from which the Gold cores do not support TEE interfaces
  * so that CPU_IDS should list only Silver cores.
  */
-
-#ifdef RSU_SELECT_SILVER_CORES
-#define CPU_SELECTION
-#if defined CPU_SELECTION
-#define NB_CPU 4
-#define CPU_IDS {0x0, 0x1, 0x2, 0x3}
-#endif
-
-#else
 /* Enforce/restrict statically CPUs potentially running TEE
  * (Customize to match platform CPU layout... 0xF0 for big cores only for ex).
  * If not defined TEE dynamically using all platform CPUs (recommended)
@@ -163,6 +154,5 @@ static inline int smc_fastcall(void *fc_generic, size_t size)
  */
 #define PLAT_DEFAULT_TEE_AFFINITY_MASK (0xF)
 #define BIG_CORE_SWITCH_AFFINITY_MASK (0xF)
-#endif /* RSU_SELECT_SILVER_CORES */
 
 #endif /* _MC_PLATFORM_H_ */

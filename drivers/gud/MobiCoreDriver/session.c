@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2020 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -204,7 +204,6 @@ static int hash_path_and_data(struct task_struct *task, u8 *hash,
 	}
 
 	desc->tfm = tfm;
-	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 	crypto_shash_init(desc);
 	crypto_shash_update(desc, (u8 *)path, path_len);
 	if (data) {
@@ -268,7 +267,6 @@ static int hash_path_and_data(struct task_struct *task, u8 *hash,
 		goto end;
 	}
 
-	desc.flags = 0;
 	sg_init_one(&sg, path, path_len);
 	crypto_hash_init(&desc);
 	crypto_hash_update(&desc, &sg, path_len);
@@ -652,7 +650,7 @@ int session_mc_notify(struct tee_session *session)
  * Sleep until next notification from SWd.
  */
 int session_mc_wait(struct tee_session *session, s32 timeout,
-		    bool silent_expiry)
+		    int silent_expiry)
 {
 	return mcp_wait(&session->mcp_session, timeout, silent_expiry);
 }

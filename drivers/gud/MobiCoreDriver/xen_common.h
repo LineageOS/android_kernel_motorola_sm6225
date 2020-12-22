@@ -151,7 +151,7 @@ struct tee_xfe {
 	struct tee_xen_buffer	buffers[TEE_BUFFERS];
 	struct mutex		ring_mutex;	/* Protect our side of ring */
 	struct completion	ring_completion;
-	bool			ring_busy;
+	int			ring_busy;
 	/* Unique ID for commands */
 	u32			domu_cmd_id;
 };
