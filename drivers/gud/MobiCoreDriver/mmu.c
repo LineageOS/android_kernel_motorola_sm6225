@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2013-2018 TRUSTONIC LIMITED
+ * Copyright (c) 2013-2020 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -24,6 +24,15 @@
 #include <linux/device.h>
 #include <linux/version.h>
 #include <linux/dma-buf.h>
+#ifdef CONFIG_DMA_SHARED_BUFFER
+#if KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
+#include <linux/ion.h>
+#elif KERNEL_VERSION(4, 11, 12) < LINUX_VERSION_CODE
+#include "../../drivers/staging/android/ion/ion.h"
+#elif KERNEL_VERSION(3, 14, 0) < LINUX_VERSION_CODE
+#include "../../drivers/staging/android/ion/ion_priv.h"
+#endif
+#endif
 
 #ifdef CONFIG_XEN
 /* To get the MFN */
@@ -120,7 +129,7 @@ static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 	return get_user_pages_remote(NULL, mm, start, nr_pages, gup_flags,
 				    pages, NULL);
 }
-#else
+#elif KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE
 static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 			     unsigned long nr_pages, int write,
 			     struct page **pages)
@@ -132,6 +141,19 @@ static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 
 	return get_user_pages_remote(NULL, mm, start, nr_pages, gup_flags,
 				    pages, NULL, NULL);
+}
+#else
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	unsigned int gup_flags = 0;
+
+	gup_flags |= FOLL_LONGTERM;
+	if (write)
+		gup_flags |= FOLL_WRITE;
+
+	return get_user_pages(start, nr_pages, gup_flags, pages, NULL);
 }
 #endif
 
@@ -462,14 +484,23 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 			/* Buffer is ION */
 			struct sg_mapping_iter miter;
 			struct page **page_ptr;
+			unsigned int cnt = 0;
+			unsigned int global_cnt = 0;
 
-			page_ptr = &pages[0];
+			page_ptr = pages;
 			sg_miter_start(&miter, mmu->sgt->sgl,
 				       mmu->sgt->nents,
 				       SG_MITER_FROM_SG);
-			while (sg_miter_next(&miter))
-				*page_ptr++ = miter.page;
 
+			while (sg_miter_next(&miter)) {
+				if (((global_cnt) >=
+				    (PTE_ENTRIES_MAX * chunk)) &&
+				    cnt < nr_pages) {
+					page_ptr[cnt] = miter.page;
+					cnt++;
+				}
+				global_cnt++;
+			}
 			sg_miter_stop(&miter);
 		} else if (mm) {
 			long gup_ret;
