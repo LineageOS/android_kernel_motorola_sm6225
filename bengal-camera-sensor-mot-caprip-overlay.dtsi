@@ -347,6 +347,7 @@
 		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <100000>;
 		status = "ok";
+		multi-user-support;
 	};
 
 	eeprom_main: qcom,eeprom0 {
