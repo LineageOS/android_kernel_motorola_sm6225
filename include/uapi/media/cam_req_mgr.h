@@ -32,6 +32,9 @@
 #define CAM_CUSTOM_DEVICE_TYPE    (CAM_DEVICE_TYPE_BASE + 14)
 #define CAM_OPE_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 15)
 #define CAM_TFE_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 16)
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+#define CAM_MOT_ACTUATOR_TYPE     (CAM_DEVICE_TYPE_BASE + 17)
+#endif
 
 /* cam_req_mgr hdl info */
 #define CAM_REQ_MGR_HDL_IDX_POS           8
