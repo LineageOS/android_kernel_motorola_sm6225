@@ -12,3 +12,4 @@ ccflags-y += -I$(srctree)/techpack/camera/drivers/cam_utils
 
 
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_actuator_dev.o cam_actuator_core.o cam_actuator_soc.o
+obj-$(CONFIG_AF_NOISE_ELIMINATION) += mot_actuator.o mot_actuator_policy.o
