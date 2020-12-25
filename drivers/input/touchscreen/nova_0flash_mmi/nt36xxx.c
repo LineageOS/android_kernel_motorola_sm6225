@@ -1144,6 +1144,9 @@ static int nova_check_dt(struct device_node *np)
 {
 	int i;
 	int count;
+	int ret = -ENODEV;
+	bool dts_using_dummy = false;
+
 	struct device_node *node;
 	struct drm_panel *panel;
 
@@ -1155,16 +1158,28 @@ static int nova_check_dt(struct device_node *np)
 	for (i = 0; i < count; i++) {
 		node = of_parse_phandle(np, "panel", i);
 		panel = of_drm_find_panel(node);
+		NVT_LOG("node->name %s !\n", node->name);
+		if(strstr(node->name, "dummy")) {
+			dts_using_dummy = true;
+		}
 		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			active_panel = panel;
 			active_panel_name = node->name;
 			NVT_LOG("nova_check_dt, active_panel: %s !\n", active_panel_name);
-			return 0;
+			ret = 0;
 		}
 	}
 
-	return -ENODEV;
+	if(dts_using_dummy && ret)
+		ret = -EPROBE_DEFER;
+	if(active_panel_name != NULL) {
+		if(strstr(active_panel_name, "dummy")) {
+			NVT_LOG("Using dummy panel! Return!\n");
+			ret = -ENODEV;
+		}
+	}
+	return ret;
 }
 #endif
 #endif
