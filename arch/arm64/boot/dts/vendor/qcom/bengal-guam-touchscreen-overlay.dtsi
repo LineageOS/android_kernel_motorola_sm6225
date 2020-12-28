@@ -167,7 +167,7 @@
 		pinctrl-names = "pmx_ts_int_active","pmx_ts_int_suspend_high";
 		pinctrl-0 = <&ts_int_active>;
 		pinctrl-1 = <&ts_int_suspend_high>;
-		panel = <&dsi_hlt_ili9882h_video>;
+		panel = <&dsi_hlt_ili9882h_video &dsi_hlt_tinno_ili9882h_video>;
 		panel2 = <&dsi_tm_ili9882n_video>;
 	};
 	chipone_tddi@2 {
