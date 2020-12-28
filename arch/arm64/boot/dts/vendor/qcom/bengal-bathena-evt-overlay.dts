@@ -16,13 +16,13 @@
 #include "bengal-guamp-common-overlay.dtsi"
 #include "bengal-guam-awinic-audio-overlay.dtsi"
 #include "bengal-hbm-display.dtsi"
-#include "bengal-bathena-nfc.dtsi"
+// #include "bengal-bathena-nfc.dtsi"
 
 / {
-	model = "guamp";
-	compatible = "qcom,bengal-guamp", "qcom,bengal-moto", "qcom,bengal";
+	model = "bathena";
+	compatible = "qcom,bengal-bathena", "qcom,bengal-moto", "qcom,bengal";
 	qcom,msm-id = <444 0x10000>;
-	qcom,board-id = <(3<<8) 0xC100>;
+	qcom,board-id = <(0<<8) 0xA000>;
 };
 
 /*
