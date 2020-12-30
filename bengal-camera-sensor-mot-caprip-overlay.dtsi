@@ -490,12 +490,13 @@
 		cam_vana-supply = <&L4P>;
 		cam_vdig-supply = <&L2P>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
+		cam_vaf-supply = <&L5P>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
-			"cam_clk";
+			"cam_clk", "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1100000 0>;
-		rgltr-max-voltage = <1800000 2800000 1100000 0>;
-		rgltr-load-current = <120000 80000 1200000 0>;
+		rgltr-min-voltage = <1800000 2800000 1100000 0 2800000>;
+		rgltr-max-voltage = <1800000 2800000 1100000 0 2800000>;
+		rgltr-load-current = <120000 80000 1200000 0 100000>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
@@ -661,12 +662,13 @@
 		cam_vio-supply = <&L7P>;
 		cam_vana-supply = <&camera_rear_depth_macro_avdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
+		cam_vaf-supply = <&L5P>;
 		regulator-names = "cam_vio", "cam_vana",
-			"cam_clk";
+			"cam_clk", "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000  0>;
-		rgltr-max-voltage = <1800000 2800000  0>;
-		rgltr-load-current = <120000 80000 0>;
+		rgltr-min-voltage = <1800000 2800000  0 2800000>;
+		rgltr-max-voltage = <1800000 2800000  0 2800000>;
+		rgltr-load-current = <120000 80000 0 100000>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk1_active
