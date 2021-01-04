@@ -349,6 +349,7 @@ invalid:
 
 request_fail:
 		retry++;
+		msleep(100);
 		if(unlikely(retry > 2)) {
 			NVT_ERR("error, retry=%d\n", retry);
 			break;
