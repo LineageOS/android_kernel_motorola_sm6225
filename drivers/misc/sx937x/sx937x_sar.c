@@ -914,6 +914,10 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 		LOG_ERR("[SX937x]: %s - get ref-phases-c error\n", __func__);
         return -ENODEV;
 	}
+	if (pdata->ref_phase_a == 0xff) pdata->ref_phase_a = -1;
+	if (pdata->ref_phase_b == 0xff) pdata->ref_phase_b = -1;
+	if (pdata->ref_phase_c == 0xff) pdata->ref_phase_c = -1;
+
 	LOG_INFO("[SX937x]: %s ref_phase_a= %d ref_phase_b= %d ref_phase_c= %d\n",
 		__func__, pdata->ref_phase_a, pdata->ref_phase_b, pdata->ref_phase_c);
 
