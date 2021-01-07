@@ -9429,7 +9429,7 @@ __wlan_hdd_cfg80211_set_wifi_test_config(struct wiphy *wiphy,
 					&params.twt_cmd);
 			if (QDF_IS_STATUS_ERROR(status)) {
 				hdd_err_rl("TWT cmd type is invalid");
-				goto send_err;
+				return qdf_status_to_os_return(status);
 			}
 
 			cmd_id = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_TRIGGER;
