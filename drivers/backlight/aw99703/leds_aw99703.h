@@ -231,6 +231,9 @@ struct aw99703_data {
 	int hwen_gpio;
 	unsigned int  pwm_mode;
 	bool using_lsb;
+	bool bl_reconfig_enable;
+	char panel_info[16];
+	unsigned int bl_slow_reg;
 	unsigned int pwm_period;
 	unsigned int full_scale_led;
 	unsigned int ramp_on_time;
