@@ -210,7 +210,7 @@
 		chipone,irq-gpio = <&tlmm 67 0x2008>;
 		chipone,x-res = <720>;
 		chipone,y-res = <1640>;
-		chipone,def-build-id = <0x0101>;
+		chipone,def-build-id = <0x0208>;
 		chipone,def-config-id = <0x0001>;
 		panel = <&dsi_dsbj_icnl9911c_video>;
 	};
