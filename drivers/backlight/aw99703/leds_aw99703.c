@@ -292,10 +292,18 @@ static int aw99703_backlight_init(struct aw99703_data *drvdata)
 				AW99703_BSTCTR1_OCPSEL_3P3A);
 
 	/*BSTCRT2 IDCTSEL*/
-	aw99703_i2c_write_bit(drvdata->client,
+	if (drvdata->bl_reconfig_enable && (AW99703_REG_BSTCTR2 == drvdata->bl_slow_reg)) {
+                pr_info("%s: REG_BSTCTR2 slow set\n", __func__);
+                aw99703_i2c_write_bit(drvdata->client,
+                                AW99703_REG_BSTCTR2,
+                                AW99703_BSTCTR2_IDCTSEL_MASK | AW99703_BSTCTR2_EMISEL_MASK,
+                                AW99703_BSTCTR2_IDCTSEL_10UH | AW99703_BSTCTR2_EMISEL_SLOW1);
+        } else {
+                aw99703_i2c_write_bit(drvdata->client,
 				AW99703_REG_BSTCTR2,
 				AW99703_BSTCTR2_IDCTSEL_MASK,
 				AW99703_BSTCTR2_IDCTSEL_10UH);
+        }
 
 	/*Backlight current full scale*/
 	aw99703_i2c_write_bit(drvdata->client,
@@ -450,6 +458,39 @@ static void aw99703_brightness_set(struct led_classdev *led_cdev,
 	schedule_work(&drvdata->work);
 }
 
+static int aw99703_parse_dt(struct aw99703_data *drvdata)
+{
+	struct device_node *chosen;
+	int rc = -EINVAL;
+
+	pr_info("%s enter\n", __func__);
+	chosen = of_find_node_by_name(NULL, "chosen");
+	if (chosen) {
+		const char *supplier;
+		char *s, *d;
+
+		rc = of_property_read_string(chosen, "mmi,panel_name", (const char **)&supplier);
+		if (rc) {
+			pr_info("%s: cannot read mmi,panel_name %d\n", __func__, rc);
+		} else {
+			int split_num = 0;
+			/* keep panel & ic info */
+			s = (char *)supplier;
+			d = drvdata->panel_info;
+			while (*s && split_num < 2) {
+				*d++ = *s++;
+				if (*s == '_')
+					split_num++;
+			}
+
+			pr_info("%s: panel_info %s\n", __func__, drvdata->panel_info);
+		}
+		of_node_put(chosen);
+	}
+
+	return rc;
+}
+
 static void
 aw99703_get_dt_data(struct device *dev, struct aw99703_data *drvdata)
 {
@@ -535,6 +576,27 @@ aw99703_get_dt_data(struct device *dev, struct aw99703_data *drvdata)
 		pr_err("%s bl_map not found\n", __func__);
 	else
 		pr_info("%s bl_map=%d\n", __func__, drvdata->bl_map);
+
+	rc = of_property_read_u32(np, "aw99703,bl-slow-reg", &drvdata->bl_slow_reg);
+	if (!rc) {
+		const char *reconfg_panel;
+
+		pr_info("%s bl_slow_reg=%d\n", __func__, drvdata->bl_slow_reg);
+		rc = of_property_read_string(np, "aw99703,bl-reconfig-panel", (const char **)&reconfg_panel);
+		if (rc) {
+			/* enable for all panels */
+			drvdata->bl_reconfig_enable = true;
+		}
+		else {
+			rc = aw99703_parse_dt(drvdata);
+			if (!rc && strstr(drvdata->panel_info, reconfg_panel)) {
+				/* enable for matched panel */
+				drvdata->bl_reconfig_enable = true;
+			}
+		}
+		pr_info("%s bl_reconfig_enable=%d\n", __func__, drvdata->bl_reconfig_enable);
+	}
+
 }
 
 /******************************************************
