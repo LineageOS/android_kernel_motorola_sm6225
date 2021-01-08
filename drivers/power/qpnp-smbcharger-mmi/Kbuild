@@ -2,4 +2,8 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
 
+ifneq ($(filter m y,$(CONFIG_PD_CHARGER_MMI)),)
+	EXTRA_CFLAGS += -DCONFIG_PD_CHARGER_MMI
+endif
+
 obj-m += qpnp-smbcharger-mmi.o
