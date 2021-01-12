@@ -965,14 +965,16 @@ static int sr100_probe(struct spi_device* spi) {
   sr100_dev->spi_handshake_gpio = platform_data->spi_handshake_gpio;
   sr100_dev->rtc_sync_gpio = platform_data->rtc_sync_gpio;
 
-  rf_clk2 = devm_clk_get(&spi->dev,"rf_clk2");
-  if(rf_clk2 != NULL) {
-    rc = clk_prepare_enable(rf_clk2);
-    if(rc) {
-      SR100_ERR_MSG("failed to enable clk\n");
+  if (of_get_property(spi->dev.of_node, "clocks", NULL)) {
+    rf_clk2 = devm_clk_get(&spi->dev,"rf_clk2");
+    if(rf_clk2 != NULL) {
+      rc = clk_prepare_enable(rf_clk2);
+      if(rc) {
+        SR100_ERR_MSG("failed to enable clk\n");
+      }
+    } else {
+      SR100_ERR_MSG("failed to get clk\n");
     }
-  } else {
-    SR100_ERR_MSG("failed to get clk\n");
   }
 
 #if HVH_VDD_ENABLE
