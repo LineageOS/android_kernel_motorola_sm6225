@@ -235,6 +235,9 @@ struct nfc_dev {
 
 int nfc_dev_open(struct inode *inode, struct file *filp);
 int nfc_dev_close(struct inode *inode, struct file *filp);
+#ifdef CONFIG_COMPAT
+long nfc_compat_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg);
+#endif
 long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg);
 int nfc_parse_dt(struct device *dev, struct platform_gpio *nfc_gpio,
 		 struct platform_ldo *ldo, uint8_t interface);
