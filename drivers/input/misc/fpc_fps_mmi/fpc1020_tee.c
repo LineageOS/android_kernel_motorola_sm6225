@@ -426,6 +426,7 @@ static int fpc1020_remove(struct platform_device *pdev)
 {
 	struct  fpc1020_data *fpc1020 = dev_get_drvdata(&pdev->dev);
 
+	disable_irq(gpio_to_irq(fpc1020->irq_gpio));
 #ifdef CONFIG_INPUT_MISC_FPC1020_SAVE_TO_CLASS_DEVICE
 	fpc1020_create_sysfs(fpc1020, false);
 #else
