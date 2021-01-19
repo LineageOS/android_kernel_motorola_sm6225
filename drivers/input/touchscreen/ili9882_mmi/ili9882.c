@@ -973,6 +973,15 @@ static void ili_update_tp_module_info(void)
 		ilits->md_fw_ili = CTPM_FW_TXD_9882N;
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD_9882N);
 		break;
+	case MODEL_TXD_7806S:
+		ilits->md_name = "TXD_7806S";
+		ilits->md_fw_filp_path = TXD_7806S_FW_FILP_PATH;
+		ilits->md_fw_rq_path = TXD_7806S_FW_REQUEST_PATH;
+		ilits->md_ini_path = TXD_7806S_INI_NAME_PATH;
+		ilits->md_ini_rq_path = TXD_7806S_INI_REQUEST_PATH;
+		ilits->md_fw_ili = CTPM_FW_TXD_7806S;
+		ilits->md_fw_ili_size = sizeof(CTPM_FW_TXD_7806S);
+		break;
 	case MODEL_TM:
 		ilits->md_name = "ILITEK_TDDI_TM";
 		ilits->md_fw_filp_path = TM_FW_REQUEST_PATH;
