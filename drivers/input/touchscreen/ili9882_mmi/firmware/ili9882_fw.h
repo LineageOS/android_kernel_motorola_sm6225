@@ -83,7 +83,7 @@ static unsigned char CTPM_FW_TXD[] = {
 #define TXD_9882H_FW_FILP_PATH		"/sdcard/ILITEK_FW_TXD_9882H"
 #define TXD_9882H_INI_REQUEST_PATH	"mp_txd_9882h.ini"
 #define TXD_9882H_FW_REQUEST_PATH	"ILITEK_FW_TXD_9882H"
-static unsigned char CTPM_FW_TXD_9882N[] = {
+static unsigned char CTPM_FW_TXD_9882H[] = {
 	0xFF,
 };
 
@@ -91,7 +91,15 @@ static unsigned char CTPM_FW_TXD_9882N[] = {
 #define TXD_9882N_FW_FILP_PATH		"/sdcard/ILITEK_FW_TXD_9882N"
 #define TXD_9882N_INI_REQUEST_PATH	"mp_txd_9882n.ini"
 #define TXD_9882N_FW_REQUEST_PATH	"ILITEK_FW_TXD_9882N"
-static unsigned char CTPM_FW_TXD_9882H[] = {
+static unsigned char CTPM_FW_TXD_9882N[] = {
+	0xFF,
+};
+
+#define TXD_7806S_INI_NAME_PATH		"/sdcard/mp_txd_7806s.ini"
+#define TXD_7806S_FW_FILP_PATH		"/sdcard/ILITEK_FW_TXD_7806S"
+#define TXD_7806S_INI_REQUEST_PATH	"mp_txd_7806s.ini"
+#define TXD_7806S_FW_REQUEST_PATH	"ILITEK_FW_TXD_7806S"
+static unsigned char CTPM_FW_TXD_7806S[] = {
 	0xFF,
 };
 

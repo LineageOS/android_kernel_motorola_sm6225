@@ -451,6 +451,8 @@ static int ili_parse_tp_module()
 				tp_module = MODEL_TXD_9882H;
 			} else if (strstr(active_panel_name, "ili9882n")) {
 				tp_module = MODEL_TXD_9882N;
+			} else if (strstr(active_panel_name, "ili7806s")) {
+				tp_module = MODEL_TXD_7806S;
 			}
 		} else if (strstr(active_panel_name, "tm")) { // || strstr(active_panel_name, "tianma")) {
 			if (strstr(active_panel_name, "ili9882n")) {
