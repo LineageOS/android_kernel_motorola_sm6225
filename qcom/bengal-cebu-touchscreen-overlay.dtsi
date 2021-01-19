@@ -207,7 +207,7 @@
 		spi-cpha;
 		spi-cpol;
 		chipone,rst-gpio = <&tlmm 66 0x00>;
-		chipone,irq-gpio = <&tlmm 67 0x2008>;
+		chipone,irq-gpio = <&tlmm 67 0x00>;
 		chipone,x-res = <720>;
 		chipone,y-res = <1640>;
 		chipone,def-build-id = <0x020b>;
