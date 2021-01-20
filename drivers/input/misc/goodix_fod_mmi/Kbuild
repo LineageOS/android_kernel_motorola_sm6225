@@ -5,6 +5,11 @@ EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 ifneq ($(filter m y,$(CONFIG_MMI_RELAY)),)
 	EXTRA_CFLAGS += -DMMI_RELAY_MODULE
 endif
+
+ifneq ($(filter banks%, $(TARGET_PRODUCT)),)
+	EXTRA_CFLAGS += -DSOFTDEP_GPIO_PCAL6408
+endif
+
 goodix_fod_mmi-y += gf_spi.o netlink.o platform.o
 
 obj-m += goodix_fod_mmi.o

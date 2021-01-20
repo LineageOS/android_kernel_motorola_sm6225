@@ -1014,3 +1014,6 @@ MODULE_AUTHOR("Jiangtao Yi, <yijiangtao@goodix.com>");
 MODULE_AUTHOR("Jandy Gou, <gouqingsong@goodix.com>");
 MODULE_DESCRIPTION("goodix fingerprint sensor device driver");
 MODULE_LICENSE("GPL");
+#ifdef SOFTDEP_GPIO_PCAL6408
+MODULE_SOFTDEP("pre: gpio-pcal6408");
+#endif
