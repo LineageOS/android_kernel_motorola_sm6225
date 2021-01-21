@@ -170,6 +170,7 @@
 		panel = <&dsi_hlt_ili9882h_video &dsi_hlt_tinno_ili9882h_video>;
 		panel2 = <&dsi_tm_ili9882n_video>;
 	};
+/*
 	chipone_tddi@2 {
 		compatible = "chipone-tddi";
 		reg = <2>;
@@ -186,6 +187,25 @@
 		chipone,def-config-id = <0x0001>;
 		panel = <&dsi_tm_icnl9911s_video>;
          };
+*/
+	focaltech@2 {
+		compatible = "focaltech,fts";
+		reg = <0x2>;
+		spi-max-frequency = <6000000>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x2>;
+		focaltech,reset-gpio = <&tlmm 66 0x00>;
+		focaltech,irq-gpio = <&tlmm 67 0x02>;
+		focaltech,max-touch-number = <10>;
+		focaltech,display-coords =  <0 0 719 1599>;
+		panel = <&dsi_hlt_ft8006s_video>;
+/*
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+*/
+	};
 	 nova_0flash_ts@3 {
 		compatible = "novatek,NVT-ts-spi";
 		reg = <3>;
