@@ -987,7 +987,11 @@ static int ilitek_plat_probe(void)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_init(&(ilits->gesture_wakelock), WAKE_LOCK_SUSPEND, "dt-wake-lock");
 #else
-		wakeup_source_init(&(ilits->gesture_wakelock), "dt-wake-lock");
+		PM_WAKEUP_REGISTER(ilits->dev, ilits->gesture_wakelock, "dt-wake-lock");
+		if (!ilits->gesture_wakelock) {
+			ILI_ERR("ILITEK Driver failed to load. wakeup_source_init failed.");
+			return -ENOMEM;
+		}
 #endif
 		if (!ili_sensor_init(ilits))
 			initialized_sensor = true;
@@ -1016,6 +1020,10 @@ static int ilitek_tp_pm_resume(struct device *dev)
 static int ilitek_plat_remove(void)
 {
 	ILI_INFO("remove plat dev\n");
+#ifndef CONFIG_HAS_WAKELOCK
+	if(ilits->gesture_wakelock)
+		PM_WAKEUP_UNREGISTER(ilits->gesture_wakelock);
+#endif
 	ili_dev_remove();
 	return 0;
 }
