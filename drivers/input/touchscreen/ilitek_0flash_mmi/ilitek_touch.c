@@ -1159,7 +1159,7 @@ void ili_report_gesture_mode(u8 *buf, int len)
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&(ilits->gesture_wakelock), msecs_to_jiffies(5000));
 #else
-		__pm_wakeup_event(&(ilits->gesture_wakelock), 5000);
+		PM_WAKEUP_EVENT(ilits->gesture_wakelock, 5000);
 #endif
 #else
 		input_report_key(input, KEY_GESTURE_POWER, 1);
