@@ -924,7 +924,7 @@ struct ilitek_ts_data {
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock gesture_wakelock;
 #else
-	struct wakeup_source gesture_wakelock;
+	struct wakeup_source *gesture_wakelock;
 #endif
 #endif
 
