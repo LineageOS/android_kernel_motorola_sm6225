@@ -245,7 +245,7 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct wl2864c *chip;
-	int error, cs_gpio, ret;
+	int error, cs_gpio, ret, chip_rev, current_limit;
 
 	chip = devm_kzalloc(dev, sizeof(struct wl2864c), GFP_KERNEL);
 	if (!chip) {
@@ -288,12 +288,20 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 		return error;
 	}
 
-	{
-		int chip_rev = 0;
-		ret = regmap_bulk_read(chip->regmap, 0x00, &chip_rev, 1);
+	ret = regmap_bulk_read(chip->regmap, WL2864C_CHIP_REV, &chip_rev, 1);
+	dev_err(chip->dev, "wl2864c chip rev: %02x\n", chip_rev);
 
-		printk("wl2864c chip rev: %02x\n", chip_rev);
+	ret = regmap_bulk_read(chip->regmap, WL2864C_CURRENT_LIMITSEL, &current_limit, 1);
+	dev_err(chip->dev, "default current limit is 0x%x\n", current_limit);
+
+	current_limit |= 0x40;
+	ret = regmap_write(chip->regmap, WL2864C_CURRENT_LIMITSEL, current_limit);
+	if (ret < 0) {
+		dev_err(chip->dev,"Failed to write current limit register\n");
 	}
+
+	ret = regmap_bulk_read(chip->regmap, WL2864C_CURRENT_LIMITSEL, &current_limit, 1);
+	dev_err(chip->dev, "modify current limit to 0x%x\n", current_limit);
 
 	ret = wl2864c_regulator_init(chip);
 	if (ret < 0) {
