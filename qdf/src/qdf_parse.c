@@ -127,7 +127,8 @@ QDF_STATUS qdf_ini_parse(const char *ini_path, void *context,
 				}
 				if(((strncmp(device_ptr, "rav", 3) == 0) ||
 							(strncmp(device_ptr, "sofiar", 6) == 0) ||
-							(strncmp(device_ptr, "astro", 5) == 0))
+							(strncmp(device_ptr, "astro", 5) == 0) ||
+							((strncmp(device_ptr, "guam ", 5) == 0) && strncmp(radio_ptr, "CHINA", 5) != 0))
 							&& (strncmp(radio_ptr, "NA", 2) != 0)) {
 					*value='1'; //wifi BandCapability = 2.4G only
 					qdf_debug("value_new1:%.2s\n",value );
