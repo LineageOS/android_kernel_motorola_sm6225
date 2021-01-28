@@ -35,6 +35,7 @@
 
 #define HEARTBEAT_DELAY_MS 60000
 #define HEARTBEAT_FACTORY_MS 1000
+#define HEARTBEAT_DISCHARGE_MS 60000
 #define HEARTBEAT_WAKEUP_INTRVAL_NS 70000000000
 
 static bool debug_enabled;
@@ -153,6 +154,7 @@ struct mmi_charger {
 	struct mmi_battery_info batt_info;
 	struct mmi_charger_info chg_info;
 	struct mmi_charger_cfg cfg;
+	struct mmi_charger_constraint constraint;
 	struct mmi_battery_pack *battery;
 	struct list_head list;
 };
@@ -189,6 +191,8 @@ struct mmi_charger_chip {
 
 	int			dcp_pmax;
 	int			hvdcp_pmax;
+	int			pd_pmax;
+	int			wls_pmax;
 	int			max_chrg_temp;
 	bool			enable_charging_limit;
         bool                    enable_factory_poweroff;
@@ -206,11 +210,13 @@ struct mmi_charger_chip {
 	void			*ipc_log;
 };
 
+#define CHARGER_POWER_5W 5000
 #define CHARGER_POWER_7P5W 7500
 #define CHARGER_POWER_10W 10000
 #define CHARGER_POWER_15W 15000
 #define CHARGER_POWER_18W 18000
 #define CHARGER_POWER_20W 20000
+#define CHARGER_POWER_MAX 100000
 static ssize_t dcp_pmax_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
@@ -230,7 +236,7 @@ static ssize_t dcp_pmax_store(struct device *dev,
 	}
 
 	if (this_chip->dcp_pmax != pmax &&
-	    (pmax > 0 && pmax <= CHARGER_POWER_10W)) {
+	    (pmax >= CHARGER_POWER_5W && pmax <= CHARGER_POWER_10W)) {
 		this_chip->dcp_pmax = pmax;
 		cancel_delayed_work(&this_chip->heartbeat_work);
 		schedule_delayed_work(&this_chip->heartbeat_work,
@@ -275,7 +281,7 @@ static ssize_t hvdcp_pmax_store(struct device *dev,
 	}
 
 	if (this_chip->hvdcp_pmax != pmax &&
-	    (pmax >= CHARGER_POWER_7P5W && pmax <= CHARGER_POWER_20W)) {
+	    (pmax >= CHARGER_POWER_7P5W && pmax <= CHARGER_POWER_MAX)) {
 		this_chip->hvdcp_pmax = pmax;
 		cancel_delayed_work(&this_chip->heartbeat_work);
 		schedule_delayed_work(&this_chip->heartbeat_work,
@@ -300,6 +306,96 @@ static ssize_t hvdcp_pmax_show(struct device *dev,
 static DEVICE_ATTR(hvdcp_pmax, 0644,
 		hvdcp_pmax_show,
 		hvdcp_pmax_store);
+
+static ssize_t pd_pmax_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long pmax;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &pmax);
+	if (r) {
+		mmi_err(this_chip, "Invalid pd pmax value = %lu\n", pmax);
+		return -EINVAL;
+	}
+
+	if (this_chip->pd_pmax != pmax &&
+	    (pmax >= CHARGER_POWER_15W && pmax <= CHARGER_POWER_MAX)) {
+		this_chip->pd_pmax = pmax;
+		cancel_delayed_work(&this_chip->heartbeat_work);
+		schedule_delayed_work(&this_chip->heartbeat_work,
+				      msecs_to_jiffies(0));
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t pd_pmax_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	if (!this_chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", this_chip->pd_pmax);
+}
+
+static DEVICE_ATTR(pd_pmax, 0644,
+		pd_pmax_show,
+		pd_pmax_store);
+
+static ssize_t wls_pmax_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long pmax;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &pmax);
+	if (r) {
+		mmi_err(this_chip, "Invalid wireless pmax value = %lu\n", pmax);
+		return -EINVAL;
+	}
+
+	if (this_chip->wls_pmax != pmax &&
+	    (pmax >= CHARGER_POWER_5W && pmax <= CHARGER_POWER_MAX)) {
+		this_chip->wls_pmax = pmax;
+		cancel_delayed_work(&this_chip->heartbeat_work);
+		schedule_delayed_work(&this_chip->heartbeat_work,
+				      msecs_to_jiffies(0));
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t wls_pmax_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	if (!this_chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", this_chip->wls_pmax);
+}
+
+static DEVICE_ATTR(wls_pmax, 0644,
+		wls_pmax_show,
+		wls_pmax_store);
 
 static ssize_t factory_image_mode_store(struct device *dev,
 				struct device_attribute *attr,
@@ -1061,11 +1157,14 @@ static void mmi_reset_charger_configure(struct mmi_charger_chip *chip,
 	charger->cfg.full_charged = false;
 	charger->cfg.charging_disable = false;
 	charger->cfg.charger_suspend = false;
-	charger->cfg.demo_mode = chip->demo_mode;
-	charger->cfg.factory_version = chip->factory_version;
-	charger->cfg.factory_mode = chip->factory_mode;
-	charger->cfg.dcp_pmax = chip->dcp_pmax;
-	charger->cfg.hvdcp_pmax = chip->hvdcp_pmax;
+
+	charger->constraint.demo_mode = chip->demo_mode;
+	charger->constraint.factory_version = chip->factory_version;
+	charger->constraint.factory_mode = chip->factory_mode;
+	charger->constraint.dcp_pmax = chip->dcp_pmax;
+	charger->constraint.hvdcp_pmax = chip->hvdcp_pmax;
+	charger->constraint.pd_pmax = chip->pd_pmax;
+	charger->constraint.wls_pmax = chip->wls_pmax;
 }
 
 static void mmi_configure_charger(struct mmi_charger_chip *chip,
@@ -1142,6 +1241,7 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 	if (chip->force_charger_disabled)
 		cfg->charger_suspend = true;
 
+	charger->driver->set_constraint(charger->driver->data, &charger->constraint);
 	charger->driver->config_charge(charger->driver->data, cfg);
 
 	mmi_info(chip, "[C:%s]: FV=%d, FCC=%d, CDIS=%d,"
@@ -1483,12 +1583,14 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 	mutex_unlock(&chip->charger_lock);
 
 	mmi_dbg(chip, "DemoMode:%d, FactoryVersion:%d, FactoryMode:%d,"
-		" dcp_pmax:%d, hvdcp_pmax:%d\n",
+		" dcp_pmax:%d, hvdcp_pmax:%d, pd_pmax:%d, wls_pmax:%d\n",
 		chip->demo_mode,
 		chip->factory_version,
 		chip->factory_mode,
 		chip->dcp_pmax,
-		chip->hvdcp_pmax);
+		chip->hvdcp_pmax,
+		chip->pd_pmax,
+		chip->wls_pmax);
 
 	if (chip->factory_mode ||
 	    (chip->factory_version && chip->enable_factory_poweroff)) {
@@ -1507,8 +1609,10 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 
 	if (chip->factory_mode)
 		hb_resch_time = HEARTBEAT_FACTORY_MS;
-	else
+	else if (chip->max_charger_rate != POWER_SUPPLY_CHARGE_RATE_NONE)
 		hb_resch_time = chip->heartbeat_interval;
+	else
+		hb_resch_time = HEARTBEAT_DISCHARGE_MS;
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
 	if (suspend_wakeups ||
@@ -1659,7 +1763,8 @@ int mmi_register_charger_driver(struct mmi_charger_driver *driver)
 	if (!driver->get_batt_info ||
 	    !driver->get_chg_info ||
 	    !driver->config_charge ||
-	    !driver->is_charge_tapered) {
+	    !driver->is_charge_tapered ||
+	    !driver->set_constraint) {
 		mmi_err(chip, "[C:%s]: mmi charger function is empty\n",
 			driver->name);
 		return -EINVAL;
@@ -1970,6 +2075,16 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 	if (rc)
 		chip->hvdcp_pmax = CHARGER_POWER_15W;
 
+	rc = of_property_read_u32(node, "mmi,pd-power-max",
+				  &chip->pd_pmax);
+	if (rc)
+		chip->pd_pmax = CHARGER_POWER_18W;
+
+	rc = of_property_read_u32(node, "mmi,wls-power-max",
+				  &chip->wls_pmax);
+	if (rc)
+		chip->wls_pmax = CHARGER_POWER_10W;
+
 	node = of_find_node_by_path("/chosen");
 
 	if (!node)
@@ -2089,6 +2204,18 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	}
 
 	rc = device_create_file(chip->dev,
+				&dev_attr_pd_pmax);
+	if (rc) {
+		mmi_err(chip, "couldn't create pd_pmax\n");
+	}
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_wls_pmax);
+	if (rc) {
+		mmi_err(chip, "couldn't create wls_pmax\n");
+	}
+
+	rc = device_create_file(chip->dev,
 				&dev_attr_force_demo_mode);
 	if (rc) {
 		mmi_err(chip, "couldn't create force_demo_mode\n");
@@ -2158,6 +2285,8 @@ static int mmi_charger_remove(struct platform_device *pdev)
 	device_remove_file(chip->dev, &dev_attr_factory_charge_upper);
 	device_remove_file(chip->dev, &dev_attr_dcp_pmax);
 	device_remove_file(chip->dev, &dev_attr_hvdcp_pmax);
+	device_remove_file(chip->dev, &dev_attr_pd_pmax);
+	device_remove_file(chip->dev, &dev_attr_wls_pmax);
 	if (chip->batt_psy) {
 		if (chip->batt_uenvp[0]) {
 			kfree(chip->batt_uenvp[0]);
