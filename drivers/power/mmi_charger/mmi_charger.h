@@ -87,13 +87,16 @@ struct mmi_charger_cfg {
 	bool taper_kickoff;
 	bool charging_disable;
 	bool charger_suspend;
+};
 
+struct mmi_charger_constraint {
 	int demo_mode;
 	bool factory_mode;
 	bool factory_version;
-
 	int dcp_pmax;
 	int hvdcp_pmax;
+	int pd_pmax;
+	int wls_pmax;
 };
 
 struct mmi_charger_driver {
@@ -104,6 +107,7 @@ struct mmi_charger_driver {
 	int (*config_charge)(void *data, struct mmi_charger_cfg *config);
 	bool (*is_charge_tapered)(void *data, int tapered_ma);
 	bool (*is_charge_halt)(void *data);
+	void (*set_constraint)(void *data, struct mmi_charger_constraint *constraint);
 	void *data;
 };
 
