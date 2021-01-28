@@ -56,6 +56,8 @@ enum oem_property_type {
 	OEM_PROP_CHG_FG_ITERM,
 	OEM_PROP_CHG_BC_PMAX,
 	OEM_PROP_CHG_QC_PMAX,
+	OEM_PROP_CHG_PD_PMAX,
+	OEM_PROP_CHG_WLS_PMAX,
 	OEM_PROP_CHG_SUSPEND,
 	OEM_PROP_CHG_DISABLE,
 	OEM_PROP_DEMO_MODE,
@@ -135,6 +137,7 @@ struct qti_charger {
 	struct mmi_battery_info		batt_info;
 	struct mmi_charger_info		chg_info;
 	struct mmi_charger_cfg		chg_cfg;
+	struct mmi_charger_constraint	constraint;
 	struct mmi_charger_driver	*driver;
 	u32				*profile_data;
 	struct charger_profile_info	profile_info;
@@ -424,30 +427,6 @@ static int qti_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 		if (!rc)
 			chg->chg_cfg.charging_disable = config->charging_disable;
 	}
-	if (config->demo_mode != chg->chg_cfg.demo_mode) {
-		value = config->demo_mode;
-		rc = qti_charger_write(chg, OEM_PROP_DEMO_MODE,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->chg_cfg.demo_mode = config->demo_mode;
-	}
-	if (config->factory_version != chg->chg_cfg.factory_version) {
-		value = config->factory_version;
-		rc = qti_charger_write(chg, OEM_PROP_FACTORY_VERSION,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->chg_cfg.factory_version = config->factory_version;
-	}
-	if (config->factory_mode != chg->chg_cfg.factory_mode) {
-		value = config->factory_mode;
-		rc = qti_charger_write(chg, OEM_PROP_FACTORY_MODE,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->chg_cfg.factory_mode = config->factory_mode;
-	}
 
 	if (config->taper_kickoff != chg->chg_cfg.taper_kickoff) {
 		chg->chg_cfg.taper_kickoff = config->taper_kickoff;
@@ -473,24 +452,6 @@ static int qti_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 					sizeof(value));
 		if (!rc)
 			chg->chg_cfg.fg_iterm = config->fg_iterm;
-	}
-
-	if (config->dcp_pmax != chg->chg_cfg.dcp_pmax) {
-		value = config->dcp_pmax;
-		rc = qti_charger_write(chg, OEM_PROP_CHG_BC_PMAX,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->chg_cfg.dcp_pmax = config->dcp_pmax;
-	}
-
-	if (config->hvdcp_pmax != chg->chg_cfg.hvdcp_pmax) {
-		value = config->hvdcp_pmax;
-		rc = qti_charger_write(chg, OEM_PROP_CHG_QC_PMAX,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->chg_cfg.hvdcp_pmax = config->hvdcp_pmax;
 	}
 
 	if (config->charging_reset != chg->chg_cfg.charging_reset) {
@@ -528,6 +489,7 @@ static bool qti_charger_is_charge_tapered(void *data, int tapered_ma)
 
 	return is_tapered;
 }
+
 static bool qti_charger_is_charge_halt(void *data)
 {
 	struct qti_charger *chg = data;
@@ -538,6 +500,78 @@ static bool qti_charger_is_charge_halt(void *data)
 
 	return false;
 }
+
+static void qti_charger_set_constraint(void *data,
+			struct mmi_charger_constraint *constraint)
+{
+	int rc;
+	u32 value;
+	struct qti_charger *chg = data;
+
+	if (constraint->demo_mode != chg->constraint.demo_mode) {
+		value = constraint->demo_mode;
+		rc = qti_charger_write(chg, OEM_PROP_DEMO_MODE,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.demo_mode = constraint->demo_mode;
+	}
+
+	if (constraint->factory_version != chg->constraint.factory_version) {
+		value = constraint->factory_version;
+		rc = qti_charger_write(chg, OEM_PROP_FACTORY_VERSION,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.factory_version = constraint->factory_version;
+	}
+
+	if (constraint->factory_mode != chg->constraint.factory_mode) {
+		value = constraint->factory_mode;
+		rc = qti_charger_write(chg, OEM_PROP_FACTORY_MODE,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.factory_mode = constraint->factory_mode;
+	}
+
+	if (constraint->dcp_pmax != chg->constraint.dcp_pmax) {
+		value = constraint->dcp_pmax;
+		rc = qti_charger_write(chg, OEM_PROP_CHG_BC_PMAX,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.dcp_pmax = constraint->dcp_pmax;
+	}
+
+	if (constraint->hvdcp_pmax != chg->constraint.hvdcp_pmax) {
+		value = constraint->hvdcp_pmax;
+		rc = qti_charger_write(chg, OEM_PROP_CHG_QC_PMAX,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.hvdcp_pmax = constraint->hvdcp_pmax;
+	}
+
+	if (constraint->pd_pmax != chg->constraint.pd_pmax) {
+		value = constraint->pd_pmax;
+		rc = qti_charger_write(chg, OEM_PROP_CHG_PD_PMAX,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.pd_pmax = constraint->pd_pmax;
+	}
+
+	if (constraint->wls_pmax != chg->constraint.wls_pmax) {
+		value = constraint->wls_pmax;
+		rc = qti_charger_write(chg, OEM_PROP_CHG_WLS_PMAX,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->constraint.wls_pmax = constraint->wls_pmax;
+	}
+}
+
 static int qti_charger_write_profile(struct qti_charger *chg)
 {
 	int rc;
@@ -592,8 +626,8 @@ static int qti_charger_init(struct qti_charger *chg)
 		return 0;
 	}
 
-	chg->chg_cfg.factory_mode = mmi_is_factory_mode();
-	value = chg->chg_cfg.factory_mode;
+	chg->constraint.factory_mode = mmi_is_factory_mode();
+	value = chg->constraint.factory_mode;
 	rc = qti_charger_write(chg, OEM_PROP_FACTORY_MODE,
 					&value,
 					sizeof(value));
@@ -602,8 +636,8 @@ static int qti_charger_init(struct qti_charger *chg)
 		return rc;
 	}
 
-	chg->chg_cfg.factory_version = mmi_is_factory_version();
-	value = chg->chg_cfg.factory_version;
+	chg->constraint.factory_version = mmi_is_factory_version();
+	value = chg->constraint.factory_version;
 	rc = qti_charger_write(chg, OEM_PROP_FACTORY_VERSION,
 					&value,
 					sizeof(value));
@@ -633,6 +667,7 @@ static int qti_charger_init(struct qti_charger *chg)
 	driver->config_charge = qti_charger_config_charge;
 	driver->is_charge_tapered = qti_charger_is_charge_tapered;
 	driver->is_charge_halt = qti_charger_is_charge_halt;
+	driver->set_constraint = qti_charger_set_constraint;
 	chg->driver = driver;
 
 	/* register driver to mmi charger */
