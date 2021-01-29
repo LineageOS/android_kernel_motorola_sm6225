@@ -2014,12 +2014,47 @@ static ssize_t nvt_palm_settings_store(struct device *dev,
 }
 #endif
 
+#ifdef EDGE_SUPPRESSION
+static ssize_t nvt_edge_reject_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count) {
+	int res = 0;
+	uint8_t state;
+
+	res = kstrtou8(buf, 0, &state);
+	if (res < 0)
+		return res;
+
+	ts->edge_reject_state = state;
+
+	NVT_LOG("edge_reject_state %d!\n", state);
+	nvt_edge_reject_set(ts->edge_reject_state);
+
+	return count;
+}
+
+static ssize_t nvt_edge_reject_show(struct device *dev,
+	struct device_attribute *attr, char *buf) {
+
+	if(ts->edge_reject_state == VERTICAL)
+		return scnprintf(buf, PAGE_SIZE, "VERTICAL\n");
+	else if(ts->edge_reject_state == LEFT_UP)
+		return scnprintf(buf, PAGE_SIZE, "LEFT_UP\n");
+	else if(ts->edge_reject_state == RIGHT_UP)
+		return scnprintf(buf, PAGE_SIZE, "RIGHT_UP\n");
+	else
+		return scnprintf(buf, PAGE_SIZE, "Not Support!\n");
+}
+#endif
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
 	__ATTR_RO(ic_ver),
 #ifdef PALM_GESTURE
 	__ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, nvt_palm_settings_show, nvt_palm_settings_store),
+#endif
+#ifdef EDGE_SUPPRESSION
+	__ATTR(rotate, S_IRUGO | S_IWUSR | S_IWGRP, nvt_edge_reject_show, nvt_edge_reject_store),
 #endif
 	__ATTR_NULL
 };
@@ -2046,7 +2081,7 @@ int32_t nvt_fw_class_init(bool create)
 	static int minor;
 
 	if (create) {
-#ifdef PALM_GESTURE
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
 		ret = alloc_chrdev_region(&devno, 0, 1, NVT_PRIMARY_NAME);
 #else
 		ret = alloc_chrdev_region(&devno, 0, 1, NVT_SPI_NAME);
@@ -2066,7 +2101,7 @@ int32_t nvt_fw_class_init(bool create)
 
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				devno,
-#ifdef PALM_GESTURE
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
 				ts, NVT_PRIMARY_NAME);
 #else
 				ts, NVT_SPI_NAME);
@@ -2086,7 +2121,7 @@ int32_t nvt_fw_class_init(bool create)
 		if (error)
 			goto device_destroy;
 		else
-#ifdef PALM_GESTURE
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
 			NVT_LOG("create /sys/class/touchscreen/%s Succeeded!\n", NVT_PRIMARY_NAME);
 #else
 			NVT_LOG("create /sys/class/touchscreen/%s Succeeded!\n", NVT_SPI_NAME);
@@ -2329,6 +2364,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 #ifdef PALM_GESTURE
 	ts->palm_enabled = false;
+#endif
+#ifdef EDGE_SUPPRESSION
+	ts->edge_reject_state = VERTICAL;
 #endif
 
 	sprintf(ts->phys, "input/ts");
