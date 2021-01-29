@@ -681,6 +681,25 @@ int nvt_palm_set(bool enabled) {
 }
 #endif
 
+#ifdef EDGE_SUPPRESSION
+int32_t nvt_edge_reject_set(uint32_t status) {
+	int ret = 0;
+
+	if(status == VERTICAL)// 0 180
+		ret = nvt_cmd_store(EDGE_REJECT_VERTICLE_CMD);
+	else if(status == LEFT_UP) //90
+		ret = nvt_cmd_store(EDGE_REJECT_LEFT_UP);
+	else if(status == RIGHT_UP) //270
+		ret = nvt_cmd_store(EDGE_REJECT_RIGHT_UP);
+	else {
+		NVT_ERR("Invalid parameter %d!\n", status);
+		ret = -1;
+	}
+
+	return ret;
+}
+#endif
+
 static int nvt_monitor_control_show(struct seq_file *sfile, void *v)
 {
 	if(monitor_control_status == 1)
