@@ -1040,5 +1040,8 @@ void Boot_Update_Firmware(struct work_struct *work)
 #ifdef PALM_GESTURE
 	nvt_palm_set(ts->palm_enabled);
 #endif
+#ifdef EDGE_SUPPRESSION
+	ts->edge_reject_state = VERTICAL;
+#endif
 }
 #endif /* BOOT_UPDATE_FIRMWARE */
