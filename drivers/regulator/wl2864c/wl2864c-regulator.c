@@ -47,10 +47,7 @@ struct wl2864c_evt_sta {
 static const struct wl2864c_evt_sta wl2864c_status_reg = { WL2864C_LDO_EN };
 
 static const struct regmap_range wl2864c_writeable_ranges[] = {
-	/* Do not let useless register writeable */
-	regmap_reg_range(WL2864C_CURRENT_LIMITSEL, WL2864C_CURRENT_LIMITSEL),
-	regmap_reg_range(WL2864C_LDO1_VOUT, WL2864C_LDO7_VOUT),
-	regmap_reg_range(WL2864C_LDO_EN, WL2864C_LDO_EN),
+	regmap_reg_range(WL2864C_CURRENT_LIMITSEL, WL2864C_SEQ_STATUS),
 };
 
 static const struct regmap_range wl2864c_readable_ranges[] = {
@@ -93,6 +90,7 @@ static int wl2864c_get_current_limit(struct regulator_dev *rdev)
 	unsigned int val = 0;
 
 	dev_err(chip->dev, "************ start dump wl2864c register ************\n");
+	dev_err(chip->dev, "regulator name = %s \n", rdev->desc->name);
 	dev_err(chip->dev, "register 0x00:      chip version\n");
 	dev_err(chip->dev, "register 0x01:      LDO CL\n");
 	dev_err(chip->dev, "register 0x03~0x09: LDO1~LDO7 OUT Voltage\n");
@@ -273,7 +271,19 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct wl2864c *chip;
-	int error, cs_gpio, ret, current_limit;
+	int error, cs_gpio, ret, i;
+
+	/* Set all register to initial value when probe driver to avoid register value was modified.
+	*/
+	const unsigned int initial_register[7][2] = {
+		{WL2864C_CURRENT_LIMITSEL, 	0x40},
+		{WL2864C_DISCHARGE_RESISTORS, 	0x00},
+		{WL2864C_LDO1_LDO2_SEQ, 	0x00},
+		{WL2864C_LDO3_LDO4_SEQ, 	0x00},
+		{WL2864C_LDO5_LDO6_SEQ, 	0x00},
+		{WL2864C_LDO7_SEQ, 		0x00},
+		{WL2864C_SEQ_STATUS, 		0x00},
+	};
 
 	chip = devm_kzalloc(dev, sizeof(struct wl2864c), GFP_KERNEL);
 	if (!chip) {
@@ -315,13 +325,15 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 		return error;
 	}
 
-	ret = regmap_bulk_read(chip->regmap, WL2864C_CURRENT_LIMITSEL, &current_limit, 1);
-	dev_err(chip->dev, "default current limit is 0x%x\n", current_limit);
+	for (i = 0; i < 7; i++) {
+		ret = regmap_write(chip->regmap, initial_register[i][0], initial_register[i][1]);
+		if (ret < 0) {
+			dev_err(chip->dev,"Failed to write register: 0x%x, value: 0x%x \n",
+				initial_register[i][0], initial_register[i][1]);
+		}
 
-	current_limit |= 0x40;
-	ret = regmap_write(chip->regmap, WL2864C_CURRENT_LIMITSEL, current_limit);
-	if (ret < 0) {
-		dev_err(chip->dev,"Failed to write current limit register\n");
+		dev_err(chip->dev,"Success to write register: 0x%x, value: 0x%x \n",
+			initial_register[i][0], initial_register[i][1]);
 	}
 
 	ret = wl2864c_regulator_init(chip);
