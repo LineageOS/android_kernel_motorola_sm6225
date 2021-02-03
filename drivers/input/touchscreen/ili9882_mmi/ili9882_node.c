@@ -2545,7 +2545,7 @@ int ilitek_sys_init(void)
 			ILI_ERR("Failed to create touchscreen class!\n");
 			return ret;
 		}
-		if(MODEL_TM == ilits->tp_module)
+		if((ilits->tp_module >= MODEL_TM) && (ilits->tp_module < MODEL_TM_END))
 			touchscreen_class_dev = device_create(touchscreen_class, NULL, devno, NULL, ILI_SPI_NAME_TM);
 		else
 			touchscreen_class_dev = device_create(touchscreen_class, NULL, devno, NULL, ILI_SPI_NAME);
