@@ -1185,64 +1185,87 @@ int sec_ts_pinctrl_configure(struct sec_ts_data *ts, bool enable)
 
 }
 
+static int sec_ts_regulator(struct sec_ts_data *ts, bool get)
+{
+	const struct sec_ts_plat_data *pdata = ts->plat_data;
+	struct regulator *regulator_dvdd = NULL;
+	struct regulator *regulator_avdd = NULL;
+	int ret = 0;
+
+	if (get) {
+		regulator_dvdd = regulator_get(
+			&ts->client->dev, pdata->regulator_dvdd);
+		if (IS_ERR_OR_NULL(regulator_dvdd)) {
+			input_err(true, &ts->client->dev,
+				"%s: Failed to get %s regulator.\n",
+				__func__, pdata->regulator_dvdd);
+			ret = PTR_ERR(regulator_dvdd);
+			goto error;
+		}
+
+		regulator_avdd = regulator_get(
+			&ts->client->dev, pdata->regulator_avdd);
+		if (IS_ERR_OR_NULL(regulator_avdd)) {
+			input_err(true, &ts->client->dev,
+				"%s: Failed to get %s regulator.\n",
+				__func__, pdata->regulator_avdd);
+			ret = PTR_ERR(regulator_avdd);
+			goto error;
+		}
+
+	} else {
+		regulator_put(ts->regulator_dvdd);
+		regulator_put(ts->regulator_avdd);
+	}
+
+error:
+	ts->regulator_dvdd = regulator_dvdd;
+	ts->regulator_avdd = regulator_avdd;
+
+	return ret;
+}
+
 int sec_ts_power(void *data, bool on)
 {
 	struct sec_ts_data *ts = (struct sec_ts_data *)data;
 	const struct sec_ts_plat_data *pdata = ts->plat_data;
-	struct regulator *regulator_dvdd = NULL;
-	struct regulator *regulator_avdd = NULL;
 	static bool enabled;
 	int ret = 0;
 
 	if (enabled == on)
 		return ret;
 
-	regulator_dvdd = regulator_get(NULL, pdata->regulator_dvdd);
-	if (IS_ERR_OR_NULL(regulator_dvdd)) {
-		input_err(true, &ts->client->dev, "%s: Failed to get %s regulator.\n",
-				__func__, pdata->regulator_dvdd);
-		ret = PTR_ERR(regulator_dvdd);
-		goto error;
-	}
-
-	regulator_avdd = regulator_get(NULL, pdata->regulator_avdd);
-	if (IS_ERR_OR_NULL(regulator_avdd)) {
-		input_err(true, &ts->client->dev, "%s: Failed to get %s regulator.\n",
-				__func__, pdata->regulator_avdd);
-		ret = PTR_ERR(regulator_avdd);
-		goto error;
-	}
-
 	if (on) {
-		ret = regulator_enable(regulator_dvdd);
+		ret = regulator_enable(ts->regulator_dvdd);
 		if (ret) {
-			input_err(true, &ts->client->dev, "%s: Failed to enable avdd: %d\n", __func__, ret);
+			input_err(true, &ts->client->dev,
+				"%s: Failed to enable dvdd: %d\n", __func__, ret);
 			goto out;
 		}
 
 		sec_ts_delay(1);
 
-		ret = regulator_enable(regulator_avdd);
+		ret = regulator_enable(ts->regulator_avdd);
 		if (ret) {
-			input_err(true, &ts->client->dev, "%s: Failed to enable vdd: %d\n", __func__, ret);
+			input_err(true, &ts->client->dev,
+				"%s: Failed to enable avdd: %d\n", __func__, ret);
 			goto out;
 		}
 	} else {
-		regulator_disable(regulator_avdd);
+		regulator_disable(ts->regulator_avdd);
 		sec_ts_delay(4);
-		regulator_disable(regulator_dvdd);
+		regulator_disable(ts->regulator_dvdd);
 	}
 
 	enabled = on;
 
 out:
-	input_err(true, &ts->client->dev, "%s: %s: avdd:%s, dvdd:%s\n", __func__, on ? "on" : "off",
-			regulator_is_enabled(regulator_avdd) ? "on" : "off",
-			regulator_is_enabled(regulator_dvdd) ? "on" : "off");
-
-error:
-	regulator_put(regulator_dvdd);
-	regulator_put(regulator_avdd);
+	input_err(true, &ts->client->dev,
+		"%s: %s: %s:%s, %s:%s\n", __func__, on ? "on" : "off",
+		pdata->regulator_avdd,
+		regulator_is_enabled(ts->regulator_avdd) ? "on" : "off",
+		pdata->regulator_dvdd,
+		regulator_is_enabled(ts->regulator_dvdd) ? "on" : "off");
 
 	return ret;
 }
@@ -1789,6 +1812,12 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (!pdata->power) {
 		input_err(true, &client->dev, "%s: No power contorl found\n", __func__);
 		goto error_allocate_mem;
+	}
+
+	ret = sec_ts_regulator(ts, true);
+	if (ret) {
+		input_err(true, &ts->client->dev, "%s: regulator err!\n", __func__);
+		goto err_allocate_input_dev;
 	}
 
 	pdata->pinctrl = devm_pinctrl_get(&client->dev);
@@ -2417,6 +2446,9 @@ static int sec_ts_remove(struct i2c_client *client)
 	ts->input_dev_touch = NULL;
 	ts_dup = NULL;
 	ts->plat_data->power(ts, false);
+
+	sec_ts_pinctrl_configure(ts, false);
+	sec_ts_regulator(ts, false);
 
 	kfree(ts);
 	return 0;
