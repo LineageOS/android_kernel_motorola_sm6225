@@ -11760,6 +11760,14 @@ struct hdd_context *hdd_context_create(struct device *dev)
 		goto err_release_store;
 	}
 
+	// BEGIN IKSWR-45692, support loading moto specific configurations
+	status = cfg_psoc_parse(hdd_ctx->psoc, WLAN_MOT_INI_FILE);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_err("Failed to parse cfg %s, skip!",
+			WLAN_MOT_INI_FILE);
+	}
+	// END IKSWR-45692
+
 	hdd_cfg_params_init(hdd_ctx);
 
 	/* apply multiplier config, if not already set via module parameter */

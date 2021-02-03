@@ -200,6 +200,11 @@ endif
 
 $(shell mkdir -p $(TARGET_FW_PATH); \
 	ln -sf $(TARGET_MAC_BIN_PATH)/wlan_mac.bin $(TARGET_FW_PATH)/wlan_mac.bin)
+
+# BEGIN IKSWR-45692, support loading moto specific configurations
+$(shell ln -sf $(TARGET_CFG_PATH)/WCNSS_mot_cfg.ini $(TARGET_FW_PATH)/WCNSS_mot_cfg.ini)
+# END IKSWR-45692
+
 ifneq ($(GENERIC_ODM_IMAGE),true)
 $(shell ln -sf $(TARGET_CFG_PATH)/WCNSS_qcom_cfg.ini $(TARGET_FW_PATH)/WCNSS_qcom_cfg.ini)
 endif
