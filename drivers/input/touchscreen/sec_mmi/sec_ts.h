@@ -630,6 +630,9 @@ struct sec_ts_data {
 	struct TIME_TYPE time_released[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 	long time_longest;
 
+	struct regulator *regulator_dvdd;
+	struct regulator *regulator_avdd;
+
 	u8 lowpower_mode;
 	u8 lowpower_status;
 	u8 dex_mode;
