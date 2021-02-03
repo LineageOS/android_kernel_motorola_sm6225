@@ -334,6 +334,8 @@ enum NODE_MODE_SWITCH {
 	DEBUG_LITE_AREA
 };
 
+//make sure define mode in sequence per panel vendor
+//some panel need check vendor with model
 enum TP_MODEL {
 	MODEL_DEF = 0,
 	MODEL_CSOT,
@@ -349,6 +351,7 @@ enum TP_MODEL {
 	MODEL_TM_9882N,
 	MODEL_TM_9882H,
 	MODEL_TIANMA_9882N,
+	MODEL_TM_END, //For tianma panel check
 	MODEL_HLT
 };
 
