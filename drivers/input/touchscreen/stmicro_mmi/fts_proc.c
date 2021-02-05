@@ -28,6 +28,7 @@
 #include <linux/seq_file.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 #include "fts.h"
 #include "fts_lib/ftsCompensation.h"
 #include "fts_lib/ftsCore.h"
@@ -677,7 +678,11 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	/*for(temp = 0; temp<count; temp++){
 	  *      logError(0,"%s p[%d] = %02X\n",tag, temp, p[temp]);
 	  * }*/
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 	if (access_ok(buf, count) < OK ||
+#else
+	if (access_ok(VERIFY_READ, buf, count) < OK ||
+#endif
 	    copy_from_user(pbuf, buf, count) != 0) {
 		res = ERROR_ALLOC;
 		goto END;
