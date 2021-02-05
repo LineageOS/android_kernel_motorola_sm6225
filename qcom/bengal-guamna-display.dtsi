@@ -8,8 +8,9 @@
 #include "dsi-panel-moto-ili9882n-tm-hdplus-video.dtsi"
 
 &sde_dsi {
-    qcom,platform-mot-ext-feature-enable;
-    qcom,platform-mot-early-power-enable;
+    //MMI_STOPSHIP Kernel: Disable DSI extended features during R bringup to make display turn on correctly.
+    //qcom,platform-mot-ext-feature-enable;
+    //qcom,platform-mot-early-power-enable;
 };
 
 &dsi_panel_pwr_supply {
