@@ -6,4 +6,8 @@ ifneq ($(filter m y,$(CONFIG_PD_CHARGER_MMI)),)
 	EXTRA_CFLAGS += -DCONFIG_PD_CHARGER_MMI
 endif
 
+ifneq ($(filter m y, $(CONFIG_BQ2597X_DUAL)),)
+	EXTRA_CFLAGS += -DCONFIG_BQ2597X_DUAL
+endif
+
 obj-m += qpnp-smbcharger-mmi.o
