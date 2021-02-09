@@ -74,6 +74,15 @@ enum print_reason {
 	PR_MOTO         = BIT(7),
 };
 
+enum {
+ 	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
+ 	POWER_SUPPLY_CHARGE_RATE_NORMAL,
+ 	POWER_SUPPLY_CHARGE_RATE_WEAK,
+ 	POWER_SUPPLY_CHARGE_RATE_TURBO,
+ 	POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
+ 	POWER_SUPPLY_CHARGE_RATE_HYPER,
+};
+
 static inline void wakeup_source_init_internal(struct wakeup_source *ws,
 					const char *name)
 {
