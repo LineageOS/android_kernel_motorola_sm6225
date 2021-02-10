@@ -184,8 +184,9 @@ uint64_t endian_reverse64(uint64_t val)
 
 void endian_reverse_array_enc(uint8_t *dst, uint8_t *array, uint8_t sizeInBytes)
 {
+    uint8_t dstIndex;
     uint8_t valueIndex = sizeInBytes;
-    for (uint8_t dstIndex = 0; dstIndex < sizeInBytes; dstIndex++)
+    for (dstIndex = 0; dstIndex < sizeInBytes; dstIndex++)
     {
         dst[dstIndex] = array[--valueIndex];
     }
@@ -194,9 +195,10 @@ void endian_reverse_array_enc(uint8_t *dst, uint8_t *array, uint8_t sizeInBytes)
 void endian_reverse_array(uint8_t *array, uint8_t sizeInBytes)
 {
     uint8_t endIndex = sizeInBytes;
+    uint8_t startIndex;
     uint8_t value;
 
-    for (uint8_t startIndex = 0; startIndex < endIndex; startIndex++, endIndex--)
+    for (startIndex = 0; startIndex < endIndex; startIndex++, endIndex--)
     {
         value = array[startIndex];
         array[startIndex] = array[endIndex];

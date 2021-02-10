@@ -21,21 +21,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#define pr_fmt(fmt) "bos0614: %s: " fmt, __func__
 
-#include <stddef.h>
+#include <linux/string.h>
+#include <linux/slab.h>
+
 #include "contribs/cmsis/CMSIS/Driver/Include/Driver_Common.h"
 #include "contribs/comm-stack-dk/data.h"
 
 #include "bsp/boards/boreasTime.h"
 #include "bsp/drivers/i2c/i2c.h"
 #include "bsp/drivers/haptic/bos0614Driver.h"
-#include <string.h>
+#include "bsp/drivers/haptic/bos0614Register.h"
 
 #define BOS0614_CHIP_ID (0x0D)
 #define BOS0614_I2C_ADDRESS (0x2c)
 
 #define SFT_RESET_TIME_IN_US (100)
-
 #define AMPLITUDE_MAX_VALUE_VOLT (60)
 #define AMPLITUDE_MAX_VALUE (0xFFF)
 #define FB_R_V_REF (68.4)
@@ -178,9 +180,11 @@ static bool writeReg(Context *ctx, Bos0614Register *reg)
 
 static bool resetSoftware(Context *ctx)
 {
+    bool res;
+
     ctx->reg.CONFIG_0614.bit.RST = 0x1;
 
-    bool res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
+    res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
 
     ctx->reg.CONFIG_0614.bit.RST = 0x0;
 
@@ -189,9 +193,10 @@ static bool resetSoftware(Context *ctx)
 
 static Context *getNewInstance()
 {
+    int index;
     Context *ctx = NULL;
 
-    for (int index = 0; index < DATA_ARRAY_LENGTH(driverInstances); index++)
+    for (index = 0; index < DATA_ARRAY_LENGTH(driverInstances); index++)
     {
         if (driverInstances[index].isInitiated == false)
         {
@@ -403,10 +408,11 @@ static Bos0614Register *getRegister(Context *ctx, uint8_t addr)
 
 static bool readI2cRegister(Context *ctx, Bos0614Register *reg)
 {
+    bool res;
     uint8_t rxData[REG_VALUE_LENGTH] = {0};
 
     ctx->reg.READ_0614.bit.BC = reg->generic.addr;
-    bool res = writeReg(ctx, &ctx->reg.READ_0614.reg);
+    res = writeReg(ctx, &ctx->reg.READ_0614.reg);
 
     res = res && ctx->i2c->read(ctx->i2c, BOS0614_I2C_ADDRESS, rxData, REG_VALUE_LENGTH) == ARM_DRIVER_OK;
 
@@ -451,6 +457,7 @@ static bool readRegister(Context *ctx, Bos0614Register *reg)
 
 static bool burstWriteRam(Context *driver, WSFBank bank, uint16_t address, uint16_t *data, size_t length)
 {
+    int i;
     bool res = false;
     if (length < MAXIMUM_DATA_LENGTH)
     {
@@ -459,7 +466,7 @@ static bool burstWriteRam(Context *driver, WSFBank bank, uint16_t address, uint1
         htoBe16(bank, &driver->txBuffer[BURST_WRITE_RAM_BANK_INDEX]); // [1-2] WFS bank
         htoBe16(address, &driver->txBuffer[BURST_WRITE_RAM_ADDRESS_INDEX]); // [3-4] Burst start address
         htoBe16(length, &driver->txBuffer[BURST_WRITE_RAM_LENGTH_INDEX]); // [5-6] Burst data length
-        for (int i = 0; i < length; i++) // [7..] RAM Data to be forwarded to WFS
+        for (i = 0; i < length; i++) // [7..] RAM Data to be forwarded to WFS
         {
             htoBe16(data[i], &driver->txBuffer[(i * 2) + BURST_WRITE_RAM_DATA_INDEX]);
         }
@@ -482,12 +489,13 @@ static bool burstWriteRam(Context *driver, WSFBank bank, uint16_t address, uint1
 
 static bool writeRam(Context *driver, WSFBank bank, uint16_t *data, size_t length)
 {
+    int i;
     bool res = false;
 
     memset(driver->txBuffer, 0, sizeof(driver->txBuffer));
     driver->txBuffer[I2C_ADDRESS_INDEX] = ADDRESS_BOS0614_REFERENCE_REG; // [0] Main register map address
     htoBe16(bank, &driver->txBuffer[WRITE_RAM_BANK_INDEX]); // [1-2] WFS bank address
-    for (int i = 0; i < length; i += 2) // [3..] RAM Data to be forwarded to WFS
+    for (i = 0; i < length; i += 2) // [3..] RAM Data to be forwarded to WFS
     {
         htoBe16(*(data++), &driver->txBuffer[i + WRITE_RAM_DATA_INDEX]);
     }
@@ -683,9 +691,10 @@ static bool lookupGpioCtl(GPOCtrl ctrl, Bos0614GPIOMode *bos0614Ctrl)
 
 static bool isGpoSignalingAvailable(Context *ctx)
 {
+    size_t index;
     bool res = false;
 
-    for (size_t index = 0; index < DATA_ARRAY_LENGTH(ctx->channel); index++)
+    for (index = 0; index < DATA_ARRAY_LENGTH(ctx->channel); index++)
     {
         if (ctx->channel[index].gpio != NULL)
         {
@@ -909,7 +918,7 @@ setThresholdSensing(Context *ctx, SensingConfig config, SENSE_BITS_0614 *senseBi
     DebouncingTime debouncingValue;
 
     res = twoComplement(getThresholdFromMV(config.thresholdMv), THRESHOLD_NBR_OF_BITS, &threshold);
-    res = res && getDebouncingConfig(config.debounceUs, &debouncingValue);
+    res = getDebouncingConfig(config.debounceUs, &debouncingValue);
 
     senseThreshold->THRESHOLD = threshold;
     senseThreshold->REP = debouncingValue;
@@ -962,11 +971,11 @@ setSlopeSensing(Context *ctx, SensingConfig config, SENSE_BITS_0614 *senseBitFie
     return res;
 }
 
-static size_t pushErrorInQueue(BOSError *errors, size_t current, size_t maxLength, BOSError error)
+static size_t pushErrorInQueue(BOSError *errors, size_t curpos, size_t maxLength, BOSError error)
 {
-    size_t length = current;
+    size_t length = curpos;
 
-    if (current < maxLength)
+    if (curpos < maxLength)
     {
         errors[length++] = error;
     }
@@ -1034,6 +1043,7 @@ bool bos0614GetRegister(HapticDriver *driver, uint8_t addr, uint16_t *value)
 
     if (driver != NULL)
     {
+        Bos0614Register *reg;
         Context *ctx = container_of(driver, Context, hDriver);
 
 
@@ -1043,7 +1053,7 @@ bool bos0614GetRegister(HapticDriver *driver, uint8_t addr, uint16_t *value)
             writeReg(ctx, &ctx->reg.DEBUG_0614.reg);
         }
 
-        Bos0614Register *reg = getRegister(ctx, addr);
+        reg = getRegister(ctx, addr);
         if (reg != NULL)
         {
             if (readRegister(ctx, reg))
@@ -1064,6 +1074,7 @@ bool bos0614SetRegister(HapticDriver *driver, uint8_t addr, uint16_t value)
 
     if (driver != NULL)
     {
+        Bos0614Register *reg;
         Context *ctx = container_of(driver, Context, hDriver);
 
 
@@ -1073,7 +1084,7 @@ bool bos0614SetRegister(HapticDriver *driver, uint8_t addr, uint16_t value)
             writeReg(ctx, &ctx->reg.DEBUG_0614.reg);
         }
 
-        Bos0614Register *reg = getRegister(ctx, addr);
+        reg = getRegister(ctx, addr);
         if (reg != NULL)
         {
             reg->generic.value = value;
@@ -1153,7 +1164,6 @@ bos0614SetWaveforms(HapticDriver *driver, WaveformId id, uint8_t startSliceId, s
         outputChannel < BOS0614_CHANNEL_MASK)
     {
         Context *ctx = container_of(driver, Context, hDriver);
-        ctx->outputChanForWaveformId[id] = outputChannel;
 
         uint16_t waveformAddr = RAM_WAVEFORM_METADATA_ADDR + (id * WAVEFORM_METADATA_LENGTH);
 
@@ -1161,6 +1171,8 @@ bos0614SetWaveforms(HapticDriver *driver, WaveformId id, uint8_t startSliceId, s
                               RAM_SLICE_WAVEFORM_ADDR + (startSliceId * SLICE_LENGTH),
                               RAM_SLICE_WAVEFORM_ADDR + ((startSliceId + nbrOfSlices) * SLICE_LENGTH) - 1,
                               (uint16_t) cycle};
+
+        ctx->outputChanForWaveformId[id] = outputChannel;
 
         res = writeRam(ctx, WSFBank_Ram, command, sizeof(command));
 
@@ -1178,11 +1190,12 @@ bool bos0614SynthesizerPlay(HapticDriver *driver, WaveformId start, WaveformId s
 
     if (driver != NULL && start < MAXIMUM_WAVEFORM_ID_SEQUENCER && stop < MAXIMUM_WAVEFORM_ID_SEQUENCER)
     {
+        uint16_t startStopAddr;
         Context *ctx = container_of(driver, Context, hDriver);
 
         ctx->currentChannelMask = ctx->outputChanForWaveformId[start];
 
-        uint16_t startStopAddr = (start << SEQUENCER_STOP_ADDRESS_SHIFT) | stop;
+        startStopAddr = (start << SEQUENCER_STOP_ADDRESS_SHIFT) | stop;
 
         res = writeRam(ctx, WSFBank_SequencerStartStop, &startStopAddr, sizeof(startStopAddr));
     }
@@ -1196,6 +1209,8 @@ bool bos0614SynthesizerPlay(HapticDriver *driver, WaveformId start, WaveformId s
 bool bos0614SetRamPlaybackMode(HapticDriver *driver, uint32_t samplingRate, void *data, size_t length,
                                uint8_t channelMask)
 {
+    int index;
+    uint16_t *buffer;
     bool res = false;
 
     if (driver != NULL && samplingRate <= MAXIMUM_SAMPLING_RATE && data != NULL && length <= MAXIMUM_DATA_LENGTH &&
@@ -1207,8 +1222,8 @@ bool bos0614SetRamPlaybackMode(HapticDriver *driver, uint32_t samplingRate, void
         res = res && setSamplingRate(ctx, samplingRate);
 
         //Configure the channel output
-        uint16_t *buffer = (uint16_t *) data;
-        for (int index = 0; index < length; index++)
+        buffer = (uint16_t *) data;
+        for (index = 0; index < length; index++)
         {
             buffer[index] &= RAMPLAYBACK_DATA_MASK;
             buffer[index] |= (channelMask << RAMPLAYBACK_CHANNEL_OFFSET);
@@ -1269,10 +1284,11 @@ uint16_t bos0614GetMaxFifoSpace()
 
 static bool writeDataInFifo(Context *ctx, void *data, size_t length)
 {
+    int index;
     bool res = false;
     uint16_t *dataArray = (uint16_t *) data;
 
-    for (int index = 0; index < length; index++)
+    for (index = 0; index < length; index++)
     {
         res = true;
         ctx->reg.REFERENCE_0614.bit.FIFO = dataArray[index];
@@ -1317,8 +1333,9 @@ static void gpoIsr(Gpio *gpio, void *context, GPIOIsr isrEvent)
     if (context != NULL)
     {
         Context *ctx = (Context *) context;
+	uint32_t index;
 
-        for (uint32_t index = 0; index < DATA_ARRAY_LENGTH(ctx->channel); index++)
+        for (index = 0; index < DATA_ARRAY_LENGTH(ctx->channel); index++)
         {
             if (ctx->channel[index].gpio != NULL &&
                 ctx->channel[index].gpio == gpio &&
@@ -1511,11 +1528,12 @@ size_t bos0614NbrOfRegister()
 
 bool bos0614ReferencingFromVolt(HapticDriver *ctx, int16_t *data, size_t length)
 {
+    int index;
     bool res = false;
 
     if (ctx != NULL)
     {
-        for (int index = 0; index < length; index++)
+        for (index = 0; index < length; index++)
         {
 
             float num = (float) data[index] * AMPLITUDE_MAX_VALUE;
@@ -1696,8 +1714,7 @@ bool bos0614FeatureSupport(HapticDriver *driver, BosFeature feature)
  * Private Section
  */
 
-//static BOS_REGS BOS0614Regs =
-BOS0614_REGS bOS0614Regs =
+static BOS0614_REGS bOS0614Regs =
         {
                 .REFERENCE_0614.reg.generic.addr = ADDRESS_BOS0614_REFERENCE_REG,
                 .IC_STATUS_0614.reg.generic.addr = ADDRESS_BOS0614_IC_STATUS_REG,
@@ -1828,9 +1845,10 @@ static uint8_t regAddrToRead[] = {ADDRESS_BOS0614_REFERENCE_REG,
 
 static bool readAllRegister(Context *ctx)
 {
+    uint32_t index;
     bool res = true;
 
-    for (uint32_t index = 0; index < DATA_ARRAY_LENGTH(regAddrToRead) && res; index++)
+    for (index = 0; index < DATA_ARRAY_LENGTH(regAddrToRead) && res; index++)
     {
         uint16_t dummy;
         res = bos0614GetRegister(&ctx->hDriver, regAddrToRead[index], &dummy);
@@ -1853,20 +1871,22 @@ static bool setDefaultConfig(Context *ctx)
     ctx->reg.SENSECONFIG_0614.bit.CH3 = BOS0614_DISABLE;
     ctx->reg.SENSECONFIG_0614.bit.SAME = BOS0614_DISABLE;
 
-    Bos0614Register *reg[] = {&ctx->reg.SENSECONFIG_0614.reg};
+    res = ctx->hDriver.setRegister(&ctx->hDriver,
+		ctx->reg.SENSECONFIG_0614.reg.generic.addr,
+		ctx->reg.SENSECONFIG_0614.reg.generic.value);
 
-    for (uint32_t index = 0; index < DATA_ARRAY_LENGTH(reg); index++)
-    {
-        res = res && ctx->hDriver.setRegister(&ctx->hDriver, reg[index]->generic.addr,
-                                              reg[index]->generic.value);
-    }
-
+//    Bos0614Register *reg[] = {&ctx->reg.SENSECONFIG_0614.reg};
+//    for (uint32_t index = 0; index < DATA_ARRAY_LENGTH(reg); index++)
+//    {
+//        res = res && ctx->hDriver.setRegister(&ctx->hDriver, reg[index]->generic.addr,
+//                                              reg[index]->generic.value);
+//    }
     return res;
 }
 
 static void initiateDriver(Context *ctx)
 {
-    memcpy(&ctx->reg, &bOS0614Regs, sizeof(BOS0614_REGS));
+    memcpy(&ctx->reg, &bOS0614Regs, sizeof(bOS0614Regs));
 
     ctx->hDriver.softwareReset = bos0614SoftwareReset;
     ctx->hDriver.deepSleep = bos0614DeepSleep;

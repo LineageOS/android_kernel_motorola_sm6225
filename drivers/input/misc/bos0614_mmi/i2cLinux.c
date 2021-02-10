@@ -21,13 +21,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-
-#include <i2cLinux.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 
+#include "i2cLinux.h"
 
 typedef struct
 {
@@ -47,17 +46,19 @@ static void logBuffer(const char *message, const void *data, size_t length)
 
     if (buf != NULL)
     {
+        size_t index;
         char *ptr = buf;
         char *end = buf + bufferLength;
 
         uint8_t *_data = (uint8_t *) data;
 
-        for (size_t index = 0; index < length && ptr < end; index++)
+        for (index = 0; index < length && ptr < end; index++)
         {
             ptr += sprintf(ptr, index < (length - 1) ? "0x%02x " : "0x%02x", _data[index]);
         }
 
-        printk("%s length: %d [%s]\n", message, length, buf, bufferLength, ptr, end);
+        //printk("%s length: %zu [%s]\n", message, length, buf, bufferLength, ptr, end);
+        printk("%s length: %zu [%s]\n", message, length, buf);
 
         kfree(buf);
     }
@@ -76,17 +77,18 @@ static int32_t i2cKernelSend(I2c *i2c, uint8_t address, const void *data, size_t
     if (i2c != NULL && data != NULL)
     {
         Context *ctx = container_of(i2c, Context, driver);
+        char *buf = kzalloc(num, GFP_KERNEL);
 
         dev_dbg(&ctx->client->dev, "I2C Write Address: 0x%x\n", address);
 
         logBuffer("Write: ", data, num);
 
-        char *buf = kzalloc(num, GFP_KERNEL);
-
         if (buf != NULL)
         {
+	    int status;
+
             memcpy(buf, data, num);
-            int status = i2c_master_send(ctx->client, (const char *) buf, (int) num);
+            status = i2c_master_send(ctx->client, (const char *) buf, (int) num);
             res = status == num ? ARM_DRIVER_OK : status;
 
             kfree(buf);
@@ -103,10 +105,9 @@ int32_t i2cKernelRead(I2c *i2c, uint8_t address, void *data, size_t num)
     if (i2c != NULL && data != NULL)
     {
         Context *ctx = container_of(i2c, Context, driver);
+        char *buf = kzalloc(num, GFP_KERNEL);
 
         dev_dbg(&ctx->client->dev, "I2C Read Address: 0x%x \n", address);
-
-        char *buf = kzalloc(num, GFP_KERNEL);
 
         if (buf != NULL)
         {
@@ -141,7 +142,7 @@ I2c *i2cBoreasLinuxInit(struct i2c_client *client)
     {
         Context *ctx = kzalloc(sizeof(Context), GFP_KERNEL);
 
-        printk("[PF-Debug] I2C Client 0x%8x", client);
+        printk("[PF-Debug] I2C Client %p", client);
 
         if (ctx != NULL)
         {

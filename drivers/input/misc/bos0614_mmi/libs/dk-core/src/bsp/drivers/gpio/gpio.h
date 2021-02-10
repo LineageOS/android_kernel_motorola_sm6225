@@ -24,7 +24,7 @@
 #ifndef DKCORE_GPIO_H
 #define DKCORE_GPIO_H
 
-#include <stdbool.h>
+#include <linux/types.h>
 
 typedef struct _GPIO Gpio;
 
