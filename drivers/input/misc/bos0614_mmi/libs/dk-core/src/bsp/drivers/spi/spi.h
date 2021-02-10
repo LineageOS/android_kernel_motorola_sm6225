@@ -8,7 +8,7 @@
 #ifndef DKCORE_SPI_H
 #define DKCORE_SPI_H
 
-#include <stdint.h>
+#include <linux/types.h>
 
 typedef struct _spi Spi;
 

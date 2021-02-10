@@ -25,9 +25,9 @@
 #ifndef _DATA_H
 #define _DATA_H
 
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
+#include <linux/types.h>
+
+#define DATA_ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,13 +74,7 @@ extern "C" {
 
 #define BYTE_LENGTH_IN_BITS (8)
 
-#define container_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
-        (type *)( (char *)__mptr - offsetof(type,member) );})
-
 #define PI (3.14159265)
-
-#define DATA_ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
 
 void htoBe32(uint32_t value, uint8_t *data);
 

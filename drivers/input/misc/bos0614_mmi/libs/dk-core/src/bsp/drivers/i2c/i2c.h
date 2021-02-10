@@ -25,10 +25,9 @@
 #ifndef DKCORE_I2C_H
 #define DKCORE_I2C_H
 
-#include <stdint.h>
-#include <stddef.h>
+#include <linux/types.h>
 
-#include <contribs/cmsis/CMSIS/Driver/Include/Driver_Common.h>
+#include "contribs/cmsis/CMSIS/Driver/Include/Driver_Common.h"
 
 #define I2C_7BIT_ADDRESS_MASK (0x7F)
 

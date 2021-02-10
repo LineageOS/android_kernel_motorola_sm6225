@@ -1,17 +1,10 @@
-obj-m := bosDriverModule.o
-bosDriverModule-y := i2cLinux.o
-bosDriverModule-y += bosDriver.o
-bosDriverModule-y += libs/dk-core/src/bsp/drivers/haptic/bos0614Driver.o
-bosDriverModule-y += libs/dk-core/contribs/comm-stack-dk/data.o
+KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 
-ccflags-y += -I$(src)/libs/dk-core/src
-ccflags-y += -I$(src)/libs/dk-core/
-ccflags-y += -std=gnu99
-ccflags-y += -DDEBUG
-ccflags-y += -DLITTLE_ENDIAN=1234
-ccflags-y += -DBYTE_ORDER=LITTLE_ENDIAN
+all:
+	$(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules $(KBUILD_OPTIONS)
 
-PWD := $(shell pwd)
+modules_install:
+	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
 
-default:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD)
+clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(PWD) clean
