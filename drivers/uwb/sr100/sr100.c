@@ -1146,4 +1146,8 @@ MODULE_AUTHOR("Manjunatha Venkatesh");
 MODULE_DESCRIPTION("NXP SR100 SPI driver");
 MODULE_LICENSE("GPL");
 
+#ifdef SOFTDEP_GPIO_PCAL6408
+MODULE_SOFTDEP("pre: gpio-pcal6408");
+#endif
+
 /** @} */
