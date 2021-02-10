@@ -25,7 +25,7 @@
 #ifndef BOS0614_REGISTER_H_
 #define BOS0614_REGISTER_H_
 
-#include <stdint.h>
+#include <linux/types.h>
 
 #define ADDRESS_BOS0614_REFERENCE_REG        0x0000
 #define ADDRESS_BOS0614_IC_STATUS_REG        0x0001

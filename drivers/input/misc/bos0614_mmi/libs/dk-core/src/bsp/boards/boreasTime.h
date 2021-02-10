@@ -25,8 +25,7 @@
 #ifndef DKCORE_LAUNCHPADTIME_H
 #define DKCORE_LAUNCHPADTIME_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <linux/types.h>
 
 #define MICROSECOND_IN_MILLISECOND(_us) (_us/1000)
 

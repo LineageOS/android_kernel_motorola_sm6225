@@ -25,9 +25,7 @@
 #ifndef DKCORE_BOSDRIVER_H
 #define DKCORE_BOSDRIVER_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <linux/types.h>
 
 #include "bsp/drivers/spi/spi.h"
 #include "bsp/drivers/gpio/gpio.h"

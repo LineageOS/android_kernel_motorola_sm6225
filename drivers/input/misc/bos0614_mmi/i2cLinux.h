@@ -25,8 +25,8 @@
 #ifndef BOREAS_HAPTIC_DRIVER_LINUX_I2CLINUX_H
 #define BOREAS_HAPTIC_DRIVER_LINUX_I2CLINUX_H
 
-#include "libs/dk-core/src/bsp/drivers/i2c/i2c.h"
 #include <linux/i2c.h>
+#include "libs/dk-core/src/bsp/drivers/i2c/i2c.h"
 
 I2c *i2cBoreasLinuxInit(struct i2c_client *client);
 
