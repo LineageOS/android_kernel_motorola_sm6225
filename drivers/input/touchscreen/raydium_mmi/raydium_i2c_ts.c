@@ -3678,7 +3678,7 @@ void i2c_write(struct i2c_client *client, uint32_t addr, uint32_t data)
     i2c_burst_write(client, addr, 4, u8_data);
 }
 
-static unsigned char raydium_selftest_stop_mcu(struct i2c_client *client)
+static int raydium_selftest_stop_mcu(struct i2c_client *client)
 {
     unsigned char wData[4];
     unsigned int u32_read;
