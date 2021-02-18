@@ -48,7 +48,6 @@
 #endif
 #endif
 
-#include <linux/mmi_device.h>
 #include "synaptics_dsx_i2c.h"
 
 static struct workqueue_struct *det_workqueue;
@@ -1314,7 +1313,7 @@ clip_area:
 }
 
 /* ASCII names order MUST match enum */
-static const char *ascii_names[] = { "aod", "stats", "folio",
+static const char const *ascii_names[] = { "aod", "stats", "folio",
 	"charger", "wakeup", "fps", "query", "runtime", "na"
 };
 
@@ -6343,6 +6342,13 @@ static int rmi_reboot(struct notifier_block *nb,
 	/* At this point, we're all good with clean-up works */
 	synaptics_dsx_set_state_safe(rmi4_data, STATE_INVALID);
 
+#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
+	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
+#elif defined(CONFIG_DRM)
+	msm_drm_unregister_client(&rmi4_data->panel_nb);
+#elif defined(CONFIG_FB)
+	fb_unregister_client(&rmi4_data->panel_nb);
+#endif
 	if (rmi4_data->irq_enabled) {
 		rmi4_data->irq_enabled = false;
 		disable_irq(rmi4_data->irq);
@@ -6517,6 +6523,7 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 		}
 	}
 
+	rmi4_data->pm_qos_irq.irq = rmi4_data->irq;
 	synaptics_dsx_sensor_ready_state(rmi4_data, true);
 
 	rmi4_data->rmi_reboot.notifier_call = rmi_reboot;
@@ -6631,11 +6638,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 				"%s: SMBus byte data not supported\n",
 				__func__);
 		return -EIO;
-	}
-
-	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
-		dev_err(&client->dev, "%s: mmi: device not supported\n", __func__);
-		return -ENODEV;
 	}
 
 	rmi4_data = kzalloc(sizeof(*rmi4_data), GFP_KERNEL);
@@ -7112,7 +7114,3 @@ MODULE_AUTHOR("Synaptics, Inc.");
 MODULE_DESCRIPTION("Synaptics DSX I2C Touch Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(SYNAPTICS_DSX_DRIVER_VERSION);
-
-#ifdef SOFTDEP_GPIO_PCAL6408
-MODULE_SOFTDEP("pre: gpio-pcal6408");
-#endif
