@@ -1655,7 +1655,16 @@ static int sx933x_remove(struct i2c_client *client)
 static int sx933x_suspend(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	psx933x_t pDevice = 0;
+	psx933x_platform_data_t pdata = 0;
+
 	if (this) {
+		/* If we happen to reinitialize during suspend we might fail so wait for it to end */
+		if ((pDevice = this->pDevice) && (pdata = pDevice->hw)) {
+			if (pdata->reinit_on_i2c_failure)
+				cancel_delayed_work_sync(&this->i2c_watchdog_work);
+		}
+
 		sx933x_i2c_write_16bit(this,SX933X_CMD_REG,0xD);//make sx933x in Sleep mode
 		LOG_DBG(LOG_TAG "sx933x suspend:disable irq!\n");
 		disable_irq(this->irq);
@@ -1667,12 +1676,22 @@ static int sx933x_suspend(struct device *dev)
 static int sx933x_resume(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	psx933x_t pDevice = 0;
+	psx933x_platform_data_t pdata = 0;
+
 	if (this) {
 		LOG_DBG(LOG_TAG "sx933x resume:enable irq!\n");
 		sx93XX_schedule_work(this,0);
 		enable_irq(this->irq);
 		sx933x_i2c_write_16bit(this,SX933X_CMD_REG,0xC);//Exit from Sleep mode
 		this->suspended = 0;
+
+		/* Restart the watchdog in 2 seconds */
+		if ((pDevice = this->pDevice) && (pdata = pDevice->hw)){
+			if (pdata->reinit_on_i2c_failure)
+				schedule_delayed_work(&this->i2c_watchdog_work,
+					msecs_to_jiffies(SX933X_I2C_WATCHDOG_TIME_ERR));
+		}
 	}
 	return 0;
 }
