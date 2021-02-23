@@ -26,8 +26,8 @@
 #include <net/sock.h>		/* sockfd_lookup */
 #include <linux/file.h>		/* fput */
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"
+#include "mc_user.h"
+#include "mc_admin.h"
 
 #include "main.h"
 #include "mmu.h"
