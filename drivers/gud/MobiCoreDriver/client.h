@@ -19,7 +19,7 @@
 #include <linux/list.h>
 #include <linux/sched.h>	/* TASK_COMM_LEN */
 
-#include "public/mc_user.h"	/* many types */
+#include "mc_user.h"	/* many types */
 
 struct tee_client;
 struct mcp_open_info;

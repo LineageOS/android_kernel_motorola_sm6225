@@ -29,14 +29,14 @@
 
 #include "platform.h"			/* CPU-related information */
 
-#include "public/mc_user.h"
-#include "public/mc_linux_api.h"
+#include "mc_user.h"
+#include "mc_linux_api.h"
 
-#include "mci/mcifc.h"
-#include "mci/mciiwp.h"
-#include "mci/mcimcp.h"
-#include "mci/mcinq.h"
-#include "mci/mcitime.h"		/* struct mcp_time */
+#include "mcifc.h"
+#include "mciiwp.h"
+#include "mcimcp.h"
+#include "mcinq.h"
+#include "mcitime.h"		/* struct mcp_time */
 
 #include "main.h"
 #include "clock.h"

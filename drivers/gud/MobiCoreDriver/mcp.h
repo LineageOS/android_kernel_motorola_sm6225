@@ -16,7 +16,7 @@
 #ifndef _MC_MCP_H_
 #define _MC_MCP_H_
 
-#include "mci/mcloadformat.h"		/* struct identity */
+#include "mcloadformat.h"		/* struct identity */
 #include "nq.h"
 
 struct tee_mmu;

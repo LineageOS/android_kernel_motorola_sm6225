@@ -23,8 +23,8 @@
 #include <linux/suspend.h>
 #include <linux/cpu.h>
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"		/* MC_ADMIN_DEVNODE */
+#include "mc_user.h"
+#include "mc_admin.h"		/* MC_ADMIN_DEVNODE */
 
 #include "platform.h"			/* MC_PM_RUNTIME */
 #include "main.h"

@@ -40,9 +40,9 @@
 #include <xen/page.h>
 #endif
 
-#include "public/mc_user.h"
+#include "mc_user.h"
 
-#include "mci/mcimcp.h"
+#include "mcimcp.h"
 
 #include "main.h"
 #include "mcp.h"	/* mcp_buffer_map */

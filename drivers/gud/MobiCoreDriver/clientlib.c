@@ -20,9 +20,9 @@
 #include <linux/sched.h>
 #include <linux/list.h>
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"
-#include "public/mobicore_driver_api.h"
+#include "mc_user.h"
+#include "mc_admin.h"
+#include "mobicore_driver_api.h"
 
 #include "main.h"
 #include "client.h"
