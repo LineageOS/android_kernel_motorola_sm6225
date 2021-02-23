@@ -33,8 +33,8 @@
 #include <linux/sched/task.h>	/* put_task_struct */
 #endif
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"
+#include "mc_user.h"
+#include "mc_admin.h"
 
 #if KERNEL_VERSION(3, 5, 0) <= LINUX_VERSION_CODE
 #include <linux/uidgid.h>
@@ -74,7 +74,7 @@ static inline bool gid_lt(kgid_t left, kgid_t right)
 #include "mcp.h"
 #include "client.h"		/* *cbuf* */
 #include "session.h"
-#include "mci/mcimcp.h"		/* WSM_INVALID */
+#include "mcimcp.h"		/* WSM_INVALID */
 
 #define SHA1_HASH_SIZE       20
 

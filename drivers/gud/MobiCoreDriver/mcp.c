@@ -33,14 +33,14 @@
 #include <linux/sched/clock.h>	/* local_clock */
 #endif
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"
+#include "mc_user.h"
+#include "mc_admin.h"
 
-#include "mci/mcimcp.h"
-#include "mci/mcifc.h"
-#include "mci/mcinq.h"		/* SID_MCP */
-#include "mci/mcitime.h"	/* struct mcp_time */
-#include "mci/mciiwp.h"
+#include "mcimcp.h"
+#include "mcifc.h"
+#include "mcinq.h"		/* SID_MCP */
+#include "mcitime.h"	/* struct mcp_time */
+#include "mciiwp.h"
 
 #include "main.h"
 #include "admin.h"		/* tee_object* for 'blob' */

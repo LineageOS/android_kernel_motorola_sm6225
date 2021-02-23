@@ -23,9 +23,9 @@
 #include <xen/xen.h>
 #include <xen/xenbus.h>
 
-#include "public/mc_user.h"	/* many types */
-#include "mci/mciiwp.h"
-#include "mci/mcimcp.h"
+#include "mc_user.h"	/* many types */
+#include "mciiwp.h"
+#include "mcimcp.h"
 #include "mmu.h"		/* PMD/PTE max entries */
 #include "client.h"		/* For BE to treat other VMs as clients */
 

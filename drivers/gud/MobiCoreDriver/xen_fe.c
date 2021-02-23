@@ -15,7 +15,7 @@
 
 #include <linux/irq.h>
 
-#include "mci/mciiwp.h"		/* struct interworld_session */
+#include "mciiwp.h"		/* struct interworld_session */
 
 #include "main.h"
 

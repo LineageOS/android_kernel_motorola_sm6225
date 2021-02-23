@@ -16,7 +16,7 @@
 #ifndef _MC_IWP_H_
 #define _MC_IWP_H_
 
-#include "mci/mcloadformat.h"		/* struct identity */
+#include "mcloadformat.h"		/* struct identity */
 
 #include "nq.h"
 #include "mcp.h" /* mcp_buffer_map FIXME move to nq? */

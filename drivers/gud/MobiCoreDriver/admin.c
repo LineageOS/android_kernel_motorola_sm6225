@@ -32,8 +32,8 @@
 #endif
 #include <linux/freezer.h>
 
-#include "public/mc_user.h"
-#include "public/mc_admin.h"
+#include "mc_user.h"
+#include "mc_admin.h"
 
 #include "main.h"
 #include "mmu.h"	/* For load_check and load_token */

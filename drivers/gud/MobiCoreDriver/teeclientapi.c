@@ -18,11 +18,11 @@
 #include <linux/vmalloc.h>
 #include <linux/export.h>
 
-#include "public/GP/tee_client_api.h"
-#include "public/mc_user.h"
+#include "tee_client_api.h"
+#include "mc_user.h"
 
 #include "main.h"
-#include "mci/mcinq.h"	/* TA termination codes */
+#include "mcinq.h"	/* TA termination codes */
 #include "client.h"
 
 /* Macros */

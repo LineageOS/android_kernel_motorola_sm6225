@@ -20,7 +20,7 @@
 #include <linux/mm_types.h>	/* struct vm_area_struct */
 #include <linux/uaccess.h>
 
-#include "public/mc_user.h"
+#include "mc_user.h"
 
 #include "main.h"
 #include "user.h"
