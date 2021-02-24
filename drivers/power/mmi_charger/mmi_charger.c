@@ -196,6 +196,7 @@ struct mmi_charger_chip {
 	int			max_chrg_temp;
 	bool			enable_charging_limit;
         bool                    enable_factory_poweroff;
+	bool			start_factory_kill_disabled;
 	int			upper_limit_capacity;
 	int			lower_limit_capacity;
 
@@ -2050,6 +2051,9 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
         chip->enable_factory_poweroff =
                 of_property_read_bool(node, "mmi,enable-factory-poweroff");
 
+	chip->start_factory_kill_disabled =
+			of_property_read_bool(node, "mmi,start-factory-kill-disabled");
+
 	rc = of_property_read_u32(node, "mmi,upper-limit-capacity",
 				  &chip->upper_limit_capacity);
 	if (rc)
@@ -2253,6 +2257,9 @@ static int mmi_charger_probe(struct platform_device *pdev)
 		if (rc)
 			mmi_err(chip, "Register for reboot failed\n");
 	}
+
+	if (chip->start_factory_kill_disabled)
+		factory_kill_disable = 1;
 
 	cancel_delayed_work(&chip->heartbeat_work);
 	schedule_delayed_work(&chip->heartbeat_work,
