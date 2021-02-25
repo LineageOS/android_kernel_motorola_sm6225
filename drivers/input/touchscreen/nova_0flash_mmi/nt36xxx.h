@@ -271,6 +271,7 @@ typedef enum {
 typedef enum {
     EVENT_MAP_HOST_CMD                      = 0x50,
     EVENT_MAP_HANDSHAKING_or_SUB_CMD_BYTE   = 0x51,
+    EVENT_MAP_HOST_CMD_CHECK                = 0x5C,
     EVENT_MAP_RESET_COMPLETE                = 0x60,
     EVENT_MAP_FWINFO                        = 0x78,
     EVENT_MAP_PROJECTID                     = 0x9A,
@@ -340,5 +341,6 @@ extern int nvt_palm_set(bool enabled);
 #endif
 #ifdef EDGE_SUPPRESSION
 extern int32_t nvt_edge_reject_set(uint32_t status);
+extern uint8_t nvt_edge_reject_read(void);
 #endif
 #endif /* _LINUX_NVT_TOUCH_H */
