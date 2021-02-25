@@ -33,7 +33,6 @@
 #include <linux/semaphore.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reboot.h>
-#include <linux/pinctrl/consumer.h>
 #include <linux/input/mt.h>
 #include <soc/qcom/mmi_boot_info.h>
 
@@ -48,9 +47,13 @@
 #endif
 #endif
 
+#include <linux/mmi_device.h>
 #include "synaptics_dsx_i2c.h"
 
-static struct workqueue_struct *det_workqueue;
+#define PINCTRL_STATE_ACTIVE "active_state"
+#define PINCTRL_STATE_SUSPEND "suspend_state"
+
+struct workqueue_struct *det_workqueue;
 
 static char *INSTANCE_RMI(char *string,
 		struct synaptics_rmi4_data *rmi4_data)
@@ -1313,7 +1316,7 @@ clip_area:
 }
 
 /* ASCII names order MUST match enum */
-static const char const *ascii_names[] = { "aod", "stats", "folio",
+static const char *ascii_names[] = { "aod", "stats", "folio",
 	"charger", "wakeup", "fps", "query", "runtime", "na"
 };
 
@@ -6342,13 +6345,6 @@ static int rmi_reboot(struct notifier_block *nb,
 	/* At this point, we're all good with clean-up works */
 	synaptics_dsx_set_state_safe(rmi4_data, STATE_INVALID);
 
-#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
-	mmi_panel_unregister_notifier(&rmi4_data->panel_nb);
-#elif defined(CONFIG_DRM)
-	msm_drm_unregister_client(&rmi4_data->panel_nb);
-#elif defined(CONFIG_FB)
-	fb_unregister_client(&rmi4_data->panel_nb);
-#endif
 	if (rmi4_data->irq_enabled) {
 		rmi4_data->irq_enabled = false;
 		disable_irq(rmi4_data->irq);
@@ -6420,17 +6416,42 @@ int synaptics_dsx_charger_mode(struct synaptics_rmi4_data *rmi4_data , int is_pl
 static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval = 0, attr_count;
-	struct pinctrl *pinctrl;
 	struct synaptics_dsx_platform_data
 				*platform_data = &rmi4_data->board;
 
-	pinctrl = devm_pinctrl_get_select(&rmi4_data->i2c_client->dev,
-		"active");
-	if (IS_ERR(pinctrl)) {
-		long int error = PTR_ERR(pinctrl);
-		dev_err(&rmi4_data->i2c_client->dev,
-			"%s: pinctrl failed err %ld\n", __func__, error);
-		return (int)error;
+	rmi4_data->regulator = devm_regulator_get(
+				&rmi4_data->i2c_client->dev, "touch_vdd");
+	if (IS_ERR(rmi4_data->regulator)) {
+		retval = PTR_ERR(rmi4_data->regulator);
+		if (PTR_ERR(rmi4_data->regulator) == -EPROBE_DEFER)
+			goto err_gpio_free;
+
+		dev_warn(&rmi4_data->i2c_client->dev,
+				"Failed to get touch_vdd\n");
+		goto err_out;
+	} else {
+		retval = regulator_enable(rmi4_data->regulator);
+		if (retval) {
+			dev_err(&rmi4_data->i2c_client->dev,
+				"Failed to enable touch_vdd\n");
+			goto err_out;
+		}
+		platform_data->regulator_en = true;
+	}
+
+	rmi4_data->vdd_quirk = devm_regulator_get(
+				&rmi4_data->i2c_client->dev, "vdd_quirk");
+	if (!IS_ERR(rmi4_data->vdd_quirk)) {
+		retval = regulator_enable(rmi4_data->vdd_quirk);
+		if (retval) {
+			dev_err(&rmi4_data->i2c_client->dev,
+				"Failed to enable vdd-quirk\n");
+			goto err_vdd_quirk;
+		}
+	} else {
+		retval = PTR_ERR(rmi4_data->regulator);
+		if (retval == -EPROBE_DEFER)
+			goto err_vdd_quirk;
 	}
 
 	if (platform_data->gpio_config)
@@ -6442,12 +6463,17 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 			retval = gpio_direction_output(
 						platform_data->reset_gpio, 1);
 	}
+
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to configure GPIO\n",
 				__func__);
-		return retval;
+		goto err_gpio_free;
 	}
+
+	if (rmi4_data->ts_pinctrl && rmi4_data->pinctrl_state_active)
+		pinctrl_select_state(rmi4_data->ts_pinctrl,
+				rmi4_data->pinctrl_state_active);
 
 	retval = synaptics_dsx_alloc_input(rmi4_data);
 	if (retval < 0) {
@@ -6455,42 +6481,6 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 				"%s: Failed to allocate input device\n",
 				__func__);
 		goto err_gpio_free;
-	}
-
-	rmi4_data->regulator = devm_regulator_get(
-				&rmi4_data->i2c_client->dev, "touch_vdd");
-	if (IS_ERR(rmi4_data->regulator)) {
-		retval = PTR_ERR(rmi4_data->regulator);
-		if (PTR_ERR(rmi4_data->regulator) == -EPROBE_DEFER)
-			goto err_gpio_free;
-
-		dev_warn(&rmi4_data->i2c_client->dev,
-				"%s: Failed to get regulator\n",
-				__func__);
-		goto err_gpio_free;
-	} else {
-		retval = regulator_enable(rmi4_data->regulator);
-		if (retval) {
-			dev_err(&rmi4_data->i2c_client->dev,
-				"%s: Error %d enabling touch-vdd regulator\n",
-				__func__, retval);
-			goto err_touch_vdd;
-		}
-		platform_data->regulator_en = true;
-	}
-
-	rmi4_data->vdd_quirk = devm_regulator_get(
-				&rmi4_data->i2c_client->dev, "vdd_quirk");
-	if (!IS_ERR(rmi4_data->vdd_quirk)) {
-		retval = regulator_enable(rmi4_data->vdd_quirk);
-		if (retval) {
-			dev_err(&rmi4_data->i2c_client->dev, "Failed to enable vdd-quirk\n");
-			goto err_vdd_quirk;
-		}
-	} else {
-		retval = PTR_ERR(rmi4_data->regulator);
-		if (retval == -EPROBE_DEFER)
-			goto err_vdd_quirk;
 	}
 
 	retval = synaptics_dsx_ic_reset(rmi4_data, RMI4_HW_RESET);
@@ -6523,7 +6513,6 @@ static int synaptics_rmi4_hw_init(struct synaptics_rmi4_data *rmi4_data)
 		}
 	}
 
-	rmi4_data->pm_qos_irq.irq = rmi4_data->irq;
 	synaptics_dsx_sensor_ready_state(rmi4_data, true);
 
 	rmi4_data->rmi_reboot.notifier_call = rmi_reboot;
@@ -6571,14 +6560,6 @@ err_sysfs:
 	device_remove_file(&rmi4_data->i2c_client->dev, &dev_attr_poweron);
 
 err_query_device:
-	if (!IS_ERR(rmi4_data->vdd_quirk))
-			regulator_disable(rmi4_data->vdd_quirk);
-
-err_vdd_quirk:
-	if (platform_data->regulator_en)
-		regulator_disable(rmi4_data->regulator);
-
-err_touch_vdd:
 	synaptics_rmi4_cleanup(rmi4_data);
 	if (rmi4_data->input_registered)
 		input_unregister_device(rmi4_data->input_dev);
@@ -6593,6 +6574,14 @@ err_gpio_free:
 		gpio_free(platform_data->reset_gpio);
 	}
 
+	if (!IS_ERR(rmi4_data->vdd_quirk))
+		regulator_disable(rmi4_data->vdd_quirk);
+
+err_vdd_quirk:
+	if (platform_data->regulator_en)
+		regulator_disable(rmi4_data->regulator);
+
+err_out:
 	return retval;
 }
 
@@ -6607,6 +6596,48 @@ static void dummy_remove(struct synaptics_rmi4_data *rmi4_data)
 {
 	struct synaptics_rmi4_data *ptr = rmi4_data;
 	ptr = rmi4_data;
+}
+
+static int dsx_pinctrl_init(struct synaptics_rmi4_data *info)
+{
+	int retval;
+
+	/* Get pinctrl if target uses pinctrl */
+	info->ts_pinctrl = devm_pinctrl_get(&info->i2c_client->dev);
+	if (IS_ERR_OR_NULL(info->ts_pinctrl)) {
+		retval = PTR_ERR(info->ts_pinctrl);
+		dev_err(&info->i2c_client->dev,
+			"%s cannot find pinctrl %d\n", __func__, retval);
+		goto err_pinctrl_get;
+	}
+
+	info->pinctrl_state_active = pinctrl_lookup_state(
+			info->ts_pinctrl, PINCTRL_STATE_ACTIVE);
+	if (IS_ERR_OR_NULL(info->pinctrl_state_active)) {
+		retval = PTR_ERR(info->pinctrl_state_active);
+		dev_err(&info->i2c_client->dev,
+			"%s cannot lookup %s pinstate %d\n",
+			__func__, PINCTRL_STATE_ACTIVE, retval);
+		goto err_pinctrl_lookup;
+	}
+
+	info->pinctrl_state_suspend = pinctrl_lookup_state(
+			info->ts_pinctrl, PINCTRL_STATE_SUSPEND);
+	if (IS_ERR_OR_NULL(info->pinctrl_state_suspend)) {
+		retval = PTR_ERR(info->pinctrl_state_suspend);
+		dev_err(&info->i2c_client->dev,
+			"%s cannot lookup %s pinstate %d\n",
+			__func__, PINCTRL_STATE_SUSPEND, retval);
+		goto err_pinctrl_lookup;
+	}
+	return 0;
+
+err_pinctrl_lookup:
+	devm_pinctrl_put(info->ts_pinctrl);
+err_pinctrl_get:
+	info->ts_pinctrl = NULL;
+
+	return retval;
 }
 
  /**
@@ -6640,6 +6671,11 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 		return -EIO;
 	}
 
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+		dev_err(&client->dev, "%s: mmi: device not supported\n", __func__);
+		return -ENODEV;
+	}
+
 	rmi4_data = kzalloc(sizeof(*rmi4_data), GFP_KERNEL);
 	if (!rmi4_data) {
 		dev_err(&client->dev,
@@ -6661,6 +6697,7 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 #endif
 	if (client->dev.of_node) {
 		rc = synaptics_dsx_of_init(client, rmi4_data);
+		rc = rc && dsx_pinctrl_init(rmi4_data);
 		if (rc) {
 			dev_err(&client->dev,
 					"%s: No platform data found\n",
@@ -6815,7 +6852,6 @@ free_and_exit:
  */
 static int synaptics_rmi4_remove(struct i2c_client *client)
 {
-	struct pinctrl *pinctrl;
 	int attr_count;
 	struct synaptics_dsx_platform_data *platform_data;
 	struct synaptics_rmi4_data *rmi4_data = i2c_get_clientdata(client);
@@ -6840,10 +6876,9 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	if (gpio_is_valid(platform_data->reset_gpio))
 		gpio_free(platform_data->reset_gpio);
 
-	pinctrl = devm_pinctrl_get_select_default(&rmi4_data->i2c_client->dev);
-	if (IS_ERR(pinctrl))
-		dev_err(&rmi4_data->i2c_client->dev,
-			"%s: pinctrl default failed\n", __func__);
+	if (rmi4_data->ts_pinctrl && rmi4_data->pinctrl_state_suspend)
+		pinctrl_select_state(rmi4_data->ts_pinctrl,
+				rmi4_data->pinctrl_state_suspend);
 
 	if (rmi4_data->ic_on) {
 		if (!IS_ERR(rmi4_data->vdd_quirk))
@@ -6900,7 +6935,6 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
  */
 int synaptics_rmi4_suspend(struct device *dev)
 {
-	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
 	struct synaptics_dsx_platform_data
@@ -6933,11 +6967,10 @@ int synaptics_rmi4_suspend(struct device *dev)
 		/* use pinctrl to put touch RESET GPIO into SUSPEND state */
 		if (gpio_is_valid(platform_data->reset_gpio))
 			gpio_free(platform_data->reset_gpio);
-		pinctrl = devm_pinctrl_get_select_default(
-			&rmi4_data->i2c_client->dev);
-		if (IS_ERR(pinctrl))
-			dev_err(&rmi4_data->i2c_client->dev,
-				"pinctrl failed err %ld\n", PTR_ERR(pinctrl));
+
+		if (rmi4_data->ts_pinctrl && rmi4_data->pinctrl_state_suspend)
+			pinctrl_select_state(rmi4_data->ts_pinctrl,
+				rmi4_data->pinctrl_state_suspend);
 
 		if (!rmi4_data->splash_screen_mode) {
 			if (!IS_ERR(rmi4_data->vdd_quirk))
@@ -6970,7 +7003,6 @@ int synaptics_rmi4_resume(struct device *dev)
 {
 	int retval;
 	int reset = RMI4_HW_RESET;
-	struct pinctrl *pinctrl;
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
 	struct synaptics_dsx_platform_data
@@ -7014,13 +7046,9 @@ int synaptics_rmi4_resume(struct device *dev)
 		} else
 			synaptics_rmi4_irq_enable(rmi4_data, false);
 
-		pinctrl = devm_pinctrl_get_select(&rmi4_data->i2c_client->dev,
-			"active");
-		if (IS_ERR(pinctrl)) {
-			long int error = PTR_ERR(pinctrl);
-			dev_err(&rmi4_data->i2c_client->dev,
-				"pinctrl failed err %ld\n", error);
-		}
+		if (rmi4_data->ts_pinctrl && rmi4_data->pinctrl_state_active )
+			pinctrl_select_state(rmi4_data->ts_pinctrl,
+					rmi4_data->pinctrl_state_active);
 
 		if (gpio_is_valid(platform_data->reset_gpio)) {
 			if (gpio_request(platform_data->reset_gpio,
@@ -7114,3 +7142,7 @@ MODULE_AUTHOR("Synaptics, Inc.");
 MODULE_DESCRIPTION("Synaptics DSX I2C Touch Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(SYNAPTICS_DSX_DRIVER_VERSION);
+
+#ifdef SOFTDEP_GPIO_PCAL6408
+MODULE_SOFTDEP("pre: gpio-pcal6408");
+#endif
