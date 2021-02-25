@@ -1581,7 +1581,25 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			nvt_update_firmware(nvt_boot_firmware_name);
 		else
 			nvt_update_firmware(BOOT_UPDATE_FIRMWARE_NAME);
-		goto XFER_ERROR;
+
+		mutex_unlock(&ts->lock);
+
+		if (ts->charger_detection) {
+			queue_work(ts->charger_detection->nvt_charger_notify_wq, &ts->charger_detection->charger_notify_work);
+		}
+
+#ifdef NOVATECH_PEN_NOTIFIER
+		if(!ts->fw_ready_flag)
+			ts->fw_ready_flag = true;
+		nvt_mcu_pen_detect_set(ts->nvt_pen_detect_flag);
+#endif
+#ifdef PALM_GESTURE
+		nvt_palm_set(ts->palm_enabled);
+#endif
+#ifdef EDGE_SUPPRESSION
+		nvt_edge_reject_set(ts->edge_reject_state);
+#endif
+		return IRQ_HANDLED;
    }
 #endif /* #if NVT_TOUCH_WDT_RECOVERY */
 
@@ -2027,7 +2045,10 @@ static ssize_t nvt_edge_reject_store(struct device *dev,
 	ts->edge_reject_state = state;
 
 	NVT_LOG("edge_reject_state %d!\n", state);
-	nvt_edge_reject_set(ts->edge_reject_state);
+
+	if(nvt_edge_reject_read() != state) {
+		nvt_edge_reject_set(ts->edge_reject_state);
+	}
 
 	return count;
 }
@@ -2035,11 +2056,15 @@ static ssize_t nvt_edge_reject_store(struct device *dev,
 static ssize_t nvt_edge_reject_show(struct device *dev,
 	struct device_attribute *attr, char *buf) {
 
-	if(ts->edge_reject_state == VERTICAL)
+	uint8_t ret;
+
+	ret = nvt_edge_reject_read();
+
+	if(ret == VERTICAL)
 		return scnprintf(buf, PAGE_SIZE, "VERTICAL\n");
-	else if(ts->edge_reject_state == LEFT_UP)
+	else if(ret == LEFT_UP)
 		return scnprintf(buf, PAGE_SIZE, "LEFT_UP\n");
-	else if(ts->edge_reject_state == RIGHT_UP)
+	else if(ret == RIGHT_UP)
 		return scnprintf(buf, PAGE_SIZE, "RIGHT_UP\n");
 	else
 		return scnprintf(buf, PAGE_SIZE, "Not Support!\n");
