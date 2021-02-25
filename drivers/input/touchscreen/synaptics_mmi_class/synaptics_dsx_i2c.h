@@ -32,12 +32,13 @@
 #include <linux/pm_qos.h>
 #include <linux/notifier.h>
 #include <linux/fb.h>
+#include <linux/pinctrl/consumer.h>
 #if defined(USB_CHARGER_DETECTION)
 #include <linux/usb.h>
 #include <linux/power_supply.h>
 #endif
-#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
-#include <linux/mmi_panel_notifier.h>
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#include <linux/panel_notifier.h>
 #elif defined(CONFIG_DRM)
 #include <linux/msm_drm_notify.h>
 #endif
@@ -518,7 +519,7 @@ struct synaptics_rmi4_data {
 	struct regulator *vdd_quirk;
 	struct mutex rmi4_io_ctrl_mutex;
 	struct mutex state_mutex;
-#if defined(CONFIG_MMI_PANEL_NOTIFICATIONS)
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
 	struct mmi_notifier panel_nb;
 #elif defined(CONFIG_FB)
 	struct notifier_block panel_nb;
@@ -567,6 +568,10 @@ struct synaptics_rmi4_data {
 	int last_irq;
 	struct synaptics_rmi4_irq_info *irq_info;
 
+	struct pinctrl *ts_pinctrl;
+	struct pinctrl_state *pinctrl_state_active;
+	struct pinctrl_state *pinctrl_state_suspend;
+
 	/* features enablers */
 	bool charger_detection_enabled;
 	bool folio_detection_enabled;
@@ -594,7 +599,6 @@ struct synaptics_rmi4_data {
 
 	struct mutex rmi4_exp_init_mutex;
 	uint32_t pm_qos_latency;
-	struct pm_qos_request pm_qos_irq;
 
 	struct reporting_ctrl rctrl;
 	unsigned char tsb_buff_clean_flag;
