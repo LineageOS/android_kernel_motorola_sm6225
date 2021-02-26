@@ -49,6 +49,11 @@
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
+#define ENABLE_EXTENDED_BATT_PROPS
+#endif
 
 #ifdef ATL_4000MAH_8A_BATTERY_PROFILE
 #include "battery_profile/imported/lenovo_atl_df1_gmfs.h"
@@ -1264,6 +1269,7 @@ static int fg_get_batt_health(struct bq_fg_chip *bq)
 
 }
 
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 static int fg_read_soh(struct bq_fg_chip *bq)
 {
 	int ret;
@@ -1277,6 +1283,7 @@ static int fg_read_soh(struct bq_fg_chip *bq)
 
 	return soh;
 }
+#endif
 
 static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -1290,11 +1297,13 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
-	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_SOH,
+#endif
 };
 
 static int fg_get_property(struct power_supply *psy,
@@ -1405,7 +1414,15 @@ static int fg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LIPO;
 		break;
-
+	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+		ret = fg_read_ocv_voltage(bq);
+		mutex_lock(&bq->data_lock);
+		if (ret >= 0)
+			bq->batt_vocv= ret;
+		val->intval = bq->batt_vocv * 1000;
+		mutex_unlock(&bq->data_lock);
+		break;
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = bq->connected_rid ;
 		break;
@@ -1417,17 +1434,10 @@ static int fg_get_property(struct power_supply *psy,
 			val->strval = bqfs_image[bq->batt_id].batt_type_str;
 		else val->strval = "No battery type";
 		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
-		ret = fg_read_ocv_voltage(bq);
-		mutex_lock(&bq->data_lock);
-		if (ret >= 0)
-			bq->batt_vocv= ret;
-		val->intval = bq->batt_vocv * 1000;
-		mutex_unlock(&bq->data_lock);
-		break;
 	case POWER_SUPPLY_PROP_SOH:
 		val->intval = fg_read_soh(bq);
 		break;
+#endif
 	default:
 		mutex_unlock(&bq->update_lock);
 		return -EINVAL;
@@ -1451,9 +1461,11 @@ static int fg_set_property(struct power_supply *psy,
 		bq->fake_soc = val->intval;
 		power_supply_changed(bq->fg_psy);
 		break;
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		fg_dump_registers(bq);
 		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -1470,7 +1482,9 @@ static int fg_prop_is_writeable(struct power_supply *psy,
 	switch (prop) {
 	case POWER_SUPPLY_PROP_TEMP:
 	case POWER_SUPPLY_PROP_CAPACITY:
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 	case POWER_SUPPLY_PROP_UPDATE_NOW:
+#endif
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		ret = 1;
 		break;
@@ -1497,7 +1511,11 @@ static int fg_psy_register(struct bq_fg_chip *bq)
 	struct power_supply_config fg_cfg = {};
 
 	bq->fg_psy_desc.name = bq->batt_name;
+#ifdef ENABLE_EXTENDED_BATT_PROPS
 	bq->fg_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
+#else
+	bq->fg_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+#endif
 	bq->fg_psy_desc.properties = fg_props;
 	bq->fg_psy_desc.num_properties = ARRAY_SIZE(fg_props);
 	bq->fg_psy_desc.get_property = fg_get_property;
