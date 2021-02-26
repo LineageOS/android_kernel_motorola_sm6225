@@ -2448,11 +2448,12 @@ static void fts_status_event_handler(struct fts_ts_info *info, unsigned
 			break;
 
 		default:
-			logError(1,
+			/*logError(1,
 				 "%s %s Frame drop = %02X %02X %02X %02X %02X %02X\n",
 				 tag, __func__, event[2], event[3], event[4],
 				 event[5],
-				 event[6], event[7]);
+				 event[6], event[7]);*/
+			break;
 		}
 		break;
 
@@ -3836,6 +3837,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	int retval;
 	const char *name;
 	struct device_node *np = dev->of_node;
+	u32 temp_val;
 
 	bdata->irq_gpio = of_get_named_gpio_flags(np, "st,irq-gpio", 0, NULL);
 
@@ -3869,6 +3871,19 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		logError(0, "%s reset_gpio =%d\n", tag, bdata->reset_gpio);
 	} else
 		bdata->reset_gpio = GPIO_NOT_DEFINED;
+
+	retval = of_property_read_u32(np, "fts,x-max", &temp_val);
+	if (retval < 0)
+		bdata->x_max = X_AXIS_MAX;
+	else
+		bdata->x_max = temp_val;
+
+	retval = of_property_read_u32(np, "fts,y-max", &temp_val);
+	if (retval < 0)
+		bdata->y_max = Y_AXIS_MAX;
+	else
+		bdata->y_max = temp_val;
+	logError(0, "%s x_max =%d y_max =%d\n", tag, bdata->x_max, bdata->y_max);
 
 	return OK;
 }
@@ -4038,9 +4053,9 @@ static int fts_probe(struct spi_device *client)
 	/* input_mt_init_slots(info->input_dev, TOUCH_ID_MAX); */
 
 	input_set_abs_params(info->input_dev, ABS_MT_POSITION_X, X_AXIS_MIN,
-			     X_AXIS_MAX, 0, 0);
+			     info->board->x_max - 1, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_POSITION_Y, Y_AXIS_MIN,
-			     Y_AXIS_MAX, 0, 0);
+			     info->board->y_max - 1, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MAJOR, AREA_MIN,
 			     AREA_MAX, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN,
