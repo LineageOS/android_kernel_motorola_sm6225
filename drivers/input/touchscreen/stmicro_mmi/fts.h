@@ -227,6 +227,8 @@ struct fts_hw_platform_data {
 	int reset_gpio;	/* /< number of the gpio associated to the reset pin */
 	const char *vdd_reg_name;	/* /< name of the VDD regulator */
 	const char *avdd_reg_name;	/* /< name of the AVDD regulator */
+	unsigned int x_max;
+	unsigned int y_max;
 };
 
 /*
