@@ -45,5 +45,6 @@ HapticDriver *bos0614DriverI2cInit(Bos0614Resource resources);
 
 HapticDriver *bos0614DriverSpiInit(Spi *spi, Gpio *gpioA, Gpio *gpioD);
 
+Bos0614RegisterStruct *getAllRegsPtr(void);
 
 #endif //DKCORE_BOS0614DRIVER_H

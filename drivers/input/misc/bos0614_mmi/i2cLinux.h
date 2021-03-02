@@ -25,8 +25,31 @@
 #ifndef BOREAS_HAPTIC_DRIVER_LINUX_I2CLINUX_H
 #define BOREAS_HAPTIC_DRIVER_LINUX_I2CLINUX_H
 
+#include <linux/device.h>
 #include <linux/i2c.h>
 #include "libs/dk-core/src/bsp/drivers/i2c/i2c.h"
+#include "libs/dk-core/src/bsp/drivers/haptic/bos0614Driver.h"
+
+enum {
+	PARAM_UCHAR8 = 1,
+	PARAM_INT16,
+	PARAM_UINT16,
+	PARAM_INT32,
+	PARAM_UINT32
+};
+
+typedef struct {
+	int tid;
+	void *data_ptr;
+} ParamsLst;
+
+#define PARAM_ADD(t, v) {\
+	params[numP].tid = t;\
+	params[numP].data_ptr = v;\
+	numP++;\
+}
+
+int process_params(ParamsLst *params, int numP, const char *buffer);
 
 I2c *i2cBoreasLinuxInit(struct i2c_client *client);
 

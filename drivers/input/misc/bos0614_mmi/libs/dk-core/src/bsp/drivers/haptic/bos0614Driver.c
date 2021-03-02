@@ -23,6 +23,9 @@
 //
 #define pr_fmt(fmt) "bos0614: %s: " fmt, __func__
 
+#define DEBUG
+//#undef DEBUG
+
 #include <linux/string.h>
 #include <linux/slab.h>
 
@@ -31,8 +34,15 @@
 
 #include "bsp/boards/boreasTime.h"
 #include "bsp/drivers/i2c/i2c.h"
-#include "bsp/drivers/haptic/bos0614Driver.h"
 #include "bsp/drivers/haptic/bos0614Register.h"
+#include "bsp/drivers/haptic/bos0614Driver.h"
+
+#ifdef DEBUG
+#undef pr_debug
+#define pr_debug pr_info
+#undef dev_dbg
+#define dev_dbg dev_info
+#endif
 
 #define BOS0614_CHIP_ID (0x0D)
 #define BOS0614_I2C_ADDRESS (0x2c)
@@ -182,6 +192,7 @@ static bool resetSoftware(Context *ctx)
 {
     bool res;
 
+    pr_debug("enter\n");
     ctx->reg.CONFIG_0614.bit.RST = 0x1;
 
     res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
@@ -621,6 +632,8 @@ static bool validateIcWorking(Context *ctx)
     res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
     res = res && readRegister(ctx, &ctx->reg.CONFIG_0614.reg);
     res = res && ctx->reg.CONFIG_0614.bit.PLAY == bos0614SamplingRate_512Ksps;
+
+    pr_debug("ic is%s working!!!\n", res ? "" : " NOT");
 
     return res;
 }
@@ -1780,78 +1793,85 @@ static BOS0614_REGS bOS0614Regs =
                 .REG47_0614.reg.generic.addr = ADDRESS_BOS0614_REG47_REG,
         };
 
-static uint8_t regAddrToRead[] = {ADDRESS_BOS0614_REFERENCE_REG,
-                                  ADDRESS_BOS0614_IC_STATUS_REG,
-                                  ADDRESS_BOS0614_READ_REG,
-                                  ADDRESS_BOS0614_GPIOX_REG,
-                                  ADDRESS_BOS0614_TC_REG,
-                                  ADDRESS_BOS0614_CONFIG_REG,
-                                  ADDRESS_BOS0614_SENSECONFIG_REG,
-                                  ADDRESS_BOS0614_SENSE0_REG,
-                                  ADDRESS_BOS0614_SENSE0P_REG,
-                                  ADDRESS_BOS0614_SENSE0R_REG,
-                                  ADDRESS_BOS0614_SENSE0S_REG,
-                                  ADDRESS_BOS0614_SENSE1_REG,
-                                  ADDRESS_BOS0614_SENSE1P_REG,
-                                  ADDRESS_BOS0614_SENSE1R_REG,
-                                  ADDRESS_BOS0614_SENSE1S_REG,
-                                  ADDRESS_BOS0614_SENSE2_REG,
-                                  ADDRESS_BOS0614_SENSE2P_REG,
-                                  ADDRESS_BOS0614_SENSE2R_REG,
-                                  ADDRESS_BOS0614_SENSE2S_REG,
-                                  ADDRESS_BOS0614_SENSE3_REG,
-                                  ADDRESS_BOS0614_SENSE3P_REG,
-                                  ADDRESS_BOS0614_SENSE3R_REG,
-                                  ADDRESS_BOS0614_SENSE3S_REG,
-                                  ADDRESS_BOS0614_SENSESTATUS_REG,
-                                  ADDRESS_BOS0614_SENSEDATA0_REG,
-                                  ADDRESS_BOS0614_SENSEDATA1_REG,
-                                  ADDRESS_BOS0614_SENSEDATA2_REG,
-                                  ADDRESS_BOS0614_SENSEDATA3_REG,
-                                  ADDRESS_BOS0614_SENSERAW0_REG,
-                                  ADDRESS_BOS0614_SENSERAW1_REG,
-                                  ADDRESS_BOS0614_SENSERAW2_REG,
-                                  ADDRESS_BOS0614_SENSERAW3_REG,
-                                  ADDRESS_BOS0614_KPA_REG,
-                                  ADDRESS_BOS0614_KP_KI_REG,
-                                  ADDRESS_BOS0614_DEADTIME_REG,
-                                  ADDRESS_BOS0614_PARCAP_REG,
-                                  ADDRESS_BOS0614_SUP_RISE_REG,
-                                  ADDRESS_BOS0614_TRIM_REG,
-                                  ADDRESS_BOS0614_CHIP_ID_REG,
-                                  ADDRESS_BOS0614_VFEEDBACK_REG,
-                                  ADDRESS_BOS0614_FIFO_STATE_REG,
-                                  ADDRESS_BOS0614_AUTO_STATE_REG,
-                                  ADDRESS_BOS0614_BIST_REG,
-                                  ADDRESS_BOS0614_BISTRES_REG,
-                                  ADDRESS_BOS0614_DEBUG_REG,
-                                  ADDRESS_BOS0614_THRESH_REG,
-                                  ADDRESS_BOS0614_REG38_REG,
-                                  ADDRESS_BOS0614_REG39_REG,
-                                  ADDRESS_BOS0614_CALIB_DATA_REG,
-                                  ADDRESS_BOS0614_REG3B_REG,
-                                  ADDRESS_BOS0614_REG3C_REG,
-                                  ADDRESS_BOS0614_REG3D_REG,
-                                  ADDRESS_BOS0614_REG3E_REG,
-                                  ADDRESS_BOS0614_REG3F_REG,
-                                  ADDRESS_BOS0614_REG40_REG,
-                                  ADDRESS_BOS0614_REG41_REG,
-                                  ADDRESS_BOS0614_REG42_REG,
-                                  ADDRESS_BOS0614_REG43_REG,
-                                  ADDRESS_BOS0614_REG44_REG,
-                                  ADDRESS_BOS0614_REG45_REG,
-                                  ADDRESS_BOS0614_REG46_REG,
-                                  ADDRESS_BOS0614_REG47_REG};
+static Bos0614RegisterStruct regToRead[] = {
+                {.addr = ADDRESS_BOS0614_REFERENCE_REG,},
+                {.addr = ADDRESS_BOS0614_IC_STATUS_REG,},
+                {.addr = ADDRESS_BOS0614_READ_REG,},
+                {.addr = ADDRESS_BOS0614_GPIOX_REG,},
+                {.addr = ADDRESS_BOS0614_TC_REG,},
+                {.addr = ADDRESS_BOS0614_CONFIG_REG,},
+                {.addr = ADDRESS_BOS0614_SENSECONFIG_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE0_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE0P_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE0R_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE0S_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE1_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE1P_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE1R_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE1S_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE2_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE2P_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE2R_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE2S_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE3_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE3P_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE3R_REG,},
+                {.addr = ADDRESS_BOS0614_SENSE3S_REG,},
+                {.addr = ADDRESS_BOS0614_SENSESTATUS_REG,},
+                {.addr = ADDRESS_BOS0614_SENSEDATA0_REG,},
+                {.addr = ADDRESS_BOS0614_SENSEDATA1_REG,},
+                {.addr = ADDRESS_BOS0614_SENSEDATA2_REG,},
+                {.addr = ADDRESS_BOS0614_SENSEDATA3_REG,},
+                {.addr = ADDRESS_BOS0614_SENSERAW0_REG,},
+                {.addr = ADDRESS_BOS0614_SENSERAW1_REG,},
+                {.addr = ADDRESS_BOS0614_SENSERAW2_REG,},
+                {.addr = ADDRESS_BOS0614_SENSERAW3_REG,},
+                {.addr = ADDRESS_BOS0614_KPA_REG,},
+                {.addr = ADDRESS_BOS0614_KP_KI_REG,},
+                {.addr = ADDRESS_BOS0614_DEADTIME_REG,},
+                {.addr = ADDRESS_BOS0614_PARCAP_REG,},
+                {.addr = ADDRESS_BOS0614_SUP_RISE_REG,},
+                {.addr = ADDRESS_BOS0614_TRIM_REG,},
+                {.addr = ADDRESS_BOS0614_CHIP_ID_REG,},
+                {.addr = ADDRESS_BOS0614_VFEEDBACK_REG,},
+                {.addr = ADDRESS_BOS0614_FIFO_STATE_REG,},
+                {.addr = ADDRESS_BOS0614_AUTO_STATE_REG,},
+                {.addr = ADDRESS_BOS0614_BIST_REG,},
+                {.addr = ADDRESS_BOS0614_BISTRES_REG,},
+                {.addr = ADDRESS_BOS0614_DEBUG_REG,},
+                {.addr = ADDRESS_BOS0614_THRESH_REG,},
+                {.addr = ADDRESS_BOS0614_REG38_REG,},
+                {.addr = ADDRESS_BOS0614_REG39_REG,},
+                {.addr = ADDRESS_BOS0614_CALIB_DATA_REG,},
+                {.addr = ADDRESS_BOS0614_REG3B_REG,},
+                {.addr = ADDRESS_BOS0614_REG3C_REG,},
+                {.addr = ADDRESS_BOS0614_REG3D_REG,},
+                {.addr = ADDRESS_BOS0614_REG3E_REG,},
+                {.addr = ADDRESS_BOS0614_REG3F_REG,},
+                {.addr = ADDRESS_BOS0614_REG40_REG,},
+                {.addr = ADDRESS_BOS0614_REG41_REG,},
+                {.addr = ADDRESS_BOS0614_REG42_REG,},
+                {.addr = ADDRESS_BOS0614_REG43_REG,},
+                {.addr = ADDRESS_BOS0614_REG44_REG,},
+                {.addr = ADDRESS_BOS0614_REG45_REG,},
+                {.addr = ADDRESS_BOS0614_REG46_REG,},
+                {.addr = ADDRESS_BOS0614_REG47_REG,},
+        };
+
+Bos0614RegisterStruct *getAllRegsPtr(void)
+{
+	return regToRead;
+}
 
 static bool readAllRegister(Context *ctx)
 {
     uint32_t index;
     bool res = true;
 
-    for (index = 0; index < DATA_ARRAY_LENGTH(regAddrToRead) && res; index++)
+    for (index = 0; index < DATA_ARRAY_LENGTH(regToRead) && res; index++)
     {
         uint16_t dummy;
-        res = bos0614GetRegister(&ctx->hDriver, regAddrToRead[index], &dummy);
+        res = bos0614GetRegister(&ctx->hDriver, regToRead[index].addr, &dummy);
     }
 
     return res;
@@ -1861,9 +1881,21 @@ static bool setDefaultConfig(Context *ctx)
 {
     bool res = true;
 
-    //Reset configuration of the register;
+    pr_debug("enter\n");
+
+    //No need to copy registers again here!!!
     memcpy(&ctx->reg, &bOS0614Regs, sizeof(bOS0614Regs));
+    //Why do we need to do a dummy read???
     res = readAllRegister(ctx);
+
+    //bosDriverI2cProbe calls i2cBoreasLinuxInit
+    //  i2cBoreasLinuxInit calls readDeviceTree
+    //      readDeviceTree populates regToRead with default configuration
+    //
+    //Read SENSECONFIG to determine whether power cut occurred
+    //and necessary to apply default config provided in device tree
+    res = readRegister(ctx, &ctx->reg.SENSECONFIG_0614.reg);
+    res = res && ctx->reg.SENSECONFIG_0614.reg.generic.value == regToRead[ADDRESS_BOS0614_SENSECONFIG_REG].value;
 
     ctx->reg.SENSECONFIG_0614.bit.CH0 = BOS0614_DISABLE;
     ctx->reg.SENSECONFIG_0614.bit.CH1 = BOS0614_DISABLE;
@@ -1875,12 +1907,21 @@ static bool setDefaultConfig(Context *ctx)
 		ctx->reg.SENSECONFIG_0614.reg.generic.addr,
 		ctx->reg.SENSECONFIG_0614.reg.generic.value);
 
-//    Bos0614Register *reg[] = {&ctx->reg.SENSECONFIG_0614.reg};
-//    for (uint32_t index = 0; index < DATA_ARRAY_LENGTH(reg); index++)
-//    {
-//        res = res && ctx->hDriver.setRegister(&ctx->hDriver, reg[index]->generic.addr,
-//                                              reg[index]->generic.value);
-//    }
+    //This happens when SENSECONFIG register value from IC
+    //won't match config from device tree
+    if (res == false)
+    {
+        uint32_t index;
+	res = true;
+        for (index = 0; index < DATA_ARRAY_LENGTH(regToRead); index++)
+        {
+            if (regToRead[index].value != 0)
+                res = res && ctx->hDriver.setRegister(&ctx->hDriver,
+                            regToRead[index].addr,
+                            regToRead[index].value);
+        }
+    }
+
     return res;
 }
 
