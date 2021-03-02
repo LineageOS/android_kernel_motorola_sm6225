@@ -21,6 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#define pr_fmt(fmt) "bos0614: %s: " fmt, __func__
+
+#define DEBUG
+//#undef DEBUG
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -34,62 +38,12 @@
 #include "libs/dk-core/src/bsp/drivers/i2c/i2c.h"
 #include "libs/dk-core/src/bsp/drivers/haptic/bos0614Driver.h"
 
-enum {
-	PARAM_UCHAR8 = 1,
-	PARAM_INT16,
-	PARAM_UINT16,
-	PARAM_INT32,
-	PARAM_UINT32
-};
-
-typedef struct {
-	int tid;
-	void *data_ptr;
-} ParamsLst;
-
-#define PARAM_ADD(t, v) {\
-	params[numP].tid = t;\
-	params[numP].data_ptr = v;\
-	numP++;\
-}
-
-static int process_params(ParamsLst *params, int numP, const char *buffer)
-{
-	char *arg, *buf, *p;
-	int n, err;
-
-	buf = kstrdup(buffer, GFP_KERNEL);
-	for (n = 0; n < numP && p && *p; n++, params++) {
-		arg = strsep(&p, " ");
-		if (!arg || !*arg)
-			break;
-
-		switch (params->tid) {
-		case PARAM_UCHAR8:
-			err = kstrtou8(arg, 0, params->data_ptr);
-				break;
-		case PARAM_INT16:
-			err = kstrtos16(arg, 0, params->data_ptr);
-				break;
-		case PARAM_UINT16:
-			err = kstrtou16(arg, 0, params->data_ptr);
-				break;
-		case PARAM_INT32:
-			err = kstrtoint(arg, 0, params->data_ptr);
-				break;
-		case PARAM_UINT32:
-			err = kstrtouint(arg, 0, params->data_ptr);
-				break;
-		}
-
-		if (err) {
-			n = err;
-			break;
-		}
-	}
-	kfree(buf);
-	return n;
-}
+#ifdef DEBUG
+#undef pr_debug
+#define pr_debug pr_err
+#undef dev_dbg
+#define dev_dbg dev_info
+#endif
 
 typedef struct
 {
@@ -132,6 +86,40 @@ static ssize_t getChipId(struct device *dev,
 
 static DEVICE_ATTR(chip_id, 0440, getChipId, NULL);
 
+static ssize_t getRegsDump(struct device *dev,
+                         struct device_attribute *attr, char *buf)
+{
+    Context *ctx = dev_get_drvdata(dev);
+    ssize_t blen = 0;
+    (void) attr;
+
+    if (ctx != NULL)
+    {
+        mutex_lock(&ctx->lock);
+
+        if (ctx->hapticDriver != NULL)
+        {
+	    bool res;
+	    u16 r, rval;
+	    /* dump first 42 registers */
+	    for (r = 0; r < ADDRESS_BOS0614_BIST_REG; r++) {
+		rval = 0x2bad;
+		res = ctx->hapticDriver->getRegister(ctx->hapticDriver, r, &rval);
+		blen += snprintf(buf + blen, PAGE_SIZE - blen,
+			"%02X: 0x%02X 0x%02X\n", r,
+			(rval & 0xFF00) >> 8,
+			(rval & 0x00FF));
+	    }
+        }
+
+        mutex_unlock(&ctx->lock);
+    }
+
+    return blen;
+}
+
+static DEVICE_ATTR(regs, 0440, getRegsDump, NULL);
+
 static bool hasError(BOSError *errors, size_t length, BOSError errorType)
 {
     size_t index;
@@ -161,18 +149,19 @@ static ssize_t getIcErrors(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
+        HapticDriver *driver = ctx->hapticDriver;
+        size_t nbrErros;
         BOSError *errors;
+
+        errors = kzalloc(sizeof(BOSError) * BOSERROR_Length, GFP_KERNEL);
+	if (!errors)
+            return res;
 
         mutex_lock(&ctx->lock);
 
-        errors = kzalloc(sizeof(BOSError) * BOSERROR_Length, GFP_KERNEL);
+        nbrErros = driver->getError(driver, errors, BOSERROR_Length);
 
-        if (errors != NULL)
-        {
-            HapticDriver *driver = ctx->hapticDriver;
-            size_t nbrErros = driver->getError(driver, errors, BOSERROR_Length);
-
-            res = snprintf(buf, PAGE_SIZE, "SC: %d UVLO: %d IDAC: %d MAX_POWER: %d OVT: %d OVV: %d\n",
+        res = snprintf(buf, PAGE_SIZE, "SC: %d UVLO: %d IDAC: %d MAX_POWER: %d OVT: %d OVV: %d\n",
                            hasError(errors, nbrErros, BOSERROR_SHORT_CIRCUIT),
                            hasError(errors, nbrErros, BOSERROR_UVLO),
                            hasError(errors, nbrErros, BOSERROR_IDAC),
@@ -180,9 +169,7 @@ static ssize_t getIcErrors(struct device *dev,
                            hasError(errors, nbrErros, BOSERROR_OVT),
                            hasError(errors, nbrErros, BOSERROR_OVV));
 
-            kfree(errors);
-        }
-
+        kfree(errors);
 
         mutex_unlock(&ctx->lock);
     }
@@ -202,6 +189,7 @@ static ssize_t setSynthWaveform(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
+        HapticDriver *driver = ctx->hapticDriver;
         WaveformId id = 0;
         uint8_t startSliceId = 0;
         size_t nbrOfSlices = 0;
@@ -209,7 +197,7 @@ static ssize_t setSynthWaveform(struct device *dev,
         uint8_t outputChannel = 0;
         size_t paramLength = 0;
 	int numP = 0;
-	ParamsLst params[5];
+	ParamsLst params[SET_WAVEFORM_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &id);
 	PARAM_ADD(PARAM_UCHAR8, &startSliceId);
@@ -217,27 +205,20 @@ static ssize_t setSynthWaveform(struct device *dev,
 	PARAM_ADD(PARAM_UINT16, &cycle);
 	PARAM_ADD(PARAM_UCHAR8, &outputChannel);
 
-        mutex_lock(&ctx->lock);
-
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
-	 	mutex_unlock(&ctx->lock);
+	if (paramLength != SET_WAVEFORM_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%hh %hi %zi %hi %hi", &id, &startSliceId,
-	//		&nbrOfSlices, &cycle, &outputChannel);
+
         dev_dbg(ctx->dev,
                 "[Set Synth Waveform] Waveform Id: %d Start Slice Id: %d Nbr Of Slices: %zu Cycle: %d Output Channel: %d\n",
                 id, startSliceId, nbrOfSlices, cycle, outputChannel);
 
-        if (paramLength == SET_WAVEFORM_PARAM_LENGTH)
-        {
-            HapticDriver *driver = ctx->hapticDriver;
+        mutex_lock(&ctx->lock);
 
-            if (driver->synthSetWaveform(driver, id, startSliceId, nbrOfSlices, cycle, outputChannel))
-            {
-                res = count;
-            }
+        if (driver->synthSetWaveform(driver, id, startSliceId, nbrOfSlices, cycle, outputChannel))
+        {
+            res = count;
         }
 
         mutex_unlock(&ctx->lock);
@@ -258,35 +239,31 @@ static ssize_t setSynthSlice(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         SynthSlice slice;
         uint8_t outputChannel = 0;
         size_t paramLength = 0;
 	int numP = 0;
-	ParamsLst params[4];
+	ParamsLst params[SET_SLICE_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UINT32, &slice.sliceId);
 	PARAM_ADD(PARAM_INT32, &slice.mVAmp);
 	PARAM_ADD(PARAM_UINT32, &slice.mHzFreq);
+	PARAM_ADD(PARAM_UINT32, &slice.cycle);
 	PARAM_ADD(PARAM_UCHAR8, &outputChannel);
 
-        mutex_lock(&ctx->lock);
-
-        driver = ctx->hapticDriver;
-
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
-		mutex_unlock(&ctx->lock);
+	if (paramLength != SET_SLICE_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%d %d %d %d %d", &slice.sliceId, &slice.mVAmp,
-	//		&slice.mHzFreq, &slice.cycle, &outputChannel);
+
         dev_dbg(ctx->dev,
                 "[Set Slice] Slice Id: %d Amplitude: %d mV Frequency: %d milliHertz Cycle: %d Output Channel: %d\n",
                 slice.sliceId, slice.mVAmp, slice.mHzFreq, slice.cycle, outputChannel);
 
-        if (paramLength == SET_SLICE_PARAM_LENGTH &&
-            driver->synthSetSlice(driver, (const SynthSlice *) &slice, outputChannel))
+        mutex_lock(&ctx->lock);
+
+        if (driver->synthSetSlice(driver, (const SynthSlice *) &slice, outputChannel))
         {
             res = count;
         }
@@ -310,26 +287,24 @@ static ssize_t synthPlay(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         WaveformId start = 0;
         WaveformId stop = 0;
         size_t paramLength = 0;
 	int numP = 0;
-	ParamsLst params[2];
+	ParamsLst params[SYNTH_PLAY_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &start);
 	PARAM_ADD(PARAM_UCHAR8, &stop);
 
-        driver = ctx->hapticDriver;
-
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
-		mutex_unlock(&ctx->lock);
+	if (paramLength != SYNTH_PLAY_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%hi %hi", &start, &stop);
 
-        if (paramLength == SYNTH_PLAY_PARAM_LENGTH && driver->wfsPlay(driver, start, stop))
+        mutex_lock(&ctx->lock);
+
+        if (driver->wfsPlay(driver, start, stop))
         {
             res = count;
         }
@@ -352,27 +327,25 @@ static ssize_t setOutput(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         int outputState = 0;
         size_t paramLength = 0;
-        bool bOutputState = outputState > 0 ? true : false;
+        bool bOutputState;
 	int numP = 0;
-	ParamsLst params[1];
+	ParamsLst params[CTRL_OUTPUT_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_INT32, &outputState);
 
-        mutex_lock(&ctx->lock);
-        driver = ctx->hapticDriver;
-
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
-		mutex_unlock(&ctx->lock);
+	if (paramLength != CTRL_OUTPUT_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%d", &outputState);
 
-        if (paramLength == CTRL_OUTPUT_PARAM_LENGTH &&
-            driver->ctrlOutput(driver, bOutputState))
+        bOutputState = outputState > 0 ? true : false;
+
+        mutex_lock(&ctx->lock);
+
+        if (driver->ctrlOutput(driver, bOutputState))
         {
             dev_dbg(ctx->dev,
                     "[Set Output] State: %d \n", bOutputState);
@@ -440,37 +413,33 @@ static ssize_t setSensingConfig(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         SensingConfig config;
         ChannelId channelId = 0;
         size_t paramLength = 0;
-        const char *directionS = getSensingDirection(config.direction);
-        const char *modeS = getSensingDetectionMode(config.mode);
+        const char *directionS;
+        const char *modeS;
 	int numP = 0;
-	ParamsLst params[6];
+	ParamsLst params[SENSING_CONFIG_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &channelId);
 	PARAM_ADD(PARAM_UCHAR8, &config.mode);
 	PARAM_ADD(PARAM_UCHAR8, &config.direction);
 	PARAM_ADD(PARAM_UINT16, &config.debounceUs);
-	PARAM_ADD(PARAM_UINT16, &config.thresholdMv);
+	PARAM_ADD(PARAM_INT16, &config.thresholdMv);
 	PARAM_ADD(PARAM_UCHAR8, &config.stabilisationMs);
 
-        mutex_lock(&ctx->lock);
-        driver = ctx->hapticDriver;
-
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
-		mutex_unlock(&ctx->lock);
+	if (paramLength != SENSING_CONFIG_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%hhu %d %d %hd %hd %s", &channelId, &config.mode,
-	//		&config.direction, &config.debounceUs,
-	//		&config.thresholdMv, &config.stabilisationMs);
 
-        if (paramLength == SENSING_CONFIG_PARAM_LENGTH &&
-            directionS != NULL &&
-            modeS != NULL &&
+        directionS = getSensingDirection(config.direction);
+        modeS = getSensingDetectionMode(config.mode);
+
+        mutex_lock(&ctx->lock);
+
+        if (directionS != NULL && modeS != NULL &&
             driver->configSensing(driver, channelId, config) &&
             ctx->hapticDriver->configGPO(ctx->hapticDriver, channelId, GPO_ButtonState))
         {
@@ -499,32 +468,29 @@ static ssize_t setSensingAutoPlay(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         ChannelId channelId = 0;
         WaveformId id = 0;
         SensingDirection direction = 0;
         size_t paramLength = 0;
         const char *directionS;
 	int numP = 0;
-	ParamsLst params[3];
+	ParamsLst params[SENSING_AUTO_FEEDBACK_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &channelId);
 	PARAM_ADD(PARAM_UCHAR8, &id);
 	PARAM_ADD(PARAM_UCHAR8, &direction);
 
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
+	if (paramLength != SENSING_AUTO_FEEDBACK_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%d %d %d", &channelId, &id, &direction);
 
         directionS = getSensingDirection(direction);
 
         mutex_lock(&ctx->lock);
-        driver = ctx->hapticDriver;
 
-        if (paramLength == SENSING_AUTO_FEEDBACK_PARAM_LENGTH &&
-            directionS != NULL &&
+        if (directionS != NULL &&
             driver->sensingAutoPlayWave(driver, channelId, id, direction))
         {
             dev_dbg(ctx->dev, "[Set Sensing Automatic Feedback] Channel #: %d Waveform #: %d Direction: %s", channelId,
@@ -551,29 +517,27 @@ static ssize_t stopSensing(struct device *dev,
 
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
-        HapticDriver *driver;
+        HapticDriver *driver = ctx->hapticDriver;
         ChannelId channelId = 0;
         SensingDirection direction = 0;
         const char *directionS;
         size_t paramLength = 0;
 	int numP = 0;
-	ParamsLst params[2];
+	ParamsLst params[STOP_SENSING_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &channelId);
 	PARAM_ADD(PARAM_UCHAR8, &direction);
 
 	paramLength = process_params(params, numP, buf);
-	if (paramLength < 0) {
+	if (paramLength != STOP_SENSING_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
-        //paramLength = sscanf(buf, "%d %d", &channelId, &direction);
+
         directionS = getSensingDirection(direction);
 
         mutex_lock(&ctx->lock);
-        driver = ctx->hapticDriver;
 
-        if (paramLength == STOP_SENSING_PARAM_LENGTH &&
-            directionS != NULL &&
+        if (directionS != NULL &&
             driver->stopSensing(driver, channelId, direction))
         {
             dev_dbg(ctx->dev, "[Remove Sensing Profile] Channel #: %d Direction: %s", channelId, directionS);
@@ -592,6 +556,7 @@ static DEVICE_ATTR(sensing_stop, 0220, NULL, stopSensing);
 
 static struct attribute *bosDriverAttrs[] = {
         &dev_attr_chip_id.attr,
+        &dev_attr_regs.attr,
         &dev_attr_set_waveform.attr,
         &dev_attr_set_slice.attr,
         &dev_attr_synth_play.attr,
@@ -665,6 +630,8 @@ static int bosDriverI2cProbe(struct i2c_client *client,
     ctx->i2c = i2cBoreasLinuxInit(client);
     resource.i2c = ctx->i2c;
     ctx->hapticDriver = bos0614DriverI2cInit(resource);
+
+    pr_debug("i2c: %p, driver: %p\n", ctx->i2c, ctx->hapticDriver);
 
     if (ctx->i2c == NULL || ctx->hapticDriver == NULL)
     {
@@ -757,13 +724,13 @@ static struct i2c_driver bosDriverI2c = {
 #ifdef CONFIG_OF
 static int __init bosDriver_init(void)
 {
-	pr_info("%s: loading driver\n", __func__);
+	pr_debug("loading driver\n");
 	return i2c_add_driver(&bosDriverI2c);
 }
 
 static void __exit bosDriver_exit(void)
 {
-	pr_info("%s: removing driver\n", __func__);
+	pr_debug("removing driver\n");
 	i2c_del_driver(&bosDriverI2c);
 }
 
