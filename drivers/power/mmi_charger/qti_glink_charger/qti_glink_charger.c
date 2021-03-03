@@ -383,6 +383,9 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 
 	chg->chg_info.chrg_mv /= 1000;
 	chg->chg_info.chrg_ma /= 1000;
+	if (!chg->chg_info.chrg_present &&
+	    chg->chg_info.chrg_type != 0)
+		chg->chg_info.chrg_present = 1;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
 	return rc;
