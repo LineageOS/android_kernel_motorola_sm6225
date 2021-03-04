@@ -65,18 +65,21 @@ int initTestToDo(void)
 	limit_file.size = 0;
 	limit_file.data = NULL;
 	strlcpy(limit_file.name, " ", MAX_LIMIT_FILE_NAME);
-
+	tests.SelfHoverForceRaw = 0;    /* /< SS Hover Force Raw min/Max test */
+	tests.SelfHoverSenceRaw = 0;   /* /< SS Hover Sence Raw min/Max test */
+	tests.SelfHoverForceIxTotal = 0; /* /< SS Hover Total Force Ix min/Max (for each node)* test */
+	tests.SelfHoverSenceIxTotal = 0;
 #ifndef COMPUTE_INIT_METHOD
 	tests.MutualRawAdjITO = 1;
 
 	tests.MutualRaw = 1;
-	tests.MutualRawMap = 0;
+	tests.MutualRawMap = 1;
 	tests.MutualRawGap = 0;
 	tests.MutualRawAdj = 0;
 	tests.MutualRawAdjGap = 0;
 	tests.MutualRawAdjPeak = 0;
 
-	tests.MutualRawLP = 1;
+	tests.MutualRawLP = 0;
 	tests.MutualRawGapLP = 0;
 	tests.MutualRawMapLP = 0;
 	tests.MutualRawAdjLP = 0;
@@ -89,7 +92,7 @@ int initTestToDo(void)
 
 	tests.MutualCx1LP = 0;
 	tests.MutualCx2LP = 1;
-	tests.MutualCx2AdjLP = 1;
+	tests.MutualCx2TotalLP = 1;
 	tests.MutualCxTotalLP = 0;
 	tests.MutualCxTotalAdjLP = 0;
 
@@ -101,16 +104,18 @@ int initTestToDo(void)
 	tests.MutualKeyCx1 = 0;
 	tests.MutualKeyCx2 = 0;
 #ifdef PHONE_KEY
-	tests.MutualKeyCxTotal = 0;
+	tests.MutualKeyCxTotal = 1;
 #else
 	tests.MutualKeyCxTotal = 0;
 #endif
 
 	tests.SelfForceRaw = 1;
 	tests.SelfForceRawGap = 0;
+	tests.SelfForceRawMap = 1;
 
-	tests.SelfForceRawLP = 1;
+	tests.SelfForceRawLP = 0;
 	tests.SelfForceRawGapLP = 0;
+	tests.SelfForceRawMapLP = 0;
 
 	tests.SelfForceIx1 = 0;
 	tests.SelfForceIx2 = 0;
@@ -125,7 +130,7 @@ int initTestToDo(void)
 	tests.SelfForceIx1LP = 0;
 	tests.SelfForceIx2LP = 0;
 	tests.SelfForceIx2AdjLP = 0;
-	tests.SelfForceIxTotalLP = 1;
+	tests.SelfForceIxTotalLP = 0;
 	tests.SelfForceIxTotalAdjLP = 0;
 	tests.SelfForceCx1LP = 0;
 	tests.SelfForceCx2LP = 0;
@@ -136,8 +141,10 @@ int initTestToDo(void)
 	tests.SelfSenseRaw = 1;
 	tests.SelfSenseRawGap = 0;
 
-	tests.SelfSenseRawLP = 1;
+	tests.SelfSenseRawMap = 1;
+	tests.SelfSenseRawLP = 0;
 	tests.SelfSenseRawGapLP = 0;
+	tests.SelfSenseRawMapLP = 0;
 
 	tests.SelfSenseIx1 = 0;
 	tests.SelfSenseIx2 = 0;
@@ -152,7 +159,7 @@ int initTestToDo(void)
 	tests.SelfSenseIx1LP = 0;
 	tests.SelfSenseIx2LP = 0;
 	tests.SelfSenseIx2AdjLP = 0;
-	tests.SelfSenseIxTotalLP = 1;
+	tests.SelfSenseIxTotalLP = 0;
 	tests.SelfSenseIxTotalAdjLP = 0;
 	tests.SelfSenseCx1LP = 0;
 	tests.SelfSenseCx2LP = 0;
@@ -2770,7 +2777,7 @@ int production_test_ms_cx(char *path_limits, int stop_on_fail, TestToDo *todo)
 
 
 
-	if ((todo->MutualCx1LP | todo->MutualCx2LP | todo->MutualCx2AdjLP |
+	if ((todo->MutualCx1LP | todo->MutualCx2LP | todo->MutualCx2TotalLP |
 	     todo->MutualCxTotalLP | todo->MutualCxTotalAdjLP) == 1) {
 		ret = production_test_ms_cx_lp(path_limits, stop_on_fail, todo);
 		if (ret < OK) {
@@ -3292,7 +3299,7 @@ int production_test_ms_cx_lp(char *path_limits, int stop_on_fail, TestToDo *todo
 			 tag);
 
 	logError(0, "%s MS LP CX2 ADJ TEST:\n", tag);
-	if (todo->MutualCx2AdjLP == 1) {
+	if (todo->MutualCx2TotalLP == 1) {
 		/* MS CX2 ADJ HORIZ */
 		logError(0, "%s MS LP CX2 ADJ HORIZ TEST:\n", tag);
 
