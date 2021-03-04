@@ -247,7 +247,7 @@ typedef struct {
 
 	int MutualCx1LP;	/* /< MS LowPower Cx1 min/Max test */
 	int MutualCx2LP;	/* /< MS LowPower Cx2 min/Max (for each node) test */
-	int MutualCx2AdjLP;	/* /< MS LowPower Vertical and Horizontal Adj Cx2 min/Max
+	int MutualCx2TotalLP;	/* /< MS LowPower Vertical and Horizontal Adj Cx2 min/Max
 				 * (for each node) test */
 	int MutualCxTotalLP;	/* /< MS Total LowPower Cx min/Max (for each node) test
 				 * */
@@ -259,7 +259,10 @@ typedef struct {
 	int MutualKeyCx2;	/* /< MS Cx2 Key min/Max (for each node) test */
 	int MutualKeyCxTotal;	/* /< MS Total Cx Key min/Max (for each node)
 				 * test */
-
+	int SelfHoverForceRaw;	/* SS Hover Force Raw min/Max test */
+	int SelfHoverSenceRaw;	/*SS Hover Sence Raw min/Max test */
+	int SelfHoverForceIxTotal;	/*SS Hover Total Force Ix min/Max (for each node)* test */
+	int SelfHoverSenceIxTotal;	/*SS Hover Total Sence Ix min/Max (for each node)* test */
 	int SelfForceRaw;	/* /< SS Force Raw min/Max test */
 	int SelfForceRawGap;	/* /< SS Force Raw Gap(max-min) test */
 	int SelfForceRawMap;	/* /< SS Force Raw min/Max Map test */
