@@ -48,6 +48,7 @@
 #include <linux/alarmtimer.h>
 #include <linux/notifier.h>
 #include "mmi_charger_class.h"
+#include <linux/pm_wakeup.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -72,6 +73,35 @@ enum print_reason {
 	PR_MISC         = BIT(2),
 	PR_MOTO         = BIT(7),
 };
+
+enum {
+ 	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
+ 	POWER_SUPPLY_CHARGE_RATE_NORMAL,
+ 	POWER_SUPPLY_CHARGE_RATE_WEAK,
+ 	POWER_SUPPLY_CHARGE_RATE_TURBO,
+ 	POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
+ 	POWER_SUPPLY_CHARGE_RATE_HYPER,
+};
+
+static inline void wakeup_source_init_internal(struct wakeup_source *ws,
+					const char *name)
+{
+	if(ws) {
+		memset(ws, 0, sizeof(*ws));
+		ws->name = name;
+	}
+
+	wakeup_source_add(ws);
+}
+/*
+static inline void wakeup_source_trash_internal(struct wakeup_source *ws)
+{
+
+	wakeup_source_remove(ws);
+        if(!ws)
+		return;
+	__pm_relex(ws);
+}*/
 
 #define MAX_NUM_STEPS 10
 enum mmi_chrg_temp_zones {

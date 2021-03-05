@@ -392,7 +392,7 @@ void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 					chrg_dev->charger_error.bus_ocp_err_cnt);
 	return;
 }
-
+#if 0
 static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_STATUS,
@@ -561,7 +561,6 @@ static int batt_is_writeable(struct power_supply *psy,
 	}
 	return 0;
 }
-
 static const struct power_supply_desc batt_psy_desc = {
 	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
@@ -571,7 +570,6 @@ static const struct power_supply_desc batt_psy_desc = {
 	.set_property = batt_set_property,
 	.property_is_writeable = batt_is_writeable,
 };
-
 static int batt_psy_register(struct mmi_charger_manager *chip)
 {
 	struct power_supply_config batt_cfg = {};
@@ -589,7 +587,7 @@ static int batt_psy_register(struct mmi_charger_manager *chip)
 	pr_info("power supply register batt_psy successfully\n");
 	return 0;
 }
-
+#endif
 static enum power_supply_property mmi_chrg_mgr_props[] = {
 	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
@@ -878,7 +876,7 @@ end_rate_check:
 		       charge_rate[chg->charger_rate]);
 
 }
-
+#if 0
 #define CHG_SHOW_MAX_SIZE 50
 static ssize_t factory_image_mode_store(struct device *dev,
 				struct device_attribute *attr,
@@ -990,7 +988,7 @@ static ssize_t force_max_chrg_temp_show(struct device *dev,
 static DEVICE_ATTR(force_max_chrg_temp, 0644,
 		force_max_chrg_temp_show,
 		force_max_chrg_temp_store);
-
+#endif
 static bool mmi_factory_check(void)
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
@@ -1328,7 +1326,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	if (!chip->sm_work_running && chip->vbus_present
 		&& pd_active) {
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
 		mmi_chrg_info(chip, "check all effective pdo info\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 			if ((chip->mmi_pdo_info[i].type ==
@@ -1449,7 +1447,7 @@ static void psy_changed_work_func(struct work_struct *work)
 	}
 
 	if (pd_active && chip->vbus_present) {
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
 		mmi_chrg_info(chip, "check all effective pdo info\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 			if ((chip->mmi_pdo_info[i].type ==
@@ -1830,6 +1828,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	chip->factory_mode = mmi_factory_check();
 
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
+#if 0
 	if (chip->qcom_psy && chip->extrn_fg) {
 
 		chip->extrn_psy = power_supply_get_by_name(chip->extrn_fg_name);
@@ -1867,6 +1866,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 			mmi_chrg_err(chip, "couldn't create factory_charge_upper\n");
 
 	} else
+#endif		
 		chip->batt_psy = power_supply_get_by_name("battery");
 
 	if (!chip->batt_psy) {
@@ -1899,7 +1899,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	INIT_WORK(&chip->psy_changed_work, psy_changed_work_func);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
-	wakeup_source_init(&chip->mmi_hb_wake_source,
+	wakeup_source_init_internal(&chip->mmi_hb_wake_source,
 			   "mmi_hb_wake");
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
 		   mmi_heartbeat_alarm_cb);
@@ -1937,7 +1937,7 @@ static int mmi_chrg_manager_remove(struct platform_device *pdev)
 	//cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	power_supply_unreg_notifier(&chip->psy_nb);
 	power_supply_unregister(chip->mmi_chrg_mgr_psy );
-
+//	wakeup_source_trash_internal(&chip->mmi_hb_wake_source);
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);
 	return 0;
