@@ -30,6 +30,7 @@
 #include <linux/pm_qos.h>
 #include <linux/syscalls.h>
 #include <linux/power_supply.h>
+#include <linux/mmi_kernel_common.h>
 #include "aw8695.h"
 #include "aw8695_reg.h"
 #include "aw8695_config.h"
@@ -584,9 +585,14 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 	pr_debug("%s enter\n", __func__);
 
 	if (!flag) {
-		do_gettimeofday(&aw8695->current_time);
+		GET_TIME_OF_DAY(&aw8695->current_time);
 		aw8695->interval_us = (aw8695->current_time.tv_sec - aw8695->pre_enter_time.tv_sec) * 1000000
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+			+ (aw8695->current_time.tv_nsec - aw8695->pre_enter_time.tv_nsec) / 1000;
+#else
 			+ (aw8695->current_time.tv_usec - aw8695->pre_enter_time.tv_usec);
+#endif
+
 		if (aw8695->interval_us < 2000) {
 			pr_info("aw8695->interval_us t=%u\n", aw8695->interval_us);
 			mdelay(2);
@@ -595,7 +601,7 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 	if(flag == true) {
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
 			AW8695_BIT_GO_MASK, AW8695_BIT_GO_ENABLE);
-		do_gettimeofday(&aw8695->pre_enter_time);
+		GET_TIME_OF_DAY(&aw8695->pre_enter_time);
 	} else {
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
 			AW8695_BIT_GO_MASK, AW8695_BIT_GO_DISABLE);
