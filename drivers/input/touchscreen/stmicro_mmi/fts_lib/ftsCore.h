@@ -216,6 +216,7 @@ int fts_resetDisableIrqCount(void);
 int fts_enableInterrupt(void);
 int fts_is_InterruptEnabled(void);
 int fts_crc_check(void);
+int fts_wait_for_ready(void);
 int requestSyncFrame(u8 type);
 int saveMpFlag(u8 mpflag);
 
