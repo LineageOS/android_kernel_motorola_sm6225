@@ -92,6 +92,16 @@ void setResetGpio(int gpio)
 	logError(1, "%s setResetGpio: reset_gpio = %d\n", tag, reset_gpio);
 }
 
+int fts_wait_for_ready(void)
+{
+	u8 readData[FIFO_EVENT_SIZE];
+	int event_to_search;
+
+	event_to_search = (int)EVT_ID_CONTROLLER_READY;
+
+	return pollForEvent(&event_to_search, 1, readData, GENERAL_TIMEOUT);
+}
+
 /**
   * Perform a system reset of the IC.
   * If the reset pin is associated to a gpio, the function execute an hw reset
@@ -100,13 +110,9 @@ void setResetGpio(int gpio)
   */
 int fts_system_reset(void)
 {
-	u8 readData[FIFO_EVENT_SIZE];
-	int event_to_search;
 	int res = -1;
 	int i;
 	u8 data[1] = { SYSTEM_RESET_VALUE };
-
-	event_to_search = (int)EVT_ID_CONTROLLER_READY;
 
 	logError(0, "%s System resetting...\n", tag);
 	for (i = 0; i < RETRY_SYSTEM_RESET && res < 0; i++) {
@@ -128,8 +134,7 @@ int fts_system_reset(void)
 			logError(1, "%s fts_system_reset: ERROR %08X\n", tag,
 				 ERROR_BUS_W);
 		else {
-			res = pollForEvent(&event_to_search, 1, readData,
-					   GENERAL_TIMEOUT);
+			res = fts_wait_for_ready();
 			if (res < OK)
 				logError(1, "%s fts_system_reset: ERROR %08X\n",
 					 tag, res);
@@ -878,9 +883,7 @@ int fts_disableInterrupt(void)
 	//unsigned long flag;
 
 	if (getClient() != NULL) {
-		//spin_lock_irqsave(&fts_int, flag);
-		logError(0, "%s Number of disable = %d\n", tag,
-			 disable_irq_count);
+		spin_lock_irqsave(&fts_int, flag);
 		if (disable_irq_count == 0) {
 			logError(0, "%s Executing Disable...\n", tag);
 			disable_irq(getClient()->irq);
@@ -888,8 +891,7 @@ int fts_disableInterrupt(void)
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
-		//spin_unlock_irqrestore(&fts_int, flag);
-		logError(0, "%s Interrupt Disabled!\n", tag);
+		spin_unlock_irqrestore(&fts_int, flag);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
@@ -907,10 +909,8 @@ int fts_disableInterruptNoSync(void)
 {
 	if (getClient() != NULL) {
 		spin_lock_irq(&fts_int);
-		logError(0, "%s Number of disable = %d\n", tag,
-			 disable_irq_count);
 		if (disable_irq_count == 0) {
-			logError(0, "%s Executing Disable...\n", tag);
+			logError(0, "%s Executing DisableNoSync...\n", tag);
 			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
 		}
@@ -918,7 +918,7 @@ int fts_disableInterruptNoSync(void)
 		  * of the number of calls of this when reenabling */
 
 		spin_unlock(&fts_int);
-		logError(0, "%s Interrupt No Sync Disabled!\n", tag);
+		//logError(0, "%s Interrupt No Sync Disabled!\n", tag);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
@@ -953,8 +953,6 @@ int fts_enableInterrupt(void)
 
 	if (getClient() != NULL) {
 		spin_lock_irqsave(&fts_int, flag);
-		logError(0, "%s Number of re-enable = %d\n", tag,
-			 disable_irq_count);
 		while (disable_irq_count > 0) {
 			/* loop N times according on the pending number of
 			 * disable_irq to truly re-enable the int */
@@ -964,7 +962,7 @@ int fts_enableInterrupt(void)
 		}
 
 		spin_unlock_irqrestore(&fts_int, flag);
-		logError(0, "%s Interrupt Enabled!\n", tag);
+		//logError(0, "%s Interrupt Enabled!\n", tag);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
