@@ -47,14 +47,20 @@ Benefit from this new Motorola charger driver design:
 Motorola common charger driver is built as DLKM:
 Module Name: mmi_charger.ko
 Log Tag: mmi_charger
-IPC Log: /d/ipc_logging/charger/log
+IPC Log: /d/ipc_logging/mmi_charger/log
 Support Platform: platform independent
 
-Motorola low level charger driver is built as DLKM:
+Motorola platform charger driver is built as DLKM:
+(1) qti_glink_charger
 Module Name: qti_glink_charger.ko
 Log Tag: qti_glink_charger
-IPC Log: /d/ipc_logging/charger/log
-Support Platform: SM8350 or similar architecture(adsp and HLOS connection over glink)
+IPC Log: /d/ipc_logging/mmi_charger/log
+Support Platform: SM8350/SM7325(adsp and HLOS connection over glink)
+(2) qpnp_smb_basic_charger
+Module Name: qpnp_smb_basic_charger.ko
+Log Tag: pmxxx_charger
+IPC Log: /d/ipc_logging/mmi_charger/log
+Support Platform: SM6125/SM710/SM636/SM7250/SM6350(qpnp smb charger with multi-battery support)
 
 devicetree properties description:
 mmi_charger:
@@ -100,6 +106,18 @@ defaults to 0.
  Definition: Set this value to allow power in mW draw from QC3.0 charger, used
  when a QC3.0 charger is detected. If not set, 15W power is allowed.
 
+- mmi,pd-power-max
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Set this value to allow power in mW draw from pd charger, used
+ when a pd charger is detected. If not set, 15W power is allowed.
+
+- mmi,wls-power-max
+ Usage:      optional
+ Value Type: <u32>
+ Definition: Set this value to allow power in mW draw from wireless charger, used
+ when a wireless charger is detected. If not set, 5W power is allowed.
+
 - mmi,heartbeat-interval
 Usage:      optional
 Value Type: <u32>
@@ -115,9 +133,11 @@ mmi_charger: mmi,charger {
 	mmi,heartbeat-interval = <60000>;
 	mmi,dcp-power-max = <10000>;
 	mmi,hvdcp-power-max = <200000>;
+	mmi,pd-power-max = <200000>;
+	mmi,wls-power-max = <100000>;
 };
 
-qti_glink_charger:
+platform low level charger:
 - mmi,mmi-temp-zones
  Usage:      optional
  Value Type: Array of tuples of <u32>
@@ -182,6 +202,14 @@ If not defined, defaults to 4000.
 in demo mode. This value is used as the max float voltage for battery charging in
 demo mode. If not defined, defaults to 4000.
 
+- profile-ids-map
+ Usage:      optional(qti_glink_charger specific)
+ Value Type: Array of <string>
+ Definition: Unlimited array of arrays. Each internal array needs to have a set
+of 2 data members, each one representing this sequence: Battery Profile ID
+(in integer value), Battery Serial Number(provided by battery spec). Battery
+profile ID will be set to 0 if this property is not specified.
+
 - mmi,mmi-ffc-zones
  Usage:      optional
  Value Type: Array of tuples of <u32>
@@ -193,17 +221,29 @@ related to charging limitations based on temperature specifications when the
 battery supports Flash Fast Charging.
 
 - mmi,profile-data-block-size
- Usage:      optional
+ Usage:      optional(qti_glink_charger specific)
  Value Type: <u32>
  Definition: It will define the profile data member count each block line
 in the profile data array. If not defined, defaults to 4.
 
 - mmi,profile-data
- Usage:      optional
+ Usage:      optional(qti_glink_charger specific)
  Value Type: Array of tuples of <u32>
  Definition: Unlimited array of arrays. Each internal array needs to have a set
 with member count specified by property "mmi,profile-data-block-size". The content
 for each line is defined by the target user of the profile data.
+
+- battery-names
+ Usage:      optional(pm7250b_mmi specific)
+ Value Type: Array of <string>
+ Definition: Unlimited array of arrays. Each internal array specifics a power supply
+ name which is used by the driver to get the battery information.
+
+- supplied-from
+ Usage:      optional(pm7250b_mmi specific)
+ Value Type: Array of <string>
+ Definition: Unlimited array of arrays. Each internal array specifics a power supply
+ name, the change of which the battery is sensitive to.
 
 Example:
 qti_glink_charger: mmi,qti-glink-charger {
@@ -239,6 +279,70 @@ qti_glink_charger: mmi,qti-glink-charger {
 			<45 4250 3600 3000>,
 			<45 4350 3000 2000>,
 			<60 4200 2185 0>;
+	profile-ids-map = "0", "unknown-sn", "100750", "SB18C85232";
+};
+
+Single-battery Pack:
+pm7250b_mmi: qcom,qpnp-smb5-mmi {
+	status = "ok";
+	compatible = "mmi,qpnp-smb-basic-charger";
+	mmi,pmic-revid = <&pm7250b_revid>;
+	mmi,usbpd-phandle = <&pm7250b_pdphy>;
+	battery-names = "battery";
+	supplied-from = "qcom_battery", "mmi_battery";
+
+	mmi,chrg-iterm-ma = <243>;
+	mmi,vfloat-comp-uv = <20000>;
+	mmi,fg-iterm-ma = <400>;
+	mmi,max-fv-mv = <4450>;
+	mmi,max-fcc-ma = <4000>;
+	mmi,demo-fv-mv = <4000>;
+	mmi,df-serialnum = "SB18C85232";
+	mmi,mmi-temp-zones = <0 4200 1000 0>,
+			<10 4200 2500 1000>,
+			<15 0 2500 2500>,
+			<45 4200 4000 4000>,
+			<60 4200 3600 0>;
+};
+
+Multi-battery Pack:
+pm7250b_mmi: qcom,qpnp-smb5-mmi {
+	status = "ok";
+	compatible = "mmi,qpnp-smb-basic-charger";
+	mmi,pmic-revid = <&pm7250b_revid>;
+	mmi,usbpd-phandle = <&pm7250b_pdphy>;
+	battery-names = "fg_main_battery", "fg_flip_battery";
+	supplied-from = "qcom_battery", "mmi_battery", "fg_main_battery", "fg_flip_battery";
+};
+
+&main_battery {
+	mmi,chrg-iterm-ma = <50>;
+	mmi,vfloat-comp-uv = <20000>;
+	mmi,fg-iterm-ma = <100>;
+	mmi,max-fv-mv = <4450>;
+	mmi,max-fcc-ma = <4000>;
+	mmi,demo-fv-mv = <4000>;
+	mmi,df-serialnum = "main_battery-sn";
+	mmi,mmi-temp-zones = <0 4200 243 0>,
+			<10 4200 608 243>,
+			<15 0 608 608>,
+			<45 4450 1210 1200>,
+			<60 4200 608 0>;
+};
+
+&flip_battery {
+	mmi,chrg-iterm-ma = <50>;
+	mmi,vfloat-comp-uv = <20000>;
+	mmi,fg-iterm-ma = <100>;
+	mmi,max-fv-mv = <4450>;
+	mmi,max-fcc-ma = <4000>;
+	mmi,demo-fv-mv = <4000>;
+	mmi,df-serialnum = "flip_battery-sn";
+	mmi,mmi-temp-zones = <0 4200 300 0>,
+			<10 4200 750 300>,
+			<15 0 750 750>,
+			<45 4450 1250 1200>,
+			<60 4200 750 0>;
 };
 
 ==========================

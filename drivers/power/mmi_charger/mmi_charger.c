@@ -25,6 +25,7 @@
 #include <linux/string.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+#include <linux/mmi_wake_lock.h>
 
 #include "mmi_charger.h"
 
@@ -177,6 +178,8 @@ struct mmi_charger_chip {
 	int			combo_soc;
 	int			combo_age;
 	int			combo_status;
+	int			combo_health;
+	int			combo_temp;
 	int			charge_full;
 	int			charge_full_design;
 	int			init_cycles;
@@ -1368,7 +1371,7 @@ static int mmi_combine_battery_soc(struct mmi_charger_chip *chip)
 
 static int mmi_combine_battery_status(struct mmi_charger_chip *chip)
 {
-	int status = POWER_SUPPLY_STATUS_DISCHARGING;
+	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 	struct mmi_battery_pack *battery = NULL;
 
 	list_for_each_entry(battery, &chip->battery_list, list) {
@@ -1442,6 +1445,8 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	int status;
 	int cycles;
 	bool mmi_changed = false;
+	int batt_temp;
+	int batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	int charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
 	int max_charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
 	struct mmi_charger *charger = NULL;
@@ -1537,12 +1542,32 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 			charge_rate[chip->max_charger_rate]);
 	}
 
+	list_for_each_entry(battery, &chip->battery_list, list) {
+		if (batt_health == POWER_SUPPLY_HEALTH_UNKNOWN) {
+			batt_health = battery->health;
+			batt_temp = battery->info->batt_temp;
+			continue;
+		}
+		if (battery->info->batt_temp > batt_temp) {
+			batt_temp = battery->info->batt_temp;
+			batt_health = battery->health;
+		}
+	}
+	if (chip->combo_health != batt_health ||
+	    chip->combo_temp != batt_temp) {
+		mmi_changed = true;
+		chip->combo_health = batt_health;
+		chip->combo_temp = batt_temp;
+	}
+
 	if (mmi_changed) {
 		power_supply_changed(chip->mmi_psy);
-		mmi_info(chip, "Combo status: soc:%d, status:%d,"
-				" age:%d, cycles:%d, rate:%s\n",
+		mmi_info(chip, "Combo status: soc:%d, status:%d, temp:%d,"
+			" health:%d, age:%d, cycles:%d, rate:%s\n",
 			chip->combo_soc,
 			chip->combo_status,
+			chip->combo_temp,
+			chip->combo_health,
 			chip->combo_age,
 			chip->combo_cycles,
 			charge_rate[chip->max_charger_rate]);
@@ -1624,7 +1649,7 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 	if (chip->max_charger_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
 		pm_relax(chip->dev);
 
-	__pm_relax(chip->mmi_hb_wake_source);
+	PM_RELAX(chip->mmi_hb_wake_source);
 }
 
 const char *mmi_get_battery_serialnumber(void)
@@ -1893,7 +1918,7 @@ static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
 
 	mmi_info(chip, "HB alarm fired\n");
 
-	__pm_stay_awake(chip->mmi_hb_wake_source);
+	PM_STAY_AWAKE(chip->mmi_hb_wake_source);
 	cancel_delayed_work(&chip->heartbeat_work);
 	/* Delay by 500 ms to allow devices to resume. */
 	schedule_delayed_work(&chip->heartbeat_work,
@@ -1962,6 +1987,8 @@ static int mmi_charger_reboot(struct notifier_block *nb,
 
 static enum power_supply_property mmi_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
@@ -1978,6 +2005,12 @@ static int mmi_get_prop(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = chip->combo_status;
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = chip->combo_health;
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = chip->combo_temp * 10;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = chip->combo_soc;
@@ -2098,7 +2131,7 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 	if ((rc == -EINVAL) || !charger_ability) {
 		mmi_warn(chip, "mmi,charger is unused\n");
 	} else {
-		mmi_info(chip, "charger ability = %s\n", charger_ability);
+		mmi_info(chip, "QC charger ability = %s\n", charger_ability);
 		if (strstr(charger_ability, "15W"))
 			chip->hvdcp_pmax = CHARGER_POWER_15W;
 		else if (strstr(charger_ability, "18W"))
@@ -2112,7 +2145,7 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 	if ((rc == -EINVAL) || !charger_ability) {
 		mmi_warn(chip, "mmi,usb_dcp is unused\n");
 	} else {
-		mmi_info(chip, "charger ability = %s\n", charger_ability);
+		mmi_info(chip, "DCP charger ability = %s\n", charger_ability);
 		if (strstr(charger_ability, "1.5A"))
 			chip->dcp_pmax = CHARGER_POWER_7P5W;
 		else if (strstr(charger_ability, "2A"))
@@ -2137,6 +2170,7 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	chip->name = "mmi_charger";
 	chip->dev = &pdev->dev;
 	psy_cfg.drv_data = chip;
+	psy_cfg.of_node = chip->dev->of_node;
 	chip->suspended = 0;
 	chip->combo_status = 0;
 	chip->combo_age = 100;
@@ -2170,11 +2204,7 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&chip->charger_list);
 	INIT_LIST_HEAD(&chip->battery_list);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_charger_heartbeat_work);
-	chip->mmi_hb_wake_source = wakeup_source_register(
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,00)
-	chip->dev,
-#endif
-	"mmi_hb_wake");
+	PM_WAKEUP_REGISTER(chip->dev, chip->mmi_hb_wake_source, "mmi_hb_wake");
 	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
 		   mmi_heartbeat_alarm_cb);
 
@@ -2303,7 +2333,7 @@ static int mmi_charger_remove(struct platform_device *pdev)
 					&power_supply_mmi_attr_group);
 		power_supply_put(chip->batt_psy);
 	}
-	wakeup_source_unregister(chip->mmi_hb_wake_source);
+	PM_WAKEUP_UNREGISTER(chip->mmi_hb_wake_source);
 	ipc_log_context_destroy(chip->ipc_log);
 
 	return 0;
@@ -2317,7 +2347,7 @@ static void mmi_charger_shutdown(struct platform_device *pdev)
 		kfree(chip->batt_uenvp[0]);
 		chip->batt_uenvp[0] = NULL;
 	}
-	wakeup_source_unregister(chip->mmi_hb_wake_source);
+	PM_WAKEUP_UNREGISTER(chip->mmi_hb_wake_source);
 
 	return;
 }

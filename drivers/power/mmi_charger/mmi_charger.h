@@ -100,7 +100,7 @@ struct mmi_charger_constraint {
 };
 
 struct mmi_charger_driver {
-	char *name;
+	const char *name;
 	struct device *dev;
 	int (*get_batt_info)(void *data, struct mmi_battery_info *batt_info);
 	int (*get_chg_info)(void *data, struct mmi_charger_info *chg_info);
