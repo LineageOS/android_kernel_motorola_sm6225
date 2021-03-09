@@ -216,6 +216,9 @@
 #define TSP_BUF_SIZE	PAGE_SIZE	/* /< max number of bytes printable on
 					 * the shell in the normal file nodes */
 
+#define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
+#define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
+#define PINCTRL_STATE_RELEASE   "pmx_ts_release"
 
 /**
   * Struct which contains information about the HW platform and set up
@@ -229,6 +232,8 @@ struct fts_hw_platform_data {
 	const char *avdd_reg_name;	/* /< name of the AVDD regulator */
 	unsigned int x_max;
 	unsigned int y_max;
+	bool y_flip, x_flip;
+	bool power_on_suspend;
 };
 
 /*
@@ -319,6 +324,10 @@ struct fts_ts_info {
 	int fwupdate_stat;	/* /< Store the result of a fw update triggered
 				 * by the host */
 
+	struct pinctrl *ts_pinctrl;
+	struct pinctrl_state *pinctrl_state_active;
+	struct pinctrl_state *pinctrl_state_suspend;
+	/*struct pinctrl_state *pinctrl_state_release;*/
 
 	struct notifier_block notifier;	/* /< Used for be notified from a
 					 * suspend/resume event */
@@ -351,7 +360,10 @@ struct fts_ts_info {
 
 int fts_chip_powercycle(struct fts_ts_info *info);
 int fts_init_sensing(struct fts_ts_info *info);
+int fts_chip_power_switch(struct fts_ts_info *info, bool on);
+int fts_pinctrl_state(struct fts_ts_info *info, bool on);
 int fts_chip_initialization(struct fts_ts_info *info, int type);
+void fts_interrupt_uninstall(struct fts_ts_info*info);
 extern int input_register_notifier_client(struct notifier_block *nb);
 extern int input_unregister_notifier_client(struct notifier_block *nb);
 

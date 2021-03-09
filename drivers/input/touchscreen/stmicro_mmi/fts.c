@@ -1505,7 +1505,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			goto END;
 		}
 
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		res = fb_unregister_client(&info->notifier);
 		if (res < 0) {
 			logError(1, "%s ERROR: unregister notifier failed!\n",
@@ -1757,7 +1757,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	}
 
 
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	if (fb_register_client(&info->notifier) < 0)
 		logError(1, "%s ERROR: register notifier failed!\n", tag);
 #endif
@@ -2077,6 +2077,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	unsigned char touchId;
 	unsigned int touch_condition = 1, tool = MT_TOOL_FINGER;
 	int x, y, z, distance;
+	struct fts_hw_platform_data *board = info->board;
 	u8 touchType;
 
 	if (!info->resume_bit)
@@ -2092,11 +2093,17 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	distance = 0;	/* if the tool is touching the display the distance
 			 * should be 0 */
 
-	if (x == X_AXIS_MAX)
+	if (x == board->x_max)
 		x--;
 
-	if (y == Y_AXIS_MAX)
+	if (y == board->y_max)
 		y--;
+
+	if (board->y_flip)
+		y = board->y_max - y;
+
+	if (board->x_flip)
+		x = board->x_max - x;
 
 	input_mt_slot(info->input_dev, touchId);
 	switch (touchType) {
@@ -2295,6 +2302,10 @@ static void fts_controller_ready_event_handler(struct fts_ts_info *info,
 		 __func__, event[0], event[1], event[2], event[3], event[4],
 		 event[5],
 		 event[6], event[7]);
+
+	logError(0, "%s %s NB: skip calling fts_mode_handler\n", tag, __func__);
+	return;
+
 	release_all_touches(info);
 	setSystemResetedUp(1);
 	setSystemResetedDown(1);
@@ -3084,13 +3095,13 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	/* disable interrupts in any case */
 	error = fts_disableInterrupt();
 
-	logError(1, "%s Interrupt Mode\n", tag);
 	if (request_irq(info->client->irq, fts_interrupt_handler,
 			IRQF_TRIGGER_LOW, FTS_TS_DRV_NAME, info)) {
 		logError(1, "%s Request irq failed\n", tag);
 		kfree(info->event_dispatch_table);
 		error = -EBUSY;
 	}
+	logError(1, "%s Interrupt Mode Set\n", tag);
 
 	return error;
 }
@@ -3099,7 +3110,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
   *	Clean the dispatch table and the free the IRQ.
   *	This function is called when the driver need to be removed
   */
-static void fts_interrupt_uninstall(struct fts_ts_info *info)
+void fts_interrupt_uninstall(struct fts_ts_info *info)
 {
 	fts_disableInterrupt();
 
@@ -3238,6 +3249,15 @@ static int fts_init(struct fts_ts_info *info)
 	return error;
 }
 
+static inline void checkRegulatorState(struct fts_ts_info *info)
+{
+	logError(1, "%s %s: %s, %s:%s\n", tag, info->board->avdd_reg_name,
+		regulator_is_enabled(info->avdd_reg) ? "on" : "off",
+		info->board->vdd_reg_name,
+		regulator_is_enabled(info->vdd_reg) ? "on" : "off");
+}
+
+
 /**
   * Execute a power cycle in the IC, toggling the power lines (AVDD and DVDD)
   * @param info pointer to fts_ts_info struct which contain information of the
@@ -3306,6 +3326,7 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 		 __func__, error);
 	setSystemResetedUp(1);
 	setSystemResetedDown(1);
+	checkRegulatorState(info);
 	return error;
 }
 
@@ -3318,7 +3339,7 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 int fts_init_sensing(struct fts_ts_info *info)
 {
 	int error = 0;
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	error |= fb_register_client(&info->notifier);	/* register the
 							 * suspend/resume
 							 * function */
@@ -3533,15 +3554,73 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 	return res;
 }
 
+int fts_pinctrl_state(struct fts_ts_info *info, bool on)
+{
+	struct pinctrl_state *state_ptr;
+	const char *state_name;
+	int error = 0;
+
+	if (info->board->power_on_suspend || !info->ts_pinctrl)
+		return 0;
+
+	if (on) {
+		state_name = PINCTRL_STATE_ACTIVE;
+		state_ptr =info->pinctrl_state_active;
+	} else {
+		state_name = PINCTRL_STATE_SUSPEND;
+		state_ptr =info->pinctrl_state_suspend;
+	}
+
+	error = pinctrl_select_state(info->ts_pinctrl, state_ptr);
+	if (error < 0)
+		logError(1, "%s: Failed to select %s\n",  __func__, state_name);
+
+	return error;
+}
+
+int fts_chip_power_switch(struct fts_ts_info *info, bool on)
+{
+	int error = 0;
+
+	if (on) {
+		error = regulator_enable(info->avdd_reg);
+		if (error < 0)
+			logError(1, "%s %s: Failed to enable AVDD\n", tag, __func__);
+
+		error = regulator_enable(info->vdd_reg);
+		if (error < 0)
+			logError(1, "%s %s: Failed to enable DVDD\n", tag, __func__);
+	} else {
+		error = regulator_disable(info->vdd_reg);
+		if (error < 0)
+			logError(1, "%s %s: Failed to disable DVDD\n", tag, __func__);
+
+		error = regulator_disable(info->avdd_reg);
+		if (error < 0)
+			logError(1, "%s %s: Failed to disable AVDD\n", tag, __func__);
+	}
+
+	return error;
+}
+
 void fts_resume_func(struct fts_ts_info *info)
 {
+	logError(1, "%s %s: enter\n", tag, __func__);
 	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
-	info->resume_bit = 1;
-	fts_system_reset();
+	if (info->board->power_on_suspend || !info->ts_pinctrl)
+		fts_system_reset();
 	release_all_touches(info);
+	info->resume_bit = 1;
 	fts_mode_handler(info, 0);
 	info->sensor_sleep = false;
-	fts_enableInterrupt();
+#if 0
+	u8 cmd[3] = { FTS_CMD_SYSTEM, SYS_CMD_INT, 1 };
+	int res;
+
+	res = fts_write(cmd, sizeof(cmd));
+	if (res < OK)
+		logError(1, "%s %s failed to enable FW INT %d\n", tag , __func__, res);
+#endif
 }
 
 /**
@@ -3555,12 +3634,12 @@ static void inline fts_resume_work(struct work_struct *work)
 
 void fts_suspend_func(struct fts_ts_info *info)
 {
+	logError(1, "%s %s: enter\n", tag, __func__);
 	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
 	info->resume_bit = 0;
 	fts_mode_handler(info, 0);
 	release_all_touches(info);
 	info->sensor_sleep = true;
-	fts_enableInterrupt();
 }
 
 /**
@@ -3572,7 +3651,7 @@ static void inline fts_suspend_work(struct work_struct *work)
 	fts_suspend_func(container_of(work, struct fts_ts_info, suspend_work));
 }
 
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 /** @}*/
 
 /**
@@ -3727,6 +3806,7 @@ static int fts_enable_reg(struct fts_ts_info *info, bool enable)
 		}
 	}
 
+	checkRegulatorState(info);
 	return OK;
 
 disable_pwr_reg:
@@ -3736,9 +3816,8 @@ disable_pwr_reg:
 disable_bus_reg:
 	if (info->vdd_reg)
 		regulator_disable(info->vdd_reg);
-
-	logError(1, "%s %s: Failed to enable regulator(s)\n", tag, __func__);
 exit:
+	checkRegulatorState(info);
 	return retval;
 }
 
@@ -3791,8 +3870,7 @@ static int fts_gpio_setup(int gpio, bool config, int dir, int state)
 static int fts_set_gpio(struct fts_ts_info *info)
 {
 	int retval;
-	struct fts_hw_platform_data *bdata =
-		info->board;
+	struct fts_hw_platform_data *bdata = info->board;
 
 	retval = fts_gpio_setup(bdata->irq_gpio, true, 0, 0);
 	if (retval < 0) {
@@ -3872,20 +3950,77 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	} else
 		bdata->reset_gpio = GPIO_NOT_DEFINED;
 
-	retval = of_property_read_u32(np, "fts,x-max", &temp_val);
+	retval = of_property_read_u32(np, "st,x-max", &temp_val);
 	if (retval < 0)
 		bdata->x_max = X_AXIS_MAX;
 	else
 		bdata->x_max = temp_val;
 
-	retval = of_property_read_u32(np, "fts,y-max", &temp_val);
+	retval = of_property_read_u32(np, "st,y-max", &temp_val);
 	if (retval < 0)
 		bdata->y_max = Y_AXIS_MAX;
 	else
 		bdata->y_max = temp_val;
 	logError(0, "%s x_max =%d y_max =%d\n", tag, bdata->x_max, bdata->y_max);
 
+	if (of_property_read_bool(np, "st,y-flip")) {
+		bdata->y_flip = true;
+		logError(0, "%s flip Y\n", tag);
+	}
+
+	if (of_property_read_bool(np, "st,x-flip")) {
+		bdata->x_flip = true;
+		logError(0, "%s flip X\n", tag);
+	}
+
 	return OK;
+}
+
+static int fts_pinctrl_init(struct fts_ts_info *info)
+{
+	int retval;
+
+	/* Get pinctrl if target uses pinctrl */
+	info->ts_pinctrl = devm_pinctrl_get(info->dev);
+	if (IS_ERR_OR_NULL(info->ts_pinctrl)) {
+		retval = PTR_ERR(info->ts_pinctrl);
+		logError(1, "%s Target does not use pinctrl %d\n", tag, retval);
+		goto err_pinctrl_get;
+	}
+
+	info->pinctrl_state_active
+		= pinctrl_lookup_state(info->ts_pinctrl, PINCTRL_STATE_ACTIVE);
+	if (IS_ERR_OR_NULL(info->pinctrl_state_active)) {
+		retval = PTR_ERR(info->pinctrl_state_active);
+		logError(1, "%s Can not lookup %s pinstate %d\n", tag,
+					PINCTRL_STATE_ACTIVE, retval);
+		goto err_pinctrl_lookup;
+	}
+
+	info->pinctrl_state_suspend
+		= pinctrl_lookup_state(info->ts_pinctrl, PINCTRL_STATE_SUSPEND);
+	if (IS_ERR_OR_NULL(info->pinctrl_state_suspend)) {
+		retval = PTR_ERR(info->pinctrl_state_suspend);
+		logError(1, "%s Can not lookup %s pinstate %d\n", tag,
+					PINCTRL_STATE_SUSPEND, retval);
+		goto err_pinctrl_lookup;
+	}
+#if 0
+	info->pinctrl_state_release
+		= pinctrl_lookup_state(info->ts_pinctrl, PINCTRL_STATE_RELEASE);
+	if (IS_ERR_OR_NULL(info->pinctrl_state_release)) {
+		retval = PTR_ERR(info->pinctrl_state_release);
+		logError(1, "%s Can not lookup %s pinstate %d\n", tag,
+					PINCTRL_STATE_RELEASE, retval);
+	}
+#endif
+	return 0;
+
+err_pinctrl_lookup:
+	devm_pinctrl_put(info->ts_pinctrl);
+err_pinctrl_get:
+	info->ts_pinctrl = NULL;
+	return retval;
 }
 
 /**
@@ -3999,6 +4134,18 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_2;
 	}
 	info->client->irq = gpio_to_irq(info->board->irq_gpio);
+
+	retval = fts_pinctrl_init(info);
+	if (!retval && info->ts_pinctrl) {
+		/* Pinctrl handle is optional. If pinctrl handle is
+		 * found let pins to be configured in active state.
+		 * If not found continue further without error */
+		retval = pinctrl_select_state(info->ts_pinctrl,
+						info->pinctrl_state_active);
+		if (retval < 0)
+			logError(1, "%s %s: Failed to select %s\n", tag,
+				__func__, PINCTRL_STATE_ACTIVE);
+	}
 
 	logError(1, "%s SET Event Handler:\n", tag);
 
@@ -4137,7 +4284,7 @@ static int fts_probe(struct spi_device *client)
 	info->grip_enabled = 0;
 
 	info->resume_bit = 1;
-#if !defined(CONFIG_INPUT_TOUCSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	info->notifier = fts_noti_block;
 #endif
 	logError(1, "%s Init Core Lib:\n", tag);
@@ -4263,7 +4410,7 @@ static int fts_remove(struct spi_device *client)
 	/* remove interrupt and event handlers */
 	fts_interrupt_uninstall(info);
 
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	fb_unregister_client(&info->notifier);
 #endif
 	/* unregister the device */
@@ -4274,7 +4421,7 @@ static int fts_remove(struct spi_device *client)
 	/* Remove the work thread */
 	destroy_workqueue(info->event_wq);
 	PM_WAKEUP_UNREGISTER(info->wakesrc);
-#if !defined(CONFIG_INPUT_TUCHSCREEN_MMI)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 #ifndef FW_UPDATE_ON_PROBE
 	destroy_workqueue(info->fwu_workqueue);
 #endif

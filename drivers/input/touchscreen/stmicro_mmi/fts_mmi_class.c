@@ -10,7 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#define pr_fmt(fmt) "%s: " fmt, __func__
+#define pr_fmt(fmt) "[ FTS-MMI ] %s: " fmt, __func__
 
 #include "fts.h"
 #include "fts_mmi.h"
@@ -89,6 +89,7 @@ static int fts_mmi_get_poweron(struct device *dev, void *idata)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
+	pr_info("enter\n");
 	//TO_INT(idata) = (atomic_read(&ts->touch_stopped) == 0 && ts->flash_enabled) ? 1 : 0;
 	return 0;
 }
@@ -107,6 +108,7 @@ static int fts_mmi_drv_irq(struct device *dev, int state)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
+	pr_info("enter %d\n", state);
 	dev_dbg(dev, "%s\n", __func__);
 	switch (state) {
 	case 0: /* Disable irq */
@@ -119,6 +121,7 @@ static int fts_mmi_drv_irq(struct device *dev, int state)
 		dev_err(dev, "%s: invalid value\n", __func__);
 		return -EINVAL;
 	}
+	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 	return 0;
 }
 
@@ -126,6 +129,7 @@ static int fts_mmi_reset(struct device *dev, int type)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
+	pr_info("enter\n");
 	dev_dbg(dev, "%s\n", __func__);
 	return fts_system_reset();
 }
@@ -136,6 +140,7 @@ static int fts_mmi_panel_state(struct device *dev,
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
+	pr_info("panel state change: %d->%d\n", from, to);
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
 	case TS_MMI_PM_DEEPSLEEP:
@@ -147,6 +152,29 @@ static int fts_mmi_panel_state(struct device *dev,
 		dev_warn(dev, "invalid panel state %d\n", to);
 		return -EINVAL;
 	}
+	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
+	return 0;
+}
+
+static int fts_mmi_power(struct device *dev, int on)
+{
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	pr_info("enter %d\n", on);
+	dev_dbg(dev, "%s\n", __func__);
+	fts_chip_power_switch(ts, on == 1);
+	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
+	return 0;
+}
+
+static int fts_mmi_pinctrl(struct device *dev, int on)
+{
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	pr_info("enter %d\n", on);
+	dev_dbg(dev, "%s\n", __func__);
+	fts_pinctrl_state(ts, on == 1);
+	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 	return 0;
 }
 
@@ -154,8 +182,10 @@ static int fts_mmi_post_resume(struct device *dev)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
+	pr_info("enter\n");
 	dev_dbg(dev, "%s\n", __func__);
 	fts_resume_func(ts);
+	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 	return 0;
 }
 
@@ -165,6 +195,10 @@ static int fts_mmi_fw_update(struct device *dev, char *fwname)
 	int ret;
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+
+	fts_disableInterrupt();
+	fts_interrupt_uninstall(ts);
+
 	ts->fw_file = fwname;
 	ret = fts_fw_update(ts);
 	ts->fw_file = NULL;
@@ -176,6 +210,15 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s\n", __func__);
+	return 0;
+}
+
+static int fts_mmi_wait4ready(struct device *dev)
+{
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	dev_dbg(dev, "%s\n", __func__);
+	fts_wait_for_ready();
 	return 0;
 }
 
@@ -194,6 +237,9 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.reset =  fts_mmi_reset,
 	.drv_irq = fts_mmi_drv_irq,
 	.charger_mode = fts_mmi_charger_mode,
+	.power = fts_mmi_power,
+	.pinctrl = fts_mmi_pinctrl,
+	.wait_for_ready = fts_mmi_wait4ready,
 	/* Firmware */
 	.firmware_update = fts_mmi_fw_update,
 	/* vendor specific attribute group */
