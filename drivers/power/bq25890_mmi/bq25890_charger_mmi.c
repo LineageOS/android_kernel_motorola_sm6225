@@ -403,7 +403,10 @@ static int bq25890_power_supply_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = state.online;
+		if (state.online &&  bq25890_field_read(bq, F_CHG_CFG))
+			val->intval = 1;
+		else
+			val->intval = 0;
 		break;
 
 	case POWER_SUPPLY_PROP_HEALTH:
@@ -429,7 +432,10 @@ static int bq25890_power_supply_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		val->intval = bq25890_find_val(bq->init_data.ichg, TBL_ICHG);
+		ret = bq25890_field_read(bq, F_ICHG); /* read measured value */
+		if (ret < 0)
+			return ret;
+		val->intval = bq25890_find_val(ret, TBL_ICHG);
 		break;
 
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
@@ -447,7 +453,10 @@ static int bq25890_power_supply_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
-		val->intval = bq25890_find_val(bq->init_data.vreg, TBL_VREG);
+		ret = bq25890_field_read(bq, F_VREG); /* read measured value */
+		if (ret < 0)
+			return ret;
+		val->intval = bq25890_find_val(ret, TBL_VREG);
 		break;
 
 	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
@@ -468,6 +477,68 @@ static int bq25890_power_supply_get_property(struct power_supply *psy,
 	}
 
 	return 0;
+}
+
+static int bq25890_power_supply_set_property(struct power_supply *psy,
+				       enum power_supply_property psp,
+				       const union power_supply_propval *val)
+{
+	struct bq25890_device *bq = power_supply_get_drvdata(psy);
+	u8 conv_data;
+	int ret;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
+		conv_data = bq25890_find_idx(val->intval, TBL_VREG);
+		ret = bq25890_field_write(bq, F_VREG, conv_data);
+		if (ret < 0) {
+			dev_dbg(bq->dev, "Failed to write F_VREG %d\n", ret);
+		} else {
+			dev_dbg(bq->dev, "Set F_VREG to %d (%d)\n",
+				bq25890_find_val(conv_data, TBL_VREG), conv_data);
+		}
+		break;
+
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+		conv_data = bq25890_find_idx(val->intval, TBL_ICHG);
+		ret = bq25890_field_write(bq, F_ICHG, conv_data);
+		if (ret < 0) {
+			dev_dbg(bq->dev, "Failed to write F_ICHG %d\n", ret);
+		} else {
+			dev_dbg(bq->dev, "Set F_ICHG to %d (%d)\n",
+				bq25890_find_val(conv_data, TBL_ICHG), conv_data);
+		}
+		break;
+
+	case POWER_SUPPLY_PROP_ONLINE:
+		ret = bq25890_field_write(bq, F_CHG_CFG, !!val->intval);
+		if (ret < 0)
+			dev_dbg(bq->dev, "Failed to write F_CHG_CFG %d\n", ret);
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int bq25890_power_supply_prop_is_writeable(struct power_supply *psy,
+				       enum power_supply_property psp)
+{
+	int ret;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_ONLINE:
+		ret = 1;
+		break;
+	default:
+		ret = 0;
+		break;
+	}
+	return ret;
 }
 
 static int bq25890_get_chip_state(struct bq25890_device *bq,
@@ -671,7 +742,6 @@ static enum power_supply_property bq25890_power_supply_props[] = {
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static char *bq25890_charger_supplied_to[] = {
@@ -684,6 +754,8 @@ static const struct power_supply_desc bq25890_power_supply_desc = {
 	.properties = bq25890_power_supply_props,
 	.num_properties = ARRAY_SIZE(bq25890_power_supply_props),
 	.get_property = bq25890_power_supply_get_property,
+	.set_property = bq25890_power_supply_set_property,
+	.property_is_writeable = bq25890_power_supply_prop_is_writeable,
 };
 
 static int bq25890_power_supply_init(struct bq25890_device *bq)
