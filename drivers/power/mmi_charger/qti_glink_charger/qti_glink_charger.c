@@ -39,9 +39,10 @@
 
 #define OEM_WAIT_TIME_MS		5000
 
+#define BATT_DEFAULT_ID 107000
 #define BATT_SN_UNKNOWN "unknown-sn"
 
-static bool debug_enabled = true;
+static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for qti glink charger driver");
 
@@ -145,20 +146,68 @@ struct qti_charger {
 	bool				*debug_enabled;
 };
 
-static int find_profile_id(const char *batt_sn)
+static int find_profile_id(struct qti_charger *chg)
 {
 	int i;
+	int rc;
+	int count;
+	int profile_id = -EINVAL;
 	struct profile_sn_map {
-		int id;
+		const char *id;
 		const char *sn;
-	} map_table[] = {
-		{0, BATT_SN_UNKNOWN},
-	};
+	} *map_table;
 
-	i = sizeof(map_table) / sizeof(struct profile_sn_map);
-	while (i > 0 && map_table[--i].sn && strcmp(map_table[i].sn, batt_sn));
+	count = of_property_count_strings(chg->dev->of_node, "profile-ids-map");
+	if (count <= 0 || (count % 2)) {
+		mmi_err(chg, "Invalid profile-ids-map in DT, rc=%d\n", count);
+		return -EINVAL;
+	}
 
-	return map_table[i].id;
+	map_table = devm_kmalloc_array(chg->dev, count / 2,
+					sizeof(struct profile_sn_map),
+					GFP_KERNEL);
+	if (!map_table)
+		return -ENOMEM;
+
+	rc = of_property_read_string_array(chg->dev->of_node, "profile-ids-map",
+					(const char **)map_table,
+					count);
+	if (rc < 0) {
+		mmi_err(chg, "Failed to get profile-ids-map, rc=%d\n", rc);
+		profile_id = rc;
+		goto free_map;
+	}
+
+	for (i = 0; i < count / 2 && map_table[i].sn; i++) {
+		mmi_info(chg, "profile_ids_map[%d]: id=%s, sn=%s\n", i,
+					map_table[i].id, map_table[i].sn);
+		if (!strcmp(map_table[i].sn, chg->batt_info.batt_sn))
+			profile_id = i;
+	}
+
+	if (profile_id >= 0 && profile_id < count / 2) {
+		i = profile_id;
+		profile_id = 0;
+		rc = kstrtou32(map_table[i].id, 0, &profile_id);
+		if (rc) {
+			mmi_err(chg, "Invalid id: %s, sn: %s\n",
+						map_table[i].id,
+						map_table[i].sn);
+			profile_id = rc;
+		} else {
+			mmi_info(chg, "profile id: %s(%d), sn: %s\n",
+						map_table[i].id,
+						profile_id,
+						map_table[i].sn);
+		}
+	} else {
+		mmi_warn(chg, "No matched profile id in profile-ids-map\n");
+	}
+
+free_map:
+	devm_kfree(chg->dev, map_table);
+
+	return profile_id;
 }
 
 static int handle_oem_read_ack(struct qti_charger *chg, void *data, size_t len)
@@ -744,7 +793,10 @@ static int qti_charger_parse_dt(struct qti_charger *chg)
 	} else {
 		strcpy(chg->batt_info.batt_sn, dev_sn);
 	}
-	chg->profile_info.profile_id = find_profile_id(chg->batt_info.batt_sn);
+
+	chg->profile_info.profile_id = find_profile_id(chg);
+	if (chg->profile_info.profile_id < 0)
+		chg->profile_info.profile_id = BATT_DEFAULT_ID;
 
 	rc = of_property_read_u32(node, "mmi,chrg-iterm-ma",
 				  &chg->profile_info.chrg_iterm);
