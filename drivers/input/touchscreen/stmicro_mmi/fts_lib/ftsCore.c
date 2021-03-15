@@ -875,10 +875,10 @@ int writeConfig(u16 offset, u8 *data, int len)
   */
 int fts_disableInterrupt(void)
 {
-	unsigned long flag;
+	//unsigned long flag;
 
 	if (getClient() != NULL) {
-		spin_lock_irqsave(&fts_int, flag);
+		//spin_lock_irqsave(&fts_int, flag);
 		logError(0, "%s Number of disable = %d\n", tag,
 			 disable_irq_count);
 		if (disable_irq_count == 0) {
@@ -888,7 +888,7 @@ int fts_disableInterrupt(void)
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
-		spin_unlock_irqrestore(&fts_int, flag);
+		//spin_unlock_irqrestore(&fts_int, flag);
 		logError(0, "%s Interrupt Disabled!\n", tag);
 		return OK;
 	} else {
