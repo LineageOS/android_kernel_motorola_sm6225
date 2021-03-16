@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/gpio.h>
+#include <linux/version.h>
 #include "ftsCompensation.h"
 #include "ftsCore.h"
 #include "ftsError.h"
@@ -880,10 +881,14 @@ int writeConfig(u16 offset, u8 *data, int len)
   */
 int fts_disableInterrupt(void)
 {
+#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 	unsigned long flag;
+#endif
 
 	if (getClient() != NULL) {
+#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 		spin_lock_irqsave(&fts_int, flag);
+#endif
 		if (disable_irq_count == 0) {
 			logError(0, "%s Executing Disable...\n", tag);
 			disable_irq(getClient()->irq);
@@ -891,7 +896,9 @@ int fts_disableInterrupt(void)
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 		spin_unlock_irqrestore(&fts_int, flag);
+#endif
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
