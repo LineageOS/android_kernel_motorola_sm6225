@@ -880,7 +880,7 @@ int writeConfig(u16 offset, u8 *data, int len)
   */
 int fts_disableInterrupt(void)
 {
-	//unsigned long flag;
+	unsigned long flag;
 
 	if (getClient() != NULL) {
 		spin_lock_irqsave(&fts_int, flag);
@@ -916,9 +916,7 @@ int fts_disableInterruptNoSync(void)
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
-
 		spin_unlock(&fts_int);
-		//logError(0, "%s Interrupt No Sync Disabled!\n", tag);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
@@ -960,9 +958,7 @@ int fts_enableInterrupt(void)
 			enable_irq(getClient()->irq);
 			disable_irq_count--;
 		}
-
 		spin_unlock_irqrestore(&fts_int, flag);
-		//logError(0, "%s Interrupt Enabled!\n", tag);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
