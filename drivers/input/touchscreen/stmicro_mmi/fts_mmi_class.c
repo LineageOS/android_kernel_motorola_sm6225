@@ -50,8 +50,8 @@ static int fts_mmi_get_build_id(struct device *dev, void *cdata) {
 	char buffer[64];
 	ssize_t blen = 0;
 	ASSERT_PTR(ts);
-	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "%08x%02x",
-		ts->sysinfo->u16_cfgVer, ts->sysinfo->u8_cfgAfeVer);
+	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "%04x%04x",
+		ts->sysinfo->u16_fwVer, ts->sysinfo->u16_cfgVer);
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%s", buffer);
 }
 
@@ -61,8 +61,8 @@ static int fts_mmi_get_config_id(struct device *dev, void *cdata) {
 	ssize_t blen = 0;
 	ASSERT_PTR(ts);
 	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "%02x%02x%02x%02x",
-		ts->sysinfo->u8_releaseInfo[0], ts->sysinfo->u8_releaseInfo[1],
-		ts->sysinfo->u8_releaseInfo[2], ts->sysinfo->u8_releaseInfo[3]);
+		ts->sysinfo->u8_releaseInfo[3], ts->sysinfo->u8_releaseInfo[2],
+		ts->sysinfo->u8_releaseInfo[1], ts->sysinfo->u8_releaseInfo[0]);
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%s", buffer);
 }
 
