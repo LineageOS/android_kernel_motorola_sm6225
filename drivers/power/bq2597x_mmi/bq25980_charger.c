@@ -397,6 +397,7 @@ static void dump_reg(struct bq25980_device *bq, int start, int end)
 			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
 	}
 }
+/*
 static void dump_all_reg(struct bq25980_device *bq)
 {
 	int ret;
@@ -408,7 +409,7 @@ static void dump_all_reg(struct bq25980_device *bq)
 		if (!ret)
 			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
 	}
-}
+}*/
 /*
 static int bq25980_get_adc_enable(struct bq25980_device *bq)
 {
@@ -1075,7 +1076,7 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 	default:
 		return -EINVAL;
 	}
-	dev_err(bq->dev,"%s,psp:%d,value:%d\n",__func__,psp,val->intval);
+//	dev_err(bq->dev,"%s,psp:%d,value:%d\n",__func__,psp,val->intval);
 	return 0;
 }
 
