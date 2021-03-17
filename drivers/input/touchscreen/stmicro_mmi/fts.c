@@ -2161,7 +2161,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, z);
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, z);
-#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+#if  KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
 	input_report_abs(info->input_dev, ABS_MT_PRESSURE, z);
 	input_report_abs(info->input_dev, ABS_MT_DISTANCE, distance);
 #endif
@@ -3615,9 +3615,7 @@ void fts_resume_func(struct fts_ts_info *info)
 	info->resume_bit = 1;
 	fts_mode_handler(info, 0);
 	info->sensor_sleep = false;
-#if  KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE
 	fts_enableInterrupt();
-#endif
 #if 0
 	u8 cmd[3] = { FTS_CMD_SYSTEM, SYS_CMD_INT, 1 };
 	int res;
@@ -4212,7 +4210,7 @@ static int fts_probe(struct spi_device *client)
 			     AREA_MAX, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN,
 			     AREA_MAX, 0, 0);
-#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+#if  KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
 	input_set_abs_params(info->input_dev, ABS_MT_PRESSURE, PRESSURE_MIN,
 			     PRESSURE_MAX, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE, DISTANCE_MIN,
