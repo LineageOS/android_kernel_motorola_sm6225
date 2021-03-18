@@ -15,6 +15,7 @@
 #include "fts.h"
 #include "fts_mmi.h"
 #include "fts_lib/ftsCore.h"
+#include <linux/regulator/consumer.h>
 
 extern void fts_resume_func(struct fts_ts_info *info);
 extern void fts_suspend_func(struct fts_ts_info *info);
@@ -89,8 +90,8 @@ static int fts_mmi_get_poweron(struct device *dev, void *idata)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
-	pr_info("enter\n");
-	//TO_INT(idata) = (atomic_read(&ts->touch_stopped) == 0 && ts->flash_enabled) ? 1 : 0;
+	TO_INT(idata) = (regulator_is_enabled(ts->avdd_reg) &&
+				regulator_is_enabled(ts->vdd_reg)) ? 1 : 0;
 	return 0;
 }
 
@@ -200,6 +201,7 @@ static int fts_mmi_fw_update(struct device *dev, char *fwname)
 	fts_interrupt_uninstall(ts);
 
 	ts->fw_file = fwname;
+	ts->force_reflash = true;
 	ret = fts_fw_update(ts);
 	ts->fw_file = NULL;
 	return ret;

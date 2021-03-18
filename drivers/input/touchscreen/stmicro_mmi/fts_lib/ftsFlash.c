@@ -1015,6 +1015,9 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx)
 			 tag, ERROR_FW_NO_UPDATE);
 		return ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED;
 	} else {
+		/* Force burn TP FW */
+		if (force_burn == CRC_FLASH)
+			goto start;
 		/* burn procedure to update the CX memory, if not present just
 		 * skip it if there isn't a new fw release. */
 		if (force_burn == CRC_CX && fw.sec2_size == 0) {

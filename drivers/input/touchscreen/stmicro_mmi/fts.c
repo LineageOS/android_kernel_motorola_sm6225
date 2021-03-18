@@ -2855,6 +2855,8 @@ int fts_fw_update(struct fts_ts_info *info)
 		logError(1,
 			 "%s %s: NO CRC Error or Impossible to read CRC register!\n",
 			 tag, __func__);
+		if (info->force_reflash)
+			crc_status = CRC_FLASH;
 	}
 	/* support arbitrary firmware file */
 	if (info->fw_file)
