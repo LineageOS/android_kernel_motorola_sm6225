@@ -355,6 +355,7 @@ struct fts_ts_info {
 
 	struct fts_sys_info *sysinfo;
 	const char *fw_file;
+	bool force_reflash;
 };
 
 
