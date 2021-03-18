@@ -45,7 +45,8 @@ typedef enum {
 	CRC_CODE	= 1,	/* /< CRC in the code section */
 	CRC_CONFIG	= 2,	/* /< CRC in the config section */
 	CRC_CX		= 3,	/* /< CRC in the cx section */
-	CRC_PANEL	= 4	/* /< CRC in the panel section */
+	CRC_PANEL	= 4,	/* /< CRC in the panel section */
+	CRC_FLASH	= 5/* /< No CRC ERR and force flash fw */
 } CRC_Error;
 
 /* CHIP INFO */
