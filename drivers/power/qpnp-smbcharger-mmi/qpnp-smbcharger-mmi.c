@@ -313,6 +313,12 @@ struct smb_mmi_params {
 	struct smb_mmi_chg_param	freq_switcher;
 };
 
+struct mmi_ffc_zone  {
+	int		ffc_max_mv;
+	int		ffc_chg_iterm;
+	int		ffc_qg_iterm;
+};
+
 struct mmi_sm_params {
 	int			num_temp_zones;
 	struct mmi_temp_zone	*temp_zones;
@@ -325,6 +331,7 @@ struct mmi_sm_params {
 	int			target_fv;
 	int			ocp[MAX_NUM_STEPS];
 	int			demo_mode_prev_soc;
+	struct mmi_ffc_zone	*ffc_zones;
 };
 
 enum charging_limit_modes {
@@ -3155,6 +3162,49 @@ vote_now:
 	return sched_time;
 }
 
+int mmi_set_prop_to_bms(struct smb_mmi_charger *chg,
+				enum power_supply_property psp,
+				union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_set_property(chg->bms_psy, psp, val);
+
+	return rc;
+}
+
+static int mmi_get_ffc_fv(struct smb_mmi_charger *chg, int zone,int batt)
+{
+	union power_supply_propval prop = {0,};
+	int rc;
+	int ffc_max_fv;
+	struct mmi_sm_params *chip = &chg->sm_param[batt];
+
+	if (chip->ffc_zones == NULL
+		|| zone >= chip->num_temp_zones)
+		return 0;
+
+	prop.intval = chip->ffc_zones[zone].ffc_qg_iterm;
+	rc = mmi_set_prop_to_bms(chg,
+			POWER_SUPPLY_PROP_BATT_FULL_CURRENT, &prop);
+	if (rc < 0) {
+		mmi_err(chg, "Set bat full curr fail rc=%d\n", rc);
+		return 0;
+	}
+
+	chip->chrg_iterm = chip->ffc_zones[zone].ffc_chg_iterm;
+	ffc_max_fv = chip->ffc_zones[zone].ffc_max_mv;
+	mmi_err(chg,
+		"FFC temp zone %d, fv %d mV, chg iterm %d mA, qg iterm %d mA\n",
+		  zone, ffc_max_fv, chip->chrg_iterm,
+		  chip->ffc_zones[zone].ffc_qg_iterm);
+
+	return ffc_max_fv;
+}
+
 static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 				struct smb_mmi_chg_status *stat)
 {
@@ -3190,7 +3240,11 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		vote(chip->fv_votable,
 		     BATT_PROFILE_VOTER, false, 0);
 	}
-	max_fv_mv = chip->base_fv_mv;
+
+	max_fv_mv = mmi_get_ffc_fv(chip, prm->pres_temp_zone,BASE_BATT);
+	if (max_fv_mv == 0)
+		max_fv_mv = chip->base_fv_mv;
+	mmi_info(chip,"max_fv_mv:%d\n",max_fv_mv);
 
 	mmi_find_temp_zone(chip, prm, stat->batt_temp);
 	if (prm->pres_temp_zone >=  prm->num_temp_zones)
@@ -4242,6 +4296,42 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 		chip->pres_temp_zone = ZONE_NONE;
 		chip->pres_chrg_step = STEP_NONE;
 	}
+
+	if (of_find_property(node, "qcom,mmi-ffc-zones", &byte_len)) {
+		if ((byte_len / sizeof(struct mmi_ffc_zone)
+			!= chip->num_temp_zones)
+			|| ((byte_len / sizeof(u32)) % 3)) {
+			mmi_err(chg,
+				   "DT error wrong mmi ffc zones\n");
+			return -ENODEV;
+		}
+
+		chip->ffc_zones = (struct mmi_ffc_zone *)
+			devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
+
+		if (chip->ffc_zones == NULL)
+			return -ENOMEM;
+
+		rc = of_property_read_u32_array(node,
+				"qcom,mmi-ffc-zones",
+				(u32 *)chip->ffc_zones,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			mmi_err(chg,
+				   "Couldn't read mmi ffc zones rc = %d\n",
+				   rc);
+			return rc;
+		}
+
+		for (i = 0; i < chip->num_temp_zones; i++) {
+			mmi_err(chg,
+				"FFC:Zone %d,Volt %d,Ich %d,Iqg %d", i,
+				 chip->ffc_zones[i].ffc_max_mv,
+				 chip->ffc_zones[i].ffc_chg_iterm,
+				 chip->ffc_zones[i].ffc_qg_iterm);
+		}
+	} else
+		chip->ffc_zones = NULL;
 
 	rc = of_property_read_u32(node, "qcom,iterm-ma",
 				  &chip->chrg_iterm);
