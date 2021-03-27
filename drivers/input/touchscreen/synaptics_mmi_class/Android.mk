@@ -1,8 +1,15 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
+ifneq (,$(findstring CONFIG_PANEL_NOTIFICATIONS,$(KERNEL_DEFCONFIG)))
+
 ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
-KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
+    KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
+endif
+
+ifeq ($(DRM_PANEL_NOTIFICATIONS),true)
+    KERNEL_CFLAGS += CONFIG_DRM_PANEL_NOTIFICATIONS=y
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := synaptics_mmi_class.ko
