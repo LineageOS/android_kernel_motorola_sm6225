@@ -1,7 +1,7 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
-ifeq (,$(findstring CONFIG_PANEL_NOTIFICATIONS,$(KERNEL_DEFCONFIG)))
+ifneq (,$(findstring CONFIG_PANEL_NOTIFICATIONS,$(KERNEL_DEFCONFIG)))
 
 ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
     KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
