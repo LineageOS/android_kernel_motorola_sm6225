@@ -3,6 +3,8 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_mmi_class
 
+ifeq ($(filter m y,$(CONFIG_PANEL_NOTIFICATIONS)),)
+
 ifneq ($(filter banks%, $(TARGET_PRODUCT)),)
     EXTRA_CFLAGS += -DSOFTDEP_GPIO_PCAL6408
 endif
@@ -21,8 +23,9 @@ KBUILD_EXTRA_SYMBOLS += \
 synaptics_mmi_class-objs = synaptics_dsx_i2c.o synaptics_dsx_mmi.o synaptics_dsx_instance.o
 
 obj-m += synaptics_mmi_class.o
-obj-m += synaptics_dsx_fw_update.o
-obj-m += synaptics_dsx_rmi_dev.o
-obj-m += synaptics_dsx_test_reporting.o
+obj-m += synaptics_mmi_class_fw_update.o
+obj-m += synaptics_mmi_class_rmi_dev.o
+obj-m += synaptics_mmi_class_test_reporting.o
 
+endif
 endif
