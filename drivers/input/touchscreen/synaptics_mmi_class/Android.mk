@@ -1,11 +1,8 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
-ifneq (,$(findstring CONFIG_PANEL_NOTIFICATIONS,$(KERNEL_DEFCONFIG)))
-
 ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
-    KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
-endif
+KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
 
 ifeq ($(DRM_PANEL_NOTIFICATIONS),true)
     KERNEL_CFLAGS += CONFIG_DRM_PANEL_NOTIFICATIONS=y
@@ -20,19 +17,19 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/touchscreen_mmi.ko
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := synaptics_dsx_fw_update.ko
+LOCAL_MODULE := synaptics_mmi_class_fw_update.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := synaptics_dsx_rmi_dev.ko
+LOCAL_MODULE := synaptics_mmi_class_rmi_dev.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := synaptics_dsx_test_reporting.ko
+LOCAL_MODULE := synaptics_mmi_class_test_reporting.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
