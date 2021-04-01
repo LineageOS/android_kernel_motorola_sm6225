@@ -926,7 +926,7 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = bq->model_name;
 		break;
-	case POWER_SUPPLY_PROP_ONLINE:
+/*	case POWER_SUPPLY_PROP_ONLINE:
 		ret = regmap_read(bq->regmap, BQ25980_STAT3, &stat3);
 		if (ret)
 			return ret;
@@ -934,7 +934,6 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 		state.online = stat3 & BQ25980_PRESENT_MASK;
 		val->intval = state.online;
 		break;
-/*
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = bq25980_get_input_volt_lim(bq);
 		if (ret < 0)
@@ -1148,7 +1147,7 @@ irq_out:
 static enum power_supply_property bq25980_power_supply_props[] = {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_MODEL_NAME,
-	POWER_SUPPLY_PROP_ONLINE,
+	//POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_HEALTH,
 //	POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,
 //	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
