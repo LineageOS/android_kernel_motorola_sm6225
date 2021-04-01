@@ -146,7 +146,11 @@ ifneq ($(filter msm8998 sdm845 sdm670 sdm710, $(TARGET_BOARD_PLATFORM)),)
 else ifneq ($(filter sdm660, $(TARGET_BOARD_PLATFORM)),)
     WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.1.0.1/wlan_proc/build/ms/WLAN_MERGED.elf
 else ifneq ($(filter sm6150, $(TARGET_BOARD_PLATFORM)),)
+    ifeq ($(WLAN_FW_ALT_AT43), true)
+    WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.0.1/wlan_proc/build/ms/*.elf
+    else
     WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.2.2/wlan_proc/build/ms/*.elf
+    endif
 else ifneq ($(filter trinket, $(TARGET_BOARD_PLATFORM)),)
     WLAN_ELF_FILE_PATH    := vendor/qcom/nonhlos/WLAN.HL.3.0.2/wlan_proc/build/ms/WLAN_MERGED.elf
 else ifneq ($(filter lito, $(TARGET_BOARD_PLATFORM)),)
