@@ -15,6 +15,9 @@
 #include "fts.h"
 #include "fts_mmi.h"
 #include "fts_lib/ftsCore.h"
+#include "fts_lib/ftsIO.h"
+#include "fts_lib/ftsError.h"
+#include "fts_lib/ftsSoftware.h"
 #include <linux/regulator/consumer.h>
 
 extern void fts_resume_func(struct fts_ts_info *info);
@@ -25,6 +28,75 @@ extern int fts_fw_update(struct fts_ts_info *info);
 	dev_err(dev, "Failed to get driver data"); \
 		return -ENODEV; \
 	}
+
+static ssize_t fts_mmi_calibrate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+
+static DEVICE_ATTR(calibrate, (S_IWUSR | S_IWGRP), NULL, fts_mmi_calibrate_store);
+
+#define MAX_ATTRS_ENTRIES 10
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
+
+static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+
+	if (strncmp(mmi_bl_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
+		ADD_ATTR(calibrate);
+	}
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
+static ssize_t fts_mmi_calibrate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret;
+	unsigned long value = 0;
+
+	ret = kstrtoul(buf, 0, &value);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (value == 3) {
+		u8 cmd[3] = { FTS_CMD_SYSTEM, SYS_CMD_SPECIAL, SPECIAL_FULL_PANEL_INIT };
+		pr_info("Sending Event [0x%02x 0x%02x 0x%02x]...\n",
+				cmd[0], cmd[1], cmd[2]);
+
+		ret = fts_writeFwCmd(cmd, 3);
+		if (ret != OK) {
+			pr_info("TP Calibration Failed!\n");
+			return -EINVAL;
+		}
+		pr_info("TP Calibration Success!\n");
+	} else {
+		pr_info("The value is invalid\n");
+		return -EINVAL;
+	}
+
+	return size;
+}
 
 static int fts_mmi_get_class_entry_name(struct device *dev, void *cdata) {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
@@ -245,6 +317,7 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	/* Firmware */
 	.firmware_update = fts_mmi_fw_update,
 	/* vendor specific attribute group */
+	.extend_attribute_group = fts_mmi_extend_attribute_group,
 	/* PM callback */
 	.panel_state = fts_mmi_panel_state,
 	.post_resume = fts_mmi_post_resume,
