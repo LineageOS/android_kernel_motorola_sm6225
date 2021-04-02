@@ -177,6 +177,8 @@ struct mmi_charger_chip {
 	int			combo_cycles;
 	int			combo_soc;
 	int			combo_age;
+	int			combo_voltage_mv;
+	int			combo_current_ma;
 	int			combo_status;
 	int			combo_health;
 	int			combo_temp;
@@ -1438,12 +1440,43 @@ static int mmi_combine_battery_age(struct mmi_charger_chip *chip)
 	return age;
 }
 
+static int mmi_combine_battery_current(struct mmi_charger_chip *chip)
+{
+	int current_ma = 0;
+	struct mmi_battery_pack *battery = NULL;
+
+	list_for_each_entry(battery, &chip->battery_list, list) {
+		current_ma += battery->info->batt_ma;
+	}
+
+	return current_ma;
+}
+
+static int mmi_combine_battery_voltage(struct mmi_charger_chip *chip)
+{
+	int voltage_mv = 0;
+	int count = 0;
+	struct mmi_battery_pack *battery = NULL;
+
+	list_for_each_entry(battery, &chip->battery_list, list) {
+		voltage_mv += battery->info->batt_mv;
+		count++;
+	}
+
+	if (count)
+		voltage_mv /= count;
+
+	return voltage_mv;
+}
+
 static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 {
 	int soc;
 	int age;
 	int status;
 	int cycles;
+	int voltage_mv;
+	int current_ma;
 	bool mmi_changed = false;
 	int batt_temp;
 	int batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
@@ -1516,6 +1549,8 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	status = mmi_combine_battery_status(chip);
 	cycles = mmi_combine_battery_cycles(chip);
 	age = mmi_combine_battery_age(chip);
+	voltage_mv = mmi_combine_battery_voltage(chip);
+	current_ma = mmi_combine_battery_current(chip);
 	if (soc >= 0 && chip->combo_soc != soc) {
 		mmi_changed = true;
 		chip->combo_soc = soc;
@@ -1532,6 +1567,12 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	if (age > 0 && chip->combo_age != age) {
 		mmi_changed = true;
 		chip->combo_age = age;
+	}
+	if (voltage_mv > 0 && chip->combo_voltage_mv != voltage_mv) {
+		chip->combo_voltage_mv = voltage_mv;
+	}
+	if (current_ma > 0 && chip->combo_current_ma != current_ma) {
+		chip->combo_current_ma = current_ma;
 	}
 	if (chip->max_charger_rate != max_charger_rate) {
 		mmi_changed = true;
@@ -1563,13 +1604,15 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	if (mmi_changed) {
 		power_supply_changed(chip->mmi_psy);
 		mmi_info(chip, "Combo status: soc:%d, status:%d, temp:%d,"
-			" health:%d, age:%d, cycles:%d, rate:%s\n",
+			" health:%d, age:%d, voltage:%d, current:%d, cycles:%d, rate:%s\n",
 			chip->combo_soc,
 			chip->combo_status,
 			chip->combo_temp,
 			chip->combo_health,
 			chip->combo_age,
 			chip->combo_cycles,
+			chip->combo_voltage_mv,
+			chip->combo_current_ma,
 			charge_rate[chip->max_charger_rate]);
 	}
 
@@ -1993,6 +2036,8 @@ static enum power_supply_property mmi_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 static int mmi_get_prop(struct power_supply *psy,
@@ -2023,6 +2068,12 @@ static int mmi_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		val->intval = chip->charge_full;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = chip->combo_voltage_mv * 1000;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = chip->combo_current_ma * 1000;
 		break;
 	default:
 		val->intval = -EINVAL;
@@ -2174,6 +2225,8 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	chip->suspended = 0;
 	chip->combo_status = 0;
 	chip->combo_age = 100;
+	chip->combo_voltage_mv = 0;
+	chip->combo_current_ma = 0;
 	chip->combo_cycles = 0;
 	chip->combo_soc = 100;
 	chip->charge_full = 0;
