@@ -315,7 +315,7 @@ static ssize_t rmidev_sysfs_attn_state_show(struct device *dev,
 			"%s: dev_data %p, rmidev %p, rmi4_data %p\n",
 			__func__, dev_data, rmidev, rmi4_data);
 
-	attn_state = gpio_get_value(platform_data->irq_gpio);
+	attn_state = gpio_get_value_cansleep(platform_data->irq_gpio);
 
 	return snprintf(buf, PAGE_SIZE, "%u\n", attn_state);
 }
