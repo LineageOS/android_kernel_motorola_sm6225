@@ -2006,7 +2006,7 @@ int synaptics_dsx_ic_reset(struct synaptics_rmi4_data *rmi4_data, int reset)
 	sema_init(&rmi4_data->reset_semaphore, 0);
 
 	if (has_rst_pin && (reset == RMI4_HW_RESET)) {
-		gpio_set_value(platform_data->reset_gpio, 0);
+		gpio_set_value_cansleep(platform_data->reset_gpio, 0);
 		udelay(1500);
 	} else if (!has_rst_pin || (reset == RMI4_SW_RESET)) {
 		retval = synaptics_rmi4_sw_reset(rmi4_data, true);
@@ -2025,7 +2025,7 @@ int synaptics_dsx_ic_reset(struct synaptics_rmi4_data *rmi4_data, int reset)
 	}
 
 	if (has_rst_pin && (reset == RMI4_HW_RESET))
-		gpio_set_value(platform_data->reset_gpio, 1);
+		gpio_set_value_cansleep(platform_data->reset_gpio, 1);
 
 	retval = down_timeout(&rmi4_data->reset_semaphore, msecs_to_jiffies(100));
 	if (retval) {
@@ -2036,7 +2036,7 @@ int synaptics_dsx_ic_reset(struct synaptics_rmi4_data *rmi4_data, int reset)
 		dev_dbg(&rmi4_data->i2c_client->dev,
 				"%s: IRQ GPIO=%d after HW reset is %d\n",
 				__func__, platform_data->irq_gpio,
-				gpio_get_value(platform_data->irq_gpio));
+				gpio_get_value_cansleep(platform_data->irq_gpio));
 
 		retval = (int)jiffies_to_msecs(jiffies-start);
 		/* insert delay to ensure 1st i2c bus access succeeds */
@@ -2759,7 +2759,7 @@ static ssize_t synaptics_rmi4_hw_irqstat_show(struct device *dev,
 {
 	struct synaptics_rmi4_data *rmi4_data =
 					i2c_get_clientdata(to_i2c_client(dev));
-	switch (gpio_get_value(rmi4_data->board.irq_gpio)) {
+	switch (gpio_get_value_cansleep(rmi4_data->board.irq_gpio)) {
 	case 0:
 		return scnprintf(buf, PAGE_SIZE, "Low\n");
 	case 1:
@@ -6570,7 +6570,7 @@ err_gpio_free:
 	if (platform_data->gpio_config)
 		gpio_free(platform_data->irq_gpio);
 	if (gpio_is_valid(platform_data->reset_gpio)) {
-		gpio_set_value(platform_data->reset_gpio, 0);
+		gpio_set_value_cansleep(platform_data->reset_gpio, 0);
 		gpio_free(platform_data->reset_gpio);
 	}
 
@@ -7037,7 +7037,7 @@ int synaptics_rmi4_resume(struct device *dev)
 
 		/* if RESET GPIO is in SUSPEND state - no HW reset */
 		if (gpio_is_valid(platform_data->reset_gpio)) {
-			retval = gpio_get_value(platform_data->reset_gpio);
+			retval = gpio_get_value_cansleep(platform_data->reset_gpio);
 			pr_debug("reset gpio state: %d\n", retval);
 			if (retval == 0)
 				reset = RMI4_WAIT_READY;
