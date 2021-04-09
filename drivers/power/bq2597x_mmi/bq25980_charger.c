@@ -185,14 +185,14 @@ static struct reg_default bq25980_reg_init_val[] = {
 };
 
 static struct reg_default bq25960_reg_init_val[] = {
-	{BQ25980_BATOVP,	0x69},//0x69:4550mV
-	{BQ25980_BATOVP_ALM,	0x61},//0x61:4470mV
+	{BQ25980_BATOVP,	0x6c},//0x69:4550mV 0x6c:4580mv
+	{BQ25980_BATOVP_ALM,	0x64},//0x61:4470mV 0x64:4500mv
 	{BQ25980_BATOCP,	0xEE},//0xEE:disable for dual //0x46:7000mA for standalone
 	{BQ25980_BATOCP_ALM,	0x7F},//0x7F:12700mA
 	{BQ25980_CHRGR_CFG_1,	0xA8},
 	{BQ25980_CHRGR_CTRL_1,	0x49},
-	{BQ25980_BUSOVP,	0x50},//0X50:11000mV
-	{BQ25980_BUSOVP_ALM,	0x46},//0X46:10500mV
+	{BQ25980_BUSOVP,	0x64},//0X50:11000mV 0x64:12000mv
+	{BQ25980_BUSOVP_ALM,	0x50},//0X46:10500mV 0X50:11000mV
 	{BQ25980_BUSOCP,	0x0C},//0X0c:4000mA
 	{BQ25980_REG_09,	0x8C},
 	{BQ25980_TEMP_CONTROL,	0x2C},
@@ -397,7 +397,7 @@ static void dump_reg(struct bq25980_device *bq, int start, int end)
 			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
 	}
 }
-/*
+
 static void dump_all_reg(struct bq25980_device *bq)
 {
 	int ret;
@@ -409,7 +409,7 @@ static void dump_all_reg(struct bq25980_device *bq)
 		if (!ret)
 			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
 	}
-}*/
+}
 /*
 static int bq25980_get_adc_enable(struct bq25980_device *bq)
 {
@@ -1118,22 +1118,22 @@ static irqreturn_t bq25980_irq_handler_thread(int irq, void *private)
 		return IRQ_HANDLED;
 	}
 	bq->irq_waiting = false;
-		
+
 	if(bq->irq_counts > INT_MAX -1)
 		bq->irq_counts = 0;
 	else
 		bq->irq_counts++;
 
-//	dump_all_reg(bq);
+	dump_all_reg(bq);
 	mutex_unlock(&bq->irq_complete);
-	
+
 	ret = bq25980_get_state(bq, &state);
 	if (ret < 0)
 		goto irq_out;
 
 	if (!bq25980_state_changed(bq, &state))
 		goto irq_out;
-		
+
 	mutex_lock(&bq->lock);
 	bq->state = state;
 	mutex_unlock(&bq->lock);
@@ -1678,8 +1678,10 @@ static int bq25980_probe(struct i2c_client *client,
 
 	printk("-------bq25980 driver probe--------\n");
 	bq = devm_kzalloc(dev, sizeof(*bq), GFP_KERNEL);
-	if (!bq)
+	if (!bq) {
+		dev_err(dev, "Out of memory\n");
 		return -ENOMEM;
+	}
 
 	bq->client = client;
 	bq->dev = dev;
@@ -1689,12 +1691,12 @@ static int bq25980_probe(struct i2c_client *client,
 
 	bq->resume_completed = true;
 	bq->irq_waiting = false;
-	
+
 	strncpy(bq->model_name, id->name, I2C_NAME_SIZE);
 
 	ret = bq25980_parse_dt_id(bq, id->driver_data);
 	if (ret)
-		return ret;
+		goto free_mem;
 
 	bq->chip_info = &bq25980_chip_info_tbl[bq->device_id];
 
@@ -1702,6 +1704,7 @@ static int bq25980_probe(struct i2c_client *client,
 					  bq->chip_info->regmap_config);
 	if (IS_ERR(bq->regmap)) {
 		dev_err(dev, "Failed to allocate register map\n");
+		devm_kfree(bq->dev, bq);
 		return PTR_ERR(bq->regmap);
 	}
 
@@ -1709,16 +1712,16 @@ static int bq25980_probe(struct i2c_client *client,
 
 	ret = bq25980_check_device_id(bq);
 	if (ret)
-		return ret;
+		goto free_mem;
 
 	ret = bq25980_check_work_mode(bq);
 	if (ret)
-		return ret;
+		goto free_mem;
 
 	ret = bq25980_parse_dt(bq);
 	if (ret) {
 		dev_err(dev, "Failed to read device tree properties%d\n", ret);
-		return ret;
+		goto free_mem;
 	}
 
 #ifdef CONFIG_INTERRUPT_AS_GPIO
@@ -1726,18 +1729,18 @@ static int bq25980_probe(struct i2c_client *client,
 	if (!gpio_is_valid(irq_gpio))
 	{
 		dev_err(bq->dev, "%s: %d gpio get failed\n", __func__, irq_gpio);
-		return -EINVAL;
+		goto free_mem;
 	}
 	ret = gpio_request(irq_gpio, "bq25980 irq pin");
 	if (ret) {
 		dev_err(bq->dev, "%s: %d gpio request failed\n", __func__, irq_gpio);
-		return ret;
+		goto free_mem;
 	}
 	gpio_direction_input(irq_gpio);
 	irqn = gpio_to_irq(irq_gpio);
 	if (irqn < 0) {
 		dev_err(bq->dev, "%s:%d gpio_to_irq failed\n", __func__, irqn);
-		return irqn;
+		goto free_mem;
 	}
 	client->irq = irqn;
 #else
@@ -1746,8 +1749,7 @@ static int bq25980_probe(struct i2c_client *client,
 		pinctrl_get_select(bq->dev, "bq25960_int_default");
 	if (!bq->irq_pinctrl) {
 		dev_err(bq->dev,"Couldn't set pinctrl bq25960_int_default\n");
-		return ret;
-		//goto err_1;
+		goto free_mem;
 	}
 #endif
 
@@ -1760,32 +1762,37 @@ static int bq25980_probe(struct i2c_client *client,
 		if (ret < 0) {
 			dev_err(bq->dev,"request irq for irq=%d failed, ret =%d\n",
 				   client->irq, ret);
-			return ret;
+			goto free_mem;
 		}
 		//enable_irq_wake(client->irq);
 	}
 
 	ret = bq25980_power_supply_init(bq, dev, id->driver_data);
 	if (ret)
-		return ret;
+		goto free_mem;
 
 	ret = bq25980_reg_init(bq);
 	if (ret) {
 		dev_err(dev, "Cannot initialize the chip.\n");
-		return ret;
+		goto free_psy;
 	}
 
 	dump_reg(bq,0x00,0x37);
-
+	printk("-------bq25980 driver probe success--------\n");
 	return 0;
+free_psy:
+	power_supply_unregister(bq->charger);
+
+free_mem:
+	devm_kfree(bq->dev, bq);
+	return ret;
 }
 static int bq25980_charger_remove(struct i2c_client *client)
 {
 	struct bq25980_device *bq = i2c_get_clientdata(client);
 
-
 	bq25980_set_adc_enable(bq, false);
-	
+
 	power_supply_unregister(bq->charger);
 
 	mutex_destroy(&bq->lock);
