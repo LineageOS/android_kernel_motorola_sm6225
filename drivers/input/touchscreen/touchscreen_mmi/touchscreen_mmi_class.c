@@ -515,6 +515,15 @@ static int get_class_fname_handler(struct device *parent, const char **pfname)
 	return 0;
 }
 
+static int get_supplier_handler(struct device *parent, const char **psname)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+	if (!touch_cdev)
+		return -ENODEV;
+	*psname = touch_cdev->panel_supplier;
+	return 0;
+}
+
 static int ts_mmi_default_pinctrl(struct device *parent, int on)
 {
 	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
@@ -653,6 +662,7 @@ int ts_mmi_dev_register(struct device *parent,
 		goto CLASS_DEVICE_CREATE_FAILED;
 	}
 	touch_cdev->mdata->exports.get_class_fname = get_class_fname_handler;
+	touch_cdev->mdata->exports.get_supplier = get_supplier_handler;
 	touch_cdev->mdata->exports.kobj_notify = &DEV_MMI->kobj;
 
 	down_write(&touchscreens_list_lock);

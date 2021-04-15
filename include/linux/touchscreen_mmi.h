@@ -217,6 +217,7 @@ struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
 	int     (*report_palm)(bool value);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
+	int     (*get_supplier)(struct device *dev , const char **sname);
 	int     (*report_touch_event)(struct touch_event_data *tev, struct input_dev *input_dev);
 	struct kobject *kobj_notify;
 };
