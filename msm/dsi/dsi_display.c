@@ -8342,7 +8342,7 @@ int dsi_display_disable(struct dsi_display *display)
 
 	//Check is Mot early power is on going
 	pr_info("display %p, name %s is_dsi_mot_primary(%d)\n", display, display->name, display->is_dsi_mot_primary);
-	if ( display->is_dsi_mot_early_power_enabled && !display->is_dsi_display_prepared) {
+	if ( display->is_dsi_mot_early_power_enabled && !dsi_panel_initialized(display->panel)) {
 		mutex_unlock(&display->display_lock);
 		pr_info("panel already unprepared\n");
 		return rc;
@@ -8412,7 +8412,7 @@ int dsi_display_unprepare(struct dsi_display *display)
 	mutex_lock(&display->display_lock);
 
 	//Check if Mot early power is on going
-	if ( display->is_dsi_mot_early_power_enabled && !dsi_panel_initialized(display->panel)) {
+	if ( display->is_dsi_mot_early_power_enabled && !display->is_dsi_display_prepared) {
 		mutex_unlock(&display->display_lock);
 		pr_info("panel already disabled\n");
 		return rc;
