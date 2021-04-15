@@ -7532,13 +7532,13 @@ int parseProductionTestLimits(char *path, LimitFile *file, char *label,
 	char *buf = NULL;
 	int n, size, pointer = 0, ret = OK;
 	char *data_file = NULL;
-
+	struct fts_ts_info *info = dev_get_drvdata(getDev());
 
 	if (file == NULL || strcmp(path, file->name) != 0 || file->size == 0) {
 		logError(0,
 			 "%s No limit File data passed... try to get them from the system!\n",
 			 tag);
-		ret = getLimitsFile(LIMITS_FILE, &limit_file);
+		ret = getLimitsFile(info->limit_path, &limit_file);
 		if (ret < OK) {
 			logError(1,
 				 "%s parseProductionTestLimits: ERROR %08X\n",

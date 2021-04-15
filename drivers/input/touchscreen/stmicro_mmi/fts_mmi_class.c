@@ -331,6 +331,8 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 		ret = ts_mmi_dev_register(ts->dev, &fts_mmi_methods);
 		if (ret)
 			dev_err(ts->dev, "Failed to register ts mmi\n");
+		/* initialize class imported methods */
+		ts->imports = &fts_mmi_methods.exports;
 
 		dev_info(ts->dev, "MMI start sensing\n");
 		ret = fts_chip_initialization(ts, SPECIAL_FULL_PANEL_INIT);

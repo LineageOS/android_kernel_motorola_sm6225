@@ -35,7 +35,7 @@
 #include <linux/device.h>
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsHardware.h"
-
+#include "fts_lib/ftsTest.h"
 
 /****************** CONFIGURATION SECTION ******************/
 /** @defgroup conf_section	 Driver Configuration Section
@@ -354,6 +354,9 @@ struct fts_ts_info {
 				 * when allowed */
 
 	struct fts_sys_info *sysinfo;
+	/* touchscreen class*/
+	struct ts_mmi_class_methods *imports;
+	char limit_path[MAX_LIMIT_FILE_NAME];
 	const char *fw_file;
 	bool force_reflash;
 };
