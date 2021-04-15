@@ -1517,7 +1517,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		switch (typeOfComand[0]) {
 		/*ITO TEST*/
 		case 0x01:
-			res = production_test_ito(LIMITS_FILE, &tests);
+			res = production_test_ito(info->limit_path, &tests);
 			break;
 		/*PRODUCTION TEST*/
 		case 0x00:
@@ -1541,7 +1541,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			}
 #endif
 
-			res = production_test_main(LIMITS_FILE, 1, init_type,
+			res = production_test_main(info->limit_path, 1, init_type,
 						   &tests, MP_FLAG_FACTORY);
 			break;
 		/*read mutual raw*/
@@ -1703,28 +1703,28 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		case 0x03:	/* MS Raw DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ms_raw(LIMITS_FILE, 1,
+				res = production_test_ms_raw(info->limit_path, 1,
 							     &tests);
 			break;
 
 		case 0x04:	/* MS CX DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ms_cx(LIMITS_FILE, 1,
+				res = production_test_ms_cx(info->limit_path, 1,
 							    &tests);
 			break;
 
 		case 0x05:	/* SS RAW DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ss_raw(LIMITS_FILE, 1,
+				res = production_test_ss_raw(info->limit_path, 1,
 							     &tests);
 			break;
 
 		case 0x06:	/* SS IX CX DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ss_ix_cx(LIMITS_FILE, 1,
+				res = production_test_ss_ix_cx(info->limit_path, 1,
 							       &tests);
 			break;
 
@@ -3023,7 +3023,7 @@ int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 #ifndef COMPUTE_INIT_METHOD
 		ret2 = production_test_initialization(init_type);
 #else
-		ret2 = production_test_main(LIMITS_FILE, 1, init_type, &tests,
+		ret2 = production_test_main(info->limit_path, 1, init_type, &tests,
 			MP_FLAG_BOOT);
 #endif
 		if (ret2 == OK)
@@ -4029,6 +4029,27 @@ err_pinctrl_get:
 	return retval;
 }
 
+static int fts_mmi_set_limit_name(struct fts_ts_info *ts)
+{
+	int ret;
+	const char* supplier = NULL;
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI) && defined(CONFIG_ST_LIMIT_USE_SUPPLIER)
+	if (ts->imports && ts->imports->get_supplier) {
+		ret = ts->imports->get_supplier(ts->dev, &supplier);
+		if (!ret)
+			snprintf(ts->limit_path, MAX_LIMIT_FILE_NAME, "%s_%s",
+				supplier, LIMITS_FILE);
+	} else
+		snprintf(ts->limit_path, MAX_LIMIT_FILE_NAME, "%s", LIMITS_FILE);
+#else
+	snprintf(ts->limit_path, MAX_LIMIT_FILE_NAME, "%s", LIMITS_FILE);
+#endif
+
+	logError(1, "%s limit file path: %s\n", tag, ts->limit_path);
+	return 0;
+}
+
 /**
   * Probe function, called when the driver it is matched with a device with the
   *same name compatible name
@@ -4353,6 +4374,7 @@ static int fts_probe(struct spi_device *client)
 #endif
 	/* register touchscreen class if provisioned */
 	fts_mmi_init(info, true);
+	fts_mmi_set_limit_name(info);
 
 	logError(1, "%s Probe Finished!\n", tag);
 	return OK;

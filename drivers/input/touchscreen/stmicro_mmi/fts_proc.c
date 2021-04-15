@@ -1907,7 +1907,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		/*ITO TEST*/
 		case CMD_ITOTEST:
-			res = production_test_ito(LIMITS_FILE, &tests);
+			res = production_test_ito(info->limit_path, &tests);
 			break;
 
 		/*Initialization*/
@@ -1926,7 +1926,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		case CMD_MSRAWTEST:	/* MS Raw DATA TEST */
 			if (numberParam == 2)	/* need to specify if stopOnFail
 						 * */
-				res = production_test_ms_raw(LIMITS_FILE,
+				res = production_test_ms_raw(info->limit_path,
 							     cmd[1], &tests);
 			else {
 				logError(1, "%s Wrong number of parameters!\n",
@@ -1937,7 +1937,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_MSINITDATATEST:/* MS CX DATA TEST */
 			if (numberParam == 2)	/* need stopOnFail */
-				res = production_test_ms_cx(LIMITS_FILE, cmd[1],
+				res = production_test_ms_cx(info->limit_path, cmd[1],
 							    &tests);
 			else {
 				logError(1, "%s Wrong number of parameters!\n",
@@ -1948,7 +1948,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_SSRAWTEST:	/* SS RAW DATA TEST */
 			if (numberParam == 2) /* need stopOnFail */
-				res = production_test_ss_raw(LIMITS_FILE,
+				res = production_test_ss_raw(info->limit_path,
 							     cmd[1], &tests);
 			else {
 				logError(1, "%s Wrong number of parameters!\n",
@@ -1959,7 +1959,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_SSINITDATATEST:/* SS IX CX DATA TEST */
 			if (numberParam == 2)	/* need stopOnFail */
-				res = production_test_ss_ix_cx(LIMITS_FILE,
+				res = production_test_ss_ix_cx(info->limit_path,
 							       cmd[1], &tests);
 			else {
 				logError(1, "%s Wrong number of parameters!\n",
@@ -1974,12 +1974,12 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 						 * saveInit and
 						 * mpflag(optional)*/
 				if (numberParam == 3)
-					res = production_test_main(LIMITS_FILE,
+					res = production_test_main(info->limit_path,
 							   cmd[1],
 							   cmd[2], &tests,
 							   MP_FLAG_OTHERS);
 				else
-					res = production_test_main(LIMITS_FILE,
+					res = production_test_main(info->limit_path,
 							   cmd[1],
 							   cmd[2], &tests,
 							   cmd[3]);
@@ -2006,7 +2006,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				lim.data = NULL;
 				lim.size = 0;
 				if (numberParam == 1)
-					res = getLimitsFile(LIMITS_FILE, &lim);
+					res = getLimitsFile(info->limit_path, &lim);
 				else
 					res = getLimitsFile(path, &lim);
 				readData = lim.data;
@@ -2033,7 +2033,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				addr = ((u64)byteToRead) * 4;	/* number of
 								 * words */
 
-				res = getLimitsFile(LIMITS_FILE, &lim);
+				res = getLimitsFile(info->limit_path, &lim);
 
 				readData = lim.data;
 				fileSize = lim.size;
