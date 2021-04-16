@@ -66,6 +66,8 @@ enum oem_property_type {
 	OEM_PROP_FACTORY_VERSION,
 	OEM_PROP_TCMD,
 	OEM_PROP_PMIC_ICL,
+	OEM_PROP_REG_ADDRESS,
+	OEM_PROP_REG_DATA,
 	OEM_PROP_MAX,
 };
 
@@ -769,6 +771,83 @@ static DEVICE_ATTR(force_pmic_icl, 0664,
 		force_pmic_icl_show,
 		force_pmic_icl_store);
 
+static ssize_t addr_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	u16 addr;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtou16(buf, 0, &addr);
+	if (r) {
+		mmi_err(chg, "Invalid reg_address = 0x%x\n", addr);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_REG_ADDRESS,
+				&addr,
+				sizeof(addr));
+
+	return r ? r : count;
+}
+
+static DEVICE_ATTR_WO(addr);
+
+static ssize_t data_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	u8 data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtou8(buf, 0, &data);
+	if (r) {
+		mmi_err(chg, "Invalid reg_data = 0x%x\n", data);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_REG_DATA,
+				&data,
+				sizeof(data));
+
+	return r ? r : count;
+}
+
+static ssize_t data_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	u8 data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_REG_DATA,
+				&data,
+				sizeof(data));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%x\n", data);
+}
+
+static DEVICE_ATTR(data, 0664,
+		data_show,
+		data_store);
+
 static int qti_charger_init(struct qti_charger *chg)
 {
 	int rc;
@@ -846,6 +925,20 @@ static int qti_charger_init(struct qti_charger *chg)
 			   "Couldn't create force_pmic_icl\n");
 	}
 
+	rc = device_create_file(chg->dev,
+				&dev_attr_addr);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create addr\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_data);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create data\n");
+	}
+
 	return 0;
 }
 
@@ -860,6 +953,10 @@ static void qti_charger_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->dev, &dev_attr_tcmd);
 	device_remove_file(chg->dev, &dev_attr_force_pmic_icl);
+
+	device_remove_file(chg->dev, &dev_attr_addr);
+
+	device_remove_file(chg->dev, &dev_attr_data);
 
 	/* unregister driver from mmi charger */
 	rc = mmi_unregister_charger_driver(chg->driver);
