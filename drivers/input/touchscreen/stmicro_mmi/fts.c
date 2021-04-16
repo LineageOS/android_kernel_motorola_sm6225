@@ -4031,9 +4031,8 @@ err_pinctrl_get:
 
 static int fts_mmi_set_limit_name(struct fts_ts_info *ts)
 {
-	int ret;
-
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI) && defined(CONFIG_ST_LIMIT_USE_SUPPLIER)
+	int ret;
 	const char* supplier = NULL;
 	if (ts->imports && ts->imports->get_supplier) {
 		ret = ts->imports->get_supplier(ts->dev, &supplier);
