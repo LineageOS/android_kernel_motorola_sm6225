@@ -65,6 +65,7 @@ enum oem_property_type {
 	OEM_PROP_FACTORY_MODE,
 	OEM_PROP_FACTORY_VERSION,
 	OEM_PROP_TCMD,
+	OEM_PROP_PMIC_ICL,
 	OEM_PROP_MAX,
 };
 
@@ -718,6 +719,56 @@ static DEVICE_ATTR(tcmd, 0664,
 		tcmd_show,
 		tcmd_store);
 
+static ssize_t force_pmic_icl_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long pmic_icl;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &pmic_icl);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", pmic_icl);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_PMIC_ICL,
+				&pmic_icl,
+				sizeof(pmic_icl));
+
+	return r ? r : count;
+}
+
+static ssize_t force_pmic_icl_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_PMIC_ICL,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", data);
+}
+
+
+static DEVICE_ATTR(force_pmic_icl, 0664,
+		force_pmic_icl_show,
+		force_pmic_icl_store);
+
 static int qti_charger_init(struct qti_charger *chg)
 {
 	int rc;
@@ -788,6 +839,13 @@ static int qti_charger_init(struct qti_charger *chg)
 			   "Couldn't create tcmd\n");
 	}
 
+	rc = device_create_file(chg->dev,
+				&dev_attr_force_pmic_icl);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create force_pmic_icl\n");
+	}
+
 	return 0;
 }
 
@@ -801,6 +859,7 @@ static void qti_charger_deinit(struct qti_charger *chg)
 	}
 
 	device_remove_file(chg->dev, &dev_attr_tcmd);
+	device_remove_file(chg->dev, &dev_attr_force_pmic_icl);
 
 	/* unregister driver from mmi charger */
 	rc = mmi_unregister_charger_driver(chg->driver);
