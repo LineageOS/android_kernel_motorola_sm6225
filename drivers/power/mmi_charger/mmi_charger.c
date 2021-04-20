@@ -602,6 +602,50 @@ static const struct attribute_group power_supply_mmi_attr_group = {
 	.attrs = mmi_g,
 };
 
+static void mmi_battery_supply_init(struct mmi_charger_chip *chip)
+{
+	int rc;
+
+	if (chip->batt_psy)
+		return;
+
+	chip->batt_psy = power_supply_get_by_name("battery");
+	if (!chip->batt_psy) {
+		mmi_err(chip, "No battery supply found\n");
+		return;
+	}
+
+	rc = sysfs_create_group(&chip->batt_psy->dev.kobj,
+				&power_supply_mmi_attr_group);
+	if (rc)
+		mmi_err(chip, "failed: attr create\n");
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_force_demo_mode);
+	if (rc) {
+		mmi_err(chip, "couldn't create force_demo_mode\n");
+	}
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_force_max_chrg_temp);
+	if (rc) {
+		mmi_err(chip, "couldn't create force_max_chrg_temp\n");
+	}
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_factory_image_mode);
+	if (rc) {
+		mmi_err(chip, "couldn't create factory_image_mode\n");
+	}
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_factory_charge_upper);
+	if (rc)
+		mmi_err(chip, "couldn't create factory_charge_upper\n");
+
+	mmi_info(chip, "battery supply is initialized\n");
+}
+
 static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 				struct mmi_charger *charger)
 {
@@ -1263,7 +1307,6 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 
 static void mmi_notify_charger_rate(struct mmi_charger_chip *chip, int rate)
 {
-	int rc;
 	char *chrg_rate_string = NULL;
 
 	if (rate < POWER_SUPPLY_CHARGE_RATE_NONE ||
@@ -1273,16 +1316,9 @@ static void mmi_notify_charger_rate(struct mmi_charger_chip *chip, int rate)
 	}
 
 	if (!chip->batt_psy) {
-		chip->batt_psy = power_supply_get_by_name("battery");
-		if (chip->batt_psy) {
-			rc = sysfs_create_group(&chip->batt_psy->dev.kobj,
-						&power_supply_mmi_attr_group);
-			if (rc)
-				mmi_err(chip, "failed: attr create\n");
-		} else {
-			mmi_err(chip, "No battery supply found\n");
+		mmi_battery_supply_init(chip);
+		if (!chip->batt_psy)
 			return;
-		}
 	}
 
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
@@ -2270,13 +2306,7 @@ static int mmi_charger_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	chip->batt_psy = power_supply_get_by_name("battery");
-	if (chip->batt_psy) {
-		rc = sysfs_create_group(&chip->batt_psy->dev.kobj,
-					&power_supply_mmi_attr_group);
-		if (rc)
-			mmi_err(chip, "failed: attr create\n");
-	}
+	mmi_battery_supply_init(chip);
 
 	rc = device_create_file(chip->dev,
 				&dev_attr_dcp_pmax);
@@ -2301,29 +2331,6 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	if (rc) {
 		mmi_err(chip, "couldn't create wls_pmax\n");
 	}
-
-	rc = device_create_file(chip->dev,
-				&dev_attr_force_demo_mode);
-	if (rc) {
-		mmi_err(chip, "couldn't create force_demo_mode\n");
-	}
-
-	rc = device_create_file(chip->dev,
-				&dev_attr_force_max_chrg_temp);
-	if (rc) {
-		mmi_err(chip, "couldn't create force_max_chrg_temp\n");
-	}
-
-	rc = device_create_file(chip->dev,
-				&dev_attr_factory_image_mode);
-	if (rc) {
-		mmi_err(chip, "couldn't create factory_image_mode\n");
-	}
-
-	rc = device_create_file(chip->dev,
-				&dev_attr_factory_charge_upper);
-	if (rc)
-		mmi_err(chip, "couldn't create factory_charge_upper\n");
 
 	/* Register the notifier for the psy updates*/
 	chip->mmi_psy_notifier.notifier_call = mmi_psy_notifier_call;
@@ -2369,10 +2376,6 @@ static int mmi_charger_remove(struct platform_device *pdev)
 	if (chip->factory_mode)
 		unregister_reboot_notifier(&chip->mmi_reboot);
 	power_supply_unreg_notifier(&chip->mmi_psy_notifier);
-	device_remove_file(chip->dev, &dev_attr_force_demo_mode);
-	device_remove_file(chip->dev, &dev_attr_force_max_chrg_temp);
-	device_remove_file(chip->dev, &dev_attr_factory_image_mode);
-	device_remove_file(chip->dev, &dev_attr_factory_charge_upper);
 	device_remove_file(chip->dev, &dev_attr_dcp_pmax);
 	device_remove_file(chip->dev, &dev_attr_hvdcp_pmax);
 	device_remove_file(chip->dev, &dev_attr_pd_pmax);
@@ -2382,6 +2385,14 @@ static int mmi_charger_remove(struct platform_device *pdev)
 			kfree(chip->batt_uenvp[0]);
 			chip->batt_uenvp[0] = NULL;
 		}
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_force_demo_mode);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_force_max_chrg_temp);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_factory_image_mode);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_factory_charge_upper);
 		sysfs_remove_group(&chip->batt_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		power_supply_put(chip->batt_psy);
