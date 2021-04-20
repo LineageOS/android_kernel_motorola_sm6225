@@ -318,10 +318,10 @@ static int ps_notify_callback(struct notifier_block *nb,
 		!strncmp(psy->desc->name, "usb", sizeof("usb")) && data) {
 		pr_info("psy notif: event = %lu\n", event);
 
-		retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,
+		retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE,
 						&pval);
 		if (retval) {
-			pr_err("%s psy get property failed\n", psy->desc->name);
+			pr_err("%s psy get property failed, ERR: %d\n", psy->desc->name, retval);
 			return retval;
 		}
 		present_ps = (pval.intval) ? true : false;
