@@ -1,7 +1,7 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/power/bq27426_fg_mmi
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/bq27426_fg_mmi
 
 ifneq ($(filter m y,$(CONFIG_ATL_4000MAH_8A_BATTERY_PROFILE)),)
 	EXTRA_CFLAGS += -DATL_4000MAH_8A_BATTERY_PROFILE
