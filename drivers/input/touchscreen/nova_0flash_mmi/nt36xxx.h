@@ -232,6 +232,7 @@ struct nvt_ts_data {
 #endif
 	char product_id[10];
 	uint8_t fw_type;
+	atomic_t loading_fw;
 	uint32_t build_id;
 	uint32_t config_id;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
@@ -319,6 +320,7 @@ void nvt_sw_reset_idle(void);
 void nvt_boot_ready(void);
 void nvt_bld_crc_enable(void);
 void nvt_fw_crc_enable(void);
+void nvt_irq_enable(bool enable);
 int32_t nvt_update_firmware(char *firmware_name);
 int32_t nvt_check_fw_reset_state(RST_COMPLETE_STATE check_reset_state);
 int32_t nvt_get_fw_info(void);
@@ -326,6 +328,8 @@ int32_t nvt_clear_fw_status(void);
 int32_t nvt_check_fw_status(void);
 int32_t nvt_set_page(uint32_t addr);
 int32_t nvt_write_addr(uint32_t addr, uint8_t data);
+int32_t nvt_ts_suspend(struct device *dev);
+int32_t nvt_ts_resume(struct device *dev);
 #ifdef NVT_SET_TOUCH_STATE
 int touch_set_state(int state, int panel_idx);
 int check_touch_state(int *state, int panel_idx);
