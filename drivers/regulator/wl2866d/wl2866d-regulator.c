@@ -35,6 +35,7 @@ struct wl2866d {
 	struct regulator_desc *rdesc[WL2866D_MAX_REGULATORS];
 	struct regulator_dev *rdev[WL2866D_MAX_REGULATORS];
 	int chip_cs_pin;
+	int init_value;
 };
 
 struct wl2866d_evt_sta {
@@ -210,7 +211,7 @@ static int wl2866d_regulator_init(struct wl2866d *chip)
 	};
 
 	/*Disable all ldo output by default*/
-	ret = regmap_write(chip->regmap, WL2866D_LDO_EN, 0);
+	ret = regmap_write(chip->regmap, WL2866D_LDO_EN, chip->init_value);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Disable all LDO output failed!!!\n");
@@ -260,7 +261,7 @@ static int wl2866d_i2c_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct wl2866d *chip;
-	int error, cs_gpio, ret, i;
+	int error, cs_gpio, ret, i, value;
 
 	/* Set all register to initial value when probe driver to avoid register value was modified.
 	*/
@@ -298,6 +299,13 @@ static int wl2866d_i2c_probe(struct i2c_client *client,
 	}
 
 	dev_info(chip->dev, "wl2866d_i2c_probe cs_gpio:%d...\n", cs_gpio);
+
+	if (of_property_read_u32(dev->of_node, "semi,init-value", &value) < 0) {
+		dev_info(chip->dev, "wl2866d_i2c_probe no init_value, use default 0x0\n");
+		value = 0x0;
+	}
+	chip->init_value = value;
+	dev_info(chip->dev, "wl2866d_i2c_probe init_value:%d...\n", value);
 
 	mdelay(10);
 
