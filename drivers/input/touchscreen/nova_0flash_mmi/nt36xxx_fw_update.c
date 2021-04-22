@@ -952,6 +952,7 @@ int32_t nvt_update_firmware(char *firmware_name)
 {
 	int32_t ret = 0;
 
+	atomic_set(&ts->loading_fw, 1);
 	// request bin file in "/etc/firmware"
 	ret = update_firmware_request(firmware_name);
 	if (ret) {
@@ -999,6 +1000,7 @@ download_fail:
 	update_firmware_release();
 request_firmware_fail:
 
+	atomic_set(&ts->loading_fw, 0);
 	return ret;
 }
 
