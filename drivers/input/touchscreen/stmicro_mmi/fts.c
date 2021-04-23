@@ -3979,6 +3979,12 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		logError(0, "%s flip X\n", tag);
 	}
 
+	if (of_property_read_u8_array(np, "st,report_rate_cmd",
+			bdata->report_rate_cmd, 10) == 0) {
+		bdata->report_rate_ctrl = true;
+		logError(1, "%s Support set report rate.\n", tag);
+	}
+
 	return OK;
 }
 
