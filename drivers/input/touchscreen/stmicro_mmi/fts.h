@@ -234,6 +234,8 @@ struct fts_hw_platform_data {
 	unsigned int y_max;
 	bool y_flip, x_flip;
 	bool power_on_suspend;
+	u8 report_rate_cmd[10];	/* /< support report rate switching */
+	bool report_rate_ctrl;	/* /< support report rate switching */
 };
 
 /*
@@ -359,6 +361,8 @@ struct fts_ts_info {
 	char limit_path[MAX_LIMIT_FILE_NAME];
 	const char *fw_file;
 	bool force_reflash;
+
+	unsigned int report_rate;
 };
 
 
