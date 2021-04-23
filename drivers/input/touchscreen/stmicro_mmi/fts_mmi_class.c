@@ -31,8 +31,14 @@ extern int fts_fw_update(struct fts_ts_info *info);
 
 static ssize_t fts_mmi_calibrate_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fts_mmi_report_rate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fts_mmi_report_rate_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(calibrate, (S_IWUSR | S_IWGRP), NULL, fts_mmi_calibrate_store);
+static DEVICE_ATTR(report_rate, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_mmi_report_rate_show, fts_mmi_report_rate_store);
 
 #define MAX_ATTRS_ENTRIES 10
 #define ADD_ATTR(name) { \
@@ -53,7 +59,12 @@ static struct attribute_group ext_attr_group = {
 
 static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
 {
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	int idx = 0;
+
+	ASSERT_PTR(ts);
+	if (ts->board->report_rate_ctrl)
+		ADD_ATTR(report_rate);
 
 	if (strncmp(mmi_bl_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(calibrate);
@@ -65,6 +76,73 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 		*group = NULL;
 
 	return 0;
+}
+/* Configure different reporting rates
+ * mode = 0x00, Set report rate 240Hz
+ * mode = 0x01, Set report rate 480Hz
+ * ...
+ */
+static int fts_mmi_set_report_rate(struct fts_ts_info *ts, unsigned int mode)
+{
+	int ret = 0;
+
+	if (mode == 0x00 || mode == 0x01) {
+		ts->board->report_rate_cmd[2] = mode;
+		ret = fts_write(ts->board->report_rate_cmd, ARRAY_SIZE(ts->board->report_rate_cmd));
+			pr_info("len=%d ", ARRAY_SIZE(ts->board->report_rate_cmd));
+	} else {
+		pr_info("The report rate mode=%d is valid.\n", mode);
+		return -EINVAL;
+	}
+
+	if (ret == OK) {
+		ts->report_rate = mode;
+		pr_info("Successfully to set report rate mode=%d!\n", ts->report_rate);
+	} else
+		pr_info("Failed to set report rate mode=%d!\n", ts->report_rate);
+
+	return ret;
+}
+
+
+static ssize_t fts_mmi_report_rate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct fts_ts_info *ts;
+	int ret = 0;
+	unsigned long mode = 0;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (ts->report_rate == mode) {
+		pr_info("value is same,so not write.\n");
+		return size;
+	}
+
+	ret = fts_mmi_set_report_rate(ts, mode);
+
+	return size;
+}
+
+static ssize_t fts_mmi_report_rate_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_info *ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+
+	pr_info("report_rate mode=%d.\n", ts->report_rate);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->report_rate);
 }
 
 static ssize_t fts_mmi_calibrate_store(struct device *dev,
@@ -259,6 +337,9 @@ static int fts_mmi_post_resume(struct device *dev)
 	dev_dbg(dev, "%s\n", __func__);
 	fts_resume_func(ts);
 	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
+	/* restore data */
+	if (ts->board->report_rate_ctrl)
+		fts_mmi_set_report_rate(ts, ts->report_rate);
 	return 0;
 }
 
@@ -340,6 +421,12 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 			dev_err(ts->dev, "Failed chip init\n");
 		fts_init_sensing(ts);
 		fts_enableInterrupt();
+
+		/* initialize value */
+		/* The report rate defaults to 240Hz */
+		if (ts->board->report_rate_ctrl)
+			ts->report_rate = 0x00;
+
 	} else
 		ts_mmi_dev_unregister(ts->dev);
 	return ret;
