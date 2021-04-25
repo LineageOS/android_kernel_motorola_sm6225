@@ -22,6 +22,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/version.h>
 #include <linux/interrupt.h>
 #ifdef CONFIG_OF
 #include <linux/of.h>
@@ -44,7 +45,11 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+#include <linux/qcom_scm.h>
+#else
 #include <soc/qcom/scm.h>
+#endif
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
 #else
