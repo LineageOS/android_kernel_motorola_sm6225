@@ -1,7 +1,7 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/misc/ets_fps_mmi
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/ets_fps_mmi
 
 ifneq ($(filter m y,$(CONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_NAVI_HORIZON
