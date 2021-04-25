@@ -519,11 +519,6 @@ struct synaptics_rmi4_data {
 	struct regulator *vdd_quirk;
 	struct mutex rmi4_io_ctrl_mutex;
 	struct mutex state_mutex;
-#if defined(CONFIG_PANEL_NOTIFICATIONS)
-	struct mmi_notifier panel_nb;
-#elif defined(CONFIG_FB)
-	struct notifier_block panel_nb;
-#endif
 	atomic_t panel_off_flag;
 	unsigned char current_page;
 	unsigned char button_0d_enabled;
