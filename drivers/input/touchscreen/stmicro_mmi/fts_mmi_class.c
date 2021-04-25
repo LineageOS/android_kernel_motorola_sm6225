@@ -16,6 +16,7 @@
 #include "fts_mmi.h"
 #include "fts_lib/ftsCore.h"
 #include "fts_lib/ftsIO.h"
+#include "fts_lib/ftsTool.h"
 #include "fts_lib/ftsError.h"
 #include "fts_lib/ftsSoftware.h"
 #include <linux/regulator/consumer.h>
@@ -363,9 +364,43 @@ static int fts_mmi_fw_update(struct device *dev, char *fwname)
 static int fts_mmi_charger_mode(struct device *dev, int mode)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
+	int res = OK;
+	int ret = OK;
+	u8 settings[4] = { 0 };
 	ASSERT_PTR(ts);
-	dev_dbg(dev, "%s\n", __func__);
-	return 0;
+
+	ts->mode = MODE_NOTHING;	/* initialize the mode to nothing in
+					 * order to be updated depending on the
+					 * features enabled */
+	ts->charger_enabled = mode;
+	settings[0] = ts->charger_enabled;
+	ret = setFeatures(FEAT_SEL_CHARGER, settings, 1);
+	if (ret < OK)
+		logError(1, "%s %s: error during setting CHARGER_MODE! ERROR %08X\n",
+			tag, __func__, ret);
+
+	res |= ret;
+
+	if (ret >= OK && ts->charger_enabled == FEAT_ENABLE) {
+		fromIDtoMask(FEAT_SEL_CHARGER, (u8 *)&ts->mode, sizeof(ts->mode));
+		logError(1, "%s %s: CHARGER_MODE Enabled!\n",
+			tag, __func__);
+	} else
+		logError(1, "%s %s: CHARGER_MODE Disabled!\n", tag, __func__);
+
+	/* if some selective scan want to be enabled can be done an or
+	 * of the following options */
+	/* settings[0] = ACTIVE_MULTI_TOUCH | ACTIVE_KEY | ACTIVE_HOVER
+	 * | ACTIVE_PROXIMITY | ACTIVE_FORCE; */
+	settings[0] = 0xFF;	/* enable all the possible scans mode
+				* supported by the config */
+	logError(0, "%s %s: Sense ON!\n", tag, __func__);
+	res |= setScanMode(SCAN_MODE_ACTIVE, settings[0]);
+	ts->mode |= (SCAN_MODE_ACTIVE << 24);
+	MODE_ACTIVE(ts->mode, settings[0]);
+
+	setSystemResetedUp(0);
+	return res;
 }
 
 static int fts_mmi_wait4ready(struct device *dev)
