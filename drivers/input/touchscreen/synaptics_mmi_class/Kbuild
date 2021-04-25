@@ -3,8 +3,6 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_mmi_class
 
-ifeq ($(filter m y,$(CONFIG_PANEL_NOTIFICATIONS)),)
-
 ifneq ($(filter banks%, $(TARGET_PRODUCT)),)
     EXTRA_CFLAGS += -DSOFTDEP_GPIO_PCAL6408
 endif
@@ -27,5 +25,4 @@ obj-m += synaptics_mmi_class_fw_update.o
 obj-m += synaptics_mmi_class_rmi_dev.o
 obj-m += synaptics_mmi_class_test_reporting.o
 
-endif
 endif
