@@ -315,8 +315,11 @@ static inline int ts_mmi_ps_get_state(struct power_supply *psy, bool *present)
 	int ret;
 
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &pval);
-	if (ret)
-		return ret;
+	if (ret) {
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &pval);
+		if (ret)
+			return ret;
+	}
 	*present = !pval.intval ? false : true;
 	return 0;
 }
