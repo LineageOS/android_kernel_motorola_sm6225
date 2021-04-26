@@ -330,6 +330,7 @@ int32_t nvt_set_page(uint32_t addr);
 int32_t nvt_write_addr(uint32_t addr, uint8_t data);
 int32_t nvt_ts_suspend(struct device *dev);
 int32_t nvt_ts_resume(struct device *dev);
+int nvt_set_charger(uint8_t charger_on_off);
 #ifdef NVT_SET_TOUCH_STATE
 int touch_set_state(int state, int panel_idx);
 int check_touch_state(int *state, int panel_idx);
