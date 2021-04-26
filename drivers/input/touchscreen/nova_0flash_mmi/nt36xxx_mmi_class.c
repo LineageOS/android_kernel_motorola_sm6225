@@ -139,6 +139,20 @@ static int nvt_mmi_methods_drv_irq(struct device *dev, int state)
 	return ret;
 }
 
+static int nvt_mmi_charger_mode(struct device *dev, int mode)
+{
+	if (mutex_lock_interruptible(&ts->lock)) {
+		NVT_ERR("Failed to lock in mutex_lock_interruptible(&ts->lock).\n");
+		return -EINVAL;
+	}
+
+	nvt_set_charger(mode);
+	NVT_LOG("Charger mode %s!\n", !!mode ? "Enabled" : "Disabled");
+	mutex_unlock(&ts->lock);
+
+	return 0;
+}
+
 static int nvt_mmi_methods_reset(struct device *dev, int type)
 {
 	nvt_sw_reset();
@@ -211,6 +225,7 @@ static struct ts_mmi_methods nvt_mmi_methods = {
 	/* SET methods */
 	.reset =  nvt_mmi_methods_reset,
 	.drv_irq = nvt_mmi_methods_drv_irq,
+	.charger_mode = nvt_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = nvt_mmi_firmware_update,
 	/* PM callback */

@@ -167,7 +167,6 @@ uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; //read from dtsi
 uint32_t SPI_RD_FAST_ADDR = 0;	//read from dtsi
 static int charger_notifier_callback(struct notifier_block *nb, unsigned long val, void *v);
-static int nvt_set_charger(uint8_t charger_on_off);
 static void nvt_charger_notify_work(struct work_struct *work);
 static int usb_detect_flag = 0;
 
@@ -3315,7 +3314,7 @@ static const struct spi_device_id nvt_ts_id[] = {
 	{ }
 };
 
-static int nvt_set_charger(uint8_t charger_on_off)
+int nvt_set_charger(uint8_t charger_on_off)
 {
 	uint8_t buf[8] = {0};
 	int32_t ret = 0;
