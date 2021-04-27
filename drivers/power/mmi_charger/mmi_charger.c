@@ -1117,13 +1117,11 @@ static void mmi_update_charger_status(struct mmi_charger_chip *chip,
 		if ((status->demo_chrg_suspend == false) &&
 		    ((batt_info->batt_soc >= chip->demo_mode) || voltage_full)) {
 			status->demo_full_soc = batt_info->batt_soc;
-			cfg->charger_suspend = true;
 			status->demo_chrg_suspend = true;
 		} else if (status->demo_chrg_suspend == true &&
 		    (batt_info->batt_soc <= (status->demo_full_soc - DEMO_MODE_HYS_SOC))) {
 			status->demo_chrg_suspend = false;
 			cfg->taper_kickoff = true;
-			cfg->charger_suspend = false;
 		}
 	} else if (!status->temp_zone) {
 		status->pres_chrg_step = STEP_MAX;
@@ -1288,7 +1286,7 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 		cfg->charging_reset = false;
 	}
 
-	if (chip->force_charger_disabled)
+	if (chip->force_charger_disabled || status->demo_chrg_suspend)
 		cfg->charger_suspend = true;
 
 	charger->driver->set_constraint(charger->driver->data, &charger->constraint);
