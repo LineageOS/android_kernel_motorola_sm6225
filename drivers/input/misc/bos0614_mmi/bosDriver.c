@@ -115,7 +115,7 @@ static ssize_t getChipId(struct device *dev,
     return snprintf(buf, PAGE_SIZE, "0x%x\n", chipId);
 }
 
-static DEVICE_ATTR(chip_id, 0440, getChipId, NULL);
+static DEVICE_ATTR(chip_id, 0444, getChipId, NULL);
 
 static ssize_t getRegsDump(struct device *dev,
                          struct device_attribute *attr, char *buf)
@@ -149,7 +149,7 @@ static ssize_t getRegsDump(struct device *dev,
     return blen;
 }
 
-static DEVICE_ATTR(regs, 0440, getRegsDump, NULL);
+static DEVICE_ATTR(regs, 0444, getRegsDump, NULL);
 
 static bool hasError(BosError *errors, size_t length, BosError errorType)
 {
@@ -208,7 +208,7 @@ static ssize_t getIcErrors(struct device *dev,
     return res;
 }
 
-static DEVICE_ATTR(ic_errors, 0440, getIcErrors, NULL);
+static DEVICE_ATTR(ic_errors, 0444, getIcErrors, NULL);
 
 static ssize_t getIcSensingState(struct device *dev,
                            struct device_attribute *attr, char *buf)
