@@ -626,6 +626,52 @@ static ssize_t age_show(struct device *dev,
 }
 static DEVICE_ATTR(age, S_IRUGO, age_show, NULL);
 
+static ssize_t force_charger_suspend_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int state;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = this_chip->force_charger_disabled;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static ssize_t force_charger_suspend_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("mmi_charger: Invalid charger suspend value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	this_chip->force_charger_disabled = (mode) ? true : false;
+	cancel_delayed_work(&this_chip->heartbeat_work);
+	schedule_delayed_work(&this_chip->heartbeat_work, msecs_to_jiffies(0));
+	mmi_info(this_chip, "%s force_charger_disabled\n", (mode)? "set" : "clear");
+
+	return count;
+}
+
+static DEVICE_ATTR(force_charger_suspend, 0644,
+		force_charger_suspend_show,
+		force_charger_suspend_store);
+
 static struct attribute * mmi_g[] = {
 	&dev_attr_charge_rate.attr,
 	&dev_attr_age.attr,
@@ -676,6 +722,11 @@ static void mmi_battery_supply_init(struct mmi_charger_chip *chip)
 				&dev_attr_factory_charge_upper);
 	if (rc)
 		mmi_err(chip, "couldn't create factory_charge_upper\n");
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_force_charger_suspend);
+	if (rc)
+		mmi_err(chip, "couldn't create force_charger_suspend\n");
 
 	mmi_info(chip, "battery supply is initialized\n");
 }
@@ -2435,6 +2486,8 @@ static int mmi_charger_remove(struct platform_device *pdev)
 					&dev_attr_factory_image_mode);
 		device_remove_file(chip->batt_psy->dev.parent,
 					&dev_attr_factory_charge_upper);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_force_charger_suspend);
 		sysfs_remove_group(&chip->batt_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		power_supply_put(chip->batt_psy);
