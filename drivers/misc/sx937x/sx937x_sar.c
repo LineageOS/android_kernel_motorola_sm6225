@@ -59,6 +59,9 @@
 #define SX937x_CONN_ERROR	3
 #define SX937x_I2C_ERROR	4
 
+#define SX937X_I2C_WATCHDOG_TIME 10000
+#define SX937X_I2C_WATCHDOG_TIME_ERR 2000
+
 /*! \struct sx937x
  * Specialized struct containing input event data, platform data, and
  * last cap state read if needed.
@@ -77,6 +80,8 @@ static int sx937x_get_nirq_state(void)
 {
 	return  !gpio_get_value(irq_gpio_num);
 }
+
+static void sx937x_reinitialize(psx93XX_t this);
 
 /*! \fn static int sx937x_i2c_write_16bit(psx93XX_t this, u8 address, u8 value)
  * \brief Sends a write register to the device
@@ -548,6 +553,17 @@ static ssize_t sx937x_int_state_show(struct class *class,
 	return sprintf(buf, "%d\n", this->int_state);
 }
 
+static ssize_t sx937x_reinitialize_store(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t count)
+{
+	psx93XX_t this = global_sx937x;
+
+	sx937x_reinitialize(this);
+
+	return count;
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
 static struct class_attribute class_attr_reset =
 	__ATTR(reset, 0660, NULL, capsense_reset_store);
@@ -566,7 +582,8 @@ static struct class_attribute class_attr_manual_calibrate =
 	manual_offset_calibration_store);
 static struct class_attribute class_attr_int_state =
 	__ATTR(int_state, 0440, sx937x_int_state_show, NULL);
-
+static struct class_attribute class_attr_reinitialize =
+	__ATTR(reinitialize, 0660, NULL, sx937x_reinitialize_store);
 
 static struct attribute *capsense_class_attrs[] = {
 	&class_attr_reset.attr,
@@ -578,6 +595,7 @@ static struct attribute *capsense_class_attrs[] = {
 	&class_attr_register_read.attr,
 	&class_attr_manual_calibrate.attr,
 	&class_attr_int_state.attr,
+	&class_attr_reinitialize.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(capsense_class);
@@ -589,6 +607,7 @@ static struct class_attribute capsense_class_attributes[] = {
 	__ATTR(register_read,0660, NULL,sx937x_register_read_store),
 	__ATTR(manual_calibrate, 0660, manual_offset_calibration_show,manual_offset_calibration_store),
 	__ATTR(int_state, 0440, sx937x_int_state_show, NULL),
+	__ATTR(reinitialize, 0660, NULL, sx937x_reinitialize_store),
 	__ATTR_NULL,
 };
 #endif
@@ -971,6 +990,8 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 	pdata->phone_flip_update_regs = parse_flip_dt_params(pdata, dev);
 #endif
+	pdata->reinit_on_i2c_failure = of_property_read_bool(dNode, "reinit-on-i2c-failure");
+
 	LOG_INFO("-[%d] parse_dt complete\n", pdata->irq_gpio);
 	return 0;
 }
@@ -1216,6 +1237,8 @@ static int flip_notify_callback(struct notifier_block *self,
 }
 #endif
 #endif
+
+static void sx937x_i2c_watchdog_work(struct work_struct *work);
 
 /*! \fn static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *id)
  * \brief Probe function
@@ -1488,6 +1511,13 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	global_sx937x = this;
+
+	if(pplatData->reinit_on_i2c_failure) {
+		INIT_DELAYED_WORK(&this->i2c_watchdog_work, sx937x_i2c_watchdog_work);
+		schedule_delayed_work(&this->i2c_watchdog_work,
+			msecs_to_jiffies(SX937X_I2C_WATCHDOG_TIME));
+	}
+
 	LOG_INFO("sx937x_probe() Done\n");
 	return 0;
 }
@@ -1545,10 +1575,20 @@ static int sx937x_remove(struct i2c_client *client)
 static int sx937x_suspend(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	psx937x_t pDevice = 0;
+	psx937x_platform_data_t pdata = 0;
+
 	if (this) {
+		/* If we happen to reinitialize during suspend we might fail so wait for it to end */
+		if ((pDevice = this->pDevice) && (pdata = pDevice->hw)) {
+			if (pdata->reinit_on_i2c_failure)
+				cancel_delayed_work_sync(&this->i2c_watchdog_work);
+		}
+
 		sx937x_i2c_write_16bit(this,SX937X_COMMAND,0xD);//make sx937x in Sleep mode
 		LOG_DBG(LOG_TAG "sx937x suspend:disable irq!\n");
 		disable_irq(this->irq);
+		this->suspended = 1;
 	}
 	return 0;
 }
@@ -1556,11 +1596,22 @@ static int sx937x_suspend(struct device *dev)
 static int sx937x_resume(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	psx937x_t pDevice = 0;
+	psx937x_platform_data_t pdata = 0;
+
 	if (this) {
 		LOG_DBG(LOG_TAG "sx937x resume:enable irq!\n");
 		sx93XX_schedule_work(this,0);
 		enable_irq(this->irq);
 		sx937x_i2c_write_16bit(this,SX937X_COMMAND,0xC);//Exit from Sleep mode
+		this->suspended = 0;
+
+		/* Restart the watchdog in 2 seconds */
+		if ((pDevice = this->pDevice) && (pdata = pDevice->hw)){
+			if (pdata->reinit_on_i2c_failure)
+				schedule_delayed_work(&this->i2c_watchdog_work,
+					msecs_to_jiffies(SX937X_I2C_WATCHDOG_TIME_ERR));
+		}
 	}
 	return 0;
 }
@@ -1730,4 +1781,88 @@ int sx93XX_IRQ_init(psx93XX_t this)
 		LOG_INFO("registered with irq (%d)\n", this->irq);
 	}
 	return -ENOMEM;
+}
+
+/* Read i2c every 10 seconds, if there is an error, schedule again in 2 seconds
+ * and if it fails a few more times we can assume there is a device error and reset
+ */
+static void sx937x_i2c_watchdog_work(struct work_struct *work)
+{
+	static int err_cnt = 0;
+	psx93XX_t this = container_of(work, sx93XX_t, i2c_watchdog_work.work);
+	int ret;
+	u32 temp;
+	int delay = SX937X_I2C_WATCHDOG_TIME;
+
+	LOG_DBG("sx937x_i2c_watchdog_work");
+
+	if(!this->suspended) {
+		ret = sx937x_i2c_read_16bit(this, SX937X_DEVICE_INFO, &temp);
+		if (ret < 0) {
+			err_cnt++;
+			LOG_ERR("sx937x_i2c_watchdog_work err_cnt: %d", err_cnt);
+			delay = SX937X_I2C_WATCHDOG_TIME_ERR;
+		} else
+			err_cnt = 0;
+
+		if (err_cnt >= 3) {
+			err_cnt = 0;
+			sx937x_reinitialize(this);
+			delay = SX937X_I2C_WATCHDOG_TIME;
+		}
+	} else
+		LOG_DBG("sx937x_i2c_watchdog_work before resume.");
+
+	schedule_delayed_work(&this->i2c_watchdog_work,
+		msecs_to_jiffies(delay));
+}
+
+static void sx937x_reinitialize(psx93XX_t this)
+{
+	psx937x_t pDevice = 0;
+	psx937x_platform_data_t pdata = 0;
+	u32 temp;
+	int i=0;
+	int retry;
+	if (this && (pDevice = this->pDevice) && (pdata = pDevice->hw)) {
+		if (!pdata->reinit_on_i2c_failure)
+			return;
+		if (!atomic_add_unless(&this->init_busy, 1, 1))
+			return;
+		disable_irq(this->irq);
+		/* perform a reset */
+		for ( retry = 10; retry > 0; retry-- ) {
+			if (sx937x_i2c_write_16bit(this, SX937X_DEVICE_RESET, 0xDE) >= 0)
+				break;
+			LOG_INFO("SX937x write SX937X_DEVICE_RESET retry:%d\n", 11 - retry);
+			msleep(10);
+		}
+		/* wait until the reset has finished by monitoring NIRQ */
+		LOG_INFO("Sent Software Reset. Waiting until device is back from reset to continue.\n");
+		/* just sleep for awhile instead of using a loop with reading irq status */
+		msleep(100);
+		sx937x_reg_init(this);
+#ifdef CONFIG_CAPSENSE_FLIP_CAL
+		update_flip_regs(pdata, pdata->phone_flip_state);
+#endif
+		/* re-enable interrupt handling */
+		enable_irq(this->irq);
+
+		/* make sure no interrupts are pending since enabling irq will only
+		 * work on next falling edge */
+		read_regStat(this);
+
+		/* If one of the sensors is on, re-enable it */
+		sx937x_i2c_read_16bit(this, SX937X_GENERAL_SETUP, &temp);
+		for (i=0; i < ARRAY_SIZE(psmtcButtons); i++) {
+			if (psmtcButtons[i].enabled) {
+				sx937x_i2c_write_16bit(this, SX937X_GENERAL_SETUP, temp | 0x0000007F);
+				break;
+			}
+		}
+
+		manual_offset_calibration(this);
+		atomic_set(&this->init_busy, 0);
+		LOG_ERR("reinitialized sx937x, count %d\n", this->reset_count++);
+	}
 }
