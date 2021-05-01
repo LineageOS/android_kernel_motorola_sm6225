@@ -34,17 +34,43 @@
 
 typedef struct
 {
-    I2c *i2c;
-    Gpio *gpioA;
-    Gpio *gpioB;
-    Gpio *gpioC;
-    Gpio *gpioD;
+    const I2c* i2c;
+    const Gpio* gpioA;
+    const Gpio* gpioB;
+    const Gpio* gpioC;
+    const Gpio* gpioD;
 } Bos0614Resource;
 
-HapticDriver *bos0614DriverI2cInit(Bos0614Resource resources);
+/**
+ * @brief Init bos1614 haptic driver with I2C
+ *
+ * @param[in] resources     I2C and GPIO drivers reference
+ *
+ * @return The Sensing Driver
+ */
+HapticDriver* bos0614DriverI2cInit(Bos0614Resource resources);
 
-HapticDriver *bos0614DriverSpiInit(Spi *spi, Gpio *gpioA, Gpio *gpioD);
+/**
+ * @brief Uninit a bos1614 Haptic Driver
+ *
+ * @param driver The HapticDriver to unint
+ *
+ * @return True if the driver as been handled, false otherwise
+ */
+bool bos0614DriverUninit(HapticDriver* driver);
+
+/**
+ * @brief Init bos1614 haptic driver with SPI
+ *
+ * @param[in] spi       SPI driver reference
+ * @param[in] gpioA     GPIOA driver reference
+ * @param[in] gpioD     GPIOD driver reference
+ *
+ * @return The Sensing Driver
+ */
+HapticDriver* bos0614DriverSpiInit(const Spi* spi, const Gpio* gpioA, const Gpio* gpioD);
 
 Bos0614RegisterStruct *getAllRegsPtr(void);
+bool bos0614DriverUninit(HapticDriver* driver);
 
 #endif //DKCORE_BOS0614DRIVER_H
