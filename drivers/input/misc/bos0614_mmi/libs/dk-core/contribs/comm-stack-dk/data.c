@@ -37,7 +37,15 @@ void htoBe32(uint32_t value, uint8_t *data)
     data[3] = (value & 0x000000FF);
 }
 
-void htoBe16(uint16_t value, uint8_t *data)
+void hToLe32(uint16_t value, uint8_t* data)
+{
+    data[0] = (value & 0x000000FF);
+    data[1] = (value >> 8) & 0x000000FF;
+    data[2] = (value >> 16) & 0x000000FF;
+    data[3] = (value >> 24) & 0x000000FF;
+}
+
+void htoBe16(uint16_t value, uint8_t* data)
 {
     data[0] = (value & 0xFF00) >> 8;
     data[1] = (value & 0x00FF);
@@ -62,7 +70,20 @@ uint32_t beToH32(uint8_t *data)
     return value;
 }
 
-uint16_t beToH16(uint8_t *data)
+uint32_t leToH32(uint8_t* data)
+{
+    uint32_t value = 0;
+
+    value |= data[3] << 24;
+    value |= data[2] << 16;
+    value |= data[1] << 8;
+    value |= data[0];
+
+    return value;
+}
+
+
+uint16_t beToH16(uint8_t* data)
 {
     uint32_t value = 0;
 

@@ -72,11 +72,16 @@ extern "C" {
 #define SHIFT_8_BIT     (0x8)
 #define SHIFT_16_BIT    (0x16)
 
+#define LSHIFT(X, POS)   (X<<POS)
+#define RSHIFT(X, POS)   (X>>POS)
+
 #define BYTE_LENGTH_IN_BITS (8)
 
 #define PI (3.14159265)
 
 void htoBe32(uint32_t value, uint8_t *data);
+
+void hToLe32(uint16_t value, uint8_t *data);
 
 void htoBe16(uint16_t value, uint8_t *data);
 
@@ -85,6 +90,8 @@ void hToLe16(uint16_t value, uint8_t *data);
 uint32_t beToH32(uint8_t *data);
 
 uint16_t beToH16(uint8_t *data);
+
+uint32_t leToH32(uint8_t *data);
 
 uint16_t leToH16(uint8_t *data);
 

@@ -44,56 +44,57 @@ typedef enum
  * @typedef I2c driver Instance
  */
 typedef struct _i2c I2c;
+typedef struct _i2c I2c_t;
 
 /**
  * @brief I2C Master Read Primitive
  *
- * @param i2c       Driver instance
- * @param address   I2C slave address
- * @param data      Buffer for read data
- * @param num       Length to read
+ * @param[in] i2c       Driver instance
+ * @param[in] address   I2C slave address
+ * @param[out] data     Buffer for read data
+ * @param[in] num       Length to read
  *
  * @return ARM_DRIVER_OK on successful operation, ERRNO on failure
  */
-typedef int32_t(*I2cRead)(I2c *i2c, uint8_t address, void *data, size_t num);
+typedef int32_t(*I2cRead)(const I2c *i2c, uint8_t address, void *data, size_t num);
 
 /**
  * @brief 2C Master Read Primitive with stop configuration
  *
- * @param i2c       Driver instance
- * @param address   I2C slave address
- * @param data      Buffer for read data
- * @param num       Length to read
- * @param writeStop Set to true for writing stop at the end of the transaction
+ * @param[in] i2c       Driver instance
+ * @param[in] address   I2C slave address
+ * @param[out] data     Buffer for read data
+ * @param[in] num       Length to read
+ * @param[in] writeStop Set to true for writing stop at the end of the transaction
  *
  * @return ARM_DRIVER_OK on successful operation, ERRNO on failure
  */
-typedef int32_t(*I2cReadStop)(I2c *i2c, uint8_t address, void *data, size_t num, bool writeStop);
+typedef int32_t(*I2cReadStop)(const I2c *i2c, uint8_t address, void *data, size_t num, bool writeStop);
 
 /**
  * @brief I2C Master Write Primitive
  *
- * @param i2c       Driver instance
- * @param address   I2C slave address
- * @param data      Data buffer to write
- * @param num       Length of the buffer to write
+ * @param[in] i2c       Driver instance
+ * @param[in] address   I2C slave address
+ * @param[in] data      Data buffer to write
+ * @param[in] num       Length of the buffer to write
  *
  * @return ARM_DRIVER_OK on successful operation, ERRNO on failure
  */
-typedef int32_t(*I2cWrite)(I2c *i2c, uint8_t address, const void *data, size_t num);
+typedef int32_t(*I2cWrite)(const I2c *i2c, uint8_t address, const void *data, size_t num);
 
 /**
  * @brief I2C Master Write Primitive  with stop configuration
  *
- * @param i2c       Driver instance
- * @param address   I2C slave address
- * @param data      Data buffer to write
- * @param num       Length of the buffer to write
- * @param writeStop Set to true for writing stop at the end of the transaction
+ * @param[in] i2c       Driver instance
+ * @param[in] address   I2C slave address
+ * @param[in] data      Data buffer to write
+ * @param[in] num       Length of the buffer to write
+ * @param[in] writeStop Set to true for writing stop at the end of the transaction
  *
  * @return ARM_DRIVER_OK on successful operation, ERRNO on failure
  */
-typedef int32_t(*I2cWriteStop)(I2c *i2c, uint8_t address, const void *data, size_t num, bool writeStop);
+typedef int32_t(*I2cWriteStop)(const I2c *i2c, uint8_t address, const void *data, size_t num, bool writeStop);
 
 struct _i2c
 {

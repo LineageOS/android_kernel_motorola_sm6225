@@ -1,7 +1,7 @@
 //
 // Description: Linux Boréas Haptic Driver for I2C base IC
 //
-// Copyright (c) 2020 Boreas Technologies All rights reserved.
+// Copyright (c) 2021 Boreas Technologies All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,10 +28,13 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 
 #include "libs/dk-core/src/bsp/drivers/haptic/bosDriver.h"
 #include "i2cLinux.h"
@@ -44,6 +47,28 @@
 #undef dev_dbg
 #define dev_dbg dev_info
 #endif
+#define MAXIMUM_SLICE_CONF (4)
+
+typedef struct
+{
+    SynthSlice slice[MAXIMUM_SLICE_CONF];
+    SensingConfig detection;
+    size_t nbrSlice;
+} HwButtonFeedback;
+
+typedef struct
+{
+    bool present;
+    ChannelId channelId;
+    SensingConfig detection[SENSING_DIRECTION_ENUM_LENGTH];
+} Channel;
+
+typedef struct
+{
+    HwButtonFeedback feedback[SENSING_DIRECTION_ENUM_LENGTH];
+    size_t nextSliceId;
+    Channel channel[BOS0614_NBR_OF_CHANNEL];
+} DefaultButtonConfig;
 
 typedef struct
 {
@@ -52,6 +77,7 @@ typedef struct
     struct mutex lock;
     struct device *dev;
     HapticDriver *hapticDriver;
+    DefaultButtonConfig defaultButtonConfig;
 } Context;
 
 #define SET_WAVEFORM_PARAM_LENGTH (5)
@@ -60,7 +86,11 @@ typedef struct
 #define CTRL_OUTPUT_PARAM_LENGTH (1)
 #define SENSING_CONFIG_PARAM_LENGTH (6)
 #define SENSING_AUTO_FEEDBACK_PARAM_LENGTH (3)
-#define STOP_SENSING_PARAM_LENGTH (2)
+#define STOP_SENSING_PARAM_LENGTH (1)
+
+#define ATTRIBUTE_CHANNEL_PREFIX_LENGTH (50)
+
+#define FEEDBACK_SLICE_LENGTH (5)
 
 static ssize_t getChipId(struct device *dev,
                          struct device_attribute *attr, char *buf)
@@ -120,7 +150,7 @@ static ssize_t getRegsDump(struct device *dev,
 
 static DEVICE_ATTR(regs, 0440, getRegsDump, NULL);
 
-static bool hasError(BOSError *errors, size_t length, BOSError errorType)
+static bool hasError(BosError *errors, size_t length, BosError errorType)
 {
     size_t index;
     bool res = false;
@@ -151,23 +181,23 @@ static ssize_t getIcErrors(struct device *dev,
     {
         HapticDriver *driver = ctx->hapticDriver;
         size_t nbrErros;
-        BOSError *errors;
+        BosError *errors;
 
-        errors = kzalloc(sizeof(BOSError) * BOSERROR_Length, GFP_KERNEL);
+        errors = kzalloc(sizeof(BosError) * BOS_ERROR_LENGTH, GFP_KERNEL);
 	if (!errors)
             return res;
 
         mutex_lock(&ctx->lock);
 
-        nbrErros = driver->getError(driver, errors, BOSERROR_Length);
+        nbrErros = driver->getError(driver, errors, BOS_ERROR_LENGTH);
 
         res = snprintf(buf, PAGE_SIZE, "SC: %d UVLO: %d IDAC: %d MAX_POWER: %d OVT: %d OVV: %d\n",
-                           hasError(errors, nbrErros, BOSERROR_SHORT_CIRCUIT),
-                           hasError(errors, nbrErros, BOSERROR_UVLO),
-                           hasError(errors, nbrErros, BOSERROR_IDAC),
-                           hasError(errors, nbrErros, BOSERROR_MAX_POWER),
-                           hasError(errors, nbrErros, BOSERROR_OVT),
-                           hasError(errors, nbrErros, BOSERROR_OVV));
+                           hasError(errors, nbrErros, BOS_ERROR_SHORT_CIRCUIT),
+                           hasError(errors, nbrErros, BOS_ERROR_UVLO),
+                           hasError(errors, nbrErros, BOS_ERROR_IDAC),
+                           hasError(errors, nbrErros, BOS_ERROR_MAX_POWER),
+                           hasError(errors, nbrErros, BOS_ERROR_OVT),
+                           hasError(errors, nbrErros, BOS_ERROR_OVV));
 
         kfree(errors);
 
@@ -368,10 +398,10 @@ static const char *getSensingDetectionMode(SensingDetectionMode mode)
     const char *stringDetectionMode = NULL;
     switch (mode)
     {
-        case SensingDetectionMode_Slope:
+        case SENSING_DETECTION_MODE_SLOPE:
             stringDetectionMode = slopeDetection;
             break;
-        case SensingDetectionMode_Threshold:
+        case SENSING_DETECTION_MODE_THRESHOLD:
             stringDetectionMode = thresholdDetection;
             break;
     }
@@ -381,7 +411,6 @@ static const char *getSensingDetectionMode(SensingDetectionMode mode)
 
 const char *sensingPressDirection = "Press";
 const char *sensingReleaseDirection = "Release";
-const char *sensingPressReleaseDirection = "Press & Release";
 
 static const char *getSensingDirection(SensingDirection direction)
 {
@@ -389,14 +418,14 @@ static const char *getSensingDirection(SensingDirection direction)
 
     switch (direction)
     {
-        case SensingDirection_Press:
+        case SENSING_DIRECTION_PRESS:
             directionString = sensingPressDirection;
             break;
-        case SensingDirection_Release:
+        case SENSING_DIRECTION_RELEASE:
             directionString = sensingReleaseDirection;
             break;
-        case SensingDirection_Both:
-            directionString = sensingPressReleaseDirection;
+        case SENSING_DIRECTION_ENUM_LENGTH:
+            directionString = NULL;
             break;
     }
 
@@ -440,8 +469,8 @@ static ssize_t setSensingConfig(struct device *dev,
         mutex_lock(&ctx->lock);
 
         if (directionS != NULL && modeS != NULL &&
-            driver->configSensing(driver, channelId, config) &&
-            ctx->hapticDriver->configGPO(ctx->hapticDriver, channelId, GPO_ButtonState))
+            driver->buttonSensing(driver, channelId, config) &&
+            ctx->hapticDriver->configGPO(ctx->hapticDriver, channelId, GPO_BUTTON_STATE))
         {
             dev_dbg(ctx->dev,
                     "[Sensing config] Success Channel #: %d Mode: %s Direction: %s Debouncing Duration: %d microS Threshold: %d Stabilization Duration: %d ms\n",
@@ -519,28 +548,22 @@ static ssize_t stopSensing(struct device *dev,
     {
         HapticDriver *driver = ctx->hapticDriver;
         ChannelId channelId = 0;
-        SensingDirection direction = 0;
-        const char *directionS;
         size_t paramLength = 0;
 	int numP = 0;
 	ParamsLst params[STOP_SENSING_PARAM_LENGTH];
 
 	PARAM_ADD(PARAM_UCHAR8, &channelId);
-	PARAM_ADD(PARAM_UCHAR8, &direction);
 
 	paramLength = process_params(params, numP, buf);
 	if (paramLength != STOP_SENSING_PARAM_LENGTH) {
 		return (ssize_t)paramLength;
 	}
 
-        directionS = getSensingDirection(direction);
-
         mutex_lock(&ctx->lock);
 
-        if (directionS != NULL &&
-            driver->stopSensing(driver, channelId, direction))
+        if (driver->stopSensing(driver, channelId))
         {
-            dev_dbg(ctx->dev, "[Remove Sensing Profile] Channel #: %d Direction: %s", channelId, directionS);
+            dev_dbg(ctx->dev, "[Remove Sensing Profile] Channel #: %d", channelId);
             res = count;
         }
 
@@ -553,6 +576,244 @@ static ssize_t stopSensing(struct device *dev,
 }
 
 static DEVICE_ATTR(sensing_stop, 0220, NULL, stopSensing);
+#define FREQ_INDEX (0)
+#define MV_AMP_INDEX (1)
+#define CYCLE_INDEX (2)
+
+static bool
+decodeSlicesDefaultConfig(Context* ctx, const char* attr, HwButtonFeedback* feedback)
+{
+    bool res = false;
+
+    u32 dataFeedback[4 * FEEDBACK_SLICE_LENGTH];
+
+    if (attr)
+    {
+        int count = of_property_read_variable_u32_array(ctx->dev->of_node,
+			attr, dataFeedback, FEEDBACK_SLICE_LENGTH, sizeof(dataFeedback));
+
+        if (count > 0 && (count % FEEDBACK_SLICE_LENGTH) == 0)
+        {
+	    uint sliceId, baseIndex;
+            SynthSlice *slice;
+            uint nbrSlice = count / FEEDBACK_SLICE_LENGTH;
+
+            feedback->nbrSlice = 0;
+
+            for (sliceId = 0; sliceId < nbrSlice && nbrSlice < ARRAY_SIZE(feedback->slice); sliceId++)
+            {
+                baseIndex = sliceId * FEEDBACK_SLICE_LENGTH;
+
+                slice = &feedback->slice[sliceId];
+                feedback->nbrSlice++;
+
+                slice->sliceId = ctx->defaultButtonConfig.nextSliceId++;
+                slice->mHzFreq = dataFeedback[baseIndex + FREQ_INDEX];
+                slice->mVAmp = dataFeedback[baseIndex + MV_AMP_INDEX];
+                slice->cycle = dataFeedback[baseIndex + CYCLE_INDEX];
+
+                dev_dbg(ctx->dev, "Slice id: %d Freq: %d (milliHertz) Amplitude: %d (mV) Cycle: %d\n",
+			slice->sliceId, slice->mHzFreq, slice->mVAmp, slice->cycle);
+            }
+
+            res = true;
+        }
+    }
+
+    return res;
+}
+
+
+#define BUTTON_CONFIG_ELEMENT_LENGTH (5)
+
+#define DIRECTION_INDEX (0)
+#define DETECTION_MODE_INDEX (1)
+#define THRESHOLD_INDEX (2)
+#define DEBOUNCING_INDEX (3)
+#define STABILISATION_INDEX (4)
+
+static bool
+decodeDetectionDefaultConf(Context* ctx, const char* channelAttr, const char* suffixAttr, SensingConfig* conf)
+{
+    bool res = false;
+
+    char attr[ATTRIBUTE_CHANNEL_PREFIX_LENGTH];
+    size_t expectedLength = strlen(channelAttr) + strlen(suffixAttr);
+
+    u32 buttonConf[BUTTON_CONFIG_ELEMENT_LENGTH * 10];
+
+    if (expectedLength < ATTRIBUTE_CHANNEL_PREFIX_LENGTH &&
+        sprintf(attr, "%s,%s", channelAttr, suffixAttr))
+    {
+        const char *directionS;
+        const char *modeS;
+        int count = of_property_read_variable_u32_array(ctx->dev->of_node, attr, buttonConf,
+                                                        BUTTON_CONFIG_ELEMENT_LENGTH,
+                                                        sizeof(buttonConf));
+
+        if (count > 0 && (count % BUTTON_CONFIG_ELEMENT_LENGTH) == 0)
+        {
+            conf->direction = buttonConf[DIRECTION_INDEX];
+            conf->mode = buttonConf[DETECTION_MODE_INDEX];
+            conf->thresholdMv = (int16_t) buttonConf[THRESHOLD_INDEX];
+            conf->debounceUs = buttonConf[DEBOUNCING_INDEX];
+            conf->stabilisationMs = buttonConf[STABILISATION_INDEX];
+
+            directionS = getSensingDirection(conf->direction);
+            modeS = getSensingDetectionMode(conf->mode);
+
+            if (directionS != NULL && modeS != NULL)
+            {
+                dev_dbg(ctx->dev,
+                        "Mode: %s Direction: %s Debouncing Duration: %d μs Threshold: %d Stabilization Duration: %d ms\n",
+                        modeS, directionS, conf->debounceUs,
+                        conf->thresholdMv, conf->stabilisationMs);
+                res = true;
+            }
+        }
+    }
+
+    return res;
+}
+
+const char* feedbackPress = "button,feedback,press";
+const char* feedbackRelease = "button,feedback,release";
+
+const char* buttonPress = "button,press";
+const char* buttonRelease = "button,release";
+
+static bool readDefaultConfiguration(Context* ctx)
+{
+    bool res = true;
+    uint channel;
+
+    ctx->defaultButtonConfig.nextSliceId = 0;
+
+    //Decode feedbacks
+    res = res && decodeSlicesDefaultConfig(ctx, feedbackPress,
+                                           &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_PRESS]);
+    res = res && decodeSlicesDefaultConfig(ctx, feedbackRelease,
+                                           &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_RELEASE]);
+
+    for (channel = 0; channel < BOS0614_NBR_OF_CHANNEL; channel++)
+    {
+        char attrChannel[ATTRIBUTE_CHANNEL_PREFIX_LENGTH];
+        const char* status;
+
+        sprintf(attrChannel, "channel,%d", channel);
+
+        if (of_property_read_string(ctx->dev->of_node, attrChannel, &status) == 0)
+        {
+            ctx->defaultButtonConfig.channel[channel].present = strcmp(status, "active") == 0;
+        }
+        else
+        {
+            dev_warn(ctx->dev, "No default configuration for channel %d\n", channel);
+        }
+
+
+        if (ctx->defaultButtonConfig.channel[channel].present)
+        {
+            dev_dbg(ctx->dev, "Channel %d is Activated\n", channel);
+
+            res = res && decodeDetectionDefaultConf(ctx, attrChannel, buttonPress,
+                                                    &ctx->defaultButtonConfig.channel[channel].detection[SENSING_DIRECTION_PRESS]);
+            res = res && decodeDetectionDefaultConf(ctx, attrChannel, buttonRelease,
+                                                    &ctx->defaultButtonConfig.channel[channel].detection[SENSING_DIRECTION_RELEASE]);
+        }
+        else
+        {
+            dev_dbg(ctx->dev, "Channel %d is Deactivated\n", channel);
+        }
+    }
+
+    return res;
+}
+
+#define IGNORE_OUPUT_CHANNEL (0)
+#define DEFAULT_PRESS_WAVEFORM_ID (0)
+#define DEFAULT_RELEASE_WAVEFORM_ID (1)
+
+
+static bool applyingFeedbackButtonConf(Context* ctx, HwButtonFeedback* feedbacks, WaveformId waveformId)
+{
+    bool res = true;
+    uint sliceId;
+    HapticDriver *driver;
+
+    if (feedbacks->nbrSlice == 0)
+    {
+        dev_err(ctx->dev, "No default slices detected for the HW button feedbacks related to waveform id %d",
+                waveformId);
+        res = false;
+    }
+
+    driver = ctx->hapticDriver;
+
+    //Slice configuration
+    for (sliceId = 0; sliceId < feedbacks->nbrSlice; sliceId++)
+    {
+        res = res && driver->synthSetSlice(driver, &feedbacks->slice[sliceId], IGNORE_OUPUT_CHANNEL);
+    }
+
+    res = res && driver->synthSetWaveform(driver, waveformId, feedbacks->slice->sliceId, feedbacks->nbrSlice, 1,
+                                          IGNORE_OUPUT_CHANNEL);
+
+    if (!res)
+    {
+        dev_err(ctx->dev, "Failed to configure the HW button feedbacks for waveform id %d", waveformId);
+    }
+
+    return res;
+}
+
+static bool applyButtonSensingConfiguration(Context* ctx, uint buttonId, SensingConfig* conf, WaveformId waveformId)
+{
+
+    bool res = true;
+
+    HapticDriver* driver = ctx->hapticDriver;
+
+    res = res && driver->buttonSensing(driver, buttonId, *conf);
+    res = res && driver->sensingAutoPlayWave(driver, buttonId, waveformId, conf->direction);
+
+    if (!res)
+    {
+        dev_err(ctx->dev, "Failed to configure the HW button sensing for button id %d \n", buttonId);
+    }
+
+    return res;
+}
+
+static bool applyDefaultConfiguration(Context* ctx)
+{
+    uint buttonId;
+    bool res = applyingFeedbackButtonConf(ctx, &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_PRESS],
+                                          DEFAULT_PRESS_WAVEFORM_ID);
+    res = res && applyingFeedbackButtonConf(ctx, &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_RELEASE],
+                                            DEFAULT_RELEASE_WAVEFORM_ID);
+
+    for (buttonId = 0; buttonId < ARRAY_SIZE(ctx->defaultButtonConfig.channel) && res; buttonId++)
+    {
+        if (ctx->defaultButtonConfig.channel[buttonId].present)
+        {
+            dev_dbg(ctx->dev, "Applying default configuration for Channel %d \n", buttonId);
+
+            res = res && applyButtonSensingConfiguration(ctx, buttonId,
+                                                         &ctx->defaultButtonConfig.channel[buttonId].detection[SENSING_DIRECTION_PRESS],
+                                                         DEFAULT_PRESS_WAVEFORM_ID);
+            res = res && applyButtonSensingConfiguration(ctx, buttonId,
+                                                         &ctx->defaultButtonConfig.channel[buttonId].detection[SENSING_DIRECTION_RELEASE],
+                                                         DEFAULT_RELEASE_WAVEFORM_ID);
+        }
+    }
+
+    return res;
+}
+
+/*
+ * Public Section
+ */
 
 static struct attribute *bosDriverAttrs[] = {
         &dev_attr_chip_id.attr,
@@ -569,7 +830,7 @@ static struct attribute *bosDriverAttrs[] = {
 };
 
 static struct attribute_group bosDriverAttrGroup = {
-        .attrs = bosDriverAttrs
+        .attrs = bosDriverAttrs,
 };
 
 static void freeResources(Context *ctx)
@@ -588,9 +849,14 @@ static void freeResources(Context *ctx)
 
 }
 
-/*
- * Public Section
- */
+static const struct i2c_device_id bosDriverI2cId[] = {
+    {.name = "bos0614",},
+};
+
+static struct of_device_id bos_dt_match[] = {
+    {.compatible = "boreas,bos0614",},
+    {},
+};
 
 static int bosDriverI2cProbe(struct i2c_client *client,
                              const struct i2c_device_id *id)
@@ -598,6 +864,7 @@ static int bosDriverI2cProbe(struct i2c_client *client,
     int res = -ENODEV;
     int err;
     Context *ctx;
+    const struct of_device_id *match;
     Bos0614Resource resource = {
 	    .gpioA = NULL,
 	    .gpioB = NULL,
@@ -639,6 +906,18 @@ static int bosDriverI2cProbe(struct i2c_client *client,
         goto bosDriverProbeError;
     }
 
+    match = of_match_device(of_match_ptr(bos_dt_match), &client->dev);
+    if (match)
+    {
+        dev_info(&client->dev, "Reading Configuration from DT\n");
+
+        if (!readDefaultConfiguration(ctx) || !applyDefaultConfiguration(ctx))
+        {
+            dev_err(&client->dev, "Failed to decode DT configuration\n");
+            goto bosDriverProbeError;
+        }
+    }
+
     mutex_init(&ctx->lock);
 
     err = sysfs_create_group(&ctx->dev->kobj, &bosDriverAttrGroup);
@@ -663,8 +942,8 @@ static int bosDriverI2cProbe(struct i2c_client *client,
 
     if (res != 0)
     {
-        freeResources(ctx);
         dev_err(&client->dev, "Boreas Haptic Driver failed to probe\n");
+        freeResources(ctx);
     }
 
     return res;
@@ -682,9 +961,6 @@ static int bosDriverI2cRemove(struct i2c_client *client)
     return res;
 }
 
-static const struct i2c_device_id bosDriverI2cId[] = {
-        {"bos0614", 0}
-};
 
 static const unsigned short addrList[] = {
         0x2c,
@@ -696,23 +972,12 @@ static int detect(struct i2c_client *client, struct i2c_board_info *info)
     return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id matchTable[] = {
-        { .compatible = "boreas,bos0614", },
-	{},
-};
-#endif
-
 static struct i2c_driver bosDriverI2c = {
         .class = I2C_CLASS_HWMON,
         .driver = {
                 .owner = THIS_MODULE,
-#ifdef CONFIG_OF
                 .name = "bos0614_mmi",
-		.of_match_table = matchTable,
-#else
-                .name = "bos0614",
-#endif
+                .of_match_table = of_match_ptr(bos_dt_match),
         },
         .probe = bosDriverI2cProbe,
         .remove = bosDriverI2cRemove,
@@ -721,24 +986,7 @@ static struct i2c_driver bosDriverI2c = {
         .address_list = addrList
 };
 
-#ifdef CONFIG_OF
-static int __init bosDriver_init(void)
-{
-	pr_debug("loading driver\n");
-	return i2c_add_driver(&bosDriverI2c);
-}
-
-static void __exit bosDriver_exit(void)
-{
-	pr_debug("removing driver\n");
-	i2c_del_driver(&bosDriverI2c);
-}
-
-module_init(bosDriver_init);
-module_exit(bosDriver_exit);
-#else
-module_i2c_driver(bosDriverI2c)
-#endif
+module_i2c_driver(bosDriverI2c);
 
 MODULE_AUTHOR("Pascal-Frédéric St-Laurent <pfstlaurent@boreas.ca>");
 MODULE_DESCRIPTION("I2C Driver for Boréas Haptic Technologies");

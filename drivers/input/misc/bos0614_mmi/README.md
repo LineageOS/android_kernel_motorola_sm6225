@@ -2,7 +2,7 @@
 
 ![GitHub Logo](/images/logo.png)
 
-_Version: 1.0.0_
+_Version: 1.1.0_
 
 _Copyright (c) 2021 Boreas Technologies All rights reserved._
 
@@ -12,7 +12,10 @@ Allow to configure the button press & release detection with feedback generated 
 driver provides a file system API (String base). The binary file API & GPIO configuration will be supported in the
 subsequent release.
 
-Kbuild configuration are not yet available. Please use Linux Kernel makefiles methods for compiling the driver.
+A device tree support example is available within the dts folder. The default configuration enables the button behaviour
+for a specific set of channel on driver probe. This allows the system to remain in a knows state at boot up.
+
+BOS0614 Revision. B & C are supported by this driver.
 
 _Tested against the Linux Kernel V4.14_
 
@@ -62,7 +65,6 @@ Deactivate the button detection for a specific channel & direction
 **Arguments**
 
 * channel id :        The channel number starting from 0
-* direction:          The button direction such press (0) or release (1)
 
 ### set_slice
 
@@ -126,8 +128,11 @@ Arm the synthesizer for playing a specific sequence of waveforms. The waveform s
 
 ## Virtual Button Example - on chip detection
 
-This example configure the button detection mechanism on the channel #0 with a specific feedback for the press and one
-for the release event. This example uses a i2c device instance on the bus i2c #1 with the address 0x002c.
+This example configures the button detection mechanism on the channel #0 with a specific feedback for the press and one
+for the release event. This example uses an i2c device instance on the bus i2c #1 with the address 0x002c.
+
+Note: The stabilization slice is not required anymore with this bos0614 revision C. The stabilization setting accept
+values between 0 & 103 ms for the release and press event.
 
 ### 1. Configure the feedback for press event.
 
@@ -136,10 +141,6 @@ Press Feedback:
 Press Slice (Slice #0) : 60 volts amplitude @175 Hz 2 Cycle on channel #0
 
 `echo 0 60000 175000 2 1 > /sys/bus/i2c/devices/1-002c/set_slice`
-
-Stabilization Slice (Slice #1) : 0 volts amplitude @250 Hz 2 cycle on channel #0
-
-`echo 1 00000 250000 2 1 >/sys/bus/i2c/devices/1-002c/set_slice`
 
 Setup the waveform #0 using the two previous slices
 
@@ -151,19 +152,15 @@ Release Slice (Slice #2) : 60 volts amplitude @170 Hz 2 Cycle on channel #0
 
 `echo 2 60000 170000 2 1 > /sys/bus/i2c/devices/1-002c/set_slice`
 
-Stabilization Slice (Slice #3) : 0 volts amplitude @250 Hz 11 cycle on channel #0
-
-`echo 3 00000 250000 11 1 > /sys/bus/i2c/devices/1-002c/set_slice`
-
 Setup the waveform #1 using the two previous slices
 
-`echo 1 2 2 1 1 >/sys/bus/i2c/devices/1-002c/set_waveform`
+`echo 1 2 1 1 1 >/sys/bus/i2c/devices/1-002c/set_waveform`
 
 ### 3. Activate Press Detection and Autoplay on button press event
 
-Setup press detection with threshold mode, 1.2 Volt threshold, 4000 uS debounce time and 4 milliseconds stabilization
+Setup press detection with threshold mode, 1.2 Volt threshold, 4000 uS debounce time and 25 milliseconds stabilization
 
-`echo 0 0 0 4000 1200 4 > /sys/bus/i2c/devices/1-002c/sensing_config`
+`echo 0 0 0 4000 1200 25 > /sys/bus/i2c/devices/1-002c/sensing_config`
 
 `echo 0 0 0 >/sys/bus/i2c/devices/1-002c/sensing_autoplay`
 
