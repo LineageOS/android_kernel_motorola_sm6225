@@ -44,7 +44,11 @@
 #define dev_dbg dev_info
 #endif
 
-#define BOS0614_CHIP_ID (0x0D)
+#define BOS0614_REV_B_RETURNED_CHIP_ID (0x0000)
+#define BOS0614_REV_B_CHIP_ID (0x000D)
+#define BOS0614_REV_C_CHIP_ID_BASE (0x0604)
+#define BOS0614_REV_C_CHIP_ID_DEFAULT (0x0614)
+#define BOS0614_REV_C_CHIP_ID_MASK (0xFF0F)
 #define BOS0614_I2C_ADDRESS (0x2c)
 
 #define SFT_RESET_TIME_IN_US (100)
@@ -53,6 +57,8 @@
 #define FB_R_V_REF (68.4)
 
 #define FREQUENCY_RESOLUTION_HZ (3.90625)
+
+#define FIFO_MAX_AMPLITUDE (3689)
 
 #define BURST_WRITE_RAM_BANK_INDEX (1)
 #define BURST_WRITE_RAM_ADDRESS_INDEX (3)
@@ -80,11 +86,15 @@
 #define BOS0614_THRESH_STEP_mV (1.66)
 #define BOS0614_SLOPE_THRESH_STEP_mV (2.2)
 
+#define BOS0614_SENSEDATA_CONVERSION_uV (220)
+#define BOS0614_SENSEDATA_VALID_RANGE (16384)
+
 #define THRESHOLD_NBR_OF_BITS (12)
 #define SLOPE_THRESHOLD_NBR_OF_BITS (7)
 
-#define MAXIMUM_WAVEFORM_ID_FOR_AUTO_SENSING (1)
+#define MAXIMUM_WAVEFORM_ID_FOR_AUTO_SENSING (3)
 
+#define MIN_TC_VALUE (1)
 #define MAX_TC_VALUE (31)
 
 #define MAXIMUM_NUMBER_OF_SLICE (597)
@@ -94,6 +104,13 @@
 
 #define RAMPLAYBACK_START_RAM_ADDRESS (0x0000)
 
+typedef enum
+{
+    REV_A,
+    REV_B,
+    REV_C
+} Revision;
+
 typedef struct
 {
     uint16_t sequencerCmd[MAXIMUM_WAVEFORM_ID_SEQUENCER];
@@ -101,26 +118,27 @@ typedef struct
 
 typedef struct
 {
-    Gpio *gpio;
+    const Gpio* gpio;
     BOSEventCb cb;
-    void *ctx;
-    Bos0614GPIOMode mode;
+    void* ctx;
+    Bos0614GpioMode mode;
 } ChannelCtx;
 
 typedef struct
 {
+    Revision rev;
     bool isInitiated;
     uint8_t txBuffer[MAXIMUM_DATA_LENGTH * sizeof(uint16_t)]; // Max size in words * 2 bytes
-    uint8_t chipId;
+    ChipId chipId;
     uint8_t currentChannelMask;
-    I2c *i2c;
-    Spi *spi;
+    const I2c* i2c;
+    const Spi* spi;
     ChannelCtx channel[BOS0614_NBR_OF_CHANNEL];
     bool gpoSignalingAvailable;
     uint8_t outputChanForWaveformId[MAXIMUM_WAVEFORM_NUMBER];
     HapticDriver hDriver;
     Synthesizer synth;
-    BOS0614_REGS reg;
+    Bos0614Registers reg;
 } Context;
 
 typedef enum
@@ -132,6 +150,7 @@ typedef enum
     WSFBank_BurstRamWrite = 0x014
 } WSFBank;
 
+static const HapticDriver bos0614Driver;
 static Context driverInstances[BOS0614_NBR_OF_INSTANCE];
 
 /**
@@ -139,7 +158,9 @@ static Context driverInstances[BOS0614_NBR_OF_INSTANCE];
  */
 static void initiateDriver(Context *ctx);
 
-static bool setDefaultConfig(Context *ctx);
+static bool checkBos0614Revision(Context* ctx);
+
+static bool setDefaultConfig(Context* ctx);
 
 static bool writeI2cReg(Context *ctx, Bos0614Register *reg)
 {
@@ -193,11 +214,14 @@ static bool resetSoftware(Context *ctx)
     bool res;
 
     pr_debug("enter\n");
-    ctx->reg.CONFIG_0614.bit.RST = 0x1;
-
-    res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
-
-    ctx->reg.CONFIG_0614.bit.RST = 0x0;
+    ctx->reg.common.config0614.bit.rst = 0x1;
+    res = writeReg(ctx, &ctx->reg.common.config0614.reg);
+    ctx->reg.common.config0614.bit.rst = 0x0;
+    if (ctx->rev == REV_C)
+    {
+        res = res && writeReg(ctx, &ctx->reg.common.config0614.reg);
+        res = res && writeReg(ctx, &ctx->reg.common.config0614.reg);
+    }
 
     return res;
 }
@@ -220,197 +244,222 @@ static Context *getNewInstance()
     return ctx;
 }
 
-static Bos0614Register *getRegister(Context *ctx, uint8_t addr)
+static Context* getContext(HapticDriver* driver)
+{
+    Context* ctx = NULL;
+
+    if (driver != NULL)
+    {
+        size_t index;
+
+        for (index = 0; index < DATA_ARRAY_LENGTH(driverInstances); index++)
+        {
+            if (&(driverInstances[index].hDriver) == driver && driverInstances[index].isInitiated)
+            {
+                ctx = &driverInstances[index];
+                break;
+            }
+        }
+    }
+
+    return ctx;
+}
+
+static Bos0614Register* getRegister(Context* ctx, uint8_t addr)
 {
     Bos0614Register *reg = NULL;
 
     switch (addr)
     {
         case ADDRESS_BOS0614_REFERENCE_REG:
-            reg = &ctx->reg.REFERENCE_0614.reg;
+            reg = &ctx->reg.common.reference0614.reg;
             break;
         case ADDRESS_BOS0614_IC_STATUS_REG:
-            reg = &ctx->reg.IC_STATUS_0614.reg;
+            reg = &ctx->reg.common.icStatus0614.reg;
             break;
         case ADDRESS_BOS0614_READ_REG    :
-            reg = &ctx->reg.READ_0614.reg;
+            reg = &ctx->reg.common.read0614.reg;
             break;
         case ADDRESS_BOS0614_GPIOX_REG:
-            reg = &ctx->reg.GPIOX_0614.reg;
+            reg = &ctx->reg.common.gpiox0614.reg;
             break;
         case ADDRESS_BOS0614_TC_REG:
-            reg = &ctx->reg.TC_0614.reg;
+            reg = &ctx->reg.common.tc0614.reg;
             break;
         case ADDRESS_BOS0614_CONFIG_REG:
-            reg = &ctx->reg.CONFIG_0614.reg;
+            reg = &ctx->reg.common.config0614.reg;
             break;
         case ADDRESS_BOS0614_SENSECONFIG_REG:
-            reg = &ctx->reg.SENSECONFIG_0614.reg;
+            reg = &ctx->reg.common.senseConfig0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE0_REG:
-            reg = &ctx->reg.SENSE0_0614.reg;
+            reg = &ctx->reg.common.sense00614.reg;
             break;
         case ADDRESS_BOS0614_SENSE0P_REG:
-            reg = &ctx->reg.SENSE0P_0614.reg;
+            reg = &ctx->reg.common.sense0P0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE0R_REG:
-            reg = &ctx->reg.SENSE0R_0614.reg;
+            reg = &ctx->reg.common.sense0R0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE0S_REG:
-            reg = &ctx->reg.SENSE0S_0614.reg;
+            reg = &ctx->reg.common.sense0S0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE1_REG:
-            reg = &ctx->reg.SENSE1_0614.reg;
+            reg = &ctx->reg.common.sense10614.reg;
             break;
         case ADDRESS_BOS0614_SENSE1P_REG:
-            reg = &ctx->reg.SENSE1P_0614.reg;
+            reg = &ctx->reg.common.sense1P0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE1R_REG:
-            reg = &ctx->reg.SENSE1R_0614.reg;
+            reg = &ctx->reg.common.sense1R0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE1S_REG:
-            reg = &ctx->reg.SENSE1S_0614.reg;
+            reg = &ctx->reg.common.sense1S0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE2_REG:
-            reg = &ctx->reg.SENSE2_0614.reg;
+            reg = &ctx->reg.common.sense20614.reg;
             break;
         case ADDRESS_BOS0614_SENSE2P_REG:
-            reg = &ctx->reg.SENSE2P_0614.reg;
+            reg = &ctx->reg.common.sense2P0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE2R_REG:
-            reg = &ctx->reg.SENSE2R_0614.reg;
+            reg = &ctx->reg.common.sense2R0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE2S_REG:
-            reg = &ctx->reg.SENSE2S_0614.reg;
+            reg = &ctx->reg.common.sense2S0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE3_REG:
-            reg = &ctx->reg.SENSE3_0614.reg;
+            reg = &ctx->reg.common.sense30614.reg;
             break;
         case ADDRESS_BOS0614_SENSE3P_REG:
-            reg = &ctx->reg.SENSE3P_0614.reg;
+            reg = &ctx->reg.common.sense3P0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE3R_REG:
-            reg = &ctx->reg.SENSE3R_0614.reg;
+            reg = &ctx->reg.common.sense3R0614.reg;
             break;
         case ADDRESS_BOS0614_SENSE3S_REG:
-            reg = &ctx->reg.SENSE3S_0614.reg;
+            reg = &ctx->reg.common.sense3S0614.reg;
             break;
         case ADDRESS_BOS0614_SENSESTATUS_REG:
-            reg = &ctx->reg.SENSESTATUS_0614.reg;
+            reg = &ctx->reg.common.senseStatus0614.reg;
             break;
         case ADDRESS_BOS0614_SENSEDATA0_REG:
-            reg = &ctx->reg.SENSEDATA0_0614.reg;
+            reg = &ctx->reg.common.senseData00614.reg;
             break;
         case ADDRESS_BOS0614_SENSEDATA1_REG:
-            reg = &ctx->reg.SENSEDATA1_0614.reg;
+            reg = &ctx->reg.common.senseData10614.reg;
             break;
         case ADDRESS_BOS0614_SENSEDATA2_REG:
-            reg = &ctx->reg.SENSEDATA2_0614.reg;
+            reg = &ctx->reg.common.senseData20614.reg;
             break;
         case ADDRESS_BOS0614_SENSEDATA3_REG:
-            reg = &ctx->reg.SENSEDATA3_0614.reg;
+            reg = &ctx->reg.common.senseData30614.reg;
             break;
         case ADDRESS_BOS0614_SENSERAW0_REG:
-            reg = &ctx->reg.SENSERAW0_0614.reg;
+            reg = &ctx->reg.common.senseRaw00614.reg;
             break;
         case ADDRESS_BOS0614_SENSERAW1_REG:
-            reg = &ctx->reg.SENSERAW1_0614.reg;
+            reg = &ctx->reg.common.senseRaw10614.reg;
             break;
         case ADDRESS_BOS0614_SENSERAW2_REG:
-            reg = &ctx->reg.SENSERAW2_0614.reg;
+            reg = &ctx->reg.common.senseRaw20614.reg;
             break;
         case ADDRESS_BOS0614_SENSERAW3_REG:
-            reg = &ctx->reg.SENSERAW3_0614.reg;
+            reg = &ctx->reg.common.senseRaw30614.reg;
             break;
         case ADDRESS_BOS0614_KPA_REG:
-            reg = &ctx->reg.KPA_0614.reg;
+            reg = &ctx->reg.common.kpa0614.reg;
             break;
         case ADDRESS_BOS0614_KP_KI_REG:
-            reg = &ctx->reg.KP_KI_0614.reg;
+            reg = &ctx->reg.common.kpKi0614.reg;
             break;
         case ADDRESS_BOS0614_DEADTIME_REG:
-            reg = &ctx->reg.DEADTIME_0614.reg;
+            reg = &ctx->reg.common.deadTime0614.reg;
             break;
         case ADDRESS_BOS0614_PARCAP_REG:
-            reg = &ctx->reg.PARCAP_0614.reg;
+            reg = &ctx->reg.common.parcap0614.reg;
             break;
         case ADDRESS_BOS0614_SUP_RISE_REG:
-            reg = &ctx->reg.SUP_RISE_0614.reg;
+            reg = &ctx->reg.common.supRise0614.reg;
             break;
         case ADDRESS_BOS0614_TRIM_REG:
-            reg = &ctx->reg.TRIM_0614.reg;
+            reg = &ctx->reg.common.trim0614.reg;
             break;
         case ADDRESS_BOS0614_CHIP_ID_REG:
-            reg = &ctx->reg.CHIP_ID_0614.reg;
+            reg = &ctx->reg.common.chipId0614.reg;
             break;
         case ADDRESS_BOS0614_VFEEDBACK_REG:
-            reg = &ctx->reg.VFEEDBACK_0614.reg;
+            reg = &ctx->reg.common.vFeedback0614.reg;
             break;
         case ADDRESS_BOS0614_FIFO_STATE_REG:
-            reg = &ctx->reg.FIFO_STATE_0614.reg;
+            reg = &ctx->reg.common.fifoState0614.reg;
             break;
         case ADDRESS_BOS0614_AUTO_STATE_REG:
-            reg = &ctx->reg.AUTO_STATE_0614.reg;
+            reg = &ctx->reg.common.autoState0614.reg;
             break;
         case ADDRESS_BOS0614_BIST_REG:
-            reg = &ctx->reg.BIST_0614.reg;
+            reg = &ctx->reg.common.bist0614.reg;
             break;
         case ADDRESS_BOS0614_BISTRES_REG:
-            reg = &ctx->reg.BISTRES_0614.reg;
+            reg = &ctx->reg.common.bistRes0614.reg;
             break;
         case ADDRESS_BOS0614_DEBUG_REG:
-            reg = &ctx->reg.DEBUG_0614.reg;
+            reg = &ctx->reg.common.debug0614.reg;
             break;
         case ADDRESS_BOS0614_THRESH_REG:
-            reg = &ctx->reg.THRESH_0614.reg;
+            reg = &ctx->reg.common.thresh0614.reg;
             break;
         case ADDRESS_BOS0614_REG38_REG:
-            reg = &ctx->reg.REG38_0614.reg;
+            reg = &ctx->reg.common.reg380614.reg;
             break;
-        case ADDRESS_BOS0614_REG39_REG:
-            reg = &ctx->reg.REG39_0614.reg;
+        case ADDRESS_BOS0614B_SENSE_OFFSET_REG:
+        case ADDRESS_BOS0614C_SENSE_OFFSET_REG:
+            reg = &ctx->reg.common.senseOffset0614.reg;
             break;
         case ADDRESS_BOS0614_CALIB_DATA_REG:
-            reg = &ctx->reg.CALIB_DATA_0614.reg;
+            reg = &ctx->reg.common.calibData0614.reg;
             break;
         case ADDRESS_BOS0614_REG3B_REG:
-            reg = &ctx->reg.REG3B_0614.reg;
+            reg = &ctx->reg.common.reg3B0614.reg;
             break;
         case ADDRESS_BOS0614_REG3C_REG:
-            reg = &ctx->reg.REG3C_0614.reg;
+            reg = &ctx->reg.common.reg3C0614.reg;
             break;
         case ADDRESS_BOS0614_REG3D_REG:
-            reg = &ctx->reg.REG3D_0614.reg;
+            reg = &ctx->reg.common.reg3D0614.reg;
             break;
         case ADDRESS_BOS0614_REG3E_REG:
-            reg = &ctx->reg.REG3E_0614.reg;
+            reg = &ctx->reg.common.reg3E0614.reg;
             break;
         case ADDRESS_BOS0614_REG3F_REG:
-            reg = &ctx->reg.REG3F_0614.reg;
+            reg = &ctx->reg.common.reg3F0614.reg;
             break;
         case ADDRESS_BOS0614_REG40_REG:
-            reg = &ctx->reg.REG40_0614.reg;
+            reg = &ctx->reg.common.reg400614.reg;
             break;
         case ADDRESS_BOS0614_REG41_REG:
-            reg = &ctx->reg.REG41_0614.reg;
+            reg = &ctx->reg.common.reg410614.reg;
             break;
         case ADDRESS_BOS0614_REG42_REG:
-            reg = &ctx->reg.REG42_0614.reg;
+            reg = &ctx->reg.common.reg420614.reg;
             break;
         case ADDRESS_BOS0614_REG43_REG:
-            reg = &ctx->reg.REG43_0614.reg;
+            reg = &ctx->reg.common.reg430614.reg;
             break;
-        case ADDRESS_BOS0614_REG44_REG:
-            reg = &ctx->reg.REG44_0614.reg;
+        case ADDRESS_BOS0614B_RAM_DATA_REG:
+        case ADDRESS_BOS0614C_RAM_DATA_REG:
+            reg = &ctx->reg.common.ramData0614.reg;
             break;
         case ADDRESS_BOS0614_REG45_REG:
-            reg = &ctx->reg.REG45_0614.reg;
+            reg = &ctx->reg.common.reg450614.reg;
             break;
         case ADDRESS_BOS0614_REG46_REG:
-            reg = &ctx->reg.REG46_0614.reg;
+            reg = &ctx->reg.common.reg460614.reg;
             break;
         case ADDRESS_BOS0614_REG47_REG:
-            reg = &ctx->reg.REG47_0614.reg;
+            reg = &ctx->reg.common.reg470614.reg;
+            break;
+        default:
             break;
     }
 
@@ -422,8 +471,8 @@ static bool readI2cRegister(Context *ctx, Bos0614Register *reg)
     bool res;
     uint8_t rxData[REG_VALUE_LENGTH] = {0};
 
-    ctx->reg.READ_0614.bit.BC = reg->generic.addr;
-    res = writeReg(ctx, &ctx->reg.READ_0614.reg);
+    ctx->reg.common.read0614.bit.bc = reg->generic.addr;
+    res = writeReg(ctx, &ctx->reg.common.read0614.reg);
 
     res = res && ctx->i2c->read(ctx->i2c, BOS0614_I2C_ADDRESS, rxData, REG_VALUE_LENGTH) == ARM_DRIVER_OK;
 
@@ -439,10 +488,10 @@ static bool readSpiRegister(Context *ctx, Bos0614Register *reg)
 {
     bool res = false;
 
-    ctx->reg.READ_0614.bit.BC = reg->generic.addr;
+    ctx->reg.common.read0614.bit.bc = reg->generic.addr;
 
-    if (writeSpiReg(ctx, &ctx->reg.READ_0614.reg, NULL) &&
-        writeSpiReg(ctx, &ctx->reg.READ_0614.reg, &reg->generic.value))
+    if (writeSpiReg(ctx, &ctx->reg.common.read0614.reg, NULL) &&
+        writeSpiReg(ctx, &ctx->reg.common.read0614.reg, &reg->generic.value))
     {
         res = true;
     }
@@ -485,8 +534,7 @@ static bool burstWriteRam(Context *driver, WSFBank bank, uint16_t address, uint1
         if (driver->i2c != NULL)
         {
             res = driver->i2c->write(driver->i2c, BOS0614_I2C_ADDRESS, driver->txBuffer,
-                                     BURST_WRITE_RAM_DATA_INDEX + (length * 2)) ==
-                  ARM_DRIVER_OK;
+                                     BURST_WRITE_RAM_DATA_INDEX + (length * 2)) == ARM_DRIVER_OK;
         }
         else if (driver->spi != NULL)
         {
@@ -558,44 +606,44 @@ static bool setSlice(Context *driver, SynthSlice const *slice,
     return writeRam(driver, WSFBank_Ram, buffer, sizeof(buffer));
 }
 
-static bool setMode(Context *driver, BOS0614Mode mode)
+static bool setMode(Context *driver, Bos0614Mode mode)
 {
-    driver->reg.CONFIG_0614.bit.RAM = mode;
+    driver->reg.common.config0614.bit.ram = mode;
 
-    return writeReg(driver, &driver->reg.CONFIG_0614.reg);
+    return writeReg(driver, &driver->reg.common.config0614.reg);
 }
 
 static bool setSamplingRate(Context *ctx, uint32_t samplingRateKsps)
 {
     bool res = false;
     bool found = true;
-    BOS0614SamplingRate rate;
+    Bos0614SamplingRate rate;
 
     switch (samplingRateKsps)
     {
         case 1024:
-            rate = bos0614SamplingRate_1024Ksps;
+            rate = Bos0614SamplingRate_1024Ksps;
             break;
         case 512:
-            rate = bos0614SamplingRate_512Ksps;
+            rate = Bos0614SamplingRate_512Ksps;
             break;
         case 256:
-            rate = bos0614SamplingRate_256Ksps;
+            rate = Bos0614SamplingRate_256Ksps;
             break;
         case 128:
-            rate = bos0614SamplingRate_128Ksps;
+            rate = Bos0614SamplingRate_128Ksps;
             break;
         case 64:
-            rate = bos0614SamplingRate_64Ksps;
+            rate = Bos0614SamplingRate_64Ksps;
             break;
         case 32:
-            rate = bos0614SamplingRate_32Ksps;
+            rate = Bos0614SamplingRate_32Ksps;
             break;
         case 16:
-            rate = bos0614SamplingRate_16Ksps;
+            rate = Bos0614SamplingRate_16Ksps;
             break;
         case 8:
-            rate = bos0614SamplingRate_8Ksps;
+            rate = Bos0614SamplingRate_8Ksps;
             break;
         default:
             found = false;
@@ -603,8 +651,8 @@ static bool setSamplingRate(Context *ctx, uint32_t samplingRateKsps)
 
     if (found)
     {
-        ctx->reg.CONFIG_0614.bit.PLAY = rate;
-        res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
+        ctx->reg.common.config0614.bit.play = rate;
+        res = writeReg(ctx, &ctx->reg.common.config0614.reg);
     }
 
     return res;
@@ -615,8 +663,8 @@ static bool activateChannel(Context *ctx, uint8_t channel)
     bool res = false;
     if (channel < BOS0614_NBR_OF_CHANNEL)
     {
-        ctx->reg.REFERENCE_0614.bit.FIFO = 0;
-        ctx->reg.REFERENCE_0614.bit.CHANNEL = 0x1 << channel;
+        ctx->reg.common.reference0614.bit.fifo = 0;
+        ctx->reg.common.reference0614.bit.channel = 0x1 << channel;
         res = true;
     }
 
@@ -627,18 +675,18 @@ static bool validateIcWorking(Context *ctx)
 {
     bool res = false;
 
-    ctx->reg.CONFIG_0614.bit.PLAY = bos0614SamplingRate_512Ksps;
+    ctx->reg.common.config0614.bit.play = Bos0614SamplingRate_512Ksps;
 
-    res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
-    res = res && readRegister(ctx, &ctx->reg.CONFIG_0614.reg);
-    res = res && ctx->reg.CONFIG_0614.bit.PLAY == bos0614SamplingRate_512Ksps;
+    res = writeReg(ctx, &ctx->reg.common.config0614.reg);
+    res = res && readRegister(ctx, &ctx->reg.common.config0614.reg);
+    res = res && ctx->reg.common.config0614.bit.play == Bos0614SamplingRate_512Ksps;
 
     pr_debug("ic is%s working!!!\n", res ? "" : " NOT");
 
     return res;
 }
 
-static BOSEvent getEventFromGpioState(Bos0614GPIOMode mode, GPIOIsr state)
+static BOSEvent getEventFromGpioState(Bos0614GpioMode mode, GPIOIsr state)
 {
     BOSEvent event = BOS_EVENT_NO_EVENT;
 
@@ -677,21 +725,21 @@ static BOSEvent getEventFromGpioState(Bos0614GPIOMode mode, GPIOIsr state)
     return event;
 }
 
-static bool lookupGpioCtl(GPOCtrl ctrl, Bos0614GPIOMode *bos0614Ctrl)
+static bool lookupGpioCtl(GPOCtrl ctrl, Bos0614GpioMode *bos0614Ctrl)
 {
     bool res = false;
 
     switch (ctrl)
     {
-        case GPO_WaveformFifoDone:
+        case GPO_WAVEFORM_FIFO_DONE:
             *bos0614Ctrl = Bos0614GPOCtrl_WaveformFifoDone;
             res = true;
             break;
-        case GPO_SenseTrigger:
+        case GPO_SENSE_TRIGGER:
             *bos0614Ctrl = Bos0614GPOCtrl_SenseTrigger;
             res = true;
             break;
-        case GPO_ButtonState:
+        case GPO_BUTTON_STATE:
             *bos0614Ctrl = Bos0614GPOCtrl_ButtonState;
             res = true;
             break;
@@ -725,13 +773,9 @@ static HapticDriver *genericDriverInit(Context *ctx)
 
     initiateDriver(ctx);
 
-    resetSoftware(ctx);
-
-    if (validateIcWorking(ctx) &&
-        setDefaultConfig(ctx))
+    if (resetSoftware(ctx) && validateIcWorking(ctx) && setDefaultConfig(ctx))
     {
         ctx->gpoSignalingAvailable = isGpoSignalingAvailable(ctx);
-        ctx->chipId = BOS0614_CHIP_ID;
         driver = &ctx->hDriver;
     }
     else
@@ -742,72 +786,101 @@ static HapticDriver *genericDriverInit(Context *ctx)
     return driver;
 }
 
-static bool
-getSensingRegistersPerChannel(Context *ctx, uint8_t channel, SensingDirection direction,
-                              SENSE_BITS_0614 **senseConfBitField, SENSE_THRESHOLD **senseThreshold,
-                              SENSES_BITS_0614 **senseSlope)
+static bool getSensingAutplayReg(Context* ctx, uint8_t channel, SenseBits0614** senseConfBitField)
 {
     bool res = false;
 
     switch (channel)
     {
         case 0:
-            *senseConfBitField = &ctx->reg.SENSE0_0614.bit;
-            *senseSlope = &ctx->reg.SENSE0S_0614.bit;
+            *senseConfBitField = &ctx->reg.common.sense00614.bit;
+            res = true;
+            break;
+        case 1:
+            *senseConfBitField = &ctx->reg.common.sense10614.bit;
+            res = true;
+            break;
 
-            if (direction == SensingDirection_Press)
+        case 2:
+            *senseConfBitField = &ctx->reg.common.sense20614.bit;
+            res = true;
+            break;
+        case 3:
+            *senseConfBitField = &ctx->reg.common.sense30614.bit;
+            res = true;
+            break;
+        default:
+            res = false;
+    }
+
+    return res;
+}
+
+static bool getSensingRegistersPerChannel(Context* ctx, uint8_t channel, SensingDirection direction,
+               SenseBits0614** senseConfBitField, SenseThreshold** senseThreshold,
+               SenseSBits0614** senseSlope)
+{
+    bool res = false;
+
+    switch (channel)
+    {
+        case 0:
+            *senseConfBitField = &ctx->reg.common.sense00614.bit;
+            *senseSlope = &ctx->reg.common.sense0S0614.bit;
+
+            if (direction == SENSING_DIRECTION_PRESS)
             {
-                *senseThreshold = &ctx->reg.SENSE0P_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense0P0614.bit;
             }
-            else if (direction == SensingDirection_Release)
+            else if (direction == SENSING_DIRECTION_RELEASE)
             {
-                *senseThreshold = &ctx->reg.SENSE0R_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense0R0614.bit;
             }
 
             res = true;
             break;
         case 1:
-            *senseConfBitField = &ctx->reg.SENSE1_0614.bit;
-            *senseSlope = &ctx->reg.SENSE1S_0614.bit;
+            *senseConfBitField = &ctx->reg.common.sense10614.bit;
+            *senseSlope = &ctx->reg.common.sense1S0614.bit;
 
-            if (direction == SensingDirection_Press)
+            if (direction == SENSING_DIRECTION_PRESS)
             {
-                *senseThreshold = &ctx->reg.SENSE1P_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense1P0614.bit;
             }
-            else if (direction == SensingDirection_Release)
+            else if (direction == SENSING_DIRECTION_RELEASE)
             {
-                *senseThreshold = &ctx->reg.SENSE1R_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense1R0614.bit;
             }
 
             res = true;
             break;
 
         case 2:
-            *senseConfBitField = &ctx->reg.SENSE2_0614.bit;
-            *senseSlope = &ctx->reg.SENSE2S_0614.bit;
+            *senseConfBitField = &ctx->reg.common.sense20614.bit;
+            *senseSlope = &ctx->reg.common.sense2S0614.bit;
 
-            if (direction == SensingDirection_Press)
+            if (direction == SENSING_DIRECTION_PRESS)
             {
-                *senseThreshold = &ctx->reg.SENSE2P_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense2P0614.bit;
             }
-            else if (direction == SensingDirection_Release)
+            else if (direction == SENSING_DIRECTION_RELEASE)
             {
-                *senseThreshold = &ctx->reg.SENSE2R_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense2R0614.bit;
             }
 
             res = true;
             break;
         case 3:
-            *senseConfBitField = &ctx->reg.SENSE3_0614.bit;
-            *senseSlope = &ctx->reg.SENSE3S_0614.bit;
+            *senseConfBitField = &ctx->reg.common.sense30614.bit;
+            *senseSlope = &ctx->reg.common.sense3S0614.bit;
 
-            if (direction == SensingDirection_Press)
+            if (direction == SENSING_DIRECTION_PRESS)
             {
-                *senseThreshold = &ctx->reg.SENSE3P_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense3P0614.bit;
             }
-            else if (direction == SensingDirection_Release)
+            else if (direction == SENSING_DIRECTION_RELEASE)
             {
-                *senseThreshold = &ctx->reg.SENSE3R_0614.bit;
+                *senseThreshold = &ctx->reg.common.sense3R0614.bit;
             }
 
             res = true;
@@ -895,26 +968,28 @@ static bool activateSensingForChannel(Context *ctx, uint8_t channel, bool activa
     switch (channel)
     {
         case 0:
-            ctx->reg.SENSECONFIG_0614.bit.CH0 = activate;
+            ctx->reg.common.senseConfig0614.bit.ch0 = activate;
             res = true;
             break;
         case 1:
-            ctx->reg.SENSECONFIG_0614.bit.CH1 = activate;
+            ctx->reg.common.senseConfig0614.bit.ch1 = activate;
             res = true;
             break;
         case 2:
-            ctx->reg.SENSECONFIG_0614.bit.CH2 = activate;
+            ctx->reg.common.senseConfig0614.bit.ch2 = activate;
             res = true;
             break;
         case 3:
-            ctx->reg.SENSECONFIG_0614.bit.CH3 = activate;
+            ctx->reg.common.senseConfig0614.bit.ch3 = activate;
             res = true;
+            break;
+        default:
             break;
     }
 
     if (res)
     {
-        res = writeReg(ctx, &ctx->reg.SENSECONFIG_0614.reg);
+        res = writeReg(ctx, &ctx->reg.common.senseConfig0614.reg);
     }
 
     return res;
@@ -923,72 +998,88 @@ static bool activateSensingForChannel(Context *ctx, uint8_t channel, bool activa
 bool bos0614WriteRegister(HapticDriver *driver, Register *reg);
 
 static bool
-setThresholdSensing(Context *ctx, SensingConfig config, SENSE_BITS_0614 *senseBitField, SENSE_THRESHOLD *senseThreshold)
+setThresholdSensing(Context* ctx, SensingConfig config, SenseBits0614* senseBitField, SenseThreshold* senseThreshold)
 {
     bool res = false;
 
     uint32_t threshold;
-    DebouncingTime debouncingValue;
+    DebouncingTime debouncingValue = DebouncingTime_1us;
 
     res = twoComplement(getThresholdFromMV(config.thresholdMv), THRESHOLD_NBR_OF_BITS, &threshold);
-    res = getDebouncingConfig(config.debounceUs, &debouncingValue);
+    res = res && getDebouncingConfig(config.debounceUs, &debouncingValue);
 
-    senseThreshold->THRESHOLD = threshold;
-    senseThreshold->REP = debouncingValue;
+    senseThreshold->threshold = threshold;
+    senseThreshold->rep = debouncingValue;
 
-    if (config.direction == SensingDirection_Press || config.direction == SensingDirection_Both)
+    if (config.direction == SENSING_DIRECTION_PRESS)
     {
-        senseBitField->T1 = BOS0614_ENABLE;
-        senseThreshold->AB = SensingThresholdMode_Above;
+        senseBitField->t1 = BOS0614_ENABLE;
+        senseThreshold->ab = SensingThresholdMode_Above;
 
         res = true;
     }
 
-    if (config.direction == SensingDirection_Release || config.direction == SensingDirection_Both)
+    if (config.direction == SENSING_DIRECTION_RELEASE)
     {
-        senseBitField->T2 = BOS0614_ENABLE;
-        senseThreshold->AB = SensingThresholdMode_Below;
+        senseBitField->t2 = BOS0614_ENABLE;
+        senseThreshold->ab = SensingThresholdMode_Below;
 
         res = true;
     }
 
-    res = res && bos0614WriteRegister(&ctx->hDriver, (Register *) senseBitField);
-    res = res && bos0614WriteRegister(&ctx->hDriver, (Register *) senseThreshold);
+    res = res && bos0614WriteRegister(&ctx->hDriver, (Register*) senseBitField);
+    res = res && bos0614WriteRegister(&ctx->hDriver, (Register*) senseThreshold);
 
     return res;
 }
 
+static bool disableThresholdSensing(Context* ctx, SenseBits0614* senseBitField)
+{
+    senseBitField->t1 = BOS0614_DISABLE;
+    senseBitField->t2 = BOS0614_DISABLE;
+
+    return bos0614WriteRegister(&ctx->hDriver, (Register*) senseBitField);
+}
+
 static bool
-setSlopeSensing(Context *ctx, SensingConfig config, SENSE_BITS_0614 *senseBitField, SENSES_BITS_0614 *senseSlope)
+setSlopeSensing(Context* ctx, SensingConfig config, SenseBits0614* senseBitField, SenseSBits0614* senseSlope)
 {
     uint32_t slope;
     bool res = twoComplement(getSlopeThresholdFromMv(config.thresholdMv), SLOPE_THRESHOLD_NBR_OF_BITS, &slope);
 
-    if (config.direction == SensingDirection_Press || config.direction == SensingDirection_Both)
+    if (config.direction == SENSING_DIRECTION_PRESS)
     {
-        senseBitField->S1 = BOS0614_ENABLE;
-        senseSlope->SLOPE1 = slope;
-        senseSlope->ABS1 = SensingThresholdMode_Above;
+        senseBitField->s1 = BOS0614_ENABLE;
+        senseSlope->slope1 = slope;
+        senseSlope->abs1 = SensingThresholdMode_Above;
     }
 
-    if (config.direction == SensingDirection_Release || config.direction == SensingDirection_Both)
+    if (config.direction == SENSING_DIRECTION_RELEASE)
     {
-        senseBitField->S2 = BOS0614_ENABLE;
-        senseSlope->SLOPE2 = slope;
-        senseSlope->ABS2 = SensingThresholdMode_Below;
+        senseBitField->s2 = BOS0614_ENABLE;
+        senseSlope->slope2 = slope;
+        senseSlope->abs2 = SensingThresholdMode_Below;
     }
 
-    res = res && bos0614WriteRegister(&ctx->hDriver, (Register *) senseSlope);
-    res = res && bos0614WriteRegister(&ctx->hDriver, (Register *) senseBitField);
+    res = res && bos0614WriteRegister(&ctx->hDriver, (Register*) senseSlope);
+    res = res && bos0614WriteRegister(&ctx->hDriver, (Register*) senseBitField);
 
     return res;
 }
 
-static size_t pushErrorInQueue(BOSError *errors, size_t curpos, size_t maxLength, BOSError error)
+static bool disableSlopeSensing(Context* ctx, SenseBits0614* senseBitField)
 {
-    size_t length = curpos;
+    senseBitField->s1 = BOS0614_DISABLE;
+    senseBitField->s2 = BOS0614_DISABLE;
 
-    if (curpos < maxLength)
+    return bos0614WriteRegister(&ctx->hDriver, (Register*) senseBitField);
+}
+
+static size_t pushErrorInQueue(BosError* errors, size_t curr, size_t maxLength, BosError error)
+{
+    size_t length = curr;
+
+    if (curr < maxLength)
     {
         errors[length++] = error;
     }
@@ -999,13 +1090,12 @@ static size_t pushErrorInQueue(BOSError *errors, size_t curpos, size_t maxLength
 /**
  * Public Section
  */
-HapticDriver *bos0614DriverSpiInit(Spi *spi, Gpio *gpioA, Gpio *gpioD)
+HapticDriver* bos0614DriverSpiInit(const Spi* spi, const Gpio* gpioA, const Gpio* gpioD)
 {
-    HapticDriver *driver = NULL;
-    Context *ctx = getNewInstance();
+    HapticDriver* driver = NULL;
+    Context* ctx = getNewInstance();
 
-    if (spi != NULL && gpioA != NULL && gpioD != NULL &&
-        ctx != NULL)
+    if (spi != NULL && gpioA != NULL && gpioD != NULL && ctx != NULL)
     {
         ctx->spi = spi;
         ctx->channel[0].gpio = gpioA;
@@ -1032,13 +1122,36 @@ HapticDriver *bos0614DriverI2cInit(Bos0614Resource resources)
 
         driver = genericDriverInit(ctx);
     }
+    else if (ctx != NULL)
+    {
+        ctx->isInitiated = false;
+    }
 
     return driver;
 }
 
-uint8_t bos0614DriverGetChipId(HapticDriver *driver)
+
+bool bos0614DriverUninit(HapticDriver* driver)
 {
-    uint8_t chipId = 0;
+    bool res = false;
+
+    if (driver != NULL)
+    {
+        Context* ctx = getContext(driver);
+
+        if (ctx != NULL)
+        {
+            memset(ctx, 0, sizeof(Context));
+            res = true;
+        }
+    }
+
+    return res;
+}
+
+ChipId bos0614DriverGetChipId(HapticDriver* driver)
+{
+    ChipId chipId = 0;
 
     if (driver != NULL)
     {
@@ -1060,10 +1173,10 @@ bool bos0614GetRegister(HapticDriver *driver, uint8_t addr, uint16_t *value)
         Context *ctx = container_of(driver, Context, hDriver);
 
 
-        if (addr >= ADDRESS_BOS0614_BIST_REG)
+        if (addr >= ADDRESS_BOS0614C_SENSE_OFFSET_REG)
         {
-            ctx->reg.DEBUG_0614.bit.ACCESS = 0x3A;
-            writeReg(ctx, &ctx->reg.DEBUG_0614.reg);
+            ctx->reg.common.debug0614.bit.access = 0x3A;
+            writeReg(ctx, &ctx->reg.common.debug0614.reg);
         }
 
         reg = getRegister(ctx, addr);
@@ -1075,13 +1188,40 @@ bool bos0614GetRegister(HapticDriver *driver, uint8_t addr, uint16_t *value)
                 res = true;
             }
         }
+    }
+    return res;
+}
 
+bool bos0614GetRegisters(HapticDriver* ctx, const uint8_t* addrArray, uint16_t* valueArray, const uint8_t nbRegisters)
+{
+    bool res = true;
+    bool getRes;
+    uint32_t i;
+
+    if (ctx == NULL)
+    {
+        return false;
+    }
+
+    for (i = 0; i < nbRegisters; i++)
+    {
+        getRes = bos0614GetRegister(ctx, addrArray[i], &valueArray[i]);
+
+        /*
+         * Because of the current implementation of the read registers command send by the GUI
+         * This function loop can not be interrupted if an invalid register is read and the read
+         * function is returning false.
+         *
+         * The following code is to be sure this function returns false is on the read registers failed.
+         */
+        //FIXME This function shall return false if one read register failed.
+        res = res ? getRes : false;
     }
 
     return res;
 }
 
-bool bos0614SetRegister(HapticDriver *driver, uint8_t addr, uint16_t value)
+bool bos0614SetRegister(HapticDriver* driver, const uint8_t addr, const uint16_t value)
 {
     bool res = false;
 
@@ -1093,8 +1233,8 @@ bool bos0614SetRegister(HapticDriver *driver, uint8_t addr, uint16_t value)
 
         if (addr >= ADDRESS_BOS0614_BIST_REG)
         {
-            ctx->reg.DEBUG_0614.bit.ACCESS = 0x3A;
-            writeReg(ctx, &ctx->reg.DEBUG_0614.reg);
+            ctx->reg.common.debug0614.bit.access = 0x3A;
+            writeReg(ctx, &ctx->reg.common.debug0614.reg);
         }
 
         reg = getRegister(ctx, addr);
@@ -1108,7 +1248,27 @@ bool bos0614SetRegister(HapticDriver *driver, uint8_t addr, uint16_t value)
     return res;
 }
 
-bool bos0614WriteRegister(HapticDriver *driver, Register *reg)
+bool
+bos0614SetRegisters(HapticDriver* ctx, const uint8_t* addrArray, const uint16_t* valueArray,
+                    const uint8_t nbRegisters)
+{
+	bool res = true;
+	int i;
+
+    if (ctx == NULL)
+    {
+        return false;
+    }
+
+    for (i = 0; res && i < nbRegisters; i++)
+    {
+        res = bos0614SetRegister(ctx, addrArray[i], valueArray[i]);
+    }
+
+    return res;
+}
+
+bool bos0614WriteRegister(HapticDriver* driver, Register* reg)
 {
     bool res = false;
 
@@ -1143,9 +1303,9 @@ bool bos0614CtrlOutput(HapticDriver *driver, bool activate)
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        ctx->reg.CONFIG_0614.bit.OE = activate ? 1 : 0; //Enable waveform playback
+        ctx->reg.common.config0614.bit.oe = activate ? 1 : 0; //Enable waveform playback
 
-        res = writeReg(ctx, &ctx->reg.CONFIG_0614.reg);
+        res = writeReg(ctx, &ctx->reg.common.config0614.reg);
     }
     return res;
 }
@@ -1160,7 +1320,7 @@ bos0614SetSlice(HapticDriver *driver, const SynthSlice *slice, const uint8_t out
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        res = setMode(ctx, bos0614Mode_RAM_Synthesis);
+        res = setMode(ctx, Bos0614Mode_RAM_Synthesis);
         res = res && setSlice(ctx, slice, outputChannel);
     }
 
@@ -1176,7 +1336,7 @@ bos0614SetWaveforms(HapticDriver *driver, WaveformId id, uint8_t startSliceId, s
     if (driver != NULL && id < MAXIMUM_WAVEFORM_NUMBER && nbrOfSlices < MAXIMUM_NUMBER_OF_SLICE &&
         outputChannel < BOS0614_CHANNEL_MASK)
     {
-        Context *ctx = container_of(driver, Context, hDriver);
+        Context* ctx = container_of(driver, Context, hDriver);
 
         uint16_t waveformAddr = RAM_WAVEFORM_METADATA_ADDR + (id * WAVEFORM_METADATA_LENGTH);
 
@@ -1216,6 +1376,22 @@ bool bos0614SynthesizerPlay(HapticDriver *driver, WaveformId start, WaveformId s
     return res;
 }
 
+static bool fixRamPlayback(HapticDriver* driver)
+{
+    bool res = false;
+
+    if (driver != NULL)
+    {
+        Context* ctx = container_of(driver, Context, hDriver);
+
+        uint16_t cmd[] = {RAMPLAYBACK_START_RAM_ADDRESS, RAMPLAYBACK_START_RAM_ADDRESS};
+
+        res = writeRam(ctx, WSFBank_RamPlayback, cmd, sizeof(cmd));
+    }
+
+    return res;
+}
+
 #define RAMPLAYBACK_DATA_MASK (0xFFF)
 #define RAMPLAYBACK_CHANNEL_OFFSET (12)
 
@@ -1231,7 +1407,7 @@ bool bos0614SetRamPlaybackMode(HapticDriver *driver, uint32_t samplingRate, void
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        res = setMode(ctx, bos0614Mode_RAM_Playback);
+        res = setMode(ctx, Bos0614Mode_RAM_Playback);
         res = res && setSamplingRate(ctx, samplingRate);
 
         //Configure the channel output
@@ -1240,6 +1416,11 @@ bool bos0614SetRamPlaybackMode(HapticDriver *driver, uint32_t samplingRate, void
         {
             buffer[index] &= RAMPLAYBACK_DATA_MASK;
             buffer[index] |= (channelMask << RAMPLAYBACK_CHANNEL_OFFSET);
+        }
+
+        if (ctx->rev == REV_C)
+        {
+            res = res && fixRamPlayback(driver);
         }
 
         res = res && burstWriteRam(ctx, WSFBank_BurstRamWrite, RAMPLAYBACK_START_RAM_ADDRESS, data, length);
@@ -1257,7 +1438,7 @@ bool bos0614SetFifoMode(HapticDriver *driver, uint32_t samplingRate, uint8_t out
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        res = setMode(ctx, bos0614Mode_FIFO);
+        res = setMode(ctx, Bos0614Mode_FIFO);
         res = res && setSamplingRate(ctx, samplingRate);
         res = res && activateChannel(ctx, outputChannel);
     }
@@ -1279,12 +1460,12 @@ bool bos0614GetFifoSpace(HapticDriver *driver, uint16_t *availableSpace)
 
         if (res)
         {
-            if (ctx->reg.FIFO_STATE_0614.bit.EMPTY)
+            if (ctx->reg.common.fifoState0614.bit.empty)
                 *availableSpace = MAXIMUM_DATA_LENGTH;
-            else if (ctx->reg.FIFO_STATE_0614.bit.FULL)
+            else if (ctx->reg.common.fifoState0614.bit.full)
                 *availableSpace = 0;
             else
-                *availableSpace = ctx->reg.FIFO_STATE_0614.bit.FIFO_SPACE;
+                *availableSpace = ctx->reg.common.fifoState0614.bit.fifoSpace;
         }
     }
     return res;
@@ -1304,9 +1485,9 @@ static bool writeDataInFifo(Context *ctx, void *data, size_t length)
     for (index = 0; index < length; index++)
     {
         res = true;
-        ctx->reg.REFERENCE_0614.bit.FIFO = dataArray[index];
+        ctx->reg.common.reference0614.bit.fifo = dataArray[index];
 
-        writeReg(ctx, &ctx->reg.REFERENCE_0614.reg);
+        writeReg(ctx, &ctx->reg.common.reference0614.reg);
     }
 
     return res;
@@ -1341,12 +1522,12 @@ bool bos0614PlayRamPlayback(HapticDriver *ctx, size_t length)
     return res;
 }
 
-static void gpoIsr(Gpio *gpio, void *context, GPIOIsr isrEvent)
+static void gpoIsr(const Gpio *gpio, void *context, GPIOIsr isrEvent)
 {
     if (context != NULL)
     {
         Context *ctx = (Context *) context;
-	uint32_t index;
+        uint32_t index;
 
         for (index = 0; index < DATA_ARRAY_LENGTH(ctx->channel); index++)
         {
@@ -1373,7 +1554,7 @@ bool bos0614ConfigGPO(HapticDriver *driver, uint8_t channel, GPOCtrl state)
     if (driver != NULL)
     {
         Context *ctx = container_of(driver, Context, hDriver);
-        Bos0614GPIOMode bos0614Mode;
+        Bos0614GpioMode bos0614Mode;
 
         if (lookupGpioCtl(state, &bos0614Mode))
         {
@@ -1382,24 +1563,26 @@ bool bos0614ConfigGPO(HapticDriver *driver, uint8_t channel, GPOCtrl state)
             switch (channel)
             {
                 case 0:
-                    ctx->reg.GPIOX_0614.bit.GPIO0 = bos0614Mode;
+                    ctx->reg.common.gpiox0614.bit.gpio0 = bos0614Mode;
                     res = true;
                     break;
                 case 1:
-                    ctx->reg.GPIOX_0614.bit.GPIO1 = bos0614Mode;
+                    ctx->reg.common.gpiox0614.bit.gpio1 = bos0614Mode;
                     res = true;
                     break;
                 case 2:
-                    ctx->reg.GPIOX_0614.bit.GPIO2 = bos0614Mode;
+                    ctx->reg.common.gpiox0614.bit.gpio2 = bos0614Mode;
                     res = true;
                     break;
                 case 3:
-                    ctx->reg.GPIOX_0614.bit.GPIO3 = bos0614Mode;
+                    ctx->reg.common.gpiox0614.bit.gpio3 = bos0614Mode;
                     res = true;
+                    break;
+                default:
                     break;
             }
 
-            res = res && writeReg(ctx, &ctx->reg.GPIOX_0614.reg);
+            res = res && writeReg(ctx, &ctx->reg.common.gpiox0614.reg);
 
         }
     }
@@ -1414,7 +1597,7 @@ bool bos0614RegisterOnEvents(HapticDriver *driver, ChannelId channelId, BOSEvent
     if (driver != NULL && channelId < BOS0614_NBR_OF_CHANNEL && cb != NULL)
     {
         Context *ctx = container_of(driver, Context, hDriver);
-        Gpio *gpio = ctx->channel[channelId].gpio;
+        const Gpio *gpio = ctx->channel[channelId].gpio;
 
         GPIOIsr isrMode = GPIOISR_Both;
 
@@ -1422,7 +1605,7 @@ bool bos0614RegisterOnEvents(HapticDriver *driver, ChannelId channelId, BOSEvent
         {
             ctx->channel[channelId].cb = cb;
             ctx->channel[channelId].ctx = context;
-            res = gpio->registerIsr(gpio, isrMode, gpoIsr, ctx, true);
+            res = gpio->registerIsr(gpio, isrMode, gpoIsr, ctx);
         }
     }
 
@@ -1442,7 +1625,7 @@ bool bos0614UnregisterEvents(HapticDriver *driver, ChannelId channelId)
         {
             channelCtx->cb = NULL;
             channelCtx->ctx = NULL;
-            channelCtx->gpio->registerIsr(channelCtx->gpio, GPIOISR_None, NULL, NULL, false);
+            res = channelCtx->gpio->unregisterIsr(channelCtx->gpio);
         }
     }
 
@@ -1472,9 +1655,8 @@ bool bos0614DeepSleep(HapticDriver *ctx, bool enable)
         uint16_t dummyValue;
 
         res = bos0614GetRegister(ctx, ADDRESS_BOS0614_CONFIG_REG, &dummyValue);
-        driver->reg.CONFIG_0614.bit.DS = enable ? 0x1 : 0x0;
-        res = res && bos0614SetRegister(ctx, ADDRESS_BOS0614_CONFIG_REG, driver->reg.CONFIG_0614.reg.all);
-//        timeWaitUs(BOS0614_WAKE_FROM_SLEEP_DELAY_US);
+        driver->reg.common.config0614.bit.ds = enable ? 0x1 : 0x0;
+        res = res && bos0614SetRegister(ctx, ADDRESS_BOS0614_CONFIG_REG, driver->reg.common.config0614.reg.all);
     }
 
     return res;
@@ -1487,7 +1669,7 @@ bool bos0614Synch(HapticDriver *driver, bool activate)
     return false;
 }
 
-size_t bos0614GetError(HapticDriver *driver, BOSError *errors, size_t maxLength)
+size_t bos0614GetError(HapticDriver *driver, BosError *errors, size_t maxLength)
 {
     size_t length = 0;
 
@@ -1498,35 +1680,34 @@ size_t bos0614GetError(HapticDriver *driver, BOSError *errors, size_t maxLength)
 
         if (bos0614GetRegister(driver, ADDRESS_BOS0614_IC_STATUS_REG, &dummyData))
         {
-            if (ctx->reg.IC_STATUS_0614.bit.SC != 0)
+            if (ctx->reg.common.icStatus0614.bit.sc != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_SHORT_CIRCUIT);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_SHORT_CIRCUIT);
             }
 
-            if (ctx->reg.IC_STATUS_0614.bit.UVLO != 0)
+            if (ctx->reg.common.icStatus0614.bit.uvlo != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_UVLO);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_UVLO);
             }
 
-            if (ctx->reg.IC_STATUS_0614.bit.IDAC != 0)
+            if (ctx->reg.common.icStatus0614.bit.idac != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_IDAC);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_IDAC);
             }
 
-            if (ctx->reg.IC_STATUS_0614.bit.MAXPOWER != 0)
+            if (ctx->reg.common.icStatus0614.bit.maxPower != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_MAX_POWER);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_MAX_POWER);
             }
 
-
-            if (ctx->reg.IC_STATUS_0614.bit.OVT != 0)
+            if (ctx->reg.common.icStatus0614.bit.ovt != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_OVT);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_OVT);
             }
 
-            if (ctx->reg.IC_STATUS_0614.bit.OVV != 0)
+            if (ctx->reg.common.icStatus0614.bit.ovv != 0)
             {
-                length = pushErrorInQueue(errors, length, maxLength, BOSERROR_OVV);
+                length = pushErrorInQueue(errors, length, maxLength, BOS_ERROR_OVV);
             }
         }
     }
@@ -1539,7 +1720,7 @@ size_t bos0614NbrOfRegister()
     return (BOS0614_MAXIMUM_REG_ADDR + 1);
 }
 
-bool bos0614ReferencingFromVolt(HapticDriver *ctx, int16_t *data, size_t length)
+bool bos0614ReferencingFromVolt(HapticDriver* ctx, int16_t* dataIn, size_t length, int16_t* dataOut)
 {
     int index;
     bool res = false;
@@ -1548,19 +1729,50 @@ bool bos0614ReferencingFromVolt(HapticDriver *ctx, int16_t *data, size_t length)
     {
         for (index = 0; index < length; index++)
         {
-
-            float num = (float) data[index] * AMPLITUDE_MAX_VALUE;
+            float num = (float) dataIn[index] * AMPLITUDE_MAX_VALUE;
             float den = FB_R_V_REF;
             float res = num / den;
 
-            data[index] = (int16_t) (res);
+            dataOut[index] = (int16_t) (res);
         }
     }
 
     return res;
 }
 
-GPIOState bos0614GetGpioState(HapticDriver *driver, uint8_t channel)
+
+bool bos0614ReferencingFromRelativeInt16(HapticDriver* driver, int16_t* dataIn, size_t length,
+                                         int16_t vMinVolt, int16_t vMaxVolt, int16_t* dataOut)
+{
+    bool res = false;
+
+    if (driver != NULL)
+    {
+        size_t index;
+
+        bos0614ReferencingFromVolt(driver, &vMinVolt, 1, &vMinVolt);
+        bos0614ReferencingFromVolt(driver, &vMaxVolt, 1, &vMaxVolt);
+
+        for (index = 0; index < length; index++)
+        {
+            //Should we divide by UINT16_MAX and use the roundf function
+            int16_t value = ((dataIn[index] - INT16_MIN) * FIFO_MAX_AMPLITUDE) >> 16;
+            if (value < vMinVolt)
+            {
+                value = vMinVolt;
+            }
+            else if (value > vMaxVolt)
+            {
+                value = vMaxVolt;
+            }
+            dataOut[index] = value;
+        }
+        res = true;
+    }
+    return res;
+}
+
+GPIOState bos0614GetGpioState(HapticDriver* driver, uint8_t channel)
 {
     return GPIOState_Invalid;
 }
@@ -1579,7 +1791,7 @@ Registers *bos0614GetShadowRegisters(HapticDriver *driver)
 
 }
 
-bool bos0614SensingConfig(HapticDriver *driver, uint8_t channel, SensingConfig config)
+bool bos0614EnableSensing(HapticDriver* driver, uint8_t channel)
 {
     bool res = false;
 
@@ -1588,33 +1800,105 @@ bool bos0614SensingConfig(HapticDriver *driver, uint8_t channel, SensingConfig c
         Context *ctx = container_of(driver, Context, hDriver);
         ChannelCtx *channelCtx = &ctx->channel[channel];
 
-        SENSE_BITS_0614 *senseBitField;
-        SENSE_THRESHOLD *senseThreshold;
-        SENSES_BITS_0614 *senseSlope;
+        SenseBits0614 *senseBitField;
+        SenseThreshold *senseThreshold;
+        SenseSBits0614 *senseSlope;
 
-        if (getSensingRegistersPerChannel(ctx, channel, config.direction, &senseBitField, &senseThreshold,
-                                          &senseSlope) &&
+        if (getSensingRegistersPerChannel(ctx, channel, SENSING_DIRECTION_PRESS,
+            &senseBitField, &senseThreshold, &senseSlope) &&
             channelCtx != NULL)
         {
+            res = disableSlopeSensing(ctx, senseBitField);
+            res = res && disableThresholdSensing(ctx, senseBitField);
+        }
+
+        res = res && bos0614WriteRegister(driver, (Register*) &ctx->reg.common.senseConfig0614.reg);
+
+        res = res && activateSensingForChannel(ctx, channel, BOS0614_ENABLE);
+    }
+
+    return res;
+}
+
+#define STABILIZATION_TIME_MICRO_SECOND_PER_BIT_REV_C (3200)
+#define MAXIMUM_STABILIZATION_TIME_REV_C_MS (103)
+
+bool getStabilizationTimeRevC(uint8_t stabilizationMs, uint16_t* value)
+{
+    bool res = false;
+
+    if (value != NULL && stabilizationMs < MAXIMUM_STABILIZATION_TIME_REV_C_MS)
+    {
+        uint16_t _value = MILLISECOND_MICROSECOND(stabilizationMs);
+        *value = _value / STABILIZATION_TIME_MICRO_SECOND_PER_BIT_REV_C;
+        res = true;
+    }
+
+    return res;
+}
+
+bool bos0614ButtonSensing(HapticDriver* driver, uint8_t channel, SensingConfig config)
+{
+    bool res = false;
+
+    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL)
+    {
+        Context* ctx = container_of(driver, Context, hDriver);
+        ChannelCtx* channelCtx = &ctx->channel[channel];
+
+        SenseBits0614 *senseBitField;
+        SenseThreshold *senseThreshold;
+        SenseSBits0614 *senseSlope;
+
+        if (getSensingRegistersPerChannel(ctx, channel, config.direction,
+            &senseBitField, &senseThreshold, &senseSlope) &&
+            channelCtx != NULL)
+        {
+            res = true;
+
             switch (config.mode)
             {
-                case SensingDetectionMode_Threshold:
-                    res = setThresholdSensing(ctx, config, senseBitField, senseThreshold);
+                case SENSING_DETECTION_MODE_THRESHOLD:
+                    res = res && setThresholdSensing(ctx, config, senseBitField, senseThreshold);
                     break;
-                case SensingDetectionMode_Slope:
-                    res = setSlopeSensing(ctx, config, senseBitField, senseSlope);
+                case SENSING_DETECTION_MODE_SLOPE:
+                    res = res && setSlopeSensing(ctx, config, senseBitField, senseSlope);
+                    break;
             }
 
             //Setup Stabilization
-            ctx->reg.TC_0614.bit.POL = 0;
-            ctx->reg.TC_0614.bit.PC = 0x1;
-            ctx->reg.TC_0614.bit.TC = MAX_TC_VALUE;
+            if (ctx->rev == REV_B)
+            {
+                ctx->reg.revB.tc0614.bit.pol = 0;
+                ctx->reg.revB.tc0614.bit.pc = 0x1;
+                ctx->reg.revB.tc0614.bit.tc = MAX_TC_VALUE;
+                ctx->reg.revB.senseConfig0614.bit.scomp = 1;
+            }
+            else if (ctx->rev == REV_C)
+            {
+                uint16_t stabilizationMs;
+                res = res && getStabilizationTimeRevC(config.stabilisationMs, &stabilizationMs);
 
-            ctx->reg.SENSECONFIG_0614.bit.SCOMP = 1;
+                switch (config.direction)
+                {
+                    case SENSING_DIRECTION_PRESS:
+                        ctx->reg.revC.tc0614.bit.tcp = stabilizationMs;
+                        break;
+                    case SENSING_DIRECTION_RELEASE:
+                        ctx->reg.revC.tc0614.bit.tcr = stabilizationMs;
+                        break;
+                    default:
+                        res = false;
+                        break;
+                }
 
-            res = res && bos0614WriteRegister(driver, (Register *) &ctx->reg.TC_0614.reg);
-            res = res && bos0614WriteRegister(driver, (Register *) &ctx->reg.SENSECONFIG_0614.reg);
+                ctx->reg.revC.tc0614.bit.pol = 0;
+                ctx->reg.revC.tc0614.bit.pc = 0x1;
+                ctx->reg.revC.senseConfig0614.bit.scomp = 1;
+            }
 
+            res = res && bos0614WriteRegister(driver, (Register*) &ctx->reg.common.tc0614.reg);
+            res = res && bos0614WriteRegister(driver, (Register*) &ctx->reg.common.senseConfig0614.reg);
 
             res = res && activateSensingForChannel(ctx, channel, BOS0614_ENABLE);
         }
@@ -1632,61 +1916,53 @@ bos0614SensingAutoPlayWave(HapticDriver *driver, uint8_t channel, WaveformId id,
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        SENSE_BITS_0614 *senseBitField;
-        SENSE_THRESHOLD *senseThreshold;
-        SENSES_BITS_0614 *senseSlope;
+        SenseBits0614 *senseBitField;
+        SenseThreshold *senseThreshold;
+        SenseSBits0614 *senseSlope;
 
         if (getSensingRegistersPerChannel(ctx, channel, direction, &senseBitField, &senseThreshold, &senseSlope))
         {
-            if (direction == SensingDirection_Press)
+            if (direction == SENSING_DIRECTION_PRESS)
             {
-                senseBitField->WVP = id;
-                senseBitField->AUTOP = BOS0614_ENABLE;
+                senseBitField->wvp = id;
+                senseBitField->autop = BOS0614_ENABLE;
                 res = true;
             }
-            else if (direction == SensingDirection_Release)
+            else if (direction == SENSING_DIRECTION_RELEASE)
             {
-                senseBitField->WVR = id;
-                senseBitField->AUTOR = BOS0614_ENABLE;
+                senseBitField->wvr = id;
+                senseBitField->autor = BOS0614_ENABLE;
                 res = true;
             }
 
-            res = res && bos0614WriteRegister(driver, (Register *) senseBitField);
+            res = res && bos0614WriteRegister(driver, (Register*) senseBitField);
         }
     }
 
     return res;
 }
 
-bool bos0614SensingStop(HapticDriver *driver, uint8_t channel, SensingDirection direction)
+bool bos0614SensingStop(HapticDriver* driver, uint8_t channel)
 {
     bool res = false;
 
-    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL && direction <= SensingDirection_Both)
+    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL)
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
-        SENSE_BITS_0614 *senseBitField;
-        SENSE_THRESHOLD *senseThreshold;
-        SENSES_BITS_0614 *senseSlope;
+        SenseBits0614 *senseBitField;
 
-        if (getSensingRegistersPerChannel(ctx, channel, direction, &senseBitField, &senseThreshold, &senseSlope))
+        if (getSensingAutplayReg(ctx, channel, &senseBitField))
         {
-            if (direction == SensingDirection_Press || direction == SensingDirection_Both)
-            {
-                senseBitField->AUTOP = BOS0614_DISABLE;
-                senseBitField->T1 = BOS0614_DISABLE;
-                senseBitField->S1 = BOS0614_DISABLE;
-            }
+            senseBitField->autop = BOS0614_DISABLE;
+            senseBitField->t1 = BOS0614_DISABLE;
+            senseBitField->s1 = BOS0614_DISABLE;
 
-            if (direction == SensingDirection_Release || direction == SensingDirection_Both)
-            {
-                senseBitField->AUTOR = BOS0614_DISABLE;
-                senseBitField->T2 = BOS0614_DISABLE;
-                senseBitField->S2 = BOS0614_DISABLE;
-            }
+            senseBitField->autor = BOS0614_DISABLE;
+            senseBitField->t2 = BOS0614_DISABLE;
+            senseBitField->s2 = BOS0614_DISABLE;
 
-            res = bos0614WriteRegister(driver, (Register *) senseBitField);
+            res = bos0614WriteRegister(driver, (Register*) senseBitField);
             res = res && activateSensingForChannel(ctx, channel, BOS0614_DISABLE);
         }
     }
@@ -1698,22 +1974,23 @@ bool bos0614FeatureSupport(HapticDriver *driver, BosFeature feature)
 {
     bool res = false;
 
-    if (driver != NULL && feature < BosFeature_Length)
+    if (driver != NULL && feature < BOS_FEATURE_LENGTH)
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
         switch (feature)
         {
-            case BosFeature_GPOSignaling:
+            case BOS_FEATURE_GPO_SIGNALING:
                 if (ctx->gpoSignalingAvailable)
                 {
                     res = true;
                 }
                 break;
-            case BosFeature_Fifo:
-            case BosFeature_Synthesizer:
-            case BosFeature_Ramplayback:
-            case BosFeature_SensingWithAutomaticFeedback:
+            case BOS_FEATURE_FIFO:
+            case BOS_FEATURE_SYNTHESIZER:
+            case BOS_FEATURE_RAM_PLAYBACK:
+            case BOS_FEATURE_SENSING_WITH_AUTOMATIC_FEEDBACK:
+            case BOS_FEATURE_SUPPORT_BOTH_SENSING_POLARITY:
                 res = true;
                 break;
             default:
@@ -1723,10 +2000,171 @@ bool bos0614FeatureSupport(HapticDriver *driver, BosFeature feature)
     return res;
 }
 
+bool bos0614SenseOutput(HapticDriver* driver, uint8_t channel, int32_t* data)
+{
+    bool res = false;
+
+    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL && data != NULL)
+    {
+        Context* ctx = container_of(driver, Context, hDriver);
+
+        uint16_t tempData;
+
+        res = ctx->hDriver.getRegister(&ctx->hDriver, ADDRESS_BOS0614_SENSEDATA0_REG + channel, &tempData);
+
+        if (res && (int16_t) tempData < BOS0614_SENSEDATA_VALID_RANGE &&
+            (int16_t) tempData >= -BOS0614_SENSEDATA_VALID_RANGE)
+        {
+            *data = (int32_t) ((int16_t) tempData * BOS0614_SENSEDATA_CONVERSION_uV);
+        }
+    }
+
+    return res;
+}
+
 /**
  * Private Section
  */
 
+Bos0614Registers bos0614RegsRevB = {
+    .revB.reference0614.reg.generic.addr = ADDRESS_BOS0614_REFERENCE_REG, .revB.icStatus0614.reg.generic.addr = ADDRESS_BOS0614_IC_STATUS_REG, .revB.read0614.reg.generic.addr = ADDRESS_BOS0614_READ_REG, .revB.gpiox0614.reg.generic.addr = ADDRESS_BOS0614_GPIOX_REG, .revB.tc0614.reg.generic.addr = ADDRESS_BOS0614_TC_REG, .revB.config0614.reg.generic.addr = ADDRESS_BOS0614_CONFIG_REG, .revB.senseConfig0614.reg.generic.addr = ADDRESS_BOS0614_SENSECONFIG_REG, .revB.sense00614.reg.generic.addr = ADDRESS_BOS0614_SENSE0_REG, .revB.sense0P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0P_REG, .revB.sense0R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0R_REG, .revB.sense0S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0S_REG, .revB.sense10614.reg.generic.addr = ADDRESS_BOS0614_SENSE1_REG, .revB.sense1P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1P_REG, .revB.sense1R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1R_REG, .revB.sense1S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1S_REG, .revB.sense20614.reg.generic.addr = ADDRESS_BOS0614_SENSE2_REG, .revB.sense2P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2P_REG, .revB.sense2R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2R_REG, .revB.sense2S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2S_REG, .revB.sense30614.reg.generic.addr = ADDRESS_BOS0614_SENSE3_REG, .revB.sense3P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3P_REG, .revB.sense3R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3R_REG, .revB.sense3S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3S_REG, .revB.senseStatus0614.reg.generic.addr = ADDRESS_BOS0614_SENSESTATUS_REG, .revB.senseData00614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA0_REG, .revB.senseData10614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA1_REG, .revB.senseData20614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA2_REG, .revB.senseData30614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA3_REG, .revB.senseRaw00614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW0_REG, .revB.senseRaw10614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW1_REG, .revB.senseRaw20614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW2_REG, .revB.senseRaw30614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW3_REG, .revB.kpa0614.reg.generic.addr = ADDRESS_BOS0614_KPA_REG, .revB.kpKi0614.reg.generic.addr = ADDRESS_BOS0614_KP_KI_REG, .revB.deadTime0614.reg.generic.addr = ADDRESS_BOS0614_DEADTIME_REG, .revB.parcap0614.reg.generic.addr = ADDRESS_BOS0614_PARCAP_REG, .revB.supRise0614.reg.generic.addr = ADDRESS_BOS0614_SUP_RISE_REG, .revB.trim0614.reg.generic.addr = ADDRESS_BOS0614_TRIM_REG, .revB.chipId0614.reg.generic.addr = ADDRESS_BOS0614_CHIP_ID_REG, .revB.vFeedback0614.reg.generic.addr = ADDRESS_BOS0614_VFEEDBACK_REG, .revB.fifoState0614.reg.generic.addr = ADDRESS_BOS0614_FIFO_STATE_REG, .revB.autoState0614.reg.generic.addr = ADDRESS_BOS0614_AUTO_STATE_REG, .revB.bist0614.reg.generic.addr = ADDRESS_BOS0614_BIST_REG, .revB.bistRes0614.reg.generic.addr = ADDRESS_BOS0614_BISTRES_REG, .revB.debug0614.reg.generic.addr = ADDRESS_BOS0614_DEBUG_REG, .revB.thresh0614.reg.generic.addr = ADDRESS_BOS0614_THRESH_REG, .revB.reg380614.reg.generic.addr = ADDRESS_BOS0614_REG38_REG, .revB.senseOffset0614.reg.generic.addr = ADDRESS_BOS0614B_SENSE_OFFSET_REG, .revB.calibData0614.reg.generic.addr = ADDRESS_BOS0614_CALIB_DATA_REG, .revB.reg3B0614.reg.generic.addr = ADDRESS_BOS0614_REG3B_REG, .revB.reg3C0614.reg.generic.addr = ADDRESS_BOS0614_REG3C_REG, .revB.reg3D0614.reg.generic.addr = ADDRESS_BOS0614_REG3D_REG, .revB.reg3E0614.reg.generic.addr = ADDRESS_BOS0614_REG3E_REG, .revB.reg3F0614.reg.generic.addr = ADDRESS_BOS0614_REG3F_REG, .revB.reg400614.reg.generic.addr = ADDRESS_BOS0614_REG40_REG, .revB.reg410614.reg.generic.addr = ADDRESS_BOS0614_REG41_REG, .revB.reg420614.reg.generic.addr = ADDRESS_BOS0614_REG42_REG, .revB.reg430614.reg.generic.addr = ADDRESS_BOS0614_REG43_REG, .revB.ramData0614.reg.generic.addr = ADDRESS_BOS0614B_RAM_DATA_REG, .revB.reg450614.reg.generic.addr = ADDRESS_BOS0614_REG45_REG, .revB.reg460614.reg.generic.addr = ADDRESS_BOS0614_REG46_REG, .revB.reg470614.reg.generic.addr = ADDRESS_BOS0614_REG47_REG,
+};
+
+Bos0614Registers bos0614RegsRevC = {
+    .revC.reference0614.reg.generic.addr = ADDRESS_BOS0614_REFERENCE_REG, .revC.icStatus0614.reg.generic.addr = ADDRESS_BOS0614_IC_STATUS_REG, .revC.read0614.reg.generic.addr = ADDRESS_BOS0614_READ_REG, .revC.gpiox0614.reg.generic.addr = ADDRESS_BOS0614_GPIOX_REG, .revC.tc0614.reg.generic.addr = ADDRESS_BOS0614_TC_REG, .revC.config0614.reg.generic.addr = ADDRESS_BOS0614_CONFIG_REG, .revC.senseConfig0614.reg.generic.addr = ADDRESS_BOS0614_SENSECONFIG_REG, .revC.sense00614.reg.generic.addr = ADDRESS_BOS0614_SENSE0_REG, .revC.sense0P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0P_REG, .revC.sense0R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0R_REG, .revC.sense0S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE0S_REG, .revC.sense10614.reg.generic.addr = ADDRESS_BOS0614_SENSE1_REG, .revC.sense1P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1P_REG, .revC.sense1R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1R_REG, .revC.sense1S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE1S_REG, .revC.sense20614.reg.generic.addr = ADDRESS_BOS0614_SENSE2_REG, .revC.sense2P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2P_REG, .revC.sense2R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2R_REG, .revC.sense2S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE2S_REG, .revC.sense30614.reg.generic.addr = ADDRESS_BOS0614_SENSE3_REG, .revC.sense3P0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3P_REG, .revC.sense3R0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3R_REG, .revC.sense3S0614.reg.generic.addr = ADDRESS_BOS0614_SENSE3S_REG, .revC.senseStatus0614.reg.generic.addr = ADDRESS_BOS0614_SENSESTATUS_REG, .revC.senseData00614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA0_REG, .revC.senseData10614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA1_REG, .revC.senseData20614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA2_REG, .revC.senseData30614.reg.generic.addr = ADDRESS_BOS0614_SENSEDATA3_REG, .revC.senseRaw00614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW0_REG, .revC.senseRaw10614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW1_REG, .revC.senseRaw20614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW2_REG, .revC.senseRaw30614.reg.generic.addr = ADDRESS_BOS0614_SENSERAW3_REG, .revC.kpa0614.reg.generic.addr = ADDRESS_BOS0614_KPA_REG, .revC.kpKi0614.reg.generic.addr = ADDRESS_BOS0614_KP_KI_REG, .revC.deadTime0614.reg.generic.addr = ADDRESS_BOS0614_DEADTIME_REG, .revC.parcap0614.reg.generic.addr = ADDRESS_BOS0614_PARCAP_REG, .revC.supRise0614.reg.generic.addr = ADDRESS_BOS0614_SUP_RISE_REG, .revC.trim0614.reg.generic.addr = ADDRESS_BOS0614_TRIM_REG, .revC.chipId0614.reg.generic.addr = ADDRESS_BOS0614_CHIP_ID_REG, .revC.vFeedback0614.reg.generic.addr = ADDRESS_BOS0614_VFEEDBACK_REG, .revC.fifoState0614.reg.generic.addr = ADDRESS_BOS0614_FIFO_STATE_REG, .revC.autoState0614.reg.generic.addr = ADDRESS_BOS0614_AUTO_STATE_REG, .revC.bist0614.reg.generic.addr = ADDRESS_BOS0614_BIST_REG, .revC.bistRes0614.reg.generic.addr = ADDRESS_BOS0614_BISTRES_REG, .revC.debug0614.reg.generic.addr = ADDRESS_BOS0614_DEBUG_REG, .revC.thresh0614.reg.generic.addr = ADDRESS_BOS0614_THRESH_REG, .revC.reg380614.reg.generic.addr = ADDRESS_BOS0614_REG38_REG, .revC.senseOffset0614.reg.generic.addr = ADDRESS_BOS0614C_SENSE_OFFSET_REG, .revC.calibData0614.reg.generic.addr = ADDRESS_BOS0614_CALIB_DATA_REG, .revC.reg3B0614.reg.generic.addr = ADDRESS_BOS0614_REG3B_REG, .revC.reg3C0614.reg.generic.addr = ADDRESS_BOS0614_REG3C_REG, .revC.reg3D0614.reg.generic.addr = ADDRESS_BOS0614_REG3D_REG, .revC.reg3E0614.reg.generic.addr = ADDRESS_BOS0614_REG3E_REG, .revC.reg3F0614.reg.generic.addr = ADDRESS_BOS0614_REG3F_REG, .revC.reg400614.reg.generic.addr = ADDRESS_BOS0614_REG40_REG, .revC.reg410614.reg.generic.addr = ADDRESS_BOS0614_REG41_REG, .revC.reg420614.reg.generic.addr = ADDRESS_BOS0614_REG42_REG, .revC.reg430614.reg.generic.addr = ADDRESS_BOS0614_REG43_REG, .revC.ramData0614.reg.generic.addr = ADDRESS_BOS0614C_RAM_DATA_REG, .revC.reg450614.reg.generic.addr = ADDRESS_BOS0614_REG45_REG, .revC.reg460614.reg.generic.addr = ADDRESS_BOS0614_REG46_REG, .revC.reg470614.reg.generic.addr = ADDRESS_BOS0614_REG47_REG,
+};
+
+static uint8_t regAddrToReadRevB[] = {
+    ADDRESS_BOS0614_REFERENCE_REG,
+    ADDRESS_BOS0614_IC_STATUS_REG,
+    ADDRESS_BOS0614_READ_REG,
+    ADDRESS_BOS0614_GPIOX_REG,
+    ADDRESS_BOS0614_TC_REG,
+    ADDRESS_BOS0614_CONFIG_REG,
+    ADDRESS_BOS0614_SENSECONFIG_REG,
+    ADDRESS_BOS0614_SENSE0_REG,
+    ADDRESS_BOS0614_SENSE0P_REG,
+    ADDRESS_BOS0614_SENSE0R_REG,
+    ADDRESS_BOS0614_SENSE0S_REG,
+    ADDRESS_BOS0614_SENSE1_REG,
+    ADDRESS_BOS0614_SENSE1P_REG,
+    ADDRESS_BOS0614_SENSE1R_REG,
+    ADDRESS_BOS0614_SENSE1S_REG,
+    ADDRESS_BOS0614_SENSE2_REG,
+    ADDRESS_BOS0614_SENSE2P_REG,
+    ADDRESS_BOS0614_SENSE2R_REG,
+    ADDRESS_BOS0614_SENSE2S_REG,
+    ADDRESS_BOS0614_SENSE3_REG,
+    ADDRESS_BOS0614_SENSE3P_REG,
+    ADDRESS_BOS0614_SENSE3R_REG,
+    ADDRESS_BOS0614_SENSE3S_REG,
+    ADDRESS_BOS0614_SENSESTATUS_REG,
+    ADDRESS_BOS0614_SENSEDATA0_REG,
+    ADDRESS_BOS0614_SENSEDATA1_REG,
+    ADDRESS_BOS0614_SENSEDATA2_REG,
+    ADDRESS_BOS0614_SENSEDATA3_REG,
+    ADDRESS_BOS0614_SENSERAW0_REG,
+    ADDRESS_BOS0614_SENSERAW1_REG,
+    ADDRESS_BOS0614_SENSERAW2_REG,
+    ADDRESS_BOS0614_SENSERAW3_REG,
+    ADDRESS_BOS0614_KPA_REG,
+    ADDRESS_BOS0614_KP_KI_REG,
+    ADDRESS_BOS0614_DEADTIME_REG,
+    ADDRESS_BOS0614_PARCAP_REG,
+    ADDRESS_BOS0614_SUP_RISE_REG,
+    ADDRESS_BOS0614_TRIM_REG,
+    ADDRESS_BOS0614_CHIP_ID_REG,
+    ADDRESS_BOS0614_VFEEDBACK_REG,
+    ADDRESS_BOS0614_FIFO_STATE_REG,
+    ADDRESS_BOS0614_AUTO_STATE_REG,
+    ADDRESS_BOS0614_BIST_REG,
+    ADDRESS_BOS0614_BISTRES_REG,
+    ADDRESS_BOS0614_DEBUG_REG,
+    ADDRESS_BOS0614_THRESH_REG,
+    ADDRESS_BOS0614_REG38_REG,
+    ADDRESS_BOS0614B_SENSE_OFFSET_REG,
+    ADDRESS_BOS0614_CALIB_DATA_REG,
+    ADDRESS_BOS0614_REG3B_REG,
+    ADDRESS_BOS0614_REG3C_REG,
+    ADDRESS_BOS0614_REG3D_REG,
+    ADDRESS_BOS0614_REG3E_REG,
+    ADDRESS_BOS0614_REG3F_REG,
+    ADDRESS_BOS0614_REG40_REG,
+    ADDRESS_BOS0614_REG41_REG,
+    ADDRESS_BOS0614_REG42_REG,
+    ADDRESS_BOS0614_REG43_REG,
+    ADDRESS_BOS0614B_RAM_DATA_REG,
+    ADDRESS_BOS0614_REG45_REG,
+    ADDRESS_BOS0614_REG46_REG,
+    ADDRESS_BOS0614_REG47_REG
+};
+
+static uint8_t regAddrToReadRevC[] = {
+    ADDRESS_BOS0614_REFERENCE_REG,
+    ADDRESS_BOS0614_IC_STATUS_REG,
+    ADDRESS_BOS0614_READ_REG,
+    ADDRESS_BOS0614_GPIOX_REG,
+    ADDRESS_BOS0614_TC_REG,
+    ADDRESS_BOS0614_CONFIG_REG,
+    ADDRESS_BOS0614_SENSECONFIG_REG,
+    ADDRESS_BOS0614_SENSE0_REG,
+    ADDRESS_BOS0614_SENSE0P_REG,
+    ADDRESS_BOS0614_SENSE0R_REG,
+    ADDRESS_BOS0614_SENSE0S_REG,
+    ADDRESS_BOS0614_SENSE1_REG,
+    ADDRESS_BOS0614_SENSE1P_REG,
+    ADDRESS_BOS0614_SENSE1R_REG,
+    ADDRESS_BOS0614_SENSE1S_REG,
+    ADDRESS_BOS0614_SENSE2_REG,
+    ADDRESS_BOS0614_SENSE2P_REG,
+    ADDRESS_BOS0614_SENSE2R_REG,
+    ADDRESS_BOS0614_SENSE2S_REG,
+    ADDRESS_BOS0614_SENSE3_REG,
+    ADDRESS_BOS0614_SENSE3P_REG,
+    ADDRESS_BOS0614_SENSE3R_REG,
+    ADDRESS_BOS0614_SENSE3S_REG,
+    ADDRESS_BOS0614_SENSESTATUS_REG,
+    ADDRESS_BOS0614_SENSEDATA0_REG,
+    ADDRESS_BOS0614_SENSEDATA1_REG,
+    ADDRESS_BOS0614_SENSEDATA2_REG,
+    ADDRESS_BOS0614_SENSEDATA3_REG,
+    ADDRESS_BOS0614_SENSERAW0_REG,
+    ADDRESS_BOS0614_SENSERAW1_REG,
+    ADDRESS_BOS0614_SENSERAW2_REG,
+    ADDRESS_BOS0614_SENSERAW3_REG,
+    ADDRESS_BOS0614_KPA_REG,
+    ADDRESS_BOS0614_KP_KI_REG,
+    ADDRESS_BOS0614_DEADTIME_REG,
+    ADDRESS_BOS0614_PARCAP_REG,
+    ADDRESS_BOS0614_SUP_RISE_REG,
+    ADDRESS_BOS0614_TRIM_REG,
+    ADDRESS_BOS0614_CHIP_ID_REG,
+    ADDRESS_BOS0614_VFEEDBACK_REG,
+    ADDRESS_BOS0614_FIFO_STATE_REG,
+    ADDRESS_BOS0614_AUTO_STATE_REG,
+    ADDRESS_BOS0614_BIST_REG,
+    ADDRESS_BOS0614_BISTRES_REG,
+    ADDRESS_BOS0614_DEBUG_REG,
+    ADDRESS_BOS0614_THRESH_REG,
+    ADDRESS_BOS0614_REG38_REG,
+    ADDRESS_BOS0614C_SENSE_OFFSET_REG,
+    ADDRESS_BOS0614_CALIB_DATA_REG,
+    ADDRESS_BOS0614_REG3B_REG,
+    ADDRESS_BOS0614_REG3C_REG,
+    ADDRESS_BOS0614_REG3D_REG,
+    ADDRESS_BOS0614_REG3E_REG,
+    ADDRESS_BOS0614_REG3F_REG,
+    ADDRESS_BOS0614_REG40_REG,
+    ADDRESS_BOS0614_REG41_REG,
+    ADDRESS_BOS0614_REG42_REG,
+    ADDRESS_BOS0614_REG43_REG,
+    ADDRESS_BOS0614C_RAM_DATA_REG,
+    ADDRESS_BOS0614_REG45_REG,
+    ADDRESS_BOS0614_REG46_REG,
+    ADDRESS_BOS0614_REG47_REG
+};
+
+#if 0
 static BOS0614_REGS bOS0614Regs =
         {
                 .REFERENCE_0614.reg.generic.addr = ADDRESS_BOS0614_REFERENCE_REG,
@@ -1862,16 +2300,25 @@ Bos0614RegisterStruct *getAllRegsPtr(void)
 {
 	return regToRead;
 }
+#endif
 
 static bool readAllRegister(Context *ctx)
 {
     uint32_t index;
     bool res = true;
 
-    for (index = 0; index < DATA_ARRAY_LENGTH(regToRead) && res; index++)
+    for (index = 0; index < DATA_ARRAY_LENGTH(regAddrToReadRevB) && res; index++)
     {
         uint16_t dummy;
-        res = bos0614GetRegister(&ctx->hDriver, regToRead[index].addr, &dummy);
+
+        if (ctx->rev == REV_B)
+        {
+            res = bos0614GetRegister(&ctx->hDriver, regAddrToReadRevB[index], &dummy);
+        }
+        else if (ctx->rev == REV_C)
+        {
+            res = bos0614GetRegister(&ctx->hDriver, regAddrToReadRevC[index], &dummy);
+        }
     }
 
     return res;
@@ -1879,10 +2326,18 @@ static bool readAllRegister(Context *ctx)
 
 static bool setDefaultConfig(Context *ctx)
 {
-    bool res = true;
+    bool res = false;
 
-    pr_debug("enter\n");
-
+    //Reset configuration of the register;
+    if (ctx->rev == REV_B)
+    {
+        memcpy(&ctx->reg, &bos0614RegsRevB, sizeof(bos0614RegsRevB));
+    }
+    else if (ctx->rev == REV_C)
+    {
+        memcpy(&ctx->reg, &bos0614RegsRevC, sizeof(bos0614RegsRevC));
+    }
+#if 0
     //No need to copy registers again here!!!
     memcpy(&ctx->reg, &bOS0614Regs, sizeof(bOS0614Regs));
     //Why do we need to do a dummy read???
@@ -1894,25 +2349,33 @@ static bool setDefaultConfig(Context *ctx)
     //
     //Read SENSECONFIG to determine whether power cut occurred
     //and necessary to apply default config provided in device tree
-    res = readRegister(ctx, &ctx->reg.SENSECONFIG_0614.reg);
-    res = res && ctx->reg.SENSECONFIG_0614.reg.generic.value == regToRead[ADDRESS_BOS0614_SENSECONFIG_REG].value;
+    res = readRegister(ctx, &ctx->reg.common.senseConfig0614.reg);
+    res = res && ctx->reg.common.senseConfig0614.reg.generic.value == regToRead[ADDRESS_BOS0614_SENSECONFIG_REG].value;
 
-    ctx->reg.SENSECONFIG_0614.bit.CH0 = BOS0614_DISABLE;
-    ctx->reg.SENSECONFIG_0614.bit.CH1 = BOS0614_DISABLE;
-    ctx->reg.SENSECONFIG_0614.bit.CH2 = BOS0614_DISABLE;
-    ctx->reg.SENSECONFIG_0614.bit.CH3 = BOS0614_DISABLE;
-    ctx->reg.SENSECONFIG_0614.bit.SAME = BOS0614_DISABLE;
+    res = readAllRegister(ctx);
+#endif
+
+    ctx->reg.common.senseConfig0614.bit.ch0 = BOS0614_DISABLE;
+    ctx->reg.common.senseConfig0614.bit.ch1 = BOS0614_DISABLE;
+    ctx->reg.common.senseConfig0614.bit.ch2 = BOS0614_DISABLE;
+    ctx->reg.common.senseConfig0614.bit.ch3 = BOS0614_DISABLE;
+    ctx->reg.common.senseConfig0614.bit.same = BOS0614_DISABLE;
+
+#if 0
+    res = ctx->hDriver.setRegister(&ctx->hDriver,
+                ctx->reg.common.senseConfig0614.generic.addr,
+                ctx->reg.common.senseConfig0614.generic.value);
 
     res = ctx->hDriver.setRegister(&ctx->hDriver,
-		ctx->reg.SENSECONFIG_0614.reg.generic.addr,
-		ctx->reg.SENSECONFIG_0614.reg.generic.value);
+		ctx->reg.common.senseConfig0614.reg.generic.addr,
+		ctx->reg.common.senseConfig0614.reg.generic.value);
 
     //This happens when SENSECONFIG register value from IC
     //won't match config from device tree
     if (res == false)
     {
         uint32_t index;
-	res = true;
+        res = true;
         for (index = 0; index < DATA_ARRAY_LENGTH(regToRead); index++)
         {
             if (regToRead[index].value != 0)
@@ -1921,42 +2384,104 @@ static bool setDefaultConfig(Context *ctx)
                             regToRead[index].value);
         }
     }
+#endif
+    return res;
+}
+
+static bool checkBos0614Revision(Context* ctx)
+{
+    bool res = false;
+
+    if (&(ctx->hDriver) != NULL)
+    {
+        res = bos0614GetRegister(&ctx->hDriver, ADDRESS_BOS0614_CHIP_ID_REG, &ctx->chipId);
+        if ((ctx->chipId & BOS0614_REV_C_CHIP_ID_MASK) == BOS0614_REV_C_CHIP_ID_BASE && res)
+        {
+            ctx->rev = REV_C;
+            ctx->chipId = BOS0614_REV_C_CHIP_ID_DEFAULT;
+        }
+        else if (ctx->chipId == BOS0614_REV_B_RETURNED_CHIP_ID && res)
+        {
+            ctx->rev = REV_B;
+            ctx->chipId = BOS0614_REV_B_CHIP_ID;
+        }
+        else
+        {
+            ctx->chipId = INVALID_CHIP_ID;
+            res = false;
+        }
+    }
 
     return res;
 }
 
 static void initiateDriver(Context *ctx)
 {
-    memcpy(&ctx->reg, &bOS0614Regs, sizeof(bOS0614Regs));
+    bool res = false;
 
-    ctx->hDriver.softwareReset = bos0614SoftwareReset;
-    ctx->hDriver.deepSleep = bos0614DeepSleep;
-    ctx->hDriver.setRegister = bos0614SetRegister;
-    ctx->hDriver.getRegister = bos0614GetRegister;
-    ctx->hDriver.getChipId = bos0614DriverGetChipId;
-    ctx->hDriver.synthSetSlice = bos0614SetSlice;
-    ctx->hDriver.synthSetWaveform = bos0614SetWaveforms;
-    ctx->hDriver.wfsPlay = bos0614SynthesizerPlay;
-    ctx->hDriver.ctrlOutput = bos0614CtrlOutput;
-    ctx->hDriver.configGPO = bos0614ConfigGPO;
-    ctx->hDriver.registerOnEvents = bos0614RegisterOnEvents;
-    ctx->hDriver.unregisterEvents = bos0614UnregisterEvents;
-    ctx->hDriver.setRamPlayback = bos0614SetRamPlaybackMode;
-    ctx->hDriver.playRamPlayback = bos0614PlayRamPlayback;
-    ctx->hDriver.setFifoMode = bos0614SetFifoMode;
-    ctx->hDriver.writeFifoSamples = bos0614WriteFifo;
-    ctx->hDriver.synch = bos0614Synch;
-    ctx->hDriver.getError = bos0614GetError;
-    ctx->hDriver.referencingFromVolt = bos0614ReferencingFromVolt;
-    ctx->hDriver.writeRegister = bos0614WriteRegister;
-    ctx->hDriver.readRegister = bos0614ReadRegister;
-    ctx->hDriver.getShadowRegisters = bos0614GetShadowRegisters;
-    ctx->hDriver.getGpioState = bos0614GetGpioState;
-    ctx->hDriver.configSensing = bos0614SensingConfig;
-    ctx->hDriver.sensingAutoPlayWave = bos0614SensingAutoPlayWave;
-    ctx->hDriver.stopSensing = bos0614SensingStop;
-    ctx->hDriver.numberOfRegister = bos0614NbrOfRegister;
-    ctx->hDriver.getFifoSpace = bos0614GetFifoSpace;
-    ctx->hDriver.getMaximumFifoSpace = bos0614GetMaxFifoSpace;
-    ctx->hDriver.isSupported = bos0614FeatureSupport;
+    memcpy(&ctx->hDriver, &bos0614Driver, sizeof(bos0614Driver));
+    memcpy(&ctx->reg, &bos0614RegsRevB, sizeof(Bos0614Registers));
+
+    res = checkBos0614Revision(ctx);
+
+    if (ctx->chipId == BOS0614_REV_C_CHIP_ID_DEFAULT)
+    {
+        memcpy(&ctx->reg, &bos0614RegsRevC, sizeof(Bos0614Registers));
+    }
 }
+
+static const HapticDriver bos0614Driver = {
+    bos0614DriverGetChipId,
+    bos0614SoftwareReset,
+    bos0614DeepSleep,
+
+    bos0614GetRegister,
+    bos0614GetRegisters,
+
+    bos0614SetRegister,
+    bos0614SetRegisters,
+
+    NULL,   //BosSetGetRegister setGetRegister;
+    NULL,   //BosSetGetRegisters setGetRegisters;
+
+    bos0614SetSlice,
+    bos0614SetWaveforms,
+    bos0614SynthesizerPlay,
+
+    bos0614RegisterOnEvents,
+    bos0614UnregisterEvents,
+
+    bos0614CtrlOutput,
+    bos0614ConfigGPO,
+
+    bos0614SetRamPlaybackMode,
+    bos0614PlayRamPlayback,
+
+    bos0614GetFifoSpace,
+    bos0614GetMaxFifoSpace,
+    bos0614SetFifoMode,
+    bos0614WriteFifo,
+
+    bos0614Synch,
+    bos0614GetError,
+    bos0614ReferencingFromVolt,
+    bos0614ReferencingFromRelativeInt16,
+    bos0614NbrOfRegister,
+
+    bos0614ButtonSensing,
+    bos0614EnableSensing,
+    bos0614SensingAutoPlayWave,
+    bos0614SensingStop,
+
+    bos0614FeatureSupport,
+    bos0614SenseOutput,
+    NULL,
+
+    /* Engineering functions */
+    bos0614GetShadowRegisters,
+
+    bos0614WriteRegister,
+    bos0614ReadRegister,
+
+    bos0614GetGpioState
+};

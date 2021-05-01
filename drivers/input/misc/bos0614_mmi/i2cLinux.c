@@ -175,7 +175,8 @@ static int readDevTree(Context *ctx)
 	return 0;
 }
 #endif
-static void logBuffer(const char *message, const void *data, size_t length)
+static void logBuffer(struct i2c_client* client, const char* message,
+       uint8_t addr, const void* data, size_t length)
 {
     size_t bufferLength = length * NBR_CHAR_PER_BYTE + ESCAPE_CHAR;
     char *buf = kzalloc(bufferLength, GFP_KERNEL);
@@ -193,7 +194,7 @@ static void logBuffer(const char *message, const void *data, size_t length)
             ptr += sprintf(ptr, index < (length - 1) ? "0x%02x " : "0x%02x", _data[index]);
         }
 
-        pr_debug("%s length: %zu [%s]\n", message, length, buf);
+        dev_dbg(&client->dev, "%s addr: 0x%x length: %zu [%s]\n", message, addr, length, buf);
 
         kfree(buf);
     }
@@ -204,7 +205,7 @@ static void logBuffer(const char *message, const void *data, size_t length)
  * Private Section
  */
 
-static int32_t i2cKernelSend(I2c *i2c, uint8_t address, const void *data, size_t num)
+static int32_t i2cKernelSend(const I2c *i2c, uint8_t address, const void *data, size_t num)
 {
     int32_t res = -EIO;
 
@@ -213,9 +214,7 @@ static int32_t i2cKernelSend(I2c *i2c, uint8_t address, const void *data, size_t
         Context *ctx = container_of(i2c, Context, driver);
         char *buf = kzalloc(num, GFP_KERNEL);
 
-        dev_dbg(&ctx->client->dev, "I2C Write Address: 0x%x\n", address);
-
-        logBuffer("Write: ", data, num);
+        logBuffer(ctx->client, "Write: ", address, data, num);
 
         if (buf != NULL)
         {
@@ -232,7 +231,7 @@ static int32_t i2cKernelSend(I2c *i2c, uint8_t address, const void *data, size_t
     return res;
 }
 
-int32_t i2cKernelRead(I2c *i2c, uint8_t address, void *data, size_t num)
+int32_t i2cKernelRead(const I2c *i2c, uint8_t address, void *data, size_t num)
 {
     int32_t res = -EIO;
 
@@ -240,8 +239,6 @@ int32_t i2cKernelRead(I2c *i2c, uint8_t address, void *data, size_t num)
     {
         Context *ctx = container_of(i2c, Context, driver);
         char *buf = kzalloc(num, GFP_KERNEL);
-
-        dev_dbg(&ctx->client->dev, "I2C Read Address: 0x%x \n", address);
 
         if (buf != NULL)
         {
@@ -252,7 +249,7 @@ int32_t i2cKernelRead(I2c *i2c, uint8_t address, void *data, size_t num)
             if (res == ARM_DRIVER_OK)
             {
                 memcpy(data, buf, num);
-                logBuffer("Read: ", data, num);
+                logBuffer(ctx->client, "Read: ", address, data, num);
             }
 
             kfree(buf);

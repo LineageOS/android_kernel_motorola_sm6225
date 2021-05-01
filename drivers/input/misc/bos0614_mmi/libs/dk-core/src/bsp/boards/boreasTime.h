@@ -27,27 +27,31 @@
 
 #include <linux/types.h>
 
-#define MICROSECOND_IN_MILLISECOND(_us) (_us/1000)
-
-#define SECOND_IN_MILLISECOND(_s) (_s*1000)
-
-#define SECOND_IN_MICROSECOND(_s) (_s*1000000)
+#define MICROSECOND_IN_MILLISECOND(_us) (_us / 1000)
+#define MILLISECOND_MICROSECOND(_ms) (_ms*1000)
+#define SECOND_IN_MILLISECOND(_s)       (_s * 1000)
+#define SECOND_IN_MICROSECOND(_s)       (_s * 1000000)
 
 typedef uint32_t TimeStamp;
 
 /*
  * @brief Initiate the time service
  *
- * @return void
+ * @return True if the initialisation succeeded, otherwise false.
  */
 bool timeInit(void);
 
-/*
+/**
+ * @brief Wait specific amount time in millisecond.
+ *
+ * @param[in] timeUs The time in millisecond to wait for
+ */
+void timeWaitMs(uint32_t timeMs);
+
+/**
  * @brief Wait specific amount time in microsecond.
  *
  * @param[in] timeUs The time in microsecond to wait for
- *
- * @return void
  */
 void timeWaitUs(uint32_t timeUs);
 
@@ -57,6 +61,13 @@ void timeWaitUs(uint32_t timeUs);
  * @return uint32_t The time in millisecond
  */
 TimeStamp timeGet(void);
+
+/**
+ * @brief
+ *
+ * @return
+ */
+uint64_t timeGetUsCounter(void);
 
 
 #endif //DKCORE_LAUNCHPADTIME_H

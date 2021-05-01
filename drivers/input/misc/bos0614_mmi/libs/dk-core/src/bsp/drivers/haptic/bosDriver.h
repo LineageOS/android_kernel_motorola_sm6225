@@ -29,48 +29,64 @@
 
 #include "bsp/drivers/spi/spi.h"
 #include "bsp/drivers/gpio/gpio.h"
-
 #include "bsp/drivers/haptic/bos0614Register.h"
+#include "bsp/drivers/haptic/bos1211Register.h"
+#include "bsp/drivers/haptic/bos1901Register.h"
 
-#define INVALID_CHIP_ID (0xFF)
+#define INT16_MIN (-32768)
+#define UINT16_MAX (65535)
+#define INVALID_CHIP_ID (UINT16_MAX)
 #define HAPTIC_DRIVER_DEFAULT_CHANNEL (0)
 
+typedef uint16_t ChipId;
 typedef uint8_t SliceId;
 typedef uint8_t WaveformId;
 
 typedef union
 {
     Bos0614Register register0614;
+    Bos1211Register register1211;
+    Bos1901Register register1901;
 } Register;
 
 typedef union
 {
-    BOS0614_REGS bos0614Regs;
+    Bos0614Registers bos0614Regs;
+    BOS1211_REGS bos1211Regs;
+    BOS1901_REGS bos1901Regs;
 } Registers;
 
 typedef enum
 {
-    GPO_InternalReset = 0,
-    GPO_SenseTrigger,
-    GPO_WaveformFifoDone,
-    GPO_ErrorNotify,
-    GPO_MaxPower,
-    GPO_ButtonState,
-    GPO_RequestToPLay,
+    GPO_INTERNAL_RESET = 0,
+    GPO_SENSE_TRIGGER,
+    GPO_WAVEFORM_FIFO_DONE,
+    GPO_ERROR_NOTIFY,
+    GPO_MAX_POWER,
+    GPO_BUTTON_STATE,
+    GPO_REQUEST_TO_PLAY,
 } GPOCtrl;
 
 typedef enum
 {
-    SensingDirection_Press = 0x00,
-    SensingDirection_Release = 0x01,
-    SensingDirection_Both
+    SENSING_DIRECTION_PRESS = 0x00,
+    SENSING_DIRECTION_RELEASE = 0x01,
+    SENSING_DIRECTION_ENUM_LENGTH
 } SensingDirection;
 
 typedef enum
 {
-    SensingDetectionMode_Threshold = 0x0,
-    SensingDetectionMode_Slope = 0x1,
+    SENSING_DETECTION_MODE_THRESHOLD = 0x0,
+    SENSING_DETECTION_MODE_SLOPE = 0x1,
 } SensingDetectionMode;
+
+typedef enum
+{
+    SENSING_POLARITY_INVALID = 0x00,
+    SENSING_POLARITY_POSITIVE = 0x01,
+    SENSING_POLARITY_NEGATIVE = 0x02,
+    SENSING_POLARITY_BOTH = 0x03,
+} SensingPolarity;
 
 typedef struct
 {
@@ -79,20 +95,21 @@ typedef struct
     SensingDirection direction;
     SensingDetectionMode mode;
     uint8_t stabilisationMs;
+    SensingPolarity polarity;
 } SensingConfig;
 
 typedef enum
 {
-    BosFeature_Fifo,
-    BosFeature_Synthesizer,
-    BosFeature_Ramplayback,
-    BosFeature_SensingWithAutomaticFeedback,
-    BosFeature_SensingThresholdDetection,
-    BosFeature_GPOSignaling,
+    BOS_FEATURE_FIFO,
+    BOS_FEATURE_SYNTHESIZER,
+    BOS_FEATURE_RAM_PLAYBACK,
+    BOS_FEATURE_SENSING_WITH_AUTOMATIC_FEEDBACK,
+    BOS_FEATURE_SENSING_THRESHOLD_DETECTION,
+    BOS_FEATURE_GPO_SIGNALING,
+    BOS_FEATURE_SUPPORT_BOTH_SENSING_POLARITY,
 
-    BosFeature_Length
+    BOS_FEATURE_LENGTH
 } BosFeature;
-
 
 typedef struct
 {
@@ -104,15 +121,16 @@ typedef struct
 
 typedef enum
 {
-    BOSERROR_NO_ERROR = 0,
-    BOSERROR_SHORT_CIRCUIT,
-    BOSERROR_UVLO,
-    BOSERROR_IDAC,
-    BOSERROR_MAX_POWER,
-    BOSERROR_OVT,
-    BOSERROR_OVV,
-    BOSERROR_Length,
-} BOSError;
+    BOS_ERROR_NO_ERROR = 0,
+    BOS_ERROR_SHORT_CIRCUIT,
+    BOS_ERROR_UVLO,
+    BOS_ERROR_IDAC,
+    BOS_ERROR_OVT,
+    BOS_ERROR_OVV,
+    BOS_ERROR_MAX_POWER,
+
+    BOS_ERROR_LENGTH,
+} BosError;
 
 typedef enum
 {
@@ -136,7 +154,7 @@ typedef struct _HapticDriver HapticDriver;
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosSoftwareReset)(HapticDriver *driver);
+typedef bool(* BosSoftwareReset)(HapticDriver* driver);
 
 /*
  * @brief Put device to sleep or wake it up
@@ -144,43 +162,102 @@ typedef bool(*BosSoftwareReset)(HapticDriver *driver);
  * @param[in] toSleep    true for sleep, false for wakeup
  * @return True if the operation succeeded, otherwise false
  */
-typedef bool(*BosDeepSleep)(HapticDriver *driver, bool toSleep);
+typedef bool(* BosDeepSleep)(HapticDriver* driver, bool toSleep);
 
 /**
  * @brief Return the chip id
  *
  * @param[in]   driver  The haptic driver context
  *
- * @return uint8_t Return the chip id
+ * @return ChipId Return the chip id
  */
-typedef uint8_t (*BosGetChipId)(HapticDriver *driver);
+typedef ChipId (* BosGetChipId)(HapticDriver* driver);
 
-/*
- * @brief Return the register value for a specific address
+/**
+ * @brief Reads a register value of a haptic IC.
  *
- * @param[in]   driver haptic driver context
- * @param[in]   addr  The register address
- * @param[out]  value The pointer where to pu the read value
+ * @param[in] driver    A Haptic driver instance.
+ * @param[in] addr      A register address.
+ * @param[out] value    A variable pointer to return the register value.
  *
- * @return bool True if the operation succeed, otherwise false
+ * @return True if the operation succeed, otherwise false.
  */
-typedef bool(*BosGetRegister)(HapticDriver *driver, uint8_t addr, uint16_t *value);
+typedef bool(* BosGetRegister)(HapticDriver* driver, uint8_t addr, uint16_t* value);
 
-/*
- * @brief Set the specified register
+/**
+ * @brief Read an array of registers value of a haptic IC.
  *
- * @param[in] driver   The haptic driver context
- * @param[in] addr  The register address
- * @param[in] value The register value to set
+ * @param[in] driver        A Haptic driver instance.
+ * @param[in] addrArray     An array of register addresses.
+ * @param[out] valueArray   A variable pointer to return the registers value.
+ * @param[in] nbRegisters   Number of registers in @a addrArray
  *
- * @return bool
+ * @note addrArray and valueArray must have the same number of entries.
+ *
+ * @return True if the operation succeed, otherwise false.
  */
-typedef bool(*BosSetRegister)(HapticDriver *driver, uint8_t addr, uint16_t value);
+typedef bool(* BosGetRegisters)(HapticDriver* driver, const uint8_t* addrArray, uint16_t* valueArray,
+                                const uint8_t nbRegisters);
+
+/**
+ * @brief Writes a value into a haptic IC's register.
+ *
+ * @param[in] driver    A haptic driver instance.
+ * @param[in] addr      A register address.
+ * @param[in] value     A register value to set
+ *
+ * @return True if the operation succeed, otherwise false.
+ */
+typedef bool(* BosSetRegister)(HapticDriver* driver, uint8_t addr, uint16_t value);
+
+/**
+ * @brief Writes values into haptic IC's registers.
+ *
+ * @param[in] driver        A haptic driver instance.
+ * @param[in] addrArray     An array of registers address.
+ * @param[in] valueArray    A array of registers value to set.
+ * @param[in] nbRegisters   Number of registers into @a addrArray.
+ *
+ * @note addrArray and valueArray must have the same number of entries.
+ *
+ * @return True if the operation succeed, otherwise false.
+ */
+typedef bool(* BosSetRegisters)(HapticDriver* driver, const uint8_t* addrArray, const uint16_t* valueArray,
+                                const uint8_t nbRegisters);
+
+/**
+ * @brief Writes a value into haptic IC's register and reads the current broadcast register value.
+ *
+ * @param[in] driver            A haptic driver instance.
+ * @param[in] addr              A register address.
+ * @param[in] value             A register value to set.
+ * @param[out] broadcastValue   A variable pointer to return the broadcast register value.
+ *
+ * @return True if the operation succeed, otherwise false.
+ */
+typedef bool(* BosSetGetRegister)(HapticDriver* driver, const uint8_t addr, uint16_t value, uint16_t* broadcastValue);
+
+/**
+ * @brief Writes values into haptic IC's registers and reads the current broadcast register values.
+ *
+ * @param[in] driver            A haptic driver instance.
+ * @param[in] addrArray         A array of registers address.
+ * @param[in] valueArray        A array of registers value to set.
+ * @param[out] broadcastArray   A pointer to an array to return the broadcast register values.
+ * @param[in] nbRegisters       Number of registers into @a addrArray.
+ *
+ * @note addrArray, valueArray and broadcastArray must have the same number of entries.
+ *
+ * @return True if the operation succeed, otherwise false.
+ */
+typedef bool(* BosSetGetRegisters)(HapticDriver* driver, const uint8_t* addrArray, const uint16_t* valueArray,
+                                   uint16_t* broasdcastArray, const uint8_t nbRegisters);
+
 
 /*
  * @brief Get the number of register available
  */
-typedef size_t (*BosGetNumberOfRegister)(void);
+typedef size_t (* BosGetNumberOfRegister)(void);
 
 /*
  * @brief Configure a slice which is part of a waveform (group of slice)
@@ -191,7 +268,7 @@ typedef size_t (*BosGetNumberOfRegister)(void);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool (*BosSynthesizerSetSlice)(HapticDriver *driver, const SynthSlice *slice, const uint8_t outputChannel);
+typedef bool (* BosSynthesizerSetSlice)(HapticDriver* driver, const SynthSlice* slice, const uint8_t outputChannel);
 
 /**
  * @brief Set the synthesizer mode
@@ -205,8 +282,8 @@ typedef bool (*BosSynthesizerSetSlice)(HapticDriver *driver, const SynthSlice *s
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosSynthesizerSetWaveform)(HapticDriver *driver, WaveformId id, uint8_t startSliceId,
-                                         size_t nbrOfSlices, uint16_t cycle, uint8_t outputChannel);
+typedef bool(* BosSynthesizerSetWaveform)(HapticDriver* driver, WaveformId id, uint8_t startSliceId,
+                                          size_t nbrOfSlices, uint16_t cycle, uint8_t outputChannel);
 
 
 /**
@@ -217,7 +294,7 @@ typedef bool(*BosSynthesizerSetWaveform)(HapticDriver *driver, WaveformId id, ui
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosCtrlOutput)(HapticDriver *driver, bool activate);
+typedef bool(* BosCtrlOutput)(HapticDriver* driver, bool activate);
 
 /**
  * @brief Configure the GPO mode
@@ -228,7 +305,7 @@ typedef bool(*BosCtrlOutput)(HapticDriver *driver, bool activate);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BOSCtrlGPO)(HapticDriver *driver, ChannelId channelId, GPOCtrl state);
+typedef bool(* BOSCtrlGPO)(HapticDriver* driver, ChannelId channelId, GPOCtrl state);
 
 /**
  * @brief BOS Driver GPO Event Callback
@@ -240,7 +317,7 @@ typedef bool(*BOSCtrlGPO)(HapticDriver *driver, ChannelId channelId, GPOCtrl sta
  *
  * @return void
  */
-typedef void(*BOSEventCb)(HapticDriver *driver, ChannelId channelId, BOSEvent event, void *context);
+typedef void(* BOSEventCb)(HapticDriver* driver, ChannelId channelId, BOSEvent event, void* context);
 
 /**
  * @brief Register for event callback registration
@@ -252,7 +329,7 @@ typedef void(*BOSEventCb)(HapticDriver *driver, ChannelId channelId, BOSEvent ev
  *
  * @return True if the operation succeed, false otherwise
  */
-typedef bool(*BOSRegisterEvents)(HapticDriver *driver, ChannelId channelId, BOSEventCb cb, void *context);
+typedef bool(* BOSRegisterEvents)(HapticDriver* driver, ChannelId channelId, BOSEventCb cb, void* context);
 
 /*
  * @brief Remove from event callback registration for GPO signals
@@ -262,7 +339,7 @@ typedef bool(*BOSRegisterEvents)(HapticDriver *driver, ChannelId channelId, BOSE
  *
  * @return True if the operation succeed, false otherwise
  */
-typedef bool(*BOSUnregisterEvents)(HapticDriver *driver, ChannelId channelId);
+typedef bool(* BOSUnregisterEvents)(HapticDriver* driver, ChannelId channelId);
 
 /*
  * @brief Toggle the synthesizer play
@@ -273,7 +350,7 @@ typedef bool(*BOSUnregisterEvents)(HapticDriver *driver, ChannelId channelId);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosWaveSynthesizerPlay)(HapticDriver *driver, WaveformId start, WaveformId stop);
+typedef bool(* BosWaveSynthesizerPlay)(HapticDriver* driver, WaveformId start, WaveformId stop);
 
 /**
  * @brief Configure the chip in RAM playback mode
@@ -287,8 +364,8 @@ typedef bool(*BosWaveSynthesizerPlay)(HapticDriver *driver, WaveformId start, Wa
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosRamplayback)(HapticDriver *driver, uint32_t samplingRate, void *data, size_t length,
-                              uint8_t channelMask);
+typedef bool(* BosRamplayback)(HapticDriver* driver, uint32_t samplingRate, void* data, size_t length,
+                               uint8_t channelMask);
 
 /**
  * @brief Play the content of the ram playback
@@ -298,7 +375,7 @@ typedef bool(*BosRamplayback)(HapticDriver *driver, uint32_t samplingRate, void 
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosRamPlaybackToggle)(HapticDriver *driver, size_t length);
+typedef bool(* BosRamPlaybackToggle)(HapticDriver* driver, size_t length);
 
 
 /**
@@ -309,7 +386,7 @@ typedef bool(*BosRamPlaybackToggle)(HapticDriver *driver, size_t length);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosSetFifoMode)(HapticDriver *driver, uint32_t samplingRate, uint8_t outputChannel);
+typedef bool(* BosSetFifoMode)(HapticDriver* driver, uint32_t samplingRate, uint8_t outputChannel);
 
 /**
  * @brief Write data in the fifo
@@ -320,7 +397,7 @@ typedef bool(*BosSetFifoMode)(HapticDriver *driver, uint32_t samplingRate, uint8
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosWriteFifoSamples)(HapticDriver *driver, void *data, size_t length);
+typedef bool(* BosWriteFifoSamples)(HapticDriver* driver, void* data, size_t length);
 
 /**
  * @brief Get the fifo space avaiable in the fifo
@@ -330,14 +407,14 @@ typedef bool(*BosWriteFifoSamples)(HapticDriver *driver, void *data, size_t leng
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosGetFifoSpace)(HapticDriver *ctx, uint16_t *availableSpace);
+typedef bool(* BosGetFifoSpace)(HapticDriver* ctx, uint16_t* availableSpace);
 
 /**
  * @brief Get the FIFO max available space
  *
  * @return uint16_t The max space available
  */
-typedef uint16_t (*BosGetMaximumFifoSpace)(void);
+typedef uint16_t (* BosGetMaximumFifoSpace)(void);
 
 /**
  * @brief Activate or deactivate the synchronization mode between chip
@@ -347,18 +424,34 @@ typedef uint16_t (*BosGetMaximumFifoSpace)(void);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosSynch)(HapticDriver *driver, bool activate);
+typedef bool(* BosSynch)(HapticDriver* driver, bool activate);
 
 /**
  * @brief Referencing the voltage value passed in the array to values referencing in the chip domain
  *
  * @param[in]       driver  The haptic driver context
- * @param[in|out]   data    The data to reference
+ * @param[in]       dataIn  The data to reference
  * @param[in]       length  The length of the array to reference
+ * @param[out]      dataOut The data converted to the IC reference voltage.
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool(*BosReferencingFromVolt)(HapticDriver *driver, int16_t *data, size_t length);
+typedef bool(* BosReferencingFromVolt)(HapticDriver* driver, int16_t* dataIn, size_t length, int16_t* dataOut);
+
+/**
+ * @brief Referencing the relative int16 value passed in the array to values referencing in the chip domain
+ *
+ * @param[in]       driver  The haptic driver context
+ * @param[in]       dataIn  The relative data point (between INT16_MIN and INT16_MAX)
+ * @param[in]       length  The length of the array to reference
+ * @param[in]       vMinVolt  The minimum voltage supported by the piezo(s)
+ * @param[in]       vMaxVolt  The maximum voltage supported by the piezo(s)
+ * @param[out]      dataOut The data converted to the IC reference voltage.
+ *
+ * @return True if the operation succeed, otherwise false
+ */
+typedef bool(* BosReferencingFromRelativeInt16)(HapticDriver* driver, int16_t* dataIn, size_t length,
+                                                int16_t vMinVolt, int16_t vMaxVolt, int16_t* dataOut);
 
 /*
  * @brief Get the error status bits
@@ -369,7 +462,7 @@ typedef bool(*BosReferencingFromVolt)(HapticDriver *driver, int16_t *data, size_
  *
  * @return The amount of active errors
  */
-typedef size_t(*BosGetError)(HapticDriver *driver, BOSError *errors, size_t maxLength);
+typedef size_t(* BosGetError)(HapticDriver* driver, BosError* errors, size_t maxLength);
 
 /*
  * @brief Sensing Event Callback
@@ -381,7 +474,7 @@ typedef size_t(*BosGetError)(HapticDriver *driver, BOSError *errors, size_t maxL
  *
  * @return void
  */
-typedef void (*BosSensingEvent)(uint8_t channel, SensingDetectionMode mode, SensingDirection direction, void *arg);
+typedef void (* BosSensingEvent)(uint8_t channel, SensingDetectionMode mode, SensingDirection direction, void* arg);
 
 /*
  * @brief Configures the chip for sensing
@@ -389,10 +482,11 @@ typedef void (*BosSensingEvent)(uint8_t channel, SensingDetectionMode mode, Sens
  * @param[in] driver        The haptic driver concerned
  * @param[in] channel       The channel to configure the sensing for.
  * @param[in] config        Sensing configuration to apply
+ * @param[in] type          Sensing type desired
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool (*BosSensingConfig)(HapticDriver *driver, ChannelId channelId, SensingConfig config);
+typedef bool (* BosButtonSensing)(HapticDriver* driver, uint8_t channel, SensingConfig config);
 
 /*
  * @brief Set the automatic feedback by channel
@@ -404,8 +498,8 @@ typedef bool (*BosSensingConfig)(HapticDriver *driver, ChannelId channelId, Sens
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool (*BosSensingAutoPlayWave)(HapticDriver *driver, ChannelId channelId, WaveformId id,
-                                       SensingDirection direction);
+typedef bool (* BosSensingAutoPlayWave)(HapticDriver* driver, ChannelId channelId, WaveformId id,
+                                        SensingDirection direction);
 
 /*
  * @brief Stops sensing without disabling the output
@@ -416,14 +510,25 @@ typedef bool (*BosSensingAutoPlayWave)(HapticDriver *driver, ChannelId channelId
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool (*BosSensingStop)(HapticDriver *driver, ChannelId channelId, SensingDirection direction);
+typedef bool (* BosSensingStop)(HapticDriver* driver, ChannelId channelId);
+
+/*
+ * @brief Read output in Volt when in sensing
+ *
+ * @param[in] driver    The haptic driver context
+ * @param[in] channel   The channel to deactivate the sensing
+ * @param[in] *data     The variable pointer in which the output value will be placed
+ *
+ * @return True if the operation succeed, otherwise false
+ */
+typedef bool (* BosSenseOutput)(HapticDriver* driver, ChannelId channelId, int32_t* data);
 
 /*
  * @brief (Engineering feature) Access register shadow value of the driver
  *
  * @return Registers The register set corresponding to the IC
  */
-typedef Registers *(*BosGetShadowRegisters)(HapticDriver *driver);
+typedef Registers* (* BosGetShadowRegisters)(HapticDriver* driver);
 
 /*
  * @brief (Engineering feature) Set a specific register using the Register struct
@@ -433,8 +538,7 @@ typedef Registers *(*BosGetShadowRegisters)(HapticDriver *driver);
  *
  * @return bool             True if the operation succeed and false if the operation failed
  */
-typedef bool(*BosWriteRegister)(HapticDriver *driver, Register *reg);
-
+typedef bool(* BosWriteRegister)(HapticDriver* driver, Register* reg);
 
 /*
  * @brief (Engineering feature) Set a specific register using the Register struct
@@ -444,7 +548,7 @@ typedef bool(*BosWriteRegister)(HapticDriver *driver, Register *reg);
  *
  * @return bool             True if the operation succeed and false if the operation failed
  */
-typedef bool(*BosReadRegister)(HapticDriver *driver, Register *reg);
+typedef bool(* BosReadRegister)(HapticDriver* driver, Register* reg);
 
 /*
  * @brief (Engineering feature) Read the GPIO pin state
@@ -454,7 +558,7 @@ typedef bool(*BosReadRegister)(HapticDriver *driver, Register *reg);
  *
  * @return GPIOState        The state of the Gpio
  */
-typedef GPIOState(*BosGetGpioState)(HapticDriver *driver, ChannelId channelId);
+typedef GPIOState(* BosGetGpioState)(HapticDriver* driver, ChannelId channelId);
 
 /**
  * @brief Interrogate driver if a specific feature is supported
@@ -463,7 +567,27 @@ typedef GPIOState(*BosGetGpioState)(HapticDriver *driver, ChannelId channelId);
  *
  * @return bool             True if the feature is supported, false if not
  */
-typedef bool (*SupportedFeature)(HapticDriver *driver, BosFeature feature);
+typedef bool (* SupportedFeature)(HapticDriver* driver, BosFeature feature);
+
+/**
+ * @brief Enable the sensing on the specified channel
+ *
+ * @param[in] driver        The haptic driver context
+ * @param[in] channel       The channel specific to this IC
+ *
+ * @return bool             True if the operation succeed and false if the operation failed
+ */
+typedef bool (* BosEnableSensing)(HapticDriver* driver, ChannelId channelId);
+
+/**
+ * @brief Set the polarity of the sensing (Ex: Set the HBridge of the BOS1901 in the good direction for sensing positive or negative voltage)
+ *
+ * @param[in] driver         The haptic driver context
+ * @param[in] channel       The channel specific to this IC
+ *
+ * @return bool             True if the operation succeed and false if the operation failed
+ */
+typedef bool (* BosSetSensingPolarity)(HapticDriver* driver, ChannelId channelId, SensingPolarity polarity);
 
 struct _HapticDriver
 {
@@ -471,7 +595,11 @@ struct _HapticDriver
     BosSoftwareReset softwareReset;
     BosDeepSleep deepSleep;
     BosGetRegister getRegister;
+    BosGetRegisters getRegisters;
     BosSetRegister setRegister;
+    BosSetRegisters setRegisters;
+    BosSetGetRegister setGetRegister;
+    BosSetGetRegisters setGetRegisters;
     BosSynthesizerSetSlice synthSetSlice;
     BosSynthesizerSetWaveform synthSetWaveform;
     BosWaveSynthesizerPlay wfsPlay;
@@ -488,11 +616,15 @@ struct _HapticDriver
     BosSynch synch;
     BosGetError getError;
     BosReferencingFromVolt referencingFromVolt;
+    BosReferencingFromRelativeInt16 referencingFromInt16;
     BosGetNumberOfRegister numberOfRegister;
-    BosSensingConfig configSensing;
+    BosButtonSensing buttonSensing;
+    BosEnableSensing enableSensing;
     BosSensingAutoPlayWave sensingAutoPlayWave;
     BosSensingStop stopSensing;
     SupportedFeature isSupported;
+    BosSenseOutput senseOutput;
+    BosSetSensingPolarity setSensingPolarity;
 
     /* Engineering functions */
     BosGetShadowRegisters getShadowRegisters;
