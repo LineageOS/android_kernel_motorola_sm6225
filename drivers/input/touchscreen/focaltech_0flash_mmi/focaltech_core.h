@@ -73,6 +73,9 @@
 #include <linux/sensors.h>
 #define SENSOR_TYPE_MOTO_TOUCH_PALM	(SENSOR_TYPE_DEVICE_PRIVATE_BASE + 31)
 #endif
+#ifdef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define

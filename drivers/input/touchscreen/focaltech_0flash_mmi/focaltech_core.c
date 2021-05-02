@@ -62,6 +62,18 @@ extern int fts_mmi_dev_register(struct fts_ts_data *ts_data);
 extern void fts_mmi_dev_unregister(struct fts_ts_data *ts_data);
 #endif
 
+#ifdef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
+#define register_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_unregister_notifier
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
+#else
+#define register_panel_notifier(...) rc
+#define unregister_panel_notifier(...) rc
+#endif
+
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -1837,6 +1849,7 @@ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void
 	return 0;
 }
 #else
+#ifndef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
 int drm_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
@@ -1890,6 +1903,46 @@ int drm_notifier_callback(struct notifier_block *self,
 
 	return 0;
 }
+#else
+int drm_notifier_callback(struct notifier_block *self,
+				unsigned long event, void *data)
+{
+	struct msm_drm_notifier *evdata = data;
+	struct fts_ts_data *ts_data =
+		container_of(self, struct fts_ts_data, fb_notif);
+
+	if (!evdata || (evdata->id != 0)) {
+		return 0;
+    }
+
+    FTS_INFO("DRM event:%lu", event);
+    switch (event) {
+    case PANEL_EVENT_DISPLAY_ON:
+            queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+        break;
+    case PANEL_EVENT_PRE_DISPLAY_OFF:
+            cancel_work_sync(&fts_data->resume_work);
+            fts_ts_suspend(ts_data->dev);
+#ifdef FOCALTECH_SENSOR_EN
+            if (fts_data->should_enable_gesture) {
+                FTS_INFO("double tap gesture suspend\n");
+		  touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+		  fts_gesture_suspend(ts_data);
+            } else {
+#endif
+                touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+                fts_ts_suspend(ts_data->dev);
+#ifdef FOCALTECH_SENSOR_EN
+            }
+#endif
+        break;
+    default:
+        break;
+    }
+
+	return 0;
+}
+#endif
 #endif
 #elif defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
@@ -2166,10 +2219,17 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("[DRM]drm_panel_notifier_register fail: active_panel NULL!\n");
     }
 #else
+#ifndef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
     ret = msm_drm_register_client(&ts_data->fb_notif);
     if (ret) {
         FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
     }
+#else
+    ret = register_panel_notifier(&ts_data->fb_notif);
+    if(ret) {
+        FTS_ERROR("register panel_notifier failed. ret=%d\n", ret);
+    }
+#endif
 #endif
 #elif defined(CONFIG_FB)
     if (ts_data->ts_workqueue) {
