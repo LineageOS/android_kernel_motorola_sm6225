@@ -57,11 +57,13 @@ static struct fet_control_data {
 	int battplus_en_gpio;
 	int balance_en_n_gpio;
 	int chrg_fullcurr_en_gpio;
+	int flip_chrg_en_gpio;
 } fet_control_data;
 
 int battplus_state = -1;
 int balance_state = -1;
 int fullcurr_state = -1;
+int flip_chrg_en_state = -1;
 
 static int get_ps_int_prop(struct power_supply *psy, enum power_supply_property prop)
 {
@@ -219,10 +221,20 @@ module_param_cb(fullcurr_state,
 static void update_work(struct work_struct *work)
 {
 	struct fet_control_data *data = container_of(work, struct fet_control_data, update.work);
-	int flip_curr, main_curr, flip_mv, main_mv;
+	int flip_curr, main_curr, flip_mv, main_mv, usbtype;
 	int flip_dischg = 1;
 	int main_dischg = 1;
-	int hb_sched_time;
+	int hb_sched_time = HBDLY_DISCHARGE_MS;
+	bool weakchrg = 0;
+	const char * usb_types[] = {"UNKNOWN","SDP","DCP"};
+
+	usbtype = get_ps_int_prop(data->usb_psy,
+		POWER_SUPPLY_PROP_USB_TYPE);
+	pr_info("USB-TYPE found:%d [%s]\n", usbtype,usb_types[usbtype] );
+	if (usbtype == POWER_SUPPLY_USB_TYPE_SDP) {
+		pr_info("USB_TYPE WEAK-CHRG\n");
+		weakchrg = 1;
+	}
 
 	flip_mv = get_ps_int_prop(data->flip_batt_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW);
@@ -236,7 +248,7 @@ static void update_work(struct work_struct *work)
 		POWER_SUPPLY_PROP_CURRENT_NOW);
 	flip_curr /= 1000;
 	if (flip_curr < 0) {
-		pr_debug("Charging Flip\n");
+		pr_info("Charging Flip\n");
 		flip_dischg = -1;
 	}
 
@@ -244,7 +256,7 @@ static void update_work(struct work_struct *work)
 	main_curr = get_ps_int_prop(data->main_batt_psy,
 		POWER_SUPPLY_PROP_CURRENT_NOW);
 	if (main_curr < 0) {
-		pr_debug("Charging Main\n");
+		pr_info("Charging Main\n");
 		main_dischg = -1;
 	}
 
@@ -279,27 +291,35 @@ static void update_work(struct work_struct *work)
 	pr_info("Flip-Vbatt:%d, Main-Vbatt: %d\n", flip_mv, main_mv);
 
 	/* FET paths set in Batt discharge state */
-	if (flip_dischg ==1 && main_dischg ==1) {
-		hb_sched_time = HBDLY_DISCHARGE_MS;
+	if (weakchrg || (flip_dischg ==1 && main_dischg ==1)) {
 		/* Leave Balance dflt-en & toggle in/out parallel low-Z battplus fet */
 		balance_state = 0;
 		if ((main_mv - flip_mv) < RBALANCE_VDIFF_MV) {
 			battplus_state = 1;
-			pr_debug("DISCHG-battplus-EN: %d\n", battplus_state);
+			pr_info("battplus-EN: %d\n", battplus_state);
 		} else {
 			battplus_state = 0;
-			pr_debug("DISCHG-battplus-DIS: %d\n", battplus_state);
+			pr_info("battplus-DIS: %d\n", battplus_state);
+		}
+
+		if (weakchrg) {
+			// Only pm8350b enabled for weak charger type:
+			hb_sched_time = HBDLY_CHARGE_MS;
+			flip_chrg_en_state = 0;
 		}
 	} else {
 		hb_sched_time = HBDLY_CHARGE_MS;
 		battplus_state = 0;
 		balance_state = 1;
+		flip_chrg_en_state = 1;
 	}
+	pr_debug("Flip chrg_en state: %d\n", flip_chrg_en_state);
 
 	/* Update GPIO controls */
 	update_state_gpio(fet_control_data.battplus_en_gpio, battplus_state);
 	update_state_gpio(fet_control_data.balance_en_n_gpio, balance_state);
 	update_state_gpio(fet_control_data.chrg_fullcurr_en_gpio, fullcurr_state);
+	update_state_gpio(fet_control_data.flip_chrg_en_gpio, flip_chrg_en_state);
 
 	schedule_delayed_work(&data->update, msecs_to_jiffies(hb_sched_time));
 }
@@ -380,6 +400,13 @@ static int parse_dt(struct device_node *node)
 		return -ENODEV;
 	}
 
+	fet_control_data.flip_chrg_en_gpio = of_get_named_gpio(node,
+			"mmi,flip-chrg-en-gpios", 0);
+	if (!gpio_is_valid(fet_control_data.flip_chrg_en_gpio)) {
+		pr_err("flip-chrg-en-gpios is not valid!\n");
+		return -ENODEV;
+	}
+
 	return rc;
 }
 
@@ -403,6 +430,12 @@ static int fet_control_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	rc = gpio_request(fet_control_data.flip_chrg_en_gpio, "mmi,flip-chrg-en-gpios");
+	if (rc) {
+		pr_err("Failed request flip-chrg-en-gpios\n");
+		goto fail;
+	}
+
 	rc = gpio_request(fet_control_data.battplus_en_gpio, "mmi,flip_battplus_en_gpio");
 	if (rc) {
 		pr_err("Failed request battplus_en_gpio\n");
@@ -418,6 +451,13 @@ static int fet_control_probe(struct platform_device *pdev)
 	rc = gpio_request(fet_control_data.chrg_fullcurr_en_gpio, "mmi,chrg-fullcurr-en-gpio");
 	if (rc) {
 		pr_err("Failed request chrg-fullcurr-en-gpio\n");
+		goto fail;
+	}
+
+	/* Enable Flip BQ Chrg */
+	rc = gpio_direction_output(fet_control_data.flip_chrg_en_gpio, 1);
+	if (rc) {
+		pr_err("Unable to set bq25898_en [%d]\n", fet_control_data.flip_chrg_en_gpio);
 		goto fail;
 	}
 
@@ -454,7 +494,9 @@ static int fet_control_probe(struct platform_device *pdev)
 	pr_info("chrg_fullcurr Init GPIO:[%d], VAL:[%d]\n",
 				fet_control_data.chrg_fullcurr_en_gpio,
 				gpio_get_value(fet_control_data.chrg_fullcurr_en_gpio) );
-
+	pr_info("Flip charge_en Init GPIO:[%d], VAL:[%d]\n",
+				fet_control_data.flip_chrg_en_gpio,
+				gpio_get_value(fet_control_data.flip_chrg_en_gpio) );
 
 	// Notify on plug/unplug
 	fet_control_data.ps_notif.notifier_call = ps_notify_callback;
@@ -482,6 +524,7 @@ static int fet_control_remove(struct platform_device *pdev)
 		gpio_free(fet_control_data.battplus_en_gpio);
 		gpio_free(fet_control_data.balance_en_n_gpio);
 		gpio_free(fet_control_data.chrg_fullcurr_en_gpio);
+		gpio_free(fet_control_data.flip_chrg_en_gpio);
 	}
 
 	return 0;
