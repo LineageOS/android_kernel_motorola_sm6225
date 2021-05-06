@@ -103,7 +103,7 @@ static int qpnp_pmic_set_charging_current(struct mmi_charger_device *chrg, u32 u
 
 	prop.intval = uA;
 	rc = power_supply_set_property(chrg->chrg_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
+				POWER_SUPPLY_PROP_QC3P_CURRENT_MAX, &prop);
 //	if (!rc)
 //		chrg->charger_limited = true;
 

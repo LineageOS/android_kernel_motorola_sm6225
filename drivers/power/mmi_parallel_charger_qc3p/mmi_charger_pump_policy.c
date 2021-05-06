@@ -45,7 +45,8 @@
 
 extern struct mmi_charger_ops bq2597x_charger_ops;
 extern struct mmi_charger_ops qpnp_pmic_charger_ops;
-
+int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_ua);
+int get_caculated_real_ibus_vbus(struct mmi_charger_manager *chip, int *ibus_curr,int *calculated_vbus);
 static const struct mmi_chrg_dev_ops dev_ops[] = {
 	{
 		.dev_name = "pmic-sw",
@@ -92,6 +93,7 @@ typedef enum  {
 	PM_STATE_RECOVERY_SW,
 	PM_STATE_STOP_CHARGE,
 	PM_STATE_COOLING_LOOP,
+	PM_STATE_POWER_LIMIT_LOOP,
 } pm_sm_state_t;
 
 const unsigned char *pm_state_str[] = {
@@ -110,9 +112,11 @@ const unsigned char *pm_state_str[] = {
 	"PM_STATE_RECOVERY_SW",
 	"PM_STATE_STOP_CHARGE",
 	"PM_STATE_COOLING_LOOP",
+	"PM_STATE_POWER_LIMIT_LOOP",
 };
 
 static pm_sm_state_t	sm_state = PM_STATE_DISCONNECT;
+static pm_sm_state_t	prev_sm_state = PM_STATE_DISCONNECT;
 static int chrg_cc_power_tunning_cnt = 0;
 static int chrg_cv_taper_tunning_cnt = 0;
 static int chrg_cv_delta_volt = 0;
@@ -125,6 +129,9 @@ static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state
 {
 	mmi_chrg_dbg(chip, PR_INTERRUPT, "pm_state change:%s -> %s\n",
 		pm_state_str[sm_state], pm_state_str[state]);
+
+	//add for PM_STATE_POWER_LIMIT_LOOP
+	prev_sm_state = sm_state;
 	sm_state = state;
 	pd_constant_power_cnt = 0;
 	batt_curr_roof = 0;
@@ -345,7 +352,7 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 }
 
 #define HEARTBEAT_SHORT_DELAY_MS 1000
-#define HEARTBEAT_lOOP_WAIT_MS 3000
+#define HEARTBEAT_lOOP_WAIT_MS 2000
 #define HEARTBEAT_PPS_TUNNING_MS 100
 #define HEARTBEAT_NEXT_STATE_MS 100
 #define HEARTBEAT_CANCEL -1
@@ -360,6 +367,9 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define DISABLE_CHRG_LIMIT -1
 #define CP_CHRG_SOC_LIMIT 90
 #define PD_CONT_PWR_CNT 5
+
+#define QC3P_V_STEP  20000
+#define CURR_TO_VOLT_STEP 5
 
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
@@ -395,6 +405,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	struct mmi_chrg_step_info *chrg_step;
 	union power_supply_propval prop = {0,};
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	int ibus_curr = 0, calculated_vbus = 0,ibus_cov_to_volt = 0, vbus_cov_to_volt = 0;
 
 	mmi_chrg_dbg(chip, PR_MOTO, "\n\n\n");
 
@@ -440,7 +451,6 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 
 	if (ibatt_curr < 0)
 		ibatt_curr *= -1;
-
 
 	mmi_update_all_charger_status(chip);
 	mmi_update_all_charger_error(chip);
@@ -512,6 +522,11 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		mmi_get_input_current_settled(chrg_list->chrg_dev[PMIC_SW],
 					&chrg_list->chrg_dev[PMIC_SW]->input_curr_setted);
 		mmi_find_chrg_step(chip, chip->pres_temp_zone, vbatt_volt);
+		//one issue found , plug out charger and sm_stat stay at PM_STATE_DISCONNECT,but disabled by cancel_delay_work sync
+		//so charger_limited stay true and not limt pmic current to 500mA.
+		//if (chrg_list->chrg_dev[PMIC_SW]->charger_limited) {
+		//	chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
+		//}
 		mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 	} else if (zone_change &&
 			chip->pres_temp_zone != ZONE_COLD &&
@@ -652,6 +667,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 		}
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
+#if 0
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
@@ -669,8 +685,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 					break;
 				}
 		}
-
-		chip->pd_request_volt = SWITCH_CHARGER_PPS_VOLT;
+#endif
+		chip->pd_request_volt =	chip->switch_charger_pps_volt;
 		chip->pd_request_curr = TYPEC_HIGH_CURRENT_UA;
 		mmi_chrg_info(chip,"Select pdo %d, pd request curr %d, volt %d\n",
 						chip->mmi_pd_pdo_idx,
@@ -737,6 +753,9 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
+#if 1
+		calculate_qc3p_vc_based_power_type(chip);
+#else
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 			if ((chip->mmi_pdo_info[i].type ==
@@ -767,7 +786,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 				break;
 			}
 		}
-
+#endif
 		/*Initial setup pps request power by the battery voltage*/
 		chip->pd_request_volt = (2 * vbatt_volt) % 20000;
 		chip->pd_request_volt = 2 * vbatt_volt - chip->pd_request_volt
@@ -819,8 +838,9 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
 		}else if (vbatt_volt > chrg_step->chrg_step_cv_volt) {
 			if (chip->pd_request_curr - chip->pps_curr_steps
-				> chip->typec_middle_current)
+				> chip->typec_middle_current) {
 				chip->pd_request_curr -= chip->pps_curr_steps;
+			}
 			mmi_chrg_sm_move_state(chip,
 						PM_STATE_CP_CC_LOOP);
 			mmi_chrg_info(chip,"During the curr going up process, "
@@ -840,7 +860,8 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 		} else if (chip->pd_request_curr + chip->pps_curr_steps
 				<= chip->pd_curr_max
 				&& vbatt_volt < chrg_step->chrg_step_cv_volt
-				&& ibatt_curr < chrg_step->chrg_step_cc_curr) {
+				&& ibatt_curr < chrg_step->chrg_step_cc_curr
+				/*&& ibus_curr < chip->pd_curr_max*/) {
 				chip->pd_request_curr += chip->pps_curr_steps;
 				mmi_chrg_dbg(chip, PR_MOTO, "Increase pps curr %d\n",
 								chip->pd_request_curr);
@@ -984,9 +1005,11 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 									chip->pd_request_volt);
 				} else {
 					if (chip->pd_request_curr + chip->pps_curr_steps
-						< chip->pd_curr_max) {
+						< chip->pd_curr_max
+						/*&& ibus_curr < chip->pd_curr_max*/) {
 						chip->pd_request_curr +=
 							chip->pps_curr_steps;
+
 						mmi_chrg_dbg(chip, PR_MOTO,
 									"Request curr decreass %dmA\n ",
 									chip->pd_request_curr);
@@ -1074,6 +1097,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			case BLANCE_POWER:
 				chip->pd_request_curr -=
 					chip->pps_curr_steps;
+
 				mmi_chrg_err(chip, "Reduce pps curr,for pps power balance\n");
 				mmi_clear_pps_result_history(chip);
 				break;
@@ -1275,7 +1299,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_sm_move_state(chip, PM_STATE_ENTRY);
 			heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		}
-		chip->pd_request_volt = SWITCH_CHARGER_PPS_VOLT;
+		chip->pd_request_volt =	chip->switch_charger_pps_volt;
 		chip->pd_request_curr = TYPEC_HIGH_CURRENT_UA;
 		break;
 	case PM_STATE_COOLING_LOOP:
@@ -1346,6 +1370,34 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			chrg_cv_taper_tunning_cnt = 0;
 		heartbeat_dely_ms = HEARTBEAT_SHORT_DELAY_MS;
 		break;
+	case PM_STATE_POWER_LIMIT_LOOP:
+		mmi_chrg_info(chip, "ibus_curr over, enter limitation status:%s\n",pm_state_str[sm_state]);
+		get_caculated_real_ibus_vbus(chip,&ibus_curr,&calculated_vbus);
+
+		if( ibus_curr <= (chip->pd_curr_max ) && calculated_vbus < (chip->pd_volt_max ) ) {
+			mmi_chrg_info(chip, "ibus_curr and vbus back to normal, resume prev status:%s\n",pm_state_str[prev_sm_state]);
+			mmi_chrg_sm_move_state(chip, prev_sm_state);
+			heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
+			goto schedule;
+		}
+
+		ibus_cov_to_volt  = (((ibus_curr - chip->pd_curr_max + chip->pps_curr_steps)/100000) * CURR_TO_VOLT_STEP);
+		if(ibus_cov_to_volt <0)
+			ibus_cov_to_volt = 0;
+		vbus_cov_to_volt= (((calculated_vbus -chip->pd_volt_max + chip->pps_volt_steps*2)/QC3P_V_STEP)  );
+		if(vbus_cov_to_volt <0)
+			vbus_cov_to_volt = 0;
+
+		mmi_chrg_info(chip, "ibus_curr abnormal, ibus decrease:%d,vbus decrease:%d\n", ibus_cov_to_volt, vbus_cov_to_volt );
+
+		chip->pd_request_volt  -= max(ibus_cov_to_volt, vbus_cov_to_volt ) * chip->pps_volt_steps;
+
+		mmi_chrg_info(chip, "ibus_curr abnormal, decrease pps volt:%d\n", chip->pd_request_volt );
+
+		heartbeat_dely_ms = HEARTBEAT_PPS_TUNNING_MS;
+		break;
+	default:
+		break;
 	}
 
 schedule:
@@ -1367,10 +1419,13 @@ schedule:
 
 	} else if (chip->system_thermal_level > 0 &&
 		(sm_state == PM_STATE_CP_CC_LOOP ||
-		sm_state == PM_STATE_CP_CV_LOOP)) {
+		sm_state == PM_STATE_CP_CV_LOOP ||
+//		sm_state == PM_STATE_PPS_TUNNING_CURR ||
+//		sm_state == PM_STATE_PPS_TUNNING_VOLT ||
+		sm_state == PM_STATE_POWER_LIMIT_LOOP )) {
 
-		mmi_chrg_dbg(chip, PR_MOTO, "Thermal level is %d\n",
-								chip->system_thermal_level);
+		mmi_chrg_dbg(chip, PR_MOTO, "Thermal level is %d, thermal target curr:%d\n",
+								chip->system_thermal_level,chip->thermal_mitigation[chip->system_thermal_level]);
 		if (!chip->sys_therm_cooling) {
 			chip->sys_therm_cooling = true;
 			chip->pd_sys_therm_volt = chip->pd_request_volt_prev;
@@ -1544,7 +1599,7 @@ schedule:
 								chip->pd_batt_therm_volt,
 								chip->pd_batt_therm_curr);
 
-	if (chip->pd_target_volt < SWITCH_CHARGER_PPS_VOLT
+	if (chip->pd_target_volt < chip->switch_charger_pps_volt
 		|| chip->pd_target_curr < chip->typec_middle_current) {
 
 		if (sm_state == PM_STATE_PPS_TUNNING_CURR
@@ -1562,13 +1617,18 @@ schedule:
 		}
 		goto skip_pd_select;
 	}
+#if 1
+	chip->pps_result = qc3p_select_pdo(chip,chip->pd_target_volt,chip->pd_target_curr);
 
+#else
 	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
 								chip->mmi_pd_pdo_idx,
 								chip->pd_target_volt,
 								chip->pd_target_curr);
+#endif
 	mmi_set_pps_result_history(chip, chip->pps_result);
 	if (!chip->pps_result) {
+		mmi_chrg_err(chip, "current pd voltage,current level volt:%d,curr:%d\n",chip->pd_target_volt,chip->pd_target_curr);
 		chip->pd_request_volt_prev = chip->pd_target_volt;
 		chip->pd_request_curr_prev = chip->pd_target_curr;
 	}
@@ -1587,6 +1647,244 @@ skip_pd_select:
 	}
 
 	return;
+}
+
+int get_caculated_real_ibus_vbus(struct mmi_charger_manager *chip, int *ibus_curr,int *calculated_vbus) {
+	int rc;
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	union power_supply_propval prop = {0,};
+	int  vbus_volt = 0,ibus_curr_temp = 0,ibus_usb = 0,ibus_pump = 0;
+	int calculated_vbus_temp = 0;
+
+	rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED, &prop);
+	if (!rc)
+		vbus_volt = prop.intval;
+
+	rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+	if (!rc)
+		ibus_pump = prop.intval;
+
+	if(ibus_pump < 0)
+		ibus_pump = 0;
+
+	rc = power_supply_get_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+	if (!rc)
+		ibus_usb = prop.intval;
+	if(ibus_usb < 0)
+		ibus_usb = 0;
+
+	//calculate the real ibus vbus
+	ibus_curr_temp = ibus_usb + ibus_pump;
+	calculated_vbus_temp = vbus_volt+ (ibus_curr_temp *200)/1000; // Define vbus resistance 200 mili oum
+
+	*ibus_curr = ibus_curr_temp;
+	*calculated_vbus = calculated_vbus_temp;
+	mmi_chrg_err(chip, "calculated ibus:%d,vbus:%d\n",*ibus_curr,*calculated_vbus);
+
+	return 0;
+}
+
+int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_ua){
+	int rc;
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	union power_supply_propval prop = {0,};
+	int ibatt_curr = 0, vbatt_volt = 0, vbus_volt = 0,ibus_curr = 0,ibus_usb = 0,ibus_pump = 0;
+	int i = 0;
+	int calculated_vbus = 0;
+	int req_volt_inc_step = 0,req_volt_dec_step = 0;
+	int req_curr_inc_step = 0,req_curr_dec_step = 0;
+	int real_inc_step = 0,real_dec_step =0;
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+	if (!rc)
+		vbatt_volt = prop.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	if (!rc)
+		ibatt_curr = prop.intval;
+
+	rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED, &prop);
+	if (!rc)
+		vbus_volt = prop.intval;
+
+	rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+	if (!rc)
+		ibus_pump = prop.intval;
+
+	if(ibus_pump < 0)
+		ibus_pump = 0;
+
+	rc = power_supply_get_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+	if (!rc)
+		ibus_usb = prop.intval;
+	if(ibus_usb < 0)
+		ibus_usb = 0;
+
+	mmi_chrg_err(chip, "ibus_usb:%d,ibus_pump:%d\n",ibus_usb , ibus_pump);
+
+	//calculate the real ibus vbus
+	ibus_curr = ibus_usb + ibus_pump;
+	calculated_vbus = vbus_volt+ (ibus_curr *200)/1000; // Define vbus resistance 200 mili oum
+
+	//get_caculated_real_ibus_vbus(chip,&ibus_curr,&calculated_vbus);
+
+	mmi_chrg_err(chip, "qc3p_select_pdo current vbat:%d,ibatt:%d,vbus:%d,calculated_vbus:%d,ibus:%d,target_uv:%d,prev_uv:%d,target_ua:%d,prev_ua:%d\n",vbatt_volt,ibatt_curr,vbus_volt,calculated_vbus,ibus_curr,chip->pd_target_volt,chip->pd_request_volt_prev,chip->pd_target_curr,chip->pd_request_curr_prev);
+
+	if(((ibus_curr > chip->pd_curr_max && chrg_list->chrg_dev[CP_MASTER]->charger_enabled) || calculated_vbus > chip->pd_volt_max) && sm_state != PM_STATE_POWER_LIMIT_LOOP && sm_state != PM_STATE_SW_LOOP ){
+		if(chip->pd_request_volt_prev != 0 && chip->pd_request_curr_prev != 0) {
+			chip->pd_request_volt = chip->pd_request_volt_prev;
+			chip->pd_target_volt = chip->pd_request_volt;
+			chip->pd_request_curr = chip->pd_request_curr_prev;
+			chip->pd_target_curr = chip->pd_request_curr;
+		}
+		mmi_chrg_sm_move_state(chip,PM_STATE_POWER_LIMIT_LOOP);
+		return 0;
+	}
+
+	if(chip->pd_request_volt_prev == 0)
+		chip->pd_request_volt_prev = 5000000;
+
+	//req current step
+	if(chip->pd_target_curr > chip->pd_request_curr_prev) {  //100mA -> 100mv
+		req_curr_inc_step =  (chip->pd_target_curr -chip->pd_request_curr_prev)/100000 * CURR_TO_VOLT_STEP;
+		if(req_curr_inc_step < 0 )
+			req_curr_inc_step = 0;
+
+	}else if(chip->pd_target_curr < chip->pd_request_curr_prev) {
+		req_curr_dec_step =  (chip->pd_request_curr_prev - chip->pd_target_curr)/100000 * CURR_TO_VOLT_STEP;
+		if(req_curr_dec_step < 0)
+			req_curr_dec_step = 0;
+
+		//check the steps
+		if(ibus_curr <= chip->pd_target_curr ) {
+			mmi_chrg_err(chip,"ibus <= target curr,not decrease curr");
+				req_volt_inc_step = 0;
+		}
+	}
+
+	//req voltage step
+	if(chip->pd_target_volt >= chip->pd_request_volt_prev) {
+		req_volt_inc_step =  (chip->pd_target_volt -chip->pd_request_volt_prev)/QC3P_V_STEP;
+		if(req_volt_inc_step<0)
+			req_volt_inc_step = 0;
+
+	}else {
+		req_volt_dec_step =  (chip->pd_request_volt_prev - chip->pd_target_volt)/QC3P_V_STEP;
+		if(req_volt_dec_step < 0)
+			req_volt_dec_step = 0;
+
+	}
+
+		//check the steps
+	if(ibus_curr > chip->pd_curr_max || calculated_vbus > chip->pd_volt_max) {
+		mmi_chrg_err(chip,"ibus > max curr or vbus, skip inc volt");
+		req_volt_inc_step = 0;
+		req_volt_inc_step = 0;
+	}
+
+	mmi_chrg_err(chip, "prev_calculate current inc:%d,dec:%d,voltage inc:%d,dec:%d\n",req_curr_inc_step,req_curr_dec_step,req_volt_inc_step,req_volt_dec_step);
+/*
+	switch (sm_state) {
+		case PM_STATE_DISCONNECT:
+		case PM_STATE_ENTRY:
+		case PM_STATE_SW_ENTRY:
+		case PM_STATE_SW_LOOP:
+			req_volt_inc_step = 0;
+			req_volt_dec_step = 0;
+			req_curr_inc_step = 0;
+			req_curr_dec_step = 0;
+			break;
+		case PM_STATE_CHRG_PUMP_ENTRY:
+			//only increase.
+			//req_volt_inc_step = 0;
+			req_volt_dec_step = 0;
+			req_curr_inc_step = 0;
+			req_curr_dec_step = 0;
+			break;
+		case PM_STATE_SINGLE_CP_ENTRY:
+		case PM_STATE_DULE_CP_ENTRY:
+			req_curr_inc_step = 0;
+			req_curr_dec_step = 0;
+			break;
+		case PM_STATE_PPS_TUNNING_CURR:
+			req_volt_inc_step = 0;
+			req_volt_dec_step = 0;
+			break;
+		case PM_STATE_PPS_TUNNING_VOLT:
+			req_curr_inc_step = 0;
+			req_curr_dec_step = 0;
+			break;
+		case PM_STATE_CP_CC_LOOP:
+		case PM_STATE_CP_CV_LOOP:
+			break;
+		case PM_STATE_CP_QUIT:
+			req_volt_inc_step = 0;
+			req_volt_dec_step = 0;
+			req_curr_inc_step = 0;
+			req_curr_dec_step = 0;
+			break;
+		case PM_STATE_RECOVERY_SW:
+		case PM_STATE_STOP_CHARGE:
+			break;
+		case PM_STATE_COOLING_LOOP:
+			req_volt_inc_step = 0;
+			req_volt_dec_step = 0;
+			break;
+		default:
+			break;
+	}
+*/
+
+	real_inc_step = max(req_volt_inc_step,req_curr_inc_step);
+	real_dec_step = max(req_volt_dec_step,req_curr_dec_step);
+
+	mmi_chrg_err(chip, "after calculated, voltage inc:%d,dec:%d\n",real_inc_step,real_dec_step);
+
+	if(real_inc_step > 0
+//		&& (chip->pd_target_volt >= calculated_vbus)
+		&& (calculated_vbus <= chip->pd_volt_max)
+		&& ibus_curr <= chip->pd_curr_max){  //increase
+
+		prop.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
+		mmi_chrg_err(chip, "increase voltage pulse:%d\n", real_inc_step);
+		for(i=0;i<real_inc_step;i++) {
+			rc = power_supply_set_property(chip->qcom_psy,
+					POWER_SUPPLY_PROP_DP_DM, &prop);
+			if (rc < 0) {
+				mmi_chrg_err(chip, "Couldn't set dp pulse\n");
+			}
+			udelay(5000);
+		}
+		if(chip->pd_request_volt_prev != 0) {
+			chip->pd_request_volt = chip->pd_request_volt_prev + real_inc_step*QC3P_V_STEP;
+			chip->pd_target_volt = chip->pd_request_volt;
+		}
+	} else {
+
+		prop.intval = POWER_SUPPLY_DP_DM_DM_PULSE;
+		mmi_chrg_err(chip, "decrease volt pulse:%d\n", real_dec_step);
+		for(i=0;i<real_dec_step;i++) {
+			rc = power_supply_set_property(chip->qcom_psy,
+					POWER_SUPPLY_PROP_DP_DM, &prop);
+			if (rc < 0) {
+				mmi_chrg_err(chip, "Couldn't set dm pulse\n");
+			}
+			udelay(5000);
+		}
+		if(chip->pd_request_volt_prev != 0) {
+			chip->pd_request_volt = chip->pd_request_volt_prev - real_dec_step*QC3P_V_STEP;
+			chip->pd_target_volt = chip->pd_request_volt;
+		}
+	}
+	return 0;
 }
 
 int mmi_chrg_policy_init(struct mmi_charger_manager *chip,
