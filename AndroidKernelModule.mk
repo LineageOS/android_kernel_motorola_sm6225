@@ -1,3 +1,7 @@
+ifeq ($(TARGET_BOARD_PLATFORM),taro)
+#Taro is using a new mechanisim to build kernel modules
+include device/qcom/common/dlkm/Build_external_kernelmodule.mk
+else
 ifneq (,$(findstring gki,$(KERNEL_DEFCONFIG)))
 #GKI product should use Qcom latest dlkm compile file
 include device/qcom/common/dlkm/AndroidKernelModule.mk
@@ -180,3 +184,4 @@ KBUILD_OPTIONS :=
 endif
 endif
 endif  #(findstring gki,$(KERNEL_DEFCONFIG))
+endif #($(TARGET_BOARD_PLATFORM),taro)
