@@ -63,6 +63,7 @@ int mmi_get_charing_current(struct mmi_charger_device *chrg, u32 *uA)
 
 int mmi_set_charing_current(struct mmi_charger_device *chrg, u32 uA)
 {
+
 	if(chrg != NULL && chrg->ops != NULL && chrg->ops->set_charging_current)
 		return chrg->ops->set_charging_current(chrg,uA);
 
@@ -185,7 +186,7 @@ struct mmi_charger_device *mmi_charger_device_register(const char *name,
 	return charger_dev;
 }
 
-EXPORT_SYMBOL(mmi_charger_device_register);
+//EXPORT_SYMBOL(mmi_charger_device_register);
 
 void mmi_charger_device_unregister(struct mmi_charger_device* charger_dev)
 {
@@ -198,7 +199,7 @@ void mmi_charger_device_unregister(struct mmi_charger_device* charger_dev)
 	device_unregister(&charger_dev->dev);
 }
 
-EXPORT_SYMBOL(mmi_charger_device_unregister);
+//EXPORT_SYMBOL(mmi_charger_device_unregister);
 
 void mmi_charger_class_exit(void)
 {
@@ -207,7 +208,7 @@ void mmi_charger_class_exit(void)
 
 int mmi_charger_class_init(void)
 {
-	mmi_charger_class = class_create(THIS_MODULE, "mmi_charger");
+	mmi_charger_class = class_create(THIS_MODULE, "mmi_charger_qc3p");
 	if (IS_ERR(mmi_charger_class)) {
 		pr_err("Unable to create mmi charger class; error = %ld\n",
 			PTR_ERR(mmi_charger_class));

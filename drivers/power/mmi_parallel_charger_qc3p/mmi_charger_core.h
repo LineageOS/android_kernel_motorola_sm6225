@@ -156,6 +156,13 @@ struct mmi_chrg_dts_info {
 	int charging_curr_min;
 };
 
+enum qc3p_power_type{
+	QC3P_POWER_NONE = 0,
+	QC3P_POWER_18W,
+	QC3P_POWER_27W,
+	QC3P_POWER_45W
+};
+
 #define PPS_RET_HISTORY_SIZE	8
 #define PD_SRC_PDO_TYPE_FIXED		0
 #define PD_SRC_PDO_TYPE_BATTERY		1
@@ -195,7 +202,9 @@ struct mmi_charger_manager {
 	int pd_curr_max;	/*the Maximum request PD current*/
 	int batt_ovp_lmt;	/*the battery over current limitation*/
 	int pl_chrg_vbatt_min;	/*the minimum battery voltage to enable parallel charging*/
-
+	int hvdcp_power_max;  //pmic charging max support power
+	int switch_charger_pps_volt;//pmic pps volt
+	
 	int typec_middle_current;
 	int step_first_curr_comp;
 	int pps_volt_comp;
@@ -263,6 +272,8 @@ struct mmi_charger_manager {
 
 	int mmi_chrg_dev_num;
 	struct mmi_charger_device **chrg_list;	/*charger device list*/
+	enum qc3p_power_type qc3p_power;
+	bool qc3p_active;
 };
 
 extern bool mmi_get_pps_result_history(struct mmi_charger_manager *chip);
@@ -283,4 +294,5 @@ extern ssize_t mmi_get_demo_mode(void);
 extern ssize_t mmi_set_demo_mode(int mode);
 extern ssize_t mmi_get_max_chrg_temp(void);
 extern ssize_t mmi_set_max_chrg_temp(int value);
+extern void calculate_qc3p_vc_based_power_type(struct mmi_charger_manager *chip);
 #endif
