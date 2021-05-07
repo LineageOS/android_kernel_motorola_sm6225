@@ -95,8 +95,8 @@
 };
 
 &dsi_djnboe_ft8009_video {
-	qcom,mdss-dsi-t-clk-post = <0x13>;
-	qcom,mdss-dsi-t-clk-pre = <0x2D>;
+	qcom,mdss-dsi-t-clk-post = <0x11>;
+	qcom,mdss-dsi-t-clk-pre = <0x24>;
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
 	qcom,mdss-dsi-panel-status-command = [14 01 00 01 05 00 01 0A];
@@ -123,11 +123,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[2E 27 0F 11 0B 02 04 a0
-				2E 27 0F 11 0B 02 04 a0
-				2E 27 0F 11 0B 02 04 a0
-				2E 27 0F 11 0B 02 04 a0
-				2E 35 0F 10 0B 02 04 a0];
+				[1F 1C 05 07 03 02 04 a0
+				1F 1C 05 07 03 02 04 a0
+				1F 1C 05 07 03 02 04 a0
+				1F 1C 05 07 03 02 04 a0
+				1F 11 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
