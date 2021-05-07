@@ -55,7 +55,8 @@ int process_params(ParamsLst *params, int numP, const char *buffer)
 {
 	char *arg, *buf, *p;
 	int n, err;
-	unsigned int value;
+	unsigned int valueUI = 0;
+	int valueI = 0;
 
 	p = buf = kstrdup(buffer, GFP_KERNEL);
 	for (n = 0; n < numP && p && *p; n++, params++) {
@@ -68,31 +69,36 @@ int process_params(ParamsLst *params, int numP, const char *buffer)
 		switch (params->tid) {
 		case PARAM_UCHAR8:
 			err = kstrtou8(arg, 0, params->data_ptr);
-			value = (unsigned int)*(unsigned char *)params->data_ptr;
+			valueUI = (unsigned int)*(unsigned char *)params->data_ptr;
 				break;
 		case PARAM_INT16:
 			err = kstrtos16(arg, 0, params->data_ptr);
-			value = (unsigned int)*(short *)params->data_ptr;
+			valueI = (int)*(short *)params->data_ptr;
 				break;
 		case PARAM_UINT16:
 			err = kstrtou16(arg, 0, params->data_ptr);
-			value = (unsigned int)*(unsigned short *)params->data_ptr;
+			valueUI = (unsigned int)*(unsigned short *)params->data_ptr;
 				break;
 		case PARAM_INT32:
 			err = kstrtoint(arg, 0, params->data_ptr);
-			value = (unsigned int)*(int *)params->data_ptr;
+			valueI = (int)*(int *)params->data_ptr;
 				break;
 		case PARAM_UINT32:
 			err = kstrtouint(arg, 0, params->data_ptr);
-			value = *(unsigned int *)params->data_ptr;
+			valueUI = *(unsigned int *)params->data_ptr;
 				break;
 		}
 
 		if (err) {
 			n = err;
 			break;
-		} else
-			pr_debug("[%d]=%u\n", n, value);
+		} else if (valueUI != 0) {
+			pr_debug("[%d]=%u\n", n, valueUI);
+		} else if (valueI != 0)
+			pr_debug("[%d]=%d\n", n, valueI);
+
+		valueI = 0;
+		valueUI = 0;
 	}
 	kfree(buf);
 	pr_debug("processed %d input parameters\n", n);
