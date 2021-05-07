@@ -1628,7 +1628,7 @@ bos0614SensingAutoPlayWave(HapticDriver *driver, uint8_t channel, WaveformId id,
 {
     bool res = false;
 
-    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL && id <= MAXIMUM_WAVEFORM_ID_FOR_AUTO_SENSING)
+    if (driver != NULL && channel < BOS0614_NBR_OF_CHANNEL) // && id <= MAXIMUM_WAVEFORM_ID_FOR_AUTO_SENSING)
     {
         Context *ctx = container_of(driver, Context, hDriver);
 
