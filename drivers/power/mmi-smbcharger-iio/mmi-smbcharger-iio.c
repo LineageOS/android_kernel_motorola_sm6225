@@ -189,6 +189,7 @@ enum {
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
 #define DEMO_VOTER			"DEMO_VOTER"
+#define MMI_VOTER			"MMI_VOTER"
 #define HYST_STEP_MV 50
 #define HYST_STEP_FLIP_MV (HYST_STEP_MV*2)
 #define DEMO_MODE_HYS_SOC 5
@@ -3754,6 +3755,12 @@ static int batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		chip->cycles += val->intval * 100;
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (val->intval < 0) {
+			vote(chip->fcc_votable, MMI_VOTER, false, 0);
+		} else
+			vote(chip->fcc_votable, MMI_VOTER, true, val->intval);
+		break;
 	default:
 		rc = power_supply_set_property(chip->qcom_psy, prop, val);
 		if (rc < 0) {
@@ -3775,6 +3782,7 @@ static int batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		return 1;
 	default:
 		break;

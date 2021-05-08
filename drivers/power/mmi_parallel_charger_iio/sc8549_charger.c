@@ -38,34 +38,35 @@
 #include "mmi_charger_core.h"
 #include "mmi_charger_core_iio.h"
 
-static int qpnp_pmic_enable_charging(struct mmi_charger_device *chrg, bool en)
+static int sc8549_enable_charging(struct mmi_charger_device *chrg, bool en)
 {
-	int rc = 0;
+	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_write_iio_chan(chip, SMB5_CHARGING_ENABLED, en);
+	rc = mmi_charger_write_iio_chan(chip, SC8549_CP_ENABLE, en);
+
 	if (!rc) {
-		chrg->charger_enabled = en;
-	} else {
+		chrg->charger_enabled = !!en;
+	} else
 		chrg->charger_enabled  = false;
-	}
 
 	return rc;
 }
 
-static int qpnp_pmic_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
+static int sc8549_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
 {
-	int rc = 0;
+	int rc;
 	int value;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SMB5_CHARGING_ENABLED, &value);
+	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_ENABLE, &value);
+
 	if (!rc) {
 		chrg->charger_enabled = !!value;
 	} else
@@ -76,7 +77,7 @@ static int qpnp_pmic_is_charging_enabled(struct mmi_charger_device *chrg, bool *
 	return rc;
 }
 
-static int qpnp_pmic_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
+static int sc8549_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
 {
 	int rc;
 	union power_supply_propval prop = {0,};
@@ -92,52 +93,30 @@ static int qpnp_pmic_get_charging_current(struct mmi_charger_device *chrg, u32 *
 	return rc;
 }
 
-static int qpnp_pmic_set_charging_current(struct mmi_charger_device *chrg, u32 uA)
+static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA)
 {
 	int rc;
-	union power_supply_propval prop = {0,};
-
-	if (!chrg->chrg_psy)
-		return -ENODEV;
-
-	prop.intval = uA;
-	rc = power_supply_set_property(chrg->chrg_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
-//	if (!rc)
-//		chrg->charger_limited = true;
-
-	return rc;
-}
-
-static int qpnp_pmic_get_input_current_settled(struct mmi_charger_device *chrg, u32 *uA)
-{
-	int rc = 0;
 	int value;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SMB5_HW_CURRENT_MAX, &value);
+	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_CURRENT_NOW, &value);
+
 	if (!rc)
-		chrg->input_curr_setted = value;
-	*uA = chrg->input_curr_setted;
+		*uA = value;
 
 	return rc;
 }
 
-static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
+static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
 {
 	int rc;
-	bool value = 0;
-	struct power_supply	*usb_psy;
+	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 	union power_supply_propval prop = {0,};
 
 	if (!chrg->chrg_psy)
-		return -ENODEV;
-
-	usb_psy = power_supply_get_by_name("usb");
-	if (!usb_psy)
 		return -ENODEV;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
@@ -153,28 +132,26 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_TEMP, &prop);
 	if (!rc)
-		chrg->charger_data.batt_temp = prop.intval / 10;
+		chrg->charger_data.batt_temp = prop.intval;
 
-	rc = power_supply_get_property(usb_psy,
-				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_VOLTAGE_NOW, &prop.intval);
 	if (!rc)
 		chrg->charger_data.vbus_volt = prop.intval;
 
-	rc = power_supply_get_property(usb_psy,
-				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_CURRENT_NOW, &prop.intval);
 	if (!rc)
 		chrg->charger_data.ibus_curr = prop.intval;
 
-	rc = power_supply_get_property(usb_psy,
+	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
 	if (!rc)
 		chrg->charger_data.vbus_pres = !!prop.intval;
 
-	rc = qpnp_pmic_is_charging_enabled(chrg, &value);
+	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_ENABLE, &prop.intval);
 	if (!rc)
-		chrg->charger_enabled= !!value;
+		chrg->charger_enabled = !!prop.intval;
 
-	chrg_dev_info(chrg, "QPNP SW chrg: status update: --- info---");
+	chrg_dev_info(chrg, "SC8549 chrg: %s status update: --- info---\n",chrg->name);
 	chrg_dev_info(chrg, "vbatt %d\n", chrg->charger_data.vbatt_volt);
 	chrg_dev_info(chrg, "ibatt %d\n", chrg->charger_data.ibatt_curr);
 	chrg_dev_info(chrg, "batt temp %d\n", chrg->charger_data.batt_temp);
@@ -182,15 +159,47 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	chrg_dev_info(chrg, "ibus %d\n", chrg->charger_data.ibus_curr);
 	chrg_dev_info(chrg, "vbus pres %d\n", chrg->charger_data.vbus_pres);
 	chrg_dev_info(chrg, "charger_enabled %d\n", chrg->charger_enabled);
-	chrg_dev_info(chrg, "charger_limited %d\n", chrg->charger_limited);
+
 	return rc;
 }
 
-struct mmi_charger_ops qpnp_pmic_charger_ops = {
-	.enable = qpnp_pmic_enable_charging,
-	.is_enabled = qpnp_pmic_is_charging_enabled,
-	.get_charging_current = qpnp_pmic_get_charging_current,
-	.set_charging_current = qpnp_pmic_set_charging_current,
-	.get_input_current_settled = qpnp_pmic_get_input_current_settled,
-	.update_charger_status = qpnp_pmic_update_charger_status,
+static int sc8549_update_charger_error_status(struct mmi_charger_device *chrg)
+{
+	int rc;
+	int value = 0;
+	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
+
+	if (!chip)
+		return -ENODEV;
+
+	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_STATUS1, &value);
+	if (!rc) {
+		chrg->charger_error.chrg_err_type = value;
+	}
+	return rc;
+}
+
+static int sc8549_clear_charger_error(struct mmi_charger_device *chrg)
+{
+	int rc;
+	int value = 0;
+	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
+
+	if (!chip)
+		return -ENODEV;
+
+	rc = mmi_charger_write_iio_chan(chip, SC8549_CP_CLEAR_ERROR, value);
+
+	return rc;
+}
+
+struct mmi_charger_ops sc8549_charger_ops = {
+	.enable = sc8549_enable_charging,
+	.is_enabled = sc8549_is_charging_enabled,
+	.get_charging_current = sc8549_get_charging_current,
+	.get_input_current = sc8549_get_input_current,
+	.update_charger_status = sc8549_update_charger_status,
+	.update_charger_error = sc8549_update_charger_error_status,
+	.clear_charger_error = sc8549_clear_charger_error,
 };
+
