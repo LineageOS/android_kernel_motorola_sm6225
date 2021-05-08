@@ -43,12 +43,78 @@
 #include <linux/types.h>
 #include "mmi_charger_class.h"
 #include "mmi_charger_core.h"
+#include "mmi_charger_core_iio.h"
 #include "mmi_charger_policy.h"
+#include <linux/iio/consumer.h>
+#include <linux/qti_power_supply.h>
 
 static int __debug_mask = 0x85;
 module_param_named(
 	debug_mask, __debug_mask, int, S_IRUSR | S_IWUSR
 );
+
+bool is_chan_valid(struct mmi_charger_manager *chip,
+		enum mmi_charger_ext_iio_channels chan)
+{
+	int rc;
+
+	if (IS_ERR(chip->ext_iio_chans[chan]))
+		return false;
+
+	if (!chip->ext_iio_chans[chan]) {
+		chip->ext_iio_chans[chan] = iio_channel_get(chip->dev,
+					mmi_charger_ext_iio_chan_name[chan]);
+		if (IS_ERR(chip->ext_iio_chans[chan])) {
+			rc = PTR_ERR(chip->ext_iio_chans[chan]);
+			if (rc == -EPROBE_DEFER)
+				chip->ext_iio_chans[chan] = NULL;
+
+			mmi_chrg_err(chip, "Failed to get IIO channel %s, rc=%d\n",
+				mmi_charger_ext_iio_chan_name[chan], rc);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int mmi_charger_read_iio_chan(struct mmi_charger_manager *chip,
+	enum mmi_charger_ext_iio_channels chan, int *val)
+{
+	int rc;
+
+	if (is_chan_valid(chip, chan)) {
+		rc = iio_read_channel_processed(
+				chip->ext_iio_chans[chan], val);
+		return (rc < 0) ? rc : 0;
+	}
+
+	return -EINVAL;
+}
+
+int mmi_charger_write_iio_chan(struct mmi_charger_manager *chip,
+	enum mmi_charger_ext_iio_channels chan, int val)
+{
+	if (is_chan_valid(chip, chan))
+		return iio_write_channel_raw(chip->ext_iio_chans[chan],
+						val);
+
+	return -EINVAL;
+}
+
+static int mmi_charger_init_iio_psy(struct mmi_charger_manager *chip,
+				struct platform_device *pdev)
+{
+	int rc = 0;
+	chip->ext_iio_chans = devm_kcalloc(chip->dev,
+				ARRAY_SIZE(mmi_charger_ext_iio_chan_name),
+				sizeof(*chip->ext_iio_chans),
+				GFP_KERNEL);
+	if (!chip->ext_iio_chans)
+		return -ENOMEM;
+
+	return rc;
+}
 
 static int pd_volt_max_init = 0;
 static int pd_curr_max_init = 0;
@@ -589,16 +655,9 @@ static int batt_psy_register(struct mmi_charger_manager *chip)
 }
 #endif
 static enum power_supply_property mmi_chrg_mgr_props[] = {
-	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
-	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
-	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
-	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
-	POWER_SUPPLY_PROP_NUM_SYSTEM_TEMP_LEVELS,
-	POWER_SUPPLY_PROP_CP_ENABLE,
 };
 
 static int mmi_chrg_mgr_get_property(struct power_supply *psy,
@@ -616,18 +675,6 @@ static int mmi_chrg_mgr_get_property(struct power_supply *psy,
 	}
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
-		val->intval = chip->pd_request_curr_prev;
-		break;
-	case POWER_SUPPLY_PROP_PD_VOLTAGE_MAX:
-		val->intval = chip->pd_request_volt_prev;
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED:
-		val->intval = chip->pd_target_curr;
-		break;
-	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED:
-		val->intval = chip->pd_target_volt;
-		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
@@ -650,15 +697,6 @@ static int mmi_chrg_mgr_get_property(struct power_supply *psy,
 		} else
 			val->intval = 0;
 		break;
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-		val->intval = chip->system_thermal_level;
-		break;
-	case POWER_SUPPLY_PROP_NUM_SYSTEM_TEMP_LEVELS:
-		val->intval = chip->thermal_levels;
-		break;
-	case POWER_SUPPLY_PROP_CP_ENABLE:
-		val->intval = !chip->cp_disable;
-		break;
 	default:
 		return -EINVAL;
 
@@ -670,38 +708,8 @@ static int mmi_chrg_mgr_set_property(struct power_supply *psy,
 				       enum power_supply_property prop,
 				       const union power_supply_propval *val)
 {
-	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-		if (val->intval < 0)
-			return -EINVAL;
-
-		if (chip->thermal_levels <= 0)
-			return -EINVAL;
-
-		if (val->intval >= chip->thermal_levels)
-			chip->system_thermal_level =
-				chip->thermal_levels - 1;
-		else
-			chip->system_thermal_level = val->intval;
-
-		break;
-	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
-		if (val->intval > chip->pd_curr_max)
-			return -EINVAL;
-		chip->pd_curr_max = val->intval;
-		break;
-	case POWER_SUPPLY_PROP_PD_VOLTAGE_MAX:
-		if (val->intval > chip->pd_volt_max)
-			return -EINVAL;
-		chip->pd_volt_max= val->intval;
-		break;
-	case POWER_SUPPLY_PROP_CP_ENABLE:
-		if (chip->pd_pps_support
-			&& !chip->factory_mode)
-			mmi_chrg_enable_all_cp(chip, val->intval);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -715,12 +723,6 @@ static int mmi_chrg_mgr_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
-	case POWER_SUPPLY_PROP_PD_VOLTAGE_MAX:
-	case POWER_SUPPLY_PROP_CP_ENABLE:
-		ret = 1;
-		break;
 	default:
 		ret = 0;
 		break;
@@ -730,7 +732,7 @@ static int mmi_chrg_mgr_is_writeable(struct power_supply *psy,
 
 static const struct power_supply_desc mmi_chrg_mgr_psy_desc = {
 	.name = "mmi_chrg_manager",
-	.type = POWER_SUPPLY_TYPE_PARALLEL,
+	.type = POWER_SUPPLY_TYPE_MAINS,
 	.properties = mmi_chrg_mgr_props,
 	.num_properties = ARRAY_SIZE(mmi_chrg_mgr_props),
 	.get_property = mmi_chrg_mgr_get_property,
@@ -784,18 +786,16 @@ static int get_prop_charger_present(struct mmi_charger_manager *chg,
 	int rc = -EINVAL;
 	val->intval = 0;
 
-	if (chg->usb_psy)
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_TYPEC_MODE, val);
+	rc = mmi_charger_read_iio_chan(chg, SMB5_TYPEC_MODE, &val->intval);
 	if (rc < 0) {
 		mmi_chrg_err(chg, "Couldn't read TypeC Mode rc=%d\n", rc);
 		return rc;
 	}
 
 	switch (val->intval) {
-	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
-	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
-	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+	case QTI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+	case QTI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+	case QTI_POWER_SUPPLY_TYPEC_SOURCE_HIGH:
 		val->intval = 1;
 		break;
 	default:
@@ -834,8 +834,7 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 
 	if (val.intval) {
 		val.intval = 0;
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
+		rc = mmi_charger_read_iio_chan(chg, SMB5_HW_CURRENT_MAX, &val.intval);
 		if (rc < 0) {
 			mmi_chrg_info(chg, "Error getting HW Current Max rc = %d\n", rc);
 			return;
@@ -843,8 +842,7 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 		chrg_cm_ma = val.intval / 1000;
 
 		val.intval = 0;
-		rc = power_supply_get_property(chg->usb_psy,
-				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
+		rc = mmi_charger_read_iio_chan(chg, SMB5_USB_INPUT_CURRENT_SETTLED, &val.intval);
 		if (rc < 0) {
 			mmi_chrg_err(chg, "Error getting ICL Settled rc = %d\n", rc);
 			return;
@@ -1005,8 +1003,8 @@ static bool mmi_factory_check(void)
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
-	union power_supply_propval val;
-	int ret;
+//	union power_supply_propval val;
+//	int ret;
 
 	if (!chip->sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
@@ -1015,11 +1013,11 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
 		chip->sm_work_running = true;
-		val.intval = true;
+/*		val.intval = true;
 		ret = power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_CP_ENABLE, &val);
 		if (ret)
-			mmi_chrg_err(chip, "Unable to enable CP: %d\n", ret);
+			mmi_chrg_err(chip, "Unable to enable CP: %d\n", ret);*/
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg sm work already existed\n");
@@ -1027,18 +1025,18 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
-	union power_supply_propval val;
-	int ret;
+//	union power_supply_propval val;
+//	int ret;
 
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
-	val.intval = false;
+/*	val.intval = false;
 	ret = power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_CP_ENABLE, &val);
 	if (ret)
-		mmi_chrg_err(chip, "Unable to disable CP: %d\n", ret);
+		mmi_chrg_err(chip, "Unable to disable CP: %d\n", ret);*/
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
@@ -1182,75 +1180,13 @@ static void mmi_cycle_counts(struct mmi_charger_manager *chip)
 	chip->prev_batt_status = chip->pres_batt_status;
 }
 
-static bool __mmi_ps_is_supplied_by(struct power_supply *supplier,
-					struct power_supply *supply)
-{
-	int i;
-
-	if (!supply->supplied_from && !supplier->supplied_to)
-		return false;
-
-	/* Support both supplied_to and supplied_from modes */
-	if (supply->supplied_from) {
-		if (!supplier->desc->name)
-			return false;
-		for (i = 0; i < supply->num_supplies; i++)
-			if (!strcmp(supplier->desc->name,
-				    supply->supplied_from[i]))
-				return true;
-	} else {
-		if (!supply->desc->name)
-			return false;
-		for (i = 0; i < supplier->num_supplicants; i++)
-			if (!strcmp(supplier->supplied_to[i],
-				    supply->desc->name))
-				return true;
-	}
-
-	return false;
-}
-
-static int __mmi_ps_changed(struct device *dev, void *data)
-{
-	struct power_supply *psy = data;
-	struct power_supply *pst = dev_get_drvdata(dev);
-
-	if (__mmi_ps_is_supplied_by(psy, pst)) {
-		if (pst->desc->external_power_changed)
-			pst->desc->external_power_changed(pst);
-	}
-
-	return 0;
-}
-
 static void mmi_power_supply_changed(struct power_supply *psy,
 					 char *envp_ext[])
 {
 	dev_err(&psy->dev, "%s: %s\n", __func__, envp_ext[0]);
 
-	class_for_each_device(power_supply_class, NULL, psy,
-			      __mmi_ps_changed);
-	atomic_notifier_call_chain(&power_supply_notifier,
-			PSY_EVENT_PROP_CHANGED, psy);
 	kobject_uevent_env(&psy->dev.kobj, KOBJ_CHANGE, envp_ext);
-}
-
-static enum alarmtimer_restart mmi_heartbeat_alarm_cb(struct alarm *alarm,
-						      ktime_t now)
-{
-	struct mmi_charger_manager *chip = container_of(alarm,
-						    struct mmi_charger_manager,
-						    heartbeat_alarm);
-
-	mmi_chrg_info(chip, "MMI: HB alarm fired\n");
-
-	__pm_stay_awake(&chip->mmi_hb_wake_source);
-	cancel_delayed_work(&chip->heartbeat_work);
-	/* Delay by 500 ms to allow devices to resume. */
-	schedule_delayed_work(&chip->heartbeat_work,
-			      msecs_to_jiffies(500));
-
-	return ALARMTIMER_NORESTART;
+	power_supply_changed(psy);
 }
 
 #define HEARTBEAT_DELAY_MS 60000
@@ -1276,8 +1212,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 
 	mmi_awake_vote(chip, true);
-	alarm_try_to_cancel(&chip->heartbeat_alarm);
-
 
 	if (!chip->usb_psy) {
 		chip->usb_psy = power_supply_get_by_name("usb");
@@ -1298,15 +1232,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	hb_resch_time = HEARTBEAT_DELAY_MS;
 
-	if (chip->vbus_present)
-		alarm_start_relative(&chip->heartbeat_alarm,
-				     ns_to_ktime(SMBCHG_HEARTBEAT_INTRVAL_NS));
-
 	if (!chip->vbus_present)
 		mmi_awake_vote(chip, false);
 
-	ret = power_supply_get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
 		goto schedule_work;
@@ -1368,12 +1297,12 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	mmi_chrg_rate_check(chip);
        if (!chip->extrn_fg) {
-		val.intval = chip->charger_rate;
+/*		val.intval = chip->charger_rate;
 		ret = power_supply_set_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_CHARGE_RATE, &val);
 		if (ret)
 			mmi_chrg_err(chip, "Unable to set charge rate: %d\n", ret);
-       }
+*/       }
 
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
 	if (!chrg_rate_string) {
@@ -1392,8 +1321,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	}
 
 	kfree(chrg_rate_string);
-
-	__pm_relax(&chip->mmi_hb_wake_source);
 
 schedule_work:
 	schedule_delayed_work(&chip->heartbeat_work,
@@ -1427,8 +1354,7 @@ static void psy_changed_work_func(struct work_struct *work)
 	}
 	chip->vbus_present = val.intval;
 
-	ret = power_supply_get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
 		return;
@@ -1825,6 +1751,13 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
+	ret = mmi_charger_init_iio_psy(chip, pdev);
+	if (ret < 0) {
+		dev_err(&pdev->dev,
+			"mmi charger iio psy init failed\n");
+		goto cleanup;
+	}
+
 	chip->factory_mode = mmi_factory_check();
 
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
@@ -1899,11 +1832,6 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	INIT_WORK(&chip->psy_changed_work, psy_changed_work_func);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
-	wakeup_source_init_internal(&chip->mmi_hb_wake_source,
-			   "mmi_hb_wake");
-	alarm_init(&chip->heartbeat_alarm, ALARM_BOOTTIME,
-		   mmi_heartbeat_alarm_cb);
-
 
 	ret = mmi_chrg_mgr_psy_register(chip);
 	if (ret)
@@ -1937,7 +1865,6 @@ static int mmi_chrg_manager_remove(struct platform_device *pdev)
 	//cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	power_supply_unreg_notifier(&chip->psy_nb);
 	power_supply_unregister(chip->mmi_chrg_mgr_psy );
-//	wakeup_source_trash_internal(&chip->mmi_hb_wake_source);
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);
 	return 0;

@@ -49,6 +49,8 @@
 #include <linux/notifier.h>
 #include "mmi_charger_class.h"
 #include <linux/pm_wakeup.h>
+#include <linux/build_bug.h>
+#include <linux/compiler.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -179,8 +181,8 @@ struct mmi_charger_manager {
 	struct usbpd_pdo_info	mmi_pdo_info[PD_MAX_PDO_NUM];
 	struct notifier_block	psy_nb;
 
-	struct wakeup_source	mmi_hb_wake_source;
-	struct alarm		heartbeat_alarm;
+	struct iio_channel	**ext_iio_chans;
+
 	bool			factory_mode;
 	bool			suspended;
 	bool			awake;

@@ -185,8 +185,6 @@ struct mmi_charger_device *mmi_charger_device_register(const char *name,
 	return charger_dev;
 }
 
-EXPORT_SYMBOL(mmi_charger_device_register);
-
 void mmi_charger_device_unregister(struct mmi_charger_device* charger_dev)
 {
 	if (!charger_dev)
@@ -197,8 +195,6 @@ void mmi_charger_device_unregister(struct mmi_charger_device* charger_dev)
 	mutex_unlock(&charger_dev->ops_lock);
 	device_unregister(&charger_dev->dev);
 }
-
-EXPORT_SYMBOL(mmi_charger_device_unregister);
 
 void mmi_charger_class_exit(void)
 {

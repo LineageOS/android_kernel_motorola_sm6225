@@ -37,7 +37,9 @@
 
 #include <linux/regmap.h>
 #include "mmi_sc8549.h"
+#include "mmi_sc8549_iio.h"
 #include <linux/gpio.h>
+#include <linux/iio/consumer.h>
 
 enum {
 	ADC_IBUS,
@@ -104,6 +106,11 @@ struct sc8549_cfg {
 struct sc8549 {
 	struct device *dev;
 	struct i2c_client *client;
+
+	struct iio_dev		*indio_dev;
+	struct iio_chan_spec	*iio_chan;
+	struct iio_channel	*int_iio_chans;
+	struct iio_channel	**ext_iio_chans;
 
 	int device_id;
 	int part_no;
@@ -1097,13 +1104,9 @@ static const struct attribute_group sc8549_attr_group = {
 };
 
 static enum power_supply_property sc8549_charger_props[] = {
-	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_CURRENT_BOOT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 };
 
 static void sc8549_check_fault_status(struct sc8549 *sc);
@@ -1117,10 +1120,6 @@ static int sc8549_charger_get_property(struct power_supply *psy,
 	int result;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CURRENT_BOOT:
-		sc8549_check_charge_enabled(sc, &sc->charge_enabled);
-		val->intval = sc->charge_enabled;
-		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		ret = sc8549_get_vbus_present(sc);
 		if (!ret)
@@ -1142,29 +1141,6 @@ static int sc8549_charger_get_property(struct power_supply *psy,
 
 		val->intval = sc->ibat_curr;
 		break;
-	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
-		ret = sc8549_get_adc_data(sc, ADC_VBUS, &result);
-		if (!ret)
-			sc->vbus_volt = result;
-
-		val->intval = sc->vbus_volt;
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = sc8549_get_adc_data(sc, ADC_IBUS, &result);
-		if (!ret)
-			sc->ibus_curr = result;
-
-		val->intval = sc->ibus_curr;
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		sc8549_check_fault_status(sc);
-		val->intval = (sc->bat_ovp_fault << BAT_OVP_FAULT_SHIFT)
-			| (sc->bat_ocp_fault << BAT_OCP_FAULT_SHIFT)
-			| (sc->bus_ovp_fault << BUS_OVP_FAULT_SHIFT)
-			| (sc->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
-			| (sc->ss_timeout_fault << SS_TIMEOUT_FAULT_SHIFT)
-			| (sc->ts_shut_fault << TS_SHUT_FAULT_SHIFT);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -1177,25 +1153,9 @@ static int sc8549_charger_set_property(struct power_supply *psy,
 {
 	struct sc8549 *sc = power_supply_get_drvdata(psy);
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CURRENT_BOOT:
-		sc8549_enable_charge(sc, val->intval);
-		sc8549_check_charge_enabled(sc, &sc->charge_enabled);
-		sc_info("POWER_SUPPLY_PROP_CHARGING_ENABLED: %s, %d\n",
-				val->intval ? "enable" : "disable", sc->charge_enabled);
-		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		sc8549_set_present(sc, !!val->intval);
 		sc_info("set present :%d\n", val->intval);
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_EMPTY:
-		sc->bat_ovp_fault = false;
-		sc->bat_ocp_fault = false;
-		sc->bus_ovp_fault = false;
-		sc->bus_ocp_fault = false;
-		sc->drop_ovp_fault = false;
-		sc->ac_ovp_fault = false;
-		sc->ss_timeout_fault = false;
-		sc->ts_shut_fault = false;
 		break;
 	default:
 		return -EINVAL;
@@ -1210,9 +1170,6 @@ static int sc8549_charger_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CURRENT_BOOT:
-		ret = 1;
-		break;
 	default:
 		ret = 0;
 		break;
@@ -1400,21 +1357,182 @@ static struct of_device_id sc8549_charger_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, sc8549_charger_match_table);
 
+static int sc8549_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	struct sc8549 *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		sc8549_enable_charge(chip, val1);
+		sc8549_check_charge_enabled(chip, &chip->charge_enabled);
+		sc_info("sc8549 cp enable: %s, %d\n",
+				val1 ? "enable" : "disable", chip->charge_enabled);
+		break;
+	case PSY_IIO_MMI_CP_CLEAR_ERROR:
+		chip->bat_ovp_fault = false;
+		chip->bat_ocp_fault = false;
+		chip->bus_ovp_fault = false;
+		chip->bus_ocp_fault = false;
+		chip->drop_ovp_fault = false;
+		chip->ac_ovp_fault = false;
+		chip->ss_timeout_fault = false;
+		chip->ts_shut_fault = false;
+		break;
+	default:
+		sc_err("Unsupported sc8549 IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		sc_err("Couldn't write IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int sc8549_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	struct sc8549 *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	*val1 = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		sc8549_check_charge_enabled(chip, &chip->charge_enabled);
+		*val1 = chip->charge_enabled;
+		break;
+	case PSY_IIO_MMI_CP_INPUT_CURRENT_NOW:
+		rc = sc8549_get_adc_data(chip, ADC_IBUS, val1);
+		if (!rc)
+			chip->ibus_curr = *val1;
+		break;
+	case PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW:
+		rc = sc8549_get_adc_data(chip, ADC_VBUS, val1);
+		if (!rc)
+			chip->vbus_volt = *val1;
+		break;
+	case PSY_IIO_CP_STATUS1:
+		sc8549_check_fault_status(chip);
+		*val1 = (chip->bat_ovp_fault << BAT_OVP_FAULT_SHIFT)
+			| (chip->bat_ocp_fault << BAT_OCP_FAULT_SHIFT)
+			| (chip->bus_ovp_fault << BUS_OVP_FAULT_SHIFT)
+			| (chip->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
+			| (chip->ss_timeout_fault << SS_TIMEOUT_FAULT_SHIFT)
+			| (chip->ts_shut_fault << TS_SHUT_FAULT_SHIFT);
+		break;
+	default:
+		sc_err("Unsupported sc8549 IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		sc_err("Couldn't read IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int sc8549_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct sc8549 *chip = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = chip->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(sc8549_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info sc8549_iio_info = {
+	.read_raw	= sc8549_iio_read_raw,
+	.write_raw	= sc8549_iio_write_raw,
+	.of_xlate	= sc8549_iio_of_xlate,
+};
+
+static int sc8549_init_iio_psy(struct sc8549 *chip)
+{
+	struct iio_dev *indio_dev = chip->indio_dev;
+	struct iio_chan_spec *chan;
+	int sc8549_num_iio_channels = ARRAY_SIZE(sc8549_iio_psy_channels);
+	int rc, i;
+
+	chip->iio_chan = devm_kcalloc(chip->dev, sc8549_num_iio_channels,
+				sizeof(*chip->iio_chan), GFP_KERNEL);
+	if (!chip->iio_chan)
+		return -ENOMEM;
+
+	chip->int_iio_chans = devm_kcalloc(chip->dev,
+				sc8549_num_iio_channels,
+				sizeof(*chip->int_iio_chans),
+				GFP_KERNEL);
+	if (!chip->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &sc8549_iio_info;
+	indio_dev->dev.parent = chip->dev;
+	indio_dev->dev.of_node = chip->dev->of_node;
+	indio_dev->name = "sc8549-charger";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = chip->iio_chan;
+	indio_dev->num_channels = sc8549_num_iio_channels;
+
+	for (i = 0; i < sc8549_num_iio_channels; i++) {
+		chip->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &chip->iio_chan[i];
+		chip->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = sc8549_iio_psy_channels[i].channel_num;
+		chan->type = sc8549_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			sc8549_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			sc8549_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			sc8549_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(chip->dev, indio_dev);
+	if (rc)
+		pr_err("Failed to register sc8549 IIO device, rc=%d\n", rc);
+
+	return rc;
+}
 
 static int sc8549_charger_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
 	struct sc8549 *sc;
+	struct iio_dev *indio_dev;
 	const struct of_device_id *match;
 	struct device_node *node = client->dev.of_node;
 	int ret;
 	printk("-----------sc8549---------\n");
 
-	sc = devm_kzalloc(&client->dev, sizeof(struct sc8549), GFP_KERNEL);
+	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*sc));
+	if (!indio_dev)
+		return -ENOMEM;
+
+	sc = iio_priv(indio_dev);
 	if (!sc) {
 		sc_err("Out of memory\n");
 		return -ENOMEM;
 	}
+	sc->indio_dev = indio_dev;
+
 	sc->dev = &client->dev;
 
 	sc->client = client;
@@ -1437,6 +1555,12 @@ static int sc8549_charger_probe(struct i2c_client *client,
 	if (match == NULL) {
 		sc_err("device tree match not found!\n");
 		return -ENODEV;
+	}
+
+	ret = sc8549_init_iio_psy(sc);
+	if (ret < 0) {
+		sc_err("Failed to initialize sc8549 IIO PSY, ret = %d\n", ret);
+		return ret;
 	}
 
 	ret = sc8549_parse_dt(sc, &client->dev);

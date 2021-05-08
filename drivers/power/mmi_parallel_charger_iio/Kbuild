@@ -1,14 +1,14 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/power/mmi_parallel_charger
+		-I$(TOP)/motorola/kernel/modules/drivers/power/mmi_parallel_charger_iio
 
-obj-m += mmi_parallel_charger.o
-mmi_parallel_charger-objs += mmi_charger_class.o
-mmi_parallel_charger-objs += mmi_charger_core.o
-mmi_parallel_charger-objs += mmi_charger_pump_policy.o
-mmi_parallel_charger-objs += bq2597x_charger.o
-mmi_parallel_charger-objs += qpnp_pmic_charger.o
+obj-m += mmi_parallel_charger_iio.o
+mmi_parallel_charger_iio-objs += mmi_charger_class.o
+mmi_parallel_charger_iio-objs += mmi_charger_core.o
+mmi_parallel_charger_iio-objs += mmi_charger_pump_policy.o
+mmi_parallel_charger_iio-objs += sc8549_charger.o
+mmi_parallel_charger_iio-objs += qpnp_pmic_charger.o
 
 #ifeq ($(CONFIG_MMI_PL_CP_POLICY), y)
 #endif
