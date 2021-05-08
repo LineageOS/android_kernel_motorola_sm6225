@@ -43,7 +43,7 @@
 #include <linux/types.h>
 #include "mmi_charger_core.h"
 
-extern struct mmi_charger_ops bq2597x_charger_ops;
+extern struct mmi_charger_ops sc8549_charger_ops;
 extern struct mmi_charger_ops qpnp_pmic_charger_ops;
 
 static const struct mmi_chrg_dev_ops dev_ops[] = {
@@ -53,11 +53,11 @@ static const struct mmi_chrg_dev_ops dev_ops[] = {
 	},
 	{
 		.dev_name = "cp-master",
-		.ops = &bq2597x_charger_ops,
+		.ops = &sc8549_charger_ops,
 	},
 	{
 		.dev_name = "cp-slave",
-		.ops = &bq2597x_charger_ops,
+		.ops = &sc8549_charger_ops,
 	},
 };
 
@@ -413,7 +413,7 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 	}
 
 	rc = power_supply_get_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL, &prop);
+				POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT, &prop);
 	if (!rc)
 		pmic_sys_therm_level = prop.intval;
 
