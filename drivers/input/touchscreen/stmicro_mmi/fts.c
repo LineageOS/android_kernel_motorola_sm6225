@@ -127,7 +127,6 @@ extern spinlock_t fts_int;
 
 
 
-static void fts_interrupt_enable(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
 
 
@@ -2760,9 +2759,9 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
   * the FIFO and dispatch them to the proper event handler according the event
   * ID
   */
-static void fts_event_handler(struct work_struct *work)
+static irqreturn_t fts_event_handler(int irq, void *ptr)
 {
-	struct fts_ts_info *info;
+	struct fts_ts_info *info = (struct fts_ts_info *)ptr;
 	int error = 0, count = 0;
 	unsigned char regAdd;
 	unsigned char data[FIFO_EVENT_SIZE] = { 0 };
@@ -2770,13 +2769,9 @@ static void fts_event_handler(struct work_struct *work)
 
 	event_dispatch_handler_t event_handler;
 
-	info = container_of(work, struct fts_ts_info, work);
-
 	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
 
 	/* read the FIFO and parsing events */
-
-
 	regAdd = FIFO_CMD_READONE;
 
 	for (count = 0; count < FIFO_DEPTH; count++) {
@@ -2807,10 +2802,7 @@ static void fts_event_handler(struct work_struct *work)
 	}
 	input_sync(info->input_dev);
 
-
-	/* re-enable interrupts */
-
-	fts_interrupt_enable(info);
+	return IRQ_HANDLED;
 }
 /** @}*/
 
@@ -3046,29 +3038,6 @@ int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 	return ret2;
 }
 
-
-/**
-  * @addtogroup isr
-  * @{
-  */
-/**
-  * Top half Interrupt handler function
-  * Respond to the interrupt and schedule the bottom half interrupt handler
-  * in its work queue
-  * @see fts_event_handler()
-  */
-static irqreturn_t fts_interrupt_handler(int irq, void *handle)
-{
-	struct fts_ts_info *info = handle;
-
-	disable_irq_nosync(info->client->irq);
-
-	queue_work(info->event_wq, &info->work);
-
-	return IRQ_HANDLED;
-}
-
-
 /**
   * Initialize the dispatch table with the event handlers for any possible event
   * ID
@@ -3099,12 +3068,10 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	install_handler(info, STATUS_UPDATE, status);
 	install_handler(info, USER_REPORT, user_report);
 
-	/* disable interrupts in any case */
-	error = fts_disableInterrupt();
-
-	if (request_irq(info->client->irq, fts_interrupt_handler,
-			IRQF_TRIGGER_LOW, FTS_TS_DRV_NAME, info)) {
-		logError(1, "%s Request irq failed\n", tag);
+	error = request_threaded_irq(info->client->irq, NULL, fts_event_handler,
+			 IRQF_TRIGGER_LOW|IRQF_ONESHOT, FTS_TS_DRV_NAME, info);
+	if (error < 0) {
+		logError(1, "%s Request threaded irq failed\n", tag);
 		kfree(info->event_dispatch_table);
 		error = -EBUSY;
 	}
@@ -3124,15 +3091,6 @@ void fts_interrupt_uninstall(struct fts_ts_info *info)
 	kfree(info->event_dispatch_table);
 
 	free_irq(info->client->irq, info);
-}
-
-/**
-  * Enable the host side interrupt
-  */
-static void fts_interrupt_enable(struct fts_ts_info *info)
-{
-	/* logError(0, "%s %s : enable interrupts!\n",tag,__func__); */
-	enable_irq(info->client->irq);
 }
 
 /**@}*/
@@ -4197,8 +4155,6 @@ static int fts_probe(struct spi_device *client)
 		error = -ENOMEM;
 		goto ProbeErrorExit_4;
 	}
-
-	INIT_WORK(&info->work, fts_event_handler);
 
 	INIT_WORK(&info->resume_work, fts_resume_work);
 	INIT_WORK(&info->suspend_work, fts_suspend_work);
