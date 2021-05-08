@@ -69,9 +69,6 @@ enum touch_state {
 	TOUCH_DEEP_SLEEP_STATE = 0,
 	TOUCH_LOW_POWER_STATE,
 };
-#else
-#define register_panel_notifier(...) rc
-#define unregister_panel_notifier(...) rc
 #endif
 
 /*****************************************************************************
