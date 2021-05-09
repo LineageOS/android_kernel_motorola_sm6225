@@ -23,12 +23,14 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/ctype.h>
+#include <linux/version.h>
+#if KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE
 #include <linux/dma-contiguous.h>
+#endif
 #include <linux/dma-mapping.h>
 #include <linux/mmi_annotate.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>
-#include <linux/version.h>
 
 #define MAX_USER_STR 1024
 #define DEFAULT_MEM_SIZE 4096
@@ -92,6 +94,15 @@ static ssize_t mmi_annotate_write(struct file *file, const char __user *buf,
 	return count;
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops mmi_annotate_operations = {
+	.proc_open		= mmi_annotate_open,
+	.proc_read		= seq_read,
+	.proc_write		= mmi_annotate_write,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
+};
+#else
 static const struct file_operations mmi_annotate_operations = {
 	.open		= mmi_annotate_open,
 	.read		= seq_read,
@@ -99,6 +110,7 @@ static const struct file_operations mmi_annotate_operations = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
 static void* mmi_annotate_ram_vmap(phys_addr_t start, size_t size)
