@@ -168,12 +168,21 @@ static int unitinfo_open(struct inode *inode, struct file *file)
 	return single_open(file, unitinfo_seq_show, inode->i_private);
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops unitinfo_operations = {
+	.proc_open		= unitinfo_open,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
+};
+#else
 static const struct file_operations unitinfo_operations = {
 	.open		= unitinfo_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+#endif
 
 int mmi_unit_info_init(void)
 {
