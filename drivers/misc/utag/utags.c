@@ -37,6 +37,7 @@
 #include <linux/completion.h>
 #include <linux/workqueue.h>
 #include <linux/version.h>
+#include <linux/blk_types.h>
 
 #define MAX_UTAG_SIZE 1024
 #define MAX_UTAG_NAME 32
@@ -49,7 +50,6 @@
 #define DEFAULT_ROOT "config"
 #define HW_ROOT "hw"
 
-static const struct file_operations utag_fops;
 struct ctrl;
 
 enum utag_flag {
@@ -174,6 +174,32 @@ static int add_utag_tail(struct utag *head, char *utag_name, char *utag_type);
 static int lock_open(struct inode *inode, struct file *file);
 static int partition_open(struct inode *inode, struct file *file);
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops utag_fops = {
+	.proc_open = partition_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+	.proc_write = write_utag,
+};
+
+static const struct proc_ops new_fops = {
+	.proc_read = NULL,
+	.proc_write = new_utag,
+};
+
+static const struct proc_ops lock_fops = {
+	.proc_open = lock_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+
+static const struct proc_ops delete_fops = {
+	.proc_read = NULL,
+	.proc_write = delete_utag,
+};
+#else
 static const struct file_operations utag_fops = {
 	.owner = THIS_MODULE,
 	.open = partition_open,
@@ -199,6 +225,7 @@ static const struct file_operations delete_fops = {
 	.read = NULL,
 	.write = delete_utag,
 };
+#endif
 
 /*
  * check utag name
@@ -582,7 +609,11 @@ static struct utag *find_first_utag(const struct utag *head, const char *name)
 
 static int proc_utag_file(char *utag_name, char *utag_type,
 	  enum utag_output mode, struct dir_node *dnode,
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	  const struct proc_ops *fops)
+#else
 	  const struct file_operations *fops)
+#endif
 {
 	struct proc_node *node;
 	struct ctrl *ctrl = dnode->ctrl;
@@ -1724,6 +1755,15 @@ static int partition_open(struct inode *inode, struct file *file)
 	return single_open(file, read_utag, PDE_DATA(inode));
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops reload_fops = {
+	.proc_open = reload_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+	.proc_write = reload_write,
+};
+#else
 static const struct file_operations reload_fops = {
 	.owner = THIS_MODULE,
 	.open = reload_open,
@@ -1732,6 +1772,7 @@ static const struct file_operations reload_fops = {
 	.release = single_release,
 	.write = reload_write,
 };
+#endif
 
 static int build_utags_directory(struct ctrl *ctrl)
 {
