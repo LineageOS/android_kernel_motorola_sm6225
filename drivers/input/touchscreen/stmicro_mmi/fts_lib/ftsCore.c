@@ -18,6 +18,7 @@
   * \brief Contains the implementation of the Core functions
   */
 
+#include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
@@ -52,7 +53,7 @@ static int system_reseted_down;	/* /< flag checked during suspend to
 static int disable_irq_count = 1;	/* /< count the number of call to
 					 * disable_irq, start with 1 because at
 					 * the boot IRQ are already disabled */
-spinlock_t fts_int;	/* /< spinlock to controll the access to the
+DEFINE_MUTEX(fts_int_mlock);	/* /< mutex lock to controll the access to the
 			 * disable_irq_counter */
 
 
@@ -881,24 +882,18 @@ int writeConfig(u16 offset, u8 *data, int len)
   */
 int fts_disableInterrupt(void)
 {
-#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-	unsigned long flag;
-#endif
-
 	if (getClient() != NULL) {
-#if  KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-		spin_lock_irqsave(&fts_int, flag);
-#endif
+		mutex_lock(&fts_int_mlock);
 		if (disable_irq_count == 0) {
 			logError(0, "%s Executing Disable...\n", tag);
+
 			disable_irq(getClient()->irq);
+
 			disable_irq_count++;
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-		spin_unlock_irqrestore(&fts_int, flag);
-#endif
+		mutex_unlock(&fts_int_mlock);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
@@ -915,7 +910,7 @@ int fts_disableInterrupt(void)
 int fts_disableInterruptNoSync(void)
 {
 	if (getClient() != NULL) {
-		spin_lock_irq(&fts_int);
+		mutex_lock(&fts_int_mlock);
 		if (disable_irq_count == 0) {
 			logError(0, "%s Executing DisableNoSync...\n", tag);
 			disable_irq_nosync(getClient()->irq);
@@ -923,7 +918,7 @@ int fts_disableInterruptNoSync(void)
 		}
 		/* disable_irq is re-entrant so it is required to keep track
 		  * of the number of calls of this when reenabling */
-		spin_unlock(&fts_int);
+		mutex_unlock(&fts_int_mlock);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
@@ -954,18 +949,18 @@ int fts_is_InterruptEnabled(void)
   */
 int fts_enableInterrupt(void)
 {
-	unsigned long flag;
-
 	if (getClient() != NULL) {
-		spin_lock_irqsave(&fts_int, flag);
+		mutex_lock(&fts_int_mlock);
 		while (disable_irq_count > 0) {
 			/* loop N times according on the pending number of
 			 * disable_irq to truly re-enable the int */
+
 			logError(0, "%s Executing Enable...\n", tag);
 			enable_irq(getClient()->irq);
+
 			disable_irq_count--;
 		}
-		spin_unlock_irqrestore(&fts_int, flag);
+		mutex_unlock(&fts_int_mlock);
 		return OK;
 	} else {
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n",
