@@ -388,18 +388,6 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 	} else
 		logError(1, "%s %s: CHARGER_MODE Disabled!\n", tag, __func__);
 
-	/* if some selective scan want to be enabled can be done an or
-	 * of the following options */
-	/* settings[0] = ACTIVE_MULTI_TOUCH | ACTIVE_KEY | ACTIVE_HOVER
-	 * | ACTIVE_PROXIMITY | ACTIVE_FORCE; */
-	settings[0] = 0xFF;	/* enable all the possible scans mode
-				* supported by the config */
-	logError(0, "%s %s: Sense ON!\n", tag, __func__);
-	res |= setScanMode(SCAN_MODE_ACTIVE, settings[0]);
-	ts->mode |= (SCAN_MODE_ACTIVE << 24);
-	MODE_ACTIVE(ts->mode, settings[0]);
-
-	setSystemResetedUp(0);
 	return res;
 }
 
