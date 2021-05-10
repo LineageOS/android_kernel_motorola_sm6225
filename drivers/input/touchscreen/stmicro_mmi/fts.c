@@ -123,8 +123,6 @@ static u8 key_mask = 0x00;	/* /< store the last update of the key mask
 #endif
 
 
-extern spinlock_t fts_int;
-
 
 
 static int fts_mode_handler(struct fts_ts_info *info, int force);
@@ -4247,8 +4245,6 @@ static int fts_probe(struct spi_device *client)
 #ifdef GESTURE_MODE
 	mutex_init(&gestureMask_mutex);
 #endif
-
-	spin_lock_init(&fts_int);
 
 	/* register the multi-touch input device */
 	error = input_register_device(info->input_dev);
