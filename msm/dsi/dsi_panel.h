@@ -249,6 +249,12 @@ enum cabc_state {
 	CABC_STATE_NUM,
 };
 
+enum dc_state {
+	DC_OFF_STATE = 0,
+	DC_ON_STATE,
+	DC_STATE_NUM,
+};
+
 struct panel_param_val_map {
 	int state;
 	enum dsi_cmd_set_type type;
