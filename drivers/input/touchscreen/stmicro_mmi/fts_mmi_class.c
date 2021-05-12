@@ -189,11 +189,14 @@ static int fts_mmi_get_vendor(struct device *dev, void *cdata) {
 
 static int fts_mmi_get_productinfo(struct device *dev, void *cdata) {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
+	u8 readData[3];
 	char buffer[64];
 	ssize_t blen = 0;
 	ASSERT_PTR(ts);
-	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "fts%04x",
-		ts->sysinfo->u16_chip0Id);
+	fts_writeReadU8UX(FTS_CMD_HW_REG_R, ADDR_SIZE_HW_REG,
+			ADDR_DCHIP_ID, readData, 2, DUMMY_FIFO);
+	blen += scnprintf(buffer+blen, sizeof(buffer)-blen, "fts%02x%02x",
+		readData[0], readData[1]);
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_INFO_LEN, "%s", buffer);
 }
 
