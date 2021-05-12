@@ -226,7 +226,7 @@ static void update_work(struct work_struct *work)
 	int main_dischg = 1;
 	int hb_sched_time = HBDLY_DISCHARGE_MS;
 	bool weakchrg = 0;
-	const char * usb_types[] = {"UNKNOWN","SDP","DCP"};
+	const char * usb_types[] = {"UNKNOWN","SDP","DCP","CDP","ACA","Type-C","PD","PD_DRP"};
 
 	usbtype = get_ps_int_prop(data->usb_psy,
 		POWER_SUPPLY_PROP_USB_TYPE);
@@ -312,8 +312,9 @@ static void update_work(struct work_struct *work)
 		battplus_state = 0;
 		balance_state = 1;
 		flip_chrg_en_state = 1;
+		pr_info("FASTCHG: battfets-OPEN\n");
 	}
-	pr_debug("Flip chrg_en state: %d\n", flip_chrg_en_state);
+	pr_info("Flip chrg_en state: %d\n", flip_chrg_en_state);
 
 	/* Update GPIO controls */
 	update_state_gpio(fet_control_data.battplus_en_gpio, battplus_state);
@@ -356,8 +357,15 @@ static int ps_notify_callback(struct notifier_block *nb,
 		}
 		data->ps_is_present = present_ps;
 
+		/* FETS OPEN prior to reading Vbatt levels */
+		battplus_state = 0;
+		balance_state = 1;
+		update_state_gpio(fet_control_data.battplus_en_gpio, battplus_state);
+		update_state_gpio(fet_control_data.balance_en_n_gpio, balance_state);
+		pr_info("VBATT CHK... battfets-OPEN\n");
+
 		cancel_delayed_work(&data->update);
-		schedule_delayed_work(&data->update, msecs_to_jiffies(1));
+		schedule_delayed_work(&data->update, msecs_to_jiffies(3000));
 	}
 
 	return 0;
