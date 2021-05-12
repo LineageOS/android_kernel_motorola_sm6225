@@ -310,6 +310,7 @@ struct fts_ts_info {
 				 * indicate if active or lpm) */
 	unsigned long touch_id;	/* /< Bitmask for touch id (mapped to input
 				 * slots) */
+	unsigned int touch_count;
 #ifdef STYLUS_MODE
 	unsigned long stylus_id;	/* /< Bitmask for tracking the stylus
 					 * touches (mapped using the touchId) */

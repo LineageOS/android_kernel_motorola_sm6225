@@ -149,8 +149,10 @@ void release_all_touches(struct fts_ts_info *info)
 		input_mt_report_slot_state(info->input_dev, type, 0);
 		/* input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1); */
 	}
+	input_report_key(info->input_dev, BTN_TOUCH, 0);
 	input_sync(info->input_dev);
 	info->touch_id = 0;
+	info->touch_count = 0;
 #ifdef STYLUS_MODE
 	info->stylus_id = 0;
 #endif
@@ -2151,7 +2153,11 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 
 	/* logError(0, "%s  %s : TouchID = %d,Touchcount = %d
 	 *\n",tag,__func__,touchId,touchcount); */
-	input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
+	if (event[0] == EVT_ID_ENTER_POINT) {
+		if (info->touch_count == 0)
+			input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
+		info->touch_count++;
+	}
 
 	/* input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, touchId); */
 	input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
@@ -2225,8 +2231,11 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
 
 	/* no need to set ABS_MT_TRACKING_ID, input_mt_init_slots() already set it */
 	/* input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1); */
+	if (info->touch_count > 0)
+		info->touch_count--;
 
-	input_report_key(info->input_dev, BTN_TOUCH, 0);
+	if (info->touch_count == 0)
+		input_report_key(info->input_dev, BTN_TOUCH, 0);
 	/* logError(0, "%s  %s : Event 0x%02x - release ID[%d]\n", tag,
 	 * __func__, event[0], touchId); */
 }
