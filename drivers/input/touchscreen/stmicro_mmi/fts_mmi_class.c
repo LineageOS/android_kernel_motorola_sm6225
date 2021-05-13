@@ -448,9 +448,6 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 		ts->imports = &fts_mmi_methods.exports;
 
 		dev_info(ts->dev, "MMI start sensing\n");
-		ret = fts_chip_initialization(ts, SPECIAL_FULL_PANEL_INIT);
-		if (ret)
-			dev_err(ts->dev, "Failed chip init\n");
 		fts_init_sensing(ts);
 		fts_enableInterrupt();
 
