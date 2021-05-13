@@ -195,6 +195,7 @@ typedef enum {
 #define GEST_ID_LEFTBRACE	0x11	/* /< '<' */
 #define GEST_ID_RIGHTBRACE	0x12	/* /< '>' */
 #define GEST_ID_CARET		0x13	/* /< '^' */
+#define GEST_ID_SIGTAP		0x19	/* /< Single Tap */
 /** @}*/
 
 /* WRYTE SYSTEM COMMAND (0xA4) */
