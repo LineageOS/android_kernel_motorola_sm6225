@@ -19,6 +19,7 @@
 #include "fts_lib/ftsTool.h"
 #include "fts_lib/ftsError.h"
 #include "fts_lib/ftsSoftware.h"
+#include "fts_lib/ftsGesture.h"
 #include <linux/regulator/consumer.h>
 
 extern void fts_resume_func(struct fts_ts_info *info);
@@ -292,12 +293,17 @@ static int fts_mmi_reset(struct device *dev, int type)
 static int fts_mmi_panel_state(struct device *dev,
 		enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
+	u8 mask[4] = { 0 };
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
 	pr_info("panel state change: %d->%d\n", from, to);
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
+		/* support single tap gesture */
+		fromIDtoMask(GEST_ID_SIGTAP, mask, GESTURE_MASK_SIZE);
+		updateGestureMask(mask, GESTURE_MASK_SIZE, 1);
+		ts->gesture_enabled = 1;
 	case TS_MMI_PM_DEEPSLEEP:
 		fts_suspend_func(ts);
 			break;
