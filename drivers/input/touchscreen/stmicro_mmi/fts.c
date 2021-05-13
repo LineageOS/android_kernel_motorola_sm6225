@@ -2587,7 +2587,7 @@ static void fts_key_event_handler(struct fts_ts_info *info, unsigned
 static void fts_gesture_event_handler(struct fts_ts_info *info, unsigned
 				      char *event)
 {
-	int value;
+	int value = 0;
 	int needCoords = 0;
 
 	logError(0,
@@ -2699,6 +2699,27 @@ static void fts_gesture_event_handler(struct fts_ts_info *info, unsigned
 		case GEST_ID_RIGHTBRACE:
 			value = KEY_RIGHTBRACE;
 			logError(0, "%s %s:  > !\n", tag, __func__);
+			break;
+
+		case GEST_ID_SIGTAP:
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+			if (info->imports && info->imports->report_gesture) {
+				int ret = 0;
+				struct gesture_event_data mmi_event;
+
+				logError(1, "%s %s: invoke imported report gesture function\n", tag, __func__);
+				/* extract X and Y coordinates */
+				mmi_event.evcode = 1;
+				mmi_event.evdata.x = (event[4] << 8) | event[3];
+				mmi_event.evdata.y = (event[6] << 8) | event[5];
+				/* call class method */
+				ret = info->imports->report_gesture(&mmi_event);
+				if (!ret)
+					PM_WAKEUP_EVENT(info->wakesrc, 3000);
+
+				goto gesture_done;
+			}
+#endif
 			break;
 
 		default:
