@@ -4079,6 +4079,9 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_HOT_TEMP,
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+        POWER_SUPPLY_PROP_QC3P_CURRENT_MAX,
+#endif
 };
 
 static int batt_get_prop(struct power_supply *psy,
@@ -4227,6 +4230,10 @@ static int batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+	case POWER_SUPPLY_PROP_QC3P_CURRENT_MAX:
+#endif
 		return 1;
 	default:
 		break;
