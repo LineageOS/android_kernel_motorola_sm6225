@@ -1098,14 +1098,13 @@ void ili_report_debug_lite_mode(u8 *buf, int len)
 
 void ili_report_gesture_mode(u8 *buf, int len)
 {
-	int i, lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
+	int lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
 	u8 ges[P5_X_GESTURE_INFO_LENGTH] = {0};
 	struct gesture_coordinate *gc = ilits->gcoord;
 	struct input_dev *input = ilits->input;
 	bool transfer = ilits->trans_xy;
 
-	for (i = 0; i < len; i++)
-		ges[i] = buf[i];
+	ipio_memcpy(ges, buf, len, P5_X_GESTURE_INFO_LENGTH);
 
 	memset(gc, 0x0, sizeof(struct gesture_coordinate));
 
