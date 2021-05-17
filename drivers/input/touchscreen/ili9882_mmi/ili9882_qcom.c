@@ -569,7 +569,7 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 	}
 	return NOTIFY_OK;
 }
-#else
+#elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void ilitek_plat_early_suspend(struct early_suspend *h)
 {
 	if (ili_sleep_handler(TP_SUSPEND) < 0)
@@ -614,7 +614,8 @@ static void ilitek_plat_sleep_init(void)
 		ILI_ERR("Unable to register notifier_fb\n");
 #endif /* CONFIG_PLAT_SPRD */
 #endif /* CONFIG_DRM_MSM */
-#else
+
+#elif defined(CONFIG_HAS_EARLYSUSPEND)
 	ILI_INFO("Init eqarly_suspend struct\n");
 	ilits->early_suspend.suspend = ilitek_plat_early_suspend;
 	ilits->early_suspend.resume = ilitek_plat_late_resume;
@@ -794,5 +795,8 @@ static void __exit ilitek_plat_dev_exit(void)
 //module_init(ilitek_plat_dev_init);
 late_initcall(ilitek_plat_dev_init);
 module_exit(ilitek_plat_dev_exit);
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_AUTHOR("ILITEK");
 MODULE_LICENSE("GPL");

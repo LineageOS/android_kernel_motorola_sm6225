@@ -90,7 +90,9 @@
 #ifdef CONFIG_FB
 #include <linux/notifier.h>
 #include <linux/fb.h>
-#else
+#endif
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
 
@@ -350,6 +352,7 @@ enum TP_MODEL {
 	MODEL_TM,
 	MODEL_TM_9882N,
 	MODEL_TM_9882H,
+	MODEL_TM_7807S,
 	MODEL_TIANMA_9882N,
 	MODEL_TM_END, //For tianma panel check
 	MODEL_HLT
@@ -797,9 +800,9 @@ struct ilitek_ts_data {
 	struct regulator *vdd;
 	struct regulator *vcc;
 
-#ifdef CONFIG_FB
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block notifier_fb;
-#else
+#elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
 #if CHARGER_NOTIFIER_CALLBACK
