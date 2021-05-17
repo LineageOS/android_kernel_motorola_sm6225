@@ -250,7 +250,26 @@ static void ilitek_tddi_wq_esd_check(struct work_struct *work)
 	complete_all(&ilits->esd_done);
 	ili_wq_ctrl(WQ_ESD, ENABLE);
 }
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+static int read_power_status(u8 *buf)
+{
+	struct file *f = NULL;
+	ssize_t byte = 0;
+	loff_t pos = 0;
 
+	f = filp_open(POWER_STATUS_PATH, O_RDONLY, 0);
+	if (ERR_ALLOC_MEM(f)) {
+		ILI_ERR("Failed to open %s\n", POWER_STATUS_PATH);
+		return -1;
+	}
+
+	kernel_read(f, buf, 20, &pos);
+	ILI_DBG("Read %d bytes\n", (int)byte);
+
+	filp_close(f, NULL);
+	return 0;
+}
+#else
 static int read_power_status(u8 *buf)
 {
 	struct file *f = NULL;
@@ -275,6 +294,7 @@ static int read_power_status(u8 *buf)
 	filp_close(f, NULL);
 	return 0;
 }
+#endif
 
 static void ilitek_tddi_wq_bat_check(struct work_struct *work)
 {
@@ -1008,6 +1028,15 @@ static void ili_update_tp_module_info(void)
 		ilits->md_ini_rq_path = TM_9882H_FW_REQUEST_PATH;
 		ilits->md_fw_ili = CTPM_FW_TM_9882H;
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM_9882H);
+		break;
+	case MODEL_TM_7807S:
+		ilits->md_name = "TM_7807S";
+		ilits->md_fw_filp_path = TM_7807S_FW_FILP_PATH;
+		ilits->md_fw_rq_path = TM_7807S_FW_REQUEST_PATH;
+		ilits->md_ini_path = TM_7807S_INI_NAME_PATH;
+		ilits->md_ini_rq_path = TM_7807S_FW_REQUEST_PATH;
+		ilits->md_fw_ili = CTPM_FW_TM_7807S;
+		ilits->md_fw_ili_size = sizeof(CTPM_FW_TM_7807S);
 		break;
 	case MODEL_TIANMA_9882N:
 		ilits->md_name = "TIANMA_9882N";

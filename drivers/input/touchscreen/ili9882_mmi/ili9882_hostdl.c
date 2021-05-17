@@ -197,7 +197,9 @@ static int ilitek_tddi_fw_iram_read(u8 *buf, u32 start, int len)
 int ili_fw_dump_iram_data(u32 start, u32 end, bool save)
 {
 	struct file *f = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	mm_segment_t old_fs;
+#endif
 	loff_t pos = 0;
 	int i, ret = 0;
 	int len, tmp = debug_en;
@@ -236,12 +238,16 @@ int ili_fw_dump_iram_data(u32 start, u32 end, bool save)
 			goto out;
 		}
 
+		pos = 0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		kernel_write(f, ilits->update_buf, len, &pos);
+#else
 		old_fs = get_fs();
 		set_fs(get_ds());
 		set_fs(KERNEL_DS);
-		pos = 0;
 		vfs_write(f, ilits->update_buf, len, &pos);
 		set_fs(old_fs);
+#endif
 		filp_close(f, NULL);
 		ILI_INFO("Save iram data to %s\n", DUMP_IRAM_PATH);
 	} else {
@@ -709,7 +715,9 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
 	int ret =0, fsize = 0;
 	const struct firmware *fw = NULL;
 	struct file *f = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	mm_segment_t old_fs;
+#endif
 	loff_t pos = 0;
 
 	ILI_INFO("Open file method = %s, path = %s\n",
@@ -785,12 +793,16 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
 		}
 
 		/* ready to map user's memory to obtain data by reading files */
+		pos = 0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+		kernel_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
+#else
 		old_fs = get_fs();
 		set_fs(get_ds());
 		set_fs(KERNEL_DS);
-		pos = 0;
 		vfs_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
 		set_fs(old_fs);
+#endif
 		filp_close(f, NULL);
 		ilits->tp_fw.size = fsize;
 		break;
