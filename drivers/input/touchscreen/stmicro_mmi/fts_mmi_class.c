@@ -308,6 +308,7 @@ static int fts_mmi_panel_state(struct device *dev,
 		fts_suspend_func(ts);
 			break;
 	case TS_MMI_PM_ACTIVE:
+		ts->gesture_enabled = 0;
 			break;
 	default:
 		dev_warn(dev, "invalid panel state %d\n", to);
@@ -373,10 +374,15 @@ static int fts_mmi_fw_update(struct device *dev, char *fwname)
 static int fts_mmi_charger_mode(struct device *dev, int mode)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
-	int res = OK;
 	int ret = OK;
 	u8 settings[4] = { 0 };
 	ASSERT_PTR(ts);
+
+	if (mode == ts->charger_enabled) {
+		logError(1, "%s %s: Charger mode is already %s.\n",
+			tag, __func__, !!mode ? "Enable" : "Disable");
+		return ret;
+	}
 
 	ts->mode = MODE_NOTHING;	/* initialize the mode to nothing in
 					 * order to be updated depending on the
@@ -388,8 +394,6 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 		logError(1, "%s %s: error during setting CHARGER_MODE! ERROR %08X\n",
 			tag, __func__, ret);
 
-	res |= ret;
-
 	if (ret >= OK && ts->charger_enabled == FEAT_ENABLE) {
 		fromIDtoMask(FEAT_SEL_CHARGER, (u8 *)&ts->mode, sizeof(ts->mode));
 		logError(1, "%s %s: CHARGER_MODE Enabled!\n",
@@ -397,7 +401,7 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 	} else
 		logError(1, "%s %s: CHARGER_MODE Disabled!\n", tag, __func__);
 
-	return res;
+	return ret;
 }
 
 static int fts_mmi_wait4ready(struct device *dev)
