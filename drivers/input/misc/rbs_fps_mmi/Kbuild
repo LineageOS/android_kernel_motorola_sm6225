@@ -1,0 +1,12 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+				-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/rbs_fps_mmi
+
+
+
+rbs_fps_mmi-y += etxxx_fp.o
+
+
+obj-m += rbs_fps_mmi.o
+
