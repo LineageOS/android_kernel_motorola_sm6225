@@ -82,6 +82,7 @@ typedef struct
 
 #define SET_WAVEFORM_PARAM_LENGTH (5)
 #define SET_SLICE_PARAM_LENGTH (5)
+#define SET_SHAPED_SLICE_PARAM_LENGTH (6)
 #define SYNTH_PLAY_PARAM_LENGTH (2)
 #define CTRL_OUTPUT_PARAM_LENGTH (1)
 #define SENSING_CONFIG_PARAM_LENGTH (6)
@@ -209,6 +210,29 @@ static ssize_t getIcErrors(struct device *dev,
 
 static DEVICE_ATTR(ic_errors, 0440, getIcErrors, NULL);
 
+static ssize_t getIcSensingState(struct device *dev,
+                           struct device_attribute *attr, char *buf)
+{
+    Context *ctx = dev_get_drvdata(dev);
+    ssize_t res = -EIO;
+
+    if (ctx != NULL && ctx->hapticDriver != NULL)
+    {
+        HapticDriver *driver = ctx->hapticDriver;
+        uint16_t regVal = 0;
+
+        mutex_lock(&ctx->lock);
+        driver->getRegister(driver, ADDRESS_BOS0614_SENSECONFIG_REG, &regVal);
+        mutex_unlock(&ctx->lock);
+
+        res = snprintf(buf, PAGE_SIZE, "%d\n", (regVal & 0x000F) ? 1 : 0);
+    }
+
+    return res;
+}
+
+static DEVICE_ATTR(is_sensing, 0444, getIcSensingState, NULL);
+
 static ssize_t setSynthWaveform(struct device *dev,
                                 struct device_attribute *attr,
                                 const char *buf, size_t count)
@@ -273,27 +297,30 @@ static ssize_t setSynthSlice(struct device *dev,
         SynthSlice slice;
         uint8_t outputChannel = 0;
         size_t paramLength = 0;
-	int numP = 0;
-	ParamsLst params[SET_SLICE_PARAM_LENGTH];
+        uint8_t shape = 0;
+        int numP = 0;
+        ParamsLst params[SET_SHAPED_SLICE_PARAM_LENGTH];
 
-	PARAM_ADD(PARAM_UINT32, &slice.sliceId);
-	PARAM_ADD(PARAM_INT32, &slice.mVAmp);
-	PARAM_ADD(PARAM_UINT32, &slice.mHzFreq);
-	PARAM_ADD(PARAM_UINT32, &slice.cycle);
-	PARAM_ADD(PARAM_UCHAR8, &outputChannel);
+        PARAM_ADD(PARAM_UINT32, &slice.sliceId);
+        PARAM_ADD(PARAM_INT32, &slice.mVAmp);
+        PARAM_ADD(PARAM_UINT32, &slice.mHzFreq);
+        PARAM_ADD(PARAM_UINT32, &slice.cycle);
+        PARAM_ADD(PARAM_UCHAR8, &outputChannel);
+        PARAM_ADD(PARAM_UCHAR8, &shape);
 
-	paramLength = process_params(params, numP, buf);
-	if (paramLength != SET_SLICE_PARAM_LENGTH) {
-		return (ssize_t)paramLength;
-	}
+        paramLength = process_params(params, numP, buf);
+        if (paramLength != SET_SLICE_PARAM_LENGTH &&
+            paramLength != SET_SHAPED_SLICE_PARAM_LENGTH) {
+            return (ssize_t)paramLength;
+        }
 
         dev_dbg(ctx->dev,
-                "[Set Slice] Slice Id: %d Amplitude: %d mV Frequency: %d milliHertz Cycle: %d Output Channel: %d\n",
-                slice.sliceId, slice.mVAmp, slice.mHzFreq, slice.cycle, outputChannel);
+                "[Set Slice] Slice Id: %d Amplitude: %d mV Frequency: %d milliHertz Cycle: %d Shape: %d Output Channel: %d\n",
+                slice.sliceId, slice.mVAmp, slice.mHzFreq, slice.cycle, shape, outputChannel);
 
         mutex_lock(&ctx->lock);
 
-        if (driver->synthSetSlice(driver, (const SynthSlice *) &slice, outputChannel))
+        if (driver->synthSetSlice(driver, (const SynthSlice *) &slice, shape, outputChannel))
         {
             res = count;
         }
@@ -753,7 +780,8 @@ static bool applyingFeedbackButtonConf(Context* ctx, HwButtonFeedback* feedbacks
     //Slice configuration
     for (sliceId = 0; sliceId < feedbacks->nbrSlice; sliceId++)
     {
-        res = res && driver->synthSetSlice(driver, &feedbacks->slice[sliceId], IGNORE_OUPUT_CHANNEL);
+        res = res && driver->synthSetSlice(driver, &feedbacks->slice[sliceId], SHAPE_NO_SHAPE, IGNORE_OUPUT_CHANNEL);
+	pr_debug("set_slice: %d\n", sliceId);
     }
 
     res = res && driver->synthSetWaveform(driver, waveformId, feedbacks->slice->sliceId, feedbacks->nbrSlice, 1,
@@ -774,6 +802,7 @@ static bool applyButtonSensingConfiguration(Context* ctx, uint buttonId, Sensing
 
     HapticDriver* driver = ctx->hapticDriver;
 
+    pr_debug("enter\n");
     res = res && driver->buttonSensing(driver, buttonId, *conf);
     res = res && driver->sensingAutoPlayWave(driver, buttonId, waveformId, conf->direction);
 
@@ -790,9 +819,9 @@ static bool applyDefaultConfiguration(Context* ctx)
     uint buttonId;
     bool res = applyingFeedbackButtonConf(ctx, &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_PRESS],
                                           DEFAULT_PRESS_WAVEFORM_ID);
+    pr_debug("enter\n");
     res = res && applyingFeedbackButtonConf(ctx, &ctx->defaultButtonConfig.feedback[SENSING_DIRECTION_RELEASE],
                                             DEFAULT_RELEASE_WAVEFORM_ID);
-
     for (buttonId = 0; buttonId < ARRAY_SIZE(ctx->defaultButtonConfig.channel) && res; buttonId++)
     {
         if (ctx->defaultButtonConfig.channel[buttonId].present)
@@ -826,6 +855,7 @@ static struct attribute *bosDriverAttrs[] = {
         &dev_attr_sensing_config.attr,
         &dev_attr_sensing_autoplay.attr,
         &dev_attr_sensing_stop.attr,
+        &dev_attr_is_sensing.attr,
         NULL,
 };
 
@@ -916,7 +946,8 @@ static int bosDriverI2cProbe(struct i2c_client *client,
             dev_err(&client->dev, "Failed to decode DT configuration\n");
             goto bosDriverProbeError;
         }
-    }
+    } else
+        pr_info("cannot find matching device tree\n");
 
     mutex_init(&ctx->lock);
 

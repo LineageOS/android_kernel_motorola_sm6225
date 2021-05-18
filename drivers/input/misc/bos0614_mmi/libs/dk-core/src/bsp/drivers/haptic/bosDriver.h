@@ -143,6 +143,15 @@ typedef enum
     BOS_EVENT_NO_EVENT
 } BOSEvent;
 
+typedef enum
+{
+    SHAPE_NO_SHAPE,
+    SHAPE_SAW,
+    SHAPE_TRIANGLE,
+    SHAPE_SLOW_RISE,
+    SHAPE_SLOW_DROP
+} SliceShape;
+
 typedef uint8_t ChannelId;
 
 typedef struct _HapticDriver HapticDriver;
@@ -268,7 +277,7 @@ typedef size_t (* BosGetNumberOfRegister)(void);
  *
  * @return True if the operation succeed, otherwise false
  */
-typedef bool (* BosSynthesizerSetSlice)(HapticDriver* driver, const SynthSlice* slice, const uint8_t outputChannel);
+typedef bool (* BosSynthesizerSetSlice)(HapticDriver* driver, const SynthSlice* slice, SliceShape shape, const uint8_t outputChannel);
 
 /**
  * @brief Set the synthesizer mode
@@ -278,6 +287,7 @@ typedef bool (* BosSynthesizerSetSlice)(HapticDriver* driver, const SynthSlice* 
  * @param[in] frequency     The frequency of the specified waveform
  * @param[in] amplitude     The amplitude of the specified waveform
  * @param[in] cycle         The amount of waveform period to play
+ * @param[in] shape         Shape In/Out arrangement
  * @param[in] outputChannel The output channel to play the waveform
  *
  * @return True if the operation succeed, otherwise false
