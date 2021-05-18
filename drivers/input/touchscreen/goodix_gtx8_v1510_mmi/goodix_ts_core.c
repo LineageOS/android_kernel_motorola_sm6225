@@ -977,7 +977,7 @@ static ssize_t gtp_selftest_read(struct file *file, char __user *buf,
 		kfree(info);
 		return 0;
 	}
-	strcat(info->result, "\n");
+	strlcat(info->result, "\n", sizeof(info->result));
 	ret = simple_read_from_buffer(buf, count, pos, info->result, strlen(info->result));
 	kfree(info);
 
@@ -1861,7 +1861,7 @@ static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 					false);
 		}
 		input_report_key(input_dev, BTN_TOUCH, 0);
-		input_mt_sync_frame(input_dev);
+		/* input_mt_sync_frame(input_dev); */
 		input_sync(input_dev);
 	}
 }
