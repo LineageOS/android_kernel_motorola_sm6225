@@ -920,10 +920,10 @@ static int parse_valid_data(char *buf_start, loff_t buf_size,
 			if (strlen(token) == 0)
 				continue;
 			if ( token[0] == '0' && (token[1] == 'X' || token[1] == 'x')){
-				data[j] = (int32_t)simple_strtol(token, NULL, STRTOL_HEX_LEN);
+				data[j] = (int32_t)simple_strtoul(token, NULL, STRTOL_HEX_LEN);
 				j++;
 			}else{
-				data[j] = (int32_t)simple_strtol(token, NULL, STRTOL_LEN);
+				data[j] = (int32_t)simple_strtoul(token, NULL, STRTOL_LEN);
 				j++;
 			}
 		}
@@ -2334,7 +2334,8 @@ char *gtx8_strncat(char *dest, char *src, size_t dest_size)
 	size_t dest_len = 0;
 
 	dest_len = strnlen(dest, dest_size);
-	return strncat(&dest[dest_len], src, dest_size - dest_len - 1);
+	strlcat(dest, src, dest_len);
+	return dest;
 }
 char *gtx8_strncatint(char *dest, int src, char *format, size_t dest_size)
 {
