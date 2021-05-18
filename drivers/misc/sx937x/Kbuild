@@ -10,6 +10,10 @@ ifneq ($(filter m y,$(CONFIG_SX937X_USB_CAL)),)
 	EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
 endif
 
+ifneq ($(filter m y,$(CONFIG_SX937X_USB_CAL)),)
+	EXTRA_CFLAGS += -DCONFIG_USE_POWER_SUPPLY_ONLINE
+endif
+
 ifneq ($(filter m y,$(CONFIG_SX937X_FLIP_CAL)),)
 	EXTRA_CFLAGS += -DCONFIG_CAPSENSE_FLIP_CAL
 endif
