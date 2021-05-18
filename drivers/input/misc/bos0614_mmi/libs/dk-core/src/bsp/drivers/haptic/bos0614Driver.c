@@ -545,12 +545,41 @@ static bool burstWriteRam(Context *driver, WSFBank bank, uint16_t address, uint1
 
     return res;
 }
+#if 0
+static void hexDump(char* message, uint8_t *data, size_t length)
+{
+    size_t bufferLength = length * 5 + 5;
+    char *buf = kzalloc(bufferLength, GFP_KERNEL);
 
+    if (buf != NULL)
+    {
+        size_t index;
+        char *ptr = buf;
+        char *end = buf + bufferLength;
+
+        uint8_t *_data = (uint8_t *) data;
+
+        for (index = 0; index < length && ptr < end; index++)
+        {
+            ptr += sprintf(ptr, index < (length - 1) ? "0x%02x " : "0x%02x", _data[index]);
+        }
+
+        pr_debug("%s [%s]\n", message, buf);
+
+        kfree(buf);
+    }
+
+}
+#endif
 static bool writeRam(Context *driver, WSFBank bank, uint16_t *data, size_t length)
 {
     int i;
     bool res = false;
-
+#if 0
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer) - 1, "Bank: %d, length=%zu", bank, length);
+    hexDump(buffer, (uint8_t *)data,  length * 2);
+#endif
     memset(driver->txBuffer, 0, sizeof(driver->txBuffer));
     driver->txBuffer[I2C_ADDRESS_INDEX] = ADDRESS_BOS0614_REFERENCE_REG; // [0] Main register map address
     htoBe16(bank, &driver->txBuffer[WRITE_RAM_BANK_INDEX]); // [1-2] WFS bank address
@@ -586,12 +615,13 @@ static bool writeRam(Context *driver, WSFBank bank, uint16_t *data, size_t lengt
 #define VOLT_TO_MILLI_VOLT (1000)
 
 static bool setSlice(Context *driver, SynthSlice const *slice,
-                     uint8_t outputChannel)
+                     SliceShape shape, uint8_t outputChannel)
 {
     uint16_t buffer[SLICE_LENGTH + RAM_ADDRESS_LENGTH];
     uint32_t amplitude_computed =
             (slice->mVAmp * AMPLITUDE_MAX_VALUE) / (AMPLITUDE_MAX_VALUE_VOLT * VOLT_TO_MILLI_VOLT);
     uint8_t channel_computed = outputChannel;
+    uint16_t setShape;
 
     uint32_t freq_computed_den = FREQUENCY_RESOLUTION_HZ * Hz_In_MilliHz;
     uint16_t freq = (uint16_t) (slice->mHzFreq / freq_computed_den);
@@ -601,7 +631,26 @@ static bool setSlice(Context *driver, SynthSlice const *slice,
     buffer[SLICE_AMPLITUDE_INDEX] = (uint16_t) ((channel_computed << 12) | amplitude_computed);
     buffer[SLICE_FREQ_CYCLE_INDEX] = (uint16_t) freq;
     buffer[SLICE_FREQ_CYCLE_INDEX] |= (0xFF & slice->cycle) << SLICE_CYCLE_SHIFT;
-    buffer[SLICE_SHAPE_INDEX] = SLICE_NO_SHAPE;
+
+    switch(shape) {
+	case SHAPE_SAW:
+            setShape = 0x0020; /* 64ms shapeUp only */
+                break;
+	case SHAPE_TRIANGLE:
+            setShape = 0x0022; /* 64ms both ways */
+                break;
+	case SHAPE_SLOW_RISE:
+            setShape = 0x0042; /* 128ms shapeUp and 64ms shapeDn */
+                break;
+	case SHAPE_SLOW_DROP:
+            setShape = 0x0024; /* 64ms shapeUp and 128ms shapeDn */
+                break;
+	default:
+            setShape = SLICE_NO_SHAPE;
+		break;
+    }
+    buffer[SLICE_SHAPE_INDEX] = setShape;
+    pr_debug("Shape = 0x%04x\n", setShape);
 
     return writeRam(driver, WSFBank_Ram, buffer, sizeof(buffer));
 }
@@ -1311,7 +1360,7 @@ bool bos0614CtrlOutput(HapticDriver *driver, bool activate)
 }
 
 bool
-bos0614SetSlice(HapticDriver *driver, const SynthSlice *slice, const uint8_t outputChannel)
+bos0614SetSlice(HapticDriver *driver, const SynthSlice *slice, SliceShape shape, const uint8_t outputChannel)
 {
     bool res = false;
 
@@ -1321,7 +1370,7 @@ bos0614SetSlice(HapticDriver *driver, const SynthSlice *slice, const uint8_t out
         Context *ctx = container_of(driver, Context, hDriver);
 
         res = setMode(ctx, Bos0614Mode_RAM_Synthesis);
-        res = res && setSlice(ctx, slice, outputChannel);
+        res = res && setSlice(ctx, slice, shape, outputChannel);
     }
 
     return res;
@@ -2163,7 +2212,6 @@ static uint8_t regAddrToReadRevC[] = {
     ADDRESS_BOS0614_REG46_REG,
     ADDRESS_BOS0614_REG47_REG
 };
-
 #if 0
 static BOS0614_REGS bOS0614Regs =
         {
@@ -2337,23 +2385,9 @@ static bool setDefaultConfig(Context *ctx)
     {
         memcpy(&ctx->reg, &bos0614RegsRevC, sizeof(bos0614RegsRevC));
     }
-#if 0
-    //No need to copy registers again here!!!
-    memcpy(&ctx->reg, &bOS0614Regs, sizeof(bOS0614Regs));
+
     //Why do we need to do a dummy read???
     res = readAllRegister(ctx);
-
-    //bosDriverI2cProbe calls i2cBoreasLinuxInit
-    //  i2cBoreasLinuxInit calls readDeviceTree
-    //      readDeviceTree populates regToRead with default configuration
-    //
-    //Read SENSECONFIG to determine whether power cut occurred
-    //and necessary to apply default config provided in device tree
-    res = readRegister(ctx, &ctx->reg.common.senseConfig0614.reg);
-    res = res && ctx->reg.common.senseConfig0614.reg.generic.value == regToRead[ADDRESS_BOS0614_SENSECONFIG_REG].value;
-
-    res = readAllRegister(ctx);
-#endif
 
     ctx->reg.common.senseConfig0614.bit.ch0 = BOS0614_DISABLE;
     ctx->reg.common.senseConfig0614.bit.ch1 = BOS0614_DISABLE;
@@ -2361,30 +2395,6 @@ static bool setDefaultConfig(Context *ctx)
     ctx->reg.common.senseConfig0614.bit.ch3 = BOS0614_DISABLE;
     ctx->reg.common.senseConfig0614.bit.same = BOS0614_DISABLE;
 
-#if 0
-    res = ctx->hDriver.setRegister(&ctx->hDriver,
-                ctx->reg.common.senseConfig0614.generic.addr,
-                ctx->reg.common.senseConfig0614.generic.value);
-
-    res = ctx->hDriver.setRegister(&ctx->hDriver,
-		ctx->reg.common.senseConfig0614.reg.generic.addr,
-		ctx->reg.common.senseConfig0614.reg.generic.value);
-
-    //This happens when SENSECONFIG register value from IC
-    //won't match config from device tree
-    if (res == false)
-    {
-        uint32_t index;
-        res = true;
-        for (index = 0; index < DATA_ARRAY_LENGTH(regToRead); index++)
-        {
-            if (regToRead[index].value != 0)
-                res = res && ctx->hDriver.setRegister(&ctx->hDriver,
-                            regToRead[index].addr,
-                            regToRead[index].value);
-        }
-    }
-#endif
     return res;
 }
 

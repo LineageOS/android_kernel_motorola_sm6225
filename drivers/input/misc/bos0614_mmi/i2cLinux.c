@@ -55,11 +55,13 @@ int process_params(ParamsLst *params, int numP, const char *buffer)
 {
 	char *arg, *buf, *p;
 	int n, err;
-	unsigned int valueUI = 0;
-	int valueI = 0;
+	unsigned int valueUI;
+	int valueI;
 
 	p = buf = kstrdup(buffer, GFP_KERNEL);
 	for (n = 0; n < numP && p && *p; n++, params++) {
+		valueI = INT16_MIN;
+		valueUI = UINT16_MAX;
 		arg = strsep(&p, " ");
 		if (!arg || !*arg)
 			break;
@@ -92,89 +94,18 @@ int process_params(ParamsLst *params, int numP, const char *buffer)
 		if (err) {
 			n = err;
 			break;
-		} else if (valueUI != 0) {
-			pr_debug("[%d]=%u\n", n, valueUI);
-		} else if (valueI != 0)
-			pr_debug("[%d]=%d\n", n, valueI);
+		}
 
-		valueI = 0;
-		valueUI = 0;
+		if (valueUI != UINT16_MAX)
+			pr_debug("[%d]=%u\n", n, valueUI);
+		else if (valueI != INT16_MIN)
+			pr_debug("[%d]=%d\n", n, valueI);
 	}
 	kfree(buf);
 	pr_debug("processed %d input parameters\n", n);
 	return n;
 }
-#if 0
-static int readRegsConfig(Context *ctx, struct device_node *parent, const char *suffix)
-{
-	Bos0614RegisterStruct *config = getAllRegsPtr();
-	struct device_node *node;
-	char node_name[64];
-	u32 *temp, length = 0;
-	int npairs, i, index, ret = -EIO;
 
-	scnprintf(node_name, 63, "config-%s", suffix);
-	node = of_find_node_by_name(parent, node_name);
-	if (!node)
-		return -ENODEV;
-
-	if (!of_find_property(node, "config-data", &length)) {
-		dev_err(&ctx->client->dev, "(config-%s) prop config-data not found\n", suffix);
-		goto out;
-	}
-
-	npairs = length / 2;
-	dev_info(&ctx->client->dev, "(config-%s) array size %d\n", suffix, npairs);
-
-	temp = kzalloc(length, GFP_KERNEL);
-	if (!temp)
-		goto out;
-
-	ret = of_property_read_u32_array(node, "config-data", temp, sizeof(u32) * npairs * 2);
-	if (ret) {
-		dev_err(&ctx->client->dev, "error reading config-data (config-%s)\n", suffix);
-		goto release_mem;
-	}
-
-	for (i = 0; i < npairs; i++) {
-		index =(uint16_t)*temp++;
-		config[index].value = (uint16_t)*temp++;
-		dev_info(&ctx->client->dev, "[%d] addr=0x%02x, val=0x%04x\n",
-				i, config[index].addr, config[index].value);
-	}
-
-release_mem:
-	kfree(temp);
-out:
-	of_node_put(node);
-
-	return ret;
-}
-
-static int readDevTree(Context *ctx)
-{
-	int ret, verno;
-	struct device_node *np = ctx->client->dev.of_node;
-	struct device_node *config_np;
-
-	config_np = of_find_node_by_name(np, "configs");
-	if (!config_np) {
-		dev_info(&ctx->client->dev, "does not support configs\n");
-		return 0;
-	}
-
-	if (!of_property_read_u32(config_np, "config-ver", &verno))
-		dev_info(&ctx->client->dev, "dt config Rev.%u\n", verno);
-
-	ret = readRegsConfig(ctx, config_np, "default");
-	if (ret > 0)
-		dev_info(&ctx->client->dev, "has default config\n");
-
-	of_node_put(config_np);
-
-	return 0;
-}
-#endif
 static void logBuffer(struct i2c_client* client, const char* message,
        uint8_t addr, const void* data, size_t length)
 {
