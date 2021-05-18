@@ -1122,15 +1122,28 @@ static int ps_get_state(struct power_supply *psy, bool *present)
 	union power_supply_propval pval = {0};
 	int retval;
 
+#ifdef CONFIG_USE_POWER_SUPPLY_ONLINE
+	retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE,
+			&pval);
+#else
 	retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,
 			&pval);
+#endif
+
 	if (retval) {
 		LOG_DBG("%s psy get property failed\n", psy->desc->name);
 		return retval;
 	}
 	*present = (pval.intval) ? true : false;
+
+#ifdef CONFIG_USE_POWER_SUPPLY_ONLINE
+	LOG_DBG("%s is %s\n", psy->desc->name,
+			(*present) ? "online" : "not online");
+#else
 	LOG_DBG("%s is %s\n", psy->desc->name,
 			(*present) ? "present" : "not present");
+#endif
+
 	return 0;
 }
 
