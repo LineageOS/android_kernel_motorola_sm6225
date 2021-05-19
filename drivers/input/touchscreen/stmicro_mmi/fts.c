@@ -3973,6 +3973,23 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		logError(1, "%s Support set report rate.\n", tag);
 	}
 
+	if (of_property_read_u8_array(np, "st,jitter_cmd",
+			bdata->jitter_cmd, 8) == 0) {
+		bdata->jitter_ctrl = true;
+		logError(1, "%s Support set jitter.\n", tag);
+	}
+
+	if (of_property_read_u8_array(np, "st,linearity_cmd",
+			bdata->linearity_cmd, 3) == 0) {
+		bdata->linearity_ctrl = true;
+		logError(1, "%s Support set linearity.\n", tag);
+	}
+
+	if (of_property_read_u8_array(np, "st,first_filter_cmd",
+			bdata->first_filter_cmd, 4) == 0) {
+		bdata->first_filter_ctrl = true;
+		logError(1, "%s Support set first_filter.\n", tag);
+	}
 	return OK;
 }
 
