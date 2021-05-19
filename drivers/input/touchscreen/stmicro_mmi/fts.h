@@ -234,14 +234,16 @@ struct fts_hw_platform_data {
 	unsigned int y_max;
 	bool y_flip, x_flip;
 	bool power_on_suspend;
-	u8 report_rate_cmd[10];	/* /< support report rate switching */
-	bool report_rate_ctrl;	/* /< support report rate switching */
 	u8 jitter_cmd[8];	/* /< support report rate switching */
 	bool jitter_ctrl;	/* /< support report rate switching */
 	u8 linearity_cmd[3];	/* /< support report rate switching */
 	bool linearity_ctrl;	/* /< support report rate switching */
 	u8 first_filter_cmd[4];	/* /< support report rate switching */
 	bool first_filter_ctrl;	/* /< support report rate switching */
+	u8 interpolation_cmd[10];	/* /< report rate interpolation command */
+	bool interpolation_ctrl;	/* /< support report rate interpolation */
+	u8 report_rate_cmd[3];	/* /< report rate switching command */
+	bool report_rate_ctrl;	/* /< support report rate switching */
 };
 
 /*
@@ -369,6 +371,7 @@ struct fts_ts_info {
 	const char *fw_file;
 	bool force_reflash;
 
+	unsigned int interpolation_val;
 	unsigned int report_rate;
 	u8 jitter_val[8];
 	u8 first_filter_val[4];

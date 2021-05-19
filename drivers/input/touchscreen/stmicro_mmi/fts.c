@@ -3967,10 +3967,10 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		logError(0, "%s flip X\n", tag);
 	}
 
-	if (of_property_read_u8_array(np, "st,report_rate_cmd",
-			bdata->report_rate_cmd, 10) == 0) {
-		bdata->report_rate_ctrl = true;
-		logError(1, "%s Support set report rate.\n", tag);
+	if (of_property_read_u8_array(np, "st,interpolation_cmd",
+			bdata->interpolation_cmd, 10) == 0) {
+		bdata->interpolation_ctrl = true;
+		logError(1, "%s Support report rate interpolation.\n", tag);
 	}
 
 	if (of_property_read_u8_array(np, "st,jitter_cmd",
@@ -3990,6 +3990,13 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		bdata->first_filter_ctrl = true;
 		logError(1, "%s Support set first_filter.\n", tag);
 	}
+
+	if (of_property_read_u8_array(np, "st,report_rate_cmd",
+			bdata->report_rate_cmd, 3) == 0) {
+		bdata->report_rate_ctrl = true;
+		logError(1, "%s Support report rate switching.\n", tag);
+	}
+
 	return OK;
 }
 
