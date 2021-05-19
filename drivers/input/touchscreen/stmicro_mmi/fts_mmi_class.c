@@ -33,9 +33,9 @@ extern int fts_fw_update(struct fts_ts_info *info);
 
 static ssize_t fts_mmi_calibrate_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t fts_mmi_report_rate_store(struct device *dev,
+static ssize_t fts_mmi_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t fts_mmi_report_rate_show(struct device *dev,
+static ssize_t fts_mmi_interpolation_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t fts_mmi_linearity_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
@@ -51,8 +51,8 @@ static ssize_t fts_mmi_jitter_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(calibrate, (S_IWUSR | S_IWGRP), NULL, fts_mmi_calibrate_store);
-static DEVICE_ATTR(report_rate, (S_IRUGO | S_IWUSR | S_IWGRP),
-	fts_mmi_report_rate_show, fts_mmi_report_rate_store);
+static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_mmi_interpolation_show, fts_mmi_interpolation_store);
 static DEVICE_ATTR(linearity, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_linearity_show, fts_mmi_linearity_store);
 static DEVICE_ATTR(first_filter, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -83,8 +83,8 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 	int idx = 0;
 
 	ASSERT_PTR(ts);
-	if (ts->board->report_rate_ctrl)
-		ADD_ATTR(report_rate);
+	if (ts->board->interpolation_ctrl)
+		ADD_ATTR(interpolation);
 
 	if (ts->board->jitter_ctrl)
 		ADD_ATTR(jitter);
@@ -107,34 +107,35 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	return 0;
 }
-/* Configure different reporting rates
- * mode = 0x00, Set report rate 240Hz
- * mode = 0x01, Set report rate 480Hz
+/*
+ * To enable/disable interpolation algorithm to modify report rate.
+ * mode = 0x00, Disable interpolation algorithm
+ * mode = 0x01, Enable interpolation algorithm
  * ...
  */
-static int fts_mmi_set_report_rate(struct fts_ts_info *ts, unsigned int mode)
+static int fts_mmi_set_interpolation(struct fts_ts_info *ts, unsigned int mode)
 {
 	int ret = 0;
 
 	if (mode == 0x00 || mode == 0x01) {
-		ts->board->report_rate_cmd[2] = mode;
-		ret = fts_write(ts->board->report_rate_cmd, ARRAY_SIZE(ts->board->report_rate_cmd));
+		ts->board->interpolation_cmd[2] = mode;
+		ret = fts_write(ts->board->interpolation_cmd, ARRAY_SIZE(ts->board->interpolation_cmd));
 	} else {
-		pr_info("The report rate mode=%d is valid.\n", mode);
+		pr_info("The interpolation mode=%d is valid.\n", mode);
 		return -EINVAL;
 	}
 
 	if (ret == OK) {
-		ts->report_rate = mode;
-		pr_info("Successfully to set report rate mode=%d!\n", ts->report_rate);
+		ts->interpolation_val = mode;
+		pr_info("Successfully to set inpolation = %d!\n", ts->interpolation_val);
 	} else
-		pr_info("Failed to set report rate mode=%d!\n", ts->report_rate);
+		pr_info("Failed to set inpolation = %d!\n", ts->interpolation_val);
 
 	return ret;
 }
 
 
-static ssize_t fts_mmi_report_rate_store(struct device *dev,
+static ssize_t fts_mmi_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct fts_ts_info *ts;
@@ -151,17 +152,17 @@ static ssize_t fts_mmi_report_rate_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (ts->report_rate == mode) {
+	if (ts->interpolation_val == mode) {
 		pr_info("value is same,so not write.\n");
 		return size;
 	}
 
-	ret = fts_mmi_set_report_rate(ts, mode);
+	ret = fts_mmi_set_interpolation(ts, mode);
 
 	return size;
 }
 
-static ssize_t fts_mmi_report_rate_show(struct device *dev,
+static ssize_t fts_mmi_interpolation_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct fts_ts_info *ts;
@@ -170,8 +171,8 @@ static ssize_t fts_mmi_report_rate_show(struct device *dev,
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 
-	pr_info("report_rate mode=%d.\n", ts->report_rate);
-	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->report_rate);
+	pr_info("Interpolation mode = %d.\n", ts->interpolation_val);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->interpolation_val);
 }
 
 static ssize_t fts_mmi_jitter_store(struct device *dev,
@@ -549,8 +550,8 @@ static int fts_mmi_post_resume(struct device *dev)
 	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 
 	/* restore data */
-	if (ts->board->report_rate_ctrl)
-		fts_mmi_set_report_rate(ts, ts->report_rate);
+	if (ts->board->interpolation_ctrl)
+		fts_mmi_set_interpolation(ts, ts->interpolation_val);
 
 	if (ts->board->jitter_ctrl) {
 		ret = fts_write(board->jitter_cmd, ARRAY_SIZE(board->jitter_cmd));
@@ -568,6 +569,12 @@ static int fts_mmi_post_resume(struct device *dev)
 		ret = fts_write(board->first_filter_cmd, ARRAY_SIZE(board->first_filter_cmd));
 		if (ret == OK)
 			dev_dbg(dev, "%s: Successfully to restore first_filter mode!\n", __func__);
+	}
+
+	if (ts->board->report_rate_ctrl) {
+		ret = fts_write(board->report_rate_cmd, ARRAY_SIZE(board->report_rate_cmd));
+		if (ret == OK)
+			dev_dbg(dev, "%s: Successfully to restore report rate mode!\n", __func__);
 	}
 
 	return 0;
@@ -623,6 +630,33 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 	return ret;
 }
 
+#define DSI_REFRESH_RATE_144			144
+static int fts_mmi_refresh_rate(struct device *dev, int freq)
+{
+	struct fts_hw_platform_data *board;
+	struct fts_ts_info *ts;
+
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	board = ts->board;
+
+	if (freq == DSI_REFRESH_RATE_144)
+		board->report_rate_cmd[2] = 0x01;
+	else
+		board->report_rate_cmd[2] = 0x00;
+
+	if (ts->report_rate == board->report_rate_cmd[2]) {
+		pr_info("value is same,so not write.\n");
+		return 0;
+	}
+
+	ts->report_rate = board->report_rate_cmd[2];
+	fts_write(board->report_rate_cmd, ARRAY_SIZE(board->report_rate_cmd));
+
+	logError(1, "%s %s: Successfully to write refresh rate %dhz!\n", tag, __func__, freq);
+	return 0;
+}
+
 static int fts_mmi_wait4ready(struct device *dev)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
@@ -647,6 +681,7 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.reset =  fts_mmi_reset,
 	.drv_irq = fts_mmi_drv_irq,
 	.charger_mode = fts_mmi_charger_mode,
+	.refresh_rate = fts_mmi_refresh_rate,
 	.power = fts_mmi_power,
 	.pinctrl = fts_mmi_pinctrl,
 	.wait_for_ready = fts_mmi_wait4ready,
@@ -674,10 +709,9 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 		fts_init_sensing(ts);
 		fts_enableInterrupt();
 
-		/* initialize value */
-		/* The report rate defaults to 240Hz */
-		if (ts->board->report_rate_ctrl)
-			ts->report_rate = 0x00;
+		/* Disable interpolation algorithm */
+		if (ts->board->interpolation_ctrl)
+			ts->interpolation_val = 0x00;
 
 	} else
 		ts_mmi_dev_unregister(ts->dev);
