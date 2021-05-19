@@ -1167,7 +1167,9 @@ static int fts_read_file(char *file_name, u8 **file_buf)
     old_fs = get_fs();
     set_fs(KERNEL_DS);
     pos = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     ret = vfs_read(filp, *file_buf, file_len , &pos);
+#endif
     if (ret < 0)
         FTS_ERROR("read file fail");
     FTS_INFO("file len:%d read len:%d pos:%d", (u32)file_len, ret, (u32)pos);
