@@ -60,7 +60,7 @@ static char *charge_rate[] = {
 #define MIN_TEMP_C -20
 #define MAX_TEMP_C 60
 #define HYSTEREISIS_DEGC 2
-void mmi_chrg_rate_check(struct mmi_charger_manager *chg);
+bool mmi_chrg_rate_check(struct mmi_charger_manager *chg);
 bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c, bool ignore_hysteresis_degc)
 {
 	int prev_zone, num_zones;
@@ -811,7 +811,7 @@ static int get_prop_charger_present(struct mmi_charger_manager *chg,
 #define TURBO_30W_CHRG_THRSH_UW 25000000
 #define HYPER_CHRG_THRSH_UW 40000000
 
-void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
+bool mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 {
 	union power_supply_propval val;
 	int chrg_cm_ma = 0;
@@ -822,14 +822,14 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 
 	if (!chg->usb_psy) {
 		mmi_chrg_err(chg, "No usb PSY\n");
-		return;
+		return false;
 	}
 
 	val.intval = 0;
 	rc = get_prop_charger_present(chg, &val);
 	if (rc < 0) {
 		mmi_chrg_err(chg, "Error getting Charger Present rc = %d\n", rc);
-		return;
+		return false;
 	}
 
 	if (val.intval) {
@@ -838,7 +838,7 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 				POWER_SUPPLY_PROP_HW_CURRENT_MAX, &val);
 		if (rc < 0) {
 			mmi_chrg_info(chg, "Error getting HW Current Max rc = %d\n", rc);
-			return;
+			return false;
 		}
 		chrg_cm_ma = val.intval / 1000;
 
@@ -847,7 +847,7 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &val);
 		if (rc < 0) {
 			mmi_chrg_err(chg, "Error getting ICL Settled rc = %d\n", rc);
-			return;
+			return false;
 		}
 		chrg_cs_ma = val.intval / 1000;
 	} else {
@@ -871,10 +871,12 @@ void mmi_chrg_rate_check(struct mmi_charger_manager *chg)
 			chg->charger_rate = POWER_SUPPLY_CHARGE_RATE_TURBO_30W;
 	}
 end_rate_check:
-	if (prev_chg_rate != chg->charger_rate)
+	if (prev_chg_rate != chg->charger_rate) {
 		mmi_chrg_info(chg, "%s Charger Detected\n",
 		       charge_rate[chg->charger_rate]);
-
+		return true;
+	} else
+		return false;
 }
 #if 0
 #define CHG_SHOW_MAX_SIZE 50
@@ -1346,32 +1348,33 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	if (chip->use_batt_age)
 		mmi_cycle_counts(chip);
 
-	mmi_chrg_rate_check(chip);
-       if (!chip->extrn_fg) {
-		val.intval = chip->charger_rate;
-		ret = power_supply_set_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_CHARGE_RATE, &val);
-		if (ret)
-			mmi_chrg_err(chip, "Unable to set charge rate: %d\n", ret);
-       }
+	if(mmi_chrg_rate_check(chip)) {
+	       if (!chip->extrn_fg) {
+			val.intval = chip->charger_rate;
+			ret = power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_RATE, &val);
+			if (ret)
+				mmi_chrg_err(chip, "Unable to set charge rate: %d\n", ret);
+	       }
 
-	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
-	if (!chrg_rate_string) {
-		mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
-		envp[0] = NULL;
-	} else {
-		scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
-			  "POWER_SUPPLY_CHARGE_RATE=%s",
-			  charge_rate[chip->charger_rate]);
-		envp[0] = chrg_rate_string;
-		envp[1] = NULL;
+		chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
+		if (!chrg_rate_string) {
+			mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
+			envp[0] = NULL;
+		} else {
+			scnprintf(chrg_rate_string, CHG_SHOW_MAX_SIZE,
+				  "POWER_SUPPLY_CHARGE_RATE=%s",
+				  charge_rate[chip->charger_rate]);
+			envp[0] = chrg_rate_string;
+			envp[1] = NULL;
+		}
+
+		if (chip->qcom_psy) {
+			mmi_power_supply_changed(chip->batt_psy, envp);
+		}
+
+		kfree(chrg_rate_string);
 	}
-
-	if (chip->qcom_psy) {
-		mmi_power_supply_changed(chip->batt_psy, envp);
-	}
-
-	kfree(chrg_rate_string);
 
 	__pm_relax(&chip->mmi_hb_wake_source);
 
