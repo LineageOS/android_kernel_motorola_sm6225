@@ -69,12 +69,15 @@ enum touch_state {
 extern int nvt_mmi_init(struct nvt_ts_data *ts_data, bool enable);
 #endif
 
-#ifdef NVT_SENSOR_EN
+#if defined (NVT_SENSOR_EN) || defined (CONFIG_INPUT_TOUCHSCREEN_MMI)
 #ifdef CONFIG_HAS_WAKELOCK
 static struct wake_lock gesture_wakelock;
 #else
 static struct wakeup_source *gesture_wakelock;
 #endif
+#endif
+
+#if defined (NVT_SENSOR_EN)
 static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 
 	.name = "dt-gesture",
@@ -229,8 +232,6 @@ const struct mtk_chip_config spi_ctrdata = {
     .cs_pol = 0,
 };
 #endif
-
-static uint8_t bTouchIsAwake = 0;
 
 /*******************************************************
 Description:
@@ -1018,55 +1019,55 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 
 	switch (gesture_id) {
 		case GESTURE_WORD_C:
-			NVT_LOG("Gesture : Word-C.\n");
+			NVT_DBG("Gesture : Word-C.\n");
 			keycode = gesture_key_array[0];
 			break;
 		case GESTURE_WORD_W:
-			NVT_LOG("Gesture : Word-W.\n");
+			NVT_DBG("Gesture : Word-W.\n");
 			keycode = gesture_key_array[1];
 			break;
 		case GESTURE_WORD_V:
-			NVT_LOG("Gesture : Word-V.\n");
+			NVT_DBG("Gesture : Word-V.\n");
 			keycode = gesture_key_array[2];
 			break;
 		case GESTURE_DOUBLE_CLICK:
-			NVT_LOG("Gesture : Double Click.\n");
+			NVT_DBG("Gesture : Double Click.\n");
 			keycode = gesture_key_array[3];
 			break;
 		case GESTURE_WORD_Z:
-			NVT_LOG("Gesture : Word-Z.\n");
+			NVT_DBG("Gesture : Word-Z.\n");
 			keycode = gesture_key_array[4];
 			break;
 		case GESTURE_WORD_M:
-			NVT_LOG("Gesture : Word-M.\n");
+			NVT_DBG("Gesture : Word-M.\n");
 			keycode = gesture_key_array[5];
 			break;
 		case GESTURE_WORD_O:
-			NVT_LOG("Gesture : Word-O.\n");
+			NVT_DBG("Gesture : Word-O.\n");
 			keycode = gesture_key_array[6];
 			break;
 		case GESTURE_WORD_e:
-			NVT_LOG("Gesture : Word-e.\n");
+			NVT_DBG("Gesture : Word-e.\n");
 			keycode = gesture_key_array[7];
 			break;
 		case GESTURE_WORD_S:
-			NVT_LOG("Gesture : Word-S.\n");
+			NVT_DBG("Gesture : Word-S.\n");
 			keycode = gesture_key_array[8];
 			break;
 		case GESTURE_SLIDE_UP:
-			NVT_LOG("Gesture : Slide UP.\n");
+			NVT_DBG("Gesture : Slide UP.\n");
 			keycode = gesture_key_array[9];
 			break;
 		case GESTURE_SLIDE_DOWN:
-			NVT_LOG("Gesture : Slide DOWN.\n");
+			NVT_DBG("Gesture : Slide DOWN.\n");
 			keycode = gesture_key_array[10];
 			break;
 		case GESTURE_SLIDE_LEFT:
-			NVT_LOG("Gesture : Slide LEFT.\n");
+			NVT_DBG("Gesture : Slide LEFT.\n");
 			keycode = gesture_key_array[11];
 			break;
 		case GESTURE_SLIDE_RIGHT:
-			NVT_LOG("Gesture : Slide RIGHT.\n");
+			NVT_DBG("Gesture : Slide RIGHT.\n");
 			keycode = gesture_key_array[12];
 			break;
 		default:
@@ -1074,7 +1075,21 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 	}
 
 	if (keycode > 0) {
-#ifdef NVT_SENSOR_EN
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		if (ts->imports && ts->imports->report_gesture) {
+			struct gesture_event_data event;
+			int ret = 0;
+
+			dev_dbg(&ts->client->dev,
+				"%s: invoke imported report gesture function\n", __func__);
+			/* extract X and Y coordinates */
+			event.evcode = 1;
+			/* call class method */
+			ret = ts->imports->report_gesture(&event);
+			if (!ret)
+				PM_WAKEUP_EVENT(gesture_wakelock, 5000);
+		}
+#elif NVT_SENSOR_EN
 		if (!(ts->wakeable && ts->should_enable_gesture)) {
 			NVT_LOG("Gesture got but wakeable not set. Skip this gesture.");
 			return;
@@ -1569,7 +1584,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	int32_t finger_cnt = 0;
 
 #if WAKEUP_GESTURE
-	if (bTouchIsAwake == 0) {
+	if (ts->bTouchIsAwake == 0) {
 		pm_wakeup_event(&ts->input_dev->dev, 5000);
 	}
 #endif
@@ -1638,7 +1653,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif /* POINT_DATA_CHECKSUM */
 
 #if WAKEUP_GESTURE
-	if (bTouchIsAwake == 0) {
+	if (ts->bTouchIsAwake == 0) {
 		input_id = (uint8_t)(point_data[1] >> 3);
 		nvt_ts_wakeup_gesture_report(input_id, point_data);
 		mutex_unlock(&ts->lock);
@@ -2204,7 +2219,7 @@ static int pen_notifier_callback(struct notifier_block *self,
     else if (event == PEN_DETECTION_PULL)
         ts->nvt_pen_detect_flag = PEN_DETECTION_PULL;
 
-    if (!bTouchIsAwake || !ts->fw_ready_flag) {
+    if (!ts->bTouchIsAwake || !ts->fw_ready_flag) {
         NVT_LOG("touch in suspend or no firmware, so store.");
     } else {
         ret = nvt_mcu_pen_detect_set(ts->nvt_pen_detect_flag);
@@ -2639,7 +2654,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_touchscreen_class_failed;
 	}
 
-	bTouchIsAwake = 1;
+	ts->bTouchIsAwake = 1;
 	NVT_LOG("end\n");
 
 	nvt_irq_enable(true);
@@ -2941,6 +2956,34 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #endif
 }
 
+/**
+ * Release all the touches in the linux input subsystem
+ * @param info pointer to fts_ts_info which contains info about the device and
+ * its hw setup
+ */
+
+void release_all_touches(void)
+{
+#if MT_PROTOCOL_B
+	uint32_t i = 0;
+	for (i = 0; i < ts->max_touch_num; i++) {
+		input_mt_slot(ts->input_dev, i);
+#ifdef PALM_GESTURE_RANGE
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_ORIENTATION, 0);
+#endif
+		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+	}
+#endif
+	input_report_key(ts->input_dev, BTN_TOUCH, 0);
+#if !MT_PROTOCOL_B
+	input_mt_sync(ts->input_dev);
+#endif
+	input_sync(ts->input_dev);
+}
+
 /*******************************************************
 Description:
 	Novatek touchscreen driver suspend function.
@@ -2951,15 +2994,12 @@ return:
 int32_t nvt_ts_suspend(struct device *dev)
 {
 	uint8_t buf[4] = {0};
-#if MT_PROTOCOL_B
-	uint32_t i = 0;
-#endif
 
 #ifdef NVT_SENSOR_EN
 	mutex_lock(&ts->state_mutex);
 #endif
 
-	if (!bTouchIsAwake) {
+	if (!ts->bTouchIsAwake) {
 #ifdef NVT_SENSOR_EN
 		mutex_unlock(&ts->state_mutex);
 #endif
@@ -2986,7 +3026,7 @@ int32_t nvt_ts_suspend(struct device *dev)
 
 	NVT_LOG("start\n");
 
-	bTouchIsAwake = 0;
+	ts->bTouchIsAwake = 0;
 
 #if WAKEUP_GESTURE
 #ifdef NVT_SENSOR_EN
@@ -3021,25 +3061,7 @@ int32_t nvt_ts_suspend(struct device *dev)
 
 	mutex_unlock(&ts->lock);
 
-	/* release all touches */
-#if MT_PROTOCOL_B
-	for (i = 0; i < ts->max_touch_num; i++) {
-		input_mt_slot(ts->input_dev, i);
-#ifdef PALM_GESTURE_RANGE
-		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR, 0);
-		input_report_abs(ts->input_dev, ABS_MT_ORIENTATION, 0);
-#endif
-		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
-	}
-#endif
-	input_report_key(ts->input_dev, BTN_TOUCH, 0);
-#if !MT_PROTOCOL_B
-	input_mt_sync(ts->input_dev);
-#endif
-	input_sync(ts->input_dev);
-
+	release_all_touches();
 	msleep(50);
 
 	NVT_LOG("end\n");
@@ -3064,7 +3086,7 @@ int32_t nvt_ts_resume(struct device *dev)
 #ifdef NVT_SENSOR_EN
 	mutex_lock(&ts->state_mutex);
 #endif
-	if (bTouchIsAwake) {
+	if (ts->bTouchIsAwake) {
 #ifdef NVT_SENSOR_EN
 		mutex_unlock(&ts->state_mutex);
 #endif
@@ -3111,7 +3133,7 @@ int32_t nvt_ts_resume(struct device *dev)
 #endif
 #endif
 
-	bTouchIsAwake = 1;
+	ts->bTouchIsAwake = 1;
 
 	mutex_unlock(&ts->lock);
 
@@ -3414,7 +3436,7 @@ static int charger_notifier_callback(struct notifier_block *nb,
 					 }else{
 						  charger_detection->usb_connected = USB_DETECT_OUT;
 					 }
-					 if (bTouchIsAwake){
+					 if (ts->bTouchIsAwake){
 						 queue_work(charger_detection->nvt_charger_notify_wq,
 								&charger_detection->charger_notify_work);
 					}
