@@ -54,6 +54,10 @@
 
 #include <linux/mmi_wake_lock.h>
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
+
 #define NVT_DEBUG 1
 
 //---GPIO number---
@@ -77,6 +81,7 @@
 #define NVT_LOG(fmt, args...)    pr_info("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
 #endif
 #define NVT_ERR(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
+#define NVT_DBG(fmt, args...)    pr_debug("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
 
 //---Input device info.---
 #define NVT_TS_NAME "NVTCapacitiveTouchScreen"
@@ -117,7 +122,7 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 #define NVT_TOUCH_EXT_PROC 1
 #define NVT_TOUCH_MP 1
 #define MT_PROTOCOL_B 1
-#ifdef NVT_SENSOR_EN
+#if defined (NVT_SENSOR_EN) || defined (CONFIG_INPUT_TOUCHSCREEN_MMI)
 #define WAKEUP_GESTURE 1
 #else
 #define WAKEUP_GESTURE 0
@@ -179,7 +184,7 @@ struct nvt_ts_data {
 	struct delayed_work nvt_fwu_work;
 	uint16_t addr;
 	int8_t phys[32];
-
+	uint8_t bTouchIsAwake;
 	uint8_t fw_ver;
 	uint8_t x_num;
 	uint8_t y_num;
@@ -211,10 +216,12 @@ struct nvt_ts_data {
 #ifdef CONFIG_SPI_MT65XX
     struct mtk_chip_config spi_ctrl;
 #endif
-#ifdef NVT_SENSOR_EN
-	bool wakeable;
-	bool should_enable_gesture;
+#ifdef WAKEUP_GESTURE
 	bool gesture_enabled;
+	bool wakeable;
+#endif
+#ifdef NVT_SENSOR_EN
+	bool should_enable_gesture;
 #ifdef NOVATECH_PEN_NOTIFIER
 	bool fw_ready_flag;
 	int nvt_pen_detect_flag;
@@ -253,6 +260,10 @@ struct nvt_ts_data {
 	struct notifier_block panel_notif;
 #endif
 #endif //version code >= 5.4.0
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	struct ts_mmi_class_methods *imports;
+#endif
 };
 
 #if NVT_TOUCH_PROC
@@ -348,4 +359,5 @@ extern int nvt_palm_set(bool enabled);
 extern int32_t nvt_edge_reject_set(uint32_t status);
 extern uint8_t nvt_edge_reject_read(void);
 #endif
+void release_all_touches(void);
 #endif /* _LINUX_NVT_TOUCH_H */
