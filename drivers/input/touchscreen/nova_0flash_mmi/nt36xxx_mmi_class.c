@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/interrupt.h>
 #include <linux/gpio.h>
 #include <linux/touchscreen_mmi.h>
 #include <linux/regulator/consumer.h>
@@ -182,11 +183,16 @@ static int nvt_mmi_panel_state(struct device *dev,
 
 	GET_TS_DATA(dev);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
-	pr_info("panel state change: %d->%d\n", from, to);
+	NVT_LOG("panel state change: %d->%d\n", from, to);
 	switch (to) {
 		case TS_MMI_PM_GESTURE:
+			ts->gesture_enabled = true;
+			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+			break;
+
 		case TS_MMI_PM_DEEPSLEEP:
-			nvt_ts_suspend(&ts_data->client->dev);
+			ts->gesture_enabled = false;
+			touch_set_state(TS_MMI_PM_DEEPSLEEP, TOUCH_PANEL_IDX_PRIMARY);
 			break;
 
 		case TS_MMI_PM_ACTIVE:
@@ -195,20 +201,82 @@ static int nvt_mmi_panel_state(struct device *dev,
 			dev_warn(dev, "panel mode %d is invalid.\n", to);
 			return -EINVAL;
 	}
-
-	pr_info("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
+	NVT_LOG("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
 	return 0;
-
 }
+
+int32_t nvt_mmi_post_suspend(struct device *dev)
+{
+	uint8_t buf[4] = {0};
+
+	mutex_lock(&ts->lock);
+	NVT_LOG("enter\n");
+
+	if (ts->gesture_enabled) {
+		//---write command to enter "wakeup gesture mode"---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0x13;
+		CTP_SPI_WRITE(ts->client, buf, 2);
+		enable_irq_wake(ts->client->irq);
+		NVT_LOG("Enabled touch wakeup gesture\n");
+	} else {
+		//---write command to enter "deep sleep mode"---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0x11;
+		CTP_SPI_WRITE(ts->client, buf, 2);
+	}
+	ts->bTouchIsAwake = 0;
+
+	mutex_unlock(&ts->lock);
+
+	release_all_touches();
+	msleep(50);
+
+	return 0;
+}
+
+/*******************************************************
+Description:
+	Novatek touchscreen driver resume function.
+
+return:
+	Executive outcomes. 0---succeed.
+*******************************************************/
+static int nvt_mmi_pre_resume(struct device *dev)
+{
+	struct nvt_ts_data *ts_data;
+	int ret = 0;
+
+	GET_TS_DATA(dev);
+	NVT_LOG("enter\n");
+
+	mutex_lock(&ts->lock);
+	ret = nvt_update_firmware(nvt_boot_firmware_name);
+	if (ret) {
+		 NVT_ERR("download firmware failed, ignore check fw state\n");
+	} else {
+		nvt_check_fw_reset_state(RESET_STATE_REK);
+	}
+	mutex_unlock(&ts->lock);
+
+	return 0;
+}
+
 static int nvt_mmi_post_resume(struct device *dev)
 {
 	struct nvt_ts_data *ts_data;
 
 	GET_TS_DATA(dev);
-	pr_info("enter\n");
-	dev_dbg(dev, "%s\n", __func__);
-	nvt_ts_resume(&ts_data->client->dev);
-	pr_info("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
+	NVT_LOG("enter\n");
+
+	mutex_lock(&ts->lock);
+	if (ts->gesture_enabled)
+		disable_irq_wake(ts_data->client->irq);
+
+	ts->bTouchIsAwake = 1;
+	mutex_unlock(&ts->lock);
+
+	NVT_LOG("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
 	return 0;
 }
 
@@ -230,7 +298,9 @@ static struct ts_mmi_methods nvt_mmi_methods = {
 	.firmware_update = nvt_mmi_firmware_update,
 	/* PM callback */
 	.panel_state = nvt_mmi_panel_state,
+	.pre_resume = nvt_mmi_pre_resume,
 	.post_resume = nvt_mmi_post_resume,
+	.post_suspend = nvt_mmi_post_suspend,
 
 };
 
@@ -241,6 +311,8 @@ int nvt_mmi_init(struct nvt_ts_data *ts_data, bool enable) {
 		ret = ts_mmi_dev_register(&ts_data->client->dev, &nvt_mmi_methods);
 		if (ret)
 			dev_err(&ts_data->client->dev, "Failed to register ts mmi\n");
+		/* initialize class imported methods */
+		ts_data->imports = &nvt_mmi_methods.exports;
 	} else
 		ts_mmi_dev_unregister(&ts_data->client->dev);
 
