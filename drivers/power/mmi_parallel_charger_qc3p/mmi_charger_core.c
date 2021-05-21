@@ -1266,7 +1266,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	char *chrg_rate_string = NULL;
 	char *envp[2];
 	union power_supply_propval val;
-	bool pd_active;
 
 	mmi_chrg_info(chip, "MMI: Heartbeat!\n");
 	/* Have not been resumed so wait another 100 ms */
@@ -1316,26 +1315,29 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	ret = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_REAL_TYPE, &val);
-	if (ret || val.intval  != POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
-		mmi_chrg_err(chip, "Unable to read qc3p type or not the qc3p5 type return: %d\n", ret);
-		return;
+	if (ret ) {
+		mmi_chrg_err(chip, "Unable to read real type return: %d\n", ret);
+		goto schedule_work;
 	}
-	chip->qc3p_active = true;
-	pd_active = val.intval;
+
+	if(val.intval  == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+		chip->qc3p_active = true;
+	else
+		chip->qc3p_active = false;
 
 	ret = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_HVDCP_POWER, &val);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read qc3p power: %d\n", ret);
-		return;
+		goto schedule_work;
 	}
 
 	chip->qc3p_power = val.intval;
 	mmi_chrg_err(chip, "qc3p detected power:%d\n",chip->qc3p_power);
 
 	if (!chip->sm_work_running && chip->vbus_present
-		&& pd_active) {
-		chip->pd_pps_support = true;		
+		&& chip->qc3p_active) {
+		chip->pd_pps_support = true;
 		calculate_qc3p_vc_based_power_type(chip);
 
 		if (chip->pd_pps_support
