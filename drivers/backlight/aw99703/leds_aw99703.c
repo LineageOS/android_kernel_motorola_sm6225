@@ -733,6 +733,7 @@ static int aw99703_probe(struct i2c_client *client,
 
 err_sysfs:
 err_init:
+	gpio_free(drvdata->hwen_gpio);
 	kfree(drvdata);
 err_out:
 	return err;
