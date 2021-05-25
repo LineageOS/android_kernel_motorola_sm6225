@@ -113,6 +113,7 @@
 	qcom,mdss-dsi-no-panel-on-read-support;
 	qcom,platform-reset-gpio-always-on;
 	qcom,mdss-dsi-reset-force-pull-low;
+	qcom,mdss-panel-on-rst-pull-down;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,mdss-dsi-panel-supplier = "djnboe";
 
