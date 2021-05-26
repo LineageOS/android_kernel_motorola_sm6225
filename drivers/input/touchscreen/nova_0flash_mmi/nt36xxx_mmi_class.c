@@ -186,13 +186,17 @@ static int nvt_mmi_panel_state(struct device *dev,
 	NVT_LOG("panel state change: %d->%d\n", from, to);
 	switch (to) {
 		case TS_MMI_PM_GESTURE:
+#ifdef NVT_SET_TOUCH_STATE
 			ts->gesture_enabled = true;
 			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 			break;
 
 		case TS_MMI_PM_DEEPSLEEP:
+#ifdef NVT_SET_TOUCH_STATE
 			ts->gesture_enabled = false;
 			touch_set_state(TS_MMI_PM_DEEPSLEEP, TOUCH_PANEL_IDX_PRIMARY);
+#endif
 			break;
 
 		case TS_MMI_PM_ACTIVE:
