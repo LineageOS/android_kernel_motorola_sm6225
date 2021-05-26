@@ -55,11 +55,12 @@ enum {
 	POWER_SUPPLY_CHARGE_RATE_NORMAL,
 	POWER_SUPPLY_CHARGE_RATE_WEAK,
 	POWER_SUPPLY_CHARGE_RATE_TURBO,
+	POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
 	POWER_SUPPLY_CHARGE_RATE_HYPER,
 };
 
 static char *charge_rate[] = {
-	"None", "Normal", "Weak", "Turbo", "Hyper"
+	"None", "Normal", "Weak", "Turbo", "Turbo_30W", "Hyper"
 };
 
 #define MAX_NUM_TEMP_ZONE 10
@@ -1337,6 +1338,7 @@ static void mmi_notify_charger_rate(struct mmi_charger_chip *chip, int rate)
 
 #define WEAK_CHRG_THRSH_MW 2500
 #define TURBO_CHRG_THRSH_MW 12500
+#define TURBO_CHRG_30W_THRSH_MW 25000
 #define HYPER_CHRG_THRSH_MW 40000
 int mmi_get_battery_charger_rate(struct mmi_charger *charger)
 {
@@ -1350,8 +1352,10 @@ int mmi_get_battery_charger_rate(struct mmi_charger *charger)
 		rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
 	else if (info->chrg_pmax_mw < TURBO_CHRG_THRSH_MW)
 		rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
-	else if (info->chrg_pmax_mw < HYPER_CHRG_THRSH_MW)
+	else if (info->chrg_pmax_mw < TURBO_CHRG_30W_THRSH_MW)
 		rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+	else if (info->chrg_pmax_mw < HYPER_CHRG_THRSH_MW)
+		rate = POWER_SUPPLY_CHARGE_RATE_TURBO_30W;
 	else
 		rate = POWER_SUPPLY_CHARGE_RATE_HYPER;
 
