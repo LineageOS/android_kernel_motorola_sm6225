@@ -42,5 +42,3 @@ endif
 ifneq ($(filter m y, $(CONFIG_NAV_DOUBLE_TAP)),)
 EXTRA_CFLAGS += -DCONFIG_NAV_DOUBLE_TAP
 endif
-
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
