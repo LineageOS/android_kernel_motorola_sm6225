@@ -96,23 +96,12 @@ void setResetGpio(int gpio)
 
 int fts_wait_for_ready(void)
 {
-	int ret = -1;
-	int i;
 	u8 readData[FIFO_EVENT_SIZE];
 	int event_to_search;
 
 	event_to_search = (int)EVT_ID_CONTROLLER_READY;
 
-	for (i = 0; i < 3; i++) {
-		ret = pollForEvent(&event_to_search, 1, readData, GENERAL_TIMEOUT);
-		if (ret == ERROR_TIMEOUT || ret == ERROR_BUS_R)
-			fts_system_reset();
-		else
-			return ret;
-	}
-
-	logError(1, "%s fts_wait_for_ready Failed\n", tag);
-	return ret;
+	return pollForEvent(&event_to_search, 1, readData, GENERAL_TIMEOUT);
 }
 
 /**
