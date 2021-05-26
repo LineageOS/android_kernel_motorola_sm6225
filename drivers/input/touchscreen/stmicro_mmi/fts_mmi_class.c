@@ -646,7 +646,7 @@ static int fts_mmi_refresh_rate(struct device *dev, int freq)
 		board->report_rate_cmd[2] = 0x00;
 
 	if (ts->report_rate == board->report_rate_cmd[2]) {
-		pr_info("value is same,so not write.\n");
+		dev_dbg(dev, "%s: value is same, so not write.\n", __func__);
 		return 0;
 	}
 
