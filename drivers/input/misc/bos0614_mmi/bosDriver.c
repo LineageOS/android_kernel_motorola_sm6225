@@ -294,7 +294,7 @@ static ssize_t setSynthSlice(struct device *dev,
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
         HapticDriver *driver = ctx->hapticDriver;
-        SynthSlice slice;
+        SynthSlice slice = {0};
         uint8_t outputChannel = 0;
         size_t paramLength = 0;
         uint8_t shape = 0;
@@ -470,7 +470,7 @@ static ssize_t setSensingConfig(struct device *dev,
     if (ctx != NULL && ctx->hapticDriver != NULL)
     {
         HapticDriver *driver = ctx->hapticDriver;
-        SensingConfig config;
+        SensingConfig config = {0};
         ChannelId channelId = 0;
         size_t paramLength = 0;
         const char *directionS;
@@ -497,7 +497,7 @@ static ssize_t setSensingConfig(struct device *dev,
 
         if (directionS != NULL && modeS != NULL &&
             driver->buttonSensing(driver, channelId, config) &&
-            ctx->hapticDriver->configGPO(ctx->hapticDriver, channelId, GPO_BUTTON_STATE))
+            driver->configGPO(driver, channelId, GPO_BUTTON_STATE))
         {
             dev_dbg(ctx->dev,
                     "[Sensing config] Success Channel #: %d Mode: %s Direction: %s Debouncing Duration: %d microS Threshold: %d Stabilization Duration: %d ms\n",
