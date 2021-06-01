@@ -194,6 +194,7 @@ struct mmi_charger_chip {
 	bool			factory_version;
 	bool			factory_kill_armed;
 	bool			force_charger_disabled;
+	bool			force_charging_enabled;
 
 	int			dcp_pmax;
 	int			hvdcp_pmax;
@@ -672,6 +673,52 @@ static DEVICE_ATTR(force_charger_suspend, 0644,
 		force_charger_suspend_show,
 		force_charger_suspend_store);
 
+static ssize_t force_charging_enable_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int state;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	state = this_chip->force_charging_enabled;
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static ssize_t force_charging_enable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("mmi_charger: Invalid charger enable value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	this_chip->force_charging_enabled = (mode) ? true : false;
+	cancel_delayed_work(&this_chip->heartbeat_work);
+	schedule_delayed_work(&this_chip->heartbeat_work, msecs_to_jiffies(0));
+	mmi_info(this_chip, "%s force_charging_enabled\n", (mode)? "set" : "clear");
+
+	return count;
+}
+
+static DEVICE_ATTR(force_charging_enable, 0644,
+		force_charging_enable_show,
+		force_charging_enable_store);
+
 static struct attribute * mmi_g[] = {
 	&dev_attr_charge_rate.attr,
 	&dev_attr_age.attr,
@@ -727,6 +774,11 @@ static void mmi_battery_supply_init(struct mmi_charger_chip *chip)
 				&dev_attr_force_charger_suspend);
 	if (rc)
 		mmi_err(chip, "couldn't create force_charger_suspend\n");
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_force_charging_enable);
+	if (rc)
+		mmi_err(chip, "couldn't create force_charging_enable\n");
 
 	mmi_info(chip, "battery supply is initialized\n");
 }
@@ -1373,6 +1425,10 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 
 	if (chip->force_charger_disabled || status->demo_chrg_suspend)
 		cfg->charger_suspend = true;
+
+	if (chip->force_charging_enabled) {
+		cfg->charging_disable = false;
+	}
 
 	charger->driver->set_constraint(charger->driver->data, &charger->constraint);
 	charger->driver->config_charge(charger->driver->data, cfg);
@@ -2488,6 +2544,8 @@ static int mmi_charger_remove(struct platform_device *pdev)
 					&dev_attr_factory_charge_upper);
 		device_remove_file(chip->batt_psy->dev.parent,
 					&dev_attr_force_charger_suspend);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_force_charging_enable);
 		sysfs_remove_group(&chip->batt_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		power_supply_put(chip->batt_psy);
