@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Motorola Mobility, LLC.
+ * Copyright (c) 2021 Motorola Mobility, LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,9 +25,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- #ifndef __MMI_CHRG_POLICY_H_
- #define __MMI_CHRG_POLICY_H_
-extern void mmi_chrg_policy_clear(struct mmi_charger_manager *chip);
-extern void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val);
-extern void mmi_qc3p_chrg_policy_clear(struct mmi_charger_manager *chip);
-#endif
+
+extern bool mmi_qc3p_power_active(struct mmi_charger_manager *chg);
+extern int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv);
+
