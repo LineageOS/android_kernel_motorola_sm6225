@@ -138,7 +138,7 @@ static int dump_i2c_reg(struct ti_lmu_bl_chip *chip)
 {
 	struct regmap *regmap = chip->lmu->regmap;
 	int ret_val = 0;
-#if 1
+
 	regmap_read(regmap, 0x10, &ret_val);
 	pr_err("[bkl] %s read 0x10 = 0x%x\n", __func__, ret_val);
 	regmap_read(regmap, 0x1A, &ret_val);
@@ -155,54 +155,6 @@ static int dump_i2c_reg(struct ti_lmu_bl_chip *chip)
 	pr_err("[bkl] %s read 0x18 = 0x%x\n", __func__, ret_val);
 	regmap_read(regmap, 0x16, &ret_val);
 	pr_err("[bkl] %s read 0x16 = 0x%x\n", __func__, ret_val);
-#else
-	regmap_read(regmap, 0x00, &ret_val);
-	pr_err("[bkl] %s read 0x00 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x01, &ret_val);
-	pr_err("[bkl] %s read 0x01 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x10, &ret_val);
-	pr_err("[bkl] %s read 0x10 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x11, &ret_val);
-	pr_err("[bkl] %s read 0x11 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x12, &ret_val);
-	pr_err("[bkl] %s read 0x12 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x13, &ret_val);
-	pr_err("[bkl] %s read 0x13 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x14, &ret_val);
-	pr_err("[bkl] %s read 0x14 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x15, &ret_val);
-	pr_err("[bkl] %s read 0x15 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x16, &ret_val);
-	pr_err("[bkl] %s read 0x16 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x17, &ret_val);
-	pr_err("[bkl] %s read 0x17 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x18, &ret_val);
-	pr_err("[bkl] %s read 0x18 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x19, &ret_val);
-	pr_err("[bkl] %s read 0x19 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x1A, &ret_val);
-	pr_err("[bkl] %s read 0x1A = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x1B, &ret_val);
-	pr_err("[bkl] %s read 0x1B = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x1C, &ret_val);
-	pr_err("[bkl] %s read 0x1C = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x20, &ret_val);
-	pr_err("[bkl] %s read 0x20 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x21, &ret_val);
-	pr_err("[bkl] %s read 0x21 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x22, &ret_val);
-	pr_err("[bkl] %s read 0x22 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x23, &ret_val);
-	pr_err("[bkl] %s read 0x23 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x24, &ret_val);
-	pr_err("[bkl] %s read 0x24 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0xB0, &ret_val);
-	pr_err("[bkl] %s read 0xB0 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0xB2, &ret_val);
-	pr_err("[bkl] %s read 0xB2 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0xB4, &ret_val);
-	pr_err("[bkl] %s read 0xB4 = 0x%x\n", __func__, ret_val);
-#endif
 
 	return 0;
 }
@@ -243,8 +195,6 @@ static int ti_lmu_backlight_enable(struct ti_lmu_bl *lmu_bl, int enable)
 	struct regmap *regmap = chip->lmu->regmap;
 	unsigned long enable_time = chip->cfg->reginfo->enable_usec;
 	u8 *reg = chip->cfg->reginfo->enable;
-	//u8 offset = chip->cfg->reginfo->enable_offset;
-	//u8 mask = BIT(lmu_bl->bank_id) << offset;
 
 	if (!reg)
 		return -EINVAL;
@@ -253,8 +203,6 @@ static int ti_lmu_backlight_enable(struct ti_lmu_bl *lmu_bl, int enable)
 		return regmap_write(regmap, *reg, 0x02);
 	else
 		return regmap_write(regmap, *reg, 0x00);
-
-    dump_i2c_reg(chip);
 
 	if (enable_time > 0)
 		usleep_range(enable_time, enable_time + 100);
@@ -339,16 +287,13 @@ static int ti_lmu_backlight_update_brightness_register(struct ti_lmu_bl *lmu_bl,
 		if (!reginfo->brightness_lsb)
 			return -EINVAL;
 
-		// i = brightness;
-		// brightness = translate_value[i];
-
 		reg = reginfo->brightness_lsb[lmu_bl->bank_id];
 		ret = regmap_update_bits(regmap, reg,
 					 LMU_BACKLIGHT_11BIT_LSB_MASK,
 					 brightness);
 		if (ret)
 			return ret;
-		pr_err("[bkl][after]11bit %s brightness = %d\n", __func__, brightness);
+		pr_debug("[bkl][after]11bit %s brightness = %d\n", __func__, brightness);
 		val = (brightness >> LMU_BACKLIGHT_11BIT_MSB_SHIFT) & 0xFF;
 	} else {
 		val = brightness & 0xFF;
@@ -357,7 +302,6 @@ static int ti_lmu_backlight_update_brightness_register(struct ti_lmu_bl *lmu_bl,
 
 	reg = reginfo->brightness_msb[lmu_bl->bank_id];
     ret = regmap_write(regmap, reg, val);
-    dump_i2c_reg(lmu_bl->chip);
 	return ret;
 }
 static int ti_lmu_backlight_set_brightness(int brightness)
@@ -375,17 +319,12 @@ static int ti_lmu_backlight_set_brightness(int brightness)
 		return ret;
 	}
 
-	/*if (lmu_bl->mode == BL_PWM_BASED)
-		ti_lmu_backlight_pwm_ctrl(lmu_bl, brightness,
-					  bl_dev->props.max_brightness);*/
-
 	return ti_lmu_backlight_update_brightness_register(lmu_bl, brightness);
 }
 
 int lm3697_set_brightness(int brightness)
 {
 	printk(KERN_INFO "[bkl][before]%s brightness = %d\n", __func__, brightness);
-	//return ti_lmu_backlight_update_brightness_register(bl_chip->lmu_bl, brightness);
 
 	return ti_lmu_backlight_set_brightness(brightness);
 }
@@ -424,44 +363,6 @@ static const struct backlight_ops lmu_backlight_ops = {
 	.update_status = ti_lmu_backlight_update_status,
 	.get_brightness = ti_lmu_backlight_get_brightness,
 };
-
-#if 0
-static int of_property_count_elems_of_size(const struct device_node *np,
-				const char *propname, int elem_size)
-{
-	struct property *prop = of_find_property(np, propname, NULL);
-
-	if (!prop)
-		return -EINVAL;
-	if (!prop->value)
-		return -ENODATA;
-
-	if (prop->length % elem_size != 0) {
-		pr_err("size of %s in node %s is not a multiple of %d\n",
-		       propname, np->full_name, elem_size);
-		return -EINVAL;
-	}
-
-	return prop->length / elem_size;
-}
-
-/**
- * of_property_count_u32_elems - Count the number of u32 elements in a property
- *
- * @np:		device node from which the property value is to be read.
- * @propname:	name of the property to be searched.
- *
- * Search for a property in a device node and count the number of u32 elements
- * in it. Returns number of elements on sucess, -EINVAL if the property does
- * not exist or its length does not match a multiple of u32 and -ENODATA if the
- * property does not have a value.
- */
-static int of_property_count_u32_elems(const struct device_node *np,
-				const char *propname)
-{
-	return of_property_count_elems_of_size(np, propname, sizeof(u32));
-}
-#endif
 
 static int ti_lmu_backlight_of_get_ctrl_bank(struct device_node *np,
 					     struct ti_lmu_bl *lmu_bl)
@@ -560,73 +461,6 @@ static int ti_lmu_backlight_of_create(struct ti_lmu_bl_chip *chip,
 
 	return 0;
 }
-
-#if 0
-static int ti_lmu_backlight_create_channel(struct ti_lmu_bl *lmu_bl)
-{
-	struct regmap *regmap = lmu_bl->chip->lmu->regmap;
-	u32 *reg = lmu_bl->chip->cfg->reginfo->channel;
-	int num_channels = lmu_bl->chip->cfg->num_channels;
-	int i, ret;
-	u8 val;
-
-	/*
-	 * How to create backlight output channels:
-	 *   Check 'led_sources' bit and update registers.
-	 *
-	 *   1) Dual channel configuration
-	 *     The 1st register data is used for single channel.
-	 *     The 2nd register data is used for dual channel.
-	 *
-	 *   2) Multiple channel configuration
-	 *     Each register data is mapped to bank ID.
-	 *     Bit shift operation is defined in channel registers.
-	 *
-	 * Channel register data consists of address, mask, value.
-	 * Driver can get each data by using LMU_BL_GET_ADDR(),
-	 * LMU_BL_GET_MASK(), LMU_BL_GET_VAL().
-	 */
-
-	if (num_channels == NUM_DUAL_CHANNEL) {
-		if (lmu_bl->led_sources == LMU_BACKLIGHT_DUAL_CHANNEL_USED)
-			++reg;
-
-		return regmap_update_bits(regmap, LMU_BL_GET_ADDR(*reg),
-					  LMU_BL_GET_MASK(*reg),
-					  LMU_BL_GET_VAL(*reg));
-	}
-
-	for (i = 0; i < num_channels; i++) {
-		if (!reg)
-			break;
-
-		/*
-		 * The result of LMU_BL_GET_VAL()
-		 *
-		 * Register set value. One bank controls multiple channels.
-		 * LM36274 data should be configured with 'single_bank_used'.
-		 * Otherwise, the result is shift bit.
-		 * The bank_id should be shifted for the channel configuration.
-		 */
-
-		if (test_bit(i, &lmu_bl->led_sources)) {
-			if (lmu_bl->chip->cfg->single_bank_used)
-				val = LMU_BL_GET_VAL(*reg);
-			else
-				val = lmu_bl->bank_id << LMU_BL_GET_VAL(*reg);
-
-			ret = regmap_update_bits(regmap, LMU_BL_GET_ADDR(*reg),
-						 LMU_BL_GET_MASK(*reg), val);
-			if (ret)
-				return ret;
-		}
-
-		reg++;
-	}
-
-	return 0;
-}
-#endif
 
 static int ti_lmu_backlight_update_ctrl_mode(struct ti_lmu_bl *lmu_bl)
 {
@@ -731,10 +565,6 @@ static int ti_lmu_backlight_configure(struct ti_lmu_bl *lmu_bl)
 {
 	int ret;
 
-	//ret = ti_lmu_backlight_create_channel(lmu_bl);
-	//if (ret)
-	//	return ret;
-
 	ret = ti_lmu_backlight_update_ctrl_mode(lmu_bl);
 	if (ret)
 		return ret;
@@ -745,9 +575,6 @@ static int ti_lmu_backlight_configure(struct ti_lmu_bl *lmu_bl)
 static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 {
 	struct regmap *regmap = chip->lmu->regmap;
-	//u32 *reg = chip->cfg->reginfo->init;
-	//int num_init = chip->cfg->reginfo->num_init;
-	//int i, ret;
 	pr_err("[bkl] %s enter\n", __func__);
 	/*
 	 * 'init' register data consists of address, mask, value.
@@ -755,25 +582,6 @@ static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 	 * LMU_BL_GET_MASK(), LMU_BL_GET_VAL().
 	 */
 
-#if 0
-	for (i = 0; i < num_init; i++) {
-		if (!reg)
-			break;
-
-		ret = regmap_update_bits(regmap, LMU_BL_GET_ADDR(*reg),
-					 LMU_BL_GET_MASK(*reg),
-					 LMU_BL_GET_VAL(*reg));
-		pr_err("%s ADDR = 0x%x, MASK = 0x%x, VAL = 0x%x\n", __func__,
-					 LMU_BL_GET_ADDR(*reg),
-					 LMU_BL_GET_MASK(*reg),
-					 LMU_BL_GET_VAL(*reg));
-
-		if (ret)
-			return ret;
-
-		reg++;
-	}
-#else
 	regmap_write(regmap, 0x10, 0x07);
 	regmap_write(regmap, 0x12, 0x11);
 	regmap_write(regmap, 0x16, 0x01);
@@ -785,7 +593,7 @@ static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 	regmap_write(regmap, 0x23, 0xFF);
 	regmap_write(regmap, 0x24, 0x02);
     regmap_write(regmap, 0xB4, 0x03);
-#endif
+
 
 	pr_err("[bkl] %s finish\n", __func__);
 	return 0;
@@ -840,24 +648,7 @@ static ssize_t i2c_reg_dump_show(struct device *dev,
 
 	struct regmap *regmap = bl_chip->lmu->regmap;
 	int ret_val = 0;
-#if 0
-	regmap_read(regmap, 0x10, &ret_val);
-	pr_err("[bkl] %s read 0x10 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x1A, &ret_val);
-	pr_err("[bkl] %s read 0x1A = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x1C, &ret_val);
-	pr_err("[bkl] %s read 0x1C = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x22, &ret_val);
-	pr_err("[bkl] %s read 0x22 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x23, &ret_val);
-	pr_err("[bkl] %s read 0x23 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x24, &ret_val);
-	pr_err("[bkl] %s read 0x24 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x18, &ret_val);
-	pr_err("[bkl] %s read 0x18 = 0x%x\n", __func__, ret_val);
-	regmap_read(regmap, 0x16, &ret_val);
-	pr_err("[bkl] %s read 0x16 = 0x%x\n", __func__, ret_val);
-#else
+
 	regmap_read(regmap, 0x00, &ret_val);
 	pr_err("[bkl] %s read 0x00 = 0x%x\n", __func__, ret_val);
 	regmap_read(regmap, 0x01, &ret_val);
@@ -904,7 +695,6 @@ static ssize_t i2c_reg_dump_show(struct device *dev,
 	pr_err("[bkl] %s read 0xB2 = 0x%x\n", __func__, ret_val);
 	regmap_read(regmap, 0xB4, &ret_val);
 	pr_err("[bkl] %s read 0xB4 = 0x%x\n", __func__, ret_val);
-#endif
 
 	ret = snprintf(buf, PAGE_SIZE, "reg dump done \n");
 	return ret;
@@ -912,6 +702,31 @@ static ssize_t i2c_reg_dump_show(struct device *dev,
 
 DEVICE_ATTR(i2c_reg_dump, S_IRUGO, i2c_reg_dump_show, NULL);
 
+static int  ti_lm3697_read_chipid(struct ti_lmu_bl_chip *chip)
+{
+	int ret_val = 0;
+	unsigned char cnt = 0;
+	struct regmap *regmap = chip->lmu->regmap;
+
+	while (cnt < 5)
+	{
+		regmap_read(regmap, 0x00, &ret_val);
+		switch (ret_val)
+		{
+		case 0x01:
+			pr_info("%s ti_lm3697 detected\n",__func__);
+			return 0;
+		default:
+			pr_info("%s unsupported device revision (0x%x)\n",
+				__func__, ret_val);
+			break;
+		}
+		cnt++;
+		msleep(2);
+	}
+
+	return -EINVAL;
+}
 static struct ti_lmu_bl_chip *
 ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 			  const struct ti_lmu_bl_cfg *cfg)
@@ -920,18 +735,16 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 	struct ti_lmu_bl *each;
 	int i, ret;
 
-	pr_err("[bkl] %s enter\n", __func__);
+	pr_debug("[bkl] %s enter\n", __func__);
 
 	if (!cfg) {
 		dev_err(dev, "Operation is not configured\n");
-		return ERR_PTR(-EINVAL);
+		goto err_ein;
 	}
 
 	chip = devm_kzalloc(dev, sizeof(*chip), 0);
-	if (!chip){
-
-		return ERR_PTR(-ENOMEM);
-}
+	if (!chip)
+		goto err_eno;
 
 	chip->dev = dev;
 	chip->lmu = lmu;
@@ -939,37 +752,34 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 
 	ret = ti_lmu_backlight_of_create(chip, dev->of_node);
 	if (ret){
-		return ERR_PTR(ret);
+		goto err_init;
 	}
 
-	dump_i2c_reg(chip);
-#if 0
-	ret = ti_lmu_backlight_init(chip);
-	if (ret) {
-		dev_err(dev, "Backlight init err: %d\n", ret);
-		return ERR_PTR(ret);
+	ret = ti_lm3697_read_chipid(chip);
+	if (ret < 0)
+	{
+		pr_err("%s : ID idenfy failed\n", __func__);
+		goto err_id;
 	}
-#endif
 
 	for (i = 0; i < chip->num_backlights; i++) {
 		each = chip->lmu_bl + i;
 		ret = ti_lmu_backlight_configure(each);
 		if (ret) {
 			dev_err(dev, "[bkl] Backlight config err: %d\n", ret);
-			return ERR_PTR(ret);
+			goto err_each;
 		}
 		ret = ti_lmu_backlight_add_device(dev, each);
 		if (ret) {
 			dev_err(dev, "[bkl] Backlight device err: %d\n", ret);
-			return ERR_PTR(ret);
+			goto err_add;
 		}
-		//backlight_update_status(each->bl_dev);
 	}
 
 	ret = ti_lmu_backlight_init(chip);
 	if (ret) {
 		dev_err(dev, "Backlight init err: %d\n", ret);
-		return ERR_PTR(ret);
+		goto err_init;
 	}
 
 	dump_i2c_reg(chip);
@@ -984,6 +794,21 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 	pr_err("[bkl] %s finish\n", __func__);
 
 	return chip;
+
+err_id:
+	gpio_free(chip->lmu->en_gpio);
+	kfree(chip);
+err_init:
+	kfree(chip);
+err_add:
+	kfree(dev);
+	kfree(each);
+err_each:
+	kfree(each);
+err_ein:
+	return ERR_PTR(-EINVAL);
+err_eno:
+	return ERR_PTR(-ENOMEM);
 }
 
 static void ti_lmu_backlight_unregister(struct ti_lmu_bl_chip *chip)
@@ -1024,11 +849,6 @@ static int ti_lmu_backlight_probe(struct platform_device *pdev)
 
 	pr_err("[bkl] %s enter\n", __func__);
 
-	/* set PM439_GPIO4 output ,HIGH and enable */
-	//spmi_register_write(0xC340,0x11);
-	//spmi_register_write(0xC346,0x80);
-	//writel_relaxed(0x11,0xC340);
-	//writel_relaxed(0x80,0xC346);
 
 	chip = ti_lmu_backlight_register(dev, lmu, &lmu_bl_cfg[pdev->id]);
 	if (IS_ERR(chip))

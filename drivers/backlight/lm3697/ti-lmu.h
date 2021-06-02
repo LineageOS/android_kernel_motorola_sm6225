@@ -21,11 +21,6 @@
 #define LMU_EVENT_MONITOR_DONE		0x01
 
 enum ti_lmu_id {
-	LM3532,
-	LM3631,
-	LM3632,
-	LM3633,
-	LM3695,
 	LM3697,
 	LMU_MAX_ID,
 };
@@ -57,20 +52,6 @@ enum ti_lmu_max_current {
 	LMU_IMAX_28mA,
 	LMU_IMAX_29mA,
 	LMU_IMAX_30mA,
-};
-
-enum lm363x_regulator_id {
-	LM3627X_BOOST,		/* Boost output */
-	LM3627X_LDO_POS,	/* Positive display bias output */
-	LM3627X_LDO_NEG,	/* Negative display bias output */
-	LM3631_BOOST,		/* Boost output */
-	LM3631_LDO_CONT,	/* Display panel controller */
-	LM3631_LDO_OREF,	/* Gamma reference */
-	LM3631_LDO_POS,		/* Positive display bias output */
-	LM3631_LDO_NEG,		/* Negative display bias output */
-	LM3632_BOOST,		/* Boost output */
-	LM3632_LDO_POS,		/* Positive display bias output */
-	LM3632_LDO_NEG,		/* Negative display bias output */
 };
 
 /**

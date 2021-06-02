@@ -50,13 +50,6 @@ static int ti_lmu_enable_hw(struct ti_lmu *lmu, enum ti_lmu_id id)
 	/* Delay about 1ms after HW enable pin control */
 	usleep_range(1000, 1500);
 
-	/* LM3631 has additional power up sequence - enable LCD_EN bit. */
-	if (id == LM3631) {
-		return regmap_update_bits(lmu->regmap, LM3631_REG_DEVCTRL,
-					  LM3631_LCD_EN_MASK,
-					  LM3631_LCD_EN_MASK);
-	}
-
 	return 0;
 }
 
@@ -66,70 +59,6 @@ static void ti_lmu_disable_hw(struct ti_lmu *lmu)
 		gpio_set_value(lmu->en_gpio, 0);
 }
 
-static struct mfd_cell lm3532_devices[] = {
-	{
-		.name          = "ti-lmu-backlight",
-		.id            = LM3532,
-		.of_compatible = "ti,lm3532-backlight",
-	},
-};
-
-#define LM363X_REGULATOR(_id)			\
-{						\
-	.name          = "lm363x-regulator",	\
-	.id            = _id,			\
-	.of_compatible = "ti,lm363x-regulator",	\
-}						\
-
-static struct mfd_cell lm3631_devices[] = {
-	LM363X_REGULATOR(LM3631_BOOST),
-	LM363X_REGULATOR(LM3631_LDO_CONT),
-	LM363X_REGULATOR(LM3631_LDO_OREF),
-	LM363X_REGULATOR(LM3631_LDO_POS),
-	LM363X_REGULATOR(LM3631_LDO_NEG),
-	{
-		.name          = "ti-lmu-backlight",
-		.id            = LM3631,
-		.of_compatible = "ti,lm3631-backlight",
-	},
-};
-
-static struct mfd_cell lm3632_devices[] = {
-	LM363X_REGULATOR(LM3632_BOOST),
-	LM363X_REGULATOR(LM3632_LDO_POS),
-	LM363X_REGULATOR(LM3632_LDO_NEG),
-	{
-		.name          = "ti-lmu-backlight",
-		.id            = LM3632,
-		.of_compatible = "ti,lm3632-backlight",
-	},
-};
-
-static struct mfd_cell lm3633_devices[] = {
-	{
-		.name          = "ti-lmu-backlight",
-		.id            = LM3633,
-		.of_compatible = "ti,lm3633-backlight",
-	},
-	{
-		.name          = "lm3633-leds",
-		.of_compatible = "ti,lm3633-leds",
-	},
-	/* Monitoring driver for open/short circuit detection */
-	{
-		.name          = "ti-lmu-fault-monitor",
-		.id            = LM3633,
-		.of_compatible = "ti,lm3633-fault-monitor",
-	},
-};
-
-static struct mfd_cell lm3695_devices[] = {
-	{
-		.name          = "ti-lmu-backlight",
-		.id            = LM3695,
-		.of_compatible = "ti,lm3695-backlight",
-	},
-};
 
 static struct mfd_cell lm3697_devices[] = {
 	{
@@ -153,19 +82,9 @@ static const struct ti_lmu_data chip##_data =	\
 	.max_register = max_reg,		\
 }						\
 
-TI_LMU_DATA(lm3532, LM3532_MAX_REG);
-TI_LMU_DATA(lm3631, LM3631_MAX_REG);
-TI_LMU_DATA(lm3632, LM3632_MAX_REG);
-TI_LMU_DATA(lm3633, LM3633_MAX_REG);
-TI_LMU_DATA(lm3695, LM3695_MAX_REG);
 TI_LMU_DATA(lm3697, LM3697_MAX_REG);
 
 static const struct of_device_id ti_lmu_of_match[] = {
-	{ .compatible = "ti,lm3532", .data = &lm3532_data },
-	{ .compatible = "ti,lm3631", .data = &lm3631_data },
-	{ .compatible = "ti,lm3632", .data = &lm3632_data },
-	{ .compatible = "ti,lm3633", .data = &lm3633_data },
-	{ .compatible = "ti,lm3695", .data = &lm3695_data },
 	{ .compatible = "ti,lm3697", .data = &lm3697_data },
 	{ }
 };
@@ -242,11 +161,6 @@ static int ti_lmu_remove(struct i2c_client *cl)
 }
 
 static const struct i2c_device_id ti_lmu_ids[] = {
-	{ "lm3532", LM3532 },
-	{ "lm3631", LM3631 },
-	{ "lm3632", LM3632 },
-	{ "lm3633", LM3633 },
-	{ "lm3695", LM3695 },
 	{ "lm3697", LM3697 },
 	{ }
 };
