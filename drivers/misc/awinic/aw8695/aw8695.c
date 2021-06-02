@@ -599,6 +599,13 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 		}
 	}
 	if(flag == true) {
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+	if (aw8695->haptic_mode == HAPTIC_LONG) {
+		pr_info("%s: %d: mot_actuator_on_vibrate_start, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
+			,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
+		mot_actuator_on_vibrate_start();
+	}
+#endif
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
 			AW8695_BIT_GO_MASK, AW8695_BIT_GO_ENABLE);
 		GET_TIME_OF_DAY(&aw8695->pre_enter_time);
@@ -637,7 +644,9 @@ static int aw8695_haptic_stop(struct aw8695 *aw8695)
 	aw8695_haptic_play_mode(aw8695, AW8695_HAPTIC_STANDBY_MODE);
 
 #ifdef CONFIG_AF_NOISE_ELIMINATION
-	if (aw8695->duration > 80)	{
+	if (aw8695->haptic_mode == HAPTIC_LONG) {
+		pr_info("%s: %d: mot_actuator_on_vibrate_stop, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
+			,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
 		mot_actuator_on_vibrate_stop();
 	}
 #endif
@@ -648,12 +657,6 @@ static int aw8695_haptic_stop(struct aw8695 *aw8695)
 static int aw8695_haptic_start(struct aw8695 *aw8695)
 {
 	pr_debug("%s enter\n", __func__);
-
-#ifdef CONFIG_AF_NOISE_ELIMINATION
-	if (aw8695->duration > 80) {
-		mot_actuator_on_vibrate_start();
-	}
-#endif
 
 	aw8695_haptic_play_go(aw8695, true);
 
@@ -1487,6 +1490,12 @@ static int aw8695_haptic_get_f0(struct aw8695 *aw8695)
 	/* clear aw8695 interrupt */
 	ret = aw8695_i2c_read(aw8695, AW8695_REG_SYSINT, &reg_val);
 
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+	pr_info("%s: %d: mot_actuator_on_vibrate_start, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
+		,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
+	mot_actuator_on_vibrate_start();
+#endif
+
 	/* play go and start f0 calibration */
 	aw8695_haptic_play_go(aw8695, true);
 
@@ -1590,6 +1599,12 @@ static int aw8695_haptic_f0_calibration(struct aw8695 *aw8695)
 	aw8695_i2c_write_bits(aw8695, AW8695_REG_SYSCTRL,
 			      AW8695_BIT_SYSCTRL_PLAY_MODE_MASK, AW8695_BIT_SYSCTRL_PLAY_MODE_RAM);
 	aw8695_haptic_stop(aw8695);
+
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+	pr_info("%s: %d: mot_actuator_on_vibrate_stop, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
+		,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
+	mot_actuator_on_vibrate_stop();
+#endif
 
 	return ret;
 }
