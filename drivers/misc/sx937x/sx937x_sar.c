@@ -816,6 +816,40 @@ static void touchProcess(psx93XX_t this)
 	}
 }
 
+#define DSI_DISPALY_MAX_LEN 64
+const char *get_dsi_display_name(void)
+{
+	const char *bootargs = NULL;
+	char *end = NULL;
+	char *idx = NULL;
+	struct device_node *np;
+	static char display[DSI_DISPALY_MAX_LEN] = {'\0'};
+
+	if (display[0] != '\0')
+		return display;
+
+	np = of_find_node_by_path("/chosen");
+	if (np == NULL)
+		return NULL;
+
+	if (of_property_read_string(np, "bootargs", &bootargs) != 0)
+		goto putnode;
+
+	idx = strstr(bootargs, "msm_drm.dsi_display0=");
+	if (idx) {
+		end = strpbrk(idx, " ");
+		idx = strpbrk(idx, "=");
+		if (idx && end > idx)
+			strlcpy(display, idx + 1, end - idx);
+	}
+
+	return display;
+
+putnode:
+	of_node_put(np);
+	return NULL;
+}
+
 #ifdef CONFIG_CAPSENSE_FLIP_CAL
 static int read_dt_regs(struct device *dev, const char *dt_field, int *num_regs, struct smtc_reg_data **regs)
 {
@@ -874,7 +908,9 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 {
 	struct device_node *dNode = dev->of_node;
 	enum of_gpio_flags flags;
-	int rc;
+	int i, rc, support_panel_num;
+	const char *panel_name, *current_dsi;
+	const char *reg_group_name = "Semtech,reg-init";
 
 	if (dNode == NULL)
 		return -ENODEV;
@@ -956,8 +992,39 @@ static int sx937x_parse_dt(struct sx937x_platform_data *pdata, struct device *de
 			return -ENOMEM;
 		}
 
+		current_dsi = get_dsi_display_name();
+		/*
+		   if three's no "support-panel-num" in dts or
+		   there's no matched panel_name(maybe it is a bare board),
+		   the default reg_group_name will be "Semtech,reg-init"
+		*/
+		if(!of_property_read_u32(dNode,"support-panel-num",&support_panel_num))
+		{
+			LOG_INFO("support_panel_num is %d \n", support_panel_num);
+			for (i = 0; i < support_panel_num; i++) {
+				if(of_property_read_string_index(dNode, "support-panel-names", i, &panel_name))
+				{
+					LOG_ERR("[SX937x]: %s - get support-panel-names error\n", __func__);
+        				return -ENODEV;
+				}
+
+				if(strstr(current_dsi, panel_name))
+				{
+					if(of_property_read_string_index(dNode, "reg-groups-names", i, &reg_group_name))
+					{
+						LOG_ERR("[SX937x]: %s - get reg-groups-names error\n", __func__);
+						return -ENODEV;
+					}
+					LOG_INFO("dsi display matched, index %d, support dsi: %s, reg group: %s\n", i, panel_name, reg_group_name);
+					break;
+				}
+			}
+		} else {
+			LOG_INFO("multi panels isn't supported\n");
+		}
+
 		// initialize the array
-		if (of_property_read_u32_array(dNode,"Semtech,reg-init",(u32*)&(pdata->pi2c_reg[0]),sizeof(struct smtc_reg_data)*pdata->i2c_reg_num/sizeof(u32)))
+		if (of_property_read_u32_array(dNode,reg_group_name,(u32*)&(pdata->pi2c_reg[0]),sizeof(struct smtc_reg_data)*pdata->i2c_reg_num/sizeof(u32)))
 			return -ENOMEM;
 	}
 #ifdef CONFIG_CAPSENSE_HEADSET_STATE
