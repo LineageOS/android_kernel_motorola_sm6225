@@ -352,7 +352,7 @@ typedef struct {
 } TestToDo;
 
 
-#define MAX_LIMIT_FILE_NAME 100	/* /< max number of chars of the limit file name
+#define MAX_LIMIT_FILE_NAME 128	/* /< max number of chars of the limit file name
 				 * */
 
 /**
