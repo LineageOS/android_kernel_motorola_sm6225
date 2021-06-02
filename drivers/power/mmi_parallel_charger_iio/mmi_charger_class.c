@@ -69,6 +69,14 @@ int mmi_set_charing_current(struct mmi_charger_device *chrg, u32 uA)
 	return -ENOTSUPP;
 }
 
+int mmi_get_vbus(struct mmi_charger_device *chrg, u32 *mv)
+{
+	if(chrg != NULL && chrg->ops != NULL && chrg->ops->get_vbus)
+		return chrg->ops->get_vbus(chrg,mv);
+
+	return -ENOTSUPP;
+}
+
 int mmi_get_input_current_settled(struct mmi_charger_device *chrg, u32 *uA)
 {
 	if(chrg != NULL && chrg->ops != NULL && chrg->ops->get_input_current_settled)

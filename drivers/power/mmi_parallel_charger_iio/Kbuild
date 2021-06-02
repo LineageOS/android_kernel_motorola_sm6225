@@ -9,6 +9,8 @@ mmi_parallel_charger_iio-objs += mmi_charger_core.o
 mmi_parallel_charger_iio-objs += mmi_charger_pump_policy.o
 mmi_parallel_charger_iio-objs += sc8549_charger.o
 mmi_parallel_charger_iio-objs += qpnp_pmic_charger.o
+mmi_parallel_charger_iio-objs += mmi_qc3p.o
+mmi_parallel_charger_iio-objs += mmi_qc3p_cp_policy.o
 
 #ifeq ($(CONFIG_MMI_PL_CP_POLICY), y)
 #endif

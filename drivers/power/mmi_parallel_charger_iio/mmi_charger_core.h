@@ -280,9 +280,32 @@ struct mmi_charger_manager {
 
 	int mmi_chrg_dev_num;
 	struct mmi_charger_device **chrg_list;	/*charger device list*/
+
+	/*qc3p*/
+	int qc3p_max_ibus_ma;
+	int qc3p_power;
+	bool qc3p_active;
+	bool qc3p_sm_work_running;
+	struct delayed_work	mmi_qc3p_chrg_sm_work;
+	int qc3p_request_volt;
+	int qc3p_request_volt_prev;
+	int qc3p_target_volt;
+	int qc3p_batt_therm_volt;
+	int qc3p_sys_therm_volt;
+	bool qc3p_recovery_pmic_chrg;
+	bool qc3p_sys_therm_cooling;
+	bool qc3p_sys_therm_force_pmic_chrg;
+	bool qc3p_batt_therm_cooling;
+	int qc3p_batt_therm_cooling_cnt;
+	int qc3p_volt_comp;
+	int qc3p_ibus_max_volt;
+	int qc3p_volt_steps;
+	int qc3p_volt_max;
 };
 
 #define PPS_INIT_VOLT_COMP	500000
+#define QC3P_INIT_VOLT_COMP	500000
+extern void mmi_qc3p_chrg_sm_work_func(struct work_struct *work);
 extern struct mmi_cp_policy_dev g_chrg_list;
 extern const struct mmi_chrg_dev_ops dev_ops[];
 extern void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list);
