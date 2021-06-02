@@ -22,6 +22,10 @@
 #include "fts_lib/ftsGesture.h"
 #include <linux/regulator/consumer.h>
 
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+int flash_mode; /* global variable */
+#endif
+
 extern void fts_resume_func(struct fts_ts_info *info);
 extern void fts_suspend_func(struct fts_ts_info *info);
 extern int fts_fw_update(struct fts_ts_info *info);
@@ -456,6 +460,29 @@ static int fts_mmi_get_flashprog(struct device *dev, void *idata)
 	return 0;
 }
 
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+static int fts_mmi_get_flash_mode(struct device *dev, void *idata)
+{
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
+
+	ASSERT_PTR(ts);
+	TO_INT(idata) = flash_mode;
+
+	return 0;
+}
+
+static int fts_mmi_flash_mode(struct device *dev, int mode)
+{
+	struct fts_ts_info *ts = dev_get_drvdata(dev);
+
+	ASSERT_PTR(ts);
+
+	flash_mode = mode;
+
+	return 0;
+}
+#endif
+
 static int fts_mmi_drv_irq(struct device *dev, int state)
 {
 	struct fts_ts_info *ts = dev_get_drvdata(dev);
@@ -676,6 +703,9 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.get_drv_irq = fts_mmi_get_drv_irq,
 	.get_poweron = fts_mmi_get_poweron,
 	.get_flashprog = fts_mmi_get_flashprog,
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	.get_flash_mode = fts_mmi_get_flash_mode,
+#endif
 	.get_class_entry_name = fts_mmi_get_class_entry_name,
 	/* SET methods */
 	.reset =  fts_mmi_reset,
@@ -686,6 +716,9 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.pinctrl = fts_mmi_pinctrl,
 	.wait_for_ready = fts_mmi_wait4ready,
 	/* Firmware */
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	.flash_mode = fts_mmi_flash_mode,
+#endif
 	.firmware_update = fts_mmi_fw_update,
 	/* vendor specific attribute group */
 	.extend_attribute_group = fts_mmi_extend_attribute_group,

@@ -45,6 +45,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/firmware.h>
+#include "fts_mmi.h"
 
 
 #ifdef FW_H_FILE
@@ -54,7 +55,11 @@
 
 extern SysInfo systemInfo;	/* /< forward declaration of the global variable
 				  *  of containing System Info Data */
-
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+extern int flash_mode;  /* /< if flash_mode == 0, use the request_firmware method to upgrade.
+				* if flash_mode == 1, read the firmware data in the /data/vendor/param/touch/
+				* to upgrade. */
+#endif
 
 /**
   * Retrieve the actual FW data from the system (bin file or header file)
@@ -70,32 +75,33 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 	const struct firmware *fw = NULL;
 	struct device *dev = NULL;
 	int res, from = 0;
-	char *path = (char *)pathToFile;
+	char path[MAX_LIMIT_FILE_NAME] = { 0 };
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	struct file *filp = NULL;
+	struct inode *inode;
+	loff_t pos = 0;
+	loff_t file_len = 0;
+#endif
 
 	logError(1, "%s getFWdata starting ...\n", tag);
 	if (strncmp(pathToFile, "NULL", 4) == 0) {
 		from = 1;
-		path = PATH_FILE_FW;
+		snprintf(path, MAX_LIMIT_FILE_NAME, "%s", PATH_FILE_FW);
 	}
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	else if (flash_mode == FW_PARAM_MODE) {
+		from = 2;
+		snprintf(path, MAX_LIMIT_FILE_NAME, "%s%s", TS_MMI_FW_PARAM_PATH, pathToFile);
+	}
+#endif
+	else
+		snprintf(path, MAX_LIMIT_FILE_NAME, "%s", pathToFile);
+
 	/* keep the switch case because if the argument passed is null but
 	  * the option from .h is not set we still try to load from bin */
-	switch (from) {
-#ifdef FW_H_FILE
-	case 1:
-		logError(1, "%s Read FW from .h file!\n", tag);
-		*size = FW_SIZE_NAME;
-		*data = (u8 *)kmalloc((*size) * sizeof(u8), GFP_KERNEL);
-		if (*data == NULL) {
-			logError(1,
-				 "%s getFWdata: Impossible to allocate memory! ERROR %08X\n",
-				 tag, ERROR_ALLOC);
-			return ERROR_ALLOC;
-		}
-		memcpy(*data, (u8 *)FW_ARRAY_NAME, (*size));
 
-		break;
-#endif
-	default:
+	switch (from) {
+	case 0:
 		logError(1, "%s Read FW from BIN file %s !\n", tag, path);
 		dev = getDev();
 
@@ -127,6 +133,54 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 				 ERROR_OP_NOT_ALLOW);
 			return ERROR_OP_NOT_ALLOW;
 		}
+		break;
+#ifdef FW_H_FILE
+	case 1:
+		logError(1, "%s Read FW from .h file!\n", tag);
+		*size = FW_SIZE_NAME;
+		*data = (u8 *)kmalloc((*size) * sizeof(u8), GFP_KERNEL);
+		if (*data == NULL) {
+			logError(1,
+				 "%s getFWdata: Impossible to allocate memory! ERROR %08X\n",
+				 tag, ERROR_ALLOC);
+			return ERROR_ALLOC;
+		}
+		memcpy(*data, (u8 *)FW_ARRAY_NAME, (*size));
+
+		break;
+#endif
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	case 2:
+		logError(1, "%s Read FW from parm path %s!\n", tag, path);
+		filp = filp_open(path, O_RDONLY, 0);
+		if (IS_ERR(filp)) {
+			logError(1, "%s open %s file fail", tag, file_path);
+			return -ENOENT;
+		}
+		inode = filp->f_inode;
+		file_len = inode->i_size;
+		*data = (u8 *)vmalloc(file_len);
+		if (NULL == *data) {
+			logError(1, "%s Failed to malloc param firmware memory! ERROR %08X\n",
+				tag, ERROR_ALLOC);
+			filp_close(filp, NULL);
+			return -ENOMEM;
+		}
+		res = kernel_read(filp, *data, file_len, &pos);
+		if (res < 0) {
+			logError(1, "%s Failed to read param firmware file!\n", tag);
+			filp_close(filp, NULL);
+			return -EIO;
+		}
+		*size = res;
+		logError(1, "%s fw file len:%d pos:%d!\n", tag, (u32)file_len, (u32)pos);
+		filp_close(filp, NULL);
+
+		break;
+#endif
+	default:
+		logError(1, "%s Invalid firmware upgrade mode: %d\n", tag, from);
+		return -1;
 	}
 
 	logError(1, "%s getFWdata Finished!\n", tag);
@@ -206,6 +260,7 @@ int flashProcedure(const char *path, int force, int keep_cx)
 		return res | ERROR_FLASH_PROCEDURE;
 	}
 	logError(0, "%s flashing procedure Finished!\n", tag);
+
 	kfree(fw.data);
 
 	return res;
@@ -556,7 +611,14 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 	}
 
 END:
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	if (flash_mode == FW_PARAM_MODE)
+		vfree(fw_data);
+	else
+		kfree(fw_data);
+#else
 	kfree(fw_data);
+#endif
 	return res;
 }
 
