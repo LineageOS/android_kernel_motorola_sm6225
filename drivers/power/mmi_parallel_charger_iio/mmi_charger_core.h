@@ -158,6 +158,21 @@ struct mmi_chrg_dts_info {
 	int charging_curr_min;
 };
 
+enum mmi_chrg_dev {
+	PMIC_SW = 0,
+	CP_MASTER,
+	CP_SLAVE,
+	CHRG_NUM,
+};
+
+struct mmi_cp_policy_dev {
+	bool pmic_sw;
+	bool cp_master;
+	bool cp_slave;
+	bool cp_clave_later;
+	struct mmi_charger_device *chrg_dev[CHRG_NUM];
+};
+
 #define PPS_RET_HISTORY_SIZE	8
 #define PD_SRC_PDO_TYPE_FIXED		0
 #define PD_SRC_PDO_TYPE_BATTERY		1
@@ -267,13 +282,19 @@ struct mmi_charger_manager {
 	struct mmi_charger_device **chrg_list;	/*charger device list*/
 };
 
+#define PPS_INIT_VOLT_COMP	500000
+extern struct mmi_cp_policy_dev g_chrg_list;
+extern const struct mmi_chrg_dev_ops dev_ops[];
+extern void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list);
+extern void chrg_policy_error_clear(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list);
+extern void mmi_chrg_sm_work_func(struct work_struct *work);
+extern void chrg_dev_init(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list);
 extern bool mmi_get_pps_result_history(struct mmi_charger_manager *chip);
 extern void mmi_set_pps_result_history(struct mmi_charger_manager *chip, int pps_result);
 extern void mmi_clear_pps_result_history(struct mmi_charger_manager *chip);
 extern int mmi_calculate_delta_volt(int pps_voltage, int pps_current, int delta_curr);
 extern bool mmi_find_chrg_step(struct mmi_charger_manager *chip, int temp_zone, int vbatt_volt);
 extern bool mmi_find_temp_zone(struct mmi_charger_manager *chip, int temp_c, bool ignore_hysteresis_degc);
-extern void clear_chg_manager(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_status(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
 extern void mmi_dump_charger_error(struct mmi_charger_manager *chip,

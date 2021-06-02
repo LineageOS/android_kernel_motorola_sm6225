@@ -27,9 +27,6 @@
  */
  #ifndef __MMI_CHRG_POLICY_H_
  #define __MMI_CHRG_POLICY_H_
-extern int mmi_chrg_policy_init(struct mmi_charger_manager *chip,
-								struct mmi_chrg_dts_info *chrg_dts,
-								int chrg_cnt);
 extern void mmi_chrg_policy_clear(struct mmi_charger_manager *chip);
 extern void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val);
 #endif

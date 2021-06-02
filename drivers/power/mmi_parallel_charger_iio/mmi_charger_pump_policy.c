@@ -43,39 +43,6 @@
 #include <linux/types.h>
 #include "mmi_charger_core.h"
 
-extern struct mmi_charger_ops sc8549_charger_ops;
-extern struct mmi_charger_ops qpnp_pmic_charger_ops;
-
-static const struct mmi_chrg_dev_ops dev_ops[] = {
-	{
-		.dev_name = "pmic-sw",
-		.ops = &qpnp_pmic_charger_ops,
-	},
-	{
-		.dev_name = "cp-master",
-		.ops = &sc8549_charger_ops,
-	},
-	{
-		.dev_name = "cp-slave",
-		.ops = &sc8549_charger_ops,
-	},
-};
-
-enum mmi_chrg_dev {
-	PMIC_SW = 0,
-	CP_MASTER,
-	CP_SLAVE,
-	CHRG_NUM,
-};
-
-struct mmi_cp_policy_dev {
-	bool pmic_sw;
-	bool cp_master;
-	bool cp_slave;
-	bool cp_clave_later;
-	struct mmi_charger_device *chrg_dev[CHRG_NUM];
-};
-
 typedef enum  {
 	PM_STATE_DISCONNECT,
 	PM_STATE_ENTRY,
@@ -119,7 +86,6 @@ static int chrg_cv_delta_volt = 0;
 static int quit_slave_chrg_cnt = 0;
 static int batt_curr_roof = 0;
 static int pd_constant_power_cnt = 0;
-static struct mmi_cp_policy_dev g_chrg_list = {0};
 
 static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state_t state)
 {
@@ -130,60 +96,6 @@ static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state
 	batt_curr_roof = 0;
 }
 
-static void chrg_dev_init(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
-{
-	int chrg_num, i;
-	chrg_num = chip->mmi_chrg_dev_num;
-	mmi_chrg_err(chip,"runing in chrg dev init!\n");
-
-	for (i = 0; i < chrg_num; i++) {
-
-		switch (i) {
-		case PMIC_SW:
-			if (is_charger_exist(dev_ops[PMIC_SW].dev_name)) {
-				chrg_list->pmic_sw = true;
-				chrg_list->chrg_dev[PMIC_SW] = chip->chrg_list[PMIC_SW];
-				}
-			break;
-		case CP_MASTER:
-			if (is_charger_exist(dev_ops[CP_MASTER].dev_name)) {
-				chrg_list->cp_master = true;
-				chrg_list->chrg_dev[CP_MASTER] = chip->chrg_list[CP_MASTER];
-				}
-			break;
-		case CP_SLAVE:
-			if (is_charger_exist(dev_ops[CP_SLAVE].dev_name)) {
-				chrg_list->cp_slave = true;
-				chrg_list->cp_clave_later = false;
-				chrg_list->chrg_dev[CP_SLAVE] = chip->chrg_list[CP_SLAVE];
-				}
-			break;
-		default:
-			mmi_chrg_err(chip,"No mmi_chrg_dev found %d !\n",i);
-			break;
-		}
-	}
-	return;
-}
-
-static void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_policy_dev *chrg_list)
-{
-	int chrg_num, i;
-	struct mmi_charger_device *chrg_dev;
-	chrg_num = chip->mmi_chrg_dev_num;
-
-	for (i = 0; i < chrg_num; i++) {
-		if (is_charger_exist(dev_ops[i].dev_name)) {
-			chrg_dev = chrg_list->chrg_dev[i];
-			chrg_dev->charger_error.chrg_err_type = 0;
-			chrg_dev->charger_error.bus_ucp_err_cnt = 0;
-			chrg_dev->charger_error.bus_ocp_err_cnt = 0;
-		}
-	}
-	return;
-}
-
-#define PPS_INIT_VOLT_COMP	500000
 #define PPS_VOLT_COMP_DELTA	300000
 static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 										struct mmi_cp_policy_dev *chrg_list)
@@ -273,37 +185,6 @@ static void chrg_policy_error_recovery(struct mmi_charger_manager *chip,
 	return;
 }
 
-static void chrg_policy_error_clear(struct mmi_charger_manager *chip,
-					struct mmi_cp_policy_dev *chrg_list)
-{
-	int chrg_num = 0, i = 0;
-	struct mmi_charger_device *chrg_dev;
-	chrg_num = chip->mmi_chrg_dev_num;
-
-	for (i = 0; i < chrg_num; i++) {
-		switch (i) {
-			case PMIC_SW:
-				break;
-
-			case CP_MASTER:
-				if (is_charger_exist(dev_ops[CP_MASTER].dev_name)) {
-					chrg_dev = chrg_list->chrg_dev[CP_MASTER];
-					mmi_clear_charger_error(chrg_dev);
-				}
-				break;
-
-			case CP_SLAVE:
-				break;
-
-			default:
-				mmi_chrg_err(chip,"mmi_chrg_dev not found %d !\n",i);
-				break;
-		}
-	}
-
-	return;
-}
-
 void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 {
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
@@ -361,6 +242,29 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define CP_CHRG_SOC_LIMIT 90
 #define PD_CONT_PWR_CNT 5
 
+static void clear_chg_manager(struct mmi_charger_manager *chip)
+{
+	mmi_chrg_dbg(chip, PR_INTERRUPT, "clear mmi chrg manager!\n");
+	chip->pd_request_volt = 0;
+	chip->pd_request_curr = 0;
+	chip->pd_request_volt_prev = 0;
+	chip->pd_request_curr_prev = 0;
+	chip->pd_target_curr = 0;
+	chip->pd_target_volt = 0;
+	chip->pd_batt_therm_volt = 0;
+	chip->pd_batt_therm_curr = 0;
+	chip->pd_sys_therm_volt = 0;
+	chip->pd_sys_therm_curr = 0;
+	chip->recovery_pmic_chrg = false;
+	chip->sys_therm_cooling= false;
+	chip->sys_therm_force_pmic_chrg = false;
+	chip->batt_therm_cooling = false;
+	chip->batt_therm_cooling_cnt = 0;
+
+	memset(chip->mmi_pdo_info, 0,
+			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
+}
+
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	chrg_dev_init(chip, &g_chrg_list);
@@ -379,7 +283,7 @@ void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	return;
 }
 
-static void mmi_chrg_sm_work_func(struct work_struct *work)
+void mmi_chrg_sm_work_func(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, mmi_chrg_sm_work.work);
@@ -1589,75 +1493,4 @@ skip_pd_select:
 	return;
 }
 
-int mmi_chrg_policy_init(struct mmi_charger_manager *chip,
-					struct mmi_chrg_dts_info *chrg_dts,
-					int chrg_cnt) {
-	int i = 0, ops_cnt = 0, chrg_idx = 0;
-	struct mmi_charger_device *chrg_dev;
-
-	if (!chip ||!chrg_dts) {
-		mmi_chrg_err(chip, "invalid input param!\n");
-		return -EINVAL;
-	}
-
-	ops_cnt = ARRAY_SIZE(dev_ops);
-	if (chrg_cnt > ops_cnt ||
-		chrg_cnt > chip->mmi_chrg_dev_num) {
-		mmi_chrg_err(chip, "invalid input param!, chrg_cnt %d , ops_cnt %d, "
-						"mmi_chrg_dev_num %d\n",
-			chrg_cnt, ops_cnt, chip->mmi_chrg_dev_num);
-		return -EINVAL;
-	}
-
-	mmi_chrg_err(chip, "chrg_cnt %d\n", chrg_cnt);
-	for (i = 0; i < chrg_cnt; i++) {
-		if (!strcmp(chrg_dts[i].chrg_name, dev_ops[i].dev_name)) {
-
-			chrg_dev = mmi_charger_device_register(chrg_dts[i].chrg_name,
-				chrg_dts[i].psy_name, chip->dev, chip,
-				dev_ops[i].ops);
-			if (IS_ERR_OR_NULL(chrg_dev)
-				|| !is_charger_exist(chrg_dts[i].chrg_name)) {
-				mmi_chrg_err(chip,
-					"register mmi charger %s failed\n",
-					chrg_dts[i].chrg_name);
-				return -EINVAL;
-			} else {
-				mmi_chrg_info(chip,
-				"register mmi charger %s successfully, i %d, chrg_idx %d\n",
-				chrg_dts[i].chrg_name, i, chrg_idx);
-				chrg_dev->charging_curr_limited =
-					chrg_dts[i].charging_curr_limited;
-				mmi_chrg_err(chip, "charging_curr_limited %d\n",
-					chrg_dts[i].charging_curr_limited);
-				chrg_dev->charging_curr_min =
-					chrg_dts[i].charging_curr_min;
-				mmi_chrg_err(chip, "charging_curr_min %d, chrg_id %d\n",
-								chrg_dts[i].charging_curr_min, chrg_idx);
-				chip->chrg_list[chrg_idx] = chrg_dev;
-				mmi_chrg_err(chip, "--- over ----\n");
-				chrg_idx++;
-			}
-		}
-	}
-
-	mmi_chrg_info(chip,"chrg_cnt %d, ops_cnt %d, mmi_chrg_dev_num %d, "
-				"chrg_idx %d\n",
-				chrg_cnt, ops_cnt, chip->mmi_chrg_dev_num, chrg_idx);
-
-	if (chrg_idx != chip->mmi_chrg_dev_num
-		&& chrg_idx > 0) {
-
-		mmi_chrg_err(chip, "chrg_id %d != charger num %d\n",
-						chrg_idx, chip->mmi_chrg_dev_num);
-		for (i = 0; i < chrg_idx; i++)
-			mmi_charger_device_unregister(chip->chrg_list[i]);
-		return -EINVAL;
-	}
-
-	chrg_dev_init(chip, &g_chrg_list);
-	chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
-	INIT_DELAYED_WORK(&chip->mmi_chrg_sm_work, mmi_chrg_sm_work_func);
-	return 0;
-}
 
