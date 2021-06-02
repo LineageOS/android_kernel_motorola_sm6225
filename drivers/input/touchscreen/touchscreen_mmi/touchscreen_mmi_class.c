@@ -123,6 +123,9 @@ TOUCH_MMI_GET_ATTR_RW(suppression, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(hold_grip, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(hold_distance, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(gs_distance, FMT_HEX_INTEGER);
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+TOUCH_MMI_GET_ATTR_RW(flash_mode, FMT_INTEGER);
+#endif
 #ifdef TS_MMI_TOUCH_GESTURE_POISON_EVENT
 TOUCH_MMI_GET_ATTR_RW(poison_timeout, FMT_HEX_INTEGER);
 TOUCH_MMI_GET_ATTR_RW(poison_distance, FMT_HEX_INTEGER);
@@ -303,6 +306,9 @@ static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_reset.attr,
 	&dev_attr_forcereflash.attr,
 	&dev_attr_doreflash.attr,
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	&dev_attr_flash_mode.attr,
+#endif
 	&dev_attr_pwr.attr,
 	&dev_attr_pinctrl.attr,
 	&dev_attr_refresh_rate.attr,

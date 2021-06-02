@@ -179,18 +179,26 @@ static inline unsigned long long timediff_ms(
 
 #define TS_MMI_MAX_POINT_NUM		10
 #define TS_MMI_MAX_FW_PATH		64
+#define TS_MMI_MAX_FULL_FW_PATH		128
 #define TS_MMI_MAX_ID_LEN		16
 #define TS_MMI_MAX_VENDOR_LEN		16
 #define TS_MMI_MAX_INFO_LEN		16
 #define TS_MMI_MAX_CLASS_NAME_LEN	16
 #define TS_MMI_MAX_PANEL_LEN		16
 #define TS_MMI_PILL_REGION_REQ_ARGS_NUM	3
+#define TS_MMI_FW_PARAM_PATH	"/data/vendor/param/touch/"
 
 enum touch_event_mode {
 	TS_COORDINATE_ACTION_NONE = 0,
 	TS_COORDINATE_ACTION_PRESS,
 	TS_COORDINATE_ACTION_RELEASE,
 	TS_COORDINATE_ACTION_MOVE
+};
+
+enum TS_FW_UPGRADE_MODE {
+	FW_DEFAULT_MODE = 0,
+	FW_PARAM_MODE,
+	FW_SDCARD_MODE,
 };
 
 struct touch_event_data {
@@ -276,6 +284,7 @@ enum ts_mmi_pm_mode {
 	int	(*get_flashprog)(struct device *dev, void *idata);
 	int	(*get_suppression)(struct device *dev, void *idata);
 	int	(*get_hold_grip)(struct device *dev, void *idata);
+	int	(*get_flash_mode)(struct device *dev, void *idata);
 	int	(*get_pill_region)(struct device *dev, void *uiadata);
 	int	(*get_hold_distance)(struct device *dev, void *idata);
 	int	(*get_gs_distance)(struct device *dev, void *idata);
@@ -292,6 +301,7 @@ enum ts_mmi_pm_mode {
 	int	(*palm_set_enable)(struct device *dev, unsigned int enable);
 	int	(*suppression)(struct device *dev, int state);
 	int	(*hold_grip)(struct device *dev, int state);
+	int	(*flash_mode)(struct device *dev, int state);
 	int	(*pill_region)(struct device *dev, int *region_array);
 	int	(*hold_distance)(struct device *dev, int dis);
 	int	(*gs_distance)(struct device *dev, int dis);
@@ -413,6 +423,7 @@ struct ts_mmi_dev {
 	int			hold_distance;
 	int			gs_distance;
 	int			hold_grip;
+	int			flash_mode;
 	int			poison_timeout;
 	int			poison_distance;
 	int			poison_trigger_distance;
