@@ -45,6 +45,7 @@
 #include "mmi_charger_core.h"
 #include "mmi_charger_core_iio.h"
 #include "mmi_charger_policy.h"
+#include "mmi_qc3p.h"
 #include <linux/iio/consumer.h>
 #include <linux/qti_power_supply.h>
 
@@ -132,6 +133,7 @@ static int mmi_charger_init_iio_psy(struct mmi_charger_manager *chip,
 	return rc;
 }
 
+static int qc3p_volt_max_init = 0;
 static int pd_volt_max_init = 0;
 static int pd_curr_max_init = 0;
 static int *dt_temp_zones;
@@ -1107,7 +1109,32 @@ void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_po
 	return;
 }
 
+static void kick_qc3p_sm(struct mmi_charger_manager *chip, int ms)
+{
 
+
+	if (!chip->qc3p_sm_work_running) {
+		mmi_chrg_dbg(chip, PR_INTERRUPT,
+					"launch mmi qc3p chrg sm work\n");
+		mmi_qc3p_chrg_policy_clear(chip); //todo
+		schedule_delayed_work(&chip->mmi_qc3p_chrg_sm_work, //
+				msecs_to_jiffies(ms)); //todo
+		chip->qc3p_sm_work_running = true;
+	} else
+		mmi_chrg_dbg(chip, PR_INTERRUPT,
+					"mmi chrg qc3p sm work already existed\n");
+}
+
+static void cancel_qc3p_sm(struct mmi_charger_manager *chip)
+{
+	cancel_delayed_work_sync(&chip->mmi_qc3p_chrg_sm_work);
+	flush_delayed_work(&chip->mmi_qc3p_chrg_sm_work);
+	mmi_qc3p_chrg_policy_clear(chip);
+	chip->qc3p_sm_work_running = false;
+	chip->qc3p_volt_max = qc3p_volt_max_init;
+	mmi_chrg_dbg(chip, PR_INTERRUPT,
+					"cancel sync and flush mmi chrg qc3p sm work\n");
+}
 
 static void mmi_awake_vote(struct mmi_charger_manager *chip, bool awake)
 {
@@ -1327,12 +1354,18 @@ static void mmi_heartbeat_work(struct work_struct *work)
 				break;
 			}
 		}
+	}
+	if (!chip->qc3p_sm_work_running && chip->vbus_present)
+		chip->qc3p_active = mmi_qc3p_power_active(chip);
 
-		if (chip->pd_pps_support
-			&& !chip->factory_mode) {
-			mmi_chrg_info(chip, "MMI: Heartbeat!, launch sm work\n");
-			kick_sm(chip, 100);
-		}
+	if (chip->pd_pps_support
+		&& !chip->factory_mode) {
+		mmi_chrg_info(chip, "MMI: Heartbeat!, launch sm work\n");
+		kick_sm(chip, 100);
+	} else if(chip->qc3p_active
+		&& !chip->factory_mode) {
+		mmi_chrg_info(chip, "MMI: Heartbeat!, launch qc3p sm work\n");
+		kick_qc3p_sm(chip, 100);
 	}
 
 	if (chip->use_batt_age)
@@ -1455,19 +1488,29 @@ static void psy_changed_work_func(struct work_struct *work)
 					chip->pd_pps_support,
 					chip->pd_volt_max,
 					chip->pd_curr_max);
+	if (chip->vbus_present)
+		chip->qc3p_active = mmi_qc3p_power_active(chip);
 
 	if (chip->vbus_present
 		&& chip->pd_pps_support
 		&& !chip->factory_mode) {
 		kick_sm(chip, 100);
+	} else if (chip->vbus_present
+		&& chip->qc3p_active
+		&& !chip->factory_mode) {
+		kick_qc3p_sm(chip, 100);
 	} else {
 		cancel_sm(chip);
-
+		cancel_qc3p_sm(chip);
 		chip->pd_pps_support =  false;
+		chip->qc3p_active =  false;
 	}
+
 	return;
 }
-
+#define DEFAULT_IBUS_MAX_MA 3000
+#define DEFAULT_QC3P_VOLT_STEPS	20000
+#define DEFAULT_QC3P_VOLT_MAX	11000000
 #define DEFAULT_BATT_OVP_LMT		4475000
 #define DEFAULT_PL_CHRG_VBATT_MIN	3600000
 #define DEFAULT_PPS_VOLT_STEPS	20000
@@ -1566,6 +1609,27 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 		chip->pd_curr_max =
 				DEFAULT_PPS_CURR_MAX;
 	pd_curr_max_init = chip->pd_curr_max;
+
+	rc = of_property_read_u32(node,
+				"mmi,qc3p-max-ibus-ma",
+				&chip->qc3p_max_ibus_ma);
+	if (rc < 0)
+		chip->qc3p_max_ibus_ma =
+				DEFAULT_IBUS_MAX_MA;
+	rc = of_property_read_u32(node,
+				"mmi,qc3p-volt-steps",
+				&chip->qc3p_volt_steps);
+	if (rc < 0)
+		chip->qc3p_volt_steps =
+				DEFAULT_QC3P_VOLT_STEPS;
+
+	rc = of_property_read_u32(node,
+				"mmi,qc3p-volt-max",
+				&chip->qc3p_volt_max);
+	if (rc < 0)
+		chip->qc3p_volt_max =
+				DEFAULT_QC3P_VOLT_MAX;
+	qc3p_volt_max_init = chip->qc3p_volt_max;
 
 	for_each_child_of_node(node, child)
 		chip->mmi_chrg_dev_num++;
@@ -1864,6 +1928,8 @@ int mmi_chrg_policy_init(struct mmi_charger_manager *chip,
 	chrg_dev_init(chip, &g_chrg_list);
 	chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 	INIT_DELAYED_WORK(&chip->mmi_chrg_sm_work, mmi_chrg_sm_work_func);
+	chip->qc3p_volt_comp = QC3P_INIT_VOLT_COMP;
+	INIT_DELAYED_WORK(&chip->mmi_qc3p_chrg_sm_work, mmi_qc3p_chrg_sm_work_func);
 	return 0;
 }
 

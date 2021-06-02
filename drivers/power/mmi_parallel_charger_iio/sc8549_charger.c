@@ -93,7 +93,21 @@ static int sc8549_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
 	return rc;
 }
 
-static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA)
+static int sc8549_get_vbus(struct mmi_charger_device *chrg, u32 *mv)
+{
+	int rc, val;
+       struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
+	if (!chip)
+		return -ENODEV;
+
+	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_VOLTAGE_NOW, &val);
+	if (!rc)
+		*mv = val;
+
+	return rc;
+}
+
+static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //ibus
 {
 	int rc;
 	int value;
@@ -118,6 +132,11 @@ static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
 
 	if (!chrg->chrg_psy)
 		return -ENODEV;
+
+	rc = power_supply_get_property(chrg->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &prop);
+	if (!rc)
+		chrg->charger_data.ibus_curr= prop.intval;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
@@ -197,6 +216,7 @@ struct mmi_charger_ops sc8549_charger_ops = {
 	.enable = sc8549_enable_charging,
 	.is_enabled = sc8549_is_charging_enabled,
 	.get_charging_current = sc8549_get_charging_current,
+	.get_vbus = sc8549_get_vbus,
 	.get_input_current = sc8549_get_input_current,
 	.update_charger_status = sc8549_update_charger_status,
 	.update_charger_error = sc8549_update_charger_error_status,

@@ -87,7 +87,26 @@ static int qpnp_pmic_get_charging_current(struct mmi_charger_device *chrg, u32 *
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
-		*uA = !!prop.intval;
+		*uA = prop.intval;
+
+	return rc;
+}
+
+static int qpnp_pmic_get_ibus(struct mmi_charger_device *chrg, u32 *uA)
+{
+	int rc;
+	static struct power_supply	*usb_psy;
+	union power_supply_propval prop = {0,};
+
+	if (!usb_psy)
+		usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy)
+		return -ENODEV;
+
+	rc = power_supply_get_property(usb_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	if (!rc)
+		*uA = prop.intval;
 
 	return rc;
 }
@@ -130,15 +149,21 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 {
 	int rc;
 	bool value = 0;
-	struct power_supply	*usb_psy;
+	static struct power_supply	*usb_psy = NULL;
 	union power_supply_propval prop = {0,};
 
 	if (!chrg->chrg_psy)
 		return -ENODEV;
 
+	if (!usb_psy)
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy)
 		return -ENODEV;
+
+	rc = power_supply_get_property(usb_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	if (!rc)
+		chrg->charger_data.ibus_curr= prop.intval;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
@@ -190,6 +215,7 @@ struct mmi_charger_ops qpnp_pmic_charger_ops = {
 	.enable = qpnp_pmic_enable_charging,
 	.is_enabled = qpnp_pmic_is_charging_enabled,
 	.get_charging_current = qpnp_pmic_get_charging_current,
+	.get_input_current = qpnp_pmic_get_ibus,
 	.set_charging_current = qpnp_pmic_set_charging_current,
 	.get_input_current_settled = qpnp_pmic_get_input_current_settled,
 	.update_charger_status = qpnp_pmic_update_charger_status,

@@ -16,6 +16,10 @@ enum mmi_charger_ext_iio_channels {
 	SMB5_TYPEC_MODE,
 	SMB5_USB_INPUT_CURRENT_SETTLED,
 	SMB5_USB_PD_ACTIVE,
+	/*qc3p*/
+	SMB5_USB_REAL_TYPE,
+	SMB5_DP_DM,
+	SMB5_QC3P_POWER,
 	/*sc8549*/
 	SC8549_CP_ENABLE,
 	SC8549_INPUT_CURRENT_NOW,
@@ -31,6 +35,10 @@ static const char * const mmi_charger_ext_iio_chan_name[] = {
 	[SMB5_TYPEC_MODE] = "usb_typec_mode",
 	[SMB5_USB_INPUT_CURRENT_SETTLED] = "usb_input_current_settled",
 	[SMB5_USB_PD_ACTIVE] = "usb_pd_active",
+	/*qc3p*/
+	[SMB5_USB_REAL_TYPE] = "usb_real_type",
+	[SMB5_DP_DM] = "battery_dp_dm",
+	[SMB5_QC3P_POWER] = "usb_qc3p_power",
 	/*sc8549*/
 	[SC8549_CP_ENABLE] = "sc8549_cp_enable",
 	[SC8549_INPUT_CURRENT_NOW] = "sc8549_input_current_now",
