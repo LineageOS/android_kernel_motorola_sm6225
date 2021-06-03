@@ -813,6 +813,9 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	dsi = &panel->mipi_device;
 	bl = &panel->bl_config;
 
+	if (panel->bl_config.bl_level_align == DSI_BACKLIGHT_LEVEL_ALIGN_BIT15_8_BIT3_0)
+		bl_lvl = (((bl_lvl & 0xff0) << 4) | (bl_lvl & 0x0f));
+
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
 
@@ -2944,6 +2947,16 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
+
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-level-align", &val);
+	if (rc) {
+		DSI_DEBUG("[%s] bl_level_align unspecified, defaulting to normal, no special algin\n",
+			 panel->name);
+		panel->bl_config.bl_level_align = DSI_BACKLIGHT_LEVEL_ALIGN_NORMAL;
+	} else {
+		panel->bl_config.bl_level_align = val;
+	}
 
 	panel->bl_config.bl_2bytes_enable = utils->read_bool(utils->data,
 			"qcom,bklt-dcs-2bytes-enabled");
