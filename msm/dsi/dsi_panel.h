@@ -85,6 +85,12 @@ enum dsi_backlight_type {
 	DSI_BACKLIGHT_MAX,
 };
 
+enum dsi_backlight_level_align_type {
+	DSI_BACKLIGHT_LEVEL_ALIGN_NORMAL = 0,
+	DSI_BACKLIGHT_LEVEL_ALIGN_BIT15_8_BIT3_0 = 1,
+};
+
+
 enum bl_update_flag {
 	BL_UPDATE_DELAY_UNTIL_FIRST_FRAME,
 	BL_UPDATE_NONE,
@@ -156,6 +162,7 @@ struct dsi_backlight_config {
 	u32 bl_level;
 	u32 bl_scale;
 	u32 bl_scale_sv;
+	u32 bl_level_align;
 	bool bl_inverted_dbv;
 	u32 bl_dcs_subtype;
 
