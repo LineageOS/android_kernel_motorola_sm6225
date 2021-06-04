@@ -551,6 +551,15 @@ static int parse_dt(struct device_node *np)
 {
 	int32_t ret = 0;
 
+#ifdef ILI_SENSOR_EN
+	if (of_property_read_bool(np, "ilitek,report_gesture_key")) {
+		ILI_INFO("ilitek,report_gesture_key set");
+		ilits->report_gesture_key = 1;
+	} else {
+		ilits->report_gesture_key = 0;
+	}
+#endif
+
 #ifdef ILI_CONFIG_PANEL_GESTURE
 	//parse gesture by panel config
 	if (active_panel_name) {
