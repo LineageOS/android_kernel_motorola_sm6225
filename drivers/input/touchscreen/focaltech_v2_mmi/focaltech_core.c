@@ -332,6 +332,20 @@ static int fts_get_ic_information(struct fts_ts_data *ts_data)
         }
     }
 
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT3519)
+    chip_id[0] = 0x54;
+    chip_id[1] = 0x5E;
+#else
+    chip_id[0] = 0x54;
+    chip_id[1] = 0x5C;
+#endif
+
+    ret = fts_get_chip_types(ts_data, chip_id[0], chip_id[1], INVALID);
+    if (ret < 0) {
+        FTS_ERROR("can't get ic informaton");
+        return ret;
+    }
+
     FTS_INFO("get ic information, chip id = 0x%02x%02x",
              ts_data->ic_info.ids.chip_idh, ts_data->ic_info.ids.chip_idl);
 
@@ -1494,7 +1508,7 @@ static void fts_resume_work(struct work_struct *work)
 
 #if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
-static struct drm_panel *active_panel;
+struct drm_panel *active_panel;
 
 static int drm_check_dt(struct device_node *np)
 {
