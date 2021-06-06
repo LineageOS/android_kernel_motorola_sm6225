@@ -26,6 +26,7 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/soc/qcom/pmic_glink.h>
+#include <linux/power/bm_adsp_ulog.h>
 
 #include "mmi_charger.h"
 
@@ -41,6 +42,8 @@
 
 #define BATT_DEFAULT_ID 107000
 #define BATT_SN_UNKNOWN "unknown-sn"
+
+#define OEM_BM_ULOG_SIZE		4096
 
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
@@ -404,6 +407,7 @@ static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_i
 {
 	int rc;
 	struct qti_charger *chg = data;
+	int batt_status = chg->batt_info.batt_status;
 
 	rc = qti_charger_read(chg, OEM_PROP_BATT_INFO,
 				&chg->batt_info,
@@ -420,6 +424,10 @@ static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_i
 	chg->batt_info.batt_temp /= 100;
 	memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
 
+	if (batt_status != chg->batt_info.batt_status) {
+		bm_ulog_print_log(OEM_BM_ULOG_SIZE);
+	}
+
 	return rc;
 }
 
@@ -427,6 +435,9 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 {
 	int rc;
 	struct qti_charger *chg = data;
+	int chrg_type = chg->chg_info.chrg_type;
+	int chrg_pmax_mw = chg->chg_info.chrg_pmax_mw;
+	int chrg_present = chg->chg_info.chrg_present;
 
 	rc = qti_charger_read(chg, OEM_PROP_CHG_INFO,
 				&chg->chg_info,
@@ -440,6 +451,12 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	    chg->chg_info.chrg_type != 0)
 		chg->chg_info.chrg_present = 1;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
+
+	if (chrg_type != chg->chg_info.chrg_type ||
+	    chrg_present != chg->chg_info.chrg_present ||
+	    chrg_pmax_mw != chg->chg_info.chrg_pmax_mw) {
+		bm_ulog_print_log(OEM_BM_ULOG_SIZE);
+	}
 
 	return rc;
 }
@@ -938,6 +955,8 @@ static int qti_charger_init(struct qti_charger *chg)
 		mmi_err(chg,
 			   "Couldn't create data\n");
 	}
+
+	bm_ulog_print_mask_log(BM_ALL, BM_LOG_LEVEL_INFO, OEM_BM_ULOG_SIZE);
 
 	return 0;
 }
