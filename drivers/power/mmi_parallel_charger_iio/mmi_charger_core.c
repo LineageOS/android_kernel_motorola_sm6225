@@ -676,6 +676,8 @@ static enum power_supply_property mmi_chrg_mgr_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX
 };
 
 static int mmi_chrg_mgr_get_property(struct power_supply *psy,
@@ -715,6 +717,12 @@ static int mmi_chrg_mgr_get_property(struct power_supply *psy,
 		} else
 			val->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = chip->system_thermal_level;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = chip->thermal_levels;
+		break;
 	default:
 		return -EINVAL;
 
@@ -726,8 +734,23 @@ static int mmi_chrg_mgr_set_property(struct power_supply *psy,
 				       enum power_supply_property prop,
 				       const union power_supply_propval *val)
 {
+	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
 
 	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		if (val->intval < 0)
+			return -EINVAL;
+
+		if (chip->thermal_levels <= 0)
+			return -EINVAL;
+
+		if (val->intval >= chip->thermal_levels)
+			chip->system_thermal_level =
+				chip->thermal_levels - 1;
+		else
+			chip->system_thermal_level = val->intval;
+
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -741,6 +764,9 @@ static int mmi_chrg_mgr_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		ret = 1;
+		break;
 	default:
 		ret = 0;
 		break;
