@@ -127,7 +127,51 @@ struct fpc1020_data {
 	int irq_num;
 	unsigned int irq_cnt;
 	int rst_gpio;
+	int pwr_gpio;
+	int power_enabled;
+	unsigned int  rgltr_ctrl_support; //whether regulator control is supported
+	struct regulator *pwr_supply;
+	int pwr_voltage_range[2];
+	int pwr_load[1];
 };
+
+static int fpc1020_power_on(struct fpc1020_data *fpc1020)
+{
+	int rc = 0;
+	if(!fpc1020) return 0;
+
+	if (!fpc1020->power_enabled) {
+		if(fpc1020->rgltr_ctrl_support && !IS_ERR_OR_NULL(fpc1020->pwr_supply)) {
+			rc = regulator_enable(fpc1020->pwr_supply);
+			pr_warn(" %s : enable  pwr_supply return %d \n", __func__, rc);
+		}
+		if (gpio_is_valid(fpc1020->pwr_gpio)) {
+			gpio_direction_output(fpc1020->pwr_gpio, 1);
+		}
+		fpc1020->power_enabled = 1;
+		if(fpc1020->rgltr_ctrl_support ||gpio_is_valid(fpc1020->pwr_gpio)){
+			usleep_range(11000,12000);
+		}
+	}
+	return rc;
+}
+
+int fpc1020_power_off(struct fpc1020_data *fpc1020)
+{
+	int rc = 0;
+	if(!fpc1020) return 0;
+	if (fpc1020->power_enabled) {
+		if (fpc1020->rgltr_ctrl_support  && !IS_ERR_OR_NULL(fpc1020->pwr_supply)) {
+			rc = regulator_disable(fpc1020->pwr_supply);
+			pr_warn(" %s : disable  pwr_supply return %d \n", __func__, rc);
+		}
+		if (gpio_is_valid(fpc1020->pwr_gpio)) {
+			gpio_direction_output(fpc1020->pwr_gpio, 0);
+		}
+		fpc1020->power_enabled = 0;
+	}
+	return rc;
+}
 
 static int hw_reset(struct fpc1020_data *fpc1020)
 {
@@ -167,9 +211,16 @@ static ssize_t hw_reset_set(struct device *dev,
 {
 	int rc;
 	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
-
-	rc = hw_reset(fpc1020);
-
+	dev_info(dev," %s : hw_reset_set %s\n", __func__, (buf == NULL) ? "":buf);
+	if (!strncmp(buf, "reset", strlen("reset"))) {
+		rc = hw_reset(fpc1020);
+	} else if (!strncmp(buf, "poweroff", strlen("poweroff"))) {
+		rc = fpc1020_power_off(fpc1020);
+	} else if (!strncmp(buf, "poweron", strlen("poweron"))) {
+		rc = fpc1020_power_on(fpc1020);
+	} else {
+		return -EINVAL;
+	}
 	return rc ? rc : count;
 }
 static DEVICE_ATTR(hw_reset, S_IWUSR, NULL, hw_reset_set);
@@ -351,13 +402,56 @@ static int fpc1020_probe(struct platform_device *pdev)
 	fpc1020->dev = dev;
 	dev_set_drvdata(dev, fpc1020);
 	fpc1020->pdev = pdev;
-
+	fpc1020->power_enabled = 0;
+	fpc1020->pwr_supply = NULL;
 	if (!np) {
 		dev_err(dev, "no of node found\n");
 		rc = -EINVAL;
 		goto exit;
 	}
+	fpc1020->pwr_gpio = of_get_named_gpio(np, "fp-gpio-ven", 0);
+	if (fpc1020->pwr_gpio < 0) {
+		pr_warn("failed to get pwr gpio!\n");
+		fpc1020->pwr_gpio = -1;
+	} else {
+		if (gpio_is_valid(fpc1020->pwr_gpio)) {
+			rc = devm_gpio_request(dev, fpc1020->pwr_gpio, "fpc_pwr");
+			if (rc) {
+				pr_err("failed to request pwr gpio, rc = %d\n", rc);
+				goto err_pwr;
+			}
+			gpio_direction_output(fpc1020->pwr_gpio, 1);
+		}
+	}
+	if(of_property_read_bool(np,"rgltr-ctrl-support")) {
+		fpc1020->rgltr_ctrl_support = 1;
+	} else {
+		fpc1020->rgltr_ctrl_support = 0;
+		pr_err("No regulator control parameter defined\n");
+	}
+	if (fpc1020->rgltr_ctrl_support) {
+		fpc1020->pwr_supply = regulator_get(dev, "fp,vdd");
+		if (IS_ERR_OR_NULL(fpc1020->pwr_supply)) {
+			fpc1020->pwr_supply = NULL;
+			fpc1020->rgltr_ctrl_support = 0;
+			pr_warn("Unable to get fp,vdd-regulator");
+		} else {
+			rc = of_property_read_u32_array(np, "fp,voltage-range", fpc1020->pwr_voltage_range, 2);
+			if (rc) {
+				fpc1020->pwr_voltage_range[0] = -1;
+				fpc1020->pwr_voltage_range[1] = -1;
+			}
+			if (regulator_count_voltages(fpc1020->pwr_supply) > 0) {
+				if((fpc1020->pwr_voltage_range[0] >0) && (fpc1020->pwr_voltage_range[1] > 0))
+					rc = regulator_set_voltage(fpc1020->pwr_supply, fpc1020->pwr_voltage_range[0], fpc1020->pwr_voltage_range[1]);
+				if (rc) {
+					pr_warn(" %s : set vdd regulator voltage failed %d \n", __func__, rc);
+				}
+			}
+		}
+	}
 
+	fpc1020_power_on(fpc1020);
 	rc = fpc1020_request_named_gpio(fpc1020, "irq",
 			&fpc1020->irq_gpio);
 	gpio_direction_input(fpc1020->irq_gpio);
@@ -419,6 +513,20 @@ irq_exit:
 	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
 #endif
 exit:
+err_pwr:
+	if(!IS_ERR_OR_NULL(fpc1020->pwr_supply))
+	{
+		pr_info(" %s : devm_regulator_put \n", __func__);
+		regulator_disable(fpc1020->pwr_supply);
+		regulator_put(fpc1020->pwr_supply);
+		fpc1020->pwr_supply= NULL;
+	}
+
+	if (gpio_is_valid(fpc1020->pwr_gpio)) {
+		devm_gpio_free(fpc1020->dev,fpc1020->pwr_gpio);
+		fpc1020->pwr_gpio = -1;
+		pr_info("remove pwr_gpio success\n");
+	}
 	return rc;
 }
 
@@ -435,12 +543,29 @@ static int fpc1020_remove(struct platform_device *pdev)
 
 	device_init_wakeup(fpc1020->dev, false);
 	devm_free_irq(fpc1020->dev, gpio_to_irq(fpc1020->irq_gpio),fpc1020);
-
-	if (gpio_is_valid(fpc1020->irq_gpio))
+	if(fpc1020->rgltr_ctrl_support ||gpio_is_valid(fpc1020->pwr_gpio)){
+		fpc1020_power_off(fpc1020);
+	}
+	if (gpio_is_valid(fpc1020->irq_gpio)) {
 		devm_gpio_free(fpc1020->dev, fpc1020->irq_gpio);
-	if (gpio_is_valid(fpc1020->rst_gpio))
+		fpc1020->irq_gpio = -1;
+	}
+	if (gpio_is_valid(fpc1020->rst_gpio)) {
 		devm_gpio_free(fpc1020->dev, fpc1020->rst_gpio);
+		fpc1020->rst_gpio = -1;
 
+	}
+	if (fpc1020->rgltr_ctrl_support && !IS_ERR_OR_NULL(fpc1020->pwr_supply))
+	{
+		regulator_put(fpc1020->pwr_supply);
+		fpc1020->pwr_supply= NULL;
+		pr_info(" %s : regulator_put vdd \n", __func__);
+	}
+	if (gpio_is_valid(fpc1020->pwr_gpio)) {
+		devm_gpio_free(fpc1020->dev,fpc1020->pwr_gpio);
+		fpc1020->pwr_gpio = -1;
+		pr_info("remove pwr_gpio success\n");
+	}
 	dev_info(&pdev->dev, "%s\n", __func__);
 	return 0;
 }
