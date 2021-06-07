@@ -159,6 +159,10 @@ struct gf_dev {
 	signed int irq_gpio;
 	signed int reset_gpio;
 	signed int pwr_gpio;
+	unsigned int  rgltr_ctrl_support; //whether regulator control is supported
+	struct regulator *pwr_supply;
+	int pwr_voltage_range[2];
+	int pwr_load[1];
 	int irq;
 	int irq_enabled;
 	int clk_enabled;
