@@ -3518,6 +3518,10 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 					 __func__);
 		}
 #endif
+
+		logError(1, "%s %s: Sense OFF!\n", tag, __func__);
+		res |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
+
 		/* if some selective scan want to be enabled can be done an or
 		 * of the following options */
 		/* settings[0] = ACTIVE_MULTI_TOUCH | ACTIVE_KEY | ACTIVE_HOVER
