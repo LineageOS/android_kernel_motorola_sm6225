@@ -1418,7 +1418,6 @@ static void psy_changed_work_func(struct work_struct *work)
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, psy_changed_work);
 	union power_supply_propval val;
-	bool pd_active;
 	int ret;
 
 	mmi_chrg_info(chip, "kick psy changed work.\n");
@@ -1442,12 +1441,15 @@ static void psy_changed_work_func(struct work_struct *work)
 
 	ret = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_REAL_TYPE, &val);
-	if (ret || val.intval  != POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+	if (ret) {
 		mmi_chrg_err(chip, "Unable to read qc3p type or not the qc3p5 type return: %d\n", ret);
 		return;
 	}
-	chip->qc3p_active = true;
-	pd_active = val.intval;
+
+	if(val.intval == POWER_SUPPLY_TYPE_USB_HVDCP_3P5 )
+		chip->qc3p_active = true;
+	else
+		chip->qc3p_active = false;
 
 	ret = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_HVDCP_POWER, &val);
@@ -1458,8 +1460,8 @@ static void psy_changed_work_func(struct work_struct *work)
 
 	chip->qc3p_power = val.intval;
 	mmi_chrg_err(chip, "qc3p detected power:%d\n",chip->qc3p_power);
-	
-	if (pd_active && chip->vbus_present) {
+
+	if (chip->qc3p_active && chip->vbus_present) {
 		chip->pd_pps_support = true;
 		calculate_qc3p_vc_based_power_type(chip);
 	}
