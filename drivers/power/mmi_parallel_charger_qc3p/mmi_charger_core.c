@@ -1394,7 +1394,7 @@ void calculate_qc3p_vc_based_power_type(struct mmi_charger_manager *chip){
 			curr_max = 1900000;
 			break;
 		case QC3P_POWER_27W:
-			volt_max = 10000000;
+			volt_max = 11000000;
 			curr_max = 3000000;
 			break;
 		case QC3P_POWER_45W:
