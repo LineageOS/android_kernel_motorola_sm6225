@@ -67,6 +67,9 @@
 #define PM_QOS_VALUE_VB 400
 struct pm_qos_request pm_qos_req_vb;
 
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+static bool is_af_enabled = false;
+#endif
 /******************************************************
  *
  * variable
@@ -603,6 +606,7 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 	if (aw8695->haptic_mode == HAPTIC_LONG) {
 		pr_info("%s: %d: mot_actuator_on_vibrate_start, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
 			,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
+		is_af_enabled = true;
 		mot_actuator_on_vibrate_start();
 	}
 #endif
@@ -644,10 +648,11 @@ static int aw8695_haptic_stop(struct aw8695 *aw8695)
 	aw8695_haptic_play_mode(aw8695, AW8695_HAPTIC_STANDBY_MODE);
 
 #ifdef CONFIG_AF_NOISE_ELIMINATION
-	if (aw8695->haptic_mode == HAPTIC_LONG) {
+	if ((aw8695->haptic_mode == HAPTIC_LONG) || (is_af_enabled == true)) {
 		pr_info("%s: %d: mot_actuator_on_vibrate_stop, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
 			,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
 		mot_actuator_on_vibrate_stop();
+		is_af_enabled = false;
 	}
 #endif
 
