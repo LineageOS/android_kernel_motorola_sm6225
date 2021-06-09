@@ -40,6 +40,10 @@
 #ifndef TASK_STATE_TO_CHAR_STR
 #define TASK_STATE_TO_CHAR_STR "RSDTtXZxKWPNn"
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	#define VA_START     (UL(0xffffffffffffffff) -\
+			(UL(1)<<VA_BITS) + 1)
+#endif
 
 #define MSMDBG(fmt, args...) mmi_annotate(fmt, ##args)
 
@@ -212,9 +216,21 @@ static void msm_wdog_ctx_lnx_arch(struct msm_wdog_lnx_info *lnx)
 	lnx->kaslr_offset = 0;
 }
 #endif
-
-static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
+static inline uint64_t system_read_TTBR1_EL1(void)
 {
+	uint64_t val;
+	asm volatile("mrs %0, ttbr1_el1": "=r"(val));
+	return (val & 0xffffffffffc0) | ((val & 0x3c) << 46);
+}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+static void __nocfi msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
+#else
+static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
+#endif
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	unsigned long init_mm_addr = 0;
+#else
 	/* Since this is a module we cannot link to these symbols
 	 * directly, so use kallsyms. kallsyms is needed to find the
 	 * names of the stacktrace symbols anyways.
@@ -224,6 +240,7 @@ static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
 	 * is not available via kallsyms_lookup_name directly
 	 */
 	unsigned long init_mm_addr = kallsyms_lookup_name("init_mm");
+#endif
 	struct mm_struct *init_mm = NULL;
 	if(init_mm_addr) {
 		init_mm = (struct mm_struct *)init_mm_addr;
@@ -237,8 +254,13 @@ static void msm_wdog_ctx_lnx(struct msm_wdog_lnx_info *lnx)
 	lnx->tsk_size = sizeof(struct task_struct);
 	lnx->aa64 = IS_ENABLED(CONFIG_ARM64);
 	lnx->lpae = IS_ENABLED(CONFIG_ARM_LPAE);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	lnx->pgd_paddr = system_read_TTBR1_EL1();
+	lnx->text_paddr = 0;
+#else
 	lnx->text_paddr = _text_addr ? virt_to_phys((void *)_text_addr) : 0;
 	lnx->pgd_paddr = init_mm ? virt_to_phys(init_mm->pgd) : 0;
+#endif
 	lnx->page_shift = PAGE_SHIFT;
 	lnx->thread_size = THREAD_SIZE;
 	msm_wdog_ctx_lnx_arch(lnx);
@@ -270,11 +292,16 @@ static void msm_wdog_ctx_reset(struct msm_wdog_cpuctx *ctx, size_t ctx_size)
 #endif
 		msm_wdog_ctx_header_init(ctxi);
 		msm_wdog_ctx_lnx(&ctxi->lnx);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+		if(!ctxi->lnx.pgd_paddr ||
+			(IS_ENABLED(CONFIG_ARM64) && !ctxi->lnx.kaslr_offset))
+			ctxi->info.syms_avail = 0;
+#else
 		if(!ctxi->lnx.text_paddr ||
 			!ctxi->lnx.pgd_paddr ||
 			(IS_ENABLED(CONFIG_ARM64) && !ctxi->lnx.kaslr_offset))
 			ctxi->info.syms_avail = 0;
+#endif
 	}
 }
 
@@ -818,9 +845,12 @@ static int watchdog_cpu_ctx_probe(struct platform_device *pdev)
 	}
 
 	watchdog_cpu_ctx_table_register(dev, pdata);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+	ctx_vaddr = ioremap_wc(pdata->mem_address, pdata->mem_size);
+#else
 	ctx_vaddr = dma_remap(dev, NULL, pdata->mem_address,
 					pdata->mem_size, 0);
+#endif
 	if (!ctx_vaddr) {
 		dev_err(dev, "Cannot remap buffer %pa size %zx\n",
 				&pdata->mem_address, pdata->mem_size);
