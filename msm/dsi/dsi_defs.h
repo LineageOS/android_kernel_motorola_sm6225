@@ -291,6 +291,10 @@ enum dsi_dyn_clk_feature_type {
  * @DSI_CMD_SET_CABC_DIS:                  CABC DIS mode
  * @DSI_CMD_SET_DC_ON:                    DC mode on
  * @DSI_CMD_SET_DC_OFF:                   DC mode off
+ * @DSI_CMD_SET_COLOR_VBT :                    COLOR VBT mode
+ * @DSI_CMD_SET_COLOR_STD:                   COLOR STD mode
+ * @DSI_CMD_SET_COLOR_GAME :                    COLOR GAME mode
+ * @DSI_CMD_SET_COLOR_NONE:                   COLOR NONE mode
  * @DSI_CMD_SET_MAX
  */
 enum dsi_cmd_set_type {
@@ -327,6 +331,10 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_CABC_DIS,
 	DSI_CMD_SET_DC_ON,
 	DSI_CMD_SET_DC_OFF,
+	DSI_CMD_SET_COLOR_VBT,
+	DSI_CMD_SET_COLOR_STD,
+	DSI_CMD_SET_COLOR_GAME,
+	DSI_CMD_SET_COLOR_NONE,
 	DSI_CMD_SET_MAX
 };
 

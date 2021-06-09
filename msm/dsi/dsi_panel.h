@@ -255,6 +255,14 @@ enum dc_state {
 	DC_STATE_NUM,
 };
 
+enum color_state {
+	COLOR_VBT_STATE = 0,
+	COLOR_STD_STATE,
+	COLOR_GAME_STATE,
+	COLOR_NONE_STATE,
+	COLOR_STATE_NUM,
+};
+
 struct panel_param_val_map {
 	int state;
 	enum dsi_cmd_set_type type;
