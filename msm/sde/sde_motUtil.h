@@ -117,6 +117,7 @@ enum sde_motUtil_kmsPropTest_ConnPropType {
 	KMSPROPTEST_TYPE_ACL,
 	KMSPROPTEST_TYPE_CABC,
 	KMSPROPTEST_TYPE_DC,
+	KMSPROPTEST_TYPE_COLOR,
 };
 
 struct motUtil {
