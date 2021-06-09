@@ -423,17 +423,17 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 	for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 		if (!(evt[i][R2] & SLG51000_IRQ_ILIM_FLAG_MASK) &&
 		    (evt[i][R0] & SLG51000_EVT_ILIM_FLAG_MASK)) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 			regulator_lock(chip->rdev[i]);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 			mutex_lock(&chip->rdev[i]->mutex);
 #endif
 			regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_CURRENT,
 						NULL);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 			regulator_unlock(chip->rdev[i]);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 			mutex_unlock(&chip->rdev[i]->mutex);
 #endif
 			if (evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK)
@@ -448,17 +448,17 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 		for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 			if (!(evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK) &&
 			    (evt[i][R1] & SLG51000_STA_VOUT_OK_FLAG_MASK)) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 				regulator_lock(chip->rdev[i]);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 				mutex_lock(&chip->rdev[i]->mutex);
 #endif
 				regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_TEMP,
 						NULL);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 				regulator_unlock(chip->rdev[i]);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 				mutex_unlock(&chip->rdev[i]->mutex);
 #endif
 			}
