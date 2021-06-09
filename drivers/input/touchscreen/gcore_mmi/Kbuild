@@ -1,0 +1,14 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/gcore_mmi
+
+ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_GCORE_CHIPSET)),)
+	obj-m += gcore_mmi.o
+endif
+
+gcore_mmi-objs += gcore_drv_main.o
+gcore_mmi-objs += gcore_drv_qcom.o
+gcore_mmi-objs += gcore_drv_fw_update.o
+gcore_mmi-objs += gcore_drv_interface.o
+gcore_mmi-objs += gcore_drv_mp_test.o
