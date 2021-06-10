@@ -604,14 +604,6 @@ static int aw8695_haptic_play_go(struct aw8695 *aw8695, bool flag)
 		}
 	}
 	if(flag == true) {
-#ifdef CONFIG_AF_NOISE_ELIMINATION
-	if (aw8695->haptic_mode == HAPTIC_LONG) {
-		pr_info("%s: %d: mot_actuator_on_vibrate_start, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
-			,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
-		is_af_enabled = true;
-		mot_actuator_on_vibrate_start();
-	}
-#endif
 		aw8695_i2c_write_bits(aw8695, AW8695_REG_GO,
 			AW8695_BIT_GO_MASK, AW8695_BIT_GO_ENABLE);
 		GET_TIME_OF_DAY(&aw8695->pre_enter_time);
@@ -1982,6 +1974,12 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 			aw8695_haptic_play_wav_seq(aw8695, 0x01);
 			break;
 		case HAPTIC_LONG:
+#ifdef CONFIG_AF_NOISE_ELIMINATION
+			pr_info("%s: %d: mot_actuator_on_vibrate_start, duration=%d, haptic_mode=%d, play_mode=%hhu \n", __func__,__LINE__
+				,aw8695->duration,aw8695->haptic_mode,aw8695->play_mode);
+			is_af_enabled = true;
+			mot_actuator_on_vibrate_start();
+#endif
 			aw8695->duration = value;
 			/* wav index config */
 			aw8695->index = 0x02;
