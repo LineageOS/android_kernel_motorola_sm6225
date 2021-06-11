@@ -129,6 +129,8 @@ static char aw8695_rtp_name[][AW8695_RTP_NAME_MAX] = {
 	{"aw8695_rtp_City_Lights.bin"},
 	{"aw8695_rtp_Firefly.bin"},
 	{"aw8695_rtp_Now_or_Never.bin"},
+	{"aw8695_rtp_Moto_Retro.bin"},
+	{"aw8695_rtp_Moto_Original.bin"},
 };
 
 struct aw8695_container *aw8695_rtp;
