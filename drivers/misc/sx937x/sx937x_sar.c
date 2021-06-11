@@ -1174,16 +1174,6 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev,
 }
 
 #ifdef CONFIG_CAPSENSE_USB_CAL
-static void ps_notify_callback_work(struct work_struct *work)
-{
-	u32 temp = 0;
-	sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
-	if (temp & 0x000000FF) {
-		LOG_DBG("USB state change, Going to force calibrate\n");
-		manual_offset_calibration(global_sx937x);
-	}
-}
-
 static int ps_get_state(struct power_supply *psy, bool *present)
 {
 	union power_supply_propval pval = {0};
@@ -1214,14 +1204,63 @@ static int ps_get_state(struct power_supply *psy, bool *present)
 	return 0;
 }
 
+static void ps_notify_callback_work(struct work_struct *work)
+{
+	u32 temp = 0;
+	bool present;
+	int retval;
+	struct sx937x_platform_data *data =
+		container_of(work, struct sx937x_platform_data, ps_notify_work);
+
+
+	if (global_sx937x->psy_event == SX93XX_PSY_EVENT_USB)
+	{
+		retval = ps_get_state(global_sx937x->psy, &present);
+		if (retval) {
+			return;
+		}
+
+		if (data->ps_is_present == present) {
+			LOG_DBG("ps present state not change\n");
+			return;
+		}
+		data->ps_is_present = present;
+		sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
+		if (temp & 0x000000FF) {
+			LOG_ERR("USB state change, Going to force calibrate\n");
+			manual_offset_calibration(global_sx937x);
+		}
+		global_sx937x->psy_event = SX93XX_PSY_EVENT_UNKNOWN;
+	}
+
+#ifdef CONFIG_CAPSENSE_ATTACH_CAL
+	if (global_sx937x->psy_event == SX93XX_PSY_EVENT_PHONE)
+	{
+		retval = ps_get_state(global_sx937x->psy, &present);
+		if (retval)
+			return retval;
+
+		if (data->phone_is_present != present) {
+			data->phone_is_present = present;
+			sx937x_i2c_read_16bit(global_sx937x, SX937X_GENERAL_SETUP, &temp);
+			if (temp & 0x000000FF) {
+				LOG_ERR("Phone state change, Going to force calibrate\n");
+				manual_offset_calibration(global_sx937x);
+			}
+		}
+		global_sx937x->psy_event = SX93XX_PSY_EVENT_UNKNOWN;
+	}
+#endif
+}
+
 static int ps_notify_callback(struct notifier_block *self,
 		unsigned long event, void *p)
 {
 	struct sx937x_platform_data *data =
 		container_of(self, struct sx937x_platform_data, ps_notif);
 	struct power_supply *psy = p;
-	bool present;
-	int retval;
+	global_sx937x->psy = p;
+	global_sx937x->psy_event = SX93XX_PSY_EVENT_UNKNOWN;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
 	if (event == PSY_EVENT_PROP_CHANGED
@@ -1231,18 +1270,7 @@ static int ps_notify_callback(struct notifier_block *self,
 			&& psy && psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "usb", sizeof("usb")) && data) {
 		LOG_DBG("ps notification: event = %lu\n", event);
-		retval = ps_get_state(psy, &present);
-		if (retval) {
-			return retval;
-		}
-
-		if (event == PSY_EVENT_PROP_CHANGED) {
-			if (data->ps_is_present == present) {
-				LOG_DBG("ps present state not change\n");
-				return 0;
-			}
-		}
-		data->ps_is_present = present;
+		global_sx937x->psy_event = SX93XX_PSY_EVENT_USB;
 		schedule_work(&data->ps_notify_work);
 	}
 
@@ -1251,15 +1279,8 @@ static int ps_notify_callback(struct notifier_block *self,
 			&& psy && psy->desc->get_property && psy->desc->name &&
 			!strncmp(psy->desc->name, "phone", sizeof("phone")) && data) {
 		LOG_DBG("phone ps notification: event = %lu\n", event);
-
-		retval = ps_get_state(psy, &present);
-		if (retval)
-			return retval;
-
-		if (data->phone_is_present != present) {
-			data->phone_is_present = present;
-			schedule_work(&data->ps_notify_work);
-		}
+		global_sx937x->psy_event = SX93XX_PSY_EVENT_PHONE;
+		schedule_work(&data->ps_notify_work);
 	}
 #endif
 
