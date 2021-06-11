@@ -481,6 +481,15 @@ typedef struct sx937x_platform_data *psx937x_platform_data_t;
 
 #define MAX_NUM_STATUS_BITS (8)
 
+
+typedef enum{
+	SX93XX_PSY_EVENT_UNKNOWN = 0,
+	SX93XX_PSY_EVENT_USB,
+#ifdef CONFIG_CAPSENSE_ATTACH_CAL
+	SX93XX_PSY_EVENT_PHONE,
+#endif
+}sx93xx_psy_supply_type_t;
+
 typedef struct sx93XX sx93XX_t, *psx93XX_t;
 struct sx93XX
 {
@@ -530,6 +539,9 @@ struct sx93XX
 	atomic_t init_busy;
 	struct delayed_work i2c_watchdog_work;
 	int suspended;
+
+	struct power_supply *psy;
+	sx93xx_psy_supply_type_t psy_event;
 };
 
 int sx93XX_IRQ_init(psx93XX_t this);
