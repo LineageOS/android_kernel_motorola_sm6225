@@ -119,10 +119,133 @@ int mmi_charger_write_iio_chan(struct mmi_charger_manager *chip,
 	return -EINVAL;
 }
 
+static int mmi_charger_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	struct mmi_charger_manager *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		if (!chip->factory_mode) {
+			if (chip->pd_pps_support)
+				mmi_chrg_enable_all_cp(chip, val1);
+			else if (chip->qc3p_active)
+				mmi_qc3p_chrg_enable_all_cp(chip, val1);
+		}
+		break;
+	default:
+		pr_err("Unsupported mmi_charger IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		pr_err("Couldn't write IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int mmi_charger_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	struct mmi_charger_manager *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	*val1 = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		*val1 = !chip->cp_disable;
+		break;
+	default:
+		pr_err("Unsupported mmi_charger IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		pr_err("Couldn't read IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int mmi_charger_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct mmi_charger_manager *chip = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = chip->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mmi_charger_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info mmi_charger_iio_info = {
+	.read_raw	= mmi_charger_iio_read_raw,
+	.write_raw	= mmi_charger_iio_write_raw,
+	.of_xlate	= mmi_charger_iio_of_xlate,
+};
+
 static int mmi_charger_init_iio_psy(struct mmi_charger_manager *chip,
 				struct platform_device *pdev)
 {
-	int rc = 0;
+	struct iio_dev *indio_dev = chip->indio_dev;
+	struct iio_chan_spec *chan;
+	int mmi_charger_num_iio_channels = ARRAY_SIZE(mmi_charger_iio_psy_channels);
+	int rc, i;
+
+	chip->iio_chan = devm_kcalloc(chip->dev, mmi_charger_num_iio_channels,
+				sizeof(*chip->iio_chan), GFP_KERNEL);
+	if (!chip->iio_chan)
+		return -ENOMEM;
+
+	chip->int_iio_chans = devm_kcalloc(chip->dev,
+				mmi_charger_num_iio_channels,
+				sizeof(*chip->int_iio_chans),
+				GFP_KERNEL);
+	if (!chip->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &mmi_charger_iio_info;
+	indio_dev->dev.parent = chip->dev;
+	indio_dev->dev.of_node = chip->dev->of_node;
+	indio_dev->name = "mmi-parallel-charger";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = chip->iio_chan;
+	indio_dev->num_channels = mmi_charger_num_iio_channels;
+
+	for (i = 0; i < mmi_charger_num_iio_channels; i++) {
+		chip->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &chip->iio_chan[i];
+		chip->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = mmi_charger_iio_psy_channels[i].channel_num;
+		chan->type = mmi_charger_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			mmi_charger_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			mmi_charger_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			mmi_charger_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(chip->dev, indio_dev);
+	if (rc) {
+		pr_err("Failed to register sc8549 IIO device, rc=%d\n", rc);
+		return rc;
+	}
+
 	chip->ext_iio_chans = devm_kcalloc(chip->dev,
 				ARRAY_SIZE(mmi_charger_ext_iio_chan_name),
 				sizeof(*chip->ext_iio_chans),
@@ -130,7 +253,7 @@ static int mmi_charger_init_iio_psy(struct mmi_charger_manager *chip,
 	if (!chip->ext_iio_chans)
 		return -ENOMEM;
 
-	return rc;
+	return 0;
 }
 
 static int qc3p_volt_max_init = 0;
@@ -1963,17 +2086,21 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct mmi_charger_manager *chip;
+	struct iio_dev *indio_dev;
 
 	if (!pdev)
 		return -ENODEV;
 
-	chip = devm_kzalloc(&pdev->dev, sizeof(struct mmi_charger_manager),
-								GFP_KERNEL);
+	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*chip));
+	if (!indio_dev)
+		return -ENOMEM;
+	chip = iio_priv(indio_dev);
 	if (!chip) {
 		dev_err(&pdev->dev,
 			"Unable to alloc memory for mmi_charger_manager\n");
 		return -ENOMEM;
 	}
+	chip->indio_dev = indio_dev;
 
 	chip->dev = &pdev->dev;
 	chip->name = "mmi_chrg_manager";
@@ -1995,7 +2122,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	}
 
 	ret = mmi_charger_init_iio_psy(chip, pdev);
-	if (ret < 0) {
+	if (ret) {
 		dev_err(&pdev->dev,
 			"mmi charger iio psy init failed\n");
 		goto cleanup;

@@ -9,6 +9,28 @@
 #include <linux/iio/iio.h>
 #include <dt-bindings/iio/qti_power_supply_iio.h>
 
+struct mmi_charger_iio_channels {
+	const char *datasheet_name;
+	int channel_num;
+	enum iio_chan_type type;
+	long info_mask;
+};
+
+#define MMI_CHARGER_IIO_CHAN(_name, _num, _type, _mask)		\
+	{						\
+		.datasheet_name = _name,		\
+		.channel_num = _num,			\
+		.type = _type,				\
+		.info_mask = _mask,			\
+	},
+
+#define MMI_CHARGER_CHAN_INDEX(_name, _num)			\
+	MMI_CHARGER_IIO_CHAN(_name, _num, IIO_INDEX,		\
+		BIT(IIO_CHAN_INFO_PROCESSED))
+
+static const struct mmi_charger_iio_channels mmi_charger_iio_psy_channels[] = {
+	MMI_CHARGER_CHAN_INDEX("cp_charging_enabled", PSY_IIO_CP_ENABLE)
+};
 enum mmi_charger_ext_iio_channels {
 	/*smb5*/
 	SMB5_HW_CURRENT_MAX,

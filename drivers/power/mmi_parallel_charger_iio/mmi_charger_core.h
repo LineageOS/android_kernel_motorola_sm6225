@@ -197,6 +197,9 @@ struct mmi_charger_manager {
 	struct notifier_block	psy_nb;
 
 	struct iio_channel	**ext_iio_chans;
+	struct iio_dev		*indio_dev;
+	struct iio_chan_spec	*iio_chan;
+	struct iio_channel	*int_iio_chans;
 
 	bool			factory_mode;
 	bool			suspended;
