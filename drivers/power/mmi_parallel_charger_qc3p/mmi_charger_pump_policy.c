@@ -367,10 +367,10 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define DISABLE_CHRG_LIMIT -1
 #define CP_CHRG_SOC_LIMIT 90
 #define PD_CONT_PWR_CNT 5
-
+#define AICL_DEFALLT_THREHOLD 4500
 #define QC3P_V_STEP  20000
 #define CURR_TO_VOLT_STEP 5
-
+#define DEFAULT_HVDCP_POWER_MAX 15000
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	chrg_dev_init(chip, &g_chrg_list);
@@ -387,6 +387,35 @@ void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 	pd_constant_power_cnt = 0;
 	batt_curr_roof = 0;
 	return;
+}
+
+int qc3p_config_aicl_threshold(struct mmi_charger_manager *chip, int threshold)
+{
+	int rc;
+	union power_supply_propval prop = {0,};
+	int prev_threshold = 0;
+
+	if(threshold < AICL_DEFALLT_THREHOLD)
+		return -1;
+
+	if(!chip->batt_psy) {
+		chip->batt_psy = power_supply_get_by_name("qcom_battery");
+		if(!chip->batt_psy)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chip->batt_psy,
+						POWER_SUPPLY_PROP_QC3P_AICL_THRESHOLD,&prop);
+	if(!rc)
+		prev_threshold = prop.intval;
+
+	if(threshold != prev_threshold){
+		prop.intval = threshold;
+		rc = power_supply_set_property(chip->batt_psy,
+						POWER_SUPPLY_PROP_QC3P_AICL_THRESHOLD, &prop);
+	}
+
+	return 0;
 }
 
 static void mmi_chrg_sm_work_func(struct work_struct *work)
@@ -717,6 +746,10 @@ static void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_chrg_dbg(chip, PR_MOTO, "Continue to SW charging, "
 						"vbatt %d uV, ibatt %d uA\n",
 						vbatt_volt, ibatt_curr);
+
+			if(chip->hvdcp_power_max > DEFAULT_HVDCP_POWER_MAX)
+				qc3p_config_aicl_threshold(chip,AICL_DEFALLT_THREHOLD);
+
 			heartbeat_dely_ms = HEARTBEAT_lOOP_WAIT_MS;
 		}
 		break;
