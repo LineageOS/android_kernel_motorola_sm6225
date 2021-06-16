@@ -264,6 +264,9 @@ struct nvt_ts_data {
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct ts_mmi_class_methods *imports;
 #endif
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	int flash_mode;
+#endif
 };
 
 #if NVT_TOUCH_PROC
