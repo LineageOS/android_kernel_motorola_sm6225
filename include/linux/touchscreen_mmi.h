@@ -340,6 +340,7 @@ struct ts_mmi_dev_pdata {
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
 	bool		palm_enabled;
+	bool		fw_load_resume;
 	bool		suppression_ctrl;
 	bool		pill_region_ctrl;
 	bool		hold_distance_ctrl;
