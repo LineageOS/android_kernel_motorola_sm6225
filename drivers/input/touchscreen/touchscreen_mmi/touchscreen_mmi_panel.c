@@ -71,6 +71,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		dev_info(DEV_TS, "%s: using %u reset on resume\n",
 				__func__, ppdata->reset);
 
+	if (of_property_read_bool(of_node, "mmi,fw-load-on-resume")) {
+		dev_info(DEV_TS, "%s: load firmware on resume\n", __func__);
+		ppdata->fw_load_resume = true;
+	}
+
 	if (of_property_read_bool(of_node, "mmi,power-off-suspend")) {
 		dev_info(DEV_TS, "%s: using power off in suspend\n", __func__);
 		ppdata->power_off_suspend = true;
