@@ -124,6 +124,28 @@ static int nvt_mmi_methods_get_flashprog(struct device *dev, void *idata)
 	return 0;
 }
 
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+static int nvt_mmi_get_flash_mode(struct device *dev, void *idata)
+{
+	struct nvt_ts_data *ts_data;
+
+	GET_TS_DATA(dev);
+	TO_INT(idata) = ts_data->flash_mode;
+
+	return 0;
+}
+
+static int nvt_mmi_flash_mode(struct device *dev, int mode)
+{
+	struct nvt_ts_data *ts_data;
+
+	GET_TS_DATA(dev);
+	ts_data->flash_mode = mode;
+
+	return 0;
+}
+#endif
+
 static int nvt_mmi_methods_drv_irq(struct device *dev, int state)
 {
 	int ret = 0;
@@ -168,8 +190,10 @@ static int nvt_mmi_firmware_update(struct device *dev, char *fwname)
 	GET_TS_DATA(dev);
 
 	mutex_lock(&ts->lock);
-	snprintf(nvt_boot_firmware_name, NVT_FILE_NAME_LENGTH, "%s", fwname);
-	snprintf(nvt_mp_firmware_name, NVT_FILE_NAME_LENGTH, "mp-%s", fwname);
+	if (strncmp(fwname, "Default", sizeof("Default"))) {
+		snprintf(nvt_boot_firmware_name, NVT_FILE_NAME_LENGTH, "%s", fwname);
+		snprintf(nvt_mp_firmware_name, NVT_FILE_NAME_LENGTH, "mp-%s", fwname);
+	}
 	nvt_update_firmware(nvt_boot_firmware_name);
 	mutex_unlock(&ts->lock);
 
@@ -251,18 +275,22 @@ return:
 static int nvt_mmi_pre_resume(struct device *dev)
 {
 	struct nvt_ts_data *ts_data;
-	int ret = 0;
 
 	GET_TS_DATA(dev);
 	NVT_LOG("enter\n");
 
-	mutex_lock(&ts->lock);
-	ret = nvt_update_firmware(nvt_boot_firmware_name);
-	if (ret) {
-		 NVT_ERR("download firmware failed, ignore check fw state\n");
-	} else {
-		nvt_check_fw_reset_state(RESET_STATE_REK);
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	if (ts_data->flash_mode == FW_PARAM_MODE)
+	{
+		NVT_LOG("update firmware through touchUpg service\n");
+		return 0;
 	}
+#endif
+
+	mutex_lock(&ts->lock);
+	NVT_LOG("update firmware: %s\n", nvt_boot_firmware_name);
+	nvt_update_firmware(nvt_boot_firmware_name);
+
 	mutex_unlock(&ts->lock);
 
 	return 0;
@@ -295,12 +323,18 @@ static struct ts_mmi_methods nvt_mmi_methods = {
 	.get_irq_status = nvt_mmi_methods_get_irq_status,
 	.get_drv_irq = nvt_mmi_methods_get_drv_irq,
 	.get_flashprog = nvt_mmi_methods_get_flashprog,
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	.get_flash_mode = nvt_mmi_get_flash_mode,
+#endif
 	.get_poweron = nvt_mmi_methods_get_poweron,
 	/* SET methods */
 	.reset =  nvt_mmi_methods_reset,
 	.drv_irq = nvt_mmi_methods_drv_irq,
 	.charger_mode = nvt_mmi_charger_mode,
 	/* Firmware */
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	.flash_mode = nvt_mmi_flash_mode,
+#endif
 	.firmware_update = nvt_mmi_firmware_update,
 	/* PM callback */
 	.panel_state = nvt_mmi_panel_state,
