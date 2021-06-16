@@ -62,5 +62,9 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     nova_0flash_mmi-objs += nt36xxx_mmi_class.o
+
+    ifneq ($(filter m y, $(CONFIG_TOUCHCLASS_MMI_MULTIWAY_UPDATE_FW)),)
+        EXTRA_CFLAGS += -DTS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+    endif
 endif
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers

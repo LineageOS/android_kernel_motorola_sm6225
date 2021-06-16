@@ -20,6 +20,7 @@
 #include <linux/gpio.h>
 
 #include "nt36xxx.h"
+#include <linux/touchscreen_mmi.h>
 
 #if BOOT_UPDATE_FIRMWARE
 
@@ -285,6 +286,13 @@ return:
 static void update_firmware_release(void)
 {
 	if (fw_entry) {
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+		if (ts->flash_mode == FW_PARAM_MODE) {
+			vfree(fw_entry->data);
+			fw_entry = NULL;
+			return;
+		}
+#endif
 		release_firmware(fw_entry);
 	}
 
@@ -302,6 +310,15 @@ static int32_t update_firmware_request(char *filename)
 {
 	uint8_t retry = 0;
 	int32_t ret = 0;
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+	char path[TS_MMI_MAX_FULL_FW_PATH] = { 0 };
+	void *data = NULL;
+	struct firmware *fw_tmp;
+	struct file *filp = NULL;
+	struct inode *inode;
+	loff_t pos = 0;
+	loff_t file_len = 0;
+#endif
 
 	if (NULL == filename) {
 		return -ENOENT;
@@ -310,10 +327,53 @@ static int32_t update_firmware_request(char *filename)
 	while (1) {
 		NVT_LOG("filename is %s\n", filename);
 
-		ret = request_firmware(&fw_entry, filename, &ts->client->dev);
-		if (ret) {
-			NVT_ERR("firmware load failed, ret=%d\n", ret);
-			goto request_fail;
+#ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
+		if (ts->flash_mode == FW_PARAM_MODE) {
+			NVT_LOG("Read FW data from param path: %s\n", filename);
+			snprintf(path, TS_MMI_MAX_FULL_FW_PATH, "%s%s", TS_MMI_FW_PARAM_PATH, filename);
+			filp = filp_open(path, O_RDONLY, 0);
+			if (IS_ERR(filp)) {
+				NVT_ERR("Open %s file fail!\n", path);
+				return -ENOENT;
+			}
+
+			fw_tmp = vzalloc(sizeof(struct firmware));
+			if (!fw_tmp) {
+				NVT_ERR("Failed to malloc (struct) firmware!\n");
+				return -ENOMEM;
+			}
+
+			inode = filp->f_inode;
+			file_len = inode->i_size;
+			data = (u8 *)vzalloc(file_len);
+			if (NULL == data) {
+				NVT_ERR("Failed to malloc param firmware memory!\n");
+				filp_close(filp, NULL);
+				return -ENOMEM;
+			}
+
+			ret = kernel_read(filp, data, file_len, &pos);
+			if (ret < 0) {
+				NVT_ERR("Failed to read param firmware data, ret = %d\n", ret);
+				filp_close(filp, NULL);
+				vfree(data);
+				vfree(fw_tmp);
+				fw_entry = NULL;
+				return -EIO;
+			}
+			fw_tmp->data = data;
+			fw_tmp->size = file_len;
+			NVT_ERR("fw file len:%d pos:%d!\n", (u32)file_len, (u32)pos);
+			filp_close(filp, NULL);
+			fw_entry = fw_tmp;
+		} else
+#endif
+		{
+			ret = request_firmware(&fw_entry, filename, &ts->client->dev);
+			if (ret) {
+				NVT_ERR("firmware load failed, ret=%d\n", ret);
+				goto request_fail;
+			}
 		}
 
 		// check FW need to write size
