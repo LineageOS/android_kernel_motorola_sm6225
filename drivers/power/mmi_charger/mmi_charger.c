@@ -217,6 +217,39 @@ struct mmi_charger_chip {
 	void			*ipc_log;
 };
 
+static void mmi_notify_charger_rate(struct mmi_charger_chip *chip, int rate);
+static ssize_t state_sync_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		mmi_err(this_chip, "Invalid state_sync value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	if (mode) {
+		mutex_lock(&this_chip->charger_lock);
+		mmi_notify_charger_rate(this_chip, this_chip->max_charger_rate);
+		mutex_unlock(&this_chip->charger_lock);
+		cancel_delayed_work(&this_chip->heartbeat_work);
+		schedule_delayed_work(&this_chip->heartbeat_work,
+					msecs_to_jiffies(0));
+		mmi_info(this_chip, "charger state sync received\n");
+	}
+
+	return count;
+}
+static DEVICE_ATTR(state_sync, 0200, NULL, state_sync_store);
+
 #define CHARGER_POWER_5W 5000
 #define CHARGER_POWER_7P5W 7500
 #define CHARGER_POWER_10W 10000
@@ -2311,6 +2344,12 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	mmi_battery_supply_init(chip);
 
 	rc = device_create_file(chip->dev,
+				&dev_attr_state_sync);
+	if (rc) {
+		mmi_err(chip, "couldn't create state_sync\n");
+	}
+
+	rc = device_create_file(chip->dev,
 				&dev_attr_dcp_pmax);
 	if (rc) {
 		mmi_err(chip, "couldn't create dcp_pmax\n");
@@ -2378,6 +2417,7 @@ static int mmi_charger_remove(struct platform_device *pdev)
 	if (chip->factory_mode)
 		unregister_reboot_notifier(&chip->mmi_reboot);
 	power_supply_unreg_notifier(&chip->mmi_psy_notifier);
+	device_remove_file(chip->dev, &dev_attr_state_sync);
 	device_remove_file(chip->dev, &dev_attr_dcp_pmax);
 	device_remove_file(chip->dev, &dev_attr_hvdcp_pmax);
 	device_remove_file(chip->dev, &dev_attr_pd_pmax);
@@ -2409,11 +2449,7 @@ static void mmi_charger_shutdown(struct platform_device *pdev)
 {
 	struct mmi_charger_chip *chip = platform_get_drvdata(pdev);
 
-	if (chip->batt_uenvp[0]) {
-		kfree(chip->batt_uenvp[0]);
-		chip->batt_uenvp[0] = NULL;
-	}
-	PM_WAKEUP_UNREGISTER(chip->mmi_hb_wake_source);
+	mmi_info(chip, "MMI charger shutdown\n");
 
 	return;
 }
