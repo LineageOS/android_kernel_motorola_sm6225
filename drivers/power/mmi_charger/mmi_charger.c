@@ -2032,12 +2032,6 @@ static int mmi_psy_notifier_call(struct notifier_block *nb, unsigned long val,
 				      msecs_to_jiffies(0));
 	}
 
-	if (chip->batt_psy && chip->batt_uenvp[0]) {
-		kobject_uevent_env(&chip->batt_psy->dev.kobj,
-						KOBJ_CHANGE,
-						chip->batt_uenvp);
-	}
-
 	return NOTIFY_OK;
 }
 
