@@ -68,6 +68,7 @@ struct mmi_charger_info {
 #define MMI_CONV_OCP_FAULT_BIT 12
 #define MMI_THERM_ALARM_BIT 13
 #define MMI_THERM_FAULT_BIT  14
+#define MMI_CP_SWITCH_BIT 18
 
 struct mmi_charger_error_info {
 	int chrg_err_type;
