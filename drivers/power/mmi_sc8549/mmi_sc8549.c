@@ -52,20 +52,21 @@ enum {
 	ADC_MAX_NUM,
 };
 
-/*below used for comm with other module*/
-#define	BAT_OVP_FAULT_SHIFT			8
-#define	BAT_OCP_FAULT_SHIFT			9
-#define	BUS_OVP_FAULT_SHIFT			10
-#define	BUS_OCP_FAULT_SHIFT			11
-#define	SS_TIMEOUT_FAULT_SHIFT			16
-#define	TS_SHUT_FAULT_SHIFT			17
 
-#define	BAT_OVP_FAULT_MASK		(1 << BAT_OVP_FAULT_SHIFT)
-#define	BAT_OCP_FAULT_MASK		(1 << BAT_OCP_FAULT_SHIFT)
-#define	BUS_OVP_FAULT_MASK		(1 << BUS_OVP_FAULT_SHIFT)
-#define	BUS_OCP_FAULT_MASK		(1 << BUS_OCP_FAULT_SHIFT)
-#define	SS_TIMEOUT_FAULT_MASK	(1 << SS_TIMEOUT_FAULT_SHIFT)
-#define	TS_SHUT_FAULT_MASK		(1 << TS_SHUT_FAULT_SHIFT)
+/*below used for comm with other module*/
+#define	MMI_BAT_OVP_FAULT_BIT			6
+#define	MMI_BAT_OCP_FAULT_BIT			7
+#define	MMI_BUS_OVP_FAULT_BIT			9
+#define	MMI_BUS_OCP_FAULT_BIT			10
+#define	MMI_SS_TIMEOUT_FAULT_BIT		16
+#define	MMI_TS_SHUT_FAULT_BIT			17
+
+#define	MMI_BAT_OVP_FAULT_MASK		(1 << MMI_BAT_OVP_FAULT_BIT)
+#define	MMI_BAT_OCP_FAULT_MASK		(1 << MMI_BAT_OCP_FAULT_BIT)
+#define	MMI_BUS_OVP_FAULT_MASK		(1 << MMI_BUS_OVP_FAULT_BIT)
+#define	MMI_BUS_OCP_FAULT_MASK		(1 << MMI_BUS_OCP_FAULT_BIT)
+#define	MMI_SS_TIMEOUT_FAULT_MASK	(1 << MMI_SS_TIMEOUT_FAULT_BIT)
+#define	MMI_TS_SHUT_FAULT_MASK		(1 << MMI_TS_SHUT_FAULT_BIT)
 
 #define sc_err(fmt, ...)								\
 do {											\
@@ -1420,12 +1421,12 @@ static int sc8549_iio_read_raw(struct iio_dev *indio_dev,
 		break;
 	case PSY_IIO_CP_STATUS1:
 		sc8549_check_fault_status(chip);
-		*val1 = (chip->bat_ovp_fault << BAT_OVP_FAULT_SHIFT)
-			| (chip->bat_ocp_fault << BAT_OCP_FAULT_SHIFT)
-			| (chip->bus_ovp_fault << BUS_OVP_FAULT_SHIFT)
-			| (chip->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
-			| (chip->ss_timeout_fault << SS_TIMEOUT_FAULT_SHIFT)
-			| (chip->ts_shut_fault << TS_SHUT_FAULT_SHIFT);
+		*val1 = (chip->bat_ovp_fault << MMI_BAT_OVP_FAULT_BIT)
+			| (chip->bat_ocp_fault << MMI_BAT_OCP_FAULT_BIT)
+			| (chip->bus_ovp_fault << MMI_BUS_OVP_FAULT_BIT)
+			| (chip->bus_ocp_fault << MMI_BUS_OCP_FAULT_BIT)
+			| (chip->ss_timeout_fault << MMI_SS_TIMEOUT_FAULT_BIT)
+			| (chip->ts_shut_fault << MMI_TS_SHUT_FAULT_BIT);
 		break;
 	default:
 		sc_err("Unsupported sc8549 IIO chan %d\n", chan->channel);
