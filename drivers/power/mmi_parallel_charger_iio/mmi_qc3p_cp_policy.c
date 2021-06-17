@@ -258,6 +258,10 @@ void mmi_qc3p_chrg_policy_clear(struct mmi_charger_manager *chip) {
        chrg_dev_init(chip, &g_chrg_list);
        clear_chrg_dev_error_cnt(chip, &g_chrg_list);
        qc3p_clear_chg_manager(chip);
+	if (chrg_list->cp_slave)
+		mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
+	if (chrg_list->cp_master)
+		mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
        mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
                                                        QC3P_DISABLE_CHRG_LIMIT);
        qc3p_sm_state = PM_QC3P_STATE_DISCONNECT;
