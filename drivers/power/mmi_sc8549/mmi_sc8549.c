@@ -60,6 +60,7 @@ enum {
 #define	MMI_BUS_OCP_FAULT_BIT			10
 #define	MMI_SS_TIMEOUT_FAULT_BIT		16
 #define	MMI_TS_SHUT_FAULT_BIT			17
+#define	MMI_CP_SWITCH_BIT			18
 
 #define	MMI_BAT_OVP_FAULT_MASK		(1 << MMI_BAT_OVP_FAULT_BIT)
 #define	MMI_BAT_OCP_FAULT_MASK		(1 << MMI_BAT_OCP_FAULT_BIT)
@@ -67,6 +68,7 @@ enum {
 #define	MMI_BUS_OCP_FAULT_MASK		(1 << MMI_BUS_OCP_FAULT_BIT)
 #define	MMI_SS_TIMEOUT_FAULT_MASK	(1 << MMI_SS_TIMEOUT_FAULT_BIT)
 #define	MMI_TS_SHUT_FAULT_MASK		(1 << MMI_TS_SHUT_FAULT_BIT)
+#define	MMI_CP_SWITCH_MASK		(1 << MMI_CP_SWITCH_BIT)
 
 #define sc_err(fmt, ...)								\
 do {											\
@@ -156,6 +158,7 @@ struct sc8549 {
 	bool bus_ocp_fault;
 	bool ss_timeout_fault;
 	bool ts_shut_fault;
+	bool cp_switch;
 
 	bool vbat_reg;
 	bool ibat_reg;
@@ -1237,6 +1240,8 @@ static void sc8549_check_fault_status(struct sc8549 *sc)
 			sc->ts_shut_fault = !!(stat & SC8549_TSHUT_FLAG_MASK);
 		if (stat & SC8549_SS_TIMEOUT_FLAG_MASK)
 			sc->ss_timeout_fault = !!(stat & SC8549_SS_TIMEOUT_FLAG_MASK);
+		if (stat & SC8549_CONV_SWITCHING_STAT_MASK)
+			sc->cp_switch = !!(stat & SC8549_CONV_SWITCHING_STAT_MASK);
 	}
 
 	ret = sc8549_read_byte(sc, SC8549_REG_0F, &flag);
@@ -1426,7 +1431,8 @@ static int sc8549_iio_read_raw(struct iio_dev *indio_dev,
 			| (chip->bus_ovp_fault << MMI_BUS_OVP_FAULT_BIT)
 			| (chip->bus_ocp_fault << MMI_BUS_OCP_FAULT_BIT)
 			| (chip->ss_timeout_fault << MMI_SS_TIMEOUT_FAULT_BIT)
-			| (chip->ts_shut_fault << MMI_TS_SHUT_FAULT_BIT);
+			| (chip->ts_shut_fault << MMI_TS_SHUT_FAULT_BIT)
+			| (chip->cp_switch << MMI_CP_SWITCH_BIT);
 		break;
 	default:
 		sc_err("Unsupported sc8549 IIO chan %d\n", chan->channel);
