@@ -116,6 +116,8 @@ bool mmi_is_factory_version(void);
 const char *mmi_get_battery_serialnumber(void);
 void mmi_get_charger_configure(struct mmi_charger_driver *driver);
 int mmi_register_charger_driver(struct mmi_charger_driver *driver);
+int mmi_vote_charging_disable(const char *voter, bool enable);
+int mmi_vote_charger_suspend(const char *voter, bool enable);
 int mmi_unregister_charger_driver(struct mmi_charger_driver *driver);
 
 #endif
