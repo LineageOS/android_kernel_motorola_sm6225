@@ -3265,7 +3265,7 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 	logError(1, "%s %s: Disabling IRQ...\n", tag, __func__);
 	/* if IRQ pin is short with DVDD a call to the ISR will triggered when
 	  * the regulator is turned off if IRQ not disabled */
-	fts_disableInterrupt();
+	fts_disableInterruptNoSync();
 
 	if (info->vdd_reg) {
 		error = regulator_disable(info->vdd_reg);
