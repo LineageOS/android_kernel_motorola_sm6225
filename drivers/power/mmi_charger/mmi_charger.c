@@ -161,6 +161,13 @@ struct mmi_charger {
 	struct list_head list;
 };
 
+#define MMI_VOTE_NUM_MAX 32
+struct mmi_vote {
+	const char *name;
+	int votes[MMI_VOTE_NUM_MAX];
+	const char *voters[MMI_VOTE_NUM_MAX];
+};
+
 #define IS_SUSPENDED BIT(0)
 #define WAS_SUSPENDED BIT(1)
 
@@ -216,7 +223,79 @@ struct mmi_charger_chip {
 
 	bool			*debug_enabled;
 	void			*ipc_log;
+
+	struct mmi_vote		suspend_charger_vote;
+	struct mmi_vote		disable_charging_vote;
 };
+
+static int mmi_vote(struct mmi_vote *vote, const char *voter,
+				bool enabled, int value)
+{
+	int i;
+	int empty = -EINVAL;
+	struct mmi_charger_chip *chip = this_chip;
+
+	if (!chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -ENODEV;
+	}
+
+	if (!voter) {
+		mmi_err(chip, "%s: Invalid voter\n", vote->name);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < MMI_VOTE_NUM_MAX; i++) {
+		if (vote->voters[i] &&
+		    !strcmp(vote->voters[i], voter)) {
+			break;
+		} else if (empty < 0 && !vote->voters[i]) {
+			empty = i;
+		}
+	}
+
+	if (i < MMI_VOTE_NUM_MAX) {
+		if (enabled) {
+			vote->voters[i] = voter;
+			vote->votes[i] = value;
+		} else {
+			vote->voters[i] = NULL;
+			vote->votes[i] = 0;
+		}
+	} else {
+		if (!enabled) {
+			return 0;
+		} else if (empty < 0) {
+			mmi_err(this_chip, "No entry found\n");
+			return -ENOENT;
+		} else {
+			vote->voters[empty] = voter;
+			vote->votes[empty] = value;
+		}
+	}
+
+	mmi_info(chip, "%s:%s voter: en:%d, val:%d\n",
+			vote->name, voter, enabled, value);
+
+	return 0;
+}
+
+static int mmi_get_effective_voter(struct mmi_vote *vote)
+{
+	int i;
+	int win_voter = -EINVAL;
+	int win_vote = INT_MAX;
+
+	for (i = 0; i < MMI_VOTE_NUM_MAX; i++) {
+		if (vote->voters[i] &&
+		    vote->votes[i] < win_vote) {
+			win_voter = i;
+			win_vote = vote->votes[i];
+		}
+	}
+
+	return win_voter;
+}
 
 static void mmi_notify_charger_rate(struct mmi_charger_chip *chip, int rate);
 static ssize_t state_sync_store(struct device *dev,
@@ -1410,7 +1489,8 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 		break;
 	}
 
-	if (cfg->target_fcc < 0)
+	if (cfg->target_fcc < 0 ||
+	    mmi_get_effective_voter(&chip->disable_charging_vote) >= 0)
 		cfg->charging_disable = true;
 	else
 		cfg->charging_disable = false;
@@ -1423,7 +1503,9 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 		cfg->charging_reset = false;
 	}
 
-	if (chip->force_charger_disabled || status->demo_chrg_suspend)
+	if (chip->force_charger_disabled ||
+	    status->demo_chrg_suspend ||
+	    mmi_get_effective_voter(&chip->suspend_charger_vote) >= 0)
 		cfg->charger_suspend = true;
 
 	if (chip->force_charging_enabled) {
@@ -1988,6 +2070,32 @@ void mmi_get_charger_configure(struct mmi_charger_driver *driver)
 }
 EXPORT_SYMBOL(mmi_get_charger_configure);
 
+int mmi_vote_charging_disable(const char *voter, bool enable)
+{
+	struct mmi_charger_chip *chip = this_chip;
+
+	if (!chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -EINVAL;
+	}
+
+	return mmi_vote(&chip->disable_charging_vote, voter, enable, 0);
+}
+EXPORT_SYMBOL(mmi_vote_charging_disable);
+
+int mmi_vote_charger_suspend(const char *voter, bool enable)
+{
+	struct mmi_charger_chip *chip = this_chip;
+
+	if (!chip) {
+		pr_err("mmi_charger: chip is invalid\n");
+		return -EINVAL;
+	}
+
+	return mmi_vote(&chip->suspend_charger_vote, voter, enable, 0);
+}
+EXPORT_SYMBOL(mmi_vote_charger_suspend);
+
 int mmi_register_charger_driver(struct mmi_charger_driver *driver)
 {
 	int ret = 0;
@@ -2412,6 +2520,8 @@ static int mmi_charger_probe(struct platform_device *pdev)
 	chip->init_cycles = 0;
 	chip->factory_version = mmi_is_factory_version();
 	chip->factory_mode = mmi_is_factory_mode();
+	chip->disable_charging_vote.name = "disable_charging";
+	chip->suspend_charger_vote.name = "suspend_charger";
 	platform_set_drvdata(pdev, chip);
 	device_init_wakeup(chip->dev, true);
 
