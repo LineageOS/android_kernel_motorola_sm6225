@@ -1686,7 +1686,7 @@ int get_caculated_real_ibus_vbus(struct mmi_charger_manager *chip, int *ibus_cur
 	int rc;
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	union power_supply_propval prop = {0,};
-	int  vbus_volt = 0,ibus_curr_temp = 0,ibus_usb = 0,ibus_pump = 0;
+	int  vbus_volt = 0,ibus_curr_temp = 0,ibus_usb = 0,ibus_pump = 0,ibus_pump_slave = 0;
 	int calculated_vbus_temp = 0;
 
 	rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
@@ -1709,8 +1709,17 @@ int get_caculated_real_ibus_vbus(struct mmi_charger_manager *chip, int *ibus_cur
 	if(ibus_usb < 0)
 		ibus_usb = 0;
 
+	if (chrg_list->cp_slave && chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+		rc = power_supply_get_property(chrg_list->chrg_dev[CP_SLAVE]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+		if (!rc)
+			ibus_pump_slave = prop.intval;
+		if(ibus_pump_slave < 0)
+			ibus_pump_slave = 0;
+	}
+
 	//calculate the real ibus vbus
-	ibus_curr_temp = ibus_usb + ibus_pump;
+	ibus_curr_temp = ibus_usb + ibus_pump+ibus_pump_slave;
 	calculated_vbus_temp = vbus_volt+ (ibus_curr_temp *200)/1000; // Define vbus resistance 200 mili oum
 
 	*ibus_curr = ibus_curr_temp;
@@ -1720,16 +1729,19 @@ int get_caculated_real_ibus_vbus(struct mmi_charger_manager *chip, int *ibus_cur
 	return 0;
 }
 
+#define QC3P_PULSE_COUNT_MAX 	((11000 - 5000) / 20 )
 int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_ua){
 	int rc;
 	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	union power_supply_propval prop = {0,};
-	int ibatt_curr = 0, vbatt_volt = 0, vbus_volt = 0,ibus_curr = 0,ibus_usb = 0,ibus_pump = 0;
+	int ibatt_curr = 0, vbatt_volt = 0, vbus_volt = 0,ibus_curr = 0,ibus_usb = 0,ibus_pump = 0,ibus_pump_slave = 0;
 	int i = 0;
 	int calculated_vbus = 0;
 	int req_volt_inc_step = 0,req_volt_dec_step = 0;
 	int req_curr_inc_step = 0,req_curr_dec_step = 0;
 	int real_inc_step = 0,real_dec_step =0;
+	union power_supply_propval val = {0, };
+	int pulse_cnt_curr;
 
 	rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
@@ -1754,6 +1766,13 @@ int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_u
 	if(ibus_pump < 0)
 		ibus_pump = 0;
 
+	if (chrg_list->cp_slave && chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+		rc = power_supply_get_property(chrg_list->chrg_dev[CP_SLAVE]->chrg_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+		if (!rc)
+			ibus_pump_slave= prop.intval;
+	}
+
 	rc = power_supply_get_property(chip->usb_psy,
 					POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
 	if (!rc)
@@ -1761,13 +1780,14 @@ int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_u
 	if(ibus_usb < 0)
 		ibus_usb = 0;
 
-	mmi_chrg_err(chip, "ibus_usb:%d,ibus_pump:%d\n",ibus_usb , ibus_pump);
+	mmi_chrg_err(chip, "ibus_usb:%d,ibus_pump:%d,ibus_pump_slave:%d\n",ibus_usb , ibus_pump, ibus_pump_slave);
 
 	//calculate the real ibus vbus
 	ibus_curr = ibus_usb + ibus_pump;
+	if (chrg_list->cp_slave && chrg_list->chrg_dev[CP_SLAVE]->charger_enabled) {
+		ibus_curr += ibus_pump_slave;
+	}
 	calculated_vbus = vbus_volt+ (ibus_curr *200)/1000; // Define vbus resistance 200 mili oum
-
-	//get_caculated_real_ibus_vbus(chip,&ibus_curr,&calculated_vbus);
 
 	mmi_chrg_err(chip, "qc3p_select_pdo current vbat:%d,ibatt:%d,vbus:%d,calculated_vbus:%d,ibus:%d,target_uv:%d,prev_uv:%d,target_ua:%d,prev_ua:%d\n",vbatt_volt,ibatt_curr,vbus_volt,calculated_vbus,ibus_curr,chip->pd_target_volt,chip->pd_request_volt_prev,chip->pd_target_curr,chip->pd_request_curr_prev);
 
@@ -1824,62 +1844,33 @@ int qc3p_select_pdo(struct mmi_charger_manager *chip,int target_uv, int target_u
 	}
 
 	mmi_chrg_err(chip, "prev_calculate current inc:%d,dec:%d,voltage inc:%d,dec:%d\n",req_curr_inc_step,req_curr_dec_step,req_volt_inc_step,req_volt_dec_step);
-/*
-	switch (sm_state) {
-		case PM_STATE_DISCONNECT:
-		case PM_STATE_ENTRY:
-		case PM_STATE_SW_ENTRY:
-		case PM_STATE_SW_LOOP:
-			req_volt_inc_step = 0;
-			req_volt_dec_step = 0;
-			req_curr_inc_step = 0;
-			req_curr_dec_step = 0;
-			break;
-		case PM_STATE_CHRG_PUMP_ENTRY:
-			//only increase.
-			//req_volt_inc_step = 0;
-			req_volt_dec_step = 0;
-			req_curr_inc_step = 0;
-			req_curr_dec_step = 0;
-			break;
-		case PM_STATE_SINGLE_CP_ENTRY:
-		case PM_STATE_DULE_CP_ENTRY:
-			req_curr_inc_step = 0;
-			req_curr_dec_step = 0;
-			break;
-		case PM_STATE_PPS_TUNNING_CURR:
-			req_volt_inc_step = 0;
-			req_volt_dec_step = 0;
-			break;
-		case PM_STATE_PPS_TUNNING_VOLT:
-			req_curr_inc_step = 0;
-			req_curr_dec_step = 0;
-			break;
-		case PM_STATE_CP_CC_LOOP:
-		case PM_STATE_CP_CV_LOOP:
-			break;
-		case PM_STATE_CP_QUIT:
-			req_volt_inc_step = 0;
-			req_volt_dec_step = 0;
-			req_curr_inc_step = 0;
-			req_curr_dec_step = 0;
-			break;
-		case PM_STATE_RECOVERY_SW:
-		case PM_STATE_STOP_CHARGE:
-			break;
-		case PM_STATE_COOLING_LOOP:
-			req_volt_inc_step = 0;
-			req_volt_dec_step = 0;
-			break;
-		default:
-			break;
-	}
-*/
 
 	real_inc_step = max(req_volt_inc_step,req_curr_inc_step);
 	real_dec_step = max(req_volt_dec_step,req_curr_dec_step);
 
 	mmi_chrg_err(chip, "after calculated, voltage inc:%d,dec:%d\n",real_inc_step,real_dec_step);
+
+	//get current dp dm count
+	rc = power_supply_get_property(chip->qcom_psy,
+			POWER_SUPPLY_PROP_DP_DM, &val);
+	if (rc < 0) {
+		mmi_chrg_err(chip, "Couldn't read dpdm pulse count rc=%d\n", rc);
+		return -EINVAL;
+	} else {
+		mmi_chrg_err(chip, "DP DM pulse count = %d\n", val.intval);
+		pulse_cnt_curr = val.intval;
+	}
+
+	//limit not beyond max pulse
+	if(real_inc_step + pulse_cnt_curr > QC3P_PULSE_COUNT_MAX) {
+		real_inc_step = QC3P_PULSE_COUNT_MAX - pulse_cnt_curr;
+		mmi_chrg_err(chip, "volt increase step bigger than max, real_increse_step:%d\n",real_inc_step);
+	}
+
+	if(real_dec_step > pulse_cnt_curr) {
+		real_dec_step = pulse_cnt_curr;
+		mmi_chrg_err(chip, "vol decrese step bigger than current pulse, set to curr_pulse:%d\n",real_dec_step);
+	}
 
 	if(real_inc_step > 0
 //		&& (chip->pd_target_volt >= calculated_vbus)
