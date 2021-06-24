@@ -193,6 +193,92 @@ int gcore_parse_mp_test_dt(struct gcore_mp_data *mp_data)
 	return 0;
 }
 
+#define MP_TEST_INI   "/sdcard/gcore_mp_test.ini"
+
+static u8 *read_line(u8 *buf, int buf_len, struct file *fp)
+{
+    int ret;
+    int i = 0;
+    mm_segment_t fs;
+
+
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = fp->f_op->read(fp, buf, buf_len, &(fp->f_pos));
+	set_fs(fs);
+
+	if (ret <= 0)
+		return NULL;
+
+	while (buf[i] != '\n' && i < ret) {
+		i++;
+	}
+
+    if (i < ret) {
+		fp->f_pos += i-ret;
+    }
+
+    if (i < buf_len) {
+		buf[i] = 0;
+    }
+    return buf;
+}
+
+int gcore_parse_mp_test_ini(struct gcore_mp_data *mp_data)
+{
+	struct file *f = NULL;
+	u8 *buff = NULL;
+	int buff_len = 20;
+
+	buff = kzalloc(buff_len, GFP_KERNEL);
+	if (!buff) {
+		GTP_ERROR("file mem alloc fail!");
+		return -1;
+	}
+
+	f = filp_open(MP_TEST_INI, O_RDONLY, 644);
+	if (!f) {
+		GTP_ERROR("open mp test ini file fail!");
+		return -1;
+	}
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "open_cb=%d", &mp_data->open_cb);
+	GTP_DEBUG("read open cb:%d", mp_data->open_cb);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "open_min=%d", &mp_data->open_min);
+	GTP_DEBUG("read open min:%d", mp_data->open_min);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "short_cb=%d", &mp_data->short_cb);
+	GTP_DEBUG("read short cb:%d", mp_data->short_cb);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "short_min=%d", &mp_data->short_min);
+	GTP_DEBUG("read short min:%d", mp_data->short_min);
+
+	if (f != NULL) {
+		filp_close(f, NULL);
+	}
+
+	kfree(buff);
+
+	mp_data->test_chip_id = true;
+	mp_data->test_int_pin = true;
+	mp_data->test_open    = true;
+	mp_data->test_short   = true;
+
+	return 0;
+}
+
 int gcore_mp_test_int_pin(struct gcore_mp_data *mp_data)
 {
 	u8 read_buf[4] = { 0 };
@@ -442,6 +528,13 @@ static int mp_test_event_handler(void *p)
 		wait_event_interruptible(gdev->wait, mp_test_fn.event_flag == true);
 		mp_test_fn.event_flag = false;
 
+		if (mutex_is_locked(&gdev->transfer_lock)) {
+			GTP_DEBUG("fw event is locked, ignore");
+			continue;
+		}
+
+		mutex_lock(&gdev->transfer_lock);
+
 		switch (gdev->fw_event) {
 		case FW_READ_OPEN:
 			gcore_mp_test_item_open_reply(gdev->firmware, gdev->fw_xfer);
@@ -455,7 +548,7 @@ static int mp_test_event_handler(void *p)
 			break;
 		}
 
-		gdev->irq_enable(gdev);
+		mutex_unlock(&gdev->transfer_lock);
 
 	} while (!kthread_should_stop());
 
@@ -664,6 +757,65 @@ int gcore_save_mp_data_to_file(struct gcore_mp_data *mp_data)
 	}
 
 	return 0;
+}
+
+int gcore_start_mp_test(void)
+{
+	struct gcore_mp_data *mp_data = g_mp_data;
+	int test_result = 0;
+
+	GTP_DEBUG("gcore start mp test.");
+
+	gcore_parse_mp_test_ini(mp_data);
+
+	gcore_alloc_mp_test_mem(mp_data);
+
+	if (mp_data->test_int_pin) {
+		mp_data->int_pin_test_result = gcore_mp_test_int_pin(mp_data);
+	}
+
+	msleep(1);
+
+	if (mp_data->test_chip_id) {
+		mp_data->chip_id_test_result = gcore_mp_test_chip_id(mp_data);
+	}
+
+	msleep(1);
+
+	if (mp_data->test_open || mp_data->test_short) {
+		GTP_DEBUG("mp test begin to updata mp bin");
+
+#ifdef CONFIG_GCORE_AUTO_UPDATE_FW_HOSTDOWNLOAD
+		if (gcore_auto_update_hostdownload_proc(gcore_mp_FW)) {
+			GTP_ERROR("mp bin update hostdownload proc fail");
+		}
+//		gcore_request_firmware_update_work(NULL);
+#endif
+		else {
+			msleep(1);
+
+			if (mp_data->test_open) {
+				mp_data->open_test_result = gcore_mp_test_item_open(mp_data);
+			}
+
+			msleep(1);
+
+			if (mp_data->test_short) {
+				mp_data->short_test_result = gcore_mp_test_item_short(mp_data);
+			}
+		}
+
+	}
+
+	gcore_save_mp_data_to_file(mp_data);
+
+	test_result = (mp_data->int_pin_test_result || mp_data->chip_id_test_result \
+		|| mp_data->open_test_result || mp_data->short_test_result) ? -1 : 0;
+
+	GTP_DEBUG("start mp test result:%d", test_result);
+
+	return test_result;
+
 }
 
 static int32_t gcore_mp_test_open(struct inode *inode, struct file *file)

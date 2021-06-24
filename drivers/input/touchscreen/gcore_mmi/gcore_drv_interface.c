@@ -254,6 +254,17 @@ long gcore_app_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		break;
 
+	case IOC_APP_START_MP_TEST:
+
+		GTP_DEBUG("App ioctl start mp test");
+
+		if (gcore_start_mp_test()) {
+			GTP_ERROR("App ioctl mp test fail!");
+			return -1;
+		}
+
+		break;
+
 	default:
 		GTP_ERROR("ioctl unknow cmd!");
 		return -ENOTTY;

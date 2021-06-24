@@ -1905,6 +1905,13 @@ static int fwu_event_handler(void *p)
 		wait_event_interruptible(gdev->wait, fw_update_fn.event_flag == true);
 		fw_update_fn.event_flag = false;
 
+		if (mutex_is_locked(&gdev->transfer_lock)) {
+			GTP_DEBUG("fw event is locked, ignore");
+			continue;
+		}
+
+		mutex_lock(&gdev->transfer_lock);
+
 		switch (gdev->fw_event) {
 		case FW_UPDATE:
 #ifdef CONFIG_GCORE_AUTO_UPDATE_FW_HOSTDOWNLOAD
@@ -1922,7 +1929,7 @@ static int fwu_event_handler(void *p)
 			break;
 		}
 
-		gdev_fwu->irq_enable(gdev_fwu);
+		mutex_unlock(&gdev->transfer_lock);
 
 	} while (!kthread_should_stop());
 
