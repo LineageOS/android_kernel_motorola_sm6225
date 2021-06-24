@@ -629,41 +629,30 @@ s32 gcore_touch_event_handler(struct gcore_dev *gdev)
 	return 0;
 }
 
-static int tpd_event_handler(void *p)
+static irqreturn_t tpd_event_handler(int irq, void *dev_id)
 {
-	struct gcore_dev *gdev = (struct gcore_dev *)p;
-	struct sched_param param = {.sched_priority = 4};
+	struct gcore_dev *gdev = (struct gcore_dev *)dev_id;
 
-	sched_setscheduler(current, SCHED_RR, &param);
-	do {
-		set_current_state(TASK_INTERRUPTIBLE);
+	if (mutex_is_locked(&gdev->transfer_lock)) {
+		GTP_DEBUG("touch is locked, ignore");
+		return IRQ_HANDLED;
+	}
 
-		wait_event_interruptible(gdev->wait, gdev->tpd_flag != 0);
-		gdev->tpd_flag = 0;
+	mutex_lock(&gdev->transfer_lock);
+	/* don't reset before "if (tpd_halt..."  */
 
-		set_current_state(TASK_RUNNING);
+	if (gcore_touch_event_handler(gdev)) {
+		GTP_ERROR("touch event handler error.");
+	}
 
-		mutex_lock(&gdev->transfer_lock);
-		/* don't reset before "if (tpd_halt..."  */
+	mutex_unlock(&gdev->transfer_lock);
 
-		if (gcore_touch_event_handler(gdev)) {
-			GTP_ERROR("touch event handler error.");
-		}
-
-		gcore_irq_enable(gdev);
-
-		mutex_unlock(&gdev->transfer_lock);
-
-	} while (!kthread_should_stop());
-
-	return 0;
+	return IRQ_HANDLED;
 }
 
-
-static irqreturn_t tpd_eint_interrupt_handler(unsigned irq, void *p)
+static irqreturn_t tpd_eint_interrupt_handler(int irq, void *dev_id)
 {
-	struct gcore_dev *gdev = (struct gcore_dev *)p;
-	unsigned long flags;
+	struct gcore_dev *gdev = (struct gcore_dev *)dev_id;
 	struct gcore_exp_fn *exp_fn = NULL;
 	struct gcore_exp_fn *exp_fn_temp = NULL;
 	u8 found = 0;
@@ -680,22 +669,12 @@ static irqreturn_t tpd_eint_interrupt_handler(unsigned irq, void *p)
 
 	if (!found) {
 		gdev->tpd_flag = 1;
-	}
-
-	spin_lock_irqsave(&gdev->irq_flag_lock, flags);
-	if (gdev->irq_flag == 0) {
-		spin_unlock_irqrestore(&gdev->irq_flag_lock, flags);
+		return IRQ_WAKE_THREAD;
+	} else {
+		wake_up_interruptible(&gdev->wait);
 		return IRQ_HANDLED;
 	}
-	/* enter EINT handler disable INT, make sure INT is disable when handle touch event including top/bottom half */
-	/* use _nosync to avoid deadlock */
-	gdev->irq_flag = 0;
-	spin_unlock_irqrestore(&gdev->irq_flag_lock, flags);
-	disable_irq_nosync(gdev->touch_irq);
 
-	/*GTP_DEBUG("disable irq_flag=%d",g_touch.irq_flag);*/
-	wake_up_interruptible(&gdev->wait);
-	return IRQ_HANDLED;
 }
 
 static int tpd_irq_registration(struct gcore_dev *gdev)
@@ -741,8 +720,10 @@ static int tpd_irq_registration(struct gcore_dev *gdev)
 
 #endif
 
-	ret = request_irq(gdev->touch_irq, (irq_handler_t) tpd_eint_interrupt_handler,
-			IRQF_TRIGGER_RISING, "TOUCH_PANEL-eint", gdev);
+	ret = devm_request_threaded_irq(&gdev->bus_device->dev, gdev->touch_irq,
+					tpd_eint_interrupt_handler,
+					tpd_event_handler,
+					IRQF_TRIGGER_RISING | IRQF_ONESHOT, "TOUCH_PANEL-eint", gdev);
 	if (ret > 0) {
 		ret = -1;
 		GTP_ERROR("tpd request_irq IRQ LINE NOT AVAILABLE!.");
@@ -873,12 +854,6 @@ void gcore_deinit(struct gcore_dev *gdev)
 		}
 	}
 
-	if (gdev->touch_irq) {
-		free_irq(gdev->touch_irq, gdev);
-	}
-
-	kthread_stop(gdev->thread);
-
 	destroy_workqueue(gdev->fwu_workqueue);
 
 	if (gdev->touch_data) {
@@ -898,7 +873,6 @@ void gcore_deinit(struct gcore_dev *gdev)
 
 int gcore_touch_probe(struct gcore_dev *gdev)
 {
-	s32 err = 0;
 #if 0
 	struct gcore_exp_fn *exp_fn = NULL;
 	struct gcore_exp_fn *exp_fn_temp = NULL;
@@ -914,11 +888,6 @@ int gcore_touch_probe(struct gcore_dev *gdev)
 		GTP_ERROR("gcore init fail!");
 	}
 
-	gdev->thread = kthread_run(tpd_event_handler, gdev, GTP_DRIVER_NAME);
-	if (IS_ERR(gdev->thread)) {
-		err = PTR_ERR(gdev->thread);
-		GTP_DEBUG(GTP_DRIVER_NAME " failed to create kernel thread: %d\n", err);
-	}
 
 #ifdef CONFIG_TOUCH_DRIVER_RUN_ON_MTK_PLATFORM
 	tpd_gpio_as_int(GTP_INT_PORT);
@@ -970,6 +939,11 @@ int gcore_touch_probe(struct gcore_dev *gdev)
 			GTP_ERROR("register notifier failed!");
 	}
 #endif
+
+#if RESUME_USES_WORKQ
+	gcore_resume_wq_init();
+#endif
+
 #endif
 
 	return 0;
