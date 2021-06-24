@@ -250,7 +250,6 @@ static const struct of_device_id tpd_of_match[] = {
 #define GESTURE_KEY   KEY_POWER
 #endif
 
-
 #ifdef CONFIG_ENABLE_FW_RAWDATA
 enum FW_MODE {
 	DEMO,
@@ -277,7 +276,7 @@ struct gcore_dev {
 	struct spi_device *bus_device;
 #endif
 
-	unsigned int touch_irq;
+	int touch_irq;
 	spinlock_t irq_flag_lock;
 	int irq_flag;
 	int tpd_flag;
@@ -394,6 +393,13 @@ extern int gcore_sysfs_add_device(struct device *dev);
 #ifdef CONFIG_DRM
 extern int gcore_ts_drm_notifier_callback(struct notifier_block *self,
 	unsigned long event, void *data);
+#endif
+
+extern int gcore_start_mp_test(void);
+
+#define RESUME_USES_WORKQ   1
+#if RESUME_USES_WORKQ
+extern void gcore_resume_wq_init(void);
 #endif
 
 #endif    /* GCORE_TPD_COMMON_H_  */

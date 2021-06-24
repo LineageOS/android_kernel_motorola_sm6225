@@ -23,6 +23,27 @@
 #include <drm/drm_panel.h>
 #endif
 
+#if RESUME_USES_WORKQ
+static struct workqueue_struct *resume_by_ddi_wq;
+static struct work_struct resume_by_ddi_work;
+
+void gcore_resume_by_ddi_work(struct work_struct *work)
+{
+	gcore_request_firmware_update_work(NULL);
+
+	gcore_touch_release_all_point(fn_data.gdev->input_device);
+
+	fn_data.gdev->tp_suspend = false;
+}
+
+void gcore_resume_wq_init(void)
+{
+	resume_by_ddi_wq = create_singlethread_workqueue("resume_by_ddi_wq");
+	WARN_ON(!resume_by_ddi_wq);
+	INIT_WORK(&resume_by_ddi_work, gcore_resume_by_ddi_work);
+}
+#endif
+
 #if defined(CONFIG_ENABLE_GESTURE_WAKEUP) && defined(CONFIG_GESTURE_SPECIAL_INT)
 
 int gcore_enable_irq_wake(struct gcore_dev *gdev)
@@ -115,6 +136,7 @@ void gcore_resume(void)
 
 	GTP_DEBUG("enter gcore resume");
 
+#if !RESUME_USES_WORKQ
 #if defined(CONFIG_ENABLE_GESTURE_WAKEUP) && defined(CONFIG_GESTURE_SPECIAL_INT)
 	struct gcore_dev *gdev = fn_data.gdev;
 	if (gdev->gesture_wakeup_en) {
@@ -137,9 +159,12 @@ void gcore_resume(void)
 	gcore_touch_release_all_point(fn_data.gdev->input_device);
 
 	fn_data.gdev->tp_suspend = false;
+#else
+	queue_work(resume_by_ddi_wq, &(resume_by_ddi_work));
+	GTP_DEBUG("TP resume work queued.");
+#endif
 
 }
-
 
 #ifdef CONFIG_DRM
 int gcore_ts_drm_notifier_callback(struct notifier_block *self,
