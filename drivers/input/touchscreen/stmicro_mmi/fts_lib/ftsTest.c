@@ -977,7 +977,7 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 	}
 
 	sett[0] = 0xFF;
-	sett[1] = 0xFF;
+	sett[1] = 0x01;
 	logError(0, "%s ITO Check command sent...\n", tag);
 	res = writeSysCmd(SYS_CMD_ITO, sett, 2);
 	if (res < OK) {
