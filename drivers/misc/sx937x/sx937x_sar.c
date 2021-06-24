@@ -1371,6 +1371,7 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	}
 
 	this = devm_kzalloc(&client->dev,sizeof(sx93XX_t), GFP_KERNEL); /* create memory for main struct */
+	global_sx937x = this;
 	LOG_DBG("Initialized Main Memory: 0x%p\n",this);
 
 	pButtonInformationData = devm_kzalloc(&client->dev , sizeof(struct totalButtonInformation), GFP_KERNEL);
@@ -1610,8 +1611,6 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 		LOG_ERR("sx937x_Hardware_CheckFail!\n");
 		//return -1;
 	}
-
-	global_sx937x = this;
 
 	if(pplatData->reinit_on_i2c_failure) {
 		INIT_DELAYED_WORK(&this->i2c_watchdog_work, sx937x_i2c_watchdog_work);
