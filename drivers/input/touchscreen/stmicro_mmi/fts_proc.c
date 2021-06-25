@@ -3033,6 +3033,15 @@ ERROR:
   * file_operations struct which define the functions for the canonical
   *operation on a device file node (open. read, write etc.)
   */
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops fts_driver_test_ops = {
+	.proc_open		= fts_open,
+	.proc_read		= seq_read,
+	.proc_write		= fts_driver_test_write,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= seq_release
+};
+#else
 static const struct file_operations fts_driver_test_ops = {
 	.open		= fts_open,
 	.read		= seq_read,
@@ -3040,6 +3049,7 @@ static const struct file_operations fts_driver_test_ops = {
 	.llseek		= seq_lseek,
 	.release	= seq_release
 };
+#endif
 
 /*****************************************************************************/
 
