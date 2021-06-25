@@ -1,10 +1,13 @@
-KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+all: modules
 
-all:
-	$(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules $(KBUILD_OPTIONS)
+modules:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
 
 modules_install:
-	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
+	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(M) modules_install
 
-clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(PWD) clean
+%:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
+
+KBUILD_EXTRA_SYMBOLS += $(M)/../../../sensors/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(M)/../../../mmi_relay/Module.symvers
