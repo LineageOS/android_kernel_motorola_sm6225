@@ -57,12 +57,6 @@ int getChannelsLength(void)
 	int ret;
 	u8 data[2];
 
-	if (data == NULL) {
-		logError(1, "%s getChannelsLength: ERROR %08X\n", tag,
-			 ERROR_ALLOC);
-		return ERROR_ALLOC;
-	}
-
 	ret = readConfig(ADDR_CONFIG_SENSE_LEN, data, 2);
 	if (ret < OK) {
 		logError(1, "%s getChannelsLength: ERROR %08X\n", tag, ret);
