@@ -612,7 +612,7 @@ int ts_mmi_dev_register(struct device *parent,
 	mutex_init(&touch_cdev->extif_mutex);
 	mutex_init(&touch_cdev->method_mutex);
 
-#ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
+#if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
 	ret = ts_mmi_check_drm_panel(DEV_TS->of_node);
 	if (ret < 0) {
 		dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);

@@ -16,14 +16,6 @@
 
 #include <linux/notifier.h>
 
-enum panel_event {
-	PANEL_EVENT_PRE_DISPLAY_OFF,
-	PANEL_EVENT_PRE_DISPLAY_ON,
-	PANEL_EVENT_DISPLAY_OFF,
-	PANEL_EVENT_DISPLAY_ON,
-	PANEL_EVENT_DISPLAY_ON_PREPARE,
-};
-
 #ifdef CONFIG_PANEL_NOTIFICATIONS
 
 int panel_register_notifier(struct notifier_block *nb);

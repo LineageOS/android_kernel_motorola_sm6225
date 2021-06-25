@@ -25,8 +25,14 @@
 
 #include <linux/panel_notifier.h>
 
-#define register_panel_notifier panel_register_notifier
-#define unregister_panel_notifier panel_unregister_notifier
+#define REGISTER_PANEL_NOTIFIER {\
+	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb; \
+	ret = panel_register_notifier(&touch_cdev->panel_nb); \
+}
+
+#define UNREGISTER_PANEL_NOTIFIER {\
+	panel_unregister_notifier(&touch_cdev->panel_nb); \
+}
 
 #define GET_CONTROL_DSI_INDEX { \
 	if (evd) \
@@ -46,19 +52,52 @@
 	(event == PANEL_EVENT_DISPLAY_ON)
 
 #else /* CONFIG_PANEL_NOTIFICATIONS */
-#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS)
-
-#include <drm/drm_panel.h>
+#if defined(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+#include <linux/soc/qcom/panel_event_notifier.h>
 extern struct drm_panel *active_panel;
 
-static inline int register_panel_notifier(struct notifier_block *nb)
-{
-	return drm_panel_notifier_register(active_panel, nb);
+#define REGISTER_PANEL_NOTIFIER { \
+	void *cookie = NULL; \
+	cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY, \
+		PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH, active_panel, \
+		&ts_mmi_panel_cb, touch_cdev); \
+	if (!cookie) \
+		ret = -1; \
+	else \
+		touch_cdev->notifier_cookie = cookie; \
 }
 
-static inline void unregister_panel_notifier(struct notifier_block *nb)
-{
-	drm_panel_notifier_unregister(active_panel, nb);
+#define UNREGISTER_PANEL_NOTIFIER { \
+	panel_event_notifier_unregister(touch_cdev->notifier_cookie); \
+}
+
+#define EVENT_PRE_DISPLAY_OFF \
+	((event == DRM_PANEL_EVENT_BLANK) && \
+	 (evdata.early_trigger))
+
+#define EVENT_DISPLAY_OFF \
+	((event == DRM_PANEL_EVENT_BLANK) && \
+	 (!evdata.early_trigger))
+
+#define EVENT_PRE_DISPLAY_ON \
+	((event == DRM_PANEL_EVENT_UNBLANK) && \
+	 (evdata.early_trigger))
+
+#define EVENT_DISPLAY_ON \
+	((event == DRM_PANEL_EVENT_UNBLANK) && \
+	 (!evdata.early_trigger))
+
+#else /* CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS */
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS)
+#include <drm/drm_panel.h>
+extern struct drm_panel *active_panel;
+#define REGISTER_PANEL_NOTIFIER {\
+	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb; \
+	ret = drm_panel_notifier_register(active_panel, &touch_cdev->panel_nb); \
+}
+
+#define UNREGISTER_PANEL_NOTIFIER {\
+	drm_panel_notifier_unregister(active_panel, &touch_cdev->panel_nb);\
 }
 
 #define GET_CONTROL_DSI_INDEX \
@@ -97,8 +136,14 @@ struct drm_panel_notifier *evdata = evd; \
 
 #include <linux/msm_drm_notify.h>
 
-#define register_panel_notifier msm_drm_register_client
-#define unregister_panel_notifier msm_drm_unregister_client
+#define REGISTER_PANEL_NOTIFIER {\
+	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb; \
+	ret = msm_drm_register_client(&touch_cdev->panel_nb); \
+}
+
+#define UNREGISTER_PANEL_NOTIFIER {\
+	msm_drm_unregister_client(&touch_cdev->panel_nb); \
+}
 
 #define GET_CONTROL_DSI_INDEX \
 int *blank; \
@@ -148,6 +193,7 @@ struct msm_drm_notifier *evdata = evd; \
 
 #endif /* LINUX_VERSION_CODE */
 #endif /* CONFIG_DRM_PANEL_NOTIFICATIONS */
+#endif /* CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS */
 #endif /* CONFIG_PANEL_NOTIFICATIONS */
 
 
@@ -163,9 +209,9 @@ struct msm_drm_notifier *evdata = evd; \
 #define NANO_TO_MSEC	1000000
 
 static inline unsigned long long timediff_ms(
-		struct timespec start, struct timespec end)
+		struct timespec64 start, struct timespec64 end)
 {
-	struct timespec temp;
+	struct timespec64 temp;
 
 	if ((end.tv_nsec - start.tv_nsec) < 0) {
 		temp.tv_sec = end.tv_sec - start.tv_sec - 1;
@@ -234,6 +280,15 @@ enum ts_mmi_pm_mode {
 	TS_MMI_PM_DEEPSLEEP = 0,
 	TS_MMI_PM_GESTURE,
 	TS_MMI_PM_ACTIVE,
+};
+
+enum panel_event {
+	PANEL_EVENT_PRE_DISPLAY_OFF,
+	PANEL_EVENT_PRE_DISPLAY_ON,
+	PANEL_EVENT_DISPLAY_OFF,
+	PANEL_EVENT_DISPLAY_ON,
+	PANEL_EVENT_DISPLAY_ON_PREPARE,
+	PANEL_EVENT_UNKNOWN
 };
 
 #define TS_MMI_RESET_SOFT	0
@@ -379,7 +434,11 @@ struct ts_mmi_dev {
 	int			forcereflash;
 	int			panel_status;
 	struct ts_mmi_dev_pdata	pdata;
+#ifdef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+	void *notifier_cookie;
+#else
 	struct notifier_block	panel_nb;
+#endif
 	struct mutex		extif_mutex;
 	struct mutex		method_mutex;
 	struct pinctrl		*pinctrl_node;
@@ -484,7 +543,7 @@ extern int ts_mmi_palm_remove(struct ts_mmi_dev *data);
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
 #endif
-#ifdef CONFIG_DRM_PANEL_NOTIFICATIONS
+#if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
 int ts_mmi_check_drm_panel(struct device_node *of_node);
 #endif
 extern bool ts_mmi_is_panel_match(const char *panel_node, char *touch_ic_name);
