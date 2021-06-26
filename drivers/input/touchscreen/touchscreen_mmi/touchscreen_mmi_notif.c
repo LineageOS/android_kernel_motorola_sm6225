@@ -92,14 +92,14 @@ static int inline ts_mmi_panel_on(struct ts_mmi_dev *touch_cdev) {
 	return schedule_delayed_work(&touch_cdev->work, 0) == false;
 }
 
-static int ts_mmi_panel_event_handle(struct ts_mmi_dev *touch_cdev, enum panel_event event)
+static int ts_mmi_panel_event_handle(struct ts_mmi_dev *touch_cdev, enum ts_mmi_panel_event event)
 {
 	int ret = 0;
 	/* entering suspend upon early blank event */
 	/* to ensure shared power supply is still on */
 	/* for in-cell design touch solutions */
 	switch (event) {
-	case PANEL_EVENT_PRE_DISPLAY_OFF:
+	case TS_MMI_EVENT_PRE_DISPLAY_OFF:
 		cancel_delayed_work_sync(&touch_cdev->work);
 		ts_mmi_panel_off(touch_cdev);
 		if (NEED_TO_SET_PINCTRL) {
@@ -108,7 +108,7 @@ static int ts_mmi_panel_event_handle(struct ts_mmi_dev *touch_cdev, enum panel_e
 		}
 		break;
 
-	case PANEL_EVENT_DISPLAY_OFF:
+	case TS_MMI_EVENT_DISPLAY_OFF:
 		if (NEED_TO_SET_POWER) {
 			/* then proceed with de-powering */
 			TRY_TO_CALL(power, TS_MMI_POWER_OFF);
@@ -116,7 +116,7 @@ static int ts_mmi_panel_event_handle(struct ts_mmi_dev *touch_cdev, enum panel_e
 		}
 		break;
 
-	case PANEL_EVENT_PRE_DISPLAY_ON:
+	case TS_MMI_EVENT_PRE_DISPLAY_ON:
 		if (NEED_TO_SET_POWER) {
 			/* powering on early */
 			TRY_TO_CALL(power, TS_MMI_POWER_ON);
@@ -131,7 +131,7 @@ static int ts_mmi_panel_event_handle(struct ts_mmi_dev *touch_cdev, enum panel_e
 		}
 		break;
 
-	case PANEL_EVENT_DISPLAY_ON:
+	case TS_MMI_EVENT_DISPLAY_ON:
 		/* out of reset to allow wait for boot complete */
 		if (NEED_TO_SET_PINCTRL) {
 			TRY_TO_CALL(pinctrl, TS_MMI_PINCTL_ON);
@@ -153,7 +153,7 @@ static void ts_mmi_panel_cb(enum panel_event_notifier_tag tag,
 		 struct panel_event_notification *notification, void *client_data)
 {
 	int event = 0;
-	enum panel_event panel_event;
+	enum ts_mmi_panel_event panel_event;
 	struct ts_mmi_dev *touch_cdev = client_data;
 	struct panel_event_notification_data evdata;
 
@@ -172,10 +172,10 @@ static void ts_mmi_panel_cb(enum panel_event_notifier_tag tag,
 		(EVENT_DISPLAY_ON ?       "EVENT_DISPLAY_ON" : "Unknown"))),
 		event, (evdata.early_trigger ? 1 : 0));
 
-	panel_event = EVENT_PRE_DISPLAY_OFF ? PANEL_EVENT_PRE_DISPLAY_OFF :
-		(EVENT_DISPLAY_OFF ? PANEL_EVENT_DISPLAY_OFF :
-		(EVENT_PRE_DISPLAY_ON ? PANEL_EVENT_PRE_DISPLAY_ON :
-		(EVENT_DISPLAY_ON ? PANEL_EVENT_DISPLAY_ON : PANEL_EVENT_UNKNOWN)));
+	panel_event = EVENT_PRE_DISPLAY_OFF ? TS_MMI_EVENT_PRE_DISPLAY_OFF :
+		(EVENT_DISPLAY_OFF ? TS_MMI_EVENT_DISPLAY_OFF :
+		(EVENT_PRE_DISPLAY_ON ? TS_MMI_EVENT_PRE_DISPLAY_ON :
+		(EVENT_DISPLAY_ON ? TS_MMI_EVENT_DISPLAY_ON : TS_MMI_EVENT_UNKNOWN)));
 
 	ts_mmi_panel_event_handle(touch_cdev, panel_event);
 
@@ -187,7 +187,7 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 {
 	int idx = -1;
 	int ret = 0;
-	enum panel_event panel_event;
+	enum ts_mmi_panel_event panel_event;
 	struct ts_mmi_dev *touch_cdev =
 			container_of(nb, struct ts_mmi_dev, panel_nb);
 
@@ -206,10 +206,10 @@ static int ts_mmi_panel_cb(struct notifier_block *nb,
 	if (touch_cdev->pdata.ctrl_dsi != idx)
 		return 0;
 
-	panel_event = EVENT_PRE_DISPLAY_OFF ? PANEL_EVENT_PRE_DISPLAY_OFF :
-		(EVENT_DISPLAY_OFF ? PANEL_EVENT_DISPLAY_OFF :
-		(EVENT_PRE_DISPLAY_ON ? PANEL_EVENT_PRE_DISPLAY_ON :
-		(EVENT_DISPLAY_ON ? PANEL_EVENT_DISPLAY_ON : PANEL_EVENT_UNKNOWN)));
+	panel_event = EVENT_PRE_DISPLAY_OFF ? TS_MMI_EVENT_PRE_DISPLAY_OFF :
+		(EVENT_DISPLAY_OFF ? TS_MMI_EVENT_DISPLAY_OFF :
+		(EVENT_PRE_DISPLAY_ON ? TS_MMI_EVENT_PRE_DISPLAY_ON :
+		(EVENT_DISPLAY_ON ? TS_MMI_EVENT_DISPLAY_ON : TS_MMI_EVENT_UNKNOWN)));
 
 	ret = ts_mmi_panel_event_handle(touch_cdev, panel_event);
 
