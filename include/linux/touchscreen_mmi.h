@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/input.h>
+#include <linux/mmi_kernel_common.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 
@@ -209,9 +210,9 @@ struct msm_drm_notifier *evdata = evd; \
 #define NANO_TO_MSEC	1000000
 
 static inline unsigned long long timediff_ms(
-		struct timespec64 start, struct timespec64 end)
+		struct TIME_SPEC start, struct TIME_SPEC end)
 {
-	struct timespec64 temp;
+	struct TIME_SPEC temp;
 
 	if ((end.tv_nsec - start.tv_nsec) < 0) {
 		temp.tv_sec = end.tv_sec - start.tv_sec - 1;

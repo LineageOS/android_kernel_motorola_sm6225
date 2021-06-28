@@ -35,4 +35,10 @@
 #define SIGINFO siginfo
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+#define TIME_SPEC timespec64
+#else
+#define TIME_SPEC timespec
+#endif
+
 #endif    /*_MMI_KERNEL_COMMON_H*/
