@@ -53,6 +53,10 @@ static ssize_t fts_mmi_jitter_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fts_mmi_jitter_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t fts_mmi_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fts_mmi_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(calibrate, (S_IWUSR | S_IWGRP), NULL, fts_mmi_calibrate_store);
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -63,8 +67,18 @@ static DEVICE_ATTR(first_filter, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_first_filter_show, fts_mmi_first_filter_store);
 static DEVICE_ATTR(jitter, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_jitter_show, fts_mmi_jitter_store);
+static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_mmi_edge_show, fts_mmi_edge_store);
 
 #define MAX_ATTRS_ENTRIES 10
+#define ROTATE_90   1
+#define ROTATE_180   2
+#define ROTATE_270  3
+#define BIG_MODE   1
+#define DEFAULT_MODE   0
+#define SMALL_EDGE   0
+#define BIG_EDGE   1
+#define CLOSE_EDGE   2
 #define ADD_ATTR(name) { \
 	if (idx < MAX_ATTRS_ENTRIES)  { \
 		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
@@ -98,6 +112,9 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->board->first_filter_ctrl)
 		ADD_ATTR(first_filter);
+
+	if (ts->board->edge_ctrl)
+		ADD_ATTR(edge);
 
 	if (strncmp(mmi_bl_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(calibrate);
@@ -157,7 +174,7 @@ static ssize_t fts_mmi_interpolation_store(struct device *dev,
 	}
 
 	if (ts->interpolation_val == mode) {
-		pr_info("value is same,so not write.\n");
+		pr_debug("value is same,so not write.\n");
 		return size;
 	}
 
@@ -210,7 +227,7 @@ static ssize_t fts_mmi_jitter_store(struct device *dev,
 	board->jitter_cmd[7] = args[2] & 0xff;
 
 	if (!memcmp(board->jitter_cmd, ts->jitter_val, sizeof(ts->jitter_val))) {
-		pr_info("value is same,so not write.\n");
+		pr_debug("value is same,so not write.\n");
 		return size;
 	}
 
@@ -267,7 +284,7 @@ static ssize_t fts_mmi_linearity_store(struct device *dev,
 
 	board->linearity_cmd[2] = mode;
 	if (!memcmp(board->linearity_cmd, ts->linearity_val, sizeof(ts->linearity_val))) {
-		pr_info("value is same,so not write.\n");
+		pr_debug("value is same,so not write.\n");
 		return size;
 	}
 
@@ -315,7 +332,7 @@ static ssize_t fts_mmi_first_filter_store(struct device *dev,
 	board->first_filter_cmd[3] = args[1];
 
 	if (!memcmp(board->first_filter_cmd, ts->first_filter_val, sizeof(ts->first_filter_val))) {
-		pr_info("value is same,so not write.\n");
+		pr_debug("value is same,so not write.\n");
 		return size;
 	}
 
@@ -346,6 +363,62 @@ static ssize_t fts_mmi_first_filter_show(struct device *dev,
 		ts->first_filter_val[2], ts->first_filter_val[3]);
 }
 
+static ssize_t fts_mmi_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct fts_ts_info *ts;
+	struct fts_hw_platform_data *board;
+	int ret = 0;
+	unsigned int args[2] = { 0 };
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	board = ts->board;
+
+	ret = sscanf(buf, "%d %d", &args[0], &args[1]);
+	if (ret < 2)
+		return -EINVAL;
+	/* UI will not update when rotato to 180 degree.*/
+	if(ROTATE_180 == args[1])
+		return size;
+	/* here need set cmd 02 to fw when 270 degree.*/
+	if(ROTATE_270 == args[1])
+		args[1]--;
+
+	board->edge_cmd[2] = CLOSE_EDGE * 3 +args[1];
+
+	if(BIG_MODE == args[0]) {
+		board->edge_cmd[2] = BIG_EDGE* 3 +args[1];
+	}
+
+	if (!memcmp(board->edge_cmd, ts->edge_val, sizeof(ts->edge_val))) {
+		pr_debug("value is same,so not write.\n");
+		return size;
+	}
+
+	memcpy(ts->edge_val, board->edge_cmd, sizeof(ts->edge_val));
+	ret = fts_write(board->edge_cmd, ARRAY_SIZE(board->edge_cmd));
+	if (ret == OK)
+		pr_info("Successfully to set edge mode: %02x!\n", ts->edge_val[2]);
+	else
+		pr_info("Failed to set edge mode: %02x!\n", ts->edge_val[2]);
+
+	return size;
+}
+
+static ssize_t fts_mmi_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_info *ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+
+	pr_info("edge = %02x\n", ts->board->edge_cmd[2]);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->board->edge_cmd[2]);
+}
 
 static ssize_t fts_mmi_calibrate_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -602,6 +675,12 @@ static int fts_mmi_post_resume(struct device *dev)
 		ret = fts_write(board->report_rate_cmd, ARRAY_SIZE(board->report_rate_cmd));
 		if (ret == OK)
 			dev_dbg(dev, "%s: Successfully to restore report rate mode!\n", __func__);
+	}
+
+	if (ts->board->edge_ctrl) {
+		ret = fts_write(board->edge_cmd, ARRAY_SIZE(board->edge_cmd));
+		if (ret == OK)
+			dev_dbg(dev, "%s: Successfully to restore edge mode!\n", __func__);
 	}
 
 	return 0;
