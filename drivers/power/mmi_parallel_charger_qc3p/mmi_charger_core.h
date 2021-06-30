@@ -274,6 +274,7 @@ struct mmi_charger_manager {
 	struct mmi_charger_device **chrg_list;	/*charger device list*/
 	enum qc3p_power_type qc3p_power;
 	bool qc3p_active;
+	int afvc_volt_comp; /*afvc enabled ,volt compensation uv*/
 };
 
 extern bool mmi_get_pps_result_history(struct mmi_charger_manager *chip);
