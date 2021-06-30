@@ -1782,6 +1782,11 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 		}
 	}
 
+	rc = of_property_read_u32(node,
+				"mmi,afvc_enable_compensation_uv",
+				&chip->afvc_volt_comp);
+	if (rc < 0)
+		chip->afvc_volt_comp = 0;
 	return rc;
 thermal_failed:
 	devm_kfree(chip->dev,chip->thermal_mitigation);
