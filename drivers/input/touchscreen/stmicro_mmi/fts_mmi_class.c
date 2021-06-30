@@ -71,6 +71,7 @@ static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_edge_show, fts_mmi_edge_store);
 
 #define MAX_ATTRS_ENTRIES 10
+#define ROTATE_0   0
 #define ROTATE_90   1
 #define ROTATE_180   2
 #define ROTATE_270  3
@@ -385,6 +386,9 @@ static ssize_t fts_mmi_edge_store(struct device *dev,
 	/* here need set cmd 02 to fw when 270 degree.*/
 	if(ROTATE_270 == args[1])
 		args[1]--;
+	/* Need set default cmd to fw when 0 degree in any mode.*/
+	if(ROTATE_0 == args[1])
+		args[0] = DEFAULT_MODE;
 
 	board->edge_cmd[2] = CLOSE_EDGE * 3 +args[1];
 
