@@ -326,11 +326,6 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		pmic_sys_therm_level = prop.intval;
 
 	rc = power_supply_get_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
-	if (!rc)
-		vbatt_volt = prop.intval;
-
-	rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
 		ibatt_curr = prop.intval;
@@ -358,9 +353,9 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		ibatt_curr *= 1000;
 		if (ibatt_curr < 0)
 			ibatt_curr *= -1;
-		vbatt_volt = chrg_list->chrg_dev[CP_MASTER]->charger_data.vbatt_volt;
-		vbatt_volt *= 1000;
 	}
+	vbatt_volt = chrg_list->chrg_dev[CP_MASTER]->charger_data.vbatt_volt;
+	vbatt_volt *= 1000;
 
 	vbus_pres = chrg_list->chrg_dev[PMIC_SW]->charger_data.vbus_pres;
 	if (!vbus_pres) {
