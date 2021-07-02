@@ -95,15 +95,6 @@ static inline void wakeup_source_init_internal(struct wakeup_source *ws,
 
 	wakeup_source_add(ws);
 }
-/*
-static inline void wakeup_source_trash_internal(struct wakeup_source *ws)
-{
-
-	wakeup_source_remove(ws);
-        if(!ws)
-		return;
-	__pm_relex(ws);
-}*/
 
 #define MAX_NUM_STEPS 10
 enum mmi_chrg_temp_zones {
