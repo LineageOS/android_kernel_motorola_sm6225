@@ -375,6 +375,7 @@ struct fts_ts_info {
 
 	unsigned int interpolation_val;
 	unsigned int report_rate;
+	unsigned int refresh_rate;
 	u8 jitter_val[8];
 	u8 first_filter_val[4];
 	u8 linearity_val[3];
