@@ -599,202 +599,7 @@ void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 					chrg_dev->charger_error.bus_ocp_err_cnt);
 	return;
 }
-#if 0
-static enum power_supply_property batt_props[] = {
-	POWER_SUPPLY_PROP_INPUT_SUSPEND,
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_HEALTH,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_CHARGE_TYPE,
-	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_CHARGER_TEMP,
-	POWER_SUPPLY_PROP_CHARGER_TEMP_MAX,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
-	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_CURRENT_QNOVO,
-	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
-	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
-	POWER_SUPPLY_PROP_SW_JEITA_ENABLED,
-	POWER_SUPPLY_PROP_CHARGE_DONE,
-	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
-	POWER_SUPPLY_PROP_SET_SHIP_MODE,
-	POWER_SUPPLY_PROP_DIE_HEALTH,
-	POWER_SUPPLY_PROP_RERUN_AICL,
-	POWER_SUPPLY_PROP_DP_DM,
-	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
-	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
-	POWER_SUPPLY_PROP_CHARGE_COUNTER,
-	POWER_SUPPLY_PROP_CYCLE_COUNT,
-	POWER_SUPPLY_PROP_RECHARGE_SOC,
-	POWER_SUPPLY_PROP_CHARGE_FULL,
-	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
-	POWER_SUPPLY_PROP_FORCE_RECHARGE,
-	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
-	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
-	POWER_SUPPLY_PROP_NUM_SYSTEM_TEMP_LEVELS,
-	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
-	POWER_SUPPLY_PROP_CHARGE_RATE,
-	POWER_SUPPLY_PROP_AGE,
-	POWER_SUPPLY_PROP_CURRENT_MAX,
-};
 
-static int batt_get_property(struct power_supply *psy,
-				enum power_supply_property psp,
-				union power_supply_propval *val)
-{
-	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
-	union power_supply_propval prop = {0,};
-	int rc = 0;
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-	case POWER_SUPPLY_PROP_TEMP:
-	case POWER_SUPPLY_PROP_CHARGE_FULL:
-	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		rc = power_supply_get_property(chip->extrn_psy,
-							psp, &prop);
-		if (rc < 0) {
-			mmi_chrg_err(chip, "Get Unknown prop %d from extrn_psy rc = %d\n",
-								psp, rc);
-			rc = power_supply_get_property(chip->qcom_psy,
-							psp, &prop);
-		}
-		if (!rc)
-			val->intval = prop.intval;
-		break;
-	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		if (chip->use_batt_age) {
-			val->intval = chip->cycles;
-		} else {
-			rc = power_supply_get_property(chip->qcom_psy,
-							psp, &prop);
-			if (rc < 0) {
-				mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
-				rc = 0;
-				val->intval = -EINVAL;
-			}
-			if (!rc)
-				val->intval = prop.intval;
-		}
-		break;
-	case POWER_SUPPLY_PROP_STATUS:
-		rc = power_supply_get_property(chip->qcom_psy,
-							psp, &prop);
-		if (rc < 0) {
-			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
-			rc = 0;
-			val->intval = -EINVAL;
-		} else {
-			val->intval = prop.intval;
-			if (prop.intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
-				rc = power_supply_get_property(chip->extrn_psy,
-									psp, &prop);
-				if (!rc && (prop.intval == POWER_SUPPLY_STATUS_CHARGING
-					|| prop.intval == POWER_SUPPLY_STATUS_FULL))
-					val->intval = prop.intval;
-			}
-		}
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_RATE:
-		mmi_chrg_rate_check(chip);
-		val->intval = chip->charger_rate;
-		break;
-	default:
-		rc = power_supply_get_property(chip->qcom_psy,
-							psp, &prop);
-		if (rc < 0) {
-			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", psp, rc);
-			rc = 0;
-			val->intval = -EINVAL;
-		}
-		if (!rc)
-			val->intval = prop.intval;
-		break;
-
-	}
-	return rc;
-}
-
-static int batt_set_property(struct power_supply *psy,
-				       enum power_supply_property prop,
-				       const union power_supply_propval *val)
-{
-	struct mmi_charger_manager *chip  = power_supply_get_drvdata(psy);
-	int rc = 0;
-
-	switch (prop) {
-	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		chip->cycles = val->intval;
-		break;
-	default:
-		rc = power_supply_set_property(chip->qcom_psy,
-						prop, val);
-		if (rc < 0) {
-			mmi_chrg_err(chip, "Get Unknown prop %d rc = %d\n", prop, rc);
-			rc = 0;
-		}
-		break;
-	}
-	return rc;
-}
-
-static int batt_is_writeable(struct power_supply *psy,
-				       enum power_supply_property prop)
-{
-	switch (prop) {
-	case POWER_SUPPLY_PROP_STATUS:
-	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
-	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
-	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_PARALLEL_DISABLE:
-	case POWER_SUPPLY_PROP_DP_DM:
-	case POWER_SUPPLY_PROP_RERUN_AICL:
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
-	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
-	case POWER_SUPPLY_PROP_DIE_HEALTH:
-	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
-	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		return 1;
-	default:
-		break;
-	}
-	return 0;
-}
-static const struct power_supply_desc batt_psy_desc = {
-	.name = "battery",
-	.type = POWER_SUPPLY_TYPE_BATTERY,
-	.properties = batt_props,
-	.num_properties = ARRAY_SIZE(batt_props),
-	.get_property = batt_get_property,
-	.set_property = batt_set_property,
-	.property_is_writeable = batt_is_writeable,
-};
-static int batt_psy_register(struct mmi_charger_manager *chip)
-{
-	struct power_supply_config batt_cfg = {};
-
-	batt_cfg.drv_data = chip;
-	batt_cfg.of_node = chip->dev->of_node;
-	chip->batt_psy = power_supply_register(chip->dev,
-						&batt_psy_desc,
-						&batt_cfg);
-	if (IS_ERR(chip->batt_psy)) {
-		pr_err("Couldn't register batt_psy power supply\n");
-		return PTR_ERR(chip->batt_psy);
-	}
-
-	pr_info("power supply register batt_psy successfully\n");
-	return 0;
-}
-#endif
 static enum power_supply_property mmi_chrg_mgr_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -1041,119 +846,7 @@ end_rate_check:
 		       charge_rate[chg->charger_rate]);
 
 }
-#if 0
-#define CHG_SHOW_MAX_SIZE 50
-static ssize_t factory_image_mode_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	unsigned long r;
-	unsigned long mode;
 
-	r = kstrtoul(buf, 0, &mode);
-	if (r) {
-		pr_err("Invalid factory image mode value = %lu\n", mode);
-		return -EINVAL;
-	}
-
-	mmi_set_factory_image_mode(mode);
-
-	return r ? r : count;
-}
-
-static ssize_t factory_image_mode_show(struct device *dev,
-				    struct device_attribute *attr,
-				    char *buf)
-{
-	int state;
-	state = mmi_get_factory_image_mode() ? 1 : 0;
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
-}
-
-static DEVICE_ATTR(factory_image_mode, 0644,
-		factory_image_mode_show,
-		factory_image_mode_store);
-
-static ssize_t factory_charge_upper_show(struct device *dev,
-				    struct device_attribute *attr,
-				    char *buf)
-{
-	int state;
-	state = mmi_get_factory_charge_upper();
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
-}
-
-static DEVICE_ATTR(factory_charge_upper, 0444,
-		factory_charge_upper_show,
-		NULL);
-
-static ssize_t force_demo_mode_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	unsigned long r;
-	unsigned long mode;
-
-	r = kstrtoul(buf, 0, &mode);
-	if (r) {
-		pr_err("Invalid demo  mode value = %lu\n", mode);
-		return -EINVAL;
-	}
-
-	mmi_set_demo_mode(mode);
-
-	return r ? r : count;
-}
-
-static ssize_t force_demo_mode_show(struct device *dev,
-				    struct device_attribute *attr,
-				    char *buf)
-{
-	int state;
-
-	state = 	mmi_get_demo_mode();
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
-}
-
-static DEVICE_ATTR(force_demo_mode, 0644,
-		force_demo_mode_show,
-		force_demo_mode_store);
-
-static ssize_t force_max_chrg_temp_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	unsigned long r;
-	unsigned long mode;
-
-	r = kstrtoul(buf, 0, &mode);
-	if (r) {
-		pr_err("Invalid max temp value = %lu\n", mode);
-		return -EINVAL;
-	}
-
-	mmi_set_max_chrg_temp(mode);
-
-	return r ? r : count;
-}
-
-static ssize_t force_max_chrg_temp_show(struct device *dev,
-				    struct device_attribute *attr,
-				    char *buf)
-{
-	int state;
-	state = mmi_get_max_chrg_temp();
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
-}
-
-static DEVICE_ATTR(force_max_chrg_temp, 0644,
-		force_max_chrg_temp_show,
-		force_max_chrg_temp_store);
-#endif
 static bool mmi_factory_check(void)
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
@@ -1170,9 +863,6 @@ static bool mmi_factory_check(void)
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
-//	union power_supply_propval val;
-//	int ret;
-
 	if (!chip->sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"launch mmi chrg sm work\n");
@@ -1180,11 +870,6 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
 		chip->sm_work_running = true;
-/*		val.intval = true;
-		ret = power_supply_set_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CP_ENABLE, &val);
-		if (ret)
-			mmi_chrg_err(chip, "Unable to enable CP: %d\n", ret);*/
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg sm work already existed\n");
@@ -1192,18 +877,10 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
-//	union power_supply_propval val;
-//	int ret;
-
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
-/*	val.intval = false;
-	ret = power_supply_set_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CP_ENABLE, &val);
-	if (ret)
-		mmi_chrg_err(chip, "Unable to disable CP: %d\n", ret);*/
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
@@ -1521,14 +1198,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_cycle_counts(chip);
 
 	mmi_chrg_rate_check(chip);
-       if (!chip->extrn_fg) {
-/*		val.intval = chip->charger_rate;
-		ret = power_supply_set_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_CHARGE_RATE, &val);
-		if (ret)
-			mmi_chrg_err(chip, "Unable to set charge rate: %d\n", ret);
-*/       }
-
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
 	if (!chrg_rate_string) {
 		mmi_chrg_err(chip, "SMBMMI: Failed to Get Uevent Mem\n");
@@ -2131,47 +1800,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	chip->factory_mode = mmi_factory_check();
 
 	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
-#if 0
-	if (chip->qcom_psy && chip->extrn_fg) {
-
-		chip->extrn_psy = power_supply_get_by_name(chip->extrn_fg_name);
-		if (!chip->extrn_psy) {
-			mmi_chrg_err(chip, "Get extrn psy failed\n");
-			goto cleanup;
-		}
-		ret = batt_psy_register(chip);
-		if (ret) {
-			mmi_chrg_err(chip, "Batt psy register failed\n");
-			goto cleanup;
-		}
-
-		ret = device_create_file(chip->dev,
-					&dev_attr_factory_image_mode);
-		if (ret) {
-			mmi_chrg_err(chip, "couldn't create factory_image_mode\n");
-		}
-
-		ret = device_create_file(chip->dev,
-					&dev_attr_force_demo_mode);
-		if (ret) {
-			mmi_chrg_err(chip, "couldn't create force_demo_mode\n");
-		}
-
-		ret = device_create_file(chip->dev,
-					&dev_attr_force_max_chrg_temp);
-		if (ret) {
-			mmi_chrg_err(chip, "couldn't create force_max_chrg_temp\n");
-		}
-
-		ret = device_create_file(chip->dev,
-					&dev_attr_factory_charge_upper);
-		if (ret)
-			mmi_chrg_err(chip, "couldn't create factory_charge_upper\n");
-
-	} else
-#endif		
-		chip->batt_psy = power_supply_get_by_name("battery");
-
+	chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy) {
 		mmi_chrg_err(chip, "Could not get battery power_supply\n");
 		goto cleanup;
@@ -2231,8 +1860,6 @@ static int mmi_chrg_manager_remove(struct platform_device *pdev)
 {
 	struct mmi_charger_manager *chip =  platform_get_drvdata(pdev);
 
-	//remove_sysfs_entries(chip);
-	//cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	power_supply_unreg_notifier(&chip->psy_nb);
 	power_supply_unregister(chip->mmi_chrg_mgr_psy );
 	platform_set_drvdata(pdev, NULL);
