@@ -131,42 +131,59 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 }
 /*
  * To enable/disable interpolation algorithm to modify report rate.
- * mode = 0x00, Disable interpolation algorithm
- * mode = 0x01, Enable interpolation algorithm
- * ...
+ * interpolation_cmd[2] == 0x00, Disable interpolation algorithm
+ * interpolation_cmd[2] == 0x01, Enable interpolation algorithm
+ * report_rate_cmd[2] == 0x00, Set report rate 240Hz
+ * report_rate_cmd[2] == 0x01, Set report rate 288Hz
  */
-static int fts_mmi_set_interpolation(struct fts_ts_info *ts, unsigned int mode)
+#define DSI_REFRESH_RATE_144			144
+static void fts_mmi_set_report_rate(struct fts_ts_info *ts)
 {
+	struct fts_hw_platform_data *board;
 	int ret = 0;
 
-	if (mode == 0x00 || mode == 0x01) {
-		ts->board->interpolation_cmd[2] = mode;
-		ret = fts_write(ts->board->interpolation_cmd, ARRAY_SIZE(ts->board->interpolation_cmd));
+	board = ts->board;
+
+	if (board->interpolation_cmd[2] == 0x01 && ts->refresh_rate == DSI_REFRESH_RATE_144)
+		board->report_rate_cmd[2] = 0x01;
+	else
+		board->report_rate_cmd[2] = 0x00;
+
+	if (ts->report_rate == board->report_rate_cmd[2]) {
+		pr_debug("%s: report rate value is same, so not write.\n", __func__);
 	} else {
-		pr_info("The interpolation mode=%d is valid.\n", mode);
-		return -EINVAL;
+		ret = fts_write(board->report_rate_cmd, ARRAY_SIZE(board->report_rate_cmd));
+		if (ret == OK) {
+			ts->report_rate = board->report_rate_cmd[2];
+			pr_err("Successfully to write refresh rate %dHz!\n", ts->refresh_rate);
+		} else
+			pr_err("Failed to write refresh rate %dHz!\n", ts->refresh_rate);
 	}
 
-	if (ret == OK) {
-		ts->interpolation_val = mode;
-		pr_info("Successfully to set inpolation = %d!\n", ts->interpolation_val);
-	} else
-		pr_info("Failed to set inpolation = %d!\n", ts->interpolation_val);
-
-	return ret;
+	if (ts->interpolation_val == board->interpolation_cmd[2]) {
+		pr_debug("%s: interpolation value is same, so not write.\n", __func__);
+	} else {
+		ret = fts_write(board->interpolation_cmd, ARRAY_SIZE(board->interpolation_cmd));
+		if (ret == OK) {
+			ts->interpolation_val = board->interpolation_cmd[2];
+			pr_info("Successfully to set inpolation = %d!\n", ts->interpolation_val);
+		} else
+			pr_err("Failed to set inpolation = %d!\n", ts->interpolation_val);
+	}
 }
-
 
 static ssize_t fts_mmi_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct fts_ts_info *ts;
+	struct fts_hw_platform_data *board;
 	int ret = 0;
 	unsigned long mode = 0;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
+	board = ts->board;
 
 	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
@@ -174,12 +191,8 @@ static ssize_t fts_mmi_interpolation_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (ts->interpolation_val == mode) {
-		pr_debug("value is same,so not write.\n");
-		return size;
-	}
-
-	ret = fts_mmi_set_interpolation(ts, mode);
+	board->interpolation_cmd[2] = mode;
+	fts_mmi_set_report_rate(ts);
 
 	return size;
 }
@@ -284,8 +297,9 @@ static ssize_t fts_mmi_linearity_store(struct device *dev,
 	}
 
 	board->linearity_cmd[2] = mode;
+
 	if (!memcmp(board->linearity_cmd, ts->linearity_val, sizeof(ts->linearity_val))) {
-		pr_debug("value is same,so not write.\n");
+		pr_debug("value is same, so not write.\n");
 		return size;
 	}
 
@@ -294,7 +308,7 @@ static ssize_t fts_mmi_linearity_store(struct device *dev,
 	if (ret == OK)
 		pr_info("Successfully to %s linearity mode!\n", (!!mode ? "Enable" : "Disable"));
 	else
-		pr_info("Failed to %s linearity mode!\n", (!!mode ? "Enable" : "Disable"));
+		pr_err("Failed to %s linearity mode!\n", (!!mode ? "Enable" : "Disable"));
 
 	return size;
 }
@@ -654,9 +668,6 @@ static int fts_mmi_post_resume(struct device *dev)
 	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 
 	/* restore data */
-	if (ts->board->interpolation_ctrl)
-		fts_mmi_set_interpolation(ts, ts->interpolation_val);
-
 	if (ts->board->jitter_ctrl) {
 		ret = fts_write(board->jitter_cmd, ARRAY_SIZE(board->jitter_cmd));
 		if (ret == OK)
@@ -740,30 +751,18 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 	return ret;
 }
 
-#define DSI_REFRESH_RATE_144			144
 static int fts_mmi_refresh_rate(struct device *dev, int freq)
 {
-	struct fts_hw_platform_data *board;
 	struct fts_ts_info *ts;
 
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
-	board = ts->board;
 
-	if (freq == DSI_REFRESH_RATE_144)
-		board->report_rate_cmd[2] = 0x01;
-	else
-		board->report_rate_cmd[2] = 0x00;
+	ts->refresh_rate = freq;
 
-	if (ts->report_rate == board->report_rate_cmd[2]) {
-		dev_dbg(dev, "%s: value is same, so not write.\n", __func__);
-		return 0;
-	}
+	if (ts->board->interpolation_ctrl)
+		fts_mmi_set_report_rate(ts);
 
-	ts->report_rate = board->report_rate_cmd[2];
-	fts_write(board->report_rate_cmd, ARRAY_SIZE(board->report_rate_cmd));
-
-	logError(1, "%s %s: Successfully to write refresh rate %dhz!\n", tag, __func__, freq);
 	return 0;
 }
 
