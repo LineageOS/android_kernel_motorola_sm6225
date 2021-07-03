@@ -328,8 +328,15 @@ struct smb_mmi_params {
 	struct smb_mmi_chg_param	aicl_cont_threshold;
 };
 
+struct mmi_ffc_zone  {
+       int             ffc_max_mv;
+       int             ffc_chg_iterm;
+       int             ffc_qg_iterm;
+};
+
 struct mmi_sm_params {
 	int			num_temp_zones;
+	struct mmi_ffc_zone     *ffc_zones;
 	struct mmi_temp_zone	*temp_zones;
 	enum mmi_temp_zones	pres_temp_zone;
 	enum mmi_chrg_step	pres_chrg_step;
@@ -562,6 +569,7 @@ enum smb_mmi_ext_iio_channels {
 	SMB5_QG_CAPACITY,
 	SMB5_QG_CHARGE_FULL,
 	SMB5_QG_CHARGE_FULL_DESIGN,
+	SMB5_QG_BATT_FULL_CURRENT,
 };
 
 static const char * const smb_mmi_ext_iio_chan_name[] = {
@@ -583,7 +591,7 @@ static const char * const smb_mmi_ext_iio_chan_name[] = {
 	[SMB5_QG_CAPACITY] = "capacity",
 	[SMB5_QG_CHARGE_FULL] = "charge_full",
 	[SMB5_QG_CHARGE_FULL_DESIGN] = "charge_full_design",
-
+	[SMB5_QG_BATT_FULL_CURRENT] = "batt_full_current",
 };
 
 bool is_chan_valid(struct smb_mmi_charger *chip,
@@ -2861,6 +2869,30 @@ vote_now:
 	return sched_time;
 }
 
+static int mmi_get_ffc_fv(struct smb_mmi_charger *chip, int zone)
+{
+       int rc;
+       int ffc_max_fv;
+	struct mmi_sm_params *prm = &chip->sm_param[BASE_BATT];
+
+       if (prm->ffc_zones == NULL || zone >= prm->num_temp_zones)
+               return 0;
+
+	rc = smb_mmi_write_iio_chan(chip,
+			SMB5_QG_BATT_FULL_CURRENT, prm->ffc_zones[zone].ffc_qg_iterm);
+	if (rc < 0) {
+		mmi_err(chip, "Couldn't set batt full current, rc=%d\n", rc);
+	}
+
+       prm->chrg_iterm = prm->ffc_zones[zone].ffc_chg_iterm;
+       ffc_max_fv = prm->ffc_zones[zone].ffc_max_mv;
+       mmi_info(chip,
+               "FFC temp zone %d, fv %d mV, chg iterm %d mA, qg iterm %d mA\n",
+                 zone, ffc_max_fv, prm->chrg_iterm, prm->ffc_zones[zone].ffc_qg_iterm);
+
+       return ffc_max_fv;
+}
+
 static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 				struct smb_mmi_chg_status *stat)
 {
@@ -2896,7 +2928,9 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 		vote(chip->fv_votable,
 		     BATT_PROFILE_VOTER, false, 0);
 	}
-	max_fv_mv = chip->base_fv_mv;
+	max_fv_mv = mmi_get_ffc_fv(chip, prm->pres_temp_zone);
+       if (max_fv_mv == 0)
+               max_fv_mv = chip->base_fv_mv;
 
 	mmi_find_temp_zone(chip, prm, stat->batt_temp);
 	if (prm->pres_temp_zone >=  prm->num_temp_zones)
@@ -3852,6 +3886,37 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 		chip->pres_temp_zone = ZONE_NONE;
 		chip->pres_chrg_step = STEP_NONE;
 	}
+
+	if (of_find_property(node, "qcom,mmi-ffc-zones", &byte_len)) {
+               if ((byte_len / sizeof(struct mmi_ffc_zone) != chip->num_temp_zones)
+                      || ((byte_len / sizeof(u32)) % 3)) {
+                       mmi_err(chg, "DT error wrong mmi ffc zones\n");
+                       return -ENODEV;
+               }
+
+               chip->ffc_zones = (struct mmi_ffc_zone *)
+                       devm_kzalloc(chg->dev, byte_len, GFP_KERNEL);
+
+              if (chip->ffc_zones == NULL)
+                       return -ENOMEM;
+
+               rc = of_property_read_u32_array(node,
+                               "qcom,mmi-ffc-zones",
+                               (u32 *)chip->ffc_zones,
+                               byte_len / sizeof(u32));
+               if (rc < 0) {
+                       mmi_err(chg, "Couldn't read mmi ffc zones rc = %d\n", rc);
+                       return rc;
+              }
+
+               for (i = 0; i < chip->num_temp_zones; i++) {
+                       mmi_info(chg, "FFC:Zone %d,Volt %d,Ich %d,Iqg %d", i,
+                                chip->ffc_zones[i].ffc_max_mv,
+                                chip->ffc_zones[i].ffc_chg_iterm,
+                                chip->ffc_zones[i].ffc_qg_iterm);
+               }
+       } else
+               chip->ffc_zones = NULL;
 
 	rc = of_property_read_u32(node, "qcom,iterm-ma",
 				  &chip->chrg_iterm);
