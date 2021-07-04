@@ -422,6 +422,9 @@ struct smb_mmi_charger {
 	int			inc_hvdcp_cnt;
 	int			hb_startup_cnt;
 	bool		ocp_flag;
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+	int			hvdcp_apsd_count; //for qc3p shalcomm charger , run apsd twice.
+#endif
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -2077,7 +2080,15 @@ static int mmi_increase_vbus_power(struct smb_mmi_charger *chg, int cur_mv)
 		if (rc < 0) {
 			mmi_err(chg, "Couldn't set aicl cont threshold to 9V rc=%d\n", rc);
 		}
-
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+		if(cur_mv < 5600) {
+			mmi_err(chg, "voltage increase failed, reset aicl threshold otherwise charging failure\n");
+			rc = smblib_set_charge_param(chg, &chg->param.aicl_cont_threshold, 4500);
+			if (rc < 0) {
+				mmi_err(chg, "Couldn't set aicl cont threshold rc=%d\n", rc);
+			}
+		}
+#endif
 		vote(chg->chg_dis_votable, MMI_HB_VOTER, false, 0);
 	}
 
@@ -2390,8 +2401,12 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 	if (!chg->usb_psy || !chg->qcom_psy)
 		return;
 
-	if (cur_mv < HVDCP_VOLTAGE_MIN)
+	if (cur_mv < HVDCP_VOLTAGE_MIN) {
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+		chg->hvdcp_apsd_count = 0;
+#endif
 		return;
+	}
 
 	rc = power_supply_get_property(chg->usb_psy,
 			POWER_SUPPLY_PROP_PD_ACTIVE, &val);
@@ -2408,10 +2423,22 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 		mmi_err(chg, "Couldn't read charger type rc=%d\n", rc);
 		return;
 	}
-	if (val.intval != POWER_SUPPLY_TYPE_USB_HVDCP_3)
+
+	if (val.intval != POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+		chg->hvdcp_apsd_count = 0;
+#endif
 		return;
+	}
 
 	if (chg->hvdcp_power_max > CHARGER_POWER_15W) {
+#ifdef CONFIG_QC3P_PUMP_SUPPORT
+		if(chg->hvdcp_apsd_count == 0) {
+			chg->hvdcp_apsd_count = 1;
+			mmi_info(chg, "Charge pump shalcomm adapter workaround APSD twice , skip increase volt once\n");
+			return;
+		}
+#endif
 		mmi_increase_vbus_power(chg, cur_mv);
 		return;
 	}
