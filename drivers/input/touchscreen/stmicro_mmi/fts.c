@@ -2857,6 +2857,7 @@ int fts_fw_update(struct fts_ts_info *info)
 	int error = 0;
 	int init_type = NO_INIT;
 	const char *firmware_name;
+	const struct fts_hw_platform_data *bdata = info->board;
 
 #if defined(PRE_SAVED_METHOD) || defined (COMPUTE_INIT_METHOD)
 	int keep_cx = 1;
@@ -2986,16 +2987,23 @@ int fts_fw_update(struct fts_ts_info *info)
 			init_type = NO_INIT;
 	}
 
-
-	if (init_type != NO_INIT) {	/* initialization status not correct or
-					 * after FW complete update, do
-					 * initialization. */
-		error = fts_chip_initialization(info, init_type);
-		if (error < OK)
-			logError(1,
-				"%s %s Cannot initialize the chip ERROR %08X\n",
-				 tag,
-				 __func__, error);
+/**
+  * Note: The fts_chip_initialization function contains the touchscreen calibration
+  *       operation. We close the operation by default, plese be very careful to
+  *       open it if necessary.
+*/
+	if (bdata->need_tp_cal) {
+		if (init_type != NO_INIT) {	/* initialization status not correct or
+						 * after FW complete update, do
+						 * initialization. */
+			logError(1, "%s Note: Do touch calibration...!\n", tag);
+			error = fts_chip_initialization(info, init_type);
+			if (error < OK)
+				logError(1,
+					"%s %s Cannot initialize the chip ERROR %08X\n",
+					tag,
+					__func__, error);
+		}
 	}
 
 	error = fts_init_sensing(info);
@@ -3969,6 +3977,11 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	if (of_property_read_bool(np, "st,x-flip")) {
 		bdata->x_flip = true;
 		logError(0, "%s flip X\n", tag);
+	}
+
+	if (of_property_read_bool(np, "st,need_tp_cal")) {
+		bdata->need_tp_cal = true;
+		logError(0, "%s Need to do calibraion after fw upgrade");
 	}
 
 	if (of_property_read_u8_array(np, "st,interpolation_cmd",
