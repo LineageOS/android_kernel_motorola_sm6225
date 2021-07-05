@@ -234,6 +234,7 @@ struct fts_hw_platform_data {
 	unsigned int y_max;
 	bool y_flip, x_flip;
 	bool power_on_suspend;
+	bool need_tp_cal;
 	u8 jitter_cmd[8];	/* /< support report rate switching */
 	bool jitter_ctrl;	/* /< support report rate switching */
 	u8 linearity_cmd[3];	/* /< support report rate switching */
