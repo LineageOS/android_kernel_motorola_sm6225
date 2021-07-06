@@ -8,3 +8,5 @@ modules_install:
 
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(PWD) clean
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
