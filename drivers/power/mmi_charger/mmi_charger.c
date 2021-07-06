@@ -1864,7 +1864,7 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	if (mmi_changed) {
 		power_supply_changed(chip->mmi_psy);
 		mmi_info(chip, "Combo status: soc:%d, status:%d, temp:%d,"
-			" health:%d, age:%d, voltage:%d, current:%d, cycles:%d, rate:%s\n",
+			" health:%d, age:%d, cycles:%d, voltage:%d, current:%d, rate:%s\n",
 			chip->combo_soc,
 			chip->combo_status,
 			chip->combo_temp,
