@@ -381,36 +381,19 @@ static void bm_ulog_add_debugfs(struct bm_ulog_dev *bmdev)
 		return;
 	}
 
-	file = debugfs_create_x64("categories", 0664, dir, &bmdev->categories);
-	if (IS_ERR(file)) {
-		rc = PTR_ERR(file);
-		pr_err("Failed to create ulog categories debugfs file, rc=%d\n",
-			rc);
-		goto error;
-	}
-
-	file = debugfs_create_x32("level", 0664, dir, &bmdev->level);
-	if (IS_ERR(file)) {
-		rc = PTR_ERR(file);
-		pr_err("Failed to create ulog level debugfs file, rc=%d\n",
-			rc);
-		goto error;
-	}
-
-	file = debugfs_create_file("dump", 0444, dir, bmdev,
-					&bm_ulog_fops);
+	file = debugfs_create_file("dump", 0444, dir, bmdev, &bm_ulog_fops);
 	if (IS_ERR(file)) {
 		rc = PTR_ERR(file);
 		pr_err("Failed to create ulog dump debugfs file, rc=%d\n",
 			rc);
-		goto error;
+		debugfs_remove_recursive(dir);
+		return;
 	}
 
-	bmdev->debugfs_dir = dir;
+	debugfs_create_x64("categories", 0664, dir, &bmdev->categories);
+	debugfs_create_x32("level", 0664, dir, &bmdev->level);
 
-	return;
-error:
-	debugfs_remove_recursive(dir);
+	bmdev->debugfs_dir = dir;
 }
 #else
 static void bm_ulog_add_debugfs(struct bm_ulog_dev *bmdev) { }
