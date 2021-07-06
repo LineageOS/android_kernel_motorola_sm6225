@@ -173,6 +173,23 @@ static int fts_mmi_methods_reset(struct device *dev, int type)
 	return 0;
 }
 
+static int fts_mmi_methods_pinctrl(struct device *dev, int on)
+{
+	struct fts_ts_data *ts_data;
+	struct input_dev *input_dev;
+
+	GET_TS_DATA(dev);
+	input_dev = ts_data->input_dev;
+
+	if (on == TS_MMI_PINCTL_ON) {
+		mutex_lock(&input_dev->mutex);
+		fts_reset_proc(150);
+		mutex_unlock(&input_dev->mutex);
+	}
+
+	return 0;
+}
+
 static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 {
 	struct fts_ts_data *ts_data;
@@ -216,11 +233,9 @@ static int fts_mmi_panel_state(struct device *dev,
 	switch (to) {
 		case TS_MMI_PM_DEEPSLEEP:
 			ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP);
+			ts_data->gesture_mode = false;
 			if (ret < 0)
 				FTS_ERROR("set TP to sleep mode fail, ret=%d", ret);
-
-			/* TP delay 50ms then lcd entery suspend*/
-			mdelay(50);
 			break;
 
 		case TS_MMI_PM_GESTURE:
@@ -229,6 +244,7 @@ static int fts_mmi_panel_state(struct device *dev,
 			/* Enter into gesture mode(suspend) */
 #ifdef FOCALTECH_SENSOR_EN
 				ts_data->wakeable = true;
+				ts_data->gesture_mode = true;
 #endif
 			}
 #endif
@@ -362,6 +378,7 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.get_poweron = fts_mmi_methods_get_poweron,
 	/* SET methods */
 	.reset =  fts_mmi_methods_reset,
+	.pinctrl =  fts_mmi_methods_pinctrl,
 	.drv_irq = fts_mmi_methods_drv_irq,
 #if FTS_POWER_SOURCE_CUST_EN
 	.power = fts_mmi_methods_power,
