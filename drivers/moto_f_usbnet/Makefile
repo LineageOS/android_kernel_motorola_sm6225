@@ -12,6 +12,3 @@ modules_install:
 clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
 	rm -rf .tmp_versions
-
-KBUILD_EXTRA_SYMBOLS := $(M)/../../mmi_info/Module.symvers
-
