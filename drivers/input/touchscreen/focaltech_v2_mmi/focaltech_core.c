@@ -61,7 +61,7 @@ extern void fts_mmi_dev_unregister(struct fts_ts_data *ts_data);
 * Private constant and macro definitions using #define
 *****************************************************************************/
 #define FTS_DRIVER_NAME                     "fts_ts"
-#define INTERVAL_READ_REG                   200  /* unit:ms */
+#define INTERVAL_READ_REG                   50  /* unit:ms */
 #define TIMEOUT_READ_REG                    1000 /* unit:ms */
 #if FTS_POWER_SOURCE_CUST_EN
 #define FTS_VTG_MIN_UV                      3000000
@@ -79,8 +79,10 @@ struct fts_ts_data *fts_data;
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
+#endif
 
 /*****************************************************************************
 *  Name: fts_wait_tp_to_valid
@@ -1297,6 +1299,7 @@ static int fts_power_source_exit(struct fts_ts_data *ts_data)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_power_source_suspend(struct fts_ts_data *ts_data)
 {
     int ret = 0;
@@ -1328,6 +1331,7 @@ static int fts_power_source_resume(struct fts_ts_data *ts_data)
 
     return ret;
 }
+#endif
 #endif /* FTS_POWER_SOURCE_CUST_EN */
 
 static int fts_gpio_configure(struct fts_ts_data *data)
@@ -1498,6 +1502,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static void fts_resume_work(struct work_struct *work)
 {
     struct fts_ts_data *ts_data = container_of(work, struct fts_ts_data,
@@ -1690,6 +1695,7 @@ static void fts_ts_late_resume(struct early_suspend *handler)
     queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
 }
 #endif
+#endif
 
 static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 {
@@ -1709,12 +1715,14 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         if (ret)
             FTS_ERROR("device-tree parse fail");
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
         ret = drm_check_dt(ts_data->dev->of_node);
         if (ret) {
             FTS_ERROR("parse drm-panel fail");
         }
+#endif
 #endif
 #endif
     } else {
@@ -1769,7 +1777,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 #endif
 
 #if (!FTS_CHIP_IDC)
-    fts_reset_proc(200);
+    fts_reset_proc(150);
 #endif
 
     ret = fts_get_ic_information(ts_data);
@@ -1831,15 +1839,18 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("init fw upgrade fail");
     }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
     }
+#endif
 
 #if defined(CONFIG_PM) && FTS_PATCH_COMERR_PM
     init_completion(&ts_data->pm_completion);
     ts_data->pm_suspend = false;
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_DRM)
     ts_data->fb_notif.notifier_call = drm_notifier_callback;
 #if defined(CONFIG_DRM_PANEL)
@@ -1865,6 +1876,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     ts_data->early_suspend.suspend = fts_ts_early_suspend;
     ts_data->early_suspend.resume = fts_ts_late_resume;
     register_early_suspend(&ts_data->early_suspend);
+#endif
 #endif
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
@@ -1936,6 +1948,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
     if (active_panel)
@@ -1949,6 +1962,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&ts_data->early_suspend);
+#endif
 #endif
 
     if (gpio_is_valid(ts_data->pdata->reset_gpio))
@@ -1972,6 +1986,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_ts_suspend(struct device *dev)
 {
     int ret = 0;
@@ -2061,7 +2076,7 @@ static int fts_ts_resume(struct device *dev)
 #if FTS_POWER_SOURCE_CUST_EN
         fts_power_source_resume(ts_data);
 #endif
-        fts_reset_proc(200);
+        fts_reset_proc(150);
     }
 
     fts_wait_tp_to_valid();
@@ -2085,6 +2100,7 @@ static int fts_ts_resume(struct device *dev)
     FTS_FUNC_EXIT();
     return 0;
 }
+#endif
 
 #if defined(CONFIG_PM) && FTS_PATCH_COMERR_PM
 static int fts_pm_suspend(struct device *dev)
