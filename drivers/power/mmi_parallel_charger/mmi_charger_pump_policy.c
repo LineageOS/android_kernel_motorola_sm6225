@@ -1364,7 +1364,14 @@ schedule:
 		mmi_chrg_info(chip, "Thermal is the highest, level %d, "
 						"Force enter into single pmic charging !\n",
 						chip->system_thermal_level);
-
+		if(chip->pd_sys_therm_volt == 0)
+			chip->pd_sys_therm_volt = SWITCH_CHARGER_PPS_VOLT;
+		if(chip->pd_sys_therm_curr == 0)
+			chip->pd_sys_therm_curr = TYPEC_HIGH_CURRENT_UA;
+		if(chip->pd_batt_therm_volt == 0)
+			chip->pd_batt_therm_volt = SWITCH_CHARGER_PPS_VOLT;
+		if(chip->pd_batt_therm_curr == 0)
+			chip->pd_batt_therm_curr = TYPEC_HIGH_CURRENT_UA;
 	} else if (chip->system_thermal_level > 0 &&
 		(sm_state == PM_STATE_CP_CC_LOOP ||
 		sm_state == PM_STATE_CP_CV_LOOP)) {
