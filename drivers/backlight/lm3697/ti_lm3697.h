@@ -196,6 +196,10 @@ struct ti_lmu_bl {
 
 	/* Only valid in PWM mode */
 	unsigned int pwm_period;
+
+	/* current mode */
+	unsigned int led_current_mode;
+
 	struct pwm_device *pwm;
 };
 
