@@ -1220,28 +1220,23 @@ static void sc8549_check_fault_status(struct sc8549 *sc)
 	mutex_lock(&sc->data_lock);
 
 	ret = sc8549_read_byte(sc, SC8549_REG_02, &stat);
-	if (!ret && (stat & (SC8549_AC_OVP_STAT_MASK | SC8549_AC_OVP_FLAG_MASK))) {
+	if (!ret) {
 		sc_err("VAC_STAT = 0x%02X\n", stat);
-		if (stat & SC8549_AC_OVP_FLAG_MASK)
-			sc->ac_ovp_fault = !!(stat & SC8549_AC_OVP_FLAG_MASK);
+		sc->ac_ovp_fault = !!(stat & (SC8549_AC_OVP_STAT_MASK | SC8549_AC_OVP_FLAG_MASK));
 	}
 
 	ret = sc8549_read_byte(sc, SC8549_REG_03, &stat);
-	if (!ret && (stat & (SC8549_VDROP_OVP_STAT_MASK | SC8549_VDROP_OVP_FLAG_MASK))) {
+	if (!ret) {
 		sc_err("VDROP_STAT = 0x%02X\n", stat);
-		if (stat & SC8549_VDROP_OVP_FLAG_MASK)
-			sc->drop_ovp_fault = !!(stat & SC8549_VDROP_OVP_FLAG_MASK);
+		sc->drop_ovp_fault = !!(stat & (SC8549_VDROP_OVP_STAT_MASK | SC8549_VDROP_OVP_FLAG_MASK));
 	}
 
 	ret = sc8549_read_byte(sc, SC8549_REG_06, &stat);
-	if (!ret && stat) {
+	if (!ret) {
 		sc_err("REG06_STAT = 0x%02X\n", stat);
-		if (stat & SC8549_TSHUT_FLAG_MASK)
-			sc->ts_shut_fault = !!(stat & SC8549_TSHUT_FLAG_MASK);
-		if (stat & SC8549_SS_TIMEOUT_FLAG_MASK)
-			sc->ss_timeout_fault = !!(stat & SC8549_SS_TIMEOUT_FLAG_MASK);
-		if (stat & SC8549_CONV_SWITCHING_STAT_MASK)
-			sc->cp_switch = !!(stat & SC8549_CONV_SWITCHING_STAT_MASK);
+		sc->ts_shut_fault = !!(stat & SC8549_TSHUT_FLAG_MASK);
+		sc->ss_timeout_fault = !!(stat & SC8549_SS_TIMEOUT_FLAG_MASK);
+		sc->cp_switch = !!(stat & SC8549_CONV_SWITCHING_STAT_MASK);
 	}
 
 	ret = sc8549_read_byte(sc, SC8549_REG_0F, &flag);
