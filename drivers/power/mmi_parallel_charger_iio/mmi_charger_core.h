@@ -316,6 +316,7 @@ extern void mmi_update_all_charger_status(struct mmi_charger_manager *chip);
 extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
 extern void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 									struct mmi_charger_device *chrg_dev);
+extern bool mmi_is_cable_plugout(struct mmi_charger_manager *chip);
 extern ssize_t mmi_get_factory_image_mode(void);
 extern ssize_t mmi_set_factory_image_mode(int mode);
 extern ssize_t mmi_get_factory_charge_upper(void);
