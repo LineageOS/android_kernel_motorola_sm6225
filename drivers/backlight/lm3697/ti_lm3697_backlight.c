@@ -293,7 +293,7 @@ static int ti_lmu_backlight_update_brightness_register(struct ti_lmu_bl *lmu_bl,
 					 brightness);
 		if (ret)
 			return ret;
-		pr_debug("[bkl][after]11bit %s brightness = %d\n", __func__, brightness);
+		pr_info("[bkl][after]11bit %s brightness = %d\n", __func__, brightness);
 		val = (brightness >> LMU_BACKLIGHT_11BIT_MSB_SHIFT) & 0xFF;
 	} else {
 		val = brightness & 0xFF;
@@ -405,6 +405,12 @@ static void ti_lmu_backlight_of_get_light_properties(struct device_node *np,
 
 	of_property_read_u32(np, "ramp-up-msec",  &lmu_bl->ramp_up_msec);
 	of_property_read_u32(np, "ramp-down-msec", &lmu_bl->ramp_down_msec);
+
+	if(of_property_read_u32(np, "current-mode", &lmu_bl->led_current_mode)) {
+		lmu_bl->led_current_mode = HBM_MODE_DEFAULT;
+		pr_info("[bkl] %s led_current_mode default %d\n", __func__,
+			lmu_bl->led_current_mode);
+	}
 }
 
 static void ti_lmu_backlight_of_get_brightness_mode(struct device_node *np,
@@ -782,9 +788,11 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 		goto err_init;
 	}
 
-	dump_i2c_reg(chip);
-
 	bl_chip = chip;
+
+	ti_hbm_set(chip->lmu_bl->led_current_mode);
+
+	dump_i2c_reg(chip);
 
 	ret = device_create_file(dev, &dev_attr_i2c_reg_dump);
 	if (ret < 0) {
