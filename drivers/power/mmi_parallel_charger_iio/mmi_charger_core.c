@@ -778,6 +778,49 @@ static int get_prop_charger_present(struct mmi_charger_manager *chg,
 	return rc;
 }
 
+#define REV_CP_THRESH_UV 4400000
+#define CP_IBUS_THRESH_MA 20
+#define IBAT_THRESH_UA 10000
+#define REV_CP_DOUBLE_THRESH_UV 100000
+bool mmi_is_cable_plugout(struct mmi_charger_manager *chip)
+{
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	int vbus_volt, ibatt_curr, ibus_curr, vbatt_volt;
+	bool cp_chrg_enable, cp_sw_en;
+
+	if (chip->extrn_sense) {
+		ibatt_curr = chrg_list->chrg_dev[CP_MASTER]->charger_data.ibatt_curr;
+		ibatt_curr *= 1000;
+		vbatt_volt = chrg_list->chrg_dev[CP_MASTER]->charger_data.vbatt_volt;
+		vbatt_volt *= 1000;
+	} else {
+		ibatt_curr= chrg_list->chrg_dev[PMIC_SW]->charger_data.ibatt_curr;
+		vbatt_volt = chrg_list->chrg_dev[PMIC_SW]->charger_data.vbatt_volt;
+	}
+	vbus_volt = chrg_list->chrg_dev[PMIC_SW]->charger_data.vbus_volt;
+	ibus_curr = chrg_list->chrg_dev[CP_MASTER]->charger_data.ibus_curr;
+	cp_sw_en = chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT);
+	cp_chrg_enable = chrg_list->chrg_dev[CP_MASTER]->charger_enabled;
+	mmi_chrg_info(chip, "ibat:%d, vbat:%d, vbus:%d, ibus:%d, cp_chg_en:%d, cp_sw_en:%d\n",
+		ibatt_curr, vbatt_volt, vbus_volt, ibus_curr, cp_chrg_enable, cp_sw_en);
+
+	if (!cp_chrg_enable ||ibus_curr > CP_IBUS_THRESH_MA || ibatt_curr > IBAT_THRESH_UA)
+		return false;
+
+	if  (vbatt_volt >= vbus_volt
+		&& vbus_volt < REV_CP_THRESH_UV) {
+			mmi_chrg_info(chip, "cable plug out: cp reverse\n");
+			return true;
+	}
+
+	if (cp_sw_en && vbus_volt < 2 * vbatt_volt - REV_CP_DOUBLE_THRESH_UV) {
+		mmi_chrg_info(chip, "cable plug out: cp double reverse\n");
+		return true;
+	}
+
+	return false;
+}
+
 #define WEAK_CHRG_THRSH 450
 #define TURBO_CHRG_THRSH 2500
 #define TURBO_30W_CHRG_THRSH_UW 25000000
