@@ -37,7 +37,7 @@
 #define MP_TEST_OF_TEST_SHORT_MIN          MP_TEST_OF_PREFIX"short-min"
 
 
-#define MP_TEST_DATA_DIR              "data/vendor/touchpad"
+#define MP_TEST_DATA_DIR              "/data/vendor/touchpad"
 #define MP_OPEN_TEST_DATA_FILEPATH    MP_TEST_DATA_DIR"/OpenTest.csv"
 #define MP_SHORT_TEST_DATA_FILEPATH   MP_TEST_DATA_DIR"/ShortTest.csv"
 
@@ -48,21 +48,21 @@ DECLARE_COMPLETION(mp_test_complete);
 struct gcore_mp_data {
 	struct proc_dir_entry *mp_proc_entry;
 
-	bool test_int_pin;
+	int test_int_pin;
 	int  int_pin_test_result;
 
-	bool test_chip_id;
+	int test_chip_id;
 	int chip_id_test_result;
 	u8 chip_id[2];
 
-	bool test_open;
+	int test_open;
 	int open_test_result;
 	int open_cb;
 	int open_min;
 	u8 *open_data;
 	u16 *open_node_val;
 
-	bool test_short;
+	int test_short;
 	int short_test_result;
 	int short_cb;
 	int short_min;
@@ -193,7 +193,7 @@ int gcore_parse_mp_test_dt(struct gcore_mp_data *mp_data)
 	return 0;
 }
 
-#define MP_TEST_INI   "/sdcard/gcore_mp_test.ini"
+#define MP_TEST_INI   "/vendor/etc/motorola/12m/gcore_mp_test.ini"
 
 static u8 *read_line(u8 *buf, int buf_len, struct file *fp)
 {
@@ -204,7 +204,7 @@ static u8 *read_line(u8 *buf, int buf_len, struct file *fp)
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	ret = fp->f_op->read(fp, buf, buf_len, &(fp->f_pos));
+	ret = kernel_read(fp, buf, buf_len, &(fp->f_pos));
 	set_fs(fs);
 
 	if (ret <= 0)
@@ -229,6 +229,7 @@ int gcore_parse_mp_test_ini(struct gcore_mp_data *mp_data)
 	struct file *f = NULL;
 	u8 *buff = NULL;
 	int buff_len = 20;
+	int chip_type = 0;
 
 	buff = kzalloc(buff_len, GFP_KERNEL);
 	if (!buff) {
@@ -242,8 +243,40 @@ int gcore_parse_mp_test_ini(struct gcore_mp_data *mp_data)
 		return -1;
 	}
 
+	/* [MP TEST] */
 	buff = read_line(buff, buff_len, f);
 	GTP_DEBUG("ini read line %s", buff);
+
+	/* test int pin */
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "test-int-pin=%d", &mp_data->test_int_pin);
+	GTP_DEBUG("test-int-pin:%s", mp_data->test_int_pin ? "y" : "n");
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+
+	/* test chip id */
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "test-chip-id=%d", &mp_data->test_chip_id);
+	GTP_DEBUG("test-chip-id:%s", mp_data->test_chip_id ? "y" : "n");
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "chip-id=[%x]", &chip_type);
+	GTP_DEBUG("chip-id:%x", chip_type);
+	mp_data->chip_id[0] = (u8)(chip_type >> 8);
+	mp_data->chip_id[1] = (u8)chip_type;
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "test-open=%d", &mp_data->test_open);
+	GTP_DEBUG("test-open:%s", mp_data->test_open ? "y" : "n");
 
 	buff = read_line(buff, buff_len, f);
 	GTP_DEBUG("ini read line %s", buff);
@@ -254,6 +287,14 @@ int gcore_parse_mp_test_ini(struct gcore_mp_data *mp_data)
 	GTP_DEBUG("ini read line %s", buff);
 	sscanf(buff, "open_min=%d", &mp_data->open_min);
 	GTP_DEBUG("read open min:%d", mp_data->open_min);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+
+	buff = read_line(buff, buff_len, f);
+	GTP_DEBUG("ini read line %s", buff);
+	sscanf(buff, "test-short=%d", &mp_data->test_short);
+	GTP_DEBUG("test-short:%s", mp_data->test_short ? "y" : "n");
 
 	buff = read_line(buff, buff_len, f);
 	GTP_DEBUG("ini read line %s", buff);
@@ -270,11 +311,6 @@ int gcore_parse_mp_test_ini(struct gcore_mp_data *mp_data)
 	}
 
 	kfree(buff);
-
-	mp_data->test_chip_id = true;
-	mp_data->test_int_pin = true;
-	mp_data->test_open    = true;
-	mp_data->test_short   = true;
 
 	return 0;
 }
@@ -308,7 +344,7 @@ int gcore_mp_test_int_pin(struct gcore_mp_data *mp_data)
 
 	if (gpio_get_value(mp_data->gdev->irq_gpio) == 1) {
 		GTP_ERROR("INT pin state != LOW test fail!");
-		return -1;
+		goto error;
 	}
 
 	read_buf[2] |= BIT7;
@@ -319,7 +355,7 @@ int gcore_mp_test_int_pin(struct gcore_mp_data *mp_data)
 
 	if (gpio_get_value(mp_data->gdev->irq_gpio) == 0) {
 		GTP_ERROR("INT pin state != HIGH test fail!");
-		return -1;
+		goto error;
 	}
 
 	gcore_exit_idm_mode();
@@ -329,6 +365,10 @@ int gcore_mp_test_int_pin(struct gcore_mp_data *mp_data)
 
 	return 0;
 
+error:
+	mp_data->gdev->irq_enable(mp_data->gdev);
+	mutex_unlock(&mp_data->gdev->transfer_lock);
+	return -1;
 }
 
 int gcore_mp_test_chip_id(struct gcore_mp_data *mp_data)
@@ -370,7 +410,6 @@ int gcore_mp_test_item_open(struct gcore_mp_data *mp_data)
 	gdev->fw_xfer = RAW_DATA_SIZE;
 #endif
 
-
 	mutex_lock(&gdev->transfer_lock);
 
 	mp_test_fn.wait_int = true;
@@ -401,7 +440,7 @@ int gcore_mp_test_item_open(struct gcore_mp_data *mp_data)
 
 	for (i = 0; i < RAW_DATA_SIZE/2; i++) {
 		node_data = mp_data->open_node_val[i];
-		GTP_DEBUG("i:%d open node_data:%d", i, node_data);
+//		GTP_DEBUG("i:%d open node_data:%d", i, node_data);
 
 
 		if ((i == 0) || (i == 8) || (i == 9) || (i == 17)) {
@@ -410,8 +449,8 @@ int gcore_mp_test_item_open(struct gcore_mp_data *mp_data)
 		}
 
 		if (node_data < mp_data->open_min) {
-			GTP_ERROR("node_data %d < open_min %d test fail!", \
-				i, mp_data->open_min);
+			GTP_ERROR("i: %d node_data %d < open_min test fail!", \
+				i, node_data);
 
 			return -1;
 		}
@@ -497,7 +536,7 @@ int gcore_mp_test_item_short(struct gcore_mp_data *mp_data)
 
 	for (i = 0; i < RAW_DATA_SIZE/2; i++) {
 		node_data = mp_data->short_node_val[i];
-		GTP_DEBUG("i:%d short node_data:%d", i, node_data);
+//		GTP_DEBUG("i:%d short node_data:%d", i, node_data);
 
 		if ((i == 0) || (i == 8) || (i == 9) || (i == 17)) {
 			GTP_DEBUG("empty node need not judge.");
@@ -505,8 +544,8 @@ int gcore_mp_test_item_short(struct gcore_mp_data *mp_data)
 		}
 
 		if (node_data < mp_data->short_min) {
-			GTP_ERROR("node_data %d < short_min %d test fail!", \
-				i, mp_data->short_min);
+			GTP_ERROR("i: %d node_data %d < short_min test fail!", \
+				i, node_data);
 
 			return -1;
 		}
@@ -668,7 +707,7 @@ int dump_mp_data_to_csv_file(const char *filepath, int flags,
 
 	file = filp_open(filepath, flags, 0666);
 	if (IS_ERR(file)) {
-		GTP_ERROR("Open file %s failed", filepath);
+		GTP_ERROR("Open file %s failed %ld", filepath, PTR_ERR(file));
 		return -1;
 	}
 
@@ -686,7 +725,7 @@ int dump_mp_data_to_csv_file(const char *filepath, int flags,
 #endif
 		if (ret != len) {
 			GTP_ERROR("write to file %s failed %d", filepath, ret);
-			goto fail1;
+			goto error;
 		}
 
 		n_val += cols;
@@ -700,11 +739,11 @@ int dump_mp_data_to_csv_file(const char *filepath, int flags,
 #endif
 	if (ret != 1) {
 		GTP_ERROR("write newline to file %s failed %d", filepath, ret);
-		goto fail1;
+		goto error;
 	}
 
 
-fail1:
+error:
 	filp_close(file, NULL);
 
 	return ret;
@@ -772,12 +811,18 @@ int gcore_start_mp_test(void)
 
 	if (mp_data->test_int_pin) {
 		mp_data->int_pin_test_result = gcore_mp_test_int_pin(mp_data);
+		if (mp_data->int_pin_test_result) {
+			GTP_DEBUG("Int pin test result fail!");
+		}
 	}
 
 	msleep(1);
 
 	if (mp_data->test_chip_id) {
 		mp_data->chip_id_test_result = gcore_mp_test_chip_id(mp_data);
+		if (mp_data->chip_id_test_result) {
+			GTP_DEBUG("Chip id test result fail!");
+		}
 	}
 
 	msleep(1);
@@ -796,18 +841,28 @@ int gcore_start_mp_test(void)
 
 			if (mp_data->test_open) {
 				mp_data->open_test_result = gcore_mp_test_item_open(mp_data);
+				if (mp_data->open_test_result) {
+					GTP_DEBUG("Open test result fail!");
+				}
 			}
 
 			msleep(1);
 
 			if (mp_data->test_short) {
 				mp_data->short_test_result = gcore_mp_test_item_short(mp_data);
+				if (mp_data->short_test_result) {
+					GTP_DEBUG("Short test result fail!");
+				}
 			}
 		}
 
 	}
 
 	gcore_save_mp_data_to_file(mp_data);
+
+#ifdef CONFIG_GCORE_AUTO_UPDATE_FW_HOSTDOWNLOAD
+	gcore_request_firmware_update_work(NULL);
+#endif
 
 	test_result = (mp_data->int_pin_test_result || mp_data->chip_id_test_result \
 		|| mp_data->open_test_result || mp_data->short_test_result) ? -1 : 0;
@@ -914,12 +969,12 @@ int gcore_mp_test_fn_init(struct gcore_dev *gdev)
 		S_IRUGO, NULL, &gcore_mp_fops, mp_data);
 	if (mp_data->mp_proc_entry == NULL) {
 		GTP_ERROR("create mp test proc entry selftest failed");
-		goto fail1;
+		goto error;
 	}
 
 	return 0;
 
-fail1:
+error:
 	kfree(mp_data);
 	return -1;
 

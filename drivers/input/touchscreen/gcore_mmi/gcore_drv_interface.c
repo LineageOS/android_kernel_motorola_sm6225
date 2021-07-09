@@ -275,11 +275,51 @@ long gcore_app_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 }
 
 
+struct proc_dir_entry *gcore_mp_entry = NULL;
+
+#define GCORE_MP_FILE   "gcore_mp"
+
+static ssize_t gcore_selftest_read(struct file *file, char __user *buffer, \
+								size_t count, loff_t *ppos);
+
+
+struct file_operations gcore_selftest_fops = {
+	.read = gcore_selftest_read,
+};
+
+ssize_t gcore_selftest_read(struct file *file, char __user *buffer, \
+									size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	u8 result = 0;
+
+	GTP_DEBUG("gcore selftest read enter.");
+
+	ret = gcore_start_mp_test();
+	if (ret) {
+		result = 1;
+		GTP_DEBUG("selftest failed!");
+	} else {
+		result = 0;
+		GTP_DEBUG("selftest success!");
+	}
+
+	ret = copy_to_user(buffer, &result, 1);
+
+	return 1;
+}
+
 int gcore_app_node_init(void)
 {
 	gcore_proc_entry = proc_create(GCORE_PROC_FILE, 0644, NULL, &gcore_app_fops);
 	if (gcore_proc_entry == NULL) {
 		GTP_ERROR("create proc entry gcore_app failed");
+		return -1;
+	}
+
+	gcore_mp_entry = proc_create(GCORE_MP_FILE, 0644, NULL, &gcore_selftest_fops);
+	if (gcore_mp_entry == NULL) {
+		GTP_ERROR("create proc entry gcore_mp failed");
 		return -1;
 	}
 
@@ -290,6 +330,10 @@ void gcore_app_node_deinit(void)
 {
 	if (gcore_proc_entry != NULL) {
 		remove_proc_entry(GCORE_PROC_FILE, NULL);
+	}
+
+	if (gcore_mp_entry != NULL) {
+		remove_proc_entry(GCORE_MP_FILE, NULL);
 	}
 }
 
