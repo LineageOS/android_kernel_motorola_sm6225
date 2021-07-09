@@ -376,6 +376,9 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 	mmi_chrg_info(chip, "battery temp %d\n", batt_temp);
 	mmi_chrg_info(chip, "battery capacity %d\n", batt_soc);
 
+	if (vbus_pres && mmi_is_cable_plugout(chip))
+		vbus_pres = 0;
+
 	if (vbus_pres &&
 		(sm_state == PM_STATE_PPS_TUNNING_CURR
 		|| sm_state == PM_STATE_PPS_TUNNING_VOLT
