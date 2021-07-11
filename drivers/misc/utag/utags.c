@@ -1885,18 +1885,141 @@ err:
 	return err;
 }
 
+#ifdef CONFIG_BOOT_CONFIG
+static int utag_haskey_bootarg(char *key)
+{
+	const char *bootargs_ptr = NULL;
+	char *idx = NULL;
+	int err = 0;
+	struct device_node *n = of_find_node_by_path("/chosen");
+	size_t bootargs_ptr_len = 0;
+
+	if (n == NULL)
+		goto err;
+
+	if (of_property_read_string(n, "bootargs", &bootargs_ptr) != 0)
+		goto err_putnode;
+
+	bootargs_ptr_len = strlen(bootargs_ptr);
+	if (!bootargs_str) {
+		/* Following operations need a non-const version of bootargs */
+		bootargs_str = kzalloc(bootargs_ptr_len + 1, GFP_KERNEL);
+		if (!bootargs_str)
+			goto err_putnode;
+	}
+	strlcpy(bootargs_str, bootargs_ptr, bootargs_ptr_len + 1);
+
+	idx = strnstr(bootargs_str, key, strlen(bootargs_str));
+	if (idx)
+		err = 1;
+
+err_putnode:
+	of_node_put(n);
+err:
+	return err;
+}
+
+#include <linux/bootconfig.h>
+#define BOOTCONFIG_FULLPATH "/proc/bootconfig"
+static char bootdevice_name[256];
+
+static int utags_read_bootconfig(const char *bootconfig_key, char **bootconfig_val)
+{
+	struct file *filep = NULL;
+	char *xbc_buf = NULL;
+	int bytes = 0;
+	char *start_bootdevice = NULL;
+	int rc = 0;
+
+	filep = filp_open(BOOTCONFIG_FULLPATH, O_RDONLY, 0600);
+	if (IS_ERR_OR_NULL(filep)) {
+		rc = PTR_ERR(filep);
+		pr_err("opening (%s) errno=%d\n", BOOTCONFIG_FULLPATH, rc);
+		return rc;
+	}
+
+	xbc_buf = kzalloc(XBC_DATA_MAX, GFP_KERNEL);
+	if (!xbc_buf) {
+		pr_err("alloc len %d memory fail\n", XBC_DATA_MAX);
+		filp_close(filep, NULL);
+		return -ENOMEM;
+	}
+
+	bytes = kernel_read_stub(filep, (void *) xbc_buf, XBC_DATA_MAX);
+	pr_debug("read bootconfig bytes %d\n", bytes);
+	if (bytes <= 0) {
+		pr_err("fail read bytes %d\n", bytes);
+		kfree(xbc_buf);
+		filp_close(filep, NULL);
+		return -EIO;
+	}
+
+	start_bootdevice = strstr(xbc_buf, bootconfig_key);
+	if (start_bootdevice) {
+		char *p = start_bootdevice + strlen(bootconfig_key);
+		int i = 0;
+
+		memset(bootdevice_name, 0, sizeof(bootdevice_name));
+		while (p && *p && (*p != '\n') && (*p != '"')
+				&& (i < sizeof(bootdevice_name))) {
+			bootdevice_name[i] = *p;
+			i++;
+			p++;
+		}
+		*bootconfig_val = bootdevice_name;
+		pr_info("bootconfig key %s%s\"\n", bootconfig_key, *bootconfig_val);
+	} else {
+		pr_err("cannot find key %s\n", bootconfig_key);
+		rc = -ENOENT;
+	}
+
+	kfree(xbc_buf);
+	filp_close(filep, NULL);
+
+	return rc;
+}
+
+static int utags_get_bootdevice_from_bootconfig(char **bootconfig_val)
+{
+	static char bootdevice_init = 0;
+	int rc = 0;
+
+	if (bootdevice_init) {
+		*bootconfig_val = bootdevice_name;
+		return 0;
+	}
+
+	rc = utags_read_bootconfig("androidboot.bootdevice = \"", bootconfig_val);
+	if (!rc && *bootconfig_val)
+		bootdevice_init = 1;
+
+	return rc;
+}
+#endif
+
 #define PLATFORM_PATH "/dev/block/platform/soc/"
 
 static void utags_bootdevice_expand(const char **name_ptr, const char *name)
 {
-	int rc;
+	int rc = -1;
 	size_t max_len = strlen(name);
 	char *bootdevice = NULL;
 	char *replace, *suffix, *expanded;
 
+#ifndef CONFIG_BOOT_CONFIG
 	rc = utag_get_bootarg("androidboot.bootdevice=", &bootdevice);
 	if (rc || !bootdevice)
 		goto need_no_expansion;
+#else
+	if (utag_haskey_bootarg("bootconfig"))
+		rc = utags_get_bootdevice_from_bootconfig(&bootdevice);
+
+	if (rc || !bootdevice) {
+		rc = utag_get_bootarg("androidboot.bootdevice=", &bootdevice);
+		if (rc || !bootdevice)
+			goto need_no_expansion;
+	}
+#endif
 
 	replace = strnstr(name, "bootdevice", max_len);
 	suffix = strnstr(name, "by-name", max_len);
