@@ -70,15 +70,100 @@
 static char bootreason[BOOTREASON_MAX_LEN];
 static char bootmode[BOOTMODE_MAX_LEN];
 
+#ifdef CONFIG_BOOT_CONFIG
+#include <linux/bootconfig.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#define BOOTCONFIG_FULLPATH "/proc/bootconfig"
+static char bootconfig_tmp[256];
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+{
+	loff_t pos = 0;
+	return kernel_read(file, addr, count, &pos);
+}
+#else
+static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+{
+	return kernel_read(file, 0, addr, count);
+}
+#endif
+
+static int mmi_read_bootconfig(const char *bootconfig_key, char **bootconfig_val)
+{
+	struct file *filep = NULL;
+	char *xbc_buf = NULL;
+	int bytes = 0;
+	char *start_bootdevice = NULL;
+	int rc = 0;
+
+	filep = filp_open(BOOTCONFIG_FULLPATH, O_RDONLY, 0600);
+	if (IS_ERR_OR_NULL(filep)) {
+		rc = PTR_ERR(filep);
+		pr_err("opening (%s) errno=%d\n", BOOTCONFIG_FULLPATH, rc);
+		return rc;
+	}
+
+	xbc_buf = kzalloc(XBC_DATA_MAX, GFP_KERNEL);
+	if (!xbc_buf) {
+		pr_err("alloc len %d memory fail\n", XBC_DATA_MAX);
+		filp_close(filep, NULL);
+		return -ENOMEM;
+	}
+
+	bytes = kernel_read_stub(filep, (void *) xbc_buf, XBC_DATA_MAX);
+	pr_debug("read bootconfig bytes %d\n", bytes);
+	if (bytes <= 0) {
+		pr_err("fail read bytes %d\n", bytes);
+		kfree(xbc_buf);
+		filp_close(filep, NULL);
+		return -EIO;
+	}
+
+	start_bootdevice = strstr(xbc_buf, bootconfig_key);
+	if (start_bootdevice) {
+		char *p = start_bootdevice + strlen(bootconfig_key);
+		int i = 0;
+
+		memset(bootconfig_tmp, 0, sizeof(bootconfig_tmp));
+		while (p && *p && (*p != '\n') && (*p != '"')
+				&& (i < sizeof(bootconfig_tmp))) {
+			bootconfig_tmp[i] = *p;
+			i++;
+			p++;
+		}
+		*bootconfig_val = bootconfig_tmp;
+		pr_info("bootconfig key %s%s\"\n", bootconfig_key, *bootconfig_val);
+	} else {
+		pr_err("cannot find key %s\n", bootconfig_key);
+		rc = -ENOENT;
+	}
+
+	kfree(xbc_buf);
+	filp_close(filep, NULL);
+
+	return rc;
+}
+#endif
+
 static void mmi_bootarg_setup(void)
 {
 	char *s;
 
+#ifndef CONFIG_BOOT_CONFIG
 	if (mmi_get_bootarg("androidboot.bootreason=", &s) == 0)
 		strlcpy(bootreason, s, BOOTREASON_MAX_LEN);
 
 	if (mmi_get_bootarg("androidboot.mode=", &s) == 0)
 		strlcpy(bootmode, s, BOOTMODE_MAX_LEN);
+#else
+	if (mmi_read_bootconfig("androidboot.bootreason = \"", &s) == 0)
+		strlcpy(bootreason, s, BOOTREASON_MAX_LEN);
+
+	if (mmi_read_bootconfig("androidboot.mode = \"", &s) == 0)
+		strlcpy(bootmode, s, BOOTMODE_MAX_LEN);
+#endif
 }
 
 /*
