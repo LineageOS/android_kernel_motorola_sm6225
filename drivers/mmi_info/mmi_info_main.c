@@ -171,7 +171,7 @@ static int mmi_get_bootarg_bootconfig(const char *bootconfig_key, char **bootcon
 
 	return rc;
 }
-#endif
+#else
 
 static int mmi_get_bootarg_cmdline(char *key, char **value)
 {
@@ -215,6 +215,7 @@ putnode:
 err:
 	return err;
 }
+#endif
 
 int mmi_get_bootarg(char *key, char **value)
 {
