@@ -780,7 +780,7 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 	if (ret < 0)
 	{
 		pr_err("%s : ID idenfy failed\n", __func__);
-		goto err_id;
+		goto err_init;
 	}
 
 	for (i = 0; i < chip->num_backlights; i++) {
@@ -788,12 +788,12 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 		ret = ti_lmu_backlight_configure(each);
 		if (ret) {
 			dev_err(dev, "[bkl] Backlight config err: %d\n", ret);
-			goto err_each;
+			goto err_init;
 		}
 		ret = ti_lmu_backlight_add_device(dev, each);
 		if (ret) {
 			dev_err(dev, "[bkl] Backlight device err: %d\n", ret);
-			goto err_add;
+			goto err_init;
 		}
 	}
 
@@ -818,19 +818,16 @@ ti_lmu_backlight_register(struct device *dev, struct ti_lmu *lmu,
 
 	return chip;
 
-err_id:
-	gpio_free(chip->lmu->en_gpio);
-	kfree(chip);
 err_init:
-	kfree(chip);
-err_add:
-	kfree(dev);
-	kfree(each);
-err_each:
-	kfree(each);
+	if(chip->lmu_bl)
+		devm_kfree(dev, chip->lmu_bl);
+	if(chip)
+		devm_kfree(dev, chip);
 err_ein:
+	gpio_free(lmu->en_gpio);
 	return ERR_PTR(-EINVAL);
 err_eno:
+	gpio_free(lmu->en_gpio);
 	return ERR_PTR(-ENOMEM);
 }
 
@@ -874,8 +871,10 @@ static int ti_lmu_backlight_probe(struct platform_device *pdev)
 
 
 	chip = ti_lmu_backlight_register(dev, lmu, &lmu_bl_cfg[pdev->id]);
-	if (IS_ERR(chip))
-		return PTR_ERR(chip);
+	if (IS_ERR(chip)) {
+		pr_err("[bkl] %s error bkl register\n", __func__);
+		return -ENODEV;
+	}
 	/*
 	 * Notifier callback is required because backlight device needs
 	 * reconfiguration after fault detection procedure is done by
