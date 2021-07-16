@@ -26,6 +26,7 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/mmi_wake_lock.h>
+#include <soc/qcom/mmi_boot_info.h>
 
 #include "mmi_charger.h"
 
@@ -1990,6 +1991,10 @@ bool mmi_is_factory_mode(void)
 	const char *bootargs = NULL;
 	char *bootmode = NULL;
 	char *end = NULL;
+
+	if ((this_chip && this_chip->factory_mode) ||
+	    !strncmp(bi_bootmode(), "mot-factory", 11))
+		return true;
 
 	if (!np)
 		return factory_mode;
