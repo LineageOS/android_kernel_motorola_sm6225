@@ -200,6 +200,11 @@ struct ti_lmu_bl {
 	/* current mode */
 	unsigned int led_current_mode;
 
+	/* Boost OVP */
+	unsigned int led_boost_ovp;
+	/* Boost frequency */
+	unsigned int led_boost_freq;
+
 	struct pwm_device *pwm;
 };
 
@@ -209,6 +214,18 @@ enum backlight_hbm_mode {
 	HBM_MODE_LEVEL1,	//CURRENT = HBM_MODE_DEFAULT*112.5%
 	HBM_MODE_LEVEL2,	//CURRENT = HBM_MODE_DEFAULT*125%
 	HBM_MODE_LEVEL_MAX
+};
+
+enum backlight_boost_ovp {
+	BOOST_OVP_16V,
+	BOOST_OVP_24V,
+	BOOST_OVP_32V,
+	BOOST_OVP_40V
+};
+
+enum backlight_boost_freq {
+	BOOST_FREQ_500K,
+	BOOST_FREQ_1M
 };
 
 extern struct ti_lmu_bl_cfg lmu_bl_cfg[LMU_MAX_ID];
