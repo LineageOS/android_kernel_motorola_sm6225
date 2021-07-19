@@ -267,6 +267,15 @@ struct nvt_ts_data {
 #ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
 	int flash_mode;
 #endif
+	uint8_t jitter_cmd[2];	/* /< support report rate switching */
+	bool jitter_ctrl;	/* /< support report rate switching */
+	uint8_t first_filter_cmd[2];	/* /< support report rate switching */
+	bool first_filter_ctrl;	/* /< support report rate switching */
+	uint8_t interpolation_cmd[2];	/* /< report rate interpolation command */
+	bool interpolation_ctrl;	/* /< support report rate interpolation */
+	uint8_t edge_cmd[3];	/* /< edge switching command */
+	uint8_t rotate_cmd;	/* /< rotate switching command */
+	bool edge_ctrl;	/* /< edge rate switching */
 };
 
 #if NVT_TOUCH_PROC

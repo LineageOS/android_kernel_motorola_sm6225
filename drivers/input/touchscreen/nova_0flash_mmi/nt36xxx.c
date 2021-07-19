@@ -1357,6 +1357,31 @@ static int32_t nvt_parse_dt(struct device *dev)
 		ts->report_gesture_key = 0;
 	}
 
+	if (of_property_read_u8_array(np, "novatek,interpolation_cmd",
+			ts->interpolation_cmd, 2) == 0) {
+		ts->interpolation_ctrl = true;
+		NVT_LOG("Support report rate interpolation.\n");
+	}
+
+	if (of_property_read_u8_array(np, "novatek,jitter_cmd",
+			ts->jitter_cmd, 2) == 0) {
+		ts->jitter_ctrl = true;
+		NVT_LOG("Support set jitter.\n");
+	}
+
+	if (of_property_read_u8_array(np, "novatek,first_filter_cmd",
+			ts->first_filter_cmd, 2) == 0) {
+		ts->first_filter_ctrl = true;
+		NVT_LOG("Support set first_filter.\n");
+	}
+
+	if (of_property_read_u8_array(np, "novatek,edge_cmd",
+			ts->edge_cmd, 3) == 0) {
+		ts->rotate_cmd = EDGE_REJECT_VERTICLE_CMD;
+		ts->edge_ctrl = true;
+		NVT_LOG("Support edge switching.\n");
+	}
+
 	return ret;
 
 nvt_mp_firmware_name_alloc_failed:
