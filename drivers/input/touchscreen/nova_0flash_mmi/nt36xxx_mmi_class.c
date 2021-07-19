@@ -24,6 +24,297 @@
 		return -ENODEV; \
 	} \
 }
+
+static ssize_t nvt_mmi_interpolation_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t nvt_mmi_interpolation_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t nvt_mmi_first_filter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t nvt_mmi_first_filter_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t nvt_mmi_jitter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t nvt_mmi_jitter_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t nvt_mmi_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t nvt_mmi_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
+	nvt_mmi_interpolation_show, nvt_mmi_interpolation_store);
+static DEVICE_ATTR(first_filter, (S_IRUGO | S_IWUSR | S_IWGRP),
+	nvt_mmi_first_filter_show, nvt_mmi_first_filter_store);
+static DEVICE_ATTR(jitter, (S_IRUGO | S_IWUSR | S_IWGRP),
+	nvt_mmi_jitter_show, nvt_mmi_jitter_store);
+static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
+	nvt_mmi_edge_show, nvt_mmi_edge_store);
+
+#define MAX_ATTRS_ENTRIES 10
+#define UI_FEATURE_ENABLE   1
+#define UI_FEATURE_DISABLE   0
+#define CMD_ON 0x71
+#define CMD_OFF 0x72
+#define ROTATE_0   0
+#define ROTATE_90   1
+#define ROTATE_180   2
+#define ROTATE_270  3
+#define DEFAULT_MODE   0
+#define BIG_MODE   1
+#define SMALL_MODE   2
+#define CLOSE_MODE   3
+#define DEFAULT_EDGE   0
+#define BIG_EDGE   1
+#define SMALL_EDGE   2
+#define CLOSE_EDGE   3
+
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
+static int nvt_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+
+	if (ts->interpolation_ctrl)
+		ADD_ATTR(interpolation);
+
+	if (ts->jitter_ctrl)
+		ADD_ATTR(jitter);
+
+	if (ts->first_filter_ctrl)
+		ADD_ATTR(first_filter);
+
+	if (ts->edge_ctrl)
+		ADD_ATTR(edge);
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
+int32_t nvt_cmd_write(uint8_t u8Cmd, uint8_t u8subCmd, uint8_t u8subCmd2, uint16_t len)
+{
+	int i, retry = 5;
+	uint8_t buf[8] = {0};
+	int32_t ret = 0;
+
+	if (mutex_lock_interruptible(&ts->lock)) {
+		return -ERESTARTSYS;
+	}
+
+	//---set xdata index to EVENT BUF ADDR---
+	ret = nvt_set_page(ts->mmap->EVENT_BUF_ADDR | EVENT_MAP_HOST_CMD);
+	if (ret < 0) {
+		NVT_ERR("Set event buffer index fail!\n");
+		mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	for (i = 0; i < retry; i++) {
+		//---set cmd status---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = u8Cmd;
+		buf[2] = u8subCmd;
+		buf[3] = u8subCmd2;
+		CTP_SPI_WRITE(ts->client, buf, len+1);
+		msleep(20);
+
+		//---read cmd status---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0xFF;
+		CTP_SPI_READ(ts->client, buf, 2);
+		if (buf[1] == 0x00)
+			break;
+	}
+
+	if (unlikely(i == retry)) {
+		NVT_LOG("send Cmd 0x%02X 0x%02X 0x%02X failed, buf[1]=0x%02X\n", u8Cmd, u8subCmd, u8subCmd2, buf[1]);
+		ret = -1;
+	} else {
+		NVT_LOG("send Cmd 0x%02X 0x%02X 0x%02X success, tried %d times\n", u8Cmd, u8subCmd, u8subCmd2, i);
+	}
+
+	mutex_unlock(&ts->lock);
+
+	return ret;
+}
+
+static ssize_t nvt_mmi_interpolation_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	uint8_t mode = 0;
+	uint8_t cmd = 0;
+
+	ret = kstrtou8(buf, 0, &mode);
+	if (ret < 0) {
+		NVT_ERR("Failed to convert value.\n");
+		return -EINVAL;
+	}
+	NVT_LOG("mode=%d\n", mode);
+
+	if (UI_FEATURE_ENABLE == mode)
+		cmd = CMD_ON;
+	else
+		cmd = CMD_OFF;
+
+	if (ts->interpolation_cmd[0] != cmd) {
+		ts->interpolation_cmd[0] = cmd;
+		nvt_cmd_write(ts->interpolation_cmd[0], ts->interpolation_cmd[1], 0, 2);
+	}
+
+	return size;
+}
+
+static ssize_t nvt_mmi_interpolation_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", ts->interpolation_cmd[0]);
+}
+
+static ssize_t nvt_mmi_jitter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	uint8_t mode = 0;
+	uint8_t cmd = 0;
+
+	ret = kstrtou8(buf, 0, &mode);
+	if (ret < 0) {
+		NVT_ERR("Failed to convert value.\n");
+		return -EINVAL;
+	}
+	NVT_LOG("mode=%d\n", mode);
+
+	if (UI_FEATURE_ENABLE == mode)
+		cmd = CMD_ON;
+	else
+		cmd = CMD_OFF;
+
+	if (ts->jitter_cmd[0] != cmd) {
+		ts->jitter_cmd[0] = cmd;
+		nvt_cmd_write(ts->jitter_cmd[0], ts->jitter_cmd[1], 0, 2);
+	}
+
+	return size;
+}
+
+static ssize_t nvt_mmi_jitter_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", ts->jitter_cmd[0]);
+}
+
+static ssize_t nvt_mmi_first_filter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	uint8_t mode = 0;
+	uint8_t cmd = 0;
+
+	ret = kstrtou8(buf, 0, &mode);
+	if (ret < 0) {
+		NVT_ERR("Failed to convert value.\n");
+		return -EINVAL;
+	}
+	NVT_LOG("mode=%d\n", mode);
+
+	if (UI_FEATURE_ENABLE == mode)
+		cmd = CMD_ON;
+	else
+		cmd = CMD_OFF;
+
+	if (ts->first_filter_cmd[0] != cmd) {
+		ts->first_filter_cmd[0] = cmd;
+		nvt_cmd_write(ts->first_filter_cmd[0], ts->first_filter_cmd[1], 0, 2);
+	}
+
+	return size;
+}
+
+static ssize_t nvt_mmi_first_filter_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", ts->first_filter_cmd[0]);
+}
+
+static ssize_t nvt_mmi_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned int args[2] = { 0 };
+	uint8_t mode = 0;
+	uint8_t rotate = 0;
+
+	ret = sscanf(buf, "%d %d", &args[0], &args[1]);
+	if (ret < 2)
+		return -EINVAL;
+	NVT_LOG("mode=%d, rotate=%d\n", args[0], args[1]);
+	
+	if (DEFAULT_MODE == args[0]) {
+		ts->edge_cmd[0] = CMD_OFF;
+		ts->edge_cmd[2] = DEFAULT_EDGE;
+		nvt_cmd_write(ts->edge_cmd[0], ts->edge_cmd[1], 0, 2);
+		return size;
+	} else if (BIG_MODE == args[0])
+		mode = BIG_EDGE;
+	else if (SMALL_MODE == args[0])
+		mode = SMALL_EDGE;
+	else if (CLOSE_MODE == args[0])
+		mode = CLOSE_EDGE;
+	else {
+		NVT_ERR("Invalid mode %d!\n", args[0]);
+		return size;
+	}
+
+	if (ts->edge_cmd[2] != mode) {
+		ts->edge_cmd[0] = CMD_ON;
+		ts->edge_cmd[2] = mode;
+		nvt_cmd_write(ts->edge_cmd[0], ts->edge_cmd[1], ts->edge_cmd[2], 3);
+	}
+
+	if (ROTATE_0 == args[1])
+		rotate = EDGE_REJECT_VERTICLE_CMD;
+	else if (ROTATE_90 == args[1])
+		rotate = EDGE_REJECT_LEFT_UP;
+	else if (ROTATE_270 == args[1])
+		rotate = EDGE_REJECT_RIGHT_UP;
+	else {
+		NVT_ERR("Invalid rotate %d!\n", args[1]);
+		return size;
+	}
+
+	if (ts->rotate_cmd!= rotate) {
+		ts->rotate_cmd = rotate;
+		nvt_cmd_write(ts->rotate_cmd, 0, 0, 1);
+	}
+
+	return size;
+}
+
+static ssize_t nvt_mmi_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%02x\n", ts->edge_cmd[2], ts->rotate_cmd);
+}
+
 static int nvt_mmi_methods_get_vendor(struct device *dev, void *cdata)
 {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "novatek_ts");
@@ -310,6 +601,28 @@ static int nvt_mmi_post_resume(struct device *dev)
 	ts->bTouchIsAwake = 1;
 	mutex_unlock(&ts->lock);
 
+	/* restore data */
+	if (ts->interpolation_ctrl) {
+		nvt_cmd_write(ts->interpolation_cmd[0], ts->interpolation_cmd[1], 0, 2);
+	}
+
+	if (ts->jitter_ctrl) {
+		nvt_cmd_write(ts->jitter_cmd[0], ts->jitter_cmd[1], 0, 2);
+	}
+
+	if (ts->first_filter_ctrl) {
+		nvt_cmd_write(ts->first_filter_cmd[0], ts->first_filter_cmd[1], 0, 2);
+	}
+
+	if (ts->edge_ctrl) {
+		if (ts->edge_cmd[0] == CMD_ON)
+			nvt_cmd_write(ts->edge_cmd[0], ts->edge_cmd[1], ts->edge_cmd[2], 3);
+		else
+			nvt_cmd_write(ts->edge_cmd[0], ts->edge_cmd[1], 0, 2);
+
+		nvt_cmd_write(ts->rotate_cmd, 0, 0, 1);
+	}
+
 	NVT_LOG("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
 	return 0;
 }
@@ -336,6 +649,7 @@ static struct ts_mmi_methods nvt_mmi_methods = {
 	.flash_mode = nvt_mmi_flash_mode,
 #endif
 	.firmware_update = nvt_mmi_firmware_update,
+	.extend_attribute_group = nvt_mmi_extend_attribute_group,
 	/* PM callback */
 	.panel_state = nvt_mmi_panel_state,
 	.pre_resume = nvt_mmi_pre_resume,
