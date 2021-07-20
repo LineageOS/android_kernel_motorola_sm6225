@@ -47,6 +47,7 @@ enum ts_mmi_work {
 	TS_MMI_DO_PS,
 	TS_MMI_DO_REFRESH_RATE,
 	TS_MMI_DO_FPS,
+	TS_MMI_TASK_INIT,
 };
 
 static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
@@ -345,9 +346,29 @@ static void ts_mmi_worker_func(struct work_struct *w)
 				}
 			}
 				break;
+
+		case TS_MMI_TASK_INIT:
+#if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+			ret = ts_mmi_check_drm_panel(DEV_TS->of_node);
+			if (ret < 0) {
+				dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
+				touch_cdev->panel_status = -1;
+			} else {
+				touch_cdev->panel_status = 0;
+				dev_info(DEV_MMI, "%s: register panel notifier\n", __func__);
+				REGISTER_PANEL_NOTIFIER;
+			}
+#endif
+				break;
+
 		default:
 			dev_dbg(DEV_MMI, "%s: unknown command %d\n", __func__, cmd);
 		}
+	}
+
+	if (touch_cdev->panel_status == -1) {
+		kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_TASK_INIT);
+		schedule_delayed_work(&touch_cdev->work, msecs_to_jiffies(100));
 	}
 }
 
@@ -516,11 +537,8 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 	*/
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 
-	if (!touch_cdev->panel_status) {
-		REGISTER_PANEL_NOTIFIER;
-		if (ret)
-			goto PANEL_NOTIF_REGISTER_FAILED;
-	}
+	kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_TASK_INIT);
+	schedule_delayed_work(&touch_cdev->work, 0);
 
 	if (touch_cdev->pdata.update_refresh_rate) {
 		touch_cdev->freq_nb.notifier_call = ts_mmi_refresh_rate_cb;
@@ -540,9 +558,6 @@ int ts_mmi_notifiers_register(struct ts_mmi_dev *touch_cdev)
 	return 0;
 
 FREQ_NOTIF_REGISTER_FAILED:
-	if (!touch_cdev->panel_status)
-		UNREGISTER_PANEL_NOTIFIER;
-PANEL_NOTIF_REGISTER_FAILED:
 	cancel_delayed_work(&touch_cdev->work);
 PS_NOTIF_REGISTER_FAILED:
 	kfifo_free(&touch_cdev->cmd_pipe);
