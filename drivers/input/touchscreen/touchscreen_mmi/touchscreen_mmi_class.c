@@ -552,40 +552,6 @@ static int ts_mmi_default_pinctrl(struct device *parent, int on)
 	return 0;
 }
 
-#define BOOTMODE_MAX_LEN 64
-const char *mmi_bl_bootmode(void)
-{
-	const char *bootargs = NULL;
-	char *end = NULL;
-	char *idx = NULL;
-	struct device_node *np;
-	static char bootmode[BOOTMODE_MAX_LEN] = {'\0'};
-
-	if (bootmode[0] != '\0')
-		return bootmode;
-
-	np = of_find_node_by_path("/chosen");
-	if (np == NULL)
-		return NULL;
-
-	if (of_property_read_string(np, "bootargs", &bootargs) != 0)
-		goto putnode;
-
-	idx = strstr(bootargs, "androidboot.mode=");
-	if (idx) {
-		end = strpbrk(idx, " ");
-		idx = strpbrk(idx, "=");
-		if (idx && end > idx)
-			strlcpy(bootmode, idx + 1, end - idx);
-	}
-
-putnode:
-	of_node_put(np);
-	return bootmode;
-}
-
-EXPORT_SYMBOL(mmi_bl_bootmode);
-
 /**
  * ts_mmi_dev_register - register a new object of ts_mmi_dev class.
  * @parent: The device to register.

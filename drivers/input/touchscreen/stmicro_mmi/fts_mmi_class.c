@@ -20,6 +20,7 @@
 #include "fts_lib/ftsError.h"
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsGesture.h"
+#include <soc/qcom/mmi_boot_info.h>
 #include <linux/regulator/consumer.h>
 
 #ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
@@ -117,7 +118,7 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 	if (ts->board->edge_ctrl)
 		ADD_ATTR(edge);
 
-	if (strncmp(mmi_bl_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
+	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(calibrate);
 	}
 
