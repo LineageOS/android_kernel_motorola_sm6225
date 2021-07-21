@@ -28,6 +28,7 @@
 #include <linux/of_gpio.h>
 #include <linux/time.h>
 #include <linux/vmalloc.h>
+#include <soc/qcom/mmi_boot_info.h>
 #include <linux/touchscreen_mmi.h>
 
 #include "sec_ts.h"
@@ -126,7 +127,7 @@ static int sec_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 	if (ts->plat_data->hold_grip_ctrl)
 		ADD_ATTR(hold_grip);
 
-	if (strncmp(mmi_bl_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
+	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(address);
 		ADD_ATTR(size);
 		ADD_ATTR(data);
