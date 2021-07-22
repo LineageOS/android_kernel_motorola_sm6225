@@ -353,7 +353,8 @@ static void ts_mmi_worker_func(struct work_struct *w)
 			if (ret < 0) {
 				dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
 				touch_cdev->panel_status = -1;
-			}
+			} else
+				touch_cdev->panel_status = 0;
 #endif
 			if (!touch_cdev->panel_status) {
 				REGISTER_PANEL_NOTIFIER;
