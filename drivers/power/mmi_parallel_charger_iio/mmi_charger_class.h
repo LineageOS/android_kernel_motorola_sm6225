@@ -125,7 +125,7 @@ extern int mmi_update_charger_status(struct mmi_charger_device *chrg);
 extern int mmi_update_charger_error(struct mmi_charger_device *chrg);
 extern int mmi_clear_charger_error(struct mmi_charger_device *chrg);
 extern int mmi_get_vbus(struct mmi_charger_device *chrg, u32 *mv);
-extern struct mmi_charger_ops sc8549_charger_ops;
+extern struct mmi_charger_ops cp_charger_ops;
 extern struct mmi_charger_ops qpnp_pmic_charger_ops;
 extern struct mmi_charger_device *mmi_charger_device_register(const char *name,
 		const char *psy_name,struct device *parent, void *devdata,

@@ -38,7 +38,7 @@
 #include "mmi_charger_core.h"
 #include "mmi_charger_core_iio.h"
 
-static int sc8549_enable_charging(struct mmi_charger_device *chrg, bool en)
+static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 {
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
@@ -46,7 +46,7 @@ static int sc8549_enable_charging(struct mmi_charger_device *chrg, bool en)
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_write_iio_chan(chip, SC8549_CP_ENABLE, en);
+	rc = mmi_charger_write_iio_chan(chip, CP_ENABLE, en);
 
 	if (!rc) {
 		chrg->charger_enabled = !!en;
@@ -56,7 +56,7 @@ static int sc8549_enable_charging(struct mmi_charger_device *chrg, bool en)
 	return rc;
 }
 
-static int sc8549_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
+static int cp_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
 {
 	int rc;
 	int value;
@@ -65,7 +65,7 @@ static int sc8549_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_ENABLE, &value);
+	rc = mmi_charger_read_iio_chan(chip, CP_ENABLE, &value);
 
 	if (!rc) {
 		chrg->charger_enabled = !!value;
@@ -77,7 +77,7 @@ static int sc8549_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
 	return rc;
 }
 
-static int sc8549_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
+static int cp_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
 {
 	int rc;
 	union power_supply_propval prop = {0,};
@@ -93,21 +93,21 @@ static int sc8549_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
 	return rc;
 }
 
-static int sc8549_get_vbus(struct mmi_charger_device *chrg, u32 *mv)
+static int cp_get_vbus(struct mmi_charger_device *chrg, u32 *mv)
 {
 	int rc, val;
        struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_VOLTAGE_NOW, &val);
+	rc = mmi_charger_read_iio_chan(chip, CP_INPUT_VOLTAGE_NOW, &val);
 	if (!rc)
 		*mv = val;
 
 	return rc;
 }
 
-static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //ibus
+static int cp_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //ibus
 {
 	int rc;
 	int value;
@@ -116,7 +116,7 @@ static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_CURRENT_NOW, &value);
+	rc = mmi_charger_read_iio_chan(chip, CP_INPUT_CURRENT_NOW, &value);
 
 	if (!rc)
 		*uA = value;
@@ -124,7 +124,7 @@ static int sc8549_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //
 	return rc;
 }
 
-static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
+static int cp_update_charger_status(struct mmi_charger_device *chrg)
 {
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
@@ -153,11 +153,11 @@ static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.batt_temp = prop.intval;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_VOLTAGE_NOW, &prop.intval);
+	rc = mmi_charger_read_iio_chan(chip, CP_INPUT_VOLTAGE_NOW, &prop.intval);
 	if (!rc)
 		chrg->charger_data.vbus_volt = prop.intval;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_INPUT_CURRENT_NOW, &prop.intval);
+	rc = mmi_charger_read_iio_chan(chip, CP_INPUT_CURRENT_NOW, &prop.intval);
 	if (!rc)
 		chrg->charger_data.ibus_curr = prop.intval;
 
@@ -166,11 +166,11 @@ static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.vbus_pres = !!prop.intval;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_ENABLE, &prop.intval);
+	rc = mmi_charger_read_iio_chan(chip, CP_ENABLE, &prop.intval);
 	if (!rc)
 		chrg->charger_enabled = !!prop.intval;
 
-	chrg_dev_info(chrg, "SC8549 chrg: %s status update: --- info---\n",chrg->name);
+	chrg_dev_info(chrg, "CP chrg: %s status update: --- info---\n",chrg->name);
 	chrg_dev_info(chrg, "vbatt %d\n", chrg->charger_data.vbatt_volt);
 	chrg_dev_info(chrg, "ibatt %d\n", chrg->charger_data.ibatt_curr);
 	chrg_dev_info(chrg, "batt temp %d\n", chrg->charger_data.batt_temp);
@@ -182,7 +182,7 @@ static int sc8549_update_charger_status(struct mmi_charger_device *chrg)
 	return rc;
 }
 
-static int sc8549_update_charger_error_status(struct mmi_charger_device *chrg)
+static int cp_update_charger_error_status(struct mmi_charger_device *chrg)
 {
 	int rc;
 	int value = 0;
@@ -191,14 +191,14 @@ static int sc8549_update_charger_error_status(struct mmi_charger_device *chrg)
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SC8549_CP_STATUS1, &value);
+	rc = mmi_charger_read_iio_chan(chip, CP_STATUS1, &value);
 	if (!rc) {
 		chrg->charger_error.chrg_err_type = value;
 	}
 	return rc;
 }
 
-static int sc8549_clear_charger_error(struct mmi_charger_device *chrg)
+static int cp_clear_charger_error(struct mmi_charger_device *chrg)
 {
 	int rc;
 	int value = 0;
@@ -207,19 +207,19 @@ static int sc8549_clear_charger_error(struct mmi_charger_device *chrg)
 	if (!chip)
 		return -ENODEV;
 
-	rc = mmi_charger_write_iio_chan(chip, SC8549_CP_CLEAR_ERROR, value);
+	rc = mmi_charger_write_iio_chan(chip, CP_CLEAR_ERROR, value);
 
 	return rc;
 }
 
-struct mmi_charger_ops sc8549_charger_ops = {
-	.enable = sc8549_enable_charging,
-	.is_enabled = sc8549_is_charging_enabled,
-	.get_charging_current = sc8549_get_charging_current,
-	.get_vbus = sc8549_get_vbus,
-	.get_input_current = sc8549_get_input_current,
-	.update_charger_status = sc8549_update_charger_status,
-	.update_charger_error = sc8549_update_charger_error_status,
-	.clear_charger_error = sc8549_clear_charger_error,
+struct mmi_charger_ops cp_charger_ops = {
+	.enable = cp_enable_charging,
+	.is_enabled = cp_is_charging_enabled,
+	.get_charging_current = cp_get_charging_current,
+	.get_vbus = cp_get_vbus,
+	.get_input_current = cp_get_input_current,
+	.update_charger_status = cp_update_charger_status,
+	.update_charger_error = cp_update_charger_error_status,
+	.clear_charger_error = cp_clear_charger_error,
 };
 
