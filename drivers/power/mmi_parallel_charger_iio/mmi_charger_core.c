@@ -62,11 +62,11 @@ const struct mmi_chrg_dev_ops dev_ops[] = {
 	},
 	{
 		.dev_name = "cp-master",
-		.ops = &sc8549_charger_ops,
+		.ops = &cp_charger_ops,
 	},
 	{
 		.dev_name = "cp-slave",
-		.ops = &sc8549_charger_ops,
+		.ops = &cp_charger_ops,
 	},
 };
 
@@ -242,7 +242,7 @@ static int mmi_charger_init_iio_psy(struct mmi_charger_manager *chip,
 
 	rc = devm_iio_device_register(chip->dev, indio_dev);
 	if (rc) {
-		pr_err("Failed to register sc8549 IIO device, rc=%d\n", rc);
+		pr_err("Failed to register cp IIO device, rc=%d\n", rc);
 		return rc;
 	}
 
