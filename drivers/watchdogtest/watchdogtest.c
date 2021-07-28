@@ -75,9 +75,9 @@ static int watchdog_test_init(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
 	trigger_wdog_bite = (void *)kallsyms_lookup_name("msm_trigger_wdog_bite");
 #else
-#if defined(CONFIG_QCOM_WATCHDOG_V2)
+#if IS_ENABLED(CONFIG_QCOM_WATCHDOG_V2)
 	trigger_wdog_bite = msm_trigger_wdog_bite;
-#elif defined(CONFIG_QCOM_WDT_CORE)
+#elif IS_ENABLED(CONFIG_QCOM_WDT_CORE)
 	trigger_wdog_bite = qcom_wdt_trigger_bite;
 #else
 	trigger_wdog_bite = NULL;
