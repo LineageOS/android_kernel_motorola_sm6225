@@ -48,6 +48,30 @@ struct gesture_module {
 };
 
 static struct gesture_module *gsx_gesture; /*allocated in gesture init module*/
+static bool module_initialized;
+
+
+int goodix_gesture_enable(int enable)
+{
+	int ret = 0;
+
+	if (!module_initialized)
+		return 0;
+
+	if (enable) {
+		if (atomic_read(&gsx_gesture->registered))
+			ts_info("gesture module has been already registered");
+		else
+			ret = goodix_register_ext_module_no_wait(&gsx_gesture->module);
+	} else {
+		if (!atomic_read(&gsx_gesture->registered))
+			ts_info("gesture module has been already unregistered");
+		else
+			ret = goodix_unregister_ext_module(&gsx_gesture->module);
+	}
+
+	return ret;
+}
 
 /**
  * gsx_gesture_type_show - show valid gesture type
@@ -125,10 +149,10 @@ static ssize_t gsx_gesture_enable_store(struct goodix_ext_module *module,
 		return ret;
 
 	if (val) {
-		ret = goodix_register_ext_module_no_wait(&gsx_gesture->module);
+		ret = goodix_gesture_enable(1);
 		return ret ? ret : count;
 	} else {
-		ret = goodix_unregister_ext_module(&gsx_gesture->module);
+		ret = goodix_gesture_enable(0);
 		return ret ? ret : count;
 	}
 }
@@ -157,46 +181,33 @@ const struct goodix_ext_attribute gesture_attrs[] = {
 static int gsx_gesture_init(struct goodix_ts_core *cd,
 		struct goodix_ext_module *module)
 {
-	int i, ret = -EINVAL;
-
 	if (!cd || !cd->hw_ops->gesture) {
 		ts_err("gesture unsupported");
 		return -EINVAL;
 	}
 
-	if (atomic_read(&gsx_gesture->registered))
-		return 0;
-
+	ts_info("gesture switch: ON");
 	ts_debug("enable all gesture type");
 	/* set all bit to 1 to enable all gesture wakeup */
 	memset(gsx_gesture->gesture_type, 0xff, GSX_GESTURE_TYPE_LEN);
-	module->priv_data = cd;
-
-	ret = kobject_init_and_add(&module->kobj, goodix_get_default_ktype(),
-			&cd->pdev->dev.kobj, "gesture");
-	if (ret) {
-		ts_err("failed create gesture sysfs node!");
-		return ret;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(gesture_attrs) && !ret; i++)
-		ret = sysfs_create_file(&module->kobj, &gesture_attrs[i].attr);
-	if (ret) {
-		ts_err("failed create gst sysfs files");
-		while (--i >= 0)
-			sysfs_remove_file(&module->kobj, &gesture_attrs[i].attr);
-
-		kobject_put(&module->kobj);
-		return ret;
-	}
-
 	atomic_set(&gsx_gesture->registered, 1);
+
 	return 0;
 }
 
 static int gsx_gesture_exit(struct goodix_ts_core *cd,
 		struct goodix_ext_module *module)
 {
+	if (!cd || !cd->hw_ops->gesture) {
+		ts_err("gesture unsupported");
+		return -EINVAL;
+	}
+
+	ts_info("gesture switch: OFF");
+	ts_debug("disable all gesture type");
+	memset(gsx_gesture->gesture_type, 0x00, GSX_GESTURE_TYPE_LEN);
+	atomic_set(&gsx_gesture->registered, 0);
+
 	return 0;
 }
 
@@ -248,9 +259,10 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 
 re_send_ges_cmd:
 	if (hw_ops->gesture(cd, 0))
-		ts_info("warning: failed re_send gesture cmd\n");
+		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
-	hw_ops->after_event_handler(cd);
+	if (!cd->tools_ctrl_sync)
+		hw_ops->after_event_handler(cd);
 	return EVT_CANCEL_IRQEVT;
 }
 
@@ -268,29 +280,49 @@ static int gsx_gesture_before_suspend(struct goodix_ts_core *cd,
 	int ret;
 	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
-	atomic_set(&cd->suspended, 1);
 	ret = hw_ops->gesture(cd, 0);
 	if (ret)
 		ts_err("failed enter gesture mode");
 	else
 		ts_info("enter gesture mode");
 
+	hw_ops->irq_enable(cd, true);
+	enable_irq_wake(cd->irq);
+
 	return EVT_CANCEL_SUSPEND;
+}
+
+static int gsx_gesture_before_resume(struct goodix_ts_core *cd,
+	struct goodix_ext_module *module)
+{
+	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+
+	hw_ops->irq_enable(cd, false);
+	disable_irq_wake(cd->irq);
+	hw_ops->reset(cd, GOODIX_NORMAL_RESET_DELAY_MS);
+
+	return EVT_CANCEL_RESUME;
 }
 
 static struct goodix_ext_module_funcs gsx_gesture_funcs = {
 	.irq_event = gsx_gesture_ist,
 	.init = gsx_gesture_init,
 	.exit = gsx_gesture_exit,
-	.before_suspend = gsx_gesture_before_suspend
+	.before_suspend = gsx_gesture_before_suspend,
+	.before_resume = gsx_gesture_before_resume,
 };
 
-static int __init goodix_gsx_gesture_init(void)
+int gesture_module_init(void)
 {
-	ts_info("gesture module init");
+	int ret;
+	int i;
+	struct kobject *def_kobj = goodix_get_default_kobj();
+	struct kobj_type *def_kobj_type = goodix_get_default_ktype();
+
 	gsx_gesture = kzalloc(sizeof(struct gesture_module), GFP_KERNEL);
 	if (!gsx_gesture)
 		return -ENOMEM;
+
 	gsx_gesture->module.funcs = &gsx_gesture_funcs;
 	gsx_gesture->module.priority = EXTMOD_PRIO_GESTURE;
 	gsx_gesture->module.name = "Goodix_gsx_gesture";
@@ -298,32 +330,55 @@ static int __init goodix_gsx_gesture_init(void)
 
 	atomic_set(&gsx_gesture->registered, 0);
 	rwlock_init(&gsx_gesture->rwlock);
-	goodix_register_ext_module(&(gsx_gesture->module));
+
+	/* gesture sysfs init */
+	ret = kobject_init_and_add(&gsx_gesture->module.kobj,
+			def_kobj_type, def_kobj, "gesture");
+	if (ret) {
+		ts_err("failed create gesture sysfs node!");
+		goto err_out;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(gesture_attrs) && !ret; i++)
+		ret = sysfs_create_file(&gsx_gesture->module.kobj,
+				&gesture_attrs[i].attr);
+	if (ret) {
+		ts_err("failed create gst sysfs files");
+		while (--i >= 0)
+			sysfs_remove_file(&gsx_gesture->module.kobj,
+					&gesture_attrs[i].attr);
+
+		kobject_put(&gsx_gesture->module.kobj);
+		goto err_out;
+	}
+
+	module_initialized = true;
+	ts_info("gesture module init success");
+
 	return 0;
+
+err_out:
+	ts_err("gesture module init failed!");
+	kfree(gsx_gesture);
+	return ret;
 }
 
-static void __exit goodix_gsx_gesture_exit(void)
+void gesture_module_exit(void)
 {
 	int i;
 
 	ts_info("gesture module exit");
-	if (atomic_read(&gsx_gesture->registered)) {
-		goodix_unregister_ext_module(&gsx_gesture->module);
-		atomic_set(&gsx_gesture->registered, 0);
+	if (!module_initialized)
+		return;
 
-		for (i = 0; i < ARRAY_SIZE(gesture_attrs); i++)
-			sysfs_remove_file(&gsx_gesture->module.kobj,
-					  &gesture_attrs[i].attr);
+	goodix_gesture_enable(0);
 
-		kobject_put(&gsx_gesture->module.kobj);
-	}
+	/* deinit sysfs */
+	for (i = 0; i < ARRAY_SIZE(gesture_attrs); i++)
+		sysfs_remove_file(&gsx_gesture->module.kobj,
+					&gesture_attrs[i].attr);
 
+	kobject_put(&gsx_gesture->module.kobj);
 	kfree(gsx_gesture);
+	module_initialized = false;
 }
-
-late_initcall(goodix_gsx_gesture_init);
-module_exit(goodix_gsx_gesture_exit);
-
-MODULE_DESCRIPTION("Goodix Touchscreen Gesture Module");
-MODULE_AUTHOR("Goodix, Inc.");
-MODULE_LICENSE("GPL v2");
