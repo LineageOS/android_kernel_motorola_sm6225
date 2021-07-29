@@ -3,48 +3,18 @@
 #
 menuconfig TOUCHSCREEN_GOODIX_BRL
 	tristate "Goodix berlin touchscreen"
-	default y
 	help
 	  Say Y here if you have a Goodix berlin series touch controller
 	  to your system.
 
+	  If build module, say M.
 	  If unsure, say N.
 
 if TOUCHSCREEN_GOODIX_BRL
-config TOUCHSCREEN_GOODIX_BRL_I2C
-	tristate "support I2C bus connection"
-	depends on I2C
-	help
-	  Say Y here if the touchscreen is connected via I2C bus.
-
-	  To compile this driver as a module, choose M here.
 
 config TOUCHSCREEN_GOODIX_BRL_SPI
-	tristate "support SPI bus connection"
-	depends on SPI_MASTER
+	bool "support SPI bus connection"
 	help
-	  Say Y here if the touchscreen is connected via SPI bus.
-
-	  To compile this driver as a module, choose M here.
-
-config TOUCHSCREEN_GOODIX_TS_TOOLS
-	tristate "Goodix debug tools support"
-	default y
-	help
-	  Say Y here to enable debug tools.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here.
-
-config TOUCHSCREEN_GOODIX_TS_GESTURE
-	tristate "Goodix gesture support"
-	default y
-	help
-	  Say Y here to enable gesture.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here.
+		Say Y here if the touchscreen is connected via SPI bus.
 
 endif

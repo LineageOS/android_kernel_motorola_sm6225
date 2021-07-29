@@ -14,7 +14,6 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/completion.h>
-#include <linux/debugfs.h>
 #include <linux/of_irq.h>
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
@@ -25,17 +24,32 @@
 #include <linux/fb.h>
 #endif
 
-#define GOODIX_CORE_DRIVER_NAME		"goodix_ts"
-#define GOODIX_PEN_DRIVER_NAME		"goodix_ts,pen"
-#define GOODIX_DRIVER_VERSION		"v1.0.1"
-#define GOODIX_MAX_TOUCH		10
-#define GOODIX_PEN_MAX_PRESSURE		4096
-#define GOODIX_MAX_PEN_KEY 		2
-#define GOODIX_CFG_MAX_SIZE		4096
-#define GOODIX_MAX_STR_LABLE_LEN	32
+#define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
+#define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
+#define GOODIX_DRIVER_VERSION			"v1.1.21"
+#define GOODIX_MAX_TOUCH				10
+#define GOODIX_PEN_MAX_PRESSURE			4096
+#define GOODIX_MAX_PEN_KEY 				2
+#define GOODIX_PEN_MAX_TILT				90
+#define GOODIX_CFG_MAX_SIZE				4096
+#define GOODIX_MAX_STR_LABLE_LEN		32
 
 #define GOODIX_NORMAL_RESET_DELAY_MS	100
 #define GOODIX_HOLD_CPU_RESET_DELAY_MS  5
+
+#define GOODIX_RETRY_3					3
+#define GOODIX_RETRY_5					5
+#define GOODIX_RETRY_10					10
+
+#define TS_DEFAULT_FIRMWARE				"goodix_firmware.bin"
+#define TS_DEFAULT_CFG_BIN 				"goodix_cfg_group.bin"
+
+enum CORD_PROB_STA {
+	CORE_MODULE_UNPROBED = 0,
+	CORE_MODULE_PROB_SUCCESS = 1,
+	CORE_MODULE_PROB_FAILED = -1,
+	CORE_MODULE_REMOVED = -2,
+};
 
 enum GOODIX_ERR_CODE {
 	GOODIX_EBUS      = (1<<0),
@@ -52,7 +66,9 @@ enum IC_TYPE_ID {
 	IC_TYPE_NORMANDY,
 	IC_TYPE_NANJING,
 	IC_TYPE_YELLOWSTONE,
-	IC_TYPE_BERLIN,
+	IC_TYPE_BERLIN_A,
+	IC_TYPE_BERLIN_B,
+	IC_TYPE_BERLIN_D
 };
 
 enum GOODIX_IC_CONFIG_TYPE {
@@ -181,6 +197,18 @@ struct goodix_ic_info {
 #pragma pack()
 
 /*
+ * struct ts_rawdata_info
+ *
+ */
+#define TS_RAWDATA_BUFF_MAX             7000
+#define TS_RAWDATA_RESULT_MAX           100
+struct ts_rawdata_info {
+	int used_size; //fill in rawdata size
+	s16 buff[TS_RAWDATA_BUFF_MAX];
+	char result[TS_RAWDATA_RESULT_MAX];
+};
+
+/*
  * struct goodix_module - external modules container
  * @head: external modules list
  * @initilized: whether this struct is initilized
@@ -193,7 +221,6 @@ struct goodix_module {
 	bool initilized;
 	struct mutex mutex;
 	struct workqueue_struct *wq;
-	struct completion core_comp;
 	struct goodix_ts_core *core_data;
 };
 
@@ -214,6 +241,8 @@ struct goodix_ts_board_data {
 	char iovdd_name[GOODIX_MAX_STR_LABLE_LEN];
 	int reset_gpio;
 	int irq_gpio;
+	int avdd_gpio;
+	int iovdd_gpio;
 	unsigned int  irq_flags;
 
 	unsigned int swap_axis;
@@ -223,8 +252,8 @@ struct goodix_ts_board_data {
 	unsigned int panel_max_p; /*pressure*/
 
 	bool pen_enable;
-	const char *fw_name;
-	const char *cfg_bin_name;
+	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
+	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
 };
 
 enum goodix_fw_update_mode {
@@ -324,6 +353,7 @@ struct goodix_pen_data {
  * @event_data: event data
  */
 struct goodix_ts_event {
+	int retry;
 	enum ts_event_type event_type;
 	u8 request_code; /* represent the request type */
 	u8 gesture_type;
@@ -339,6 +369,7 @@ enum goodix_ic_bus_type {
 
 struct goodix_bus_interface {
 	int bus_type;
+	int ic_type;
 	struct device *dev;
 	int (*read)(struct device *dev, unsigned int addr,
 			 unsigned char *data, unsigned int len);
@@ -366,6 +397,7 @@ struct goodix_ts_hw_ops {
 	int (*esd_check)(struct goodix_ts_core *cd);
 	int (*event_handler)(struct goodix_ts_core *cd, struct goodix_ts_event *ts_event);
 	int (*after_event_handler)(struct goodix_ts_core *cd); /* clean sync flag */
+	int (*get_capacitance_data)(struct goodix_ts_core *cd, struct ts_rawdata_info *info);
 };
 
 /*
@@ -375,6 +407,7 @@ struct goodix_ts_hw_ops {
  *  off esd protection
  */
 struct goodix_ts_esd {
+	bool irq_status;
 	atomic_t esd_on;
 	struct delayed_work esd_work;
 	struct notifier_block esd_notifier;
@@ -403,7 +436,7 @@ struct goodix_ts_core {
 	struct goodix_ts_hw_ops *hw_ops;
 	struct input_dev *input_dev;
 	struct input_dev *pen_dev;
- 	/* TODO counld we remove this from core data? */
+	/* TODO counld we remove this from core data? */
 	struct goodix_ts_event ts_event;
 
 	/* every pointer of this array represent a kind of config */
@@ -417,6 +450,8 @@ struct goodix_ts_core {
 
 	atomic_t irq_enabled;
 	atomic_t suspended;
+	/* when this flag is true, driver should not clean the sync flag */
+	bool tools_ctrl_sync;
 
 	struct notifier_block ts_notifier;
 	struct goodix_ts_esd ts_esd;
@@ -436,9 +471,9 @@ enum goodix_ext_priority {
 	EXTMOD_PRIO_DEFAULT,
 };
 
-#define EVT_HANDLED			0
+#define EVT_HANDLED				0
 #define EVT_CONTINUE			0
-#define EVT_CANCEL			1
+#define EVT_CANCEL				1
 #define EVT_CANCEL_IRQEVT		1
 #define EVT_CANCEL_SUSPEND		1
 #define EVT_CANCEL_RESUME		1
@@ -511,16 +546,11 @@ struct goodix_ext_attribute {
 static struct goodix_ext_attribute ext_attr_##_name = \
 	__EXTMOD_ATTR(_name, _mode, _show, _store);
 
-
-//#define CONFIG_GOODIX_DEBUG
 /* log macro */
+extern bool debug_log_flag;
 #define ts_info(fmt, arg...)	pr_info("[GTP-INF][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
-#define	ts_err(fmt, arg...)	pr_err("[GTP-ERR][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
-#ifdef CONFIG_GOODIX_DEBUG
-#define ts_debug(fmt, arg...)	pr_info("[GTP-DBG][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
-#else
-#define ts_debug(fmt, arg...)	do {} while (0)
-#endif
+#define	ts_err(fmt, arg...)		pr_err("[GTP-ERR][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
+#define ts_debug(fmt, arg...)	{if (debug_log_flag) pr_info("[GTP-DBG][%s:%d] "fmt"\n", __func__, __LINE__, ##arg);}
 
 /*
  * get board data pointer
@@ -554,24 +584,35 @@ int goodix_unregister_ext_module(struct goodix_ext_module *module);
 /* remove all registered ext module
  * return 0 on success, otherwise return < 0
  */
-int goodix_unregister_all_module(void);
 int goodix_ts_blocking_notify(enum ts_notify_event evt, void *v);
-void goodix_debugfs_printf(const char *fmt, ...);
 struct kobj_type *goodix_get_default_ktype(void);
+struct kobject *goodix_get_default_kobj(void);
 
 struct goodix_ts_hw_ops *goodix_get_hw_ops(void);
 int goodix_get_config_proc(struct goodix_ts_core *cd);
 
-int goodix_bus_init(void);
-void goodix_bus_exit(void);
+int goodix_spi_bus_init(void);
+void goodix_spi_bus_exit(void);
+int goodix_i2c_bus_init(void);
+void goodix_i2c_bus_exit(void);
 
 u32 goodix_append_checksum(u8 *data, int len, int mode);
 int checksum_cmp(const u8 *data, int size, int mode);
 int is_risk_data(const u8 *data, int size);
 u32 goodix_get_file_config_id(u8 *ic_config);
+void goodix_rotate_abcd2cbad(int tx, int rx, s16 *data);
+int goodix_gesture_enable(int enable);
 
 int goodix_fw_update_init(struct goodix_ts_core *core_data);
 void goodix_fw_update_uninit(void);
 int goodix_do_fw_update(struct goodix_ic_config *ic_config, int mode);
+
+int goodix_get_ic_type(struct device_node *node);
+int gesture_module_init(void);
+void gesture_module_exit(void);
+int inspect_module_init(void);
+void inspect_module_exit(void);
+int goodix_tools_init(void);
+void goodix_tools_exit(void);
 
 #endif

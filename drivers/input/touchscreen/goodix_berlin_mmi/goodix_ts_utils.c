@@ -16,6 +16,8 @@
   */
 #include "goodix_ts_core.h"
 
+bool debug_log_flag = false;
+
 /*****************************************************************************
 * goodix_append_checksum
 * @summary
@@ -118,4 +120,60 @@ u32 goodix_get_file_config_id(u8 *ic_config)
 	if (!ic_config)
 		return 0;
 	return le32_to_cpup((__le32 *)&ic_config[CONFIG_ID_OFFSET]);
+}
+
+/* matrix transpose */
+void goodix_rotate_abcd2cbad(int tx, int rx, s16 *data)
+{
+	s16 *temp_buf = NULL;
+	int size = tx * rx;
+	int i;
+	int j;
+	int col;
+
+	temp_buf = kcalloc(size, sizeof(s16), GFP_KERNEL);
+	if (!temp_buf) {
+		ts_err("malloc failed");
+		return;
+	}
+
+	for (i = 0, j = 0, col = 0; i < size; i++) {
+		temp_buf[i] = data[j++ * rx + col];
+		if (j == tx) {
+			j = 0;
+			col++;
+		}
+	}
+
+	memcpy(data, temp_buf, size * sizeof(s16));
+	kfree(temp_buf);
+}
+
+/* get ic type */
+int goodix_get_ic_type(struct device_node *node)
+{
+	const char *name_tmp;
+	int ret;
+
+	ret = of_property_read_string(node, "compatible", &name_tmp);
+	if (ret < 0) {
+		ts_err("get compatible failed");
+		return ret;
+	}
+
+	if (strstr(name_tmp, "9897")) {
+		ts_info("ic type is BerlinA");
+		ret = IC_TYPE_BERLIN_A;
+	} else if (strstr(name_tmp, "9966") || strstr(name_tmp, "7986")) {
+		ts_info("ic type is BerlinB");
+		ret = IC_TYPE_BERLIN_B;
+	} else if (strstr(name_tmp, "9916")) {
+		ts_info("ic type is BerlinD");
+		ret = IC_TYPE_BERLIN_D;
+	} else {
+		ts_info("can't find valid ic_type");
+		ret = -EINVAL;
+	}
+
+	return ret;
 }

@@ -16,17 +16,16 @@
   */
 #include "goodix_ts_core.h"
 
-#define TS_DEFAULT_CFG_BIN 		"goodix_cfg_group.bin"
-#define TS_BIN_VERSION_START_INDEX	5
-#define TS_BIN_VERSION_LEN		4
+#define TS_BIN_VERSION_START_INDEX		5
+#define TS_BIN_VERSION_LEN				4
 #define TS_CFG_BIN_HEAD_RESERVED_LEN	6
-#define TS_CFG_OFFSET_LEN		2
-#define TS_IC_TYPE_NAME_MAX_LEN		15
-#define TS_CFG_BIN_HEAD_LEN 		(sizeof(struct goodix_cfg_bin_head) + \
-					 TS_CFG_BIN_HEAD_RESERVED_LEN)
-#define TS_PKG_CONST_INFO_LEN  		(sizeof(struct goodix_cfg_pkg_const_info))
-#define TS_PKG_REG_INFO_LEN 		(sizeof(struct goodix_cfg_pkg_reg_info))
-#define TS_PKG_HEAD_LEN 		(TS_PKG_CONST_INFO_LEN + TS_PKG_REG_INFO_LEN)
+#define TS_CFG_OFFSET_LEN				2
+#define TS_IC_TYPE_NAME_MAX_LEN			15
+#define TS_CFG_BIN_HEAD_LEN		(sizeof(struct goodix_cfg_bin_head) + \
+					TS_CFG_BIN_HEAD_RESERVED_LEN)
+#define TS_PKG_CONST_INFO_LEN	(sizeof(struct goodix_cfg_pkg_const_info))
+#define TS_PKG_REG_INFO_LEN		(sizeof(struct goodix_cfg_pkg_reg_info))
+#define TS_PKG_HEAD_LEN			(TS_PKG_CONST_INFO_LEN + TS_PKG_REG_INFO_LEN)
 
 /*cfg block definitin*/
 #define TS_CFG_BLOCK_PID_LEN		8
@@ -35,8 +34,8 @@
 #define TS_CFG_BLOCK_FW_PATCH_LEN	4
 #define TS_CFG_BLOCK_RESERVED_LEN	9
 
-#define TS_NORMAL_CFG 			0x01
-#define TS_HIGH_SENSE_CFG 		0x03
+#define TS_NORMAL_CFG 				0x01
+#define TS_HIGH_SENSE_CFG 			0x03
 #define TS_RQST_FW_RETRY_TIMES 		2
 
 #pragma pack(1)
@@ -101,20 +100,24 @@ struct goodix_cfg_bin {
 	struct goodix_cfg_package *cfg_pkgs;
 };
 
-static int goodix_read_cfg_bin(struct device *dev, struct goodix_cfg_bin *cfg_bin)
+static int goodix_read_cfg_bin(struct device *dev, const char *cfg_name,
+			struct goodix_cfg_bin *cfg_bin)
 {
 	const struct firmware *firmware = NULL;
-	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN] = {0x00};
 	int ret;
+	int retry = GOODIX_RETRY_3;
 
-	/*get cfg_bin_name*/
-	strlcpy(cfg_bin_name, TS_DEFAULT_CFG_BIN, sizeof(cfg_bin_name));
-	ts_info("cfg_bin_name:%s", cfg_bin_name);
+	ts_info("cfg_bin_name:%s", cfg_name);
 
-	ret = request_firmware(&firmware, cfg_bin_name, dev);
-	if (ret) {
-		ts_err("failed get cfg bin[%s] error:%d",
-			cfg_bin_name, ret);
+	while (retry--) {
+		ret = request_firmware(&firmware, cfg_name, dev);
+		if (!ret)
+			break;
+		ts_info("get cfg bin retry:[%d]", GOODIX_RETRY_3 - retry);
+		msleep(200);
+	}
+	if (retry < 0) {
+		ts_err("failed get cfg bin[%s] error:%d", cfg_name, ret);
 		return ret;
 	}
 
@@ -126,7 +129,7 @@ static int goodix_read_cfg_bin(struct device *dev, struct goodix_cfg_bin *cfg_bi
 	}
 
 	cfg_bin->bin_data_len = firmware->size;
-	/*allocate memory for cfg_bin->bin_data*/
+	/* allocate memory for cfg_bin->bin_data */
 	cfg_bin->bin_data = kzalloc(cfg_bin->bin_data_len, GFP_KERNEL);
 	if (!cfg_bin->bin_data) {
 		ret = -ENOMEM;
@@ -209,8 +212,6 @@ static int goodix_parse_cfg_bin(struct goodix_cfg_bin *cfg_bin)
 		memcpy(&cfg_bin->cfg_pkgs[i].reg_info,
 		       &cfg_bin->bin_data[offset1 + TS_PKG_CONST_INFO_LEN],
 		       TS_PKG_REG_INFO_LEN);
-		/*TODO compatible little edition and big edition*/
-		//goodix_cfg_pkg_leToCpu(&cfg_bin->cfg_pkgs[i]);
 
 		/*get configuration data*/
 		cfg_bin->cfg_pkgs[i].cfg = &cfg_bin->bin_data[offset1 + TS_PKG_HEAD_LEN];
@@ -290,10 +291,11 @@ err_out:
 static int goodix_get_config_data(struct goodix_ts_core *cd, u8 sensor_id)
 {
 	struct goodix_cfg_bin cfg_bin = {0};
+	char *cfg_name = cd->board_data.cfg_bin_name;
 	int ret;
 
 	/*get cfg_bin from file system*/
-	ret = goodix_read_cfg_bin(&cd->pdev->dev, &cfg_bin);
+	ret = goodix_read_cfg_bin(&cd->pdev->dev, cfg_name, &cfg_bin);
 	if (ret) {
 		ts_err("failed get valid config bin data");
 		return ret;
@@ -328,3 +330,5 @@ int goodix_get_config_proc(struct goodix_ts_core *cd)
 
 	return goodix_get_config_data(cd, cd->fw_version.sensor_id);
 }
+
+
