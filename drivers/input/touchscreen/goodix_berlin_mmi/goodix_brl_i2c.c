@@ -20,8 +20,8 @@
 
 #include "goodix_ts_core.h"
 
-#define TS_DRIVER_NAME			"gtx8_i2c"
-#define I2C_MAX_TRANSFER_SIZE		255
+#define TS_DRIVER_NAME				"gtx8_i2c"
+#define I2C_MAX_TRANSFER_SIZE		60
 #define GOODIX_BUS_RETRY_TIMES		3
 #define GOODIX_REG_ADDR_SIZE		4
 
@@ -174,6 +174,12 @@ static int goodix_i2c_probe(struct i2c_client *client,
 	if (!ret)
 		return -EIO;
 
+	/* get ic type */
+	ret = goodix_get_ic_type(client->dev.of_node);
+	if (ret < 0)
+		return ret;
+
+	goodix_i2c_bus.ic_type = ret;
 	goodix_i2c_bus.bus_type = GOODIX_BUS_TYPE_I2C;
 	goodix_i2c_bus.dev = &client->dev;
 	goodix_i2c_bus.read = goodix_i2c_read;
@@ -188,14 +194,14 @@ static int goodix_i2c_probe(struct i2c_client *client,
 	goodix_pdev->num_resources = 0;
 	/*
 	 * you can find this platform dev in
-	 * /sys/devices/platfrom/goodix_ts.0
+	 * /sys/devices/platform/goodix_ts.0
 	 * goodix_pdev->dev.parent = &client->dev;
 	 */
 	goodix_pdev->dev.platform_data = &goodix_i2c_bus;
 	goodix_pdev->dev.release = goodix_pdev_release;
 
 	/* register platform device, then the goodix_ts_core
-	 * module will probe the touch deivce.
+	 * module will probe the touch device.
 	 */
 	ret = platform_device_register(goodix_pdev);
 	if (ret) {
@@ -220,8 +226,9 @@ static int goodix_i2c_remove(struct i2c_client *client)
 
 #ifdef CONFIG_OF
 static const struct of_device_id i2c_matchs[] = {
-	{.compatible = "goodix,brl-generic",},
 	{.compatible = "goodix,gt9897",},
+	{.compatible = "goodix,gt9966",},
+	{.compatible = "goodix,gt9916",},
 	{},
 };
 MODULE_DEVICE_TABLE(of, i2c_matchs);
@@ -244,20 +251,14 @@ static struct i2c_driver goodix_i2c_driver = {
 	.id_table = i2c_id_table,
 };
 
-int goodix_bus_init(void)
+int goodix_i2c_bus_init(void)
 {
 	ts_info("Goodix i2c driver init");
 	return i2c_add_driver(&goodix_i2c_driver);
 }
-EXPORT_SYMBOL(goodix_bus_init);
 
-void goodix_bus_exit(void)
+void goodix_i2c_bus_exit(void)
 {
 	ts_info("Goodix i2c driver exit");
 	i2c_del_driver(&goodix_i2c_driver);
 }
-EXPORT_SYMBOL(goodix_bus_exit);
-
-MODULE_DESCRIPTION("Goodix Touchscreen Hardware Module");
-MODULE_AUTHOR("Goodix, Inc.");
-MODULE_LICENSE("GPL v2");

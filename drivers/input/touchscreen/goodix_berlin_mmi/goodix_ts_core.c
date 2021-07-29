@@ -16,7 +16,8 @@
   */
 #include <linux/version.h>
 #include <linux/fs.h>
-#include <linux/debugfs.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
@@ -26,14 +27,10 @@
 
 #include "goodix_ts_core.h"
 
-#define GOOIDX_INPUT_PHYS	"goodix_ts/input0"
+#define GOODIX_DEFAULT_CFG_NAME 	"goodix_cfg_group.cfg"
+#define GOOIDX_INPUT_PHYS			"goodix_ts/input0"
 
 struct goodix_module goodix_modules;
-
-#define CORE_MODULE_UNPROBED     0
-#define CORE_MODULE_PROB_SUCCESS 1
-#define CORE_MODULE_PROB_FAILED -1
-#define CORE_MODULE_REMOVED     -2
 int core_module_prob_sate = CORE_MODULE_UNPROBED;
 
 static int goodix_send_ic_config(struct goodix_ts_core *cd, int type);
@@ -47,7 +44,6 @@ static int __do_register_ext_module(struct goodix_ext_module *module)
 	struct goodix_ext_module *ext_module, *next;
 	struct list_head *insert_point = &goodix_modules.head;
 
-	ts_info("__do_register_ext_module IN");
 	/* prority level *must* be set */
 	if (module->priority == EXTMOD_PRIO_RESERVED) {
 		ts_err("Priority of module [%s] needs to be set",
@@ -100,20 +96,6 @@ static void goodix_register_ext_module_work(struct work_struct *work) {
 			container_of(work, struct goodix_ext_module, work);
 
 	ts_info("module register work IN");
-	if (core_module_prob_sate == CORE_MODULE_PROB_FAILED
-		|| core_module_prob_sate == CORE_MODULE_REMOVED) {
-		ts_err("core layer state error %d", core_module_prob_sate);
-		return;
-	}
-
-	if (core_module_prob_sate == CORE_MODULE_UNPROBED) {
-		/* waitting for core layer */
-		if (!wait_for_completion_timeout(&goodix_modules.core_comp,
-						 25 * HZ)) {
-			ts_err("Module [%s] timeout", module->name);
-			return;
-		}
-	}
 
 	/* driver probe failed */
 	if (core_module_prob_sate != CORE_MODULE_PROB_SUCCESS) {
@@ -134,7 +116,6 @@ static void goodix_core_module_init(void)
 	goodix_modules.initilized = true;
 	INIT_LIST_HEAD(&goodix_modules.head);
 	mutex_init(&goodix_modules.mutex);
-	init_completion(&goodix_modules.core_comp);
 }
 
 /**
@@ -160,7 +141,6 @@ int goodix_register_ext_module(struct goodix_ext_module *module)
 	ts_info("goodix_register_ext_module OUT");
 	return 0;
 }
-EXPORT_SYMBOL_GPL(goodix_register_ext_module);
 
 /**
  * goodix_register_ext_module_no_wait
@@ -178,45 +158,6 @@ int goodix_register_ext_module_no_wait(struct goodix_ext_module *module)
 		return -EINVAL;
 	}
 	return __do_register_ext_module(module);
-}
-EXPORT_SYMBOL_GPL(goodix_register_ext_module_no_wait);
-
-/* remove all registered ext module
- * return 0 on success, otherwise return < 0
- */
-int goodix_unregister_all_module(void)
-{
-	int ret = 0;
-	struct goodix_ext_module *ext_module, *next;
-
-	if (!goodix_modules.initilized)
-		return 0;
-
-	if (!goodix_modules.core_data)
-		return 0;
-
-	mutex_lock(&goodix_modules.mutex);
-	if (list_empty(&goodix_modules.head)) {
-		mutex_unlock(&goodix_modules.mutex);
-		return 0;
-	}
-
-	list_for_each_entry_safe(ext_module, next,
-				 &goodix_modules.head, list) {
-		if (ext_module->funcs && ext_module->funcs->exit) {
-			ret = ext_module->funcs->exit(goodix_modules.core_data,
-					ext_module);
-			if (ret) {
-				ts_err("failed register ext module, %d:%s",
-					ret, ext_module->name);
-				break;
-			}
-		}
-		ts_info("remove module: %s", ext_module->name);
-		list_del(&ext_module->list);
-	}
-	mutex_unlock(&goodix_modules.mutex);
-	return ret;
 }
 
 /**
@@ -271,7 +212,6 @@ int goodix_unregister_ext_module(struct goodix_ext_module *module)
 		module->name ? module->name : " ");
 	return 0;
 }
-EXPORT_SYMBOL_GPL(goodix_unregister_ext_module);
 
 static void goodix_ext_sysfs_release(struct kobject *kobj)
 {
@@ -321,7 +261,6 @@ struct kobj_type *goodix_get_default_ktype(void)
 {
 	return &goodix_ext_ktype;
 }
-EXPORT_SYMBOL_GPL(goodix_get_default_ktype);
 
 struct kobject *goodix_get_default_kobj(void)
 {
@@ -332,7 +271,6 @@ struct kobject *goodix_get_default_kobj(void)
 		kobj = &goodix_modules.core_data->pdev->dev.kobj;
 	return kobj;
 }
-EXPORT_SYMBOL_GPL(goodix_get_default_kobj);
 
 /* show driver infomation */
 static ssize_t goodix_ts_driver_info_show(struct device *dev,
@@ -349,14 +287,17 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	struct goodix_fw_version chip_ver;
-	int ret, cnt = -EINVAL;
+	u8 temp_pid[8] = {0};
+	int ret;
+	int cnt = -EINVAL;
 
 	if (hw_ops->read_version) {
 		ret = hw_ops->read_version(core_data, &chip_ver);
 		if (!ret) {
-			cnt = snprintf(&buf[cnt], PAGE_SIZE,
+			memcpy(temp_pid, chip_ver.rom_pid, sizeof(chip_ver.rom_pid));
+			cnt = snprintf(&buf[0], PAGE_SIZE,
 				"rom_pid:%s\nrom_vid:%02x%02x%02x\n",
-				chip_ver.rom_pid, chip_ver.rom_vid[0],
+				temp_pid, chip_ver.rom_vid[0],
 				chip_ver.rom_vid[1], chip_ver.rom_vid[2]);
 			cnt += snprintf(&buf[cnt], PAGE_SIZE,
 				"patch_pid:%s\npatch_vid:%02x%02x%02x%02x\n",
@@ -365,6 +306,16 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 				chip_ver.patch_vid[3]);
 			cnt += snprintf(&buf[cnt], PAGE_SIZE,
 				"sensorid:%d\n", chip_ver.sensor_id);
+		}
+	}
+
+	if (hw_ops->get_ic_info) {
+		ret = hw_ops->get_ic_info(core_data, &core_data->ic_info);
+		if (!ret) {
+			cnt += snprintf(&buf[cnt], PAGE_SIZE,
+				"config_id:%x\n", core_data->ic_info.version.config_id);
+			cnt += snprintf(&buf[cnt], PAGE_SIZE,
+				"config_version:%x\n", core_data->ic_info.version.config_version);
 		}
 	}
 
@@ -385,6 +336,284 @@ static ssize_t goodix_ts_reset_store(struct device *dev,
 	if (buf[0] != '0')
 		hw_ops->reset(core_data, GOODIX_NORMAL_RESET_DELAY_MS);
 	return count;
+}
+
+/* read config */
+static ssize_t goodix_ts_read_cfg_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+	int ret;
+	int i;
+	int offset;
+	char *cfg_buf = NULL;
+
+	cfg_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!cfg_buf)
+		return -ENOMEM;
+
+	if (hw_ops->read_config)
+		ret = hw_ops->read_config(core_data, cfg_buf, PAGE_SIZE);
+	else
+		ret = -EINVAL;
+
+	if (ret > 0) {
+		offset = 0;
+		for (i = 0; i < 200; i++) { // only print 200 bytes
+			offset += snprintf(&buf[offset], PAGE_SIZE - offset,
+					"%02x,", cfg_buf[i]);
+			if ((i + 1) % 20 == 0)
+				buf[offset++] = '\n';
+		}
+	}
+
+	kfree(cfg_buf);
+	if (ret <= 0)
+		return ret;
+
+	return offset;
+}
+
+static u8 ascii2hex(u8 a)
+{
+	s8 value = 0;
+
+	if (a >= '0' && a <= '9')
+		value = a - '0';
+	else if (a >= 'A' && a <= 'F')
+		value = a - 'A' + 0x0A;
+	else if (a >= 'a' && a <= 'f')
+		value = a - 'a' + 0x0A;
+	else
+		value = 0xff;
+
+	return value;
+}
+
+static int goodix_ts_convert_0x_data(const u8 *buf, int buf_size,
+				     u8 *out_buf, int *out_buf_len)
+{
+	int i, m_size = 0;
+	int temp_index = 0;
+	u8 high, low;
+
+	for (i = 0; i < buf_size; i++) {
+		if (buf[i] == 'x' || buf[i] == 'X')
+			m_size++;
+	}
+
+	if (m_size <= 1) {
+		ts_err("cfg file ERROR, valid data count:%d", m_size);
+		return -EINVAL;
+	}
+	*out_buf_len = m_size;
+
+	for (i = 0; i < buf_size; i++) {
+		if (buf[i] != 'x' && buf[i] != 'X')
+			continue;
+
+		if (temp_index >= m_size) {
+			ts_err("exchange cfg data error, overflow,"
+			       "temp_index:%d,m_size:%d",
+			       temp_index, m_size);
+			return -EINVAL;
+		}
+		high = ascii2hex(buf[i + 1]);
+		low = ascii2hex(buf[i + 2]);
+		if (high == 0xff || low == 0xff) {
+			ts_err("failed convert: 0x%x, 0x%x",
+				buf[i + 1], buf[i + 2]);
+			return -EINVAL;
+		}
+		out_buf[temp_index++] = (high << 4) + low;
+	}
+	return 0;
+}
+
+/* send config */
+static ssize_t goodix_ts_send_cfg_store(struct device *dev,
+						struct device_attribute *attr,
+						const char *buf, size_t count)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+	struct goodix_ic_config *config = NULL;
+	const struct firmware *cfg_img = NULL;
+	int en;
+	int ret;
+
+	if (sscanf(buf, "%d", &en) != 1)
+		return -EINVAL;
+
+	if (en != 1)
+		return -EINVAL;
+
+	hw_ops->irq_enable(core_data, false);
+
+	ret = request_firmware(&cfg_img, GOODIX_DEFAULT_CFG_NAME, dev);
+	if (ret < 0) {
+		ts_err("cfg file [%s] not available,errno:%d",
+			GOODIX_DEFAULT_CFG_NAME, ret);
+		goto exit;
+	} else {
+		ts_info("cfg file [%s] is ready", GOODIX_DEFAULT_CFG_NAME);
+	}
+
+	config = kzalloc(sizeof(*config), GFP_KERNEL);
+	if (!config)
+		goto exit;
+
+	if (goodix_ts_convert_0x_data(cfg_img->data, cfg_img->size,
+			config->data, &config->len)) {
+		ts_err("convert config data FAILED");
+		goto exit;
+	}
+
+	if (hw_ops->send_config) {
+		ret = hw_ops->send_config(core_data, config->data, config->len);
+		if (ret < 0)
+			ts_err("send config failed");
+	}
+
+exit:
+	hw_ops->irq_enable(core_data, true);
+	kfree(config);
+	if (cfg_img)
+		release_firmware(cfg_img);
+
+	return count;
+}
+
+/* reg read/write */
+static u32 rw_addr;
+static u32 rw_len;
+static u8 rw_flag;
+static u8 store_buf[32];
+static u8 show_buf[PAGE_SIZE];
+static ssize_t goodix_ts_reg_rw_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+	int ret;
+
+	if (!rw_addr || !rw_len) {
+		ts_err("address(0x%x) and length(%d) can't be null",
+			rw_addr, rw_len);
+		return -EINVAL;
+	}
+
+	if (rw_flag != 1) {
+		ts_err("invalid rw flag %d, only support [1/2]", rw_flag);
+		return -EINVAL;
+	}
+
+	ret = hw_ops->read(core_data, rw_addr, show_buf, rw_len);
+	if (ret < 0) {
+		ts_err("failed read addr(%x) length(%d)", rw_addr, rw_len);
+		return snprintf(buf, PAGE_SIZE, "failed read addr(%x), len(%d)\n",
+			rw_addr, rw_len);
+	}
+
+	return snprintf(buf, PAGE_SIZE, "0x%x,%d {%*ph}\n",
+		rw_addr, rw_len, rw_len, show_buf);
+}
+
+static ssize_t goodix_ts_reg_rw_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+	char *pos = NULL;
+	char *token = NULL;
+	long result = 0;
+	int ret;
+	int i;
+
+	if (!buf || !count) {
+		ts_err("invalid parame");
+		goto err_out;
+	}
+
+	if (buf[0] == 'r') {
+		rw_flag = 1;
+	} else if (buf[0] == 'w') {
+		rw_flag = 2;
+	} else {
+		ts_err("string must start with 'r/w'");
+		goto err_out;
+	}
+
+	/* get addr */
+	pos = (char *)buf;
+	pos += 2;
+	token = strsep(&pos, ":");
+	if (!token) {
+		ts_err("invalid address info");
+		goto err_out;
+	} else {
+		if (kstrtol(token, 16, &result)) {
+			ts_err("failed get addr info");
+			goto err_out;
+		}
+		rw_addr = (u32)result;
+		ts_info("rw addr is 0x%x", rw_addr);
+	}
+
+	/* get length */
+	token = strsep(&pos, ":");
+	if (!token) {
+		ts_err("invalid length info");
+		goto err_out;
+	} else {
+		if (kstrtol(token, 0, &result)) {
+			ts_err("failed get length info");
+			goto err_out;
+		}
+		rw_len = (u32)result;
+		ts_info("rw length info is %d", rw_len);
+		if (rw_len > sizeof(store_buf)) {
+			ts_err("data len > %lu", sizeof(store_buf));
+			goto err_out;
+		}
+	}
+
+	if (rw_flag == 1)
+		return count;
+
+	for (i = 0; i < rw_len; i++) {
+		token = strsep(&pos, ":");
+		if (!token) {
+			ts_err("invalid data info");
+			goto err_out;
+		} else {
+			if (kstrtol(token, 16, &result)) {
+				ts_err("failed get data[%d] info", i);
+				goto err_out;
+			}
+			store_buf[i] = (u8)result;
+			ts_info("get data[%d]=0x%x", i, store_buf[i]);
+		}
+	}
+	ret = hw_ops->write(core_data, rw_addr, store_buf, rw_len);
+	if (ret < 0) {
+		ts_err("failed write addr(%x) data %*ph", rw_addr,
+			rw_len, store_buf);
+		goto err_out;
+	}
+
+	ts_info("%s write to addr (%x) with data %*ph",
+		"success", rw_addr, rw_len, store_buf);
+
+	return count;
+err_out:
+	snprintf(show_buf, PAGE_SIZE, "%s\n",
+		"invalid params, format{r/w:4100:length:[41:21:31]}");
+	return -EINVAL;
+
 }
 
 /* show irq infomation */
@@ -423,7 +652,7 @@ static ssize_t goodix_ts_irq_info_show(struct device *dev,
 
 	offset += r;
 	r = snprintf(&buf[offset], PAGE_SIZE - offset,
-		     "echo 0/1 > irq_info to disable/enable irq");
+		     "echo 0/1 > irq_info to disable/enable irq\n");
 	if (r < 0)
 		return -EINVAL;
 
@@ -449,17 +678,86 @@ static ssize_t goodix_ts_irq_info_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(driver_info, S_IRUGO, goodix_ts_driver_info_show, NULL);
-static DEVICE_ATTR(chip_info, S_IRUGO, goodix_ts_chip_info_show, NULL);
-static DEVICE_ATTR(reset, S_IWUSR | S_IWGRP, NULL, goodix_ts_reset_store);
-static DEVICE_ATTR(irq_info, S_IRUGO | S_IWUSR | S_IWGRP,
-		   goodix_ts_irq_info_show, goodix_ts_irq_info_store);
+/* show esd status */
+static ssize_t goodix_ts_esd_info_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
+	int r = 0;
+
+	r = snprintf(buf, PAGE_SIZE, "state:%s\n",
+		     atomic_read(&ts_esd->esd_on) ?
+		     "enabled" : "disabled");
+
+	return r;
+}
+
+/* enable/disable esd */
+static ssize_t goodix_ts_esd_info_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	if (!buf || count <= 0)
+		return -EINVAL;
+
+	if (buf[0] != '0')
+		goodix_ts_blocking_notify(NOTIFY_ESD_ON, NULL);
+	else
+		goodix_ts_blocking_notify(NOTIFY_ESD_OFF, NULL);
+	return count;
+}
+
+/* debug level show */
+static ssize_t goodix_ts_debug_log_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	int r = 0;
+
+	r = snprintf(buf, PAGE_SIZE, "state:%s\n",
+		    debug_log_flag ?
+		    "enabled" : "disabled");
+
+	return r;
+}
+
+/* debug level store */
+static ssize_t goodix_ts_debug_log_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	if (!buf || count <= 0)
+		return -EINVAL;
+
+	if (buf[0] != '0')
+		debug_log_flag = true;
+	else
+		debug_log_flag = false;
+	return count;
+}
+
+static DEVICE_ATTR(driver_info, 0444, goodix_ts_driver_info_show, NULL);
+static DEVICE_ATTR(chip_info, 0444, goodix_ts_chip_info_show, NULL);
+static DEVICE_ATTR(reset, 0220, NULL, goodix_ts_reset_store);
+static DEVICE_ATTR(send_cfg, 0220, NULL, goodix_ts_send_cfg_store);
+static DEVICE_ATTR(read_cfg, 0444, goodix_ts_read_cfg_show, NULL);
+static DEVICE_ATTR(reg_rw, 0664, goodix_ts_reg_rw_show, goodix_ts_reg_rw_store);
+static DEVICE_ATTR(irq_info, 0664, goodix_ts_irq_info_show, goodix_ts_irq_info_store);
+static DEVICE_ATTR(esd_info, 0664, goodix_ts_esd_info_show, goodix_ts_esd_info_store);
+static DEVICE_ATTR(debug_log, 0664, goodix_ts_debug_log_show, goodix_ts_debug_log_store);
 
 static struct attribute *sysfs_attrs[] = {
 	&dev_attr_driver_info.attr,
 	&dev_attr_chip_info.attr,
 	&dev_attr_reset.attr,
+	&dev_attr_send_cfg.attr,
+	&dev_attr_read_cfg.attr,
+	&dev_attr_reg_rw.attr,
 	&dev_attr_irq_info.attr,
+	&dev_attr_esd_info.attr,
+	&dev_attr_debug_log.attr,
 	NULL,
 };
 
@@ -485,195 +783,92 @@ static void goodix_ts_sysfs_exit(struct goodix_ts_core *core_data)
 	sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
 }
 
-#ifdef CONFIG_DEBUG_FS
-#define MAX_DEBUGFS_BUF_SIZE 4096
-static struct goodix_debug_fs {
-	wait_queue_head_t log_wait;
-
-	struct dentry *rootdir;
-	char buf[MAX_DEBUGFS_BUF_SIZE];
-	char *r_pos;
-	char *w_pos;
-	char *start_pos;
-	char *end_pos;
-	struct mutex mutex;
-} goodix_dbgfs;
-
-#define MAX_LINE_SIZE 120
-void goodix_debugfs_printf(const char *fmt, ...)
+/* prosfs create */
+static int rawdata_proc_show(struct seq_file *m, void *v)
 {
-	char tmp_buf[MAX_LINE_SIZE] = {0};
-	char *buf_ptr;
-	va_list args;
-	int need_copy, copy_size;
-
-	if (!goodix_dbgfs.rootdir)
-		return;
-
-	va_start(args, fmt);
-	need_copy = vscnprintf(tmp_buf,
-			MAX_LINE_SIZE, fmt, args);
-	va_end(args);
-
-	mutex_lock(&goodix_dbgfs.mutex);
-	buf_ptr = &tmp_buf[0];
-	if (goodix_dbgfs.r_pos <= goodix_dbgfs.w_pos) {
-		if (need_copy <= goodix_dbgfs.end_pos - goodix_dbgfs.w_pos) {
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, need_copy);
-			goodix_dbgfs.w_pos += need_copy;
-			if (goodix_dbgfs.w_pos >= goodix_dbgfs.end_pos) {
-				goodix_dbgfs.w_pos = goodix_dbgfs.start_pos;
-				/* modify r_pos */
-				if (goodix_dbgfs.w_pos >= goodix_dbgfs.r_pos)
-					goodix_dbgfs.r_pos =
-						goodix_dbgfs.w_pos + 1;
-			}
-		} else {
-			/* roll back */
-			copy_size = goodix_dbgfs.end_pos - goodix_dbgfs.w_pos;
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, copy_size);
-			goodix_dbgfs.w_pos = goodix_dbgfs.start_pos;
-			buf_ptr += copy_size;
-			need_copy -= copy_size;
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, need_copy);
-			goodix_dbgfs.w_pos += need_copy;
-
-			/* modify r_pos */
-			if (goodix_dbgfs.w_pos >= goodix_dbgfs.r_pos)
-				goodix_dbgfs.r_pos = goodix_dbgfs.w_pos + 1;
-		}
-	} else {
-		if (need_copy < goodix_dbgfs.end_pos - goodix_dbgfs.w_pos) {
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, need_copy);
-			goodix_dbgfs.w_pos += need_copy;
-			if (goodix_dbgfs.w_pos >= goodix_dbgfs.r_pos)
-				goodix_dbgfs.r_pos = goodix_dbgfs.w_pos + 1;
-		} else {
-			/* roll back */
-			copy_size = goodix_dbgfs.end_pos - goodix_dbgfs.w_pos;
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, copy_size);
-			goodix_dbgfs.w_pos = goodix_dbgfs.start_pos;
-			goodix_dbgfs.r_pos = goodix_dbgfs.w_pos + 1;
-			buf_ptr += copy_size;
-			need_copy -= copy_size;
-			memcpy(goodix_dbgfs.w_pos, buf_ptr, need_copy);
-			goodix_dbgfs.w_pos += need_copy;
-			/* modify r_pos */
-			if (goodix_dbgfs.w_pos >= goodix_dbgfs.r_pos)
-				goodix_dbgfs.r_pos = goodix_dbgfs.w_pos + 1;
-		}
-	}
-
-	/* r_pos overflow */
-	if (goodix_dbgfs.r_pos >= goodix_dbgfs.end_pos)
-		goodix_dbgfs.r_pos = goodix_dbgfs.start_pos;
-	mutex_unlock(&goodix_dbgfs.mutex);
-	wake_up_interruptible(&goodix_dbgfs.log_wait);
-}
-EXPORT_SYMBOL(goodix_debugfs_printf);
-
-static ssize_t goodix_debugfs_read(struct file *file,
-			char __user *buf, size_t size, loff_t *ppos)
-{
+	struct ts_rawdata_info *info;
+	struct goodix_ts_core *cd = m->private;
+	int tx;
+	int rx;
 	int ret;
-	ssize_t valied_data = 0;
-	ssize_t copy_data = 0;
+	int i;
+	int index;
 
-	ret = wait_event_interruptible(goodix_dbgfs.log_wait,
-			      goodix_dbgfs.r_pos != goodix_dbgfs.w_pos);
-	if (ret)
-		return -EAGAIN;
-
-	mutex_lock(&goodix_dbgfs.mutex);
-
-	if (goodix_dbgfs.r_pos < goodix_dbgfs.w_pos) {
-		valied_data = goodix_dbgfs.w_pos - goodix_dbgfs.r_pos;
-		copy_data = valied_data < size ? valied_data : size;
-		ret = copy_to_user(buf, goodix_dbgfs.r_pos, copy_data);
-		copy_data -= ret;
-		goodix_dbgfs.r_pos += copy_data;
-		goto out;
+	if (!m || !v || !cd) {
+		ts_err("rawdata_proc_show, input null ptr");
+		return -EIO;
 	}
 
-	/* to simplify code design, when divie read operation into two syscall */
-	valied_data = goodix_dbgfs.end_pos - goodix_dbgfs.r_pos;
-	copy_data = valied_data < size ? valied_data : size;
-	ret = copy_to_user(buf, goodix_dbgfs.r_pos, copy_data);
-	copy_data -= ret;
-	goodix_dbgfs.r_pos += copy_data;
-	if (goodix_dbgfs.r_pos >= goodix_dbgfs.end_pos)
-		goodix_dbgfs.r_pos = goodix_dbgfs.start_pos;
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info) {
+		ts_err("Failed to alloc rawdata info memory");
+		return -ENOMEM;
+	}
 
-out:
-	mutex_unlock(&goodix_dbgfs.mutex);
-	return copy_data;
+	ret = cd->hw_ops->get_capacitance_data(cd, info);
+	if (ret < 0) {
+		ts_err("failed to get_capacitance_data, exit!");
+		goto exit;
+	}
+
+	rx = info->buff[0];
+	tx = info->buff[1];
+	seq_printf(m, "TX:%d  RX:%d\n", tx, rx);
+	seq_printf(m, "mutual_rawdata:\n");
+	index = 2;
+	for (i = 0; i < tx * rx; i++) {
+		seq_printf(m, "%5d,", info->buff[index + i]);
+		if ((i + 1) % tx == 0)
+			seq_printf(m, "\n");
+	}
+	seq_printf(m, "mutual_diffdata:\n");
+	index += tx * rx;
+	for (i = 0; i < tx * rx; i++) {
+		seq_printf(m, "%3d,", info->buff[index + i]);
+		if ((i + 1) % tx == 0)
+			seq_printf(m, "\n");
+	}
+
+exit:
+	kfree(info);
+	return ret;
 }
 
-static int goodix_debugfs_open(struct inode *inode, struct file *file)
+static int rawdata_proc_open(struct inode *inode, struct file *file)
 {
-	file->private_data = inode->i_private;
-	return 0;
+	return single_open_size(file, rawdata_proc_show, PDE_DATA(inode), PAGE_SIZE * 10);
 }
 
-static int goodix_debugfs_release(struct inode *inode, struct file *file)
-{
-	return 0;
-}
-
-static const struct file_operations goodix_debugfs_ops = {
-	.owner = THIS_MODULE,
-	.open = goodix_debugfs_open,
-	.read = goodix_debugfs_read,
-	.release = goodix_debugfs_release,
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops rawdata_proc_fops = {
+	.proc_open = rawdata_proc_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
-
-static int goodix_debugfs_init(struct goodix_ts_core *cd)
-{
-	struct dentry *rootdir;
-	struct dentry *retval;
-
-	rootdir = debugfs_create_dir("goodix_ts", NULL);
-	if (!rootdir) {
-		ts_err("failed create goodix debugfs dir");
-		return -EINVAL;
-	}
-	retval = debugfs_create_file("event", S_IRUGO | S_IWUSR, rootdir,
-		cd, &goodix_debugfs_ops);
-	if (IS_ERR_OR_NULL(retval)) {
-		debugfs_remove_recursive(rootdir);
-		return -EINVAL;
-	}
-	init_waitqueue_head(&goodix_dbgfs.log_wait);
-	goodix_dbgfs.r_pos = goodix_dbgfs.buf;
-	goodix_dbgfs.w_pos = goodix_dbgfs.buf;
-	goodix_dbgfs.start_pos = goodix_dbgfs.buf;
-	goodix_dbgfs.end_pos = goodix_dbgfs.buf + MAX_DEBUGFS_BUF_SIZE;
-	goodix_dbgfs.rootdir = rootdir;
-	mutex_init(&goodix_dbgfs.mutex);
-
-	return 0;
-}
-
-static void goodix_debugfs_remove(struct goodix_ts_core *cd)
-{
-	if (!goodix_dbgfs.rootdir)
-		return;
-	debugfs_remove_recursive(goodix_dbgfs.rootdir);
-}
 #else
-static int goodix_debugfs_init(struct goodix_ts_core *cd)
-{
-	return -EINVAL;
-}
-static void goodix_debugfs_remove(struct goodix_ts_core *cd)
-{
-}
-void goodix_debugfs_printf(const char *fmt, ...)
-{
-	return;
-}
-EXPORT_SYMBOL(goodix_debugfs_printf);
+static const struct file_operations rawdata_proc_fops = {
+	.open = rawdata_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
 #endif
+
+static void goodix_ts_procfs_init(struct goodix_ts_core *core_data)
+{
+	if (!proc_mkdir("goodix_ts", NULL))
+		return;
+	proc_create_data("goodix_ts/tp_capacitance_data",
+			0666, NULL, &rawdata_proc_fops, core_data);
+}
+
+static void goodix_ts_procfs_exit(struct goodix_ts_core *core_data)
+{
+	remove_proc_entry("goodix_ts/tp_capacitance_data", NULL);
+	remove_proc_entry("goodix_ts", NULL);
+}
+
 /* event notifier */
 static BLOCKING_NOTIFIER_HEAD(ts_notifier_list);
 /**
@@ -685,7 +880,6 @@ int goodix_ts_register_notifier(struct notifier_block *nb)
 {
 	return blocking_notifier_chain_register(&ts_notifier_list, nb);
 }
-EXPORT_SYMBOL(goodix_ts_register_notifier);
 
 /**
  * goodix_ts_unregister_client - unregister a client notifier
@@ -696,7 +890,6 @@ int goodix_ts_unregister_notifier(struct notifier_block *nb)
 {
 	return blocking_notifier_chain_unregister(&ts_notifier_list, nb);
 }
-EXPORT_SYMBOL(goodix_ts_unregister_notifier);
 
 /**
  * fb_notifier_call_chain - notify clients of fb_events
@@ -710,7 +903,6 @@ int goodix_ts_blocking_notify(enum ts_notify_event evt, void *v)
 			(unsigned long)evt, v);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(goodix_ts_blocking_notify);
 
 #ifdef CONFIG_OF
 /**
@@ -772,6 +964,24 @@ static int goodix_parse_dt(struct device_node *node,
 		return -EINVAL;
 	}
 
+	r = of_get_named_gpio(node, "goodix,avdd-gpio", 0);
+	if (r < 0) {
+		ts_info("can't find avdd-gpio, use other power supply");
+		board_data->avdd_gpio = 0;
+	} else {
+		ts_info("get avdd-gpio[%d] from dt", r);
+		board_data->avdd_gpio = r;
+	}
+
+	r = of_get_named_gpio(node, "goodix,iovdd-gpio", 0);
+	if (r < 0) {
+		ts_info("can't find iovdd-gpio, use other power supply");
+		board_data->iovdd_gpio = 0;
+	} else {
+		ts_info("get iovdd-gpio[%d] from dt", r);
+		board_data->iovdd_gpio = r;
+	}
+
 	r = of_get_named_gpio(node, "goodix,reset-gpio", 0);
 	if (r < 0) {
 		ts_err("invalid reset-gpio in dt: %d", r);
@@ -798,7 +1008,7 @@ static int goodix_parse_dt(struct device_node *node,
 	memset(board_data->avdd_name, 0, sizeof(board_data->avdd_name));
 	r = of_property_read_string(node, "goodix,avdd-name", &name_tmp);
 	if (!r) {
-		ts_info("avdd name form dt: %s", name_tmp);
+		ts_info("avdd name from dt: %s", name_tmp);
 		if (strlen(name_tmp) < sizeof(board_data->avdd_name))
 			strncpy(board_data->avdd_name,
 				name_tmp, sizeof(board_data->avdd_name));
@@ -811,7 +1021,7 @@ static int goodix_parse_dt(struct device_node *node,
 	memset(board_data->iovdd_name, 0, sizeof(board_data->iovdd_name));
 	r = of_property_read_string(node, "goodix,iovdd-name", &name_tmp);
 	if (!r) {
-		ts_info("iovdd name form dt: %s", name_tmp);
+		ts_info("iovdd name from dt: %s", name_tmp);
 		if (strlen(name_tmp) < sizeof(board_data->iovdd_name))
 			strncpy(board_data->iovdd_name,
 				name_tmp, sizeof(board_data->iovdd_name));
@@ -819,6 +1029,26 @@ static int goodix_parse_dt(struct device_node *node,
 			ts_info("invalied iovdd name length: %ld > %ld",
 				strlen(name_tmp),
 				sizeof(board_data->iovdd_name));
+	}
+
+	/* get firmware file name */
+	r = of_property_read_string(node, "goodix,firmware-name", &name_tmp);
+	if (!r) {
+		ts_info("firmware name from dt: %s", name_tmp);
+		strncpy(board_data->fw_name, name_tmp, sizeof(board_data->fw_name));
+	} else {
+		ts_info("can't find firmware name, use default: %s", TS_DEFAULT_FIRMWARE);
+		strncpy(board_data->fw_name, TS_DEFAULT_FIRMWARE, sizeof(board_data->fw_name));
+	}
+
+	/* get config file name */
+	r = of_property_read_string(node, "goodix,config-name", &name_tmp);
+	if (!r) {
+		ts_info("config name from dt: %s", name_tmp);
+		strncpy(board_data->cfg_bin_name, name_tmp, sizeof(board_data->cfg_bin_name));
+	} else {
+		ts_info("can't find config name, use default: %s", TS_DEFAULT_CFG_BIN);
+		strncpy(board_data->cfg_bin_name, TS_DEFAULT_CFG_BIN, sizeof(board_data->cfg_bin_name));
 	}
 
 	/* get xyz resolutions */
@@ -847,6 +1077,8 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 {
 	int i;
 
+	mutex_lock(&dev->mutex);
+
 	if (pen_data->coords.status == TS_TOUCH) {
 		input_report_key(dev, BTN_TOUCH, 1);
 		input_report_key(dev, pen_data->coords.tool_type, 1);
@@ -858,6 +1090,12 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 		input_report_abs(dev, ABS_X, pen_data->coords.x);
 		input_report_abs(dev, ABS_Y, pen_data->coords.y);
 		input_report_abs(dev, ABS_PRESSURE, pen_data->coords.p);
+		input_report_abs(dev, ABS_TILT_X, pen_data->coords.tilt_x);
+		input_report_abs(dev, ABS_TILT_Y, pen_data->coords.tilt_y);
+		ts_debug("pen_data:x %d, y %d, p%d, tilt_x %d tilt_y %d",
+				pen_data->coords.x, pen_data->coords.y,
+				pen_data->coords.p, pen_data->coords.tilt_x,
+				pen_data->coords.tilt_x);
 	}
 	/* report pen button */
 	for (i = 0; i < GOODIX_MAX_PEN_KEY; i++) {
@@ -869,45 +1107,40 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 			input_report_key(dev, pen_data->keys[i].code, 0);
 	}
 	input_sync(dev);
+	mutex_unlock(&dev->mutex);
 }
 
 static void goodix_ts_report_finger(struct input_dev *dev,
 		struct goodix_touch_data *touch_data)
 {
 	unsigned int touch_num = touch_data->touch_num;
-	static u32 pre_fin;
 	int i;
 
-	/*first touch down and last touch up condition*/
-	if (touch_num && !pre_fin)
-		input_report_key(dev, BTN_TOUCH, 1);
-	else if (!touch_num && pre_fin)
-		input_report_key(dev, BTN_TOUCH, 0);
-
-	pre_fin = touch_num;
+	mutex_lock(&dev->mutex);
 
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
-		if (!touch_data->coords[i].status)
-			continue;
-		if (touch_data->coords[i].status == TS_RELEASE) {
+		if (touch_data->coords[i].status == TS_TOUCH) {
+			ts_debug("report: id %d, x %d, y %d, w %d", i,
+				touch_data->coords[i].x, touch_data->coords[i].y,
+				touch_data->coords[i].w);
+			input_mt_slot(dev, i);
+			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
+			input_report_abs(dev, ABS_MT_POSITION_X,
+					touch_data->coords[i].x);
+			input_report_abs(dev, ABS_MT_POSITION_Y,
+					touch_data->coords[i].y);
+			input_report_abs(dev, ABS_MT_TOUCH_MAJOR,
+					touch_data->coords[i].w);
+		} else {
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
-			continue;
 		}
-		ts_debug("report: id %d, x %d, y %d, w %d", i,
-			 touch_data->coords[i].x, touch_data->coords[i].y,
-			 touch_data->coords[i].p);
-		input_mt_slot(dev, i);
-		input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
-		input_report_abs(dev, ABS_MT_POSITION_X,
-				 touch_data->coords[i].x);
-		input_report_abs(dev, ABS_MT_POSITION_Y,
-				 touch_data->coords[i].y);
-		input_report_abs(dev, ABS_MT_TOUCH_MAJOR,
-				 touch_data->coords[i].w);
 	}
 
+	input_report_key(dev, BTN_TOUCH, touch_num > 0 ? 1 : 0);
 	input_sync(dev);
+
+	mutex_unlock(&dev->mutex);
 }
 
 static int goodix_ts_request_handle(struct goodix_ts_core *cd,
@@ -946,8 +1179,10 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	struct goodix_ext_module *ext_module, *next;
 	struct goodix_ts_event *ts_event = &core_data->ts_event;
+	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
 	int ret;
 
+	ts_esd->irq_status = true;
 	core_data->irq_trig_cnt++;
 	/* inform external module */
 	mutex_lock(&goodix_modules.mutex);
@@ -971,7 +1206,8 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 			goodix_ts_report_finger(core_data->input_dev,
 					&ts_event->touch_data);
 		}
-		if (ts_event->event_type == EVENT_PEN) {
+		if (core_data->board_data.pen_enable &&
+				ts_event->event_type == EVENT_PEN) {
 			goodix_ts_report_pen(core_data->pen_dev,
 					&ts_event->pen_data);
 		}
@@ -980,7 +1216,10 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 		}
 	}
 
-	hw_ops->after_event_handler(core_data);
+	if (!core_data->tools_ctrl_sync && !ts_event->retry)
+		hw_ops->after_event_handler(core_data);
+	ts_event->retry = 0;
+
 	return IRQ_HANDLED;
 }
 
@@ -1037,6 +1276,11 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 			core_data->avdd = NULL;
 			return ret;
 		}
+		ret = regulator_set_voltage(core_data->avdd, 3000000, 3000000);
+		if (ret < 0) {
+			ts_err("set avdd voltage failed");
+			return ret;
+		}
 	} else {
 		ts_info("Avdd name is NULL");
 	}
@@ -1048,6 +1292,11 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 			ret = PTR_ERR(core_data->iovdd);
 			ts_err("Failed to get regulator iovdd:%d", ret);
 			core_data->iovdd = NULL;
+		}
+		ret = regulator_set_voltage(core_data->iovdd, 1800000, 1800000);
+		if (ret < 0) {
+			ts_err("set iovdd voltage failed");
+			return ret;
 		}
 	} else {
 		ts_info("iovdd name is NULL");
@@ -1116,7 +1365,7 @@ static int goodix_ts_gpio_setup(struct goodix_ts_core *core_data)
 	 * driver should use gpiod_ api.
 	 */
 	r = devm_gpio_request_one(&core_data->pdev->dev, ts_bdata->reset_gpio,
-				  GPIOF_OUT_INIT_HIGH, "ts_reset_gpio");
+				  GPIOF_OUT_INIT_LOW, "ts_reset_gpio");
 	if (r < 0) {
 		ts_err("Failed to request reset gpio, r:%d", r);
 		return r;
@@ -1127,6 +1376,24 @@ static int goodix_ts_gpio_setup(struct goodix_ts_core *core_data)
 	if (r < 0) {
 		ts_err("Failed to request irq gpio, r:%d", r);
 		return r;
+	}
+
+	if (ts_bdata->avdd_gpio > 0) {
+		r = devm_gpio_request_one(&core_data->pdev->dev, ts_bdata->avdd_gpio,
+				GPIOF_OUT_INIT_LOW, "ts_avdd_gpio");
+		if (r < 0) {
+			ts_err("Failed to request avdd-gpio, r:%d", r);
+			return r;
+		}
+	}
+
+	if (ts_bdata->iovdd_gpio > 0) {
+		r = devm_gpio_request_one(&core_data->pdev->dev, ts_bdata->iovdd_gpio,
+				GPIOF_OUT_INIT_LOW, "ts_iovdd_gpio");
+		if (r < 0) {
+			ts_err("Failed to request iovdd-gpio, r:%d", r);
+			return r;
+		}
 	}
 
 	return 0;
@@ -1208,6 +1475,7 @@ static int goodix_ts_pen_dev_config(struct goodix_ts_core *core_data)
 		ts_err("Failed to allocated pen device");
 		return -ENOMEM;
 	}
+
 	core_data->pen_dev = pen_dev;
 	input_set_drvdata(pen_dev, core_data);
 
@@ -1219,6 +1487,8 @@ static int goodix_ts_pen_dev_config(struct goodix_ts_core *core_data)
 	pen_dev->evbit[0] |= BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
 	__set_bit(ABS_X, pen_dev->absbit);
 	__set_bit(ABS_Y, pen_dev->absbit);
+	__set_bit(ABS_TILT_X, pen_dev->absbit);
+	__set_bit(ABS_TILT_Y, pen_dev->absbit);
 	__set_bit(BTN_STYLUS, pen_dev->keybit);
 	__set_bit(BTN_STYLUS2, pen_dev->keybit);
 	__set_bit(BTN_TOUCH, pen_dev->keybit);
@@ -1227,7 +1497,11 @@ static int goodix_ts_pen_dev_config(struct goodix_ts_core *core_data)
 	input_set_abs_params(pen_dev, ABS_X, 0, ts_bdata->panel_max_x, 0, 0);
 	input_set_abs_params(pen_dev, ABS_Y, 0, ts_bdata->panel_max_y, 0, 0);
 	input_set_abs_params(pen_dev, ABS_PRESSURE, 0,
-			     ts_bdata->panel_max_w, 0, 0);
+			     ts_bdata->panel_max_p, 0, 0);
+	input_set_abs_params(pen_dev, ABS_TILT_X,
+			-GOODIX_PEN_MAX_TILT, GOODIX_PEN_MAX_TILT, 0, 0);
+	input_set_abs_params(pen_dev, ABS_TILT_Y,
+			-GOODIX_PEN_MAX_TILT, GOODIX_PEN_MAX_TILT, 0, 0); 
 
 	r = input_register_device(pen_dev);
 	if (r < 0) {
@@ -1271,6 +1545,9 @@ static void goodix_ts_esd_work(struct work_struct *work)
 	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 	int ret = 0;
 
+	if (ts_esd->irq_status)
+		goto exit;
+
 	if (!atomic_read(&ts_esd->esd_on))
 		return;
 
@@ -1282,9 +1559,10 @@ static void goodix_ts_esd_work(struct work_struct *work)
 		ts_err("esd check failed");
 		goodix_ts_power_off(cd);
 		goodix_ts_power_on(cd);
-		if (hw_ops->reset)
-			hw_ops->reset(cd, GOODIX_NORMAL_RESET_DELAY_MS);
 	}
+
+exit:
+	ts_esd->irq_status = false;
 	if (atomic_read(&ts_esd->esd_on))
 		schedule_delayed_work(&ts_esd->esd_work, 2 * HZ);
 }
@@ -1298,6 +1576,9 @@ static void goodix_ts_esd_on(struct goodix_ts_core *cd)
 	struct goodix_ts_esd *ts_esd = &cd->ts_esd;
 
 	if (!misc->esd_addr)
+		return;
+
+	if (atomic_read(&ts_esd->esd_on))
 		return;
 
 	atomic_set(&ts_esd->esd_on, 1);
@@ -1314,6 +1595,9 @@ static void goodix_ts_esd_off(struct goodix_ts_core *cd)
 {
 	struct goodix_ts_esd *ts_esd = &cd->ts_esd;
 	int ret;
+
+	if (!atomic_read(&ts_esd->esd_on))
+		return;
 
 	atomic_set(&ts_esd->esd_on, 0);
 	ret = cancel_delayed_work_sync(&ts_esd->esd_work);
@@ -1380,24 +1664,21 @@ int goodix_ts_esd_init(struct goodix_ts_core *cd)
 static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 {
 	struct input_dev *input_dev = core_data->input_dev;
-	struct input_mt *mt = input_dev->mt;
 	int i;
 
-	memset(&core_data->ts_event, 0, sizeof(core_data->ts_event));
-	goodix_ts_report_finger(core_data->input_dev,
-			&core_data->ts_event.touch_data);
+	mutex_lock(&input_dev->mutex);
 
-	if (mt) {
-		for (i = 0; i < mt->num_slots; i++) {
-			input_mt_slot(input_dev, i);
-			input_mt_report_slot_state(input_dev,
-					MT_TOOL_FINGER,
-					false);
-		}
-		input_report_key(input_dev, BTN_TOUCH, 0);
-		input_mt_sync_frame(input_dev);
-		input_sync(input_dev);
+	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
+		input_mt_slot(input_dev, i);
+		input_mt_report_slot_state(input_dev,
+				MT_TOOL_FINGER,
+				false);
 	}
+	input_report_key(input_dev, BTN_TOUCH, 0);
+	input_mt_sync_frame(input_dev);
+	input_sync(input_dev);
+
+	mutex_unlock(&input_dev->mutex);
 }
 
 /**
@@ -1410,7 +1691,14 @@ static int goodix_ts_suspend(struct goodix_ts_core *core_data)
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	int ret;
 
+	if (core_data->init_stage < CORE_INIT_STAGE2 ||
+			atomic_read(&core_data->suspended))
+		return 0;
+
 	ts_info("Suspend start");
+	atomic_set(&core_data->suspended, 1);
+	/* disable irq */
+	hw_ops->irq_enable(core_data, false);
 
 	/*
 	 * notify suspend event, inform the esd protector
@@ -1438,19 +1726,15 @@ static int goodix_ts_suspend(struct goodix_ts_core *core_data)
 	}
 	mutex_unlock(&goodix_modules.mutex);
 
-	/* disable irq */
-	hw_ops->irq_enable(core_data, false);
-
-	/* let touch ic work in sleep mode */
+	/* enter sleep mode or power off */
 	if (hw_ops->suspend)
 		hw_ops->suspend(core_data);
-	atomic_set(&core_data->suspended, 1);
 
 	/* inform exteranl modules */
 	mutex_lock(&goodix_modules.mutex);
 	if (!list_empty(&goodix_modules.head)) {
 		list_for_each_entry_safe(ext_module, next,
-					 &goodix_modules.head, list) {
+					&goodix_modules.head, list) {
 			if (!ext_module->funcs->after_suspend)
 				continue;
 
@@ -1467,6 +1751,7 @@ static int goodix_ts_suspend(struct goodix_ts_core *core_data)
 	mutex_unlock(&goodix_modules.mutex);
 
 out:
+	goodix_ts_release_connects(core_data);
 	ts_info("Suspend end");
 	return 0;
 }
@@ -1481,8 +1766,12 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	int ret;
 
+	if (core_data->init_stage < CORE_INIT_STAGE2 ||
+			!atomic_read(&core_data->suspended))
+		return 0;
+
 	ts_info("Resume start");
-	goodix_ts_release_connects(core_data);
+	atomic_set(&core_data->suspended, 0);
 
 	mutex_lock(&goodix_modules.mutex);
 	if (!list_empty(&goodix_modules.head)) {
@@ -1492,7 +1781,7 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 				continue;
 
 			ret = ext_module->funcs->before_resume(core_data,
-							     ext_module);
+					ext_module);
 			if (ret == EVT_CANCEL_RESUME) {
 				mutex_unlock(&goodix_modules.mutex);
 				ts_info("Canceled by module:%s",
@@ -1503,8 +1792,7 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 	}
 	mutex_unlock(&goodix_modules.mutex);
 
-	atomic_set(&core_data->suspended, 0);
-	/* resume device */
+	/* reset device or power on*/
 	if (hw_ops->resume)
 		hw_ops->resume(core_data);
 
@@ -1527,16 +1815,12 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 	}
 	mutex_unlock(&goodix_modules.mutex);
 
-	hw_ops->irq_enable(core_data, true);
-
-	/*
-	 * notify resume event, inform the esd protector
-	 * and charger detector to turn on the work
-	 */
-	ts_info("try notify resume");
-	goodix_ts_blocking_notify(NOTIFY_RESUME, NULL);
 out:
-	ts_debug("Resume end");
+	/* enable irq */
+	hw_ops->irq_enable(core_data, true);
+	/* open esd */
+	goodix_ts_blocking_notify(NOTIFY_RESUME, NULL);
+	ts_info("Resume end");
 	return 0;
 }
 
@@ -1607,6 +1891,9 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 			struct goodix_ts_core, ts_notifier);
 	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
+	if (cd->init_stage < CORE_INIT_STAGE2)
+		return 0;
+
 	ts_info("notify event type 0x%x", (unsigned int)action);
 	switch (action) {
 	case NOTIFY_FWUPDATE_START:
@@ -1655,12 +1942,21 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	if (fb_register_client(&cd->fb_notifier))
 		ts_err("Failed to register fb notifier client:%d", ret);
 #endif
-	/*create sysfs files*/
+	/* create sysfs files */
 	goodix_ts_sysfs_init(cd);
+
+	/* create procfs files */
+	goodix_ts_procfs_init(cd);
 
 	/* esd protector */
 	goodix_ts_esd_init(cd);
-	goodix_debugfs_init(cd);
+
+	/* gesture init */
+	gesture_module_init();
+
+	/* inspect init */
+	inspect_module_init();
+
 	return 0;
 exit:
 	goodix_ts_pen_dev_remove(cd);
@@ -1754,6 +2050,7 @@ static int goodix_later_init_thread(void *data)
 		goto uninit_fw;
 	}
 	cd->init_stage = CORE_INIT_STAGE2;
+
 	return 0;
 
 uninit_fw:
@@ -1854,7 +2151,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
-	core_data->hw_ops->reset(core_data, GOODIX_NORMAL_RESET_DELAY_MS);
 	/* confirm it's goodix touch dev or not */
 	ret = core_data->hw_ops->dev_confirm(core_data);
 	if (ret) {
@@ -1873,11 +2169,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
+	/* debug node init */
+	goodix_tools_init();
+
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
 	core_module_prob_sate = CORE_MODULE_PROB_SUCCESS;
 
-	complete_all(&goodix_modules.core_comp);
 	ts_info("goodix_ts_core probe success");
 	return 0;
 
@@ -1885,8 +2183,6 @@ err_out:
 	core_data->init_stage = CORE_INIT_FAIL;
 	core_module_prob_sate = CORE_MODULE_PROB_FAILED;
 	ts_err("goodix_ts_core failed, ret:%d", ret);
-	/* wakeup ext module register work */
-	complete_all(&goodix_modules.core_comp);
 	return ret;
 }
 
@@ -1896,12 +2192,12 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
 
-	if (goodix_unregister_all_module())
-		return -EBUSY;
-
 	goodix_ts_unregister_notifier(&core_data->ts_notifier);
+	goodix_tools_exit();
 
 	if (core_data->init_stage >= CORE_INIT_STAGE2) {
+		gesture_module_exit();
+		inspect_module_exit();
 		hw_ops->irq_enable(core_data, false);
 	#ifdef CONFIG_FB
 		fb_unregister_client(&core_data->fb_notifier);
@@ -1911,11 +2207,11 @@ static int goodix_ts_remove(struct platform_device *pdev)
 			goodix_ts_esd_off(core_data);
 		goodix_ts_unregister_notifier(&ts_esd->esd_notifier);
 
-		goodix_debugfs_remove(core_data);
 		goodix_fw_update_uninit();
 		goodix_ts_input_dev_remove(core_data);
 		goodix_ts_pen_dev_remove(core_data);
 		goodix_ts_sysfs_exit(core_data);
+		goodix_ts_procfs_exit(core_data);
 		goodix_ts_power_off(core_data);
 	}
 
@@ -1955,7 +2251,11 @@ static int __init goodix_ts_core_init(void)
 	int ret;
 
 	ts_info("Core layer init:%s", GOODIX_DRIVER_VERSION);
-	ret = goodix_bus_init();
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI
+	ret = goodix_spi_bus_init();
+#else
+	ret = goodix_i2c_bus_init();
+#endif
 	if (ret) {
 		ts_err("failed add bus driver");
 		return ret;
@@ -1967,10 +2267,14 @@ static void __exit goodix_ts_core_exit(void)
 {
 	ts_info("Core layer exit");
 	platform_driver_unregister(&goodix_ts_driver);
-	goodix_bus_exit();
-	return;
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI
+	goodix_spi_bus_exit();
+#else
+	goodix_i2c_bus_exit();
+#endif
 }
-module_init(goodix_ts_core_init);
+
+late_initcall(goodix_ts_core_init);
 module_exit(goodix_ts_core_exit);
 
 MODULE_DESCRIPTION("Goodix Touchscreen Core Module");

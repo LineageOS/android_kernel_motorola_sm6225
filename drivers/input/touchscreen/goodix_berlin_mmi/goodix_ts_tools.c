@@ -45,29 +45,12 @@ static const u16 goodix_tools_ver = ((GOODIX_TOOLS_VER_MAJOR << 8) +
 #define GTP_READ_CONFIG	(_IOW(GOODIX_TS_IOC_MAGIC, 7, u8) & NEGLECT_SIZE_MASK)
 #define GTP_ESD_ENABLE	_IO(GOODIX_TS_IOC_MAGIC, 8)
 #define GTP_TOOLS_VER   (_IOR(GOODIX_TS_IOC_MAGIC, 9, u8) & NEGLECT_SIZE_MASK)
+#define GTP_TOOLS_CTRL_SYNC (_IOW(GOODIX_TS_IOC_MAGIC, 10, u8) & NEGLECT_SIZE_MASK)
 
-#define GOODIX_TS_IOC_MAXNR	10
 #define MAX_BUF_LENGTH		(16*1024)
 #define IRQ_FALG		(0x01 << 2)
 
 #define I2C_MSG_HEAD_LEN	20
-
-/*
- * struct goodix_tools_data - goodix tools data message used in sync read
- * @data: The buffer into which data is written
- * @reg_addr: Slave device register start address to start read data
- * @length: Number of data bytes in @data being read from slave device
- * @filled: When buffer @data be filled will set this flag with 1, outhrwise 0
- * @list_head:Eonnet every goodix_tools_data struct into a list
- */
-
-struct goodix_tools_data {
-	u32 reg_addr;
-	u32 length;
-	u8 *data;
-	bool filled;
-	struct list_head list;
-};
 
 /*
  * struct goodix_tools_dev - goodix tools device struct
@@ -188,64 +171,6 @@ err_out:
 	return ret;
 }
 
-/* read data from i2c synchronous,
- * return data length when success, otherwise return < 0
- */
-static int sync_read(struct goodix_tools_dev *dev, void __user *arg)
-{
-	int ret = 0;
-	u8 i2c_msg_head[I2C_MSG_HEAD_LEN];
-	struct goodix_tools_data tools_data;
-
-	ret = copy_from_user(&i2c_msg_head, arg, I2C_MSG_HEAD_LEN);
-	if (ret) {
-		ts_err("Copy data from user failed");
-		return -EFAULT;
-	}
-	tools_data.reg_addr = i2c_msg_head[0] + (i2c_msg_head[1] << 8)
-				+ (i2c_msg_head[2] << 16) + (i2c_msg_head[3] << 24);
-	tools_data.length = i2c_msg_head[4] + (i2c_msg_head[5] << 8)
-				+ (i2c_msg_head[6] << 16) + (i2c_msg_head[7] << 24);
-	tools_data.filled = 0;
-	if (tools_data.length > MAX_BUF_LENGTH) {
-		ts_err("buffer too long:%d > %d",
-			tools_data.length, MAX_BUF_LENGTH);
-		return -EINVAL;
-	}
-	tools_data.data = kzalloc(tools_data.length, GFP_KERNEL);
-	if (!tools_data.data) {
-			ts_err("Alloc memory failed");
-			return -ENOMEM;
-	}
-
-	mutex_lock(&dev->mutex);
-	list_add_tail(&tools_data.list, &dev->head);
-	mutex_unlock(&dev->mutex);
-	/* wait queue will timeout after 1 seconds */
-	wait_event_interruptible_timeout(dev->wq, tools_data.filled == 1, HZ * 3);
-
-	mutex_lock(&dev->mutex);
-	list_del(&tools_data.list);
-	mutex_unlock(&dev->mutex);
-	if (!tools_data.filled) {
-		ret = -EAGAIN;
-		ts_err("Wait queue timeout");
-		goto out;
-	}
-
-	ret = copy_to_user((u8 *)arg + I2C_MSG_HEAD_LEN,
-			   tools_data.data, tools_data.length);
-	if (ret) {
-		ret = -EFAULT;
-		ts_err("Copy_to_user failed");
-		goto out;
-	}
-	ret = tools_data.length;
-out:
-	kfree(tools_data.data);
-	return ret;
-}
-
 /* write data to i2c asynchronous,
  * success return bytes write, else return <= 0
  */
@@ -351,11 +276,6 @@ static long goodix_tools_ioctl(struct file *filp, unsigned int cmd,
 		ts_err("Bad magic num:%c", _IOC_TYPE(cmd));
 		return -ENOTTY;
 	}
-	if (_IOC_NR(cmd) > GOODIX_TS_IOC_MAXNR) {
-		ts_err("Bad cmd num:%d > %d",
-		       _IOC_NR(cmd), GOODIX_TS_IOC_MAXNR);
-		return -ENOTTY;
-	}
 
 	switch (cmd & NEGLECT_SIZE_MASK) {
 	case GTP_IRQ_ENABLE:
@@ -425,14 +345,7 @@ static long goodix_tools_ioctl(struct file *filp, unsigned int cmd,
 			ts_err("Async data read failed");
 		break;
 	case GTP_SYNC_READ:
-		if (filp->f_flags & O_NONBLOCK) {
-			ts_err("Goodix tools now worked in sync_bus mode");
-			ret = -EAGAIN;
-			goto err_out;
-		}
-		ret = sync_read(dev, (void __user *)arg);
-		if (ret < 0)
-			ts_err("Sync data read failed");
+		ts_info("unsupport sync read");
 		break;
 	case GTP_ASYNC_WRITE:
 		ret = async_write(dev, (void __user *)arg);
@@ -444,6 +357,10 @@ static long goodix_tools_ioctl(struct file *filp, unsigned int cmd,
 					sizeof(u16));
 		if (ret)
 			ts_err("failed copy driver version info to user");
+		break;
+	case GTP_TOOLS_CTRL_SYNC:
+		ts_core->tools_ctrl_sync = !!arg;
+		ts_info("set tools ctrl sync %d", ts_core->tools_ctrl_sync);
 		break;
 	default:
 		ts_info("Invalid cmd");
@@ -489,39 +406,11 @@ static int goodix_tools_release(struct inode *inode, struct file *filp)
 {
 	int ret = 0;
 	/* when the last close this dev node unregister the module */
+	goodix_tools_dev->ts_core->tools_ctrl_sync = false;
 	atomic_set(&goodix_tools_dev->in_use, 0);
 	goodix_ts_blocking_notify(NOTIFY_ESD_ON, NULL);
 	ret = goodix_unregister_ext_module(&goodix_tools_dev->module);
 	return ret;
-}
-
-/**
- * goodix_tools_module_irq - goodix tools Irq handle
- * This functions is excuted when interrupt happended
- *
- * @core_data: pointer to touch core data
- * @module: pointer to goodix_ext_module struct
- * return: EVT_CONTINUE let other module handle this irq
- */
-static int goodix_tools_module_irq(struct goodix_ts_core *core_data,
-	struct goodix_ext_module *module)
-{
-	struct goodix_tools_dev *dev = module->priv_data;
-	const struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
-	struct goodix_tools_data *tools_data, *next;
-
-	mutex_lock(&dev->mutex);
-	if (!list_empty(&dev->head)) {
-		list_for_each_entry_safe(tools_data, next, &dev->head, list) {
-			if (!hw_ops->read(core_data, tools_data->reg_addr,
-				     tools_data->data, tools_data->length)) {
-				tools_data->filled = 1;
-			}
-		}
-		wake_up(&dev->wq);
-	}
-	mutex_unlock(&dev->mutex);
-	return EVT_CONTINUE;
 }
 
 static int goodix_tools_module_init(struct goodix_ts_core *core_data,
@@ -566,7 +455,6 @@ static struct miscdevice goodix_tools_miscdev = {
 };
 
 static struct goodix_ext_module_funcs goodix_tools_module_funcs = {
-	.irq_event = goodix_tools_module_irq,
 	.init = goodix_tools_module_init,
 	.exit = goodix_tools_module_exit,
 };
@@ -576,7 +464,7 @@ static struct goodix_ext_module_funcs goodix_tools_module_funcs = {
  *
  * return: 0 success, else failed
  */
-static int __init goodix_tools_init(void)
+int goodix_tools_init(void)
 {
 	int ret;
 
@@ -601,20 +489,15 @@ static int __init goodix_tools_init(void)
 	ret = misc_register(&goodix_tools_miscdev);
 	if (ret)
 		ts_err("Debug tools miscdev register failed");
+	else
+		ts_info("Debug tools miscdev register success");
 
 	return ret;
 }
 
-static void __exit goodix_tools_exit(void)
+void goodix_tools_exit(void)
 {
 	misc_deregister(&goodix_tools_miscdev);
 	kfree(goodix_tools_dev);
-	ts_info("Goodix tools miscdev exit");
+	ts_info("Debug tools miscdev exit");
 }
-
-late_initcall(goodix_tools_init);
-module_exit(goodix_tools_exit);
-
-MODULE_DESCRIPTION("Goodix tools Module");
-MODULE_AUTHOR("Goodix, Inc.");
-MODULE_LICENSE("GPL v2");
