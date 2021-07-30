@@ -36,6 +36,8 @@
 #include <linux/iio/consumer.h>
 #include <linux/qti_power_supply.h>
 #include <linux/usb/usbpd.h>
+#include <linux/iio/iio.h>
+#include <dt-bindings/iio/qti_power_supply_iio.h>
 
 #define MODULE_LOG "SMBMMI"
 
@@ -96,6 +98,29 @@
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for SMBMMI driver");
+
+struct mmi_smbcharger_iio_channels {
+	const char *datasheet_name;
+	int channel_num;
+	enum iio_chan_type type;
+	long info_mask;
+};
+
+#define MMI_SMBCHARGER_IIO_CHAN(_name, _num, _type, _mask)		\
+	{						\
+		.datasheet_name = _name,		\
+		.channel_num = _num,			\
+		.type = _type,				\
+		.info_mask = _mask,			\
+	},
+
+#define MMI_SMBCHARGER_CHAN_INDEX(_name, _num)			\
+	MMI_SMBCHARGER_IIO_CHAN(_name, _num, IIO_INDEX,		\
+		BIT(IIO_CHAN_INFO_PROCESSED))
+
+static const struct mmi_smbcharger_iio_channels mmi_smbcharger_iio_psy_channels[] = {
+	MMI_SMBCHARGER_CHAN_INDEX("mmi_cp_enabled_status", PSY_IIO_CP_ENABLE)
+};
 
 static struct smb_mmi_charger *this_chip = NULL;
 
@@ -376,6 +401,10 @@ struct smb_mmi_charger {
 	int			smb_version;
 
 	struct iio_channel	**ext_iio_chans;
+	struct iio_dev		*indio_dev;
+	struct iio_chan_spec	*iio_chan;
+	struct iio_channel	*int_iio_chans;
+	bool			cp_active;
 
 	bool			factory_mode;
 	int			demo_mode;
@@ -2325,7 +2354,7 @@ static void mmi_chrg_usb_vin_pd_config(struct smb_mmi_charger *chg, int vbus_mv)
 	bool pd_active = false, vbus_present = false, pps_active = false, fixed_active = false;
 	static bool fsw_setted = false, fixed_power_done = false;
 
-	if (!chg->usb_psy || !chg->pd_handle)
+	if (!chg->usb_psy || !chg->pd_handle || chg->cp_active)
 		return;
 
 	rc = get_prop_usb_present(chg, &val);
@@ -4519,10 +4548,128 @@ static void smb_mmi_create_debugfs(struct smb_mmi_charger *chip)
 {}
 #endif
 
+static int mmi_smbcharger_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	struct smb_mmi_charger *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		chip->cp_active = !!val1;
+		break;
+	default:
+		pr_err("Unsupported mmi_charger IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		pr_err("Couldn't write IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int mmi_smbcharger_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	struct smb_mmi_charger *chip = iio_priv(indio_dev);
+	int rc = 0;
+
+	*val1 = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		*val1 = chip->cp_active;
+		break;
+	default:
+		pr_err("Unsupported mmi_charger IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		pr_err("Couldn't read IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int mmi_smbcharger_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct smb_mmi_charger *chip = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = chip->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mmi_smbcharger_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info mmi_smbcharger_iio_info = {
+	.read_raw	= mmi_smbcharger_iio_read_raw,
+	.write_raw	= mmi_smbcharger_iio_write_raw,
+	.of_xlate	= mmi_smbcharger_iio_of_xlate,
+};
+
 static int smb_mmi_init_iio_psy(struct smb_mmi_charger *chip,
 				struct platform_device *pdev)
 {
-	int rc = 0;
+	struct iio_dev *indio_dev = chip->indio_dev;
+	struct iio_chan_spec *chan;
+	int mmi_smbcharger_num_iio_channels = ARRAY_SIZE(mmi_smbcharger_iio_psy_channels);
+	int rc, i;
+
+	chip->iio_chan = devm_kcalloc(chip->dev, mmi_smbcharger_num_iio_channels,
+				sizeof(*chip->iio_chan), GFP_KERNEL);
+	if (!chip->iio_chan)
+		return -ENOMEM;
+
+	chip->int_iio_chans = devm_kcalloc(chip->dev,
+				mmi_smbcharger_num_iio_channels,
+				sizeof(*chip->int_iio_chans),
+				GFP_KERNEL);
+	if (!chip->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &mmi_smbcharger_iio_info;
+	indio_dev->dev.parent = chip->dev;
+	indio_dev->dev.of_node = chip->dev->of_node;
+	indio_dev->name = "mmi-smbcharger-iio";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = chip->iio_chan;
+	indio_dev->num_channels = mmi_smbcharger_num_iio_channels;
+
+	for (i = 0; i < mmi_smbcharger_num_iio_channels; i++) {
+		chip->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &chip->iio_chan[i];
+		chip->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = mmi_smbcharger_iio_psy_channels[i].channel_num;
+		chan->type = mmi_smbcharger_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			mmi_smbcharger_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			mmi_smbcharger_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			mmi_smbcharger_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(chip->dev, indio_dev);
+	if (rc) {
+		pr_err("Failed to register mmi-smbcharger-iio IIO device, rc=%d\n", rc);
+		return rc;
+	}
+
 	chip->ext_iio_chans = devm_kcalloc(chip->dev,
 				ARRAY_SIZE(smb_mmi_ext_iio_chan_name),
 				sizeof(*chip->ext_iio_chans),
@@ -4536,15 +4683,24 @@ static int smb_mmi_init_iio_psy(struct smb_mmi_charger *chip,
 static int smb_mmi_probe(struct platform_device *pdev)
 {
 	struct smb_mmi_charger *chip;
+	struct iio_dev *indio_dev;
 	int rc = 0;
 	union power_supply_propval val;
 	struct power_supply_config psy_cfg = {};
 	const char *max_main_name, *max_flip_name;
 	union power_supply_propval pval;
 
-	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
-	if (!chip)
+	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*chip));
+	if (!indio_dev)
 		return -ENOMEM;
+
+	chip = iio_priv(indio_dev);
+	if (!chip) {
+		dev_err(&pdev->dev,
+			"Unable to alloc memory for mmi_smbcharger_iio\n");
+		return -ENOMEM;
+	}
+	chip->indio_dev = indio_dev;
 
 	chip->dev = &pdev->dev;
 	psy_cfg.drv_data = chip;
