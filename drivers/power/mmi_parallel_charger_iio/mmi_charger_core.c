@@ -809,6 +809,8 @@ static bool mmi_factory_check(void)
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
+	int ret;
+
 	if (!chip->sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"launch mmi chrg sm work\n");
@@ -816,6 +818,9 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
 		chip->sm_work_running = true;
+		ret = mmi_charger_write_iio_chan(chip, MMI_CP_ENABLE_STATUS, true);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to write CP enable status: %d\n", ret);
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg sm work already existed\n");
@@ -823,10 +828,15 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
+	int ret;
+
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
+	ret = mmi_charger_write_iio_chan(chip, MMI_CP_ENABLE_STATUS, false);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to write CP disable status: %d\n", ret);
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
