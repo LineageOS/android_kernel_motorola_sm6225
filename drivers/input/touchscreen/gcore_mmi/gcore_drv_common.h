@@ -32,7 +32,25 @@
 #include <linux/fs.h>
 #include <asm/uaccess.h>
 #include <linux/version.h>
+#include <linux/mmi_wake_lock.h>
 
+/* display state */
+#ifdef GCORE_SENSOR_EN
+#include <linux/sensors.h>
+
+enum display_state {
+	SCREEN_UNKNOWN,
+	SCREEN_OFF,
+	SCREEN_ON,
+};
+struct gcore_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	int sensor_opened;
+	char sensor_data; /* 0 near, 1 far */
+	struct gcore_dev *data;
+};
+#endif
 
 /*----------------------------------------------------------*/
 /* GALAXYCORE TOUCH DEVICE DRIVER RELEASE VERSION           */
@@ -307,6 +325,21 @@ struct gcore_dev {
 
 	bool tp_suspend;
 
+#ifdef GCORE_SENSOR_EN
+	bool wakeable;
+	bool should_enable_gesture;
+	bool gesture_enabled;
+	uint32_t report_gesture_key;
+	enum display_state screen_state;
+	struct mutex state_mutex;
+	struct gcore_sensor_platform_data *sensor_pdata;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock gesture_wakelock;
+#else
+	struct wakeup_source *gesture_wakelock;
+#endif
+#endif
+
 #ifdef CONFIG_ENABLE_GESTURE_WAKEUP
 	bool gesture_wakeup_en;
 #endif
@@ -345,9 +378,26 @@ struct gcore_exp_fn_data {
 	struct gcore_dev *gdev;
 };
 
+#ifdef GCORE_SET_TOUCH_STATE
+#define MAX_PANEL_IDX 2
+enum touch_panel_id {
+	TOUCH_PANEL_IDX_PRIMARY = 0,
+	TOUCH_PANEL_MAX_IDX,
+};
+
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
+#endif
+
 /*
  * Declaration
  */
+
+#ifdef GCORE_SET_TOUCH_STATE
+int touch_set_state(int state, int panel_idx);
+#endif
 
 extern s32 gcore_bus_read(u8 *buffer, s32 len);
 extern s32 gcore_bus_write(const u8 *buffer, s32 len);
