@@ -28,6 +28,7 @@ struct gcore_dev *gdev_fwu;
 struct task_struct *fwu_thread;
 
 DECLARE_COMPLETION(fw_update_complete);
+u8 g_update_running;
 
 static int gcore_fw_update_fn_init(struct gcore_dev *gdev);
 static void gcore_fw_update_fn_remove(struct gcore_dev *gdev);
@@ -457,6 +458,7 @@ int gcore_read_fw_version(u8 *version, int length)
 #endif
 #endif
 
+	mutex_lock(&gdev_fwu->transfer_lock);
 	gcore_enter_idm_mode();
 
 	msleep(1);
@@ -480,7 +482,13 @@ int gcore_read_fw_version(u8 *version, int length)
 	msleep(1);
 #endif
 
+	if (g_update_running) {
+		GTP_ERROR("fw update is running, do not read version!");
+		return 0;
+	}
+
 	gcore_exit_idm_mode();
+	mutex_unlock(&gdev_fwu->transfer_lock);
 
 	return 0;
 
@@ -1587,6 +1595,7 @@ void gcore_request_firmware_update_work(struct work_struct *work)
 #endif
 
 	g_ret_update = 0;
+	g_update_running = 1;
 
 #ifdef CONFIG_GCORE_AUTO_UPDATE_FW_FLASHDOWNLOAD
 	if (gcore_auto_update_flashdownload_proc(fw_buf)) {
@@ -1599,6 +1608,7 @@ void gcore_request_firmware_update_work(struct work_struct *work)
 #endif
 
 	g_ret_update = 1;
+	g_update_running = 0;
 
 	return;
 }
