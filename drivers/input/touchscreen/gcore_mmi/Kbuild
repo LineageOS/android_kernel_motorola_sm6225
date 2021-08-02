@@ -7,6 +7,15 @@ ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_GCORE_CHIPSET)),)
 	obj-m += gcore_mmi.o
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_GCORE_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DGCORE_SENSOR_EN
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_GCORE_MMI_NOTIFY_TOUCH_STATE)),)
+	EXTRA_CFLAGS += -DGCORE_SET_TOUCH_STATE
+endif
+
 gcore_mmi-objs += gcore_drv_main.o
 gcore_mmi-objs += gcore_drv_qcom.o
 gcore_mmi-objs += gcore_drv_fw_update.o

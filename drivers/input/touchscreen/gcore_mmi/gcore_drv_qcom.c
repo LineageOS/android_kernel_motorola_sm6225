@@ -124,7 +124,20 @@ void gcore_suspend(void)
 	}
 #endif
 
+#ifdef GCORE_SENSOR_EN
+	mutex_lock(&fn_data.gdev->state_mutex);
+
 	fn_data.gdev->tp_suspend = true;
+
+	if (fn_data.gdev->should_enable_gesture) {
+		fn_data.gdev->gesture_enabled = true;
+		fn_data.gdev->wakeable = true;
+		fn_data.gdev->screen_state = SCREEN_OFF;
+	}
+	mutex_unlock(&fn_data.gdev->state_mutex);
+#else
+	fn_data.gdev->tp_suspend = true;
+#endif
 
 	msleep(20);
 
@@ -160,8 +173,23 @@ void gcore_resume(void)
 
 	fn_data.gdev->tp_suspend = false;
 #else
+
+#ifdef GCORE_SENSOR_EN
+	mutex_lock(&fn_data.gdev->state_mutex);
+
+	fn_data.gdev->gesture_enabled = false;
+	fn_data.gdev->wakeable = false;
+	fn_data.gdev->screen_state = SCREEN_ON;
+
 	queue_work(resume_by_ddi_wq, &(resume_by_ddi_work));
 	GTP_DEBUG("TP resume work queued.");
+
+	mutex_unlock(&fn_data.gdev->state_mutex);
+#else
+	queue_work(resume_by_ddi_wq, &(resume_by_ddi_work));
+	GTP_DEBUG("TP resume work queued.");
+#endif
+
 #endif
 
 }
@@ -189,6 +217,15 @@ int gcore_ts_drm_notifier_callback(struct notifier_block *self,
 	case DRM_PANEL_BLANK_POWERDOWN:
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			gcore_suspend();
+#ifdef GCORE_SET_TOUCH_STATE
+			if (fn_data.gdev->should_enable_gesture) {
+				GTP_DEBUG("double tap gesture suspend\n");
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			} else {
+				GTP_DEBUG("deep uspend\n");
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			}
+#endif
 		}
 		break;
 
