@@ -4015,7 +4015,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	}
 
 	if (of_property_read_u8_array(np, "st,edge_cmd",
-			bdata->edge_cmd, 3) == 0) {
+			bdata->edge_cmd, 4) == 0) {
 		bdata->edge_ctrl = true;
 		logError(1, "%s Support edge switching.\n", tag);
 	}

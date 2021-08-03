@@ -72,15 +72,23 @@ static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_edge_show, fts_mmi_edge_store);
 
 #define MAX_ATTRS_ENTRIES 10
+/* hal settings */
 #define ROTATE_0   0
 #define ROTATE_90   1
 #define ROTATE_180   2
 #define ROTATE_270  3
 #define BIG_MODE   1
+#define SMALL_MODE    2
 #define DEFAULT_MODE   0
-#define SMALL_EDGE   0
-#define BIG_EDGE   1
-#define CLOSE_EDGE   2
+
+/* firmware settings */
+#define ROTATE_DEFAULT_0  0
+#define ROTATE_RIGHT_90    1
+#define ROTATE_LEFT_90    2
+#define DEFAULT_EDGE   0
+#define SMALL_EDGE    1
+#define BIG_EDGE    2
+
 #define ADD_ATTR(name) { \
 	if (idx < MAX_ATTRS_ENTRIES)  { \
 		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
@@ -395,20 +403,25 @@ static ssize_t fts_mmi_edge_store(struct device *dev,
 	ret = sscanf(buf, "%d %d", &args[0], &args[1]);
 	if (ret < 2)
 		return -EINVAL;
-	/* UI will not update when rotato to 180 degree.*/
-	if(ROTATE_180 == args[1])
-		return size;
-	/* here need set cmd 02 to fw when 270 degree.*/
-	if(ROTATE_270 == args[1])
-		args[1]--;
-	/* Need set default cmd to fw when 0 degree in any mode.*/
-	if(ROTATE_0 == args[1])
-		args[0] = DEFAULT_MODE;
 
-	board->edge_cmd[2] = CLOSE_EDGE * 3 +args[1];
+	if (ROTATE_0 == args[1]) {
+		board->edge_cmd[2] = ROTATE_DEFAULT_0;
+	} else if (ROTATE_90 == args[1]) {
+		board->edge_cmd[2] = ROTATE_RIGHT_90;
+	} else if (ROTATE_270 == args[1]) {
+		board->edge_cmd[2] = ROTATE_LEFT_90;
+	} else {
+		pr_err("Invalid rotation mode: %d!\n", args[1]);
+	}
 
 	if(BIG_MODE == args[0]) {
-		board->edge_cmd[2] = BIG_EDGE* 3 +args[1];
+		board->edge_cmd[3] = BIG_EDGE;
+	} else if(SMALL_MODE == args[0]) {
+		board->edge_cmd[3] = SMALL_EDGE;
+	} else if(DEFAULT_MODE == args[0]) {
+		board->edge_cmd[3] = DEFAULT_EDGE;
+	} else {
+		pr_err("Invalid edge mode: %d!\n", args[0]);
 	}
 
 	if (!memcmp(board->edge_cmd, ts->edge_val, sizeof(ts->edge_val))) {
@@ -419,9 +432,11 @@ static ssize_t fts_mmi_edge_store(struct device *dev,
 	memcpy(ts->edge_val, board->edge_cmd, sizeof(ts->edge_val));
 	ret = fts_write(board->edge_cmd, ARRAY_SIZE(board->edge_cmd));
 	if (ret == OK)
-		pr_info("Successfully to set edge mode: %02x!\n", ts->edge_val[2]);
+		pr_info("Successfully to set rotation mode: %02x, edge mode: %02x!\n",
+			ts->edge_val[2], ts->edge_val[3]);
 	else
-		pr_info("Failed to set edge mode: %02x!\n", ts->edge_val[2]);
+		pr_info("Successfully to set rotation mode: %02x, edge mode: %02x!\n",
+			ts->edge_val[2], ts->edge_val[3]);
 
 	return size;
 }
@@ -435,8 +450,10 @@ static ssize_t fts_mmi_edge_show(struct device *dev,
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 
-	pr_info("edge = %02x\n", ts->board->edge_cmd[2]);
-	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->board->edge_cmd[2]);
+	pr_info("rotation mode = %02x, edge mode = %02x\n",
+		ts->board->edge_cmd[2], ts->board->edge_cmd[3]);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%02x",
+		ts->board->edge_cmd[2], ts->board->edge_cmd[3]);
 }
 
 static ssize_t fts_mmi_calibrate_store(struct device *dev,
