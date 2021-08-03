@@ -31,6 +31,11 @@
 #include <linux/mmi_annotate.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
+#include <soc/qcom/minidump.h>
+#endif
+#endif
 
 #define MAX_USER_STR 1024
 #define DEFAULT_MEM_SIZE 4096
@@ -159,6 +164,11 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 	struct platform_data *pdata;
 	struct resource res;
 	struct device_node *node;
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
+	struct md_region md_entry;
+#endif
+#endif
 	int err = 0;
 
 	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
@@ -239,6 +249,18 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 	/* Create the procfs file at /proc/driver/mmi_annotate */
 	procfs_file = proc_create("driver/mmi_annotate",
 		0444, NULL, &mmi_annotate_operations);
+
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
+	/*Register annotate to minidump */
+	strlcpy(md_entry.name, "ANNOTATE", sizeof(md_entry.name));
+	md_entry.virt_addr = (uintptr_t)phys_to_virt(pdata->mem_address);
+	md_entry.phys_addr = pdata->mem_address;
+	md_entry.size = pdata->mem_size;
+	if (msm_minidump_add_region(&md_entry) < 0)
+		pr_err("Failed to add annotate in Minidump\n");
+#endif
+#endif
 err:
 	return err;
 }
