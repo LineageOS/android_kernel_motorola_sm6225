@@ -180,7 +180,6 @@ struct mmi_charger_manager {
 	struct device	*dev;
 	struct power_supply	*batt_psy;
 	struct power_supply	*qcom_psy;
-	struct power_supply	*extrn_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*mmi_chrg_mgr_psy;
 	struct usbpd	*pd_handle;
@@ -232,7 +231,6 @@ struct mmi_charger_manager {
 	int pps_result_history_idx;
 	/*save the result of the return from PD request*/
 
-	int 	charger_rate;
 	bool vbus_present;
 	bool pd_pps_support;
 	bool pd_pps_balance;
@@ -247,14 +245,6 @@ struct mmi_charger_manager {
 	bool sys_therm_force_pmic_chrg;
 	bool batt_therm_cooling;
 	int batt_therm_cooling_cnt;
-
-	bool use_batt_age;
-	int cycles;
-	int batt_cap_delta;
-	int batt_soc_delta;
-	int soc_cycles_start;
-	int pres_batt_status;
-	int prev_batt_status;
 
 	struct delayed_work	mmi_chrg_sm_work;	/*mmi charger state machine work*/
 	struct delayed_work	heartbeat_work;	/*cycle trig heartbeat work*/
