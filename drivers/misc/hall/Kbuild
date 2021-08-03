@@ -1,0 +1,15 @@
+KERNEL_DIR_PATH = $(shell find $(ANDROID_BUILD_TOP)/kernel/ -name "msm-*" -type d | head -1 | grep -i "kernel/msm-*")
+
+KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
+
+KERNEL_PLATFORM_PATH = $(shell find $(ANDROID_BUILD_TOP) -maxdepth 1 -name "kernel_platform" -type d)
+
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+
+obj-m += hall_pen.o
+obj-m += hall_folio.o
