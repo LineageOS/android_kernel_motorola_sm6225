@@ -458,6 +458,10 @@ int gcore_read_fw_version(u8 *version, int length)
 #endif
 #endif
 
+	if (g_update_running) {
+		GTP_ERROR("fw update is running, do not read version!");
+		return 0;
+	}
 	mutex_lock(&gdev_fwu->transfer_lock);
 	gcore_enter_idm_mode();
 
@@ -481,11 +485,6 @@ int gcore_read_fw_version(u8 *version, int length)
 
 	msleep(1);
 #endif
-
-	if (g_update_running) {
-		GTP_ERROR("fw update is running, do not read version!");
-		return 0;
-	}
 
 	gcore_exit_idm_mode();
 	mutex_unlock(&gdev_fwu->transfer_lock);
