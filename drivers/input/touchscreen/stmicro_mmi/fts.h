@@ -245,7 +245,7 @@ struct fts_hw_platform_data {
 	bool interpolation_ctrl;	/* /< support report rate interpolation */
 	u8 report_rate_cmd[3];	/* /< report rate switching command */
 	bool report_rate_ctrl;	/* /< support report rate switching */
-	u8 edge_cmd[3];	/* /< edge switching command */
+	u8 edge_cmd[4];	/* /< edge switching command */
 	bool edge_ctrl;	/* /< edge rate switching */
 };
 
@@ -380,7 +380,7 @@ struct fts_ts_info {
 	u8 jitter_val[8];
 	u8 first_filter_val[4];
 	u8 linearity_val[3];
-	u8 edge_val[3];
+	u8 edge_val[4];
 };
 
 
