@@ -26,6 +26,9 @@ endif
 ifneq ($(filter m y,$(CONFIG_ILITEK_FW_PANEL)),)
 EXTRA_CFLAGS += -DILI_FW_PANEL
 endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_CHARGER)),)
+EXTRA_CFLAGS += -DILI_CONFIG_CHARGER
+endif
 ifneq ($(filter m y,$(CONFIG_ILITEK_ESD)),)
 EXTRA_CFLAGS += -DILI_CONFIG_ESD
 endif
