@@ -21,6 +21,10 @@ ifeq ($(ILITEK_FW_PANEL),true)
         KERNEL_CFLAGS += CONFIG_ILITEK_FW_PANEL=y
 endif
 
+ifeq ($(ILITEK_CHARGER),true)
+	KERNEL_CFLAGS += CONFIG_ILITEK_CHARGER=y
+endif
+
 ifeq ($(ILITEK_ESD),true)
 	KERNEL_CFLAGS += CONFIG_ILITEK_ESD=y
 endif
