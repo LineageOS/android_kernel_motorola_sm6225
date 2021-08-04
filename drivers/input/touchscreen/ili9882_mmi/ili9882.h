@@ -156,7 +156,11 @@
 #define BOOT_FW_UPDATE			ENABLE
 #define MP_INT_LEVEL			DISABLE
 #define PLL_CLK_WAKEUP_TP_RESUME	DISABLE
+#ifdef ILI_CONFIG_CHARGER
+#define CHARGER_NOTIFIER_CALLBACK	ENABLE
+#else
 #define CHARGER_NOTIFIER_CALLBACK	DISABLE
+#endif
 
 /*if current interface is spi, must to hostdownload */
 #if (TDDI_INTERFACE == BUS_SPI)

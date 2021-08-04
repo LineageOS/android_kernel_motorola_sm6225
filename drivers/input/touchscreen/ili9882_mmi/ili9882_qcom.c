@@ -807,6 +807,9 @@ static void ilitek_update_charger(struct work_struct *work)
 void ilitek_plat_charger_init(void)
 {
 	int ret = 0;
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop;
+
 	ilits->usb_plug_status = 2;
 	ilits->charger_notify_wq = create_singlethread_workqueue("ili_charger_wq");
 	if (!ilits->charger_notify_wq) {
@@ -818,6 +821,22 @@ void ilitek_plat_charger_init(void)
 	ret = power_supply_reg_notifier(&ilits->notifier_charger);
 	if (ret < 0)
 		ILI_ERR("power_supply_reg_notifier failed\n");
+
+	/* if power supply supplier registered brfore TP
+	* ps_notify_callback will not receive PSY_EVENT_PROP_ADDED
+	* event, and will cause miss to set TP into charger state.
+	* So check PS state in probe.
+	*/
+	psy = power_supply_get_by_name("usb");
+	if (psy) {
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &prop);
+		if (ret < 0) {
+			ILI_ERR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+		} else {
+			ilits->usb_plug_status = prop.intval;
+			ILI_INFO("boot check usb_plug_status = %d\n", prop.intval);
+		}
+	}
 }
 /* add_for_charger_end */
 #endif
