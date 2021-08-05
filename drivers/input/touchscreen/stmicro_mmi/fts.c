@@ -4003,7 +4003,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	}
 
 	if (of_property_read_u8_array(np, "st,first_filter_cmd",
-			bdata->first_filter_cmd, 4) == 0) {
+			bdata->first_filter_cmd, 4*2) == 0) {
 		bdata->first_filter_ctrl = true;
 		logError(1, "%s Support set first_filter.\n", tag);
 	}
