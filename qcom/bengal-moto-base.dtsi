@@ -11,6 +11,7 @@
  */
 
 #include "bengal.dtsi"
+#include "bengal-pmi632.dtsi"
 
 /*
  * Moto huangzq2 BEGIN: Reduce cdsp caverout for all targets as it only be used by FOD feature.
