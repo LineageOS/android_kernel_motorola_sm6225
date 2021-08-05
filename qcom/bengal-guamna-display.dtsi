@@ -311,8 +311,8 @@
 
 &dsi_djn_ft8006s_video {
 	qcom,suspend-ulps-enabled;
-	qcom,mdss-dsi-t-clk-post = <0x0B>;
-	qcom,mdss-dsi-t-clk-pre = <0x24>;
+	qcom,mdss-dsi-t-clk-post = <0x04>;
+	qcom,mdss-dsi-t-clk-pre = <0x21>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0",
 				"src_byte_clk0", "src_pixel_clk0",
 				"shadow_byte_clk0", "shadow_pixel_clk0";
@@ -334,6 +334,11 @@
 	qcom,mdss-dsi-panel-status-valid-params = <1>;
 	qcom,mdss-dsi-no-panel-on-read-support;
 	qcom,platform-reset-gpio-always-on;
+	qcom,mdss-panel-on-tp-rst-enable;
+	qcom,mdss-panel-on-rst-pull-down;
+	qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
+	qcom,mdss-dsi-tp-rst-post-ms = <2>;
+	qcom,mdss-dsi-reset-sequence = <1 40>;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
@@ -341,11 +346,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[20 1D 05 05 07 02 04 a0
-				20 1D 05 05 07 02 04 a0
-				20 1D 05 05 07 02 04 a0
-				20 1D 05 05 07 02 04 a0
-				20 12 05 06 03 02 04 a0];
+				[20 1C 06 07 03 02 04 a0
+				20 1C 06 07 03 02 04 a0
+				20 1C 06 07 03 02 04 a0
+				20 1C 06 07 03 02 04 a0
+				20 13 05 06 03 02 04 a0];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
