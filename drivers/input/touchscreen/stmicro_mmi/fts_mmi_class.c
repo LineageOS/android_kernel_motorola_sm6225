@@ -341,33 +341,35 @@ static ssize_t fts_mmi_first_filter_store(struct device *dev,
 	struct fts_ts_info *ts;
 	struct fts_hw_platform_data *board;
 	int ret = 0;
-	unsigned int args[2] = { 0 };
+	unsigned long value = 0;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 	board = ts->board;
 
-	ret = sscanf(buf, "0x%x 0x%x", &args[0], &args[1]);
-	if (ret < 2)
+	ret = kstrtoul(buf, 0, &value);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
 		return -EINVAL;
+	}
 
-	board->first_filter_cmd[2] = args[0];
-	board->first_filter_cmd[3] = args[1];
-
-	if (!memcmp(board->first_filter_cmd, ts->first_filter_val, sizeof(ts->first_filter_val))) {
-		pr_debug("value is same,so not write.\n");
+	if (value == ts->first_filter_val) {
+		pr_debug("First_filter is already %s, so not write.\n",
+			value ? "Enabled" : "Disabled");
 		return size;
 	}
 
-	memcpy(ts->first_filter_val, board->first_filter_cmd, sizeof(ts->first_filter_val));
-	ret = fts_write(board->first_filter_cmd, ARRAY_SIZE(board->first_filter_cmd));
+	ts->first_filter_val = value ? 1 : 0;
+
+	ret = fts_write(&board->first_filter_cmd[ts->first_filter_val*4], 4);
+
 	if (ret == OK)
-		pr_info("Successfully to set first_filter mode: %02x %02x!\n",
-			ts->first_filter_val[2], ts->first_filter_val[3]);
+		pr_info("Successfully to %s first_filter mode!\n",
+			value ? "Enabled" : "Disabled");
 	else
-		pr_info("Failed to set first_filter mode: %02x %02x!\n",
-			ts->first_filter_val[2], ts->first_filter_val[3]);
+		pr_info("Failed to %s first_filter mode!\n",
+			value ? "Enabled" : "Disabled");
 
 	return size;
 }
@@ -381,10 +383,8 @@ static ssize_t fts_mmi_first_filter_show(struct device *dev,
 	ts = dev_get_drvdata(dev);
 	ASSERT_PTR(ts);
 
-	pr_info("finger filter: 1st = %02x, 2nd = %02x.\n",
-		ts->first_filter_val[2], ts->first_filter_val[3]);
-	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%02x",
-		ts->first_filter_val[2], ts->first_filter_val[3]);
+	pr_info("finger filter mode = %d.\n", ts->first_filter_val);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->first_filter_val);
 }
 
 static ssize_t fts_mmi_edge_store(struct device *dev,
@@ -699,7 +699,7 @@ static int fts_mmi_post_resume(struct device *dev)
 	}
 
 	if (ts->board->first_filter_ctrl) {
-		ret = fts_write(board->first_filter_cmd, ARRAY_SIZE(board->first_filter_cmd));
+		ret = fts_write(&board->first_filter_cmd[ts->first_filter_val*4], 4);
 		if (ret == OK)
 			dev_dbg(dev, "%s: Successfully to restore first_filter mode!\n", __func__);
 	}
@@ -845,6 +845,9 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 		/* Disable interpolation algorithm */
 		if (ts->board->interpolation_ctrl)
 			ts->interpolation_val = 0x00;
+		/* Disable first filter function */
+		if (ts->board->first_filter_ctrl)
+			ts->first_filter_val = 0x00;
 
 	} else
 		ts_mmi_dev_unregister(ts->dev);

@@ -239,7 +239,7 @@ struct fts_hw_platform_data {
 	bool jitter_ctrl;	/* /< support report rate switching */
 	u8 linearity_cmd[3];	/* /< support report rate switching */
 	bool linearity_ctrl;	/* /< support report rate switching */
-	u8 first_filter_cmd[4];	/* /< support report rate switching */
+	u8 first_filter_cmd[4*2];	/* /< support report rate switching */
 	bool first_filter_ctrl;	/* /< support report rate switching */
 	u8 interpolation_cmd[10];	/* /< report rate interpolation command */
 	bool interpolation_ctrl;	/* /< support report rate interpolation */
@@ -377,8 +377,8 @@ struct fts_ts_info {
 	unsigned int interpolation_val;
 	unsigned int report_rate;
 	unsigned int refresh_rate;
+	unsigned int first_filter_val;
 	u8 jitter_val[8];
-	u8 first_filter_val[4];
 	u8 linearity_val[3];
 	u8 edge_val[4];
 };
