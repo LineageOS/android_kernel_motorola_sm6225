@@ -230,6 +230,7 @@ struct aw99703_data {
 	unsigned short *brt_code_table;
 	int hwen_gpio;
 	unsigned int  pwm_mode;
+	unsigned int  map_type;
 	bool using_lsb;
 	bool bl_reconfig_enable;
 	char panel_info[16];
