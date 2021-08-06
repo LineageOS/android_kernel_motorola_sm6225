@@ -271,7 +271,7 @@ static int aw99703_backlight_init(struct aw99703_data *drvdata)
 	aw99703_i2c_write_bit(drvdata->client,
 				AW99703_REG_MODE,
 				AW99703_MODE_MAP_MASK,
-				AW99703_MODE_MAP_LINEAR);
+				drvdata->map_type);
 
 	/*default OVPSEL 38V*/
 	aw99703_i2c_write_bit(drvdata->client,
@@ -508,6 +508,14 @@ aw99703_get_dt_data(struct device *dev, struct aw99703_data *drvdata)
 		pr_err("%s pwm-mode not found\n", __func__);
 	else
 		pr_info("%s pwm_mode=%d\n", __func__, drvdata->pwm_mode);
+
+	rc = of_property_read_u32(np, "aw99703,map-type", &drvdata->map_type);
+	if (rc != 0) {
+		drvdata->map_type = AW99703_MODE_MAP_LINEAR;
+		pr_err("%s map-type not found\n", __func__);
+	}
+	else
+		pr_info("%s map-type=%d\n", __func__, drvdata->map_type);
 
 	drvdata->using_lsb = of_property_read_bool(np, "aw99703,using-lsb");
 	pr_info("%s using_lsb --<%d>\n", __func__, drvdata->using_lsb);
