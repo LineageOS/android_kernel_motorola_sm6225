@@ -205,6 +205,9 @@ struct ti_lmu_bl {
 	/* Boost frequency */
 	unsigned int led_boost_freq;
 
+	/* Map type */
+	unsigned int map_type;
+
 	struct pwm_device *pwm;
 };
 
@@ -226,6 +229,11 @@ enum backlight_boost_ovp {
 enum backlight_boost_freq {
 	BOOST_FREQ_500K,
 	BOOST_FREQ_1M
+};
+
+enum backlight_map_type {
+	EXPONENTIAL_TYPE,
+	LINEAR_TYPE
 };
 
 extern struct ti_lmu_bl_cfg lmu_bl_cfg[LMU_MAX_ID];
