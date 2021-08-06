@@ -51,6 +51,10 @@ static void ilitek_resume_by_ddi_work(struct work_struct *work)
 		disable_irq_wake(ilits->irq_num);
 #endif
 
+#ifdef ILI_SUSPEND_PWROFF
+	ili_pinctrl_select_normal(ilits);
+#endif
+
 	/* Set tp as demo mode and reload code if it's iram. */
 	ilits->actual_tp_mode = P5_X_FW_AP_MODE;
 	if (ilits->fw_upgrade_mode == UPGRADE_IRAM)
@@ -58,7 +62,9 @@ static void ilitek_resume_by_ddi_work(struct work_struct *work)
 	else
 		ili_reset_ctrl(ilits->reset);
 
+#ifndef ILI_SUSPEND_PWROFF
 	ili_pinctrl_select_normal(ilits);
+#endif
 
 	ili_irq_enable();
 	ILI_INFO("TP resume end by wq\n");
@@ -542,8 +548,17 @@ int ili_sleep_handler(int mode)
 #endif
 		{
 			ili_pinctrl_select_suspend(ilits);
+
+#ifdef ILI_SUSPEND_PWROFF
+			gpio_direction_output(ilits->tp_rst, 1);
+			mdelay(1);
+			gpio_set_value(ilits->tp_rst, 0);
+			mdelay(5);
+#else
 			if (ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0)
 				ILI_ERR("Write deep sleep in cmd failed\n");
+#endif
+
 		}
 		ILI_INFO("TP deep suspend end\n");
 		ilits->tp_suspend = true;
