@@ -423,6 +423,13 @@ static void ti_lmu_backlight_of_get_light_properties(struct device_node *np,
 		pr_info("[bkl] %s led_boost_freq default %d\n", __func__,
 			lmu_bl->led_boost_freq);
 	}
+
+
+	if(of_property_read_u32(np, "map-type", &lmu_bl->map_type)) {
+		lmu_bl->map_type = LINEAR_TYPE;
+		pr_info("[bkl] %s map_type default %d\n", __func__,
+			lmu_bl->map_type);
+	}
 }
 
 static void ti_lmu_backlight_of_get_brightness_mode(struct device_node *np,
@@ -594,6 +601,7 @@ static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 {
 	struct regmap *regmap = chip->lmu->regmap;
 	unsigned char boost_ctl;
+	unsigned char brightness_cfg;
 	pr_err("[bkl] %s enter\n", __func__);
 	/*
 	 * 'init' register data consists of address, mask, value.
@@ -602,10 +610,11 @@ static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 	 */
 
 	boost_ctl = (chip->lmu_bl->led_boost_ovp<<1) | chip->lmu_bl->led_boost_freq;
+	brightness_cfg = chip->lmu_bl->map_type;
 
 	regmap_write(regmap, 0x10, 0x07);
 	regmap_write(regmap, 0x12, 0x11);
-	regmap_write(regmap, 0x16, 0x01);
+	regmap_write(regmap, 0x16, brightness_cfg);
 	regmap_write(regmap, 0x19, 0x07);
 	regmap_write(regmap, 0x18, 0x15);//21.8mA default
 	regmap_write(regmap, 0x1A, boost_ctl);
