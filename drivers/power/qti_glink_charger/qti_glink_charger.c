@@ -71,6 +71,7 @@ enum oem_property_type {
 	OEM_PROP_PMIC_ICL,
 	OEM_PROP_REG_ADDRESS,
 	OEM_PROP_REG_DATA,
+	OEM_PROP_LPD_INFO,
 	OEM_PROP_MAX,
 };
 
@@ -102,6 +103,12 @@ struct charger_profile_info {
         int data_bk_size; /* number of byte for each data block */
 	int data_size; /* number of byte for while data */
 	int profile_id; /* profile id for charging profile selection in ADSP */
+};
+
+struct lpd_info {
+	int lpd_present;
+	int lpd_rsbu1;
+	int lpd_rsbu2;
 };
 
 struct oem_read_buf_req_msg {
@@ -149,6 +156,7 @@ struct qti_charger {
 	struct mmi_charger_driver	*driver;
 	u32				*profile_data;
 	struct charger_profile_info	profile_info;
+	struct lpd_info			lpd_info;
 	void				*ipc_log;
 	bool				*debug_enabled;
 };
@@ -444,6 +452,16 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 				sizeof(struct charger_info));
 	if (rc)
 		return rc;
+
+	rc = qti_charger_read(chg, OEM_PROP_LPD_INFO,
+				&chg->lpd_info,
+				sizeof(struct lpd_info));
+	if (rc)
+		return rc;
+	mmi_info(chg, "LPD: present=%d, rsbu1=%d, rsbu2=%d\n",
+			chg->lpd_info.lpd_present,
+			chg->lpd_info.lpd_rsbu1,
+			chg->lpd_info.lpd_rsbu2);
 
 	chg->chg_info.chrg_mv /= 1000;
 	chg->chg_info.chrg_ma /= 1000;
