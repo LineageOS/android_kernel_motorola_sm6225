@@ -1362,19 +1362,23 @@ static int fts_gpio_configure(struct fts_ts_data *data)
             goto err_irq_gpio_dir;
         }
 
+#if (FTS_CHIP_IDC)
         ret = gpio_direction_output(data->pdata->reset_gpio, 1);
         if (ret) {
             FTS_ERROR("[GPIO]set_direction for reset gpio failed");
             goto err_reset_gpio_dir;
         }
+#endif
     }
 
     FTS_FUNC_EXIT();
     return 0;
 
+#if (FTS_CHIP_IDC)
 err_reset_gpio_dir:
     if (gpio_is_valid(data->pdata->reset_gpio))
         gpio_free(data->pdata->reset_gpio);
+#endif
 err_irq_gpio_dir:
     if (gpio_is_valid(data->pdata->irq_gpio))
         gpio_free(data->pdata->irq_gpio);
