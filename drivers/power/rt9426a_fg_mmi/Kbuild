@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/power/rt9426a_fg_mmi
+
+rt9426a_fg_mmi-objs += rt9426a_battery.o
+obj-m += rt9426a_fg_mmi.o
