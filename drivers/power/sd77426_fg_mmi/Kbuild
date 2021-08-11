@@ -1,0 +1,10 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/power/sd77426_fg_mmi
+
+sd77426_fg_mmi-objs += oz8806_battery.o
+sd77426_fg_mmi-objs += parameter.o
+sd77426_fg_mmi-objs += table.o
+sd77426_fg_mmi-objs += bmulib.o
+obj-m += sd77426_fg_mmi.o
