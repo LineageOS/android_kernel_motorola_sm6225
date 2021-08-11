@@ -107,7 +107,9 @@ EXPORT_SYMBOL(gcore_ges_irq_disable);
 
 void gcore_suspend(void)
 {
-	//struct gcore_dev *gdev = fn_data.gdev;
+#ifdef GCORE_SENSOR_EN
+	struct gcore_dev *gdev = fn_data.gdev;
+#endif
 
 	GTP_DEBUG("enter gcore suspend");
 
@@ -132,8 +134,10 @@ void gcore_suspend(void)
 	if (fn_data.gdev->should_enable_gesture) {
 		fn_data.gdev->gesture_enabled = true;
 		fn_data.gdev->wakeable = true;
-		fn_data.gdev->screen_state = SCREEN_OFF;
+		enable_irq_wake(gdev->touch_irq);
+		GTP_DEBUG("Enable gcore irq wake");
 	}
+	fn_data.gdev->screen_state = SCREEN_OFF;
 	mutex_unlock(&fn_data.gdev->state_mutex);
 #else
 	fn_data.gdev->tp_suspend = true;
@@ -145,7 +149,9 @@ void gcore_suspend(void)
 
 void gcore_resume(void)
 {
-	//struct gcore_dev *gdev = fn_data.gdev;
+#ifdef GCORE_SENSOR_EN
+	struct gcore_dev *gdev = fn_data.gdev;
+#endif
 
 	GTP_DEBUG("enter gcore resume");
 
@@ -177,8 +183,12 @@ void gcore_resume(void)
 #ifdef GCORE_SENSOR_EN
 	mutex_lock(&fn_data.gdev->state_mutex);
 
-	fn_data.gdev->gesture_enabled = false;
-	fn_data.gdev->wakeable = false;
+	if(fn_data.gdev->wakeable) {
+		GTP_DEBUG("Disable gcore irq wake");
+		disable_irq_wake(gdev->touch_irq);
+		fn_data.gdev->gesture_enabled = false;
+		fn_data.gdev->wakeable = false;
+	}
 	fn_data.gdev->screen_state = SCREEN_ON;
 
 	queue_work(resume_by_ddi_wq, &(resume_by_ddi_work));
