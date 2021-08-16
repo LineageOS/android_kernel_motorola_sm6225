@@ -59,18 +59,19 @@
 #include <linux/pm_wakeup.h>
 #include "etxxx_fp.h"
 #include <linux/input.h>
-#ifdef CONFIG_DRM_MSM
-#include <linux/msm_drm_notify.h>
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
+#define ETS_FB_PANEL_NOTIFY   2
+#define FP_NOTIFY_TYPE    ETS_FB_PANEL_NOTIFY
 #endif
 #define ETS_FB   1
-#define ETS_FB_DRM   2
-#define FP_NOTIFY_TYPE    ETS_FB_DRM
-#if (defined(CONFIG_DRM_MSM) && (FP_NOTIFY_TYPE == ETS_FB_DRM))
-#define FP_NOTIFY_ON                            MSM_DRM_BLANK_UNBLANK
-#define FP_NOTIFY_OFF                           MSM_DRM_BLANK_POWERDOWN
-#define FP_NOTIFY_EVENT_BLANK                   MSM_DRM_EARLY_EVENT_BLANK    //MSM_DRM_EVENT_BLANK
-#define ets_fb_register_client(client)     msm_drm_register_client(client);
-#define ets_fb_unregister_client(client)   msm_drm_unregister_client(client);
+
+#if (defined(CONFIG_PANEL_NOTIFICATIONS) && (FP_NOTIFY_TYPE == ETS_FB_PANEL_NOTIFY))
+#define FP_NOTIFY_ON                                     PANEL_EVENT_DISPLAY_ON
+#define FP_NOTIFY_OFF                                    PANEL_EVENT_DISPLAY_OFF
+#define FP_NOTIFY_EVENT_BLANK                   PANEL_EVENT_DISPLAY_OFF    //MSM_DRM_EVENT_BLANK
+#define ets_fb_register_client(client)                panel_register_notifier(client);
+#define ets_fb_unregister_client(client)            panel_unregister_notifier(client);
 #else
 #define FP_NOTIFY_ON                            FB_BLANK_UNBLANK
 #define FP_NOTIFY_OFF                           FB_BLANK_POWERDOWN
@@ -980,10 +981,36 @@ int egisfp_check_ioctl_permission(struct egisfp_dev_t *egis_dev, unsigned int cm
 static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void *data)
 {
 	struct egisfp_dev_t *egis_dev = NULL;
+	char *envp[2];
+	int ret = 0;
+#ifdef CONFIG_PANEL_NOTIFICATIONS
+	INFO_PRINT(" %s : got notify value = %d \n", __func__, (int)val);
+	egis_dev = container_of(nb, struct egisfp_dev_t, notifier);
+	egis_dev->screen_onoff = 1;
+	switch(val) {
+		case PANEL_EVENT_DISPLAY_ON:
+			egis_dev->screen_onoff = 1;
+			envp[0] = "PANEL=1";
+			break;
+		case PANEL_EVENT_DISPLAY_OFF:
+			egis_dev->screen_onoff = 0;
+			envp[0] = "PANEL=0";
+			break;
+		case PANEL_EVENT_PRE_DISPLAY_OFF:
+			break;
+		case PANEL_EVENT_PRE_DISPLAY_ON:
+			break;
+		default:
+			break;
+	}
+	if(val == FP_NOTIFY_ON ||val == FP_NOTIFY_OFF){
+		envp[1] = NULL;
+		ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
+		INFO_PRINT(" %s : screen_onoff = %d val=%lu ret=%d\n", __func__, egis_dev->screen_onoff, val,ret);
+	}
+#else
 	struct fb_event *evdata = data;
 	unsigned int blank;
-	char *envp[2];
-	int ret;
 
 	if (val != FP_NOTIFY_EVENT_BLANK)
 		return 0;
@@ -1009,6 +1036,7 @@ static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void
 		envp[1] = NULL;
 		ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
 	}
+#endif
 	return NOTIFY_OK;
 }
 

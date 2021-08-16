@@ -3,7 +3,9 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 				-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/rbs_fps_mmi
 
-
+ifneq ($(filter m y,$(CONFIG_EGIS_PANEL_NOTIFICATIONS)),)
+    EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
+endif
 
 rbs_fps_mmi-y += etxxx_fp.o
 
