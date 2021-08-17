@@ -24,9 +24,8 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
-//#include <linux/wakelock.h>
 #include <linux/suspend.h>
-
+#include <asm/div64.h>
 //you must add these here for O2MICRO
 #include "parameter.h"
 #include "table.h"
@@ -42,7 +41,12 @@ static int fg_hw_init_done = 0;
 static uint8_t 	bmu_init_done = 0;
 static int oz8806_suspend = 0;
 static DEFINE_MUTEX(update_mutex);
+#ifdef OZ8806_API
+struct mutex *update_mutex_ptr = &update_mutex;
+bmu_data_t 	*batt_info_ptr = NULL;
+#else
 static bmu_data_t 	*batt_info_ptr = NULL;
+#endif
 static gas_gauge_t *gas_gauge_ptr = NULL;
 static uint8_t charger_finish = 0;
 static unsigned long ic_wakeup_time = 0;
@@ -333,6 +337,13 @@ static ssize_t oz8806_debug_store(struct device *dev, struct device_attribute *a
 
 	return _count;
 }
+static ssize_t oz8806_save_capacity_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	if (capacity_init_ok && gas_gauge_ptr && gas_gauge_ptr->stored_capacity)
+		return sprintf(buf,"%d\n", gas_gauge_ptr->stored_capacity);
+
+	return sprintf(buf,"%d\n", save_capacity);
+}
 
 static ssize_t oz8806_bmu_init_done_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
@@ -369,51 +380,12 @@ static ssize_t oz8806_bmu_init_done_store(struct device *dev, struct device_attr
 	schedule_delayed_work(&the_oz8806->work, 0);
 	return _count;
 }
-static ssize_t oz8806_save_capacity_show(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	if (capacity_init_ok && gas_gauge_ptr && gas_gauge_ptr->stored_capacity)
-		return sprintf(buf,"%d\n", gas_gauge_ptr->stored_capacity);
-
-	return sprintf(buf,"%d\n", save_capacity);
-}
-#ifdef USERSPACE_READ_SAVED_CAP
-static ssize_t oz8806_save_capacity_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int val;
-	struct oz8806_data *oz8806;
-
-	if (&(the_oz8806->myclient->dev) == dev)
-	    oz8806 = dev_get_drvdata(dev);
-	else //this device is the private device of power supply 
-	    oz8806 = dev_get_drvdata(dev->parent);
-
-	if (kstrtoint(buf, 10, &val))
-		return -EINVAL;
-	save_capacity = val;
-	batt_dbg("save_capacity:%d\n", save_capacity);
-
-	if (oz8806 && !bmu_init_done)                                       
-	{
-		cancel_delayed_work(&oz8806->work);
-		schedule_delayed_work(&oz8806->work, 0);
-	}
-
-	return count;
-}
-#endif
 
 static DEVICE_ATTR(registers, S_IRUGO | (S_IWUSR|S_IWGRP), oz8806_register_show, oz8806_register_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, oz8806_chip_id_show, NULL);
 static DEVICE_ATTR(debug, S_IRUGO | (S_IWUSR|S_IWGRP), oz8806_debug_show, oz8806_debug_store);
-static DEVICE_ATTR(bmu_init_done, S_IRUGO| (S_IWUSR|S_IWGRP), oz8806_bmu_init_done_show, oz8806_bmu_init_done_store);
-
-#ifdef USERSPACE_READ_SAVED_CAP
-static DEVICE_ATTR(save_capacity, S_IRUGO | (S_IWUSR|S_IWGRP), oz8806_save_capacity_show, oz8806_save_capacity_store);
-#else
 static DEVICE_ATTR(save_capacity, S_IRUGO, oz8806_save_capacity_show, NULL);
-#endif
-
-
+static DEVICE_ATTR(bmu_init_done, S_IRUGO| (S_IWUSR|S_IWGRP), oz8806_bmu_init_done_show, oz8806_bmu_init_done_store);
 static struct attribute *oz8806_attributes[] = {
 	&dev_attr_registers.attr,
 	&dev_attr_chip_id.attr,
@@ -513,19 +485,11 @@ static int32_t oz8806_update_bits(struct oz8806_data *data, uint8_t reg, uint8_t
 	else
 		return 0;
 }
-#if 0
-static int oz8806_check_battery_status(struct oz8806_data *data)
+
+void oz8806_reset_wkuptime(void)
 {
-	uint8_t val;
-	int ret = 0;
-
-	ret = oz8806_read_byte(data, OZ8806_OP_BATTERY_ID, &val);
-
-	pr_err("battery ID: 0x%02x\n", val);
-
-	return ret;
+	ic_wakeup_time = 0;
 }
-#endif
 int oz8806_wakeup_full_power(void)
 {
 	uint8_t val = 0;
@@ -586,8 +550,7 @@ static void discharge_end_fun(struct oz8806_data *data)
         {
             batt_info_ptr->fRSOC = 0;
             batt_info_ptr->sCaMAH = data->batt_info.batt_fcc_data / num_100 -1;
-            if (bmu_discharge_end_process_callback)
-                bmu_discharge_end_process_callback();
+            discharge_end_process();
         }
         else if(batt_info_ptr->fRSOC > 0){
             batt_info_ptr->sCaMAH = batt_info_ptr->fRSOC * data->batt_info.batt_fcc_data / num_100 - 1;
@@ -650,18 +613,6 @@ static void charge_end_fun(void)
 #endif
 		return;
 	}	
-	/*
-	if(adapter_status == CHARGER_USB)
-	{
-		gas_gauge_ptr->fast_charge_step = 1;
-	}
-	else
-	{
-		gas_gauge_ptr->fast_charge_step = 2;
-	}
-	*/
-	
-
 
 	if((batt_info_ptr->fVolt >= (config_data.charge_cv_voltage - 50))&&(batt_info_ptr->fCurr >= DISCH_CURRENT_TH) &&
 		(batt_info_ptr->fCurr < oz8806_eoc)&& (!gas_gauge_ptr->charge_end))
@@ -765,9 +716,7 @@ charger_full:
 			{
 				batt_dbg("enter charger charge end");
 				gas_gauge_ptr->charge_end = 1;
-
-				if (bmu_charge_end_process_callback)
-					bmu_charge_end_process_callback();
+				charge_end_process();
 
 				charger_finish = 0;
 				chgr_full_soc_pursue_start = 0;
@@ -876,6 +825,7 @@ static void oz8806_lock_soc(struct oz8806_data *data)
 					car = rsoc_pre * data->batt_info.batt_fcc_data / 100;
 
 				temp = (car * config_data.fRsense) / config_data.dbCARLSB;		//transfer to CAR
+				temp /= 1000;
 		
 				i2c_smbus_write_word_data(data->myclient, OZ8806_OP_CAR,(unsigned short)temp);
 			}
@@ -892,12 +842,14 @@ static void oz8806_lock_soc(struct oz8806_data *data)
 				batt_info_ptr->fRC = car;
 				batt_info_ptr->fRCPrev = car;
 				temp = (car * config_data.fRsense) / config_data.dbCARLSB;		//transfer to CAR
+				temp /= 1000;
 	
 				i2c_smbus_write_word_data(data->myclient, OZ8806_OP_CAR,(unsigned short)temp);	
 			}
 		}
 	}
 }
+
 static void oz8806_battery_func(struct oz8806_data *data)
 {
 	unsigned long time_since_last_update_ms = 0;
@@ -924,8 +876,8 @@ static void oz8806_battery_func(struct oz8806_data *data)
 
 	/**************mutex_lock*********************/
 	mutex_lock(&update_mutex);
-	if (bmu_polling_loop_callback && !oz8806_suspend)
-		bmu_polling_loop_callback();
+	if (!oz8806_suspend)
+		bmu_polling_loop();
 
 	oz8806_update_batt_info(data);
 
@@ -974,8 +926,6 @@ int32_t is_battery_exchanged(void)
 }
 EXPORT_SYMBOL(is_battery_exchanged);
 
-
-
 static int oz8806_suspend_notifier(struct notifier_block *nb,
 				unsigned long event,
 				void *dummy)
@@ -998,8 +948,7 @@ static int oz8806_suspend_notifier(struct notifier_block *nb,
 		mutex_lock(&update_mutex);
 		// if AC charge can't wake up every 1 min,you must remove the if.
 		if(adapter_status == O2_CHARGER_BATTERY)
-			if (bmu_wake_up_chip_callback)
-				bmu_wake_up_chip_callback();
+				bmu_wake_up_chip();
 
 		oz8806_update_batt_info(data);
 		mutex_unlock(&update_mutex);
@@ -1047,7 +996,7 @@ static void oz8806_init_soc(struct oz8806_data *data)
 
 	temp = (int16_t)ret;
 	temp = temp * config_data.dbCARLSB;
-	temp = temp / config_data.fRsense;
+	temp = temp * 1000 / config_data.fRsense;
 	if(temp > 5)
 	{
 		init_soc = temp * 100 / config_data.design_capacity - 1;
@@ -1174,8 +1123,8 @@ int oz8806_get_battry_current(void)
 
 	mutex_lock(&update_mutex);
 
-	if (oz8806_current_read_callback && batt_info_ptr)
-		ret = oz8806_current_read_callback(&batt_info_ptr->fCurr);
+	if (batt_info_ptr)
+		ret = afe_read_current(&batt_info_ptr->fCurr);
 
 	if (ret < 0)
 	{
@@ -1200,8 +1149,8 @@ int oz8806_get_battery_voltage(void)
 
 	mutex_lock(&update_mutex);
 
-	if (oz8806_voltage_read_callback && batt_info_ptr)
-		ret = oz8806_voltage_read_callback(&batt_info_ptr->fVolt);
+	if (batt_info_ptr)
+		ret = afe_read_cell_volt(&batt_info_ptr->fVolt);
 
 	if (ret < 0)
 	{
@@ -1248,8 +1197,7 @@ int32_t oz8806_vbus_voltage(void)
 	int32_t vbus_voltage = 0;
 	int ret = -1;
 
-	if (oz8806_temp_read_callback)
-		ret = oz8806_temp_read_callback(&vbus_voltage);
+	ret =oz8806_temp_read(&vbus_voltage);
 
 	if (ret < 0)
 	{
@@ -1267,6 +1215,7 @@ EXPORT_SYMBOL(oz8806_vbus_voltage);
 int32_t oz8806_get_simulated_temp(void)
 {
 	return 25;
+
 }
 EXPORT_SYMBOL(oz8806_get_simulated_temp);
 
@@ -1323,8 +1272,7 @@ void oz8806_register_bmu_callback(void *bmu_polling_loop_func,
 	oz8806_current_read_callback = oz8806_current_read_func;
 	oz8806_voltage_read_callback = oz8806_voltage_read_func;
 
-	if(bmu_polling_loop_callback)
-		bmu_polling_loop_callback();
+	bmu_polling_loop();
 
 	mutex_unlock(&update_mutex);
 }
@@ -1404,6 +1352,18 @@ int oz8806_get_save_capacity(void)
 }
 EXPORT_SYMBOL(oz8806_get_save_capacity);
 
+unsigned long oz8806_get_system_boot_time(void)
+{
+	unsigned long long time_sec;
+	unsigned long mod;
+	time_sec = ktime_to_ns(ktime_get_boottime());
+	mod = do_div(time_sec,1000000);
+	batt_dbg("system boottime: %lu ms", (unsigned long)time_sec);
+	
+	return time_sec;
+}
+EXPORT_SYMBOL(oz8806_get_system_boot_time);
+
 unsigned long oz8806_get_boot_up_time(void)
 {
 	unsigned long long t;
@@ -1419,10 +1379,10 @@ EXPORT_SYMBOL(oz8806_get_boot_up_time);
 unsigned long oz8806_get_power_on_time(void)
 {
 	unsigned int t = 0;
-	pr_info("jiffies %lu,ic_wakeup_time %lu\n",jiffies,ic_wakeup_time);
+	pr_err("jiffies %lu,ic_wakeup_time %lu\n",jiffies,ic_wakeup_time);
 	t = jiffies_to_msecs(jiffies - ic_wakeup_time);
 
-	pr_info("IC wakeup time: %u ms\n", t);
+	pr_err("IC wakeup time: %u ms\n", t);
 
 	return (unsigned long)t;
 }
@@ -1492,7 +1452,6 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 		pr_err("failed to register power_supply battery\n");
 		goto register_fail;
 	}
-
 	/*
 	 * /sys/class/i2c-dev/i2c-2/device/2-002f/
 	 */
@@ -1537,13 +1496,10 @@ static int oz8806_remove(struct i2c_client *client)
 
 	mutex_lock(&update_mutex);
 
-	if (bmu_power_down_chip_callback)
-    {
-		//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
-		//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
+	//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
+	//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
         fg_hw_init_done = 0;//be carefull other thread call bmu_polling_loop_func and wake up chip again 
-		bmu_power_down_chip_callback();
-    }
+	bmu_power_down_chip();
 
 	oz8806_update_batt_info(data);
 
@@ -1565,13 +1521,11 @@ static void oz8806_shutdown(struct i2c_client *client)
 	sysfs_remove_group(&(data->myclient->dev.kobj), &oz8806_attribute_group);
 
 	mutex_lock(&update_mutex);
-	if (bmu_power_down_chip_callback)
-	{
-		//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
-		//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
-		fg_hw_init_done = 0; 
-		bmu_power_down_chip_callback();
-	}
+
+	//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
+	//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
+	fg_hw_init_done = 0; 
+	bmu_power_down_chip();
 
 	oz8806_update_batt_info(data);
 	mutex_unlock(&update_mutex);
@@ -1597,7 +1551,7 @@ static struct i2c_driver oz8806_driver = {
 		.of_match_table = oz8806_of_match,
 	},
 	.probe			= oz8806_probe,
-	.remove			= oz8806_remove,
+	.remove		= oz8806_remove,
 	.shutdown		= oz8806_shutdown,
 	.id_table		= oz8806_id,
 };

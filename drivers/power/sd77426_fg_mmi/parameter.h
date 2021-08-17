@@ -34,8 +34,14 @@
 //#define MUTEX_TIMEOUT           5000
 #define MYDRIVER				"oz8806"  //"oz8806"
 
+//#define OZ8806_API
+//#define BAT_STAT
+
+//two cells application
+//#define OZ8806_VME_SEL
+
 #define DISCH_CURRENT_TH    -10
-#define O2_OCV_100_VOLTAGE  (xaxis_table[X_AXIS - 1])
+#define O2_OCV_100_VOLTAGE  8700
 #define TEMPERATURE_DATA_NUM 28
 
 #define num_0      	0
@@ -107,6 +113,10 @@ struct oz8806_data
 	struct power_supply *usb_psy;
 	
 	struct delayed_work work;
+#ifdef BAT_STAT
+	struct delayed_work bat_monitor_work;
+	int32_t bat_changed;
+#endif
 	unsigned int interval;
 
 	struct i2c_client	*myclient;
@@ -118,7 +128,7 @@ struct oz8806_data
 
  
 typedef struct	 tag_config_data {
-	int32_t		fRsense;		//= 20;			//Rsense value of chip, in mini ohm
+	int32_t		fRsense;		//= 20 * 1000;			//Rsense value of chip, in mini ohm expand 1000 times
 	int32_t     temp_pull_up;  //230000;
 	int32_t     temp_ref_voltage; //1800;1.8v
 	int32_t		dbCARLSB;		//= 5.0;		//LSB of CAR, comes from spec
@@ -241,6 +251,7 @@ typedef struct tag_gas_gauge {
 	uint8_t lower_capacity_soc_start;
 
 	uint8_t percent_10_reserve;
+	uint32_t power_on_100_vol;
 }gas_gauge_t;
 
 /****************************************************************************
@@ -254,6 +265,8 @@ extern int	ZAxisElement[ZAxis];
 extern int	RCtable[YAxis*ZAxis][XAxis];
 //extern one_latitude_data_t	charge_data[CHARGE_DATA_NUM];
 
+extern uint8_t battery_ri ;
+extern int32_t one_percent_rc ;
 
 /****************************************************************************
 * extern variable/function defined by parameter.c
@@ -269,6 +282,17 @@ extern void bmu_reinit(int32_t mode); //mode = 0,wakeup ic,rewrite car; mode = 1
 extern int bmulib_init(void);
 extern void bmulib_exit(void);
 #endif
+
+//bmulib extern
+extern void bmu_polling_loop(void);
+extern void bmu_wake_up_chip(void);
+extern void bmu_power_down_chip(void);
+extern void charge_end_process(void);
+extern void discharge_end_process(void);
+extern int32_t 	oz8806_temp_read(int32_t *voltage);
+extern int32_t 	afe_read_current(int32_t *dat);
+extern int32_t 	afe_read_cell_volt(int32_t *voltage);
+//endif
 
 #ifdef OZ8806_API
 //extern void bmu_init_charge_data(uint8_t *dest, uint32_t bytes);
@@ -316,10 +340,11 @@ extern void oz8806_set_batt_info_ptr(bmu_data_t  *batt_info);
 extern void oz8806_set_gas_gauge(gas_gauge_t *gas_gauge);
 extern int oz8806_get_save_capacity(void);
 extern int oz8806_get_soc_from_ext(void);
+extern unsigned long oz8806_get_system_boot_time(void);
 extern unsigned long oz8806_get_power_on_time(void);
 extern unsigned long oz8806_get_boot_up_time(void);
 extern int oz8806_wakeup_full_power(void);
-
+extern void oz8806_reset_wkuptime(void);
 /****************************************************************************
 * extern variable/function defined by oz8806_api_dev.c.
 * This file is deprecated in Linux system.
@@ -330,6 +355,38 @@ extern void bmu_call(void);
 #endif
 
 extern int is_battery_exchanged(void);
+
+
+#define bmu_dbg(fmt, args...)\
+do {\
+	if(parameter->config->debug)\
+	    printk(KERN_ERR pr_fmt(fmt), ## args);\
+} while(0)
+extern int32_t calculate_soc_result(void);
+extern int32_t one_latitude_table(int32_t number,one_latitude_data_t *data,int32_t value);
+extern  uint8_t OZ8806_LookUpRCTable(int infVolt,int infCurr, int infTemp, int *infCal);
+void charge_process(void);
+void discharge_process(void);
+
+
+extern bmu_data_t	   *batt_info;
+extern gas_gauge_t    *gas_gauge;
+extern parameter_data_t parameter_customer;
+extern parameter_data_t *parameter;
+
+extern int *rc_table;
+extern int *xaxis_table;
+extern int *yaxis_table;
+extern int *zaxis_table;
+
+ extern int32_t calculate_mah;
+extern int32_t  calculate_soc ;
+
+#define X_AXIS gas_gauge->rc_x_num 
+#define Y_AXIS gas_gauge->rc_y_num 
+#define Z_AXIS gas_gauge->rc_z_num 
+
+
 
 #endif //end _PARAMETER_H_
 
