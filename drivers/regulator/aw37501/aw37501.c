@@ -1749,7 +1749,7 @@ static int aw37501_power_remove(struct i2c_client *i2c)
 	sysfs_remove_group(&aw37501->dev->kobj,
 					&aw37501_power_attr_group);
 	while (--i >= 0)
-		devm_regulator_unregister(aw37501->dev, aw37501->regulators[i]);
+		regulator_unregister(aw37501->regulators[i]);
 
 	if (aw37501->bool_gpio_ctrl == true)
 		aw37501_pinctrl_deinit(aw37501);
