@@ -7,4 +7,5 @@ sd77426_fg_mmi-objs += oz8806_battery.o
 sd77426_fg_mmi-objs += parameter.o
 sd77426_fg_mmi-objs += table.o
 sd77426_fg_mmi-objs += bmulib.o
+sd77426_fg_mmi-objs += calculate.o
 obj-m += sd77426_fg_mmi.o

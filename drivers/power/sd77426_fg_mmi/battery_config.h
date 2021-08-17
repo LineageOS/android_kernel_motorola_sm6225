@@ -25,7 +25,7 @@
 		
 #define OZ8806_VOLTAGE  		    4350
 #define O2_CONFIG_CAPACITY  		5158
-#define O2_CONFIG_RSENSE  		    20
+#define O2_CONFIG_RSENSE  		    10000  //Expanded 1000 times
 #define O2_CONFIG_EOC  				200
 #define OZ8806_EOD 				    3400
 #define O2_CONFIG_BOARD_OFFSET		12

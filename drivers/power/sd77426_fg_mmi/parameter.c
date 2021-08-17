@@ -117,6 +117,7 @@ void bmu_init_gg(gas_gauge_t *gas_gauge)
 
 	gas_gauge->ri = 18;
 	gas_gauge->line_impedance = 10;
+	gas_gauge->power_on_100_vol = O2_OCV_100_VOLTAGE;
 
 #if 0
 	//add this for oinom
