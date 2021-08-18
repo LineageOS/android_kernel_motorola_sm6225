@@ -36,6 +36,7 @@ struct wl2866d {
 	struct regulator_dev *rdev[WL2866D_MAX_REGULATORS];
 	int chip_cs_pin;
 	int init_value;
+	bool shutdown_ldo;
 };
 
 struct wl2866d_evt_sta {
@@ -306,6 +307,7 @@ static int wl2866d_i2c_probe(struct i2c_client *client,
 	}
 	chip->init_value = value;
 	dev_info(chip->dev, "wl2866d_i2c_probe init_value:%d...\n", value);
+	chip->shutdown_ldo = of_property_read_bool(dev->of_node, "semi,shutdown-ldo");
 
 	mdelay(10);
 
@@ -358,6 +360,19 @@ static int wl2866d_i2c_remove(struct i2c_client *client)
 	return ret;
 }
 
+static void wl2866d_i2c_shutdown(struct i2c_client *client)
+{
+	struct wl2866d *chip = i2c_get_clientdata(client);
+	unsigned int val = 0;
+
+	if (chip->shutdown_ldo) {
+		regmap_read(chip->regmap, WL2866D_LDO_EN, &val);
+		/* Disable AVDD1 when shutdown to meet device SPEC and avoid current leak */
+		regmap_write(chip->regmap, WL2866D_LDO_EN, val & ~(1<<2));
+		dev_info(chip->dev, "wl2866d_i2c_shutdown");
+	}
+}
+
 static const struct i2c_device_id wl2866d_i2c_id[] = {
 	{"wl2866d", 0},
 	{},
@@ -370,6 +385,7 @@ static struct i2c_driver wl2866d_regulator_driver = {
 	},
 	.probe = wl2866d_i2c_probe,
 	.remove = wl2866d_i2c_remove,
+	.shutdown = wl2866d_i2c_shutdown,
 	.id_table = wl2866d_i2c_id,
 };
 
