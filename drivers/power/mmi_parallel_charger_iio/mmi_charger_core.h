@@ -172,6 +172,7 @@ struct mmi_cp_policy_dev {
 #define STEP_FIREST_CURR_COMP 		300000
 #define TYPEC_HIGH_CURRENT_UA		3000000
 #define TYPEC_MIDDLE_CURRENT_UA		2000000
+#define PD_ALLOW_MIN_CURRENT_UA		1500000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
 #define PUMP_CHARGER_PPS_MIN_VOLT	8000000
 #define COOLING_HYSTERISIS_DEGC 2
@@ -207,6 +208,7 @@ struct mmi_charger_manager {
 	int pl_chrg_vbatt_min;	/*the minimum battery voltage to enable parallel charging*/
 
 	int typec_middle_current;
+	int pd_allow_min_current;
 	int step_first_curr_comp;
 	int pps_volt_comp;
 	int pd_request_volt;

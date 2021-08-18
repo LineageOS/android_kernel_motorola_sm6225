@@ -1211,6 +1211,13 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 				TYPEC_MIDDLE_CURRENT_UA;
 
 	rc = of_property_read_u32(node,
+				"mmi,pd-allow-min-current",
+				&chip->pd_allow_min_current);
+	if (rc < 0)
+		chip->pd_allow_min_current =
+				PD_ALLOW_MIN_CURRENT_UA;
+
+	rc = of_property_read_u32(node,
 				"mmi,step-first-current-comp",
 				&chip->step_first_curr_comp);
 	if (rc < 0)
