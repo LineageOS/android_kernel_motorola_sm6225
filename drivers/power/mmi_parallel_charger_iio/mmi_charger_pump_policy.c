@@ -276,6 +276,7 @@ void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
 		mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
 	mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
 							DISABLE_CHRG_LIMIT);
+	chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
 	sm_state = PM_STATE_DISCONNECT;
 	chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 	quit_slave_chrg_cnt = 0;

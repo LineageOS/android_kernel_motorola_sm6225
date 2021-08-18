@@ -254,25 +254,26 @@ void qc3p_clear_chg_manager(struct mmi_charger_manager *chip)
 }
 
 void mmi_qc3p_chrg_policy_clear(struct mmi_charger_manager *chip) {
-       struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
-       chrg_dev_init(chip, &g_chrg_list);
-       clear_chrg_dev_error_cnt(chip, &g_chrg_list);
-       qc3p_clear_chg_manager(chip);
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	chrg_dev_init(chip, &g_chrg_list);
+	clear_chrg_dev_error_cnt(chip, &g_chrg_list);
+	qc3p_clear_chg_manager(chip);
 	if (chrg_list->cp_slave)
 		mmi_enable_charging(chrg_list->chrg_dev[CP_SLAVE], false);
 	if (chrg_list->cp_master)
 		mmi_enable_charging(chrg_list->chrg_dev[CP_MASTER], false);
-       mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
-                                                       QC3P_DISABLE_CHRG_LIMIT);
-       qc3p_sm_state = PM_QC3P_STATE_DISCONNECT;
-       chip->qc3p_volt_comp = QC3P_INIT_VOLT_COMP;
-       qc3p_quit_slave_chrg_cnt = 0;
-       qc3p_chrg_cc_power_tunning_cnt = 0;
-       qc3p_chrg_cv_taper_tunning_cnt = 0;
-       qc3p_chrg_cv_delta_volt = 0;
-       qc3p_constant_power_cnt = 0;
-       qc3p_batt_curr_roof = 0;
-       return;
+	mmi_set_charing_current(chrg_list->chrg_dev[PMIC_SW],
+		QC3P_DISABLE_CHRG_LIMIT);
+	chrg_list->chrg_dev[PMIC_SW]->charger_limited = false;
+	qc3p_sm_state = PM_QC3P_STATE_DISCONNECT;
+	chip->qc3p_volt_comp = QC3P_INIT_VOLT_COMP;
+	qc3p_quit_slave_chrg_cnt = 0;
+	qc3p_chrg_cc_power_tunning_cnt = 0;
+	qc3p_chrg_cv_taper_tunning_cnt = 0;
+	qc3p_chrg_cv_delta_volt = 0;
+	qc3p_constant_power_cnt = 0;
+	qc3p_batt_curr_roof = 0;
+	return;
 }
 
 void mmi_qc3p_chrg_sm_work_func(struct work_struct *work)
