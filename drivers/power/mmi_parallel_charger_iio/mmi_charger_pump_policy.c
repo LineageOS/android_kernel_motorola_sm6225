@@ -883,7 +883,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 					CC_POWER_COUNT) {
 				if (chip->pd_pps_balance
 					&& (chip->pd_request_curr - chip->pps_curr_steps)
-						> chip->typec_middle_current) {
+						> chip->pd_allow_min_current) {
 					chip->pd_request_curr -=
 						chip->pps_curr_steps;
 					chip->pd_request_volt +=
@@ -1210,7 +1210,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		} else if (batt_temp > chrg_step->temp_c) {
 				cooling_curr =
-					min(chip->pd_curr_max, chip->typec_middle_current);
+					min(chip->pd_curr_max, chip->pd_allow_min_current);
 				if (chip->pd_request_curr > cooling_curr) {
 					chip->pd_request_curr -= COOLING_DELTA_POWER;
 				} else {
@@ -1296,7 +1296,7 @@ schedule:
 			chip->thermal_mitigation[chip->system_thermal_level]
 			+ CC_CURR_DEBOUNCE) {
 			if (chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR >=
-				chip->typec_middle_current) {
+				chip->pd_allow_min_current) {
 				chip->pd_sys_therm_curr -= THERMAL_TUNNING_CURR;
 				mmi_chrg_dbg(chip, PR_MOTO, "For thermal, decrease pps curr %d\n",
 								chip->pd_sys_therm_curr);
@@ -1306,7 +1306,7 @@ schedule:
 								"pd_sys_therm_curr %dmA was less than %dmA, "
 								"Give up thermal mitigation!",
 								chip->pd_sys_therm_curr - THERMAL_TUNNING_CURR,
-								chip->typec_middle_current);
+								chip->pd_allow_min_current);
 			}
 		} else if (ibatt_curr <
 			chip->thermal_mitigation[chip->system_thermal_level]
@@ -1349,7 +1349,7 @@ schedule:
 
 		} else if (batt_temp > chrg_step->temp_c) {
 				cooling_curr =
-					min(chip->pd_curr_max, chip->typec_middle_current);
+					min(chip->pd_curr_max, chip->pd_allow_min_current);
 				cooling_volt = (2 * vbatt_volt) % 20000;
 				cooling_volt = 2 * vbatt_volt - cooling_volt
 						+ chip->pps_volt_comp;
@@ -1357,7 +1357,7 @@ schedule:
 					&& chip->pd_batt_therm_curr > cooling_curr) {
 
 					if (chip->pd_batt_therm_curr - COOLING_DELTA_POWER >=
-						chip->typec_middle_current)
+						chip->pd_allow_min_current)
 						chip->pd_batt_therm_curr -= COOLING_DELTA_POWER;
 					mmi_chrg_info(chip, "Do chrg power cooling"
 						"pd_batt_therm_curr %dmA, "
@@ -1460,7 +1460,7 @@ schedule:
 								chip->pd_batt_therm_curr);
 
 	if (chip->pd_target_volt < SWITCH_CHARGER_PPS_VOLT
-		|| chip->pd_target_curr < chip->typec_middle_current) {
+		|| chip->pd_target_curr < chip->pd_allow_min_current) {
 
 		if (sm_state == PM_STATE_PPS_TUNNING_CURR
 			|| sm_state == PM_STATE_PPS_TUNNING_VOLT
