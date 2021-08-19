@@ -246,7 +246,7 @@ static int ti_lmu_backlight_update_brightness_register(struct ti_lmu_bl *lmu_bl,
 	int ret;
 	// int i = 0;
 
-	regmap_write(regmap, 0x13, 0x22);
+	regmap_write(regmap, 0x13, 0x11);
 
 	if (lmu_bl->mode == BL_PWM_BASED) {
 		switch (cfg->pwm_action) {
@@ -286,6 +286,14 @@ static int ti_lmu_backlight_update_brightness_register(struct ti_lmu_bl *lmu_bl,
 	if (cfg->max_brightness == MAX_BRIGHTNESS_11BIT) {
 		if (!reginfo->brightness_lsb)
 			return -EINVAL;
+
+		if(lmu_bl->map_type == EXPONENTIAL_TYPE && lmu_bl->led_current_align) {
+			if(brightness) {
+				pr_info("[bkl] %s brightness = %d, align = %d\n", __func__,
+					brightness, lmu_bl->led_current_align);
+				brightness = brightness*8383/10000+324;
+			}
+		}
 
 		reg = reginfo->brightness_lsb[lmu_bl->bank_id];
 		ret = regmap_update_bits(regmap, reg,
@@ -429,6 +437,12 @@ static void ti_lmu_backlight_of_get_light_properties(struct device_node *np,
 		lmu_bl->map_type = LINEAR_TYPE;
 		pr_info("[bkl] %s map_type default %d\n", __func__,
 			lmu_bl->map_type);
+	}
+
+	if(of_property_read_u32(np, "current-align-type", &lmu_bl->led_current_align)) {
+		lmu_bl->led_current_align = ALIGN_NONE;
+		pr_info("[bkl] %s led_current_align default %d, no align, keep as lm3697 exp mode\n", __func__,
+			lmu_bl->led_current_align);
 	}
 }
 
@@ -619,8 +633,8 @@ static int ti_lmu_backlight_init(struct ti_lmu_bl_chip *chip)
 	regmap_write(regmap, 0x18, 0x15);//21.8mA default
 	regmap_write(regmap, 0x1A, boost_ctl);
 	regmap_write(regmap, 0x1C, 0x0E);
-	regmap_write(regmap, 0x22, 0x07);
-	regmap_write(regmap, 0x23, 0xFF);
+	//regmap_write(regmap, 0x22, 0x07);
+	//regmap_write(regmap, 0x23, 0xFF);
 	regmap_write(regmap, 0x24, 0x02);
 	regmap_write(regmap, 0xB4, 0x03);
 
