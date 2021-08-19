@@ -154,10 +154,10 @@ const unsigned char aw99703_reg_access[AW99703_REG_MAX] = {
 #define AW99703_BSTCTR1_OVPSEL_38V		(3<<2)
 #define AW99703_BSTCTR1_OVPSEL_41P5V		(4<<2)
 #define AW99703_BSTCTR1_OCPSEL_MASK		(~(3<<0))
-#define AW99703_BSTCTR1_OCPSEL_0P7A		(0<<0)
-#define AW99703_BSTCTR1_OCPSEL_1P6A		(1<<0)
-#define AW99703_BSTCTR1_OCPSEL_2P46A		(2<<0)
-#define AW99703_BSTCTR1_OCPSEL_3P3A		(3<<0)
+#define AW99703_BSTCTR1_OCPSEL_0P9A		(0<<0)
+#define AW99703_BSTCTR1_OCPSEL_1P8A		(1<<0)
+#define AW99703_BSTCTR1_OCPSEL_2P7A		(2<<0)
+#define AW99703_BSTCTR1_OCPSEL_3P4A		(3<<0)
 
 /*BSTCTR2:0x05*/
 #define AW99703_BSTCTR2_AFEN_MASK		(~(1<<7))
@@ -242,6 +242,7 @@ struct aw99703_data {
 	unsigned int i2c_trans_dim;
 	unsigned int channel;
 	unsigned int ovp_level;
+	unsigned int ocp_level;
 	unsigned int frequency;
 	unsigned int default_brightness;
 	unsigned int max_brightness;
