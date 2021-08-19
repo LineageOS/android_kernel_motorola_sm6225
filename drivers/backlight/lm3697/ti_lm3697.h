@@ -208,6 +208,9 @@ struct ti_lmu_bl {
 	/* Map type */
 	unsigned int map_type;
 
+	/* Align boost current to AW chip */
+	unsigned int led_current_align;
+
 	struct pwm_device *pwm;
 };
 
@@ -234,6 +237,11 @@ enum backlight_boost_freq {
 enum backlight_map_type {
 	EXPONENTIAL_TYPE,
 	LINEAR_TYPE
+};
+
+enum backlight_exp_current_align {
+	ALIGN_NONE,
+	ALIGN_AW99703
 };
 
 extern struct ti_lmu_bl_cfg lmu_bl_cfg[LMU_MAX_ID];
