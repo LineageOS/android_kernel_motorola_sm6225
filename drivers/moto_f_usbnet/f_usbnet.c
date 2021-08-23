@@ -1043,6 +1043,7 @@ static struct usb_function *usbnet_alloc(struct usb_function_instance *fi)
 	dev->function.fs_descriptors = fs_function;
 	dev->function.hs_descriptors = hs_function;
 	dev->function.ss_descriptors = ss_function;
+	dev->function.ssp_descriptors = ss_function;
 
 	dev->function.bind = usbnet_bind;
 	dev->function.unbind = usbnet_unbind;
