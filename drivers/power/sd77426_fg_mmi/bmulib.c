@@ -1,31 +1,28 @@
 /*****************************************************************************
-* Copyright(c) O2Micro, 2019. All rights reserved.
-*       
-* O2Micro [OZ8806] Source Code Reference Design
+* Copyright(c) BMT, 2021. All rights reserved.
+*
+* BMT [oz8806] Source Code Reference Design
 * File:[bmulib.c]
-*       
-* This Source Code Reference Design for O2MICRO [OZ8806] access 
-* ("Reference Design") is solely for the use of PRODUCT INTEGRATION REFERENCE ONLY, 
-* and contains confidential and privileged information of O2Micro International 
-* Limited. O2Micro shall have no liability to any PARTY FOR THE RELIABILITY, 
-* SERVICEABILITY FOR THE RESULT OF PRODUCT INTEGRATION, or results from: (i) any 
-* modification or attempted modification of the Reference Design by any party, or 
-* (ii) the combination, operation or use of the Reference Design with non-O2Micro 
-* Reference Design. Use of the Reference Design is at user's discretion to qualify 
+*
+* This Source Code Reference Design for BMT [oz8806] access
+* ("Reference Design") is solely for the use of PRODUCT INTEGRATION REFERENCE ONLY,
+* and contains confidential and privileged information of BMT International
+* Limited. BMT shall have no liability to any PARTY FOR THE RELIABILITY,
+* SERVICEABILITY FOR THE RESULT OF PRODUCT INTEGRATION, or results from: (i) any
+* modification or attempted modification of the Reference Design by any party, or
+* (ii) the combination, operation or use of the Reference Design with non-BMT
+* Reference Design. Use of the Reference Design is at user's discretion to qualify
 * the final work result.
 *****************************************************************************/
 
-
 /****************************************************************************************
-  
+
 ****************************************************************************************/
 #include <linux/kernel.h>
-#include <linux/module.h>     
+#include <linux/module.h>
 #include <linux/version.h>
-
 #include <linux/kmod.h>
 #include <linux/init.h>
-
 #include <linux/i2c.h>
 
 #include "parameter.h"
@@ -33,13 +30,11 @@
 #include "table.h"
 
 #include <linux/slab.h>
-
 #include <linux/timer.h>
 #include <linux/timex.h>
 #include <linux/rtc.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/syscalls.h>
@@ -54,19 +49,14 @@
 
 //#define FCC_UPDATA_CHARGE
 
-#define VERSION						"2021.08.12/7.00.06 disable otp and expand rsense"
-#define charge_step					parameter->charge_pursue_step
-#define discharge_step				parameter->discharge_pursue_step
-#define discharge_th				parameter->discharge_pursue_th
-#define config_data					parameter->config
+#define VERSION		"2021.08.12/7.00.06 disable otp and expand rsense"
+#define charge_step		parameter->charge_pursue_step
+#define discharge_step		parameter->discharge_pursue_step
+#define discharge_th		parameter->discharge_pursue_th
+#define config_data		parameter->config
 
 #define	RETRY_CNT	8
-
-#define	FORCE_OTP_MAPPING			0
-
-
-
-
+#define	FORCE_OTP_MAPPING	0
 
 #define SHUTDOWN_HI          50
 #define SHUTDOWN_TH1         100
@@ -78,8 +68,6 @@
 //#define FCC_LOWER_LIMIT		 80
 #define FCC_LOWER_LIMIT		 70   //for lianxiang
 
-
-
 #define charge_full_voltage  (config_data->charge_cv_voltage - 26)
 //#define full_charge_data   (gas_gauge->fcc_data + config_data->design_capacity / 100 - 1)
 #define full_charge_data   (gas_gauge->fcc_data + gas_gauge->fcc_data / 100 - 1)
@@ -90,44 +78,38 @@
 #define MAX_SUSPEND_CONSUME	(MAX_SUSPEND_CURRENT*10/36)	//H7 add wakup CAR range check, max suspend consumption(1000*mah)
 #define MAX_SUSPEND_CHARGE	(1800*10/36)//H7 add wakup CAR range check, max suspend charge(1000*mah)
 
-
-
-
 #define ABS(a, b) ((a>b)?(a-b):(b-a))
-
 
 
 /*****************************************************************************
 * static variables section
 ****************************************************************************/
 static unsigned long bmu_kernel_memaddr;
- bmu_data_t 	*batt_info;
- gas_gauge_t	*gas_gauge;
- parameter_data_t parameter_customer;
- parameter_data_t *parameter;
+bmu_data_t 	*batt_info;
+gas_gauge_t	*gas_gauge;
+parameter_data_t parameter_customer;
+parameter_data_t *parameter;
 
- int *rc_table;
- int *xaxis_table;
- int *yaxis_table;
- int *zaxis_table;
+int *rc_table;
+int *xaxis_table;
+int *yaxis_table;
+int *zaxis_table;
 
-  int32_t calculate_mah = 0;
- int32_t  calculate_soc = 0;
+int32_t	calculate_mah = 0;
+int32_t	calculate_soc = 0;
 static int	car_error = 0;
 
-static char * BATT_CAPACITY= NULL;//"/data/sCaMAH.dat";
-static char * BATT_FCC 		= NULL;//"/data/fcc.dat";
-static char * OCV_FLAG 		= NULL;//"/data/ocv_flag.dat";
+static char * BATT_CAPACITY	= NULL;//"/data/sCaMAH.dat";
+static char * BATT_FCC 	= NULL;//"/data/fcc.dat";
+static char * OCV_FLAG		= NULL;//"/data/ocv_flag.dat";
 static char * BATT_OFFSET 	= NULL;//"/data/offset.dat";
 
-static uint8_t     oz8806_pec_check  = 0;
-static uint8_t     oz8806_cell_num  = 1;
-static int32_t     res_divider_ratio = 2000;
-static uint8_t     charge_end_flag = 0;
+static uint8_t	oz8806_pec_check  = 0;
+static uint8_t	oz8806_cell_num  = 1;
+static int32_t	res_divider_ratio = 2000;
+static uint8_t	charge_end_flag = 0;
 
-
-
- int32_t one_percent_rc = 0;
+int32_t one_percent_rc = 0;
 //static uint8_t     wait_dc_charger= 0;
 //static uint8_t     wait_voltage_end = 0;
 
@@ -138,7 +120,7 @@ static uint8_t     wait_ocv_flag = 0;
 //static uint8_t oz8806_in_suspend = 0;
 
 //static uint8_t start_chg_count_flag = 0;
- uint8_t battery_ri = 100;
+uint8_t battery_ri = 100;
 
 //static uint8_t charge_end = 0;
 //static uint8_t charge_fcc_update = 0;
@@ -154,11 +136,7 @@ static int32_t fRSOC_PRE;
 static uint8_t discharge_end_flag = 0;
 static uint8_t sleep_ocv_flag = 0;
 
-//static struct timex  time_x;
 //static struct rtc_time rtc_time;
-
-
-
 static uint32_t	previous_loop_timex = 0;
 
 static uint8_t set_soc_from_ext = 0;
@@ -224,9 +202,6 @@ static void 	check_board_offset(void);
 static void 	check_shutdwon_voltage(void);
 
 static void 	trim_bmu_VD23(void);
-
-
-
 //static int32_t oz8806_write_byte_pec(uint8_t addr,uint8_t index, uint8_t data);
 
 void bmu_init_parameter_more(parameter_data_t *paramter_temp)
@@ -258,14 +233,13 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	if (paramter_temp->fix_car_init)
 		fix_car_init = paramter_temp->fix_car_init;
 
-	// if (paramter_temp->power_on_retry_times)
+	//if (paramter_temp->power_on_retry_times)
 	power_on_retry_times = paramter_temp->power_on_retry_times;
 
 	if (!paramter_temp->bmu_sys_rw_kernel)
 		bmu_sys_rw_kernel = paramter_temp->bmu_sys_rw_kernel;
 
-	//pr_err("%s\n%s\n%s\n%s\n", BATT_CAPACITY, BATT_FCC, OCV_FLAG, BATT_OFFSET);
-	pr_err("oz8806_cell_num:%d, res_divider_ratio: %d,file_not_ok_cap:%d, set_soc_from_ext: %d, fix_car_init:%d,power_on_retry_times:%d, bmu_sys_rw_kernel:%d\n", 
+	bmt_dbg("oz8806_cell_num:%d, res_divider_ratio: %d,file_not_ok_cap:%d, set_soc_from_ext: %d, fix_car_init:%d,power_on_retry_times:%d, bmu_sys_rw_kernel:%d\n",
 				oz8806_cell_num, res_divider_ratio,file_not_ok_cap, set_soc_from_ext, fix_car_init,power_on_retry_times, bmu_sys_rw_kernel);
 }
 /*****************************************************************************
@@ -280,7 +254,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 {
 
 	int32_t ret;
-    //uint16_t value;	
+    //uint16_t value;
 	uint8_t i;
 	int32_t data;
 	uint8_t * addr;
@@ -290,7 +264,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	byte_num = sizeof(config_data_t) + sizeof(bmu_data_t) +  sizeof(gas_gauge_t);
 
 	memset((uint8_t *)bmu_kernel_memaddr,num_0,byte_num);
-	
+
 	parameter = paramter_temp;
 	addr = (uint8_t *)(parameter->config);
 	for(byte_num = num_0;byte_num < sizeof(config_data_t);byte_num++)
@@ -311,19 +285,17 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	gas_gauge = (gas_gauge_t *)((uint8_t *)bmu_kernel_memaddr + byte_num);
 	byte_num += sizeof(gas_gauge_t);
 	//--------------------------------------------------------------------------------------------------
-    gas_gauge->bmu_init_ok = 0;
+    	gas_gauge->bmu_init_ok = 0;
 	gas_gauge->charge_end = num_0;
 	gas_gauge->charge_end_current_th2 = CHARGE_END_CURRENT2;
 	gas_gauge->charge_strategy = 1;
 	gas_gauge->charge_max_ratio = 3500;
 	//gas_gauge->charge_max_ratio = 10000;  // for lianxiang
-	
-	
+
 	gas_gauge->discharge_end = num_0;
 	gas_gauge->discharge_current_th = DISCH_CURRENT_TH;
 	gas_gauge->discharge_strategy = 1;
 	gas_gauge->discharge_max_ratio = 8000;  // for lianxiang
-	
 	gas_gauge->dsg_end_voltage_hi = SHUTDOWN_HI;
 
 	gas_gauge->batt_ri = 120;  // charging. It is related to voltage when full charging condition.
@@ -340,7 +312,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	gas_gauge->lower_capacity_soc_start =30;
 
 	gas_gauge->percent_10_reserve = 0;
-    //add this for oinom, end
+    	//add this for oinom, end
 
 	//this for test gas gaugue
 	if(parameter->config->debug)
@@ -350,47 +322,22 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	gas_gauge->dsg_count_2 = num_0;
 
 	gas_gauge->overflow_data = num_32768 * num_5 * 1000 / config_data->fRsense;
-	bmu_dbg("yyyy gas_gauge->overflow_data is %d\n",gas_gauge->overflow_data);	
+	batt_dbg("yyyy gas_gauge->overflow_data is %d\n",gas_gauge->overflow_data);
 
 	bmu_init_gg(gas_gauge);
 
 	//--------------------------------------------------------------------------------------------------
-#ifdef OZ8806_API
-	//bmu_init_charge_data(((uint8_t *)bmu_kernel_memaddr + byte_num), 4*gas_gauge->charge_table_num* 2);
-	//byte_num += 4 * gas_gauge->charge_table_num * 2;
-	
-	xaxis_table = (int *)((uint8_t *)bmu_kernel_memaddr + byte_num);
-	bmu_init_XAxisElement(((uint8_t *)bmu_kernel_memaddr + byte_num), 4*gas_gauge->rc_x_num );
-	byte_num += 4*gas_gauge->rc_x_num ;
-
-	yaxis_table = (int *)((uint8_t *)bmu_kernel_memaddr + byte_num);
-	bmu_init_YAxisElement(((uint8_t *)bmu_kernel_memaddr + byte_num), 4*gas_gauge->rc_y_num);
-	byte_num += 4*gas_gauge->rc_y_num;
-
-	zaxis_table = (int *)((uint8_t *)bmu_kernel_memaddr + byte_num);
-	bmu_init_ZAxisElement(((uint8_t *)bmu_kernel_memaddr + byte_num), 4*gas_gauge->rc_z_num);
-	byte_num += 4*gas_gauge->rc_z_num;
-
-	rc_table = (int *)((uint8_t *)bmu_kernel_memaddr + byte_num);
-	bmu_init_RCtable(((uint8_t *)bmu_kernel_memaddr + byte_num), 4*gas_gauge->rc_x_num *gas_gauge->rc_y_num*gas_gauge->rc_z_num);
-	byte_num += 4*gas_gauge->rc_x_num *gas_gauge->rc_y_num*gas_gauge->rc_z_num;
-
-#else
 
 	bmu_init_table(&xaxis_table, &yaxis_table, &zaxis_table, &rc_table);
 
-#endif
-
-	pr_err("byte_num is %d\n",byte_num);
-	
+	batt_dbg("byte_num is %d\n",byte_num);
 	power_on_flag = num_0;
 	bmu_sleep_flag = num_0;
-	
 	one_percent_rc = config_data->design_capacity  / num_100;
 
-	pr_err("AAAA O2MICRO OZ8806 DRIVER VERSION is %s\n",VERSION);
+	batt_dbg("AAAA BMT fgu DRIVER VERSION is %s\n",VERSION);
 
-	pr_err("OZ8806 test parameter:Rsense:%d, RTempPullup:%d, VTempRef:%d, CarLSB:%d, CurLSB:%d, VolLSB:%d, FCC:%d, CV:%d, EOC:%d, EOD:%d, BoardOffset:%d, Debug:%d\n",
+	batt_dbg("BMT fgu test parameter:Rsense:%d, RTempPullup:%d, VTempRef:%d, CarLSB:%d, CurLSB:%d, VolLSB:%d, FCC:%d, CV:%d, EOC:%d, EOD:%d, BoardOffset:%d, Debug:%d\n",
 		config_test->fRsense,
 		config_test->temp_pull_up,
 		config_test->temp_ref_voltage,
@@ -405,7 +352,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		config_test->debug
 
 	);
-	
+
 	//check_pec_control();
 	//move check_oz8806_status here to avoid iic-commu-issue
 	check_oz8806_staus();
@@ -416,15 +363,15 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	 */
 	if (oz8806_get_boot_up_time() < 625) 
 	{
-		pr_err("AAAA wait for current offset detection\n");
+		batt_dbg("AAAA wait for current offset detection\n");
 		msleep(625 - oz8806_get_boot_up_time());
 		afe_register_read_word(OZ8806_OP_BOARD_OFFSET,(uint16_t *)&data);
 	}
 
-	bmu_dbg("AAAAAAAAAAAAA Register BOARD_OFFSET: 0x%02x\n",data);
-	
+	batt_dbg("AAAAAAAAAAAAA Register BOARD_OFFSET: 0x%02x\n",data);
+
 	ret  = afe_read_board_offset(&data);
-	pr_err("AAAA board_offset is %d mA\n",data);
+	batt_dbg("AAAA board_offset is %d mA\n",data);
 
 
 	if(ret >= num_0)
@@ -440,7 +387,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 
 	//wake up OZ8806 into FullPower mode
 
-	pr_err("oz8806_cell_num  is  %d\n",oz8806_cell_num);
+	batt_dbg("BMT fgu cell_num  is  %d\n",oz8806_cell_num);
 
 	if(oz8806_cell_num > num_1)
 		afe_register_write_byte(OZ8806_OP_CTRL,num_0x2c);
@@ -448,7 +395,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		afe_register_write_byte(OZ8806_OP_CTRL,num_0x20);
 
 	ret = afe_register_read_byte(OZ8806_OP_CTRL,&i);
-	pr_err("first read reg[0x09]= 0x%02x, ret = %d\n", i, ret);
+	batt_dbg("first read reg[0x09]= 0x%02x, ret = %d\n", i, ret);
 
 	if((i & num_0x40) || (ret < num_0))
 	{
@@ -458,14 +405,13 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		}
 		else
 			afe_register_write_byte(OZ8806_OP_CTRL,0x20);
-		bmu_dbg("Wake up oz8806 write op_ctrl 0x20 \n");
+		batt_dbg("Wake up BMT fgu write op_ctrl 0x20 \n");
 
 		ret = afe_register_read_byte(OZ8806_OP_CTRL,&i);
-		pr_err("second read reg[0x09]= 0x%02x, ret = %d\n", i, ret);
-		
+		batt_dbg("second read reg[0x09]= 0x%02x, ret = %d\n", i, ret);
 	}
-	
-	pr_err("O2MICRO OZ8806 parameter  %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,\n",
+
+	batt_dbg("BMT fgu parameter  %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,\n",
 		config_data->fRsense,
 		config_data->temp_pull_up,
 		config_data->temp_ref_voltage,
@@ -478,7 +424,6 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		config_data->discharge_end_voltage,
 		config_data->board_offset,
 		config_data->debug
-
 	);
 
 	//check_oz8806_staus();
@@ -499,24 +444,25 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 {
 
 	int32_t ret;
-    uint16_t value;	
+    uint16_t value;
 	uint8_t i;
 	int32_t data;
 #if 1
-	if (oz8806_get_boot_up_time() < 2000) // ocv can be stable after oz8806 is wakeuped for 2 s  
+	if (oz8806_get_boot_up_time() < 1500)// ocv can be stable after oz8806 is wakeuped for 1.375 s
 	{
-		pr_err("wait ocv flag register ready 1\n");
-		msleep(2000 - oz8806_get_boot_up_time());
+		batt_dbg("wait ocv flag register ready 1\n");
+		msleep(1500 - oz8806_get_boot_up_time());
 		oz8806_get_boot_up_time();
 		//return;
 	}
-
+/*
 	if (oz8806_get_power_on_time() < 2250)
 	{
-		pr_err("wait ocv flag register ready 2\n");
+		batt_dbg("wait ocv flag register ready 2\n");
 		msleep(2250 - oz8806_get_power_on_time());
 		oz8806_get_power_on_time();
 	}
+*/
 #endif
 
 	wait_ocv_flag = 1;
@@ -528,17 +474,15 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		{
 			if ((value & POWER_OCV_FLAG) || (value & SLEEP_OCV_FLAG))
 			{
-				if (oz8806_get_power_on_time() < 4250)//2250+2000
+				if (oz8806_get_power_on_time() < 2250)//2250+2000
 				{
-					pr_err("ocv or sleep_ocv: wait for normal scan cycle\n");
-					msleep(4250 - oz8806_get_power_on_time());
+					batt_dbg("ocv or sleep_ocv: wait for normal scan cycle\n");
 					oz8806_get_power_on_time();
 				}
 			}
 			else if (oz8806_get_boot_up_time() < 2250) 
 			{
-				pr_err("normal ok: wait for normal scan cycle\n");
-				msleep(2250 - oz8806_get_boot_up_time());
+				batt_dbg("normal ok: wait for normal scan cycle\n");
 			}
 			break;
 		}
@@ -552,14 +496,13 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 
 	batt_info->fRSOC = batt_info->fRC   * num_100;
 	batt_info->fRSOC = batt_info->fRSOC /  config_data->design_capacity ;
-	
 
-	pr_err("read batt_info.fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
-	pr_err("read batt_info.fRC is %d\n",batt_info->fRC);
-	pr_err("read batt_info.fCurr is %d\n",batt_info->fCurr);
-	pr_err("read ocv flag ret is 0x%02x,value is 0x%02x\n",ret,value);
-	pr_err("read fCellTemp is %d\n",batt_info->fCellTemp);
-	if (ret >= num_0 )	
+	batt_dbg("read batt_info.fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
+	batt_dbg("read batt_info.fRC is %d\n",batt_info->fRC);
+	batt_dbg("read batt_info.fCurr is %d\n",batt_info->fCurr);
+	batt_dbg("read ocv flag ret is 0x%02x,value is 0x%02x\n",ret,value);
+	batt_dbg("read fCellTemp is %d\n",batt_info->fCellTemp);
+	if (ret >= num_0 )
 	{
 		// OZ8806 First power on 
 		if (value & POWER_OCV_FLAG)
@@ -568,72 +511,65 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 			afe_read_ocv_volt(&batt_info->fOCVVolt);
 
 			afe_read_cell_volt(&batt_info->fVolt);
-			
 			if(oz8806_cell_num > num_1)
 				batt_info->fOCVVolt = batt_info->fVolt;
-			
-			pr_err("AAAA ocv volt is %d\n",(batt_info->fOCVVolt * oz8806_cell_num));
-			pr_err("AAAA volt is %d\n",(batt_info->fVolt * oz8806_cell_num));
-			
-			
-			if(batt_info->fOCVVolt  > (config_data->charge_cv_voltage + 70)){
+			batt_dbg("AAAA ocv volt is %d\n",(batt_info->fOCVVolt * oz8806_cell_num));
+			batt_dbg("AAAA volt is %d\n",(batt_info->fVolt * oz8806_cell_num));
+			if(batt_info->fOCVVolt  > (config_data->charge_cv_voltage + 150)){
+            		if (oz8806_get_power_on_time() < 2250)//2250+2000
+			{
+				batt_dbg("ocv wait for normal scan cycle\n");
+				msleep(2250 - oz8806_get_power_on_time());
+				oz8806_get_power_on_time();
+			}
+
 				afe_read_cell_volt(&batt_info->fVolt);
 				batt_info->fOCVVolt = batt_info->fVolt;
-				pr_err("AAAAA ocv data errror ,so batt_info->fVolt is %d\n",batt_info->fVolt);
+				batt_dbg("AAAAA ocv data errror ,so batt_info->fVolt is %d\n",batt_info->fVolt);
 			}
 
 			afe_read_current(&batt_info->fCurr);
-			pr_err("AAAA batt_info.fCurr is %d\n",batt_info->fCurr);
+			batt_dbg("AAAA batt_info.fCurr is %d\n",batt_info->fCurr);
 
 			if(batt_info->fCurr > num_50)
 				data = batt_info->fOCVVolt - num_100;
 			else
 				data = batt_info->fOCVVolt;
-			
 			batt_info->fRSOC = one_latitude_table(parameter->ocv_data_num,parameter->ocv,data);
-			pr_err("find ocv table batt_info.fRSOC is %d\n",batt_info->fRSOC); 
-			
+			batt_dbg("find ocv table batt_info.fRSOC is %d\n",batt_info->fRSOC);
 			if((batt_info->fRSOC >num_100) || (batt_info->fRSOC < num_0))
 				batt_info->fRSOC = num_50;
 
 			batt_info->fRC = batt_info->fRSOC * config_data->design_capacity / num_100;
-			
 			afe_read_current(&batt_info->fCurr);
-		
-				
-			
 			if(batt_info->fRC  >= (gas_gauge->overflow_data -num_10))
 			{
 				batt_info->fRC = gas_gauge->overflow_data  - gas_gauge->overflow_data /num_100;
-				batt_info->fRCPrev = batt_info->fRC;	
+				batt_info->fRCPrev = batt_info->fRC;
 			}
-			
 			afe_write_car(batt_info->fRC);
 			batt_info->fRCPrev = batt_info->fRC;
 			gas_gauge->fcc_data= config_data->design_capacity * 100/100;
-			
 
-			pr_err("Power on mode is activated \n");
+			batt_dbg("Power on mode is activated \n");
 
-			
 			batt_info->sCaMAH = batt_info->fRSOC * config_data->design_capacity / num_100;
 			gas_gauge->sCtMAH = batt_info->sCaMAH; 
 			gas_gauge->discharge_sCtMAH = config_data->design_capacity - batt_info->sCaMAH; 
-			
 		}
 		else if(value & SLEEP_OCV_FLAG)
 		{
 			afe_read_ocv_volt(&batt_info->fOCVVolt);
 			sleep_ocv_flag = 1;
-			pr_err("Sleep ocv mode is activated \n");
+			batt_dbg("Sleep ocv mode is activated \n");
 		}
 		else
-			pr_err("Normal mode is activated \n");
+			batt_dbg("Normal mode is activated \n");
 	}
 	else
 	{
-		pr_err("AAAA O2MICRO OZ8806 DRIVER \n");
-		pr_err("AAAA O2MICRO OZ8806 read OZ8806_OP_OCV_LOW\n");
+		batt_dbg("AAAA BMT fgu DRIVER \n");
+		batt_dbg("AAAA BMT fgu read BMT_OP_OCV_LOW\n");
 
 	}
 
@@ -642,23 +578,19 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	afe_read_car(&batt_info->fRC);
 	if((batt_info->fRC < (one_percent_rc)) && (batt_info->fRC > -3000))
 	{
-		bmu_dbg("yyyy fRC will over fRC  is %d\n",batt_info->fRC);
-		
+		batt_dbg("yyyy fRC will over fRC  is %d\n",batt_info->fRC);
 		batt_info->fRC = one_percent_rc - num_1;
 		afe_write_car(batt_info->fRC);
 		batt_info->fRCPrev = batt_info->fRC;
 	}
 	afe_read_car(&batt_info->fRC);
-	pr_err("fRC  is %d\n",batt_info->fRC);
+	batt_dbg("fRC  is %d\n",batt_info->fRC);
 #endif
-
-	
-	
 	afe_register_read_byte(num_0,&i);
-	pr_err("O2micro regeidter 0x00 is 0x%02x\n",i);
+	batt_dbg("BMT fgu regeidter 0x00 is 0x%02x\n",i);
 
 	afe_register_read_byte(num_9,&i);
-	pr_err("O2micro regeidter 0x09 is 0x%02x\n",i);	
+	batt_dbg("BMT fgu regeidter 0x09 is 0x%02x\n",i);
 }
 
 /*****************************************************************************
@@ -669,14 +601,13 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
  * Return:
  *		None
  *****************************************************************************/
- void trim_bmu_VD23(void)
+void trim_bmu_VD23(void)
 {
 	int32_t ret;
 	uint8_t i;
 	uint16_t value;
 	uint8_t data;
 	uint8_t temp;
-	
 
 	for(i = 0;i < 3;i++)
 	{
@@ -685,13 +616,13 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	}
 	if(ret < 0)
 	{
-		pr_err("READ OZ8806_OP_VD23 fail and return:%d\n",ret);
+		batt_dbg("READ BMT_OP_VD23 fail and return:%d\n",ret);
 		return;
 	}
-	pr_err("READ oz8806 REG 0x03 is 0x%02x\n",value);
+	batt_dbg("READ BMT REG 0x03 is 0x%02x\n",value);
 	data = ((value >> 6) & 0x02) | ((value >> 8) & 0x01);
 	data &= 0x03; 
-	pr_err("So trim is 0x%02x\n",data);
+	batt_dbg("So trim is 0x%02x\n",data);
 
 	for(i = 0;i < 3;i++)
 	{
@@ -700,27 +631,21 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	}
 	if(ret < 0)
 	{
-		pr_err("READ OZ8806_OP_PEC_CTRL fail and return:%d\n",ret);
+		batt_dbg("READ BMT_OP_PEC_CTRL fail and return:%d\n",ret);
 		return;
 	}
+	batt_dbg("READ BMT fgu REG 0x08 is 0x%02x\n",temp);
 
-
-	
-	pr_err("READ oz8806 REG 0x08 is 0x%02x\n",temp);
-
-	
 	temp &= (~0x03);
-	
 	if(data != 0x02)
 	{
 		temp |= data;
 		for(i = 0;i < 3;i++)
 		{
 			ret = afe_register_write_byte(OZ8806_OP_PEC_CTRL,temp);
-			pr_err("write1 oz8806 REG 0x08 is 0x%02x\n",temp);
+			batt_dbg("write1 BMT fgu REG 0x08 is 0x%02x\n",temp);
 			if(ret >= 0)break;
 		}
-
 	}
 	else
 	{
@@ -728,14 +653,12 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		for(i = 0;i < 3;i++)
 		{
 			ret = afe_register_write_byte(OZ8806_OP_PEC_CTRL,temp);
-			pr_err("write2 oz8806 REG 0x08 is 0x%02x\n",temp);
+			batt_dbg("write2 BMT fgu REG 0x08 is 0x%02x\n",temp);
 			if(ret >= 0)break;
 		}
-
 	}
-
 	ret = afe_register_read_byte(OZ8806_OP_PEC_CTRL,&temp);
-	pr_err("oz8806 REG 0x08 is 0x%02x\n",temp);
+	batt_dbg("BMT fgu REG 0x08 is 0x%02x\n",temp);
 
 }
 
@@ -747,7 +670,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 * Return:
 *		None
 *****************************************************************************/
- void check_shutdwon_voltage(void)
+void check_shutdwon_voltage(void)
 {
 	//int32_t ret;
 	//uint8_t i;
@@ -755,12 +678,10 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	//int32_t infVolt;
 	afe_read_cell_volt(&batt_info->fVolt);
 
-
 	if(!sleep_ocv_flag) return;
-	
+
 	temp = one_latitude_table(parameter->ocv_data_num,parameter->ocv,batt_info->fOCVVolt);
-	pr_err("Sleep data is %d \n",temp);
-	
+	batt_dbg("Sleep data is %d \n",temp);
 
 	// select higher data 
 	if(calculate_soc > temp)
@@ -770,18 +691,17 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 	if((batt_info->fRSOC - temp) > 20 
 	|| (batt_info->fVolt < (config_data->discharge_end_voltage - 50) && temp <= 5))
 	{
-		
 		//batt_info->fRSOC -= 5;
 		batt_info->fRSOC = temp;
 		if(batt_info->fRSOC < 0)	batt_info->fRSOC = 0;
-		
+
 		batt_info->sCaMAH = batt_info->fRSOC * gas_gauge->fcc_data/ 100;
 
 		batt_info->fRC= batt_info->sCaMAH;
 		if(batt_info->fRC >  (gas_gauge->overflow_data - 20))
 			 batt_info->fRC = gas_gauge->overflow_data - 20;
 		afe_write_car(batt_info->fRC);
-		
+
 		batt_info->fRCPrev 	= batt_info->fRC;
 
 		gas_gauge->sCtMAH = batt_info->sCaMAH;
@@ -790,12 +710,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 		else
 			gas_gauge->discharge_sCtMAH = 0;
 	}
-
-	
 }
-
-
-
 
 /*****************************************************************************
 * Description:
@@ -808,13 +723,7 @@ void bmu_init_parameter_more(parameter_data_t *paramter_temp)
 static void check_oz8806_staus(void)
 {
 
-
 }
-
-
-
-
-
 /*****************************************************************************
 * Description:
 *		bmu_wait_ready
@@ -829,20 +738,18 @@ static void bmu_wait_ready(void)
 	//int32_t fcc;
 	uint8_t i;
 	int32_t ret;
-    uint16_t value;	
-
+	uint16_t value;	
 	int32_t calculate_soc_temp;
-
 	int32_t file_soc_temp;
 
-	pr_err("AAAA bmu wait times %d \n",times);
+	batt_dbg("AAAA bmu wait times %d \n",times);
 	times ++;
 	//wake up OZ8806 into FullPower mode
 	oz8806_wakeup_full_power();
 
 	ret = afe_register_read_byte(OZ8806_OP_CTRL,&i);
 	batt_info->Battery_ok = i & BI_STATUS;
-	pr_err("bmu_wait_ready read 0x09 ret is %d,i is 0x%02x\n",ret,i);
+	batt_dbg("bmu_wait_ready read 0x09 ret is %d,i is 0x%02x\n",ret,i);
 
 	if((i & 0x40) || (ret < 0))
 	{
@@ -852,51 +759,59 @@ static void bmu_wait_ready(void)
 		}
 		else
 			afe_register_write_byte(OZ8806_OP_CTRL,0x20);
-		pr_err("oz8806 wake up function\n");
+		batt_dbg("BMT fgu wake up function\n");
 
 		ret = afe_register_read_byte(OZ8806_OP_CTRL,&i);
-		pr_err("bmu_wait_ready read 0x09 ret is %d,i is 0x%02x\n",ret,i);
+		batt_dbg("bmu_wait_ready read 0x09 ret is %d,i is 0x%02x\n",ret,i);
 	}
 
 	//do we need add check ocv flag now?
 	ret = afe_register_read_word(OZ8806_OP_OCV_LOW,&value);
-	if ((ret >= 0) && (value & POWER_OCV_FLAG))	
+	if ((ret >= 0) && (value & POWER_OCV_FLAG))
 	{
-		pr_err("read flag too late\n");	
+		batt_dbg("read flag too late\n");
 		wait_ocv_flag_fun();
 	}
 
-	if (oz8806_get_power_on_time() < 2250)
+	afe_read_car(&batt_info->fRC);
+	if((batt_info->fRC < 5)|| (power_on_flag))
 	{
-		pr_err("wait for normal scan cycle");
-		msleep(2250 - oz8806_get_power_on_time());
+
+        if (oz8806_get_power_on_time() < 2250)
+	{
+	    	batt_dbg("wait for normal scan cycle and return \n");
+	    	return;
+    		//msleep(2250 - oz8806_get_power_on_time());
+    	}
+    	else
+    		batt_dbg("normal scan cycle delay ok\n");
 	}
+	else
+    	batt_dbg("means normal boot,no need delay\n");
 
 	afe_read_cell_temp(&batt_info->fCellTemp);
 	afe_read_cell_volt(&batt_info->fVolt);
 	afe_read_current(&batt_info->fCurr);
-	afe_read_car(&batt_info->fRC);
 
-
-	pr_err("fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
-	pr_err("fCurr is %d\n",batt_info->fCurr);
-	pr_err("ftemp is %d\n",batt_info->fCellTemp);
-	pr_err("fRC is %d\n",batt_info->fRC);
+	batt_dbg("fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
+	batt_dbg("fCurr is %d\n",batt_info->fCurr);
+	batt_dbg("ftemp is %d\n",batt_info->fCellTemp);
+	batt_dbg("fRC is %d\n",batt_info->fRC);
 
 	// every time we check this and print to see if the voltage and temp and current is abnormal
 	// how about if rc_result error
-	
+
 	calculate_soc_temp = calculate_soc_result();
 
 	calculate_soc = calculate_soc_temp;
 	calculate_mah = calculate_soc * config_data->design_capacity / num_100;
-	
+
 	calculate_times++;
 #if 0
 	if (calculate_times <= calculate_retry_times)
 		return;
 #endif
-    pr_err("calculate_times: %d\n",calculate_times);
+	batt_dbg("calculate_times: %d\n",calculate_times);
 
 	gas_gauge->fcc_data = config_data->design_capacity;
 
@@ -904,33 +819,32 @@ static void bmu_wait_ready(void)
 	{
 		store_rc = batt_info->fRC;
 		//calculate_retry_times = 0;
-		pr_err("Success to get soc from car :%d\n", batt_info->fRC);
+		batt_dbg("Success to get soc from car :%d\n", batt_info->fRC);
 		goto file_ok;
 	}
-
+/*
 	if (oz8806_get_boot_up_time() < 5000) // voltage can be stable after oz8806 is powered for 5 s  
 	{
-		pr_err("wait oz8806 ADC ready\n");
+		batt_dbg("wait oz8806 ADC ready\n");
 		return;
 	}
-
-	
+    */
 	if((set_soc_from_ext))
 	{
 		soc_external = oz8806_get_soc_from_ext();
 
-		pr_err("soc from external: %d\n", soc_external);
+		batt_dbg("soc from external: %d\n", soc_external);
 
 		if (soc_external == -1)
 		{
-			pr_err("wait for external soc:%d, retry:%d\n", soc_external, retry_times);
+			batt_dbg("wait for external soc:%d, retry:%d\n", soc_external, retry_times);
 
 			if(retry_times >= 0)
 			{
-				pr_err("fail to get externl soc, retry_times:%d \n",retry_times);
+				batt_dbg("fail to get externl soc, retry_times:%d \n",retry_times);
 				retry_times = 0; 
 				set_soc_from_ext = 0;
-				pr_err("can't get external soc,so make set_soc_from_ext 0\n");
+				batt_dbg("can't get external soc,so make set_soc_from_ext 0\n");
 			}
 			else
 			{
@@ -940,24 +854,24 @@ static void bmu_wait_ready(void)
 		}
 		else if ((soc_external <= 100) && (soc_external >= 0))
 		{
-			pr_err("Success to get soc from external :%d\n", soc_external);
+			batt_dbg("Success to get soc from external :%d\n", soc_external);
 
 			store_rc = soc_external * gas_gauge->fcc_data  / 100;
 			store_rc += gas_gauge->fcc_data  / 200; // + fcc / 100 * / 2
-			pr_err("stored RC:%d\n", store_rc);
+			batt_dbg("stored RC:%d\n", store_rc);
 
 			goto file_ok;
 		}
 		else
 		{
-			pr_err("Error to get wrong soc from external :%d\n", soc_external);
+			batt_dbg("Error to get wrong soc from external :%d\n", soc_external);
 			retry_times = 0; 
 			set_soc_from_ext = 0;
-			pr_err("can't get external soc,so make set_soc_from_ext 0\n");
+			batt_dbg("can't get external soc,so make set_soc_from_ext 0\n");
 		}
 	}
 
-	if (bmu_sys_rw_kernel)
+	if (bmu_sys_rw_kernel)// this ok
 	{
 		/* wait for sysfs to capacity from file*/
 		store_rc = bmu_read_data(BATT_CAPACITY);
@@ -965,10 +879,10 @@ static void bmu_wait_ready(void)
 		//check file ,if file not exit, goto file fail
 		if(store_rc < 0)
 		{
-			pr_err("open BATT_CAPACITY fail, retry_times:%d \n", retry_times);
+			batt_dbg("open BATT_CAPACITY fail, retry_times:%d \n", retry_times);
 			if(retry_times >= power_on_retry_times)
 			{
-				pr_err("BATT_CAPACITY file fail\n");
+				batt_dbg("BATT_CAPACITY file fail\n");
 				batt_info->sCaMAH = calculate_mah;
 				goto file_fail;
 			}
@@ -978,27 +892,27 @@ static void bmu_wait_ready(void)
 				return;
 			}
 		}
-		pr_err("open BATT_CAPACITY success, retry_times:%d \n", retry_times);
-		pr_err("AAAA read battery capacity data is %d\n", store_rc);
+		batt_dbg("open BATT_CAPACITY success, retry_times:%d \n", retry_times);
+		batt_dbg("AAAA read battery capacity data is %d\n", store_rc);
 	}
 	else
 	{
 		store_rc = oz8806_get_save_capacity();
-
-		pr_err("RC from file:%d\n", store_rc);
+		batt_dbg("RC from file:%d\n", store_rc);
 		if (store_rc == INIT_CAP)
-        {
-            pr_err("wait for reading file:%s, retry:%d\n", BATT_CAPACITY, retry_times);
-          	if(retry_times > 10)
-           {
-                   pr_err("fail to get save_capacity, retry_times:%d \n",retry_times);
-                   goto file_fail;
+        	{
+            		batt_dbg("wait for reading file:%s, retry:%d\n", BATT_CAPACITY, retry_times);
+			if(retry_times > 10)
+        		{
+                   		batt_dbg("fail to get save_capacity, retry_times:%d \n",retry_times);
+                   		goto file_fail;
 			}
-            retry_times++;
-            return;
-        }
-		else if (store_rc == NO_FILE) {
-			pr_err("no file %s, retry_times:%d \n", BATT_CAPACITY, retry_times);
+		retry_times++;
+		return;
+        	}
+		else if (store_rc == NO_FILE)
+		{
+			batt_dbg("no file %s, retry_times:%d \n", BATT_CAPACITY, retry_times);
 			goto file_fail;
 		}
 	}
@@ -1014,34 +928,34 @@ file_ok:
 	//file ok, if ocv power on 
 	if(power_on_flag)
 	{
-		pr_err("bmu_wait_ready, power on ok \n");
+		batt_dbg("bmu_wait_ready, power on ok \n");
 		gas_gauge->ocv_flag = 1;
 
 		//file_soc_temp: soc read from file
 		//batt_info->fRSOC: calculated using OCV 
 		//calculated_soc: calculated using VI
-		pr_err("soc from file:%d, vi soc:%d, ocv soc:%d \n", 
+		batt_dbg("soc from file:%d, vi soc:%d, ocv soc:%d \n",
 			    file_soc_temp, calculate_soc, batt_info->fRSOC);
 
-		pr_err("RC from file:%d, vi RC:%d, ocv RC:%d \n", 
+		batt_dbg("RC from file:%d, vi RC:%d, ocv RC:%d \n",
 			    store_rc, calculate_mah, batt_info->sCaMAH);
 
 		if((batt_info->fRSOC  > 90)&& (file_soc_temp > 90))
 		{
 			batt_info->sCaMAH = store_rc;
-			pr_err("start sCaMAH high USE file\n");
+			batt_dbg("start sCaMAH high USE file\n");
 		}
 		else if(batt_info->fCurr >= 0)
 		{
 			if( ABS(calculate_soc,file_soc_temp) > 30)
 			{
 				batt_info->sCaMAH = calculate_mah;
-				pr_err("start sCaMAH chg USE vi\n");
+				batt_dbg("start sCaMAH chg USE vi\n");
 			}
 			else // file
 			{
 				batt_info->sCaMAH = store_rc;
-				pr_err("start sCaMAH chg USE file\n");
+				batt_dbg("start sCaMAH chg USE file\n");
 			}
 		}
 		else //discharging
@@ -1050,22 +964,22 @@ file_ok:
 			|| (batt_info->fVolt < (config_data->discharge_end_voltage - 50) && file_soc_temp<=5))
 			{
 				batt_info->sCaMAH = calculate_mah;
-				pr_err("start sCaMAH USE vi\n");
+				batt_dbg("start sCaMAH USE vi\n");
 			}
 			else
 			{
 				batt_info->sCaMAH = store_rc;
-				pr_err("start sCaMAH USE file\n");
+				batt_dbg("start sCaMAH USE file\n");
 			}
 		}
 	}
 	//if not ocv power on
 	else
-	{	pr_err("bmu_wait_ready, normal ok \n");
+	{	batt_dbg("bmu_wait_ready, normal ok \n");
 		gas_gauge->ocv_flag = 0;
 		afe_read_car(&batt_info->fRC);
 
-		pr_err("RC from file: %d ,RC from register: %d\n", store_rc, batt_info->fRC);
+		batt_dbg("RC from file: %d ,RC from register: %d\n", store_rc, batt_info->fRC);
 
 		if ((batt_info->fCurr > 0 && batt_info->fRC <= 2) 
 		 || (batt_info->fCurr <= 0 && batt_info->fRC <= 0))//power on, no ocv flag
@@ -1074,12 +988,12 @@ file_ok:
 			|| (batt_info->fVolt < (config_data->discharge_end_voltage - 50) && file_soc_temp<=5))
 			{
 				batt_info->sCaMAH = calculate_mah;
-				pr_err("file ok but USE vi,fRC<=0\n");
+				batt_dbg("file ok but USE vi,fRC<=0\n");
 			}
 			else
 			{
 				batt_info->sCaMAH = store_rc;
-				pr_err("file ok USE file\n");
+				batt_dbg("file ok USE file\n");
 			}
 		}
 		else
@@ -1088,7 +1002,7 @@ file_ok:
 			if(( ABS(batt_info->fRC,store_rc) > (one_percent_rc)))
 			{
 				batt_info->sCaMAH = batt_info->fRC;
-				pr_err("file ok  USE RC\n");
+				batt_dbg("file ok  USE RC\n");
 			}
 			else
 			{
@@ -1097,50 +1011,50 @@ file_ok:
 					&&(batt_info->fRC > store_rc)
 					&&(batt_info->fRC - store_rc <= one_percent_rc))
 				{
-					pr_err("file ok USE RC\n");
+					batt_dbg("file ok USE RC\n");
 					batt_info->sCaMAH = batt_info->fRC;
 				}
 				else
 				{
 					batt_info->sCaMAH = store_rc;
-					pr_err("file ok USE file\n");
+					batt_dbg("file ok USE file\n");
 				}
 			}
 		}
-	}	
-	
+	}
+
 file_fail:
 	if(store_rc<0) //fail to red fil or no file exist
 	{
 		if(power_on_flag)
 		{
-			pr_err("fVolt %dmv, oz8806_cell_num:%d, power_on_100_vol:%dmv\n",batt_info->fVolt,oz8806_cell_num,gas_gauge->power_on_100_vol);
+			batt_dbg("fVolt %dmv,cell_num:%d, power_on_100_vol:%dmv\n",batt_info->fVolt,oz8806_cell_num,gas_gauge->power_on_100_vol);
 			if((batt_info->fVolt * oz8806_cell_num)>= gas_gauge->power_on_100_vol)
 				batt_info->sCaMAH = full_charge_data;
 			else
 				batt_info->sCaMAH = calculate_mah;
-			pr_err("bmu_wait_ready, power on ok and file fail \n");
-			pr_err("file fail USE vi\n");
+			batt_dbg("bmu_wait_ready, power on ok and file fail \n");
+			batt_dbg("file fail USE vi\n");
 		}
 		else
 		{
-			pr_err("bmu_wait_ready, normal on ok and file fail \n");
+			batt_dbg("bmu_wait_ready, normal on ok and file fail \n");
 			afe_read_car(&batt_info->fRC);
 
-			pr_err("RC from register: %d, RC from vi: %d\n", batt_info->fRC, calculate_mah);
+			batt_dbg("RC from register: %d, RC from vi: %d\n", batt_info->fRC, calculate_mah);
 
 			if ((batt_info->fCurr > 0 && batt_info->fRC <= 2) 
 			 || (batt_info->fCurr <= 0 && batt_info->fRC <= 0))//power on, no ocv flag
 			{
-				pr_err("big error first power on and ocv flag not set: %d ,%d\n", batt_info->fRC, calculate_mah);
+				batt_dbg("big error first power on and ocv flag not set: %d ,%d\n", batt_info->fRC, calculate_mah);
 				batt_info->sCaMAH = calculate_mah;
-				pr_err("file fail USE vi\n");
+				batt_dbg("file fail USE vi\n");
 			}
 			else
 			{
 #if 0
 				batt_info->sCaMAH = batt_info->fRC;
-				pr_err("file fail USE RC\n");
+				batt_dbg("file fail USE RC\n");
 #else
 
 				if(batt_info->fRC < one_percent_rc )    //if CAR < 1%  
@@ -1149,58 +1063,54 @@ file_fail:
 				if( ABS(batt_info->fRC,calculate_mah) > (file_not_ok_cap * config_data->design_capacity / num_100))
 				{
 					batt_info->sCaMAH = calculate_mah;
-					pr_err("file fail USE vi\n");
+					batt_dbg("file fail USE vi\n");
 
 				}
 				else
 				{
 					batt_info->sCaMAH = batt_info->fRC;
-					pr_err("file fail USE RC\n");
+					batt_dbg("file fail USE RC\n");
 				}
 
 				if(fix_car_init)
 				{
 					batt_info->sCaMAH = batt_info->fRC;
-					pr_err("file fail fix fRC: %d,%d \n",batt_info->sCaMAH,batt_info->fRC);
+					batt_dbg("file fail fix fRC: %d,%d \n",batt_info->sCaMAH,batt_info->fRC);
 				}
 #endif
 			}
 		}
-	}	
-				
+	}
+
 	if(batt_info->sCaMAH <= num_0)
 	{
-		pr_err("calculate_soc is %d\n",calculate_soc);
+		batt_dbg("calculate_soc is %d\n",calculate_soc);
 		afe_read_cell_volt(&batt_info->fVolt);
 		batt_info->fRSOC = calculate_soc;
 		if((batt_info->fRSOC >num_100) || (batt_info->fRSOC < num_0))
 			batt_info->fRSOC = num_50;
 
-		pr_err("batt_info->fRSOC is %d\n",batt_info->fRSOC);
+		batt_dbg("batt_info->fRSOC is %d\n",batt_info->fRSOC);
 		batt_info->fRC = batt_info->fRSOC * config_data->design_capacity / num_100;
-		pr_err("batt_info->fRC is %d\n",batt_info->fRC);
+		batt_dbg("batt_info->fRC is %d\n",batt_info->fRC);
 		if(batt_info->fRC  >= (gas_gauge->overflow_data -num_10))
 		{
 			batt_info->fRC = gas_gauge->overflow_data  - gas_gauge->overflow_data/num_100;
-			batt_info->fRCPrev = batt_info->fRC;	
+			batt_info->fRCPrev = batt_info->fRC;
 		}
+		batt_dbg("batt_info->fRC is %d\n",batt_info->fRC);
 
-		pr_err("batt_info->fRC is %d\n",batt_info->fRC);
-		
 		afe_write_car(batt_info->fRC);
 		batt_info->fRCPrev = batt_info->fRC;
-		
-		batt_info->sCaMAH = batt_info->fRC;
 
-			
+		batt_info->sCaMAH = batt_info->fRC;
 	}
-	
 	if(batt_info->sCaMAH > full_charge_data)
 	{
 		batt_info->sCaMAH = full_charge_data;
 	}
-	pr_err("batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
-	
+	batt_dbg("batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
+
 	batt_info->fRSOC = batt_info->sCaMAH   * num_100;
 	batt_info->fRSOC = batt_info->fRSOC / gas_gauge->fcc_data ;
 
@@ -1214,21 +1124,20 @@ file_fail:
 	if(batt_info->fRC  >= (gas_gauge->overflow_data -num_10))
 	{
 		batt_info->fRC = gas_gauge->overflow_data  - gas_gauge->overflow_data/num_100;
-		batt_info->fRCPrev = batt_info->fRC;	
+		batt_info->fRCPrev = batt_info->fRC;
 	}
-
 	gas_gauge->sCtMAH = batt_info->sCaMAH;
 
-	pr_err("AAAA batt_info->fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
-	pr_err("AAAA batt_info->fRSOC is %d\n",batt_info->fRSOC);
-	pr_err("AAAA batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
-	pr_err("AAAA gas_gauge->sCtMAH is %d\n",gas_gauge->sCtMAH);
-	pr_err("AAAA fcc is %d\n",gas_gauge->fcc_data);
-	pr_err("AAAA batt_info->fRC is %d\n",batt_info->fRC);
-	pr_err("AAAA batt_info->fCurr is %d\n",batt_info->fCurr);
-		
-	afe_write_car(batt_info->fRC);	
-	batt_info->fRCPrev = batt_info->fRC;	
+	batt_dbg("AAAA batt_info->fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
+	batt_dbg("AAAA batt_info->fRSOC is %d\n",batt_info->fRSOC);
+	batt_dbg("AAAA batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
+	batt_dbg("AAAA gas_gauge->sCtMAH is %d\n",gas_gauge->sCtMAH);
+	batt_dbg("AAAA fcc is %d\n",gas_gauge->fcc_data);
+	batt_dbg("AAAA batt_info->fRC is %d\n",batt_info->fRC);
+	batt_dbg("AAAA batt_info->fCurr is %d\n",batt_info->fCurr);
+
+	afe_write_car(batt_info->fRC);
+	batt_info->fRCPrev = batt_info->fRC;
 
 	if(gas_gauge->fcc_data > batt_info->sCaMAH)                                  
 		gas_gauge->discharge_sCtMAH = gas_gauge->fcc_data- batt_info->sCaMAH;    
@@ -1258,19 +1167,18 @@ file_fail:
 		check_shutdwon_voltage();
 
 	fRSOC_PRE = batt_info->fRSOC;
-	
+
 	// double check
 	if (bmu_sys_rw_kernel)
 	{
 		store_rc =  bmu_read_data(BATT_CAPACITY);
 		if(store_rc != batt_info->sCaMAH)
-		{	
+		{
 			bmu_write_data(BATT_CAPACITY,batt_info->sCaMAH);
 			bmu_write_data(BATT_FCC, gas_gauge->fcc_data);
-			//pr_err("init write sCaMAH  %d,%d\n",batt_info->sCaMAH,store_rc);
+			//batt_dbg("init write sCaMAH  %d,%d\n",batt_info->sCaMAH,store_rc);
 		}
 	}
-
 	gas_gauge->bmu_init_ok = num_1;
 }
 
@@ -1284,7 +1192,6 @@ file_fail:
 *****************************************************************************/
 void bmu_power_down_chip(void)
 {
-	
 	afe_read_cell_temp(&batt_info->fCellTemp);
 	afe_read_cell_volt(&batt_info->fVolt);
 	afe_read_current(&batt_info->fCurr);
@@ -1295,16 +1202,14 @@ void bmu_power_down_chip(void)
 	else
 		afe_register_write_byte(OZ8806_OP_CTRL,SLEEP_MODE | SLEEP_OCV_EN);
 
-	
-	if(parameter->config->debug){	
-		pr_err("eeee power down  oz8806 \n");
-		pr_err("eeee batt_info->fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
-		pr_err("eeee batt_info->fRSOC is %d\n",batt_info->fRSOC);
-		pr_err("eeee batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
-		pr_err("eeee batt_info->fRC is %d\n",batt_info->fRC);
-		pr_err("eeee batt_info->fCurr is %d\n",batt_info->fCurr);
+	if(parameter->config->debug){
+		batt_dbg("eeee power down BMT fgu \n");
+		batt_dbg("eeee batt_info->fVolt is %d\n",(batt_info->fVolt * oz8806_cell_num));
+		batt_dbg("eeee batt_info->fRSOC is %d\n",batt_info->fRSOC);
+		batt_dbg("eeee batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
+		batt_dbg("eeee batt_info->fRC is %d\n",batt_info->fRC);
+		batt_dbg("eeee batt_info->fCurr is %d\n",batt_info->fCurr);
 	}
-	
 }
 
 /*****************************************************************************
@@ -1326,36 +1231,36 @@ void bmu_wake_up_chip(void)
 	int32_t	car_wakeup = 0;
 	int8_t adapter_status = 0;
 
-	pr_err("fCurr is %d\n",batt_info->fCurr);
-	
+	batt_dbg("fCurr is %d\n",batt_info->fCurr);
+
 	adapter_status = get_adapter_status();
 	if ((batt_info->fCurr <= gas_gauge->discharge_current_th) ||
  		(adapter_status == O2_CHARGER_BATTERY))
 	{
 		discharge_flag = 1;
 	}
-	
-	pr_err("adapter_status: %d\n", adapter_status);
+
+	batt_dbg("adapter_status: %d\n", adapter_status);
 
 	bmu_sleep_flag = 1;
-	
+
 	time_sec = oz8806_get_system_boot_time();
 	sleep_time = time_sec - previous_loop_timex;
-	pr_err("sleep time: %d s\n",sleep_time);
+	batt_dbg("sleep time: %d s\n",sleep_time);
 
 	oz8806_wakeup_full_power();
 
 	ret = afe_register_read_byte(OZ8806_OP_CTRL,&data);//wake up OZ8806 into FullPower mode
 	if((data & 0x40) || (ret < 0))
 	{
-		pr_err("bmu_wake_up_chip read 0x09 ret is %d,i is %d \n",ret,data);
+		batt_dbg("bmu_wake_up_chip read 0x09 ret is %d,i is %d \n",ret,data);
 		if(oz8806_cell_num > 1)
 		{
 			afe_register_write_byte(OZ8806_OP_CTRL,0x2c);
 		}
 		else
 			afe_register_write_byte(OZ8806_OP_CTRL,0x20);
-		pr_err("oz8806 wake up function\n");
+		batt_dbg("BMT fgu wake up function\n");
 
 	}
 
@@ -1364,20 +1269,19 @@ void bmu_wake_up_chip(void)
 		if(batt_info->fRSOC >= num_100)	batt_info->fRSOC = num_100;
 		if(batt_info->sCaMAH > (full_charge_data))
 		{
-			pr_err("oz8806 wake up batt_info.sCaMAH big error is %d\n",batt_info->sCaMAH);
+			batt_dbg("BMT fgu wake up batt_info.sCaMAH big error is %d\n",batt_info->sCaMAH);
 			batt_info->sCaMAH = full_charge_data;
-			
 		}
 	}
-	
+
 	afe_read_current(&batt_info->fCurr);
 	afe_read_cell_volt(&batt_info->fVolt);
 
-	pr_err("sCaMAH:%d,fRC:%d,fcurr:%d,volt:%d,sCtMAH:%d\n",
+	batt_dbg("sCaMAH:%d,fRC:%d,fcurr:%d,volt:%d,sCtMAH:%d\n",
 		batt_info->sCaMAH,batt_info->fRC,batt_info->fCurr,
 		(batt_info->fVolt * oz8806_cell_num),
 		gas_gauge->sCtMAH);
-	
+
 	for(i = num_0;i< num_3;i++)
 	{
 		ret = afe_read_car(&car_wakeup);
@@ -1386,7 +1290,7 @@ void bmu_wake_up_chip(void)
 			if ((car_wakeup == 0) || ((!discharge_flag) && (car_wakeup < 0)))
 			{
 				car_error += 1;
-				pr_err("test fRC read: %d, %d\n",car_error, car_wakeup);	//H7 Test Version
+				batt_dbg("test fRC read: %d, %d\n",car_error, car_wakeup);	//H7 Test Version
 			}
 			else
 				break;
@@ -1407,16 +1311,16 @@ void bmu_wake_up_chip(void)
 		if (((value * 1000) - sleep_time) < 0)				//over max car range
 		{
 			value = (sleep_time / 1000);
-			pr_err("Ab CAR:%d,mod:%d\n",car_wakeup,value);
+			batt_dbg("Ab CAR:%d,mod:%d\n",car_wakeup,value);
 			car_wakeup = value + batt_info->fRC;
 			afe_write_car(car_wakeup);
 		}
 	}
-	pr_err("CAR Prev:%d,CAR Now:%d\n",batt_info->fRC,car_wakeup);
+	batt_dbg("CAR Prev:%d,CAR Now:%d\n",batt_info->fRC,car_wakeup);
 	//*******CAR zero reading Workaround******************************
 	if(car_wakeup <= 0)  
 	{
-	    pr_err("fRC is %d\n",car_wakeup);
+	    batt_dbg("fRC is %d\n",car_wakeup);
 		//oz8806_over_flow_prevent();
 		gas_gauge->charge_fcc_update = num_0;
 		gas_gauge->discharge_fcc_update = num_0;
@@ -1438,7 +1342,7 @@ void bmu_wake_up_chip(void)
 			batt_info->fRC = car_wakeup;
 			batt_info->fRCPrev = batt_info->fRC;
 		}
-		
+
 		if(discharge_flag)
 		{
 			check_shutdwon_voltage();
@@ -1472,22 +1376,21 @@ void bmu_wake_up_chip(void)
 
 	if ((discharge_flag) && (car_wakeup > batt_info->fRC))
 	{
-		pr_err("it seems error 1\n");
+		batt_dbg("it seems error 1\n");
 		value = car_wakeup - batt_info->fRC;
 		car_wakeup = batt_info->fRC - value;
 		afe_write_car(car_wakeup);
 	}
 	if ((!discharge_flag) && (car_wakeup < batt_info->fRC))
 	{
-		pr_err("it seems error 2\n");
+		batt_dbg("it seems error 2\n");
 		value = batt_info->fRC - car_wakeup;
 		car_wakeup = batt_info->fRC + value;
-		afe_write_car(car_wakeup);		
+		afe_write_car(car_wakeup);
 	}
 
-	bmu_dbg("tttt final wakeup car is %d\n",car_wakeup);
+	batt_dbg("tttt final wakeup car is %d\n",car_wakeup);
 }
-
 
 /*****************************************************************************
 * Description:
@@ -1511,18 +1414,15 @@ static void check_board_offset(void)
 		afe_write_board_offset(config_data->board_offset);
 		return;
 	}
-	
+
 	ret = bmu_read_data(BATT_OFFSET);
-		
-
-	//pr_err("AAAA board_offset is  %d\n",data);
-
+	//batt_dbg("AAAA board_offset is  %d\n",data);
 	if(ret < num_0)
 	{
 
 		if((data > num_10) || (data <= num_0))
 			afe_write_board_offset(7);
-		
+
 		if(ret2 >= num_0)
 		{
 			if((data < num_10) && (data > num_0) && (data != num_0))
@@ -1530,11 +1430,11 @@ static void check_board_offset(void)
 				ret = bmu_write_data(BATT_OFFSET,data);
 
 				if(ret <num_0)
-					pr_err("first write board_offset error\n");
+					batt_dbg("first write board_offset error\n");
 
 				data = bmu_read_data(BATT_OFFSET);
-				
-				pr_err("first write board_offset is %d\n",data);
+
+				batt_dbg("first write board_offset is %d\n",data);
 			}
 		}
 	}
@@ -1548,9 +1448,9 @@ static void check_board_offset(void)
 	afe_read_board_offset(&data);
 	if((data > num_10) || (data <= num_0))
 		afe_write_board_offset(num_7);
-		
+
 	afe_read_board_offset(&data);
-	pr_err("AAAA board_offset is  %dmA\n",data);
+	batt_dbg("AAAA board_offset is  %dmA\n",data);
 }
 
 /*****************************************************************************
@@ -1568,16 +1468,14 @@ void bmu_polling_loop(void)
 	int32_t ret;
 	uint8_t i;
 	static uint8_t error_times = 0;
-#if (FORCE_OTP_MAPPING)
-	uint32_t force_otp_time = 0;
-#endif
+
 	int8_t adapter_status = 0;
 	uint8_t retry = 0;
 	uint8_t val = 0;
 	if(is_battery_exchanged()){ //battery was exchanged, oz8806 in start-up mode
 		gas_gauge->bmu_init_ok = 0;
 		batt_info->i2c_error_times = 0;
-		pr_err("battery was exchanged, init SOC again\n");
+		batt_dbg("battery was exchanged, init SOC again\n");
 
 retry_wakeup:
 		//wake up this stupid chip 
@@ -1586,11 +1484,11 @@ retry_wakeup:
 		ret = afe_register_read_byte(OZ8806_OP_CTRL,&val);
 		if((val & 0x40) || (ret < 0))
 		{
-			pr_err("bmu_wake_up_chip read 0x09 ret is %d,i is %d \n",ret,val);
+			batt_dbg("bmu_wake_up_chip read 0x09 ret is %d,i is %d \n",ret,val);
 			retry++;
 
 			if(retry>10){
-				pr_err("fail wakeup ic");
+				batt_dbg("fail wakeup ic");
 			}
 			goto retry_wakeup;
 		}
@@ -1602,7 +1500,7 @@ retry_wakeup:
 		wait_ocv_flag_fun();
 	}
 
-	bmu_dbg("-----------------------bmu_polling_loop start------------------\n");
+	batt_dbg("-----------------------bmu_polling_loop start------------------\n");
 
 	if(!(gas_gauge->bmu_init_ok))
 	{
@@ -1611,7 +1509,7 @@ retry_wakeup:
 		else
 			bmu_wait_ready();
 
-		if(gas_gauge->bmu_init_ok)	
+		if(gas_gauge->bmu_init_ok)
 			check_board_offset();
 
 		goto end;
@@ -1628,15 +1526,15 @@ retry_wakeup:
 	ret = afe_read_car(&data);
 	if(parameter->config->debug) {
 		if (data == 0)	car_error++;
-		pr_err("CAR is %d, %d\n",data, car_error);
+		batt_dbg("CAR is %d, %d\n",data, car_error);
 	}
-	
+
 	if((ret >= 0) && (data > 0))
 	{
 		// for big current charge
 		// 10%
 		if (ABS(batt_info->fRCPrev, data) < (10 * config_data->design_capacity / num_100))
-		{	
+		{
 			batt_info->fRC = data;
 			error_times = 0;
 		}
@@ -1645,7 +1543,7 @@ retry_wakeup:
 			error_times++;
 			if(error_times > 3)
 			{
-				pr_err("CAR error_times is %d\n",error_times);
+				batt_dbg("CAR error_times is %d\n",error_times);
 				error_times = 0;
 				afe_write_car(batt_info->sCaMAH);
 				batt_info->fRCPrev = batt_info->sCaMAH;
@@ -1653,8 +1551,8 @@ retry_wakeup:
 			}
 		}
 	}
-	
-	bmu_dbg("first sCaMAH:%d,fRC:%d,fRCPrev:%d,fcurr:%d,volt:%d\n",
+
+	batt_dbg("first sCaMAH:%d,fRC:%d,fRCPrev:%d,fcurr:%d,volt:%d\n",
 			batt_info->sCaMAH,batt_info->fRC,batt_info->fRCPrev,
 			batt_info->fCurr,(batt_info->fVolt * oz8806_cell_num));
 
@@ -1662,20 +1560,19 @@ retry_wakeup:
 	//H7====LOW VOLTAGE CHARGE PREVENT======
 	if ((batt_info->fVolt < config_data->discharge_end_voltage) && (batt_info->fCurr > 0)) //charge and voltage < 3300
 	{
-		pr_err("Low voltage %d charge current %d detected\n",batt_info->fVolt,batt_info->fCurr);
+		batt_dbg("Low voltage %d charge current %d detected\n",batt_info->fVolt,batt_info->fCurr);
 		if (batt_info->fRC > batt_info->fRCPrev)	//CAR increased
 		{
-			pr_err("Low voltage fRC limit triggered %d\n",batt_info->fRCPrev);
+			batt_dbg("Low voltage fRC limit triggered %d\n",batt_info->fRCPrev);
 			batt_info->fRC = batt_info->fRCPrev;	//Limit CAR as previous	
 			afe_write_car(batt_info->fRC);			//write back CAR
 		}
 	}
 	//H7====LOW VOLTAGE CHARGE PREVENT======
 
-	
 	gas_gauge->sCtMAH += batt_info->fRC - batt_info->fRCPrev;
 	gas_gauge->discharge_sCtMAH += batt_info->fRCPrev - batt_info->fRC;
-	
+
 	if(gas_gauge->sCtMAH < num_0)  gas_gauge->sCtMAH = num_0;
 	if(gas_gauge->discharge_sCtMAH < num_0)  gas_gauge->discharge_sCtMAH = num_0;
 
@@ -1688,26 +1585,23 @@ retry_wakeup:
 	else
 		charge_process();
 
-	bmu_dbg("second sCaMAH:%d,fRC:%d,fRCPrev:%d,fcurr:%d,volt:%d\n",
+	batt_dbg("second sCaMAH:%d,fRC:%d,fRCPrev:%d,fcurr:%d,volt:%d\n",
 			batt_info->sCaMAH,batt_info->fRC,batt_info->fRCPrev,
 			batt_info->fCurr,(batt_info->fVolt * oz8806_cell_num));
 
 	if(gas_gauge->charge_end)
 	{
 		if(!charge_end_flag)
-		{	
-			pr_err("enter 8806 charge end\n");
+		{
+			batt_dbg("enter BMT fgu charge end\n");
 			charge_end_flag = num_1;
 			charge_end_process();
 		}
-
 	}
 	else
 	{
 		charge_end_flag = num_0;
 	}
-
-	
 
 	if(gas_gauge->discharge_end)
 	{
@@ -1716,7 +1610,6 @@ retry_wakeup:
 			discharge_end_flag = num_1;
 			discharge_end_process();
 		}
-
 	}
 	else
 	{
@@ -1734,24 +1627,22 @@ retry_wakeup:
 			discharge_end_process();
 	}
 	*/
-
-
 	//gas_gauge->bmu_tick++;
 	previous_loop_timex = time_sec;
 	time_sec = oz8806_get_system_boot_time();
-		bmu_dbg("----------------------------------------------------\n"
-    	"VERSION: %s\n"
-    	"TABLEVERSION: %s\n" 
-    	"battery_ok: %d,time_x: %d\n"
-		"chg_fcc_update: %d, disg_fcc_update: %d\n"
-		"fVolt: %d   fCurr: %d   fCellTemp: %d   fRSOC: %d\n"
-		"sCaMAH: %d, sCtMAH1: %d, sCtMAH2: %d\n"
-		"fcc: %d, fRC: %d\n"
-		"i2c_error_times: %d\n"
-		"charge_end: %d, discharge_end: %d\n"
-		"adapter_status: %d\n"
-		"----------------------------------------------------\n",
-		VERSION, get_table_version(),batt_info->Battery_ok,time_sec,
+		batt_dbg("----------------------------------------------------\n"
+		"[bmt]:VERSION: %s-%x\n"
+		"[bmt]:TABLEVERSION: %s\n"
+		"[bmt]:battery_ok: %d,time_x: %d\n"
+		"[bmt]:chg_fcc_update: %d, disg_fcc_update: %d\n"
+		"[bmt]:fVolt: %d   fCurr: %d   fCellTemp: %d   fRSOC: %d\n"
+		"[bmt]:sCaMAH: %d, sCtMAH1: %d, sCtMAH2: %d\n"
+		"[bmt]:fcc: %d, fRC: %d\n"
+		"[bmt]:i2c_error_times: %d\n"
+		"[bmt]:charge_end: %d, discharge_end: %d\n"
+		"[bmt]:adapter_status: %d\n"
+		"[bmt]:----------------------------------------------------\n",
+		VERSION,calculate_version,get_table_version(),batt_info->Battery_ok,time_sec,
 		gas_gauge->charge_fcc_update,gas_gauge->discharge_fcc_update,
 		(batt_info->fVolt * oz8806_cell_num),batt_info->fCurr,batt_info->fCellTemp,batt_info->fRSOC,
 		batt_info->sCaMAH,gas_gauge->sCtMAH,gas_gauge->discharge_sCtMAH,
@@ -1762,13 +1653,13 @@ retry_wakeup:
 
 	if(batt_info->sCaMAH > (full_charge_data))
 	{
-		pr_err("big error sCaMAH is %d\n",batt_info->sCaMAH);
+		batt_dbg("big error sCaMAH is %d\n",batt_info->sCaMAH);
 		batt_info->sCaMAH = full_charge_data;	
 	}
 
 	if(batt_info->sCaMAH < (gas_gauge->fcc_data / 100 - 1))
 	{
-		//pr_err("big error sCaMAH is %d\n",batt_info->sCaMAH);
+		//batt_dbg("big error sCaMAH is %d\n",batt_info->sCaMAH);
 		batt_info->sCaMAH = gas_gauge->fcc_data / 100 - 1;	
 	}
 
@@ -1778,7 +1669,7 @@ retry_wakeup:
 		gas_gauge->fcc_data=  config_data->design_capacity  * FCC_UPPER_LIMIT / 100 ;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
 	
-		pr_err("fcc error is %d\n",gas_gauge->fcc_data);
+		batt_dbg("fcc error is %d\n",gas_gauge->fcc_data);
 
 	}
 	if((gas_gauge->fcc_data <= 0) || (gas_gauge->fcc_data  < (config_data->design_capacity * FCC_LOWER_LIMIT / 100)))
@@ -1786,7 +1677,7 @@ retry_wakeup:
 		gas_gauge->fcc_data = config_data->design_capacity * FCC_LOWER_LIMIT /100;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
 	
-		pr_err("fcc error is %d\n",gas_gauge->fcc_data);
+		batt_dbg("fcc error is %d\n",gas_gauge->fcc_data);
 
 	}
 	*/
@@ -1796,22 +1687,21 @@ retry_wakeup:
 	if (bmu_sys_rw_kernel)
 	{
 		data = bmu_read_data(BATT_CAPACITY);
-		//bmu_dbg("read from RAM batt_info->sCaMAH is %d\n",data);
+		//batt_dbg("read from RAM batt_info->sCaMAH is %d\n",data);
 		if(data >= num_0)
 		{
 			if(fRSOC_PRE != batt_info->fRSOC)
 			{
 				fRSOC_PRE = batt_info->fRSOC;
 				bmu_write_data(BATT_CAPACITY,batt_info->sCaMAH);
-			//	bmu_dbg("o2 back batt_info->sCaMAH num_1 is %d\n",batt_info->sCaMAH);
+			//	batt_dbg("o2 back batt_info->sCaMAH num_1 is %d\n",batt_info->sCaMAH);
 				//return;
 				goto end;
-
 			}
 
 			if(((batt_info->sCaMAH - data)> (gas_gauge->fcc_data/200))||((data - batt_info->sCaMAH)> (gas_gauge->fcc_data/200))){
 				bmu_write_data(BATT_CAPACITY,batt_info->sCaMAH);
-			//	bmu_dbg("o2 back batt_info->sCaMAH 2 is %d\n",batt_info->sCaMAH);
+			//	batt_dbg("o2 back batt_info->sCaMAH 2 is %d\n",batt_info->sCaMAH);
 			}
 		}
 		else bmu_write_data(BATT_CAPACITY,batt_info->sCaMAH);
@@ -1821,7 +1711,7 @@ retry_wakeup:
 		if(fRSOC_PRE != batt_info->fRSOC)
 		{
 			fRSOC_PRE = batt_info->fRSOC;
-			//bmu_dbg("o2 back batt_info->sCaMAH num_1 is %d\n",batt_info->sCaMAH);
+			//batt_dbg("o2 back batt_info->sCaMAH num_1 is %d\n",batt_info->sCaMAH);
 			goto end;
 		}
 	}
@@ -1834,17 +1724,17 @@ retry_wakeup:
 
 	if((i & num_0x40) || (ret < num_0))
 	{
-		bmu_dbg("bmu_polling_loop read 0x09 ret is %d,i is %d \n",ret,i);
+		batt_dbg("bmu_polling_loop read 0x09 ret is %d,i is %d \n",ret,i);
 		if(oz8806_cell_num > 1)
 		{
 			afe_register_write_byte(OZ8806_OP_CTRL,num_0x2c);
 		}
 		else
 			afe_register_write_byte(OZ8806_OP_CTRL,num_0x20);
-		//pr_err("oz8806 wake up function\n");
+		//batt_dbg("oz8806 wake up function\n");
 
 	}
-	
+
 	ret  = afe_read_board_offset(&data);
 	if (ret >= 0)
 	{
@@ -1854,37 +1744,32 @@ retry_wakeup:
 			if(ABS(data, config_data->board_offset) > 3)
 			{
 				afe_write_board_offset(config_data->board_offset);
-				pr_err("oz8806 board offset error1 is %d \n",data);
+				batt_dbg("BMT fgu board offset error1 is %d \n",data);
 			}
 		}
 		else
 		{
 			if((data > 10) || (data <= 0))
 			{
-				pr_err("oz8806 board offset error2 is %d \n",data);
+				batt_dbg("BMT fgu board offset error2 is %d \n",data);
 				afe_write_board_offset(7);
 			}
-
 		}
 	}
-	
-
-	bmu_dbg("test data is %d\n",batt_info->sCaMAH);
-
+	batt_dbg("test data is %d\n",batt_info->sCaMAH);
 	/*
-	
+
 	data = bmu_read_data(BATT_FCC);
 
 	if(data != gas_gauge->fcc_data)
 	{
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
-		pr_err("test %d\n",gas_gauge->fcc_data);
+		batt_dbg("test %d\n",gas_gauge->fcc_data);
 	}
-		
 	*/
-	
+
 end:
-	bmu_dbg("-----------------------bmu_polling_loop end--------------------\n");
+	batt_dbg("-----------------------bmu_polling_loop end--------------------\n");
 }
 
 /*****************************************************************************
@@ -1900,7 +1785,7 @@ static void oz8806_over_flow_prevent(void)
 	int32_t ret;
 	int32_t data;
 
-    if((batt_info->fRSOC > num_0) && gas_gauge->discharge_end)
+	if((batt_info->fRSOC > num_0) && gas_gauge->discharge_end)
 		gas_gauge->discharge_end = num_0;
    
 	if((batt_info->fRSOC < num_100) && gas_gauge->charge_end)
@@ -1909,17 +1794,17 @@ static void oz8806_over_flow_prevent(void)
 	if(batt_info->fRC< num_0)
 	{
 		if(batt_info->fVolt >= (config_data->charge_cv_voltage - 200))
-		{	
+		{
 			batt_info->fRC = gas_gauge->fcc_data -num_1;
 		}
 		else
-		{				
+		{
 			if(batt_info->fRSOC > 0)
 				batt_info->fRC = batt_info->fRSOC * gas_gauge->fcc_data / num_100 - num_1;
 			else
 				batt_info->fRC = batt_info->sCaMAH;
 		}
-		
+
 		afe_write_car(batt_info->fRC);
 		batt_info->fRCPrev = batt_info->fRC;
 	}
@@ -1932,24 +1817,22 @@ static void oz8806_over_flow_prevent(void)
 		ret = (int16_t)ret;
 		if(ret >= (num_32768 - num_10 * config_data->fRsense))
 		{
-			if(parameter->config->debug)pr_err("yyyy  CAR WILL UP OVER %d\n",ret);
+			if(parameter->config->debug)batt_dbg("yyyy  CAR WILL UP OVER %d\n",ret);
 			ret = 32768 - 15 * config_data->fRsense;
 			oz8806_write_word(OZ8806_OP_CAR,(int16_t)ret);
 			afe_read_car(&batt_info->fRC);
 			batt_info->fRCPrev = batt_info->fRC;
-				
 		}
 		else if(ret <= (num_10 * config_data->fRsense))
 		{
-			if(parameter->config->debug)pr_err("yyyy  CAR WILL DOWN OVER %d\n",ret);
+			if(parameter->config->debug)batt_dbg("yyyy  CAR WILL DOWN OVER %d\n",ret);
 			ret =  num_15 * config_data->fRsense;
 			oz8806_write_word(OZ8806_OP_CAR,(int16_t)ret);
 			afe_read_car(&batt_info->fRC);
-			batt_info->fRCPrev = batt_info->fRC;	
-		}	
-				
+			batt_info->fRCPrev = batt_info->fRC;
+		}
 
-	}	
+	}
 	*/
 
 	ret = afe_read_car(&data);
@@ -1961,16 +1844,16 @@ static void oz8806_over_flow_prevent(void)
 		afe_write_car(batt_info->sCaMAH);
 		batt_info->fRCPrev = batt_info->sCaMAH;
 		batt_info->fRC 	= batt_info->sCaMAH;
-		bmu_dbg("dddd car down is %d\n",data);
+		batt_dbg("dddd car down is %d\n",data);
 	}
 	else if(data > (32768 * parameter->config->dbCARLSB * 1000 / config_data->fRsense -5))
 	{
 		afe_write_car(batt_info->sCaMAH);
 		batt_info->fRCPrev = batt_info->sCaMAH;
 		batt_info->fRC 	= batt_info->sCaMAH;
-		bmu_dbg("dddd car up is %d\n",data);
+		batt_dbg("dddd car up is %d\n",data);
 	}
-	
+
 	if(ABS(batt_info->sCaMAH, data) > one_percent_rc)
 	{
 		if((batt_info->sCaMAH < gas_gauge->overflow_data ) && (batt_info->sCaMAH > 0))
@@ -1979,17 +1862,16 @@ static void oz8806_over_flow_prevent(void)
 			batt_info->fRCPrev = batt_info->sCaMAH;
 			batt_info->fRC 	= batt_info->sCaMAH;
 			if(parameter->config->debug){
-				pr_err("dddd write car batt_info->fRCPrev is %d\n",batt_info->fRCPrev);
-				pr_err("dddd write car batt_info->fRC is %d\n",batt_info->fRC);
-				pr_err("dddd write car batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
+				batt_dbg("dddd write car batt_info->fRCPrev is %d\n",batt_info->fRCPrev);
+				batt_dbg("dddd write car batt_info->fRC is %d\n",batt_info->fRC);
+				batt_dbg("dddd write car batt_info->sCaMAH is %d\n",batt_info->sCaMAH);
 			}
 		}
 	}
 
-	
 	if(batt_info->fRC > (full_charge_data))
 	{
-		pr_err("more fRC %d\n",batt_info->fRC);
+		batt_dbg("more fRC %d\n",batt_info->fRC);
 		batt_info->fRC = full_charge_data;
 		batt_info->fRCPrev = batt_info->fRC;
 		afe_write_car(batt_info->fRC);
@@ -2017,16 +1899,16 @@ void charge_end_process(void)
 			gas_gauge->fcc_data = gas_gauge->sCtMAH;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
 		
-		pr_err("charge1 fcc update is %d\n",gas_gauge->fcc_data);
+		batt_dbg("charge1 fcc update is %d\n",gas_gauge->fcc_data);
 
 	}
 
 	if(gas_gauge->fcc_data > (config_data->design_capacity *FCC_UPPER_LIMIT / 100))
-	{	
+	{
 		gas_gauge->fcc_data=  config_data->design_capacity  * FCC_UPPER_LIMIT / 100 ;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
-	
-		pr_err("charge2 fcc update is %d\n",gas_gauge->fcc_data);
+
+		batt_dbg("charge2 fcc update is %d\n",gas_gauge->fcc_data);
 
 	}
 	if((gas_gauge->fcc_data <= 0) || (gas_gauge->fcc_data  < (config_data->design_capacity * FCC_LOWER_LIMIT / 100)))
@@ -2034,11 +1916,11 @@ void charge_end_process(void)
 		gas_gauge->fcc_data = config_data->design_capacity * FCC_LOWER_LIMIT / 100;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
 	
-		pr_err("charge3 fcc update is %d\n",gas_gauge->fcc_data);
+		batt_dbg("charge3 fcc update is %d\n",gas_gauge->fcc_data);
 
 	}
 	*/
-	
+
 	gas_gauge->fcc_data = config_data->design_capacity;
 	batt_info->sCaMAH = full_charge_data;;
 
@@ -2049,8 +1931,8 @@ void charge_end_process(void)
 
 	if(gas_gauge->ocv_flag)
 		bmu_write_data(OCV_FLAG,0);
-	
-	pr_err("yyyy  end charge \n");	
+
+	batt_dbg("yyyy  end charge \n");
 	batt_info->fRSOC = num_100;
 	gas_gauge->charge_end = num_1;
 	charge_end_flag = num_1;
@@ -2059,7 +1941,6 @@ void charge_end_process(void)
 	gas_gauge->discharge_fcc_update = 1;
 	gas_gauge->discharge_sCtMAH = 0;
 	power_on_flag = 0;
-	
 }
 
 /*****************************************************************************
@@ -2080,43 +1961,43 @@ void discharge_end_process(void)
 	{
 		gas_gauge->fcc_data = gas_gauge->discharge_sCtMAH;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
-		pr_err("discharge1 fcc update is %d\n",gas_gauge->fcc_data);
+		batt_dbg("discharge1 fcc update is %d\n",gas_gauge->fcc_data);
 
 	}
 
 	if(gas_gauge->fcc_data > (config_data->design_capacity *FCC_UPPER_LIMIT / 100))
-	{	
-		gas_gauge->fcc_data=  config_data->design_capacity  * FCC_UPPER_LIMIT / 100 ;	
+	{
+		gas_gauge->fcc_data=  config_data->design_capacity  * FCC_UPPER_LIMIT / 100 ;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
-		pr_err("discharge2 fcc update is %d\n",gas_gauge->fcc_data);
+		batt_dbg("discharge2 fcc update is %d\n",gas_gauge->fcc_data);
 	}
 	if((gas_gauge->fcc_data <= 0) || (gas_gauge->fcc_data  < (config_data->design_capacity * FCC_LOWER_LIMIT / 100)))
-	{	
+	{
 		gas_gauge->fcc_data = config_data->design_capacity * FCC_LOWER_LIMIT / 100;
 		bmu_write_data(BATT_FCC,gas_gauge->fcc_data);
-		pr_err("discharge3 fcc update is %d\n",gas_gauge->fcc_data);
+		batt_dbg("discharge3 fcc update is %d\n",gas_gauge->fcc_data);
 	}
 	*/
 	gas_gauge->fcc_data = config_data->design_capacity;
 	if(gas_gauge->ocv_flag)
 		bmu_write_data(OCV_FLAG,0);
-		
+
 	batt_info->sCaMAH = gas_gauge->fcc_data / 100 - 1;
 
 	if (bmu_sys_rw_kernel)
 		bmu_write_data(BATT_CAPACITY,batt_info->sCaMAH);
-	
+
 	afe_write_car(batt_info->sCaMAH);
 	batt_info->fRCPrev = batt_info->sCaMAH;
-	
-	
-	pr_err("yyyy  end discharge \n");
+
+
+	batt_dbg("yyyy  end discharge \n");
 	batt_info->fRSOC = num_0;
 	gas_gauge->discharge_end = num_1;
 	gas_gauge->discharge_fcc_update = 1;
 	gas_gauge->charge_fcc_update = 1;
 	gas_gauge->sCtMAH = num_0;
-	
+
 }
 
 
@@ -2136,7 +2017,7 @@ static int bmu_check_file(char * address)
     
         if(fd < num_0)
         {
-                //bmu_dbg(" bmu check file  fail %s\n",address);
+                //batt_dbg(" bmu check file  fail %s\n",address);
 				return -num_1;
         } 
         sys_close(fd);
@@ -2152,7 +2033,7 @@ static int bmu_read_data(char * address)
     
         if(fd < num_0)
 		{
-			bmu_dbg(" bmu read open file fail %s, return %ld\n",address, fd);
+			batt_dbg(" bmu read open file fail %s, return %ld\n",address, fd);
 			return fd;
 		}
         
@@ -2171,7 +2052,7 @@ static int bmu_write_data(char * address,int data)
     
         if(fd < num_0)
         {
-			bmu_dbg("bmu wirte open file fail %s failed, return %ld\n",address, fd);
+			batt_dbg("bmu wirte open file fail %s failed, return %ld\n",address, fd);
 			return fd;
         }
         *p = data;
@@ -2193,12 +2074,12 @@ static int bmu_read_data(char * address)
 	int ret = 0;
 	int val = 0;
 
-	//pr_err("%s\n", __func__);
+	//batt_dbg("%s\n", __func__);
 
 	fp = filp_open(address, O_RDONLY, 0644);
 	if (IS_ERR(fp))
 	{
-		pr_err(" %s: open file fail %s\n", __func__, address);
+		batt_dbg(" %s: open file fail %s\n", __func__, address);
 		return -1;
 	}
 
@@ -2208,14 +2089,14 @@ static int bmu_read_data(char * address)
 	pos = 0;
 	ret = vfs_read(fp, buf_r, sizeof(buf_r), &pos);
 	if (ret < 0)
-		pr_err(" %s: read file fail %s\n", __func__, address);
+		batt_dbg(" %s: read file fail %s\n", __func__, address);
 
 	buf_r[4] = '\0';
-	bmu_dbg("%s: read: %s\n", __func__, buf_r);
+	batt_dbg("%s: read: %s\n", __func__, buf_r);
 
 	ret = kstrtoint(buf_r, 10, &val);
 	if (ret < 0)
-		pr_err(" %s: fail to get int from %s\n", __func__, address);
+		batt_dbg(" %s: fail to get int from %s\n", __func__, address);
 
 	set_fs(fs);
 
@@ -2242,12 +2123,12 @@ static int bmu_write_data(char * address,int data)
 
 	ret = sprintf(buf, "%d", data);
 
-	//pr_err("%s\n", __func__);
+	//batt_dbg("%s\n", __func__);
 
 	fp = filp_open(address, O_RDWR | O_CREAT, 0644);
 	if (IS_ERR(fp))
 	{
-		pr_err(" %s: open file fail %s\n", __func__, address);
+		batt_dbg(" %s: open file fail %s\n", __func__, address);
 		return -1;
 	}
 
@@ -2257,7 +2138,7 @@ static int bmu_write_data(char * address,int data)
 	pos = 0;
 	ret = vfs_write(fp, buf, sizeof(buf), &pos);
 	if (ret < 0)
-		pr_err(" %s: write file fail %s\n", __func__, address);
+		batt_dbg(" %s: write file fail %s\n", __func__, address);
 
 	else if (!strcmp(address, BATT_CAPACITY))
 		gas_gauge->stored_capacity = data;
@@ -2267,13 +2148,13 @@ static int bmu_write_data(char * address,int data)
 		pos = 0;
 		ret = vfs_read(fp, buf_r, sizeof(buf_r), &pos);
 		if (ret < 0)
-			pr_err(" %s: read file fail %s\n", __func__, address);
+			batt_dbg(" %s: read file fail %s\n", __func__, address);
 
-		bmu_dbg("%s: read: %s\n", __func__, buf_r);
+		batt_dbg("%s: read: %s\n", __func__, buf_r);
 
 		ret = kstrtoint(buf_r, 10, &val);
 		if (ret < 0)
-			pr_err(" %s: fail to get int from %s\n", __func__, address);
+			batt_dbg(" %s: fail to get int from %s\n", __func__, address);
 	}
 
 	set_fs(fs);
@@ -2291,7 +2172,7 @@ static int bmu_check_file(char * address)
 	fp = filp_open(address, O_RDONLY, 0644);
 	if (IS_ERR(fp))
 	{
-		pr_err(" %s: open file fail %s\n", __func__, address);
+		batt_dbg(" %s: open file fail %s\n", __func__, address);
 		return -1;
 	}
 	return 0;
@@ -2316,13 +2197,13 @@ static int bmu_check_file(char * address)
  *      	index:		oz8806 operation register 
  *		data: 		write data
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 #if 0
 static int32_t oz8806_write_byte_pec(uint8_t addr,uint8_t index, uint8_t data)
 {
 	int32_t ret;
-	
+
 	uint8_t pec_data = num_0;
 	uint16_t temp = num_0;
 	pec_data =pec_calculate(pec_data,addr);
@@ -2336,8 +2217,6 @@ static int32_t oz8806_write_byte_pec(uint8_t addr,uint8_t index, uint8_t data)
 }
 #endif
 
-
-
 /****************************************************************************
  * Description:
  *		read oz8806 operation register
@@ -2345,14 +2224,14 @@ static int32_t oz8806_write_byte_pec(uint8_t addr,uint8_t index, uint8_t data)
  *      index:		oz8806 operation register 
  *		buf: 		pointer to buffer to store read data
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_read_byte(uint8_t index)
 {
 	int32_t ret;
 	uint8_t pec_data = num_0;
 	uint8_t temp;
-	
+
 
 	if(num_0)
 	{
@@ -2364,15 +2243,15 @@ static int32_t oz8806_read_byte(uint8_t index)
 		temp = (uint8_t)(ret & 0xff);
 		pec_data =pec_calculate(pec_data,temp);
 		temp = (uint8_t)(ret >> 8);
-		
+
 		if(pec_data != temp)
 		{ 
-			pr_err("33333333333333333 oz8806_read_byte\n");
-			pr_err("33333333333333333 pec_data is %d\n",pec_data);
-			pr_err("33333333333333333 temp is %d\n",temp);
+			batt_dbg("33333333333333333 BMT_fgu_read_byte\n");
+			batt_dbg("33333333333333333 pec_data is %d\n",pec_data);
+			batt_dbg("33333333333333333 temp is %d\n",temp);
 			return -num_1;
 		}
-			
+
 		return ret;
 	}
 	else
@@ -2382,7 +2261,6 @@ static int32_t oz8806_read_byte(uint8_t index)
 	}
 }
 
-
 /****************************************************************************
  * Description:
  *		write oz8806 operation register
@@ -2390,14 +2268,14 @@ static int32_t oz8806_read_byte(uint8_t index)
  *     	index:		oz8806 operation register 
  *		data: 		write data
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_write_byte(uint8_t index, uint8_t data)
 {
 	int32_t ret;
 	uint8_t pec_data = num_0;
 	uint16_t temp = num_0;
-	
+
 	if(oz8806_pec_check)
 	{
 		pec_data =pec_calculate(pec_data,0x5e);
@@ -2422,7 +2300,7 @@ static int32_t oz8806_write_byte(uint8_t index, uint8_t data)
  * Parameters:
  *      index:		oz8806 operation register 
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_read_word(uint8_t index)
 {
@@ -2430,7 +2308,7 @@ static int32_t oz8806_read_word(uint8_t index)
 	int32_t ret1 = num_0;
 	uint8_t temp;
 	uint8_t pec_data = num_0;
-	
+
 	if(num_0)
 	{
 		ret = i2c_smbus_read_word_data(parameter->client, index);
@@ -2444,16 +2322,16 @@ static int32_t oz8806_read_word(uint8_t index)
 
 		if(pec_data != temp)
 		{ 
-			pr_err("index 0x%02x\n",index);
-			pr_err("0x%02x\n",(uint8_t)(ret & 0xff));
-			pr_err("33333333333333333 oz8806_read_word num_1\n");
-			pr_err("33333333333333333 pec_data is 0x%02x\n",pec_data);
-			pr_err("33333333333333333 temp is 0x%02x\n",temp);
+			batt_dbg("index 0x%02x\n",index);
+			batt_dbg("0x%02x\n",(uint8_t)(ret & 0xff));
+			batt_dbg("33333333333333333 BMT_fgu_read_word num_1\n");
+			batt_dbg("33333333333333333 pec_data is 0x%02x\n",pec_data);
+			batt_dbg("33333333333333333 temp is 0x%02x\n",temp);
 
-			pr_err("33333333333333333 ret is 0x%02x\n",ret);
+			batt_dbg("33333333333333333 ret is 0x%02x\n",ret);
 			return -num_1;
 		}
-		
+
 		ret1 = i2c_smbus_read_word_data(parameter->client, (index + num_1));
 		if(ret1 < num_0)	return ret1;
 
@@ -2467,18 +2345,18 @@ static int32_t oz8806_read_word(uint8_t index)
 
 		if(pec_data != temp)
 		{ 
-			pr_err("33333333333333333 oz8806_read_word 2\n");
-			pr_err("33333333333333333 pec_data is %d\n",pec_data);
-			pr_err("33333333333333333 temp is %d\n",temp);
+			batt_dbg("33333333333333333 BMT_fgu_read_word 2\n");
+			batt_dbg("33333333333333333 pec_data is %d\n",pec_data);
+			batt_dbg("33333333333333333 temp is %d\n",temp);
 			return -num_1;
 		}
-		
+
 		ret1 <<= 8;
 		ret1 |= (uint8_t)(0xff & ret);
 		return ret1;
 	}
 	else
-	{	
+	{
 		ret = i2c_smbus_read_word_data(parameter->client, index);
 		return ret;
 	}
@@ -2491,7 +2369,7 @@ static int32_t oz8806_read_word(uint8_t index)
  *      index:		oz8806 operation register 
  *		data: 		write data
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_write_word( uint8_t index, uint16_t data)
 {
@@ -2499,10 +2377,10 @@ static int32_t oz8806_write_word( uint8_t index, uint16_t data)
 	uint8_t pec_data = num_0;
 	uint16_t temp = num_0;
 
-	
+
 	if(oz8806_pec_check)
 	{
-	
+
 		pec_data =pec_calculate(pec_data,0x5e);
 		pec_data =pec_calculate(pec_data,index);
 		pec_data =pec_calculate(pec_data,(uint8_t)data);
@@ -2510,10 +2388,10 @@ static int32_t oz8806_write_word( uint8_t index, uint16_t data)
 		temp <<= 8;
 		temp |=  (uint8_t)data;
 		ret  = i2c_smbus_write_word_data(parameter->client, index,temp);
-		
+
 		if(ret < num_0) return ret;
 		pec_data = num_0;
-		
+
 		pec_data =pec_calculate(pec_data,0x5e);
 		pec_data =pec_calculate(pec_data,(index +num_1));
 		pec_data =pec_calculate(pec_data,(uint8_t)(data>>8));
@@ -2537,17 +2415,17 @@ static int32_t oz8806_write_word( uint8_t index, uint16_t data)
  * Parameters: 
  *		voltage: 	cell voltage in mV, range from -5120mv to +5120mv
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_cell_voltage_read(int32_t *voltage)
 {
 	int32_t ret;
 	int32_t data;
-	
+
 	ret = oz8806_read_word(OZ8806_OP_CELL_VOLT);
 
 	if (ret < num_0)  return ret;
-	
+
 	data = ret & 0xFFFF;
 	data = (int16_t)data / 16; // >> 4 and keep sign bit
 
@@ -2556,12 +2434,12 @@ static int32_t oz8806_cell_voltage_read(int32_t *voltage)
 
 	if (data > 5117 || data < 0)
 	{
-		pr_err("%s:data: %d, reg:%x\n", __func__, data, ret);
+		batt_dbg("%s:data: %d, reg:%x\n", __func__, data, ret);
 		return -1;
 	}
 	batt_info->i2c_error_times = 0;
 	*voltage = data;
-	
+
 	return ret;
 }
 
@@ -2571,16 +2449,16 @@ static int32_t oz8806_cell_voltage_read(int32_t *voltage)
  * Parameters: 
  *		voltage: 	voltage in mV, range from -5120mv to +5120mv with 2.5mV LSB
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_ocv_voltage_read(int32_t *voltage)
 {
 	int32_t ret;
 	int32_t data;
-	
+
 	ret = oz8806_read_word(OZ8806_OP_OCV_LOW);
 	if (ret < num_0)  return ret;
-	
+
 	data = ret & 0xFFFF;
 	data = (int16_t)data / 16; // >> 4 and keep sign bit
 
@@ -2589,12 +2467,12 @@ static int32_t oz8806_ocv_voltage_read(int32_t *voltage)
 
 	if (data > 5117 || data < 0)
 	{
-		pr_err("%s:data: %d, reg:%x\n", __func__, data, ret);
+		batt_dbg("%s:data: %d, reg:%x\n", __func__, data, ret);
 		return -1;
 	}
 
 	*voltage = data;
-	
+
 	return ret;
 }
 
@@ -2604,14 +2482,14 @@ static int32_t oz8806_ocv_voltage_read(int32_t *voltage)
  * Parameters: 
  *		current: in mA, range is +/-64mv / Rsense with 7.8uv LSB / Rsense
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_current_read(int32_t *data)
 
 {
 	int32_t ret;
 	int32_t temp;
-	
+
 	ret = oz8806_read_word(OZ8806_OP_CURRENT);
 
 	if (ret < num_0)  return ret;
@@ -2632,18 +2510,18 @@ static int32_t oz8806_current_read(int32_t *data)
  * Parameters: 
  *		voltage: 	voltage value in mV, range is +/- 5120mV with 2.5mV LSB
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 int32_t oz8806_temp_read(int32_t *voltage)
 {
 	int32_t ret;
 	int32_t data;
-	
+
 	ret = oz8806_read_word(OZ8806_OP_CELL_TEMP);
 	if (ret < num_0)  return ret;
 
-	//pr_err("1111111111111 regeister is 0x%02x\n",ret);
-	
+	//batt_dbg("1111111111111 regeister is 0x%02x\n",ret);
+
 	data = ret & 0xFFFF;
 	data = (int16_t)data / 16; // >> 4 and keep sign bit
 
@@ -2652,14 +2530,14 @@ int32_t oz8806_temp_read(int32_t *voltage)
 
 	if (data > 5117 || data < 0)
 	{
-		pr_err("%s:data: %d, reg:%x\n", __func__, data, ret);
+		batt_dbg("%s:data: %d, reg:%x\n", __func__, data, ret);
 		return -1;
 	}
 
 	*voltage = data;
 
-	//pr_err("1111111111111 voltage is %d\n",*voltage);
-	
+	//batt_dbg("1111111111111 voltage is %d\n",*voltage);
+
 	return ret;
 }
 
@@ -2669,18 +2547,17 @@ int32_t oz8806_temp_read(int32_t *voltage)
  * Parameters: 
  *		car: in mAHr, range is +/- 163840 uvHr/ Rsense with 5 uvHr LSB / Rsense
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_car_read(int32_t *car)
 {
 	int32_t ret;
 	int32_t data;
 
-	
+
 	ret = oz8806_read_word(OZ8806_OP_CAR);
 	if (ret < num_0)  return ret;
 
-		
 	data = (int16_t)ret;
 	data = data * parameter->config->dbCARLSB;
 	data = data * 1000 / parameter->config->fRsense;
@@ -2690,20 +2567,19 @@ static int32_t oz8806_car_read(int32_t *car)
 	return ret;
 }
 
-
 /****************************************************************************
  * Description:
  *		write oz8806 CAR
  * Parameters: 
  *		data: in mAHr, range is +/- 163840 uvHr/ Rsense with 5 uvHr LSB / Rsense
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_car_write(int32_t data)
 {
 	int32_t temp;
 	int32_t ret;
-	
+
 	temp = data;
 	temp = (temp * parameter->config->fRsense) / parameter->config->dbCARLSB;		//transfer to CAR
 	temp /= 1000;
@@ -2718,18 +2594,18 @@ static int32_t oz8806_car_write(int32_t data)
  * Parameters: 
  *		data: in mA, +/- 8mV / Rsense with 7.8uV / Rsense 
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_board_offset_read(int32_t *data)
 {
 	int32_t ret;
 	int32_t temp;
 
-	
+
 	ret = oz8806_read_word(OZ8806_OP_BOARD_OFFSET);
 	if (ret < num_0)  return ret;
 
-		
+
 	temp = (int16_t)ret;
 	temp = temp & 0x7ff;
 	if(temp & 0x0400)// if bit[10] is 1, it's negative
@@ -2747,15 +2623,13 @@ static int32_t oz8806_board_offset_read(int32_t *data)
  * Parameters: 
  *		data: the data will be wrriten
  * Return:
- *		see I2C_STATUS_XXX define	
+ *		see I2C_STATUS_XXX define
  ****************************************************************************/
 static int32_t oz8806_board_offset_write(int32_t data)
 {
 	int32_t ret;
 	int32_t over_data;
-	
-	
-	
+
 	if(data > num_0){
 		data = data * config_data->fRsense * num_10 / 78;
 		data /= 1000;
@@ -2777,7 +2651,6 @@ static int32_t oz8806_board_offset_write(int32_t data)
 	return ret;
 }
 
-
 /*****************************************************************************
  * Description:
  *		wrapper function for operation register byte reading 
@@ -2798,7 +2671,7 @@ static int32_t afe_register_read_byte(uint8_t index, uint8_t *dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
@@ -2806,7 +2679,6 @@ static int32_t afe_register_read_byte(uint8_t index, uint8_t *dat)
 
 	return ret;
 }
-
 
 /*****************************************************************************
  * Description:
@@ -2828,13 +2700,12 @@ static int32_t afe_register_write_byte(uint8_t index, uint8_t dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
 	return ret;
 }
-
 
 /*****************************************************************************
  * Description:
@@ -2849,7 +2720,6 @@ static int32_t afe_register_read_word(uint8_t index, uint16_t *dat)
 {
 	int32_t ret;
 	uint8_t i;
-	
 
 	for(i = num_0; i < RETRY_CNT; i++){
 		ret = oz8806_read_word(index);
@@ -2857,7 +2727,7 @@ static int32_t afe_register_read_word(uint8_t index, uint16_t *dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
@@ -2865,7 +2735,6 @@ static int32_t afe_register_read_word(uint8_t index, uint16_t *dat)
 
 	return ret;
 }
-
 
 /*****************************************************************************
  * Description:
@@ -2888,15 +2757,13 @@ static int32_t afe_register_write_word(uint8_t index, uint16_t dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
 	return ret;
 }
 #endif
-
-
 
 /*****************************************************************************
  * Description:
@@ -2922,21 +2789,20 @@ int32_t afe_read_cell_volt(int32_t *voltage)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	if(oz8806_cell_num > num_1)
 	{
 		//*voltage = buf * num_1000 / res_divider_ratio;
-		bmu_dbg("read from register %d mv \n",buf);
+		batt_dbg("read from register %d mv \n",buf);
 		*voltage = buf * res_divider_ratio / num_1000; // res_divider_ratio = ((Rpull + Rdown) / Rdown) * 1000
 		*voltage /= oz8806_cell_num;
 	}
-	else	
+	else
 		*voltage = buf;
 	return ret;
 }
-
 
 /*****************************************************************************
  * Description:
@@ -2962,7 +2828,7 @@ static int32_t afe_read_ocv_volt(int32_t *voltage)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
@@ -2971,9 +2837,9 @@ static int32_t afe_read_ocv_volt(int32_t *voltage)
 		*voltage = buf * num_1000 / res_divider_ratio;
 		*voltage /= oz8806_cell_num;
 	}
-	else	
+	else
 		*voltage = buf;
-	
+
 	return ret;
 }
 
@@ -3001,13 +2867,12 @@ int32_t afe_read_current(int32_t *dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	*dat = buf;
 	return ret;
 }
-
 
 /*****************************************************************************
  * Description:
@@ -3033,14 +2898,12 @@ static int32_t afe_read_car(int32_t *dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	*dat = buf;
 	return ret;
 }
-
-
 
 /*****************************************************************************
  * Description:
@@ -3065,7 +2928,7 @@ static int32_t afe_write_car(int32_t date)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	return ret;
@@ -3093,7 +2956,7 @@ static int32_t afe_write_board_offset(int32_t date)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	return ret;
@@ -3122,12 +2985,13 @@ static int32_t afe_read_board_offset(int32_t *dat)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 	*dat = buf;
 	return ret;
 }
+
 /*****************************************************************************
  * Description:
  *		wrapper function to read temp
@@ -3155,11 +3019,10 @@ static int32_t afe_read_cell_temp(int32_t *data)
 	}
 	if(i >= RETRY_CNT){
 		batt_info->i2c_error_times++;
-		bmu_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
+		batt_dbg("yyyy. %s failed, ret %d\n", __func__, ret);
 		return ret;
 	} 
 
-	
 	if((buf >= config_data->temp_ref_voltage)|| (buf <= num_0)){
 		*data = num_25;
 	}
@@ -3168,7 +3031,7 @@ static int32_t afe_read_cell_temp(int32_t *data)
 		temp = temp / (config_data->temp_ref_voltage - buf);
 		*data =	one_latitude_table(parameter->cell_temp_num,parameter->temperature,temp);
 	}
-	//pr_err("1111111111111 r is %d\n",temp);
+	//batt_dbg("1111111111111 r is %d\n",temp);
 	return ret;
 }
 
@@ -3181,7 +3044,7 @@ static int32_t afe_read_cell_temp(int32_t *data)
  * Return:
  *		crc data
  * Note:
- *		
+ *
  *****************************************************************************/
 static uint8_t pec_calculate (uint8_t ucCrc, uint8_t ucData)
 {
@@ -3200,6 +3063,7 @@ static uint8_t pec_calculate (uint8_t ucCrc, uint8_t ucData)
        }
        return ucCrc;
 }
+
 #if 0
 /*****************************************************************************
  * Description:
@@ -3207,7 +3071,7 @@ static uint8_t pec_calculate (uint8_t ucCrc, uint8_t ucData)
  * Parameters:
  * Return:
  * Note:
- *		
+ *
  *****************************************************************************/
 static int32_t i2c_read_byte(uint8_t addr,uint8_t index,uint8_t *data)
 {
@@ -3240,7 +3104,7 @@ static int32_t i2c_read_byte(uint8_t addr,uint8_t index,uint8_t *data)
  * Parameters:
  * Return:
  * Note:
- *		
+ *
  *****************************************************************************/
 static int32_t i2c_write_byte(uint8_t addr,uint8_t index,uint8_t data)
 {
@@ -3249,7 +3113,7 @@ static int32_t i2c_write_byte(uint8_t addr,uint8_t index,uint8_t data)
 	struct i2c_adapter *adap=parameter->client->adapter;
 	struct i2c_msg msg;
 	int32_t scl_rate = num_100 * num_1000;
-	
+
 	char tx_buf[num_3];
 	tx_buf[num_0] = index;
 	tx_buf[num_1] = data;
@@ -3275,9 +3139,6 @@ static int32_t i2c_write_byte(uint8_t addr,uint8_t index,uint8_t data)
 
 }
 #endif
-
-
-
 
 void bmu_reinit(int32_t mode)
 {
@@ -3312,11 +3173,7 @@ void bmu_reinit(int32_t mode)
 }
 EXPORT_SYMBOL(bmu_reinit);
 
-#ifdef CONFIG_OZ8806_M
-static int __init bmulib_init(void)
-#else
 int bmulib_init(void)
-#endif
 {
 	int ret = 0;
 #if !defined(OZ8806_API)
@@ -3324,24 +3181,21 @@ int bmulib_init(void)
 	uint8_t * p = NULL;
 #endif
 
-	pr_err("%s\n", __func__);
+	bmt_dbg("%s\n", __func__);
 
 	//NOTICE: Don't change the sequence of calling below functions
-	
-#ifdef OZ8806_API
-	bmu_kernel_memaddr = oz8806_get_kernel_memaddr();
-#else
+
 	byte_num = sizeof(config_data_t) + sizeof(bmu_data_t) +  sizeof(gas_gauge_t);
 	p = kzalloc(byte_num, GFP_KERNEL);
 	bmu_kernel_memaddr = (unsigned long)p;
-#endif
+	
 	if (!bmu_kernel_memaddr)
 		goto fail_mem;
 
 	parameter_customer.client = oz8806_get_client();
 	if (!parameter_customer.client)
 		goto fail_i2c;
-	pr_err("i2c address:%x\n", parameter_customer.client->addr);
+	bmt_dbg("i2c address:%x\n", parameter_customer.client->addr);
 	//struct oz8806_data *data = i2c_get_clientdata(parameter_customer.client);
 
 	bmu_init_parameter(&parameter_customer);
@@ -3360,20 +3214,16 @@ int bmulib_init(void)
 
 	return ret;
 fail_mem:
-	pr_err("%s: bmu_kernel_memaddr error\n", __func__);
+	bmt_dbg("%s: bmu_kernel_memaddr error\n", __func__);
 
 fail_i2c:
-	pr_err("%s: oz8806 i2c register error\n", __func__);
+	bmt_dbg("%s: oz8806 i2c register error\n", __func__);
 	return -1;
 }
 
-#ifdef CONFIG_OZ8806_M
-static void __exit bmulib_exit(void)
-#else
 void bmulib_exit(void)
-#endif
 {
-	pr_err("%s\n", __func__);
+	batt_dbg("%s\n", __func__);
 	unregister_bmu_callback();
 
 #if !defined(OZ8806_API)
@@ -3382,14 +3232,4 @@ void bmulib_exit(void)
 	bmu_kernel_memaddr = 0;
 #endif
 }
-
-#ifdef CONFIG_OZ8806_M
-//module_init(bmulib_init);
-late_initcall(bmulib_init);
-module_exit(bmulib_exit);
-
-MODULE_AUTHOR("O2Micro");
-MODULE_DESCRIPTION("o2micro oz8806 battery gauge driver");
-//MODULE_LICENSE("GPL");
-#endif                                     
 
