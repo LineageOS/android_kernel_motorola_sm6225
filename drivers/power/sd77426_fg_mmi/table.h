@@ -19,16 +19,16 @@
 * Reference Design by any party, or (ii) the combination, operation or use of the 
 * Reference Design with non-O2Micro Reference Design.
 *
-* Battery Manufacture: Lenovo
-* Battery Model: BL244
-* Absolute Max Capacity(mAhr): 5158
-* Limited Charge Voltage(mV): 4350
+* Battery Manufacture: ATL
+* Battery Model: M1892
+* Absolute Max Capacity(mAhr): 3661
+* Limited Charge Voltage(mV): 4400
 * Cutoff Discharge Voltage(mV): 3200
-* Equipment: "JY1-8","JY1-4","JY1-4","JY2-8","JY2-8","JY2-8","JY2-5","JY1-1","JY1-1","JY1-8","JY1-8","JY1-8","JY1-8","JY2-5","JY2-5","JY2-5","JY2-5","JY1-8","JY2-8","JY2-8","JY1-8","JY1-2","JY1-2","JY2-6","JY2-6","JY2-6","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY2-7","JY1-3","JY1-3","JY1-6","JY1-6","JY1-6","JY2-8","JY2-5","JY2-5"
-* Tester: "SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ"
-* Battery ID: "BL244-1","BL244-1","BL244-1","BL244-1","BL244-1","BL244-1","BL244-1","BL244-1","BL244-1","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-2","BL244-3","BL244-3","BL244-3","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-4","BL244-1","BL244-2","BL244-02"
-* Version = V00.13.00
-* Date = 2015.6.23
+* Equipment: "JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY1-5","JY2-5","JY2-5","JY2-5","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-6","JY2-5","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-8","JY1-8","JY1-8","JY1-8","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-6","JY1-8","JY1-7","JY1-7","JY1-7","JY1-7","JY1-7","JY1-7","JY1-3","JY1-3","JY1-3","JY1-5","JY1-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY2-5","JY1-8","JY1-8","JY1-2","JY1-2","JY1-2","JY2-6","JY2-6","JY2-6"
+* Tester: "SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ","SZ"
+* Battery ID: "M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_1","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_2","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_3","M1892_4","M1892_4","M1892_4","M1892_2","M1892_2","M1892_2"
+* Version = V00.8D.00
+* Date = 2018.3.26
 * Comment = 
 *           
 *****************************************************************************/
@@ -41,11 +41,11 @@
 #define CHARGE_DATA_NUM 		 65
 
 
-#define XAxis 		 42
-#define YAxis 		 7
-#define ZAxis 		 7
+#define XAxis 		 86
+#define YAxis 		 10
+#define ZAxis 		 9
 
-#define BATTERY_ID_NUM 		 52
+#define BATTERY_ID_NUM 		 93
 
 
 /****************************************************************************
