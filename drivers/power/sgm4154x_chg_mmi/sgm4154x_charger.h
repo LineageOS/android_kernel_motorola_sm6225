@@ -49,6 +49,10 @@
 #define SGM4154x_CHRG_CTRL_f	0x0f
 
 /* charge status flags  */
+#define SGM4154x_IINDPM_INT_MASK		GENMASK(0, 0)
+#define SGM4154x_IINDPM_INT_DISABLE	BIT(0)
+#define SGM4154x_VINDPM_INT_MASK		GENMASK(1, 1)
+#define SGM4154x_VINDPM_INT_DISABLE	BIT(1)
 #define SGM4154x_CHRG_EN		BIT(4)
 #define SGM4154x_HIZ_EN		    BIT(7)
 #define SGM4154x_TERM_EN		BIT(7)
@@ -160,7 +164,7 @@
 #define SGM4154x_VINDPM_V_MIN_uV    3900000
 #define SGM4154x_VINDPM_V_MAX_uV    12000000
 #define SGM4154x_VINDPM_STEP_uV     100000
-#define SGM4154x_VINDPM_DEF_uV	    3600000
+#define SGM4154x_VINDPM_DEF_uV	    4600000
 #define SGM4154x_VINDPM_OS_MASK     GENMASK(1, 0)
 
 /* DP DM SEL  */
@@ -173,6 +177,8 @@
 #define SGM4154x_PUMPX_DN           BIT(5)
 
 /* customer define jeita paramter */
+#define SGM4154x_JEITA_ENABLE_MASK GENMASK(0, 0)
+#define SGM4154x_JEITA_DISABLE 0
 #define JEITA_TEMP_ABOVE_T4_CV	0
 #define JEITA_TEMP_T3_TO_T4_CV	4100000
 #define JEITA_TEMP_T2_TO_T3_CV	4350000
@@ -287,6 +293,10 @@ struct sgm4154x_device {
 	struct wakeup_source *charger_wakelock;
 	bool enable_sw_jeita;
 	struct sgm4154x_jeita data;
+
+	struct regulator	*dpdm_reg;
+	struct mutex		dpdm_lock;
+	bool			dpdm_enabled;
 };
 
 #endif /* _SGM4154x_CHARGER_H */

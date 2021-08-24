@@ -20,21 +20,6 @@
 
 #include "sgm4154x_charger.h"
 static struct power_supply_desc sgm4154x_power_supply_desc;
-static struct reg_default sgm4154x_reg_defs[] = {
-	{SGM4154x_CHRG_CTRL_0, 0x0a},
-	{SGM4154x_CHRG_CTRL_1, 0x1a},
-	{SGM4154x_CHRG_CTRL_2, 0x88},
-	{SGM4154x_CHRG_CTRL_3, 0x22},
-	{SGM4154x_CHRG_CTRL_4, 0x58},
-	{SGM4154x_CHRG_CTRL_5, 0x9f},
-	{SGM4154x_CHRG_CTRL_6, 0xe6},
-	{SGM4154x_CHRG_CTRL_7, 0x4c},
-	{SGM4154x_CHRG_CTRL_a, 0x00},
-	{SGM4154x_CHRG_CTRL_b, 0x64},
-	{SGM4154x_CHRG_CTRL_c, 0x75},
-	{SGM4154x_CHRG_CTRL_d, 0x00},
-	{SGM4154x_CHRG_CTRL_f, 0x00},
-};
 
 /* SGM4154x REG06 BOOST_LIM[5:4], uV */
 static const unsigned int BOOST_VOLT_LIMIT[] = {
@@ -203,7 +188,7 @@ static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 
 
 	reg_val = (chrg_volt-SGM4154x_VREG_V_MIN_uV) / SGM4154x_VREG_V_STEP_uV;
-	reg_val = (reg_val&SGM4154x_VREG_V_MASK)<<3;
+	reg_val = reg_val<<3;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_4,
 				  SGM4154x_VREG_V_MASK, reg_val);
 
@@ -511,7 +496,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	state->therm_stat = !!(chrg_stat & SGM4154x_THERM_STAT);
 	state->vsys_stat = !!(chrg_stat & SGM4154x_VSYS_STAT);
 
-	pr_err("%s chrg_stat =%d,vbus_status =%d online = %d\n",__func__,chrg_stat,state->vbus_status,state->online);
+	pr_err("%s chrg_stat =%d,chrg_type =%d online = %d\n",__func__,state->chrg_stat,state->chrg_type,state->online);
 
 
 	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_FAULT, &fault);
@@ -576,6 +561,43 @@ int sgm4154x_disable_charger(struct sgm4154x_device *sgm)
                      0);
     return ret;
 }
+
+int sgm4154x_disable_watchdog(struct sgm4154x_device *sgm)
+{
+	int ret;
+	printk("sgm4154x_disable_watchdog\n");
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_5, SGM4154x_WDT_TIMER_MASK,
+                     SGM4154x_WDT_TIMER_DISABLE);
+	return ret;
+}
+
+int sgm4154x_disable_jeita(struct sgm4154x_device *sgm)
+{
+	int ret;
+	printk("sgm4154x_disable_jeita\n");
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d, SGM4154x_JEITA_ENABLE_MASK,
+                     SGM4154x_JEITA_DISABLE);
+	return ret;
+}
+
+int sgm4154x_disable_vindpm_int_pulse(struct sgm4154x_device *sgm)
+{
+	int ret;
+	printk("sgm4154x_disable_vindpm_pulse\n");
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_a, SGM4154x_VINDPM_INT_MASK,
+                     SGM4154x_VINDPM_INT_DISABLE);
+	return ret;
+}
+
+int sgm4154x_disable_iindpm_int_pulse(struct sgm4154x_device *sgm)
+{
+	int ret;
+	printk("sgm4154x_disable_iindpm_pulse\n");
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_a, SGM4154x_IINDPM_INT_MASK,
+                     SGM4154x_IINDPM_INT_DISABLE);
+	return ret;
+}
+
 /*mahj:for build
 float sgm4154x_get_charger_output_power(struct sgm4154x_device *sgm)
 {
@@ -968,14 +990,57 @@ static bool sgm4154x_state_changed(struct sgm4154x_device *sgm,
 static void sgm4154x_dump_register(struct sgm4154x_device * sgm)
 {
 	int i = 0;
-	int reg = 0;
+	u32 reg = 0;
 
 	for(i=0; i<=SGM4154x_CHRG_CTRL_f; i++) {
 		regmap_read(sgm->regmap, i, &reg);
-		pr_err("%s REG%x    %X\n", __func__, i, reg);
+		pr_err("%s REG[0x%x]=0x%x\n", __func__, i, reg);
 	}
 }
+#if 0
+static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
+{
+		/* fetch the DPDM regulator */
+	if (!sgm->dpdm_reg && of_get_property(sgm->dev->of_node,
+				"dpdm-supply", NULL)) {
+		sgm->dpdm_reg = devm_regulator_get(sgm->dev, "dpdm");
+		if (IS_ERR(sgm->dpdm_reg)) {
+			rc = PTR_ERR(sgm->dpdm_reg);
+			dev_err(sgm->dev, "Couldn't get dpdm regulator rc=%d\n", rc);
+			sgm->dpdm_reg = NULL;
+			return rc;
+		}
+	}
 
+	mutex_lock(&sgm->dpdm_lock);
+	if (enable) {
+		if (sgm->dpdm_reg && !sgm->dpdm_enabled) {
+			dev_err(sgm->dev, "enabling DPDM regulator\n");
+			rc = regulator_enable(sgm->dpdm_reg);
+			if (rc < 0)
+				dev_err(sgm->dev,
+					"Couldn't enable dpdm regulator rc=%d\n",
+					rc);
+			else
+				sgm->dpdm_enabled = true;
+		}
+	} else {
+		if (sgm->dpdm_reg && sgm->dpdm_enabled) {
+			dev_err(sgm->dev, "disabling DPDM regulator\n");
+			rc = regulator_disable(sgm->dpdm_reg);
+			if (rc < 0)
+				dev_err(sgm->dev,
+					"Couldn't disable dpdm regulator rc=%d\n",
+					rc);
+			else
+				sgm->dpdm_enabled = false;
+		}
+	}
+	mutex_unlock(&sgm->dpdm_lock);
+
+	return rc;
+}
+#endif
 static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 {
 	int chrg_stat;
@@ -1014,13 +1079,18 @@ static void charger_monitor_work_func(struct work_struct *work)
 	sgm->state = state;
 	mutex_unlock(&sgm->lock);
 
-	if (!sgm->state.vbus_status) {
+	if (!sgm->state.chrg_type) {
 		pr_err("%s not present vbus_status \n",__func__);
-		goto OUT;
+		//goto OUT;
 	}
+
+	sgm4154x_set_input_curr_lim(sgm, 2400000);
+	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
+	sgm4154x_set_chrg_volt(sgm,4400000);
+
 	sgm4154x_dump_register(sgm);
 	pr_err("%s\n",__func__);
-OUT:
+//OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
 }
 
@@ -1052,11 +1122,12 @@ static void charger_detect_work_func(struct work_struct *work)
 	sgm->state = state;
 	mutex_unlock(&sgm->lock);
 
-	if(!sgm->state.vbus_gd) {
+/*	if(!sgm->state.vbus_gd) {
 		dev_err(sgm->dev, "Vbus not present, disable charge\n");
 		sgm4154x_disable_charger(sgm);
 		goto err;
-	}
+	}*/
+
 	if(!state.online)
 	{
 		dev_err(sgm->dev, "Vbus not online\n");
@@ -1103,10 +1174,13 @@ static void charger_detect_work_func(struct work_struct *work)
 			//break;
 			return;
 	}
-
+	curr_in_limit = 2400000;
 	//set charge parameters
 	dev_err(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
 	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
+	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
+	sgm4154x_set_chrg_volt(sgm,4400000);
+
 #endif
 	//enable charge
 	sgm4154x_enable_charger(sgm);
@@ -1195,27 +1269,11 @@ static struct power_supply_desc sgm4154x_ac_desc = {
        .get_property = sgm4154x_ac_get_property,
 };
 
-static bool sgm4154x_is_volatile_reg(struct device *dev, unsigned int reg)
-{
-	switch (reg) {
-	case SGM4154x_CHRG_CTRL_0...SGM4154x_CHRG_CTRL_7:
-	case SGM4154x_CHRG_CTRL_c...SGM4154x_CHRG_CTRL_d:
-	case SGM4154x_CHRG_CTRL_f:
-		return true;
-	default:
-		return false;
-	}
-}
-
 static const struct regmap_config sgm4154x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 
 	.max_register = SGM4154x_CHRG_CTRL_f,
-	.reg_defaults	= sgm4154x_reg_defs,
-	.num_reg_defaults = ARRAY_SIZE(sgm4154x_reg_defs),
-	.cache_type = REGCACHE_RBTREE,
-	.volatile_reg = sgm4154x_is_volatile_reg,
 };
 
 static int sgm4154x_power_supply_init(struct sgm4154x_device *sgm,
@@ -1300,6 +1358,26 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 		goto err_out;
 
 	ret = sgm4154x_set_recharge_volt(sgm, 200);//100~200mv
+	if (ret)
+		goto err_out;
+
+	ret = sgm4154x_disable_jeita(sgm);
+	if (ret)
+		goto err_out;
+
+	ret = sgm4154x_disable_watchdog(sgm);
+	if (ret)
+		goto err_out;
+
+	ret = sgm4154x_disable_vindpm_int_pulse(sgm);
+	if (ret)
+		goto err_out;
+
+	ret = sgm4154x_disable_iindpm_int_pulse(sgm);
+	if (ret)
+		goto err_out;
+
+	ret = sgm4154x_enable_charger(sgm);
 	if (ret)
 		goto err_out;
 
@@ -1709,6 +1787,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 	sgm->dev = dev;
 
 	mutex_init(&sgm->lock);
+	mutex_init(&sgm->dpdm_lock);
 
 	strncpy(sgm->model_name, id->name, I2C_NAME_SIZE);
 
@@ -1790,6 +1869,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
 
+	dev_err(dev, "SGM4154x prob successfully.\n");
 	return ret;
 error_out:
 	if (!IS_ERR_OR_NULL(sgm->usb2_phy))
