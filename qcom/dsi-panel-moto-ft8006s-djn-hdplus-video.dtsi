@@ -65,9 +65,9 @@
 		qcom,mdss-dsi-cabc-mv-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-cabc-dis-command = [15 01 00 00 00 00 02 55 00];
 		qcom,mdss-dsi-cabc-dis-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 0F FF];
+		qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 FF 0F];
 		qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 0C CC];
+		qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 CC 0C];
 		qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
 
 		qcom,mdss-dsi-display-timings {
@@ -83,20 +83,18 @@
 					qcom,mdss-dsi-v-pulse-width = <8>;
 					qcom,mdss-dsi-panel-framerate = <60>;
 					qcom,mdss-dsi-on-command = [
-						39 01 00 00 00 00 03 51 00 00
-						15 01 00 00 00 00 02 53 2C
-						15 01 00 00 00 00 02 55 01
 						39 01 00 00 00 00 03 41 5A 19
-						39 01 00 00 00 00 04 A0 05 05 42
-						15 01 00 00 00 00 02 A2 42
+						39 01 00 00 00 00 04 A0 00 00 46
+						39 01 00 00 00 00 11 80 EF D9 C6 B9 AF A5 9E 98 92 8D 88 83 00 60 F6 CF
+						39 01 00 00 00 00 08 90 FC 0F FE EF CF AF 0F
 						39 01 00 00 00 00 03 41 5A 2F
 						15 01 00 00 00 00 02 19 01
 						15 01 00 00 00 00 02 4C 03
-						39 01 00 00 00 00 03 41 5A 19
-						39 01 00 00 00 00 11 80 EF D9 C6 B9 AF A5 9E 98 92 8D 88 83 00 60 F6 CF
-						39 01 00 00 00 00 08 90 FC 0F FE EF CF AF 0F
 						15 01 00 00 78 00 02 11 00
-						15 01 00 00 14 00 02 29 00];
+						15 01 00 00 14 00 02 29 00
+						39 01 00 00 00 00 03 51 00 00
+						15 01 00 00 00 00 02 53 2C
+						15 01 00 00 00 00 02 55 01];
 					qcom,mdss-dsi-off-command = [
 						15 01 00 00 14 00 02 28 00
 						15 01 00 00 96 00 02 10 00];
