@@ -192,11 +192,13 @@ struct dsi_panel_reset_config {
 	int lcd_mode_sel_gpio;
 	int tp_rst_gpio;
 	u32 tp_rst_post_sleep;
+	u32 panel_rst_due_tp_rst_sleep;
 	u32 mode_sel_state;
 
 	bool panel_on_rst_pull_down;
 	bool panel_on_tp_rst_enable;
 	bool reset_force_pull_low;
+	bool panel_rst_due_tp_rst;
 };
 
 enum esd_check_status_mode {

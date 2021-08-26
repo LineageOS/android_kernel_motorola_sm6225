@@ -451,6 +451,16 @@ int dsi_panel_reset(struct dsi_panel *panel)
 
 	/* set tp rst before lcd rst */
 	if (r_config->panel_on_tp_rst_enable && gpio_is_valid(r_config->tp_rst_gpio)) {
+		if(r_config->panel_rst_due_tp_rst) {
+			DSI_INFO("dsp dbg: set lcd reset_gpio to 1\n");
+			gpio_set_value(r_config->reset_gpio, 1);
+			usleep_range(r_config->panel_rst_due_tp_rst_sleep*1000,
+				(r_config->panel_rst_due_tp_rst_sleep*1000) + 100);
+			DSI_INFO("dsp dbg: set lcd reset_gpio to 0\n");
+			gpio_set_value(r_config->reset_gpio, 0);
+			usleep_range(r_config->panel_rst_due_tp_rst_sleep*1000,
+				(r_config->panel_rst_due_tp_rst_sleep*1000) + 100);
+		}
 		rc = gpio_request(r_config->tp_rst_gpio, "tp_rst_gpio");
 		if (rc) {
 			DSI_ERR("request for tp_rst_gpio failed, rc=%d\n", rc);
@@ -2601,6 +2611,21 @@ static int dsi_panel_parse_reset_sequence(struct dsi_panel *panel)
 		} else {
 			DSI_DEBUG("[%s] tp_rst_gpio=%d, tp_rst_post_sleep=%d\n", panel->name,
 						panel->reset_config.tp_rst_gpio, panel->reset_config.tp_rst_post_sleep);
+		}
+
+		panel->reset_config.panel_rst_due_tp_rst = utils->read_bool(utils->data,
+				"qcom,mdss-panel-rst-due-tp-rst");
+
+		DSI_INFO("[%s] panel_rst_due_tp_rst=%d\n", panel->name,
+							panel->reset_config.panel_rst_due_tp_rst);
+
+		rc = utils->read_u32(utils->data,
+						"qcom,mdss-dsi-panel-rst-due-tp-post-ms", &panel->reset_config.panel_rst_due_tp_rst_sleep);
+		if (rc) {
+			panel->reset_config.panel_rst_due_tp_rst_sleep = 0;
+		} else {
+			DSI_INFO("[%s] panel_rst_due_tp_rst_sleep=%d\n", panel->name,
+						panel->reset_config.panel_rst_due_tp_rst_sleep);
 		}
 	}
 
