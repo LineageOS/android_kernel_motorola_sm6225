@@ -406,6 +406,7 @@ struct smb_mmi_charger {
 	struct iio_channel	*int_iio_chans;
 	bool			cp_active;
 
+	bool			enable_factory_mode_aicl;
 	bool			factory_mode;
 	int			demo_mode;
 	struct notifier_block	smb_reboot;
@@ -4306,6 +4307,9 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->dc_cl_ma = -EINVAL;
 
+	chg->enable_factory_mode_aicl =
+		of_property_read_bool(node, "mmi,enable-factory-mode-aicl");
+
 	mmi_charger_power_support(chg);
 
 	rc = of_property_read_u32(node, "qcom,inc-hvdcp-cnt",
@@ -4932,12 +4936,13 @@ static int smb_mmi_probe(struct platform_device *pdev)
 			mmi_err(chip,
 				"Couldn't set USBIN_LOAD_CFG rc=%d\n", rc);
 
-		rc = smblib_masked_write_mmi(chip, USBIN_AICL_OPTIONS_CFG_REG,
+		if (!chip->enable_factory_mode_aicl) {
+			rc = smblib_masked_write_mmi(chip, USBIN_AICL_OPTIONS_CFG_REG,
 					     0xFF, 0x00);
-		if (rc < 0)
-			mmi_err(chip,
-				"Couldn't set USBIN_AICL_OPTIONS rc=%d\n", rc);
-
+			if (rc < 0)
+				mmi_err(chip,
+					"Couldn't set USBIN_AICL_OPTIONS rc=%d\n", rc);
+		}
 		chip->smb_reboot.notifier_call = smbchg_reboot;
 		chip->smb_reboot.next = NULL;
 		chip->smb_reboot.priority = 1;
