@@ -69,6 +69,10 @@ enum oem_property_type {
 	OEM_PROP_FACTORY_VERSION,
 	OEM_PROP_TCMD,
 	OEM_PROP_PMIC_ICL,
+	OEM_PROP_USB_SUSPEND,
+	OEM_PROP_WLS_EN,
+	OEM_PROP_WLS_VOLT_MAX,
+	OEM_PROP_WLS_CURR_MAX,
 	OEM_PROP_REG_ADDRESS,
 	OEM_PROP_REG_DATA,
 	OEM_PROP_LPD_INFO,
@@ -806,6 +810,202 @@ static DEVICE_ATTR(force_pmic_icl, 0664,
 		force_pmic_icl_show,
 		force_pmic_icl_store);
 
+static ssize_t force_wls_en_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wls_en;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wls_en);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", wls_en);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_EN,
+				&wls_en,
+				sizeof(wls_en));
+
+	return r ? r : count;
+}
+
+static ssize_t force_wls_en_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_EN,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", data);
+}
+
+static DEVICE_ATTR(force_wls_en, 0664,
+		force_wls_en_show,
+		force_wls_en_store);
+
+static ssize_t force_usb_suspend_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long usb_suspend;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &usb_suspend);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", usb_suspend);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_USB_SUSPEND,
+				&usb_suspend,
+				sizeof(usb_suspend));
+
+	return r ? r : count;
+}
+
+static ssize_t force_usb_suspend_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_USB_SUSPEND,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", data);
+}
+
+static DEVICE_ATTR(force_usb_suspend, 0664,
+		force_usb_suspend_show,
+		force_usb_suspend_store);
+
+static ssize_t force_wls_volt_max_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wls_volt_max;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wls_volt_max);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", wls_volt_max);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_VOLT_MAX,
+				&wls_volt_max,
+				sizeof(wls_volt_max));
+
+	return r ? r : count;
+}
+
+static ssize_t force_wls_volt_max_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_VOLT_MAX,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", data);
+}
+
+static DEVICE_ATTR(force_wls_volt_max, 0664,
+		force_wls_volt_max_show,
+		force_wls_volt_max_store);
+
+static ssize_t force_wls_curr_max_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wls_curr_max;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wls_curr_max);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", wls_curr_max);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_CURR_MAX,
+				&wls_curr_max,
+				sizeof(wls_curr_max));
+
+	return r ? r : count;
+}
+
+static ssize_t force_wls_curr_max_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_CURR_MAX,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", data);
+}
+
+static DEVICE_ATTR(force_wls_curr_max, 0664,
+		force_wls_curr_max_show,
+		force_wls_curr_max_store);
+
 static ssize_t addr_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t count)
@@ -958,6 +1158,34 @@ static int qti_charger_init(struct qti_charger *chg)
 	if (rc) {
 		mmi_err(chg,
 			   "Couldn't create force_pmic_icl\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_force_wls_en);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create force_wls_en\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_force_usb_suspend);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create force_usb_suspend\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_force_wls_volt_max);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create force_wls_volt_max\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_force_wls_curr_max);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create force_wls_curr_max\n");
 	}
 
 	rc = device_create_file(chg->dev,
