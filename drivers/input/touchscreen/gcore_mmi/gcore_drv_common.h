@@ -33,6 +33,10 @@
 #include <asm/uaccess.h>
 #include <linux/version.h>
 #include <linux/mmi_wake_lock.h>
+#include <linux/power_supply.h>
+
+//#define GCORE_SENSOR_EN 1
+#define CHARGER_NOTIFIER 0
 
 /* display state */
 #ifdef GCORE_SENSOR_EN
@@ -279,8 +283,24 @@ enum FW_MODE {
 enum fw_event_type {
 	FW_UPDATE = 0,
 	FW_READ_REG,
+	FW_WRITE_REG,
 	FW_READ_OPEN,
 	FW_READ_SHORT,
+	FW_EDGE_0,
+	FW_EDGE_90,
+	FW_CHARGER_PLUG,
+	FW_CHARGER_UNPLUG,
+	FW_HEADSET_PLUG,
+	FW_HEADSET_UNPLUG,
+	FW_READ_RAWDATA,
+	FW_READ_DIFFDATA,
+	FW_GESTURE_ENABLE,
+	FW_GESTURE_DISABLE,
+};
+
+enum GCORE_TS_STAT {
+	TS_NORMAL = 0,
+	TS_SUSPEND,
 };
 
 struct gcore_dev {
@@ -423,7 +443,7 @@ extern s32 gcore_idm_write_reg(u32 addr, u8 *buffer, s32 len);
 extern void gcore_irq_disable(struct gcore_dev *gdev);
 extern void gcore_irq_enable(struct gcore_dev *gdev);
 
-
+extern int gcore_fw_event_notify(enum fw_event_type event);
 
 extern struct gcore_exp_fn fw_update_fn;
 extern struct gcore_exp_fn fs_interf_fn;
@@ -451,6 +471,19 @@ extern int gcore_start_mp_test(void);
 #if RESUME_USES_WORKQ
 extern void gcore_resume_wq_init(void);
 #endif
+
+#if CHARGER_NOTIFIER
+struct usb_charger_detection {
+	struct notifier_block charger_notif;
+	u8 usb_connected;
+	struct workqueue_struct *gcore_charger_notify_wq;
+	struct work_struct charger_notify_work;
+};
+
+extern int gcore_charger_notifier_init(void);
+#endif
+
+extern int gcore_idm_tddi_reset(void);
 
 #endif    /* GCORE_TPD_COMMON_H_  */
 
