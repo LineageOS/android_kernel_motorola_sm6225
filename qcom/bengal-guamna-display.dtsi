@@ -338,6 +338,8 @@
 	qcom,mdss-panel-on-rst-pull-down;
 	qcom,mdss-dsi-tp-rst-gpio = <&tlmm 66 0>;
 	qcom,mdss-dsi-tp-rst-post-ms = <2>;
+	qcom,mdss-panel-rst-due-tp-rst;
+	qcom,mdss-dsi-panel-rst-due-tp-post-ms = <10>;
 	qcom,mdss-dsi-reset-sequence = <1 40>;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
