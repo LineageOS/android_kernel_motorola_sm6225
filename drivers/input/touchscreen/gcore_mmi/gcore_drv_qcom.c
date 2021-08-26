@@ -44,6 +44,129 @@ void gcore_resume_wq_init(void)
 }
 #endif
 
+#if CHARGER_NOTIFIER
+struct usb_charger_detection charger_detection;
+static int usb_detect_flag;
+
+static void gcore_charger_notify_work(struct work_struct *work)
+{
+	GTP_DEBUG("enter gcore_charger_notify_work");
+	if (1 == usb_detect_flag) {
+		gcore_fw_event_notify(FW_CHARGER_PLUG);
+	} else if (0 == usb_detect_flag) {
+		gcore_fw_event_notify(FW_CHARGER_UNPLUG);
+	} else {
+		GTP_DEBUG("Charger flag:%d not currently required!",usb_detect_flag);
+	}
+}
+
+static int charger_notifier_callback(struct notifier_block *nb,
+		unsigned long val, void *v)
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	struct usb_charger_detection *charger_detection =
+			container_of(nb, struct usb_charger_detection, charger_notif);
+	union power_supply_propval prop;
+
+	psy= power_supply_get_by_name("usb");
+	if (!psy){
+		return -EINVAL;
+		GTP_ERROR("Couldn't get usbpsy\n");
+	}
+
+	if (!strcmp(psy->desc->name, "usb")){
+		if (psy && charger_detection && val == POWER_SUPPLY_PROP_STATUS) {
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,&prop);
+			if (ret < 0) {
+				GTP_ERROR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+				return ret;
+			}else{
+				usb_detect_flag = prop.intval;
+				if(usb_detect_flag != charger_detection->usb_connected) {
+					 if (1 == usb_detect_flag) {
+						  charger_detection->usb_connected = 1;
+					 }else{
+						  charger_detection->usb_connected = 0;
+					 }
+
+					 queue_work(charger_detection->gcore_charger_notify_wq, \
+						&charger_detection->charger_notify_work);
+
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+int gcore_charger_notifier_init(void)
+{
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop = {0};
+	int ret = 0;
+
+	GTP_ERROR("charger_detection on");
+
+	charger_detection.usb_connected = 0;
+	charger_detection.gcore_charger_notify_wq = create_singlethread_workqueue("gcore_charge_wq");
+	if (!charger_detection.gcore_charger_notify_wq) {
+		GTP_ERROR("allocate gcore_charger_notify_wq failed");
+		return -1;
+	}
+
+	INIT_WORK(&charger_detection.charger_notify_work, gcore_charger_notify_work);
+
+	charger_detection.charger_notif.notifier_call = charger_notifier_callback;
+	ret = power_supply_reg_notifier(&charger_detection.charger_notif);
+	if (ret) {
+		GTP_ERROR("Unable to register charger_notifier:%d\n", ret);
+		goto fail1;
+	}
+
+	/* if power supply supplier registered brfore TP
+	 * ps_notify_callback will not receive PSY_EVENT_PROP_ADDED
+	 * event, and will cause miss to set TP into charger state.
+	 * So check PS state in probe.
+	 */
+	psy = power_supply_get_by_name("usb");
+	if (psy) {
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,&prop);
+		if (ret < 0) {
+			GTP_ERROR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+			goto fail1;
+		} else {
+			usb_detect_flag = prop.intval;
+			if (usb_detect_flag != charger_detection.usb_connected) {
+				 if (1 == usb_detect_flag) {
+					  charger_detection.usb_connected = 1;
+				 } else {
+					  charger_detection.usb_connected = 0;
+				 }
+
+				 if (charger_detection.usb_connected) {
+					gcore_fw_event_notify(FW_CHARGER_PLUG);
+				 } else {
+					gcore_fw_event_notify(FW_CHARGER_UNPLUG);
+				 }
+
+			}
+		}
+	}
+
+	return 0;
+
+fail1:
+	if (charger_detection.charger_notif.notifier_call)
+			power_supply_unreg_notifier(&charger_detection.charger_notif);
+
+	destroy_workqueue(charger_detection.gcore_charger_notify_wq);
+
+	return -1;
+
+}
+#endif
+
 #if defined(CONFIG_ENABLE_GESTURE_WAKEUP) && defined(CONFIG_GESTURE_SPECIAL_INT)
 
 int gcore_enable_irq_wake(struct gcore_dev *gdev)
@@ -132,15 +255,20 @@ void gcore_suspend(void)
 	fn_data.gdev->tp_suspend = true;
 
 	if (fn_data.gdev->should_enable_gesture) {
+		gcore_fw_event_notify(FW_GESTURE_ENABLE);
 		fn_data.gdev->gesture_enabled = true;
 		fn_data.gdev->wakeable = true;
 		enable_irq_wake(gdev->touch_irq);
 		GTP_DEBUG("Enable gcore irq wake");
 	}
+	else {
+		gcore_fw_event_notify(FW_GESTURE_DISABLE);
+	}
 	fn_data.gdev->screen_state = SCREEN_OFF;
 	mutex_unlock(&fn_data.gdev->state_mutex);
 #else
 	fn_data.gdev->tp_suspend = true;
+	gcore_fw_event_notify(FW_GESTURE_DISABLE);
 #endif
 
 	msleep(20);
