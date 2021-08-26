@@ -771,7 +771,7 @@ s32 gcore_touch_event_handler(struct gcore_dev *gdev)
 
 		set_bit(id, &curr_touch);
 
-		gcore_touch_down(gdev->input_device, input_x, input_y, id);
+		gcore_touch_down(gdev->input_device, input_x, input_y, id - 1);
 
 		coor_data += 6;
 
@@ -780,7 +780,7 @@ s32 gcore_touch_event_handler(struct gcore_dev *gdev)
 #ifdef CONFIG_ENABLE_TYPE_B_PROCOTOL
 	for (i = 1; i <= GTP_MAX_TOUCH; i++) {
 		if (!test_bit(i, &curr_touch) && test_bit(i, &prev_touch)) {
-			gcore_touch_up(gdev->input_device, i);
+			gcore_touch_up(gdev->input_device, i - 1);
 		}
 
 		if (test_bit(i, &curr_touch)) {
@@ -1117,6 +1117,10 @@ int gcore_touch_probe(struct gcore_dev *gdev)
 
 #if RESUME_USES_WORKQ
 	gcore_resume_wq_init();
+#endif
+
+#if CHARGER_NOTIFIER
+	gcore_charger_notifier_init();
 #endif
 
 #endif

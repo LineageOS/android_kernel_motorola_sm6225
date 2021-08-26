@@ -428,6 +428,70 @@ int gcore_fw_read_reg_reply(u8 *buf, int len)
 
 }
 
+int gcore_fw_event_notify(enum fw_event_type event)
+{
+	u8 cmd[] = { 0x80, 0xB0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	u8 cmd_len = sizeof(cmd);
+	int ret = 0;
+
+	switch (event) {
+	case FW_EDGE_0:
+		cmd[cmd_len - 1] = 0x02;
+		GTP_DEBUG("gcore fw event:edge 0");
+		break;
+
+	case FW_EDGE_90:
+		cmd[cmd_len - 1] = 0x03;
+		GTP_DEBUG("gcore fw event:edge 90");
+		break;
+
+	case FW_CHARGER_PLUG:
+		cmd[cmd_len - 1] = 0x04;
+		GTP_DEBUG("gcore fw event:charger plug");
+		break;
+
+	case FW_CHARGER_UNPLUG:
+		cmd[cmd_len - 1] = 0x05;
+		GTP_DEBUG("gcore fw event:charger unplug");
+		break;
+
+	case FW_HEADSET_PLUG:
+		cmd[cmd_len - 1] = 0x06;
+		GTP_DEBUG("gcore fw event:headset plug");
+		break;
+
+	case FW_HEADSET_UNPLUG:
+		cmd[cmd_len - 1] = 0x07;
+		GTP_DEBUG("gcore fw event:headset unplug");
+		break;
+
+	case FW_GESTURE_ENABLE:
+		cmd[cmd_len - 1] = 0x0A;
+		GTP_DEBUG("gcore fw event:gesture enable");
+		break;
+
+	case FW_GESTURE_DISABLE:
+		cmd[cmd_len - 1] = 0x0B;
+		GTP_DEBUG("gcore fw event:gesture disable");
+		break;
+
+	default:
+		GTP_DEBUG("unknown fw event type.");
+		break;
+	}
+
+	mutex_lock(&gdev_fwu->transfer_lock);
+
+	ret = gcore_bus_write(cmd, cmd_len);
+	if (ret) {
+		GTP_ERROR("gcore write fw event fail.");
+	}
+
+	mutex_unlock(&gdev_fwu->transfer_lock);
+
+	return ret;
+}
+
 int gcore_reg_enable_write_on(void)
 {
 	u32 addr = 0xC0000020;
