@@ -28,6 +28,7 @@
 #include <linux/power_supply.h>
 #include <linux/notifier.h>
 #include <linux/workqueue.h>
+#include <linux/compat.h>
 
 #define TEMP_NODE_SENSOR_NAMES "mmi,temperature-names"
 #define SENSOR_LISTENER_NAMES "mmi,sensor-listener-names"
