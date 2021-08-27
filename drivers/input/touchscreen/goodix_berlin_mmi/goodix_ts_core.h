@@ -444,6 +444,10 @@ struct goodix_ts_core {
 	struct regulator *avdd;
 	struct regulator *iovdd;
 
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pin_sta_active;
+	struct pinctrl_state *pin_sta_suspend;
+
 	int power_on;
 	int irq;
 	size_t irq_trig_cnt;

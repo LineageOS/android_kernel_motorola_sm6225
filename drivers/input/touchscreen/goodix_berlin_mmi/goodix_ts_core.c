@@ -27,6 +27,8 @@
 
 #include "goodix_ts_core.h"
 
+#define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
+#define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
 #define GOODIX_DEFAULT_CFG_NAME 	"goodix_cfg_group.cfg"
 #define GOOIDX_INPUT_PHYS			"goodix_ts/input0"
 
@@ -1349,6 +1351,54 @@ int goodix_ts_power_off(struct goodix_ts_core *cd)
 }
 
 /**
+ * goodix_ts_pinctrl_init - Get pinctrl handler and pinctrl_state
+ * @core_data: pointer to touch core data
+ * return: 0 ok, <0 failed
+ */
+static int goodix_ts_pinctrl_init(struct goodix_ts_core *core_data)
+{
+	int r = 0;
+
+	/* get pinctrl handler from of node */
+	core_data->pinctrl = devm_pinctrl_get(core_data->bus->dev);
+	if (IS_ERR_OR_NULL(core_data->pinctrl)) {
+		ts_info("Failed to get pinctrl handler[need confirm]");
+		core_data->pinctrl = NULL;
+		return -EINVAL;
+	}
+	ts_debug("success get pinctrl");
+	/* active state */
+	core_data->pin_sta_active = pinctrl_lookup_state(core_data->pinctrl,
+				PINCTRL_STATE_ACTIVE);
+	if (IS_ERR_OR_NULL(core_data->pin_sta_active)) {
+		r = PTR_ERR(core_data->pin_sta_active);
+		ts_err("Failed to get pinctrl state:%s, r:%d",
+				PINCTRL_STATE_ACTIVE, r);
+		core_data->pin_sta_active = NULL;
+		goto exit_pinctrl_put;
+	}
+	ts_debug("success get avtive pinctrl state");
+
+	/* suspend state */
+	core_data->pin_sta_suspend = pinctrl_lookup_state(core_data->pinctrl,
+				PINCTRL_STATE_SUSPEND);
+	if (IS_ERR_OR_NULL(core_data->pin_sta_suspend)) {
+		r = PTR_ERR(core_data->pin_sta_suspend);
+		ts_err("Failed to get pinctrl state:%s, r:%d",
+				PINCTRL_STATE_SUSPEND, r);
+		core_data->pin_sta_suspend = NULL;
+		goto exit_pinctrl_put;
+	}
+	ts_debug("success get suspend pinctrl state");
+
+	return 0;
+exit_pinctrl_put:
+	devm_pinctrl_put(core_data->pinctrl);
+	core_data->pinctrl = NULL;
+	return r;
+}
+
+/**
  * goodix_ts_gpio_setup - Request gpio resources from GPIO subsysten
  * @core_data: pointer to touch core data
  * return: 0 ok, <0 failed
@@ -2149,6 +2199,15 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	if (ret) {
 		ts_err("failed power on");
 		goto err_out;
+	}
+
+	/* Pinctrl handle is optional. */
+	ret = goodix_ts_pinctrl_init(core_data);
+	if (!ret && core_data->pinctrl) {
+		ret = pinctrl_select_state(core_data->pinctrl,
+					 core_data->pin_sta_active);
+		if (ret < 0)
+			ts_err("Failed to select active pinstate, r:%d", ret);
 	}
 
 	/* confirm it's goodix touch dev or not */
