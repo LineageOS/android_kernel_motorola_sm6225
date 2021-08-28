@@ -355,7 +355,7 @@ unsigned int egisfp_interrupt_poll(struct file *file, struct poll_table_struct *
 	}
 	else if (egis_dev->fps_ints.drdy_irq_abort == 1)
 	{
-		mask |= POLLFREE;
+		mask |= 0x400 | POLLRDNORM;
 		egis_dev->fps_ints.drdy_irq_abort = 0;
 	}
 	return mask;
