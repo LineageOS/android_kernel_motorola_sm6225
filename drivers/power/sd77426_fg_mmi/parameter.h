@@ -35,6 +35,7 @@
 #define DISCH_CURRENT_TH    -10
 #define O2_OCV_100_VOLTAGE  8700
 #define TEMPERATURE_DATA_NUM 28
+#define OZ8806_CHIP_ID 0x38
 
 #define num_0      	0
 #define num_1		1
