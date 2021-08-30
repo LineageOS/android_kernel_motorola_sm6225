@@ -944,6 +944,36 @@ static int oz8806_suspend_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 	}
 }
+
+static int32_t oz8806_hw_ic_detect(struct oz8806_data *data)
+{
+
+	uint8_t chip_id = 0;
+	int32_t ret = 0;
+	int32_t i = 0;
+
+	for(i=0; i<5; i++)
+	{
+		ret = i2c_smbus_read_word_data(data->myclient, OZ8806_OP_IDREV);
+		if(ret >= 0)
+		{
+			bmt_dbg("BMT fgu read chip id value 0x%.2x\n",ret);
+			break;
+		}
+		msleep(5);
+	}
+	if(i >= 5)
+	{
+		bmt_dbg("BMT fgu hw ic not detect, reg value 0x%.2x\n",ret);
+		return -1;
+	}
+	chip_id = (uint8_t)ret;
+	if(OZ8806_CHIP_ID != chip_id)
+		return -1;
+
+	return 0;
+}
+
 static void oz8806_init_soc(struct oz8806_data *data)
 {
 	int32_t ret = 0;
@@ -1382,8 +1412,17 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 
 	the_oz8806 = data;
 	data->myclient = client;
+
+	ret = oz8806_hw_ic_detect(data);
+	if(ret < 0)
+	{
+		pr_err("BMT fgu do not detect ic, exit\n");
+		goto register_fail;
+	}
+
 	//init battery information as soon as possible
 	oz8806_wakeup_full_power();
+
 	oz8806_init_batt_info(data);
 
 	INIT_DELAYED_WORK(&data->work, oz8806_battery_work);
