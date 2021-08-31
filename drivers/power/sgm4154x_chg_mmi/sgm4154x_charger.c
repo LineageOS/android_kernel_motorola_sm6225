@@ -705,31 +705,26 @@ static int get_charger_type(struct sgm4154x_device * sgm)
 	enum power_supply_usb_type usb_type;
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
-			sgm4154x_power_supply_desc.type = POWER_SUPPLY_TYPE_USB;
 			usb_type = POWER_SUPPLY_USB_TYPE_SDP;
 			break;
 
 		case SGM4154x_USB_CDP:
-			sgm4154x_power_supply_desc.type = POWER_SUPPLY_TYPE_USB_CDP;
 			usb_type = POWER_SUPPLY_USB_TYPE_CDP;
 			break;
 
 		case SGM4154x_USB_DCP:
-			sgm4154x_power_supply_desc.type = POWER_SUPPLY_TYPE_USB_DCP;
 			usb_type = POWER_SUPPLY_USB_TYPE_DCP;
 			break;
 
 		case SGM4154x_NON_STANDARD:
-			sgm4154x_power_supply_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 			usb_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 			break;
 
 		default:
-			sgm4154x_power_supply_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 			usb_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 			break;
 	}
-	pr_err("%s psy.type:%d,usb_type:%d\n",__func__,sgm4154x_power_supply_desc.type,usb_type);
+	pr_err("%s usb_type:%d\n",__func__,usb_type);
 	return usb_type;
 }
 #endif
@@ -997,9 +992,25 @@ static void sgm4154x_dump_register(struct sgm4154x_device * sgm)
 		pr_err("%s REG[0x%x]=0x%x\n", __func__, i, reg);
 	}
 }
-#if 0
+
+int sgm4154x_get_usb_present(struct sgm4154x_device *sgm)
+{
+	int ret;
+	u32 stat;
+
+	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_a, &stat);
+	if (ret){
+		pr_err("%s read SGM4154x_CHRG_CTRL_a fail\n",__func__);
+		return ret;
+	}
+	sgm->state.vbus_gd = !!(stat & SGM4154x_VBUS_GOOD);
+	return 0;
+}
+
 static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 {
+	int rc = 0;
+
 		/* fetch the DPDM regulator */
 	if (!sgm->dpdm_reg && of_get_property(sgm->dev->of_node,
 				"dpdm-supply", NULL)) {
@@ -1040,7 +1051,42 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 
 	return rc;
 }
-#endif
+
+void sgm4154x_rerun_apsd(struct sgm4154x_device * sgm)
+{
+	int rc;
+
+	dev_info(sgm->dev, "re-running APSD\n");
+
+	rc = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_7, SGM4154x_IINDET_EN_MASK,
+                     SGM4154x_IINDET_EN);
+	if (rc < 0)
+		dev_err(sgm->dev, "Couldn't re-run APSD rc=%d\n", rc);
+	else
+		sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+}
+
+static int sgm4154x_rerun_apsd_if_required(struct sgm4154x_device * sgm)
+{
+	int rc = 0;
+
+	rc = sgm4154x_get_usb_present(sgm);
+	if (rc)
+		return rc;
+
+	if (!sgm->state.vbus_gd)
+		return 0;
+
+	rc = sgm4154x_request_dpdm(sgm, true);
+	if (rc < 0)
+		dev_err(sgm->dev, "Couldn't to enable DPDM rc=%d\n", rc);
+
+	sgm->typec_apsd_rerun_done = true;
+	sgm4154x_rerun_apsd(sgm);
+
+	return 0;
+}
+
 static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 {
 	int chrg_stat;
@@ -1084,14 +1130,19 @@ static void charger_monitor_work_func(struct work_struct *work)
 		//goto OUT;
 	}
 
-	sgm4154x_set_input_curr_lim(sgm, 2400000);
-	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
-	sgm4154x_set_chrg_volt(sgm,4400000);
-
 	sgm4154x_dump_register(sgm);
 	pr_err("%s\n",__func__);
 //OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
+}
+
+static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
+{
+	dev_err(sgm->dev, "Vbus not present, disable charge\n");
+	sgm->typec_apsd_rerun_done = false;
+	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	sgm4154x_disable_charger(sgm);
+	sgm4154x_request_dpdm(sgm, true);
 }
 
 static void charger_detect_work_func(struct work_struct *work)
@@ -1122,15 +1173,15 @@ static void charger_detect_work_func(struct work_struct *work)
 	sgm->state = state;
 	mutex_unlock(&sgm->lock);
 
-/*	if(!sgm->state.vbus_gd) {
-		dev_err(sgm->dev, "Vbus not present, disable charge\n");
-		sgm4154x_disable_charger(sgm);
-		goto err;
-	}*/
+	if(!sgm->state.vbus_gd) {
+		sgm4154x_vbus_remove(sgm);
+		goto vbus_remove;
+	}
 
 	if(!state.online)
 	{
-		dev_err(sgm->dev, "Vbus not online\n");
+		sgm4154x_request_dpdm(sgm, true);
+		dev_err(sgm->dev, "BC1.2 detecte not done\n");
 		goto err;
 	}
 
@@ -1138,30 +1189,41 @@ static void charger_detect_work_func(struct work_struct *work)
 		dev_err(sgm->dev, "DPDM detecte not done, disable charge\n");
 		goto err;
 	}
+
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+	if (((sgm->state.chrg_type == SGM4154x_USB_SDP) ||
+		(sgm->state.chrg_type == SGM4154x_NON_STANDARD))
+		&& (!sgm->typec_apsd_rerun_done)) {
+		dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
+		sgm->typec_apsd_rerun_done = true;
+		sgm4154x_rerun_apsd_if_required(sgm);
+		goto err;
+	}
+
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			pr_err("SGM4154x charger type: SDP\n");
 			curr_in_limit = 500000;
+			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB;
 			break;
 
 		case SGM4154x_USB_CDP:
 			pr_err("SGM4154x charger type: CDP\n");
 			curr_in_limit = 1500000;
+			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
 			break;
 
 		case SGM4154x_USB_DCP:
 			pr_err("SGM4154x charger type: DCP\n");
 			curr_in_limit = 2400000;
+			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
 			break;
 
 		case SGM4154x_UNKNOWN:
+		case SGM4154x_NON_STANDARD:
 			pr_err("SGM4154x charger type: UNKNOWN\n");
 			curr_in_limit = 500000;
-			break;
-		case SGM4154x_NON_STANDARD:
-			pr_err("SGM4154x charger type: NON_STANDARD\n");
-			curr_in_limit = 1000000;
+			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
 			break;
 
 		case SGM4154x_OTG_MODE:
@@ -1174,12 +1236,10 @@ static void charger_detect_work_func(struct work_struct *work)
 			//break;
 			return;
 	}
-	curr_in_limit = 2400000;
+
 	//set charge parameters
 	dev_err(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
 	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
-	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
-	sgm4154x_set_chrg_volt(sgm,4400000);
 
 #endif
 	//enable charge
@@ -1189,10 +1249,13 @@ static void charger_detect_work_func(struct work_struct *work)
 	power_supply_changed(sgm->charger);
 	power_supply_changed(sgm->ac);
 	return;
-err:
-	//release wakelock
+
+vbus_remove:
 	power_supply_changed(sgm->charger);
 	power_supply_changed(sgm->ac);
+
+err:
+	//release wakelock
 	dev_err(sgm->dev, "Relax wakelock\n");
 	__pm_relax(sgm->charger_wakelock);
 	return;
@@ -1204,7 +1267,7 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 
 	//lock wakelock
 	pr_err("%s entry\n",__func__);
-    #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+	#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	schedule_delayed_work(&sgm->charge_detect_delayed_work, 100);
 	//power_supply_changed(sgm->charger);
 	#endif
@@ -1242,7 +1305,7 @@ static char *sgm4154x_charger_supplied_to[] = {
 
 static struct power_supply_desc sgm4154x_power_supply_desc = {
 	.name = "sgm4154x-charger",
-	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.type = POWER_SUPPLY_TYPE_MAINS,
 	.usb_types = sgm4154x_usb_type,
 	.num_usb_types = ARRAY_SIZE(sgm4154x_usb_type),
 	.properties = sgm4154x_power_supply_props,
@@ -1830,6 +1893,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 		INIT_WORK(&sgm->usb_work, sgm4154x_usb_work);
 		sgm->usb_nb.notifier_call = sgm4154x_usb_notifier;
 		otg_notify = usb_register_notifier(sgm->usb3_phy, &sgm->usb_nb);
+	}
+
+	ret = sgm4154x_rerun_apsd_if_required(sgm);
+	if (ret) {
+		dev_err(dev, "Failed to rerun apsd\n");
+		goto error_out;
 	}
 
 	if (client->irq) {
