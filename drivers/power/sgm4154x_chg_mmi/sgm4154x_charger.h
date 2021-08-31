@@ -48,6 +48,10 @@
 #define SGM4154x_INPUT_DET   	0x0e
 #define SGM4154x_CHRG_CTRL_f	0x0f
 
+/*rerun apsd*/
+#define SGM4154x_IINDET_EN_MASK		GENMASK(7, 7)
+#define SGM4154x_IINDET_EN				BIT(7)
+
 /* charge status flags  */
 #define SGM4154x_IINDPM_INT_MASK		GENMASK(0, 0)
 #define SGM4154x_IINDPM_INT_DISABLE	BIT(0)
@@ -297,6 +301,8 @@ struct sgm4154x_device {
 	struct regulator	*dpdm_reg;
 	struct mutex		dpdm_lock;
 	bool			dpdm_enabled;
+	bool			typec_apsd_rerun_done;
+	int			real_charger_type;
 };
 
 #endif /* _SGM4154x_CHARGER_H */
