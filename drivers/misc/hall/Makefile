@@ -13,3 +13,4 @@ clean:
 	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
 	rm -rf .tmp_versions
 
+KBUILD_EXTRA_SYMBOLS := $(M)/../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers

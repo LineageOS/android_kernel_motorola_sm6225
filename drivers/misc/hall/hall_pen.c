@@ -19,10 +19,11 @@
 #include <asm/uaccess.h>
 #include <linux/of_gpio.h>
 #include <linux/irq.h>
+#include <linux/sensors.h>
 #include <linux/regulator/consumer.h>
 
 #define DRIVER_NAME "hall_pen_detect"
-#define LOG_DBG(fmt, args...)    pr_info(DRIVER_NAME " [DBG]" "<%s:%d>"fmt, __func__, __LINE__, ##args)
+#define LOG_DBG(fmt, args...)    pr_debug(DRIVER_NAME " [DBG]" "<%s:%d>"fmt, __func__, __LINE__, ##args)
 #define LOG_INFO(fmt, args...)   pr_info(DRIVER_NAME " [INFO]" "<%s:%d>"fmt, __func__, __LINE__, ##args)
 #define LOG_ERR(fmt, args...)    pr_err(DRIVER_NAME " [ERR]" "<%s:%d>"fmt, __func__, __LINE__, ##args)
 
@@ -42,9 +43,12 @@ static struct hall_sensor_str {
 	int enable;
 	int gpio_num;
 	int report_val;
+	int pen_detect;
 	struct regulator *hall_vdd;
 	struct hall_gpio *gpio_list;
 	spinlock_t mHallSensorLock;
+	struct input_dev *hall_dev;
+	struct sensors_classdev sensors_pen_cdev;
 }* hall_sensor_dev;
 
 #ifdef CONFIG_OF
@@ -79,6 +83,11 @@ void check_and_send(void)
 			report_val |= hall_sensor_dev->gpio_list[i].gpio_low_report_val;
 	}
 	hall_sensor_dev->report_val = report_val;
+	if(hall_sensor_dev->pen_detect){
+		input_report_abs(hall_sensor_dev->hall_dev, ABS_DISTANCE, report_val);
+		input_sync(hall_sensor_dev->hall_dev);
+	}
+	LOG_DBG("hall hall_pen_detectend ==%d", hall_sensor_dev->pen_detect);
 	LOG_DBG("hall report %d", report_val);
 }
 
@@ -107,6 +116,13 @@ void hall_enable(bool enable)
 	}
 }
 
+static int hallpen_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	hall_sensor_dev->pen_detect =1;
+	hall_enable(enable);
+	return 0;
+}
 static ssize_t hall_enable_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t count)
@@ -163,6 +179,9 @@ static int hall_sensor_probe(struct platform_device *pdev)
 	enum of_gpio_flags flags;
 	struct device_node *np = pdev->dev.of_node;
 	int i;
+	int err ;
+	const char *name_temp;
+	//struct totalHallInformation *pHallInformationData = NULL;
 
 	//Memory allocation
 	hall_sensor_dev = kzalloc(sizeof (struct hall_sensor_str), GFP_KERNEL);
@@ -174,9 +193,12 @@ static int hall_sensor_probe(struct platform_device *pdev)
 
 	spin_lock_init(&hall_sensor_dev->mHallSensorLock);
 	hall_sensor_dev->enable = 0;
+	hall_sensor_dev->pen_detect = 0;
 	//tcmd node
 	ret = of_property_read_string(np, "hall,factory-class-name", &hall_class.name);
 	ret = class_register(&hall_class);
+	ret = of_property_read_string(np, "hall,input-dev-name", &name_temp);
+     	LOG_INFO("hall_input num :%s", name_temp);
 
 	ret =  of_property_read_u32(np,"hall,nirq-gpio-num", &hall_sensor_dev->gpio_num);
 	if (ret < 0)
@@ -184,6 +206,47 @@ static int hall_sensor_probe(struct platform_device *pdev)
 		LOG_ERR("GPIO for hall sensor does not exist");
 	}
 	LOG_INFO("gpio num :%d", hall_sensor_dev->gpio_num);
+
+	  hall_sensor_dev->hall_dev = input_allocate_device();
+	  	if (!hall_sensor_dev->hall_dev){
+			LOG_ERR(" hall_indev allocation fails\n" );
+			return -ENOMEM;
+		}
+	hall_sensor_dev->hall_dev->name = name_temp;
+	hall_sensor_dev->hall_dev->dev.parent= NULL;
+	LOG_INFO("hall_ num :%s", hall_sensor_dev->hall_dev->name);
+	/* Set all the keycodes */
+	//input_set_capability(hall_sensor_dev->hall_dev, EV_SW, SW_CAMERA_LENS_COVER);
+	__set_bit(EV_ABS, hall_sensor_dev->hall_dev->evbit);
+	input_set_abs_params(hall_sensor_dev->hall_dev, ABS_DISTANCE, -1, 100, 0, 0);
+
+	err = input_register_device(hall_sensor_dev->hall_dev);
+	if (ret) {
+		LOG_ERR("halinput registration fails\n");
+		return -ENOMEM;
+	}
+	input_report_abs(hall_sensor_dev->hall_dev, ABS_DISTANCE, -1);
+	input_sync(hall_sensor_dev->hall_dev);
+
+	hall_sensor_dev->sensors_pen_cdev.sensors_enable = hallpen_enable;
+	hall_sensor_dev->sensors_pen_cdev.sensors_poll_delay = NULL;
+	hall_sensor_dev->sensors_pen_cdev.name = hall_sensor_dev->hall_dev->name;
+	hall_sensor_dev->sensors_pen_cdev.vendor = "motorola";
+	hall_sensor_dev->sensors_pen_cdev.version = 1;
+	hall_sensor_dev->sensors_pen_cdev.type = SENSOR_TYPE_MOTO_HALL;
+	hall_sensor_dev->sensors_pen_cdev.max_range = "5";
+	hall_sensor_dev->sensors_pen_cdev.resolution = "5.0";
+	hall_sensor_dev->sensors_pen_cdev.sensor_power = "3";
+	hall_sensor_dev->sensors_pen_cdev.min_delay = 0;
+	hall_sensor_dev->sensors_pen_cdev.fifo_reserved_event_count = 0;
+	hall_sensor_dev->sensors_pen_cdev.fifo_max_event_count = 0;
+	hall_sensor_dev->sensors_pen_cdev.delay_msec = 100;
+	hall_sensor_dev->sensors_pen_cdev.enabled = 0;
+
+	err = sensors_classdev_register(&hall_sensor_dev->hall_dev->dev, &hall_sensor_dev->sensors_pen_cdev);
+	if (err < 0)
+		LOG_ERR("create cap sensor_class  file failed (%d)\n", err);
+
 	hall_sensor_dev->gpio_list = kzalloc(sizeof (struct hall_gpio) * hall_sensor_dev->gpio_num, GFP_KERNEL);
 	if (!hall_sensor_dev->gpio_list) {
 		LOG_ERR("Memory allocation fails for hall sensor");
@@ -283,6 +346,8 @@ static int hall_sensor_remove(struct platform_device *pdev)
 	if (hall_sensor_dev)
 		kfree(hall_sensor_dev);
 
+	sensors_classdev_unregister(&hall_sensor_dev->sensors_pen_cdev);
+	input_unregister_device(hall_sensor_dev->hall_dev);
 	LOG_INFO("paltform rm");
 	return 0;
 }
