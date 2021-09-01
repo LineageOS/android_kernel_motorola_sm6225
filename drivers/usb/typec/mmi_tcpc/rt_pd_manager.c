@@ -14,7 +14,6 @@
  */
 
 #include <linux/extcon-provider.h>
-#include <linux/iio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -41,18 +40,13 @@ enum dr {
 	DR_MAX,
 };
 
-static char *dr_names[DR_MAX] = {
+static const char * const dr_names[DR_MAX] = {
 	"Idle", "Device", "Host", "Device to Host", "Host to Device",
 };
 
 struct rt_pd_manager_data {
 	struct device *dev;
 	struct extcon_dev *extcon;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	struct iio_channel **iio_channels;
-#else
-	struct power_supply *usb_psy;
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) */
 	struct delayed_work usb_dwork;
 	struct tcpc_device *tcpc;
 	struct notifier_block pd_nb;
@@ -69,77 +63,6 @@ struct rt_pd_manager_data {
 	struct typec_partner_desc partner_desc;
 	struct usb_pd_identity partner_identity;
 };
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-#include <linux/qti_power_supply.h>
-#define POWER_SUPPLY_TYPE_USB_FLOAT	QTI_POWER_SUPPLY_TYPE_USB_FLOAT
-#define POWER_SUPPLY_PD_INACTIVE	QTI_POWER_SUPPLY_PD_INACTIVE
-#define POWER_SUPPLY_PD_ACTIVE		QTI_POWER_SUPPLY_PD_ACTIVE
-#define POWER_SUPPLY_PD_PPS_ACTIVE	QTI_POWER_SUPPLY_PD_PPS_ACTIVE
-
-enum iio_psy_property {
-	POWER_SUPPLY_PROP_PD_ACTIVE = 0,
-	POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
-	POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
-	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
-	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
-	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_REAL_TYPE,
-	POWER_SUPPLY_IIO_PROP_MAX,
-};
-
-static const char * const iio_channel_map[] = {
-	"pd_active", "pd_usb_suspend_supported", "pd_in_hard_reset",
-	"pd_current_max", "pd_voltage_min", "pd_voltage_max", "real_type",
-};
-
-static int smblib_get_prop(struct rt_pd_manager_data *rpmd,
-			   enum iio_psy_property ipp,
-			   union power_supply_propval *val)
-{
-	int ret = 0, value = 0;
-
-	ret = iio_read_channel_processed(rpmd->iio_channels[ipp], &value);
-	if (ret < 0) {
-		dev_err(rpmd->dev, "%s fail(%d), ipp = %d\n",
-				   __func__, ret, ipp);
-		return ret;
-	}
-
-	val->intval = value;
-	return 0;
-}
-
-static int smblib_set_prop(struct rt_pd_manager_data *rpmd,
-			   enum iio_psy_property ipp,
-			   const union power_supply_propval *val)
-{
-	int ret = 0;
-
-	ret = iio_write_channel_raw(rpmd->iio_channels[ipp], val->intval);
-	if (ret < 0) {
-		dev_err(rpmd->dev, "%s fail(%d), ipp = %d\n",
-				   __func__, ret, ipp);
-		return ret;
-	}
-
-	return 0;
-}
-#else
-static inline int smblib_get_prop(struct rt_pd_manager_data *rpmd,
-				  enum power_supply_property psp,
-				  union power_supply_propval *val)
-{
-	return power_supply_get_property(rpmd->usb_psy, psp, val);
-}
-
-static inline int smblib_set_prop(struct rt_pd_manager_data *rpmd,
-				  enum power_supply_property psp,
-				  const union power_supply_propval *val)
-{
-	return power_supply_set_property(rpmd->usb_psy, psp, val);
-}
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) */
 
 static const unsigned int rpm_extcon_cable[] = {
 	EXTCON_USB,
@@ -258,7 +181,13 @@ static void usb_dwork_handler(struct work_struct *work)
 		stop_usb_host(rpmd);
 		break;
 	case DR_DEVICE:
-		ret = smblib_get_prop(rpmd, POWER_SUPPLY_PROP_REAL_TYPE, &val);
+		/* ***
+		 * ret = smblib_get_prop(rpmd,
+		 *			 POWER_SUPPLY_PROP_REAL_TYPE, &val);
+		 * Replace the following two lines to obtain charger type
+		 */
+		ret = 0;
+		val.intval = POWER_SUPPLY_TYPE_UNKNOWN;
 		dev_info(rpmd->dev, "%s polling_cnt = %d, ret = %d type = %d\n",
 				    __func__, ++rpmd->usb_type_polling_cnt,
 				    ret, val.intval);
@@ -286,48 +215,12 @@ static void usb_dwork_handler(struct work_struct *work)
 	}
 }
 
-static void pd_sink_set_vol_and_cur(struct rt_pd_manager_data *rpmd,
-				    int mv, int ma, uint8_t type)
+static void sink_vbus_set_vol_and_cur(struct rt_pd_manager_data *rpmd,
+				      int mv, int ma, uint8_t type)
 {
-	const int micro_5v = 5000000;
-	unsigned long sel = 0;
-	union power_supply_propval val = {.intval = 0};
-
-	/* Charger plug-in first time */
-	smblib_get_prop(rpmd, POWER_SUPPLY_PROP_PD_ACTIVE, &val);
-	if (val.intval == POWER_SUPPLY_PD_INACTIVE) {
-		val.intval = POWER_SUPPLY_PD_ACTIVE;
-		smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_ACTIVE, &val);
-	}
-
-	switch (type) {
-	case TCP_VBUS_CTRL_PD_HRESET:
-	case TCP_VBUS_CTRL_PD_PR_SWAP:
-	case TCP_VBUS_CTRL_PD_REQUEST:
-		set_bit(0, &sel);
-		set_bit(1, &sel);
-		val.intval = mv * 1000;
-		break;
-	case TCP_VBUS_CTRL_PD_STANDBY_UP:
-		set_bit(1, &sel);
-		val.intval = mv * 1000;
-		break;
-	case TCP_VBUS_CTRL_PD_STANDBY_DOWN:
-		set_bit(0, &sel);
-		val.intval = mv * 1000;
-		break;
-	default:
-		break;
-	}
-	if (val.intval < micro_5v)
-		val.intval = micro_5v;
-	if (test_bit(0, &sel))
-		smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_VOLTAGE_MIN, &val);
-	if (test_bit(1, &sel))
-		smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_VOLTAGE_MAX, &val);
-
-	val.intval = ma * 1000;
-	smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_CURRENT_MAX, &val);
+	/* ***
+	 * The input voltage/current limit hints from TCPC/RT1715
+	 */
 }
 
 static int pd_tcp_notifier_call(struct notifier_block *nb,
@@ -340,7 +233,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 	uint8_t old_state = TYPEC_UNATTACHED, new_state = TYPEC_UNATTACHED;
 	enum typec_pwr_opmode opmode = TYPEC_PWR_MODE_USB;
 	uint32_t partner_vdos[VDO_MAX_NR];
-	union power_supply_propval val = {.intval = 0};
 
 	switch (event) {
 	case TCP_NOTIFY_SINK_VBUS:
@@ -361,10 +253,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			}
 		}
 
-		if (noti->vbus_state.type & TCP_VBUS_CTRL_PD_DETECT)
-			pd_sink_set_vol_and_cur(rpmd, rpmd->sink_mv_new,
-						rpmd->sink_ma_new,
-						noti->vbus_state.type);
+		sink_vbus_set_vol_and_cur(rpmd, rpmd->sink_mv_new,
+					  rpmd->sink_ma_new,
+					  noti->vbus_state.type);
 		break;
 	case TCP_NOTIFY_SOURCE_VBUS:
 		dev_info(rpmd->dev, "%s source vbus %dmV\n",
@@ -456,13 +347,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		}
 
 		if (new_state == TYPEC_UNATTACHED) {
-			val.intval = 0;
-			smblib_set_prop(rpmd,
-				POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
-					&val);
-			smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_ACTIVE,
-					&val);
-
 			typec_unregister_partner(rpmd->partner);
 			rpmd->partner = NULL;
 			if (rpmd->typec_caps.prefer_role == TYPEC_SOURCE) {
@@ -556,12 +440,6 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			 * to not interfering with USB2.0 communication
 			 */
 
-			/* toggle chg->pd_active to clean up the effect of
-			 * smblib_uusb_removal() */
-			val.intval = 10;
-			smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_ACTIVE,
-					&val);
-
 			typec_set_pwr_role(rpmd->typec_port, TYPEC_SINK);
 		} else if (noti->swap_state.new_role == PD_ROLE_SOURCE) {
 			dev_info(rpmd->dev, "%s swap power role to source\n",
@@ -627,25 +505,8 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		case PD_CONNECT_PE_READY_SNK:
 		case PD_CONNECT_PE_READY_SNK_PD30:
 		case PD_CONNECT_PE_READY_SNK_APDO:
-			ret = tcpm_inquire_dpm_flags(rpmd->tcpc);
-			val.intval = ret & DPM_FLAGS_PARTNER_USB_SUSPEND ?
-				     1 : 0;
-			smblib_set_prop(rpmd,
-				POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
-					&val);
 		case PD_CONNECT_PE_READY_SRC:
 		case PD_CONNECT_PE_READY_SRC_PD30:
-			/* update chg->pd_active */
-			val.intval = noti->pd_state.connected ==
-				     PD_CONNECT_PE_READY_SNK_APDO ?
-				     POWER_SUPPLY_PD_PPS_ACTIVE :
-				     POWER_SUPPLY_PD_ACTIVE;
-			smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_ACTIVE,
-					&val);
-			pd_sink_set_vol_and_cur(rpmd, rpmd->sink_mv_old,
-						rpmd->sink_ma_old,
-						TCP_VBUS_CTRL_PD_STANDBY);
-
 			typec_set_pwr_opmode(rpmd->typec_port,
 					     TYPEC_PWR_MODE_PD);
 			if (!rpmd->partner)
@@ -665,13 +526,10 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		switch (noti->hreset_state.state) {
 		case TCP_HRESET_SIGNAL_SEND:
 		case TCP_HRESET_SIGNAL_RECV:
-			val.intval = 1;
 			break;
 		default:
-			val.intval = 0;
 			break;
 		}
-		smblib_set_prop(rpmd, POWER_SUPPLY_PROP_PD_IN_HARD_RESET, &val);
 		break;
 	default:
 		break;
@@ -1014,9 +872,6 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 	int ret = 0;
 	static int probe_cnt = 0;
 	struct rt_pd_manager_data *rpmd = NULL;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	int i = 0;
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) */
 
 	dev_info(&pdev->dev, "%s (%s) probe_cnt = %d\n",
 			     __func__, RT_PD_MANAGER_VERSION, ++probe_cnt);
@@ -1036,44 +891,6 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 		else
 			goto err_init_extcon;
 	}
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	rpmd->iio_channels = devm_kcalloc(rpmd->dev, POWER_SUPPLY_IIO_PROP_MAX,
-					  sizeof(rpmd->iio_channels[0]),
-					  GFP_KERNEL);
-	if (!rpmd->iio_channels) {
-		dev_err(rpmd->dev, "%s kcalloc fail\n", __func__);
-		ret = -EPROBE_DEFER;
-		if (probe_cnt >= PROBE_CNT_MAX)
-			goto out;
-		else
-			goto err_get_iio_chan;
-	}
-	for (i = 0; i < POWER_SUPPLY_IIO_PROP_MAX; i++) {
-		rpmd->iio_channels[i] =
-			devm_iio_channel_get(rpmd->dev, iio_channel_map[i]);
-		if (IS_ERR(rpmd->iio_channels[i])) {
-			ret = PTR_ERR(rpmd->iio_channels[i]);
-			dev_err(rpmd->dev, "%s get iio chan %s fail(%d)\n",
-					   __func__, iio_channel_map[i], ret);
-			ret = -EPROBE_DEFER;
-			if (probe_cnt >= PROBE_CNT_MAX)
-				goto out;
-			else
-				goto err_get_iio_chan;
-		}
-	}
-#else
-	rpmd->usb_psy = power_supply_get_by_name("usb");
-	if (!rpmd->usb_psy) {
-		dev_err(rpmd->dev, "%s get usb psy fail\n", __func__);
-		ret = -EPROBE_DEFER;
-		if (probe_cnt >= PROBE_CNT_MAX)
-			goto out;
-		else
-			goto err_get_usb_psy;
-	}
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) */
 
 	rpmd->tcpc = tcpc_dev_get_by_name("type_c_port0");
 	if (!rpmd->tcpc) {
@@ -1126,12 +943,6 @@ err_reg_tcpc_notifier:
 	typec_unregister_port(rpmd->typec_port);
 err_init_typec:
 err_get_tcpc_dev:
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-err_get_iio_chan:
-#else
-	power_supply_put(rpmd->usb_psy);
-err_get_usb_psy:
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) */
 err_init_extcon:
 	return ret;
 }
@@ -1150,10 +961,6 @@ static int rt_pd_manager_remove(struct platform_device *pdev)
 		dev_err(rpmd->dev, "%s unregister tcpc notifier fail(%d)\n",
 				   __func__, ret);
 	typec_unregister_port(rpmd->typec_port);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
-	if (rpmd->usb_psy)
-		power_supply_put(rpmd->usb_psy);
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)) */
 
 	return ret;
 }
