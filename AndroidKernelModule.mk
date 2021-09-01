@@ -5,8 +5,10 @@ include device/qcom/common/dlkm/Build_external_kernelmodule.mk
 endif
 else
 ifneq (,$(findstring gki,$(KERNEL_DEFCONFIG)))
+ifneq (,$(findstring $(LOCAL_MODULE),$(BOARD_VENDOR_KERNEL_MODULES)))
 #GKI product should use Qcom latest dlkm compile file
 include device/qcom/common/dlkm/AndroidKernelModule.mk
+endif
 else
 DISABLE_THIS_DLKM := $(strip $(TARGET_KERNEL_DLKM_DISABLE))
 
