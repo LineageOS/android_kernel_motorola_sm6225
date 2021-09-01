@@ -6,6 +6,7 @@
 #define _SGM4154x_CHARGER_H
 
 #include <linux/i2c.h>
+#include <linux/iio/consumer.h>
 
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
 
@@ -209,6 +210,10 @@
 #define TEMP_T0_THRES_PLUS_X_DEGREE  0
 #define TEMP_NEG_10_THRES 0
 
+struct sgm4154x_iio {
+	struct iio_channel	*usbin_v_chan;
+};
+
 struct sgm4154x_init_data {
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
@@ -303,6 +308,10 @@ struct sgm4154x_device {
 	bool			dpdm_enabled;
 	bool			typec_apsd_rerun_done;
 	int			real_charger_type;
+
+	struct delayed_work hvdcp_detect_delayed_work;
+
+	struct sgm4154x_iio		iio;
 };
 
 #endif /* _SGM4154x_CHARGER_H */
