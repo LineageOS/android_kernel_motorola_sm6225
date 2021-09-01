@@ -118,6 +118,9 @@ struct blkdev {
 	const char *name;
 	struct file *filep;
 	size_t size;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) || defined(CONFIG_MMI_UTAG_RW_BIO)
+	struct block_device *bdev;
+#endif
 };
 
 struct ctrl {
@@ -145,16 +148,95 @@ struct ctrl {
 	int store_work_result;
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) || defined(CONFIG_MMI_UTAG_RW_BIO)
+#include <linux/blkdev.h>
+#include <linux/bio.h>
+
+static struct page *addr_to_page(void *addr)
+{
+	if (is_vmalloc_addr(addr))
+		return vmalloc_to_page(addr);
+	else
+		return virt_to_page(addr);
+}
+
+static int utags_submit_bio(struct block_device *bdev, void *buf, int pages, int opf)
+{
+	int i, ret;
+	struct bio *bio;
+	int num, left_pages = pages;
+
+	pr_debug("%s: pages %d left_pages %d begin\n", __func__, pages, left_pages);
+	while (left_pages > 0) {
+		num = (left_pages >= BIO_MAX_PAGES) ? BIO_MAX_PAGES : left_pages;
+
+		bio = bio_alloc(GFP_KERNEL, num);
+		if (!bio)
+			return -ENOMEM;
+
+		bio->bi_iter.bi_sector = (pages - left_pages) * (PAGE_SIZE >> 9);
+		bio->bi_opf = opf;
+		bio_set_dev(bio, bdev);
+
+		for (i = 0; i < num; i++) {
+			if (!bio_add_page(bio, addr_to_page(buf + (pages - left_pages + i) * PAGE_SIZE), PAGE_SIZE, 0)) {
+				bio_put(bio);
+				return -EIO;
+			}
+		}
+
+		ret = submit_bio_wait(bio);
+		if (ret)
+			pr_err("Submit bio err %d,%d,%d", num, opf, ret);
+
+		bio_put(bio);
+		left_pages -= num;
+		pr_debug("%s: pages %d left_pages %d\n", __func__, pages, left_pages);
+	}
+	return ret;
+}
+
+static ssize_t rw_bdev(struct block_device *bdev, void *buf, size_t count, int opf)
+{
+	int ret;
+
+	ret = utags_submit_bio(bdev, buf, 1 << get_order(count), opf);
+	return  ret < 0 ? ret : count;
+}
+
+static ssize_t kernel_read_stub(struct blkdev* cb, void *buf, size_t count)
+{
+	return rw_bdev(cb->bdev, buf, count, REQ_OP_READ);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+static inline ssize_t kernel_read_stub(struct blkdev* cb, void *addr, size_t count)
 {
 	loff_t pos = 0;
-	return kernel_read(file, addr, count, &pos);
+	return kernel_read(cb->filep, addr, count, &pos);
 }
 #else
-static inline ssize_t kernel_read_stub(struct file *file, void *addr, size_t count)
+static inline ssize_t kernel_read_stub(struct blkdev* cb, void *addr, size_t count)
 {
-	return kernel_read(file, 0, addr, count);
+	return kernel_read(cb->filep, 0, addr, count);
+}
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) || defined(CONFIG_MMI_UTAG_RW_BIO)
+static ssize_t kernel_write_stub(struct blkdev* cb, void *buf, size_t count)
+{
+	return rw_bdev(cb->bdev, buf, count, REQ_OP_WRITE | REQ_SYNC);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+static inline ssize_t kernel_write_stub(struct blkdev* cb, void *addr, size_t count)
+{
+	loff_t pos = 0;
+	return kernel_write(cb->filep, addr, count, &pos);
+}
+#else
+static inline ssize_t kernel_write_stub(struct blkdev* cb, void *addr, size_t count)
+{
+	loff_t pos = 0;
+	return vfs_write(cb->filep, addr, count, &pos);
 }
 #endif
 
@@ -255,29 +337,36 @@ static int no_show_tag(char *name)
 static int read_head(struct blkdev *cb, struct utag *htag)
 {
 	int bytes;
-	struct frozen_utag buf;
+	struct frozen_utag *buf;
 
 	if (!htag) {
 		pr_err("[%s] null pointer", cb->name);
 		return -EINVAL;
 	}
 
-	bytes = kernel_read_stub(cb->filep, (void *) &buf, UTAG_MIN_TAG_SIZE);
+	buf = vmalloc(UTAG_MIN_TAG_SIZE);
+	if (!buf)
+		return -ENOMEM;
+
+	bytes = kernel_read_stub(cb, (void *) buf, UTAG_MIN_TAG_SIZE);
 	if ((int) UTAG_MIN_TAG_SIZE > bytes) {
 		pr_err("ERR file (%s) read failed ret %d\n", cb->name, bytes);
+		vfree(buf);
 		return -EIO;
 	}
 
-	strlcpy(htag->name, buf.name, MAX_UTAG_NAME - 1);
+	strlcpy(htag->name, buf->name, MAX_UTAG_NAME - 1);
 	if (strncmp(htag->name, UTAG_HEAD, MAX_UTAG_NAME)) {
 		pr_err("[%s] invalid or empty utags partition\n", cb->name);
+		vfree(buf);
 		return -EIO;
 	}
-	htag->flags = ntohl(buf.flags);
-	htag->util = ntohl(buf.util);
-	htag->size = ntohl(buf.size);
+	htag->flags = ntohl(buf->flags);
+	htag->util = ntohl(buf->util);
+	htag->size = ntohl(buf->size);
 	pr_debug("utag file (%s) flags %#x util %#x size %#x\n",
 		cb->name, htag->flags, htag->util, htag->size);
+	vfree(buf);
 	return 0;
 }
 
@@ -356,6 +445,21 @@ static size_t data_size(struct blkdev *cb)
  */
 static int open_utags(struct blkdev *cb)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) || defined(CONFIG_MMI_UTAG_RW_BIO)
+	struct block_device *bdev = NULL;
+
+	bdev = blkdev_get_by_path(cb->name, FMODE_READ | FMODE_WRITE, cb);
+
+	if (IS_ERR(bdev)) {
+		pr_err("(%s) failed get block device\n", cb->name);
+		return -EIO;
+	}
+
+	cb->bdev = bdev;
+	cb->size = i_size_read(bdev->bd_inode);
+	cb->filep = NULL;
+	pr_debug("%s: read inode size %lu\n", __func__, cb->size);
+#else
 	struct inode *inode = NULL;
 
 	if (!cb->name)
@@ -393,6 +497,7 @@ static int open_utags(struct blkdev *cb)
 	}
 
 	cb->size = i_size_read(inode->i_bdev->bd_inode);
+#endif
 	pr_debug("[%s] (pid %i) open (%s) success\n",
 		current->comm, current->pid, cb->name);
 	return 0;
@@ -958,7 +1063,7 @@ static struct utag *load_utags(struct blkdev *cb)
 	if (!data)
 		return NULL;
 
-	ret_bytes = kernel_read_stub(cb->filep, data, bytes);
+	ret_bytes = kernel_read_stub(cb, data, bytes);
 	if (bytes != ret_bytes) {
 		pr_err("(%s) read failed ret %d\n", cb->name, ret_bytes);
 		goto free_data;
@@ -1157,7 +1262,6 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	char *datap = NULL;
 	int rc = 0;
 	mm_segment_t fs;
-	loff_t pos = 0;
 	struct file *fp;
 	struct blkdev *cb = &ctrl->main;
 
@@ -1178,11 +1282,7 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	}
 	fp = cb->filep;
 
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-	written = kernel_write(fp, datap, tags_size, &pos);
-#else
-	written = vfs_write(fp, datap, tags_size, &pos);
-#endif
+	written = kernel_write_stub(cb, datap, tags_size);
 	if (written < tags_size) {
 		pr_err("failed to write file (%s), rc=%zu\n",
 			cb->name, written);
@@ -1197,13 +1297,8 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 			goto err_free;
 		}
 		fp = cb->filep;
-		pos = 0;
 
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-		written = kernel_write(fp, datap, tags_size, &pos);
-#else
-		written = vfs_write(fp, datap, tags_size, &pos);
-#endif
+		written = kernel_write_stub(cb, datap, tags_size);
 		if (written < tags_size) {
 			pr_err("failed to write file (%s), rc=%zu\n",
 				cb->name, written);
@@ -1930,6 +2025,7 @@ static int utags_read_bootconfig(const char *bootconfig_key, char **bootconfig_v
 	int bytes = 0;
 	char *start_bootdevice = NULL;
 	int rc = 0;
+	loff_t pos = 0;
 
 	filep = filp_open(BOOTCONFIG_FULLPATH, O_RDONLY, 0600);
 	if (IS_ERR_OR_NULL(filep)) {
@@ -1945,7 +2041,7 @@ static int utags_read_bootconfig(const char *bootconfig_key, char **bootconfig_v
 		return -ENOMEM;
 	}
 
-	bytes = kernel_read_stub(filep, (void *) xbc_buf, XBC_DATA_MAX);
+	bytes = kernel_read(filep, (void *) xbc_buf, XBC_DATA_MAX, &pos);
 	pr_debug("read bootconfig bytes %d\n", bytes);
 	if (bytes <= 0) {
 		pr_err("fail read bytes %d\n", bytes);
