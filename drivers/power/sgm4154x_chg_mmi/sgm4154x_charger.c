@@ -225,7 +225,7 @@ static int sgm4154x_get_chrg_volt(struct sgm4154x_device *sgm)
 }
 */
 //#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
-#if 0 //mahj:for build
+
 static int sgm4154x_enable_qc20_hvdcp_9v(struct sgm4154x_device *sgm)
 {
 	int ret;
@@ -243,19 +243,18 @@ static int sgm4154x_enable_qc20_hvdcp_9v(struct sgm4154x_device *sgm)
 				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 0.6V
 	if (ret)
 		return ret;
-	mdelay(1000);
+	mdelay(1500);
 
-	dm_val = 0x2;
+	dm_val = 0x1<<1;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
 				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 0V
-	mdelay(1);
+	mdelay(500);
 	/* dp 3.3v and dm 0.6v out 9V */
 	dp_val = SGM4154x_DP_VSEL_MASK;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
 				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 3.3v
 	if (ret)
 		return ret;
-	//mdelay(1250);
 
 	dm_val = 0x2<<1;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
@@ -264,6 +263,25 @@ static int sgm4154x_enable_qc20_hvdcp_9v(struct sgm4154x_device *sgm)
 	return ret;
 }
 
+static int sgm4154x_adjust_qc20_hvdcp_5v(struct sgm4154x_device *sgm)
+{
+	int ret;
+	int dp_val, dm_val;
+
+	/* dp 0.6v and dm 0v out 5V */
+	dp_val = 0x2<<3;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
+				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
+	if (ret)
+		return ret;
+
+	dm_val = 0x1<<1;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
+				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 0v
+	return ret;
+}
+
+#if 0 //mahj:for build
 static int sgm4154x_enable_qc20_hvdcp_12v(struct sgm4154x_device *sgm)
 {
 	int ret;
@@ -334,6 +352,7 @@ static int sgm4154x_enable_qc30_hvdcp(struct sgm4154x_device *sgm)
 
 	return ret;
 }
+#endif
 
 // Must enter 3.0 mode to call ,otherwise cannot step correctly.
 static int sgm4154x_qc30_step_up_vbus(struct sgm4154x_device *sgm)
@@ -348,13 +367,14 @@ static int sgm4154x_qc30_step_up_vbus(struct sgm4154x_device *sgm)
 	if (ret)
 		return ret;
 
+	udelay(2500);
 	dp_val = 0x2<<3;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
 				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
 	if (ret)
 		return ret;
 
-	udelay(100);
+	udelay(2500);
 	return ret;
 }
 // Must enter 3.0 mode to call ,otherwise cannot step correctly.
@@ -370,14 +390,15 @@ static int sgm4154x_qc30_step_down_vbus(struct sgm4154x_device *sgm)
 	if (ret)
 		return ret;
 
+	udelay(2500);
 	dm_val = SGM4154x_DM_VSEL_MASK;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
 				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 3.3v
-	udelay(100);
+	udelay(2500);
 
 	return ret;
 }
-#endif
+
 /*mahj:for build
 // fine tuning termination voltage,to Improve accuracy
 static int sgm4154x_vreg_fine_tuning(struct sgm4154x_device *sgm,enum SGM4154x_VREG_FT ft)
@@ -795,6 +816,38 @@ static int sgm4154x_set_recharge_volt(struct sgm4154x_device *sgm, int recharge_
 				  SGM4154x_VRECHARGE, reg_val);
 }
 
+static int sgm4154x_read_usbin_voltage_chan(struct sgm4154x_device *sgm, int *val)
+{
+	int rc;
+
+	if (!sgm->iio.usbin_v_chan)
+		return -ENODATA;
+
+	rc = iio_read_channel_processed(sgm->iio.usbin_v_chan, val);
+	if (rc < 0) {
+		dev_err(sgm->dev, "Couldn't read USBIN channel rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int sgm4154x_get_usb_voltage_now(struct sgm4154x_device *sgm, int *val)
+{
+	int rc;
+	int raw_date;
+
+	rc = sgm4154x_read_usbin_voltage_chan(sgm, &raw_date);
+	if (rc < 0) {
+		dev_err(sgm->dev, "Couldn't read USBIN over vadc rc=%d\n", rc);
+		return rc;
+	}
+
+	*val = raw_date * 3;
+
+	return 0;
+}
+
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 static int get_charger_type(struct sgm4154x_device * sgm)
 {
@@ -1167,11 +1220,120 @@ static void charger_monitor_work_func(struct work_struct *work)
 
 static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
-	dev_err(sgm->dev, "Vbus not present, disable charge\n");
+	dev_err(sgm->dev, "Vbus removed, disable charge\n");
 	sgm->typec_apsd_rerun_done = false;
 	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	sgm4154x_disable_charger(sgm);
 	sgm4154x_request_dpdm(sgm, true);
+}
+
+static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charger_type)
+{
+	int ret = 0;
+	int dp_val, dm_val;
+	int i=0, vbus_voltage;
+
+	/* dp 0.6v and dm 3.3v entry QC3.0 mode */
+	dp_val = 0x2<<3;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
+				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
+	if (ret)
+		return ret;
+
+	dm_val = 0x3<<1;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
+				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 3.3v
+	if (ret)
+		return ret;
+
+	mdelay(100);
+
+	for (i = 0; i < 16; i++) {
+		ret = sgm4154x_qc30_step_up_vbus(sgm);
+		if (ret)
+			dev_err(sgm->dev, "%s qc30 step up vbus error\n", __func__);
+	}
+
+	mdelay(100);//need tunning
+
+	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
+	dev_info(sgm->dev, "%s vbus voltage now = %d in detected qc30\n", __func__,vbus_voltage);
+
+	if (vbus_voltage > 8000000) {
+		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+		dev_info(sgm->dev, "%s QC3.0 charger detected\n", __func__);
+	}
+
+	for (i = 0; i < 16; i++) {
+		ret = sgm4154x_qc30_step_down_vbus(sgm);
+		if (ret)
+			dev_err(sgm->dev, "%s qc30 step down vbus error\n", __func__);
+	}
+
+	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
+	dev_info(sgm->dev, "%s vbus voltage now = %d after detected qc30\n", __func__,vbus_voltage);
+
+	return ret;
+}
+
+static void hvdcp_detect_work_func(struct work_struct *work)
+{
+	struct delayed_work *hvdcp_detect_delayed_work = NULL;
+	struct sgm4154x_device * sgm = NULL;
+	int ret;
+	int vbus_voltage;
+	int charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+
+	hvdcp_detect_delayed_work = container_of(work, struct delayed_work, work);
+	if(hvdcp_detect_delayed_work == NULL) {
+		pr_err("Cann't get charge_detect_delayed_work\n");
+		goto err;
+	}
+	sgm = container_of(hvdcp_detect_delayed_work, struct sgm4154x_device, hvdcp_detect_delayed_work);
+	if(sgm == NULL) {
+		pr_err("Cann't get sgm4154x_device\n");
+		goto err;
+	}
+
+	//do qc2.0 detected
+	ret = sgm4154x_enable_qc20_hvdcp_9v(sgm);
+	if (ret) {
+		dev_err(sgm->dev, "Cann't enable qc20 hvdcp 9V\n");
+		goto err;
+	}
+
+	mdelay(300);//need tunning
+
+	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
+	dev_info(sgm->dev, "vbus voltage now = %d\n", vbus_voltage);
+
+	if (vbus_voltage > 8000000) {
+		dev_info(sgm->dev, "QC20 charger detected\n");
+		charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+		ret = sgm4154x_adjust_qc20_hvdcp_5v(sgm);
+		if (ret) {
+			dev_err(sgm->dev, "Cann't adjust qc20 hvdcp 5V\n");
+		}
+	} else {
+		dev_info(sgm->dev, "charger type is not HVDCP\n");
+		return;
+	}
+
+	mdelay(300);//need tunning
+	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
+	dev_info(sgm->dev, "vbus voltage now = %d after qc20 detected\n", vbus_voltage);
+
+	//do qc3.0 detected
+	ret = sgm4154x_detected_qc30_hvdcp(sgm, &charger_type);
+	if (ret) {
+		dev_err(sgm->dev, "Cann't detected qc30 hvdcp\n");
+	}
+
+	sgm->real_charger_type = charger_type;
+	//notify charging policy to update charger type
+
+err:
+	return;
 }
 
 static void charger_detect_work_func(struct work_struct *work)
@@ -1205,6 +1367,11 @@ static void charger_detect_work_func(struct work_struct *work)
 	if(!sgm->state.vbus_gd) {
 		sgm4154x_vbus_remove(sgm);
 		goto vbus_remove;
+	}
+
+	if (sgm->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
+		dev_err(sgm->dev, "BC1.2 have already detected\n");
+		return;
 	}
 
 	if(!state.online)
@@ -1246,6 +1413,7 @@ static void charger_detect_work_func(struct work_struct *work)
 			pr_err("SGM4154x charger type: DCP\n");
 			curr_in_limit = 2400000;
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+			schedule_delayed_work(&sgm->hvdcp_detect_delayed_work, 0);
 			break;
 
 		case SGM4154x_UNKNOWN:
@@ -1270,6 +1438,7 @@ static void charger_detect_work_func(struct work_struct *work)
 	dev_err(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
 	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
 
+	//notify charging policy to update charger type
 #endif
 	//enable charge
 	sgm4154x_enable_charger(sgm);
@@ -1879,6 +2048,40 @@ static int sgm4154x_hw_chipid_detect(struct sgm4154x_device *sgm)
 	return val;
 }
 
+static int sgm4154x_get_iio_channel(struct sgm4154x_device *sgm, const char *propname,
+					struct iio_channel **chan)
+{
+	int rc = 0;
+
+	rc = of_property_match_string(sgm->dev->of_node,
+					"io-channel-names", propname);
+	if (rc < 0)
+		return 0;
+
+	*chan = iio_channel_get(sgm->dev, propname);
+	if (IS_ERR(*chan)) {
+		rc = PTR_ERR(*chan);
+		if (rc != -EPROBE_DEFER)
+			dev_err(sgm->dev, "%s channel unavailable, %d\n",
+							propname, rc);
+		*chan = NULL;
+	}
+
+	return rc;
+}
+
+static int sgm4154x_parse_dt_adc_channels(struct sgm4154x_device *sgm)
+{
+	int rc = 0;
+
+	rc = sgm4154x_get_iio_channel(sgm, "gpio3_div3",
+					&sgm->iio.usbin_v_chan);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
 static int sgm4154x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -1912,6 +2115,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 	ret = sgm4154x_parse_dt(sgm);
 	if (ret) {
 		dev_err(dev, "Failed to read device tree properties%d\n", ret);
+		return ret;
+	}
+
+	ret = sgm4154x_parse_dt_adc_channels(sgm);
+	if (ret) {
+		dev_err(dev, "Failed to get adc channels%d\n", ret);
 		return ret;
 	}
 
@@ -1960,8 +2169,10 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	INIT_DELAYED_WORK(&sgm->charge_detect_delayed_work, charger_detect_work_func);
 	INIT_DELAYED_WORK(&sgm->charge_monitor_work, charger_monitor_work_func);
+	INIT_DELAYED_WORK(&sgm->hvdcp_detect_delayed_work, hvdcp_detect_work_func);
+
 	sgm->pm_nb.notifier_call = sgm4154x_suspend_notifier;
-    register_pm_notifier(&sgm->pm_nb);
+	register_pm_notifier(&sgm->pm_nb);
 
 	ret = sgm4154x_power_supply_init(sgm, dev);
 	if (ret) {
@@ -1984,7 +2195,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
 
-	dev_err(dev, "SGM4154x prob successfully.\n");
+	dev_info(dev, "SGM4154x prob successfully.\n");
 	return ret;
 error_out:
 	if (!IS_ERR_OR_NULL(sgm->usb2_phy))
