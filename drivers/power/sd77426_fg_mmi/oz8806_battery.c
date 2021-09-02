@@ -70,6 +70,12 @@ static int capacity_init_ok = 0;
 
 static int save_capacity = INIT_CAP;
 
+//-1 means not ready
+int32_t age_soh = -1;
+int32_t cycle_soh = -1;
+#define NAME	"oz8806"
+#define BATT_PHY "bms"
+
 static enum power_supply_property oz8806_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
@@ -176,7 +182,7 @@ static void oz8806_external_power_changed(struct power_supply *psy)
 
 static void oz8806_powersupply_init(struct oz8806_data *data)
 {
-	data->bat_desc.name = "battery";
+	data->bat_desc.name = BATT_PHY;
 	data->bat_desc.type = POWER_SUPPLY_TYPE_BATTERY;
 	data->bat_desc.properties = oz8806_battery_props;
 	data->bat_desc.num_properties = ARRAY_SIZE(oz8806_battery_props);
@@ -365,17 +371,65 @@ static ssize_t oz8806_bmu_init_done_store(struct device *dev, struct device_attr
 	return _count;
 }
 
+static ssize_t batt_cycle_soh_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int val;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	cycle_soh = val;
+	accmulate_data_update();
+
+	batt_dbg("batt_cycle_count: %d ", cycle_soh);
+	return count;
+}
+
+static ssize_t batt_cycle_soh_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	return sprintf(buf, "%d\n", cycle_soh);
+}
+
+static ssize_t batt_age_soh_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int val;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	age_soh = val;
+
+	batt_dbg("batt_age: %d ", age_soh);
+	return count;
+}
+
+static ssize_t batt_age_soh_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	return sprintf(buf, "%d\n", age_soh);
+}
+
+static ssize_t oz8806_name_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	return sprintf(buf, "%s\n", NAME);
+}
+
 static DEVICE_ATTR(registers, S_IRUGO | (S_IWUSR|S_IWGRP), oz8806_register_show, oz8806_register_store);
 static DEVICE_ATTR(chip_id, S_IRUGO, oz8806_chip_id_show, NULL);
 static DEVICE_ATTR(bmt_debug, S_IRUGO | (S_IWUSR|S_IWGRP), oz8806_debug_show, oz8806_debug_store);
 static DEVICE_ATTR(save_capacity, S_IRUGO, oz8806_save_capacity_show, NULL);
 static DEVICE_ATTR(bmu_init_done, S_IRUGO| (S_IWUSR|S_IWGRP), oz8806_bmu_init_done_show, oz8806_bmu_init_done_store);
+static DEVICE_ATTR(cycle_count, S_IRUGO| (S_IWUSR|S_IWGRP), batt_cycle_soh_show, batt_cycle_soh_store);
+static DEVICE_ATTR(age, S_IRUGO| (S_IWUSR|S_IWGRP), batt_age_soh_show, batt_age_soh_store);
+static DEVICE_ATTR(name, S_IRUGO, oz8806_name_show, NULL);
 static struct attribute *oz8806_attributes[] = {
 	&dev_attr_registers.attr,
 	&dev_attr_chip_id.attr,
 	&dev_attr_bmt_debug.attr,
 	&dev_attr_bmu_init_done.attr,
 	&dev_attr_save_capacity.attr,
+	&dev_attr_cycle_count.attr,
+	&dev_attr_age.attr,
+	&dev_attr_name.attr,
 	NULL,
 };
 
@@ -385,25 +439,35 @@ static struct attribute_group oz8806_attribute_group = {
 
 static int oz8806_create_sys(struct device *dev, const struct attribute_group * grp)
 {
-	int err;
+	int err = 0;
+	struct power_supply *ply;
 
 	bmt_dbg("BMT_create_sysfs\n");
+	ply = power_supply_get_by_name(BATT_PHY);
 
 	if(NULL == dev){
 		bmt_dbg("[BATT]: failed to register battery\n");
 		return -EINVAL;
 	}
 
-	err = sysfs_create_group(&(dev->kobj), grp);
+	if(ply)
+	{
+		err = sysfs_create_group(&ply->dev.kobj, grp);
 
-	if (!err) 
+		if (!err)
+		{
+			bmt_dbg("creat BMT sysfs group ok\n");
+		}
+		else
+		{
+			bmt_dbg("creat BMT sysfs group fail\n");
+			err =  -EIO;
+		}
+		power_supply_put(ply);
+	}
+	else
 	{
-		bmt_dbg("creat BMT sysfs group ok\n");
-	} 
-	else 
-	{
-		bmt_dbg("creat BMT sysfs group fail\n");
-		return -EIO;
+		bmt_dbg("don't have /sys/class/power_supply/battery dir\n");
 	}
 	return err;
 }
@@ -546,7 +610,7 @@ static int check_charger_full(void)
 {
 	int ret = 0;
 
-//from charge ic
+	//from charge ic
 	return ret;
 }
 
@@ -772,6 +836,7 @@ static void system_charge_discharge_status(struct oz8806_data *data)
 	}
 	batt_dbg("val_ac.intval %d, val_usb.intval %d,adapter_status_temp %d\n",val_ac.intval,val_usb.intval,adapter_status_temp);
 #endif
+
 	adapter_status = adapter_status_temp;
 	batt_dbg("adapter_status:%d\n", adapter_status);
 }
@@ -1236,11 +1301,9 @@ struct i2c_client * oz8806_get_client(void)
 	{
 		bmt_dbg("BMT is NULL, BMT_probe didn't call\n");
 		return NULL;
-
 	}
 }
 EXPORT_SYMBOL(oz8806_get_client);
-
 
 int8_t get_adapter_status(void)
 {
@@ -1395,12 +1458,6 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 	};
 
 	bmt_dbg("BMT fgu probe start\n");
-/*****************************************************************************
-*  BMT Warning:
-*  bmulib_init 是非常重要的函数，芯片需要client来执行初始化以及自检校验等工作
-* 不允许因为读不到I2C信息而提前于这个函数返回，这将引起非常严重的错误问题。 
-* 再次提醒，不允许因为读不到I2C信息而直接返回。
-*****************************************************************************/
 	data = devm_kzalloc(&client->dev, sizeof(struct oz8806_data), GFP_KERNEL);
 	if (!data) {
 		dev_err(&client->dev, "Can't alloc BMT_data struct\n");
@@ -1426,12 +1483,12 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 	oz8806_init_batt_info(data);
 
 	INIT_DELAYED_WORK(&data->work, oz8806_battery_work);
-/*****************************************************************************
-*  BMT Warning: This is a very important code here(bmulib_init).
-* The chip needs i2c client processing opt mapping and self init first in bmulib_init.
-* You must not return before this code even if you read i2c error.
-* Remind you again that it will make serious mistake if you return before bmulib_init.
-*****************************************************************************/
+	/*****************************************************************************
+	*  BMT Warning: This is a very important code here(bmulib_init).
+	* The chip needs i2c client processing opt mapping and self init first in bmulib_init.
+	* You must not return before this code even if you read i2c error.
+	* Remind you again that it will make serious mistake if you return before bmulib_init.
+	*****************************************************************************/
 	if (oz8806_get_boot_up_time() < 2000)
 		ic_wakeup_time = jiffies + msecs_to_jiffies(2000 - oz8806_get_boot_up_time());
 	else
@@ -1467,7 +1524,7 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 		goto bat_failed;
 	}
 
-   //alternative suspend/resume method
+	//alternative suspend/resume method
 	data->pm_nb.notifier_call = oz8806_suspend_notifier;
 	register_pm_notifier(&data->pm_nb);
 
@@ -1480,7 +1537,7 @@ static int oz8806_probe(struct i2c_client *client,const struct i2c_device_id *id
 	schedule_delayed_work(&data->work, 0);
 
 	bmt_dbg("BMT fgu probe end\n");
-	return 0;					//return Ok
+	return 0;
 bat_failed:
 	power_supply_unregister(the_oz8806->bat);
 register_fail:
@@ -1502,9 +1559,14 @@ static int oz8806_remove(struct i2c_client *client)
 
 	mutex_lock(&update_mutex);
 
-	//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
-	//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
-        fg_hw_init_done = 0;//be carefull other thread call bmu_polling_loop_func and wake up chip again 
+	/*
+	 * It should be noted here that during the shutdown process, the shutdown callback must be called,
+	 * otherwise the chip may not sleep normally, resulting in abnormal capacity at the next startup.
+	 *
+	 * And be careful after the callback, if there is work or thread running,
+	 * it may wake up the chip again, to avoid this situation.
+	 */
+	fg_hw_init_done = 0;//be carefull other thread call bmu_polling_loop_func and wake up chip again
 	bmu_power_down_chip();
 
 	oz8806_update_batt_info(data);
@@ -1528,8 +1590,13 @@ static void oz8806_shutdown(struct i2c_client *client)
 
 	mutex_lock(&update_mutex);
 
-	//这里需要注意，在关机流程中，必须要调用关机回调，否则芯片可能没有正常休眠，导致下次开机容量异常
-	//并且要小心回调之后，如果有work或者线程跑起来，可能会再次唤醒芯片，要避免这种情况。
+	/*
+	 * It should be noted here that during the shutdown process, the shutdown callback must be called,
+	 * otherwise the chip may not sleep normally, resulting in abnormal capacity at the next startup.
+	 *
+	 * And be careful after the callback, if there is work or thread running,
+	 * it may wake up the chip again, to avoid this situation.
+	 */
 	fg_hw_init_done = 0; 
 	bmu_power_down_chip();
 
@@ -1582,8 +1649,6 @@ static void __exit oz8806_exit(void)
 	bmt_dbg("BMT fgu exit\n");
 	i2c_del_driver(&oz8806_driver);
 }
-
-/*-------------------------------------------------------------------------*/
 
 MODULE_DESCRIPTION("oz8806 Battery Monitor IC Driver");
 MODULE_LICENSE("GPL");
