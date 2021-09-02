@@ -876,6 +876,70 @@ static int sgm7220_tcpc_deinit(struct tcpc_device *tcpc)
 	return 0;
 }
 
+#ifdef CONFIG_TCPC_WATCHDOG_EN
+int sgm7220_set_watchdog(struct tcpc_device *tcpc, bool en)
+{
+	return 0;
+}
+#endif	/* CONFIG_TCPC_WATCHDOG_EN */
+
+#ifdef CONFIG_TCPC_INTRST_EN
+int sgm7220_set_intrst(struct tcpc_device *tcpc, bool en)
+{
+	return rt1711_i2c_write8(tcpc,
+		RT1711H_REG_INTRST_CTRL, RT1711H_REG_INTRST_SET(en, 3));
+}
+#endif
+
+#ifdef CONFIG_USB_POWER_DELIVERY
+static int sgm7220_set_msg_header(
+	struct tcpc_device *tcpc, uint8_t power_role, uint8_t data_role)
+{
+	return 0;
+}
+
+static int sgm7220_protocol_reset(struct tcpc_device *tcpc)
+{
+	return 0;
+}
+
+static int sgm7220_set_rx_enable(struct tcpc_device *tcpc, uint8_t enable)
+{
+	return 0;
+}
+
+static int sgm7220_get_message(struct tcpc_device *tcpc, uint32_t *payload,
+			uint16_t *msg_head, enum tcpm_transmit_type *frame_type)
+{
+	return 0;
+}
+
+static int sgm7220_set_bist_carrier_mode(
+	struct tcpc_device *tcpc, uint8_t pattern)
+{
+	/* Don't support this function */
+	return 0;
+}
+
+#ifdef CONFIG_USB_PD_RETRY_CRC_DISCARD
+static int sgm7220_retransmit(struct tcpc_device *tcpc)
+{
+	return 0;
+}
+#endif
+
+static int sgm7220_transmit(struct tcpc_device *tcpc,
+	enum tcpm_transmit_type type, uint16_t header, const uint32_t *data)
+{
+	return 0;
+}
+
+static int sgm7220_set_bist_test_mode(struct tcpc_device *tcpc, bool en)
+{
+	return 0;
+}
+#endif /* CONFIG_USB_POWER_DELIVERY */
+
 static struct tcpc_ops sgm7220_tcpc_ops = {
 	.init = sgm7220_tcpc_init,
 	.alert_status_clear = sgm7220_alert_status_clear,
@@ -890,6 +954,29 @@ static struct tcpc_ops sgm7220_tcpc_ops = {
 	.set_low_rp_duty = sgm7220_set_low_rp_duty,
 	.set_vconn = sgm7220_set_vconn,
 	.deinit = sgm7220_tcpc_deinit,
+
+#ifdef CONFIG_TCPC_WATCHDOG_EN
+	.set_watchdog = sgm7220_set_watchdog,
+#endif	/* CONFIG_TCPC_WATCHDOG_EN */
+
+#ifdef CONFIG_TCPC_INTRST_EN
+	.set_intrst = sgm7220set_intrst,
+#endif
+
+#ifdef CONFIG_USB_POWER_DELIVERY
+	.set_msg_header = sgm7220_set_msg_header,
+	.set_rx_enable = sgm7220_set_rx_enable,
+	.protocol_reset = sgm7220_protocol_reset,
+	.get_message = sgm7220_get_message,
+	.transmit = sgm7220_transmit,
+	.set_bist_test_mode = sgm7220_set_bist_test_mode,
+	.set_bist_carrier_mode = sgm7220_set_bist_carrier_mode,
+#endif	/* CONFIG_USB_POWER_DELIVERY */
+#ifdef CONFIG_USB_PD_RETRY_CRC_DISCARD
+	.retransmit = sgm7220_retransmit,
+#endif	/* CONFIG_USB_PD_RETRY_CRC_DISCARD */
+
+
 };
 
 static int sgm7220_parse_dt(struct sgm7220_chip *chip, struct device *dev)
