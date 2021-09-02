@@ -150,7 +150,7 @@ static  uint8_t retry_times = 0;
 static uint8_t  calculate_times = 0;
 static uint8_t times = 0;
 static uint32_t time_sec = 0;
-
+uint32_t accmulate_dsg_data = 0;
 uint8_t check_chip_function = 1;
 /******************************************************************************
 * Function prototype section
@@ -1572,6 +1572,7 @@ retry_wakeup:
 
 	gas_gauge->sCtMAH += batt_info->fRC - batt_info->fRCPrev;
 	gas_gauge->discharge_sCtMAH += batt_info->fRCPrev - batt_info->fRC;
+	age_update();
 
 	if(gas_gauge->sCtMAH < num_0)  gas_gauge->sCtMAH = num_0;
 	if(gas_gauge->discharge_sCtMAH < num_0)  gas_gauge->discharge_sCtMAH = num_0;
@@ -1638,18 +1639,18 @@ retry_wakeup:
 		"[bmt]:fVolt: %d   fCurr: %d   fCellTemp: %d   fRSOC: %d\n"
 		"[bmt]:sCaMAH: %d, sCtMAH1: %d, sCtMAH2: %d\n"
 		"[bmt]:fcc: %d, fRC: %d\n"
-		"[bmt]:i2c_error_times: %d\n"
+		"[bmt]:i2c_error_times: %d, acc_data:%d\n"
 		"[bmt]:charge_end: %d, discharge_end: %d\n"
-		"[bmt]:adapter_status: %d\n"
+		"[bmt]:adapter_status: %d, soh: %d, cycle: %d\n"
 		"[bmt]:----------------------------------------------------\n",
 		VERSION,calculate_version,get_table_version(),batt_info->Battery_ok,time_sec,
 		gas_gauge->charge_fcc_update,gas_gauge->discharge_fcc_update,
 		(batt_info->fVolt * oz8806_cell_num),batt_info->fCurr,batt_info->fCellTemp,batt_info->fRSOC,
 		batt_info->sCaMAH,gas_gauge->sCtMAH,gas_gauge->discharge_sCtMAH,
 		gas_gauge->fcc_data,batt_info->fRC,
-		batt_info->i2c_error_times,
+		batt_info->i2c_error_times, accmulate_dsg_data,
 		gas_gauge->charge_end,gas_gauge->discharge_end,
-		adapter_status);
+		adapter_status,age_soh,cycle_soh);
 
 	if(batt_info->sCaMAH > (full_charge_data))
 	{

@@ -320,6 +320,8 @@ extern int32_t one_latitude_table(int32_t number,one_latitude_data_t *data,int32
 extern  uint8_t OZ8806_LookUpRCTable(int infVolt,int infCurr, int infTemp, int *infCal);
 void charge_process(void);
 void discharge_process(void);
+void age_update(void);
+void accmulate_data_update(void);
 
 extern bmu_data_t	   *batt_info;
 extern gas_gauge_t    *gas_gauge;
@@ -334,9 +336,13 @@ extern int *zaxis_table;
 extern int32_t calculate_mah;
 extern int32_t  calculate_soc ;
 extern uint32_t calculate_version;
+extern int32_t age_soh;
+extern int32_t cycle_soh;
+extern uint32_t accmulate_dsg_data;
 
-#define X_AXIS gas_gauge->rc_x_num 
-#define Y_AXIS gas_gauge->rc_y_num 
-#define Z_AXIS gas_gauge->rc_z_num 
+#define X_AXIS gas_gauge->rc_x_num
+#define Y_AXIS gas_gauge->rc_y_num
+#define Z_AXIS gas_gauge->rc_z_num
+
 #endif //end _PARAMETER_H_
 
