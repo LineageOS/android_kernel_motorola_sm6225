@@ -26,9 +26,10 @@
 
 #define CALM_WDOG
 #define SHOW_EVERYTHING
-//#define DRY_RUN_UPDATE
 #define SHOW_I2C_DATA
-//#define STATIC_PLATFORM_DATA
+
+#undef STATIC_PLATFORM_DATA
+#undef DRY_RUN_UPDATE
 
 #include <linux/module.h>
 #include <linux/device.h>
@@ -66,17 +67,17 @@
 #define INVALID_BYTE2 0xebeb
 #define INVALID_BYTE 0xeb
 
-#define ADDRESS_FW 0x00
-#define ADDRESS_PARAMS 0xe0
-
-#define SUPPORTED_FW_FILE_SIZE 0x0000F000
-#define FW_SECTION_SIZE 0x0000E000
-
 #define PCT1812_SECTOR_SIZE (0x1000) // 4K
 #define CHUNK_SZ 256
 
-#define FW_ADDR_BASE 0x00
-#define PARAM_ADDR_BASE 0xe0
+#define SUPPORTED_FW_FILE_SIZE 0x0000F000
+#define FW_SECTION_SIZE 0x0000D000
+#define CUSTOM_SECTION_SIZE (0x00000000 + PCT1812_SECTOR_SIZE)
+#define PARAM_SECTION_SIZE CUSTOM_SECTION_SIZE
+
+#define ADDRESS_FW 0x00000000
+#define ADDRESS_CUSTOM FW_SECTION_SIZE
+#define ADDRESS_PARAM (SUPPORTED_FW_FILE_SIZE - PARAM_SECTION_SIZE)
 
 #define POWERUP_CODE 0x02
 #define RESET_CODE 0xaa
@@ -113,7 +114,7 @@
 
 #define SW_RESET_REG 0x7a
 #define DEEP_SLEEP_REG 0x7c
-#define MODE_REG 0x7f
+#define ACTIVE_BANK_REG 0x7f
 
 #define BANK(a) (a)
 
@@ -125,6 +126,20 @@
 #define MODEL_REG 0x04
 #define FW_PATCH_REG 0x06
 #define INTR_MASK_REG 0x07
+#define START_REG 0x09
+#define FLASH_BANK_REG 0x0f
+#define REPORT_RATE_L_REG 0x10
+#define REPORT_RATE_H_REG 0x11
+#define MAX_RATE_L_REG 0x12
+#define MAX_RATE_H_REG 0x13
+#define OP_MODE_REG 0x15
+#define FORCE_OP_MODE_REG 0x16
+#define REST1_L_REG 0x18
+#define REST1_H_REG 0x19
+#define REST2_L_REG 0x1a
+#define REST2_H_REG 0x1b
+#define REST1_FRAME_RATE_REG 0x1c
+#define REST2_FRAME_RATE_REG 0x1d
 #define TX_REG 0x5a
 #define RX_REG 0x59
 #define VER_LOW_REG 0x7e
@@ -134,6 +149,7 @@
 #define FLASH_PUP_REG 0x0d
 #define KEY1_REG 0x2c
 #define KEY2_REG 0x2d
+#define ENG_MODE_REG 0x2e
 
 // USER BANK 2
 #define XRES_L_REG 0x00
@@ -141,15 +157,26 @@
 #define YRES_L_REG 0x02
 #define YRES_H_REG 0x03
 #define MAX_POINTS_REG 0x05
+#define SRAM_SELECT_REG 0x09
+#define SRAM_NSC_REG 0x0a
+#define SRAM_PORT_REG 0x0b
 
 // USER BANK 3
 #define FUNCT_CTRL_REG 0x02
+#define CUST_INFO_BASE 0x6a
+#define CUST_INFO_RNUM 8
 
 // USER BANK 4
 #define FLASH_STATUS_REG 0x1c
+#define FLASH_FLASH_CMD_REG 0x20
+#define FLASH_DCOUNT0_REG 0x22
+#define FLASH_DCOUNT1_REG 0x23
 #define FLASH_ADDR0_REG 0x24
 #define FLASH_ADDR1_REG 0x25
 #define FLASH_ADDR2_REG 0x26
+#define FLASH_COMMAND_REG 0x2c
+#define FLASH_SRAM_OFF0_REG 0x2e
+#define FLASH_SRAM_OFF1_REG 0x2f
 
 #define STAT_BIT_ERR (1 << 0)
 #define STAT_BIT_TOUCH (1 << 1)
@@ -162,7 +189,7 @@
 #define SLEEP_BIT_STAT (1 << 4)
 
 #define BOOT_COMPLETE 1
-#define MODE_COMPLETE (BOOT_COMPLETE | (1 <<7))
+#define MODE_COMPLETE (BOOT_COMPLETE | (1 << 7))
 #define TOUCH_RESET_DELAY 10
 #define CMD_WAIT_DELAY 10
 #define WDOG_INTERVAL 1000
@@ -176,18 +203,19 @@
 
 #define SNR_LOOP_COUNT 50
 
-#define I2C_WRITE_BUFFER_SIZE 4
+#define I2C_WRITE_BUFFER_SIZE 256
 #define I2C_READ_BUFFER_SIZE 4
 
 #define PINCTRL_STATE_ACTIVE "touchpad_active"
 #define PINCTRL_STATE_SUSPEND "touchpad_suspend"
 
 enum pwr_modes {
-	PWR_MODE_OFF,
+	PWR_MODE_AUTO, //controlled by FW
 	PWR_MODE_RUN,
-	PWR_MODE_LPM,
-	PWR_MODE_DEEP_SLEEP,
-	PWR_MODE_SHUTDOWN,
+	PWR_MODE_LPM, // REST1
+	PWR_MODE_DEEP_SLEEP, // REST2
+	PWR_MODE_SUSPEND,
+	PWR_MODE_NO_DEEP_SLEEP,
 	PWR_MODE_MAX
 };
 
@@ -294,6 +322,8 @@ struct pct1812_data {
 	unsigned short x_res;
 	unsigned short y_res;
 	unsigned char max_points;
+	unsigned char boot_block;
+	unsigned char custom_block[CUST_INFO_RNUM];
 };
 
 static ssize_t selftest_store(struct device *dev,
@@ -324,7 +354,7 @@ static ssize_t mask_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t selftest_bin_show(struct file *filp, struct kobject *kobp,
 		struct bin_attribute *bin_attr, char *buf, loff_t pos, size_t count);
-		
+
 static DEVICE_ATTR_WO(doreflash);
 static DEVICE_ATTR_WO(forcereflash);
 static DEVICE_ATTR_WO(reset);
@@ -451,7 +481,7 @@ static int pct1812_i2c_read(struct pct1812_data *ts, unsigned char reg, unsigned
 #ifdef SHOW_I2C_DATA
 	if (1) {
 		int i;
-		pr_info("i2c_cmd: R: %02X | ", reg);
+		pr_info("R: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
 		pr_cont("\n");
@@ -513,7 +543,7 @@ static int pct1812_i2c_write(struct pct1812_data *ts, unsigned char reg, unsigne
 #ifdef SHOW_I2C_DATA
 	if (1) {
 		int i;
-		pr_info("i2c_cmd: W: %02X | ", reg);
+		pr_info("W: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
 		pr_cont("\n");
@@ -754,9 +784,15 @@ static int pct1812_user_access(struct pct1812_data *ts,
 	unsigned char bank, unsigned char addr,
 	unsigned char *value, unsigned int size, bool R)
 {
-	unsigned char val = INVALID_BYTE;
+	unsigned char vArray[16];
 	int ret;
 
+	if (R && size > sizeof(vArray)) {
+		dev_err(ts->dev, "%s: Requested size %d bigger than buffer size %u\n", __func__, size, sizeof(vArray));
+		return -EINVAL;
+	}
+
+	memset(vArray, INVALID_BYTE, sizeof(vArray));
 	ret = pct1812_i2c_write(ts, USER_BANK_REG, &bank, sizeof(bank));
 	if (ret)
 		return -EIO;
@@ -767,17 +803,22 @@ static int pct1812_user_access(struct pct1812_data *ts,
 
 	if (R) { // read access
 		if (value)
-			*value = 0;
-		ret = pct1812_i2c_read(ts, USER_DATA_REG, &val, sizeof(val));
+			memset(value, 0, size);
+		ret = pct1812_i2c_read(ts, USER_DATA_REG, vArray, size);
 		if (!ret && value)
-			*value = val;
+			memcpy(value, vArray, size);
 	} else {
 		ret = pct1812_i2c_write(ts, USER_DATA_REG, value, size);
 	}
-
-	pr_debug("%c: b%d:0x%02x val 0x%02x\n",
-			R ? 'R' : 'W', bank, addr, R ? val : *value);
-
+#ifndef SHOW_I2C_DATA
+	if (1) {
+		int i;
+		pr_info("%c: b%d:0x%02x |", R ? 'R' : 'W', bank, addr);
+		for (i = 0; i < size; i++)
+			pr_cont(" %02X", value ? value[i] : vArray[i]);
+		pr_cont("\n");
+	}
+#endif
 	return ret;
 }
 
@@ -802,7 +843,7 @@ static int pct1812_user_access(struct pct1812_data *ts,
 	} \
 }
 
-#define SET_PARAM(b, r, v) { \
+#define SET_PARAM_IF(b, r, v) { \
 	ret = pct1812_user_access(ts, b, r, &(v), sizeof(v), AWRITE); \
 	if (ret) { \
 		dev_err(ts->dev, "%s: Error writing b(%d):0x%02x\n", __func__, b, r); \
@@ -812,7 +853,7 @@ static int pct1812_user_access(struct pct1812_data *ts,
 
 #define GET_REG_IF(r, v) { \
 	v = INVALID_BYTE; \
-	ret = pct1812_i2c_read(r, &(v), sizeof(v)); \
+	ret = pct1812_i2c_read(ts, r, &(v), sizeof(v)); \
 	if (ret) { \
 		dev_err(ts->dev, "%s: Error reading Reg0x%02x\n", __func__, r); \
 		goto failure; \
@@ -820,17 +861,55 @@ static int pct1812_user_access(struct pct1812_data *ts,
 }
 
 #define SET_REG_IF(r, v) { \
-	ret = pct1812_i2c_write(r, &(v), sizeof(v)); \
+	ret = pct1812_i2c_write(ts, r, &(v), sizeof(v)); \
 	if (ret) { \
 		dev_err(ts->dev, "%s: Error writing Reg0x%02x val=0x%02x\n", __func__, r, v); \
 		goto failure; \
 	} \
 }
 
+#define SET_REG_CHK_IF(r, v)  if (1) { \
+	unsigned char checkout; \
+	ret = pct1812_i2c_write(ts, r, &(v), sizeof(v)); \
+	if (ret) { \
+		dev_err(ts->dev, "%s: Error writing Reg0x%02x val=0x%02x\n", __func__, r, v); \
+		goto failure; \
+	} else { \
+		ret = pct1812_i2c_read(ts, r, &checkout, sizeof(checkout)); \
+		if (ret) { \
+			dev_err(ts->dev, "%s: Error reading back Reg0x%02x\n", __func__, r); \
+			goto failure; \
+		} else if (v != checkout) { \
+			dev_warn(ts->dev, "%s: Mismatch %02x != %02x\n", __func__, v, checkout); \
+		} else { \
+			pr_debug("active BANK(%d)\n", checkout); \
+		} \
+	} \
+}
+
+static int inline pct1812_set_bank(struct pct1812_data *ts,
+			unsigned char bank) {
+	int ret;
+	SET_REG_CHK_IF(ACTIVE_BANK_REG, bank);
+failure:
+	return ret;
+}
+
+static int inline pct1812_sensing_on(struct pct1812_data *ts) {
+	unsigned char curmode, value;
+	int ret;
+	QUERY_PARAM_IF(curmode, BANK(0), START_REG, value);
+	curmode |= 0x01;
+	SET_PARAM_IF(BANK(0), START_REG, curmode);
+	pr_debug("start reg b0:0x02x value %02x\n", START_REG, curmode);
+failure:
+	return ret;
+}
+
 static int pct1812_get_extinfo(struct pct1812_data *ts)
 {
 	unsigned char val, v1, v2;
-	int ret;
+	int i, ret;
 
 	QUERY_PARAM(v1, BANK(0), VER_LOW_REG, val);
 	QUERY_PARAM(v2, BANK(0), VER_HIGH_REG, val);
@@ -846,6 +925,7 @@ static int pct1812_get_extinfo(struct pct1812_data *ts)
 	ts->minor = v2 | ((v1 & 0x0f) << 8);
 	QUERY_PARAM(ts->revision, BANK(0), FW_REV_REG, val);
 	QUERY_PARAM(ts->patch, BANK(0), FW_PATCH_REG, val);
+	QUERY_PARAM(ts->boot_block, BANK(0), FLASH_BANK_REG, val);
 	QUERY_PARAM(v1, BANK(2), XRES_L_REG, val);
 	QUERY_PARAM(v2, BANK(2), XRES_H_REG, val);
 	ts->x_res = v1 | (v2 << 8);
@@ -854,312 +934,56 @@ static int pct1812_get_extinfo(struct pct1812_data *ts)
 	ts->y_res = v1 | (v2 << 8);
 	QUERY_PARAM(v1, BANK(2), MAX_POINTS_REG, val);
 	ts->max_points = v1 & 0x0f;
+	for (i = 0; i < CUST_INFO_RNUM; i++) {
+		QUERY_PARAM(ts->custom_block[i], BANK(3), CUST_INFO_BASE + i, val);
+	}
 
 	return ret;
 }
 
-static int inline pct1812_engmode(struct pct1812_data *ts, bool on)
+static int pct1812_power_mode(struct pct1812_data *ts, enum pwr_modes mode)
 {
-	unsigned char value;
-	int ret;
+	unsigned char val, cur_mode;
+	int ret = 0;
 
-	value = RESET_CODE;
-	SET_PARAM(BANK(1), KEY1_REG, value);
-	value = on ? ENGINEERING_CODE : RESUME_CODE;
-	SET_PARAM(BANK(1), KEY2_REG, value);
-
-	pct1812_delay_ms(2);
-
-	return 0;
-failure:
-	return -EIO;
-}
-
-static int pct1812_flash_exec(struct pct1812_data *ts,
-		unsigned char cmd, unsigned char flash_cmd, int cnt)
-{
-	unsigned char lval;
-	int repetition = 0;
-	int ret, step = 0;
-
-	pr_debug("cmd 0x%02x, flash_cmd 0x%02x, cnt %d\n", cmd, flash_cmd, cnt);
-#ifndef DRY_RUN_UPDATE
-	lval = 0;
-	SET_PARAM(BANK(4), 0x2c, lval);
-	step++;
-
-	lval = flash_cmd;
-	SET_PARAM(BANK(4), 0x20, lval);
-	step++;
-
-	lval = cnt & 0xff;
-	SET_PARAM(BANK(4), 0x22, lval);
-	step++;
-
-	lval = (cnt >> 8) & 0xff;
-	SET_PARAM(BANK(4), 0x23, lval);
-	step++;
-
+	switch (mode) {
+	case PWR_MODE_NO_DEEP_SLEEP:
+			val = INVALID_BYTE;
+			pct1812_i2c_read(ts, DEEP_SLEEP_REG, &val, sizeof(val));
+			pr_debug("%s: SLEEP_STATUS before %02x\n", __func__, val);
+			val = 0x01; // NO_DEEP_SLEEP
+			ret = pct1812_i2c_write(ts, DEEP_SLEEP_REG, &val, sizeof(val));
+			if (ret) {
+				dev_err(ts->dev, "%s: error setting NO_DEEP_SLEEP\n", __func__);
+				goto failure;
+			}
 do_again:
-	lval = 0;
-	SET_PARAM(BANK(4), 0x2c, lval);
-
-	if ((lval & cmd) != 0) {
-		repetition++;
-		if (repetition%11)
-			pr_debug("Still waiting ... %d\n", repetition);
-		goto do_again;
+			pct1812_delay_ms(10);
+			ret = pct1812_i2c_read(ts, DEEP_SLEEP_REG, &val, sizeof(val));
+			if (ret)
+				goto failure;
+			if ((val & SLEEP_BIT_STAT))
+				goto do_again;
+			pr_debug("%s: SLEEP_STATUS %02x\n", __func__, val);
+					break;
+	case PWR_MODE_AUTO:
+	case PWR_MODE_RUN:
+	case PWR_MODE_LPM: // REST1
+	case PWR_MODE_DEEP_SLEEP: // REST2
+	case PWR_MODE_SUSPEND:
+			QUERY_PARAM(cur_mode, BANK(3), OP_MODE_REG, val);
+			if (cur_mode != mode) {
+				val = mode;
+				SET_PARAM_IF(BANK(3), FORCE_OP_MODE_REG, val);
+			}
+					break;
+	default:
+			dev_err(ts->dev, "%s: invalid power mode %d\n", __func__, mode);
+			ret = -EINVAL;
 	}
-#else
-	lval = 0, ret = 0, step = 0, repetition = 0;
-#endif
-	return 0;
-#ifndef DRY_RUN_UPDATE
 failure:
-	dev_err(ts->dev,
-		"Error exec cmd 0x%02x, flash_cmd 0x%02x, cnt %d (stage %d, reps %d)\n",
-		__func__, cmd, flash_cmd, cnt, step, repetition);
-
-	return -EIO;
-#endif
-}
-
-static int pct1812_flash_status(struct pct1812_data *ts, int idx, int vok)
-{
-	unsigned char status[2];
-	int ret;
-#ifndef DRY_RUN_UPDATE
-do_again:
-#endif
-	ret = pct1812_flash_exec(ts, 0x08, 0x05, 1);
-	if (ret) {
-		dev_err(ts->dev, "Error flash cmd\n", __func__);
-		return -EIO;
-	}
-#ifndef DRY_RUN_UPDATE
-	ret = pct1812_user_access(ts, BANK(4), FLASH_STATUS_REG, status, sizeof(status), AREAD);
-	if (ret) {
-		dev_err(ts->dev, "Error reading flash status\n", __func__);
-		return -EIO;
-	}
-
-	if (status[idx] != vok) {
-		pct1812_delay_ms(1); // adjust delay if necessary
-		goto do_again;
-	}
-#else
-	ret = 0, status[0] = status[1] = 0;
-#endif
-	pr_debug("Flash status ([%d]=%d) OK\n", idx, vok);
-
-	return 0;
-}
-
-static int pct1812_flash_chunk(struct pct1812_data *ts, unsigned int address)
-{
-	int ret, step = 0;
-	unsigned char value;
-
-	// Flash WriteEnable
-	ret = pct1812_flash_exec(ts, 0x02, 0x09, 0);
-	if (ret)
-		goto failure;
-	step++;
-	// check status
-	ret = pct1812_flash_status(ts, 1, 1);
-	if (ret)
-		goto failure;
-	step++;
-#ifndef DRY_RUN_UPDATE
-	value = (unsigned char)(address & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR0_REG, value);
-	step++;
-
-	value = (unsigned char)((address >> 8) & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR1_REG, value);
-	step++;
-
-	value = (unsigned char)((address >> 16) & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR2_REG, value);
-	step++;
-#else
-	value = 0;
-#endif
-	ret = pct1812_flash_exec(ts, 0x81, 0x02, CHUNK_SZ);
-	if (ret)
-		goto failure;
-	step++;
-	// wait for completion
-	ret = pct1812_flash_status(ts, 0, 0);
-	if (ret)
-		goto failure;
-
-	return 0;
-
-failure:
-	dev_err(ts->dev, "Error erasing address 0x%06x (stage %d)\n",
-			__func__, address, step);
-	return -EIO;
-}
-
-static int pct1812_erase_sector(struct pct1812_data *ts, unsigned int address)
-{
-	int ret, step = 0;
-	unsigned char value;
-
-	pr_debug("Erasing sector at address 0x%06x\n", address);
-
-	// Flash WriteEnable
-	ret = pct1812_flash_exec(ts, 0x02, 0x09, 0);
-	if (ret)
-		goto failure;
-	step++;
-	// check status
-	ret = pct1812_flash_status(ts, 1, 1);
-	if (ret)
-		goto failure;
-	step++;
-#ifndef DRY_RUN_UPDATE
-	value = (unsigned char)(address & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR0_REG, value);
-	step++;
-
-	value = (unsigned char)((address >> 8) & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR1_REG, value);
-	step++;
-
-	value = (unsigned char)((address >> 16) & 0xff);
-	SET_PARAM(BANK(4), FLASH_ADDR2_REG, value);
-	step++;
-#else
-	value = 0;
-#endif
-	ret = pct1812_flash_exec(ts, 0x02, 0x20, 3);
-	if (ret)
-		goto failure;
-	step++;
-	// wait for completion
-	ret = pct1812_flash_status(ts, 0, 0);
-	if (ret)
-		goto failure;
-
-	return 0;
-
-failure:
-	dev_err(ts->dev, "Error erasing address 0x%06x (stage %d)\n",
-			__func__, address, step);
-	return -EIO;
-}
-
-static int pct1812_flash_section(struct pct1812_data *ts, unsigned char *data,
-		unsigned int size, unsigned int address)
-{
-	int m, ret;
-	unsigned int num_of_sectors = size / PCT1812_SECTOR_SIZE;
-	unsigned int target_num = size / CHUNK_SZ;
-	unsigned char value;
-	unsigned char *ptr = data;
-
-	for (m = 0; m < num_of_sectors; m++) {
-		ret = pct1812_erase_sector(ts, address + PCT1812_SECTOR_SIZE * m);
-		if (ret)
-			goto failure;
-		pr_debug("Erased sector %d of %d\n", m + 1, num_of_sectors);
-	}
-
-	for (m = 0; m < target_num; m++) {
-#ifndef DRY_RUN_UPDATE
-		// Set SRAM select
-		value = 0x08;
-		SET_PARAM(BANK(2), 0x09, value);
-		// Set SRAM NSC to 0
-		value = 0x00;
-		SET_PARAM(BANK(2), 0x0a, value);
-		// Write data to SRAM port
-		SET_PARAM(BANK(2), 0x0b, value);
-		// Set SRAM NSC to 1
-		value = 0x01;
-		SET_PARAM(BANK(2), 0x0a, value);
-#else
-		value = 0;
-#endif
-		// advance data pointer
-		ptr += CHUNK_SZ;
-		pr_debug("Flashing chunk @0x%04x\n", address);
-		// Program Flash from SRAM
-		ret = pct1812_flash_chunk(ts, address);
-		if (ret)
-			goto failure;
-		address += CHUNK_SZ;
-	}
-
-	return 0;
-failure:
-	dev_err(ts->dev, "Error flashing chunk %d\n", __func__, m);
-	return -EIO;
-}
-
-/*static*/
-int pct1812_fw_update(struct pct1812_data *ts, char *fname)
-{
-	int ret;
-	unsigned char value;
-	unsigned char *fwdata_ptr, *fwparam_ptr;
-	unsigned int fwdata_size, fwparam_size;
-	const struct firmware *fw_entry = NULL;
-
-	//__pm_stay_awake(&ts->wake_src);
-	mutex_lock(&ts->cmdlock);
-	pr_debug("Start of FW reflash process\n");
-	//fwu_irq_enable(fwu, true);
-	pr_debug("Requesting firmware %s\n", fname);
-	ret = request_firmware(&fw_entry, fname, ts->dev);
-	if (ret) {
-		dev_err(ts->dev, "%s: Error loading firmware %s\n", __func__, fname);
-		ret = -EINVAL;
-		goto failure;
-	}
-	// FW file size check
-	if (fw_entry->size != SUPPORTED_FW_FILE_SIZE) {
-		dev_err(ts->dev, "%s: Firmware %s file size is WRONG!!!\n", __func__, fname);
-		ret = -EINVAL;
-		goto failure;
-	}
-
-	fwdata_size = FW_SECTION_SIZE;
-	fwdata_ptr = (unsigned char *)fw_entry->data;
-	fwparam_size = SUPPORTED_FW_FILE_SIZE - FW_SECTION_SIZE;
-	fwparam_ptr = fwdata_ptr + FW_SECTION_SIZE;
-
-	ret = pct1812_engmode(ts, true);
-	if (ret) {
-		dev_err(ts->dev, "%s: Error entering flash mode\n", __func__);
-		goto failure;
-	}
-
-	value = POWERUP_CODE;
-	SET_PARAM(BANK(1), FLASH_PUP_REG, value);
-
-	ret = pct1812_flash_section(ts, fwdata_ptr, fwdata_size, ADDRESS_FW);
-	if (ret) {
-		dev_err(ts->dev, "%s: Flash error!!!\n", __func__);
-	} else {
-		ret = pct1812_flash_section(ts, fwparam_ptr, fwparam_size, ADDRESS_PARAMS);
-		if (ret)
-			dev_err(ts->dev, "%s: Flash error!!!\n", __func__);
-	}
-
-failure:
-	ret = pct1812_engmode(ts, false);
-	if (ret) {
-		dev_err(ts->dev, "%s: Error leaving flash mode\n", __func__);
-	}
-	mutex_unlock(&ts->cmdlock);
-	//__pm_relax(&ts->wake_src);
-
 	return ret;
 }
-
 // vok - value compared bit wise
 static int pct1812_wait4ready(struct pct1812_data *ts, unsigned char reg, unsigned char vok)
 {
@@ -1187,6 +1011,428 @@ static int pct1812_wait4ready(struct pct1812_data *ts, unsigned char reg, unsign
 	}
 
 	return (status & vok) ? 0 : ret;
+}
+
+/* This function assumes active page is set to BANK(1) already */
+static int inline pct1812_engmode(struct pct1812_data *ts, bool on,
+			unsigned char *vok)
+{
+	unsigned char curmode, value;
+	int ret;
+
+	value = RESET_CODE;
+	ret = pct1812_i2c_write(ts, KEY1_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	value = on ? ENGINEERING_CODE : RESUME_CODE;
+	ret = pct1812_i2c_write(ts, KEY2_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+
+	pct1812_delay_ms(5);
+
+	/* verify effective mode */
+	curmode = 0;
+	ret = pct1812_i2c_read(ts, ENG_MODE_REG, &curmode, sizeof(curmode));
+	if (ret)
+		goto failure;
+	pr_info("engineering mode %02x\n", curmode);
+
+	return vok && *vok != curmode ? -EINVAL : 0;
+failure:
+	return -EIO;
+}
+/* This function assumes active page is set to BANK(4) already */
+static int pct1812_flash_exec(struct pct1812_data *ts,
+		unsigned char cmd, unsigned char flash_cmd, int cnt)
+{
+	unsigned char command, lval;
+	int repetition = 0;
+	int ret, step = 0;
+
+	pr_debug("cmd 0x%02x, flash_cmd 0x%02x, cnt %d\n", cmd, flash_cmd, cnt);
+#ifndef DRY_RUN_UPDATE
+	// clean status
+	lval = 0;
+	ret = pct1812_i2c_write(ts, FLASH_COMMAND_REG, &lval, sizeof(lval));
+	if (ret)
+		goto failure;
+	step++;
+	// write flash cmd
+	lval = flash_cmd;
+	ret = pct1812_i2c_write(ts, FLASH_FLASH_CMD_REG, &lval, sizeof(lval));
+	if (ret)
+		goto failure;
+	step++;
+	// write data count LSB
+	lval = cnt & 0xff;
+	ret = pct1812_i2c_write(ts, FLASH_DCOUNT0_REG, &lval, sizeof(lval));
+	if (ret)
+		goto failure;
+	step++;
+	// write data count MSB
+	lval = (cnt >> 8) & 0xff;
+	ret = pct1812_i2c_write(ts, FLASH_DCOUNT1_REG, &lval, sizeof(lval));
+	if (ret)
+		goto failure;
+	step++;
+	// write cmd
+	lval = cmd;
+	ret = pct1812_i2c_write(ts, FLASH_COMMAND_REG, &lval, sizeof(lval));
+	if (ret)
+		goto failure;
+	step++;
+	// wait for completion
+do_again:
+	command = 0;
+	ret = pct1812_i2c_read(ts, FLASH_COMMAND_REG, &command, sizeof(command));
+	if (ret)
+		goto failure;
+
+	if ((command & cmd) != 0) {
+		repetition++;
+		if (repetition%11)
+			pr_debug("Still waiting ... %d\n", repetition);
+		goto do_again;
+	}
+#else
+	command = 0, lval = 0, ret = 0, step = 0, repetition = 0;
+#endif
+	return 0;
+#ifndef DRY_RUN_UPDATE
+failure:
+	dev_err(ts->dev,
+		"Error exec cmd 0x%02x, flash_cmd 0x%02x, cnt %d (stage %d, reps %d)\n",
+		__func__, cmd, flash_cmd, cnt, step, repetition);
+
+	return -EIO;
+#endif
+}
+/* This function assumes active page is set to BANK(4) already */
+static int pct1812_flash_status(struct pct1812_data *ts, int bit_idx, int vok)
+{
+	unsigned char status;
+	int ret;
+#ifndef DRY_RUN_UPDATE
+do_again:
+#endif
+	ret = pct1812_flash_exec(ts, 0x08, 0x05, 1);
+	if (ret) {
+		dev_err(ts->dev, "Error flash cmd\n", __func__);
+		return -EIO;
+	}
+#ifndef DRY_RUN_UPDATE
+	ret = pct1812_i2c_read(ts, FLASH_STATUS_REG, &status, sizeof(status));
+	if (ret) {
+		dev_err(ts->dev, "Error reading flash status\n", __func__);
+		return -EIO;
+	}
+
+	if ((status & (1 << bit_idx)) != vok) {
+		pct1812_delay_ms(2); // adjust delay if necessary
+		goto do_again;
+	}
+#else
+	ret = 0, status = 0;
+#endif
+	pr_debug("Flash status (bit(%d)=%d) OK\n", bit_idx, vok);
+
+	return 0;
+}
+/* This function assumes active page is set to BANK(4) already */
+static int pct1812_flash_chunk(struct pct1812_data *ts, unsigned int address)
+{
+	int ret, step = 0;
+	unsigned char value;
+
+	// Flash WriteEnable
+	ret = pct1812_flash_exec(ts, 0x02, 0x06, 0);
+	if (ret)
+		goto failure;
+	step++;
+	// check status
+	ret = pct1812_flash_status(ts, 1, 2);
+	if (ret)
+		goto failure;
+	step++;
+#ifndef DRY_RUN_UPDATE
+	value = (unsigned char)(address & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR0_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+
+	value = (unsigned char)((address >> 8) & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR1_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+
+	value = (unsigned char)((address >> 16) & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR2_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+
+	// set SRAM access offset
+	value = 0;
+	ret = pct1812_i2c_write(ts, FLASH_SRAM_OFF0_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	ret = !ret && pct1812_i2c_write(ts, FLASH_SRAM_OFF1_REG, &value, sizeof(value));
+	if (ret) {
+		dev_err(ts->dev, "%s: Error setting SRAM offset\n", __func__);
+		goto failure;
+	}
+	step++;
+#else
+	value = 0;
+#endif
+	ret = pct1812_flash_exec(ts, 0x81, 0x02, CHUNK_SZ);
+	if (ret)
+		goto failure;
+	step++;
+	// wait for completion
+	ret = pct1812_flash_status(ts, 0, 0);
+	if (ret)
+		goto failure;
+
+	return 0;
+
+failure:
+	dev_err(ts->dev, "Error erasing address 0x%06x (stage %d)\n",
+			__func__, address, step);
+	return -EIO;
+}
+
+static int pct1812_erase_sector(struct pct1812_data *ts, unsigned int address)
+{
+	int ret, step = 0;
+	unsigned char value;
+
+	pr_debug("Erasing sector @0x%06x\n", address);
+
+	// Flash WriteEnable
+	ret = pct1812_flash_exec(ts, 0x02, 0x06, 0);
+	if (ret)
+		goto failure;
+	step++;
+	// check status
+	ret = pct1812_flash_status(ts, 1, 2);
+	if (ret)
+		goto failure;
+	step++;
+#ifndef DRY_RUN_UPDATE
+	value = (unsigned char)(address & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR0_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+
+	value = (unsigned char)((address >> 8) & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR1_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+
+	value = (unsigned char)((address >> 16) & 0xff);
+	ret = pct1812_i2c_write(ts, FLASH_ADDR2_REG, &value, sizeof(value));
+	if (ret)
+		goto failure;
+	step++;
+#else
+	value = 0;
+#endif
+	ret = pct1812_flash_exec(ts, 0x02, 0x20, 3);
+	if (ret)
+		goto failure;
+	step++;
+	// wait for completion
+	ret = pct1812_flash_status(ts, 0, 0);
+	if (ret)
+		goto failure;
+
+	return 0;
+
+failure:
+	dev_err(ts->dev, "Error erasing address 0x%06x (stage %d)\n",
+			__func__, address, step);
+	return -EIO;
+}
+
+static int pct1812_flash_section(struct pct1812_data *ts, unsigned char *data,
+		unsigned int size, unsigned int address)
+{
+	int m = 0, ret;
+	unsigned int num_of_sectors = size / PCT1812_SECTOR_SIZE;
+	unsigned int target_num = size / CHUNK_SZ;
+	unsigned char value;
+	unsigned char *ptr = data;
+
+	ret = pct1812_set_bank(ts, BANK(4));
+	if (ret)
+		goto failure;
+
+	pr_debug("Start addr = %06x, size = %04x\n", address, size);
+	pr_debug("4K sectors = %u, 256b chunks = %u\n", num_of_sectors, target_num);
+	for (m = 0; m < num_of_sectors; m++) {
+		ret = pct1812_erase_sector(ts, address + PCT1812_SECTOR_SIZE * m);
+		if (ret)
+			goto failure;
+		pr_debug("Erased sector %d of %d\n", m + 1, num_of_sectors);
+	}
+
+	for (m = 0; m < target_num; m++) {
+		ret = pct1812_set_bank(ts, BANK(2));
+		if (ret)
+			goto failure;
+#ifndef DRY_RUN_UPDATE
+		// Set SRAM select
+		value = 0x08;
+		ret = pct1812_i2c_write(ts, SRAM_SELECT_REG, &value, sizeof(value));
+		if (ret) {
+			dev_err(ts->dev, "%s: error setting SRAM_SELECT\n", __func__);
+			goto failure;
+		}
+		// Set SRAM NSC to 0
+		value = 0x00;
+		ret = pct1812_i2c_write(ts, SRAM_NSC_REG, &value, sizeof(value));
+		if (ret) {
+			dev_err(ts->dev, "%s: error setting SRAM_NSC\n", __func__);
+			goto failure;
+		}
+		// Write data to SRAM port
+		ret = pct1812_i2c_write(ts, SRAM_PORT_REG, ptr, CHUNK_SZ);
+		if (ret) {
+			dev_err(ts->dev, "%s: error writing to SRAM\n", __func__);
+			goto failure;
+		}
+		// Set SRAM NSC to 1
+		value = 0x01;
+		ret = pct1812_i2c_write(ts, SRAM_NSC_REG, &value, sizeof(value));
+		if (ret) {
+			dev_err(ts->dev, "%s: error setting SRAM_NSC\n", __func__);
+			goto failure;
+		}
+#else
+		value = 0;
+#endif
+		// advance data pointer
+		ptr += CHUNK_SZ;
+		pr_debug("Flashing chunk @0x%06x\n", address);
+
+		ret = pct1812_set_bank(ts, BANK(4));
+		if (ret)
+			goto failure;
+
+		// Program Flash from SRAM
+		ret = pct1812_flash_chunk(ts, address);
+		if (ret)
+			goto failure;
+		address += CHUNK_SZ;
+	}
+
+	return 0;
+failure:
+	dev_err(ts->dev, "Error flashing chunk %d\n", __func__, m);
+	return -EIO;
+}
+
+/*static*/
+int pct1812_fw_update(struct pct1812_data *ts, char *fname)
+{
+	int ret;
+	unsigned char value;
+	unsigned char *fwdata_ptr, *fwparam_ptr, *fwcust_ptr;
+	unsigned int fwdata_size, fwparam_size, fwcust_size;
+	const struct firmware *fw_entry = NULL;
+
+	//__pm_stay_awake(&ts->wake_src);
+	mutex_lock(&ts->cmdlock);
+	pr_debug("Start of FW reflash process\n");
+	//fwu_irq_enable(fwu, true);
+	pr_debug("Requesting firmware %s\n", fname);
+	ret = request_firmware(&fw_entry, fname, ts->dev);
+	if (ret) {
+		dev_err(ts->dev, "%s: Error loading firmware %s\n", __func__, fname);
+		ret = -EINVAL;
+		goto failure;
+	}
+	// FW file size check
+	if (fw_entry->size != SUPPORTED_FW_FILE_SIZE) {
+		dev_err(ts->dev, "%s: Firmware %s file size is WRONG!!!\n", __func__, fname);
+		ret = -EINVAL;
+		goto failure;
+	}
+
+	/* 0000 ----
+	 * FW BLK (size 0xd000)
+	 * d000 ----
+	 * CUSTOM BLK (size 0x1000)
+	 * e000 ----
+	 * PARAM BLK (size 0x1000)
+	 * efff ----
+	 */
+	fwdata_size = FW_SECTION_SIZE;
+	fwdata_ptr = (unsigned char *)fw_entry->data;
+	fwcust_size = CUSTOM_SECTION_SIZE;
+	fwcust_ptr = fwdata_ptr + FW_SECTION_SIZE;
+	fwparam_size = PARAM_SECTION_SIZE;
+	fwparam_ptr = fwdata_ptr + SUPPORTED_FW_FILE_SIZE - PARAM_SECTION_SIZE;
+
+	pct1812_set_bank(ts, BANK(6));
+	ret = pct1812_power_mode(ts, PWR_MODE_NO_DEEP_SLEEP);
+	if (ret) {
+		dev_err(ts->dev, "%s: error setting no deep sleep power mode\n", __func__);
+	} else {
+		pr_debug("set power mode no deep sleep\n");
+	}
+
+	pct1812_set_bank(ts, BANK(1));
+	/* check value */
+	value = 0x01;
+	ret = pct1812_engmode(ts, true, &value);
+	if (ret) {
+		dev_err(ts->dev, "%s: Error entering flash mode\n", __func__);
+		goto failure;
+	}
+
+	value = POWERUP_CODE;
+	ret = pct1812_i2c_write(ts, FLASH_PUP_REG, &value, sizeof(value));
+	if (ret) {
+		dev_err(ts->dev, "%s: error setting FLASH_PWRUP\n", __func__);
+		goto failure;
+	}
+
+	ret = pct1812_flash_section(ts, fwdata_ptr, fwdata_size, ADDRESS_FW);
+	if (ret)
+		dev_err(ts->dev, "%s: Flash FW error!!!\n", __func__);
+	ret = !ret && pct1812_flash_section(ts, fwcust_ptr, fwcust_size, ADDRESS_CUSTOM);
+	if (ret)
+		dev_err(ts->dev, "%s: Flash customer error!!!\n", __func__);
+	ret = !ret && pct1812_flash_section(ts, fwparam_ptr, fwparam_size, ADDRESS_PARAM);
+	if (ret)
+		dev_err(ts->dev, "%s: Flash params error!!!\n", __func__);
+
+failure:
+	/* reset active page explicitly */
+	pct1812_set_bank(ts, BANK(1));
+	ret = pct1812_engmode(ts, false, NULL);
+	if (ret) {
+		dev_err(ts->dev, "%s: Error leaving flash mode\n", __func__);
+	}
+
+	pct1812_set_bank(ts, BANK(6));
+	ret = pct1812_wait4ready(ts, BOOT_STATUS_REG, BOOT_COMPLETE);
+	if (ret == -ETIME) {
+		dev_err(ts->dev, "%s: Init timed out\n", __func__);
+	}
+	mutex_unlock(&ts->cmdlock);
+	//__pm_relax(&ts->wake_src);
+
+	pct1812_get_extinfo(ts);
+
+	return ret;
 }
 
 static int pct1812_regulator(struct pct1812_data *ts, bool get)
@@ -1314,12 +1560,7 @@ static int pct1812_power(struct pct1812_data *ts, bool on)
 
 	return 0;
 }
-#if 0
-static int pct1812_power_mode(struct pct1812_data *ts, enum pwr_modes mode)
-{
-	return 0;
-}
-#endif
+
 static int pct1812_run_cmd(struct pct1812_data *ts, enum cmds command, unsigned char vok)
 {
 	unsigned char code;
@@ -1340,10 +1581,9 @@ static int pct1812_run_cmd(struct pct1812_data *ts, enum cmds command, unsigned 
 			code = SUSPEND_CODE;
 				break;
 	case CMD_MODE_RESET:
-			code = 0x06; // selftest
-			ret = pct1812_i2c_write(ts, MODE_REG, &code, sizeof(code));
+			ret = pct1812_set_bank(ts, BANK(6));
 			if (ret) {
-				dev_err(ts->dev, "%s: Mode reset error\n", __func__);
+				dev_err(ts->dev, "%s: Bank(6) set error\n", __func__);
 				return ret;
 			}
 			pct1812_delay_ms(1);
@@ -1396,7 +1636,7 @@ static int pct1812_report_mode(struct pct1812_data *ts,
 	unsigned char MASK, val;
 	int i, ret;
 
-	QUERY_PARAM(MASK, BANK(0), INTR_MASK_REG, val);
+	QUERY_PARAM_IF(MASK, BANK(0), INTR_MASK_REG, val);
 	if (stored_mask)
 		*stored_mask = MASK;
 	pr_debug("Current mask 0x%02x\n", MASK);
@@ -1410,9 +1650,8 @@ static int pct1812_report_mode(struct pct1812_data *ts,
 			pr_debug("mask w/bit set %02x\n", MASK);
 		}
 	}
-	SET_PARAM(BANK(0), INTR_MASK_REG, MASK);
+	SET_PARAM_IF(BANK(0), INTR_MASK_REG, MASK);
 	pr_debug("New interrupt mask 0x%02x\n", MASK);
-
 failure:
 	return 0;
 }
@@ -1473,6 +1712,13 @@ static int pct1812_selftest_cleanup(struct pct1812_data *ts)
 	default:
 			pct1812_selftest_set(ts, PCT1812_SELFTEST_NONE);
 			pct1812_selftest_memory(ts, false);
+	}
+
+	ret = pct1812_power_mode(ts, PWR_MODE_AUTO);
+	if (ret) {
+		dev_err(ts->dev, "%s: error setting auto power mode\n", __func__);
+	} else {
+		pr_debug("set power mode auto\n");
 	}
 
 	return ret;
@@ -1682,6 +1928,8 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	/* prevent unbalanced irq enable */
 	ts->irq_enabled = true;
+	/* sensing on */
+	pct1812_sensing_on(ts);
 
 	pct1812_fifo_cmd_add(ts, CMD_WDOG, WDOG_INTERVAL);
 
@@ -1713,7 +1961,12 @@ static ssize_t ic_ver_show(struct device *dev,
 {
 	struct pct1812_data *ts = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%04x;tx/rx:%d/%d", ts->version, ts->tx_count, ts->rx_count);
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%02d%02d%02d%02d\n%s%02x%02x%02x%02x\n",
+			"Product_ID: ", (ts->model == 0x47) &&
+				(ts->product_id & 0x80) ? "pct1812ff" : "unknown",
+			"Build ID: ", ts->major, ts->minor, ts->revision, ts->patch,
+			"Config ID: ", ts->custom_block[0], ts->custom_block[1],
+				ts->custom_block[2], ts->custom_block[3]);
 }
 
 static ssize_t vendor_show(struct device *dev,
@@ -1763,8 +2016,7 @@ static int pct1812_raw_data_frame(struct pct1812_data *ts,
 	unsigned char cmd, tx, rx;
 	int ret = 0;
 
-	cmd = 0x06; // selftest
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+	ret = pct1812_set_bank(ts, BANK(6));
 	if (ret)
 		goto failure;
 
@@ -1772,8 +2024,7 @@ static int pct1812_raw_data_frame(struct pct1812_data *ts,
 	QUERY_PARAM_IF(rx, BANK(0), 0x59, cmd);
 	dev_info(ts->dev, "%s: Tx/Rx=%d/%d\n", __func__, tx, rx);
 
-	cmd = 0x01; // selftest
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+	ret = pct1812_set_bank(ts, BANK(1));
 	if (ret)
 		goto failure;
 	cmd = 0x40;
@@ -1784,28 +2035,28 @@ static int pct1812_raw_data_frame(struct pct1812_data *ts,
 	ret = pct1812_i2c_write(ts, 0x0e, &cmd, sizeof(cmd));
 	if (ret)
 		goto failure;
-	cmd = 0x02;
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+
+	ret = pct1812_set_bank(ts, BANK(2));
 	if (ret)
 		goto failure;
 	cmd = 0x05;
-	ret = pct1812_i2c_write(ts, 0x09, &cmd, sizeof(cmd));
+	ret = pct1812_i2c_write(ts, SRAM_SELECT_REG, &cmd, sizeof(cmd));
 	if (ret)
 		goto failure;
 	cmd = 0x0;
-	ret = pct1812_i2c_write(ts, 0x0a, &cmd, sizeof(cmd));
+	ret = pct1812_i2c_write(ts, SRAM_NSC_REG, &cmd, sizeof(cmd));
 	if (ret)
 		goto failure;
 	// read data from SRAM port
-	ret = pct1812_i2c_read(ts, 0x0b, buffer, ts->frame_size);
+	ret = pct1812_i2c_read(ts, SRAM_PORT_REG, buffer, ts->frame_size);
 	if (ret)
 		goto failure;
 	cmd = 0x1;
-	ret = pct1812_i2c_write(ts, 0x0a, &cmd, sizeof(cmd));
+	ret = pct1812_i2c_write(ts, SRAM_NSC_REG, &cmd, sizeof(cmd));
 	if (ret)
 		goto failure;
-	cmd = 0x01; // selftest
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+
+	ret = pct1812_set_bank(ts, BANK(1));
 	if (ret)
 		goto failure;
 	cmd = 0x0;
@@ -1815,8 +2066,8 @@ static int pct1812_raw_data_frame(struct pct1812_data *ts,
 	ret = pct1812_i2c_write(ts, 0x0e, &cmd, sizeof(cmd));
 	if (ret)
 		goto failure;
-	cmd = 0x06; // selftest
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+
+	ret = pct1812_set_bank(ts, BANK(6));
 	if (ret)
 		goto failure;
 	cmd = 0x00; // clear interrupt
@@ -1978,12 +2229,14 @@ static ssize_t selftest_show(struct device *dev,
 		return blen;
 	}
 
-	pr_debug("%d frame(s) available\n", ts->frame_count);
 	if (ts->test_type == PCT1812_SELFTEST_FULL ||
-				ts->test_type == PCT1812_SELFTEST_SNR)
+				ts->test_type == PCT1812_SELFTEST_SNR) {
+		pr_debug("%d frame(s) available\n", ts->frame_count);
 		blen = pct1812_print_raw_data(ts, buf);
-	else
+	} else {
+		pr_debug("%d sample(s) available\n", ts->frame_sample);
 		blen = pct1812_print_coords(ts, buf);
+	}
 
 	pct1812_selftest_cleanup(ts);
 
@@ -2031,9 +2284,16 @@ static ssize_t selftest_store(struct device *dev,
 	case PCT1812_SELFTEST_DRAW_LINE:
 			ts->frame_size = sizeof(unsigned char) * 4;
 			ts->frame_count = 100; // alloc memory for 100 samples
-			ts->test_hdr_size = SELFTEST_HDR_SZ;				
+			ts->test_hdr_size = SELFTEST_HDR_SZ;
 			ts->test_data_size = ts->test_hdr_size;
 					break;
+	}
+
+	ret = pct1812_power_mode(ts, PWR_MODE_NO_DEEP_SLEEP);
+	if (ret) {
+		dev_err(ts->dev, "%s: error setting no deep sleep power mode\n", __func__);
+	} else {
+		pr_debug("set power mode no deep sleep\n");
 	}
 
 	ret = pct1812_selftest_memory(ts, true);
@@ -2076,8 +2336,7 @@ static ssize_t selftest_store(struct device *dev,
 		goto failure;
 	}
 	// INITIAL
-	cmd = 0x06; // selftest
-	ret = pct1812_i2c_write(ts, MODE_REG, &cmd, sizeof(cmd));
+	ret = pct1812_set_bank(ts, BANK(6));
 	if (ret) {
 		dev_err(ts->dev, "%s: Pre-initial error\n", __func__);
 		goto failure;
@@ -2221,14 +2480,17 @@ static ssize_t info_show(struct device *dev,
 	struct pct1812_data *ts = dev_get_drvdata(dev);
 	ssize_t blen;
 
+	pct1812_get_extinfo(ts);
+
 	blen = scnprintf(buf, PAGE_SIZE, "   Product: %sPixArt %s\n",
 				ts->model == 0x47 ? "" : "Non-",
-				ts->product_id == 0x8f ? "PCT1812FF" : "unknown");
+				(ts->product_id & 0x80) ? "PCT1812FF" : "unknown");
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "    FW ver: %d.%d\n", ts->major, ts->minor);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "    FW rev: %d patch %d\n", ts->revision, ts->patch);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "     Tx/Rx: %dx%d\n", ts->tx_count, ts->rx_count);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Resolution: %dx%d\n", ts->x_res, ts->y_res);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Max points: %d\n", ts->max_points);
+	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Boot block: %d\n", ts->boot_block);
 
 	return blen;
 }
