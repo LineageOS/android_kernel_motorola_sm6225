@@ -1301,6 +1301,43 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 	return IRQ_HANDLED;
 }
 
+static int sgm4154x_usb_get_property(struct power_supply *psy,
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+	struct sgm4154x_device *sgm = power_supply_get_drvdata(psy);
+	struct sgm4154x_state state;
+	int ret = 0;
+
+	mutex_lock(&sgm->lock);
+	//ret = sgm4154x_get_state(sgm, &state);
+	state = sgm->state;
+	mutex_unlock(&sgm->lock);
+	if (ret)
+		return ret;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+		if ((state.chrg_type == SGM4154x_USB_SDP) ||
+			(state.chrg_type == SGM4154x_USB_CDP))
+			val->intval = 1;
+		else
+			val->intval = 0;
+#endif
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		ret = sgm4154x_get_usb_present(sgm);
+		if (ret)
+			return -EINVAL;
+		val->intval = sgm->state.vbus_gd;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_MODEL_NAME,
@@ -1314,6 +1351,11 @@ static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_USB_TYPE,
 	//POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_PRESENT
+};
+
+static enum power_supply_property sgm4154x_usb_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_PRESENT,
 };
 
 static char *sgm4154x_charger_supplied_to[] = {
@@ -1332,6 +1374,13 @@ static struct power_supply_desc sgm4154x_power_supply_desc = {
 	.property_is_writeable = sgm4154x_property_is_writeable,
 };
 
+static const struct power_supply_desc sgm4154x_usb_desc = {
+	.name = "usb",
+	.type = POWER_SUPPLY_TYPE_USB,
+	.get_property = sgm4154x_usb_get_property,
+	.properties = sgm4154x_usb_props,
+	.num_properties = ARRAY_SIZE(sgm4154x_usb_props),
+};
 
 static const struct regmap_config sgm4154x_regmap_config = {
 	.reg_bits = 8,
@@ -1353,6 +1402,12 @@ static int sgm4154x_power_supply_init(struct sgm4154x_device *sgm,
 						 &sgm4154x_power_supply_desc,
 						 &psy_cfg);
 	if (IS_ERR(sgm->charger))
+		return -EINVAL;
+
+	sgm->usb = devm_power_supply_register(sgm->dev,
+						      &sgm4154x_usb_desc,
+						      &psy_cfg);
+	if (IS_ERR(sgm->usb))
 		return -EINVAL;
 
 	return 0;
