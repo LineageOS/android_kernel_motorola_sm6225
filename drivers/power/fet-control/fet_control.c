@@ -39,15 +39,14 @@
 #define RBALANCE_VDIFF_MV	100
 #define MAIN_MV_MID_LO		3600
 #define MAIN_MV_MID_HI		3800
-#define MAIN_CURR_SWITCH	250
+#define MAIN_CURR_SWITCH	500
 #define GPIO_SET_DELAY 		50
 #define CHRG_FULLCURR_EN	1
-#define HBDLY_DISCHARGE_MS	60000
+#define HBDLY_DISCHARGE_MS	30000
 #define HBDLY_CHARGE_MS		6000
 
 static struct fet_control_data {
 	struct device *dev;
-	struct power_supply	*flip_batt_psy;
 	struct power_supply *main_batt_psy;
 	struct delayed_work update;
 	bool init_done;
@@ -220,7 +219,7 @@ static void update_work(struct work_struct *work)
 {
 	struct fet_control_data *data = container_of(work, struct fet_control_data, update.work);
 	int main_curr, main_mv;
-	int main_dischg = 1;
+	int main_dischg = -1;
 	int hb_sched_time = HBDLY_DISCHARGE_MS;
 
 	fullcurr_state = CHRG_FULLCURR_EN;
@@ -236,9 +235,9 @@ static void update_work(struct work_struct *work)
 	/* Main current sysfs already in mA */
 	main_curr = get_ps_int_prop(data->main_batt_psy,
 		POWER_SUPPLY_PROP_CURRENT_NOW);
-	if (main_curr < 0) {
+	if (main_curr > 0) {
 		pr_info("Charging Main\n");
-		main_dischg = -1;
+		main_dischg = 1;
 	}
 
 	data->main_chg_curr_max = get_ps_int_prop(data->main_batt_psy,
@@ -249,21 +248,18 @@ static void update_work(struct work_struct *work)
 		return;
 	}
 
-	/*pr_info("Flip_curr:%d, flip_Ichg_MAX:%d, fullcurr state:%d\n",
-		flip_curr, data->flip_chg_curr_max, fullcurr_state);*/
 	pr_info("Main_curr:%d, main_Ichg_MAX:%d\n",
 		main_curr, data->main_chg_curr_max);
 	pr_info("Flip-Vbatt: --, Main-Vbatt: %d\n", main_mv);
 
 	/* FET paths set in Batt discharge state */
-	if (main_dischg == 1) {
+	if (main_dischg == -1) {
 		/* Leave Balance dflt-en & toggle in/out parallel low-Z battplus fet */
 		balance_state = 0;
-		/* if ((main_mv - flip_mv) < RBALANCE_VDIFF_MV) { */
-		/* MMI_STOPSHIP power: Temproary W/A for EVB, without ADC Input
-		 * Switch battplus_en Low-Z path at MAIN-Mid-Vbatt*/
+		/*if ((main_mv - flip_mv) < RBALANCE_VDIFF_MV) {
+			battplus_state = 1;*/
 		if ( (main_mv >= MAIN_MV_MID_LO && main_mv <= MAIN_MV_MID_HI) &&
-					(main_curr/1000 < MAIN_CURR_SWITCH) ) {
+					(main_dischg * main_curr/1000 < MAIN_CURR_SWITCH) ) {
 			battplus_state = 1;
 			pr_info("battplus-EN: %d\n", battplus_state);
 		} else {
@@ -277,7 +273,9 @@ static void update_work(struct work_struct *work)
 	update_state_gpio(fetControlData.battplus_en_gpio, battplus_state);
 	update_state_gpio(fetControlData.balance_en_n_gpio, balance_state);
 	update_state_gpio(fetControlData.chrg_fullcurr_en_gpio, fullcurr_state);
+
 }
+
 
 static int parse_dt(struct device_node *node)
 {
@@ -308,7 +306,7 @@ static int parse_dt(struct device_node *node)
 	}
 
 	fetControlData.chrg_fullcurr_en_gpio = of_get_named_gpio(node,
-			"mmi,chrg-fullcurr-en-gpio", 0);
+			"mmi,chrg-fullcurr-en-gpio", 1);
 	if (!gpio_is_valid(fetControlData.chrg_fullcurr_en_gpio)) {
 		pr_err("chrg-fullcurr-en-gpio is not valid!\n");
 		return -ENODEV;
@@ -366,7 +364,7 @@ static int fet_control_probe(struct platform_device *pdev)
 	balance_state = 0;
 
 	/* Set charger fullcurr enable */
-	rc = gpio_direction_output(fetControlData.chrg_fullcurr_en_gpio, 1);	// ChrgFullCurr dflt Enable
+	rc = gpio_direction_output(fetControlData.chrg_fullcurr_en_gpio, 1);	// ChrgFullCurr dflt ENABLE
 	if (rc) {
 		pr_err("Unable to set DIR/VAL chrg_fullcurr_en_gpio [%d]\n", fetControlData.chrg_fullcurr_en_gpio);
 		goto fail;
