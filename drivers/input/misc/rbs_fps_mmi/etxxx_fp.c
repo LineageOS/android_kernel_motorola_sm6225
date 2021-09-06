@@ -1212,7 +1212,7 @@ int egisfp_probe(struct platform_device *pdev)
 	egis_dev->request_irq_done = 0;
 	egis_dev->platforminit_done = 0;
 	egis_dev->power_enable = 0;
-	egis_dev->screen_onoff = 0;
+	egis_dev->screen_onoff = 1;
 	/*
 	 * If we can allocate a minor number, hook up this device.
 	 * Reusing minors is fine so long as udev or mdev is working.
