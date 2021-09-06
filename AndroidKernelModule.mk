@@ -1,6 +1,8 @@
 ifeq ($(TARGET_BOARD_PLATFORM),taro)
+ifneq (,$(findstring $(LOCAL_MODULE),$(BOARD_VENDOR_KERNEL_MODULES)))
 #Taro is using a new mechanisim to build kernel modules
 include device/qcom/common/dlkm/Build_external_kernelmodule.mk
+endif
 else
 ifneq (,$(findstring gki,$(KERNEL_DEFCONFIG)))
 #GKI product should use Qcom latest dlkm compile file
