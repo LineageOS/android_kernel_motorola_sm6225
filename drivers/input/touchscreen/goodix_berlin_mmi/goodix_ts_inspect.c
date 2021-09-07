@@ -343,7 +343,7 @@ static int ts_test_send_config(struct goodix_ts_test *ts_test,
 static int ts_test_read_version(struct goodix_ts_test *ts_test,
     struct goodix_fw_version *version)
 {
-    return ts_test->ts->hw_ops->read_version(ts_test->ts, version);
+    return ts_test->ts->hw_ops->read_version(ts_test->ts, version, true);
 }
 
 static void goto_next_line(char **ptr)
