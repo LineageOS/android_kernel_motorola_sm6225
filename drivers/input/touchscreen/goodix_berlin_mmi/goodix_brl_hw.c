@@ -645,7 +645,7 @@ exit:
  *	in this case the sensorID is valid.
  */
 static int brl_read_version(struct goodix_ts_core *cd,
-			struct goodix_fw_version *version)
+			struct goodix_fw_version *version, bool dbg_on)
 {
 	int ret, i;
 	u32 fw_addr;
@@ -681,13 +681,15 @@ static int brl_read_version(struct goodix_ts_core *cd,
 	}
 	memcpy(version, buf, sizeof(*version));
 	memcpy(temp_pid, version->rom_pid, sizeof(version->rom_pid));
-	ts_info("rom_pid:%s", temp_pid);
-	ts_info("rom_vid:%*ph", (int)sizeof(version->rom_vid),
-		version->rom_vid);
-	ts_info("pid:%s", version->patch_pid);
-	ts_info("vid:%*ph", (int)sizeof(version->patch_vid),
-		version->patch_vid);
-	ts_info("sensor_id:%d", version->sensor_id);
+	if (dbg_on) {
+		ts_info("rom_pid:%s", temp_pid);
+		ts_info("rom_vid:%*ph", (int)sizeof(version->rom_vid),
+			version->rom_vid);
+		ts_info("pid:%s", version->patch_pid);
+		ts_info("vid:%*ph", (int)sizeof(version->patch_vid),
+			version->patch_vid);
+		ts_info("sensor_id:%d", version->sensor_id);
+	}
 
 	return 0;
 }
@@ -894,7 +896,7 @@ static void print_ic_info(struct goodix_ic_info *ic_info)
 }
 
 static int brl_get_ic_info(struct goodix_ts_core *cd,
-	struct goodix_ic_info *ic_info)
+	struct goodix_ic_info *ic_info, bool dbg_on)
 {
 	int ret, i;
 	u16 length = 0;
@@ -953,7 +955,8 @@ static int brl_get_ic_info(struct goodix_ts_core *cd,
 		return ret;
 	}
 
-	print_ic_info(ic_info);
+	if (dbg_on)
+		print_ic_info(ic_info);
 
 	/* check some key info */
 	if (!ic_info->misc.cmd_addr || !ic_info->misc.fw_buffer_addr ||

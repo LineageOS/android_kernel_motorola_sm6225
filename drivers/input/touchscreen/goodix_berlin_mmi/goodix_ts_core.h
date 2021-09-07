@@ -32,7 +32,7 @@
 #define GOODIX_MAX_PEN_KEY 				2
 #define GOODIX_PEN_MAX_TILT				90
 #define GOODIX_CFG_MAX_SIZE				4096
-#define GOODIX_MAX_STR_LABLE_LEN		32
+#define GOODIX_MAX_STR_LABLE_LEN		64
 
 #define GOODIX_NORMAL_RESET_DELAY_MS	100
 #define GOODIX_HOLD_CPU_RESET_DELAY_MS  5
@@ -237,6 +237,7 @@ struct goodix_module {
  * @fw_name: name of the firmware image
  */
 struct goodix_ts_board_data {
+	char ic_name[GOODIX_MAX_STR_LABLE_LEN];
 	char avdd_name[GOODIX_MAX_STR_LABLE_LEN];
 	char iovdd_name[GOODIX_MAX_STR_LABLE_LEN];
 	int reset_gpio;
@@ -392,8 +393,10 @@ struct goodix_ts_hw_ops {
 	int (*send_cmd)(struct goodix_ts_core *cd, struct goodix_ts_cmd *cmd);
 	int (*send_config)(struct goodix_ts_core *cd, u8 *config, int len);
 	int (*read_config)(struct goodix_ts_core *cd, u8 *config_data, int size);
-	int (*read_version)(struct goodix_ts_core *cd, struct goodix_fw_version *version);
-	int (*get_ic_info)(struct goodix_ts_core *cd, struct goodix_ic_info *ic_info);
+	int (*read_version)(struct goodix_ts_core *cd,
+		   struct goodix_fw_version *version, bool dgb_on);
+	int (*get_ic_info)(struct goodix_ts_core *cd,
+		   struct goodix_ic_info *ic_info, bool dbg_on);
 	int (*esd_check)(struct goodix_ts_core *cd);
 	int (*event_handler)(struct goodix_ts_core *cd, struct goodix_ts_event *ts_event);
 	int (*after_event_handler)(struct goodix_ts_core *cd); /* clean sync flag */
@@ -463,6 +466,11 @@ struct goodix_ts_core {
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;
 #endif
+
+	/* touchscreen_mmi */
+	int (*set_fw_name)(char* fw_name);
+	int update_status;
+	int gesture_enabled;
 };
 
 /* external module structures */
@@ -618,5 +626,9 @@ int inspect_module_init(void);
 void inspect_module_exit(void);
 int goodix_tools_init(void);
 void goodix_tools_exit(void);
+void goodix_ts_release_connects(struct goodix_ts_core *core_data);
+
+int goodix_ts_power_on(struct goodix_ts_core *cd);
+int goodix_ts_power_off(struct goodix_ts_core *cd);
 
 #endif
