@@ -26,6 +26,7 @@
 #endif
 
 #include "goodix_ts_core.h"
+#include "goodix_ts_mmi.h"
 
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
@@ -294,7 +295,7 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 	int cnt = -EINVAL;
 
 	if (hw_ops->read_version) {
-		ret = hw_ops->read_version(core_data, &chip_ver);
+		ret = hw_ops->read_version(core_data, &chip_ver, true);
 		if (!ret) {
 			memcpy(temp_pid, chip_ver.rom_pid, sizeof(chip_ver.rom_pid));
 			cnt = snprintf(&buf[0], PAGE_SIZE,
@@ -312,7 +313,7 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 	}
 
 	if (hw_ops->get_ic_info) {
-		ret = hw_ops->get_ic_info(core_data, &core_data->ic_info);
+		ret = hw_ops->get_ic_info(core_data, &core_data->ic_info, true);
 		if (!ret) {
 			cnt += snprintf(&buf[cnt], PAGE_SIZE,
 				"config_id:%x\n", core_data->ic_info.version.config_id);
@@ -1060,6 +1061,15 @@ static int goodix_parse_dt(struct device_node *node,
 		return r;
 	}
 
+	/* get ic compatible */
+	r = of_property_read_string(node, "compatible", &name_tmp);
+	if (r) {
+		ts_err("get compatible failed");
+		return r;
+	} else {
+		ts_info("ic_name form dt: %s", name_tmp);
+		strncpy(board_data->ic_name, name_tmp, sizeof(board_data->ic_name));
+	}
 
 	/*get pen-enable switch and pen keys, must after "key map"*/
 	board_data->pen_enable = of_property_read_bool(node,
@@ -1711,7 +1721,7 @@ int goodix_ts_esd_init(struct goodix_ts_core *cd)
 	return 0;
 }
 
-static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
+void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 {
 	struct input_dev *input_dev = core_data->input_dev;
 	int i;
@@ -1940,6 +1950,7 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 	struct goodix_ts_core *cd = container_of(self,
 			struct goodix_ts_core, ts_notifier);
 	const struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+	int ret = 0;
 
 	if (cd->init_stage < CORE_INIT_STAGE2)
 		return 0;
@@ -1947,13 +1958,21 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 	ts_info("notify event type 0x%x", (unsigned int)action);
 	switch (action) {
 	case NOTIFY_FWUPDATE_START:
+		cd->update_status = 1;
 		hw_ops->irq_enable(cd, 0);
 		break;
 	case NOTIFY_FWUPDATE_SUCCESS:
+		ret = hw_ops->get_ic_info(cd, &cd->ic_info, true);
+		if (ret)
+			ts_err("invalid ic info [ignore]");
+		ret = goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
+		if (ret)
+			ts_info("failed send normal config[ignore]");
 	case NOTIFY_FWUPDATE_FAILED:
-		if (hw_ops->read_version(cd, &cd->fw_version))
+		if (hw_ops->read_version(cd, &cd->fw_version, true))
 			ts_info("failed read fw version info[ignore]");
 		hw_ops->irq_enable(cd, 1);
+		cd->update_status = 0;
 		break;
 	default:
 		break;
@@ -1998,8 +2017,10 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 	/* create procfs files */
 	goodix_ts_procfs_init(cd);
 
+#ifdef GOODIX_ESD_ENABLE
 	/* esd protector */
 	goodix_ts_esd_init(cd);
+#endif
 
 	/* gesture init */
 	gesture_module_init();
@@ -2068,21 +2089,23 @@ static int goodix_later_init_thread(void *data)
 		goto err_out;
 	}
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	ret = goodix_do_fw_update(cd->ic_configs[CONFIG_TYPE_NORMAL],
 			UPDATE_MODE_BLOCK | UPDATE_MODE_SRC_REQUEST);
 	if (ret)
 		ts_err("failed do fw update");
+#endif
 	/* setp3: get fw version and ic_info
 	 * at this step we believe that the ic is in normal mode,
 	 * if the version info is invalid there must have some
 	 * problem we cann't cover so exit init directly.
 	 */
-	ret = hw_ops->read_version(cd, &cd->fw_version);
+	ret = hw_ops->read_version(cd, &cd->fw_version, true);
 	if (ret) {
 		ts_err("invalid fw version, abort");
 		goto uninit_fw;
 	}
-	ret = hw_ops->get_ic_info(cd, &cd->ic_info);
+	ret = hw_ops->get_ic_info(cd, &cd->ic_info, true);
 	if (ret) {
 		ts_err("invalid ic info, abort");
 		goto uninit_fw;
@@ -2230,6 +2253,15 @@ static int goodix_ts_probe(struct platform_device *pdev)
 
 	/* debug node init */
 	goodix_tools_init();
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	ret = goodix_ts_mmi_dev_register(pdev);
+	if (ret) {
+		ts_info("Failed register touchscreen mmi.");
+		goto err_out;
+	}
+#endif
 
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;

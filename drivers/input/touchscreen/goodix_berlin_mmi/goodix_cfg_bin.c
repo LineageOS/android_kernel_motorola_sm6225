@@ -323,7 +323,7 @@ err_out:
 
 int goodix_get_config_proc(struct goodix_ts_core *cd)
 {
-	if (cd->hw_ops->read_version(cd, &cd->fw_version)) {
+	if (cd->hw_ops->read_version(cd, &cd->fw_version, true)) {
 		ts_info("version info abnormal, abort");
 		return -EINVAL;
 	}

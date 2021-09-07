@@ -266,6 +266,16 @@ struct fw_update_ctrl {
 };
 static struct fw_update_ctrl goodix_fw_update_ctrl;
 
+static int goodix_set_fwname(char* fw_name) {
+	if (fw_name != NULL) {
+		strlcpy(goodix_fw_update_ctrl.fw_name, fw_name,
+				sizeof(goodix_fw_update_ctrl.fw_name));
+		return 0;
+	}
+	else
+		return -EINVAL;
+}
+
 static int goodix_fw_update_reset(int delay)
 {
 	struct goodix_ts_hw_ops *hw_ops;
@@ -280,7 +290,7 @@ static int get_fw_version_info(struct goodix_fw_version *fw_version)
 		goodix_fw_update_ctrl.core_data->hw_ops;
 
 	return hw_ops->read_version(goodix_fw_update_ctrl.core_data,
-				fw_version);
+				fw_version, true);
 }
 
 static int goodix_reg_write(unsigned int addr,
@@ -1365,6 +1375,8 @@ int goodix_fw_update_init(struct goodix_ts_core *core_data)
 	mutex_init(&goodix_fw_update_ctrl.mutex);
 	goodix_fw_update_ctrl.core_data = core_data;
 	goodix_fw_update_ctrl.mode = 0;
+
+	core_data->set_fw_name = goodix_set_fwname;
 
 	strlcpy(goodix_fw_update_ctrl.fw_name, core_data->board_data.fw_name,
 		sizeof(goodix_fw_update_ctrl.fw_name));
