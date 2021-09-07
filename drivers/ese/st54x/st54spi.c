@@ -34,6 +34,7 @@
 // #define WITH_SPI_CLK_MNGT 1
 
 #include "linux/st21nfc.h"
+#include "linux/spi/spi-msm-geni.h"
 
 
 /*
@@ -1022,16 +1023,19 @@ static void st54spi_st21nfc_cb(int dir, void *data)
 
 /* Change CS_TIME for ST54 */
 
+/*
 static struct spi_delay st54spi_delay = {
 	.unit = SPI_DELAY_UNIT_USECS,
 	.value = 10,
 };
+*/
 
 static int st54spi_probe(struct spi_device *spi)
 {
 	struct st54spi_data *st54spi;
 	int status, ret;
 	unsigned long minor;
+	struct spi_geni_qcom_ctrl_data *spi_param = NULL;
 
 	/*
 	 * st54spi should never be referenced in DT without a specific
@@ -1090,7 +1094,17 @@ static int st54spi_probe(struct spi_device *spi)
 	// this method exists since kernel 5.3
 	// it uses u8 parameter in kernel 5.4 (clk count) and spi_delay parameter in kernel 5.5 (clk_count fobidden)
 	// target 10us delay ==> use CLK=4MHz and value 31 (even if u8 data, some platforms limit to 0-31)
-	spi_set_cs_timing(spi, &st54spi_delay, NULL, NULL);
+
+	// spi_set_cs_timing(spi, &st54spi_delay, NULL, NULL);
+
+	spi_param = devm_kzalloc(&spi->dev, sizeof(spi_param), GFP_KERNEL);
+	if (spi_param == NULL) {
+		status = -ENOMEM;
+	} else {
+		/* Initialize the driver data */
+		spi_param->spi_cs_clk_delay = 90;
+		spi->controller_data = spi_param;
+	}
 
 	if (status == 0)
 		spi_set_drvdata(spi, st54spi);
