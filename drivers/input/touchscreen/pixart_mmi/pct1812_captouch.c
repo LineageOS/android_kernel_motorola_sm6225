@@ -26,8 +26,8 @@
 
 #define CALM_WDOG
 #define SHOW_EVERYTHING
-#define SHOW_I2C_DATA
 
+#undef SHOW_I2C_DATA
 #undef STATIC_PLATFORM_DATA
 #undef DRY_RUN_UPDATE
 
@@ -46,6 +46,8 @@
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
+#include <linux/input.h>
+#include <linux/input/mt.h>
 
 #include <linux/kfifo.h>
 
@@ -60,6 +62,8 @@
 #define dev_dbg dev_err
 #endif
 #endif
+
+#define MAX_POINTS 5
 
 #define AREAD (1)
 #define AWRITE (0)
@@ -279,6 +283,7 @@ struct pct1812_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
 	struct pct1812_platform *plat_data;
+	struct input_dev *idev;
 
 	struct regulator *reg_vdd;
 	struct regulator *reg_vio;
@@ -689,36 +694,67 @@ static int inline pct1812_selftest_push(struct pct1812_data *ts,
 	return ret;
 }
 
-static int pct1812_process_touch_event(struct pct1812_data *ts)
+static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 {
-	unsigned char start_addr, nt, coords[4] = {0};
+	unsigned char nt, coords[4] = {0};
+	unsigned int x, y;
 	int i, mode, ret;
+	int pressed;
+	static int finger[MAX_POINTS];
 
 	ret = pct1812_i2c_read(ts, NUM_OBJ_REG, &nt, sizeof(nt));
 	if (ret)
 		return -EIO;
 	pr_debug("num objects %d\n", (int)nt);
-	for (i = 0; i < nt; i++) {
-		start_addr = OBJ_ADDR(i);
-		ret = pct1812_read_xy_coords(ts, start_addr, coords);
-		if (ret) {
-			dev_err(ts->dev, "%s: error reading obj %d\n", __func__, i);
-			return -EIO;
-		} else if (i == 0) { // draw line self-test supports one finger only
-			mode = pct1812_selftest_get(ts);
-			if (mode == PCT1812_SELFTEST_DRAW_LINE)
-				pct1812_selftest_push(ts, coords, sizeof(coords));
+	for (i = 0; i < MAX_POINTS; i++) {
+		if (i < nt) {
+			ret = pct1812_read_xy_coords(ts, OBJ_ADDR(i), coords);
+			if (ret) {
+				dev_err(ts->dev, "%s: error reading obj %d\n", __func__, i);
+				return -EIO;
+			}
+			x = UINT16_X(coords);
+			y = UINT16_Y(coords);
+			if (i == 0) { // draw line self-test supports one finger only
+				mode = pct1812_selftest_get(ts);
+				if (mode == PCT1812_SELFTEST_DRAW_LINE)
+					pct1812_selftest_push(ts, coords, sizeof(coords));
+				pr_debug("[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
+			}
+			pressed = 1;
+			if (finger[i] != 1) {
+				input_mt_slot(ts->idev, i);
+				input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 1);
+				input_report_key(ts->idev, BTN_TOUCH, 1);
+				input_report_key(ts->idev, BTN_TOOL_FINGER, 1);
+			}
+			input_report_abs(ts->idev, ABS_MT_POSITION_X, x);
+			input_report_abs(ts->idev, ABS_MT_POSITION_Y, y);
+			input_report_abs(ts->idev, ABS_X, x);
+			input_report_abs(ts->idev, ABS_Y, y);
+			input_sync(ts->idev);
+		} else
+			pressed = 0;
 
-			pr_debug("[@%02x]: x=%d, y=%d\n", start_addr, UINT16_X(coords), UINT16_Y(coords));
+		if (finger[i] && !pressed) {
+			input_mt_slot(ts->idev, i);
+			input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 0);
+			/* report BTN_TOUCH up only if it was not reported as part of gesture */
+			if (!up_event)
+				input_report_key(ts->idev, BTN_TOUCH, 0);
+			input_report_key(ts->idev, BTN_TOOL_FINGER, 0);
+			input_sync(ts->idev);
 		}
+		finger[i] = pressed;
 	}
 
 	return 0;
 }
 
-static int pct1812_process_gesture_event(struct pct1812_data *ts)
+static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 {
 	unsigned char gest, coords[4] = {0};
+	bool send_button = false;
 	int ret;
 
 	ret = pct1812_i2c_read(ts, GEST_TYPE_REG, &gest, sizeof(gest));
@@ -729,9 +765,11 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts)
 	switch(gest & 0x1f) {
 		case GEST_HORIZ_SCROLL:
 		case GEST_VERT_SCROLL:
-						break;
 		case GEST_TAP:
+						break;
 		case GEST_DBL_TAP:
+				send_button = true;
+						break;
 		case GEST_UP_SWIPE:
 		case GEST_DWN_SWIPE:
 		case GEST_LFT_SWIPE:
@@ -740,12 +778,31 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts)
 		default: return -EINVAL;
 	}
 
-	ret = pct1812_read_xy_coords(ts, GEST_ADDR(0), coords);
-	if (ret) {
-		dev_err(ts->dev, "%s: error reading gesture\n", __func__);
-	} else
-		pr_debug("[@%02x]: x=%d, y=%d\n", GEST_ADDR(0),
-					comp2_16b(X_GET(coords)), comp2_16b(Y_GET(coords)));
+	if (send_button) {
+		/* press */
+		input_report_key(ts->idev, BTN_TOOL_DOUBLETAP, 1);
+		input_report_key(ts->idev, BTN_TOUCH, 1);
+		input_sync(ts->idev);
+		/* release */
+		input_report_key(ts->idev, BTN_TOOL_DOUBLETAP, 0);
+		input_report_key(ts->idev, BTN_TOUCH, 0);
+		input_sync(ts->idev);
+		/* lift up event reported */
+		*up_event = 1;
+	} else {
+		ret = pct1812_read_xy_coords(ts, GEST_ADDR(0), coords);
+		if (ret) {
+			dev_err(ts->dev, "%s: error reading gesture\n", __func__);
+		} else {
+			int x = comp2_16b(X_GET(coords));
+			int y = comp2_16b(Y_GET(coords));
+#if 0
+			input_report_rel(ts->idev, REL_X, x);
+			input_report_rel(ts->idev, REL_Y, y);
+#endif
+			pr_debug("[@%02x]: x=%d, y=%d\n", GEST_ADDR(0), x, y);
+		}
+	}
 
 	return ret;
 }
@@ -755,26 +812,29 @@ static irqreturn_t pct1812_irq_handler(int irq, void *ptr)
 	struct pct1812_data *ts = (struct pct1812_data *)ptr;
 	unsigned char dropped, status = 0;
 	bool ack = true;
-	int ret;
+	int ret, up_event = 0;
 
 	mutex_lock(&ts->eventlock);
 	ret = pct1812_i2c_read(ts, STATUS_REG, &status, sizeof(status));
+	if (ret || ((status & STAT_BIT_ERR) || (status & STAT_BIT_WDOG))) {
+		pct1812_fifo_cmd_add(ts, CMD_RECOVER, TOUCH_RESET_DELAY);
+		goto failure;
+	}
 	dropped = status;
 	dropped &= ~ts->drop_mask;
 	if (status != dropped)
 		pr_debug("drop out %02x -> %02x\n", status, dropped);
 	if (dropped & STAT_BIT_GESTURE) {
-		pct1812_process_gesture_event(ts);
-	} else if (dropped & STAT_BIT_TOUCH) {
-		pct1812_process_touch_event(ts);
-	} else if ((status & STAT_BIT_ERR) || (status & STAT_BIT_WDOG)) {
-		ack = false;
-		pct1812_fifo_cmd_add(ts, CMD_RECOVER, TOUCH_RESET_DELAY);
+		pct1812_process_gesture_event(ts, &up_event);
+	}
+	if (dropped & STAT_BIT_TOUCH) {
+		pct1812_process_touch_event(ts, up_event);
 	}
 	if (ack) {
 		status = 0; // ACK interrupt
 		ret = pct1812_i2c_write(ts, STATUS_REG, &status, sizeof(status));
 	}
+failure:
 	mutex_unlock(&ts->eventlock);
 
 	return IRQ_HANDLED;
@@ -1012,7 +1072,6 @@ static int pct1812_wait4ready(struct pct1812_data *ts, unsigned char reg, unsign
 
 	return (status & vok) ? 0 : ret;
 }
-
 /* This function assumes active page is set to BANK(1) already */
 static int inline pct1812_engmode(struct pct1812_data *ts, bool on,
 			unsigned char *vok)
@@ -1708,7 +1767,7 @@ static int pct1812_selftest_cleanup(struct pct1812_data *ts)
 			}
 			// no need to restore intr mask; reset done it already!!!
 			//pct1812_report_mode(ts, ts->test_intr_mask, 0xff, NULL);
-			pct1812_drop_mask_set(ts, STAT_BIT_TOUCH);
+			pct1812_drop_mask_set(ts, 0); // STAT_BIT_TOUCH
 	default:
 			pct1812_selftest_set(ts, PCT1812_SELFTEST_NONE);
 			pct1812_selftest_memory(ts, false);
@@ -1841,6 +1900,54 @@ static int pct1812_resume(struct device *dev)
 }
 #endif
 
+static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
+{
+	static char ts_phys[64] = {0};
+	int ret = 0;
+
+	if (!alloc)
+		goto cleanup;
+
+	ts->idev = input_allocate_device();
+	if (!ts->idev)
+		return -ENOMEM;
+
+	snprintf(ts_phys, sizeof(ts_phys), "pct1812ff_touchpad/input1");
+	ts->idev->phys = ts_phys;
+	ts->idev->name = "PixArt PCT1812FF Touchpad";
+	ts->idev->id.bustype = BUS_I2C;
+	ts->idev->dev.parent = ts->dev;
+
+	set_bit(EV_SYN, ts->idev->evbit);
+	set_bit(EV_KEY, ts->idev->evbit);
+	set_bit(EV_ABS, ts->idev->evbit);
+#if 0
+	input_set_capability(ts->idev, EV_REL, REL_X);
+	input_set_capability(ts->idev, EV_REL, REL_Y);
+#endif
+	set_bit(BTN_TOUCH, ts->idev->keybit);
+	set_bit(BTN_TOOL_FINGER, ts->idev->keybit);
+	set_bit(BTN_TOOL_DOUBLETAP, ts->idev->keybit);
+	set_bit(INPUT_PROP_POINTER, ts->idev->propbit);
+
+	input_set_abs_params(ts->idev, ABS_MT_POSITION_X, 0, ts->x_res, 0, 0);
+	input_set_abs_params(ts->idev, ABS_MT_POSITION_Y, 0, ts->y_res, 0, 0);
+	input_mt_init_slots(ts->idev, ts->max_points, INPUT_MT_POINTER);
+
+	ret = input_register_device(ts->idev);
+	if (ret) {
+		dev_err(ts->dev, "%s: failed to register input device: %d\n", __func__, ret);
+		input_free_device(ts->idev);
+	}
+
+	return ret;
+
+cleanup:
+	input_unregister_device(ts->idev);
+
+	return ret;
+}
+
 static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct pct1812_data *ts;
@@ -1912,7 +2019,7 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto error_init;
 	}
 
-	pct1812_drop_mask_set(ts, STAT_BIT_TOUCH);
+	pct1812_drop_mask_set(ts, 0); // STAT_BIT_TOUCH);
 	pct1812_get_extinfo(ts);
 
 	ret = kfifo_alloc(&ts->cmd_pipe, sizeof(unsigned int)* 10, GFP_KERNEL);
@@ -1928,9 +2035,13 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	/* prevent unbalanced irq enable */
 	ts->irq_enabled = true;
+	ret = pct1812_input_dev(ts, true);
+	if (ret < 0) {
+		dev_err(&client->dev, "%s: Unable register input\n", __func__);
+		goto error_input_alloc;
+	}
 	/* sensing on */
 	pct1812_sensing_on(ts);
-
 	pct1812_fifo_cmd_add(ts, CMD_WDOG, WDOG_INTERVAL);
 
 	ret = sysfs_create_group(&client->dev.kobj, &pct1812_attrs_group);
@@ -1940,6 +2051,9 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 	sysfs_create_bin_file(&client->dev.kobj, &selftest_bin_attr);
 
 	return 0;
+
+error_input_alloc:
+	free_irq(client->irq, ts);
 
 error_fifo_alloc:
 	kfifo_free(&ts->cmd_pipe);
