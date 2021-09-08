@@ -45,6 +45,8 @@
 
 #define OEM_BM_ULOG_SIZE		4096
 
+#define VBUS_MIN_MV			4000
+
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for qti glink charger driver");
@@ -472,6 +474,9 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	if (!chg->chg_info.chrg_present &&
 	    chg->chg_info.chrg_type != 0)
 		chg->chg_info.chrg_present = 1;
+
+	chg->chg_info.vbus_present = chg->chg_info.chrg_mv > VBUS_MIN_MV;
+	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
 	if (chrg_type != chg->chg_info.chrg_type ||
