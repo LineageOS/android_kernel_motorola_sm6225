@@ -812,6 +812,36 @@ static DEVICE_ATTR(force_charging_enable, 0644,
 		force_charging_enable_show,
 		force_charging_enable_store);
 
+static ssize_t force_charging_disable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	if (!this_chip) {
+		pr_err("mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("mmi_charger: Invalid charger disable value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	mmi_vote_charging_disable("MMI_USER", !!mode);
+	cancel_delayed_work(&this_chip->heartbeat_work);
+	schedule_delayed_work(&this_chip->heartbeat_work, msecs_to_jiffies(0));
+	mmi_info(this_chip, "%s force_charging_disable\n", (mode)? "set" : "clear");
+
+	return count;
+}
+
+static DEVICE_ATTR(force_charging_disable, 0200,
+		NULL,
+		force_charging_disable_store);
+
 static struct attribute * mmi_g[] = {
 	&dev_attr_charge_rate.attr,
 	&dev_attr_age.attr,
@@ -872,6 +902,11 @@ static void mmi_battery_supply_init(struct mmi_charger_chip *chip)
 				&dev_attr_force_charging_enable);
 	if (rc)
 		mmi_err(chip, "couldn't create force_charging_enable\n");
+
+	rc = device_create_file(chip->batt_psy->dev.parent,
+				&dev_attr_force_charging_disable);
+	if (rc)
+		mmi_err(chip, "couldn't create force_charging_disable\n");
 
 	mmi_info(chip, "battery supply is initialized\n");
 }
@@ -2711,6 +2746,8 @@ static int mmi_charger_remove(struct platform_device *pdev)
 					&dev_attr_force_charger_suspend);
 		device_remove_file(chip->batt_psy->dev.parent,
 					&dev_attr_force_charging_enable);
+		device_remove_file(chip->batt_psy->dev.parent,
+					&dev_attr_force_charging_disable);
 		sysfs_remove_group(&chip->batt_psy->dev.kobj,
 					&power_supply_mmi_attr_group);
 		power_supply_put(chip->batt_psy);
