@@ -78,6 +78,7 @@ enum oem_property_type {
 	OEM_PROP_WLS_EN,
 	OEM_PROP_WLS_VOLT_MAX,
 	OEM_PROP_WLS_CURR_MAX,
+	OEM_PROP_WLS_CHIP_ID,
 	OEM_PROP_MAX,
 };
 
@@ -1011,6 +1012,29 @@ static DEVICE_ATTR(force_wls_curr_max, 0664,
 		force_wls_curr_max_show,
 		force_wls_curr_max_store);
 
+static ssize_t wireless_chip_id_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int data;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_CHIP_ID,
+				&data,
+				sizeof(int));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "0x%04x\n", data);
+}
+
+static DEVICE_ATTR(wireless_chip_id, S_IRUGO,
+		wireless_chip_id_show,
+		NULL);
+
 static ssize_t addr_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t count)
@@ -1191,6 +1215,13 @@ static int qti_charger_init(struct qti_charger *chg)
 	if (rc) {
 		mmi_err(chg,
 			   "Couldn't create force_wls_curr_max\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_wireless_chip_id);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create wireless_chip_id\n");
 	}
 
 	rc = device_create_file(chg->dev,
