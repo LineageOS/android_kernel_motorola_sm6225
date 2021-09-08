@@ -75,6 +75,8 @@ struct mmi_charger_info {
 	int chrg_type;
 	int chrg_pmax_mw;
 	int chrg_present;
+	int lpd_present;
+	int vbus_present;
 };
 
 struct mmi_charger_cfg {
