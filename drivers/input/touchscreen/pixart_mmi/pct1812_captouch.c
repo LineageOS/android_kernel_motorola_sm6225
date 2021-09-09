@@ -25,9 +25,6 @@
 #define pr_fmt(fmt) "pct1812_mmi: %s: " fmt, __func__
 
 #define CALM_WDOG
-#define SHOW_EVERYTHING
-
-#undef SHOW_I2C_DATA
 #undef STATIC_PLATFORM_DATA
 #undef DRY_RUN_UPDATE
 
@@ -278,6 +275,22 @@ static struct pct1812_platform pct1812_pd = {
 };
 #endif
 
+#define DBG_BIT_PM 0x00000001
+#define DBG_BIT_IRQ 0x00000002
+#define DBG_BIT_ISR 0x00000004
+#define DBG_BIT_I2C 0x00000008
+#define DBG_BIT_WORK 0x00000010
+#define DBG_BIT_TIME 0x00000020
+#define DBG_BIT_TEST 0x00000040
+#define DBG_BIT_FW 0x00000080
+#define DBG_BIT_UACC 0x00000100
+#define DBG_BIT_ALL 0x00000200
+
+#define DBG_PRINT(s, fmt, ...) { \
+	if (ts->debug & s) \
+		pr_info(fmt, ##__VA_ARGS__); \
+}
+
 struct pct1812_data {
 	struct device *dev;
 	struct i2c_client *client;
@@ -329,6 +342,7 @@ struct pct1812_data {
 	unsigned char max_points;
 	unsigned char boot_block;
 	unsigned char custom_block[CUST_INFO_RNUM];
+	unsigned char debug;
 };
 
 static ssize_t selftest_store(struct device *dev,
@@ -357,6 +371,10 @@ static ssize_t mask_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t mask_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t debug_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t debug_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t selftest_bin_show(struct file *filp, struct kobject *kobp,
 		struct bin_attribute *bin_attr, char *buf, loff_t pos, size_t count);
 
@@ -370,6 +388,7 @@ static DEVICE_ATTR_RO(irq_status);
 static DEVICE_ATTR_RW(selftest);
 static DEVICE_ATTR_RW(drv_irq);
 static DEVICE_ATTR_RW(mask);
+static DEVICE_ATTR_RW(debug);
 
 static struct attribute *pct1812_attrs[] = {
 	&dev_attr_doreflash.attr,
@@ -382,6 +401,7 @@ static struct attribute *pct1812_attrs[] = {
 	&dev_attr_selftest.attr,
 	&dev_attr_info.attr,
 	&dev_attr_mask.attr,
+	&dev_attr_debug.attr,
 	NULL,
 };
 
@@ -483,15 +503,15 @@ static int pct1812_i2c_read(struct pct1812_data *ts, unsigned char reg, unsigned
 		dev_err(&ts->client->dev, "%s: I2C read over retry limit\n", __func__);
 		ret = -EIO;
 	}
-#ifdef SHOW_I2C_DATA
-	if (1) {
+
+	if (ts->debug & DBG_BIT_I2C) {
 		int i;
 		pr_info("R: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
 		pr_cont("\n");
 	}
-#endif
+
 	return ret;
 }
 
@@ -545,15 +565,15 @@ static int pct1812_i2c_write(struct pct1812_data *ts, unsigned char reg, unsigne
 		dev_err(&ts->client->dev, "%s: I2C write over retry limit\n", __func__);
 		ret = -EIO;
 	}
-#ifdef SHOW_I2C_DATA
-	if (1) {
+
+	if (ts->debug & DBG_BIT_I2C) {
 		int i;
 		pr_info("W: %02X | ", reg);
 		for (i = 0; i < len; i++)
 			pr_cont("%02X ", data[i]);
 		pr_cont("\n");
 	}
-#endif
+
 	return ret;
 }
 
@@ -563,13 +583,13 @@ static void inline pct1812_set_irq(struct pct1812_data *ts, bool on)
 		if (!ts->irq_enabled) {
 			ts->irq_enabled = true;
 			enable_irq(ts->plat_data->client->irq);
-			pr_debug("IRQ enabled\n");
+			DBG_PRINT(DBG_BIT_IRQ,"IRQ enabled\n");
 		}
 	} else {
 		if (ts->irq_enabled) {
 			ts->irq_enabled = false;
 			disable_irq(ts->plat_data->client->irq);
-			pr_debug("IRQ disabled\n");
+			DBG_PRINT(DBG_BIT_IRQ,"IRQ disabled\n");
 		}
 	}
 }
@@ -686,7 +706,7 @@ static int inline pct1812_selftest_push(struct pct1812_data *ts,
 		memcpy(ts->test_data[ts->frame_sample], coords, length);
 		ts->frame_sample++;
 		ts->test_data_size += length;
-		pr_debug("push test sample to slot %d; data size %u\n", ts->frame_sample, ts->test_data_size);
+		DBG_PRINT(DBG_BIT_TEST,"push test sample to slot %d; data size %u\n", ts->frame_sample, ts->test_data_size);
 		ret = 0;
 	} else
 		dev_warn(ts->dev, "%s: Buffer is full\n", __func__);
@@ -705,7 +725,7 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 	ret = pct1812_i2c_read(ts, NUM_OBJ_REG, &nt, sizeof(nt));
 	if (ret)
 		return -EIO;
-	pr_debug("num objects %d\n", (int)nt);
+	DBG_PRINT(DBG_BIT_ISR,"num objects %d\n", (int)nt);
 	for (i = 0; i < MAX_POINTS; i++) {
 		if (i < nt) {
 			ret = pct1812_read_xy_coords(ts, OBJ_ADDR(i), coords);
@@ -719,7 +739,7 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 				mode = pct1812_selftest_get(ts);
 				if (mode == PCT1812_SELFTEST_DRAW_LINE)
 					pct1812_selftest_push(ts, coords, sizeof(coords));
-				pr_debug("[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
+				DBG_PRINT(DBG_BIT_TEST,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
 			}
 			pressed = 1;
 			if (finger[i] != 1) {
@@ -727,6 +747,7 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 				input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 1);
 				input_report_key(ts->idev, BTN_TOUCH, 1);
 				input_report_key(ts->idev, BTN_TOOL_FINGER, 1);
+				DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
 			}
 			input_report_abs(ts->idev, ABS_MT_POSITION_X, x);
 			input_report_abs(ts->idev, ABS_MT_POSITION_Y, y);
@@ -761,7 +782,7 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 	if (ret)
 		return -EIO;
 
-	pr_debug("gesture 0x%02x\n", gest);
+	DBG_PRINT(DBG_BIT_ISR,"gesture 0x%02x\n", gest);
 	switch(gest & 0x1f) {
 		case GEST_HORIZ_SCROLL:
 		case GEST_VERT_SCROLL:
@@ -800,7 +821,7 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 			input_report_rel(ts->idev, REL_X, x);
 			input_report_rel(ts->idev, REL_Y, y);
 #endif
-			pr_debug("[@%02x]: x=%d, y=%d\n", GEST_ADDR(0), x, y);
+			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", GEST_ADDR(0), x, y);
 		}
 	}
 
@@ -823,7 +844,7 @@ static irqreturn_t pct1812_irq_handler(int irq, void *ptr)
 	dropped = status;
 	dropped &= ~ts->drop_mask;
 	if (status != dropped)
-		pr_debug("drop out %02x -> %02x\n", status, dropped);
+		DBG_PRINT(DBG_BIT_ISR,"drop out %02x -> %02x\n", status, dropped);
 	if (dropped & STAT_BIT_GESTURE) {
 		pct1812_process_gesture_event(ts, &up_event);
 	}
@@ -870,15 +891,15 @@ static int pct1812_user_access(struct pct1812_data *ts,
 	} else {
 		ret = pct1812_i2c_write(ts, USER_DATA_REG, value, size);
 	}
-#ifndef SHOW_I2C_DATA
-	if (1) {
+
+	if (ts->debug & DBG_BIT_UACC) {
 		int i;
 		pr_info("%c: b%d:0x%02x |", R ? 'R' : 'W', bank, addr);
 		for (i = 0; i < size; i++)
 			pr_cont(" %02X", value ? value[i] : vArray[i]);
 		pr_cont("\n");
 	}
-#endif
+
 	return ret;
 }
 
@@ -942,7 +963,7 @@ static int pct1812_user_access(struct pct1812_data *ts,
 		} else if (v != checkout) { \
 			dev_warn(ts->dev, "%s: Mismatch %02x != %02x\n", __func__, v, checkout); \
 		} else { \
-			pr_debug("active BANK(%d)\n", checkout); \
+			DBG_PRINT(DBG_BIT_FW,"active BANK(%d)\n", checkout); \
 		} \
 	} \
 }
@@ -961,7 +982,7 @@ static int inline pct1812_sensing_on(struct pct1812_data *ts) {
 	QUERY_PARAM_IF(curmode, BANK(0), START_REG, value);
 	curmode |= 0x01;
 	SET_PARAM_IF(BANK(0), START_REG, curmode);
-	pr_debug("start reg b0:0x02x value %02x\n", START_REG, curmode);
+	DBG_PRINT(DBG_BIT_ALL,"start reg b0:0x02x value %02x\n", START_REG, curmode);
 failure:
 	return ret;
 }
@@ -1010,7 +1031,7 @@ static int pct1812_power_mode(struct pct1812_data *ts, enum pwr_modes mode)
 	case PWR_MODE_NO_DEEP_SLEEP:
 			val = INVALID_BYTE;
 			pct1812_i2c_read(ts, DEEP_SLEEP_REG, &val, sizeof(val));
-			pr_debug("%s: SLEEP_STATUS before %02x\n", __func__, val);
+			DBG_PRINT(DBG_BIT_PM,"%s: SLEEP_STATUS before %02x\n", __func__, val);
 			val = 0x01; // NO_DEEP_SLEEP
 			ret = pct1812_i2c_write(ts, DEEP_SLEEP_REG, &val, sizeof(val));
 			if (ret) {
@@ -1024,7 +1045,7 @@ do_again:
 				goto failure;
 			if ((val & SLEEP_BIT_STAT))
 				goto do_again;
-			pr_debug("%s: SLEEP_STATUS %02x\n", __func__, val);
+			DBG_PRINT(DBG_BIT_PM,"%s: SLEEP_STATUS %02x\n", __func__, val);
 					break;
 	case PWR_MODE_AUTO:
 	case PWR_MODE_RUN:
@@ -1035,6 +1056,7 @@ do_again:
 			if (cur_mode != mode) {
 				val = mode;
 				SET_PARAM_IF(BANK(3), FORCE_OP_MODE_REG, val);
+				DBG_PRINT(DBG_BIT_PM,"%s: PM mode %02x\n", __func__, val);
 			}
 					break;
 	default:
@@ -1067,7 +1089,7 @@ static int pct1812_wait4ready(struct pct1812_data *ts, unsigned char reg, unsign
 	if (retry == rlimit)
 		ret = -ETIME;
 	else if (!ret) {
-		pr_debug("success waiting for %d\n", vok);
+		DBG_PRINT(DBG_BIT_TIME,"success waiting for %d\n", vok);
 	}
 
 	return (status & vok) ? 0 : ret;
@@ -1109,7 +1131,7 @@ static int pct1812_flash_exec(struct pct1812_data *ts,
 	int repetition = 0;
 	int ret, step = 0;
 
-	pr_debug("cmd 0x%02x, flash_cmd 0x%02x, cnt %d\n", cmd, flash_cmd, cnt);
+	DBG_PRINT(DBG_BIT_FW,"cmd 0x%02x, flash_cmd 0x%02x, cnt %d\n", cmd, flash_cmd, cnt);
 #ifndef DRY_RUN_UPDATE
 	// clean status
 	lval = 0;
@@ -1151,7 +1173,7 @@ do_again:
 	if ((command & cmd) != 0) {
 		repetition++;
 		if (repetition%11)
-			pr_debug("Still waiting ... %d\n", repetition);
+			DBG_PRINT(DBG_BIT_FW,"Still waiting ... %d\n", repetition);
 		goto do_again;
 	}
 #else
@@ -1194,7 +1216,7 @@ do_again:
 #else
 	ret = 0, status = 0;
 #endif
-	pr_debug("Flash status (bit(%d)=%d) OK\n", bit_idx, vok);
+	DBG_PRINT(DBG_BIT_FW,"Flash status (bit(%d)=%d) OK\n", bit_idx, vok);
 
 	return 0;
 }
@@ -1269,7 +1291,7 @@ static int pct1812_erase_sector(struct pct1812_data *ts, unsigned int address)
 	int ret, step = 0;
 	unsigned char value;
 
-	pr_debug("Erasing sector @0x%06x\n", address);
+	DBG_PRINT(DBG_BIT_FW,"Erasing sector @0x%06x\n", address);
 
 	// Flash WriteEnable
 	ret = pct1812_flash_exec(ts, 0x02, 0x06, 0);
@@ -1332,13 +1354,13 @@ static int pct1812_flash_section(struct pct1812_data *ts, unsigned char *data,
 	if (ret)
 		goto failure;
 
-	pr_debug("Start addr = %06x, size = %04x\n", address, size);
-	pr_debug("4K sectors = %u, 256b chunks = %u\n", num_of_sectors, target_num);
+	DBG_PRINT(DBG_BIT_FW,"Start addr = %06x, size = %04x\n", address, size);
+	DBG_PRINT(DBG_BIT_FW,"4K sectors = %u, 256b chunks = %u\n", num_of_sectors, target_num);
 	for (m = 0; m < num_of_sectors; m++) {
 		ret = pct1812_erase_sector(ts, address + PCT1812_SECTOR_SIZE * m);
 		if (ret)
 			goto failure;
-		pr_debug("Erased sector %d of %d\n", m + 1, num_of_sectors);
+		DBG_PRINT(DBG_BIT_FW,"Erased sector %d of %d\n", m + 1, num_of_sectors);
 	}
 
 	for (m = 0; m < target_num; m++) {
@@ -1378,7 +1400,7 @@ static int pct1812_flash_section(struct pct1812_data *ts, unsigned char *data,
 #endif
 		// advance data pointer
 		ptr += CHUNK_SZ;
-		pr_debug("Flashing chunk @0x%06x\n", address);
+		DBG_PRINT(DBG_BIT_FW,"Flashing chunk @0x%06x\n", address);
 
 		ret = pct1812_set_bank(ts, BANK(4));
 		if (ret)
@@ -1408,9 +1430,8 @@ int pct1812_fw_update(struct pct1812_data *ts, char *fname)
 
 	//__pm_stay_awake(&ts->wake_src);
 	mutex_lock(&ts->cmdlock);
-	pr_debug("Start of FW reflash process\n");
+	dev_info(ts->dev, "%s: Start FW update from file %s\n", __func__, fname);
 	//fwu_irq_enable(fwu, true);
-	pr_debug("Requesting firmware %s\n", fname);
 	ret = request_firmware(&fw_entry, fname, ts->dev);
 	if (ret) {
 		dev_err(ts->dev, "%s: Error loading firmware %s\n", __func__, fname);
@@ -1443,8 +1464,6 @@ int pct1812_fw_update(struct pct1812_data *ts, char *fname)
 	ret = pct1812_power_mode(ts, PWR_MODE_NO_DEEP_SLEEP);
 	if (ret) {
 		dev_err(ts->dev, "%s: error setting no deep sleep power mode\n", __func__);
-	} else {
-		pr_debug("set power mode no deep sleep\n");
 	}
 
 	pct1812_set_bank(ts, BANK(1));
@@ -1473,6 +1492,8 @@ int pct1812_fw_update(struct pct1812_data *ts, char *fname)
 	if (ret)
 		dev_err(ts->dev, "%s: Flash params error!!!\n", __func__);
 
+	if (!ret)
+		dev_info(ts->dev, "%s: FW update completed successfully\n", __func__);
 failure:
 	/* reset active page explicitly */
 	pct1812_set_bank(ts, BANK(1));
@@ -1523,34 +1544,33 @@ static int pct1812_regulator(struct pct1812_data *ts, bool get)
 	ts->reg_vdd = rvdd;
 	ts->reg_vio = rvio;
 
-	pr_debug("vdd=%p, vio=%p\n", rvdd, rvio);
+	DBG_PRINT(DBG_BIT_PM,"vdd=%p, vio=%p\n", rvdd, rvio);
 
 	return 0;
 }
 
-static int pct1812_pinctrl_state(struct pct1812_data *info, bool on)
+static int pct1812_pinctrl_state(struct pct1812_data *ts, bool on)
 {
 	struct pinctrl_state *state_ptr;
 	const char *state_name;
 	int error = 0;
 
-	if (!info->ts_pinctrl)
+	if (!ts->ts_pinctrl)
 		return 0;
 
 	if (on) {
 		state_name = PINCTRL_STATE_ACTIVE;
-		state_ptr =info->pinctrl_state_active;
+		state_ptr = ts->pinctrl_state_active;
 	} else {
 		state_name = PINCTRL_STATE_SUSPEND;
-		state_ptr =info->pinctrl_state_suspend;
+		state_ptr = ts->pinctrl_state_suspend;
 	}
 
-	error = pinctrl_select_state(info->ts_pinctrl, state_ptr);
+	error = pinctrl_select_state(ts->ts_pinctrl, state_ptr);
 	if (error < 0)
-		dev_err(info->dev, "%s: Failed to select %s\n",
-			__func__, state_name);
+		dev_err(ts->dev, "%s: Failed to select %s\n",__func__, state_name);
 	else
-		pr_debug("set pinctrl state %s\n", state_name);
+		DBG_PRINT(DBG_BIT_PM,"set pinctrl state %s\n", state_name);
 
 	return error;
 }
@@ -1653,7 +1673,7 @@ static int pct1812_run_cmd(struct pct1812_data *ts, enum cmds command, unsigned 
 	}
 
 run_once_again:
-	pr_debug("command: %s\n", action);
+	DBG_PRINT(DBG_BIT_PM,"command: %s\n", action);
 	ret = pct1812_i2c_write(ts, SW_RESET_REG, &code, sizeof(code));
 	if (ret) {
 		dev_err(ts->dev, "%s: Error sending cmd: %d (%d)\n", __func__, command, ret);
@@ -1676,7 +1696,7 @@ static int pct1812_queued_resume(struct pct1812_data *ts)
 {
 	int ret;
 
-	pr_debug("enter\n");
+	DBG_PRINT(DBG_BIT_PM,"enter\n");
 
 	if (atomic_cmpxchg(&ts->touch_stopped, 1, 0) == 0)
 		return 0;
@@ -1698,19 +1718,19 @@ static int pct1812_report_mode(struct pct1812_data *ts,
 	QUERY_PARAM_IF(MASK, BANK(0), INTR_MASK_REG, val);
 	if (stored_mask)
 		*stored_mask = MASK;
-	pr_debug("Current mask 0x%02x\n", MASK);
+	DBG_PRINT(DBG_BIT_ALL,"Current mask 0x%02x\n", MASK);
 	for (i = 0; i < 8; i++) {
 		if (clear_mask & (1 << i)) {
 			MASK &= ~(1 << i); // clear bit
-			pr_debug("mask w/bit cleared %02x\n", MASK);
+			DBG_PRINT(DBG_BIT_ALL,"mask w/bit cleared %02x\n", MASK);
 		}
 		if (set_mask & (1 << i)) {
 			MASK |= (1 << i);
-			pr_debug("mask w/bit set %02x\n", MASK);
+			DBG_PRINT(DBG_BIT_ALL,"mask w/bit set %02x\n", MASK);
 		}
 	}
 	SET_PARAM_IF(BANK(0), INTR_MASK_REG, MASK);
-	pr_debug("New interrupt mask 0x%02x\n", MASK);
+	DBG_PRINT(DBG_BIT_ALL,"New interrupt mask 0x%02x\n", MASK);
 failure:
 	return 0;
 }
@@ -1740,7 +1760,7 @@ static int pct1812_selftest_memory(struct pct1812_data *ts, bool allocate)
 			goto dealloc;
 		}
 	}
-	pr_debug("allocated %d frames %d bytes each\n", ts->frame_count, ts->frame_size);
+	DBG_PRINT(DBG_BIT_TEST,"allocated %d frames %d bytes each\n", ts->frame_count, ts->frame_size);
 
 	return 0;
 
@@ -1750,7 +1770,7 @@ dealloc:
 	kfree(ts->test_data);
 	ts->test_type = PCT1812_SELFTEST_NONE;
 	ts->frame_count = ts->frame_size = ts->test_data_size = ts->frame_sample = 0;
-	pr_debug("free-ed selftest memory\n");
+	DBG_PRINT(DBG_BIT_TEST,"free-ed selftest memory\n");
 
 	return ret;
 }
@@ -1776,8 +1796,6 @@ static int pct1812_selftest_cleanup(struct pct1812_data *ts)
 	ret = pct1812_power_mode(ts, PWR_MODE_AUTO);
 	if (ret) {
 		dev_err(ts->dev, "%s: error setting auto power mode\n", __func__);
-	} else {
-		pr_debug("set power mode auto\n");
 	}
 
 	return ret;
@@ -1802,7 +1820,7 @@ static inline unsigned int timediff_ms(struct pct1812_data *ts)
 		temp.tv_nsec = end.tv_nsec - start.tv_nsec;
 	}
 	diff_ms = (unsigned int)((temp.tv_sec * SEC_TO_MSEC) + (temp.tv_nsec / NANO_TO_MSEC));
-	pr_debug("timediff %ums\n", diff_ms);
+	DBG_PRINT(DBG_BIT_TIME,"timediff %ums\n", diff_ms);
 
 	return diff_ms;
 }
@@ -1819,7 +1837,7 @@ static void pct1812_work(struct work_struct *work)
 
 	while (kfifo_get(&ts->cmd_pipe, &cmd)) {
 		mode = pct1812_selftest_get(ts);
-		//pr_debug("cmd = %d, mode = %d\n", cmd, mode);
+		//DBG_PRINT(DBG_BIT_ALL,"cmd = %d, mode = %d\n", cmd, mode);
 		switch (cmd) {
 		case CMD_CLEANUP:
 				duration = timediff_ms(ts);
@@ -1866,7 +1884,7 @@ static void pct1812_work(struct work_struct *work)
 	}
 
 	if (action && strcmp(action, "WDOG"))
-		pr_debug("action: %s\n", action);
+		DBG_PRINT(DBG_BIT_WORK,"action: %s\n", action);
 
 	pct1812_fifo_cmd_add(ts, rearm_cmd, WDOG_INTERVAL);
 }
@@ -1876,7 +1894,7 @@ static int pct1812_suspend(struct device *dev)
 	struct pct1812_data *ts = dev_get_drvdata(dev);
 	int ret;
 
-	pr_debug("enter\n");
+	DBG_PRINT(DBG_BIT_PM,"enter\n");
 
 	if (atomic_cmpxchg(&ts->touch_stopped, 0, 1) == 1)
 		return 0;
@@ -1996,6 +2014,7 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
  	ts->client = client;
 	ts->dev = &client->dev;
 	ts->plat_data = pdata;
+	ts->debug = DBG_BIT_PM;
 
 	i2c_set_clientdata(client, ts);
 	dev_set_drvdata(&client->dev, ts);
@@ -2136,7 +2155,7 @@ static int pct1812_raw_data_frame(struct pct1812_data *ts,
 
 	QUERY_PARAM_IF(tx, BANK(0), 0x5a, cmd);
 	QUERY_PARAM_IF(rx, BANK(0), 0x59, cmd);
-	dev_info(ts->dev, "%s: Tx/Rx=%d/%d\n", __func__, tx, rx);
+	dev_dbg(ts->dev, "%s: Tx/Rx=%d/%d\n", __func__, tx, rx);
 
 	ret = pct1812_set_bank(ts, BANK(1));
 	if (ret)
@@ -2252,7 +2271,7 @@ static ssize_t selftest_bin_show(struct file *filp, struct kobject *kobp,
 	remain = count;
 
 	if (pos == 0) {
-		pr_debug("sending selftest data header\n");
+		DBG_PRINT(DBG_BIT_TEST,"sending selftest data header\n");
 		memcpy(buf, &ts->test_data_size, sizeof(unsigned int));
 		bOff += sizeof(unsigned int);
 		memcpy(buf + bOff, &ts->test_type, sizeof(unsigned char));
@@ -2270,10 +2289,10 @@ static ssize_t selftest_bin_show(struct file *filp, struct kobject *kobp,
 		dOffset = pos - ts->test_hdr_size;
 	}
 
-	pr_debug("start at offset %u, remaining %u\n", dOffset, remain);
+	DBG_PRINT(DBG_BIT_TEST,"start at offset %u, remaining %u\n", dOffset, remain);
 	while ((bptr = selftest_data_ptr(ts, dOffset, remain, &available)) &&
 				available > 0) {
-		pr_debug("available for copying %u bytes at offset %u\n", available, dOffset);
+		DBG_PRINT(DBG_BIT_TEST,"available for copying %u bytes at offset %u\n", available, dOffset);
 		memcpy(buf + bOff, bptr, available);
 		bOff += available;
 		dOffset += available;
@@ -2302,7 +2321,7 @@ static ssize_t pct1812_print_raw_data(struct pct1812_data *ts, char *buf)
 		for (rr = 0; rr < ts->rx_count; rr++) {
 			blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Rx%d: ", rr);
 			for (cc = 0; cc < ts->tx_count; cc++) {
-				pr_debug("offset %d\n", (int)(bptr - ts->test_data[ll]));
+				DBG_PRINT(DBG_BIT_TEST,"offset %d\n", (int)(bptr - ts->test_data[ll]));
 				ival = comp2_16b(bptr);
 				bptr += 2;
 				blen += scnprintf(buf + blen, PAGE_SIZE - blen, "%5d ", ival);
@@ -2345,10 +2364,10 @@ static ssize_t selftest_show(struct device *dev,
 
 	if (ts->test_type == PCT1812_SELFTEST_FULL ||
 				ts->test_type == PCT1812_SELFTEST_SNR) {
-		pr_debug("%d frame(s) available\n", ts->frame_count);
+		DBG_PRINT(DBG_BIT_TEST,"%d frame(s) available\n", ts->frame_count);
 		blen = pct1812_print_raw_data(ts, buf);
 	} else {
-		pr_debug("%d sample(s) available\n", ts->frame_sample);
+		DBG_PRINT(DBG_BIT_TEST,"%d sample(s) available\n", ts->frame_sample);
 		blen = pct1812_print_coords(ts, buf);
 	}
 
@@ -2406,8 +2425,6 @@ static ssize_t selftest_store(struct device *dev,
 	ret = pct1812_power_mode(ts, PWR_MODE_NO_DEEP_SLEEP);
 	if (ret) {
 		dev_err(ts->dev, "%s: error setting no deep sleep power mode\n", __func__);
-	} else {
-		pr_debug("set power mode no deep sleep\n");
 	}
 
 	ret = pct1812_selftest_memory(ts, true);
@@ -2651,6 +2668,42 @@ static ssize_t mask_show(struct device *dev,
 	int ret;
 	QUERY_PARAM(mask, BANK(0), INTR_MASK_REG, val);
 	return scnprintf(buf, PAGE_SIZE, "%02x\n", mask);
+}
+
+static ssize_t debug_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct pct1812_data *ts = dev_get_drvdata(dev);
+	long value = 0;
+	unsigned char mask;
+	int ret;
+
+	ret = kstrtol(buf, 10, &value);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: Conversion failed\n", __func__);
+		return -EINVAL;
+	} else if (value < -255 || value > 255) {
+		dev_err(ts->dev, "%s: Value %ld is out of range [-255,255]\n", __func__);
+		return -EINVAL;
+	}
+
+	if (value < 0) {
+		value = -value;
+		mask = value & 0xff;
+		ts->debug &= ~mask;
+	} else {
+		mask = value & 0xff;
+		ts->debug |= mask;
+	}
+
+	return ret ? -EINVAL: size;
+}
+
+static ssize_t debug_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct pct1812_data *ts = dev_get_drvdata(dev);
+	return scnprintf(buf, PAGE_SIZE, "%02x\n", ts->debug);
 }
 
 static const struct i2c_device_id pct1812_id[] = {
