@@ -13,9 +13,19 @@
 #ifndef __GOODIX_TS_MMI_H__
 #define __GOODIX_TS_MMI_H__
 
-#include "goodix_ts_core.h"
+#include <linux/platform_device.h>
+#include <linux/touchscreen_mmi.h>
 
-extern int goodix_ts_mmi_dev_register(struct platform_device *ts_device);
-extern void goodix_ts_mmi_dev_unregister(struct platform_device *ts_device);
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+int goodix_ts_mmi_dev_register(struct platform_device *ts_device);
+void goodix_ts_mmi_dev_unregister(struct platform_device *ts_device);
+#else
+static int inline goodix_ts_mmi_dev_register(struct platform_device *ts_device) {
+	return -ENOSYS;
+}
+static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device) {
+	return -ENOSYS;
+}
+#endif
 
 #endif

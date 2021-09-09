@@ -468,6 +468,7 @@ struct goodix_ts_core {
 #endif
 
 	/* touchscreen_mmi */
+	struct ts_mmi_class_methods *imports;
 	int (*set_fw_name)(char* fw_name);
 	int update_status;
 	int gesture_enabled;

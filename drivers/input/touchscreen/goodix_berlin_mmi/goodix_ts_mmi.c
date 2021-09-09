@@ -11,8 +11,8 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/touchscreen_mmi.h>
 #include "goodix_ts_mmi.h"
+#include "goodix_ts_core.h"
 #include <linux/input/mt.h>
 
 #define GET_GOODIX_DATA(dev) { \
@@ -181,9 +181,8 @@ static int goodix_ts_firmware_update(struct device *dev, char *fwname) {
 	if (core_data->set_fw_name)
 		core_data->set_fw_name(fwname);
 
-	ret = goodix_do_fw_update(NULL,
+	ret = goodix_do_fw_update(core_data->ic_configs[CONFIG_TYPE_NORMAL],
 				UPDATE_MODE_SRC_REQUEST | UPDATE_MODE_BLOCK | UPDATE_MODE_FORCE);
-
 	if (ret)
 		ts_err("failed do fw update");
 
@@ -321,6 +320,8 @@ int goodix_ts_mmi_dev_register(struct platform_device *pdev) {
 		dev_err(&pdev->dev, "Failed to register ts mmi\n");
 		return ret;
 	}
+
+	core_data->imports = &goodix_ts_mmi_methods.exports;
 	return 0;
 }
 
