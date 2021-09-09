@@ -2244,6 +2244,15 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
 	goodix_ts_register_notifier(&core_data->ts_notifier);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	ret = goodix_ts_mmi_dev_register(pdev);
+	if (ret) {
+		ts_info("Failed register touchscreen mmi.");
+		goto err_out;
+	}
+#endif
+
 	/* Try start a thread to get config-bin info */
 	ret = goodix_start_later_init(core_data);
 	if (ret) {
@@ -2253,15 +2262,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 
 	/* debug node init */
 	goodix_tools_init();
-
-#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
-	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
-	ret = goodix_ts_mmi_dev_register(pdev);
-	if (ret) {
-		ts_info("Failed register touchscreen mmi.");
-		goto err_out;
-	}
-#endif
 
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;

@@ -20,6 +20,10 @@ ifneq ($(filter m y, $(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
 	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
 endif
 
+ifneq ($(filter m y,$(CONFIG_GTP_LIMIT_USE_SUPPLIER)),)
+    EXTRA_CFLAGS += -DCONFIG_GTP_LIMIT_USE_SUPPLIER
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o

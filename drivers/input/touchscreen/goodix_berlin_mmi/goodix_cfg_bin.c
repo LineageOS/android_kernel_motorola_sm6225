@@ -15,6 +15,7 @@
   *
   */
 #include "goodix_ts_core.h"
+#include "goodix_ts_mmi.h"
 
 #define TS_BIN_VERSION_START_INDEX		5
 #define TS_BIN_VERSION_LEN				4
@@ -323,6 +324,17 @@ err_out:
 
 int goodix_get_config_proc(struct goodix_ts_core *cd)
 {
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI) && defined(CONFIG_GTP_LIMIT_USE_SUPPLIER)
+	int ret;
+	const char* supplier = NULL;
+	if (cd->imports && cd->imports->get_supplier) {
+		ret = cd->imports->get_supplier(cd->bus->dev, &supplier);
+		if (!ret)
+			snprintf(cd->board_data.cfg_bin_name, GOODIX_MAX_STR_LABLE_LEN, "%s_%s",
+				supplier, TS_DEFAULT_CFG_BIN);
+	}
+#endif
+
 	if (cd->hw_ops->read_version(cd, &cd->fw_version, true)) {
 		ts_info("version info abnormal, abort");
 		return -EINVAL;
