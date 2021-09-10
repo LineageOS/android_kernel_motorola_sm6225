@@ -19,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#include <linux/clk.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
 #include <linux/input/mt.h>
@@ -2161,6 +2162,7 @@ static int goodix_ts_probe(struct platform_device *pdev)
 {
 	struct goodix_ts_core *core_data = NULL;
 	struct goodix_bus_interface *bus_interface;
+	struct clk *stylus_clk;
 	int ret;
 
 	ts_info("goodix_ts_probe IN");
@@ -2188,6 +2190,20 @@ static int goodix_ts_probe(struct platform_device *pdev)
 			ts_err("failed parse device info form dts, %d", ret);
 			return -EINVAL;
 		}
+
+		if (of_get_property(bus_interface->dev->of_node, "clocks", NULL)) {
+			stylus_clk = devm_clk_get(bus_interface->dev, "stylus_clk");
+			if (IS_ERR_OR_NULL(stylus_clk)) {
+				ts_err("failed to get stylus clk\n");
+			} else {
+				ret = clk_prepare_enable(stylus_clk);
+				if(ret) {
+					ts_err("failed to enable stylus clk\n");
+				} else
+					ts_info("success to enable stylus clk\n");
+			}
+		}
+
 	} else {
 		ts_err("no valid device tree node found");
 		return -ENODEV;
