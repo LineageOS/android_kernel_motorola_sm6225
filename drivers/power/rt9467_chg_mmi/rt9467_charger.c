@@ -3268,6 +3268,8 @@ static void rt9467_shutdown(struct i2c_client *client)
 
 	pr_info("%s\n", __func__);
 	if (info) {
+		devm_free_irq(&client->dev, client->irq, info);
+
 		ret = rt9467_sw_reset(info);
 		if (ret < 0)
 			pr_notice("%s: sw reset fail\n", __func__);
