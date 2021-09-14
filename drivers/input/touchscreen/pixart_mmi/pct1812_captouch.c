@@ -1504,8 +1504,8 @@ failure:
 
 	pct1812_set_bank(ts, BANK(6));
 	ret = pct1812_wait4ready(ts, BOOT_STATUS_REG, BOOT_COMPLETE);
-	if (ret == -ETIME) {
-		dev_err(ts->dev, "%s: Init timed out\n", __func__);
+	if (ret) {
+		dev_err(ts->dev, "%s: Failed to init\n", __func__);
 	}
 	mutex_unlock(&ts->cmdlock);
 	//__pm_relax(&ts->wake_src);
@@ -2033,7 +2033,7 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	pct1812_delay_ms(TOUCH_RESET_DELAY);
 	ret = pct1812_wait4ready(ts, BOOT_STATUS_REG, BOOT_COMPLETE);
-	if (ret == -ETIME) {
+	if (ret) {
 		dev_err(&client->dev, "%s: Failed to init\n", __func__);
 		goto error_init;
 	}
