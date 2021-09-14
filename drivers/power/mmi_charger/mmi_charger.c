@@ -859,7 +859,7 @@ static void mmi_battery_supply_init(struct mmi_charger_chip *chip)
 	if (chip->batt_psy)
 		return;
 
-	chip->batt_psy = power_supply_get_by_name("mmi_battery");
+	chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy) {
 		mmi_err(chip, "No battery supply found\n");
 		return;
