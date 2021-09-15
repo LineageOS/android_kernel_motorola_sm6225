@@ -2498,7 +2498,6 @@ struct dt_extreg_params {
 
 static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 {
-#ifdef CONFIG_OF
 	struct device_node *np = dev->of_node;
 	int sizes[3] = {0}, j, ret, i;
 	struct dt_offset_params *offset_params;
@@ -2639,7 +2638,6 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	of_property_read_u32(np, "rt,smooth_soc_en",&pdata->smooth_soc_en);
 	dev_info(dev, "smooth_soc_en = %d\n", pdata->smooth_soc_en);
 
-#endif /* CONFIG_OF */
 	return 0;
 }
 
