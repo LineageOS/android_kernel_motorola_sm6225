@@ -45,20 +45,7 @@
 #include <linux/workqueue.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
-
 #include <linux/kfifo.h>
-
-// Comment the following section out if it's too much :-)
-#if defined(SHOW_EVERYTHING)
-#ifdef pr_debug
-#undef pr_debug
-#define pr_debug pr_err
-#endif
-#ifdef dev_dbg
-#undef dev_dbg
-#define dev_dbg dev_err
-#endif
-#endif
 
 #define MAX_POINTS 5
 
@@ -329,7 +316,8 @@ struct pct1812_data {
 	struct pinctrl_state *pinctrl_state_suspend;
 
 	unsigned char drop_mask;
-	unsigned short version;
+	unsigned short ver7e;
+	unsigned short ver7f;
 	unsigned char func_ctrl;
 	unsigned char model;
 	unsigned char major;
@@ -342,7 +330,7 @@ struct pct1812_data {
 	unsigned char max_points;
 	unsigned char boot_block;
 	unsigned char custom_block[CUST_INFO_RNUM];
-	unsigned char debug;
+	unsigned short debug;
 };
 
 static ssize_t selftest_store(struct device *dev,
@@ -714,7 +702,7 @@ static int inline pct1812_selftest_push(struct pct1812_data *ts,
 	return ret;
 }
 
-static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
+static int pct1812_process_touch_event(struct pct1812_data *ts)
 {
 	unsigned char nt, coords[4] = {0};
 	unsigned int x, y;
@@ -735,6 +723,7 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 			}
 			x = UINT16_X(coords);
 			y = UINT16_Y(coords);
+			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
 			if (i == 0) { // draw line self-test supports one finger only
 				mode = pct1812_selftest_get(ts);
 				if (mode == PCT1812_SELFTEST_DRAW_LINE)
@@ -745,9 +734,9 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 			if (finger[i] != 1) {
 				input_mt_slot(ts->idev, i);
 				input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 1);
-				input_report_key(ts->idev, BTN_TOUCH, 1);
 				input_report_key(ts->idev, BTN_TOOL_FINGER, 1);
-				DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
+				input_report_key(ts->idev, BTN_TOUCH, 1);
+				DBG_PRINT(DBG_BIT_ISR,"[%d]: PRESS\n", i);
 			}
 			input_report_abs(ts->idev, ABS_MT_POSITION_X, x);
 			input_report_abs(ts->idev, ABS_MT_POSITION_Y, y);
@@ -760,19 +749,21 @@ static int pct1812_process_touch_event(struct pct1812_data *ts, int up_event)
 		if (finger[i] && !pressed) {
 			input_mt_slot(ts->idev, i);
 			input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 0);
-			/* report BTN_TOUCH up only if it was not reported as part of gesture */
-			if (!up_event)
-				input_report_key(ts->idev, BTN_TOUCH, 0);
+			input_report_key(ts->idev, BTN_TOUCH, 0);
 			input_report_key(ts->idev, BTN_TOOL_FINGER, 0);
 			input_sync(ts->idev);
+			DBG_PRINT(DBG_BIT_ISR,"[%d]: RELEASE\n", i);
 		}
 		finger[i] = pressed;
+		DBG_PRINT(DBG_BIT_ALL, "finger [%d]: %d\n", i, finger[i]);
 	}
 
 	return 0;
 }
 
-static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
+#define MIN_DIST 2
+
+static int pct1812_process_gesture_event(struct pct1812_data *ts)
 {
 	unsigned char gest, coords[4] = {0};
 	bool send_button = false;
@@ -786,11 +777,11 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 	switch(gest & 0x1f) {
 		case GEST_HORIZ_SCROLL:
 		case GEST_VERT_SCROLL:
-		case GEST_TAP:
 						break;
 		case GEST_DBL_TAP:
 				send_button = true;
 						break;
+		case GEST_TAP:
 		case GEST_UP_SWIPE:
 		case GEST_DWN_SWIPE:
 		case GEST_LFT_SWIPE:
@@ -808,8 +799,6 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 		input_report_key(ts->idev, BTN_TOOL_DOUBLETAP, 0);
 		input_report_key(ts->idev, BTN_TOUCH, 0);
 		input_sync(ts->idev);
-		/* lift up event reported */
-		*up_event = 1;
 	} else {
 		ret = pct1812_read_xy_coords(ts, GEST_ADDR(0), coords);
 		if (ret) {
@@ -817,10 +806,16 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts, int *up_event)
 		} else {
 			int x = comp2_16b(X_GET(coords));
 			int y = comp2_16b(Y_GET(coords));
-#if 0
-			input_report_rel(ts->idev, REL_X, x);
-			input_report_rel(ts->idev, REL_Y, y);
-#endif
+			/* suppress unsubstantial movement events */
+			if ((gest & 0x1f) == GEST_HORIZ_SCROLL && abs(x) >= MIN_DIST) {
+				input_report_rel(ts->idev, REL_HWHEEL, x);
+				input_sync(ts->idev);
+			} else if ((gest & 0x1f) == GEST_VERT_SCROLL && abs(y) >= MIN_DIST) {
+				input_report_rel(ts->idev, REL_WHEEL, y);
+				input_sync(ts->idev);
+			} else
+				DBG_PRINT(DBG_BIT_ALL, "dropped: x=%d, y=%d\n", x, y);
+
 			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", GEST_ADDR(0), x, y);
 		}
 	}
@@ -833,7 +828,7 @@ static irqreturn_t pct1812_irq_handler(int irq, void *ptr)
 	struct pct1812_data *ts = (struct pct1812_data *)ptr;
 	unsigned char dropped, status = 0;
 	bool ack = true;
-	int ret, up_event = 0;
+	int ret;
 
 	mutex_lock(&ts->eventlock);
 	ret = pct1812_i2c_read(ts, STATUS_REG, &status, sizeof(status));
@@ -846,10 +841,10 @@ static irqreturn_t pct1812_irq_handler(int irq, void *ptr)
 	if (status != dropped)
 		DBG_PRINT(DBG_BIT_ISR,"drop out %02x -> %02x\n", status, dropped);
 	if (dropped & STAT_BIT_GESTURE) {
-		pct1812_process_gesture_event(ts, &up_event);
+		pct1812_process_gesture_event(ts);
 	}
 	if (dropped & STAT_BIT_TOUCH) {
-		pct1812_process_touch_event(ts, up_event);
+		pct1812_process_touch_event(ts);
 	}
 	if (ack) {
 		status = 0; // ACK interrupt
@@ -993,8 +988,9 @@ static int pct1812_get_extinfo(struct pct1812_data *ts)
 	int i, ret;
 
 	QUERY_PARAM(v1, BANK(0), VER_LOW_REG, val);
+	ts->ver7e = (VER_LOW_REG << 8) | v1;
 	QUERY_PARAM(v2, BANK(0), VER_HIGH_REG, val);
-	ts->version = v1 | (v2 << 8);
+	ts->ver7f = (VER_HIGH_REG << 8) | v2;
 	QUERY_PARAM(ts->tx_count, BANK(0), TX_REG, val);
 	QUERY_PARAM(ts->rx_count, BANK(0), RX_REG, val);
 	QUERY_PARAM(ts->model, BANK(0), MODEL_REG, val);
@@ -1939,10 +1935,11 @@ static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
 	set_bit(EV_SYN, ts->idev->evbit);
 	set_bit(EV_KEY, ts->idev->evbit);
 	set_bit(EV_ABS, ts->idev->evbit);
-#if 0
-	input_set_capability(ts->idev, EV_REL, REL_X);
-	input_set_capability(ts->idev, EV_REL, REL_Y);
-#endif
+	set_bit(EV_REL, ts->idev->evbit);
+
+	set_bit(REL_WHEEL, ts->idev->relbit);
+	set_bit(REL_HWHEEL, ts->idev->relbit);
+
 	set_bit(BTN_TOUCH, ts->idev->keybit);
 	set_bit(BTN_TOOL_FINGER, ts->idev->keybit);
 	set_bit(BTN_TOOL_DOUBLETAP, ts->idev->keybit);
@@ -2014,7 +2011,7 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
  	ts->client = client;
 	ts->dev = &client->dev;
 	ts->plat_data = pdata;
-	ts->debug = DBG_BIT_PM;
+	ts->debug = DBG_BIT_PM; // | DBG_BIT_ALL | DBG_BIT_ISR;
 
 	i2c_set_clientdata(client, ts);
 	dev_set_drvdata(&client->dev, ts);
@@ -2622,6 +2619,7 @@ static ssize_t info_show(struct device *dev,
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Resolution: %dx%d\n", ts->x_res, ts->y_res);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Max points: %d\n", ts->max_points);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Boot block: %d\n", ts->boot_block);
+	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "   Version: %04x/%04x\n", ts->ver7e, ts->ver7f);
 
 	return blen;
 }
