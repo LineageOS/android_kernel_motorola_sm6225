@@ -95,6 +95,20 @@
 #define DRV_SEN_SELFCODE_REG_BRB			0x248A6
 #define DIFF_CODE_DATA_REG_BRB				0x269E0
 
+/* berlinD */
+#define MAX_DRV_NUM_BRD				    	20
+#define MAX_SEN_NUM_BRD				    	40
+#define SHORT_TEST_TIME_REG_BRD				0x14D7A
+#define DFT_ADC_DUMP_NUM_BRD				762
+#define DFT_SHORT_THRESHOLD_BRD				100
+#define DFT_DIFFCODE_SHORT_THRESHOLD_BRD	32
+#define SHORT_TEST_STATUS_REG_BRD			0x13400
+#define SHORT_TEST_RESULT_REG_BRD			0x13408
+#define DRV_DRV_SELFCODE_REG_BRD			0x1344E
+#define SEN_SEN_SELFCODE_REG_BRD 			0x137E6
+#define DRV_SEN_SELFCODE_REG_BRD			0x14556
+#define DIFF_CODE_DATA_REG_BRD				0x14D00
+
 
 #define ABS(val)			((val < 0)? -(val) : val)
 #define MAX(a, b)			((a > b)? a : b)
@@ -107,6 +121,7 @@ static u8 brl_a_drv_map[] = {
     50, 51, 52, 53, 54, 55, 56, 57,
     58, 59, 60, 61, 62
 };
+
 static u8 brl_a_sen_map[] = {
     0, 1, 2, 3, 4, 5, 6, 7,
 	8, 9, 10, 11, 12, 13, 14, 15,
@@ -126,6 +141,7 @@ static u8 brl_b_drv_map[] = {
 	113, 114, 115, 116, 117, 118, 119,
 	120, 121, 122, 123, 124, 125, 126
 };
+
 static u8 brl_b_sen_map[] = {
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 	11, 12, 13, 14, 15, 16, 17, 18,
@@ -136,6 +152,21 @@ static u8 brl_b_sen_map[] = {
 	51, 52, 53, 54, 55, 56, 57, 58,
 	59, 60, 61, 62, 63, 64, 65, 66,
 	67, 68, 69, 70, 71, 72, 73, 74
+};
+
+/* berlin D drv-sen map */
+static u8 brl_d_drv_map[] = {
+	40, 41, 42, 43, 44, 45, 46, 47,
+	48, 49, 50, 51, 52, 53, 54, 55,
+	56, 57, 58, 59,
+};
+
+static u8 brl_d_sen_map[] = {
+    0, 1, 2, 3, 4, 5, 6, 7,
+	8, 9, 10, 11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20, 21, 22, 23,
+	24, 25, 26, 27, 28, 29, 30, 31,
+	32, 33, 34, 35, 36, 37, 38, 39,
 };
 
 typedef struct __attribute__((packed)) {
@@ -197,6 +228,23 @@ struct params_info_t params_brb = {
 	DFT_ADC_DUMP_NUM_BRB,
 	DFT_SHORT_THRESHOLD_BRB,
 	DFT_DIFFCODE_SHORT_THRESHOLD_BRB,
+};
+
+struct params_info_t params_brd = {
+	MAX_DRV_NUM_BRD,
+	MAX_SEN_NUM_BRD,
+	brl_d_drv_map,
+	brl_d_sen_map,
+	SHORT_TEST_TIME_REG_BRD,
+	SHORT_TEST_STATUS_REG_BRD,
+	SHORT_TEST_RESULT_REG_BRD,
+	DRV_DRV_SELFCODE_REG_BRD,
+	SEN_SEN_SELFCODE_REG_BRD,
+	DRV_SEN_SELFCODE_REG_BRD,
+	DIFF_CODE_DATA_REG_BRD,
+	DFT_ADC_DUMP_NUM_BRD,
+	DFT_SHORT_THRESHOLD_BRD,
+	DFT_DIFFCODE_SHORT_THRESHOLD_BRD,
 };
 
 struct ts_test_params {
@@ -272,24 +320,30 @@ static int cal_cha_to_cha_res(struct goodix_ts_test *ts_test, int v1, int v2)
 {
 	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A)
 		return (v1 - v2) * 63 / v2;
-
-	return (v1 - v2) * 74 / v2 + 20;
+	else if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_B)
+		return (v1 - v2) * 74 / v2 + 20;
+	else
+		return (v1 / v2 - 1) * 70 + 59;
 }
 
 static int cal_cha_to_avdd_res(struct goodix_ts_test *ts_test, int v1, int v2)
 {
 	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A)
-		return 125 * 1024 * (100 * v2 - 125) * 40 / (1000 * v1) - 40;
-
-	return 125 * 1024 * (100 * v2 - 125) * 99 / (1000 * v1) - 60;
+		return 125 * 1024 * (100 * v2 - 125) * 40 / (10000 * v1) - 40;
+	else if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_B)
+		return 125 * 1024 * (100 * v2 - 125) * 99 / (10000 * v1) - 60;
+	else
+		return 125 * 1024 * (100 * v2 - 125) * 93 / (10000 * v1) - 20;
 }
 
 static int cal_cha_to_gnd_res(struct goodix_ts_test *ts_test, int v)
 {
 	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A)
 		return 64148 / v - 40;
-
-	return 150500 / v - 60;
+	else if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_B)
+		return 150500 / v - 60;
+	else
+		return 145000 / v - 15;
 }
 
 static int ts_test_reset(struct goodix_ts_test *ts_test,
@@ -506,8 +560,10 @@ static void goodix_init_params(struct goodix_ts_test *ts_test)
 
 	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A)
 		test_params->params_info = &params_bra;
-	else
+	else if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_B)
 		test_params->params_info = &params_brb;
+	else
+		test_params->params_info = &params_brd;
 }
 
 static int goodix_init_testlimits(struct goodix_ts_test *ts_test)
@@ -1339,8 +1395,14 @@ static int goodix_cap_test_prepare(struct goodix_ts_test *ts_test)
 		ts_test->test_result[GTP_SELFNOISE_TEST] = SYS_SOFTWARE_REASON;
 
     /* switch rawdata mode */
-    temp_cmd.cmd = GOODIX_CMD_RAWDATA;
-	temp_cmd.len = 4;
+	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_D) {
+		temp_cmd.cmd = 0x90;
+		temp_cmd.data[0] = 0x81;
+		temp_cmd.len = 5;
+	} else {
+		temp_cmd.cmd = GOODIX_CMD_RAWDATA;
+		temp_cmd.len = 4;
+	}
 	ret = ts_test_send_cmd(ts_test, &temp_cmd);
     if (ret < 0)
         ts_err("Enter rawdata mode failed");
@@ -1362,11 +1424,18 @@ static int goodix_cache_rawdata(struct goodix_ts_test *ts_test)
 	int i;
 	int retry;
 	u8 val;
+	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
+	struct frame_head *frame_head;
+	struct goodix_ts_core *cd = ts_test->ts;
+	unsigned char *cur_ptr;
 	u32 sen_num = ts_test->test_params.sen_num;
 	u32 drv_num = ts_test->test_params.drv_num;
 	u32 data_size = sen_num * drv_num;
 	u32 data_addr = ts_test->test_params.rawdata_addr;
 	u32 flag_addr = ts_test->ts->ic_info.misc.touch_data_addr;
+
+	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_D)
+		flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
 
 	for (i = 0; i < TOTAL_FRAME_NUM; i++) {
 		val = 0;
@@ -1387,10 +1456,32 @@ static int goodix_cache_rawdata(struct goodix_ts_test *ts_test)
 			return -EAGAIN;
 		}
 
-		ret = ts_test_read(ts_test, data_addr,
-			(u8 *)ts_test->rawdata[i].data, data_size * sizeof(s16));
-		if (ret < 0)
-			return ret;
+		if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+			ret = ts_test_read(ts_test, flag_addr, frame_buf, sizeof(frame_buf));
+			if (ret < 0)
+				return ret;
+			if (checksum_cmp(frame_buf, cd->ic_info.misc.frame_data_head_len, CHECKSUM_MODE_U8_LE)) {
+				ts_err("frame head checksum error");
+				return -EINVAL;
+			}
+			frame_head = (struct frame_head *)frame_buf;
+			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+				ts_err("frame body checksum error");
+				return -EINVAL;
+			}
+			cur_ptr = frame_buf;
+			cur_ptr += cd->ic_info.misc.frame_data_head_len;
+			cur_ptr += cd->ic_info.misc.fw_attr_len;
+			cur_ptr += cd->ic_info.misc.fw_log_len;
+			memcpy((u8 *)ts_test->rawdata[i].data, cur_ptr + 8,
+					cd->ic_info.misc.mutual_struct_len - 8);
+		} else {
+			ret = ts_test_read(ts_test, data_addr,
+				(u8 *)ts_test->rawdata[i].data, data_size * sizeof(s16));
+			if (ret < 0)
+				return ret;
+		}
+
 		ts_test->rawdata[i].size = data_size;
 		goodix_rotate_abcd2cbad(drv_num, sen_num, ts_test->rawdata[i].data);
 	}
@@ -1452,11 +1543,38 @@ static int goodix_cache_self_rawdata(struct goodix_ts_test *ts_test)
 	u32 drv_num = ts_test->test_params.drv_num;
 	u32 data_size = sen_num + drv_num;
 	u32 data_addr = ts_test->test_params.self_rawdata_addr;
+	u32 flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
+	struct frame_head *frame_head;
+	struct goodix_ts_core *cd = ts_test->ts;
+	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
+	unsigned char *cur_ptr;
 
-	ret = ts_test_read(ts_test, data_addr,
-		(u8 *)ts_test->self_rawdata.data, data_size * sizeof(s16));
-	if (ret < 0)
-		return ret;
+	if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+		ret = ts_test_read(ts_test, flag_addr, frame_buf, sizeof(frame_buf));
+		if (ret < 0)
+			return ret;
+		if (checksum_cmp(frame_buf, cd->ic_info.misc.frame_data_head_len, CHECKSUM_MODE_U8_LE)) {
+			ts_err("frame head checksum error");
+			return -EINVAL;
+		}
+		frame_head = (struct frame_head *)frame_buf;
+		if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+			ts_err("frame body checksum error");
+			return -EINVAL;
+		}
+		cur_ptr = frame_buf;
+		cur_ptr += cd->ic_info.misc.frame_data_head_len;
+		cur_ptr += cd->ic_info.misc.fw_attr_len;
+		cur_ptr += cd->ic_info.misc.fw_log_len;
+		cur_ptr += cd->ic_info.misc.mutual_struct_len;
+		memcpy((u8 *)ts_test->self_rawdata.data, cur_ptr + 10,
+				cd->ic_info.misc.self_struct_len - 10);
+	} else {
+		ret = ts_test_read(ts_test, data_addr,
+			(u8 *)ts_test->self_rawdata.data, data_size * sizeof(s16));
+		if (ret < 0)
+			return ret;
+	}
 	ts_test->self_rawdata.size = data_size;
 
 	return ret;
@@ -1469,11 +1587,28 @@ static int goodix_cache_noisedata(struct goodix_ts_test *ts_test)
 	int cnt;
 	int retry;
 	u8 val;
+	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
+	unsigned char *cur_ptr;
+	struct frame_head *frame_head;
+	struct goodix_ts_cmd temp_cmd;
+	struct goodix_ts_core *cd = ts_test->ts;
 	u32 sen_num = ts_test->test_params.sen_num;
 	u32 drv_num = ts_test->test_params.drv_num;
 	u32 data_size = sen_num * drv_num;
 	u32 data_addr = ts_test->test_params.noisedata_addr;
 	u32 flag_addr = ts_test->ts->ic_info.misc.touch_data_addr;
+
+	if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+		flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
+		temp_cmd.cmd = 0x90;
+		temp_cmd.data[0] = 0x82;
+		temp_cmd.len = 5;
+		ret = ts_test_send_cmd(ts_test, &temp_cmd);
+		if (ret < 0) {
+			ts_err("switch diffdata mode failed, exit!");
+			return ret;
+		}
+	}
 
 	for (cnt = 0; cnt < NOISEDATA_TEST_TIMES; cnt++) {
 		val = 0;
@@ -1494,10 +1629,32 @@ static int goodix_cache_noisedata(struct goodix_ts_test *ts_test)
 			return -EAGAIN;
 		}
 
-		ret = ts_test_read(ts_test, data_addr,
-			(u8 *)ts_test->noisedata[cnt].data, data_size * sizeof(s16));
-		if (ret < 0)
-			return ret;
+		if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+			ret = ts_test_read(ts_test, flag_addr, frame_buf, sizeof(frame_buf));
+			if (ret < 0)
+				return ret;
+			if (checksum_cmp(frame_buf, cd->ic_info.misc.frame_data_head_len, CHECKSUM_MODE_U8_LE)) {
+				ts_err("frame head checksum error");
+				return -EINVAL;
+			}
+			frame_head = (struct frame_head *)frame_buf;
+			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+				ts_err("frame body checksum error");
+				return -EINVAL;
+			}
+			cur_ptr = frame_buf;
+			cur_ptr += cd->ic_info.misc.frame_data_head_len;
+			cur_ptr += cd->ic_info.misc.fw_attr_len;
+			cur_ptr += cd->ic_info.misc.fw_log_len;
+			memcpy((u8 *)ts_test->noisedata[cnt].data, cur_ptr + 8,
+					cd->ic_info.misc.mutual_struct_len - 8);
+		} else {
+			ret = ts_test_read(ts_test, data_addr,
+				(u8 *)ts_test->noisedata[cnt].data, data_size * sizeof(s16));
+			if (ret < 0)
+				return ret;
+		}
+
 		ts_test->noisedata[cnt].size = data_size;
 		goodix_rotate_abcd2cbad(drv_num, sen_num, ts_test->noisedata[cnt].data);
 		for (i = 0; i < data_size; i++)
@@ -1515,11 +1672,39 @@ static int goodix_cache_self_noisedata(struct goodix_ts_test *ts_test)
 	u32 drv_num = ts_test->test_params.drv_num;
 	u32 data_size = sen_num + drv_num;
 	u32 data_addr = ts_test->test_params.self_noisedata_addr;
+	u32 flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
+	struct frame_head *frame_head;
+	struct goodix_ts_core *cd = ts_test->ts;
+	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
+	unsigned char *cur_ptr;
 
-	ret = ts_test_read(ts_test, data_addr,
-		(u8 *)ts_test->self_noisedata.data, data_size * sizeof(s16));
-	if (ret < 0)
-		return ret;
+	if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+		ret = ts_test_read(ts_test, flag_addr, frame_buf, sizeof(frame_buf));
+		if (ret < 0)
+			return ret;
+		if (checksum_cmp(frame_buf, cd->ic_info.misc.frame_data_head_len, CHECKSUM_MODE_U8_LE)) {
+			ts_err("frame head checksum error");
+			return -EINVAL;
+		}
+		frame_head = (struct frame_head *)frame_buf;
+		if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+			ts_err("frame body checksum error");
+			return -EINVAL;
+		}
+		cur_ptr = frame_buf;
+		cur_ptr += cd->ic_info.misc.frame_data_head_len;
+		cur_ptr += cd->ic_info.misc.fw_attr_len;
+		cur_ptr += cd->ic_info.misc.fw_log_len;
+		cur_ptr += cd->ic_info.misc.mutual_struct_len;
+		memcpy((u8 *)ts_test->self_noisedata.data, cur_ptr + 10,
+				cd->ic_info.misc.self_struct_len - 10);
+	} else {
+		ret = ts_test_read(ts_test, data_addr,
+			(u8 *)ts_test->self_noisedata.data, data_size * sizeof(s16));
+		if (ret < 0)
+			return ret;
+	}
+
 	ts_test->self_noisedata.size = data_size;
 	for (i = 0; i < data_size; i++) {
 		ts_test->self_noisedata.data[i] = ABS(ts_test->self_noisedata.data[i]);
@@ -1694,21 +1879,6 @@ static void goodix_capacitance_test(struct goodix_ts_test *ts_test)
 	else
 		ts_test->test_result[GTP_DELTA_TEST] = GTP_TEST_PASS;
 
-    /* obtain noisedata */
-	if (ts_test->test_params.test_items[GTP_NOISE_TEST]) {
-		ret = goodix_cache_noisedata(ts_test);
-		if (ret < 0) {
-			ts_err("Failed to read noisedata");
-		} else {
-			ts_info("get noisedata finish, start analysis");
-			ret = goodix_analysis_noisedata(ts_test);
-			if (ret < 0)
-				ts_test->test_result[GTP_NOISE_TEST] = GTP_PANEL_REASON;
-			else
-				ts_test->test_result[GTP_NOISE_TEST] = GTP_TEST_PASS;
-		}
-	}
-
     /* obtain self_rawdata */
 	if (ts_test->test_params.test_items[GTP_SELFCAP_TEST]) {
 		ret = goodix_cache_self_rawdata(ts_test);
@@ -1724,6 +1894,20 @@ static void goodix_capacitance_test(struct goodix_ts_test *ts_test)
 		}
 	}
 
+    /* obtain noisedata */
+	if (ts_test->test_params.test_items[GTP_NOISE_TEST]) {
+		ret = goodix_cache_noisedata(ts_test);
+		if (ret < 0) {
+			ts_err("Failed to read noisedata");
+		} else {
+			ts_info("get noisedata finish, start analysis");
+			ret = goodix_analysis_noisedata(ts_test);
+			if (ret < 0)
+				ts_test->test_result[GTP_NOISE_TEST] = GTP_PANEL_REASON;
+			else
+				ts_test->test_result[GTP_NOISE_TEST] = GTP_TEST_PASS;
+		}
+	}
 
     /* obtain self_noisedata */
 	if (ts_test->test_params.test_items[GTP_SELFNOISE_TEST]) {
