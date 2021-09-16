@@ -24,6 +24,10 @@ ifneq ($(filter m y,$(CONFIG_GTP_LIMIT_USE_SUPPLIER)),)
     EXTRA_CFLAGS += -DCONFIG_GTP_LIMIT_USE_SUPPLIER
 endif
 
+ifeq ($(filter m y,$(CONFIG_TS_KERNEL_USE_GKI)),)
+    EXTRA_CFLAGS += -DGTP_SAVE_IN_CSV
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o

@@ -322,6 +322,12 @@ int goodix_ts_mmi_dev_register(struct platform_device *pdev) {
 	}
 
 	core_data->imports = &goodix_ts_mmi_methods.exports;
+
+#if defined(CONFIG_GTP_LIMIT_USE_SUPPLIER)
+	if (core_data->imports && core_data->imports->get_supplier) {
+		ret = core_data->imports->get_supplier(core_data->bus->dev, &core_data->supplier);
+	}
+#endif
 	return 0;
 }
 
