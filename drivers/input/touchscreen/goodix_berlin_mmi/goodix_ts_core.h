@@ -492,6 +492,7 @@ struct goodix_ts_core {
 	int (*set_fw_name)(char* fw_name);
 	int update_status;
 	int gesture_enabled;
+	const char *supplier;
 };
 
 /* external module structures */
