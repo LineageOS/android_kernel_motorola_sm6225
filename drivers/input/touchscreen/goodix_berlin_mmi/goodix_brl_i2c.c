@@ -21,7 +21,7 @@
 #include "goodix_ts_core.h"
 #include <linux/mmi_device.h>
 
-#define TS_DRIVER_NAME				"gtx8_i2c"
+#define TS_DRIVER_NAME				"goodix_ts"
 #define I2C_MAX_TRANSFER_SIZE		60
 #define GOODIX_BUS_RETRY_TIMES		3
 #define GOODIX_REG_ADDR_SIZE		4

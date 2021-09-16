@@ -26,9 +26,8 @@
 /* test config */
 #define TOTAL_FRAME_NUM 					1 /* rawdata test frames */
 #define NOISEDATA_TEST_TIMES				1  /* noise test frames */
-#define SAVE_IN_CSV
 
-#define GOODIX_RESULT_SAVE_PATH				"/vendor/etc/Test_Data.csv"
+#define GOODIX_RESULT_SAVE_PATH				"/data/vendor/touchrec"
 #define GOODIX_TEST_FILE_NAME				"goodix"
 #define MAX_DATA_BUFFER						28000
 #define MAX_SHORT_NUM						15
@@ -580,8 +579,12 @@ static int goodix_init_testlimits(struct goodix_ts_test *ts_test)
     u32 tx = test_params->drv_num;
     u32 rx = test_params->sen_num;
 
-    sprintf(limit_file, "%s_test_limits_%d.csv", GOODIX_TEST_FILE_NAME,
-			ts_core->fw_version.sensor_id);
+    if (ts_core->supplier)
+        snprintf(limit_file, sizeof(limit_file), "%s_%s_test_limits_%d.csv",
+            ts_core->supplier, GOODIX_TEST_FILE_NAME, ts_core->fw_version.sensor_id);
+    else
+        snprintf(limit_file, sizeof(limit_file), "%s_test_limits_%d.csv",
+            GOODIX_TEST_FILE_NAME, ts_core->fw_version.sensor_id);
     ts_info("limit_file_name:%s", limit_file);
 
     ret = request_firmware(&firmware, limit_file, dev);
@@ -614,7 +617,7 @@ static int goodix_init_testlimits(struct goodix_ts_test *ts_test)
 			ts_test->test_config.data[i] = (u8)test_params->cfg_buf[i];
 		ts_test->test_config.len = ret;
 	}
-	
+
     /* obtain mutual_raw min */
     ret = parse_csvfile(temp_buf, firmware->size, CSV_TP_SPECIAL_RAW_MIN,
         test_params->min_limits, rx, tx);
@@ -1046,17 +1049,17 @@ static int gdix_check_rx_rx_shortcircut(struct goodix_ts_test *ts_test,
 	}
 
 	kfree(data_buf);
-	return err;    
+	return err;
 }
 
 static int gdix_check_tx_rx_shortcircut(struct goodix_ts_test *ts_test,
         u8 short_ch_num)
 {
 	int ret = 0, err = 0;
-	u32 r_threshold = 0, short_r = 0;	
+	u32 r_threshold = 0, short_r = 0;
 	int size = 0, i = 0, j = 0;
 	u16 adc_signal = 0;
-	u8 master_pin_num, slave_pin_num;	
+	u8 master_pin_num, slave_pin_num;
 	u8 *data_buf = NULL;
 	u32 data_reg;
 	struct ts_test_params *test_params = &ts_test->test_params;
@@ -1130,7 +1133,7 @@ static int gdix_check_tx_rx_shortcircut(struct goodix_ts_test *ts_test,
 	}
 
 	kfree(data_buf);
-	return err;    
+	return err;
 }
 
 #define SHORT_TYPE_FLAG  ((uint16_t)1 << 15)
@@ -1214,7 +1217,7 @@ static int gdix_check_gndvdd_shortcircut(struct goodix_ts_test *ts_test)
 	if (checksum_cmp(data_buf, size, CHECKSUM_MODE_U8_LE)) {
 		ts_err("diff code checksum error");
 		err = -EINVAL;
-		goto err_out;		
+		goto err_out;
 	}
 
 	for (i = 0; i < max_drv_num + max_sen_num; i++) {
@@ -1990,7 +1993,7 @@ static void goodix_data_statistics(s16 *data, size_t data_size,
 	return;
 }
 
-#ifdef SAVE_IN_CSV
+#ifdef GTP_SAVE_IN_CSV
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 static ssize_t fs_write(const void* buf, size_t size, struct file* fp)
 {
@@ -2631,14 +2634,44 @@ static int goodix_save_tail(struct goodix_ts_test *ts_test,
 	return ret;
 }
 
+
+static char *get_date_time_str(void)
+{
+	struct timespec64 now_time;
+	struct rtc_time rtc_now_time;
+	static char time_data_buf[128] = { 0 };
+
+	ktime_get_real_ts64(&now_time);
+	rtc_time64_to_tm(now_time.tv_sec, &rtc_now_time);
+	snprintf(time_data_buf, sizeof(time_data_buf), "%04d%02d%02d-%02d%02d%02d",
+		(rtc_now_time.tm_year + 1900), rtc_now_time.tm_mon + 1,
+		rtc_now_time.tm_mday, rtc_now_time.tm_hour, rtc_now_time.tm_min,
+		rtc_now_time.tm_sec);
+
+	return time_data_buf;
+}
+
 static void goodix_save_result_data(struct goodix_ts_test *ts_test)
 {
 	int ret = 0;
 	char save_path[100];
 	struct file *fp = NULL;
+	struct goodix_ts_core *ts_core = ts_test->ts;
 
 	/* format result file */
-	sprintf(save_path, GOODIX_RESULT_SAVE_PATH);
+	if (ts_core->supplier) {
+		if (strstr(ts_test->test_info, "PASS"))
+			snprintf(save_path, sizeof(save_path), "%s/%s-%s-%s-pass.csv",
+				GOODIX_RESULT_SAVE_PATH, ts_core->supplier,
+				GOODIX_TEST_FILE_NAME, get_date_time_str());
+		else
+			snprintf(save_path, sizeof(save_path), "%s/%s-%s-%s-fail.csv",
+				GOODIX_RESULT_SAVE_PATH, ts_core->supplier,
+				GOODIX_TEST_FILE_NAME, get_date_time_str());
+
+	} else
+		snprintf(save_path, sizeof(save_path), "%s/%s_mp_test.csv",
+			GOODIX_RESULT_SAVE_PATH, GOODIX_TEST_FILE_NAME);
 	ts_info("save result IN, file_name:%s", save_path);
 
 	fp = filp_open(save_path, O_CREAT | O_WRONLY | O_TRUNC, 0666);
@@ -2671,7 +2704,7 @@ static void goodix_save_result_data(struct goodix_ts_test *ts_test)
 save_end:
 	filp_close(fp, NULL);
 }
-#endif // SAVE_IN_CSV
+#endif // GTP_SAVE_IN_CSV
 
 static void goodix_put_test_result(struct goodix_ts_test *ts_test,
 		struct ts_rawdata_info *info)
@@ -2819,7 +2852,7 @@ static void goodix_put_test_result(struct goodix_ts_test *ts_test,
 		TS_RAWDATA_RESULT_MAX);
 	strncpy(info->result, ts_test->test_info, TS_RAWDATA_RESULT_MAX - 1);
 
-#ifdef SAVE_IN_CSV
+#ifdef GTP_SAVE_IN_CSV
 	/* save result to file */
 	goodix_save_result_data(ts_test);
 #endif
