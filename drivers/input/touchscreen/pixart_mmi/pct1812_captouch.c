@@ -48,6 +48,8 @@
 #include <linux/kfifo.h>
 
 #define MAX_POINTS 5
+#define DFLT_X_RES 1280
+#define DFLT_Y_RES 768
 
 #define AREAD (1)
 #define AWRITE (0)
@@ -107,7 +109,7 @@
 #define BANK(a) (a)
 
 // USER BANK 0
-#define PROD_ID_REG 0x00
+#define DEBUG_REG 0x00
 #define FW_REV_REG 0x01
 #define FW_VMIN_L_REG 0x02
 #define FW_MAJOR_REG 0x03
@@ -148,9 +150,13 @@
 #define SRAM_SELECT_REG 0x09
 #define SRAM_NSC_REG 0x0a
 #define SRAM_PORT_REG 0x0b
+#define ORIENTATION_REG 0x0e
 
 // USER BANK 3
 #define FUNCT_CTRL_REG 0x02
+#define ABS_TRIG_DIST_REG 0x0b
+#define V_SCROLL_RES_REG 0x26
+#define H_SCROLL_RES_REG 0x2e
 #define CUST_INFO_BASE 0x6a
 #define CUST_INFO_RNUM 8
 
@@ -179,6 +185,7 @@
 #define BOOT_COMPLETE 1
 #define MODE_COMPLETE (BOOT_COMPLETE | (1 << 7))
 #define TOUCH_RESET_DELAY 10
+#define POWER_UP_DELAY 50
 #define CMD_WAIT_DELAY 10
 #define WDOG_INTERVAL 1000
 #define SELFTEST_SHORT_INTERVAL 3000
@@ -215,7 +222,9 @@ enum cmds {
 	CMD_RECOVER,
 	CMD_WDOG,
 	CMD_MODE_RESET,
-	CMD_CLEANUP
+	CMD_CLEANUP,
+	CMD_CONFIG,
+	CMD_INFO
 };
 
 enum selftest_ids {
@@ -238,10 +247,24 @@ enum gestures {
 	GEST_RGHT_SWIPE
 };
 
-struct pct1812_platform {
-	int max_x;
-	int max_y;
+struct bank_reg {
+	unsigned char bank;
+	unsigned char reg;
+	unsigned char data;
+};
 
+struct pct1812_custom_cfg {
+	unsigned int max_x, max_y;
+	unsigned int scroll_min_distance;
+	bool flip_x;
+	bool flip_y;
+	bool report_gesture;
+	bool report_mt;
+	int reg_num;
+	struct bank_reg *patch;
+};
+
+struct pct1812_platform {
 	unsigned rst_gpio;
 	unsigned irq_gpio;
 
@@ -249,6 +272,8 @@ struct pct1812_platform {
 
 	const char *vdd;
 	const char *vio;
+
+	struct pct1812_custom_cfg *config;
 };
 
 #if defined(STATIC_PLATFORM_DATA)
@@ -271,7 +296,9 @@ static struct pct1812_platform pct1812_pd = {
 #define DBG_BIT_TEST 0x00000040
 #define DBG_BIT_FW 0x00000080
 #define DBG_BIT_UACC 0x00000100
-#define DBG_BIT_ALL 0x00000200
+#define DBG_BIT_DTS 0x00000200
+#define DBG_BIT_DROP 0x00000400
+#define DBG_BIT_ALL 0x00010000
 
 #define DBG_PRINT(s, fmt, ...) { \
 	if (ts->debug & s) \
@@ -324,7 +351,6 @@ struct pct1812_data {
 	unsigned short minor;
 	unsigned char revision;
 	unsigned char patch;
-	unsigned char product_id;
 	unsigned short x_res;
 	unsigned short y_res;
 	unsigned char max_points;
@@ -582,14 +608,15 @@ static void inline pct1812_set_irq(struct pct1812_data *ts, bool on)
 	}
 }
 
+#define PATCH_SZ 3
+
 #ifndef STATIC_PLATFORM_DATA
 static int pct1812_parse_dt(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct pct1812_platform *pdata = dev->platform_data;
-	struct device_node *np = dev->of_node;
-	unsigned int coords[2];
-	int ret = 0;
+	struct device_node *cfg, *np = dev->of_node;
+	int r, ret = 0;
 
 	if (of_property_read_string(np, "pct1812,regulator_vdd", &pdata->vdd)) {
 		dev_err(dev, "%s: Failed to get VDD name property\n", __func__);
@@ -611,10 +638,93 @@ static int pct1812_parse_dt(struct i2c_client *client)
 	if (!gpio_is_valid(pdata->rst_gpio))
 		pdata->rst_gpio = -EINVAL;
 
-	if (!of_property_read_u32_array(np, "pct1812,max_coords", coords, 2)) {
-		pdata->max_x = coords[0] - 1;
-		pdata->max_y = coords[1] - 1;
-		dev_info(dev, "%s: max_coords:(%d,%d)\n", __func__, pdata->max_x, pdata->max_y);
+	cfg = of_find_node_by_name(np, "pct1812-custom-config");
+	if (cfg) {
+		unsigned int byte_len, reg_num;
+		unsigned int coords[2], *adata;
+
+		pdata->config = devm_kzalloc(dev, sizeof(struct pct1812_custom_cfg), GFP_KERNEL);
+		if (!pdata->config) {
+			ret = -ENOMEM;
+			goto put_node_exit;
+		}
+
+		if (!of_property_read_u32_array(cfg, "max-coords", coords, 2)) {
+			pdata->config->max_x = coords[0];
+			pdata->config->max_y = coords[1];
+			dev_info(dev, "%s: max_coords:(%d,%d)\n",
+				__func__, pdata->config->max_x, pdata->config->max_y);
+		}
+
+		if (of_property_read_bool(cfg, "flip-x")) {
+			pdata->config->flip_x = true;
+			dev_info(dev, "%s: flip X\n", __func__);
+		}
+
+		if (of_property_read_bool(cfg, "flip-y")) {
+			pdata->config->flip_y = true;
+			dev_info(dev, "%s: flip Y\n", __func__);
+		}
+
+		if (of_property_read_bool(cfg, "report-mt")) {
+			pdata->config->report_mt = true;
+			dev_info(dev, "%s: report MT\n", __func__);
+		}
+
+		if (of_property_read_bool(cfg, "report-gesture")) {
+			pdata->config->report_gesture = true;
+			dev_info(dev, "%s: report GESTURE\n", __func__);
+		}
+
+		if (!of_property_read_u32(cfg, "scroll-min-distance", &pdata->config->scroll_min_distance))
+			dev_info(dev, "%s: scroll_min_disctance:(%u)\n", __func__, pdata->config->scroll_min_distance);
+
+		if (of_find_property(cfg, "bank-register-data", NULL)) {
+			of_find_property(cfg, "bank-register-data", &byte_len);
+			pr_err("bank-register-data property len %u\n", byte_len);
+			if ((byte_len / sizeof(u32)) < PATCH_SZ ||
+				(byte_len / sizeof(u32)) % PATCH_SZ) {
+				dev_err(dev, "%s: Invalid patch data alignment\n", __func__);
+				ret = -ENODEV;
+				goto put_node_exit;
+			}
+
+			adata = kzalloc(byte_len, GFP_KERNEL);
+			if (!adata) {
+				ret = -ENOMEM;
+				goto put_node_exit;
+			}
+
+			reg_num = byte_len / (sizeof(u32) * PATCH_SZ);
+			pdata->config->patch = devm_kzalloc(dev, sizeof(struct bank_reg) * reg_num, GFP_KERNEL);
+			if (!pdata->config->patch) {
+				ret = -ENOMEM;
+				goto kfree_exit;
+			}
+
+			ret = of_property_read_u32_array(cfg, "bank-register-data", adata, byte_len / sizeof(u32));
+			if (ret < 0) {
+				dev_err(dev, "%s: Error reading patch data; rc = %d\n", __func__, ret);
+				goto kfree_exit;
+			}
+
+			pdata->config->reg_num = reg_num;
+			pr_err("%d registers in the patch set\n", reg_num);
+			for (r = 0; r < reg_num; r++) {
+				struct bank_reg *brd = &pdata->config->patch[r];
+
+				brd->bank = (unsigned char)adata[r * PATCH_SZ];
+				brd->reg = (unsigned char)adata[r * PATCH_SZ + 1];
+				brd->data = (unsigned char)adata[r * PATCH_SZ + 2];
+				pr_err("[%d(off=%d)]: bank=%d, reg0x%02x, data=0x%02x\n",
+						r, r * PATCH_SZ, brd->bank, brd->reg, brd->data);
+			}
+kfree_exit:
+			kfree(adata);
+		} else
+			pr_err("has no run time patches\n");
+put_node_exit:
+		of_node_put(cfg);
 	}
 
 	return ret;
@@ -723,7 +833,15 @@ static int pct1812_process_touch_event(struct pct1812_data *ts)
 			}
 			x = UINT16_X(coords);
 			y = UINT16_Y(coords);
+
+			if (ts->plat_data->config) {
+				if (ts->plat_data->config->flip_x)
+					x = ts->plat_data->config->max_x - x;
+				if (ts->plat_data->config->flip_y)
+					y = ts->plat_data->config->max_y - y;
+			}
 			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
+
 			if (i == 0) { // draw line self-test supports one finger only
 				mode = pct1812_selftest_get(ts);
 				if (mode == PCT1812_SELFTEST_DRAW_LINE)
@@ -732,14 +850,23 @@ static int pct1812_process_touch_event(struct pct1812_data *ts)
 			}
 			pressed = 1;
 			if (finger[i] != 1) {
-				input_mt_slot(ts->idev, i);
-				input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 1);
-				input_report_key(ts->idev, BTN_TOOL_FINGER, 1);
+				if (ts->plat_data->config && ts->plat_data->config->report_mt) {
+					input_mt_slot(ts->idev, i);
+					input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 1);
+				} else {
+					DBG_PRINT(DBG_BIT_DROP,"dropped MT DOWN\n");
+				}
 				input_report_key(ts->idev, BTN_TOUCH, 1);
+				input_report_key(ts->idev, BTN_TOOL_FINGER, 1);
 				DBG_PRINT(DBG_BIT_ISR,"[%d]: PRESS\n", i);
 			}
-			input_report_abs(ts->idev, ABS_MT_POSITION_X, x);
-			input_report_abs(ts->idev, ABS_MT_POSITION_Y, y);
+
+			if (ts->plat_data->config && ts->plat_data->config->report_mt) {
+				input_report_abs(ts->idev, ABS_MT_POSITION_X, x);
+				input_report_abs(ts->idev, ABS_MT_POSITION_Y, y);
+			} else {
+				DBG_PRINT(DBG_BIT_DROP,"dropped MT X/Y\n");
+			}
 			input_report_abs(ts->idev, ABS_X, x);
 			input_report_abs(ts->idev, ABS_Y, y);
 			input_sync(ts->idev);
@@ -747,15 +874,20 @@ static int pct1812_process_touch_event(struct pct1812_data *ts)
 			pressed = 0;
 
 		if (finger[i] && !pressed) {
-			input_mt_slot(ts->idev, i);
-			input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 0);
+			if (ts->plat_data->config && ts->plat_data->config->report_mt) {
+				input_mt_slot(ts->idev, i);
+				input_mt_report_slot_state(ts->idev, MT_TOOL_FINGER, 0);
+			} else {
+				DBG_PRINT(DBG_BIT_DROP,"dropped MT UP\n");
+			}
 			input_report_key(ts->idev, BTN_TOUCH, 0);
 			input_report_key(ts->idev, BTN_TOOL_FINGER, 0);
 			input_sync(ts->idev);
 			DBG_PRINT(DBG_BIT_ISR,"[%d]: RELEASE\n", i);
 		}
+
 		finger[i] = pressed;
-		DBG_PRINT(DBG_BIT_ALL, "finger [%d]: %d\n", i, finger[i]);
+		DBG_PRINT(DBG_BIT_ALL,"finger [%d]: %d\n", i, finger[i]);
 	}
 
 	return 0;
@@ -791,6 +923,10 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts)
 	}
 
 	if (send_button) {
+		if (ts->plat_data->config && !ts->plat_data->config->report_gesture) {
+			DBG_PRINT(DBG_BIT_DROP,"dropped DOUBLETAP\n");
+			goto drop_exit;
+		}
 		/* press */
 		input_report_key(ts->idev, BTN_TOOL_DOUBLETAP, 1);
 		input_report_key(ts->idev, BTN_TOUCH, 1);
@@ -806,20 +942,42 @@ static int pct1812_process_gesture_event(struct pct1812_data *ts)
 		} else {
 			int x = comp2_16b(X_GET(coords));
 			int y = comp2_16b(Y_GET(coords));
+
+			if (ts->plat_data->config && !ts->plat_data->config->report_gesture) {
+				DBG_PRINT(DBG_BIT_DROP,"dropped SCROLL\n");
+				goto drop_exit;
+			}
+
 			/* suppress unsubstantial movement events */
-			if ((gest & 0x1f) == GEST_HORIZ_SCROLL && abs(x) >= MIN_DIST) {
+			if ((gest & 0x1f) == GEST_HORIZ_SCROLL) {
+				if (ts->plat_data->config) {
+					if (abs(x) >= ts->plat_data->config->scroll_min_distance) {
+						DBG_PRINT(DBG_BIT_DROP,"dropped HORIZ_SCROLL: x=%d, y=%d\n", x, y);
+						goto drop_exit;
+					}
+					if (ts->plat_data->config->flip_x)
+						x = -x;
+				}
 				input_report_rel(ts->idev, REL_HWHEEL, x);
 				input_sync(ts->idev);
-			} else if ((gest & 0x1f) == GEST_VERT_SCROLL && abs(y) >= MIN_DIST) {
+			} else if ((gest & 0x1f) == GEST_VERT_SCROLL) {
+				if (ts->plat_data->config) {
+					if (abs(y) >= ts->plat_data->config->scroll_min_distance) {
+						DBG_PRINT(DBG_BIT_DROP,"dropped VERT_SCROLL: x=%d, y=%d\n", x, y);
+						goto drop_exit;
+					}
+					if (ts->plat_data->config->flip_y)
+						y = -y;
+				}
 				input_report_rel(ts->idev, REL_WHEEL, y);
 				input_sync(ts->idev);
 			} else
-				DBG_PRINT(DBG_BIT_ALL, "dropped: x=%d, y=%d\n", x, y);
+				goto drop_exit;
 
 			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", GEST_ADDR(0), x, y);
 		}
 	}
-
+drop_exit:
 	return ret;
 }
 
@@ -927,12 +1085,11 @@ static int pct1812_user_access(struct pct1812_data *ts,
 	} \
 }
 
-#define GET_REG_IF(r, v) { \
+#define GET_REG(r, v) { \
 	v = INVALID_BYTE; \
 	ret = pct1812_i2c_read(ts, r, &(v), sizeof(v)); \
 	if (ret) { \
 		dev_err(ts->dev, "%s: Error reading Reg0x%02x\n", __func__, r); \
-		goto failure; \
 	} \
 }
 
@@ -984,17 +1141,26 @@ failure:
 
 static int pct1812_get_extinfo(struct pct1812_data *ts)
 {
-	unsigned char val, v1, v2;
+	unsigned char bs, status, val, v1, v2;
 	int i, ret;
 
+	pct1812_set_bank(ts, BANK(6));
+	GET_REG(BOOT_STATUS_REG, bs);
+	GET_REG(STATUS_REG, status);
+	/* read boot info first */
 	QUERY_PARAM(v1, BANK(0), VER_LOW_REG, val);
 	ts->ver7e = (VER_LOW_REG << 8) | v1;
 	QUERY_PARAM(v2, BANK(0), VER_HIGH_REG, val);
 	ts->ver7f = (VER_HIGH_REG << 8) | v2;
+	QUERY_PARAM(ts->boot_block, BANK(0), FLASH_BANK_REG, val);
+	QUERY_PARAM(v1, BANK(0), DEBUG_REG, val);
+
+	dev_info(ts->dev, "%s: ver=%04x/%04x, boot_blk=%d, dbg=%02x, boot_status=%02x, status=%02x\n",
+		__func__, ts->ver7e, ts->ver7f, ts->boot_block, v1, bs, status);
+
 	QUERY_PARAM(ts->tx_count, BANK(0), TX_REG, val);
 	QUERY_PARAM(ts->rx_count, BANK(0), RX_REG, val);
 	QUERY_PARAM(ts->model, BANK(0), MODEL_REG, val);
-	QUERY_PARAM(ts->product_id, BANK(0), PROD_ID_REG, val);
 	QUERY_PARAM(v1, BANK(0), FW_MAJOR_REG, val);
 	ts->major = v1 >> 4;
 	QUERY_PARAM(v2, BANK(0), FW_VMIN_L_REG, val);
@@ -1002,7 +1168,6 @@ static int pct1812_get_extinfo(struct pct1812_data *ts)
 	ts->minor = v2 | ((v1 & 0x0f) << 8);
 	QUERY_PARAM(ts->revision, BANK(0), FW_REV_REG, val);
 	QUERY_PARAM(ts->patch, BANK(0), FW_PATCH_REG, val);
-	QUERY_PARAM(ts->boot_block, BANK(0), FLASH_BANK_REG, val);
 	QUERY_PARAM(v1, BANK(2), XRES_L_REG, val);
 	QUERY_PARAM(v2, BANK(2), XRES_H_REG, val);
 	ts->x_res = v1 | (v2 << 8);
@@ -1506,7 +1671,14 @@ failure:
 	mutex_unlock(&ts->cmdlock);
 	//__pm_relax(&ts->wake_src);
 
-	pct1812_get_extinfo(ts);
+	pct1812_fifo_cmd_add(ts, CMD_INFO, TOUCH_RESET_DELAY);
+	/* delete runtime patch, since it might not apply over new firmware */
+	if (ts->plat_data->config && ts->plat_data->config->reg_num && ts->plat_data->config->patch) {
+		devm_kfree(ts->dev, ts->plat_data->config->patch);
+		ts->plat_data->config->patch = NULL;
+		ts->plat_data->config->reg_num = 0;
+		dev_info(ts->dev, "%s: Run time config dropped\n", __func__);
+	}
 
 	return ret;
 }
@@ -1797,6 +1969,22 @@ static int pct1812_selftest_cleanup(struct pct1812_data *ts)
 	return ret;
 }
 
+static int pct1812_config_apply(struct pct1812_data *ts)
+{
+	int r, ret = 0;
+
+	if (!ts->plat_data->config || !ts->plat_data->config->patch)
+		return 0;
+
+	for (r = 0; r < ts->plat_data->config->reg_num; r++) {
+		struct bank_reg *brd = &ts->plat_data->config->patch[r];
+
+		SET_PARAM_IF(BANK(brd->bank), brd->reg, brd->data);
+	}
+failure:
+	return ret;
+}
+
 #define NANO_SEC 1000000000
 #define SEC_TO_MSEC 1000
 #define NANO_TO_MSEC 1000000
@@ -1830,6 +2018,7 @@ static void pct1812_work(struct work_struct *work)
 	int mode, cmd, ret = 0;
 	int rearm_cmd = CMD_WDOG;
 	unsigned int duration;
+	unsigned int interval = WDOG_INTERVAL;
 
 	while (kfifo_get(&ts->cmd_pipe, &cmd)) {
 		mode = pct1812_selftest_get(ts);
@@ -1868,7 +2057,26 @@ static void pct1812_work(struct work_struct *work)
 				ret = pct1812_run_cmd(ts, CMD_RESET, BOOT_COMPLETE);
 				if (ret) {
 						dev_err(ts->dev, "%s: Reset failed\n", __func__);
+				} else if (ts->plat_data->config) {
+					rearm_cmd = CMD_CONFIG;
+					interval = TOUCH_RESET_DELAY;
 				}
+					break;
+		case CMD_CONFIG:
+				action = "CONFIG";
+				ret = pct1812_config_apply(ts);
+				if (ret) {
+						dev_err(ts->dev, "%s: Failed to apply config\n", __func__);
+				} else {
+					rearm_cmd = CMD_INFO;
+					interval = TOUCH_RESET_DELAY;
+				}
+					break;
+		case CMD_INFO:
+				action = "INFO";
+				ret = pct1812_get_extinfo(ts);
+				if (ret)
+						dev_err(ts->dev, "%s: Failed to get extinfo\n", __func__);
 					break;
 		case CMD_RESUME:
 				action = "RESUME";
@@ -1882,7 +2090,7 @@ static void pct1812_work(struct work_struct *work)
 	if (action && strcmp(action, "WDOG"))
 		DBG_PRINT(DBG_BIT_WORK,"action: %s\n", action);
 
-	pct1812_fifo_cmd_add(ts, rearm_cmd, WDOG_INTERVAL);
+	pct1812_fifo_cmd_add(ts, rearm_cmd, interval);
 }
 #if 0
 static int pct1812_suspend(struct device *dev)
@@ -1926,7 +2134,7 @@ static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
 	if (!ts->idev)
 		return -ENOMEM;
 
-	snprintf(ts_phys, sizeof(ts_phys), "pct1812ff_touchpad/input1");
+	snprintf(ts_phys, sizeof(ts_phys), "pct1812_touchpad/input0");
 	ts->idev->phys = ts_phys;
 	ts->idev->name = "PixArt PCT1812FF Touchpad";
 	ts->idev->id.bustype = BUS_I2C;
@@ -1935,19 +2143,32 @@ static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
 	set_bit(EV_SYN, ts->idev->evbit);
 	set_bit(EV_KEY, ts->idev->evbit);
 	set_bit(EV_ABS, ts->idev->evbit);
-	set_bit(EV_REL, ts->idev->evbit);
-
-	set_bit(REL_WHEEL, ts->idev->relbit);
-	set_bit(REL_HWHEEL, ts->idev->relbit);
-
 	set_bit(BTN_TOUCH, ts->idev->keybit);
 	set_bit(BTN_TOOL_FINGER, ts->idev->keybit);
-	set_bit(BTN_TOOL_DOUBLETAP, ts->idev->keybit);
-	set_bit(INPUT_PROP_POINTER, ts->idev->propbit);
+	set_bit(INPUT_PROP_DIRECT, ts->idev->propbit);
 
-	input_set_abs_params(ts->idev, ABS_MT_POSITION_X, 0, ts->x_res, 0, 0);
-	input_set_abs_params(ts->idev, ABS_MT_POSITION_Y, 0, ts->y_res, 0, 0);
-	input_mt_init_slots(ts->idev, ts->max_points, INPUT_MT_POINTER);
+	/* x_res/y_res is not available, since INFO work has not run yet */
+	input_set_abs_params(ts->idev, ABS_X, 0,
+			ts->plat_data->config ? ts->plat_data->config->max_x - 1 : DFLT_X_RES, 0, 0);
+	input_set_abs_params(ts->idev, ABS_Y, 0,
+			ts->plat_data->config ? ts->plat_data->config->max_y - 1 : DFLT_Y_RES, 0, 0);
+
+	if (ts->plat_data->config && ts->plat_data->config->report_mt) {
+		set_bit(MT_TOOL_FINGER, ts->idev->keybit);
+		set_bit(INPUT_PROP_DIRECT, ts->idev->propbit);
+		input_set_abs_params(ts->idev, ABS_MT_POSITION_X, 0,
+			ts->plat_data->config ? ts->plat_data->config->max_x - 1 : DFLT_X_RES, 0, 0);
+		input_set_abs_params(ts->idev, ABS_MT_POSITION_Y, 0,
+			ts->plat_data->config ? ts->plat_data->config->max_y - 1 : DFLT_Y_RES, 0, 0);
+		input_mt_init_slots(ts->idev, ts->max_points, INPUT_MT_DIRECT);
+	}
+
+	if (ts->plat_data->config && ts->plat_data->config->report_gesture) {
+		set_bit(EV_REL, ts->idev->evbit);
+		set_bit(REL_WHEEL, ts->idev->relbit);
+		set_bit(REL_HWHEEL, ts->idev->relbit);
+		set_bit(BTN_TOOL_DOUBLETAP, ts->idev->keybit);
+	}
 
 	ret = input_register_device(ts->idev);
 	if (ret) {
@@ -1991,6 +2212,10 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	client->dev.platform_data = pdata;
 	pdata->client = client;
+	ts->client = client;
+	ts->dev = &client->dev;
+	ts->plat_data = pdata;
+	ts->debug = DBG_BIT_PM | DBG_BIT_DTS | DBG_BIT_ISR | DBG_BIT_DROP; // DBG_BIT_I2C | DBG_BIT_UACC |
 
 #if defined(STATIC_PLATFORM_DATA)
 	memcpy(pdata, (const void *)&pct1812_pd, sizeof(struct pct1812_platform));
@@ -2008,11 +2233,6 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto error_allocate_mem;
 	}
 
- 	ts->client = client;
-	ts->dev = &client->dev;
-	ts->plat_data = pdata;
-	ts->debug = DBG_BIT_PM; // | DBG_BIT_ALL | DBG_BIT_ISR;
-
 	i2c_set_clientdata(client, ts);
 	dev_set_drvdata(&client->dev, ts);
 
@@ -2028,20 +2248,19 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 	pct1812_regulator(ts, true);
 	pct1812_power(ts, true);
 
-	pct1812_delay_ms(TOUCH_RESET_DELAY);
+	pct1812_delay_ms(POWER_UP_DELAY);
+	pct1812_set_bank(ts, BANK(6));
 	ret = pct1812_wait4ready(ts, BOOT_STATUS_REG, BOOT_COMPLETE);
 	if (ret) {
 		dev_err(&client->dev, "%s: Failed to init\n", __func__);
 		goto error_init;
 	}
 
-	pct1812_drop_mask_set(ts, 0); // STAT_BIT_TOUCH);
-	pct1812_get_extinfo(ts);
-
 	ret = kfifo_alloc(&ts->cmd_pipe, sizeof(unsigned int)* 10, GFP_KERNEL);
 	if (ret)
 		goto error_init;
 
+	pct1812_drop_mask_set(ts, 0);
 	ret = request_threaded_irq(client->irq, NULL, pct1812_irq_handler,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT, MYNAME, ts);
 	if (ret < 0) {
@@ -2056,8 +2275,11 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 		dev_err(&client->dev, "%s: Unable register input\n", __func__);
 		goto error_input_alloc;
 	}
+
 	/* sensing on */
 	pct1812_sensing_on(ts);
+	/* enqueue CMD_CONFIG and CMD_INFO */
+	pct1812_fifo_cmd_add(ts, CMD_CONFIG, TOUCH_RESET_DELAY);
 	pct1812_fifo_cmd_add(ts, CMD_WDOG, WDOG_INTERVAL);
 
 	ret = sysfs_create_group(&client->dev.kobj, &pct1812_attrs_group);
@@ -2091,10 +2313,9 @@ static ssize_t ic_ver_show(struct device *dev,
 {
 	struct pct1812_data *ts = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%02d%02d%02d%02d\n%s%02x%02x%02x%02x\n",
-			"Product_ID: ", (ts->model == 0x47) &&
-				(ts->product_id & 0x80) ? "pct1812ff" : "unknown",
-			"Build ID: ", ts->major, ts->minor, ts->revision, ts->patch,
+	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x%04x\n%s%02x%02x%02x%02x\n",
+			"Product_ID: ", ts->model == 0x47 ? "pct1812ff" : "unknown",
+			"Build ID: ", ts->ver7e, ts->ver7f,
 			"Config ID: ", ts->custom_block[0], ts->custom_block[1],
 				ts->custom_block[2], ts->custom_block[3]);
 }
@@ -2602,17 +2823,32 @@ static ssize_t reset_store(struct device *dev,
 	return size;
 }
 
+#define USER_INFO \
+	ENTRY(X_RES_L, 2, 0x00),\
+	ENTRY(X_RES_H, 2, 0x01),\
+	ENTRY(Y_RES_L, 2, 0x02),\
+	ENTRY(Y_RES_H, 2, 0x03),\
+	ENTRY(V_SCROLL_RES, 3, 0x26),\
+	ENTRY(H_SCROLL_RES, 3, 0x2e),\
+	ENTRY(ABS_DISTANCE, 3, 0x0b),
+
+#undef ENTRY
+#define ENTRY(a, b, c) #a
+static char *ui_title[] = { USER_INFO };
+
+#undef ENTRY
+#define ENTRY(a, b, c) {b, c}
+static struct bank_reg ui_addr[] = { USER_INFO };
+
 static ssize_t info_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct pct1812_data *ts = dev_get_drvdata(dev);
+	int i, ret;
 	ssize_t blen;
 
-	pct1812_get_extinfo(ts);
-
-	blen = scnprintf(buf, PAGE_SIZE, "   Product: %sPixArt %s\n",
-				ts->model == 0x47 ? "" : "Non-",
-				(ts->product_id & 0x80) ? "PCT1812FF" : "unknown");
+	blen = scnprintf(buf, PAGE_SIZE, "   Product: PixArt %s\n",
+				ts->model == 0x47 ? "PCT1812FF" : "unknown");
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "    FW ver: %d.%d\n", ts->major, ts->minor);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "    FW rev: %d patch %d\n", ts->revision, ts->patch);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "     Tx/Rx: %dx%d\n", ts->tx_count, ts->rx_count);
@@ -2621,6 +2857,13 @@ static ssize_t info_show(struct device *dev,
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "Boot block: %d\n", ts->boot_block);
 	blen += scnprintf(buf + blen, PAGE_SIZE - blen, "   Version: %04x/%04x\n", ts->ver7e, ts->ver7f);
 
+	for (i = 0; i < ARRAY_SIZE(ui_title); i++) {
+		unsigned char value, tmp;
+
+		QUERY_PARAM_IF(value, BANK(ui_addr[i].bank), ui_addr[i].reg, tmp);
+		blen += scnprintf(buf + blen, PAGE_SIZE - blen, "%12s: 0x%02x\n", ui_title[i], value);
+	}
+failure:
 	return blen;
 }
 
