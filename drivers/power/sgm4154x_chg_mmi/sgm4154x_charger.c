@@ -2111,6 +2111,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, sgm);
 
+	ret = sgm4154x_hw_chipid_detect(sgm);
+	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID){
+		pr_info("[%s] device not found !!!\n", __func__);
+		return ret;
+	}
+
 	// Customer customization
 	ret = sgm4154x_parse_dt(sgm);
 	if (ret) {
@@ -2121,12 +2127,6 @@ static int sgm4154x_probe(struct i2c_client *client,
 	ret = sgm4154x_parse_dt_adc_channels(sgm);
 	if (ret) {
 		dev_err(dev, "Failed to get adc channels%d\n", ret);
-		return ret;
-	}
-
-	ret = sgm4154x_hw_chipid_detect(sgm);
-	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID){
-		pr_info("[%s] device not found !!!\n", __func__);
 		return ret;
 	}
 
