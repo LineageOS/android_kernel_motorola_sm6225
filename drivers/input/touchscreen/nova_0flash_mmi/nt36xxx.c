@@ -1350,6 +1350,13 @@ static int32_t nvt_parse_dt(struct device *dev)
 		ts->charger_detection_enable = 0;
 	}
 
+	if (of_property_read_bool(np, "novatek,gesture-wait-pm")) {
+		NVT_LOG("novatek,gesture-wait-pm set");
+		ts->gesture_wait_pm = true;
+	} else {
+		ts->gesture_wait_pm = false;
+	}
+
 	if (of_property_read_bool(np, "novatek,report_gesture_key")) {
 		NVT_LOG("novatek,report_gesture_key set");
 		ts->report_gesture_key = 1;
@@ -1611,6 +1618,15 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #if WAKEUP_GESTURE
 	if (ts->bTouchIsAwake == 0) {
 		pm_wakeup_event(&ts->input_dev->dev, 5000);
+
+		if ((ts->gesture_wait_pm) && (ts->gesture_enabled)) {
+			/* Waiting for pm resume completed */
+			ret = wait_event_interruptible_timeout(ts->pm_wq, atomic_read(&ts->pm_resume), msecs_to_jiffies(700));
+			if (!ret) {
+				NVT_ERR("system(spi) can't finished resuming procedure.");
+				return IRQ_HANDLED;
+			}
+		}
 	}
 #endif
 
@@ -2480,6 +2496,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 			NVT_LOG("request irq %d succeed\n", client->irq);
 		}
 	}
+
+	if (ts->gesture_wait_pm)
+		init_waitqueue_head(&ts->pm_wq);
+	atomic_set(&ts->pm_resume, 1);
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -3479,6 +3499,36 @@ static struct of_device_id nvt_match_table[] = {
 };
 #endif
 
+static int nvt_pm_suspend(struct device *dev)
+{
+	struct nvt_ts_data *ts = dev_get_drvdata(dev);
+
+	NVT_LOG("CALL BACK TP PM SUSPEND");
+
+	atomic_set(&ts->pm_resume, 0);
+
+	return 0;
+}
+
+static int nvt_pm_resume(struct device *dev)
+{
+	struct nvt_ts_data *ts = dev_get_drvdata(dev);
+
+	NVT_LOG("CALL BACK TP PM RESUME");
+
+	atomic_set(&ts->pm_resume, 1);
+
+	if ((ts->gesture_wait_pm) && (ts->gesture_enabled))
+		wake_up_interruptible(&ts->pm_wq);
+
+	return 0;
+}
+
+static const struct dev_pm_ops nvt_dev_pm_ops = {
+	.suspend = nvt_pm_suspend,
+	.resume = nvt_pm_resume,
+};
+
 static struct spi_driver nvt_spi_driver = {
 	.probe		= nvt_ts_probe,
 	.remove		= nvt_ts_remove,
@@ -3489,6 +3539,9 @@ static struct spi_driver nvt_spi_driver = {
 		.owner	= THIS_MODULE,
 #ifdef CONFIG_OF
 		.of_match_table = nvt_match_table,
+#endif
+#ifdef CONFIG_PM
+		.pm = &nvt_dev_pm_ops,
 #endif
 	},
 };
