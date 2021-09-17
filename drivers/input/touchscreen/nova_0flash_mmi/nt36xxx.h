@@ -206,6 +206,9 @@ struct nvt_ts_data {
 	uint8_t *xbuf;
 	struct mutex xbuf_lock;
 	bool irq_enabled;
+	atomic_t pm_resume;
+	wait_queue_head_t pm_wq;
+	bool gesture_wait_pm;
 	const char *panel_supplier;
 #ifdef CONFIG_MTK_SPI
 	struct mt_chip_conf spi_ctrl;
