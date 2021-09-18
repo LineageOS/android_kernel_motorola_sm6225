@@ -398,6 +398,19 @@ static unsigned int rt9426a_get_cyccnt(struct rt9426a_chip *chip)
 
 	return cyccnt;
 }
+static int rt9426a_get_soh(struct rt9426a_chip *chip)
+{
+	int ret;
+	int soh = 100;
+
+	ret = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOH);
+	if (ret < 0)
+		dev_notice(chip->dev, "%s: read soh fail\n", __func__);
+	else
+		soh = ret;
+
+	return soh;
+}
 
 static int rt9426a_get_current(struct rt9426a_chip *chip)
 {
@@ -849,7 +862,8 @@ static void rt9426a_update_info(struct rt9426a_chip *chip)
 	regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_RM);
 	dev_info(chip->dev, "RM(%d)\n", regval);
 
-	regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOH);
+	//regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOH);
+	regval = rt9426a_get_soh(chip);
 	dev_info(chip->dev, "SOH(%d)\n", regval);
 
 	/* rt9426a_update_ieoc_setting(chip); */
