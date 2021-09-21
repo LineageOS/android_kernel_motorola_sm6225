@@ -18,11 +18,10 @@
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
 
-#define DRIVER_VERSION "20210331"
-#define ET721
+#define DRIVER_VERSION "20210517"
 #define USE_PIN_CTRL
 //#define PLATFORM_SPI
-#define MTK_PLATFORM
+//#define MTK_PLATFORM
 //#define LSI_PLATFORM
 #define EGIS_DEBUG
 
@@ -93,10 +92,17 @@
 
 #define SPI_DEFAULT_SPEED (1000000 * 20) //20M
 
+#ifdef ET721_FOD
+#define Tpwr_off_delay 50
+#define Tpwr_on_delay 4
+#define Rst_off_delay 4
+#define Rst_on_delay 6
+#else
 #define Tpwr_off_delay 3
 #define Tpwr_on_delay 3
 #define Rst_off_delay 3
 #define Rst_on_delay 12
+#endif
 
 #define KEY_FPS_DOWN   614
 #define KEY_FPS_UP     615
@@ -188,6 +194,7 @@ struct egisfp_dev_t
 	int pwr_by_gpio;
 	int power_enable;
 	int screen_onoff;
+	int call_back_registered;
 	struct regulator *vcc;
 	struct regulator *vdd;
 	uint32_t regulator_current;
@@ -205,6 +212,9 @@ struct egisfp_dev_t
 	struct pinctrl_state *vcc_low;
 	struct pinctrl_state *irq_active;
 	struct notifier_block notifier;
+#if defined(CONFIG_DRM_PANEL) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+	struct drm_panel *active_panel;
+#endif
 };
 
 int egisfp_platforminit(struct egisfp_dev_t *egis_dev);
