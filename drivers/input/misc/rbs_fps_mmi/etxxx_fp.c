@@ -32,6 +32,7 @@
 *Jacob.Kung		20201130		add check_ioctl_permission
 *Jacob.Kung		20201207		register platform driver with MTK platform
 *Jacob.Kung		20210331		add register FB notifier
+*Jacob.Kung		20210512		add register DRM notifier
 * -----------------------------------------------------------
 *
 **/
@@ -55,24 +56,21 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
-#include <linux/fb.h>
+
 #include <linux/pm_wakeup.h>
 #include "etxxx_fp.h"
 #include <linux/input.h>
-#ifdef CONFIG_PANEL_NOTIFICATIONS
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
-#define ETS_FB_PANEL_NOTIFY   2
-#define FP_NOTIFY_TYPE    ETS_FB_PANEL_NOTIFY
-#endif
-#define ETS_FB   1
-
-#if (defined(CONFIG_PANEL_NOTIFICATIONS) && (FP_NOTIFY_TYPE == ETS_FB_PANEL_NOTIFY))
-#define FP_NOTIFY_ON                                     PANEL_EVENT_DISPLAY_ON
-#define FP_NOTIFY_OFF                                    PANEL_EVENT_DISPLAY_OFF
-#define FP_NOTIFY_EVENT_BLANK                   PANEL_EVENT_DISPLAY_OFF    //MSM_DRM_EVENT_BLANK
+#define FP_NOTIFY_ON                                  PANEL_EVENT_DISPLAY_ON
+#define FP_NOTIFY_OFF                                 PANEL_EVENT_DISPLAY_OFF
+#define FP_NOTIFY_EVENT_BLANK                         PANEL_EVENT_DISPLAY_OFF    //MSM_DRM_EVENT_BLANK
 #define ets_fb_register_client(client)                panel_register_notifier(client);
 #define ets_fb_unregister_client(client)            panel_unregister_notifier(client);
+#elif defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+#include <drm/drm_panel.h>
 #else
+#include <linux/fb.h>
 #define FP_NOTIFY_ON                            FB_BLANK_UNBLANK
 #define FP_NOTIFY_OFF                           FB_BLANK_POWERDOWN
 #define FP_NOTIFY_EVENT_BLANK                   FB_EVENT_BLANK
@@ -460,7 +458,11 @@ EXPORT_SYMBOL(egisfp_set_screen_onoff);
 int do_egisfp_power_onoff(struct egisfp_dev_t *egis_dev, struct egisfp_ioctl_cmd_t *ioctl_data)
 {
 	int ret = 0;
+#ifdef ET721_FOD
+	uint32_t power_onoff = ioctl_data->int_mode;
+#else
 	uint32_t power_onoff = ioctl_data->power_on;
+#endif
 
 	if (!egis_dev->ctrl_power)
 	{
@@ -976,14 +978,40 @@ int egisfp_check_ioctl_permission(struct egisfp_dev_t *egis_dev, unsigned int cm
 		return -EACCES;
 	}
 }
-
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+static int drm_check_dt(struct egisfp_dev_t *egis_dev)
+{
+	int i = 0;
+	int count = 0;
+	struct device_node *np = egis_dev->dd->dev.of_node;
+	struct device_node *node = NULL;
+	struct drm_panel *panel = NULL;
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	if (count <= 0) {
+		ERROR_PRINT(" %s : find drm_panel fail count = %d ", __func__, count);
+		return -ENODEV;
+	}
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			ERROR_PRINT(" %s : ind drm_panel successfully ", __func__);
+			egis_dev->active_panel = panel;
+			return 0;
+		}
+	}
+	ERROR_PRINT(" %s : can not find drm_panel ", __func__);
+	return -ENODEV;
+}
+#endif
 // Register FB notifier +++
 static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void *data)
 {
 	struct egisfp_dev_t *egis_dev = NULL;
 	char *envp[2];
 	int ret = 0;
-#ifdef CONFIG_PANEL_NOTIFICATIONS
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
 	INFO_PRINT(" %s : got notify value = %d \n", __func__, (int)val);
 	egis_dev = container_of(nb, struct egisfp_dev_t, notifier);
 	egis_dev->screen_onoff = 1;
@@ -1008,6 +1036,35 @@ static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void
 		ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
 		INFO_PRINT(" %s : screen_onoff = %d val=%lu ret=%d\n", __func__, egis_dev->screen_onoff, val,ret);
 	}
+#elif defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+	struct drm_panel_notifier *evdata = data;
+	unsigned int blank;
+	INFO_PRINT(" %s : got notify value = %d \n", __func__, (int)val);
+	if (val != DRM_PANEL_EARLY_EVENT_BLANK)
+	{
+		return NOTIFY_OK;
+	}
+	egis_dev = container_of(nb, struct egisfp_dev_t, notifier);
+	if (!evdata || !evdata->data || !egis_dev) {
+		ERROR_PRINT(" %s : some parameters is null \n", __func__);
+		return NOTIFY_OK;
+	}
+	blank = *(int *)(evdata->data);
+	switch (blank) {
+	case DRM_PANEL_BLANK_UNBLANK:
+		egis_dev->screen_onoff = 1;
+		envp[0] = "PANEL=1";
+		break;
+	case DRM_PANEL_BLANK_POWERDOWN:
+		egis_dev->screen_onoff = 0;
+		envp[0] = "PANEL=0";
+		break;
+	default:
+		break;
+	}
+	INFO_PRINT(" %s : screen_onoff = %d \n", __func__, egis_dev->screen_onoff);
+	envp[1] = NULL;
+	ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
 #else
 	struct fb_event *evdata = data;
 	unsigned int blank;
@@ -1137,10 +1194,21 @@ int egisfp_remove(struct platform_device *pdev)
 	struct egisfp_dev_t *egis_dev = dev_get_drvdata(dev);
 	INFO_PRINT(" %s : driver remove \n", __func__);
 	if (egis_dev->request_irq_done)
+	{
 		free_irq(egis_dev->gpio_irq, egis_dev);
-
+	}
+	if (egis_dev->call_back_registered)
+	{
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+		if (egis_dev->active_panel)
+		{
+			drm_panel_notifier_unregister(egis_dev->active_panel, &egis_dev->notifier);
+			egis_dev->active_panel = NULL;
+		}
+#else
 	ets_fb_unregister_client(&egis_dev->notifier);
-
+#endif
+	}
 	del_timer_sync(&egis_dev->fps_ints.timer);
 
 	device_init_wakeup(&egis_dev->dd->dev, 0);
@@ -1212,7 +1280,12 @@ int egisfp_probe(struct platform_device *pdev)
 	egis_dev->request_irq_done = 0;
 	egis_dev->platforminit_done = 0;
 	egis_dev->power_enable = 0;
-	egis_dev->screen_onoff = 1;
+	egis_dev->screen_onoff = 0;
+	egis_dev->call_back_registered = 0;
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+	egis_dev->active_panel = NULL;
+	drm_check_dt(egis_dev);
+#endif
 	/*
 	 * If we can allocate a minor number, hook up this device.
 	 * Reusing minors is fine so long as udev or mdev is working.
@@ -1270,10 +1343,24 @@ int egisfp_probe(struct platform_device *pdev)
 	setup_timer(&egis_dev->fps_ints.timer, egisfp_interrupt_timer_call, (unsigned long)&egis_dev->fps_ints);
 #endif
 
-// Register FB notifier +++
+    //Register display notifier +++
 	egis_dev->notifier = egisfp_noti_block;
-	ets_fb_register_client(&egis_dev->notifier);
-// Register FB notifier ---
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+	if (egis_dev->active_panel) {
+		DEBUG_PRINT(" %s : register drm_panel_notifier \n", __func__);
+		status = drm_panel_notifier_register(egis_dev->active_panel, &egis_dev->notifier);
+		if (status)
+			ERROR_PRINT("  %s : drm_panel_notifier_register fail: %d ", __func__, status);
+		else
+			egis_dev->call_back_registered = 1;
+	}
+#else
+	status = ets_fb_register_client(&egis_dev->notifier);
+	if (status)
+		ERROR_PRINT("  %s : ets_fb_register_client fail: %d ", __func__, status);
+	else
+		egis_dev->call_back_registered = 1;
+#endif
 
 	g_data = egis_dev;
 
