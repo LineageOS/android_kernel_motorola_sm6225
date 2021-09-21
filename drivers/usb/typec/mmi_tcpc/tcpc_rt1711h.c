@@ -45,6 +45,8 @@
 
 /* #define DEBUG_GPIO	66 */
 
+#include <linux/debugfs.h>
+
 #define RT1711H_DRV_VERSION	"2.0.5_G"
 
 #define RT1711H_IRQ_WAKE_TIME	(500) /* ms */
@@ -70,6 +72,7 @@ struct rt1711_chip {
 	int irq_gpio;
 	int irq;
 	int chip_id;
+	struct dentry *debug_root;
 };
 
 #ifdef CONFIG_RT_REGMAP
@@ -1585,7 +1588,59 @@ static inline int rt1711h_check_revision(struct i2c_client *client)
 
 	return did;
 }
+#if defined(CONFIG_DEBUG_FS)
+static int show_registers(struct seq_file *m, void *data)
+{
+	struct rt1711_chip *chip = m->private;
+	u8 addr;
+	int ret;
+	u8 val;
 
+	for (addr = 0x0; addr <= 0xf6; addr++) {
+			 ret = rt1711_read_device(chip->client, addr, 1, &val);
+			if (ret < 0) {
+				pr_err("read rt1715 reg%x fail(%d)\n",addr,  ret);
+			} else
+				seq_printf(m, "Reg[%02X] = 0x%02X\n", addr, val);
+
+	}
+	return 0;
+}
+
+static int reg_debugfs_open(struct inode *inode, struct file *file)
+{
+	struct rt1711_chip *chip = inode->i_private;
+
+	return single_open(file, show_registers, chip);
+}
+
+
+static const struct file_operations reg_debugfs_ops = {
+	.owner		= THIS_MODULE,
+	.open		= reg_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static void create_debugfs_entry(struct rt1711_chip *chip)
+{
+	chip->debug_root = debugfs_create_dir("rt1715-reg", NULL);
+
+	if (!chip->debug_root)
+		pr_err("Failed to create debug dir\n");
+
+	if (chip->debug_root) {
+		debugfs_create_file("registers",
+					S_IFREG | S_IRUGO,
+					chip->debug_root, chip, &reg_debugfs_ops);
+
+	}
+}
+#else
+static void create_debugfs_entry(struct rt1711_chip *chip)
+{}
+#endif
 static int rt1711_i2c_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1653,6 +1708,7 @@ static int rt1711_i2c_probe(struct i2c_client *client,
 	}
 
 	tcpc_schedule_init_work(chip->tcpc);
+	create_debugfs_entry(chip);
 	pr_info("%s probe OK!\n", __func__);
 	return 0;
 
