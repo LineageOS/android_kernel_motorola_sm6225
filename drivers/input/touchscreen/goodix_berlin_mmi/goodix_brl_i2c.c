@@ -263,8 +263,13 @@ static struct i2c_driver goodix_i2c_driver = {
 
 int goodix_i2c_bus_init(void)
 {
+	struct device_node *node;
+
 	ts_info("Goodix i2c driver init");
-	return i2c_add_driver(&goodix_i2c_driver);
+	node = mmi_check_dynamic_device_node("goodix_ts_i2c");
+	if (!node || mmi_device_is_available(node))
+		return i2c_add_driver(&goodix_i2c_driver);
+	return -ENODEV;
 }
 
 void goodix_i2c_bus_exit(void)
