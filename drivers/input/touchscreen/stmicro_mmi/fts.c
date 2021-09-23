@@ -4547,7 +4547,11 @@ static struct spi_driver fts_spi_driver = {
 static int __init fts_driver_init(void)
 {
 #ifdef I2C_INTERFACE
-	return i2c_add_driver(&fts_i2c_driver);
+	struct device_node *node;
+	node = mmi_check_dynamic_device_node("st_fts");
+	if (!node || mmi_device_is_available(node))
+		return i2c_add_driver(&fts_i2c_driver);
+	return -ENODEV;
 #else
 	return spi_register_driver(&fts_spi_driver);
 #endif
