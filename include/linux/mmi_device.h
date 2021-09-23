@@ -14,5 +14,6 @@
 #define __MMI_DEVICE_H_INCLUDED
 
 bool mmi_device_is_available(struct device_node *np);
+struct device_node *mmi_check_dynamic_device_node(char *dev_name);
 
 #endif		/* __MMI_DEVICE_H_INCLUDED */
