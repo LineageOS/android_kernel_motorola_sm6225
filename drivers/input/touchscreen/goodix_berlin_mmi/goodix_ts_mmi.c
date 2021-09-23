@@ -35,6 +35,7 @@ static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
 }
 
+#define TS_MMI_CHIP_INFO_LEN    7 /* GT9916 */
 static int goodix_ts_mmi_methods_get_productinfo(struct device *dev, void *cdata) {
 	int ret;
 	struct platform_device *pdev;
@@ -44,7 +45,7 @@ static int goodix_ts_mmi_methods_get_productinfo(struct device *dev, void *cdata
 	GET_GOODIX_DATA(dev);
 
 	ret = core_data->hw_ops->read_version(core_data, &fw_version, false);
-	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_INFO_LEN, "GT%s",
+	return scnprintf(TO_CHARP(cdata), TS_MMI_CHIP_INFO_LEN, "GT%s",
 			fw_version.patch_pid);
 }
 
