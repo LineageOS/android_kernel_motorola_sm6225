@@ -1122,12 +1122,12 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 void bq2589x_enable_ilim(struct bq2589x *bq)
 	{
 	int ret;
-	dev_info(bq->dev, "%s:re-eable ILIM pin\n", __func__);
+	dev_info(bq->dev, "%s:re-enable ILIM pin\n", __func__);
 
 	ret = bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK,
 									BQ2589X_ENILIM_ENABLE << BQ2589X_ENILIM_SHIFT);
 	if (ret < 0)
-		dev_err(bq->dev, "cannot enable ILIM pin ret=%d\n", ret);
+		dev_err(bq->dev, "fail enable ILIM pin ret=%d\n", ret);
 	else
 		bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 }
@@ -1147,7 +1147,7 @@ static int bq2589x_rerun_adsp_if_required(struct bq2589x *bq)
 		dev_err(bq->dev,"%s:cannot enable DPDM rc=%d\n",__func__, ret);
 
 	bq->typec_apsd_rerun_done = true;
-	bq2589x_enable_ilim(bq);
+	bq2589x_force_dpdm(bq);
 
 	return 0;
 }
