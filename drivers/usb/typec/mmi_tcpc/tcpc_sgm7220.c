@@ -1096,6 +1096,39 @@ static int sgm7220_check_revision(struct i2c_client *client)
 	return data;
 }
 
+static int sgm7220_pwr_on(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	int pwr_en_gpio;
+	int ret;
+
+	pwr_en_gpio = of_get_named_gpio(np, "sgm7220,pwr_gpio", 0);
+	if (pwr_en_gpio < 0) {
+		pr_err("%s no sgm7220,pwr_gpio info\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!gpio_is_valid(pwr_en_gpio)) {
+		pr_err("%s pwr gpio is invalid\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = devm_gpio_request(dev, pwr_en_gpio, "sgm7220-pwr-gpio");
+	if (ret < 0) {
+		pr_err("%s failed to request GPIO%d (ret = %d)\n", __func__, pwr_en_gpio, ret);
+		return -EINVAL;
+	}
+
+	ret = gpio_direction_output(pwr_en_gpio, 1);
+	if (ret < 0) {
+		pr_err("%s: failed to set GPIO%d as out high(ret = %d)\n",
+		__func__, pwr_en_gpio, ret);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int sgm7220_i2c_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1112,12 +1145,13 @@ static int sgm7220_i2c_probe(struct i2c_client *client,
 		pr_info("I2C functionality check : failuare...\n");
 	}
 
-	mutex_init(&mutex);
-	mutex_init(&mutex2);
+	sgm7220_pwr_on(&client->dev);
 	chip_id = sgm7220_check_revision(client);
 	if (chip_id < 0)
 		return chip_id;
 
+	mutex_init(&mutex);
+	mutex_init(&mutex2);
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
