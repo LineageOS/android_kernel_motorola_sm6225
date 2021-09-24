@@ -1399,8 +1399,19 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 	return ret;
 }
 
+void bq2589x_disable_ilim(struct bq2589x *bq)
+{
+	int ret;
+	dev_info(bq->dev, "%s:disable EN ILIM pin\n", __func__);
+
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK,
+									BQ2589X_ENILIM_DISABLE << BQ2589X_ENILIM_SHIFT);
+	if (ret < 0)
+		dev_err(bq->dev, "fail to disable EN ILIM pin ret=%d\n", ret);
+}
+
 void bq2589x_enable_ilim(struct bq2589x *bq)
-	{
+{
 	int ret;
 	dev_info(bq->dev, "%s:re-enable ILIM pin\n", __func__);
 
@@ -1559,6 +1570,15 @@ static void bq2589x_adapter_in_workfunc(struct work_struct *work)
 			dev_err(bq->dev, "%s:Failed to set input current for other adapter:%d\n", __func__, ret);
 
 		schedule_delayed_work(&bq->ico_work, 0);
+	}
+
+	//MMI_STOPSHIP PMIC: force 5V 2A charging
+	ret = bq2589x_set_input_current_limit(bq, 2400);
+	if (ret < 0)
+		dev_err(bq->dev, "%s:Failed to set force current %d\n", __func__, ret);
+	ret = bq2589x_set_chargevoltage(bq, 4450);
+	if (ret < 0) {
+		dev_err(bq->dev, "%s:Failed to set charge voltage 4.45V:%d\n", __func__, ret);
 	}
 
 	dev_info(bq->dev, "%s:current charger type is %d and set input current limist is %d mA\n", __func__, bq->real_charger_type, current_limit);
@@ -1883,6 +1903,9 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	ret = bq2589x_psy_register(bq);
 	if (ret)
 		goto err_0;
+
+	/*MMI_STOPSHIP PMIC:add disable ILIM pin because of hw is not ready */
+	bq2589x_disable_ilim(bq);
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
 	INIT_WORK(&bq->adapter_in_work, bq2589x_adapter_in_workfunc);
