@@ -9,8 +9,8 @@ ifeq ($(GTP_LIMIT_USE_SUPPLIER),true)
 	KBUILD_OPTIONS += CONFIG_GTP_LIMIT_USE_SUPPLIER=y
 endif
 
-ifneq (,$(findstring gki, $(KERNEL_DEFCONFIG)))
-	KBUILD_OPTIONS += CONFIG_TS_KERNEL_USE_GKI=y
+ifeq ($(findstring factory, $(TARGET_PRODUCT)), factory)
+	KBUILD_OPTIONS += CONFIG_TARGET_BUILD_FACROTY=y
 endif
 
 include $(CLEAR_VARS)
