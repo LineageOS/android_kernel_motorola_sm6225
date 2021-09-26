@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Motorola Mobility LLC
+ * Copyright (C) 2020-2021 Motorola Mobility LLC
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -29,14 +29,17 @@
 #include <linux/power/bm_adsp_ulog.h>
 
 #include "mmi_charger.h"
+#include "qti_glink_charger.h"
 
 /* PPM specific definitions */
 #define MSG_OWNER_OEM			32782
 #define MSG_TYPE_REQ_RESP		1
+#define MSG_TYPE_NOTIFY			2
 #define OEM_PROPERTY_DATA_SIZE		16
 
 #define OEM_READ_BUF_REQ		0x10000
 #define OEM_WRITE_BUF_REQ		0x10001
+#define OEM_NOTIFY_IND			0x10002
 
 #define OEM_WAIT_TIME_MS		5000
 
@@ -50,37 +53,6 @@
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for qti glink charger driver");
-
-enum oem_property_type {
-	OEM_PROP_BATT_INFO,
-	OEM_PROP_CHG_INFO,
-	OEM_PROP_CHG_PROFILE_INFO,
-	OEM_PROP_CHG_PROFILE_DATA,
-	OEM_PROP_CHG_FV,
-	OEM_PROP_CHG_FCC,
-	OEM_PROP_CHG_ITERM,
-	OEM_PROP_CHG_FG_ITERM,
-	OEM_PROP_CHG_BC_PMAX,
-	OEM_PROP_CHG_QC_PMAX,
-	OEM_PROP_CHG_PD_PMAX,
-	OEM_PROP_CHG_WLS_PMAX,
-	OEM_PROP_CHG_SUSPEND,
-	OEM_PROP_CHG_DISABLE,
-	OEM_PROP_DEMO_MODE,
-	OEM_PROP_FACTORY_MODE,
-	OEM_PROP_FACTORY_VERSION,
-	OEM_PROP_TCMD,
-	OEM_PROP_PMIC_ICL,
-	OEM_PROP_REG_ADDRESS,
-	OEM_PROP_REG_DATA,
-	OEM_PROP_LPD_INFO,
-	OEM_PROP_USB_SUSPEND,
-	OEM_PROP_WLS_EN,
-	OEM_PROP_WLS_VOLT_MAX,
-	OEM_PROP_WLS_CURR_MAX,
-	OEM_PROP_WLS_CHIP_ID,
-	OEM_PROP_MAX,
-};
 
 struct battery_info {
 	int batt_uv;
@@ -116,6 +88,13 @@ struct lpd_info {
 	int lpd_present;
 	int lpd_rsbu1;
 	int lpd_rsbu2;
+};
+
+struct oem_notify_ind_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			notification;
+	u32			receiver;
+	u32			data[MAX_OEM_NOTIFY_DATA_LEN];
 };
 
 struct oem_read_buf_req_msg {
@@ -154,6 +133,8 @@ struct qti_charger {
 	struct oem_read_buf_resp_msg	rx_buf;
 	atomic_t			rx_valid;
 	struct work_struct		setup_work;
+	struct work_struct		notify_work;
+	struct oem_notify_ind_msg	notify_msg;
 	atomic_t			state;
 	u32				chrg_taper_cnt;
 	struct mmi_battery_info		batt_info;
@@ -167,6 +148,9 @@ struct qti_charger {
 	void				*ipc_log;
 	bool				*debug_enabled;
 };
+
+static struct qti_charger *this_chip = NULL;
+static BLOCKING_NOTIFIER_HEAD(qti_chg_notifier_list);
 
 static int find_profile_id(struct qti_charger *chg)
 {
@@ -271,6 +255,26 @@ static int handle_oem_write_ack(struct qti_charger *chg, void *data, size_t len)
 	return 0;
 }
 
+static int handle_oem_notification(struct qti_charger *chg, void *data, size_t len)
+{
+	struct oem_notify_ind_msg *notify_msg = data;
+	if (len != sizeof(*notify_msg)) {
+		mmi_err(chg, "Incorrect received length %zu expected %lu\n", len,
+			sizeof(*notify_msg));
+		return -EINVAL;
+	}
+
+	mmi_info(chg, "notification: %#x on receiver: %#x\n",
+				notify_msg->notification,
+				notify_msg->receiver);
+
+	pm_stay_awake(chg->dev);
+	memcpy(&chg->notify_msg, notify_msg, sizeof(*notify_msg));
+	schedule_work(&chg->notify_work);
+
+	return 0;
+}
+
 static int oem_callback(void *priv, void *data, size_t len)
 {
 	struct pmic_glink_hdr *hdr = data;
@@ -283,6 +287,8 @@ static int oem_callback(void *priv, void *data, size_t len)
 		handle_oem_read_ack(chg, data, len);
 	else if (hdr->opcode == OEM_WRITE_BUF_REQ)
 		handle_oem_write_ack(chg, data, len);
+	else if (hdr->opcode == OEM_NOTIFY_IND)
+		handle_oem_notification(chg, data, len);
 	else
 		mmi_err(chg, "Unknown message opcode: %d\n", hdr->opcode);
 
@@ -409,6 +415,13 @@ static int qti_charger_read(struct qti_charger *chg, u32 property,
 		goto out;
 	}
 
+	if (chg->rx_buf.data_size != val_len) {
+		mmi_err(chg, "Invalid data size %u, on property: %u\n",
+				chg->rx_buf.data_size, property);
+		rc = -ENODATA;
+		goto out;
+	}
+
 	memcpy(val, chg->rx_buf.buf, val_len);
 	atomic_set(&chg->rx_valid, 0);
 out:
@@ -417,6 +430,44 @@ out:
 
 	return rc;
 }
+
+int qti_charger_set_property(u32 property, const void *val, size_t val_len)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return qti_charger_write(chg, property, val, val_len);
+}
+EXPORT_SYMBOL(qti_charger_set_property);
+
+int qti_charger_get_property(u32 property, void *val, size_t val_len)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return qti_charger_read(chg, property, val, val_len);
+}
+EXPORT_SYMBOL(qti_charger_get_property);
+
+int qti_charger_register_notifier(struct notifier_block *nb)
+{
+        return blocking_notifier_chain_register(&qti_chg_notifier_list, nb);
+}
+EXPORT_SYMBOL(qti_charger_register_notifier);
+
+int qti_charger_unregister_notifier(struct notifier_block *nb)
+{
+        return blocking_notifier_chain_unregister(&qti_chg_notifier_list, nb);
+}
+EXPORT_SYMBOL(qti_charger_unregister_notifier);
 
 static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_info)
 {
@@ -463,8 +514,10 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	rc = qti_charger_read(chg, OEM_PROP_LPD_INFO,
 				&chg->lpd_info,
 				sizeof(struct lpd_info));
-	if (rc)
-		return rc;
+	if (rc) {
+		rc = 0;
+		memset(&chg->lpd_info, 0, sizeof(struct lpd_info));
+	}
 	mmi_info(chg, "LPD: present=%d, rsbu1=%d, rsbu2=%d\n",
 			chg->lpd_info.lpd_present,
 			chg->lpd_info.lpd_rsbu1,
@@ -1283,6 +1336,23 @@ static void qti_charger_setup_work(struct work_struct *work)
 	}
 }
 
+static void qti_charger_notify_work(struct work_struct *work)
+{
+	unsigned long notification;
+	struct qti_charger_notify_data notify_data;
+	struct qti_charger *chg = container_of(work,
+				struct qti_charger, notify_work);
+
+	notification = chg->notify_msg.notification;
+	notify_data.receiver = chg->notify_msg.receiver;
+	memcpy(notify_data.data, chg->notify_msg.data,
+				sizeof(u32) * MAX_OEM_NOTIFY_DATA_LEN);
+	blocking_notifier_call_chain(&qti_chg_notifier_list,
+				notification,
+				&notify_data);
+	pm_relax(chg->dev);
+}
+
 static int qti_charger_parse_dt(struct qti_charger *chg)
 {
 	int rc;
@@ -1418,6 +1488,7 @@ static int qti_charger_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	INIT_WORK(&chg->setup_work, qti_charger_setup_work);
+	INIT_WORK(&chg->notify_work, qti_charger_notify_work);
 	mutex_init(&chg->read_lock);
 	mutex_init(&chg->write_lock);
 	init_completion(&chg->read_ack);
@@ -1454,6 +1525,8 @@ static int qti_charger_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	this_chip = chg;
+	device_init_wakeup(chg->dev, true);
 	qti_charger_init(chg);
 
 	return 0;
