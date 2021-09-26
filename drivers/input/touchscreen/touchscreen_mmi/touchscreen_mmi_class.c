@@ -137,6 +137,41 @@ TOUCH_MMI_GET_ATTR_WO(refresh_rate);
 TOUCH_MMI_GET_ATTR_WO(charger_mode);
 TOUCH_MMI_GET_ATTR_WO(update_baseline);
 
+static char *ts_mmi_kobject_get_path(struct kobject *kobj, gfp_t gfp_mask)
+{
+	char *path;
+	int len = 1;
+	struct kobject *parent = kobj;
+
+	do {
+		if (parent->name == NULL) {
+			len = 0;
+			break;
+		}
+		len += strlen(parent->name) + 1;
+		parent = parent->parent;
+	} while (parent);
+
+	if (len == 0)
+		return NULL;
+
+	path = kzalloc(len, gfp_mask);
+	if (!path)
+		return NULL;
+
+	--len;
+	for (parent = kobj; parent; parent = parent->parent) {
+		int cur = strlen(parent->name);
+		len -= cur;
+		memcpy(path + len, parent->name, cur);
+		*(path + --len) = '/';
+	}
+	pr_debug("kobject: '%s' (%p): %s: path = '%s'\n", kobj->name,
+		kobj, __func__, path);
+
+	return path;
+}
+
 static ssize_t path_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -148,7 +183,12 @@ static ssize_t path_show(struct device *dev,
 		dev_err(dev, "touchscreen device pointer is NULL\n");
 		return (ssize_t)0;
 	}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+	path = ts_mmi_kobject_get_path(&DEV_MMI->kobj, GFP_KERNEL);
+#else
 	path = kobject_get_path(&DEV_MMI->kobj, GFP_KERNEL);
+#endif
 	blen = scnprintf(buf, PAGE_SIZE, "%s", path ? path : "na");
 	kfree(path);
 	return blen;
