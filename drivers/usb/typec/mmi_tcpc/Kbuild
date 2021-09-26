@@ -7,26 +7,26 @@ subdir-ccflags-y += -Wall -Werror -DCONFIG_RT_REGMAP
 
 EXTRA_CFLAGS += -DCONFIG_PD_DBG_INFO
 
-#ifneq ($(filter m y,$(CONFIG_TCPC_CLASS)),)
+ifneq ($(filter m y,$(CONFIG_TCPC_CLASS)),)
 	EXTRA_CFLAGS += -DCONFIG_TCPC_CLASS
-#endif
+endif
 
-#ifneq ($(filter m y,$(CONFIG_USB_POWER_DELIVERY)),)
+ifneq ($(filter m y,$(CONFIG_USB_POWER_DELIVERY)),)
 	EXTRA_CFLAGS += -DCONFIG_USB_POWER_DELIVERY
-#endif
+endif
 
-#ifneq ($(filter m y,$(CONFIG_TCPC_RT1711H)),)
+ifneq ($(filter m y,$(CONFIG_TCPC_RT1711H)),)
 	obj-m	+= tcpc_rt1711h.o
-#endif
+endif
 
-#ifneq ($(filter m y,$(CONFIG_TCPC_SGM7220)),)
+ifneq ($(filter m y,$(CONFIG_TCPC_SGM7220)),)
 	obj-m	+= tcpc_sgm7220.o
-#endif
+endif
 
 tcpc_class-objs			+= tcpci_core.o tcpci_typec.o tcpci_timer.o \
 		tcpm.o tcpci.o pd_dbg_info.o tcpci_alert.o rt-regmap.o tcpci_dual_role.o
 
-#ifneq ($(filter m y,$(CONFIG_USB_POWER_DELIVERY)),)
+ifneq ($(filter m y,$(CONFIG_USB_POWER_DELIVERY)),)
 tcpc_class-objs			+= tcpci_event.o \
 		pd_core.o pd_policy_engine.o pd_process_evt.o \
 		pd_dpm_core.o pd_dpm_uvdm.o pd_dpm_alt_mode_dp.o pd_dpm_pdo_select.o\
@@ -37,7 +37,7 @@ tcpc_class-objs			+= tcpci_event.o \
 		pd_policy_engine_src.o pd_policy_engine_snk.o pd_policy_engine_ufp.o pd_policy_engine_vcs.o \
 		pd_policy_engine_dfp.o pd_policy_engine_dr.o pd_policy_engine_drs.o pd_policy_engine_prs.o \
 		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o
-#endif
+endif
 
 obj-m	+= tcpc_class.o
 obj-m	+= rt_pd_manager.o
