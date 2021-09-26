@@ -1040,7 +1040,7 @@ static ssize_t addr_store(struct device *dev,
 					   const char *buf, size_t count)
 {
 	unsigned long r;
-	u16 addr;
+	u32 addr;
 	struct qti_charger *chg = dev_get_drvdata(dev);
 
 	if (!chg) {
@@ -1048,7 +1048,7 @@ static ssize_t addr_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	r = kstrtou16(buf, 0, &addr);
+	r = kstrtou32(buf, 0, &addr);
 	if (r) {
 		mmi_err(chg, "Invalid reg_address = 0x%x\n", addr);
 		return -EINVAL;
@@ -1068,7 +1068,7 @@ static ssize_t data_store(struct device *dev,
 					   const char *buf, size_t count)
 {
 	unsigned long r;
-	u8 data;
+	u32 data;
 	struct qti_charger *chg = dev_get_drvdata(dev);
 
 	if (!chg) {
@@ -1076,7 +1076,7 @@ static ssize_t data_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	r = kstrtou8(buf, 0, &data);
+	r = kstrtou32(buf, 0, &data);
 	if (r) {
 		mmi_err(chg, "Invalid reg_data = 0x%x\n", data);
 		return -EINVAL;
@@ -1093,7 +1093,7 @@ static ssize_t data_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
-	u8 data;
+	u32 data;
 	struct qti_charger *chg = dev_get_drvdata(dev);
 
 	if (!chg) {
