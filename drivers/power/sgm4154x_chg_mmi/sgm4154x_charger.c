@@ -1212,6 +1212,11 @@ static void charger_monitor_work_func(struct work_struct *work)
 		//goto OUT;
 	}
 
+	//MMI_STOPSHIP PMIC:force 5V2A charging
+	sgm4154x_set_input_curr_lim(sgm, 2400000);
+	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
+	sgm4154x_set_chrg_volt(sgm,4400000);
+
 	sgm4154x_dump_register(sgm);
 	pr_err("%s\n",__func__);
 //OUT:
@@ -1434,9 +1439,12 @@ static void charger_detect_work_func(struct work_struct *work)
 			return;
 	}
 
+	curr_in_limit = 2400000;
 	//set charge parameters
 	dev_err(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
 	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
+	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
+	sgm4154x_set_chrg_volt(sgm,4400000);
 
 	//notify charging policy to update charger type
 #endif
