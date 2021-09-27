@@ -184,11 +184,8 @@ static ssize_t path_show(struct device *dev,
 		return (ssize_t)0;
 	}
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
 	path = ts_mmi_kobject_get_path(&DEV_MMI->kobj, GFP_KERNEL);
-#else
-	path = kobject_get_path(&DEV_MMI->kobj, GFP_KERNEL);
-#endif
+
 	blen = scnprintf(buf, PAGE_SIZE, "%s", path ? path : "na");
 	kfree(path);
 	return blen;
