@@ -117,6 +117,7 @@ struct bq2589x {
 	int		vbus_volt;
 	int		vbat_volt;
 	int		rsoc;
+	int		chg_en_gpio;
 
 	struct	device *dev;
 	struct	i2c_client *client;
@@ -809,7 +810,6 @@ static bool bq2589x_is_charge_done(struct bq2589x *bq)
 }
 EXPORT_SYMBOL_GPL(bq2589x_is_charge_done);
 
-
 static int bq2589x_get_vindpm_volt(struct bq2589x *bq)
 {
 	uint8_t val;
@@ -1262,6 +1262,17 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 {
 	int ret;
 	struct device_node *np = dev->of_node;
+
+	bq->chg_en_gpio = of_get_named_gpio(np, "bq2589x_en-gpio", 0);
+	if (gpio_is_valid(bq->chg_en_gpio))
+	{
+		ret = devm_gpio_request(bq->dev, bq->chg_en_gpio, "bq25890 chg en pin");
+		if (ret) {
+			dev_err(bq->dev, "%s: %d gpio request failed\n", __func__, bq->chg_en_gpio);
+			return ret;
+		}
+		gpio_direction_output(bq->chg_en_gpio,0);//default enable charge
+	}
 
 	ret = of_property_read_u32(np, "ti,bq2589x,vbus-volt-high-level", &pe.high_volt_level);
 	if (ret)
@@ -1933,6 +1944,11 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 	}
 
 	devm_free_irq(&client->dev, client->irq, bq);
+
+	/*release charging enable gpio to avoid power leakage.*/
+	if(gpio_is_valid(bq->chg_en_gpio)){
+		devm_gpio_free(&client->dev, bq->chg_en_gpio);
+	}
 	g_bq = NULL;
 }
 
