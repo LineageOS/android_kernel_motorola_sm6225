@@ -3273,8 +3273,9 @@ static void rt9467_shutdown(struct i2c_client *client)
 		ret = rt9467_sw_reset(info);
 		if (ret < 0)
 			pr_notice("%s: sw reset fail\n", __func__);
-		// MMI_STOPSHIP <PMIC>: add delay to power off once pressing PWR key with EVT board
-		msleep(500);
+		/* Warnning! This is just a walkaround solution for reboot issue!
+		 * Qualcomm project use REGNN pin connect to CBL_PWR_N will cause this bug*/
+		//msleep(500);
 	}
 }
 
