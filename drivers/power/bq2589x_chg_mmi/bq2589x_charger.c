@@ -810,6 +810,13 @@ static bool bq2589x_is_charge_done(struct bq2589x *bq)
 }
 EXPORT_SYMBOL_GPL(bq2589x_is_charge_done);
 
+int bq2589x_disable_maxcharge_en(struct bq2589x *bq)
+{
+	u8 val = BQ2589X_MAXC_DISABLE << BQ2589X_MAXCEN_SHIFT;
+
+	return bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_MAXCEN_MASK, val);
+}
+
 static int bq2589x_get_vindpm_volt(struct bq2589x *bq)
 {
 	uint8_t val;
@@ -893,6 +900,9 @@ static int bq2589x_init_device(struct bq2589x *bq)
 
 	/*common initialization*/
 	bq2589x_disable_watchdog_timer(bq);
+
+	/*disable maxcharge en to allow qc2.0 detection*/
+	bq2589x_disable_maxcharge_en(bq);
 
 	bq2589x_enable_auto_dpdm(bq, bq->cfg.enable_auto_dpdm);
 	bq2589x_enable_term(bq, bq->cfg.enable_term);
