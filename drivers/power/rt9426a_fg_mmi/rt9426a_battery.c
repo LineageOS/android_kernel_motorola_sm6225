@@ -38,6 +38,7 @@ struct rt9426a_chip {
 	int bcurr;
 	u16 ic_ver;
 	int design_capacity;
+	int full_capacity;
 	u16 ocv_checksum_ic;
 	u16 ocv_checksum_dtsi;
 	bool calib_unlock;
@@ -492,6 +493,17 @@ static unsigned int rt9426a_get_design_capacity(struct rt9426a_chip *chip)
 
 	return chip->design_capacity;
 }
+
+static unsigned int rt9426a_get_full_capacity(struct rt9426a_chip *chip)
+{
+	chip->full_capacity = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_FCC);
+	if (chip->full_capacity < 0) {
+		return -EIO;
+	}
+
+	return chip->full_capacity;
+}
+
 
 /* checking cycle_cnt & bccomp */
 static int rt9426a_set_cyccnt(struct rt9426a_chip *chip, unsigned int cyc_new)
@@ -1150,6 +1162,10 @@ static int rt_fg_get_property(struct power_supply *psy,
 		val->intval = chip->ocv_index;
 		dev_info(chip->dev, "ocv index = %d\n", chip->ocv_index);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		val->intval = rt9426a_get_full_capacity(chip);
+		dev_info(chip->dev, "psp_charge_full = %d\n", val->intval);
+		break;
 	default:
 		rc = -EINVAL;
 		break;
@@ -1231,6 +1247,7 @@ static enum power_supply_property rt_fg_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
 };
 
 static struct power_supply_desc fg_psy_desc = {
@@ -2735,6 +2752,7 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	chip->bvolt = 3800;
 	chip->bcurr = 1000;
 	chip->design_capacity = 2000;
+	chip->full_capacity = 2000;
 	chip->ocv_checksum_ic = 0;
 	/* add for aging cv */
 	chip->ocv_checksum_dtsi = *(u32 *)(chip->pdata->ocv_table +
