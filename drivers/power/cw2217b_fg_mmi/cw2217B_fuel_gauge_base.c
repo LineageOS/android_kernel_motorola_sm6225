@@ -85,6 +85,12 @@
 		else {}                                                                \
 	}
 
+#define cw_info(fmt, arg...)  \
+	printk("FG_CW2217 : %s-%d : " fmt, __FUNCTION__ ,__LINE__,##arg)
+
+
+static unsigned char config_profile_info[SIZE_OF_PROFILE] = {0};
+/*
 static unsigned char config_profile_info[SIZE_OF_PROFILE] = {
 	0x5A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 	0xA6,0xB1,0xB2,0xCE,0xC1,0xC1,0x9E,0x5F,
@@ -97,7 +103,7 @@ static unsigned char config_profile_info[SIZE_OF_PROFILE] = {
 	0x00,0x00,0x64,0x26,0xD3,0x51,0x00,0x00,
 	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x94,
 };
-
+*/
 struct cw_battery {
 	struct i2c_client *client;
 
@@ -669,6 +675,106 @@ static void cw_bat_work(struct work_struct *work)
 	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work, msecs_to_jiffies(queue_delayed_work_time));
 }
 
+static const char *cw_get_battery_serialnumber(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	const char *battsn_buf;
+	int retval;
+
+	battsn_buf = NULL;
+
+	if (np)
+		retval = of_property_read_string(np, "mmi,battid",
+						 &battsn_buf);
+	else
+		return NULL;
+
+	if ((retval == -EINVAL) || !battsn_buf) {
+		cw_info(" Battsn unused\n");
+		of_node_put(np);
+		return NULL;
+
+	} else
+		cw_info("Battsn = %s\n", battsn_buf);
+
+	of_node_put(np);
+
+	return battsn_buf;
+}
+
+static struct device_node *cw_get_profile_by_serialnumber(
+		const struct device_node *np)
+{
+	struct device_node *node, *df_node, *sn_node;
+	const char *sn_buf, *df_sn, *dev_sn;
+	int rc;
+
+	if (!np)
+		return NULL;
+
+	dev_sn = NULL;
+	df_sn = NULL;
+	sn_buf = NULL;
+	df_node = NULL;
+	sn_node = NULL;
+
+	dev_sn = cw_get_battery_serialnumber();
+
+	rc = of_property_read_string(np, "df-serialnum",
+				     &df_sn);
+	if (rc)
+		cw_info("No Default Serial Number defined\n");
+	else if (df_sn)
+		cw_info("Default Serial Number %s\n", df_sn);
+
+	for_each_child_of_node(np, node) {
+		rc = of_property_read_string(node, "serialnum",
+					     &sn_buf);
+		if (!rc && sn_buf) {
+			if (dev_sn)
+				if (strnstr(dev_sn, sn_buf, 32))
+					sn_node = node;
+			if (df_sn)
+				if (strnstr(df_sn, sn_buf, 32))
+					df_node = node;
+		}
+	}
+
+	if (sn_node) {
+		node = sn_node;
+		df_node = NULL;
+		cw_info("Battery Match Found using %s\n", sn_node->name);
+	} else if (df_node) {
+		node = df_node;
+		sn_node = NULL;
+		cw_info("Battery Match Found using default %s\n",
+				df_node->name);
+	} else {
+		cw_info("No Battery Match Found!\n");
+		return NULL;
+	}
+
+	return node;
+}
+
+static int cw_parse_dts(struct cw_battery *cw_bat)
+{
+	struct device_node *np = cw_bat->client->dev.of_node;
+	struct device_node *batt_profile_node = NULL;
+	int rc;
+	int i = 0;
+
+	batt_profile_node = cw_get_profile_by_serialnumber(np);
+	if (!batt_profile_node)
+		return -1;
+
+	rc = of_property_read_u8_array(batt_profile_node, "config_profile_info", config_profile_info, SIZE_OF_PROFILE);
+	if (rc < 0)
+		cw_info("error,get profile_info fail from dts,exit \n");
+
+	return rc;
+}
+
 #ifdef CW_PROPERTIES
 static int cw_battery_set_property(struct power_supply *psy,
 				enum power_supply_property psp,
@@ -771,6 +877,12 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	i2c_set_clientdata(client, cw_bat);
 	cw_bat->client = client;
+
+	ret = cw_parse_dts(cw_bat);
+	if (ret) {
+		printk("%s : cw2217 prase dts  fail!\n", __func__);
+		return ret;
+	}
 
 	ret = cw_init(cw_bat);
 	while ((loop++ < CW_RETRY_COUNT) && (ret != 0)) {
