@@ -2518,6 +2518,87 @@ END_INIT:
 
 	return ret;
 }
+static const char *rt_get_battery_serialnumber(struct device *dev)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	const char *battsn_buf;
+	int retval;
+
+	battsn_buf = NULL;
+
+	if (np)
+		retval = of_property_read_string(np, "mmi,battid",
+						 &battsn_buf);
+	else
+		return NULL;
+
+	if ((retval == -EINVAL) || !battsn_buf) {
+		dev_info(dev, "Battsn unused\n");
+		of_node_put(np);
+		return NULL;
+
+	} else
+		dev_info(dev, "Battsn = %s\n", battsn_buf);
+
+	of_node_put(np);
+
+	return battsn_buf;
+}
+
+static struct device_node *rt_get_profile_by_serialnumber(struct device *dev)
+{
+	struct device_node *node, *df_node, *sn_node;
+	struct device_node *np = dev->of_node;
+	const char *sn_buf, *df_sn, *dev_sn;
+	int rc;
+
+	if (!np)
+		return NULL;
+
+	dev_sn = NULL;
+	df_sn = NULL;
+	sn_buf = NULL;
+	df_node = NULL;
+	sn_node = NULL;
+
+	dev_sn = rt_get_battery_serialnumber(dev);
+
+	rc = of_property_read_string(np, "df-serialnum",
+				     &df_sn);
+	if (rc)
+		dev_info(dev,"No Default Serial Number defined\n");
+	else if (df_sn)
+		dev_info(dev,"Default Serial Number %s\n", df_sn);
+
+	for_each_child_of_node(np, node) {
+		rc = of_property_read_string(node, "serialnum",
+					     &sn_buf);
+		if (!rc && sn_buf) {
+			if (dev_sn)
+				if (strnstr(dev_sn, sn_buf, 32))
+					sn_node = node;
+			if (df_sn)
+				if (strnstr(df_sn, sn_buf, 32))
+					df_node = node;
+		}
+	}
+
+	if (sn_node) {
+		node = sn_node;
+		df_node = NULL;
+		dev_info(dev,"Battery Match Found using %s\n", sn_node->name);
+	} else if (df_node) {
+		node = df_node;
+		sn_node = NULL;
+		dev_info(dev,"Battery Match Found using default %s\n",
+				df_node->name);
+	} else {
+		dev_info(dev,"No Battery Match Found!\n");
+		return NULL;
+	}
+
+	return node;
+}
 
 struct dt_offset_params {
 	int data[3];
@@ -2530,6 +2611,7 @@ struct dt_extreg_params {
 static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 {
 	struct device_node *np = dev->of_node;
+	struct device_node *batt_profile_node = NULL;
 	int sizes[3] = {0}, j, ret, i;
 	struct dt_offset_params *offset_params;
 	const char *bat_name = "rt-fuelguage";
@@ -2642,16 +2724,24 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	dev_info(dev, "rs_ic_setting = %d\n", pdata->rs_ic_setting);
 	dev_info(dev, "rs_schematic = %d\n", pdata->rs_schematic);
 
+	/* add for smooth_soc */
+	of_property_read_u32(np, "rt,smooth_soc_en",&pdata->smooth_soc_en);
+	dev_info(dev, "smooth_soc_en = %d\n", pdata->smooth_soc_en);
+
 	/* add for aging cv */
 	/* parse fcc array by 5 element */
-	ret = of_property_read_u32_array(np, "rt,fcc", pdata->fcc, 5);
+	batt_profile_node = rt_get_profile_by_serialnumber(dev);
+	if (!batt_profile_node)
+		return  -1;
+
+	ret = of_property_read_u32_array(batt_profile_node, "rt,fcc", pdata->fcc, 5);
 	if (ret < 0) {
 		dev_notice(dev, "no FCC property, use defaut 2000\n");
 		for (i = 0; i < 5; i++)
 			pdata->fcc[i] = 2000;
 	}
 	/* parse fc_vth array by 5 element */
-	ret = of_property_read_u32_array(np, "rt,fg_fc_vth", pdata->fc_vth, 5);
+	ret = of_property_read_u32_array(batt_profile_node, "rt,fg_fc_vth", pdata->fc_vth, 5);
 	if (ret < 0) {
 		dev_notice(dev, "no fc_vth property, use default 4200mV\n");
 		for (i = 0; i < 5; i++)
@@ -2660,14 +2750,11 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	/* parse ocv_table array by 80x5 element */
 	for (i = 0; i < 5; i++) {
 		snprintf(prop_name, 64, "rt,fg_ocv_table%d", i);
-		ret = of_property_read_u32_array(np, prop_name,
+		ret = of_property_read_u32_array(batt_profile_node, prop_name,
 						 (u32 *)pdata->ocv_table + i * 80, 80);
 		if (ret < 0)
 			memset32((u32 *)pdata->ocv_table + i * 80, 0, 80);
 	}
-	/* add for smooth_soc */
-	of_property_read_u32(np, "rt,smooth_soc_en",&pdata->smooth_soc_en);
-	dev_info(dev, "smooth_soc_en = %d\n", pdata->smooth_soc_en);
 
 	return 0;
 }
@@ -2736,7 +2823,11 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 		if (!pdata)
 			return -ENOMEM;
 		memcpy(pdata, &def_platform_data, sizeof(*pdata));
-		rt_parse_dt(&i2c->dev, pdata);
+		ret = rt_parse_dt(&i2c->dev, pdata);
+		if (ret < 0) {
+			dev_notice(&i2c->dev, " rt_parse_dt failed\n");
+			return -EINVAL;
+		}
 		chip->pdata = i2c->dev.platform_data = pdata;
 	} else {
 		if (!pdata) {
