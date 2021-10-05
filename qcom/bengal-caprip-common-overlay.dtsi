@@ -411,7 +411,7 @@
 &pmi632_qg {
         qcom,qg-iterm-ma = <350>;
         qcom,vbatt-cutoff-mv = <3200>;
-        qcom,vbatt-empty-mv = <3000>;
+        qcom,vbatt-empty-mv = <0>;
         qcom,vbatt-low-mv = <3300>;
         qcom,vbatt-low-cold-mv = <3500>;
         qcom,battery-data = <&mtp_batterydata>;
