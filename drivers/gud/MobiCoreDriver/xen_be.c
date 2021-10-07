@@ -1051,10 +1051,15 @@ static inline void frontend_attach(struct tee_xfe *xfe)
 
 		xfe->buffers[i].info = &xfe->ring->domu.buffers[i];
 	}
-
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	ret = bind_interdomain_evtchn_to_irqhandler_lateeoi(
+		xfe->xdev->otherend_id, xfe->evtchn_domu,
+		xen_be_irq_handler_domu_th, 0, "tee_be_domu", xfe);
+#else
 	ret = bind_interdomain_evtchn_to_irqhandler(
 		xfe->xdev->otherend_id, xfe->evtchn_domu,
 		xen_be_irq_handler_domu_th, 0, "tee_be_domu", xfe);
+#endif
 	if (ret < 0) {
 		xenbus_dev_fatal(xfe->xdev, ret,
 				 "failed to bind event channel to DomU IRQ");
@@ -1064,9 +1069,15 @@ static inline void frontend_attach(struct tee_xfe *xfe)
 	xfe->irq_domu = ret;
 	mc_dev_devel("bound DomU IRQ %d", xfe->irq_domu);
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+	ret = bind_interdomain_evtchn_to_irqhandler_lateeoi(
+		xfe->xdev->otherend_id, xfe->evtchn_dom0,
+		xen_be_irq_handler_dom0_th, 0, "tee_be_dom0", xfe);
+#else
 	ret = bind_interdomain_evtchn_to_irqhandler(
 		xfe->xdev->otherend_id, xfe->evtchn_dom0,
 		xen_be_irq_handler_dom0_th, 0, "tee_be_dom0", xfe);
+#endif
 	if (ret < 0) {
 		xenbus_dev_fatal(xfe->xdev, ret,
 				 "failed to bind event channel to Dom0 IRQ");

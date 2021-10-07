@@ -26,6 +26,9 @@
 #if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <linux/sched/clock.h>	/* local_clock */
 #endif
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+#include <linux/timekeeping.h>
+#endif
 
 #include "platform.h"			/* CPU-related information */
 
@@ -88,6 +91,8 @@ static struct {
 	struct kasnprintf_buf	dump;
 	/* Time */
 	struct mcp_time		*time;
+	/* Protects above shared MCP time */
+	struct mutex		mcp_time_mutex;
 
 	/* Scheduler */
 	struct task_struct	*tee_scheduler_thread;
@@ -211,14 +216,26 @@ static int nq_scheduler_command(enum sched_command command)
 
 static inline void nq_update_time(void)
 {
-	struct timespec tm;
+#if KERNEL_VERSION(5, 8, 0) <= LINUX_VERSION_CODE
+	struct timespec64 tm1, tm2;
 
-	getnstimeofday(&tm);
-	l_ctx.time->wall_clock_seconds = tm.tv_sec;
-	l_ctx.time->wall_clock_nsec = tm.tv_nsec;
-	getrawmonotonic(&tm);
-	l_ctx.time->monotonic_seconds = tm.tv_sec;
-	l_ctx.time->monotonic_nsec = tm.tv_nsec;
+	ktime_get_ts64(&tm1);
+	ktime_get_raw_ts64(&tm2);
+#else
+	struct timespec tm1, tm2;
+
+	getnstimeofday(&tm1);
+	getrawmonotonic(&tm2);
+#endif
+
+	mutex_lock(&l_ctx.mcp_time_mutex);
+	/* set for REE time (current time, may be affected by user timezone) */
+	l_ctx.time->wall_clock_seconds = tm1.tv_sec;
+	l_ctx.time->wall_clock_nsec    = tm1.tv_nsec;
+	/* set for TEE time (absolute time, direct raw counter) */
+	l_ctx.time->monotonic_seconds  = tm2.tv_sec;
+	l_ctx.time->monotonic_nsec     = tm2.tv_nsec;
+	mutex_unlock(&l_ctx.mcp_time_mutex);
 }
 
 static inline void nq_notif_handler(u32 id, u32 payload)
@@ -920,13 +937,13 @@ int nq_cpu_on(unsigned int cpu)
 
 int nq_suspend(void)
 {
-	mc_dev_devel("nq_suspend called");
+	mc_dev_devel("%s called", __func__);
 	return nq_cpu_off(get_cpu());
 }
 
 int nq_resume(void)
 {
-	mc_dev_devel("nq_resume called");
+	mc_dev_devel("%s called", __func__);
 	return nq_cpu_on(get_cpu());
 }
 
