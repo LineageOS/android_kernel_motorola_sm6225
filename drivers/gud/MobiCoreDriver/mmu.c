@@ -23,16 +23,27 @@
 #include <linux/pagemap.h>
 #include <linux/device.h>
 #include <linux/version.h>
-#include <linux/dma-buf.h>
 #ifdef CONFIG_DMA_SHARED_BUFFER
+#include <linux/dma-buf.h>
+#endif
+#ifdef CONFIG_ION
+#ifdef CONFIG_ION_SYSTEM_HEAP /* Android kernel only */
 #if KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
 #include <linux/ion.h>
 #elif KERNEL_VERSION(4, 11, 12) < LINUX_VERSION_CODE
 #include "../../drivers/staging/android/ion/ion.h"
 #elif KERNEL_VERSION(3, 14, 0) < LINUX_VERSION_CODE
 #include "../../drivers/staging/android/ion/ion_priv.h"
+#endif /* KERNEL_VERSION */
+#else /* CONFIG_ION_SYSTEM_HEAP */
+#if KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
+#include "../../drivers/staging/android/ion/ion.h"
+#elif KERNEL_VERSION(3, 14, 0) < LINUX_VERSION_CODE
+/* very old Android kernel without ION_SYSTEM_HEAP falls here */
+#include "../../drivers/staging/android/ion/ion_priv.h"
 #endif
-#endif
+#endif /* CONFIG_ION_SYSTEM_HEAP */
+#endif /* CONFIG_ION */
 
 #ifdef CONFIG_XEN
 /* To get the MFN */
@@ -142,7 +153,7 @@ static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 	return get_user_pages_remote(NULL, mm, start, nr_pages, gup_flags,
 				    pages, NULL, NULL);
 }
-#else
+#elif KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE
 static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 			     unsigned long nr_pages, int write,
 			     struct page **pages)
@@ -154,6 +165,19 @@ static inline long gup_local(struct mm_struct *mm, uintptr_t start,
 		gup_flags |= FOLL_WRITE;
 
 	return get_user_pages(start, nr_pages, gup_flags, pages, NULL);
+}
+#else
+static inline long gup_local(struct mm_struct *mm, uintptr_t start,
+			     unsigned long nr_pages, int write,
+			     struct page **pages)
+{
+	unsigned int gup_flags = 0;
+
+	gup_flags |= FOLL_LONGTERM;
+	if (write)
+		gup_flags |= FOLL_WRITE;
+
+	return pin_user_pages(start, nr_pages, gup_flags, pages, NULL);
 }
 #endif
 
@@ -277,7 +301,11 @@ static void tee_mmu_delete(struct tee_mmu *mmu)
 #endif
 
 				/* pte_page() cannot return NULL */
+#if KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE
 				put_page(pte_page(pte));
+#else
+				unpin_user_page(pte_page(pte));
+#endif
 			}
 
 			mmu->pages_locked -= nr_pages;
@@ -506,7 +534,11 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 			long gup_ret;
 
 			/* Buffer was allocated in user space */
+#if KERNEL_VERSION(5, 7, 19) < LINUX_VERSION_CODE
+			down_read(&mm->mmap_lock);
+#else
 			down_read(&mm->mmap_sem);
+#endif
 			/*
 			 * Always try to map read/write from a Linux PoV, so
 			 * Linux creates (page faults) the underlying pages if
@@ -524,7 +556,11 @@ struct tee_mmu *tee_mmu_create(struct mm_struct *mm,
 							   (uintptr_t)reader,
 							   nr_pages, 0, pages);
 			}
+#if KERNEL_VERSION(5, 7, 19) < LINUX_VERSION_CODE
+			up_read(&mm->mmap_lock);
+#else
 			up_read(&mm->mmap_sem);
+#endif
 			if (gup_ret < 0) {
 				ret = gup_ret;
 				mc_dev_err(ret, "failed to get user pages @%p",
