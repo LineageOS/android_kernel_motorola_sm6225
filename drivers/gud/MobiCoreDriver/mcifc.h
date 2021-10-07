@@ -17,7 +17,7 @@
 
 #include "platform.h"
 
-/** @name MobiCore FastCall Defines
+/** @name MobiCore FastCall Definition
  * Defines for the two different FastCall's.
  */
 /**/
@@ -49,7 +49,7 @@
 
 /** @} */
 
-/** @name MobiCore SMC Defines
+/** @name MobiCore SMC Definition
  * Defines the different secure monitor calls (SMC) for world switching.
  */
 /**< Yield to switch from NWd to SWd. */
