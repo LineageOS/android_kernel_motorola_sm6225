@@ -19,6 +19,9 @@
 #include <linux/of_gpio.h>
 
 #include "sgm4154x_charger.h"
+#include <linux/mmi_discrete_charger_class.h>
+#include <linux/seq_file.h>
+
 static struct power_supply_desc sgm4154x_power_supply_desc;
 
 /* SGM4154x REG06 BOOST_LIM[5:4], uV */
@@ -647,10 +650,28 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 
 	return 0;
 }
-/*mahj:for build
-static int sgm4154x_set_hiz_en(struct sgm4154x_device *sgm, bool hiz_en)
+
+static int sgm4154x_is_hiz_en(struct charger_device *chg_dev, bool *hiz_en)
 {
 	int reg_val;
+	int ret = 0;
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_0, &reg_val);
+	if (ret){
+		pr_err("%s read SGM4154x_CHRG_CTRL_0 fail\n",__func__);
+		return ret;
+	}
+	*hiz_en = !!(reg_val & SGM4154x_HIZ_EN);
+
+	dev_notice(sgm->dev, "%s:%d", __func__, *hiz_en);
+	return ret;
+}
+
+static int sgm4154x_set_hiz_en(struct charger_device *chg_dev, bool hiz_en)
+{
+	int reg_val;
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
 
 	dev_notice(sgm->dev, "%s:%d", __func__, hiz_en);
 	reg_val = hiz_en ? SGM4154x_HIZ_EN : 0;
@@ -658,7 +679,7 @@ static int sgm4154x_set_hiz_en(struct sgm4154x_device *sgm, bool hiz_en)
 	return regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_0,
 				  SGM4154x_HIZ_EN, reg_val);
 }
-*/
+
 int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 {
     int ret;
@@ -688,13 +709,19 @@ int sgm4154x_disable_watchdog(struct sgm4154x_device *sgm)
 	return ret;
 }
 
-int sgm4154x_disable_jeita(struct sgm4154x_device *sgm)
+int sgm4154x_enable_hw_jeita(struct charger_device *chg_dev, bool en)
 {
-	int ret;
-	printk("sgm4154x_disable_jeita\n");
-	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d, SGM4154x_JEITA_ENABLE_MASK,
-                     SGM4154x_JEITA_DISABLE);
-	return ret;
+	int rc = 0;
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	rc = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d, SGM4154x_JEITA_ENABLE_MASK,
+                     en ? SGM4154x_JEITA_ENABLE : SGM4154x_JEITA_DISABLE);
+
+	pr_info("%s, %s hw jeita %s\n", __func__,
+		en ? "enable" : "disable",
+		rc ? "failed" : "success");
+
+	return rc;
 }
 
 int sgm4154x_disable_vindpm_int_pulse(struct sgm4154x_device *sgm)
@@ -886,7 +913,6 @@ static int sgm4154x_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 	case POWER_SUPPLY_PROP_PRECHARGE_CURRENT:
 	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
-	//case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		return true;
 	default:
 		return false;
@@ -903,12 +929,6 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		ret = sgm4154x_set_input_curr_lim(sgm, val->intval);
 		break;
-/*	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		if (val->intval)
-			ret = sgm4154x_enable_charger(sgm);
-		else
-			ret = sgm4154x_disable_charger(sgm);
-		break;*/
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = sgm4154x_set_input_volt_lim(sgm, val->intval);
 		break;
@@ -956,8 +976,6 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
 			break;
 		case SGM4154x_TERM_CHRG:
-			val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
-			break;
 		case SGM4154x_NOT_CHRGING:
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
 			break;
@@ -1009,7 +1027,7 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		//val->intval = state.vbus_adc;
+		sgm4154x_get_usb_voltage_now(sgm, &val->intval);
 		break;
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
@@ -1033,11 +1051,6 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 		val->intval = ret;
 		ret = 0;
 		break;
-
-/*	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = !state.hiz_en;
-		break;*/
-
 	default:
 		return -EINVAL;
 	}
@@ -1209,24 +1222,22 @@ static void charger_monitor_work_func(struct work_struct *work)
 
 	if (!sgm->state.chrg_type) {
 		pr_err("%s not present vbus_status \n",__func__);
-		//goto OUT;
+		goto OUT;
 	}
-
-	//MMI_STOPSHIP PMIC:force 5V2A charging
-	sgm4154x_set_input_curr_lim(sgm, 2400000);
-	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
-	sgm4154x_set_chrg_volt(sgm,4400000);
 
 	sgm4154x_dump_register(sgm);
 	pr_err("%s\n",__func__);
-//OUT:
+OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
 }
 
 static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
 	dev_err(sgm->dev, "Vbus removed, disable charge\n");
+
 	sgm->typec_apsd_rerun_done = false;
+	sgm->chg_dev->noti.apsd_done = false;
+	sgm->chg_dev->noti.hvdcp_done = false;
 	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	sgm4154x_disable_charger(sgm);
 	sgm4154x_request_dpdm(sgm, true);
@@ -1336,6 +1347,8 @@ static void hvdcp_detect_work_func(struct work_struct *work)
 
 	sgm->real_charger_type = charger_type;
 	//notify charging policy to update charger type
+	sgm->chg_dev->noti.hvdcp_done = true;
+	charger_dev_notify(sgm->chg_dev);
 
 err:
 	return;
@@ -1345,8 +1358,6 @@ static void charger_detect_work_func(struct work_struct *work)
 {
 	struct delayed_work *charge_detect_delayed_work = NULL;
 	struct sgm4154x_device * sgm = NULL;
-	//static int charge_type_old = 0;
-	int curr_in_limit = 0;
 	struct sgm4154x_state state;
 	int ret;
 
@@ -1404,19 +1415,16 @@ static void charger_detect_work_func(struct work_struct *work)
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			pr_err("SGM4154x charger type: SDP\n");
-			curr_in_limit = 500000;
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB;
 			break;
 
 		case SGM4154x_USB_CDP:
 			pr_err("SGM4154x charger type: CDP\n");
-			curr_in_limit = 1500000;
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
 			break;
 
 		case SGM4154x_USB_DCP:
 			pr_err("SGM4154x charger type: DCP\n");
-			curr_in_limit = 2400000;
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
 			schedule_delayed_work(&sgm->hvdcp_detect_delayed_work, 0);
 			break;
@@ -1424,7 +1432,6 @@ static void charger_detect_work_func(struct work_struct *work)
 		case SGM4154x_UNKNOWN:
 		case SGM4154x_NON_STANDARD:
 			pr_err("SGM4154x charger type: UNKNOWN\n");
-			curr_in_limit = 500000;
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
 			break;
 
@@ -1434,17 +1441,8 @@ static void charger_detect_work_func(struct work_struct *work)
 
 		default:
 			pr_err("SGM4154x charger type: default\n");
-			//curr_in_limit = 500000;
-			//break;
 			return;
 	}
-
-	curr_in_limit = 2400000;
-	//set charge parameters
-	dev_err(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
-	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
-	sgm4154x_set_ichrg_curr(sgm, SGM4154x_ICHRG_I_DEF_uA);
-	sgm4154x_set_chrg_volt(sgm,4400000);
 
 	//notify charging policy to update charger type
 #endif
@@ -1452,11 +1450,12 @@ static void charger_detect_work_func(struct work_struct *work)
 	sgm4154x_enable_charger(sgm);
 
 	sgm4154x_dump_register(sgm);
-	power_supply_changed(sgm->charger);
+	sgm->chg_dev->noti.apsd_done = true;
+	charger_dev_notify(sgm->chg_dev);
 	return;
 
 vbus_remove:
-	power_supply_changed(sgm->charger);
+	charger_dev_notify(sgm->chg_dev);
 
 err:
 	//release wakelock
@@ -1478,43 +1477,6 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 	return IRQ_HANDLED;
 }
 
-static int sgm4154x_usb_get_property(struct power_supply *psy,
-	enum power_supply_property psp, union power_supply_propval *val)
-{
-	struct sgm4154x_device *sgm = power_supply_get_drvdata(psy);
-	struct sgm4154x_state state;
-	int ret = 0;
-
-	mutex_lock(&sgm->lock);
-	//ret = sgm4154x_get_state(sgm, &state);
-	state = sgm->state;
-	mutex_unlock(&sgm->lock);
-	if (ret)
-		return ret;
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_ONLINE:
-#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
-		if ((state.chrg_type == SGM4154x_USB_SDP) ||
-			(state.chrg_type == SGM4154x_USB_CDP))
-			val->intval = 1;
-		else
-			val->intval = 0;
-#endif
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		ret = sgm4154x_get_usb_present(sgm);
-		if (ret)
-			return -EINVAL;
-		val->intval = sgm->state.vbus_gd;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_MODEL_NAME,
@@ -1530,17 +1492,12 @@ static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_PRESENT
 };
 
-static enum power_supply_property sgm4154x_usb_props[] = {
-	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_PRESENT,
-};
-
 static char *sgm4154x_charger_supplied_to[] = {
 	"battery",
 };
 
 static struct power_supply_desc sgm4154x_power_supply_desc = {
-	.name = "sgm4154x-charger",
+	.name = "charger",
 	.type = POWER_SUPPLY_TYPE_MAINS,
 	.usb_types = sgm4154x_usb_type,
 	.num_usb_types = ARRAY_SIZE(sgm4154x_usb_type),
@@ -1549,14 +1506,6 @@ static struct power_supply_desc sgm4154x_power_supply_desc = {
 	.get_property = sgm4154x_charger_get_property,
 	.set_property = sgm4154x_charger_set_property,
 	.property_is_writeable = sgm4154x_property_is_writeable,
-};
-
-static const struct power_supply_desc sgm4154x_usb_desc = {
-	.name = "usb",
-	.type = POWER_SUPPLY_TYPE_USB,
-	.get_property = sgm4154x_usb_get_property,
-	.properties = sgm4154x_usb_props,
-	.num_properties = ARRAY_SIZE(sgm4154x_usb_props),
 };
 
 static const struct regmap_config sgm4154x_regmap_config = {
@@ -1579,12 +1528,6 @@ static int sgm4154x_power_supply_init(struct sgm4154x_device *sgm,
 						 &sgm4154x_power_supply_desc,
 						 &psy_cfg);
 	if (IS_ERR(sgm->charger))
-		return -EINVAL;
-
-	sgm->usb = devm_power_supply_register(sgm->dev,
-						      &sgm4154x_usb_desc,
-						      &psy_cfg);
-	if (IS_ERR(sgm->usb))
 		return -EINVAL;
 
 	return 0;
@@ -1647,7 +1590,7 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
-	ret = sgm4154x_disable_jeita(sgm);
+	ret = sgm4154x_enable_hw_jeita(sgm->chg_dev, false);
 	if (ret)
 		goto err_out;
 
@@ -1687,6 +1630,13 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	u32 val = 0;
 	int irq_gpio = 0, irqn = 0;
 	int chg_en_gpio = 0;
+
+	if (of_property_read_string(sgm->dev->of_node, "charger_name",
+			&sgm->chg_dev_name) < 0) {
+		sgm->chg_dev_name = "master_chg";
+		pr_warn("no charger name\n");
+	}
+
 	#if 0
 	ret = device_property_read_u32(sgm->dev, "watchdog-timer",
 				       &sgm->watchdog_timer);
@@ -2089,6 +2039,170 @@ static int sgm4154x_parse_dt_adc_channels(struct sgm4154x_device *sgm)
 
 	return 0;
 }
+static int sgm4154x_set_icl(struct charger_device *chg_dev, u32 uA)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	pr_info("%s set icl curr = %d\n", __func__, uA);
+
+	return sgm4154x_set_input_curr_lim(sgm, uA);
+}
+
+static int sgm4154x_get_icl(struct charger_device *chg_dev, u32 *uA)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	*uA = sgm4154x_get_input_curr_lim(sgm);
+
+	pr_info("%s get icl curr = %d\n", __func__, *uA);
+
+	return 0;
+}
+
+static int sgm4154x_enable_otg(struct charger_device *chg_dev, bool enable)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	if (enable)
+		rc = sgm4154x_enable_vbus(sgm->otg_rdev);
+	else
+		rc = sgm4154x_disable_vbus(sgm->otg_rdev);
+
+	pr_info("%s, %s otg %s\n", __func__,
+		enable ? "enable" : "disable",
+		rc ? "failed" : "success");
+
+	return rc;
+}
+
+static int sgm4154x_enable_charging(struct charger_device *chg_dev, bool enable)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	rc = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_1, SGM4154x_CHRG_EN,
+                 enable ? SGM4154x_CHRG_EN : 0);
+
+	pr_info("%s, %s charging %s\n", __func__,
+		enable ? "enable" : "disable",
+		rc ? "failed" : "success");
+
+	return rc;
+}
+
+static int sgm4154x_set_charging_current(struct charger_device *chg_dev, u32 uA)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	rc = sgm4154x_set_ichrg_curr(sgm, uA);
+
+	pr_info("%s set charging curr = %d, %s\n", __func__, uA, rc ? "failed" : "success");
+
+	return rc;
+}
+
+static int sgm4154x_set_charging_voltage(struct charger_device *chg_dev, u32 uV)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	rc = sgm4154x_set_chrg_volt(sgm, uV);
+
+	pr_info("%s set charging volt = %d, %s\n", __func__, uV, rc ? "failed" : "success");
+
+	return rc;
+}
+
+static int sgm4154x_is_charging_halted(struct charger_device *chg_dev, bool *en)
+{
+	int rc = 0;
+	int chrg_stat = 0;
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	rc = regmap_read(sgm->regmap, SGM4154x_CHRG_STAT, &chrg_stat);
+	if (rc){
+		pr_err("%s read SGM4154x_CHRG_STAT fail\n",__func__);
+		return rc;
+	}
+
+	chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
+	switch(chrg_stat) {
+	case SGM4154x_NOT_CHRGING:
+	case SGM4154x_TERM_CHRG:
+		*en = true;
+		break;
+	case SGM4154x_PRECHRG:
+	case SGM4154x_FAST_CHRG:
+		*en = false;
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
+static int sgm4154x_set_boost_current_limit(struct charger_device *chg_dev, u32 uA)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	rc = sgm4154x_set_otg_current(sgm, uA);
+
+	pr_info("%s set boost current limit = %d, %s\n", __func__, uA, rc ? "failed" : "success");
+
+	return rc;
+}
+
+static int sgm4154x_get_real_charger_type(struct charger_device *chg_dev, int *chg_type)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	*chg_type = sgm->real_charger_type;
+
+	return 0;
+}
+
+static int sgm4154x_dump_registers(struct charger_device *chg_dev, struct seq_file *m)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int i = 0;
+	u32 reg = 0;
+	int rc = 0;
+
+	for(i=0; i<=SGM4154x_CHRG_CTRL_f; i++) {
+		rc = regmap_read(sgm->regmap, i, &reg);
+		if (rc)
+			continue;
+		seq_printf(m, "%s REG[0x%x]=0x%x\n", __func__, i, reg);
+	}
+
+	return rc;
+}
+
+static const struct charger_properties sgm4154x_chg_props = {
+	.alias_name = "sgm4154x",
+};
+
+static struct charger_ops sgm4154x_chg_ops = {
+	.get_real_charger_type = sgm4154x_get_real_charger_type,
+	.set_usb_suspend = sgm4154x_set_hiz_en,
+	.is_usb_suspend = sgm4154x_is_hiz_en,
+	.set_input_current = sgm4154x_set_icl,
+	.get_input_current = sgm4154x_get_icl,
+	.enable_hw_jeita = sgm4154x_enable_hw_jeita,
+	.enable_otg = sgm4154x_enable_otg,
+	.set_boost_current_limit = sgm4154x_set_boost_current_limit,
+	.enable_charging = sgm4154x_enable_charging,
+	.set_charging_current = sgm4154x_set_charging_current,
+	.set_constant_voltage = sgm4154x_set_charging_voltage,
+	.is_charge_halted = sgm4154x_is_charging_halted,
+
+	.dump_registers = sgm4154x_dump_registers,
+
+};
 
 static int sgm4154x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -2135,6 +2249,15 @@ static int sgm4154x_probe(struct i2c_client *client,
 	ret = sgm4154x_parse_dt_adc_channels(sgm);
 	if (ret) {
 		dev_err(dev, "Failed to get adc channels%d\n", ret);
+		return ret;
+	}
+
+	sgm->chg_dev = charger_device_register(sgm->chg_dev_name,
+					      &client->dev, sgm,
+					      &sgm4154x_chg_ops,
+					      &sgm4154x_chg_props);
+	if (IS_ERR_OR_NULL(sgm->chg_dev)) {
+		ret = PTR_ERR(sgm->chg_dev);
 		return ret;
 	}
 

@@ -183,7 +183,8 @@
 
 /* customer define jeita paramter */
 #define SGM4154x_JEITA_ENABLE_MASK GENMASK(0, 0)
-#define SGM4154x_JEITA_DISABLE 0
+#define SGM4154x_JEITA_ENABLE		BIT(0)
+#define SGM4154x_JEITA_DISABLE		0
 #define JEITA_TEMP_ABOVE_T4_CV	0
 #define JEITA_TEMP_T3_TO_T4_CV	4100000
 #define JEITA_TEMP_T2_TO_T3_CV	4350000
@@ -289,9 +290,8 @@ struct sgm4154x_device {
 	struct sgm4154x_init_data init_data;
 	struct sgm4154x_state state;
 	u32 watchdog_timer;
-	#if defined(CONFIG_MTK_GAUGE_VERSION) && (CONFIG_MTK_GAUGE_VERSION == 30)
+	const char *chg_dev_name;
 	struct charger_device *chg_dev;
-	#endif
 	struct regulator_dev *otg_rdev;
 
 	struct delayed_work charge_detect_delayed_work;
