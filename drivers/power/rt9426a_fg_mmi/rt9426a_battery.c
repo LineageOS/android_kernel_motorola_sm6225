@@ -1123,12 +1123,12 @@ static int rt_fg_get_property(struct power_supply *psy,
 	int rc = 0;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_ONLINE:
+	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = chip->online;
 		dev_info(chip->dev, "psp_online = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = rt9426a_get_volt(chip);
+		val->intval = rt9426a_get_volt(chip) * 1000;
 		dev_info(chip->dev, "psp_volt_now = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
@@ -1146,7 +1146,7 @@ static int rt_fg_get_property(struct power_supply *psy,
 		dev_info(chip->dev, "psp_charge_full_design = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = rt9426a_get_current(chip);
+		val->intval = rt9426a_get_current(chip) * 1000;
 		dev_info(chip->dev, "psp_curr_now = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
@@ -1238,7 +1238,7 @@ static int rt_fg_property_is_writeable(struct power_supply *psy, enum power_supp
 }
 
 static enum power_supply_property rt_fg_props[] = {
-	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -1251,8 +1251,8 @@ static enum power_supply_property rt_fg_props[] = {
 };
 
 static struct power_supply_desc fg_psy_desc = {
-	.name = "battery",
-	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.name = "bms",
+	.type = POWER_SUPPLY_TYPE_MAINS,
 	.properties = rt_fg_props,
 	.num_properties = ARRAY_SIZE(rt_fg_props),
 	.get_property = rt_fg_get_property,
