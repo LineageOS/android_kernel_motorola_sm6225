@@ -15,7 +15,7 @@
 
 #define CWFG_ENABLE_LOG 1 /* CHANGE Customer need to change this for enable/disable log */
 
-#define CW_PROPERTIES "battery"
+#define CW_PROPERTIES "bms"
 
 #define REG_CHIP_ID             0x00
 #define REG_VCELL_H             0x02
@@ -73,6 +73,8 @@
 #define CW_TRUE                 1
 #define CW_RETRY_COUNT          3
 #define CW_VOL_UNIT             1000
+#define CW_CUR_UNIT             1000
+
 
 #define CW2217_NOT_ACTIVE          1
 #define CW2217_PROFILE_NOT_READY   2
@@ -832,7 +834,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = cw_bat->cw_current;
+		val->intval = cw_bat->cw_current * CW_CUR_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -916,7 +918,7 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 #ifdef CW_PROPERTIES
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 	cw_bat->cw_bat.name = CW_PROPERTIES;
-	cw_bat->cw_bat.type = POWER_SUPPLY_TYPE_BATTERY;
+	cw_bat->cw_bat.type = POWER_SUPPLY_TYPE_MAINS;
 	cw_bat->cw_bat.properties = cw_battery_properties;
 	cw_bat->cw_bat.num_properties = ARRAY_SIZE(cw_battery_properties);
 	cw_bat->cw_bat.get_property = cw_battery_get_property;
@@ -932,7 +934,7 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 		return -ENOMEM;
 	psy_cfg.drv_data = cw_bat;
 	psy_desc->name = CW_PROPERTIES;
-	psy_desc->type = POWER_SUPPLY_TYPE_BATTERY;
+	psy_desc->type = POWER_SUPPLY_TYPE_MAINS;
 	psy_desc->properties = cw_battery_properties;
 	psy_desc->num_properties = ARRAY_SIZE(cw_battery_properties);
 	psy_desc->get_property = cw_battery_get_property;
