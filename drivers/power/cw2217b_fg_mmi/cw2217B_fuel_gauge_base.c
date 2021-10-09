@@ -125,6 +125,8 @@ struct cw_battery {
 	int  cycle;
 	int  soh;
 	int  fw_version;
+	int  fcc_design;
+	int  fcc;
 #if 0
 	long stb_current;
 #endif
@@ -762,7 +764,6 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 	struct device_node *np = cw_bat->client->dev.of_node;
 	struct device_node *batt_profile_node = NULL;
 	int rc;
-	int i = 0;
 
 	batt_profile_node = cw_get_profile_by_serialnumber(np);
 	if (!batt_profile_node)
@@ -771,6 +772,10 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 	rc = of_property_read_u8_array(batt_profile_node, "config_profile_info", config_profile_info, SIZE_OF_PROFILE);
 	if (rc < 0)
 		cw_info("error,get profile_info fail from dts,exit \n");
+
+	rc = of_property_read_u32(batt_profile_node, "fcc_design", &cw_bat->fcc_design);
+	if (rc < 0)
+		cw_info("error,get fcc_design,exit \n");
 
 	return rc;
 }
@@ -832,6 +837,12 @@ static int cw_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		val->intval = cw_bat->fcc_design;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		val->intval = (cw_bat->fcc_design * cw_bat->soh)/100;
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = cw_bat->temp;
 		break;
@@ -851,6 +862,8 @@ static enum power_supply_property cw_battery_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_TEMP,
 };
 #endif
