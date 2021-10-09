@@ -1963,6 +1963,9 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 
 	dev_info(bq->dev, "%s: shutdown\n", __func__);
 
+	/*set CONV_RATE 0 to exits continuous conversion mode*/
+	bq2589x_adc_stop(bq);
+
 	bq2589x_psy_unregister(bq);
 
 	sysfs_remove_group(&bq->dev->kobj, &bq2589x_attr_group);
