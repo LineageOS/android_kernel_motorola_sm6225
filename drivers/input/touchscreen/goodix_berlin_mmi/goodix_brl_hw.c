@@ -851,8 +851,9 @@ static void print_ic_info(struct goodix_ic_info *ic_info)
 		version->frame_data_version_id);
 	ts_info("touch_data_customer_id:        0x%01X",
 		version->touch_data_customer_id);
-	ts_info("touch_data_version_id:         0x%01X",
-		version->touch_data_version_id);
+	ts_info("touch_data_version_id:         %02x%02x%02x%02x",
+		version->touch_data_version_id, version->reserved[0],
+		version->reserved[1], version->reserved[2]);
 
 	ts_info("freqhop_feature:               0x%04X",
 		feature->freqhop_feature);
