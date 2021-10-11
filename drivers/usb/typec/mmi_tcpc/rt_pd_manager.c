@@ -934,6 +934,10 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 #endif /* CONFIG_TCPC_NOTIFIER_LATE_SYNC */
 out:
 	platform_set_drvdata(pdev, rpmd);
+
+#ifdef CONFIG_USB_POWER_DELIVERY
+	pd_adapter_create(pdev);
+#endif
 	dev_info(rpmd->dev, "%s %s!!\n", __func__, ret == -EPROBE_DEFER ?
 			    "Over probe cnt max" : "OK");
 	return 0;
