@@ -49,38 +49,44 @@ static int goodix_ts_mmi_methods_get_productinfo(struct device *dev, void *cdata
 			fw_version.patch_pid);
 }
 
+#define TOUCH_CFG_VERSION_ADDR    0x10076
 static int goodix_ts_mmi_methods_get_build_id(struct device *dev, void *cdata) {
 	int ret;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
+	u32 cfg_id;
 
 	GET_GOODIX_DATA(dev);
 
-	ret = core_data->hw_ops->get_ic_info(core_data, &core_data->ic_info, false);
-	if (!ret) {
-		ret = snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN,
-			"%08x", core_data->ic_info.version.config_id);
-		return ret;
-	} else
+	ret = core_data->hw_ops->read(core_data, TOUCH_CFG_VERSION_ADDR,
+			(u8*)&cfg_id,  sizeof(cfg_id));
+	if (ret) {
+		ts_info("failed get fw version data, %d", ret);
 		return -EINVAL;
+	}
+
+	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%04x", le32_to_cpu(cfg_id));
 }
 
+#define TOUCH_FW_VERSION_ADDR    0x1007E
 /*return firmware version*/
 static int goodix_ts_mmi_methods_get_config_id(struct device *dev, void *cdata) {
 	int ret;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	struct goodix_fw_version chip_ver;
+	u8 fw_id[4] = {0};
 
 	GET_GOODIX_DATA(dev);
-	ret = core_data->hw_ops->read_version(core_data, &chip_ver, false);
-	if (!ret) {
-		ret = snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN,
-			"%02x%02x", chip_ver.patch_vid[2], chip_ver.patch_vid[3]);
 
-		return ret;
-	} else
+	ret = core_data->hw_ops->read(core_data, TOUCH_FW_VERSION_ADDR,
+			fw_id, sizeof(fw_id));
+	if (ret) {
+		ts_info("failed get fw version data, %d", ret);
 		return -EINVAL;
+	}
+
+	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%02x%02x%02x%02x",
+			fw_id[0], fw_id[1], fw_id[2], fw_id[3]);
 }
 
 static int goodix_ts_mmi_methods_get_bus_type(struct device *dev, void *idata) {
@@ -253,9 +259,6 @@ static int goodix_ts_mmi_pre_resume(struct device *dev) {
 	atomic_set(&core_data->suspended, 0);
 	if (core_data->gesture_enabled)
 		disable_irq_wake(core_data->irq);
-
-	if (hw_ops->resume)
-		hw_ops->resume(core_data);
 
 	return 0;
 }
