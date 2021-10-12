@@ -26,6 +26,8 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
+#include <linux/mmi_discrete_charger_class.h>
+#include <linux/seq_file.h>
 
 #include "bq2589x_reg.h"
 
@@ -119,6 +121,9 @@ struct bq2589x {
 	int		rsoc;
 	int		chg_en_gpio;
 
+	const char *chg_dev_name;
+
+	struct charger_device *chg_dev;
 	struct	device *dev;
 	struct	i2c_client *client;
 	struct	regulator *dpdm_reg;
@@ -138,7 +143,7 @@ struct bq2589x {
 	struct	power_supply_desc usb;
 	struct	power_supply_desc wall;
 	struct	power_supply *batt_psy;
-	struct	power_supply *usb_psy;
+	/*struct	power_supply *usb_psy;*/
 	struct	power_supply *wall_psy;
 	struct	power_supply_config usb_cfg;
 	struct	power_supply_config wall_cfg;
@@ -201,7 +206,7 @@ static int bq2589x_update_bits(struct bq2589x *bq, u8 reg, u8 mask, u8 data)
 	return bq2589x_write_byte(bq, reg, tmp);
 }
 
-static enum bq2589x_vbus_type bq2589x_get_vbus_type(struct bq2589x *bq)
+/*static enum bq2589x_vbus_type bq2589x_get_vbus_type(struct bq2589x *bq)
 {
 	u8 val = 0;
 	int ret;
@@ -213,7 +218,7 @@ static enum bq2589x_vbus_type bq2589x_get_vbus_type(struct bq2589x *bq)
 	val >>= BQ2589X_VBUS_STAT_SHIFT;
 
 	return val;
-}
+}*/
 
 static int bq2589x_enable_otg(struct bq2589x *bq)
 {
@@ -295,7 +300,6 @@ static int bq2589x_disable_charger(struct bq2589x *bq)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(bq2589x_disable_charger);
-
 
 /* interfaces that can be called by other module */
 int bq2589x_adc_start(struct bq2589x *bq, bool oneshot)
@@ -600,7 +604,6 @@ int bq2589x_get_hiz_mode(struct bq2589x *bq, u8 *state)
 }
 EXPORT_SYMBOL_GPL(bq2589x_get_hiz_mode);
 
-
 int bq2589x_pumpx_enable(struct bq2589x *bq, int enable)
 {
 	u8 val;
@@ -810,9 +813,14 @@ static bool bq2589x_is_charge_done(struct bq2589x *bq)
 }
 EXPORT_SYMBOL_GPL(bq2589x_is_charge_done);
 
-int bq2589x_disable_maxcharge_en(struct bq2589x *bq)
+int bq2589x_set_maxcharge_en(struct bq2589x *bq, bool enable)
 {
-	u8 val = BQ2589X_MAXC_DISABLE << BQ2589X_MAXCEN_SHIFT;
+	u8 val;
+
+	if (enable)
+		val = BQ2589X_MAXC_ENABLE << BQ2589X_MAXCEN_SHIFT;
+	else
+		val = BQ2589X_MAXC_DISABLE << BQ2589X_MAXCEN_SHIFT;
 
 	return bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_MAXCEN_MASK, val);
 }
@@ -902,7 +910,7 @@ static int bq2589x_init_device(struct bq2589x *bq)
 	bq2589x_disable_watchdog_timer(bq);
 
 	/*disable maxcharge en to allow qc2.0 detection*/
-	bq2589x_disable_maxcharge_en(bq);
+	bq2589x_set_maxcharge_en(bq, false);
 
 	bq2589x_enable_auto_dpdm(bq, bq->cfg.enable_auto_dpdm);
 	bq2589x_enable_term(bq, bq->cfg.enable_term);
@@ -977,45 +985,12 @@ static int bq2589x_charge_status(struct bq2589x *bq)
 	}
 }*/
 
-static enum power_supply_property bq2589x_usb_props[] = {
-	POWER_SUPPLY_PROP_ONLINE, /* External power source */
-	POWER_SUPPLY_PROP_PRESENT,
-};
-
-
-static int bq2589x_usb_get_property(struct power_supply *psy,
-				enum power_supply_property psp,
-				union power_supply_propval *val)
-{
-
-	struct bq2589x *bq = power_supply_get_drvdata(psy);
-	struct bq2589x_state state = bq->state;
-	u8 type = bq2589x_get_vbus_type(bq);
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_ONLINE:
-		if (type == BQ2589X_VBUS_USB_SDP || type == BQ2589X_VBUS_USB_DCP)
-			val->intval = 1;
-		else
-			val->intval = 0;
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = state.vbus_gd;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int bq2589x_power_supply_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
 {
 	struct bq2589x *bq = power_supply_get_drvdata(psy);
 	struct bq2589x_state state = bq->state;
-	//u8 type = bq2589x_get_vbus_type(bq);
 	u8 chrg_status = bq2589x_get_charging_status(bq);
 
 	switch (psp) {
@@ -1069,7 +1044,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = bq2589x_adc_read_sys_volt(bq);
+		val->intval = bq2589x_adc_read_vbus_volt(bq);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = bq2589x_adc_read_charge_current(bq);
@@ -1190,7 +1165,7 @@ static char *bq2589x_charger_supplied_to[] = {
 };
 
 static const struct power_supply_desc bq2589x_power_supply_desc = {
-	.name = "bq25890-charger",
+	.name = "charger",
 	.type = POWER_SUPPLY_TYPE_MAINS,
 	.usb_types = bq2589x_usb_type,
 	.num_usb_types = ARRAY_SIZE(bq2589x_usb_type),
@@ -1199,14 +1174,6 @@ static const struct power_supply_desc bq2589x_power_supply_desc = {
 	.get_property = bq2589x_power_supply_get_property,
 	.set_property = bq2589x_power_supply_set_property,
 	.property_is_writeable = bq2589x_power_supply_prop_is_writeable,
-};
-
-static const struct power_supply_desc bq2589x_usb_desc = {
-	.name = "usb",
-	.type = POWER_SUPPLY_TYPE_USB,
-	.get_property = bq2589x_usb_get_property,
-	.properties = bq2589x_usb_props,
-	.num_properties = ARRAY_SIZE(bq2589x_usb_props),
 };
 
 static int bq2589x_psy_register(struct bq2589x *bq)
@@ -1220,16 +1187,11 @@ static int bq2589x_psy_register(struct bq2589x *bq)
 	if (IS_ERR(bq->wall_psy))
 		return -EINVAL;
 
-	bq->usb_psy = devm_power_supply_register(bq->dev, &bq2589x_usb_desc, &psy_cfg);
-	if (IS_ERR(bq->usb_psy))
-		return -EINVAL;
-
 	return 0;
 }
 
 static void bq2589x_psy_unregister(struct bq2589x *bq)
 {
-	power_supply_unregister(bq->usb_psy);
 	power_supply_unregister(bq->wall_psy);
 }
 
@@ -1272,6 +1234,11 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 {
 	int ret;
 	struct device_node *np = dev->of_node;
+
+	if (of_property_read_string(np, "charger_name", &bq->chg_dev_name) < 0) {
+		bq->chg_dev_name = "master_chg";
+		dev_err(bq->dev,"%s: no charger name\n", __func__);
+	}
 
 	bq->chg_en_gpio = of_get_named_gpio(np, "bq2589x_en-gpio", 0);
 	if (gpio_is_valid(bq->chg_en_gpio))
@@ -1335,7 +1302,7 @@ static int bq2589x_read_batt_rsoc(struct bq2589x *bq)
 	union power_supply_propval ret = {0,};
 
 	if (!bq->batt_psy)
-		bq->batt_psy = power_supply_get_by_name("battery");
+		bq->batt_psy = power_supply_get_by_name("bms");
 
 	if (bq->batt_psy) {
 		power_supply_get_property(bq->batt_psy, POWER_SUPPLY_PROP_CAPACITY, &ret);
@@ -1399,28 +1366,21 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 	return ret;
 }
 
-void bq2589x_disable_ilim(struct bq2589x *bq)
+void bq2589x_set_ilim_enable(struct bq2589x *bq, bool enable)
 {
 	int ret;
-	dev_info(bq->dev, "%s:disable EN ILIM pin\n", __func__);
+	u8 val;
 
-	ret = bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK,
-									BQ2589X_ENILIM_DISABLE << BQ2589X_ENILIM_SHIFT);
-	if (ret < 0)
-		dev_err(bq->dev, "fail to disable EN ILIM pin ret=%d\n", ret);
-}
-
-void bq2589x_enable_ilim(struct bq2589x *bq)
-{
-	int ret;
-	dev_info(bq->dev, "%s:re-enable ILIM pin\n", __func__);
-
-	ret = bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK,
-									BQ2589X_ENILIM_ENABLE << BQ2589X_ENILIM_SHIFT);
-	if (ret < 0)
-		dev_err(bq->dev, "fail enable ILIM pin ret=%d\n", ret);
+	if (enable)
+		val = BQ2589X_ENILIM_ENABLE << BQ2589X_ENILIM_SHIFT;
 	else
-		bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		val = BQ2589X_ENILIM_DISABLE << BQ2589X_ENILIM_SHIFT;
+
+	dev_info(bq->dev, "%s:set ILIM %s\n", __func__, enable ? "enabled":"disabled");
+
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK, val);
+	if (ret < 0)
+		dev_err(bq->dev, "fail to set ILIM pin ret=%d\n", ret);
 }
 
 static int bq2589x_rerun_adsp_if_required(struct bq2589x *bq)
@@ -1435,7 +1395,7 @@ static int bq2589x_rerun_adsp_if_required(struct bq2589x *bq)
 
 	ret = bq2589x_reuqest_dpdm(bq, true);
 	if (ret < 0)
-		dev_err(bq->dev,"%s:cannot enable DPDM rc=%d\n",__func__, ret);
+		dev_err(bq->dev,"%s:cannot enable DPDM ret=%d\n",__func__, ret);
 
 	bq->typec_apsd_rerun_done = true;
 	bq2589x_force_dpdm(bq);
@@ -1481,6 +1441,8 @@ static void bq2589x_vbus_remove(struct bq2589x *bq)
 	dev_err(bq->dev, "Vbus not present, disable charge\n");
 
 	bq->typec_apsd_rerun_done = false;
+	bq->chg_dev->noti.apsd_done = false;
+	bq->chg_dev->noti.hvdcp_done = false;
 	bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	ret = bq2589x_disable_charger(bq);
 	if (ret < 0) {
@@ -1493,7 +1455,6 @@ static void bq2589x_adapter_in_workfunc(struct work_struct *work)
 {
 	struct bq2589x *bq = container_of(work, struct bq2589x, adapter_in_work);
 	int ret;
-	int current_limit = 0;
 
 	ret = bq2589x_get_usb_present(bq);
 	if (ret)
@@ -1519,69 +1480,33 @@ static void bq2589x_adapter_in_workfunc(struct work_struct *work)
 	}
 
 	if (bq->vbus_type == BQ2589X_VBUS_MAXC) {
-		dev_info(bq->dev, "%s:HVDCP or Maxcharge adapter plugged in\n", __func__);
-		//ret = bq2589x_set_chargecurrent(bq, bq->cfg.charge_current);
-		current_limit = bq->cfg.charge_current;
-		ret = bq2589x_set_input_current_limit(bq, current_limit);
-		if (ret < 0)
-			dev_err(bq->dev, "%s:Failed to set input current for VBUS_MAXC:%d\n", __func__, ret);
-
+		dev_info(bq->dev, "%s:HVDCP adapter plugged in\n", __func__);
+		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
 		schedule_delayed_work(&bq->ico_work, 0);
 	} else if (bq->vbus_type == BQ2589X_VBUS_USB_CDP) {
+		dev_info(bq->dev, "%s:CDP plugged in\n", __func__);
 		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
-		current_limit = 1500;
-		ret = bq2589x_set_input_current_limit(bq, current_limit);
-		if (ret < 0)
-			dev_err(bq->dev, "%s:Failed to set input current for CDP:%d\n", __func__, ret);
-
 		schedule_delayed_work(&bq->ico_work, 0);
 	}else if (bq->vbus_type == BQ2589X_VBUS_USB_DCP) {/* DCP, let's check if it is PE adapter*/
+		dev_info(bq->dev, "%s:DCP adapter plugged in\n", __func__);
 		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-		dev_info(bq->dev, "%s:usb dcp adapter plugged in\n", __func__);
-		//ret = bq2589x_set_chargecurrent(bq, bq->cfg.charge_current);
-		current_limit = 3250;
-		ret = bq2589x_set_input_current_limit(bq, current_limit);
-		if (ret < 0)
-			dev_err(bq->dev, "%s:Failed to set input current for DCP:%d\n", __func__, ret);
-
 		schedule_delayed_work(&bq->check_pe_tuneup_work, 0);
 	} else if (bq->vbus_type == BQ2589X_VBUS_USB_SDP || bq->vbus_type == BQ2589X_VBUS_UNKNOWN || bq->vbus_type == BQ2589X_VBUS_NONSTAND) {
 		if (bq->vbus_type == BQ2589X_VBUS_USB_SDP) {
 			bq->real_charger_type = POWER_SUPPLY_TYPE_USB;
-			dev_info(bq->dev, "%s:host SDP plugged in\n", __func__);
+			dev_info(bq->dev, "%s:SDP plugged in\n", __func__);
 		} else if (bq->vbus_type == BQ2589X_VBUS_NONSTAND) {
 			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
 			dev_info(bq->dev, "%s:NON STAND plugged in\n", __func__);
 		}else {
 			dev_info(bq->dev, "%s:unknown adapter plugged in\n", __func__);
 		}
-		//ret = bq2589x_set_chargecurrent(bq, 500);
-		current_limit = 500;
-		ret = bq2589x_set_input_current_limit(bq, 500);
-		if (ret < 0)
-			dev_err(bq->dev, "%s:Failed to set input current for SDP or UNKNOWN:%d\n", __func__, ret);
 	}
 	else {
 		dev_info(bq->dev, "%s:other adapter plugged in,vbus_type is %d\n", __func__, bq->vbus_type);
-		//ret = bq2589x_set_chargecurrent(bq, 1000);
-		current_limit = 1000;
-		ret = bq2589x_set_input_current_limit(bq, current_limit);
-		if (ret < 0)
-			dev_err(bq->dev, "%s:Failed to set input current for other adapter:%d\n", __func__, ret);
-
 		schedule_delayed_work(&bq->ico_work, 0);
 	}
 
-	//MMI_STOPSHIP PMIC: force 5V 2A charging
-	ret = bq2589x_set_input_current_limit(bq, 2400);
-	if (ret < 0)
-		dev_err(bq->dev, "%s:Failed to set force current %d\n", __func__, ret);
-	ret = bq2589x_set_chargevoltage(bq, 4450);
-	if (ret < 0) {
-		dev_err(bq->dev, "%s:Failed to set charge voltage 4.45V:%d\n", __func__, ret);
-	}
-
-	dev_info(bq->dev, "%s:current charger type is %d and set input current limist is %d mA\n", __func__, bq->real_charger_type, current_limit);
 	if (bq->cfg.use_absolute_vindpm)
 		bq2589x_adjust_absolute_vindpm(bq);
 
@@ -1589,8 +1514,10 @@ static void bq2589x_adapter_in_workfunc(struct work_struct *work)
 		schedule_delayed_work(&bq->monitor_work, 0);
 	}
 
+	bq->chg_dev->noti.apsd_done = true;
+
 vbus_remove:
-	power_supply_changed(bq->wall_psy);
+	charger_dev_notify(bq->chg_dev);
 
 err:
 	return;
@@ -1853,6 +1780,209 @@ static irqreturn_t bq2589x_charger_interrupt(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int bq2589x_get_real_charger_type(struct charger_device *chg_dev, int *chg_type)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	*chg_type = bq->real_charger_type;
+
+	return 0;
+}
+
+static int bq2589x_set_hiz_mode(struct charger_device *chg_dev, bool hiz_en)
+{
+	u8 val;
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	dev_info(bq->dev, "%s:%d", __func__, hiz_en);
+	val = (hiz_en ? BQ2589X_HIZ_ENABLE : BQ2589X_HIZ_DISABLE) << BQ2589X_ENHIZ_SHIFT;
+
+	return bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENHIZ_MASK, val);
+}
+
+static int bq2589x_is_hiz_mode(struct charger_device *chg_dev, bool *state)
+{
+	u8 val;
+	int ret;
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	ret = bq2589x_read_byte(bq, &val, BQ2589X_REG_00);
+	if (ret){
+		dev_err(bq->dev, "%s read REG 00 fail\n",__func__);
+		return ret;
+	}
+	*state = !!(((val & BQ2589X_ENHIZ_MASK) >> BQ2589X_ENHIZ_SHIFT) & BQ2589X_HIZ_ENABLE);
+
+	return 0;
+}
+
+static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	uA /= 1000;
+	dev_info(bq->dev,"%s set icl curr = %d mA\n", __func__, uA);
+
+	return bq2589x_set_input_current_limit(bq, uA);
+}
+
+static int bq2589x_get_icl(struct charger_device *chg_dev, u32 *uA)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	*uA = bq2589x_read_idpm_limit(bq)*1000;
+
+	dev_info(bq->dev,"%s get icl curr = %d uA\n", __func__, *uA);
+
+	return 0;
+}
+
+static int bq2589x_enable_hw_jeita(struct charger_device *chg_dev, bool en)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	dev_warn(bq->dev,"%s cannot set jeita state to %s\n", __func__, en ? "enabled":"disabled");
+
+	return en;
+}
+
+static int bq2589x_set_otg_enable(struct charger_device *chg_dev, bool enable)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	u8 val;
+
+	if (enable)
+		val = BQ2589X_OTG_ENABLE << BQ2589X_OTG_CONFIG_SHIFT;
+	else
+		val = BQ2589X_OTG_DISABLE << BQ2589X_OTG_CONFIG_SHIFT;
+
+	dev_info(bq->dev, "%s: %s otg\n", __func__, enable ? "enable" : "disable");
+
+	return bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
+}
+
+static int bq2589x_set_boost_current_limit(struct charger_device *chg_dev, u32 uA)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
+	uA /= 1000;
+	ret = bq2589x_set_otg_current(bq, uA);
+
+	dev_info(bq->dev,"%s set boost current limit = %d mA, %s\n", __func__, uA, ret ? "failed" : "success");
+
+	return ret;
+}
+
+static int bq2589x_enable_charging(struct charger_device *chg_dev, bool enable)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	u8 val;
+	int ret;
+
+	if (enable)
+		val = BQ2589X_CHG_ENABLE << BQ2589X_CHG_CONFIG_SHIFT;
+	else
+		val = BQ2589X_CHG_DISABLE << BQ2589X_CHG_CONFIG_SHIFT;
+
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_CHG_CONFIG_MASK, val);
+
+	if (ret == 0) {
+		if (enable)
+			bq->status |= BQ2589X_STATUS_CHARGE_ENABLE;
+		else
+			bq->status &= ~BQ2589X_STATUS_CHARGE_ENABLE;
+	}
+
+	dev_info(bq->dev,"%s, %s charging %s\n", __func__, enable ? "enable" : "disable", ret == 0 ? "success":"failed");
+
+	return ret;
+}
+
+static int bq2589x_set_charging_current(struct charger_device *chg_dev, u32 uA)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
+	uA /= 1000;
+	ret = bq2589x_set_chargecurrent(bq, uA);
+
+	dev_info(bq->dev,"%s set charging curr = %d mA, %s\n", __func__, uA, ret ? "failed" : "success");
+
+	return ret;
+}
+
+static int bq2589x_set_charging_voltage(struct charger_device *chg_dev, u32 uV)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
+	uV /= 1000;
+	ret = bq2589x_set_chargevoltage(bq, uV);
+
+	dev_info(bq->dev,"%s set charging volt = %d mV, %s\n", __func__, uV, ret ? "failed" : "success");
+
+	return ret;
+}
+
+static int bq2589x_is_charging_halted(struct charger_device *chg_dev, bool *en)
+{
+	int ret = 0;
+	int chrg_stat = 0;
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	chrg_stat = bq2589x_get_charging_status(bq);
+
+	switch(chrg_stat) {
+	case STATUS_NOT_CHARGING:
+	case STATUS_TERMINATION_DONE:
+		*en = true;
+		break;
+	case STATUS_PRE_CHARGING:
+	case STATUS_FAST_CHARGING:
+		*en = false;
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
+static int bq2589x_dump_registers(struct charger_device *chg_dev, struct seq_file *m)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	u8 addr;
+	u8 val;
+	int ret;
+
+	for(addr = 0x0; addr<=0x14; addr++) {
+		ret = bq2589x_read_byte(bq, &val, addr);
+		if (ret)
+			continue;
+		seq_printf(m, "%s Reg[0x%.2x] = 0x%.2x\n", __func__, addr, val);
+
+	}
+
+	return ret;
+}
+
+static const struct charger_properties bq2589x_chg_props = {
+	.alias_name = "bq25890",
+};
+
+static struct charger_ops bq2589x_chg_ops = {
+	.get_real_charger_type = bq2589x_get_real_charger_type,
+	.set_usb_suspend = bq2589x_set_hiz_mode,
+	.is_usb_suspend = bq2589x_is_hiz_mode,
+	.set_input_current = bq2589x_set_icl,
+	.get_input_current = bq2589x_get_icl,
+	.enable_hw_jeita = bq2589x_enable_hw_jeita,
+	.enable_otg = bq2589x_set_otg_enable,
+	.set_boost_current_limit = bq2589x_set_boost_current_limit,
+	.enable_charging = bq2589x_enable_charging,
+	.set_charging_current = bq2589x_set_charging_current,
+	.set_constant_voltage = bq2589x_set_charging_voltage,
+	.is_charge_halted = bq2589x_is_charging_halted,
+
+	.dump_registers = bq2589x_dump_registers,
+
+};
+
 static int bq2589x_charger_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1879,12 +2009,21 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
-	bq->batt_psy = power_supply_get_by_name("battery");
+	bq->batt_psy = power_supply_get_by_name("bms");
 
 	g_bq = bq;
 
 	if (client->dev.of_node)
 		bq2589x_parse_dt(&client->dev, bq);
+
+	bq->chg_dev = charger_device_register(bq->chg_dev_name,
+					      &client->dev, bq,
+					      &bq2589x_chg_ops,
+					      &bq2589x_chg_props);
+	if (IS_ERR_OR_NULL(bq->chg_dev)) {
+		ret = PTR_ERR(bq->chg_dev);
+		return ret;
+	}
 
 	ret = bq2589x_init_device(bq);
 	if (ret) {
@@ -1905,7 +2044,7 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 		goto err_0;
 
 	/*MMI_STOPSHIP PMIC:add disable ILIM pin because of hw is not ready */
-	bq2589x_disable_ilim(bq);
+	bq2589x_set_ilim_enable(bq, false);
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
 	INIT_WORK(&bq->adapter_in_work, bq2589x_adapter_in_workfunc);
