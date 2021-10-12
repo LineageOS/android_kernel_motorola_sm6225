@@ -341,7 +341,6 @@ int  aw99703_set_brightness(struct aw99703_data *drvdata, int brt_val)
 		if(brt_val == 0)
 			return 0;
 		aw99703_backlight_init(drvdata);
-		aw99703_backlight_enable(drvdata);
 	}
 
 	brt_val = aw99703_brightness_map(brt_val);
@@ -361,6 +360,7 @@ int  aw99703_set_brightness(struct aw99703_data *drvdata, int brt_val)
 					AW99703_REG_MODE,
 					AW99703_MODE_WORKMODE_MASK,
 					AW99703_MODE_WORKMODE_BACKLIGHT);
+		drvdata->enable = true;
 	} else {
 		/* standby mode*/
 		aw99703_i2c_write_bit(drvdata->client,
