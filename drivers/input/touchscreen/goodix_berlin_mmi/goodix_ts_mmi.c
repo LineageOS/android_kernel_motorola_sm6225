@@ -28,8 +28,102 @@
 	} \
 }
 
-extern int goodix_ts_unregister_notifier(struct notifier_block *nb);
-extern struct goodix_module goodix_modules;
+static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
+	goodix_ts_stylus_mode_show, goodix_ts_stylus_mode_store);
+
+#define MAX_ATTRS_ENTRIES 10
+
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
+static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	GET_GOODIX_DATA(dev);
+
+	if (core_data->board_data.stylus_mode_ctrl)
+		ADD_ATTR(stylus_mode);
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
+#define STYLUS_MODE_SWITCH_CMD    0xA4
+static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+	struct goodix_ts_cmd cmd;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (core_data->stylus_mode == mode) {
+		ts_debug("value is same,so not write.\n");
+		return size;
+	}
+
+	cmd.cmd = STYLUS_MODE_SWITCH_CMD;
+	cmd.len = 5;
+	cmd.data[0] = mode;
+	ret = hw_ops->send_cmd(core_data, &cmd);
+	if (ret < 0) {
+		ts_err("failed send stylus mode cmd");
+	}
+
+	core_data->stylus_mode = mode;
+	ts_info("Success to %s stylus mode", mode ? "Enable" : "Disable");
+	return size;
+}
+
+static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	ts_info("Stylus mode = %d.\n", core_data->stylus_mode);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->stylus_mode);
+}
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
@@ -254,11 +348,34 @@ static int goodix_ts_mmi_pre_resume(struct device *dev) {
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
 
-	GET_GOODIX_DATA(dev);
-
 	atomic_set(&core_data->suspended, 0);
 	if (core_data->gesture_enabled)
 		disable_irq_wake(core_data->irq);
+
+	return 0;
+}
+
+static int goodix_ts_mmi_post_resume(struct device *dev) {
+	int ret = 0;
+	struct goodix_ts_cmd cmd;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	/* restore data */
+	if (core_data->board_data.stylus_mode_ctrl) {
+		cmd.cmd = STYLUS_MODE_SWITCH_CMD;
+		cmd.len = 5;
+		cmd.data[0] = core_data->stylus_mode;
+		ret = hw_ops->send_cmd(core_data, &cmd);
+		if (!ret) {
+			ts_info(" Successfully to restore stylus mode = %d.",
+				core_data->stylus_mode);
+		}
+	}
 
 	return 0;
 }
@@ -304,9 +421,12 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.power = goodix_ts_mmi_methods_power,
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
+	/* vendor specific attribute group */
+	.extend_attribute_group = goodix_ts_mmi_extend_attribute_group,
 	/* PM callback */
 	.panel_state = goodix_ts_mmi_panel_state,
 	.pre_resume = goodix_ts_mmi_pre_resume,
+	.post_resume = goodix_ts_mmi_post_resume,
 	.pre_suspend = goodix_ts_mmi_pre_suspend,
 	.post_suspend = goodix_ts_mmi_post_suspend,
 };
