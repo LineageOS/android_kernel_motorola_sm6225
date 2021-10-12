@@ -274,6 +274,8 @@ struct goodix_ts_board_data {
 	bool pen_enable;
 	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
 	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
+
+	bool stylus_mode_ctrl;
 };
 
 enum goodix_fw_update_mode {
@@ -486,6 +488,8 @@ struct goodix_ts_core {
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;
 #endif
+
+	int stylus_mode;
 
 	/* touchscreen_mmi */
 	struct ts_mmi_class_methods *imports;
