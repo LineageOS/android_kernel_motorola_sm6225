@@ -2321,6 +2321,26 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	chip->mmi_psy = power_supply_get_by_name("mmi_battery");
+	if (!chip->mmi_psy) {
+		mmi_err(chip, "Failed: mmi_psy has not registered yet\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->bms_psy = power_supply_get_by_name("bms");
+	if (!chip->bms_psy) {
+		mmi_err(chip, "Failed: bms_psy has not registered yet\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->charger_psy = power_supply_get_by_name("charger");
+	if (!chip->charger_psy) {
+		mmi_err(chip, "Failed: charger_psy has not registered yet\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->wls_psy = power_supply_get_by_name("wireless");
+
 	rc = mmi_discrete_parse_dts(chip);
 	if (rc < 0) {
 		mmi_err(chip, "Failed to parse dts\n");
@@ -2351,12 +2371,6 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 		mmi_err(chip, "Failed to create MMI DISCRETE IPC log\n");
 	else
 		mmi_info(chip, "IPC logging is enabled for MMI DISCRETE\n");
-
-	chip->mmi_psy = power_supply_get_by_name("mmi_battery");
-	if (!chip->mmi_psy) {
-		mmi_err(chip, "Failed: mmi_battery has not registered yet\n");
-		return -EPROBE_DEFER;
-	}
 
 	chip->batt_psy = devm_power_supply_register(chip->dev,
 						    &batt_psy_desc,
@@ -2391,12 +2405,6 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 		mmi_err(chip, "Couldn't initialize dc psy rc=%d\n", rc);
 		goto cleanup;
 	}
-
-	chip->bms_psy = power_supply_get_by_name("bms");
-	chip->charger_psy = power_supply_get_by_name("charger");
-	chip->wls_psy = power_supply_get_by_name("wireless");
-
-
 
 	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
 	mmi_discrete_charger_init(chip);
