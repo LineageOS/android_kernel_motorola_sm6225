@@ -223,6 +223,11 @@ static void update_work(struct work_struct *work)
 	int hb_sched_time = HBDLY_DISCHARGE_MS;
 
 	fullcurr_state = CHRG_FULLCURR_EN;
+	if (battplus_state) {
+		pr_info("BATTFET Closed- Ending Work..\n");
+		cancel_delayed_work(&data->update);
+		return;
+	}
 
 	/*flip_mv = get_ps_int_prop(data->flip_batt_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW);
@@ -306,7 +311,7 @@ static int parse_dt(struct device_node *node)
 	}
 
 	fetControlData.chrg_fullcurr_en_gpio = of_get_named_gpio(node,
-			"mmi,chrg-fullcurr-en-gpio", 1);
+			"mmi,chrg-fullcurr-en-gpio", 0);
 	if (!gpio_is_valid(fetControlData.chrg_fullcurr_en_gpio)) {
 		pr_err("chrg-fullcurr-en-gpio is not valid!\n");
 		return -ENODEV;
