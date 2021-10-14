@@ -21,7 +21,7 @@
 #include <linux/power_supply.h>
 #include <linux/usb/typec.h>
 #include <linux/version.h>
-
+#include <linux/iio/consumer.h>
 #include "inc/tcpci_typec.h"
 
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
@@ -47,6 +47,7 @@ static const char * const dr_names[DR_MAX] = {
 struct rt_pd_manager_data {
 	struct device *dev;
 	struct extcon_dev *extcon;
+	struct iio_channel **iio_channels;
 	struct delayed_work usb_dwork;
 	struct tcpc_device *tcpc;
 	struct notifier_block pd_nb;
@@ -69,6 +70,49 @@ static const unsigned int rpm_extcon_cable[] = {
 	EXTCON_USB_HOST,
 	EXTCON_NONE,
 };
+
+enum iio_psy_property {
+       POWER_SUPPLY_IIO_USB_REAL_TYPE = 0,
+       POWER_SUPPLY_IIO_OTG_ENABLE,
+       POWER_SUPPLY_IIO_PROP_MAX,
+};
+
+static const char * const iio_channel_map[] = {
+	"usb_real_type", "otg_enable",
+};
+
+static int mmi_get_psy_iio_property(struct rt_pd_manager_data *rpmd,
+                          enum iio_psy_property ipp,
+                          union power_supply_propval *val)
+{
+       int ret = 0, value = 0;
+
+       ret = iio_read_channel_processed(rpmd->iio_channels[ipp], &value);
+       if (ret < 0) {
+               dev_err(rpmd->dev, "%s fail(%d), ipp = %d\n",
+                                  __func__, ret, ipp);
+               return ret;
+       }
+
+       val->intval = value;
+       return 0;
+}
+
+static int mmi_set_psy_iio_property(struct rt_pd_manager_data *rpmd,
+                          enum iio_psy_property ipp,
+                          const union power_supply_propval *val)
+{
+       int ret = 0;
+
+       ret = iio_write_channel_raw(rpmd->iio_channels[ipp], val->intval);
+       if (ret < 0) {
+               dev_err(rpmd->dev, "%s fail(%d), ipp = %d\n",
+                                  __func__, ret, ipp);
+               return ret;
+       }
+
+       return 0;
+}
 
 static int extcon_init(struct rt_pd_manager_data *rpmd)
 {
@@ -181,13 +225,12 @@ static void usb_dwork_handler(struct work_struct *work)
 		stop_usb_host(rpmd);
 		break;
 	case DR_DEVICE:
-		/* ***
-		 * ret = smblib_get_prop(rpmd,
-		 *			 POWER_SUPPLY_PROP_REAL_TYPE, &val);
-		 * Replace the following two lines to obtain charger type
-		 */
-		ret = 0;
-		val.intval = POWER_SUPPLY_TYPE_UNKNOWN;
+		ret = mmi_get_psy_iio_property(rpmd,
+				POWER_SUPPLY_IIO_USB_REAL_TYPE, &val);
+		if (ret) {
+			dev_info(rpmd->dev, "%s charge type is failed\n", __func__);
+			val.intval = POWER_SUPPLY_TYPE_UNKNOWN;
+		}
 		dev_info(rpmd->dev, "%s polling_cnt = %d, ret = %d type = %d\n",
 				    __func__, ++rpmd->usb_type_polling_cnt,
 				    ret, val.intval);
@@ -233,6 +276,7 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 	uint8_t old_state = TYPEC_UNATTACHED, new_state = TYPEC_UNATTACHED;
 	enum typec_pwr_opmode opmode = TYPEC_PWR_MODE_USB;
 	uint32_t partner_vdos[VDO_MAX_NR];
+	union power_supply_propval val = {0};
 
 	switch (event) {
 	case TCP_NOTIFY_SINK_VBUS:
@@ -261,6 +305,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		dev_info(rpmd->dev, "%s source vbus %dmV\n",
 				    __func__, noti->vbus_state.mv);
 		/* enable/disable OTG power output */
+		val.intval = (noti->vbus_state.mv) ? true : false;
+		mmi_set_psy_iio_property(rpmd,
+				POWER_SUPPLY_IIO_OTG_ENABLE, &val);
 		break;
 	case TCP_NOTIFY_TYPEC_STATE:
 		old_state = noti->typec_state.old_state;
@@ -871,6 +918,7 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 	int ret = 0;
 	static int probe_cnt = 0;
 	struct rt_pd_manager_data *rpmd = NULL;
+	int i = 0;
 
 	dev_info(&pdev->dev, "%s (%s) probe_cnt = %d\n",
 			     __func__, RT_PD_MANAGER_VERSION, ++probe_cnt);
@@ -889,6 +937,33 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 			goto out;
 		else
 			goto err_init_extcon;
+	}
+
+	rpmd->iio_channels = devm_kcalloc(rpmd->dev, POWER_SUPPLY_IIO_PROP_MAX,
+					  sizeof(rpmd->iio_channels[0]),
+					  GFP_KERNEL);
+	if (!rpmd->iio_channels) {
+		dev_err(rpmd->dev, "%s kcalloc fail\n", __func__);
+		ret = -EPROBE_DEFER;
+		if (probe_cnt >= PROBE_CNT_MAX)
+			goto out;
+		else
+			goto err_get_iio_chan;
+	}
+
+	for (i = 0; i < POWER_SUPPLY_IIO_PROP_MAX; i++) {
+		rpmd->iio_channels[i] =
+			devm_iio_channel_get(rpmd->dev, iio_channel_map[i]);
+		if (IS_ERR(rpmd->iio_channels[i])) {
+			ret = PTR_ERR(rpmd->iio_channels[i]);
+			dev_err(rpmd->dev, "%s get iio chan %s fail(%d)\n",
+					   __func__, iio_channel_map[i], ret);
+			ret = -EPROBE_DEFER;
+			if (probe_cnt >= PROBE_CNT_MAX)
+				goto out;
+			else
+				goto err_get_iio_chan;
+		}
 	}
 
 	rpmd->tcpc = tcpc_dev_get_by_name("type_c_port0");
@@ -946,6 +1021,7 @@ err_reg_tcpc_notifier:
 	typec_unregister_port(rpmd->typec_port);
 err_init_typec:
 err_get_tcpc_dev:
+err_get_iio_chan:
 err_init_extcon:
 	return ret;
 }
