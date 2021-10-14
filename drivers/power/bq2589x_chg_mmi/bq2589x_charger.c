@@ -133,8 +133,6 @@ struct bq2589x {
 
 	struct	bq2589x_config  cfg;
 	struct	work_struct irq_work;
-	struct	work_struct adapter_in_work;
-	struct	work_struct adapter_out_work;
 	struct	delayed_work monitor_work;
 	struct	delayed_work ico_work;
 	struct	delayed_work pe_volt_tune_work;
@@ -544,9 +542,7 @@ int bq2589x_force_dpdm(struct bq2589x *bq)
 	if (ret)
 		return ret;
 
-	msleep(20);/*TODO: how much time needed to finish dpdm detect?*/
 	return 0;
-
 }
 EXPORT_SYMBOL_GPL(bq2589x_force_dpdm);
 
@@ -1383,23 +1379,40 @@ void bq2589x_set_ilim_enable(struct bq2589x *bq, bool enable)
 		dev_err(bq->dev, "fail to set ILIM pin ret=%d\n", ret);
 }
 
-static int bq2589x_rerun_adsp_if_required(struct bq2589x *bq)
+static bool bq2589x_is_rerun_apsd_complete(struct bq2589x *bq)
+{
+	int ret;
+	u8 val = 0;
+	bool result = false;
+
+	ret = bq2589x_read_byte(bq, &val, BQ2589X_REG_02);
+	if (ret)
+		return false;
+
+	result = !(val & BQ2589X_FORCE_DPDM_MASK);
+	pr_info("%s:rerun apsd %s", __func__, result ? "complete" : "not complete");
+	return result;
+}
+
+static int bq2589x_rerun_apsd_if_required(struct bq2589x *bq)
 {
 	int ret = 0;
 	ret = bq2589x_get_usb_present(bq);
 	if (ret)
 		return ret;
 
-	if (bq->state.vbus_gd)
+	if (!bq->state.vbus_gd)
 		return 0;
 
 	ret = bq2589x_reuqest_dpdm(bq, true);
 	if (ret < 0)
 		dev_err(bq->dev,"%s:cannot enable DPDM ret=%d\n",__func__, ret);
 
-	bq->typec_apsd_rerun_done = true;
 	bq2589x_force_dpdm(bq);
 
+	bq->typec_apsd_rerun_done = true;
+
+	dev_info(bq->dev,"rerun apsd done\n");
 	return 0;
 }
 
@@ -1435,76 +1448,49 @@ static void bq2589x_adjust_absolute_vindpm(struct bq2589x *bq)
 
 }
 
-static void bq2589x_vbus_remove(struct bq2589x *bq)
+static void bq2589x_adapter_in_func(struct bq2589x *bq)
 {
-	int ret;
-	dev_err(bq->dev, "Vbus not present, disable charge\n");
 
-	bq->typec_apsd_rerun_done = false;
-	bq->chg_dev->noti.apsd_done = false;
-	bq->chg_dev->noti.hvdcp_done = false;
-	bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
-	ret = bq2589x_disable_charger(bq);
-	if (ret < 0) {
-		dev_err(bq->dev,"%s:failed to disable charger\n",__func__);
-	}
-	bq2589x_reuqest_dpdm(bq, true);
-}
-
-static void bq2589x_adapter_in_workfunc(struct work_struct *work)
-{
-	struct bq2589x *bq = container_of(work, struct bq2589x, adapter_in_work);
-	int ret;
-
-	ret = bq2589x_get_usb_present(bq);
-	if (ret)
-		return;
-
-	if(!bq->state.vbus_gd) {
-		bq2589x_vbus_remove(bq);
-		goto vbus_remove;
-	}
-
-	if(!bq->state.online) {
-		bq2589x_reuqest_dpdm(bq, true);
-		dev_err(bq->dev, "BC1.2 detect is not done.\n");
-		goto err;
-	}
-
-	if ((bq->vbus_type == BQ2589X_VBUS_USB_SDP || bq->vbus_type == BQ2589X_VBUS_NONSTAND)
+	if ((bq->vbus_type == BQ2589X_VBUS_USB_SDP ||
+		bq->vbus_type == BQ2589X_VBUS_NONSTAND ||
+		bq->vbus_type == BQ2589X_VBUS_UNKNOWN)
 		&& (!bq->typec_apsd_rerun_done)) {
 		dev_err(bq->dev, "rerun apsd for 0x%x\n", bq->vbus_type);
-		bq->typec_apsd_rerun_done = true;
-		bq2589x_rerun_adsp_if_required(bq);
-		goto err;
+		bq2589x_rerun_apsd_if_required(bq);
+		return;
 	}
 
-	if (bq->vbus_type == BQ2589X_VBUS_MAXC) {
-		dev_info(bq->dev, "%s:HVDCP adapter plugged in\n", __func__);
-		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
-		schedule_delayed_work(&bq->ico_work, 0);
-	} else if (bq->vbus_type == BQ2589X_VBUS_USB_CDP) {
-		dev_info(bq->dev, "%s:CDP plugged in\n", __func__);
-		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
-		schedule_delayed_work(&bq->ico_work, 0);
-	}else if (bq->vbus_type == BQ2589X_VBUS_USB_DCP) {/* DCP, let's check if it is PE adapter*/
-		dev_info(bq->dev, "%s:DCP adapter plugged in\n", __func__);
-		bq->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-		schedule_delayed_work(&bq->check_pe_tuneup_work, 0);
-	} else if (bq->vbus_type == BQ2589X_VBUS_USB_SDP || bq->vbus_type == BQ2589X_VBUS_UNKNOWN || bq->vbus_type == BQ2589X_VBUS_NONSTAND) {
-		if (bq->vbus_type == BQ2589X_VBUS_USB_SDP) {
-			bq->real_charger_type = POWER_SUPPLY_TYPE_USB;
+	switch (bq->vbus_type) {
+		case BQ2589X_VBUS_MAXC:
+			dev_info(bq->dev, "%s:HVDCP adapter plugged in\n", __func__);
+			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+			bq->chg_dev->noti.hvdcp_done = true;
+			schedule_delayed_work(&bq->ico_work, 0);
+			break;
+		case BQ2589X_VBUS_USB_CDP:
+			dev_info(bq->dev, "%s:CDP plugged in\n", __func__);
+			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
+			break;
+		case BQ2589X_VBUS_USB_DCP:
+			dev_info(bq->dev, "%s:DCP adapter plugged in\n", __func__);
+			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+			schedule_delayed_work(&bq->check_pe_tuneup_work, 0);
+			break;
+		case BQ2589X_VBUS_USB_SDP:
 			dev_info(bq->dev, "%s:SDP plugged in\n", __func__);
-		} else if (bq->vbus_type == BQ2589X_VBUS_NONSTAND) {
-			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+			bq->real_charger_type = POWER_SUPPLY_TYPE_USB;
+			break;
+		case BQ2589X_VBUS_UNKNOWN:
+			dev_err(bq->dev, "%s:Unkown adpater plugged in\n", __func__);
+		case BQ2589X_VBUS_NONSTAND:
 			dev_info(bq->dev, "%s:NON STAND plugged in\n", __func__);
-		}else {
-			dev_info(bq->dev, "%s:unknown adapter plugged in\n", __func__);
-		}
-	}
-	else {
-		dev_info(bq->dev, "%s:other adapter plugged in,vbus_type is %d\n", __func__, bq->vbus_type);
-		schedule_delayed_work(&bq->ico_work, 0);
+			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+			break;
+		default:
+			dev_info(bq->dev, "%s:Other adapter %d plugged in\n", __func__, bq->vbus_type);
+			bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+			schedule_delayed_work(&bq->ico_work, 0);
+			break;
 	}
 
 	if (bq->cfg.use_absolute_vindpm)
@@ -1515,17 +1501,13 @@ static void bq2589x_adapter_in_workfunc(struct work_struct *work)
 	}
 
 	bq->chg_dev->noti.apsd_done = true;
-
-vbus_remove:
+	bq->typec_apsd_rerun_done = false;
 	charger_dev_notify(bq->chg_dev);
 
-err:
-	return;
 }
 
-static void bq2589x_adapter_out_workfunc(struct work_struct *work)
+static void bq2589x_adapter_out_func(struct bq2589x *bq)
 {
-	struct bq2589x *bq = container_of(work, struct bq2589x, adapter_out_work);
 	int ret;
 
 	ret = bq2589x_set_input_volt_limit(bq, 4400);
@@ -1537,6 +1519,13 @@ static void bq2589x_adapter_out_workfunc(struct work_struct *work)
 	if (pe.enable) {
 		cancel_delayed_work_sync(&bq->monitor_work);
 	}
+
+	bq->typec_apsd_rerun_done = false;
+	bq->chg_dev->noti.apsd_done = false;
+	bq->chg_dev->noti.hvdcp_done = false;
+	bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	bq2589x_reuqest_dpdm(bq, false);
+	charger_dev_notify(bq->chg_dev);
 }
 
 static void bq2589x_ico_workfunc(struct work_struct *work)
@@ -1705,8 +1694,7 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 	u8 fault = 0;
 	u8 charge_status = 0;
 	int ret;
-
-	msleep(5);
+	bool reapsd_complete = false;
 
 	ret = bq2589x_sync_state(bq, &state);
 	mutex_lock(&bq->lock);
@@ -1724,14 +1712,27 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 
 	bq->vbus_type = (status & BQ2589X_VBUS_STAT_MASK) >> BQ2589X_VBUS_STAT_SHIFT;
 
+	if (state.vbus_gd && (bq->vbus_type == BQ2589X_VBUS_NONE)){
+		dev_info(bq->dev, "BC1.2 detect is not done.\n");
+		bq2589x_reuqest_dpdm(bq, true);
+	}
+
+	if(state.vbus_gd && state.online
+		&& (bq->typec_apsd_rerun_done == true)
+		&& (bq->vbus_type != BQ2589X_VBUS_NONE)) {
+		reapsd_complete = bq2589x_is_rerun_apsd_complete(bq);
+	}
+
 	if (((bq->vbus_type == BQ2589X_VBUS_NONE) || (bq->vbus_type == BQ2589X_VBUS_OTG)) && (bq->status & BQ2589X_STATUS_PLUGIN)) {
 		dev_info(bq->dev, "%s:adapter removed\n", __func__);
 		bq->status &= ~BQ2589X_STATUS_PLUGIN;
-		schedule_work(&bq->adapter_out_work);
-	} else if (bq->vbus_type != BQ2589X_VBUS_NONE && (bq->vbus_type != BQ2589X_VBUS_OTG) && !(bq->status & BQ2589X_STATUS_PLUGIN)) {
+		bq2589x_adapter_out_func(bq);
+	} else if ((bq->vbus_type != BQ2589X_VBUS_NONE) && (bq->vbus_type != BQ2589X_VBUS_OTG)
+			&& (!(bq->status & BQ2589X_STATUS_PLUGIN) || (reapsd_complete == true))
+			&& state.online) {
 		dev_info(bq->dev, "%s:adapter plugged in\n", __func__);
 		bq->status |= BQ2589X_STATUS_PLUGIN;
-		schedule_work(&bq->adapter_in_work);
+		bq2589x_adapter_in_func(bq);
 	}
 
 
@@ -2047,8 +2048,6 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	bq2589x_set_ilim_enable(bq, false);
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
-	INIT_WORK(&bq->adapter_in_work, bq2589x_adapter_in_workfunc);
-	INIT_WORK(&bq->adapter_out_work, bq2589x_adapter_out_workfunc);
 	INIT_DELAYED_WORK(&bq->monitor_work, bq2589x_monitor_workfunc);
 	INIT_DELAYED_WORK(&bq->ico_work, bq2589x_ico_workfunc);
 	INIT_DELAYED_WORK(&bq->pe_volt_tune_work, bq2589x_tune_volt_workfunc);
@@ -2058,12 +2057,6 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	ret = sysfs_create_group(&bq->dev->kobj, &bq2589x_attr_group);
 	if (ret) {
 		dev_err(dev, "failed to register sysfs. err: %d\n", ret);
-		goto err_irq;
-	}
-
-	ret = bq2589x_rerun_adsp_if_required(bq);
-	if (ret) {
-		dev_err(dev, "failed to rerun adsp. err: %d\n", ret);
 		goto err_irq;
 	}
 
@@ -2077,13 +2070,13 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	}
 
 	pe.enable = false;
-	schedule_work(&bq->irq_work);/*in case of adapter has been in when power off*/
+
+	bq2589x_rerun_apsd_if_required(bq);
+
 	return 0;
 
 err_irq:
 	cancel_work_sync(&bq->irq_work);
-	cancel_work_sync(&bq->adapter_in_work);
-	cancel_work_sync(&bq->adapter_out_work);
 	cancel_delayed_work_sync(&bq->ico_work);
 	cancel_delayed_work_sync(&bq->check_pe_tuneup_work);
 	if (pe.enable) {
@@ -2109,8 +2102,6 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 
 	sysfs_remove_group(&bq->dev->kobj, &bq2589x_attr_group);
 	cancel_work_sync(&bq->irq_work);
-	cancel_work_sync(&bq->adapter_in_work);
-	cancel_work_sync(&bq->adapter_out_work);
 	cancel_delayed_work_sync(&bq->ico_work);
 	cancel_delayed_work_sync(&bq->check_pe_tuneup_work);
 	if (pe.enable) {
