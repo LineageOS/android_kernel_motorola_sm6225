@@ -76,19 +76,19 @@ void check_and_send(void)
 	int report_val = 0;
 	for (i = 0; i < hall_sensor_dev->gpio_num; i++)
 	{
-		LOG_INFO("hall report gpio%d = %d", i, gpio_get_value(hall_sensor_dev->gpio_list[i].gpio));
+		LOG_DBG("hall report gpio%d = %d", i, gpio_get_value(hall_sensor_dev->gpio_list[i].gpio));
 		if (gpio_get_value(hall_sensor_dev->gpio_list[i].gpio) > 0)
 			report_val |= hall_sensor_dev->gpio_list[i].gpio_high_report_val;
 		else if (gpio_get_value(hall_sensor_dev->gpio_list[i].gpio) == 0)
 			report_val |= hall_sensor_dev->gpio_list[i].gpio_low_report_val;
 	}
-	hall_sensor_dev->report_val = report_val;
-	if(hall_sensor_dev->pen_detect){
+	if(hall_sensor_dev->pen_detect &&
+		hall_sensor_dev->report_val != report_val){
+		LOG_INFO("hall report %d", report_val);
+		hall_sensor_dev->report_val = report_val;
 		input_report_abs(hall_sensor_dev->hall_dev, ABS_DISTANCE, report_val);
 		input_sync(hall_sensor_dev->hall_dev);
 	}
-	LOG_DBG("hall hall_pen_detectend ==%d", hall_sensor_dev->pen_detect);
-	LOG_DBG("hall report %d", report_val);
 }
 
 void hall_enable(bool enable)
@@ -119,8 +119,14 @@ void hall_enable(bool enable)
 static int hallpen_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
-	hall_sensor_dev->pen_detect =1;
+	hall_sensor_dev->report_val = -1;
+	hall_sensor_dev->pen_detect = enable;
 	hall_enable(enable);
+	if (enable == 0)
+	{
+		input_report_abs(hall_sensor_dev->hall_dev, ABS_DISTANCE, -1);
+		input_sync(hall_sensor_dev->hall_dev);
+	}
 	return 0;
 }
 static ssize_t hall_enable_store(struct class *class,
