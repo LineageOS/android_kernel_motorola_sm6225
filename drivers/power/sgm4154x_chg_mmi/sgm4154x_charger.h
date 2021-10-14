@@ -294,7 +294,7 @@ struct sgm4154x_device {
 	struct charger_device *chg_dev;
 	struct regulator_dev *otg_rdev;
 
-	struct delayed_work charge_detect_delayed_work;
+	struct work_struct charge_detect_work;
 	struct delayed_work charge_monitor_work;
 	struct notifier_block pm_nb;
 	bool sgm4154x_suspend_flag;
@@ -309,6 +309,7 @@ struct sgm4154x_device {
 	bool			typec_apsd_rerun_done;
 	int			real_charger_type;
 
+	struct work_struct rerun_apsd_work;
 	struct delayed_work hvdcp_detect_delayed_work;
 
 	struct sgm4154x_iio		iio;
