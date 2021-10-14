@@ -2033,14 +2033,6 @@ static int mmi_discrete_charger_init(struct mmi_discrete_charger *chip)
 		goto free_mem;
 	}
 
-	/* Workaround for some cables that collapse on boot */
-	if (!chip->constraint.factory_mode) {
-		mmi_err(chip, "Suspending USB for 50 ms to clear\n");
-		mmi_discrete_set_usb_suspend(chip, true);
-		msleep(50);
-		mmi_discrete_set_usb_suspend(chip, false);
-	}
-
 	if (chip->constraint.factory_mode) {
 		mmi_info(chip, "Entering Factory Mode !\n");
 
@@ -2408,6 +2400,8 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
 	mmi_discrete_charger_init(chip);
+
+	usb_source_change_notify_handler(&chip->master_chg_nb, 0, &chip->master_chg_dev->noti);
 
 	mmi_discrete_create_debugfs(chip);
 
