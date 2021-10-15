@@ -328,11 +328,11 @@ static int cal_cha_to_cha_res(struct goodix_ts_test *ts_test, int v1, int v2)
 static int cal_cha_to_avdd_res(struct goodix_ts_test *ts_test, int v1, int v2)
 {
 	if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A)
-		return 125 * 1024 * (100 * v2 - 125) * 40 / (10000 * v1) - 40;
+		return 64 * (2 * v2 - 25) * 40 / v1 - 40;
 	else if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_B)
-		return 125 * 1024 * (100 * v2 - 125) * 99 / (10000 * v1) - 60;
+		return 64 * (2 * v2 - 25) * 99 / v1 - 60;
 	else
-		return 125 * 1024 * (100 * v2 - 125) * 93 / (10000 * v1) - 20;
+		return 64 * (2 * v2 - 25) * 93 / v1 - 20;
 }
 
 static int cal_cha_to_gnd_res(struct goodix_ts_test *ts_test, int v)
@@ -396,7 +396,7 @@ static int ts_test_send_config(struct goodix_ts_test *ts_test,
 static int ts_test_read_version(struct goodix_ts_test *ts_test,
     struct goodix_fw_version *version)
 {
-    return ts_test->ts->hw_ops->read_version(ts_test->ts, version, true);
+    return ts_test->ts->hw_ops->read_version(ts_test->ts, version);
 }
 
 static void goto_next_line(char **ptr)
@@ -773,20 +773,23 @@ static int goodix_short_test_prepare(struct goodix_ts_test *ts_test)
     struct goodix_ts_cmd tmp_cmd;
     struct goodix_fw_version fw_ver;
     int ret;
-    int retry = 3;
-	u8 status;
+    int retry;
+    int resend = 3;
+    u8 status;
 
-	ts_info("short test prepare IN");
-	ts_test->test_result[GTP_SHORT_TEST] = SYS_SOFTWARE_REASON;
+    ts_info("short test prepare IN");
+    ts_test->test_result[GTP_SHORT_TEST] = SYS_SOFTWARE_REASON;
     tmp_cmd.len = 4;
     tmp_cmd.cmd = INSPECT_FW_SWITCH_CMD;
 
+resend_cmd:
     ret = ts_test_send_cmd(ts_test, &tmp_cmd);
     if (ret < 0) {
         ts_err("send test mode failed");
         return ret;
     }
 
+    retry = 3;
     while (retry--) {
         msleep(40);
 		if (ts_test->ts->bus->ic_type == IC_TYPE_BERLIN_A) {
@@ -806,6 +809,11 @@ static int goodix_short_test_prepare(struct goodix_ts_test *ts_test)
 				return 0;
 			ts_info("short_mode_status=0x%02x ret=%d", status, ret);
 		}
+    }
+
+    if (resend--) {
+        ts_test_reset(ts_test, 100);
+        goto resend_cmd;
     }
 
     return -EINVAL;
@@ -1136,7 +1144,6 @@ static int gdix_check_tx_rx_shortcircut(struct goodix_ts_test *ts_test,
 	return err;
 }
 
-#define SHORT_TYPE_FLAG  ((uint16_t)1 << 15)
 static int gdix_check_resistance_to_gnd(struct ts_test_params *test_params,
         u16 adc_signal, u32 pos)
 {
@@ -1144,21 +1151,24 @@ static int gdix_check_resistance_to_gnd(struct ts_test_params *test_params,
 	u16 r_th = 0, avdd_value = 0;
 	u16 chn_id_tmp = 0;
 	u8 pin_num = 0;
+	unsigned short short_type;
 	struct goodix_ts_test *ts_test = container_of(test_params,
 		struct goodix_ts_test, test_params);
 	int max_drv_num = test_params->params_info->max_drv_num;
 	int max_sen_num = test_params->params_info->max_sen_num;
 
 	avdd_value = test_params->avdd_value;
-	if (adc_signal == 0 || adc_signal == 0x8000)
-		adc_signal |= 1;
+	short_type = adc_signal & 0x8000;
+	adc_signal &= ~0x8000;
+	if (adc_signal == 0)
+		adc_signal = 1;
 
-	if ((adc_signal & 0x8000) == 0) {
+	if (short_type == 0) {
 		/* short to GND */
 		r = cal_cha_to_gnd_res(ts_test, adc_signal);
 	} else {
 		/* short to VDD */
-		r = cal_cha_to_avdd_res(ts_test, adc_signal & ~0x8000, avdd_value);
+		r = cal_cha_to_avdd_res(ts_test, adc_signal, avdd_value);
 	}
 
 	if (pos < max_drv_num)
@@ -1175,11 +1185,11 @@ static int gdix_check_resistance_to_gnd(struct ts_test_params *test_params,
 	if (r < r_th) {
 		pin_num = map_die2pin(test_params, chn_id_tmp);
 		goodix_save_short_res(test_params, pin_num,
-			(adc_signal & 0x8000)? CHN_VDD : CHN_GND, r);
+				short_type ? CHN_VDD : CHN_GND, r);
 		ts_err("%s%d shortcircut to %s,R=%ldK,R_Threshold=%dK",
 				(pin_num & DRV_CHANNEL_FLAG) ? "DRV" : "SEN",
 				(pin_num & ~DRV_CHANNEL_FLAG),
-				(adc_signal & 0x8000) ? "VDD" : "GND",
+				short_type ? "VDD" : "GND",
 				r, r_th);
 
 		return -EINVAL;
@@ -2885,8 +2895,8 @@ static int goodix_do_inspect(struct goodix_ts_core *cd, struct ts_rawdata_info *
     ts_info("TP test prepare OK");
 
     goodix_capacitance_test(ts_test); /* 1F 3F 6F 7F test */
-	if (ts_test->test_params.test_items[GTP_SHORT_TEST])
-	goodix_shortcircut_test(ts_test); /* 5F test */
+    if (ts_test->test_params.test_items[GTP_SHORT_TEST])
+        goodix_shortcircut_test(ts_test); /* 5F test */
     goodix_put_test_result(ts_test, info);
     goodix_tptest_finish(ts_test);
 

@@ -290,7 +290,7 @@ static int get_fw_version_info(struct goodix_fw_version *fw_version)
 		goodix_fw_update_ctrl.core_data->hw_ops;
 
 	return hw_ops->read_version(goodix_fw_update_ctrl.core_data,
-				fw_version, true);
+				fw_version);
 }
 
 static int goodix_reg_write(unsigned int addr,
@@ -719,7 +719,7 @@ static int goodix_send_flash_cmd(struct goodix_flash_cmd *flash_cmd)
 	}
 	ts_info("flash cmd ack check pass");
 
-	msleep(80);
+	msleep(50);
 	retry = 20;
 	for (i = 0; i < retry; i++) {
 		ret = goodix_reg_read(flash_cmd_reg,
@@ -732,7 +732,7 @@ static int goodix_send_flash_cmd(struct goodix_flash_cmd *flash_cmd)
 
 		ts_info("flash cmd status not ready, retry %d, ack 0x%x, status 0x%x, ret %d",
 			i, tmp_cmd.ack, tmp_cmd.status, ret);
-		msleep(20);
+		msleep(10);
 	}
 
 	ts_err("flash cmd status error %d, ack 0x%x, status 0x%x, ret %d",
