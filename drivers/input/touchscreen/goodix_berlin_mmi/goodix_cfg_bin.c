@@ -331,7 +331,7 @@ int goodix_get_config_proc(struct goodix_ts_core *cd)
 	}
 #endif
 
-	if (cd->hw_ops->read_version(cd, &cd->fw_version, true)) {
+	if (cd->hw_ops->read_version(cd, &cd->fw_version)) {
 		ts_info("version info abnormal, abort");
 		return -EINVAL;
 	}

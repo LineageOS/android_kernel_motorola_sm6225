@@ -26,13 +26,14 @@
 
 #define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
 #define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
-#define GOODIX_DRIVER_VERSION			"v1.2.2"
+#define GOODIX_DRIVER_VERSION			"v1.2.3"
 #define GOODIX_MAX_TOUCH				10
 #define GOODIX_PEN_MAX_PRESSURE			4096
 #define GOODIX_MAX_PEN_KEY 				2
 #define GOODIX_PEN_MAX_TILT				90
 #define GOODIX_CFG_MAX_SIZE				4096
 #define GOODIX_MAX_STR_LABLE_LEN		64
+#define GOODIX_MAX_FRAMEDATA_LEN		1700
 
 #define GOODIX_NORMAL_RESET_DELAY_MS	100
 #define GOODIX_HOLD_CPU_RESET_DELAY_MS  5
@@ -213,18 +214,11 @@ struct goodix_ic_info {
  *
  */
 #define TS_RAWDATA_BUFF_MAX             7000
-#define GOODIX_MAX_FRAMEDATA_LEN        2500
 #define TS_RAWDATA_RESULT_MAX           100
 struct ts_rawdata_info {
 	int used_size; //fill in rawdata size
 	s16 buff[TS_RAWDATA_BUFF_MAX];
 	char result[TS_RAWDATA_RESULT_MAX];
-};
-
-#define FRAME_DATA_MAX_LEN	1500
-struct ts_framedata {
-	unsigned char buff[FRAME_DATA_MAX_LEN];
-	int used_size;
 };
 
 /*
@@ -414,15 +408,12 @@ struct goodix_ts_hw_ops {
 	int (*send_cmd)(struct goodix_ts_core *cd, struct goodix_ts_cmd *cmd);
 	int (*send_config)(struct goodix_ts_core *cd, u8 *config, int len);
 	int (*read_config)(struct goodix_ts_core *cd, u8 *config_data, int size);
-	int (*read_version)(struct goodix_ts_core *cd,
-		   struct goodix_fw_version *version, bool dgb_on);
-	int (*get_ic_info)(struct goodix_ts_core *cd,
-		   struct goodix_ic_info *ic_info, bool dbg_on);
+	int (*read_version)(struct goodix_ts_core *cd, struct goodix_fw_version *version);
+	int (*get_ic_info)(struct goodix_ts_core *cd, struct goodix_ic_info *ic_info);
 	int (*esd_check)(struct goodix_ts_core *cd);
 	int (*event_handler)(struct goodix_ts_core *cd, struct goodix_ts_event *ts_event);
 	int (*after_event_handler)(struct goodix_ts_core *cd); /* clean sync flag */
 	int (*get_capacitance_data)(struct goodix_ts_core *cd, struct ts_rawdata_info *info);
-	int (*get_frame_data)(struct goodix_ts_core *cd, struct ts_framedata *info);
 };
 
 /*

@@ -296,7 +296,7 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 	int cnt = -EINVAL;
 
 	if (hw_ops->read_version) {
-		ret = hw_ops->read_version(core_data, &chip_ver, true);
+		ret = hw_ops->read_version(core_data, &chip_ver);
 		if (!ret) {
 			memcpy(temp_pid, chip_ver.rom_pid, sizeof(chip_ver.rom_pid));
 			cnt = snprintf(&buf[0], PAGE_SIZE,
@@ -314,7 +314,7 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 	}
 
 	if (hw_ops->get_ic_info) {
-		ret = hw_ops->get_ic_info(core_data, &core_data->ic_info, true);
+		ret = hw_ops->get_ic_info(core_data, &core_data->ic_info);
 		if (!ret) {
 			cnt += snprintf(&buf[cnt], PAGE_SIZE,
 				"config_id:%x\n", core_data->ic_info.version.config_id);
@@ -1101,30 +1101,28 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 	if (pen_data->coords.status == TS_TOUCH) {
 		input_report_key(dev, BTN_TOUCH, 1);
 		input_report_key(dev, pen_data->coords.tool_type, 1);
-	} else if (pen_data->coords.status == TS_RELEASE) {
-		input_report_key(dev, BTN_TOUCH, 0);
-		input_report_key(dev, pen_data->coords.tool_type, 0);
-	}
-	if (pen_data->coords.status) {
 		input_report_abs(dev, ABS_X, pen_data->coords.x);
 		input_report_abs(dev, ABS_Y, pen_data->coords.y);
 		input_report_abs(dev, ABS_PRESSURE, pen_data->coords.p);
 		input_report_abs(dev, ABS_TILT_X, pen_data->coords.tilt_x);
 		input_report_abs(dev, ABS_TILT_Y, pen_data->coords.tilt_y);
-		ts_debug("pen_data:x %d, y %d, p%d, tilt_x %d tilt_y %d",
+		ts_debug("pen_data:x %d, y %d, p %d, tilt_x %d tilt_y %d key[%d %d]",
 				pen_data->coords.x, pen_data->coords.y,
 				pen_data->coords.p, pen_data->coords.tilt_x,
-				pen_data->coords.tilt_x);
+				pen_data->coords.tilt_y, pen_data->keys[0].status == TS_TOUCH ? 1 : 0,
+				pen_data->keys[1].status == TS_TOUCH ? 1 : 0);
+	} else {
+		input_report_key(dev, BTN_TOUCH, 0);
+		input_report_key(dev, pen_data->coords.tool_type, 0);
 	}
 	/* report pen button */
 	for (i = 0; i < GOODIX_MAX_PEN_KEY; i++) {
-		if (!pen_data->keys[i].status)
-			continue;
 		if (pen_data->keys[i].status == TS_TOUCH)
 			input_report_key(dev, pen_data->keys[i].code, 1);
-		else if (pen_data->keys[i].status == TS_RELEASE)
+		else
 			input_report_key(dev, pen_data->keys[i].code, 0);
 	}
+
 	input_sync(dev);
 	mutex_unlock(&dev->mutex);
 }
@@ -1295,11 +1293,6 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 			core_data->avdd = NULL;
 			return ret;
 		}
-		ret = regulator_set_voltage(core_data->avdd, 3000000, 3000000);
-		if (ret < 0) {
-			ts_err("set avdd voltage failed");
-			return ret;
-		}
 	} else {
 		ts_info("Avdd name is NULL");
 	}
@@ -1311,11 +1304,6 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 			ret = PTR_ERR(core_data->iovdd);
 			ts_err("Failed to get regulator iovdd:%d", ret);
 			core_data->iovdd = NULL;
-		}
-		ret = regulator_set_voltage(core_data->iovdd, 1800000, 1800000);
-		if (ret < 0) {
-			ts_err("set iovdd voltage failed");
-			return ret;
 		}
 	} else {
 		ts_info("iovdd name is NULL");
@@ -1333,7 +1321,7 @@ int goodix_ts_power_on(struct goodix_ts_core *cd)
 {
 	int ret = 0;
 
-	ts_info("power on");
+	ts_info("Device power on");
 	if (cd->power_on)
 		return 0;
 
@@ -1625,6 +1613,7 @@ static void goodix_ts_esd_work(struct work_struct *work)
 	if (ret) {
 		ts_err("esd check failed");
 		goodix_ts_power_off(cd);
+		usleep_range(5000, 5100);
 		goodix_ts_power_on(cd);
 	}
 
@@ -1969,14 +1958,14 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 		hw_ops->irq_enable(cd, 0);
 		break;
 	case NOTIFY_FWUPDATE_SUCCESS:
-		ret = hw_ops->get_ic_info(cd, &cd->ic_info, true);
+		ret = hw_ops->get_ic_info(cd, &cd->ic_info);
 		if (ret)
 			ts_err("invalid ic info [ignore]");
 		ret = goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
 		if (ret)
 			ts_info("failed send normal config[ignore]");
 	case NOTIFY_FWUPDATE_FAILED:
-		if (hw_ops->read_version(cd, &cd->fw_version, true))
+		if (hw_ops->read_version(cd, &cd->fw_version))
 			ts_info("failed read fw version info[ignore]");
 		hw_ops->irq_enable(cd, 1);
 		cd->update_status = 0;
@@ -2107,12 +2096,12 @@ static int goodix_later_init_thread(void *data)
 	 * if the version info is invalid there must have some
 	 * problem we cann't cover so exit init directly.
 	 */
-	ret = hw_ops->read_version(cd, &cd->fw_version, true);
+	ret = hw_ops->read_version(cd, &cd->fw_version);
 	if (ret) {
 		ts_err("invalid fw version, abort");
 		goto uninit_fw;
 	}
-	ret = hw_ops->get_ic_info(cd, &cd->ic_info, true);
+	ret = hw_ops->get_ic_info(cd, &cd->ic_info);
 	if (ret) {
 		ts_err("invalid ic info, abort");
 		goto uninit_fw;

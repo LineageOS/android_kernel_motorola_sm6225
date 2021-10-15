@@ -22,8 +22,8 @@
 #include <linux/mmi_device.h>
 
 #define TS_DRIVER_NAME				"goodix_ts"
-#define I2C_MAX_TRANSFER_SIZE		60
-#define GOODIX_BUS_RETRY_TIMES		3
+#define I2C_MAX_TRANSFER_SIZE		256
+#define GOODIX_BUS_RETRY_TIMES		2
 #define GOODIX_REG_ADDR_SIZE		4
 
 static struct platform_device *goodix_pdev;
@@ -80,7 +80,7 @@ static int goodix_i2c_read(struct device *dev, unsigned int reg,
 				break;
 			}
 			ts_info("I2c read retry[%d]:0x%x", retry + 1, reg);
-			msleep(20);
+			usleep_range(2000, 2100);
 		}
 		if (unlikely(retry == GOODIX_BUS_RETRY_TIMES)) {
 			ts_err("I2c read failed,dev:%02x,reg:%04x,size:%u",
