@@ -261,7 +261,7 @@ static void read_dbg_raw(psx93XX_t this)
 	ref_ph_c = pdata->ref_phase_c;
 
 	sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
-	dev_info(this->pdev, "SX937X_STAT0_REG= 0x%X\n", uData);
+	LOG_DBG("SX937X_STAT0_REG= 0x%X\n", uData);
 
 	if(ref_ph_a != -1)
 	{
@@ -304,13 +304,12 @@ static void read_dbg_raw(psx93XX_t this)
 		off = (u16)(uData & 0x3FFF);
 		state = psmtcButtons[ph].state;
 
-		dev_info(this->pdev,
-		"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
+		LOG_DBG("SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
 		ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use, ref_ph_c, ref_c_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
 	}
 	else
 	{
-		dev_info(this->pdev, "read_dbg_raw(): invalid reg_val= 0x%X\n", ph_sel);
+		LOG_DBG("read_dbg_raw(): invalid reg_val= 0x%X\n", ph_sel);
 	}
 }
 
@@ -329,14 +328,14 @@ static void read_rawData(psx93XX_t this)
 	if(this)
 	{
 		pDevice = this->pDevice;
-    	pdata = pDevice->hw;
+		pdata = pDevice->hw;
 		ref_ph_a = pdata->ref_phase_a;
 		ref_ph_b = pdata->ref_phase_b;
 		ref_ph_c = pdata->ref_phase_c;
-		dev_info(this->pdev, "[SX937x] ref_ph_a= %d ref_ph_b= %d ref_ph_c= %d\n", ref_ph_a, ref_ph_b, ref_ph_c);
+		LOG_DBG("[SX937x] ref_ph_a= %d ref_ph_b= %d ref_ph_c= %d\n", ref_ph_a, ref_ph_b, ref_ph_c);
 
 		sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
-		dev_info(this->pdev, "SX937X_DEVICE_STATUS_A= 0x%X\n", uData);
+		LOG_DBG("SX937X_DEVICE_STATUS_A= 0x%X\n", uData);
 
 		if(ref_ph_a != -1)
 		{
@@ -368,8 +367,7 @@ static void read_rawData(psx93XX_t this)
 
 			state = psmtcButtons[csx].state;
 
-			dev_info(this->pdev,
-			"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
+			LOG_DBG("SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
 			csx, diff, useful, ref_ph_a, ref_a_use, ref_ph_b, ref_b_use, ref_ph_c, ref_c_use, state, offset, average);
 		}
 
@@ -490,26 +488,33 @@ static ssize_t sx937x_register_write_store(struct class *class,
 	return count;
 }
 
+static int sx937x_temp_regist = 0;
+static u32 sx937x_temp_val = 0;
 static ssize_t sx937x_register_read_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t count)
 {
-	u32 val=0;
-	int regist = 0;
 	int nirq_state = 0;
 	psx93XX_t this = global_sx937x;
 
-	if (sscanf(buf, "%x", &regist) != 1)
+	if (sscanf(buf, "%x", &sx937x_temp_regist) != 1)
 	{
 		LOG_ERR(" The number of data are wrong\n");
 		return -EINVAL;
 	}
 
-	sx937x_i2c_read_16bit(this, regist, &val);
+	sx937x_i2c_read_16bit(this, sx937x_temp_regist, &sx937x_temp_val);
 	nirq_state = sx937x_get_nirq_state();
 
-	LOG_DBG("Register(0x%2x) data(0x%4x) nirq_state(%d)\n", regist, val, nirq_state);
+	LOG_DBG("Register(0x%2x) data(0x%4x) nirq_state(%d)\n", sx937x_temp_regist, sx937x_temp_val, nirq_state);
 	return count;
+}
+
+static ssize_t sx937x_register_read_show(struct class *class,
+		struct class_attribute *attr,
+		char *buf)
+{
+	return sprintf(buf, "Register(0x%2x) data(0x%4x)\n", sx937x_temp_regist, sx937x_temp_val);
 }
 
 static ssize_t manual_offset_calibration_show(struct class *class,
@@ -576,7 +581,7 @@ static struct class_attribute class_attr_raw_data =
 static struct class_attribute class_attr_register_write =
 	__ATTR(register_write,  0660, NULL,sx937x_register_write_store);
 static struct class_attribute class_attr_register_read =
-	__ATTR(register_read,0660, NULL,sx937x_register_read_store);
+	__ATTR(register_read,0660, sx937x_register_read_show,sx937x_register_read_store);
 static struct class_attribute class_attr_manual_calibrate =
 	__ATTR(manual_calibrate, 0660, manual_offset_calibration_show,
 	manual_offset_calibration_store);
@@ -604,7 +609,7 @@ static struct class_attribute capsense_class_attributes[] = {
 	__ATTR(reset, 0660, NULL, capsense_reset_store),
 	__ATTR(raw_data, 0660, capsense_raw_data_show, NULL),
 	__ATTR(register_write,  0660, NULL,sx937x_register_write_store),
-	__ATTR(register_read,0660, NULL,sx937x_register_read_store),
+	__ATTR(register_read,0660, sx937x_register_read_show,sx937x_register_read_store),
 	__ATTR(manual_calibrate, 0660, manual_offset_calibration_show,manual_offset_calibration_store),
 	__ATTR(int_state, 0440, sx937x_int_state_show, NULL),
 	__ATTR(reinitialize, 0660, NULL, sx937x_reinitialize_store),
