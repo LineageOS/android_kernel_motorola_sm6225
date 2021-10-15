@@ -29,6 +29,7 @@
 
 #include "mmi_discrete_charger_core.h"
 #include "mmi_discrete_voter.h"
+#include "mmi_discrete_factory_tcmd.h"
 #include <linux/mmi_discrete_charger_class.h>
 
 static bool debug_enabled;
@@ -2052,6 +2053,8 @@ static int mmi_discrete_charger_init(struct mmi_discrete_charger *chip)
 			pmic_vote_force_val_set(chip->usb_icl_votable, 3000000);
 			pmic_vote_force_active_set(chip->usb_icl_votable, 1);
 		}
+
+		mmi_discrete_create_factory_testcase(chip);
 	}
 
 	return 0;
