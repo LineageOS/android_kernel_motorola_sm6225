@@ -138,7 +138,7 @@ static int goodix_ts_mmi_methods_get_productinfo(struct device *dev, void *cdata
 
 	GET_GOODIX_DATA(dev);
 
-	ret = core_data->hw_ops->read_version(core_data, &fw_version, false);
+	ret = core_data->hw_ops->read_version(core_data, &fw_version);
 	return scnprintf(TO_CHARP(cdata), TS_MMI_CHIP_INFO_LEN, "GT%s",
 			fw_version.patch_pid);
 }
