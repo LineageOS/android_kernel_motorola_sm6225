@@ -19,7 +19,7 @@
 #include <linux/spi/spi.h>
 
 #include "goodix_ts_core.h"
-#define TS_DRIVER_NAME		"gtx8_spi"
+#define TS_DRIVER_NAME		"goodix_ts"
 
 #define SPI_TRANS_PREFIX_LEN    1
 #define REGISTER_WIDTH          4
@@ -225,6 +225,8 @@ static int goodix_spi_probe(struct spi_device *spi)
 	if (!goodix_pdev)
 		return -ENOMEM;
 
+	spi_set_drvdata(spi, goodix_pdev);
+
 	goodix_pdev->name = GOODIX_CORE_DRIVER_NAME;
 	goodix_pdev->id = 0;
 	goodix_pdev->num_resources = 0;
@@ -248,6 +250,7 @@ static int goodix_spi_probe(struct spi_device *spi)
 	return 0;
 
 err_pdev:
+	spi_set_drvdata(spi, NULL);
 	kfree(goodix_pdev);
 	goodix_pdev = NULL;
 	ts_info("spi probe out, %d", ret);
