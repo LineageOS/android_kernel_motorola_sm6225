@@ -51,6 +51,16 @@ int charger_dev_set_charging_current(struct charger_device *chg_dev, u32 uA)
 }
 EXPORT_SYMBOL(charger_dev_set_charging_current);
 
+int charger_dev_get_charging_current(struct charger_device *chg_dev, u32 *uA)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->get_charging_current)
+		return chg_dev->ops->get_charging_current(chg_dev, uA);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_get_charging_current);
+
 int charger_dev_enable_charging(struct charger_device *chg_dev, bool en)
 {
 	if (chg_dev != NULL && chg_dev->ops != NULL &&
