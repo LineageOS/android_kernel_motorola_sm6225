@@ -7,6 +7,7 @@ EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 obj-m += mmi_discrete_charger.o
 mmi_discrete_charger-objs += mmi_discrete_charger_core.o
 mmi_discrete_charger-objs += mmi_discrete_voter.o
+mmi_discrete_charger-objs += mmi_discrete_factory_tcmd.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
 
