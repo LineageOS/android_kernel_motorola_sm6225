@@ -97,6 +97,8 @@ extern int charger_dev_set_constant_voltage(struct charger_device *chg_dev, u32 
 
 extern int charger_dev_set_charging_current(struct charger_device *chg_dev, u32 uA);
 
+extern int charger_dev_get_charging_current(struct charger_device *chg_dev, u32 *uA);
+
 extern int charger_dev_enable_charging(struct charger_device *chg_dev, bool en);
 
 extern int charger_dev_is_enabled_charging(struct charger_device *chg_dev, bool *en);
