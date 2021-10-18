@@ -50,6 +50,9 @@
 
 #define VBUS_MIN_MV			4000
 
+#define FOD_GAIN_MAX_LEN 16
+#define FOD_CURR_MAX_LEN 7
+
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for qti glink charger driver");
@@ -122,6 +125,15 @@ struct oem_write_buf_resp_msg {
 	u32			ret_code;
 };
 
+
+struct fod_curr {
+	u32	fod_array_curr[FOD_CURR_MAX_LEN];
+};
+
+struct fod_gain {
+	u32	fod_array_gain[FOD_GAIN_MAX_LEN];
+};
+
 struct qti_charger {
 	char				*name;
 	struct device			*dev;
@@ -146,6 +158,8 @@ struct qti_charger {
 	struct charger_profile_info	profile_info;
 	struct lpd_info			lpd_info;
 	void				*ipc_log;
+	struct fod_curr	rx_fod_curr;
+	struct fod_gain	rx_fod_gain;
 	bool				*debug_enabled;
 };
 
@@ -1088,6 +1102,144 @@ static DEVICE_ATTR(wireless_chip_id, S_IRUGO,
 		wireless_chip_id_show,
 		NULL);
 
+static int fod_gain_store(struct qti_charger *chip, const char *buf,
+	u32 *fod_array)
+{
+	int i = 0, ret = 0, sum = 0;
+	char *buffer;
+	unsigned int temp;
+
+	buffer = (char *)buf;
+
+	for (i = 0; i < FOD_GAIN_MAX_LEN; i++) {
+		ret = sscanf((const char *)buffer, "%x,%s", &temp, buffer);
+		fod_array[i] = temp;
+		sum++;
+		if (ret != 2)
+			break;
+	}
+
+	if (sum != FOD_GAIN_MAX_LEN) {
+		pr_err("QTI: fod_gain array len err %d\n", sum);
+		return -ENODEV;
+	}
+
+	ret = qti_charger_write(chip, OEM_PROP_WLS_RX_FOD_GAIN,
+				fod_array,
+				sizeof(struct fod_gain));
+	if (ret) {
+		mmi_err(chip, "qti charger write wls rx fod gain failed, rc=%d\n", ret);
+		return ret;
+	}
+
+
+	return sum;
+}
+
+static ssize_t wls_fod_gain_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	fod_gain_store(chg, buf, chg->rx_fod_gain.fod_array_gain);
+	return count;
+}
+
+
+static ssize_t wls_fod_gain_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0, i = 0;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	for (i = 0; i < FOD_GAIN_MAX_LEN; i++) {
+		count += scnprintf(buf+count, CHG_SHOW_MAX_SIZE,
+				"0x%02x ", chg->rx_fod_gain.fod_array_gain[i]);
+		if (i == FOD_GAIN_MAX_LEN - 1)
+			count += scnprintf(buf+count, CHG_SHOW_MAX_SIZE, "\n");
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(wls_fod_gain, 0664,
+		wls_fod_gain_show,
+		wls_fod_gain_store);
+
+static int fod_curr_store(struct qti_charger *chip, const char *buf,
+	u32 *fod_array)
+{
+	int i = 0, ret = 0, sum = 0;
+	char *buffer;
+	unsigned int temp;
+
+	buffer = (char *)buf;
+
+	for (i = 0; i < FOD_CURR_MAX_LEN; i++) {
+		ret = sscanf((const char *)buffer, "%x,%s", &temp, buffer);
+		fod_array[i] = temp;
+		sum++;
+		if (ret != 2)
+			break;
+	}
+
+	if (sum != FOD_CURR_MAX_LEN) {
+		pr_err("QTI: fod_curr array len err %d\n", sum);
+		return -ENODEV;
+	}
+
+	ret = qti_charger_write(chip, OEM_PROP_WLS_RX_FOD_CURR,
+				fod_array,
+				sizeof(struct fod_curr));
+	if (ret) {
+		mmi_err(chip, "qti charger write wls rx fod curr failed, rc=%d\n", ret);
+		return ret;
+	}
+
+	return sum;
+}
+
+static ssize_t wls_fod_curr_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	fod_curr_store(chg, buf, chg->rx_fod_curr.fod_array_curr);
+	return count;
+}
+
+static ssize_t wls_fod_curr_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0, i = 0;
+	struct qti_charger *chg = dev_get_drvdata(dev);
+
+	for (i = 0; i < FOD_CURR_MAX_LEN; i++) {
+		count += scnprintf(buf+count, CHG_SHOW_MAX_SIZE,
+				"0x%02x ", chg->rx_fod_curr.fod_array_curr[i]);
+		if (i == FOD_CURR_MAX_LEN - 1)
+			count += scnprintf(buf+count, CHG_SHOW_MAX_SIZE, "\n");
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(wls_fod_curr, 0664,
+		wls_fod_curr_show,
+		wls_fod_curr_store);
+
 static ssize_t addr_store(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf, size_t count)
@@ -1289,6 +1441,20 @@ static int qti_charger_init(struct qti_charger *chg)
 	if (rc) {
 		mmi_err(chg,
 			   "Couldn't create data\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_wls_fod_curr);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create wls_fod_curr\n");
+	}
+
+	rc = device_create_file(chg->dev,
+				&dev_attr_wls_fod_gain);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create wls_fod_gain\n");
 	}
 
 	bm_ulog_print_mask_log(BM_ALL, BM_LOG_LEVEL_INFO, OEM_BM_ULOG_SIZE);
