@@ -251,6 +251,37 @@ static DEVICE_ATTR(force_chg_iusb, 0664,
 		force_chg_iusb_show,
 		force_chg_iusb_store);
 
+static ssize_t force_chg_fail_clear_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long mode;
+
+	r = kstrtoul(buf, 0, &mode);
+	if (r) {
+		pr_err("mmi_discrete_charger: Invalid chg fail mode value = %lu\n", mode);
+		return -EINVAL;
+	}
+
+	/* do nothing for mmi_discrete_charger */
+	r = 0;
+
+	return r ? r : count;
+}
+
+static ssize_t force_chg_fail_clear_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	/* do nothing for mmi_discrete_charger */
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "0\n");
+}
+
+static DEVICE_ATTR(force_chg_fail_clear, 0664,
+		force_chg_fail_clear_show,
+		force_chg_fail_clear_store);
+
 
 int mmi_discrete_create_factory_testcase(struct mmi_discrete_charger *chip)
 {
@@ -283,6 +314,14 @@ int mmi_discrete_create_factory_testcase(struct mmi_discrete_charger *chip)
 		mmi_err(chip,
 			"Couldn't create force_chg_iusb\n");
 	}
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_force_chg_fail_clear);
+	if (rc) {
+		mmi_err(chip,
+			"Couldn't create force_chg_fail_clear\n");
+	}
+
 
 	return rc;
 }
