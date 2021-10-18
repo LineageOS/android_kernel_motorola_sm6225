@@ -1,6 +1,11 @@
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(USB_POWER_DELIVERY),true)
+	LOCAL_ADDITIONAL_DEPENDENCIES := $(KERNEL_MODULES_OUT)/adapter_class.ko
+endif
+KBUILD_OPTIONS_GKI += GKI_OBJ_MODULE_DIR=gki
+
 ifeq ($(TCPC_SGM7220),true)
 	KERNEL_CFLAGS += CONFIG_TCPC_SGM7220=y
 
