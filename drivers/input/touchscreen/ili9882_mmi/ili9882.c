@@ -975,6 +975,15 @@ static void ili_update_tp_module_info(void)
 		ilits->md_fw_ili = CTPM_FW_CSOT;
 		ilits->md_fw_ili_size = sizeof(CTPM_FW_CSOT);
 		break;
+	case MODEL_CSOT_7807S:
+		ilits->md_name = "CSOT_7807S";
+		ilits->md_fw_filp_path = CSOT_7807S_FW_FILP_PATH;
+		ilits->md_fw_rq_path = CSOT_7807S_FW_REQUEST_PATH;
+		ilits->md_ini_path = CSOT_7807S_INI_NAME_PATH;
+		ilits->md_ini_rq_path = CSOT_7807S_INI_REQUEST_PATH;
+		ilits->md_fw_ili = CTPM_FW_CSOT_7807S;
+		ilits->md_fw_ili_size = sizeof(CTPM_FW_CSOT_7807S);
+		break;
 	case MODEL_AUO:
 		ilits->md_name = "AUO";
 		ilits->md_fw_filp_path = AUO_FW_FILP_PATH;
