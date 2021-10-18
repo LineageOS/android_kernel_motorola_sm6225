@@ -470,6 +470,10 @@ static int ili_parse_tp_module()
 			}
 		} else if (strstr(active_panel_name, "tianma") && strstr(active_panel_name, "ili9882n")) {
 			tp_module = MODEL_TIANMA_9882N;
+		} else if (strstr(active_panel_name, "csot")) {
+			if (strstr(active_panel_name, "ili7807s")) {
+				tp_module = MODEL_CSOT_7807S;
+			}
 		}
 	}
 	ILI_INFO("ili_parse_tp_module=%d\n", tp_module);
