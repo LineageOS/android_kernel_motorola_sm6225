@@ -127,6 +127,14 @@ static unsigned char CTPM_FW_TM_7807S[] = {
 	0xFF,
 };
 
+#define CSOT_7807S_INI_NAME_PATH		"/sdcard/mp_csot_7807s.ini"
+#define CSOT_7807S_FW_FILP_PATH			"/sdcard/ILITEK_FW_CSOT_7807S"
+#define CSOT_7807S_INI_REQUEST_PATH		"mp_csot_7807s.ini"
+#define CSOT_7807S_FW_REQUEST_PATH		"ILITEK_FW_CSOT_7807S"
+static unsigned char CTPM_FW_CSOT_7807S[] = {
+	0xFF,
+};
+
 #define TIANMA_9882N_INI_NAME_PATH		"/sdcard/mp_tianma_9882n.ini"
 #define TIANMA_9882N_FW_FILP_PATH		"/sdcard/ILITEK_FW_TIANMA_9882N"
 #define TIANMA_9882N_INI_REQUEST_PATH	"mp_tianma_9882n.ini"
