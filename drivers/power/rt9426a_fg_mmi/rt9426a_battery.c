@@ -2717,14 +2717,6 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 		dev_notice(dev, "pdata->curr_source is out of range, use 2\n");
 		pdata->curr_source = RT9426A_REG_AI;
 	}
-	/*  Read Ext. Reg Table for RT9426A  */
-	ret = of_property_read_u8_array(np, "rt,fg_extreg_table", (u8 *)pdata->extreg_table, 224);
-	if (ret < 0) {
-		dev_notice(dev, "no ocv table property\n");
-		for (j = 0; j < 15; j++)
-			for (i = 0; i < 16; i++)
-				pdata->extreg_table[j].data[i] = 0;
-	}
 
 	of_property_read_u32(np, "rt,rs_ic_setting",&pdata->rs_ic_setting);
 	of_property_read_u32(np, "rt,rs_schematic",&pdata->rs_schematic);
@@ -2754,6 +2746,14 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 		dev_notice(dev, "no fc_vth property, use default 4200mV\n");
 		for (i = 0; i < 5; i++)
 			pdata->fc_vth[i] = 0x0078;
+	}
+	/*  Read Ext. Reg Table for RT9426A  */
+	ret = of_property_read_u8_array(batt_profile_node, "rt,fg_extreg_table", (u8 *)pdata->extreg_table, 224);
+	if (ret < 0) {
+		dev_notice(dev, "no ocv table property\n");
+		for (j = 0; j < 15; j++)
+			for (i = 0; i < 16; i++)
+				pdata->extreg_table[j].data[i] = 0;
 	}
 	/* parse ocv_table array by 80x5 element */
 	for (i = 0; i < 5; i++) {
