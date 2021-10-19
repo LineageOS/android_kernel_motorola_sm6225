@@ -520,8 +520,8 @@ static int mmi_get_rp_based_dcp_current(struct mmi_discrete_charger *chg, int ty
 	/* fall through */
 	default:
 		rp_ua = DCP_CURRENT_UA;
-		if (chg->usb_dcp_curr_max > 0)
-			rp_ua = chg->usb_dcp_curr_max;
+		if (chg->constraint.dcp_pmax > 0)
+			rp_ua = (chg->constraint.dcp_pmax / 5) * 1000;
 	}
 
 	return rp_ua;
