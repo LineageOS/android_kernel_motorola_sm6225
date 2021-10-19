@@ -97,7 +97,6 @@ struct mmi_discrete_charger {
 
 	bool			vbus_enabled;
 	int			real_charger_type;
-	int			usb_dcp_curr_max;
 	int 			hvdcp2_max_icl_ua;
 
 	/* extcon for VBUS / ID notification to USB for type-c only */
