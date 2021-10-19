@@ -256,6 +256,7 @@ struct bank_reg {
 struct pct1812_custom_cfg {
 	unsigned int max_x, max_y;
 	unsigned int scroll_min_distance;
+	unsigned int ty_offset;
 	bool flip_x;
 	bool flip_y;
 	bool report_gesture;
@@ -334,6 +335,7 @@ struct pct1812_data {
 	struct mutex cmdlock;
 	struct delayed_work worker;
 
+	void (*transform)(struct pct1812_data *, unsigned int *);
 	bool irq_enabled;
 	struct kfifo cmd_pipe;
 	atomic_t touch_stopped;
@@ -608,6 +610,11 @@ static void inline pct1812_set_irq(struct pct1812_data *ts, bool on)
 	}
 }
 
+static void inline pct1812_transform_coords(struct pct1812_data *ts, unsigned int *y)
+{
+	*y += ts->plat_data->config->ty_offset;
+}
+
 #define PATCH_SZ 3
 
 #ifndef STATIC_PLATFORM_DATA
@@ -615,6 +622,7 @@ static int pct1812_parse_dt(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct pct1812_platform *pdata = dev->platform_data;
+	struct pct1812_data *ts = i2c_get_clientdata(client);
 	struct device_node *cfg, *np = dev->of_node;
 	int r, ret = 0;
 
@@ -678,6 +686,11 @@ static int pct1812_parse_dt(struct i2c_client *client)
 
 		if (!of_property_read_u32(cfg, "scroll-min-distance", &pdata->config->scroll_min_distance))
 			dev_info(dev, "%s: scroll_min_disctance:(%u)\n", __func__, pdata->config->scroll_min_distance);
+
+		if (!of_property_read_u32(cfg, "ty-offset", &pdata->config->ty_offset)) {
+			ts->transform = pct1812_transform_coords;
+			dev_info(dev, "%s: ty_offset:(%u)\n", __func__, pdata->config->ty_offset);
+		}
 
 		if (of_find_property(cfg, "bank-register-data", NULL)) {
 			of_find_property(cfg, "bank-register-data", &byte_len);
@@ -840,6 +853,10 @@ static int pct1812_process_touch_event(struct pct1812_data *ts)
 				if (ts->plat_data->config->flip_y)
 					y = ts->plat_data->config->max_y - y;
 			}
+
+			if (ts->transform)
+				ts->transform(ts, &y);
+
 			DBG_PRINT(DBG_BIT_ISR,"[@%02x]: x=%d, y=%d\n", OBJ_ADDR(i), x, y);
 
 			if (i == 0) { // draw line self-test supports one finger only
@@ -2125,6 +2142,9 @@ static int pct1812_resume(struct device *dev)
 static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
 {
 	static char ts_phys[64] = {0};
+	unsigned int xRes = DFLT_X_RES;
+	unsigned int yRes = DFLT_Y_RES;
+	struct pct1812_custom_cfg *config = ts->plat_data->config;
 	int ret = 0;
 
 	if (!alloc)
@@ -2147,19 +2167,27 @@ static int pct1812_input_dev(struct pct1812_data *ts, bool alloc)
 	set_bit(BTN_TOOL_FINGER, ts->idev->keybit);
 	set_bit(INPUT_PROP_DIRECT, ts->idev->propbit);
 
+	if (config) {
+		if (config->max_x)
+			xRes = config->max_x -1;
+		if (config->max_y)
+			yRes = config->max_y -1;
+		if (config->ty_offset) {
+			yRes += 2 * config->ty_offset;
+		}
+	}
+
+	dev_info(ts->dev, "%s: Input dev resolution: %ux%u", __func__, xRes, yRes);
+
 	/* x_res/y_res is not available, since INFO work has not run yet */
-	input_set_abs_params(ts->idev, ABS_X, 0,
-			ts->plat_data->config ? ts->plat_data->config->max_x - 1 : DFLT_X_RES, 0, 0);
-	input_set_abs_params(ts->idev, ABS_Y, 0,
-			ts->plat_data->config ? ts->plat_data->config->max_y - 1 : DFLT_Y_RES, 0, 0);
+	input_set_abs_params(ts->idev, ABS_X, 0, xRes, 0, 0);
+	input_set_abs_params(ts->idev, ABS_Y, 0, yRes, 0, 0);
 
 	if (ts->plat_data->config && ts->plat_data->config->report_mt) {
 		set_bit(MT_TOOL_FINGER, ts->idev->keybit);
 		set_bit(INPUT_PROP_DIRECT, ts->idev->propbit);
-		input_set_abs_params(ts->idev, ABS_MT_POSITION_X, 0,
-			ts->plat_data->config ? ts->plat_data->config->max_x - 1 : DFLT_X_RES, 0, 0);
-		input_set_abs_params(ts->idev, ABS_MT_POSITION_Y, 0,
-			ts->plat_data->config ? ts->plat_data->config->max_y - 1 : DFLT_Y_RES, 0, 0);
+		input_set_abs_params(ts->idev, ABS_MT_POSITION_X, 0, xRes, 0, 0);
+		input_set_abs_params(ts->idev, ABS_MT_POSITION_Y, 0, yRes, 0, 0);
 		input_mt_init_slots(ts->idev, ts->max_points, INPUT_MT_DIRECT);
 	}
 
@@ -2210,6 +2238,7 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto error_allocate_pdata;
 	}
 
+	i2c_set_clientdata(client, ts);
 	client->dev.platform_data = pdata;
 	pdata->client = client;
 	ts->client = client;
@@ -2233,7 +2262,6 @@ static int pct1812_probe(struct i2c_client *client, const struct i2c_device_id *
 		goto error_allocate_mem;
 	}
 
-	i2c_set_clientdata(client, ts);
 	dev_set_drvdata(&client->dev, ts);
 
 	mutex_init(&ts->i2c_mutex);
