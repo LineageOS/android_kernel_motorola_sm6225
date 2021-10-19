@@ -203,11 +203,19 @@ static int rt9426a_get_checksum(struct rt9426a_chip *chip)
 static void rt9426a_read_page_cmd(struct rt9426a_chip *chip, uint8_t page)
 {
 	uint16_t read_page_cmd = 0x6500;
+	int i, regval, retry_times = 2;
 
 	read_page_cmd += page;
-	rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, read_page_cmd);
-	rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, read_page_cmd);
-	mdelay(5);
+
+	/* confirm sending read page cmd successfully ; 2021-10-12 */
+	for (i = 0; i < retry_times; i++) {
+		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, read_page_cmd);
+		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, read_page_cmd);
+		mdelay(5);
+		regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SWINDOW1);
+		if (regval != 0xFFFF)
+			break;
+	}
 }
 
 static void rt9426a_write_page_cmd(struct rt9426a_chip *chip, uint8_t page)
