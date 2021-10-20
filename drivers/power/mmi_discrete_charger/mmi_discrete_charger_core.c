@@ -29,6 +29,7 @@
 
 #include "mmi_discrete_charger_core.h"
 #include "mmi_discrete_voter.h"
+#include "mmi_discrete_charger_iio.h"
 #include "mmi_discrete_factory_tcmd.h"
 #include <linux/mmi_discrete_charger_class.h>
 
@@ -702,6 +703,22 @@ static int mmi_discrete_disable_hw_jeita(struct mmi_discrete_charger *chip)
 
 	if (rc)
 		mmi_err(chip, "Couldn't disable hw jeita rc=%d\n", rc);
+
+	return rc;
+}
+
+int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en)
+{
+	int rc = 0;
+
+	if (en == !chip->vbus_enabled) {
+		rc = charger_dev_enable_otg(chip->master_chg_dev, en);
+		if (rc) {
+			mmi_err(chip, "Unable to %s otg (%d)\n", en?"enable":"disable", rc);
+			return rc;
+		}
+		chip->vbus_enabled = en;
+	}
 
 	return rc;
 }
@@ -2293,11 +2310,21 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 	struct mmi_discrete_charger *chip;
+	struct iio_dev *indio_dev;
 	struct power_supply_config psy_cfg = {};
 
-	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
-	if (!chip)
+	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*chip));
+	if (!indio_dev)
 		return -ENOMEM;
+
+	chip = iio_priv(indio_dev);
+	if (!chip) {
+		dev_err(&pdev->dev,
+			"Unable to alloc memory for mmi_discrete_iio\n");
+		return -ENOMEM;
+	}
+
+	chip->indio_dev = indio_dev;
 
 	chip->dev = &pdev->dev;
 	chip->name = "mmi_discrete";
@@ -2335,6 +2362,12 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 	}
 
 	chip->wls_psy = power_supply_get_by_name("wireless");
+
+	rc = mmi_discrete_init_iio_psy(chip, pdev);
+	if (rc < 0) {
+		mmi_err(chip, "Failed to init iio psy\n");
+		return rc;
+	}
 
 	rc = mmi_discrete_parse_dts(chip);
 	if (rc < 0) {
