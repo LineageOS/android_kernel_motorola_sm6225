@@ -13,6 +13,8 @@
  #ifndef __MMI_DISCRETE_CHARGER_CORE_H__
 #define __MMI_DISCRETE_CHARGER_CORE_H__
 
+#include <linux/iio/consumer.h>
+#include <linux/iio/iio.h>
 #include <linux/extcon-provider.h>
 #include "mmi_charger.h"
 
@@ -102,6 +104,11 @@ struct mmi_discrete_charger {
 	/* extcon for VBUS / ID notification to USB for type-c only */
 	struct extcon_dev	*extcon;
 
+	/*IIO*/
+	struct iio_dev		*indio_dev;
+	struct iio_chan_spec	*iio_chan;
+	struct iio_channel	*int_iio_chans;
+
 	/*PD*/
 /*	struct usbpd	*pd_handle;
 	int			pd_current_pdo;
@@ -127,5 +134,7 @@ struct mmi_discrete_charger {
 	int			typec_mode;
 	bool			use_extcon;
 };
+
+int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
 
 #endif
