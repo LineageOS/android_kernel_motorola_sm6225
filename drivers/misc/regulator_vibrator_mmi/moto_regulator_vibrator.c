@@ -50,26 +50,30 @@ static void ext_vib_work(struct work_struct *work)
 						vib_work);
 	int ret = 0;
 
+	static bool regulator_en_flag = false;
 	if (chip->state) {
-		if (chip->pwr_by_gpio){
+		if (chip->pwr_by_gpio) {
 			ret = gpio_direction_output(chip->vcc_3v0_Pin, chip->state);
 			ret = gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
 		}
-		else
+		else if (!regulator_en_flag) {
 			ret = regulator_enable(chip->vcc);
-
+			regulator_en_flag = true;
+		}
 		if (ret == 0)
 			hrtimer_start(&chip->stop_timer,
 				      ms_to_ktime(chip->vib_play_ms),
 				      HRTIMER_MODE_REL);
 	}
 	else {
-		if (chip->pwr_by_gpio){
+		if (chip->pwr_by_gpio) {
 			gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
 			gpio_direction_output(chip->vcc_3v0_Pin, chip->state);
 		}
-		else
+		else if (regulator_en_flag) {
+			regulator_en_flag = false;
 			ret = regulator_disable(chip->vcc);
+		}
 	}
 	pr_info("vib:chip->state = %d,vib_play_ms=%lld vib_vol=%d\n",chip->state,
 			chip->vib_play_ms, regulator_get_voltage(chip->vcc));
@@ -176,8 +180,8 @@ static ssize_t ext_vib_store_activate(struct device *dev,
 	hrtimer_cancel(&chip->stop_timer);
 	chip->state = val;
 	pr_info("vib: state = %d, time = %llu ms\n", chip->state, chip->vib_play_ms);
-
 	mutex_unlock(&chip->lock);
+
 	schedule_work(&chip->vib_work);
 
 	return count;
