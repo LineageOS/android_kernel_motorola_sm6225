@@ -17,6 +17,7 @@
 #include <linux/string.h>
 #include <linux/mmi_discrete_charger_class.h>
 #include "mmi_discrete_charger_core.h"
+#include "mmi_discrete_voter.h"
 
 
 #define CHG_SHOW_MAX_SIZE 50
@@ -26,6 +27,8 @@ static ssize_t force_chg_usb_suspend_store(struct device *dev,
 {
 	unsigned long  r;
 	unsigned long mode;
+	static int old_current = 0;
+	static bool old_suspend = false;
 
 	struct platform_device *pdev = to_platform_device(dev);
 	struct mmi_discrete_charger *mmi_chip = platform_get_drvdata(pdev);
@@ -40,9 +43,20 @@ static ssize_t force_chg_usb_suspend_store(struct device *dev,
 		pr_err("mmi_discrete_charger: chip not valid\n");
 		return -ENODEV;
 	}
-	r = charger_dev_set_usb_suspend(mmi_chip->master_chg_dev, (bool)mode);
-	if (r < 0)
-		mmi_err(mmi_chip, "Couldn't set usb suspend rc=%d\n", (int)r);
+	pr_info("%s:mode=%d, old_suspend=%d, old_current=%d\n", __func__,(bool)mode, old_suspend, old_current);
+	if (mode == true && old_suspend == false) {
+		old_suspend = true;
+		old_current = get_effective_result(mmi_chip->usb_icl_votable);
+		/* vote 0mA when suspended */
+		pmic_vote_force_val_set(mmi_chip->usb_icl_votable, 0);
+		pmic_vote_force_active_set(mmi_chip->usb_icl_votable, 1);
+	} else if (mode == false && old_suspend == true) {
+		old_suspend = false;
+		if (get_effective_result(mmi_chip->usb_icl_votable) == 0) {
+			pmic_vote_force_val_set(mmi_chip->usb_icl_votable, (u32)old_current);
+			pmic_vote_force_active_set(mmi_chip->usb_icl_votable, 1);
+		}
+	}
 
 	return r ? r : count;
 }
@@ -52,7 +66,6 @@ static ssize_t force_chg_usb_suspend_show(struct device *dev,
 					char *buf)
 {
 	bool state;
-	int ret;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct mmi_discrete_charger *mmi_chip = platform_get_drvdata(pdev);
 
@@ -60,14 +73,9 @@ static ssize_t force_chg_usb_suspend_show(struct device *dev,
 		pr_err("mmi_discrete_charger: chip not valid\n");
 		return -ENODEV;
 	}
-	ret =  charger_dev_is_usb_suspend(mmi_chip->master_chg_dev, &state);
-	if (ret) {
-		mmi_err(mmi_chip, "USBIN_SUSPEND_BIT failed ret = %d\n", ret);
-		state = -EFAULT;
-		goto end;
-	}
 
-end:
+	state = mmi_discrete_is_usb_suspended(mmi_chip);
+
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
 }
 
@@ -215,9 +223,8 @@ static ssize_t force_chg_iusb_store(struct device *dev,
 	}
 
 	usb_curr *= 1000; /* Convert to uA */
-	r =charger_dev_set_input_current(mmi_chip->master_chg_dev, usb_curr);
-	if (r < 0)
-		mmi_err(mmi_chip, "Couldn't set USBIN_AICL_OPTIONS rc=%d\n", (int)r);
+	pmic_vote_force_val_set(mmi_chip->usb_icl_votable, (u32)usb_curr);
+	pmic_vote_force_active_set(mmi_chip->usb_icl_votable, 1);
 
 	return r ? r : count;
 }
@@ -226,8 +233,7 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
-	u32 usb_curr;
-	unsigned long r;
+	int usb_curr;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct mmi_discrete_charger *mmi_chip = platform_get_drvdata(pdev);
 
@@ -236,15 +242,15 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 		usb_curr = -ENODEV;
 		goto end;
 	}
-	r = charger_dev_get_input_current(mmi_chip->master_chg_dev, &usb_curr);
+	usb_curr = get_effective_result(mmi_chip->usb_icl_votable);
 
-	if (r < 0) {
-		mmi_err(mmi_chip, "Factory Couldn't get usb_icl rc=%d\n", (int)r);
-		return r;
+	if (usb_curr < 0) {
+		mmi_err(mmi_chip, "Factory Couldn't get usb_icl rc=%d\n", usb_curr);
+		return usb_curr;
 	}
 	usb_curr /= 1000; /* Convert to mA */
 end:
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%ul\n", usb_curr);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", usb_curr);
 }
 
 static DEVICE_ATTR(force_chg_iusb, 0664,
