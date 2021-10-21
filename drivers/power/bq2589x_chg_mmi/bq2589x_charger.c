@@ -446,7 +446,13 @@ int bq2589x_set_input_current_limit(struct bq2589x *bq, int curr)
 {
 	u8 val;
 
-	val = (curr - BQ2589X_IINLIM_BASE) / BQ2589X_IINLIM_LSB;
+	if (curr < BQ2589X_IINLIM_BASE)
+		val = 0;
+	else if (curr > BQ2589X_IINLIM_MAX)
+		val = 0x3F;
+	else
+		val = (curr - BQ2589X_IINLIM_BASE) / BQ2589X_IINLIM_LSB;
+
 	return bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_IINLIM_MASK, val << BQ2589X_IINLIM_SHIFT);
 }
 
@@ -1748,33 +1754,6 @@ static int bq2589x_get_real_charger_type(struct charger_device *chg_dev, int *ch
 	return 0;
 }
 
-static int bq2589x_set_hiz_mode(struct charger_device *chg_dev, bool hiz_en)
-{
-	u8 val;
-	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
-
-	dev_info(bq->dev, "%s:%d", __func__, hiz_en);
-	val = (hiz_en ? BQ2589X_HIZ_ENABLE : BQ2589X_HIZ_DISABLE) << BQ2589X_ENHIZ_SHIFT;
-
-	return bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENHIZ_MASK, val);
-}
-
-static int bq2589x_is_hiz_mode(struct charger_device *chg_dev, bool *state)
-{
-	u8 val;
-	int ret;
-	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
-
-	ret = bq2589x_read_byte(bq, &val, BQ2589X_REG_00);
-	if (ret){
-		dev_err(bq->dev, "%s read REG 00 fail\n",__func__);
-		return ret;
-	}
-	*state = !!(((val & BQ2589X_ENHIZ_MASK) >> BQ2589X_ENHIZ_SHIFT) & BQ2589X_HIZ_ENABLE);
-
-	return 0;
-}
-
 static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -1926,8 +1905,6 @@ static const struct charger_properties bq2589x_chg_props = {
 
 static struct charger_ops bq2589x_chg_ops = {
 	.get_real_charger_type = bq2589x_get_real_charger_type,
-	.set_usb_suspend = bq2589x_set_hiz_mode,
-	.is_usb_suspend = bq2589x_is_hiz_mode,
 	.set_input_current = bq2589x_set_icl,
 	.get_input_current = bq2589x_get_icl,
 	.enable_hw_jeita = bq2589x_enable_hw_jeita,
