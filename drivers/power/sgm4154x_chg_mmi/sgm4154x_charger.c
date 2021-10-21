@@ -529,16 +529,14 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 	int ret;
 	int reg_val = 0;
 
-	if (iindpm < SGM4154x_IINDPM_I_MIN_uA ||
-			iindpm > SGM4154x_IINDPM_I_MAX_uA)
-		return -EINVAL;
-
-	if (iindpm > SGM4154x_IINDPM_I_MAX_uA)
+	if (iindpm < SGM4154x_IINDPM_I_MIN_uA)
+		reg_val = 0;
+	else if (iindpm >= SGM4154x_IINDPM_I_MAX_uA)
 		reg_val = 0x1F;
 	else if (iindpm >= SGM4154x_IINDPM_I_MIN_uA && iindpm <= 3100000)//default
 		reg_val = (iindpm-SGM4154x_IINDPM_I_MIN_uA) / SGM4154x_IINDPM_STEP_uA;
 	else if (iindpm > 3100000 && iindpm < SGM4154x_IINDPM_I_MAX_uA)
-		return -EINVAL;
+		reg_val = 0x1E;
 
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_0,
 				  SGM4154x_IINDPM_I_MASK, reg_val);
@@ -649,35 +647,6 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	state->vbus_gd = !!(chrg_param_2 & SGM4154x_VBUS_GOOD);
 
 	return 0;
-}
-
-static int sgm4154x_is_hiz_en(struct charger_device *chg_dev, bool *hiz_en)
-{
-	int reg_val;
-	int ret = 0;
-	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
-
-	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_0, &reg_val);
-	if (ret){
-		pr_err("%s read SGM4154x_CHRG_CTRL_0 fail\n",__func__);
-		return ret;
-	}
-	*hiz_en = !!(reg_val & SGM4154x_HIZ_EN);
-
-	dev_notice(sgm->dev, "%s:%d", __func__, *hiz_en);
-	return ret;
-}
-
-static int sgm4154x_set_hiz_en(struct charger_device *chg_dev, bool hiz_en)
-{
-	int reg_val;
-	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
-
-	dev_notice(sgm->dev, "%s:%d", __func__, hiz_en);
-	reg_val = hiz_en ? SGM4154x_HIZ_EN : 0;
-
-	return regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_0,
-				  SGM4154x_HIZ_EN, reg_val);
 }
 
 int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
@@ -2211,8 +2180,6 @@ static const struct charger_properties sgm4154x_chg_props = {
 
 static struct charger_ops sgm4154x_chg_ops = {
 	.get_real_charger_type = sgm4154x_get_real_charger_type,
-	.set_usb_suspend = sgm4154x_set_hiz_en,
-	.is_usb_suspend = sgm4154x_is_hiz_en,
 	.set_input_current = sgm4154x_set_icl,
 	.get_input_current = sgm4154x_get_icl,
 	.enable_hw_jeita = sgm4154x_enable_hw_jeita,

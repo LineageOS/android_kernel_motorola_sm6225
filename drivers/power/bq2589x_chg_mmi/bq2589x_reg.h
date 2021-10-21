@@ -17,6 +17,7 @@
 #define BQ2589X_IINLIM_SHIFT		0
 #define BQ2589X_IINLIM_BASE         100
 #define BQ2589X_IINLIM_LSB          50
+#define BQ2589X_IINLIM_MAX         3250
 
 /* Register 01h */
 #define BQ2589X_REG_01		    	0x01

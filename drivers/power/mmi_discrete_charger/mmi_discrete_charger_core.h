@@ -136,5 +136,6 @@ struct mmi_discrete_charger {
 };
 
 int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
+int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip);
 
 #endif

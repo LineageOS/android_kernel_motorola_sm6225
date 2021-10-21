@@ -662,14 +662,31 @@ static int mmi_discrete_update_usb_type(struct mmi_discrete_charger *chip)
 	return rc;
 }
 
-static int mmi_discrete_set_usb_suspend(struct mmi_discrete_charger *chip, bool suspend)
+int mmi_discrete_set_usb_suspend(struct mmi_discrete_charger *chip, bool suspend)
 {
 	int rc = 0;
+	static int old_current = 0;
+	static bool old_suspend = false;
 
-	rc = charger_dev_set_usb_suspend(chip->master_chg_dev, suspend);
+	if (!chip->constraint.factory_mode || !chip->usb_icl_votable)
+		return rc;
 
-	if (rc)
-		mmi_err(chip, "Couldn't set usb suspend rc=%d\n", rc);
+	pr_info("%s:suspend=%d, old_suspend=%d, old_current=%d\n",
+			__func__, suspend, old_suspend, old_current);
+
+	if (suspend == true && old_suspend == false) {
+		old_suspend = true;
+		old_current = get_effective_result(chip->usb_icl_votable);
+		/* vote 0mA when suspended */
+		pmic_vote_force_val_set(chip->usb_icl_votable, 0);
+		pmic_vote_force_active_set(chip->usb_icl_votable, 1);
+	} else if (suspend == false && old_suspend == true) {
+		old_suspend = false;
+		if (get_effective_result(chip->usb_icl_votable) == 0) {
+			pmic_vote_force_val_set(chip->usb_icl_votable, (u32)old_current);
+			pmic_vote_force_active_set(chip->usb_icl_votable, 1);
+		}
+	}
 
 	return rc;
 }
@@ -680,17 +697,12 @@ static int mmi_discrete_set_dc_suspend(struct mmi_discrete_charger *chip, bool s
 	return 0;
 }
 
-static int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip)
+int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip)
 {
-	int rc = 0;
 	bool enable = 0;
 
-	rc = charger_dev_is_usb_suspend(chip->master_chg_dev, &enable);
-
-	if (rc) {
-		mmi_err(chip, "Couldn't get usb suspend rc=%d\n", rc);
-		return rc;
-	}
+	if (chip->usb_icl_votable)
+		enable = get_effective_result(chip->usb_icl_votable) == 0;
 
 	return enable;
 }
