@@ -488,6 +488,7 @@ struct goodix_ts_core {
 	int update_status;
 	int gesture_enabled;
 	const char *supplier;
+	bool need_update_cfg;
 };
 
 /* external module structures */
