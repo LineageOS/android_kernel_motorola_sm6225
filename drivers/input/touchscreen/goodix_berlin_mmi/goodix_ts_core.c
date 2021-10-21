@@ -1726,6 +1726,10 @@ void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 	struct input_dev *input_dev = core_data->input_dev;
 	int i;
 
+	if (!input_dev) {
+		ts_err("Invalid input device");
+		return;
+	}
 	mutex_lock(&input_dev->mutex);
 
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
@@ -1962,6 +1966,15 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 		hw_ops->irq_enable(cd, 0);
 		break;
 	case NOTIFY_FWUPDATE_SUCCESS:
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		if (cd->need_update_cfg) {
+			if (goodix_get_config_proc(cd)) {
+				ts_info("no valid ic config found");
+				hw_ops->irq_enable(cd, 1);
+				break;
+			}
+		}
+#endif
 		ret = hw_ops->get_ic_info(cd, &cd->ic_info);
 		if (ret)
 			ts_err("invalid ic info [ignore]");
@@ -2076,18 +2089,21 @@ static int goodix_later_init_thread(void *data)
 	struct goodix_ts_core *cd = data;
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 
-	/* setp 1: get config data from config bin */
-	if (goodix_get_config_proc(cd))
-		ts_info("no valid ic config found");
-	else
-		ts_info("success get valid ic config");
-
-	/* setp 2: init fw struct add try do fw upgrade */
+	/* setp 1: init fw struct add try do fw upgrade */
 	ret = goodix_fw_update_init(cd);
 	if (ret) {
 		ts_err("failed init fw update module");
 		goto err_out;
 	}
+
+	/* setp 2: get config data from config bin */
+	if (goodix_get_config_proc(cd)) {
+		ts_info("no valid ic config found");
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		cd->need_update_cfg = 1;
+#endif
+	} else
+		ts_info("success get valid ic config");
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	ret = goodix_do_fw_update(cd->ic_configs[CONFIG_TYPE_NORMAL],
@@ -2103,11 +2119,17 @@ static int goodix_later_init_thread(void *data)
 	ret = hw_ops->read_version(cd, &cd->fw_version);
 	if (ret) {
 		ts_err("invalid fw version, abort");
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		goto stage2_init;
+#endif
 		goto uninit_fw;
 	}
 	ret = hw_ops->get_ic_info(cd, &cd->ic_info);
 	if (ret) {
 		ts_err("invalid ic info, abort");
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+		goto stage2_init;
+#endif
 		goto uninit_fw;
 	}
 
@@ -2116,6 +2138,9 @@ static int goodix_later_init_thread(void *data)
 	 */
 	goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+stage2_init:
+#endif
 	/* init other resources */
 	ret = goodix_ts_stage2_init(cd);
 	if (ret) {

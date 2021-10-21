@@ -129,18 +129,24 @@ static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
 }
 
-#define TS_MMI_CHIP_INFO_LEN    7 /* GT9916 */
 static int goodix_ts_mmi_methods_get_productinfo(struct device *dev, void *cdata) {
-	int ret;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	struct goodix_fw_version fw_version;
+	struct goodix_ts_board_data *ts_bdata;
+	char* ic_info;
 
 	GET_GOODIX_DATA(dev);
 
-	ret = core_data->hw_ops->read_version(core_data, &fw_version);
-	return scnprintf(TO_CHARP(cdata), TS_MMI_CHIP_INFO_LEN, "GT%s",
-			fw_version.patch_pid);
+	ts_bdata = board_data(core_data);
+	if (!ts_bdata) {
+		ts_err("Failed to get ts board data");
+		return -ENODEV;
+	}
+
+	ic_info = strstr(ts_bdata->ic_name, ",");
+	ic_info++;
+
+	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", ic_info);
 }
 
 #define TOUCH_CFG_VERSION_ADDR    0x10076
