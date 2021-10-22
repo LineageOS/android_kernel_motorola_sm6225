@@ -251,6 +251,42 @@ static DEVICE_ATTR(force_chg_iusb, 0664,
 		force_chg_iusb_show,
 		force_chg_iusb_store);
 
+static ssize_t chg_type_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	pr_err("%s un-supported\n", __func__);
+	return count;
+}
+
+static ssize_t chg_type_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int charger_type;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct mmi_discrete_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	if (!mmi_chip) {
+		pr_err("chip not valid\n");
+		charger_type = -ENODEV;
+		goto end;
+	}
+	//Because, Mtk platform TYPE DCP is 4.
+	// In order to be compatible with MTK platform. return "4" when real_charge_type=DCP
+	if (POWER_SUPPLY_TYPE_USB_DCP == mmi_chip->real_charger_type)
+		charger_type = 4;
+	else
+		charger_type = 1; // 1 is SDP in mkt platform
+end:
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", charger_type);
+}
+
+static DEVICE_ATTR(chg_type, 0664,
+		chg_type_show,
+		chg_type_store);
+
+
 static ssize_t force_chg_fail_clear_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
@@ -320,6 +356,13 @@ int mmi_discrete_create_factory_testcase(struct mmi_discrete_charger *chip)
 	if (rc) {
 		mmi_err(chip,
 			"Couldn't create force_chg_fail_clear\n");
+	}
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_chg_type);
+	if (rc) {
+		mmi_err(chip,
+			"Couldn't create chg_type\n");
 	}
 
 
