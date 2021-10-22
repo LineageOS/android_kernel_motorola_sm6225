@@ -1414,6 +1414,7 @@ static void bq2589x_adjust_absolute_vindpm(struct bq2589x *bq)
 
 static void bq2589x_adapter_in_func(struct bq2589x *bq)
 {
+	int ret = 0;
 
 	if ((bq->vbus_type == BQ2589X_VBUS_USB_SDP ||
 		bq->vbus_type == BQ2589X_VBUS_NONSTAND ||
@@ -1457,8 +1458,13 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 			break;
 	}
 
-	if (bq->cfg.use_absolute_vindpm)
-		bq2589x_adjust_absolute_vindpm(bq);
+	if (bq->cfg.use_absolute_vindpm) {
+		ret = bq2589x_set_input_volt_limit(bq, 4600);
+		if (ret < 0)
+			dev_err(bq->dev,"%s:reset vindpm threshold to 4600 failed:%d\n",__func__,ret);
+		else
+			dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
+	}
 
 	if (pe.enable) {
 		schedule_delayed_work(&bq->monitor_work, 0);
@@ -1474,11 +1480,11 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 {
 	int ret;
 
-	ret = bq2589x_set_input_volt_limit(bq, 4400);
+	ret = bq2589x_set_input_volt_limit(bq, 4600);
 	if (ret < 0)
-		dev_err(bq->dev,"%s:reset vindpm threshold to 4400 failed:%d\n",__func__,ret);
+		dev_err(bq->dev,"%s:reset vindpm threshold to 4600 failed:%d\n",__func__,ret);
 	else
-		dev_info(bq->dev,"%s:reset vindpm threshold to 4400 successfully\n",__func__);
+		dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
 
 	if (pe.enable) {
 		cancel_delayed_work_sync(&bq->monitor_work);
