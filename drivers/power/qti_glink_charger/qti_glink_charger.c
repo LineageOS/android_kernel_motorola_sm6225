@@ -372,6 +372,7 @@ static int qti_charger_write(struct qti_charger *chg, u32 property,
 		goto out;
 	} else {
 		rc = 0;
+		bm_ulog_print_log(OEM_BM_ULOG_SIZE);
 	}
 out:
 	mmi_dbg(chg, "Complete data write for property: %u\n", property);
@@ -515,9 +516,6 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 {
 	int rc;
 	struct qti_charger *chg = data;
-	int chrg_type = chg->chg_info.chrg_type;
-	int chrg_pmax_mw = chg->chg_info.chrg_pmax_mw;
-	int chrg_present = chg->chg_info.chrg_present;
 
 	rc = qti_charger_read(chg, OEM_PROP_CHG_INFO,
 				&chg->chg_info,
@@ -547,11 +545,7 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
-	if (chrg_type != chg->chg_info.chrg_type ||
-	    chrg_present != chg->chg_info.chrg_present ||
-	    chrg_pmax_mw != chg->chg_info.chrg_pmax_mw) {
-		bm_ulog_print_log(OEM_BM_ULOG_SIZE);
-	}
+	bm_ulog_print_log(OEM_BM_ULOG_SIZE);
 
 	return rc;
 }
@@ -1328,8 +1322,7 @@ static int qti_charger_init(struct qti_charger *chg)
 		return 0;
 	}
 
-	chg->constraint.factory_mode = mmi_is_factory_mode();
-	value = chg->constraint.factory_mode;
+	value = mmi_is_factory_mode();
 	rc = qti_charger_write(chg, OEM_PROP_FACTORY_MODE,
 					&value,
 					sizeof(value));
@@ -1337,9 +1330,9 @@ static int qti_charger_init(struct qti_charger *chg)
 		mmi_err(chg, "qti charger set factory mode failed, rc=%d\n", rc);
 		return rc;
 	}
+	chg->constraint.factory_mode = value;
 
-	chg->constraint.factory_version = mmi_is_factory_version();
-	value = chg->constraint.factory_version;
+	value = mmi_is_factory_version();
 	rc = qti_charger_write(chg, OEM_PROP_FACTORY_VERSION,
 					&value,
 					sizeof(value));
@@ -1347,6 +1340,7 @@ static int qti_charger_init(struct qti_charger *chg)
 		mmi_err(chg, "qti charger set factory ver failed, rc=%d\n", rc);
 		return rc;
 	}
+	chg->constraint.factory_version = value;
 
 	rc = qti_charger_write_profile(chg);
 	if (rc) {
