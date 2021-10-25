@@ -1421,7 +1421,7 @@ static void charger_detect_work_func(struct work_struct *work)
 		case SGM4154x_USB_DCP:
 			pr_err("SGM4154x charger type: DCP\n");
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-			schedule_delayed_work(&sgm->hvdcp_detect_delayed_work, 0);
+			//schedule_delayed_work(&sgm->hvdcp_detect_delayed_work, 0);
 			break;
 
 		case SGM4154x_UNKNOWN:
