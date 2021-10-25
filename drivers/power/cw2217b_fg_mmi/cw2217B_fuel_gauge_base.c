@@ -58,7 +58,7 @@
 
 #define CWFG_NAME               "cw2217"
 #define SIZE_OF_PROFILE         80
-#define USER_RSENSE             1000  /* mhom rsense * 1000  for convenience calculation */
+#define USER_RSENSE             (10*1000)  /* mhom rsense * 1000  for convenience calculation */
 
 #define queue_delayed_work_time  8000
 #define queue_start_work_time    50
