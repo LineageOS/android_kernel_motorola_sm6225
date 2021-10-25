@@ -1682,7 +1682,7 @@ static int mmi_combine_battery_soc(struct mmi_charger_chip *chip)
 		full += battery->info->batt_full_uah;
 	}
 
-	if (full > 0 && remain > 0) {
+	if (full > 0 && remain >= 0) {
 		soc = remain / full;
 		if (soc > 100)
 			soc = 100;
