@@ -58,6 +58,10 @@ static ssize_t fts_mmi_edge_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fts_mmi_edge_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t fts_mmi_sensitivity_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fts_mmi_sensitivity_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(calibrate, (S_IWUSR | S_IWGRP), NULL, fts_mmi_calibrate_store);
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -70,6 +74,8 @@ static DEVICE_ATTR(jitter, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_jitter_show, fts_mmi_jitter_store);
 static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_mmi_edge_show, fts_mmi_edge_store);
+static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_mmi_sensitivity_show, fts_mmi_sensitivity_store);
 
 #define MAX_ATTRS_ENTRIES 10
 /* hal settings */
@@ -125,6 +131,9 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->board->edge_ctrl)
 		ADD_ATTR(edge);
+
+	if (ts->board->sensitivity_ctrl)
+		ADD_ATTR(sensitivity);
 
 	if (strncmp(bi_bootmode(), "mot-factory", strlen("mot-factory")) == 0) {
 		ADD_ATTR(calibrate);
@@ -285,6 +294,56 @@ static ssize_t fts_mmi_jitter_show(struct device *dev,
 		(ts->jitter_val[4] << 8 | ts->jitter_val[5]),
 		(ts->jitter_val[6] << 8 | ts->jitter_val[7]));
 }
+
+static ssize_t fts_mmi_sensitivity_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct fts_ts_info *ts;
+	struct fts_hw_platform_data *board;
+	int ret = 0;
+	unsigned long mode = 0;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+	board = ts->board;
+
+	ret = kstrtoul(buf, 16, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (ts->sensitivity_val == mode) {
+		pr_debug("value is same, so not write.\n");
+		return size;
+	}
+
+	board->sensitivity_cmd[2] = mode;
+
+	ret = fts_write(board->sensitivity_cmd, ARRAY_SIZE(board->sensitivity_cmd));
+	if (ret == OK) {
+		pr_info("Successfully to %s sensitivity mode!\n", (!!mode ? "Enable" : "Disable"));
+		ts->sensitivity_val = mode;
+	} else
+		pr_err("Failed to %s sensitivity mode!\n", (!!mode ? "Enable" : "Disable"));
+
+	return size;
+}
+
+static ssize_t fts_mmi_sensitivity_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_info *ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	ts = dev_get_drvdata(dev);
+	ASSERT_PTR(ts);
+
+	pr_info("Sensitivity mode is %s!\n", (!!ts->sensitivity_val ? "Enable" : "Disable"));
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->sensitivity_val);
+};
+
 
 static ssize_t fts_mmi_linearity_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -716,6 +775,12 @@ static int fts_mmi_post_resume(struct device *dev)
 			dev_dbg(dev, "%s: Successfully to restore edge mode!\n", __func__);
 	}
 
+	if (ts->board->sensitivity_ctrl) {
+		ret = fts_write(board->sensitivity_cmd, ARRAY_SIZE(board->sensitivity_cmd));
+		if (ret == OK)
+			dev_dbg(dev, "%s: Successfully to restore edge mode!\n", __func__);
+	}
+
 	return 0;
 }
 
@@ -848,6 +913,8 @@ int fts_mmi_init(struct fts_ts_info *ts, bool enable)
 		/* Disable first filter function */
 		if (ts->board->first_filter_ctrl)
 			ts->first_filter_val = 0x00;
+		if (ts->board->sensitivity_ctrl)
+			ts->sensitivity_val = 0x00;
 
 	} else
 		ts_mmi_dev_unregister(ts->dev);

@@ -4018,6 +4018,12 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 		logError(1, "%s Support edge switching.\n", tag);
 	}
 
+	if (of_property_read_u8_array(np, "st,sensitivity_cmd",
+			bdata->sensitivity_cmd, 3) == 0) {
+		bdata->sensitivity_ctrl = true;
+		logError(1, "%s Support film sensitivity switching.\n", tag);
+	}
+
 	return OK;
 }
 
