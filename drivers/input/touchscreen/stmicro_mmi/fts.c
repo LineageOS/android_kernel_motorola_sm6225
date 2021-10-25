@@ -2797,8 +2797,6 @@ static irqreturn_t fts_event_handler(int irq, void *ptr)
 
 	event_dispatch_handler_t event_handler;
 
-	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
-
 	/* read the FIFO and parsing events */
 	regAdd = FIFO_CMD_READONE;
 
