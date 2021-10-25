@@ -247,6 +247,8 @@ struct fts_hw_platform_data {
 	bool report_rate_ctrl;	/* /< support report rate switching */
 	u8 edge_cmd[4];	/* /< edge switching command */
 	bool edge_ctrl;	/* /< edge rate switching */
+	u8 sensitivity_cmd[3];	/* /< sensitivity switching command */
+	bool sensitivity_ctrl;	/* /< sensitivity switching */
 };
 
 /*
@@ -378,6 +380,7 @@ struct fts_ts_info {
 	unsigned int report_rate;
 	unsigned int refresh_rate;
 	unsigned int first_filter_val;
+	unsigned int sensitivity_val;
 	u8 jitter_val[8];
 	u8 linearity_val[3];
 	u8 edge_val[4];
