@@ -408,6 +408,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         count -= NORMAL_MODE_HEADER_LEN;
       }
       if(count > 0) {
+	usleep_range(30,50);
         /* UCI Payload write */
         ret = spi_write(sr100_dev->spi, sr100_dev->tx_buffer + NORMAL_MODE_HEADER_LEN, count);
         if (ret < 0) {
@@ -491,9 +492,9 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
       sr100_dev->read_count = (unsigned int)(sr100_dev->totalBtyesToRead + NORMAL_MODE_HEADER_LEN);
       retry_count = 0;
       do{
-        usleep_range(5,10);
+        usleep_range(10,15);
         retry_count++;
-        if(retry_count == 200){
+        if(retry_count == 1000){
           printk("Slave not released the IRQ even after 1ms");
           break;
         }
