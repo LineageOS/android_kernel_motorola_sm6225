@@ -487,6 +487,7 @@ int tcpci_notify_typec_state(struct tcpc_device *tcpc)
 		TCP_NOTIFY_IDX_USB, TCP_NOTIFY_TYPEC_STATE);
 	return ret;
 }
+EXPORT_SYMBOL(tcpci_notify_typec_state);
 
 int tcpci_notify_role_swap(
 	struct tcpc_device *tcpc, uint8_t event, uint8_t role)

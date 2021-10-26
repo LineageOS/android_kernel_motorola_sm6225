@@ -318,8 +318,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		     new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 		     new_state == TYPEC_ATTACHED_DBGACC_SNK)) {
 			dev_info(rpmd->dev,
-				 "%s Charger plug in, polarity = %d\n",
-				 __func__, noti->typec_state.polarity);
+				 "%s Charger plug in, polarity = %d, remote rp = %d\n",
+				 __func__, noti->typec_state.polarity,
+				 noti->typec_state.rp_level);
 			/*
 			 * start charger type detection,
 			 * and enable device connection
@@ -353,8 +354,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			   (new_state == TYPEC_ATTACHED_SRC ||
 			    new_state == TYPEC_ATTACHED_DEBUG)) {
 			dev_info(rpmd->dev,
-				 "%s OTG plug in, polarity = %d\n",
-				 __func__, noti->typec_state.polarity);
+				 "%s OTG plug in, polarity = %d, local_rp = %d\n",
+				 __func__, noti->typec_state.polarity,
+				 noti->typec_state.local_rp_level);
 			/* enable host connection */
 			cancel_delayed_work_sync(&rpmd->usb_dwork);
 			rpmd->usb_dr = DR_HOST;
