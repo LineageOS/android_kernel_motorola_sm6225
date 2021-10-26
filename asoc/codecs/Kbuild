@@ -288,7 +288,17 @@ hdmi_dlkm-y := $(HDMICODEC_OBJS)
 
 #Add awinic driver begain
 ifdef CONFIG_SND_SMARTPA_AW882XX
+ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
+	SND_SOC_AW882XX_OBJS += aw88261/aw882xx.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_init.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_bin_parse.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_calib.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_device.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_dsp.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_monitor.o
+else
 	SND_SOC_AW882XX_OBJS += awinic/aw882xx.o
+endif
 endif
 obj-$(CONFIG_SND_SMARTPA_AW882XX) += aw882xx_dlkm.o
 aw882xx_dlkm-y := $(SND_SOC_AW882XX_OBJS)
