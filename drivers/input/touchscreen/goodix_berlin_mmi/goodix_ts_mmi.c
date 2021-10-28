@@ -312,6 +312,30 @@ static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
 	}
 }
 
+#define CHARGER_MODE_CMD    0xAF
+static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
+{
+	int ret = 0;
+	struct goodix_ts_cmd cmd;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	cmd.cmd = CHARGER_MODE_CMD;
+	cmd.len = 5;
+	cmd.data[0] = mode;
+	ret = hw_ops->send_cmd(core_data, &cmd);
+	if (ret < 0) {
+		ts_err("Failed to set charger mode\n");
+	}
+	ts_err("Success to %s charger mode\n", mode ? "Enable" : "Disable");
+
+	return 0;
+}
+
 static int goodix_ts_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
@@ -425,6 +449,7 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.reset =  goodix_ts_mmi_methods_reset,
 	.drv_irq = goodix_ts_mmi_methods_drv_irq,
 	.power = goodix_ts_mmi_methods_power,
+	.charger_mode = goodix_ts_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
 	/* vendor specific attribute group */
