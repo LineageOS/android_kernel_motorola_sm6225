@@ -211,6 +211,12 @@
 #define TEMP_T0_THRES_PLUS_X_DEGREE  0
 #define TEMP_NEG_10_THRES 0
 
+enum {
+	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
+	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
+	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
+};
+
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -310,7 +316,15 @@ struct sgm4154x_device {
 	int			real_charger_type;
 
 	struct work_struct rerun_apsd_work;
-	struct delayed_work hvdcp_detect_delayed_work;
+
+	/*mmi qc3*/
+	bool mmi_qc3_support;
+	struct task_struct	*mmi_qc3_authen_task;
+	wait_queue_head_t	mmi_qc3_wait_que;
+	bool			mmi_qc3_trig_flag;
+	bool			mmi_is_qc3_authen;
+	u32			input_current_cache;
+	int			pulse_cnt;
 
 	struct sgm4154x_iio		iio;
 };

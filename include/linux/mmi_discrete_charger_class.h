@@ -41,6 +41,11 @@ struct charger_device {
 
 struct charger_ops {
 
+	int (*set_input_voltage_limit)(struct charger_device *dev, u32 uV);
+
+	int (*set_dp_dm)(struct charger_device *dev, int val);
+	int (*get_pulse_cnt)(struct charger_device *dev, int *count);
+
 	int (*get_real_charger_type)(struct charger_device *dev, int *charger_type);
 
 	/* enable/disable charger */
@@ -120,6 +125,12 @@ extern int charger_dev_set_usb_suspend(struct charger_device *chg_dev, bool susp
 extern int charger_dev_get_input_current(struct charger_device *charger_dev, u32 *uA);
 
 extern int charger_dev_set_input_current(struct charger_device *chg_dev, u32 uA);
+
+extern int charger_dev_set_input_voltage(struct charger_device *chg_dev, u32 uV);
+
+extern int charger_dev_get_pulse_cnt(struct charger_device *chg_dev, int *count);
+
+extern int charger_dev_set_dp_dm(struct charger_device *chg_dev, int val);
 
 extern int charger_dev_get_real_charger_type(struct charger_device *chg_dev, int *charger_type);
 

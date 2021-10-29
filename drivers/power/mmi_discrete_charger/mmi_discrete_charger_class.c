@@ -151,6 +151,16 @@ int charger_dev_set_input_current(struct charger_device *chg_dev, u32 uA)
 }
 EXPORT_SYMBOL(charger_dev_set_input_current);
 
+int charger_dev_set_input_voltage(struct charger_device *chg_dev, u32 uV)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->set_input_voltage_limit)
+		return chg_dev->ops->set_input_voltage_limit(chg_dev, uV);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_set_input_voltage);
+
 int charger_dev_is_usb_suspend(struct charger_device *chg_dev, bool *suspend_en)
 {
 	if (chg_dev != NULL && chg_dev->ops != NULL &&
@@ -170,6 +180,26 @@ int charger_dev_set_usb_suspend(struct charger_device *chg_dev, bool suspend_en)
 	return -ENOTSUPP;
 }
 EXPORT_SYMBOL(charger_dev_set_usb_suspend);
+
+int charger_dev_get_pulse_cnt(struct charger_device *chg_dev, int *count)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->get_pulse_cnt)
+		return chg_dev->ops->get_pulse_cnt(chg_dev, count);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_get_pulse_cnt);
+
+int charger_dev_set_dp_dm(struct charger_device *chg_dev, int val)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->set_dp_dm)
+		return chg_dev->ops->set_dp_dm(chg_dev, val);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_set_dp_dm);
 
 int charger_dev_get_real_charger_type(struct charger_device *chg_dev, int *charger_type)
 {
