@@ -766,7 +766,78 @@ static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 #define HVDCP_PULSE_COUNT_MAX 	((HVDCP_VOLTAGE_BASIC - 5000) / 200 + 2)
 static void mmi_discrete_config_qc_charger(struct mmi_discrete_charger *chg)
 {
-	//config qc charger vbus
+	int rc = -EINVAL;
+	int pulse_cnt;
+	int vbus_mv;
+	bool stepwise;
+	union power_supply_propval val = {0, };
+
+	rc = charger_dev_get_pulse_cnt(chg->master_chg_dev, &pulse_cnt);
+	if (rc < 0)
+		return;
+
+	/*
+	 * Two hvdcp voltage regulation algorithm are supported:
+	 * stepwise and supplement. stepwise will be used if QC3.0
+	 * charger power is more than 15W.
+	 * It only runs once for stepwise algorithm after QC3.0
+	 * charger is detected, while it will run all the time in
+	 * supplement algorithm if QC3.0 charger is present.
+	 */
+	stepwise = chg->constraint.hvdcp_pmax > HVDCP_POWER_MIN;
+	if (stepwise && pulse_cnt)
+		return;
+
+	if (stepwise) {
+		vote(chg->chg_disable_votable, MMI_HB_VOTER, true, 0);
+		mmi_info(chg, "Disable charging before stepwise configure\n");
+	}
+
+	do {
+
+		if (chg->real_charger_type != POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+			mmi_warn(chg, "Exit for QC3.0 charger removal\n");
+			break;
+		}
+
+		rc = get_prop_usb_voltage_now(chg, &val);
+		if (rc < 0)
+			break;
+		vbus_mv = val.intval / 1000;
+
+		mmi_info(chg, "pulse_cnt=%d, vbus_mv=%d\n", pulse_cnt, vbus_mv);
+		if (vbus_mv < HVDCP_VOLTAGE_NOM &&
+		    pulse_cnt < HVDCP_PULSE_COUNT_MAX)
+			val.intval = MMI_POWER_SUPPLY_DP_DM_DP_PULSE;
+		else if (vbus_mv > HVDCP_VOLTAGE_MAX &&
+		    pulse_cnt > 0 && !stepwise)
+			val.intval = MMI_POWER_SUPPLY_DP_DM_DM_PULSE;
+		else {
+			mmi_info(chg, "QC3.0 output configure completed\n");
+			break;
+		}
+
+		rc = charger_dev_set_dp_dm(chg->master_chg_dev, val.intval);
+		if (rc < 0)
+			break;
+		else if (!stepwise) {
+			power_supply_changed(chg->usb_psy);
+			break;
+		}
+		msleep(100);
+
+		rc = charger_dev_get_pulse_cnt(chg->master_chg_dev, &pulse_cnt);
+		if (rc < 0)
+			break;
+
+	} while (stepwise);
+
+	if (stepwise) {
+		charger_dev_set_input_voltage(chg->master_chg_dev,
+					(HVDCP_VOLTAGE_NOM - 1000)*1000);
+		vote(chg->chg_disable_votable, MMI_HB_VOTER, false, 0);
+		mmi_info(chg, "Recover charging after stepwise configure\n");
+	}
 }
 
 #define WLS_POWER_MIN 5000
@@ -1661,6 +1732,7 @@ static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 		mmi_notify_device_mode(chip, false);
 	vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
 	vote(chip->usb_icl_votable, USB_PSY_VOTER, false, 0);
+	vote(chip->chg_disable_votable, MMI_HB_VOTER, true, 0);
 	power_supply_changed(chip->usb_psy);
 	mmi_info(chip, "%s\n",__func__);
 	return 0;

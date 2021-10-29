@@ -43,6 +43,12 @@ static const unsigned int mmi_discrete_extcon_cable[] = {
 	EXTCON_NONE,
 };
 
+enum {
+	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
+	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
+	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
+};
+
 /* Indicates USB Type-C CC connection status */
 enum power_supply_typec_mode {
 	MMI_POWER_SUPPLY_TYPEC_NONE,
