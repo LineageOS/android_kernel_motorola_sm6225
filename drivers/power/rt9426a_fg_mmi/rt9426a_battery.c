@@ -625,17 +625,22 @@ static void __maybe_unused rt9426a_check_cycle_cnt_for_fg_ini(struct rt9426a_chi
 
 static unsigned int rt9426a_get_ocv_checksum(struct rt9426a_chip *chip)
 {
-	int regval = 0;
-	regval = rt9426a_unseal_wi_retry(chip);
+	int i, regval = 0, retry_times = 2;
 
-	if (regval == RT9426A_UNSEAL_FAIL)
+	if (rt9426a_unseal_wi_retry(chip) == RT9426A_UNSEAL_FAIL)
 		chip->ocv_checksum_ic = 0xFFFF;
 	else{
-		/* get ocv checksum from ic */
-		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, 0xCA09);
-		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, 0xCA09);
-		mdelay(5);
-		chip->ocv_checksum_ic = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SWINDOW5);
+		/* confirm sending read page cmd successfully ; 2021-10-29 */
+		for (i = 0; i < retry_times; i++) {
+			/* get ocv checksum from ic */
+			rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, 0xCA09);
+			rt9426a_reg_write_word(chip->i2c, RT9426A_REG_BDCNTL, 0xCA09);
+			mdelay(5);
+			regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SWINDOW4);
+			chip->ocv_checksum_ic = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SWINDOW5);
+			if ((regval != 0xFFFF)||(chip->ocv_checksum_ic != 0xFFFF))
+				break;
+		}
 	}
 	return chip->ocv_checksum_ic;
 }
@@ -1221,7 +1226,7 @@ static int rt_fg_set_property(struct power_supply *psy,
 				(chip->pdata->fc_vth[chip->ocv_index]) | (chip->pdata->extreg_table[5].data[5] << 8));
 		mutex_unlock(&chip->update_lock);
 		/* update ocv checksum */
-		chip->ocv_checksum_dtsi = *(u32 *)(chip->pdata->ocv_table + 
+		chip->ocv_checksum_dtsi = *((u32 *)chip->pdata->ocv_table +
 	                          (chip->ocv_index * 80) + RT9426A_IDX_OF_OCV_CKSUM);
 		break;
 	default:
@@ -2279,14 +2284,16 @@ static int rt9426a_apply_pdata(struct rt9426a_chip *chip)
 
 	/* read ocv_index before using it */
 	chip->ocv_index = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_RSVD2);
+	dev_info(chip->dev, "%s: ocv_index = %d\n",
+			    __func__, chip->ocv_index);
 	/* update ocv_checksum_dtsi after ocv_index updated */
-	chip->ocv_checksum_dtsi = *(u32 *)(chip->pdata->ocv_table +
+	chip->ocv_checksum_dtsi = *((u32 *)chip->pdata->ocv_table +
 	                          (chip->ocv_index * 80) + RT9426A_IDX_OF_OCV_CKSUM);
 	/* add for aging cv ; udpate fcc before writing */
 	chip->pdata->extreg_table[2].data[12] = chip->pdata->fcc[chip->ocv_index] & 0xff;
 	chip->pdata->extreg_table[2].data[13] = (chip->pdata->fcc[chip->ocv_index] >> 8) & 0xff;
 	/* add for aging cv ; udpate fc_vth before writing */
-	chip->pdata->extreg_table[5].data[4]= chip->pdata->fc_vth[chip->ocv_index];
+	chip->pdata->extreg_table[4].data[4]= chip->pdata->fc_vth[chip->ocv_index];
 
 	/* backup opcfg1 */
 	chip->op_config_1_backup = (chip->pdata->extreg_table[1].data[1] * 256) +
@@ -2302,18 +2309,21 @@ static int rt9426a_apply_pdata(struct rt9426a_chip *chip)
 			/* rt9426a_exit_shutdown_mode(chip); */
             /* Check [RI]@Reg-Flag3 & fg total checksum */
 			regval = rt9426a_get_checksum(chip);
+			total_checksum_target = rt9426a_calculate_checksum_crc(chip);
 			/* get ocv checksum from fg ic before applying ocv table */
 			rt9426a_get_ocv_checksum(chip);
-            if(reg_flag3&RT9426A_RI_MASK){
+			if(reg_flag3&RT9426A_RI_MASK){
 				dev_info(chip->dev, "Init RT9426A by [RI]\n");
 				break;
 			}
-			else if(regval!=(rt9426a_calculate_checksum_crc(chip))){
+			else if(regval != total_checksum_target){
 				dev_info(chip->dev, "Force Init RT9426A by total checksum\n");
+				dev_info(chip->dev, "IC: 0x%04X ; DTSI: 0x%04X \n", regval, total_checksum_target);
 				break;
 			}
 			else if (chip->ocv_checksum_ic != chip->ocv_checksum_dtsi){
 				dev_info(chip->dev, "Force Init RT9426A by OCV checksum\n");
+				dev_info(chip->dev, "IC: 0x%04X ; DTSI: 0x%04X \n", chip->ocv_checksum_ic , chip->ocv_checksum_dtsi);
 				break;
 			}
 			else{
@@ -2339,12 +2349,8 @@ static int rt9426a_apply_pdata(struct rt9426a_chip *chip)
 	/*NOTICE!! Please follow below setting sequence & order */
 	/* write ocv table only when checksum matched */
 	/* add for aging cv */
-	{
-	const u32 *pval = (u32 *)(chip->pdata->ocv_table +
-	                  (chip->ocv_index * 80) + RT9426A_IDX_OF_OCV_CKSUM);
-	if(*pval == chip->ocv_checksum_dtsi)
+	if(chip->ocv_checksum_ic != chip->ocv_checksum_dtsi)
 		wt_ocv_result = rt9426a_write_ocv_table(chip);
-	}
 
 	/* Read Reg IRQ to reinital Alert pin state */
 	rt9426a_reg_read_word(chip->i2c, RT9426A_REG_IRQ);
@@ -2853,8 +2859,9 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	chip->design_capacity = 2000;
 	chip->full_capacity = 2000;
 	chip->ocv_checksum_ic = 0;
+	chip->ocv_index = 0;	/* init as 0 */
 	/* add for aging cv */
-	chip->ocv_checksum_dtsi = *(u32 *)(chip->pdata->ocv_table +
+	chip->ocv_checksum_dtsi = *((u32 *)chip->pdata->ocv_table +
 	                          (chip->ocv_index * 80) + RT9426A_IDX_OF_OCV_CKSUM);
 
 	mutex_init(&chip->var_lock);
