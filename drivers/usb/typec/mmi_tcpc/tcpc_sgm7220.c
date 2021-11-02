@@ -30,6 +30,7 @@
 #include "inc/tcpci.h"
 #include "inc/sgm7220.h"
 #include <linux/sched/rt.h>
+#include <linux/usb/typec.h>
 
 #define SGM7220_DRV_VERSION	"1.0.0_SGM7220"
 #define SGM7220_IRQ_WAKE_TIME	(500) /* ms */
@@ -80,13 +81,6 @@ enum cable_state_type {
 enum cable_dir_type {
 	ORIENT_CC1 = 0,
 	ORIENT_CC2
-};
-
-enum cc_modes_type {
-	MODE_DEFAULT = 0,
-	MODE_UFP,
-	MODE_DFP,
-	MODE_DRP
 };
 
 /* Type-C Attrs */
@@ -351,6 +345,10 @@ static void sgm7220_process_interrupt_register(struct sgm7220_chip *chip, u8 sta
 		}
 		tcpci_notify_typec_state(tcpc);
 		tcpc->typec_attach_old = TYPEC_UNATTACHED;
+
+		val = SET_MODE_SELECT_DRP << SET_MODE_SELECT_SHIFT;
+		if (sgm7220_reg_update(chip->client, REG_SET, val, SET_MODE_SELECT) < 0)
+			pr_err("%s: force drp  mode fail!\n", __func__);
 		break;
 	case CABLE_STATE_AS_DFP:
 		if (tcpc->typec_attach_new != TYPEC_ATTACHED_SRC) {
@@ -420,6 +418,7 @@ static void sgm7220_irq_work_handler(struct kthread_work *work)
 	if (ret < 0) {
 		pr_err("%s: update reg fail!\n", __func__);
 	}
+
 
 	tcpci_unlock_typec(tcpc);
 }
@@ -580,6 +579,59 @@ static int sgm7220_tcpc_deinit(struct tcpc_device *tcpc_dev)
 	return 0;
 }
 
+int sgm7220_set_port_type(struct tcpc_device *tcpc, int mode)
+{
+	struct sgm7220_chip *chip = tcpc_get_dev_data(tcpc);
+	u8 value;
+	int ret;
+
+	ret = sgm7220_read_device(chip->client, REG_SET, 1, &value);
+	if (ret < 0) {
+		pr_err("%s: read REG_SET fail!\n", __func__);
+		return ret;
+	}
+	value = (value & SET_MODE_SELECT) >> SET_MODE_SELECT_SHIFT;
+	pr_info("%s enter: mode = %d, now mode = %d\n",
+		__func__, mode, value);
+
+	if ((mode == TYPEC_PORT_SRC && value == SET_MODE_SELECT_SRC)
+		||(mode == TYPEC_PORT_SNK && value == SET_MODE_SELECT_SNK)
+		||(mode == TYPEC_PORT_DRP && value == SET_MODE_SELECT_DRP)) {
+		pr_err("%s: alreadly at mode %d so quit\n", __func__, mode);
+		return 0;
+	}
+
+	ret = sgm7220_reg_update(chip->client, REG_SET, 0x01, SET_I2C_DISABLE_TERM);
+	if (ret < 0) {
+		pr_err("%s: Disable RD and RP fail!\n", __func__);
+		 return ret;
+	}
+
+	if (mode == TYPEC_PORT_SRC)
+		value = SET_MODE_SELECT_SRC;
+	else if (mode == TYPEC_PORT_SNK)
+		value = SET_MODE_SELECT_SNK;
+	else if (mode == TYPEC_PORT_DRP)
+		value = SET_MODE_SELECT_DRP;
+	else
+		return -EINVAL;
+	value = value << SET_MODE_SELECT_SHIFT;
+	ret = sgm7220_reg_update(chip->client, REG_SET, value, SET_MODE_SELECT);
+	if (ret < 0) {
+		pr_err("%s: update mode reg fail!\n", __func__);
+		return ret;
+	}
+	msleep(20);
+
+	ret = sgm7220_reg_update(chip->client, REG_SET, 0x00, SET_I2C_DISABLE_TERM);
+	if (ret < 0) {
+		pr_err("%s: Enable RD and RP fail!\n", __func__);
+		return ret;
+	}
+
+	return ret;
+}
+
 #ifdef CONFIG_TCPC_WATCHDOG_EN
 int sgm7220_set_watchdog(struct tcpc_device *tcpc, bool en)
 {
@@ -656,6 +708,7 @@ static struct tcpc_ops sgm7220_tcpc_ops = {
 	.set_low_rp_duty = sgm7220_set_low_rp_duty,
 	.set_vconn = sgm7220_set_vconn,
 	.deinit = sgm7220_tcpc_deinit,
+	.set_port_type = sgm7220_set_port_type,
 #ifdef CONFIG_TCPC_WATCHDOG_EN
 	.set_watchdog = sgm7220_set_watchdog,
 #endif	/* CONFIG_TCPC_WATCHDOG_EN */
