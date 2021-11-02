@@ -191,10 +191,45 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	return ret;
 }
 
+// fine tuning termination voltage,to Improve accuracy
+static int sgm4154x_vreg_fine_tuning(struct sgm4154x_device *sgm, enum SGM4154x_VREG_FT ft)
+{
+	int ret;
+	int reg_val;
+
+	switch(ft) {
+	case VREG_FT_DISABLE:
+		reg_val = 0;
+		break;
+
+	case VREG_FT_UP_8mV:
+		reg_val = SGM4154x_VREG_FT_UP_8mV;
+		break;
+
+	case VREG_FT_DN_8mV:
+		reg_val = SGM4154x_VREG_FT_DN_8mV;
+		break;
+
+	case VREG_FT_DN_16mV:
+		reg_val = SGM4154x_VREG_FT_DN_16mV;
+		break;
+
+	default:
+		reg_val = 0;
+		break;
+	}
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_f,
+				  SGM4154x_VREG_FT_MASK, reg_val);
+	pr_info("%s reg_val:%d\n",__func__,reg_val);
+
+	return ret;
+}
+
 static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 {
 	int ret;
 	int reg_val;
+	enum SGM4154x_VREG_FT ft = VREG_FT_DISABLE;
 
 	if (chrg_volt < SGM4154x_VREG_V_MIN_uV)
 		chrg_volt = SGM4154x_VREG_V_MIN_uV;
@@ -203,6 +238,27 @@ static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 
 
 	reg_val = (chrg_volt-SGM4154x_VREG_V_MIN_uV) / SGM4154x_VREG_V_STEP_uV;
+
+	switch(chrg_volt) {
+	case 4480000:
+	case 4450000:
+		reg_val++;
+		ft = VREG_FT_DN_16mV;
+		break;
+	case 4200000:
+		reg_val++;
+		ft = VREG_FT_DN_8mV;
+		break;
+	default:
+		break;
+	}
+
+	ret = sgm4154x_vreg_fine_tuning(sgm, ft);
+	if (ret) {
+		pr_err("%s can't set vreg fine tunning ret=%d\n", __func__, ret);
+		return ret;
+	}
+
 	reg_val = reg_val<<3;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_4,
 				  SGM4154x_VREG_V_MASK, reg_val);
@@ -465,42 +521,6 @@ static int sgm4154x_qc30_step_down_vbus(struct sgm4154x_device *sgm)
 
 	return ret;
 }
-
-/*mahj:for build
-// fine tuning termination voltage,to Improve accuracy
-static int sgm4154x_vreg_fine_tuning(struct sgm4154x_device *sgm,enum SGM4154x_VREG_FT ft)
-{
-	int ret;
-	int reg_val;
-
-	switch(ft) {
-		case VREG_FT_DISABLE:
-			reg_val = 0;
-			break;
-
-		case VREG_FT_UP_8mV:
-			reg_val = SGM4154x_VREG_FT_UP_8mV;
-			break;
-
-		case VREG_FT_DN_8mV:
-			reg_val = SGM4154x_VREG_FT_DN_8mV;
-			break;
-
-		case VREG_FT_DN_16mV:
-			reg_val = SGM4154x_VREG_FT_DN_16mV;
-			break;
-
-		default:
-			reg_val = 0;
-			break;
-	}
-	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_f,
-				  SGM4154x_VREG_FT_MASK, reg_val);
-	pr_err("%s reg_val:%d\n",__func__,reg_val);
-
-	return ret;
-}
-*/
 
 static int sgm4154x_get_vindpm_offset_os(struct sgm4154x_device *sgm)
 {
