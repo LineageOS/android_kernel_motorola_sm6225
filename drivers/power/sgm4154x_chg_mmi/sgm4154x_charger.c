@@ -904,6 +904,43 @@ static int sgm4154x_set_recharge_volt(struct sgm4154x_device *sgm, int recharge_
 				  SGM4154x_VRECHARGE, reg_val);
 }
 
+static int sgm4154x_set_otg_voltage(struct sgm4154x_device *sgm, int uv)
+{
+	int ret = 0;
+	int reg_val = -1;
+	int i = 0;
+	while(i<4){
+		if (uv == BOOST_VOLT_LIMIT[i]){
+			reg_val = i;
+			break;
+		}
+		i++;
+	}
+	if (reg_val < 0)
+		return reg_val;
+	reg_val = reg_val << 4;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_6,
+				  SGM4154x_OTG_MASK, reg_val);
+
+	return ret;
+}
+
+static int sgm4154x_set_otg_current(struct sgm4154x_device *sgm, int ua)
+{
+	int ret = 0;
+
+	if (ua == BOOST_CURRENT_LIMIT[0]){
+		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
+                     0);
+	}
+
+	else if (ua == BOOST_CURRENT_LIMIT[1]){
+		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
+                     BIT(7));
+	}
+	return ret;
+}
+
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 static int get_charger_type(struct sgm4154x_device * sgm)
 {
@@ -1612,6 +1649,10 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	sgm->init_data.max_vreg =
 			SGM4154x_VREG_V_MAX_uV;
 
+	//OTG setting
+	sgm4154x_set_otg_voltage(sgm, 5000000); //5V
+	sgm4154x_set_otg_current(sgm, 2000000); //2A
+
 	ret = sgm4154x_set_ichrg_curr(sgm,
 				bat_info.constant_charge_current_max_ua);
 	if (ret)
@@ -1913,43 +1954,6 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 			sgm->data.temp_t2_thres,sgm->data.temp_t1_thres,
 			sgm->data.temp_t0_thres);
 	return 0;
-}
-
-static int sgm4154x_set_otg_voltage(struct sgm4154x_device *sgm, int uv)
-{
-	int ret = 0;
-	int reg_val = -1;
-	int i = 0;
-	while(i<4){
-		if (uv == BOOST_VOLT_LIMIT[i]){
-			reg_val = i;
-			break;
-		}
-		i++;
-	}
-	if (reg_val < 0)
-		return reg_val;
-	reg_val = reg_val << 4;
-	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_6,
-				  SGM4154x_OTG_MASK, reg_val);
-
-	return ret;
-}
-
-static int sgm4154x_set_otg_current(struct sgm4154x_device *sgm, int ua)
-{
-	int ret = 0;
-
-	if (ua == BOOST_CURRENT_LIMIT[0]){
-		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
-                     0);
-	}
-
-	else if (ua == BOOST_CURRENT_LIMIT[1]){
-		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
-                     BIT(7));
-	}
-	return ret;
 }
 
 static int sgm4154x_enable_vbus(struct regulator_dev *rdev)
@@ -2340,6 +2344,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	ret = sgm4154x_hw_init(sgm);
+	if (ret) {
+		dev_err(dev, "Cannot initialize the chip.\n");
+		return ret;
+	}
+
 	name = devm_kasprintf(sgm->dev, GFP_KERNEL, "%s",
 		"sgm4154x suspend wakelock");
 	sgm->charger_wakelock =
@@ -2360,17 +2370,6 @@ static int sgm4154x_probe(struct i2c_client *client,
 		otg_notify = usb_register_notifier(sgm->usb3_phy, &sgm->usb_nb);
 	}
 
-	if (client->irq) {
-		ret = devm_request_threaded_irq(dev, client->irq, NULL,
-						sgm4154x_irq_handler_thread,
-						IRQF_TRIGGER_FALLING |
-						IRQF_ONESHOT,
-						dev_name(&client->dev), sgm);
-		if (ret)
-			goto error_out;
-		enable_irq_wake(client->irq);
-	}
-
 	INIT_WORK(&sgm->charge_detect_work, charger_detect_work_func);
 	INIT_WORK(&sgm->rerun_apsd_work, sgm4154x_rerun_apsd_work_func);
 	INIT_DELAYED_WORK(&sgm->charge_monitor_work, charger_monitor_work_func);
@@ -2386,6 +2385,9 @@ static int sgm4154x_probe(struct i2c_client *client,
 		wake_up_process(sgm->mmi_qc3_authen_task);
 	}
 
+	//rerun apsd and trigger charger detect when boot with charger
+	schedule_work(&sgm->rerun_apsd_work);
+
 	sgm->pm_nb.notifier_call = sgm4154x_suspend_notifier;
 	register_pm_notifier(&sgm->pm_nb);
 
@@ -2395,23 +2397,20 @@ static int sgm4154x_probe(struct i2c_client *client,
 		goto error_out;
 	}
 
-	ret = sgm4154x_hw_init(sgm);
-	if (ret) {
-		dev_err(dev, "Cannot initialize the chip.\n");
-		goto error_out;
-	}
-
-
-	//OTG setting
-	sgm4154x_set_otg_voltage(sgm, 5000000); //5V
-	sgm4154x_set_otg_current(sgm, 1200000); //1.2A
-
 	ret = sgm4154x_vbus_regulator_register(sgm);
 
-	schedule_delayed_work(&sgm->charge_monitor_work,100);
+	if (client->irq) {
+		ret = devm_request_threaded_irq(dev, client->irq, NULL,
+						sgm4154x_irq_handler_thread,
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						dev_name(&client->dev), sgm);
+		if (ret)
+			goto error_out;
+		enable_irq_wake(client->irq);
+	}
 
-	//rerun apsd and trigger charger detect when boot with charger
-	schedule_work(&sgm->rerun_apsd_work);
+	schedule_delayed_work(&sgm->charge_monitor_work,100);
 
 	dev_info(dev, "SGM4154x prob successfully.\n");
 	return ret;
