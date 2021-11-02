@@ -328,7 +328,7 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
 	dev_info(sgm->dev, "vbus voltage now = %d\n", vbus_voltage);
 
-	if (vbus_voltage > 8000000) {
+	if (vbus_voltage > MMI_HVDCP2_VOLTAGE_STANDARD) {
 		dev_info(sgm->dev, "QC20 charger detected\n");
 		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
 	} else {
@@ -1374,7 +1374,7 @@ static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charge
 	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
 	dev_info(sgm->dev, "%s vbus voltage now = %d in detected qc30\n", __func__,vbus_voltage);
 
-	if (vbus_voltage > 7500000) {
+	if (vbus_voltage > MMI_HVDCP3_VOLTAGE_STANDARD) {
 		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
 		dev_info(sgm->dev, "%s QC3.0 charger detected\n", __func__);
 	}
@@ -1408,7 +1408,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 		sgm->mmi_qc3_trig_flag = false;
 		sgm->mmi_is_qc3_authen = true;
-		sgm4154x_set_input_curr_lim(sgm, 500000);
+		sgm4154x_set_input_curr_lim(sgm, MMI_HVDCP_DETECT_ICL_LIMIT);
 
 		//do qc2.0 detected
 		ret = sgm4154x_detected_qc20_hvdcp(sgm, &charger_type);
