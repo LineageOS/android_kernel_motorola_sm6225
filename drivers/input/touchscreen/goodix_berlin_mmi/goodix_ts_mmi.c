@@ -360,6 +360,9 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 		core_data->gesture_enabled = false;
 		break;
 	case TS_MMI_PM_ACTIVE:
+		if (hw_ops->resume)
+			hw_ops->resume(core_data);
+		core_data->gesture_enabled = false;
 		break;
 	default:
 		ts_err("Invalid power state parameter %d.\n", to);

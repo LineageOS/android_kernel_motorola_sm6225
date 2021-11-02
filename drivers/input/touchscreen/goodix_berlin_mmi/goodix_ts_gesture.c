@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include "goodix_ts_core.h"
+#include "goodix_ts_mmi.h"
 
 #define QUERYBIT(longlong, bit) (!!(longlong[bit/8] & (1 << bit%8)))
 
@@ -245,6 +246,20 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	if (QUERYBIT(gsx_gesture->gesture_type,
 		     gs_event.gesture_type)) {
 		gsx_gesture->gesture_data = gs_event.gesture_type;
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+		if (cd->imports && cd->imports->report_gesture) {
+			struct gesture_event_data mmi_event;
+
+			ts_info("invoke imported report gesture function\n");
+			mmi_event.evcode = 1;
+
+			/* call class method */
+			ret = cd->imports->report_gesture(&mmi_event);
+			if (!ret)
+				PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
+			goto gesture_ist_exit;
+		}
+#endif
 		/* do resume routine */
 		ts_info("got valid gesture type 0x%x",
 			gs_event.gesture_type);
@@ -353,6 +368,9 @@ int gesture_module_init(void)
 	}
 
 	module_initialized = true;
+
+	goodix_gesture_enable(1);
+
 	ts_info("gesture module init success");
 
 	return 0;

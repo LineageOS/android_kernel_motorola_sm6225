@@ -2303,6 +2303,14 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
+	PM_WAKEUP_REGISTER(bus_interface->dev, core_data->gesture_wakelock,
+			"goodix_gesture_wakelock");
+	if (!core_data->gesture_wakelock) {
+		ts_info("allocate gesture wakeup source err!\n");
+		ret = -ENOMEM;
+		goto err_register_gesture_wakelock;
+	}
+
 	/* debug node init */
 	goodix_tools_init();
 
@@ -2313,6 +2321,8 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	ts_info("goodix_ts_core probe success");
 	return 0;
 
+err_register_gesture_wakelock:
+	PM_WAKEUP_UNREGISTER(core_data->gesture_wakelock);
 err_out:
 	core_data->init_stage = CORE_INIT_FAIL;
 	core_module_prob_sate = CORE_MODULE_PROB_FAILED;

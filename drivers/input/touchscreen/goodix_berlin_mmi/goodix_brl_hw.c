@@ -237,7 +237,7 @@ int brl_resume(struct goodix_ts_core *cd)
 	return cd->hw_ops->reset(cd, GOODIX_NORMAL_RESET_DELAY_MS);
 }
 
-#define GOODIX_GESTURE_CMD	0x12
+#define GOODIX_GESTURE_CMD	0xA6
 int brl_gesture(struct goodix_ts_core *cd, int gesture_type)
 {
 	struct goodix_ts_cmd cmd;
@@ -311,7 +311,7 @@ static int brl_irq_enbale(struct goodix_ts_core *cd, bool enable)
 		ts_debug("Irq disabled");
 		return 0;
 	}
-	ts_info("warnning: irq deepth inbalance!");
+	ts_debug("warnning: irq deepth inbalance!");
 	return 0;
 }
 

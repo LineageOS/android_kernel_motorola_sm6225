@@ -473,6 +473,7 @@ struct goodix_ts_core {
 	/* when this flag is true, driver should not clean the sync flag */
 	bool tools_ctrl_sync;
 
+	struct wakeup_source *gesture_wakelock;
 	struct notifier_block ts_notifier;
 	struct goodix_ts_esd ts_esd;
 
