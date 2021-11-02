@@ -770,6 +770,12 @@ static int tcpc_typec_port_type_set(const struct typec_capability *cap,
 	dev_info(rpmd->dev, "%s type = %d, as_sink = %d\n",
 			    __func__, type, as_sink);
 
+	if (0 == tcpm_typec_change_mode(rpmd->tcpc, type)) {
+		dev_info(rpmd->dev, "%s Only type C mode and not support PD\n",
+			    __func__);
+		return 0;
+	}
+
 	switch (type) {
 	case TYPEC_PORT_SNK:
 		if (as_sink)

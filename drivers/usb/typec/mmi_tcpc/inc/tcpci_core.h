@@ -214,7 +214,7 @@ struct tcpc_ops {
 	int (*set_vconn)(struct tcpc_device *tcpc, int enable);
 	int (*deinit)(struct tcpc_device *tcpc);
 	int (*alert_vendor_defined_handler)(struct tcpc_device *tcpc);
-
+	int (*set_port_type)(struct tcpc_device *tcpc, int mode);
 #ifdef CONFIG_TCPC_VSAFE0V_DETECT_IC
 	int (*is_vsafe0v)(struct tcpc_device *tcpc);
 #endif /* CONFIG_TCPC_VSAFE0V_DETECT_IC */

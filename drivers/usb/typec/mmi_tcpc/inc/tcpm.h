@@ -874,6 +874,9 @@ extern int tcpm_typec_role_swap(
 extern int tcpm_typec_change_role(
 	struct tcpc_device *tcpc, uint8_t typec_role);
 
+extern int tcpm_typec_change_mode(
+	struct tcpc_device *tcpc, uint8_t mode);
+
 extern int tcpm_typec_change_role_postpone(
 	struct tcpc_device *tcpc, uint8_t typec_role, bool postpone);
 
@@ -1365,6 +1368,12 @@ static inline int tcpm_typec_role_swap(
 
 static inline int tcpm_typec_change_role(
 	struct tcpc_device *tcpc, uint8_t typec_role)
+{
+	return TCPM_ERROR_NO_IMPLEMENT;
+}
+
+static inline int tcpm_typec_change_mode(
+	struct tcpc_device *tcpc, uint8_t mode)
 {
 	return TCPM_ERROR_NO_IMPLEMENT;
 }

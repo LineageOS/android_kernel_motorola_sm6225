@@ -288,6 +288,19 @@ int tcpm_typec_role_swap(struct tcpc_device *tcpc)
 }
 EXPORT_SYMBOL(tcpm_typec_role_swap);
 
+int tcpm_typec_change_mode(
+	struct tcpc_device *tcpc, uint8_t mode)
+{
+	int ret = 0;
+
+	tcpci_lock_typec(tcpc);
+	ret = tcpci_set_port_type(tcpc, mode);
+	tcpci_unlock_typec(tcpc);
+
+	return ret;
+}
+EXPORT_SYMBOL(tcpm_typec_change_mode);
+
 int tcpm_typec_change_role(
 	struct tcpc_device *tcpc, uint8_t typec_role)
 {
