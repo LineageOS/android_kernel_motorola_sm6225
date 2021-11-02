@@ -79,6 +79,11 @@ dtbo-$(CONFIG_CAPRIP_DTB) += \
 bengal-caprip-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-caprip-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
 
+dtbo-$(CONFIG_RHODE_DTB) += \
+        khaje-rhode-evt-overlay.dtbo
+
+khaje-rhode-evt-overlay.dtbo-base := khaje-moto-base.dtb
+
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_KONA) += \
@@ -278,7 +283,6 @@ dtb-$(CONFIG_ARCH_BENGAL) += bengal-rumi.dtb \
 		bengalp-iot-idp-usbc.dtb \
 		bengalp-iot-idp-2gb.dtb
 endif
-endif  # CONFIG_MMI_DEVICE_DTBS
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_SCUBA) += \
@@ -484,6 +488,7 @@ dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 	sda429-mtp.dtb \
 	sda429-cdp.dtb
 endif
+endif  # CONFIG_MMI_DEVICE_DTBS
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
