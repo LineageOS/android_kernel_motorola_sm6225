@@ -65,4 +65,9 @@
 #define CTR_DISABLE_RD_RP_SHIFT     2
 #define CTR_DISABLE_RD_RP           (0x01 << CTR_DISABLE_RD_RP_SHIFT)   /*RW*/
 
+/* SET_MODE_SELECT */
+#define SET_MODE_SELECT_DEFAULT   0x00
+#define SET_MODE_SELECT_SNK       0x01
+#define SET_MODE_SELECT_SRC       0x02
+#define SET_MODE_SELECT_DRP       0x03
 #endif /* #ifndef __LINUX_SGM7220_H */
