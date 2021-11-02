@@ -268,6 +268,16 @@ int tcpci_set_polarity(struct tcpc_device *tcpc, int polarity)
 	return tcpc->ops->set_polarity(tcpc, polarity);
 }
 
+int tcpci_set_port_type(struct tcpc_device *tcpc, int mode)
+{
+	if (tcpc->ops->set_port_type == NULL)
+		return -ENOTSUPP;
+	else
+		tcpc->ops->set_port_type(tcpc, mode);
+
+	return 0;
+}
+
 int tcpci_set_low_rp_duty(struct tcpc_device *tcpc, bool low_rp)
 {
 #ifdef CONFIG_TYPEC_CAP_LOW_RP_DUTY

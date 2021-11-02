@@ -87,6 +87,7 @@ int tcpci_init_alert_mask(struct tcpc_device *tcpc);
 int tcpci_get_cc(struct tcpc_device *tcpc);
 int tcpci_set_cc(struct tcpc_device *tcpc, int pull);
 int tcpci_set_polarity(struct tcpc_device *tcpc, int polarity);
+int tcpci_set_port_type(struct tcpc_device *tcpc, int mode);
 int tcpci_set_low_rp_duty(struct tcpc_device *tcpc, bool low_rp);
 int tcpci_set_vconn(struct tcpc_device *tcpc, int enable);
 
