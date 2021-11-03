@@ -1004,7 +1004,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = bq2589x_adc_read_vbus_volt(bq);
+		val->intval = bq2589x_adc_read_vbus_volt(bq) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = bq2589x_adc_read_charge_current(bq);
