@@ -834,7 +834,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = cw_bat->cw_current * CW_CUR_UNIT;
+		val->intval = cw_bat->cw_current * CW_CUR_UNIT * (-1);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
