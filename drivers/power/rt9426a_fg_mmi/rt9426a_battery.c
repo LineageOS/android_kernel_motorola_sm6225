@@ -1159,7 +1159,7 @@ static int rt_fg_get_property(struct power_supply *psy,
 		dev_info(chip->dev, "psp_charge_full_design = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = rt9426a_get_current(chip) * 1000;
+		val->intval = rt9426a_get_current(chip) * 1000 * (-1);
 		dev_info(chip->dev, "psp_curr_now = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
