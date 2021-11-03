@@ -111,6 +111,7 @@ struct cw_battery {
 
 	struct workqueue_struct *cwfg_workqueue;
 	struct delayed_work battery_delay_work;
+	struct work_struct  hw_init_work;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 	struct power_supply cw_bat;
@@ -629,16 +630,6 @@ static int cw_init(struct cw_battery *cw_bat)
 	int ret;
 
 	cw_printk("\n");
-	ret = cw_get_chip_id(cw_bat);
-	if (ret < 0) {
-		printk("iic read write error");
-		return ret;
-	}
-	if (cw_bat->chip_id != IC_VCHIP_ID){
-		printk("not cw2217B\n");
-		return -1;
-	}
-
 	ret = cw2217_get_state(cw_bat);
 	if (ret < 0) {
 		printk("iic read write error");
@@ -677,6 +668,34 @@ static void cw_bat_work(struct work_struct *work)
 	#endif
 
 	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work, msecs_to_jiffies(queue_delayed_work_time));
+}
+
+static void cw_hw_init_work(struct work_struct *work)
+{
+	struct cw_battery *cw_bat;
+	int ret;
+	int loop = 0;
+
+	cw_bat = container_of(work, struct cw_battery, hw_init_work);
+
+	ret = cw_init(cw_bat);
+	while ((loop++ < CW_RETRY_COUNT) && (ret != 0)) {
+		msleep(CW_SLEEP_200MS);
+		ret = cw_init(cw_bat);
+	}
+	if (ret) {
+		printk("%s : cw2217 init fail!\n", __func__);
+		return ;
+	}
+
+	ret = cw_init_data(cw_bat);
+	if (ret) {
+		printk("%s : cw2217 init data fail!\n", __func__);
+		return ;
+	}
+
+	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work , msecs_to_jiffies(queue_start_work_time));
+
 }
 
 static const char *cw_get_battery_serialnumber(void)
@@ -873,7 +892,6 @@ static enum power_supply_property cw_battery_properties[] = {
 static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret;
-	int loop = 0;
 	struct cw_battery *cw_bat;
 #ifdef CW_PROPERTIES
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
@@ -893,25 +911,19 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	i2c_set_clientdata(client, cw_bat);
 	cw_bat->client = client;
 
+	ret = cw_get_chip_id(cw_bat);
+	if (ret < 0) {
+		printk("iic read write error");
+		return ret;
+	}
+	if (cw_bat->chip_id != IC_VCHIP_ID){
+		printk("not cw2217B\n");
+		return ret;
+	}
+
 	ret = cw_parse_dts(cw_bat);
 	if (ret) {
 		printk("%s : cw2217 prase dts  fail!\n", __func__);
-		return ret;
-	}
-
-	ret = cw_init(cw_bat);
-	while ((loop++ < CW_RETRY_COUNT) && (ret != 0)) {
-		msleep(CW_SLEEP_200MS);
-		ret = cw_init(cw_bat);
-	}
-	if (ret) {
-		printk("%s : cw2217 init fail!\n", __func__);
-		return ret;
-	}
-
-	ret = cw_init_data(cw_bat);
-	if (ret) {
-		printk("%s : cw2217 init data fail!\n", __func__);
 		return ret;
 	}
 
@@ -950,7 +962,9 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	cw_bat->cwfg_workqueue = create_singlethread_workqueue("cwfg_gauge");
 	INIT_DELAYED_WORK(&cw_bat->battery_delay_work, cw_bat_work);
-	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work , msecs_to_jiffies(queue_start_work_time));
+
+	INIT_WORK(&cw_bat->hw_init_work, cw_hw_init_work);
+	schedule_work(&cw_bat->hw_init_work);
 
 	cw_printk("cw2217 driver probe success!\n");
 
