@@ -22,6 +22,7 @@
 #include "fts_lib/ftsGesture.h"
 #include <soc/qcom/mmi_boot_info.h>
 #include <linux/regulator/consumer.h>
+#include <linux/delay.h>
 
 #ifdef TS_MMI_TOUCH_MULTIWAY_UPDATE_FW
 int flash_mode; /* global variable */
@@ -745,6 +746,7 @@ static int fts_mmi_post_resume(struct device *dev)
 	pr_info("IRQ is %s\n", fts_is_InterruptEnabled() ? "EN" : "DIS");
 
 	/* restore data */
+	mdelay(200);
 	if (ts->board->jitter_ctrl) {
 		ret = fts_write(board->jitter_cmd, ARRAY_SIZE(board->jitter_cmd));
 		if (ret == OK)
