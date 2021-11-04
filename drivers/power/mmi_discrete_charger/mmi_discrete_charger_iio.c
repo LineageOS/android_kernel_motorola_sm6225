@@ -23,6 +23,9 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_MMI_OTG_ENABLE:
 		rc = mmi_discrete_otg_enable(chip, !!val1);
 		break;
+	case PSY_IIO_TYPEC_MODE:
+		rc = mmi_discrete_config_typec_mode(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
