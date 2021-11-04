@@ -314,8 +314,8 @@ static int get_usb_online(struct mmi_discrete_charger *chip,
 		return rc;
 
 	//typec logic mask, bring up bc1.2 firstly
-	if (/*(chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)
-		&& */chip->real_charger_type == POWER_SUPPLY_TYPE_USB)
+	if ((chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)
+		&& chip->real_charger_type == POWER_SUPPLY_TYPE_USB)
 		val->intval = 0;
 	else
 		val->intval = 1;
@@ -336,9 +336,9 @@ static int get_usb_port_online(struct mmi_discrete_charger *chip,
 		return rc;
 
 	//typec logic mask, bring up bc1.2 firstly
-	if (/*(chip->typec_mode ==
+	if ((chip->typec_mode ==
 		MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)
-		&& */chip->real_charger_type == POWER_SUPPLY_TYPE_USB)
+		&& chip->real_charger_type == POWER_SUPPLY_TYPE_USB)
 		val->intval = 1;
 	else
 		val->intval = 0;
@@ -502,12 +502,6 @@ static int set_prop_dc_current_max(struct mmi_discrete_charger *chip,
 	return rc;
 }
 
-static int mmi_get_prop_typec_mode(struct mmi_discrete_charger *chg)
-{
-	//need to get typec mode
-	return 0;
-}
-
 static int mmi_get_rp_based_dcp_current(struct mmi_discrete_charger *chg, int typec_mode)
 {
 	int rp_ua;
@@ -531,7 +525,7 @@ static int mmi_get_rp_based_dcp_current(struct mmi_discrete_charger *chg, int ty
 static int mmi_discrete_handle_usb_current(struct mmi_discrete_charger *chg,
 					int usb_current)
 {
-	int rc = 0, rp_ua, typec_mode;
+	int rc = 0, rp_ua;
 	union power_supply_propval val = {0, };
 
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
@@ -540,9 +534,8 @@ static int mmi_discrete_handle_usb_current(struct mmi_discrete_charger *chg,
 				 * Valid FLOAT charger, report the current
 				 * based of Rp.
 				 */
-				typec_mode = mmi_get_prop_typec_mode(chg);
 				rp_ua = mmi_get_rp_based_dcp_current(chg,
-								typec_mode);
+								chg->typec_mode);
 				rc = vote(chg->usb_icl_votable,
 						SW_ICL_MAX_VOTER, true, rp_ua);
 				if (rc < 0)
@@ -568,8 +561,7 @@ static int mmi_discrete_handle_usb_current(struct mmi_discrete_charger *chg,
 		if (!rc && !val.intval)
 			return 0;
 
-		typec_mode = mmi_get_prop_typec_mode(chg);
-		if (typec_rp_med_high(chg, typec_mode)) {
+		if (typec_rp_med_high(chg, chg->typec_mode)) {
 			vote(chg->usb_icl_votable, USB_PSY_VOTER,
 							false, 0);
 			return 0;
@@ -1639,7 +1631,6 @@ static void mmi_notify_device_mode(struct mmi_discrete_charger *chg, bool enable
 
 static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 {
-	int typec_mode;
 	int rp_ua;
 
 	/* while PD is active it should have complete ICL control */
@@ -1659,9 +1650,8 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 		return;
 
 	/* TypeC rp med or high, use rp value */
-	typec_mode = mmi_get_prop_typec_mode(chg);
-	if (typec_rp_med_high(chg, typec_mode)) {
-		rp_ua = mmi_get_rp_based_dcp_current(chg, typec_mode);
+	if (typec_rp_med_high(chg, chg->typec_mode)) {
+		rp_ua = mmi_get_rp_based_dcp_current(chg, chg->typec_mode);
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 		return;
@@ -1683,7 +1673,7 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 		vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 		break;
 	case POWER_SUPPLY_TYPE_USB_DCP:
-		rp_ua = mmi_get_rp_based_dcp_current(chg, typec_mode);
+		rp_ua = mmi_get_rp_based_dcp_current(chg, chg->typec_mode);
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 		break;
@@ -1723,6 +1713,21 @@ static void mmi_handle_apsd_done(struct mmi_discrete_charger *chip, bool apsd_do
 
 	mmi_dbg(chip, "notify: apsd-done; %d detected\n",
 		   chip->real_charger_type);
+}
+
+int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
+{
+	mmi_info(chip, "config typec mode is %d old mode is %d\n", val, chip->typec_mode);
+
+	if (val != chip->typec_mode) {
+		chip->typec_mode = val;
+		update_sw_icl_max(chip);
+
+		if (chip->usb_psy)
+			power_supply_changed(chip->usb_psy);
+	}
+
+	return 0;
 }
 
 static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)

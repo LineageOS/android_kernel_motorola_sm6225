@@ -17,6 +17,7 @@
 #include <linux/iio/iio.h>
 #include <linux/extcon-provider.h>
 #include "mmi_charger.h"
+#include <linux/usb/mmi_discrete_typec.h>
 
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define USER_VOTER			"USER_VOTER"
@@ -47,24 +48,6 @@ enum {
 	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
 	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
 	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
-};
-
-/* Indicates USB Type-C CC connection status */
-enum power_supply_typec_mode {
-	MMI_POWER_SUPPLY_TYPEC_NONE,
-
-	/* Acting as source */
-	MMI_POWER_SUPPLY_TYPEC_SINK,		/* Rd only */
-	MMI_POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE,	/* Rd/Ra */
-	MMI_POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY,/* Rd/Rd */
-	MMI_POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER,	/* Ra/Ra */
-	MMI_POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY,	/* Ra only */
-
-	/* Acting as sink */
-	MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT,	/* Rp default */
-	MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM,	/* Rp 1.5A */
-	MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH,		/* Rp 3A */
-	MMI_POWER_SUPPLY_TYPEC_NON_COMPLIANT,
 };
 
 struct mmi_discrete_chg_client {
@@ -143,5 +126,6 @@ struct mmi_discrete_charger {
 
 int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
 int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip);
+int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val);
 
 #endif
