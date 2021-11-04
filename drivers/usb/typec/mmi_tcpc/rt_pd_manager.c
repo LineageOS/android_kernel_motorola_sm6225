@@ -23,6 +23,7 @@
 #include <linux/version.h>
 #include <linux/iio/consumer.h>
 #include "inc/tcpci_typec.h"
+#include <linux/usb/mmi_discrete_typec.h>
 
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
 
@@ -74,11 +75,12 @@ static const unsigned int rpm_extcon_cable[] = {
 enum iio_psy_property {
        POWER_SUPPLY_IIO_USB_REAL_TYPE = 0,
        POWER_SUPPLY_IIO_OTG_ENABLE,
+       POWER_SUPPLY_IIO_TYPEC_MODE,
        POWER_SUPPLY_IIO_PROP_MAX,
 };
 
 static const char * const iio_channel_map[] = {
-	"usb_real_type", "otg_enable",
+	"usb_real_type", "otg_enable", "typec_mode",
 };
 
 static int mmi_get_psy_iio_property(struct rt_pd_manager_data *rpmd,
@@ -350,6 +352,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			cancel_delayed_work_sync(&rpmd->usb_dwork);
 			rpmd->usb_dr = DR_IDLE;
 			schedule_delayed_work(&rpmd->usb_dwork, 0);
+			val.intval = MMI_POWER_SUPPLY_TYPEC_NONE;
+			mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 		} else if (old_state == TYPEC_UNATTACHED &&
 			   (new_state == TYPEC_ATTACHED_SRC ||
 			    new_state == TYPEC_ATTACHED_DEBUG)) {
@@ -385,14 +390,23 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			cancel_delayed_work_sync(&rpmd->usb_dwork);
 			rpmd->usb_dr = DR_IDLE;
 			schedule_delayed_work(&rpmd->usb_dwork, 0);
+			val.intval = MMI_POWER_SUPPLY_TYPEC_NONE;
+			mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 		} else if (old_state == TYPEC_UNATTACHED &&
 			   new_state == TYPEC_ATTACHED_AUDIO) {
 			dev_info(rpmd->dev, "%s Audio plug in\n", __func__);
 			/* enable AudioAccessory connection */
+			val.intval = MMI_POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER;
+			mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 		} else if (old_state == TYPEC_ATTACHED_AUDIO &&
 			   new_state == TYPEC_UNATTACHED) {
 			dev_info(rpmd->dev, "%s Audio plug out\n", __func__);
 			/* disable AudioAccessory connection */
+			val.intval = MMI_POWER_SUPPLY_TYPEC_NONE;
+			mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 		}
 
 		if (new_state == TYPEC_UNATTACHED) {
@@ -451,13 +465,22 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			switch (noti->typec_state.rp_level) {
 				/* SNK_RP_3P0 */
 				case TYPEC_CC_VOLT_SNK_3_0:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 				/* SNK_RP_1P5 */
 				case TYPEC_CC_VOLT_SNK_1_5:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 				/* SNK_RP_STD */
 				case TYPEC_CC_VOLT_SNK_DFT:
 				default:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 			}
 		} else if (new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
@@ -465,13 +488,22 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			switch (noti->typec_state.rp_level) {
 				/* DAM_3000 */
 				case TYPEC_CC_VOLT_SNK_3_0:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 				/* DAM_1500 */
 				case TYPEC_CC_VOLT_SNK_1_5:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 				/* DAM_500 */
 				case TYPEC_CC_VOLT_SNK_DFT:
 				default:
+					val.intval = MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT;
+					mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_TYPEC_MODE, &val);
 					break;
 			}
 		} else if (new_state == TYPEC_ATTACHED_NORP_SRC) {
