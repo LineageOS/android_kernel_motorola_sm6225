@@ -38,6 +38,8 @@
 #else /* CONFIG_ION_SYSTEM_HEAP */
 #if KERNEL_VERSION(5, 4, 0) < LINUX_VERSION_CODE
 #include "../../drivers/staging/android/ion/ion.h"
+#elif KERNEL_VERSION(4, 11, 12) < LINUX_VERSION_CODE
+#include "../../drivers/staging/android/ion/ion.h"
 #elif KERNEL_VERSION(3, 14, 0) < LINUX_VERSION_CODE
 /* very old Android kernel without ION_SYSTEM_HEAP falls here */
 #include "../../drivers/staging/android/ion/ion_priv.h"
