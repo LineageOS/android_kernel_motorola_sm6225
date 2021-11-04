@@ -1135,7 +1135,8 @@ static void batt_external_power_changed(struct power_supply *psy)
 	cancel_delayed_work(&chip->charger_work);
 	schedule_delayed_work(&chip->charger_work, msecs_to_jiffies(0));
 
-	power_supply_changed(chip->batt_psy);
+	if (chip->batt_psy)
+		power_supply_changed(chip->batt_psy);
 }
 
 static const struct power_supply_desc batt_psy_desc = {
@@ -2484,6 +2485,8 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 	else
 		mmi_info(chip, "IPC logging is enabled for MMI DISCRETE\n");
 
+	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
+
 	chip->batt_psy = devm_power_supply_register(chip->dev,
 						    &batt_psy_desc,
 						    &psy_cfg);
@@ -2518,7 +2521,6 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
-	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
 	mmi_discrete_charger_init(chip);
 
 	usb_source_change_notify_handler(&chip->master_chg_nb, 0, &chip->master_chg_dev->noti);
