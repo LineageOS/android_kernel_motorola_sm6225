@@ -13,6 +13,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "khaje-moto-common-overlay.dtsi"
 #include "khaje-rhode-display.dtsi"
+#include "khaje-rhode-fps-overlay_evb.dtsi"
 
 &firmware {
 	android {
@@ -22,4 +23,12 @@
 		};
 	};
 };
-
+&soc {
+    qcom,tz_gpio {
+        compatible = "qcom,tz_gpio";
+        tlmm-tz = <14>,
+                        <15>,
+                        <16>,
+                        <17>;
+    };
+};
