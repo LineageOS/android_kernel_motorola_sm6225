@@ -32,6 +32,15 @@
 	status = "disabled";
 };
 
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
+
 &qupv3_se1_i2c {
 	status = "ok";
 
@@ -40,7 +49,7 @@
                 compatible = "awinic,aw882xx_smartpa";
                 reg = <0x34>;
                 /* reset-gpio = <&tlmm 107 0>; */
-                irq-gpio = <&tlmm 85 0x2008>;
+                irq-gpio = <&tlmm 102 0x2008>;
                 dc-flag = <0>;
                 sync-flag = <0>;
                 sound-channel = <0>;
@@ -58,7 +67,7 @@
                 compatible = "awinic,aw882xx_smartpa";
                 reg = <0x37>;
                 /* reset-gpio = <&tlmm 107 0>; */
-                irq-gpio = <&tlmm 106 0x2008>;
+                irq-gpio = <&tlmm 107 0x2008>;
                 dc-flag = <0>;
                 sync-flag = <0>;
                 sound-channel = <1>;
@@ -72,24 +81,22 @@
         };
 };
 
-/* Add pinctrl for MI2S0 */
-&soc {
-        cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
-                compatible = "qcom,msm-cdc-pinctrl";
-                pinctrl-names = "aud_active", "aud_sleep";
-                pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
-                        &lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
-                pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
-                        &lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
-        };
+&q6core {
+	cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
+				&lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
+		pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
+				&lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
+		qcom,lpi-gpios;
+	};
 };
 
-/* Configure MI2S0 SD0&SD1 */
 &dai_mi2s0 {
-        /* SD0 line for playback */
-        qcom,msm-mi2s-rx-lines = <1>;
-        /* SD1 line for recording(SmartPA EC) */
-        qcom,msm-mi2s-tx-lines = <2>;
+	status = "ok";
+	qcom,msm-mi2s-rx-lines = <1>;
+	qcom,msm-mi2s-tx-lines = <2>;
 };
 
 /* Modify btfmslim_codec's compatible */
@@ -101,7 +108,7 @@
 
 &bengal_snd {
         qcom,model = "bengal-awinic-snd-card";
-	aw,have-882xx = <1>;
+	aw,have-882xx = <2>;
 
 	qcom,audio-routing =
 		"AMIC1", "MIC BIAS1",
@@ -134,18 +141,13 @@
 	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
         /delete-property/ qcom,cdc-dmic01-gpios;
         /delete-property/ qcom,cdc-dmic23-gpios;
+	/delete-property/ qcom,wsa-devs;
+	/delete-property/ qcom,wsa-aux-dev-prefix;
 
         qcom,wsa-max-devs = <0>;
         qcom,wsa-devs = <0>;
 };
 
-&cdc_dmic01_gpios {
-	status = "disabled";
-};
-
-&cdc_dmic23_gpios {
-	status = "disabled";
-};
 
 /* Modify headset's BIAS voltage to 2.6V */
 &wcd937x_codec {
