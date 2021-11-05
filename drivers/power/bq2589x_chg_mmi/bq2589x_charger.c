@@ -1126,7 +1126,7 @@ static char *bq2589x_charger_supplied_to[] = {
 
 static const struct power_supply_desc bq2589x_power_supply_desc = {
 	.name = "charger",
-	.type = POWER_SUPPLY_TYPE_MAINS,
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
 	.usb_types = bq2589x_usb_type,
 	.num_usb_types = ARRAY_SIZE(bq2589x_usb_type),
 	.properties = bq2589x_power_supply_props,
