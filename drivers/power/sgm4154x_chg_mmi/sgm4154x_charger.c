@@ -1611,7 +1611,7 @@ static char *sgm4154x_charger_supplied_to[] = {
 
 static struct power_supply_desc sgm4154x_power_supply_desc = {
 	.name = "charger",
-	.type = POWER_SUPPLY_TYPE_MAINS,
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
 	.usb_types = sgm4154x_usb_type,
 	.num_usb_types = ARRAY_SIZE(sgm4154x_usb_type),
 	.properties = sgm4154x_power_supply_props,
