@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/completion.h>
 #include <linux/of_irq.h>
+#include <linux/clk.h>
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
@@ -482,6 +483,7 @@ struct goodix_ts_core {
 #endif
 
 	int stylus_mode;
+	struct clk *stylus_clk;
 
 	/* touchscreen_mmi */
 	struct ts_mmi_class_methods *imports;
