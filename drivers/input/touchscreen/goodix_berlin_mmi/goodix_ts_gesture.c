@@ -239,7 +239,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 
 	if (!(gs_event.event_type & EVENT_GESTURE)) {
 		ts_err("invalid event type: 0x%x",
-			cd->ts_event.event_type);
+			gs_event.event_type);
 		goto re_send_ges_cmd;
 	}
 
