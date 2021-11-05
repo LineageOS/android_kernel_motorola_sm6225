@@ -13,6 +13,7 @@
 
 #include "goodix_ts_mmi.h"
 #include "goodix_ts_core.h"
+#include <linux/delay.h>
 #include <linux/input/mt.h>
 
 #define GET_GOODIX_DATA(dev) { \
@@ -73,13 +74,53 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 	return 0;
 }
 
+static int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
+		u8 cmd, u8 len, u8 subCmd, u8 subCmd2)
+{
+	int ret = 0;
+	struct goodix_ts_cmd ts_cmd;
+
+	ts_cmd.cmd = cmd;
+	ts_cmd.len = len;
+	ts_cmd.data[0] = subCmd;
+	ts_cmd.data[1] = subCmd2;
+
+	ret = core_data->hw_ops->send_cmd(core_data, &ts_cmd);
+	return ret;
+}
+
 #define STYLUS_MODE_SWITCH_CMD    0xA4
+static int goodix_stylus_mode(struct goodix_ts_core *core_data, int mode) {
+	int ret = 0;
+
+	if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
+		ts_err("failed to get stylus clk\n");
+		return -EINVAL;
+	}
+	if (mode) {
+		ret = clk_prepare_enable(core_data->stylus_clk);
+		if (ret) {
+			ts_err("failed to enable stylus clk\n");
+			return ret;
+		}
+		ts_info("success to open stylus clk\n");
+		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
+		msleep(20);
+	} else {
+		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
+		msleep(20);
+		clk_disable_unprepare(core_data->stylus_clk);
+		ts_info("success to close stylus clk\n");
+	}
+
+	return ret;
+}
+
 static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	int ret = 0;
 	unsigned long mode = 0;
-	struct goodix_ts_cmd cmd;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
@@ -99,16 +140,14 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		return size;
 	}
 
-	cmd.cmd = STYLUS_MODE_SWITCH_CMD;
-	cmd.len = 5;
-	cmd.data[0] = mode;
-	ret = hw_ops->send_cmd(core_data, &cmd);
-	if (ret < 0) {
-		ts_err("failed send stylus mode cmd");
+	ret = goodix_stylus_mode(core_data, mode);
+	if (ret) {
+		return ret;
 	}
 
 	core_data->stylus_mode = mode;
 	ts_info("Success to %s stylus mode", mode ? "Enable" : "Disable");
+
 	return size;
 }
 
@@ -316,7 +355,6 @@ static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
 static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 {
 	int ret = 0;
-	struct goodix_ts_cmd cmd;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
@@ -324,13 +362,11 @@ static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
 
-	cmd.cmd = CHARGER_MODE_CMD;
-	cmd.len = 5;
-	cmd.data[0] = mode;
-	ret = hw_ops->send_cmd(core_data, &cmd);
+	goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
 	if (ret < 0) {
 		ts_err("Failed to set charger mode\n");
 	}
+	msleep(16);
 	ts_err("Success to %s charger mode\n", mode ? "Enable" : "Disable");
 
 	return 0;
@@ -350,6 +386,7 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	case TS_MMI_PM_GESTURE:
 		if (hw_ops->gesture)
 			hw_ops->gesture(core_data, 0);
+		msleep(16);
 		enable_irq_wake(core_data->irq);
 		core_data->gesture_enabled = true;
 		break;
@@ -390,7 +427,6 @@ static int goodix_ts_mmi_pre_resume(struct device *dev) {
 
 static int goodix_ts_mmi_post_resume(struct device *dev) {
 	int ret = 0;
-	struct goodix_ts_cmd cmd;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
@@ -399,15 +435,10 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	hw_ops = core_data->hw_ops;
 
 	/* restore data */
-	if (core_data->board_data.stylus_mode_ctrl) {
-		cmd.cmd = STYLUS_MODE_SWITCH_CMD;
-		cmd.len = 5;
-		cmd.data[0] = core_data->stylus_mode;
-		ret = hw_ops->send_cmd(core_data, &cmd);
-		if (!ret) {
-			ts_info(" Successfully to restore stylus mode = %d.",
-				core_data->stylus_mode);
-		}
+	if (core_data->board_data.stylus_mode_ctrl && core_data->stylus_mode) {
+		ret = goodix_stylus_mode(core_data, core_data->stylus_mode);
+		if (!ret)
+			ts_info("Success to %s stylus mode", core_data->stylus_mode ? "Enable" : "Disable");
 	}
 
 	return 0;
@@ -426,11 +457,19 @@ static int goodix_ts_mmi_pre_suspend(struct device *dev) {
 	return 0;
 }
 
+
 static int goodix_ts_mmi_post_suspend(struct device *dev) {
+	int ret = 0;
 	struct goodix_ts_core *core_data;
 	struct platform_device *pdev;
 
 	GET_GOODIX_DATA(dev);
+
+	if (core_data->board_data.stylus_mode_ctrl && core_data->stylus_mode) {
+		ret = goodix_stylus_mode(core_data, 0);
+		if (!ret)
+			ts_info("Success to exit stylus mode");
+	}
 
 	goodix_ts_release_connects(core_data);
 
