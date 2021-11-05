@@ -767,6 +767,12 @@ static bool wcd937x_mbhc_get_moisture_status(struct wcd_mbhc *mbhc)
 	struct snd_soc_component *component = mbhc->component;
 	bool ret = false;
 
+#ifdef CONFIG_MBHC_DISABLE_MOISTURE_DETECT
+	pr_info("%s: disable moisture detection \n", __func__);
+	snd_soc_component_update_bits(component, WCD937X_MBHC_NEW_CTL_2, 0x0C, R_OFF << 2);
+	goto done;
+#endif
+
 	if ((mbhc->moist_rref == R_OFF) ||
 	    (mbhc->mbhc_cfg->enable_usbc_analog)) {
 		snd_soc_component_update_bits(component, WCD937X_MBHC_NEW_CTL_2,

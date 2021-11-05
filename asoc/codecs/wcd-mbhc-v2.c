@@ -943,8 +943,10 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		/* If moisture is present, then enable polling, disable
 		 * moisture detection and wait for interrupt
 		 */
-		if (wcd_mbhc_moisture_detect(mbhc, detection_type))
+		if (wcd_mbhc_moisture_detect(mbhc, detection_type)){
+			pr_info("%s: hwcd_mbhc_moisture_detect\n", __func__);
 			goto done;
+		}
 
 		/* Make sure MASTER_BIAS_CTL is enabled */
 		mbhc->mbhc_cb->mbhc_bias(component, true);

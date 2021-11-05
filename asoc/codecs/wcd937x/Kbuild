@@ -36,6 +36,9 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/litoautoconf.h
 	endif
+	ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
+		INCS    +=  -include $(AUDIO_ROOT)/config/rhodeautoconf.h
+	endif
 endif
 
 # As per target team, build is done as follows:
