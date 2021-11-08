@@ -28,7 +28,9 @@
 #include <linux/regulator/machine.h>
 #include <linux/mmi_discrete_charger_class.h>
 #include <linux/seq_file.h>
-
+#include <uapi/linux/sched/types.h>
+#include <linux/kthread.h>
+#include <linux/iio/consumer.h>
 #include "bq2589x_reg.h"
 
 #define BQ2589x_MANUFACTURER		"Texas Instruments"
@@ -41,6 +43,20 @@
 
 static struct bq2589x *g_bq;
 static DEFINE_MUTEX(bq2589x_i2c_lock);
+
+#define MMI_HVDCP2_VOLTAGE_STANDARD		8000
+#define MMI_HVDCP3_VOLTAGE_STANDARD		7500
+#define MMI_HVDCP_DETECT_ICL_LIMIT		500
+
+enum {
+	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
+	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
+	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
+};
+
+struct bq2589x_iio {
+	struct iio_channel	*usbin_v_chan;
+};
 
 enum bq2589x_status {
 	STATUS_NOT_CHARGING,
@@ -145,6 +161,16 @@ struct bq2589x {
 	struct	power_supply *wall_psy;
 	struct	power_supply_config usb_cfg;
 	struct	power_supply_config wall_cfg;
+
+	/*mmi qc3*/
+	bool mmi_qc3_support;
+	struct task_struct	*mmi_qc3_authen_task;
+	wait_queue_head_t	mmi_qc3_wait_que;
+	bool			mmi_qc3_trig_flag;
+	bool			mmi_is_qc3_authen;
+	u32			input_current_cache;
+	int			pulse_cnt;
+	struct bq2589x_iio		iio;
 };
 
 struct pe_ctrl {
@@ -398,6 +424,38 @@ int bq2589x_adc_read_charge_current(struct bq2589x *bq)
 	}
 }
 
+static int mmi_read_usbin_voltage_chan(struct bq2589x *bq, int *val)
+{
+	int rc;
+
+	if (!bq->iio.usbin_v_chan)
+		return -ENODATA;
+
+	rc = iio_read_channel_processed(bq->iio.usbin_v_chan, val);
+	if (rc < 0) {
+		dev_err(bq->dev, "Couldn't read USBIN channel rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int mmi_get_usb_voltage_now(struct bq2589x *bq, int *val)
+{
+	int rc;
+	int raw_date;
+
+	rc = mmi_read_usbin_voltage_chan(bq, &raw_date);
+	if (rc < 0) {
+		dev_err(bq->dev, "Couldn't read USBIN over vadc rc=%d\n", rc);
+		return rc;
+	}
+
+	*val = raw_date * 3;
+
+	return 0;
+}
+
 int bq2589x_set_chargecurrent(struct bq2589x *bq, int curr)
 {
 	u8 ichg;
@@ -454,15 +512,6 @@ int bq2589x_set_input_current_limit(struct bq2589x *bq, int curr)
 		val = (curr - BQ2589X_IINLIM_BASE) / BQ2589X_IINLIM_LSB;
 
 	return bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_IINLIM_MASK, val << BQ2589X_IINLIM_SHIFT);
-}
-
-
-int bq2589x_set_vindpm_offset(struct bq2589x *bq, int offset)
-{
-	u8 val;
-
-	val = (offset - BQ2589X_VINDPMOS_BASE)/BQ2589X_VINDPMOS_LSB;
-	return bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_VINDPMOS_MASK, val << BQ2589X_VINDPMOS_SHIFT);
 }
 
 int bq2589x_get_charging_status(struct bq2589x *bq)
@@ -785,6 +834,18 @@ int bq2589x_set_maxcharge_en(struct bq2589x *bq, bool enable)
 	return bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_MAXCEN_MASK, val);
 }
 
+int bq2589x_set_hvdcp_en(struct bq2589x *bq, bool enable)
+{
+	u8 val;
+
+	if (enable)
+		val = BQ2589X_HVDCP_ENABLE << BQ2589X_HVDCPEN_SHIFT;
+	else
+		val = BQ2589X_HVDCP_DISABLE << BQ2589X_HVDCPEN_SHIFT;
+
+	return bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_HVDCPEN_MASK, val);
+}
+
 static int bq2589x_get_vindpm_volt(struct bq2589x *bq)
 {
 	uint8_t val;
@@ -872,6 +933,8 @@ static int bq2589x_init_device(struct bq2589x *bq)
 	/*disable maxcharge en to allow qc2.0 detection*/
 	bq2589x_set_maxcharge_en(bq, false);
 
+	bq2589x_set_hvdcp_en(bq, false);
+
 	bq2589x_enable_auto_dpdm(bq, bq->cfg.enable_auto_dpdm);
 	bq2589x_enable_term(bq, bq->cfg.enable_term);
 	bq2589x_enable_ico(bq, bq->cfg.enable_ico);
@@ -879,13 +942,6 @@ static int bq2589x_init_device(struct bq2589x *bq)
 	if (!bq->cfg.enable_auto_dpdm)
 		bq->cfg.use_absolute_vindpm = true;
 	bq2589x_use_absolute_vindpm(bq, bq->cfg.use_absolute_vindpm);
-
-
-	ret = bq2589x_set_vindpm_offset(bq, 600);
-	if (ret < 0) {
-		dev_err(bq->dev, "%s:Failed to set vindpm offset:%d\n", __func__, ret);
-		return ret;
-	}
 
 	ret = bq2589x_set_term_current(bq, bq->cfg.term_current);
 	if (ret < 0) {
@@ -913,7 +969,7 @@ static int bq2589x_init_device(struct bq2589x *bq)
 
 	bq2589x_adc_start(bq, false);
 
-	ret = bq2589x_pumpx_enable(bq, 1);
+	ret = bq2589x_pumpx_enable(bq, 0);
 	if (ret) {
 		dev_err(bq->dev, "%s:Failed to enable pumpx:%d\n", __func__, ret);
 		return ret;
@@ -1004,7 +1060,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = bq2589x_adc_read_vbus_volt(bq) * 1000;
+		mmi_get_usb_voltage_now(bq, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = bq2589x_adc_read_charge_current(bq);
@@ -1070,6 +1126,8 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA);
+
 static int bq2589x_power_supply_set_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					const union power_supply_propval *val)
@@ -1079,7 +1137,7 @@ static int bq2589x_power_supply_set_property(struct power_supply *psy,
 
 	switch (psp) {
 		case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-			ret = bq2589x_set_input_current_limit(bq, val->intval);
+			ret = bq2589x_set_icl(bq->chg_dev, val->intval);
 			break;
 		case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 			ret = bq2589x_set_input_volt_limit(bq, val->intval);
@@ -1189,6 +1247,39 @@ static const struct attribute_group bq2589x_attr_group = {
 	.attrs = bq2589x_attributes,
 };
 
+static int mmi_get_iio_channel(struct bq2589x *bq, const char *propname,
+					struct iio_channel **chan)
+{
+	int rc = 0;
+
+	rc = of_property_match_string(bq->dev->of_node,
+					"io-channel-names", propname);
+	if (rc < 0)
+		return 0;
+
+	*chan = iio_channel_get(bq->dev, propname);
+	if (IS_ERR(*chan)) {
+		rc = PTR_ERR(*chan);
+		if (rc != -EPROBE_DEFER)
+			dev_err(bq->dev, "%s channel unavailable, %d\n",
+							propname, rc);
+		*chan = NULL;
+	}
+
+	return rc;
+}
+
+static int mmi_parse_dt_adc_channels(struct bq2589x *bq)
+{
+	int rc = 0;
+
+	rc = mmi_get_iio_channel(bq, "gpio3_div3",
+					&bq->iio.usbin_v_chan);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
 
 static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 {
@@ -1239,6 +1330,14 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 	ret = of_property_read_u32(np, "ti,bq2589x,term-current",&bq->cfg.term_current);
 	if (ret)
 		return ret;
+
+	bq->mmi_qc3_support = of_property_read_bool(np, "mmi,qc3-support");
+
+	ret = mmi_parse_dt_adc_channels(bq);
+	if (ret) {
+		dev_err(dev, "Failed to get adc channels%d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -1412,6 +1511,252 @@ static void bq2589x_adjust_absolute_vindpm(struct bq2589x *bq)
 
 }
 
+static int mmi_adjust_qc20_hvdcp_5v(struct bq2589x *bq)
+{
+	int ret;
+	int dp_val, dm_val;
+
+	/* dp 0.6v and dm 0v out 5V */
+
+	dm_val = 0x1<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 0v
+	if (ret)
+		return ret;
+
+	dp_val = 0x2<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 0.6v
+	return ret;
+}
+
+static int mmi_detected_qc20_hvdcp(struct bq2589x *bq, int *charger_type)
+{
+	int ret;
+	int dp_val, dm_val;
+	int vbus_voltage;
+
+	/*dp and dm connected,dp 0.6V dm 0.6V*/
+	dp_val = 0x2<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 0.6V
+	if (ret)
+	    return ret;
+
+	dm_val = 0x2<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 0.6V
+	if (ret)
+		return ret;
+
+	mdelay(1500);
+
+	dm_val = 0x1<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 0V
+	if (ret)
+		return ret;
+
+	mdelay(500);
+
+	/* dp 3.3v and dm 0.6v out 9V */
+	dp_val = 0x6<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 3.3v
+	if (ret)
+		return ret;
+
+	dm_val = 0x2<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 0.6v
+	if (ret)
+		return ret;
+
+	mdelay(300);//need tunning
+
+	mmi_get_usb_voltage_now(bq, &vbus_voltage);
+	dev_info(bq->dev, "vbus voltage now = %d\n", vbus_voltage);
+
+	if (vbus_voltage > MMI_HVDCP2_VOLTAGE_STANDARD) {
+		dev_info(bq->dev, "QC20 charger detected\n");
+		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+	} else {
+		dev_info(bq->dev, "charger type is not HVDCP\n");
+	}
+
+	ret = mmi_adjust_qc20_hvdcp_5v(bq);
+	if (ret) {
+		dev_err(bq->dev, "Cann't adjust qc20 hvdcp 5V\n");
+	}
+
+	mdelay(300);//need tunning
+
+	mmi_get_usb_voltage_now(bq, &vbus_voltage);
+	dev_info(bq->dev, "vbus voltage now = %d after qc20 detected\n", vbus_voltage);
+
+	return ret;
+}
+
+// Must enter 3.0 mode to call ,otherwise cannot step correctly.
+static int mmi_qc30_step_up_vbus(struct bq2589x *bq)
+{
+	int ret;
+	int dp_val;
+
+	/*  dm 3.3v to dm 0.6v  step up 200mV when IC is QC3.0 mode*/
+	dp_val = 0x6<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 3.3v
+	if (ret)
+		return ret;
+
+	udelay(2500);
+	dp_val = 0x2<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 0.6v
+	if (ret)
+		return ret;
+
+	udelay(2500);
+	return ret;
+}
+
+// Must enter 3.0 mode to call ,otherwise cannot step correctly.
+static int mmi_qc30_step_down_vbus(struct bq2589x *bq)
+{
+	int ret;
+	int dm_val;
+
+	/* dp 0.6v and dm 0.6v step down 200mV when IC is QC3.0 mode*/
+	dm_val = 0x2<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 0.6V
+	if (ret)
+		return ret;
+
+	udelay(2500);
+	dm_val = 0x6<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 3.3v
+	udelay(2500);
+
+	return ret;
+}
+
+static int mmi_detected_qc30_hvdcp(struct bq2589x *bq, int *charger_type)
+{
+	int ret = 0;
+	int dp_val, dm_val;
+	int i=0, vbus_voltage;
+
+	/* dp 0.6v and dm 3.3v entry QC3.0 mode */
+	dp_val = 0x2<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp 0.6v
+	if (ret)
+		return ret;
+
+	dm_val = 0x6<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm 3.3v
+	if (ret)
+		return ret;
+
+	mdelay(100);
+
+	for (i = 0; i < 16; i++) {
+		ret = mmi_qc30_step_up_vbus(bq);
+		if (ret)
+			dev_err(bq->dev, "%s qc30 step up vbus error\n", __func__);
+	}
+
+	mdelay(100);//need tunning
+
+	mmi_get_usb_voltage_now(bq, &vbus_voltage);
+	dev_info(bq->dev, "%s vbus voltage now = %d in detected qc30\n", __func__,vbus_voltage);
+
+	if (vbus_voltage > MMI_HVDCP3_VOLTAGE_STANDARD) {
+		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+		dev_info(bq->dev, "%s QC3.0 charger detected\n", __func__);
+	}
+
+	for (i = 0; i < 16; i++) {
+		ret = mmi_qc30_step_down_vbus(bq);
+		if (ret)
+			dev_err(bq->dev, "%s qc30 step down vbus error\n", __func__);
+	}
+
+	mmi_get_usb_voltage_now(bq, &vbus_voltage);
+	dev_info(bq->dev, "%s vbus voltage now = %d after detected qc30\n", __func__,vbus_voltage);
+
+	return ret;
+}
+
+static int mmi_hvdcp_detect_kthread(void *param)
+{
+	struct bq2589x * bq = param;
+	int ret;
+	int charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	struct sched_param sch_param = {.sched_priority = MAX_RT_PRIO-1};
+
+	sched_setscheduler(current, SCHED_FIFO, &sch_param);
+
+	do {
+
+		wait_event_interruptible(bq->mmi_qc3_wait_que, bq->mmi_qc3_trig_flag || kthread_should_stop());
+		if (kthread_should_stop())
+			break;
+
+		bq->mmi_qc3_trig_flag = false;
+		bq->mmi_is_qc3_authen = true;
+		bq2589x_set_input_current_limit(bq, MMI_HVDCP_DETECT_ICL_LIMIT);
+
+		//do qc2.0 detected
+		ret = mmi_detected_qc20_hvdcp(bq, &charger_type);
+		if (ret) {
+			dev_err(bq->dev, "Cann't detected qc20 hvdcp\n");
+			goto out;
+		}
+
+		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP)
+			goto out;
+
+		//do qc3.0 detected
+		ret = mmi_detected_qc30_hvdcp(bq, &charger_type);
+		if (ret) {
+			dev_err(bq->dev, "Cann't detected qc30 hvdcp\n");
+		}
+
+		bq2589x_get_usb_present(bq);
+		if (!bq->state.vbus_gd)
+			goto out;
+
+		bq->real_charger_type = charger_type;
+		//notify charging policy to update charger type
+		bq->chg_dev->noti.hvdcp_done = true;
+		charger_dev_notify(bq->chg_dev);
+
+	out:
+		bq2589x_set_input_current_limit(bq, bq->input_current_cache);
+		bq->mmi_is_qc3_authen = false;
+	}while(!kthread_should_stop());
+
+	dev_dbg(bq->dev, "qc3 kthread stop\n");
+	return 0;
+}
+
+static void mmi_start_hvdcp_detect(struct bq2589x *bq)
+{
+	dev_err(bq->dev, "start hvdcp detect\n");
+
+	if (bq->mmi_qc3_support
+		&& bq->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
+		&& !bq->mmi_is_qc3_authen) {
+		bq->mmi_qc3_trig_flag = true;
+		wake_up_interruptible(&bq->mmi_qc3_wait_que);
+	}
+}
+
 static void bq2589x_adapter_in_func(struct bq2589x *bq)
 {
 	int ret = 0;
@@ -1439,6 +1784,7 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		case BQ2589X_VBUS_USB_DCP:
 			dev_info(bq->dev, "%s:DCP adapter plugged in\n", __func__);
 			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+			mmi_start_hvdcp_detect(bq);
 			schedule_delayed_work(&bq->check_pe_tuneup_work, 0);
 			break;
 		case BQ2589X_VBUS_USB_SDP:
@@ -1490,6 +1836,7 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 		cancel_delayed_work_sync(&bq->monitor_work);
 	}
 
+	bq->pulse_cnt = 0;
 	bq->typec_apsd_rerun_done = false;
 	bq->chg_dev->noti.apsd_done = false;
 	bq->chg_dev->noti.hvdcp_done = false;
@@ -1751,6 +2098,46 @@ static irqreturn_t bq2589x_charger_interrupt(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int mmi_get_pulse_cnt(struct charger_device *chg_dev, int *count)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	*count = bq->pulse_cnt;
+
+	return 0;
+}
+
+static int mmi_set_dp_dm(struct charger_device *chg_dev, int val)
+{
+	int rc = 0;
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	switch(val) {
+	case MMI_POWER_SUPPLY_DP_DM_DP_PULSE:
+		bq->pulse_cnt++;
+		rc = mmi_qc30_step_up_vbus(bq);
+		if (rc) {
+			dev_err(bq->dev, "Couldn't increase pulse count rc=%d\n",
+				rc);
+			bq->pulse_cnt--;
+		}
+		dev_dbg(bq->dev,"DP_DM_DP_PULSE rc=%d cnt=%d\n",
+				rc, bq->pulse_cnt);
+		break;
+	case MMI_POWER_SUPPLY_DP_DM_DM_PULSE:
+		rc = mmi_qc30_step_down_vbus(bq);
+		if (!rc && bq->pulse_cnt)
+			bq->pulse_cnt--;
+		dev_dbg(bq->dev, "DP_DM_DM_PULSE rc=%d cnt=%d\n",
+				rc, bq->pulse_cnt);
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
 static int bq2589x_get_real_charger_type(struct charger_device *chg_dev, int *chg_type)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -1763,10 +2150,19 @@ static int bq2589x_get_real_charger_type(struct charger_device *chg_dev, int *ch
 static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
-	uA /= 1000;
-	dev_info(bq->dev,"%s set icl curr = %d mA\n", __func__, uA);
+	u32 mA;
 
-	return bq2589x_set_input_current_limit(bq, uA);
+	mA = uA / 1000;
+	dev_info(bq->dev,"%s set icl curr = %d mA\n", __func__, mA);
+
+	bq->input_current_cache = mA;
+
+	if (bq->mmi_is_qc3_authen) {
+		dev_info(bq->dev, "hvdcp detecting now\n");
+		return 0;
+	}
+
+	return bq2589x_set_input_current_limit(bq, mA);
 }
 
 static int bq2589x_get_icl(struct charger_device *chg_dev, u32 *uA)
@@ -1910,6 +2306,8 @@ static const struct charger_properties bq2589x_chg_props = {
 };
 
 static struct charger_ops bq2589x_chg_ops = {
+	.get_pulse_cnt = mmi_get_pulse_cnt,
+	.set_dp_dm = mmi_set_dp_dm,
 	.get_real_charger_type = bq2589x_get_real_charger_type,
 	.set_input_current = bq2589x_set_icl,
 	.get_input_current = bq2589x_get_icl,
@@ -1994,6 +2392,16 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&bq->pe_volt_tune_work, bq2589x_tune_volt_workfunc);
 	INIT_DELAYED_WORK(&bq->check_pe_tuneup_work, bq2589x_check_pe_tuneup_workfunc);
 
+	if (bq->mmi_qc3_support) {
+		bq->mmi_qc3_authen_task = kthread_create(mmi_hvdcp_detect_kthread, bq, "mmi_qc3_authen");
+		if (IS_ERR(bq->mmi_qc3_authen_task)) {
+			ret = PTR_ERR(bq->mmi_qc3_authen_task);
+			dev_err(dev, "Failed to create mmi_qc3_authen_task ret = %d\n", ret);
+			goto err_irq;
+		}
+		init_waitqueue_head(&bq->mmi_qc3_wait_que);
+		wake_up_process(bq->mmi_qc3_authen_task);
+	}
 
 	ret = sysfs_create_group(&bq->dev->kobj, &bq2589x_attr_group);
 	if (ret) {
@@ -2017,6 +2425,10 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	return 0;
 
 err_irq:
+
+	if (bq->mmi_qc3_support && bq->mmi_qc3_authen_task)
+		kthread_stop(bq->mmi_qc3_authen_task);
+
 	cancel_work_sync(&bq->irq_work);
 	cancel_delayed_work_sync(&bq->ico_work);
 	cancel_delayed_work_sync(&bq->check_pe_tuneup_work);
@@ -2040,6 +2452,9 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 	bq2589x_adc_stop(bq);
 
 	bq2589x_psy_unregister(bq);
+
+	if (bq->mmi_qc3_support && bq->mmi_qc3_authen_task)
+		kthread_stop(bq->mmi_qc3_authen_task);
 
 	sysfs_remove_group(&bq->dev->kobj, &bq2589x_attr_group);
 	cancel_work_sync(&bq->irq_work);
