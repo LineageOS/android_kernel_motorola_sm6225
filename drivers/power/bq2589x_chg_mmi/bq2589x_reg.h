@@ -21,16 +21,10 @@
 
 /* Register 01h */
 #define BQ2589X_REG_01		    	0x01
-#define BQ2589X_BHOT_MASK           0xC0
-#define BQ2589X_BHOT_SHIFT          6
-#define BQ2589X_BCOLD_MASK          0x20
-#define BQ2589X_BCOLD_SHIFT         5
-#define BQ2589X_VINDPMOS_MASK       0x1F
-#define BQ2589X_VINDPMOS_SHIFT      0
-
-#define BQ2589X_VINDPMOS_BASE       0
-#define BQ2589X_VINDPMOS_LSB        100
-
+#define BQ2589X_DP_VSEL_MASK		0xE0
+#define BQ2589X_DP_VSEL_SHIFT		5
+#define BQ2589X_DM_VSEL_MASK		0x1C
+#define BQ2589X_DM_VSEL_SHIFT		2
 
 /* Register 0x02 */
 #define BQ2589X_REG_02              0x02
