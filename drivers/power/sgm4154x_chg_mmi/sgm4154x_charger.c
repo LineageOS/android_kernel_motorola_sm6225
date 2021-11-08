@@ -325,15 +325,15 @@ static int sgm4154x_adjust_qc20_hvdcp_5v(struct sgm4154x_device *sgm)
 	int dp_val, dm_val;
 
 	/* dp 0.6v and dm 0v out 5V */
-	dp_val = 0x2<<3;
-	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
-				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
-	if (ret)
-		return ret;
-
 	dm_val = 0x1<<1;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
 				  SGM4154x_DM_VSEL_MASK, dm_val); //dm 0v
+	if (ret)
+		return ret;
+
+	dp_val = 0x2<<3;
+	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
+				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
 	return ret;
 }
 
