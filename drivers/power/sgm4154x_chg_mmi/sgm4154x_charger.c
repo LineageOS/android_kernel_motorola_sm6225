@@ -1806,17 +1806,15 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	sgm->client->irq = irqn;
 
 	chg_en_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,chg-en-gpio", 0);
-	if (!gpio_is_valid(chg_en_gpio))
+	if (gpio_is_valid(chg_en_gpio))
 	{
-		dev_err(sgm->dev, "%s: %d gpio get failed\n", __func__, chg_en_gpio);
-		return -EINVAL;
+		ret = gpio_request(chg_en_gpio, "sgm4154x chg en pin");
+		if (ret) {
+			dev_err(sgm->dev, "%s: %d gpio request failed\n", __func__, chg_en_gpio);
+			return ret;
+		}
+		gpio_direction_output(chg_en_gpio,0);//default enable charge
 	}
-	ret = gpio_request(chg_en_gpio, "sgm4154x chg en pin");
-	if (ret) {
-		dev_err(sgm->dev, "%s: %d gpio request failed\n", __func__, chg_en_gpio);
-		return ret;
-	}
-	gpio_direction_output(chg_en_gpio,0);//default enable charge
 	/* sw jeita */
 	sgm->enable_sw_jeita = of_property_read_bool(sgm->dev->of_node, "enable_sw_jeita");
 
