@@ -33,3 +33,41 @@
                         <17>;
     };
 };
+
+
+&tlmm{
+	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
+		mux {
+			pins = "gpio106";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio106";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
+&qupv3_se0_i2c {
+        status = "ok";
+        aw9610x_sar@12 {
+            compatible = "awinic,aw9610x_sar_0";
+            reg = <0x12>;
+            interrupt-parent = <&tlmm>;
+            interrupts = <106 0x2>;
+            gpios = <&tlmm 106 0x2>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&capsense_sar_gpio_pins>;
+            chip_name = "AW96105";
+            sar-num = <0>;
+            aw9610x,channel_number = <0x3>;
+            ch0_name = "capsense_bottom_left";
+            ch1_name = "capsense_top";
+            ch2_name = "capsense_bottom_right";
+            aw9610x,using-firmware;
+            aw9610x,firmware_name = "aw9610x_0";
+        };
+};
