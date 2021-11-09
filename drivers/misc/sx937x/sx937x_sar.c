@@ -261,7 +261,7 @@ static void read_dbg_raw(psx93XX_t this)
 	ref_ph_c = pdata->ref_phase_c;
 
 	sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
-	LOG_DBG("SX937X_STAT0_REG= 0x%X\n", uData);
+	dev_info(this->pdev, "SX937X_STAT0_REG= 0x%X\n", uData);
 
 	if(ref_ph_a != -1)
 	{
@@ -290,11 +290,10 @@ static void read_dbg_raw(psx93XX_t this)
 	sx937x_i2c_read_16bit(this, SX937X_DEBUG_READBACK_3, &uData);
 	use_flt_dlt_var = (s32)uData>>4;
 
-	ph = (ph_sel >>= 3) & 0x7;
-	if (ph >=0 && ph <= 7)
-	{
-		sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ph*4, &uData);
-		ant_use = (s32)uData>>10;
+	ph = (ph_sel >> 3) & 0x7;
+
+	sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ph*4, &uData);
+	ant_use = (s32)uData>>10;
 
 		sx937x_i2c_read_16bit(this, SX937X_AVERAGE_PH0 + ph*4, &uData);
 		avg = (s32)uData>>10;
@@ -304,13 +303,9 @@ static void read_dbg_raw(psx93XX_t this)
 		off = (u16)(uData & 0x3FFF);
 		state = psmtcButtons[ph].state;
 
-		LOG_DBG("SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
-		ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use, ref_ph_c, ref_c_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
-	}
-	else
-	{
-		LOG_DBG("read_dbg_raw(): invalid reg_val= 0x%X\n", ph_sel);
-	}
+	dev_info(this->pdev,
+	"SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
+	ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use, ref_ph_c, ref_c_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
 }
 
 static void read_rawData(psx93XX_t this)
@@ -319,6 +314,7 @@ static void read_rawData(psx93XX_t this)
 	s32 useful, average, diff;
 	s32 ref_a_use=0, ref_b_use=0, ref_c_use=0;
 	u32 uData;
+	u32 use_hex, avg_hex, dif_hex, dlt_hex, dbg_ph;
 	u16 offset;
 	int state;
 	psx937x_t pDevice = NULL;
@@ -332,10 +328,13 @@ static void read_rawData(psx93XX_t this)
 		ref_ph_a = pdata->ref_phase_a;
 		ref_ph_b = pdata->ref_phase_b;
 		ref_ph_c = pdata->ref_phase_c;
-		LOG_DBG("[SX937x] ref_ph_a= %d ref_ph_b= %d ref_ph_c= %d\n", ref_ph_a, ref_ph_b, ref_ph_c);
+		dev_info(this->pdev, "[SX937x] ref_ph_a= %d ref_ph_b= %d ref_ph_c= %d\n", ref_ph_a, ref_ph_b, ref_ph_c);
 
 		sx937x_i2c_read_16bit(this, SX937X_DEVICE_STATUS_A, &uData);
-		LOG_DBG("SX937X_DEVICE_STATUS_A= 0x%X\n", uData);
+		dev_info(this->pdev, "SX937X_DEVICE_STATUS_A= 0x%X\n", uData);
+		sx937x_i2c_read_16bit(this, SX937X_DEBUG_SETUP, &dbg_ph);
+		dbg_ph = (dbg_ph >> 3) & 0x7;
+		sx937x_i2c_read_16bit(this, SX937X_DEBUG_READBACK_3, &dlt_hex);
 
 		if(ref_ph_a != -1)
 		{
@@ -356,19 +355,24 @@ static void read_rawData(psx93XX_t this)
 		for(csx =0; csx<8; csx++)
 		{
 			index = csx*4;
-			sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + index, &uData);
-			useful = (s32)uData>>10;
-			sx937x_i2c_read_16bit(this, SX937X_AVERAGE_PH0 + index, &uData);
-			average = (s32)uData>>10;
-			sx937x_i2c_read_16bit(this, SX937X_DIFF_PH0 + index, &uData);
-			diff = (s32)uData>>10;
+			sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + index, &use_hex);
+			useful = (s32)use_hex>>10;
+			sx937x_i2c_read_16bit(this, SX937X_AVERAGE_PH0 + index, &avg_hex);
+			average = (s32)avg_hex>>10;
+			sx937x_i2c_read_16bit(this, SX937X_DIFF_PH0 + index, &dif_hex);
+			diff = (s32)dif_hex>>10;
 			sx937x_i2c_read_16bit(this, SX937X_OFFSET_PH0 + index*3, &uData);
 			offset = (u16)(uData & 0x3FFF);
 
 			state = psmtcButtons[csx].state;
 
-			LOG_DBG("SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
+			dev_info(this->pdev,
+			"SMTC_DAT PH= %d DIFF= %d USE= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d OFF= %d AVG= %d SMTC_END\n",
 			csx, diff, useful, ref_ph_a, ref_a_use, ref_ph_b, ref_b_use, ref_ph_c, ref_c_use, state, offset, average);
+
+			dev_info(this->pdev,
+			"SMTC_HEX PH= %d USE= 0x%X AVG= 0x%X DIF= 0x%X PH%d_DLT= 0x%X SMTC_END\n",
+			csx, use_hex, avg_hex, dif_hex, dbg_ph, dlt_hex);
 		}
 
 		read_dbg_raw(this);
