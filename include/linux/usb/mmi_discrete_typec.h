@@ -14,7 +14,7 @@
 #define MMI_DISCRETE_TYPE_C_H
 
 /* Indicates USB Type-C CC connection status */
-enum power_supply_typec_mode {
+enum mmi_power_supply_typec_mode {
 	MMI_POWER_SUPPLY_TYPEC_NONE,
 
 	/* Acting as source */
