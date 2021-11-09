@@ -36,7 +36,9 @@
 #include <linux/math64.h>
 #include <linux/regmap.h>
 #include "bq25970_reg.h"
+#include "bq2597x_charger_iio.h"
 #include <linux/gpio.h>
+#include <linux/iio/consumer.h>
 
 #ifdef pr_debug
 #undef pr_debug
@@ -163,6 +165,10 @@ struct bq2597x {
 
 	int part_no;
 	int revision;
+	struct iio_dev		*indio_dev;
+	struct iio_chan_spec	*iio_chan;
+	struct iio_channel	*int_iio_chans;
+	struct iio_channel	**ext_iio_chans;
 
 	struct mutex data_lock;
 	struct mutex i2c_rw_lock;
@@ -241,8 +247,8 @@ struct bq2597x {
 
 	struct power_supply *fc2_psy;
 
-	struct regulator	*vdd_i2c_vreg;
-	struct pinctrl		*irq_pinctrl;
+	//struct regulator	*vdd_i2c_vreg;
+	//struct pinctrl		*irq_pinctrl;
 	struct gpio		irq_gpio;
 };
 
@@ -1314,6 +1320,7 @@ static int bq2597x_detect_device(struct bq2597x *bq)
 static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 {
 	int ret;
+	int irqn = 0;
 	struct device_node *np = dev->of_node;
 
 	bq->cfg = devm_kzalloc(dev, sizeof(struct bq2597x_cfg),
@@ -1324,6 +1331,7 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 		return -ENOMEM;
 	}
 
+#if 0
 	if (of_find_property(np, "vdd-i2c-supply", NULL)) {
 		bq->vdd_i2c_vreg = devm_regulator_get(bq->dev, "vdd-i2c");
 		if (IS_ERR(bq->vdd_i2c_vreg)) {
@@ -1331,6 +1339,7 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 			return PTR_ERR(bq->vdd_i2c_vreg);
 		}
 	}
+#endif
 
 	bq->cfg->bat_ovp_disable = of_property_read_bool(np,
 			"ti,bq2597x,bat-ovp-disable");
@@ -1435,16 +1444,27 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 		return ret;
 	}
 
-	bq->irq_gpio.gpio = of_get_gpio_flags(np, 0,
-				(enum of_gpio_flags *)&bq->irq_gpio.flags);
-	of_property_read_string_index(np, "gpio-names", 0,
-					&bq->irq_gpio.label);
+	bq->irq_gpio.gpio = of_get_named_gpio(bq->dev->of_node, "bq2597x,irq-gpio", 0);
+
 	if (!gpio_is_valid(bq->irq_gpio.gpio)) {
 
 		pr_err("Invalid gpio irq int=%d\n", bq->irq_gpio.gpio);
 		return -EINVAL;
 	}
 
+	ret = gpio_request(bq->irq_gpio.gpio, "bq2597x irq pin");
+	if (ret) {
+		dev_err(bq->dev, "%s: %d gpio request failed\n", __func__, bq->irq_gpio.gpio);
+		return ret;
+	}
+	gpio_direction_input(bq->irq_gpio.gpio);
+	irqn = gpio_to_irq(bq->irq_gpio.gpio);
+
+	if (irqn < 0) {
+		dev_err(bq->dev, "%s:%d gpio_to_irq failed\n", __func__, irqn);
+		return irqn;
+	}
+	bq->client->irq = irqn;
 #if 0
 	ret = of_property_read_u32(np, "ti,bq2597x,sense-resistor-mohm",
 			&bq->cfg->sense_r_mohm);
@@ -1705,12 +1725,8 @@ static const struct attribute_group bq2597x_attr_group = {
 
 static enum power_supply_property bq2597x_charger_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
-	POWER_SUPPLY_PROP_CHARGE_NOW_ERROR,
 };
 
 static void bq2597x_check_alarm_status(struct bq2597x *bq);
@@ -1725,10 +1741,6 @@ static int bq2597x_charger_get_property(struct power_supply *psy,
 	int result;
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
-		val->intval = bq->charge_enabled;
-		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = bq->vbus_present;
 		break;
@@ -1746,39 +1758,6 @@ static int bq2597x_charger_get_property(struct power_supply *psy,
 
 		val->intval = bq->ibat_curr;
 		break;
-	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED:
-		ret = bq2597x_get_adc_data(bq, ADC_VBUS, &result);
-		if (!ret)
-			bq->vbus_volt = result;
-
-		val->intval = bq->vbus_volt;
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_NOW:
-		ret = bq2597x_get_adc_data(bq, ADC_IBUS, &result);
-		if (!ret)
-			bq->ibus_curr = result;
-
-		val->intval = bq->ibus_curr;
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_NOW_ERROR:
-		bq2597x_check_alarm_status(bq);
-		bq2597x_check_fault_status(bq);
-		val->intval = ((bq->bat_ovp_alarm << BAT_OVP_ALARM_SHIFT)
-			| (bq->bat_ocp_alarm << BAT_OCP_ALARM_SHIFT)
-			| (bq->bat_ucp_alarm << BAT_UCP_ALARM_SHIFT)
-			| (bq->bus_ovp_alarm << BUS_OVP_ALARM_SHIFT)
-			| (bq->bus_ocp_alarm << BUS_OCP_ALARM_SHIFT)
-			| (bq->bat_therm_alarm << BAT_THERM_ALARM_SHIFT)
-			| (bq->bus_therm_alarm << BUS_THERM_ALARM_SHIFT)
-			| (bq->die_therm_alarm << DIE_THERM_ALARM_SHIFT)
-			| (bq->bat_ovp_fault << BAT_OVP_FAULT_SHIFT)
-			| (bq->bat_ocp_fault << BAT_OCP_FAULT_SHIFT)
-			| (bq->bus_ovp_fault << BUS_OVP_FAULT_SHIFT)
-			| (bq->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
-			| (bq->bat_therm_fault << BAT_THERM_FAULT_SHIFT)
-			| (bq->bus_therm_fault << BUS_THERM_FAULT_SHIFT)
-			| (bq->die_therm_fault << DIE_THERM_FAULT_SHIFT));
-		break;
 	default:
 		return -EINVAL;
 
@@ -1793,14 +1772,6 @@ static int bq2597x_charger_set_property(struct power_supply *psy,
 	struct bq2597x *bq  = power_supply_get_drvdata(psy);
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-
-		bq2597x_enable_charge(bq, val->intval);
-		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
-		pr_info("POWER_SUPPLY_PROP_CHARGING_ENABLED: %s\n",
-				val->intval ? "enable" : "disable");
-
-		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		bq2597x_set_present(bq, !!val->intval);
 		pr_info("set present :%d\n", val->intval);
@@ -1818,9 +1789,6 @@ static int bq2597x_charger_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		ret = 1;
-		break;
 	default:
 		ret = 0;
 		break;
@@ -1829,7 +1797,7 @@ static int bq2597x_charger_is_writeable(struct power_supply *psy,
 }
 
 static const struct power_supply_desc bq2597x_psy_desc = {
-	.name = "bq2597x",
+	.name = "cp-standalone",
 	.type = POWER_SUPPLY_TYPE_MAINS,
 	.properties = bq2597x_charger_props,
 	.num_properties = ARRAY_SIZE(bq2597x_charger_props),
@@ -1855,6 +1823,176 @@ static int bq2597x_psy_register(struct bq2597x *bq)
 }
 
 EXPORT_SYMBOL_GPL(bq2597x_dump_reg);
+
+
+static int bq2597x_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	struct bq2597x *bq = iio_priv(indio_dev);
+	int rc = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CHARGING_ENABLED:
+
+		bq2597x_enable_charge(bq, val1);
+		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
+		pr_info("PSY_IIO_CHARGING_ENABLED: %s\n",
+				val1 ? "enable" : "disable");
+
+		break;
+	case PSY_IIO_ONLINE:
+		bq2597x_set_present(bq, !!val1);
+		pr_info("set present :%d\n", val1);
+		break;
+	default:
+		pr_err("Unsupported bq2597x IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		pr_err("Couldn't write IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int bq2597x_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	struct bq2597x *bq = iio_priv(indio_dev);
+	int rc = 0;
+	int result;
+	*val1 = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
+		*val1 = bq->charge_enabled;
+		break;
+	case PSY_IIO_ONLINE:
+		*val1 = bq->vbus_present;
+		break;
+	case PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW:
+		rc = bq2597x_get_adc_data(bq, ADC_VBUS, &result);
+		if (!rc)
+			bq->vbus_volt = result;
+
+		*val1 = bq->vbus_volt;
+		break;
+	case PSY_IIO_MMI_CP_INPUT_CURRENT_NOW:
+		rc = bq2597x_get_adc_data(bq, ADC_IBUS, &result);
+		if (!rc)
+			bq->ibus_curr = result;
+
+		*val1 = bq->ibus_curr;
+		break;
+	case PSY_IIO_CP_STATUS1:
+		bq2597x_check_alarm_status(bq);
+		bq2597x_check_fault_status(bq);
+		*val1 = ((bq->bat_ovp_alarm << BAT_OVP_ALARM_SHIFT)
+			| (bq->bat_ocp_alarm << BAT_OCP_ALARM_SHIFT)
+			| (bq->bat_ucp_alarm << BAT_UCP_ALARM_SHIFT)
+			| (bq->bus_ovp_alarm << BUS_OVP_ALARM_SHIFT)
+			| (bq->bus_ocp_alarm << BUS_OCP_ALARM_SHIFT)
+			| (bq->bat_therm_alarm << BAT_THERM_ALARM_SHIFT)
+			| (bq->bus_therm_alarm << BUS_THERM_ALARM_SHIFT)
+			| (bq->die_therm_alarm << DIE_THERM_ALARM_SHIFT)
+			| (bq->bat_ovp_fault << BAT_OVP_FAULT_SHIFT)
+			| (bq->bat_ocp_fault << BAT_OCP_FAULT_SHIFT)
+			| (bq->bus_ovp_fault << BUS_OVP_FAULT_SHIFT)
+			| (bq->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
+			| (bq->bat_therm_fault << BAT_THERM_FAULT_SHIFT)
+			| (bq->bus_therm_fault << BUS_THERM_FAULT_SHIFT)
+			| (bq->die_therm_fault << DIE_THERM_FAULT_SHIFT));
+		break;
+
+	default:
+		pr_err("Unsupported bq2597x IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		pr_err("Couldn't read IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int bq2597x_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct bq2597x *bq = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = bq->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(bq2597x_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info bq2597x_iio_info = {
+	.read_raw	= bq2597x_iio_read_raw,
+	.write_raw	= bq2597x_iio_write_raw,
+	.of_xlate	= bq2597x_iio_of_xlate,
+};
+
+static int bq2597x_init_iio_psy(struct bq2597x *chip)
+{
+	struct iio_dev *indio_dev = chip->indio_dev;
+	struct iio_chan_spec *chan;
+	int bq2597x_num_iio_channels = ARRAY_SIZE(bq2597x_iio_psy_channels);
+	int rc, i;
+
+	chip->iio_chan = devm_kcalloc(chip->dev, bq2597x_num_iio_channels,
+				sizeof(*chip->iio_chan), GFP_KERNEL);
+	if (!chip->iio_chan)
+		return -ENOMEM;
+
+	chip->int_iio_chans = devm_kcalloc(chip->dev,
+				bq2597x_num_iio_channels,
+				sizeof(*chip->int_iio_chans),
+				GFP_KERNEL);
+	if (!chip->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &bq2597x_iio_info;
+	indio_dev->dev.parent = chip->dev;
+	indio_dev->dev.of_node = chip->dev->of_node;
+	indio_dev->name = "bq2597x-charger";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = chip->iio_chan;
+	indio_dev->num_channels = bq2597x_num_iio_channels;
+
+	for (i = 0; i < bq2597x_num_iio_channels; i++) {
+		chip->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &chip->iio_chan[i];
+		chip->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = bq2597x_iio_psy_channels[i].channel_num;
+		chan->type = bq2597x_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			bq2597x_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			bq2597x_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			bq2597x_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(chip->dev, indio_dev);
+	if (rc)
+		pr_err("Failed to register bq2597x IIO device, rc=%d\n", rc);
+
+	return rc;
+}
 
 static void bq2597x_check_alarm_status(struct bq2597x *bq)
 {
@@ -2042,12 +2180,22 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 {
 	struct bq2597x *bq;
 	int ret;
+	struct iio_dev *indio_dev;
+	//const struct of_device_id *match;
+	//struct device_node *node = client->dev.of_node;
+	pr_err("bq2597x_charger_probe start\n");
+	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*bq));
 
-	bq = devm_kzalloc(&client->dev, sizeof(struct bq2597x), GFP_KERNEL);
+
+	if (!indio_dev)
+		return -ENOMEM;
+
+	bq = iio_priv(indio_dev);
 	if (!bq) {
 		pr_err("Out of memory\n");
 		return -ENOMEM;
 	}
+	bq->indio_dev = indio_dev;
 
 	bq->dev = &client->dev;
 
@@ -2070,61 +2218,44 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 		goto free_mem;
 	}
 
+
+	ret = bq2597x_init_iio_psy(bq);
+	if (ret < 0) {
+		pr_err("Failed to initialize bq2597x IIO PSY, ret = %d\n", ret);
+		return ret;
+	}
+
 	if (client->dev.of_node) {
 		ret = bq2597x_parse_dt(bq, &client->dev);
 		if (ret)
-			goto free_regulator;
-	}
-
-	if (regulator_count_voltages(bq->vdd_i2c_vreg) > 0) {
-		ret = regulator_set_voltage(bq->vdd_i2c_vreg,
-					1800000, 1800000);
-		if (ret) {
-			pr_err("Failed to set vreg voltage, rc=%d\n",
-						ret);
-			goto free_regulator;
-		}
-	}
-	ret = regulator_enable(bq->vdd_i2c_vreg);
-	if (ret) {
-		pr_err("Failed to enable vdd vreg, rc=%d\n", ret);
-		goto disable_regator;;
+			goto free_mem;
 	}
 
 	ret = bq2597x_detect_device(bq);
 	if (ret) {
 		pr_err("No bq2597x device found!\n");
-		goto disable_regator;
+		goto free_mem;
 	}
 
 	ret = bq2597x_init_device(bq);
 	if (ret) {
 		pr_err("Failed to init device\n");
-		goto disable_regator;
+		goto free_mem;
 	}
 
 	ret = bq2597x_psy_register(bq);
 	if (ret) {
 		pr_err("Failed to register psy\n");
-		goto free_regulator;
+		goto free_mem;
 	}
-
+/*
 	bq->irq_pinctrl =
 		pinctrl_get_select(bq->dev, "bq_int_default");
 	if (!bq->irq_pinctrl) {
 		pr_err("Couldn't set pinctrl bq_int_default\n");
 		goto free_psy;
 	}
-
-	ret = gpio_request_one(bq->irq_gpio.gpio,
-			      bq->irq_gpio.flags,
-			      bq->irq_gpio.label);
-	if (ret) {
-		pr_err("failed to request irq  GPIO, ret %d, gpio %d, lable %s\n",
-				ret, bq->irq_gpio.gpio, bq->irq_gpio.label);
-		goto free_psy;
-	}
-
+*/
 	if (client->irq) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
 				NULL, bq2597x_charger_interrupt,
@@ -2155,14 +2286,19 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 
 free_irq:
 	devm_free_irq(&client->dev,client->irq,bq);
+	power_supply_unregister(bq->fc2_psy);
 free_gpio:
 	gpio_free(bq->irq_gpio.gpio);
+	power_supply_unregister(bq->fc2_psy);
+#if 0
 free_psy:
 	power_supply_unregister(bq->fc2_psy);
+
 disable_regator:
 	regulator_disable(bq->vdd_i2c_vreg);
 free_regulator:
 	devm_regulator_put(bq->vdd_i2c_vreg);
+#endif
 free_mem:
 	devm_kfree(bq->dev, bq);
 	return ret;
@@ -2226,7 +2362,7 @@ static int bq2597x_charger_remove(struct i2c_client *client)
 
 	bq2597x_enable_adc(bq, false);
 
-	devm_regulator_put(bq->vdd_i2c_vreg);
+	//devm_regulator_put(bq->vdd_i2c_vreg);
 	devm_free_irq(&client->dev,client->irq,bq);
 	gpio_free(bq->irq_gpio.gpio);
 	power_supply_unregister(bq->fc2_psy);
@@ -2286,4 +2422,3 @@ module_i2c_driver(bq2597x_charger_driver);
 MODULE_DESCRIPTION("TI BQ2597x Charger Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Texas Instruments");
-
