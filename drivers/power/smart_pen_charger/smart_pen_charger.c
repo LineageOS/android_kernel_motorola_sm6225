@@ -50,8 +50,20 @@ enum pen_status {
 	PEN_STAT_READY,
 	PEN_STAT_CHARGING,
 	PEN_STAT_DISCHARGING,
-	PEN_STAT_CHARGED,
+	PEN_STAT_CHARGE_FULL,
 	PEN_STAT_MAX,
+};
+
+enum pen_error {
+	PEN_OK,
+	PEN_ERR_UNKNOWN,
+	PEN_ERR_NOT_PLUGIN,
+	PEN_ERR_TRANSTER_FAILED,
+	PEN_ERR_OVERTEMP,
+	PEN_ERR_OVERVOLT,
+	PEN_ERR_OVERCURR,
+	PEN_ERR_UNDERVOLT,
+	PEN_ERR_MAX,
 };
 
 static char *pen_status_maps[] = {
@@ -60,7 +72,7 @@ static char *pen_status_maps[] = {
 	"ready",
 	"charging",
 	"discharging",
-	"charged",
+	"charge_full",
 };
 
 struct pen_mac {
@@ -288,8 +300,6 @@ static ssize_t pen_status_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	int rc;
-	u32 status;
 	struct pen_charger *chg = this_chip;
 
 	if (!chg) {
@@ -301,22 +311,8 @@ static ssize_t pen_status_show(struct device *dev,
 		return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%s\n",
 				pen_status_maps[chg->simulator_data.status]);
 
-	rc = qti_charger_get_property(OEM_PROP_PEN_STATUS,
-				&status, sizeof(status));
-	if (rc) {
-		pr_err("Failed to read pen status, rc=%d\n", rc);
-		return rc;
-	}
-
-	if (chg->pen_data.status != status && status < PEN_STAT_MAX) {
-		pr_info("Pen status updated %s -> %s\n",
-				pen_status_maps[chg->pen_data.status],
-				pen_status_maps[status]);
-		chg->pen_data.status = status;
-	}
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%s\n",
-				pen_status_maps[chg->pen_data.status]);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n",
+					chg->pen_data.status);
 }
 static DEVICE_ATTR(pen_status, 0664, pen_status_show, pen_status_store);
 
@@ -516,11 +512,17 @@ static void pen_charger_handle_event(struct pen_charger *chg, int event)
 		scnprintf(event_string, CHG_SHOW_MAX_SIZE,
 			"POWER_SUPPLY_PEN_STATUS=%s",
 			pen_status_maps[data->status]);
+		chg->pen_data.status = data->status;
+		if (chg->pen_psy)
+			sysfs_notify(&chg->pen_psy->dev.parent->kobj, NULL, "pen_status");
 		break;
 	case NOTIFY_EVENT_PEN_SOC:
 		scnprintf(event_string, CHG_SHOW_MAX_SIZE,
 			"POWER_SUPPLY_PEN_SOC=%d",
 			data->soc);
+		if (chg->pen_psy)
+			sysfs_notify(&chg->pen_psy->dev.parent->kobj, NULL, "pen_soc");
+		break;
 		break;
 	case NOTIFY_EVENT_PEN_MAC:
 		scnprintf(event_string, CHG_SHOW_MAX_SIZE,
@@ -533,6 +535,9 @@ static void pen_charger_handle_event(struct pen_charger *chg, int event)
 		scnprintf(event_string, CHG_SHOW_MAX_SIZE,
 			"POWER_SUPPLY_PEN_ERROR=%d",
 			data->error);
+		chg->pen_data.error = data->error;
+		if (chg->pen_psy)
+			sysfs_notify(&chg->pen_psy->dev.parent->kobj, NULL, "pen_error");
 		break;
 	default:
 		pr_err("Invalid notify event %d\n", event);
