@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/power/mmi_qc3p_wt6670f
+
+mmi_qc3p_wt6670f-objs += wt6670f_qc3p.o wt6670f_upgrade.o
+obj-m += mmi_qc3p_wt6670f.o
