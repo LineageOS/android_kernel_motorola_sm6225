@@ -52,12 +52,12 @@ module_param(suspend_wakeups, int, 0644);
 static struct mmi_charger_chip *this_chip = NULL;
 
 enum {
-	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
-	POWER_SUPPLY_CHARGE_RATE_NORMAL,
-	POWER_SUPPLY_CHARGE_RATE_WEAK,
-	POWER_SUPPLY_CHARGE_RATE_TURBO,
-	POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
-	POWER_SUPPLY_CHARGE_RATE_HYPER,
+	MMI_POWER_SUPPLY_CHARGE_RATE_NONE = 0,
+	MMI_POWER_SUPPLY_CHARGE_RATE_NORMAL,
+	MMI_POWER_SUPPLY_CHARGE_RATE_WEAK,
+	MMI_POWER_SUPPLY_CHARGE_RATE_TURBO,
+	MMI_POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
+	MMI_POWER_SUPPLY_CHARGE_RATE_HYPER,
 };
 
 enum {
@@ -1630,17 +1630,17 @@ int mmi_get_battery_charger_rate(struct mmi_charger *charger)
 
 	info = &charger->chg_info;
 	if (!info->chrg_present)
-		rate = POWER_SUPPLY_CHARGE_RATE_NONE;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_NONE;
 	else if (info->chrg_pmax_mw < WEAK_CHRG_THRSH_MW)
-		rate = POWER_SUPPLY_CHARGE_RATE_WEAK;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_WEAK;
 	else if (info->chrg_pmax_mw < TURBO_CHRG_THRSH_MW)
-		rate = POWER_SUPPLY_CHARGE_RATE_NORMAL;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_NORMAL;
 	else if (info->chrg_pmax_mw < TURBO_CHRG_30W_THRSH_MW)
-		rate = POWER_SUPPLY_CHARGE_RATE_TURBO;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_TURBO;
 	else if (info->chrg_pmax_mw < HYPER_CHRG_THRSH_MW)
-		rate = POWER_SUPPLY_CHARGE_RATE_TURBO_30W;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_TURBO_30W;
 	else
-		rate = POWER_SUPPLY_CHARGE_RATE_HYPER;
+		rate = MMI_POWER_SUPPLY_CHARGE_RATE_HYPER;
 
 	return rate;
 }
@@ -1801,8 +1801,8 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	bool mmi_changed = false;
 	int batt_temp;
 	int batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
-	int charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
-	int max_charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
+	int charger_rate = MMI_POWER_SUPPLY_CHARGE_RATE_NONE;
+	int max_charger_rate = MMI_POWER_SUPPLY_CHARGE_RATE_NONE;
 	struct mmi_charger *charger = NULL;
 	struct mmi_battery_pack *battery = NULL;
 	struct mmi_battery_info *batt_info = NULL;
@@ -1818,7 +1818,7 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 		if (battery->pending == battery->reference) {
 			/* init for going through all chargers */
 			battery->status = POWER_SUPPLY_STATUS_DISCHARGING;
-			battery->charger_rate = POWER_SUPPLY_CHARGE_RATE_NONE;
+			battery->charger_rate = MMI_POWER_SUPPLY_CHARGE_RATE_NONE;
 
 			/* update only at the first charger */
 			battery->health = mmi_get_battery_health(charger);
@@ -2009,7 +2009,7 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 
 	if (chip->factory_mode ||
 	    (chip->factory_version && chip->enable_factory_poweroff)) {
-		if (chip->max_charger_rate > POWER_SUPPLY_CHARGE_RATE_NONE) {
+		if (chip->max_charger_rate > MMI_POWER_SUPPLY_CHARGE_RATE_NONE) {
 			mmi_dbg(chip, "Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
@@ -2024,18 +2024,18 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 
 	if (chip->factory_mode)
 		hb_resch_time = HEARTBEAT_FACTORY_MS;
-	else if (chip->max_charger_rate != POWER_SUPPLY_CHARGE_RATE_NONE)
+	else if (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE)
 		hb_resch_time = chip->heartbeat_interval;
 	else
 		hb_resch_time = HEARTBEAT_DISCHARGE_MS;
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
 	if (suspend_wakeups ||
-	    chip->max_charger_rate != POWER_SUPPLY_CHARGE_RATE_NONE)
+	    chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE)
 		alarm_start_relative(&chip->heartbeat_alarm,
 				     ns_to_ktime(HEARTBEAT_WAKEUP_INTRVAL_NS));
 
-	if (chip->max_charger_rate == POWER_SUPPLY_CHARGE_RATE_NONE)
+	if (chip->max_charger_rate == MMI_POWER_SUPPLY_CHARGE_RATE_NONE)
 		pm_relax(chip->dev);
 
 	PM_RELAX(chip->mmi_hb_wake_source);
@@ -2392,7 +2392,7 @@ static int mmi_charger_reboot(struct notifier_block *nb,
 		factory_kill_disable = true;
 		chip->force_charger_disabled = true;
 		schedule_delayed_work(&chip->heartbeat_work, msecs_to_jiffies(0));
-		while (chip->max_charger_rate != POWER_SUPPLY_CHARGE_RATE_NONE) {
+		while (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE) {
 			mmi_info(chip, "Wait for charger removal\n");
 			msleep(100);
 		}
