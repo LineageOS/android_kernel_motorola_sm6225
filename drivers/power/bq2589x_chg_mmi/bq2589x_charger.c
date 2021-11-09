@@ -2040,7 +2040,7 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 		reapsd_complete = bq2589x_is_rerun_apsd_complete(bq);
 	}
 
-	if (((bq->vbus_type == BQ2589X_VBUS_NONE) || (bq->vbus_type == BQ2589X_VBUS_OTG)) && (bq->status & BQ2589X_STATUS_PLUGIN)) {
+	if (((!state.vbus_gd) || (bq->vbus_type == BQ2589X_VBUS_OTG)) && (bq->status & BQ2589X_STATUS_PLUGIN)) {
 		dev_info(bq->dev, "%s:adapter removed\n", __func__);
 		bq->status &= ~BQ2589X_STATUS_PLUGIN;
 		bq2589x_adapter_out_func(bq);
@@ -2094,6 +2094,7 @@ static irqreturn_t bq2589x_charger_interrupt(int irq, void *data)
 {
 	struct bq2589x *bq = data;
 
+	dev_info(bq->dev, "%s", __func__);
 	schedule_work(&bq->irq_work);
 	return IRQ_HANDLED;
 }
