@@ -2384,8 +2384,7 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	if (ret)
 		goto err_0;
 
-	/*MMI_STOPSHIP PMIC:add disable ILIM pin because of hw is not ready */
-	bq2589x_set_ilim_enable(bq, false);
+	bq2589x_set_ilim_enable(bq, true);
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
 	INIT_DELAYED_WORK(&bq->monitor_work, bq2589x_monitor_workfunc);
