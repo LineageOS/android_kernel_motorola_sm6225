@@ -1850,7 +1850,7 @@ static int32_t aw9610x_power_init(struct aw9610x *aw9610x)
 
 	LOG_DBG("aw9610x power init enter");
 
-	aw9610x->vcc = regulator_get(aw9610x->dev, "vcc");
+	aw9610x->vcc = regulator_get(aw9610x->dev, "cap_vcc");
 	if (IS_ERR(aw9610x->vcc)) {
 		rc = PTR_ERR(aw9610x->vcc);
 		LOG_ERR("regulator get failed vcc rc = %d", rc);
