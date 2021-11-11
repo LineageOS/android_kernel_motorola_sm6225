@@ -5436,13 +5436,13 @@ static struct snd_soc_dai_link msm_awinic_be_dai_links[] = {
 static struct snd_soc_dai_link_component awinic_codecs[] = {
         {
                 .of_node = NULL,
-                .dai_name = "aw882xx-aif-0-34",
-                .name = "aw882xxacf_smartpa.0-0034",
+                .dai_name = "aw882xx-aif-1-34",
+                .name = "aw882xxacf_smartpa.1-0034",
         },
         {
                 .of_node = NULL,
-                .dai_name = "aw882xx-aif-0-37",
-                .name = "aw882xxacf_smartpa.0-0037",
+                .dai_name = "aw882xx-aif-1-37",
+                .name = "aw882xxacf_smartpa.1-0037",
         },
 };
 
