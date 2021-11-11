@@ -270,7 +270,9 @@ struct goodix_ts_board_data {
 	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
 	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
 
+	bool sensitivity_ctrl;
 	bool stylus_mode_ctrl;
+	bool leather_mode_ctrl;
 };
 
 enum goodix_fw_update_mode {
@@ -482,6 +484,7 @@ struct goodix_ts_core {
 	struct notifier_block fb_notifier;
 #endif
 
+	int leather_mode;
 	int stylus_mode;
 	struct clk *stylus_clk;
 

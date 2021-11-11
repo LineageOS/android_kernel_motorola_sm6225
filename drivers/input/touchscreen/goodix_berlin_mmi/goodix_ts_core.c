@@ -1090,6 +1090,16 @@ static int goodix_parse_dt(struct device_node *node,
 	if (board_data->stylus_mode_ctrl)
 		ts_info("support goodix stylus mode");
 
+	board_data->sensitivity_ctrl = of_property_read_bool(node,
+					"goodix,sensitivity-ctrl");
+	if (board_data->sensitivity_ctrl)
+		ts_info("support goodix sensitivity mode");
+
+	board_data->leather_mode_ctrl = of_property_read_bool(node,
+					"goodix,leather_mode-ctrl");
+	if (board_data->leather_mode_ctrl)
+		ts_info("support goodix leather mode");
+
 	return 0;
 }
 #endif
