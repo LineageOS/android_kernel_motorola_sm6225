@@ -369,7 +369,7 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 				ts_err("failed read command ack, %d", ret);
 				return ret;
 			}
-			ts_debug("cmd ack data %*ph",
+			ts_info("cmd ack data %*ph",
 				 (int)sizeof(cmd_ack), cmd_ack.buf);
 			if (cmd_ack.ack == CMD_ACK_OK) {
 				usleep_range(2000, 2100);

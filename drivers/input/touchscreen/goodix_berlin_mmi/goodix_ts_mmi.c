@@ -33,9 +33,13 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t goodix_ts_sensitivity_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
 
 static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_stylus_mode_show, goodix_ts_stylus_mode_store);
+static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
+	NULL, goodix_ts_sensitivity_store);
 
 #define MAX_ATTRS_ENTRIES 10
 
@@ -65,6 +69,9 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 	if (core_data->board_data.stylus_mode_ctrl)
 		ADD_ATTR(stylus_mode);
 
+	if (core_data->board_data.sensitivity_ctrl)
+		ADD_ATTR(sensitivity);
+
 	if (idx) {
 		ext_attributes[idx] = NULL;
 		*group = &ext_attr_group;
@@ -89,7 +96,73 @@ static int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
 	return ret;
 }
 
-#define STYLUS_MODE_SWITCH_CMD    0xA4
+static int goodix_ts_leather_mode(struct goodix_ts_core *core_data, int mode)
+{
+	int ret;
+
+	if (core_data->leather_mode == mode) {
+		ts_debug("value is same,so not write.\n");
+		return 0;
+	}
+
+	if (core_data->power_on == 0) {
+		core_data->leather_mode = mode;
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		return 0;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, LEATHER_MODE_SWITCH_CMD, 5, mode, 0x00);
+	if (ret < 0) {
+		ts_err("failed to send leather mode cmd");
+		return -EINVAL;
+	}
+
+	msleep(20);
+	core_data->leather_mode = mode;
+	ts_info("Success to %s lather mode", mode ? "Enable" : "Disable");
+	return ret;
+}
+/*
+ * This is a common interface to the HAL layer.
+ * mode = 0x00/0x01 Exit/Enter film sensitivity mode.
+ * mode = 0x10/0x11 Exit/Enter leahter sensitivity mode.
+ */
+static ssize_t goodix_ts_sensitivity_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	ret = kstrtoul(buf, 16, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	switch (mode) {
+		case 0x10:
+			if (core_data->board_data.leather_mode_ctrl)
+				ret = goodix_ts_leather_mode(core_data, EXIT_LEATHER_MODE);
+			break;
+		case 0x11:
+			if (core_data->board_data.leather_mode_ctrl)
+				ret = goodix_ts_leather_mode(core_data, ENTER_LEATHER_MODE);
+			break;
+		default:
+			ts_err("The mode = %lu does not support\n", mode);
+			return size;
+	}
+	if (!ret)
+		return size;
+	else
+		return ret;
+}
+
 static int goodix_stylus_mode(struct goodix_ts_core *core_data, int mode) {
 	int ret = 0;
 
@@ -439,6 +512,13 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 		ret = goodix_stylus_mode(core_data, core_data->stylus_mode);
 		if (!ret)
 			ts_info("Success to %s stylus mode", core_data->stylus_mode ? "Enable" : "Disable");
+	}
+
+	if (core_data->board_data.leather_mode_ctrl && core_data->leather_mode) {
+		ret = goodix_ts_send_cmd(core_data, LEATHER_MODE_SWITCH_CMD, 5,
+						core_data->leather_mode, 0x00);
+		if (!ret)
+			ts_info("Success to %s leather mode", core_data->leather_mode ? "Enable" : "Disable");
 	}
 
 	return 0;
