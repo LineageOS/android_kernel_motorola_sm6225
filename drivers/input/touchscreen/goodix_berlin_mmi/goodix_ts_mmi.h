@@ -29,4 +29,10 @@ static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_devic
 }
 #endif
 
+#define LEATHER_MODE_SWITCH_CMD    0x26
+#define ENTER_LEATHER_MODE         0x01
+#define EXIT_LEATHER_MODE          0x00
+
+#define STYLUS_MODE_SWITCH_CMD     0xA4
+
 #endif
