@@ -279,22 +279,22 @@ static int bq2589x_set_otg_current(struct bq2589x *bq, int curr)
 {
 	u8 temp;
 
-	if (curr == 500)
-		temp = BQ2589X_BOOST_LIM_500MA;
-	else if (curr == 700)
-		temp = BQ2589X_BOOST_LIM_700MA;
-	else if (curr == 1100)
-		temp = BQ2589X_BOOST_LIM_1100MA;
-	else if (curr == 1600)
-		temp = BQ2589X_BOOST_LIM_1600MA;
-	else if (curr == 1800)
-		temp = BQ2589X_BOOST_LIM_1800MA;
-	else if (curr == 2100)
-		temp = BQ2589X_BOOST_LIM_2100MA;
-	else if (curr == 2400)
+	if (curr >= 2400)
 		temp = BQ2589X_BOOST_LIM_2400MA;
-	else
+	else if (curr >= 2100)
+		temp = BQ2589X_BOOST_LIM_2100MA;
+	else if (curr >= 1800)
+		temp = BQ2589X_BOOST_LIM_1800MA;
+	else if (curr >= 1600)
+		temp = BQ2589X_BOOST_LIM_1600MA;
+	else if (curr >= 1300)
 		temp = BQ2589X_BOOST_LIM_1300MA;
+	else if (curr >= 1100)
+		temp = BQ2589X_BOOST_LIM_1100MA;
+	else if (curr >= 700)
+		temp = BQ2589X_BOOST_LIM_700MA;
+	else
+		temp = BQ2589X_BOOST_LIM_500MA;
 
 	return bq2589x_update_bits(bq, BQ2589X_REG_0A, BQ2589X_BOOST_LIM_MASK, temp << BQ2589X_BOOST_LIM_SHIFT);
 }
