@@ -322,7 +322,7 @@ static void update_work(struct work_struct *work)
 	/* Main current in uA */
 	main_curr = get_ps_int_prop(data->main_batt_psy,
 		POWER_SUPPLY_PROP_CURRENT_NOW);
-	if (main_curr > 0)
+	if (main_curr > 0 || usbtype != POWER_SUPPLY_USB_TYPE_UNKNOWN)
 		pr_info("Charging Main\n");
 	else
 		main_chg = -1;
@@ -388,7 +388,7 @@ static void update_work(struct work_struct *work)
 
 	schedule_delayed_work(&data->update, msecs_to_jiffies(hb_sched_time));
 }
-
+/*
 static int ps_notify_callback(struct notifier_block *nb,
 		unsigned long event, void *p)
 {
@@ -427,7 +427,7 @@ static int ps_notify_callback(struct notifier_block *nb,
 
 	return 0;
 }
-
+*/
 static int parse_dt(struct device_node *node)
 {
 	int rc = 0;
@@ -571,11 +571,11 @@ static int fet_control_probe(struct platform_device *pdev)
 				gpio_get_value(fetControlData.vbus_ocp_fault_n_gpio) );
 
 	// Notify on plug/unplug
-	fetControlData.ps_notif.notifier_call = ps_notify_callback;
+	/*fetControlData.ps_notif.notifier_call = ps_notify_callback;
 	if (power_supply_reg_notifier(&fetControlData.ps_notif)) {
 		pr_err("Failed to register notifier\n");
 		goto fail;
-	}
+	}*/
 
 	// Work to update the fet & charge current states.
 	INIT_DELAYED_WORK(&fetControlData.update, update_work);
