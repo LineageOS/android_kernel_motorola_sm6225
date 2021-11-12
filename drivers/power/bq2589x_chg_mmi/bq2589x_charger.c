@@ -2029,7 +2029,7 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 
 	bq->vbus_type = (status & BQ2589X_VBUS_STAT_MASK) >> BQ2589X_VBUS_STAT_SHIFT;
 
-	if (state.vbus_gd && (bq->vbus_type == BQ2589X_VBUS_NONE)){
+	if (state.vbus_gd && (!bq->dpdm_enabled)) {
 		dev_info(bq->dev, "BC1.2 detect is not done.\n");
 		bq2589x_reuqest_dpdm(bq, true);
 	}
