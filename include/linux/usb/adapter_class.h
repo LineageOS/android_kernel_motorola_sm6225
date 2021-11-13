@@ -55,10 +55,16 @@ enum adapter_property {
 };
 
 enum adapter_cap_type {
+	/*start pd30 apdo*/
 	MMI_PD_APDO_START,
+	/*end pd30 apdo*/
 	MMI_PD_APDO_END,
-	MMI_PD,
+	/*pd30 apdo*/
 	MMI_PD_APDO,
+	/*pd20 fixed pdo*/
+	MMI_PD_FIXED,
+	/*all pdo: pd20&pd30*/
+	MMI_PD_ALL,
 	MMI_CAP_TYPE_UNKNOWN,
 };
 
@@ -101,7 +107,7 @@ struct adapter_ops {
 	int (*get_status)(struct adapter_device *dev,
 		struct adapter_status *sta);
 	int (*set_cap)(struct adapter_device *dev, enum adapter_cap_type type,
-		int mV, int mA);
+		int pdo_idx, int mV, int mA);
 	int (*get_cap)(struct adapter_device *dev, enum adapter_cap_type type,
 		struct adapter_power_cap *cap);
 	int (*get_output)(struct adapter_device *dev, int *mV, int *mA);
@@ -143,7 +149,7 @@ extern int adapter_dev_get_status(struct adapter_device *adapter_dev,
 extern int adapter_dev_get_output(struct adapter_device *adapter_dev,
 	int *mV, int *mA);
 extern int adapter_dev_set_cap(struct adapter_device *adapter_dev,
-	enum adapter_cap_type type,
+	enum adapter_cap_type type, int pdo_idx,
 	int mV, int mA);
 extern int adapter_dev_get_cap(struct adapter_device *adapter_dev,
 	enum adapter_cap_type type,
