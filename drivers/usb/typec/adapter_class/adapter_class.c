@@ -57,7 +57,7 @@ static ssize_t pdo_info_show(struct device *dev,
                cap.pwr_limit[i] = 0;
        }
 
-       adapter_dev_get_cap(adapter_dev, MMI_PD, &cap);
+       adapter_dev_get_cap(adapter_dev, MMI_PD_ALL, &cap);
        for (i = 0; i < cap.nr; i++) {
 		pr_err("%d: mV:%d,%d mA:%d type:%d\n", i,
                        cap.max_mv[i], cap.min_mv[i], cap.ma[i], cap.type[i]);
@@ -125,8 +125,8 @@ static ssize_t pdo_test_show(struct device *dev,
                pr_err("*** Error : can't find PD adapter ***\n");
 
 
-       ret = adapter_dev_set_cap(adapter_dev, MMI_PD,
-			9000, 3000);
+       ret = adapter_dev_set_cap(adapter_dev, MMI_PD_FIXED,
+			1, 9000, 3000);
 	if (ret == MMI_ADAPTER_OK)
 		return snprintf(buf, 40, "select pdo to 9v3a mode ok\n");
 	else
@@ -147,7 +147,7 @@ static ssize_t apdo_test_show(struct device *dev,
        else
                pr_err("*** Error : can't find PD adapter ***\n");
 
-	ret = adapter_dev_set_cap(adapter_dev, MMI_PD_APDO_START, vol, 3000);
+	ret = adapter_dev_set_cap(adapter_dev, MMI_PD_APDO_START, 3, vol, 3000);
 	if (ret == MMI_ADAPTER_REJECT)
 		return snprintf(buf, 40, "start apdo reject\n");
 	else if (ret != 0)
@@ -155,12 +155,12 @@ static ssize_t apdo_test_show(struct device *dev,
 
 	while (vol <10000) {
 		adapter_dev_set_cap(adapter_dev, MMI_PD_APDO,
-			vol, 3000);
+			3, vol, 3000);
 		vol += 200;
 		msleep(200);
 	}
 
-	ret = adapter_dev_set_cap(adapter_dev, MMI_PD_APDO_END, vol, 3000);
+	ret = adapter_dev_set_cap(adapter_dev, MMI_PD_APDO_END, 3, vol, 3000);
 	if (ret == MMI_ADAPTER_REJECT)
 		return snprintf(buf, 40, "stop apdo reject\n");
 	else if (ret != 0)
@@ -210,12 +210,12 @@ int adapter_dev_get_output(struct adapter_device *adapter_dev, int *mV, int *mA)
 EXPORT_SYMBOL(adapter_dev_get_output);
 
 int adapter_dev_set_cap(struct adapter_device *adapter_dev,
-	enum adapter_cap_type type,
+	enum adapter_cap_type type, int pdo_idx,
 	int mV, int mA)
 {
 	if (adapter_dev != NULL && adapter_dev->ops != NULL &&
 	    adapter_dev->ops->set_cap)
-		return adapter_dev->ops->set_cap(adapter_dev, type, mV, mA);
+		return adapter_dev->ops->set_cap(adapter_dev, type, pdo_idx, mV, mA);
 
 	return -ENOTSUPP;
 }
