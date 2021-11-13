@@ -60,7 +60,7 @@ static int pd_get_property(struct adapter_device *dev,
 }
 
 static int pd_set_cap(struct adapter_device *dev, enum adapter_cap_type type,
-		int mV, int mA)
+		int pdo_idx, int mV, int mA)
 {
 	int ret = MMI_ADAPTER_OK;
 	int tcpm_ret = TCPM_SUCCESS;
@@ -69,7 +69,7 @@ static int pd_set_cap(struct adapter_device *dev, enum adapter_cap_type type,
 	pr_notice("[%s] type:%d mV:%d mA:%d\n",
 		__func__, type, mV, mA);
 
-
+	pdo_idx = 0;
 	info = (struct mmi_pd_adapter_info *)adapter_dev_get_drvdata(dev);
 	if (info == NULL || info->tcpc == NULL) {
 		pr_notice("[%s] info null\n", __func__);
@@ -83,7 +83,7 @@ static int pd_set_cap(struct adapter_device *dev, enum adapter_cap_type type,
 		tcpm_ret = tcpm_reset_pd_charging_policy(info->tcpc, NULL);
 	} else if (type == MMI_PD_APDO) {
 		tcpm_ret = tcpm_dpm_pd_request(info->tcpc, mV, mA, NULL);
-	} else if (type == MMI_PD) {
+	} else if (type == MMI_PD_FIXED) {
 		tcpm_ret = tcpm_dpm_pd_request(info->tcpc, mV,
 					mA, NULL);
 	}
@@ -230,7 +230,7 @@ static int pd_get_cap(struct adapter_device *dev,
 		if (cap_i == 0)
 			pr_notice("no APDO for pps\n");
 
-	} else if (type == MMI_PD) {
+	} else if (type == MMI_PD_FIXED) {
 		pd_cap.nr = 0;
 		pd_cap.selected_cap_idx = 0;
 		tcpm_get_remote_power_cap(info->tcpc, &pd_cap);
@@ -244,10 +244,10 @@ static int pd_get_cap(struct adapter_device *dev,
 			j = 0;
 			pr_notice("adapter cap: nr:%d\n", pd_cap.nr);
 			for (i = 0; i < pd_cap.nr; i++) {
-				if (pd_cap.type[i] == 0 &&
+				if (pd_cap.type[i] == TCPM_POWER_CAP_VAL_TYPE_FIXED &&
 					j >= 0 &&
 					j < ADAPTER_CAP_MAX_NR) {
-					tacap->type[j] = MMI_PD;
+					tacap->type[j] = MMI_PD_FIXED;
 					tacap->ma[j] = pd_cap.ma[i];
 					tacap->max_mv[j] = pd_cap.max_mv[i];
 					tacap->min_mv[j] = pd_cap.min_mv[i];
@@ -272,6 +272,38 @@ static int pd_get_cap(struct adapter_device *dev,
 					tacap->max_mv[i], tacap->ma[i],
 					tacap->maxwatt[i], tacap->minwatt[i],
 					tacap->type[i], tacap->type[i]);
+			}
+		}
+	} else if (type == MMI_PD_ALL) {
+		pd_cap.nr = 0;
+		pd_cap.selected_cap_idx = 0;
+		tcpm_get_remote_power_cap(info->tcpc, &pd_cap);
+		tacap->nr = pd_cap.nr;
+
+		if (pd_cap.nr != 0) {
+
+			tacap->selected_cap_idx = pd_cap.selected_cap_idx - 1;
+			pr_notice("[%s] nr:%d idx:%d\n",
+			__func__, pd_cap.nr, pd_cap.selected_cap_idx - 1);
+
+			for (i = 0; i < pd_cap.nr; i++) {
+				tacap->ma[i] = pd_cap.ma[i];
+				tacap->max_mv[i] = pd_cap.max_mv[i];
+				tacap->min_mv[i] = pd_cap.min_mv[i];
+				tacap->maxwatt[i] =
+					tacap->max_mv[i] * tacap->ma[i];
+				if (pd_cap.type[i] == TCPM_POWER_CAP_VAL_TYPE_FIXED)
+					tacap->type[i] = MMI_PD_FIXED;
+				else if (pd_cap.type[i] == TCPM_POWER_CAP_VAL_TYPE_AUGMENT)
+					tacap->type[i] = MMI_PD_APDO;
+				else
+					tacap->type[i] = MMI_CAP_TYPE_UNKNOWN;
+
+				pr_notice("[%s]:%d mv:[%d,%d] %d max:%d min:%d type:%d %d\n",
+					__func__, i, tacap->min_mv[i],
+					tacap->max_mv[i], tacap->ma[i],
+					tacap->maxwatt[i], tacap->minwatt[i],
+					tacap->type[i], pd_cap.type[i]);
 			}
 		}
 	}
