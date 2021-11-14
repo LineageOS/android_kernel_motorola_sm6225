@@ -462,8 +462,10 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 		pr_info("[%s] of get wt6670 gpio failed, reset_pin:%d\n",
 			__func__, wt->reset_pin);
 
-	if (gpio_request(wt->reset_pin, "wt6670_reset_pin"))
+	if (gpio_request(wt->reset_pin, "wt6670_reset_pin")) {
 		pr_info("[%s] gpio_request reset failed", __func__);
+		return 0;
+	}
 
 	if (gpio_direction_output(wt->reset_pin, 0))
 		pr_info("[%s] gpio_direction_output failed", __func__);
