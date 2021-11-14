@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  */
 
-&qupv3_se0_i2c {
+&qupv3_se1_i2c {
 	status = "okay";
 	sgm7220: sgm7220@47 {
 		compatible = "sgm,usb_type_c_sgm7220";
@@ -25,8 +25,8 @@
 		sgm7220-tcpc,rp_level = <0>; /* 0: Default, 1: 1.5, 2: 3.0 */
 		sgm7220-tcpc,vconn_supply  = <0>;  /* 0: Never, 1: Always, */
 					      /* 2: EMarkOnly, 3: StartOnly */
-		sgm7220,intr_gpio = <&tlmm 33 0x0>;
-		sgm7220,intr_gpio_num = <33>;
+		sgm7220,intr_gpio = <&tlmm 84 0x0>;
+		sgm7220,intr_gpio_num = <84>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sgm7220_int_n>;
 	};
@@ -36,12 +36,12 @@
 &tlmm {
 	sgm7220_int_n: sgm7220_int_n {
 		mux {
-			pins = "gpio33";
+			pins = "gpio84";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio33";
+			pins = "gpio84";
 			drive-strength = <2>;
 			bias-pull-up;
 		};
