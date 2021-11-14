@@ -66,8 +66,8 @@
                 status = "okay";
                 compatible = "mediatek,wt6670f_qc3p";
                 reg = <0x35>;
-                wt6670f-reset-gpio = <&tlmm 84 0x0>;
-                wt6670f-int-gpio = <&tlmm 103 0x0>;
+                wt6670f-reset-gpio = <&tlmm 68 0x0>;
+                wt6670f-int-gpio = <&tlmm 93 0x0>;
                 //wt6670f-i2c-scl-pin = <&tlmm 1 0x0>;
                 //wt6670f-i2c-sda-pin = <&tlmm 0 0x0>;
 
@@ -84,6 +84,16 @@
                 //pinctrl-4 = <&wt6670_pins_sda_high>;
                 //pinctrl-5 = <&wt6670_pins_i2c>;
         };
+
+	cw2217@64 {
+		compatible = "cellwise,cw2217";
+		reg = <0x64>;
+		status = "okay";
+
+		df-serialnum = "SB18D33989";
+		#include "bat_setting/CW_md50-scud-5000mah.dtsi"
+		#include "bat_setting/CW_md50-amperex-5000mah.dtsi"
+	};
 };
 
 &qupv3_se1_i2c {
@@ -100,9 +110,9 @@
 //		io-channel-names = "gpio3_div3";
 
 		interrupt-parent = <&tlmm>;
-		interrupts = <105 0>;            //irq num base on hardware design
-		sgm,irq-gpio = <&tlmm 105 0>;     //irq num base on hardware design
-		//sgm,chg-en-gpio = <&tlmm 92 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
+		interrupts = <96 0>;            //irq num base on hardware design
+		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
+		sgm,chg-en-gpio = <&tlmm 36 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 //add by zhanghuan
 //		dpdm-supply = <&usb2_phy0>;
 
@@ -141,8 +151,8 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&bq2589x_irq>;
-		bq2589x_irq-gpio = <&tlmm 105 0>;
-		//bq2589x_en-gpio = <&tlmm 92 0>;
+		bq2589x_irq-gpio = <&tlmm 96 0>;
+		bq2589x_en-gpio = <&tlmm 36 0>;
 		dpdm-supply = <&usb2_phy0>;
 
 		ti,bq2589x,vbus-volt-high-level = <8700>;/* tune adapter to output 9v */
@@ -169,8 +179,8 @@
 		//pinctrl-names = "default_slave";
 		//pinctrl-0 = <&bq2597x_int_default_slave>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <104 0>;            //irq num base on hardware design
-		bq2597x,irq-gpio = <&tlmm 104 0>;     //irq num base on hardware design
+		interrupts = <3 0>;            //irq num base on hardware design
+		bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
 
 		ti,bq2597x,bat-ovp-disable = <0>;
 		ti,bq2597x,bat-ocp_disable = <0>;
@@ -201,17 +211,6 @@
 		ti,bq2597x,ac-ovp-threshold = <17>;
 		ti,bq2597x,sense-resistor-mohm = <5>;
 	};
-
-	cw2217@64 {
-		compatible = "cellwise,cw2217";
-		reg = <0x64>;
-		status = "okay";
-
-		df-serialnum = "SB18D33989";
-		#include "bat_setting/CW_md50-scud-5000mah.dtsi"
-		#include "bat_setting/CW_md50-amperex-5000mah.dtsi"
-	};
-
 };
 
 &tlmm {
