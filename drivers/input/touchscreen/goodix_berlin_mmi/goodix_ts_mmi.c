@@ -29,6 +29,10 @@
 	} \
 }
 
+static ssize_t goodix_ts_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t goodix_ts_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t goodix_ts_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t goodix_ts_interpolation_show(struct device *dev,
@@ -40,6 +44,8 @@ static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 
+static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
+	goodix_ts_edge_show, goodix_ts_edge_store);
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_interpolation_show, goodix_ts_interpolation_store);
 static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -47,6 +53,14 @@ static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
 	NULL, goodix_ts_sensitivity_store);
 
+/* hal settings */
+#define ROTATE_0   0
+#define ROTATE_90   1
+#define ROTATE_180   2
+#define ROTATE_270  3
+#define BIG_MODE   1
+#define SMALL_MODE    2
+#define DEFAULT_MODE   0
 #define MAX_ATTRS_ENTRIES 10
 
 #define ADD_ATTR(name) { \
@@ -71,6 +85,9 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 	struct goodix_ts_core *core_data;
 
 	GET_GOODIX_DATA(dev);
+
+	if (core_data->board_data.edge_ctrl)
+		ADD_ATTR(edge);
 
 	if (core_data->board_data.interpolation_ctrl)
 		ADD_ATTR(interpolation);
@@ -299,6 +316,88 @@ static ssize_t goodix_ts_interpolation_show(struct device *dev,
 
 	ts_info("interpolation = %d.\n", core_data->interpolation);
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->interpolation);
+}
+/*
+ * HAL: args[0] suppression area, args[1] rotation direction.
+ * CMD: [06 17 data0 data1],
+ *      data[0] rotation direction, data[1] suppression area.
+ */
+static ssize_t goodix_ts_edge_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	int edge_cmd[2] = { 0 };
+	unsigned int args[2] = { 0 };
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	ret = sscanf(buf, "%d %d", &args[0], &args[1]);
+	if (ret < 2)
+		return -EINVAL;
+
+	if (DEFAULT_MODE == args[0]) {
+		edge_cmd[1] = DEFAULT_EDGE;
+	} else if (SMALL_MODE == args[0]) {
+		edge_cmd[1] = SMALL_EDGE;
+	} else if (BIG_MODE == args[0]) {
+		edge_cmd[1] = BIG_EDGE;
+	} else {
+		ts_err("Invalid edge mode: %d!\n", args[0]);
+		return -EINVAL;
+	}
+
+	if (ROTATE_0 == args[1]) {
+		edge_cmd[0] = ROTATE_DEFAULT_0;
+	} else if (ROTATE_90 == args[1]) {
+		edge_cmd[0] = ROTATE_RIGHT_90;
+	} else if (ROTATE_270 == args[1]) {
+		edge_cmd[0] = ROTATE_LEFT_90;
+	} else {
+		ts_err("Invalid rotation mode: %d!\n", args[1]);
+		return -EINVAL;
+	}
+
+	if (!memcmp(core_data->edge_mode, edge_cmd, sizeof(edge_cmd))) {
+		pr_debug("value is same,so not write.\n");
+		return size;
+	}
+
+	if (core_data->power_on == 0) {
+		memcpy(core_data->edge_mode, edge_cmd, sizeof(edge_cmd));
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		return size;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, EDGE_SWITCH_CMD, 6, edge_cmd[0], edge_cmd[1]);
+	if (ret < 0) {
+		ts_err("failed to send edge switch cmd");
+		return -EINVAL;
+	}
+
+	msleep(20);
+	memcpy(core_data->edge_mode, edge_cmd, sizeof(edge_cmd));
+	ts_info("Success to set edge = %02x, rotation = %02x", edge_cmd[1], edge_cmd[0]);
+	return size;
+}
+
+static ssize_t goodix_ts_edge_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	ts_info("edge area = %02x, rotation = %02x\n",
+		core_data->edge_mode[1], core_data->edge_mode[0]);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%02x",
+		core_data->edge_mode[1], core_data->edge_mode[0]);
 }
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
@@ -590,8 +689,18 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	if (core_data->board_data.interpolation_ctrl && core_data->interpolation) {
 		ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5,
 						core_data->interpolation, 0x00);
-		if (!ret)
+		if (!ret) {
 			ts_info("Success to %s interpolation mode", core_data->interpolation ? "Enable" : "Disable");
+			msleep(20);
+		}
+	}
+
+	if (core_data->board_data.edge_ctrl) {
+		ret = goodix_ts_send_cmd(core_data, EDGE_SWITCH_CMD, 6,
+						core_data->edge_mode[0], core_data->edge_mode[1]);
+		if (!ret)
+			ts_info("Success to set edge area = %02x, rotation = %02x",
+				core_data->edge_mode[1], core_data->edge_mode[0]);
 	}
 
 	return 0;
