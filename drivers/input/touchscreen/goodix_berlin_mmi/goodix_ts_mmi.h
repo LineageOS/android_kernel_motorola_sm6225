@@ -34,5 +34,6 @@ static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_devic
 #define EXIT_LEATHER_MODE          0x00
 
 #define STYLUS_MODE_SWITCH_CMD     0xA4
+#define INTERPOLATION_SWITCH_CMD   0xC2
 
 #endif
