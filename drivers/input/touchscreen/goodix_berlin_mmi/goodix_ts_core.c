@@ -1105,6 +1105,11 @@ static int goodix_parse_dt(struct device_node *node,
 	if (board_data->interpolation_ctrl)
 		ts_info("support goodix interpolation mode");
 
+	board_data->edge_ctrl = of_property_read_bool(node,
+					"goodix,edge-ctrl");
+	if (board_data->edge_ctrl)
+		ts_info("support goodix edge mode");
+
 	return 0;
 }
 #endif
