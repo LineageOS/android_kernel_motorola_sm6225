@@ -29,6 +29,10 @@
 	} \
 }
 
+static ssize_t goodix_ts_interpolation_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t goodix_ts_interpolation_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
@@ -36,6 +40,8 @@ static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 
+static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
+	goodix_ts_interpolation_show, goodix_ts_interpolation_store);
 static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_stylus_mode_show, goodix_ts_stylus_mode_store);
 static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -65,6 +71,9 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 	struct goodix_ts_core *core_data;
 
 	GET_GOODIX_DATA(dev);
+
+	if (core_data->board_data.interpolation_ctrl)
+		ADD_ATTR(interpolation);
 
 	if (core_data->board_data.stylus_mode_ctrl)
 		ADD_ATTR(stylus_mode);
@@ -138,7 +147,7 @@ static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_GOODIX_DATA(dev);
 
-	ret = kstrtoul(buf, 16, &mode);
+	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
 		pr_info("Failed to convert value.\n");
 		return -EINVAL;
@@ -235,6 +244,61 @@ static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 
 	ts_info("Stylus mode = %d.\n", core_data->stylus_mode);
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->stylus_mode);
+}
+
+static ssize_t goodix_ts_interpolation_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (core_data->interpolation == mode) {
+		ts_debug("value is same,so not write.\n");
+		return size;
+	}
+
+	if (core_data->power_on == 0) {
+		core_data->interpolation = mode;
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		return 0;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5, mode, 0x00);
+	if (ret < 0) {
+		ts_err("failed to send interpolation cmd");
+		return -EINVAL;
+	}
+
+	msleep(20);
+	core_data->interpolation = mode;
+	ts_info("Success to %s interpolation mode", mode ? "Enable" : "Disable");
+	return size;
+}
+
+static ssize_t goodix_ts_interpolation_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	ts_info("interpolation = %d.\n", core_data->interpolation);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->interpolation);
 }
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
@@ -517,8 +581,17 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	if (core_data->board_data.leather_mode_ctrl && core_data->leather_mode) {
 		ret = goodix_ts_send_cmd(core_data, LEATHER_MODE_SWITCH_CMD, 5,
 						core_data->leather_mode, 0x00);
-		if (!ret)
+		if (!ret) {
 			ts_info("Success to %s leather mode", core_data->leather_mode ? "Enable" : "Disable");
+			msleep(20);
+		}
+	}
+
+	if (core_data->board_data.interpolation_ctrl && core_data->interpolation) {
+		ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5,
+						core_data->interpolation, 0x00);
+		if (!ret)
+			ts_info("Success to %s interpolation mode", core_data->interpolation ? "Enable" : "Disable");
 	}
 
 	return 0;
