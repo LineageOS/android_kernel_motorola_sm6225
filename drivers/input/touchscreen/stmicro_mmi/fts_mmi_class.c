@@ -309,10 +309,15 @@ static ssize_t fts_mmi_sensitivity_store(struct device *dev,
 	ASSERT_PTR(ts);
 	board = ts->board;
 
-	ret = kstrtoul(buf, 16, &mode);
+	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
 		pr_info("Failed to convert value.\n");
 		return -EINVAL;
+	}
+
+	if (mode != 0x00 && mode != 0x01) {
+		pr_info("The mode = %02x does not support\n", mode);
+		return size;
 	}
 
 	if (ts->sensitivity_val == mode) {
