@@ -13,7 +13,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "khaje-moto-common-overlay.dtsi"
 #include "khaje-rhode-display.dtsi"
-#include "khaje-rhode-fps-overlay_evb.dtsi"
+#include "khaje-rhode-fps-overlay.dtsi"
 #include "khaje-rhode-touchscreen-overlay.dtsi"
 #include "sgm7220.dtsi"
 #include "discrete_charging.dtsi"
