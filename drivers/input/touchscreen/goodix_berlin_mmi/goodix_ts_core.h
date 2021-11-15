@@ -274,6 +274,7 @@ struct goodix_ts_board_data {
 	bool stylus_mode_ctrl;
 	bool leather_mode_ctrl;
 	bool interpolation_ctrl;
+	bool edge_ctrl;
 };
 
 enum goodix_fw_update_mode {
@@ -488,6 +489,7 @@ struct goodix_ts_core {
 	int leather_mode;
 	int stylus_mode;
 	int interpolation;
+	int edge_mode[2];
 	struct clk *stylus_clk;
 
 	/* touchscreen_mmi */

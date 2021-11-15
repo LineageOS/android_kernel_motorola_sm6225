@@ -33,6 +33,14 @@ static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_devic
 #define ENTER_LEATHER_MODE         0x01
 #define EXIT_LEATHER_MODE          0x00
 
+#define EDGE_SWITCH_CMD            0x17
+#define ROTATE_DEFAULT_0           0x00
+#define ROTATE_LEFT_90             0X40
+#define ROTATE_RIGHT_90            0x80
+#define DEFAULT_EDGE               0x00
+#define SMALL_EDGE                 0x40
+#define BIG_EDGE                   0x80
+
 #define STYLUS_MODE_SWITCH_CMD     0xA4
 #define INTERPOLATION_SWITCH_CMD   0xC2
 
