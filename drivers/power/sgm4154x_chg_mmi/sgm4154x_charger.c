@@ -356,7 +356,7 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 	if (ret)
 		return ret;
 
-	mdelay(1500);
+	msleep(1300);
 
 	dm_val = 0x1<<1;
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_d,
@@ -379,7 +379,7 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 	if (ret)
 		return ret;
 
-	mdelay(300);//need tunning
+	msleep(200);//need tunning
 
 	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
 	dev_info(sgm->dev, "vbus voltage now = %d\n", vbus_voltage);
@@ -396,7 +396,7 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 		dev_err(sgm->dev, "Cann't adjust qc20 hvdcp 5V\n");
 	}
 
-	mdelay(300);//need tunning
+	msleep(300);//need tunning
 
 	sgm4154x_get_usb_voltage_now(sgm, &vbus_voltage);
 	dev_info(sgm->dev, "vbus voltage now = %d after qc20 detected\n", vbus_voltage);
