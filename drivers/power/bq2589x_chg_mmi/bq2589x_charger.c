@@ -1549,7 +1549,7 @@ static int mmi_detected_qc20_hvdcp(struct bq2589x *bq, int *charger_type)
 	if (ret)
 		return ret;
 
-	mdelay(1500);
+	msleep(1300);
 
 	dm_val = 0x1<<BQ2589X_DM_VSEL_SHIFT;
 	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
@@ -1572,7 +1572,7 @@ static int mmi_detected_qc20_hvdcp(struct bq2589x *bq, int *charger_type)
 	if (ret)
 		return ret;
 
-	mdelay(300);//need tunning
+	msleep(200);//need tunning
 
 	mmi_get_usb_voltage_now(bq, &vbus_voltage);
 	dev_info(bq->dev, "vbus voltage now = %d\n", vbus_voltage);
@@ -1589,7 +1589,7 @@ static int mmi_detected_qc20_hvdcp(struct bq2589x *bq, int *charger_type)
 		dev_err(bq->dev, "Cann't adjust qc20 hvdcp 5V\n");
 	}
 
-	mdelay(300);//need tunning
+	msleep(300);//need tunning
 
 	mmi_get_usb_voltage_now(bq, &vbus_voltage);
 	dev_info(bq->dev, "vbus voltage now = %d after qc20 detected\n", vbus_voltage);
