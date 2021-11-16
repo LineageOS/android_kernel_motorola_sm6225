@@ -1816,9 +1816,7 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 			dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
 	}
 
-	if (pe.enable) {
-		schedule_delayed_work(&bq->monitor_work, 0);
-	}
+	schedule_delayed_work(&bq->monitor_work, 0);
 
 	bq->chg_dev->noti.apsd_done = true;
 	bq->typec_apsd_rerun_done = false;
@@ -1836,9 +1834,7 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 	else
 		dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
 
-	if (pe.enable) {
-		cancel_delayed_work_sync(&bq->monitor_work);
-	}
+	cancel_delayed_work_sync(&bq->monitor_work);
 
 	bq->pulse_cnt = 0;
 	bq->typec_apsd_rerun_done = false;
@@ -1973,6 +1969,8 @@ static void bq2589x_monitor_workfunc(struct work_struct *work)
 	u8 status = 0;
 	int ret;
 	int chg_current;
+	u8 addr;
+	u8 val;
 
 	bq2589x_reset_watchdog_timer(bq);
 
@@ -1990,8 +1988,15 @@ static void bq2589x_monitor_workfunc(struct work_struct *work)
 	if (ret == 0 && (status & BQ2589X_IDPM_STAT_MASK))
 		dev_info(bq->dev, "%s:IINDPM occurred\n", __func__);
 
+	for (addr = 0x0; addr <= 0x14; addr++) {
+		ret = bq2589x_read_byte(bq, &val, addr);
+		if (ret == 0) {
+			dev_info(bq->dev, "Reg[0x%.2x] = 0x%.2x\n", addr, val);
+		}
+	}
+
 	if (bq->vbus_type == BQ2589X_VBUS_USB_DCP && bq->vbus_volt > pe.high_volt_level &&
-	bq->rsoc > 95 && !pe.tune_down_volt) {
+	bq->rsoc > 95 && !pe.tune_down_volt && pe.enable) {
 		pe.tune_down_volt = true;
 		pe.tune_up_volt = false;
 		pe.target_volt = pe.low_volt_level;
