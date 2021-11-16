@@ -1805,6 +1805,10 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 	}
 
 	if (bq->cfg.use_absolute_vindpm) {
+		ret = bq2589x_use_absolute_vindpm(bq, true);
+		if (ret < 0)
+			dev_err(bq->dev,"%s:force vindpm failed:%d\n",__func__,ret);
+
 		ret = bq2589x_set_input_volt_limit(bq, 4600);
 		if (ret < 0)
 			dev_err(bq->dev,"%s:reset vindpm threshold to 4600 failed:%d\n",__func__,ret);
