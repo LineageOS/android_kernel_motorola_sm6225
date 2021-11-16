@@ -1853,6 +1853,9 @@ static void bq2589x_ico_workfunc(struct work_struct *work)
 	u8 status;
 	static bool ico_issued;
 
+	if (!bq->cfg.enable_ico)
+		return;
+
 	if (!ico_issued) {
 		ret = bq2589x_force_ico(bq);
 		if (ret < 0) {
