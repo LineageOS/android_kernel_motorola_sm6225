@@ -97,6 +97,14 @@
 
 #define BSP_SIL_IRQ_ASYNC  /* IRQ use asynchrous mode. */
 
+#define KEY_FPS_TAP    616
+#define KEY_FPS_HOLD   617
+#define KEY_FPS_YPLUS  618
+#define KEY_FPS_YMINUS 619
+#define KEY_FPS_XPLUS  620
+#define KEY_FPS_XMINUS 621
+#define KEY_FPS_DOUBLE_TAP 622
+
 #ifndef BSP_SIL_NETLINK
 struct silfp_msg_list {
     unsigned char msg;
@@ -211,13 +219,13 @@ typedef struct _key_map {
 } nav_keymap_t;
 
 static nav_keymap_t keymap[] = {
-    { NAV_KEY_UP,       KEY_UP,         }, /* KEY_RESERVED, ignore this key */
-    { NAV_KEY_DOWN,     KEY_DOWN,       },
-    { NAV_KEY_RIGHT,    KEY_RIGHT,      },
-    { NAV_KEY_LEFT,     KEY_LEFT,       },
-    { NAV_KEY_CLICK,    KEY_HOMEPAGE,   },
-    { NAV_KEY_DCLICK,   KEY_HOMEPAGE,   },
-    { NAV_KEY_LONGPRESS,KEY_HOMEPAGE,   },
+    { NAV_KEY_UP,       KEY_FPS_YPLUS,     }, /* KEY_RESERVED, ignore this key */
+    { NAV_KEY_DOWN,     KEY_FPS_YMINUS,    },
+    { NAV_KEY_RIGHT,    KEY_FPS_XPLUS,     },
+    { NAV_KEY_LEFT,     KEY_FPS_XMINUS,    },
+    { NAV_KEY_CLICK,    KEY_FPS_TAP,       },
+    { NAV_KEY_DCLICK,   KEY_FPS_DOUBLE_TAP,},
+    { NAV_KEY_LONGPRESS,KEY_FPS_HOLD,      },
 };
 
 static LIST_HEAD(device_list);
@@ -681,7 +689,8 @@ static int silfp_keyevent(struct silfp_data	*fp_dev, struct fp_dev_key_t *pkey)
 
     for (i = 0; ret && i < ARRAY_SIZE(keymap); i++) {
         if (keymap[i].key_orig == pkey->value) {
-            LOG_MSG_DEBUG(INFO_LOG, "[%s] key %d\n", __func__,keymap[i].key_new);
+            LOG_MSG_DEBUG(INFO_LOG, "[%s] key orig %d key_new %d\n", __func__,
+			keymap[i].key_orig, keymap[i].key_new);
             if (KEY_RESERVED != keymap[i].key_new) {
                 if (NAV_KEY_FLAG_CLICK == pkey->flag) {
                     input_report_key(fp_dev->input, keymap[i].key_new, NAV_KEY_FLAG_DOWN);
