@@ -17,6 +17,7 @@
 #include "khaje-rhode-touchscreen-overlay.dtsi"
 #include "sgm7220.dtsi"
 #include "discrete_charging.dtsi"
+#include "camera/khaje-camera-sensor-mot-rhode-overlay.dtsi"
 
 &firmware {
 	android {
