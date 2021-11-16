@@ -23,7 +23,7 @@
 				function = "gpio";
 			};
 			config {
-				pins = "gpio3";
+				pins = "gpio104";
 				drive-strength = <8>;
 				output-low;
 				bias-pull-down;
