@@ -2252,8 +2252,10 @@ static int rt9426a_irq_init(struct rt9426a_chip *chip)
 
 	dev_info(chip->dev, "%s\n", __func__);
 	chip->alert_irq = chip->i2c->irq;
-	rc = devm_request_threaded_irq(chip->dev, chip->alert_irq, NULL, rt9426a_irq_handler,
-				       IRQF_ONESHOT, "rt9426a_fg_irq", chip);
+	rc = devm_request_threaded_irq(chip->dev, chip->alert_irq, NULL,
+				       rt9426a_irq_handler,
+				       IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				       "rt9426a_fg_irq", chip);
 	if (rc < 0) {
 		dev_notice(chip->dev, "irq register failed\n");
 		return rc;
@@ -2628,7 +2630,6 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	struct device_node *batt_profile_node = NULL;
 	int sizes[3] = {0}, j, ret, i;
 	struct dt_offset_params *offset_params;
-	const char *bat_name = "rt-fuelguage";
 	char prop_name[64] = {0};
 
 	dev_info(dev, "%s\n", __func__);
@@ -2641,9 +2642,10 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	if (ret < 0)
 		pdata->para_version = 0;
 
-	ret = of_property_read_string(np, "rt,bat_name", (char const **)&bat_name);
-	if (ret == 0)
-		pdata->bat_name = kasprintf(GFP_KERNEL, "%s", bat_name);
+	ret = of_property_read_string(np, "rt,bat_name",
+				      (const char **)&pdata->bat_name);
+	if (ret < 0)
+		pdata->bat_name = NULL;
 
 	ret = of_property_read_u32_array(np, "rt,offset_interpolation_order",
 					 pdata->offset_interpolation_order, 2);
@@ -2814,10 +2816,13 @@ static void fg_update_work_func(struct work_struct *work)
 {
 	struct rt9426a_chip *chip = container_of(work, struct rt9426a_chip, update_work.work);
 
+	pm_wakeup_hard_event(chip->dev);
+	pm_stay_awake(chip->dev);
 	dev_info(chip->dev, "%s++\n", __func__);
 	rt9426a_update_info(chip);
 	queue_delayed_work(system_power_efficient_wq, &chip->update_work, 20 * HZ);
 	dev_info(chip->dev, "%s--\n", __func__);
+	pm_relax(chip->dev);
 }
 
 static int rt9426a_i2c_probe(struct i2c_client *i2c)
@@ -2826,7 +2831,7 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	struct rt9426a_chip *chip;
 	struct power_supply_config psy_config = {};
 	bool use_dt = i2c->dev.of_node;
-	int ret = 0;
+	int ret = 0, i = 0;
 
 	/* alloc memory */
 	chip = devm_kzalloc(&i2c->dev, sizeof(*chip), GFP_KERNEL);
@@ -2873,21 +2878,22 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	chip->regmap = devm_regmap_init_i2c(i2c, &rt9426a_regmap_config);
 	if (IS_ERR(chip->regmap)) {
 		dev_notice(chip->dev, "regmap init fail\n");
-		return PTR_ERR(chip->regmap);
+		ret = PTR_ERR(chip->regmap);
+		goto destroy_mutex;
 	}
 
 	/* check chip id first */
 	ret = rt9426a_i2c_chipid_check(chip);
 	if (ret < 0) {
-		dev_notice(&i2c->dev, "chip id check fail\n");
-		return ret;
+		dev_notice(chip->dev, "chip id check fail\n");
+		goto destroy_mutex;
 	}
 
 	/* apply platform data */
 	ret = rt9426a_apply_pdata(chip);
 	if (ret < 0) {
 		dev_notice(chip->dev, "apply pdata fail\n");
-		return ret;
+		goto destroy_mutex;
 	}
 
 	/* fg psy register */
@@ -2895,46 +2901,63 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	psy_config.drv_data = chip;
 	if (pdata->bat_name)
 		fg_psy_desc.name = pdata->bat_name;
-	chip->fg_psy = devm_power_supply_register(&i2c->dev, &fg_psy_desc, &psy_config);
+	chip->fg_psy = devm_power_supply_register(chip->dev, &fg_psy_desc, &psy_config);
 	if (IS_ERR(chip->fg_psy)) {
 		dev_notice(chip->dev, "register batt psy fail\n");
-		return PTR_ERR(chip->fg_psy);
+		ret = PTR_ERR(chip->fg_psy);
+		goto destroy_mutex;
 	}
 
-	rt_fg_create_attrs(&chip->fg_psy->dev);
+	ret = rt_fg_create_attrs(&chip->fg_psy->dev);
+	if (ret) {
+		dev_notice(chip->dev, "create attrs fail\n");
+		goto destroy_mutex;
+	}
 
 	/* mask irq before irq register */
 	ret = rt9426a_irq_enable(chip, false);
 	if (ret < 0) {
 		dev_notice(chip->dev, "scirq mask fail\n");
-		return ret;
+		goto fail_irq_enable;
 	}
 
 	ret = rt9426a_irq_init(chip);
 	if (ret < 0) {
 		dev_notice(chip->dev, "irq init fail\n");
-		return ret;
+		goto fail_irq_enable;
 	}
 
 	ret = rt9426a_irq_enable(chip, true);
 	if (ret < 0) {
 		dev_notice(chip->dev, "scirq mask fail\n");
-		return ret;
+		goto fail_irq_enable;
 	}
 
 	dev_info(chip->dev, "chip ver = 0x%04x\n", chip->ic_ver);
 	queue_delayed_work(system_power_efficient_wq, &chip->update_work, 5 * HZ);
 
 	return 0;
+
+fail_irq_enable:
+	for (i = 0; i < ARRAY_SIZE(rt_fuelgauge_attrs); i++)
+		device_remove_file(&chip->fg_psy->dev, &rt_fuelgauge_attrs[i]);
+destroy_mutex:
+	mutex_destroy(&chip->update_lock);
+	mutex_destroy(&chip->var_lock);
+
+	return ret;
 }
 
 static int rt9426a_i2c_remove(struct i2c_client *i2c)
 {
 	struct rt9426a_chip *chip = i2c_get_clientdata(i2c);
+	int i = 0;
 
 	dev_info(chip->dev, "%s\n", __func__);
 	rt9426a_irq_enable(chip, false);
 	rt9426a_irq_deinit(chip);
+	for (i = 0; i < ARRAY_SIZE(rt_fuelgauge_attrs); i++)
+		device_remove_file(&chip->fg_psy->dev, &rt_fuelgauge_attrs[i]);
 	mutex_destroy(&chip->update_lock);
 	mutex_destroy(&chip->var_lock);
 
@@ -2948,6 +2971,7 @@ static int rt9426a_i2c_suspend(struct device *dev)
 	dev_dbg(chip->dev, "%s\n", __func__);
 	if (device_may_wakeup(dev))
 		enable_irq_wake(chip->alert_irq);
+	disable_irq(chip->alert_irq);
 
 	return 0;
 }
@@ -2957,6 +2981,7 @@ static int rt9426a_i2c_resume(struct device *dev)
 	struct rt9426a_chip *chip = dev_get_drvdata(dev);
 
 	dev_dbg(chip->dev, "%s\n", __func__);
+	enable_irq(chip->alert_irq);
 	if (device_may_wakeup(dev))
 		disable_irq_wake(chip->alert_irq);
 
