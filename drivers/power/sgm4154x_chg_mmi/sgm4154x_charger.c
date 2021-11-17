@@ -1025,7 +1025,21 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 	return ret;
 }
 
+int sgm4154x_get_charging_status(struct sgm4154x_device *sgm)
+{
+	int ret = 0;
+	int chrg_stat;
 
+	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_STAT, &chrg_stat);
+	if (ret) {
+		pr_err("%s read SGM4154x_CHRG_STAT fail\n",__func__);
+		return ret;
+	}
+
+	chrg_stat &= SGM4154x_CHG_STAT_MASK;
+
+	return chrg_stat;
+}
 
 static int sgm4154x_charger_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
@@ -1033,6 +1047,7 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 {
 	struct sgm4154x_device *sgm = power_supply_get_drvdata(psy);
 	struct sgm4154x_state state;
+	int chrg_status = 0;
 	int ret = 0;
 
 	mutex_lock(&sgm->lock);
@@ -1044,17 +1059,19 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
+		chrg_status = sgm4154x_get_charging_status(sgm);
 		if (!state.chrg_type || (state.chrg_type == SGM4154x_OTG_MODE))
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-		else if (!state.chrg_stat)
+		else if (!chrg_status)
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		else if (state.chrg_stat == SGM4154x_TERM_CHRG)
+		else if (chrg_status == SGM4154x_TERM_CHRG)
 			val->intval = POWER_SUPPLY_STATUS_FULL;
 		else
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-		switch (state.chrg_stat) {
+		chrg_status = sgm4154x_get_charging_status(sgm);
+		switch (chrg_status) {
 		case SGM4154x_PRECHRG:
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
 			break;

@@ -1007,7 +1007,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 {
 	struct bq2589x *bq = power_supply_get_drvdata(psy);
 	struct bq2589x_state state = bq->state;
-	u8 chrg_status = bq2589x_get_charging_status(bq);
+	u8 chrg_status = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_MANUFACTURER:
@@ -1024,6 +1024,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 			val->strval = "UNKNOWN";
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
+		chrg_status = bq2589x_get_charging_status(bq);
 		if (!state.online)
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		else if (chrg_status == STATUS_NOT_CHARGING)
@@ -1072,6 +1073,7 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 		val->intval = bq2589x_get_vindpm_volt(bq);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		chrg_status = bq2589x_get_charging_status(bq);
 		switch (chrg_status) {
 			case STATUS_PRE_CHARGING:
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
