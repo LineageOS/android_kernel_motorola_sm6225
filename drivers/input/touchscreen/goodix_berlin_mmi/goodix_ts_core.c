@@ -1087,8 +1087,15 @@ static int goodix_parse_dt(struct device_node *node,
 
 	board_data->stylus_mode_ctrl = of_property_read_bool(node,
 					"goodix,stylus_mode-ctrl");
-	if (board_data->stylus_mode_ctrl)
+	if (board_data->stylus_mode_ctrl) {
 		ts_info("support goodix stylus mode");
+		/* get stylus clock name */
+		r = of_property_read_string(node, "goodix,stylus-clk-source", &name_tmp);
+		if (!r) {
+			ts_info("stylus clk source from source %s", name_tmp);
+			strncpy(board_data->stylus_clk_src, name_tmp, sizeof(board_data->stylus_clk_src));
+		}
+	}
 
 	board_data->sensitivity_ctrl = of_property_read_bool(node,
 					"goodix,sensitivity-ctrl");
@@ -1374,6 +1381,61 @@ int goodix_ts_power_off(struct goodix_ts_core *cd)
 		cd->power_on = 0;
 	else
 		ts_err("failed power off, %d", ret);
+
+	return ret;
+}
+/**
+ * goodix_ts_stylus_clk_init - Config stylus clock
+ * return:0 ok, <0 failed
+ */
+static int goodix_ts_stylus_clk_init(struct goodix_ts_core *core_data)
+{
+	int ret = 0;
+	struct goodix_ts_board_data *ts_bdata = board_data(core_data);
+	struct goodix_bus_interface *bus_interface = core_data->bus;
+	if (!ts_bdata->stylus_mode_ctrl) {
+		ts_err("stylus not support!");
+		return -EINVAL;
+	}
+	if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_PMIC)) {
+		if (of_get_property(bus_interface->dev->of_node, "clocks", NULL)) {
+			core_data->stylus_clk = devm_clk_get(bus_interface->dev, "stylus_clk");
+			if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
+				ts_err("failed to get stylus clk\n");
+				return -EINVAL;
+			}
+		}
+	} else if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_GPIO)){
+		if (IS_ERR_OR_NULL(core_data->pinctrl)) {
+			ts_info("Failed to get pinctrl handler[need confirm]");
+			core_data->pinctrl = NULL;
+			return -EINVAL;
+		}
+		core_data->stylus_clk_active = pinctrl_lookup_state(core_data->pinctrl,
+				PINCTRL_STYLUS_CLK_ACTIVE);
+		if (IS_ERR_OR_NULL(core_data->stylus_clk_active)) {
+			ret = PTR_ERR(core_data->stylus_clk_active);
+			ts_err("Failed to get state clk pinctrl state:%s, ret:%d",
+					PINCTRL_STYLUS_CLK_ACTIVE, ret);
+			core_data->stylus_clk_active = NULL;
+			return ret;
+		}
+		ts_info("success get stylus clk pinctrl active state");
+
+		core_data->stylus_clk_suspend = pinctrl_lookup_state(core_data->pinctrl,
+				PINCTRL_STYLUS_CLK_SUSPEND);
+		if (IS_ERR_OR_NULL(core_data->stylus_clk_suspend)) {
+			ret = PTR_ERR(core_data->stylus_clk_suspend);
+			ts_err("Failed to get state clk pinctrl state:%s, ret:%d",
+				PINCTRL_STYLUS_CLK_SUSPEND, ret);
+			core_data->stylus_clk_suspend = NULL;
+			return ret;
+		}
+		ts_info("success get stylus clk pinctrl suspend state");
+	} else {
+		ts_err("The stylus clock source is invalid");
+		return -EINVAL;
+	}
 
 	return ret;
 }
@@ -2235,14 +2297,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 			ts_err("failed parse device info form dts, %d", ret);
 			return -EINVAL;
 		}
-
-		if (of_get_property(bus_interface->dev->of_node, "clocks", NULL)) {
-			core_data->stylus_clk = devm_clk_get(bus_interface->dev, "stylus_clk");
-			if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
-				ts_err("failed to get stylus clk\n");
-			}
-		}
-
 	} else {
 		ts_err("no valid device tree node found");
 		return -ENODEV;
@@ -2287,6 +2341,11 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		if (ret < 0)
 			ts_err("Failed to select active pinstate, r:%d", ret);
 	}
+
+	/* get stylus clock*/
+	ret = goodix_ts_stylus_clk_init(core_data);
+	if (ret)
+		ts_err("failed get goodix stylus clock");
 
 	/* confirm it's goodix touch dev or not */
 	ret = core_data->hw_ops->dev_confirm(core_data);

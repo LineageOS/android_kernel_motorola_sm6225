@@ -46,6 +46,11 @@
 #define TS_DEFAULT_FIRMWARE				"goodix_firmware.bin"
 #define TS_DEFAULT_CFG_BIN 				"goodix_cfg_group.bin"
 
+#define PINCTRL_STYLUS_CLK_ACTIVE		"stylus_clk_active"
+#define PINCTRL_STYLUS_CLK_SUSPEND		"stylus_clk_suspend"
+#define STYLUS_CLK_SRC_GPIO				"stylus_clk_gpio"
+#define STYLUS_CLK_SRC_PMIC				"stylus_clk_pmic"
+
 enum CORD_PROB_STA {
 	CORE_MODULE_UNPROBED = 0,
 	CORE_MODULE_PROB_SUCCESS = 1,
@@ -269,6 +274,7 @@ struct goodix_ts_board_data {
 	bool pen_enable;
 	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
 	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
+	char stylus_clk_src[GOODIX_MAX_STR_LABLE_LEN]; /*stylus clock source*/
 
 	bool sensitivity_ctrl;
 	bool stylus_mode_ctrl;
@@ -468,6 +474,8 @@ struct goodix_ts_core {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pin_sta_active;
 	struct pinctrl_state *pin_sta_suspend;
+	struct pinctrl_state *stylus_clk_active;
+	struct pinctrl_state *stylus_clk_suspend;
 
 	int power_on;
 	int irq;
