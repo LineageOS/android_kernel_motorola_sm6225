@@ -537,7 +537,7 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 
 static void wt6670f_shutdown(struct i2c_client *client)
 {
-	wt6670f_start_detection();
+	//wt6670f_start_detection();
 	pr_info("%s\n", __func__);
 }
 //#define WT6670F_PM_OPS	(NULL)
