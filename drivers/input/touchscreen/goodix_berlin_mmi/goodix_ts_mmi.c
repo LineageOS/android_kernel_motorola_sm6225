@@ -189,27 +189,85 @@ static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 		return ret;
 }
 
+static int goodix_clock_enable(struct goodix_ts_core *core_data, bool mode) {
+	int ret = 0;
+	struct goodix_ts_board_data *ts_bdata;
+
+	ts_bdata = board_data(core_data);
+	if (!ts_bdata) {
+		ts_err("Failed to get ts board data");
+		return -ENODEV;
+	}
+
+	if (mode) {
+		if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_PMIC)) {
+			if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
+				ts_err("failed to get stylus clk\n");
+				return -EINVAL;
+			}
+			ret = clk_prepare_enable(core_data->stylus_clk);
+			if (ret) {
+				ts_err("failed to enable stylus clk\n");
+				return ret;
+			}
+		} else if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_GPIO)){
+			if (IS_ERR_OR_NULL(core_data->stylus_clk_active)) {
+				ts_err("Failed to get state clk pinctrl state:%s",
+					PINCTRL_STYLUS_CLK_ACTIVE);
+				core_data->stylus_clk_active = NULL;
+				return -EINVAL;
+			}
+			ret = pinctrl_select_state(core_data->pinctrl,
+						core_data->stylus_clk_active);
+			if (ret < 0) {
+				ts_err("Failed to select active stylus clk state, ret:%d", ret);
+				return ret;
+			}
+		} else {
+			ts_err("stylus clock source is invalid");
+			return -EINVAL;
+		}
+		ts_info("success to enable stylus clk\n");
+	} else {
+		if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_PMIC)) {
+			if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
+				ts_err("failed to get stylus clk\n");
+				return -EINVAL;
+			}
+			clk_disable_unprepare(core_data->stylus_clk);
+		} else if (!strcmp(ts_bdata->stylus_clk_src, STYLUS_CLK_SRC_GPIO)){
+			if (IS_ERR_OR_NULL(core_data->stylus_clk_suspend)) {
+				ts_err("Failed to get state clk pinctrl state:%s",
+					PINCTRL_STYLUS_CLK_SUSPEND);
+				core_data->stylus_clk_suspend = NULL;
+				return -EINVAL;
+			}
+			ret = pinctrl_select_state(core_data->pinctrl,
+						core_data->stylus_clk_suspend);
+			if (ret < 0) {
+				ts_err("Failed to select stylus clk suspend state, ret:%d", ret);
+				return ret;
+			}
+		} else {
+			ts_err("stylus clock source is invalid");
+			return -EINVAL;
+		}
+		ts_info("success to disable stylus clk\n");
+	}
+	return ret;
+}
+
 static int goodix_stylus_mode(struct goodix_ts_core *core_data, int mode) {
 	int ret = 0;
 
-	if (IS_ERR_OR_NULL(core_data->stylus_clk)) {
-		ts_err("failed to get stylus clk\n");
-		return -EINVAL;
-	}
 	if (mode) {
-		ret = clk_prepare_enable(core_data->stylus_clk);
-		if (ret) {
-			ts_err("failed to enable stylus clk\n");
-			return ret;
-		}
-		ts_info("success to open stylus clk\n");
+		goodix_clock_enable(core_data, mode);
 		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
 		msleep(20);
 	} else {
 		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
 		msleep(20);
-		clk_disable_unprepare(core_data->stylus_clk);
-		ts_info("success to close stylus clk\n");
+		goodix_clock_enable(core_data, mode);
 	}
 
 	return ret;
@@ -236,6 +294,12 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 
 	if (core_data->stylus_mode == mode) {
 		ts_debug("value is same,so not write.\n");
+		return size;
+	}
+
+	if (core_data->power_on == 0) {
+		core_data->stylus_mode = mode;
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
 		return size;
 	}
 
