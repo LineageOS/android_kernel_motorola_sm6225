@@ -18,6 +18,7 @@
 #include <linux/extcon-provider.h>
 #include "mmi_charger.h"
 #include <linux/usb/mmi_discrete_typec.h>
+#include <linux/usb/adapter_class.h>
 
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
 #define USER_VOTER			"USER_VOTER"
@@ -28,6 +29,7 @@
 #define SW_ICL_MAX_VOTER		"SW_ICL_MAX_VOTER"
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
+#define PD_VOTER			"PD_VOTER"
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
@@ -99,9 +101,8 @@ struct mmi_discrete_charger {
 	struct iio_channel	*int_iio_chans;
 
 	/*PD*/
-/*	struct usbpd	*pd_handle;
-	int			pd_current_pdo;
-*/	int			pd_active;
+	struct adapter_device *pd_adapter_dev;
+	int			pd_active;
 	bool			pd_not_supported;
 
 	int			dc_cl_ma;
@@ -127,5 +128,6 @@ struct mmi_discrete_charger {
 int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
 int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip);
 int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val);
+int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val);
 
 #endif

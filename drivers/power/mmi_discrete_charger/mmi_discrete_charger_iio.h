@@ -43,6 +43,7 @@ static const struct mmi_discrete_iio_channels mmi_discrete_iio_psy_channels[] = 
 	MMI_DISCRETE_CHAN_INDEX("usb_real_type", PSY_IIO_USB_REAL_TYPE)
 	MMI_DISCRETE_CHAN_INDEX("otg_enable", PSY_IIO_MMI_OTG_ENABLE)
 	MMI_DISCRETE_CHAN_INDEX("typec_mode", PSY_IIO_TYPEC_MODE)
+	MMI_DISCRETE_CHAN_INDEX("pd_active", PSY_IIO_PD_ACTIVE)
 };
 
 int mmi_discrete_init_iio_psy(struct mmi_discrete_charger *chip,
