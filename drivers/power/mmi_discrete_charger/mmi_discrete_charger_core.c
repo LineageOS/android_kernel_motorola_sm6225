@@ -51,16 +51,6 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 	int rc = 0, byte_len;
 	struct device_node *node = chip->dev->of_node;
 
-/*	chip->pd_handle = devm_usbpd_get_by_phandle(chip->dev,
-					"mmi,usbpd-phandle");
-	if (IS_ERR_OR_NULL(chip->pd_handle)) {
-		mmi_err(chip, "Error getting the pd phandle %ld\n",
-			PTR_ERR(chip->pd_handle));
-		chip->pd_handle = NULL;
-	} else {
-		chip->pd_current_pdo = -1;
-	}
-*/
 	rc = of_property_read_u32(node,
 				"mmi,max-fv-mv", &chip->batt_profile_fv_uv);
 	if (rc < 0)
@@ -640,10 +630,7 @@ static int mmi_discrete_update_usb_type(struct mmi_discrete_charger *chip)
 		return rc;
 	}
 
-	/* if PD is active, APSD is disabled so won't have a valid result */
-	if (chip->pd_active) {
-		chip->real_charger_type = POWER_SUPPLY_TYPE_USB_PD;
-	} else if (chip->qc3p5_detected) {
+	if (chip->qc3p5_detected) {
 		chip->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
 	} else {
 		chip->real_charger_type = chg_type;
@@ -742,13 +729,175 @@ static void mmi_discrete_check_otg_power(struct mmi_discrete_charger *chip)
 	}
 }
 
-/*
-#define PD_POWER_MIN			15000
+static void mmi_set_pd20_cap(struct mmi_discrete_charger *chg,
+	int pdo, int mv, int ma)
+{
+	int ret;
+
+	ret = adapter_dev_set_cap(chg->pd_adapter_dev, MMI_PD_FIXED,
+			pdo, mv, ma);
+	if (ret != MMI_ADAPTER_OK)
+		mmi_info(chg, "set pd20 cap fail ret=%d\n", ret);
+}
+
+static void mmi_pd30_start(struct mmi_discrete_charger *chg,
+	int pdo, int mv, int ma)
+{
+	int ret;
+
+	ret = adapter_dev_set_cap(chg->pd_adapter_dev, MMI_PD_APDO_START,
+		pdo, mv, ma);
+	if (ret != MMI_ADAPTER_OK)
+		mmi_info(chg, "set pd30 cap start fail ret=%d\n", ret);
+}
+
+static void mmi_set_pd30_cap(struct mmi_discrete_charger *chg,
+	int pdo, int mv, int ma)
+{
+	int ret;
+
+	ret = adapter_dev_set_cap(chg->pd_adapter_dev, MMI_PD_APDO,
+		pdo, mv, ma);
+	if (ret != MMI_ADAPTER_OK)
+		mmi_info(chg, "set pd30 cap fail ret=%d\n", ret);
+}
+
+
+#define CHARGER_POWER_18W	18000
+#define PD_POWER_MIN		15000
+#define PPS_VOLT_MV_MIN		5000
+#define PPS_CURR_MA_MIN		2000
+#define PD_CURR_MA_MAX		3000
+#define MICRO_MV_5V		5000
+#define MICRO_MV_9V		9000
+#define MICRO_MV_1V		1000
 static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 {
-	//config pd charger vbus and ibus
+	int rc = -EINVAL, i =0, req_pdo = -1, req_pd_volt = 0, req_pd_curr = 0;
+	int fixed_pd_volt = 0;
+	union power_supply_propval val = {0, };
+	bool vbus_present = false, pps_active = false, fixed_active = false;
+	static bool pps_start = false, fixed_power_done = false;
+	struct adapter_power_cap cap;
+	int vbus_mv;
+
+	rc = get_prop_usb_present(chg, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't get usb present rc = %d\n", rc);
+		return;
+	}
+	vbus_present = val.intval;
+	if (chg->pd_active == MMI_POWER_SUPPLY_PD_INACTIVE
+		|| !vbus_present) {
+		pps_start = false;
+		fixed_power_done = false;
+		return;
+	}
+
+	if (!chg->pd_adapter_dev) {
+		chg->pd_adapter_dev = get_adapter_by_name("pd_adapter");
+			if (!chg->pd_adapter_dev) {
+			mmi_err(chg, "Failed: pd_adapter has not registered yet\n");
+			return;
+		}
+	}
+
+	for (i = 0; i < ADAPTER_CAP_MAX_NR; i++) {
+               cap.max_mv[i] = 0;
+               cap.min_mv[i] = 0;
+               cap.ma[i] = 0;
+               cap.type[i] = 0;
+               cap.pwr_limit[i] = 0;
+       }
+
+	rc = adapter_dev_get_cap(chg->pd_adapter_dev, MMI_PD_ALL, &cap);
+	if (MMI_ADAPTER_OK != rc) {
+		mmi_err(chg, "Couldn't get pdo rc = %d\n", rc);
+		return;
+	}
+
+	rc = get_prop_usb_voltage_now(chg, &val);
+	if (rc < 0) {
+		mmi_err(chg, "Couldn't get usb vbus rc = %d\n", rc);
+		return;
+	}
+	vbus_mv = val.intval;
+
+	for (i = 0; i < cap.nr; i++) {
+		if (cap.type[i] == MMI_PD_APDO
+			&& cap.max_mv[i] >= PPS_VOLT_MV_MIN
+			&& cap.ma[i] >= PPS_CURR_MA_MIN
+			&& cap.max_mv[i] * cap.ma[i] / 1000 >= this_chip->constraint.pd_pmax) {
+			req_pdo = i;
+			req_pd_curr = cap.ma[i];
+			req_pd_curr = min(req_pd_curr, PD_CURR_MA_MAX);
+			req_pd_volt = (this_chip->constraint.pd_pmax* 1000 / req_pd_curr)  % 20;
+			req_pd_volt = (this_chip->constraint.pd_pmax * 1000 / req_pd_curr) - req_pd_volt;
+			req_pd_volt = max(req_pd_volt, PPS_VOLT_MV_MIN);
+			req_pd_volt = min(req_pd_volt, cap.max_mv[i]);
+			pps_active = true;
+			mmi_info(chg, "pps active: i=%d,pps_volt=%d, pps_curr=%d\n",
+				i, req_pd_volt, req_pd_curr);
+			break;
+		}
+	}
+
+	if (!pps_active) {
+		pps_start = false;
+
+		if (this_chip->constraint.pd_pmax < CHARGER_POWER_18W)
+			fixed_pd_volt = MICRO_MV_5V;
+		else
+			fixed_pd_volt = MICRO_MV_9V;
+
+		for (i = 0; i < cap.nr; i++) {
+			if ((cap.type[i] == MMI_PD_FIXED)
+				&& cap.max_mv[i] <= fixed_pd_volt
+				&& cap.max_mv[i] >= MICRO_MV_5V) {
+				req_pdo = i;
+				req_pd_volt = cap.max_mv[i];
+				req_pd_curr =  this_chip->constraint.pd_pmax * 1000 / req_pd_volt;
+				req_pd_curr = min(req_pd_curr, cap.ma[i]);
+				req_pd_curr = min(req_pd_curr, PD_CURR_MA_MAX);
+				fixed_active = true;
+				mmi_info(chg, "fixed pdo active:i=%d,fixed_volt=%d, fixed_curr=%d\n",
+					i, req_pd_volt, req_pd_curr);
+			}
+		}
+
+		if (fixed_active && vbus_mv < req_pd_volt - MICRO_MV_1V)
+			fixed_power_done = false;
+	}
+
+	if (!pps_active && !fixed_active)
+		return;
+
+	if (!fixed_power_done && fixed_active) {
+		mmi_set_pd20_cap(chg, req_pdo, req_pd_volt, req_pd_curr);
+		fixed_power_done =  true;
+		mmi_info(chg, "Request fixed power , re-vote USB_ICL %dmA\n", req_pd_curr);
+	} else if (pps_active) {
+		if (!pps_start) {
+			mmi_pd30_start(chg, req_pdo, req_pd_volt, req_pd_curr);
+			pps_start = true;
+		}
+		mmi_set_pd30_cap(chg, req_pdo, req_pd_volt, req_pd_curr);
+	}
+	rc = vote(chg->usb_icl_votable, PD_VOTER, true, req_pd_curr * 1000);
+	if (rc < 0)
+		mmi_info(chg, "vote PD USB_ICL  failed %duA\n", req_pd_curr);
+
+	mmi_info(chg,
+			"Request PD power, fixed %d, pps %d, pdo %d, "
+			"req volt %dmV, req curr %dmA, vbus %dmV\n",
+			fixed_active,
+			pps_active,
+			req_pdo,
+			req_pd_volt,
+			req_pd_curr,
+			vbus_mv);
+	return;
 }
-*/
 
 #define HVDCP_POWER_MIN			15000
 #define HVDCP_VOLTAGE_BASIC		(this_chip->constraint.hvdcp_pmax / 3)
@@ -884,18 +1033,16 @@ static void mmi_discrete_config_charger_input(struct mmi_discrete_charger *chip)
 			vote(chip->usb_icl_votable, MMI_HB_VOTER, false, 0);
 		}
 	}
-/*
-	if (chip->pd_handle && chip->usb_psy &&
-	    chip->constraint.pd_pmax >= PD_POWER_MIN &&
-	    chip->chg_info.chrg_type == POWER_SUPPLY_TYPE_USB_PD)
+
+	if (chip->usb_psy &&
+	    chip->constraint.pd_pmax >= PD_POWER_MIN)
 		mmi_discrete_config_pd_charger(chip);
-	else
-		chip->pd_current_pdo = -1;
-*/
+
 	if (chip->charger_psy && chip->usb_psy &&
 	    chip->constraint.hvdcp_pmax >= HVDCP_POWER_MIN &&
 	    chip->chg_info.chrg_mv > HVDCP_VOLTAGE_MIN &&
-	    chip->chg_info.chrg_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
+	    chip->chg_info.chrg_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 &&
+	    chip->pd_active == MMI_POWER_SUPPLY_PD_INACTIVE)
 		mmi_discrete_config_qc_charger(chip);
 
 	if (chip->wls_psy &&
@@ -1733,6 +1880,31 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 	return 0;
 }
 
+#define MMI_USBIN_500MA	500000
+int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
+{
+	mmi_info(chip, "config pd active is %d old mode is %d\n", val, chip->pd_active);
+
+	if (chip->pd_active && chip->pd_active == val)
+		return 0;
+
+	chip->pd_active = val;
+	update_sw_icl_max(chip);
+
+	if (chip->pd_active) {
+		vote(chip->usb_icl_votable, PD_VOTER, true, MMI_USBIN_500MA);
+		vote(chip->usb_icl_votable, USB_PSY_VOTER, false, 0);
+		vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
+	} else {
+		vote(chip->usb_icl_votable, PD_VOTER, false, 0);
+
+	}
+
+	if (chip->usb_psy)
+		power_supply_changed(chip->usb_psy);
+
+	return 0;
+}
 static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 {
 	chip->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
@@ -1741,6 +1913,7 @@ static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 		mmi_notify_device_mode(chip, false);
 	vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
 	vote(chip->usb_icl_votable, USB_PSY_VOTER, false, 0);
+	vote(chip->usb_icl_votable, PD_VOTER, false, 0);
 	vote(chip->chg_disable_votable, MMI_HB_VOTER, true, 0);
 	power_supply_changed(chip->usb_psy);
 	mmi_info(chip, "%s\n",__func__);
@@ -1755,10 +1928,6 @@ static int usb_source_change_notify_handler(struct notifier_block *nb, unsigned 
 	struct chgdev_notify *data = v;
 	union power_supply_propval pval;
 	int rc = 0;
-
-	/* PD session is ongoing, ignore BC1.2 and QC detection */
-	if (chip->pd_active)
-		return NOTIFY_DONE;
 
 	rc = get_prop_usb_present(chip, &pval);
 	if (rc < 0) {
@@ -1970,12 +2139,10 @@ static int mmi_discrete_config_charge(void *data, struct mmi_charger_cfg *config
 {
 	struct mmi_discrete_chg_client *chg = data;
 
-	if (memcmp(config, &chg->chg_cfg, sizeof(struct mmi_charger_cfg))) {
-		memcpy(&chg->chg_cfg, config, sizeof(struct mmi_charger_cfg));
-		cancel_delayed_work(&chg->chip->charger_work);
-		schedule_delayed_work(&chg->chip->charger_work,
-							msecs_to_jiffies(0));
-	}
+	memcpy(&chg->chg_cfg, config, sizeof(struct mmi_charger_cfg));
+	cancel_delayed_work(&chg->chip->charger_work);
+	schedule_delayed_work(&chg->chip->charger_work,
+				msecs_to_jiffies(0));
 
 	return 0;
 }
