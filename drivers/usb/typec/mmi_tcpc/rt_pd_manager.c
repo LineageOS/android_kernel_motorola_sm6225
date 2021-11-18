@@ -76,11 +76,12 @@ enum iio_psy_property {
        POWER_SUPPLY_IIO_USB_REAL_TYPE = 0,
        POWER_SUPPLY_IIO_OTG_ENABLE,
        POWER_SUPPLY_IIO_TYPEC_MODE,
+       POWER_SUPPLY_IIO_PD_ACTIVE,
        POWER_SUPPLY_IIO_PROP_MAX,
 };
 
 static const char * const iio_channel_map[] = {
-	"usb_real_type", "otg_enable", "typec_mode",
+	"usb_real_type", "otg_enable", "typec_mode", "pd_active",
 };
 
 static int mmi_get_psy_iio_property(struct rt_pd_manager_data *rpmd,
@@ -245,8 +246,7 @@ static void usb_dwork_handler(struct work_struct *work)
 			break;
 		} else if (val.intval != POWER_SUPPLY_TYPE_USB &&
 			   val.intval != POWER_SUPPLY_TYPE_USB_CDP &&
-			   val.intval != POWER_SUPPLY_TYPE_USB_FLOAT &&
-			   val.intval != POWER_SUPPLY_TYPE_USB_PD)
+			   val.intval != POWER_SUPPLY_TYPE_USB_FLOAT)
 			break;
 	case DR_HOST_TO_DEVICE:
 		stop_usb_host(rpmd);
@@ -580,6 +580,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 				    __func__, noti->pd_state.connected);
 		switch (noti->pd_state.connected) {
 		case PD_CONNECT_NONE:
+			val.intval = MMI_POWER_SUPPLY_PD_INACTIVE;
+			mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_PD_ACTIVE, &val);
 			break;
 		case PD_CONNECT_HARD_RESET:
 			break;
@@ -588,6 +591,22 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		case PD_CONNECT_PE_READY_SNK_APDO:
 		case PD_CONNECT_PE_READY_SRC:
 		case PD_CONNECT_PE_READY_SRC_PD30:
+			if ((noti->pd_state.connected == PD_CONNECT_PE_READY_SNK)
+				||(noti->pd_state.connected == PD_CONNECT_PE_READY_SNK_PD30)) {
+				val.intval = MMI_POWER_SUPPLY_PD_ACTIVE;
+				mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_PD_ACTIVE, &val);
+			} else if (noti->pd_state.connected == PD_CONNECT_PE_READY_SNK_APDO) {
+				val.intval = MMI_POWER_SUPPLY_PD_PPS_ACTIVE;
+				mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_PD_ACTIVE, &val);
+			} else if ((noti->pd_state.connected == PD_CONNECT_PE_READY_SRC)
+				||(noti->pd_state.connected == PD_CONNECT_PE_READY_SRC_PD30)) {
+				val.intval = MMI_POWER_SUPPLY_PD_INACTIVE;
+				mmi_set_psy_iio_property(rpmd,
+						POWER_SUPPLY_IIO_PD_ACTIVE, &val);
+			}
+
 			typec_set_pwr_opmode(rpmd->typec_port,
 					     TYPEC_PWR_MODE_PD);
 			if (!rpmd->partner)

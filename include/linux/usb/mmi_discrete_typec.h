@@ -31,4 +31,10 @@ enum mmi_power_supply_typec_mode {
 	MMI_POWER_SUPPLY_TYPEC_NON_COMPLIANT,
 };
 
+enum {
+	MMI_POWER_SUPPLY_PD_INACTIVE = 0,
+	MMI_POWER_SUPPLY_PD_ACTIVE,
+	MMI_POWER_SUPPLY_PD_PPS_ACTIVE,
+};
+
 #endif
