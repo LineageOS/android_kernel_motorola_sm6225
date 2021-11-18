@@ -173,8 +173,7 @@ static int st21nfc_loc_set_polaritymode(struct st21nfc_dev *st21nfc_dev,
 	st21nfc_dev->irq_enabled = true;
 
 	ret = request_irq(client->irq, st21nfc_dev_irq_handler,
-			  st21nfc_dev->platform_data.polarity_mode|IRQF_NO_SUSPEND,
-			  client->name, st21nfc_dev);
+			  st21nfc_dev->platform_data.polarity_mode, client->name, st21nfc_dev);
 	if (!ret) {
 		irqIsAttached = true;
 		st21nfc_disable_irq(st21nfc_dev);
