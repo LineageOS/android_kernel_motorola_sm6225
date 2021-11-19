@@ -494,17 +494,16 @@ static int rt9426a_fg_get_soc(struct rt9426a_chip *chip, int to_do_smooth_soc)
 
 static unsigned int rt9426a_get_design_capacity(struct rt9426a_chip *chip)
 {
-	chip->design_capacity = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_DC);
-	if (chip->design_capacity < 0) {
-		return -EIO;
-	}
+	chip->design_capacity =  chip->pdata->fcc_design;
 
 	return chip->design_capacity;
 }
 
 static unsigned int rt9426a_get_full_capacity(struct rt9426a_chip *chip)
 {
-	chip->full_capacity = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_FCC);
+	int curr_soh = rt9426a_get_soh(chip);
+
+	chip->full_capacity = chip->design_capacity * curr_soh  / 100;
 	if (chip->full_capacity < 0) {
 		return -EIO;
 	}
@@ -2741,6 +2740,8 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 	batt_profile_node = rt_get_profile_by_serialnumber(dev);
 	if (!batt_profile_node)
 		return  -1;
+	of_property_read_u32(batt_profile_node, "rt,fcc_design",&pdata->fcc_design);
+	dev_info(dev,"fcc_design = %d\n", pdata->fcc_design);
 
 	ret = of_property_read_u32_array(batt_profile_node, "rt,fcc", pdata->fcc, 5);
 	if (ret < 0) {

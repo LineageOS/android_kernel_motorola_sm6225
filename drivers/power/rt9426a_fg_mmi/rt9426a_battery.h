@@ -188,6 +188,7 @@ struct rt9426a_platform_data {
 	u32 fcc[5];			/* for aging_sts=0~4 */
 	u32 fc_vth[5];		/* for aging_sts=0~4 */
 	u32 ocv_table[5][10][8];	/* for aging_sts=0~4 */
+	u32 fcc_design;
 };
 
 enum {
