@@ -111,6 +111,8 @@
         aw9610x_sar@12 {
             compatible = "awinic,aw9610x_sar_0";
             reg = <0x12>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&capsense_sar_gpio_pins>;
             interrupt-parent = <&tlmm>;
             interrupts = <106 0x02>;
             irq-gpio = <&tlmm 106 0x02>;
