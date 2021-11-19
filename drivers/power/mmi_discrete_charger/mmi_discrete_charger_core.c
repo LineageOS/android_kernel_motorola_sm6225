@@ -1063,10 +1063,13 @@ static int batt_get_prop(struct power_supply *psy,
 		break;
 	default:
 		mmi_err(chip, "Get not support prop %d rc = %d\n", psp, rc);
-		/* soft fail so uevents are not blocked */
-		rc = 0;
-		val->intval = -EINVAL;
+		rc = -EINVAL;
 		break;
+	}
+
+	if (rc < 0) {
+		pr_debug("Couldn't get prop %d rc = %d\n", psp, rc);
+		return -ENODATA;
 	}
 
 	return rc;
@@ -1096,11 +1099,11 @@ static int batt_set_prop(struct power_supply *psy,
 			vote(chip->fcc_votable, USER_VOTER, true, val->intval);
 		break;
 	default:
-		mmi_dbg(chip, "Get not support prop %d rc = %d\n", prop, rc);
-		/* soft fail so uevents are not blocked */
-		rc = 0;
+		mmi_dbg(chip, "Set not support prop %d rc = %d\n", prop, rc);
+		rc = -EINVAL;
 		break;
 	}
+
 	return rc;
 }
 
