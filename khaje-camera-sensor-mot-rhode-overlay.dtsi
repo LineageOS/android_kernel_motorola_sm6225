@@ -275,7 +275,7 @@
 		cell-index = <0>;
 		compatible = "qcom,actuator";
 		cci-master = <0>;
-		//cam_vaf-supply = <&cam_ldo3>;
+		cam_vaf-supply = <&cam_ldo3>;
 		regulator-names = "cam_vaf";
 		rgltr-cntrl-support;
 		rgltr-min-voltage = <2800000>;
@@ -308,7 +308,7 @@
 		sensor-position-yaw = <180>;
 		//led-flash-src = <&led_flash_rear>;
 		//eeprom-src = <&eeprom_main>;
-		//actuator-src = <&actuator_rear>;
+		actuator-src = <&actuator_rear>;
 		//cam_vaf-supply = <&cam_ldo3>;
 		cam_vio-supply = <&cam_ldo4>;
 		cam_vana-supply = <&cam_ldo7>;
