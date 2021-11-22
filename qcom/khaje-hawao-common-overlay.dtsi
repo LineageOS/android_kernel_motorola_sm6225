@@ -1,0 +1,103 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "khaje-moto-common-overlay.dtsi"
+#include "khaje-hawao-display.dtsi"
+#include "khaje-hawao-fps-overlay_evb.dtsi"
+#include "khaje-hawao-touchscreen-overlay.dtsi"
+#include "sgm7220.dtsi"
+#include "discrete_charging.dtsi"
+
+&firmware {
+	android {
+		vbmeta {
+			compatible = "android,vbmeta";
+			parts = "vbmeta,boot,system,vendor,dtbo";
+		};
+	};
+};
+&soc {
+    qcom,tz_gpio {
+        compatible = "qcom,tz_gpio";
+        tlmm-tz = <14>,
+                        <15>,
+                        <16>,
+                        <17>;
+    };
+
+	ldo_vib {
+		compatible = "moto,vibrator-ldo";
+		moto,vib-ldo-gpio = <&pm6125_gpios 8 0>;
+		status = "ok";
+	};
+};
+
+
+&tlmm{
+	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
+		mux {
+			pins = "gpio106";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio106";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
+
+&sdhc_2 {
+	vdd-supply = <&L22A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L5A>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	vdd-io-bias-supply = <&L7A>;
+	qcom,vdd-io-bias-voltage-level = <1256000 1256000>;
+	qcom,vdd-io-bias-current-level = <0 6000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+
+	status = "ok";
+};
+
+&qupv3_se0_i2c {
+        status = "ok";
+        aw9610x_sar@12 {
+            compatible = "awinic,aw9610x_sar_0";
+            reg = <0x12>;
+            interrupt-parent = <&tlmm>;
+            interrupts = <106 0x02>;
+            irq-gpio = <&tlmm 106 0x02>;
+            chip_name = "AW96105";
+            sar-num = <0>;
+            cap_vcc-supply = <&pm6125_l21>;
+            aw9610x,channel_number = <0x3>;
+            ch0_name = "capsense_bottom_left";
+            ch1_name = "capsense_top";
+            ch2_name = "capsense_bottom_right";
+            aw9610x,using-firmware;
+            aw9610x,firmware_name = "aw9610x_0";
+        };
+};

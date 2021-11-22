@@ -84,6 +84,11 @@ dtbo-$(CONFIG_RHODE_DTB) += \
 
 khaje-rhode-evt-overlay.dtbo-base := khaje-moto-base.dtb
 
+dtbo-$(CONFIG_HAWAO_DTB) += \
+        khaje-hawao-evt-overlay.dtbo
+
+khaje-hawao-evt-overlay.dtbo-base := khaje-moto-base.dtb
+
 else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_KONA) += \
