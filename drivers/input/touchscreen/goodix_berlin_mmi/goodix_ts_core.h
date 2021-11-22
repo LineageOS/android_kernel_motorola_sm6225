@@ -16,6 +16,7 @@
 #include <linux/completion.h>
 #include <linux/of_irq.h>
 #include <linux/clk.h>
+#include <linux/pm_qos.h>
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
@@ -272,6 +273,7 @@ struct goodix_ts_board_data {
 	unsigned int panel_max_p; /*pressure*/
 
 	bool pen_enable;
+	bool pm_qos_enable;
 	char fw_name[GOODIX_MAX_STR_LABLE_LEN];
 	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN];
 	char stylus_clk_src[GOODIX_MAX_STR_LABLE_LEN]; /*stylus clock source*/
@@ -489,6 +491,7 @@ struct goodix_ts_core {
 	struct wakeup_source *gesture_wakelock;
 	struct notifier_block ts_notifier;
 	struct goodix_ts_esd ts_esd;
+	struct pm_qos_request goodix_pm_qos;
 
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;

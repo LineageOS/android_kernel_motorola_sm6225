@@ -1097,6 +1097,11 @@ static int goodix_parse_dt(struct device_node *node,
 		}
 	}
 
+	board_data->pm_qos_enable = of_property_read_bool(node,
+					"goodix,pm_qos-enable");
+	if (board_data->pm_qos_enable)
+		ts_info("goodix pm_qos enabled");
+
 	board_data->sensitivity_ctrl = of_property_read_bool(node,
 					"goodix,sensitivity-ctrl");
 	if (board_data->sensitivity_ctrl)
@@ -1227,7 +1232,12 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	struct goodix_ext_module *ext_module, *next;
 	struct goodix_ts_event *ts_event = &core_data->ts_event;
 	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
+	const struct goodix_ts_board_data *ts_bdata = board_data(core_data);
 	int ret;
+
+	if (ts_bdata->pm_qos_enable)
+		cpu_latency_qos_add_request(&core_data->goodix_pm_qos, 0);
+
 
 	ts_esd->irq_status = true;
 	core_data->irq_trig_cnt++;
@@ -1266,6 +1276,10 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	if (!core_data->tools_ctrl_sync && !ts_event->retry)
 		hw_ops->after_event_handler(core_data);
 	ts_event->retry = 0;
+
+	if (ts_bdata->pm_qos_enable)
+		cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
+
 
 	return IRQ_HANDLED;
 }
