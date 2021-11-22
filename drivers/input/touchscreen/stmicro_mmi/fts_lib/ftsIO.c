@@ -363,7 +363,7 @@ int fts_writeFwCmd(u8 *cmd, int cmdLength)
 			ret2 = checkEcho(cmd, cmdLength);
 		if (ret < OK || ret2 < OK)
 			msleep(I2C_WAIT_BEFORE_RETRY);
-		/* logError(1,"%s fts_writeCmd: attempt %d\n", tag, retry); */
+		logError(1,"%s fts_writeCmd: attempt %d\n", tag, retry);
 	}
 	if (ret < 0) {
 		logError(1, "%s fts_writeFwCmd: ERROR %08X\n", tag,

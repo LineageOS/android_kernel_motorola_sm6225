@@ -218,6 +218,10 @@ int errorHandler(u8 *event, int size)
 		case EVT_TYPE_ERROR_ITO_KEYOPEN:
 			logError(1, "%s errorHandler: Key Open !\n", tag);
 			break;
+		case EVT_TYPE_ERROR_CAL_NOISE:
+			logError(1, "%s errorHandler: Calibration noise check error !\n", tag);
+			res = (ERROR_HANDLER_STOP_PROC | res);
+			break;
 
 		default:
 			logError(1, "%s errorHandler: No Action taken!\n", tag);
