@@ -443,6 +443,7 @@ typedef enum {
 						 * Subsection Area Header */
 #define EVT_TYPE_ERROR_CRC_CX_SUB	0xA6	/* /< CRC error in the CX
 						 * Subsection Area */
+#define EVT_TYPE_ERROR_CAL_NOISE	0xE0
 
 #define EVT_TYPE_ERROR_ESD		0xF0	/* /< ESD error */
 /** @}*/
