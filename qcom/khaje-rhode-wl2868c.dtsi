@@ -1,0 +1,81 @@
+&tlmm{
+	cam_pmic_en_default: cam_pmic_en_default {
+		mux {
+			pins = "gpio26";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio26";
+			drive-strength = <2>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+
+&qupv3_se1_i2c {
+	status = "ok";
+	cam_pmic: wl2868c@2F{
+		compatible = "semi,wl2868c";
+		reg = <0x2F>;
+
+		semi,cs-gpios = <&tlmm 26 1>;
+
+		pinctrl-0 = <&cam_pmic_en_default>;
+		pinctrl-names = "default";
+
+		vin1-supply = <&S6A>;
+
+		regulators {
+			cam_ldo1: ldo1 {
+				regulator-name = "ldo1";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <3787500>;
+			};
+
+			cam_ldo2: ldo2 {
+				regulator-name = "ldo2";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <3787500>;
+			};
+
+			cam_ldo3: ldo3 {
+				regulator-name = "ldo3";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4387500>;
+			};
+
+			cam_ldo4: ldo4 {
+				regulator-name = "ldo4";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4387500>;
+			};
+
+			cam_ldo5: ldo5 {
+				regulator-name = "ldo5";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4387500>;
+			};
+
+			cam_ldo6: ldo6 {
+				regulator-name = "ldo6";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4387500>;
+			};
+
+			cam_ldo7: ldo7 {
+				regulator-name = "ldo7";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4387500>;
+			};
+		};
+	};
+};
+
+&pm8008_8 {
+	status = "disabled";
+};
+
+&pm8008_9 {
+	status = "disabled";
+};
