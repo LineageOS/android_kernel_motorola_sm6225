@@ -19,6 +19,7 @@
 #include "discrete_charging.dtsi"
 #include "khaje-rhode-wl2868c.dtsi"
 #include "camera/khaje-camera-sensor-mot-rhode-overlay.dtsi"
+#include "khaje-rhode-wl2866d.dtsi"
 
 &firmware {
 	android {
