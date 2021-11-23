@@ -60,7 +60,7 @@
 
 	ldo_vib {
 		compatible = "moto,vibrator-ldo";
-		moto,vib-ldo-gpio = <&pm6125_gpios 8 0>;
+		moto,vib-ldo-gpio = <&tlmm 25 0x0>;
 		status = "ok";
 	};
 };
