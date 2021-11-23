@@ -77,9 +77,9 @@
 		spi-max-frequency = <1000000>;
 		mmi,status = "/chosen","mmi,panel_name","contains","nt37701";
 
-		goodix,avdd-gpio = <&pm6125_gpios 1 GPIO_ACTIVE_LOW>;
+		goodix,avdd-gpio = <&tlmm 2 0x0>;
 		goodix,reset-gpio = <&tlmm 86 0x0>;
-		goodix,irq-gpio = <&tlmm 69 0x2002>;
+		goodix,irq-gpio = <&tlmm 97 0x2002>;
 		goodix,irq-flags = <0x2002>; /* 1:trigger rising, 2:trigger falling;*/
 		goodix,panel-max-id = <10>;
 		goodix,panel-max-x = <1080>;
