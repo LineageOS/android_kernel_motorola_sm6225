@@ -1229,6 +1229,10 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
 	int ret;
 
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+	cpu_latency_qos_add_request(&core_data->goodix_pm_qos, 0);
+#endif
+
 	ts_esd->irq_status = true;
 	core_data->irq_trig_cnt++;
 	/* inform external module */
@@ -1266,6 +1270,10 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	if (!core_data->tools_ctrl_sync && !ts_event->retry)
 		hw_ops->after_event_handler(core_data);
 	ts_event->retry = 0;
+
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+	cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
+#endif
 
 	return IRQ_HANDLED;
 }
