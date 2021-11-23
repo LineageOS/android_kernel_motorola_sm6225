@@ -24,6 +24,9 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+#include <linux/pm_qos.h>
+#endif
 
 #define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
 #define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
@@ -489,6 +492,9 @@ struct goodix_ts_core {
 	struct wakeup_source *gesture_wakelock;
 	struct notifier_block ts_notifier;
 	struct goodix_ts_esd ts_esd;
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+	struct pm_qos_request goodix_pm_qos;
+#endif
 
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;

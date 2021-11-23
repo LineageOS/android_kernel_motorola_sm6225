@@ -17,6 +17,10 @@ ifeq ($(GTP_LIMIT_USE_SUPPLIER),true)
 	KBUILD_OPTIONS += CONFIG_GTP_LIMIT_USE_SUPPLIER=y
 endif
 
+ifeq ($(GTP_ENABLE_PM_QOS),true)
+	KBUILD_OPTIONS += CONFIG_GTP_ENABLE_PM_QOS=y
+endif
+
 ifeq ($(findstring factory, $(TARGET_PRODUCT)), factory)
 	KBUILD_OPTIONS += CONFIG_TARGET_BUILD_FACROTY=y
 endif
