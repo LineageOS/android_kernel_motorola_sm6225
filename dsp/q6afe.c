@@ -11031,6 +11031,9 @@ static int afe_unmap_cal_data(int32_t cal_type,
 	ret = afe_cmd_memory_unmap_nowait(
 		cal_block->map_data.q6map_handle);
 	atomic_set(&this_afe.mem_map_cal_index, -1);
+#ifdef CONFIG_AW882XX_PARAMS_STORED_IN_BIN
+	atomic_set(&this_afe.mem_map_cal_handles[cal_index],0);
+#endif
 	if (ret < 0) {
 		pr_err("%s: unmap did not work! cal_type %i ret %d\n",
 			__func__, cal_index, ret);
