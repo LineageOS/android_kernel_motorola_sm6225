@@ -2,5 +2,4 @@
 /* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  */
 #define CONFIG_AW882XX_STEREO_SMARTPA 1
-#define CONFIG_MBHC_DISABLE_MOISTURE_DETECT 1
 #define CONFIG_AW882XX_PARAMS_STORED_IN_BIN 1
