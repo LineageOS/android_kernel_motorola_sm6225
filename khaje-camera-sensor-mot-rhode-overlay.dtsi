@@ -258,7 +258,7 @@
 		regulator-max-microvolt = <1200000>;
 		regulator-enable-ramp-delay = <233>;
 		enable-active-high;
-		gpio = <&tlmm 2 0>;
+		//gpio = <&tlmm 2 0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&camera_dvdd_en_active>;
 		vin-supply = <&S6A>;
