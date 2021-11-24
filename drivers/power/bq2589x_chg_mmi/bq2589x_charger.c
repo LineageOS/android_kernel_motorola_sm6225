@@ -506,7 +506,8 @@ int bq2589x_set_input_current_limit(struct bq2589x *bq, int curr)
 
 	if (curr < BQ2589X_IINLIM_BASE)
 		val = 0;
-	else if (curr > BQ2589X_IINLIM_MAX)
+	/*for HW accuracy issue, so icl >= 3A we need to set 0x3F*/
+	else if (curr >= BQ2589X_IINLIM_MAX)
 		val = 0x3F;
 	else
 		val = (curr - BQ2589X_IINLIM_BASE) / BQ2589X_IINLIM_LSB;
