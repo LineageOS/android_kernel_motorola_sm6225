@@ -17,7 +17,8 @@
 #define BQ2589X_IINLIM_SHIFT		0
 #define BQ2589X_IINLIM_BASE         100
 #define BQ2589X_IINLIM_LSB          50
-#define BQ2589X_IINLIM_MAX         3250
+/*for HW accuracy issue, so icl >= 3A we need to set 0x3F*/
+#define BQ2589X_IINLIM_MAX         3000
 
 /* Register 01h */
 #define BQ2589X_REG_01		    	0x01
