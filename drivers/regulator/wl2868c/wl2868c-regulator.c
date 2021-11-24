@@ -226,11 +226,11 @@ static int wl2868c_regulator_init(struct wl2868c *chip)
 
 	unsigned int initial_voltage[WL2868C_MAX_REGULATORS] = {
 		0x24,//LDO1 1.05V
-		0x30,//LDO2 1.2V
+		0x5D,//LDO2 1.24V
 		0x80,//LDO3 2.8V
 		0x80,//LDO4 2.8V
 		0x80,//LDO5 2.8V
-		0x30,//LDO6 1.8V
+		0xA2,//LDO6 2.8V
 		0x30,//LDO7 1.8V
 	};
 
