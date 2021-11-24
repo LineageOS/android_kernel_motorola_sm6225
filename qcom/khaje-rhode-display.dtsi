@@ -5,12 +5,12 @@
 &tlmm {
 	disp_vio_en_default: disp_vio_en_default {
 		mux {
-			pins = "gpio111";
+			pins = "gpio68";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio111";
+			pins = "gpio68";
 			drive-strength = <8>;
 			bias-disable = <0>;
 			output-high;
@@ -25,7 +25,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		vin-supply = <&L19A>;
-		gpio = <&tlmm 111 0>;
+		gpio = <&tlmm 68 0>;
 		startup-delay-us = <300>;
 		enable-active-high;
 		regulator-boot-on;
