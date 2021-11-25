@@ -29,8 +29,9 @@
 
 			cam_pmic2_ldo4: ldo4 {
 				regulator-name = "camera_ldo4";
-				regulator-min-microvolt = <1200000>;
-				regulator-max-microvolt = <4300000>;
+				regulator-min-microvolt = <3000000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-always-on;
 			};
 		};
 	};
