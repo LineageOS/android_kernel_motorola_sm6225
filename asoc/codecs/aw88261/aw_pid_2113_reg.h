@@ -2303,4 +2303,10 @@ const unsigned char aw_pid_2113_reg_access[AW_PID_2113_REG_MAX] = {
 #define AW_PID_2113_TEML_MASK			(0x83ff)
 #define AW_PID_2113_DEFAULT_CFG			(0x0000)
 
+/********************************************
+ * Init check
+ *******************************************/
+#define AW_PID_2113_INIT_CHECK_REG		(0x73)
+#define AW_PID_2113_INIT_CHECK_VALUE		(0x1D40)
+
 #endif  /* #ifndef  __AW_PID_2113_REG_H__ */

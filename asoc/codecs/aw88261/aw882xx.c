@@ -35,7 +35,7 @@
 #include "aw_log.h"
 #include "aw_dsp.h"
 
-#define AW882XX_DRIVER_VERSION "v1.6.0"
+#define AW882XX_DRIVER_VERSION "v1.8.0.1"
 #define AW882XX_I2C_NAME "aw882xxacf_smartpa"
 
 #define AW_READ_CHIPID_RETRIES		5	/* 5 times */
@@ -882,6 +882,11 @@ static int aw882xx_get_rx_en(struct snd_kcontrol *kcontrol,
 	struct aw882xx *aw882xx =
 		aw_componet_codec_ops.codec_get_drvdata(codec);
 
+	/*ret = aw_dev_get_afe_module_en(AW_RX_MODULE, &ctrl_value);
+	if (ret) {
+		aw_dev_err(aw882xx->dev, "dsp_msg error, ret=%d", ret);
+	}
+	ucontrol->value.integer.value[0] = ctrl_value;*/
 
 	if (aw882xx->pstream) {
 		ret = aw_dev_get_afe_module_en(AW_RX_MODULE, &ctrl_value);
@@ -937,7 +942,6 @@ static int aw882xx_get_tx_en(struct snd_kcontrol *kcontrol,
 	/*ret = aw_dev_get_afe_module_en(AW_TX_MODULE, &ctrl_value);
 	if (ret) {
 		aw_dev_err(aw882xx->dev, "dsp_msg error, ret=%d", ret);
-		ctrl_value = 0;
 	}
 	ucontrol->value.integer.value[0] = ctrl_value;*/
 
@@ -2444,7 +2448,7 @@ static const struct i2c_device_id aw882xx_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, aw882xx_i2c_id);
 
 static struct of_device_id aw882xx_dt_match[] = {
-	{ .compatible = "awinic,aw882xx_smartpa" },
+	{ .compatible = "awinic,aw882xxacf_smartpa" },
 	{ },
 };
 
@@ -2485,6 +2489,3 @@ module_exit(aw882xx_i2c_exit);
 
 MODULE_DESCRIPTION("ASoC AW882XX Smart PA Driver");
 MODULE_LICENSE("GPL v2");
-
-
-

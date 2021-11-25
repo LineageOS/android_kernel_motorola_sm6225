@@ -2021,4 +2021,10 @@ const unsigned char aw_pid_2055_reg_access[AW_PID_2055_REG_MAX] = {
  *******************************************/
 #define AW_PID_2055_VOL_STEP		(6 * 8)
 
+/********************************************
+ * Init check
+ *******************************************/
+#define AW_PID_2055_INIT_CHECK_REG		(0x73)
+#define AW_PID_2055_INIT_CHECK_VALUE		(0x1D40)
+
 #endif  /* #ifndef  __AW_PID_2055_REG_H__ */
