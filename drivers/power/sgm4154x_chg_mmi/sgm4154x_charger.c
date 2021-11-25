@@ -949,14 +949,12 @@ static int sgm4154x_set_otg_current(struct sgm4154x_device *sgm, int ua)
 {
 	int ret = 0;
 
-	if (ua == BOOST_CURRENT_LIMIT[0]){
-		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
-                     0);
-	}
-
-	else if (ua == BOOST_CURRENT_LIMIT[1]){
-		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2, SGM4154x_OTG_EN,
-                     BIT(7));
+	if (ua >= BOOST_CURRENT_LIMIT[1]) {
+		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2,
+			SGM4154X_BOOST_LIM_MASK, BIT(7));
+	} else {
+		ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2,
+			SGM4154X_BOOST_LIM_MASK, 0);
 	}
 	return ret;
 }
