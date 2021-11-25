@@ -682,7 +682,7 @@ static void aw_dev_fade_in(struct aw_device *aw_dev)
 	int i = 0;
 	int fade_step = aw_dev->vol_step;
 	struct aw882xx *aw882xx = (struct aw882xx *)aw_dev->private_data;
-	int fade_flag = aw882xx->fade_flag; 
+	int fade_flag = aw882xx->fade_flag;
 	struct aw_volume_desc *desc = &aw_dev->volume_desc;
 
 	if (fade_step == 0 || g_fade_in_time == 0 || fade_flag == 0) {
