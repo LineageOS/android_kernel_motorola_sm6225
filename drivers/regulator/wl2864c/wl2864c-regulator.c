@@ -349,6 +349,17 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 	return ret;
 }
 
+static void wl2864c_i2c_shutdown(struct i2c_client *client)
+{
+	struct wl2864c *chip = i2c_get_clientdata(client);
+
+	if (chip) {
+		/* Disable all regulator to avoid current leak */
+		regmap_write(chip->regmap, WL2864C_LDO_EN, 0x00);
+		dev_err(chip->dev, "wl2864c_i2c_shutdown");
+	}
+}
+
 static int wl2864c_i2c_remove(struct i2c_client *client)
 {
 	struct wl2864c *chip = i2c_get_clientdata(client);
@@ -375,6 +386,7 @@ static struct i2c_driver wl2864c_regulator_driver = {
 	},
 	.probe = wl2864c_i2c_probe,
 	.remove = wl2864c_i2c_remove,
+	.shutdown = wl2864c_i2c_shutdown,
 	.id_table = wl2864c_i2c_id,
 };
 

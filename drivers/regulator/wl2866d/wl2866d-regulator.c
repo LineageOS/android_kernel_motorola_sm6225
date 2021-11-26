@@ -371,6 +371,10 @@ static void wl2866d_i2c_shutdown(struct i2c_client *client)
 		regmap_write(chip->regmap, WL2866D_LDO_EN, val & ~(1<<2));
 		dev_info(chip->dev, "wl2866d_i2c_shutdown");
 	}
+	if (chip) {
+		regmap_write(chip->regmap, WL2866D_LDO_EN, 0);
+		dev_err(chip->dev, "wl2866d_i2c_shutdown force disable all LDOs");
+	}
 }
 
 static const struct i2c_device_id wl2866d_i2c_id[] = {
