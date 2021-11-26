@@ -1060,10 +1060,8 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 		chrg_status = sgm4154x_get_charging_status(sgm);
 		if (!state.chrg_type || (state.chrg_type == SGM4154x_OTG_MODE))
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-		else if (!chrg_status)
+		else if (!chrg_status || (chrg_status == SGM4154x_TERM_CHRG))
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		else if (chrg_status == SGM4154x_TERM_CHRG)
-			val->intval = POWER_SUPPLY_STATUS_FULL;
 		else
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		break;

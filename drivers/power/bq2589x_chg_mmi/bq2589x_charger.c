@@ -1028,12 +1028,10 @@ static int bq2589x_power_supply_get_property(struct power_supply *psy,
 		chrg_status = bq2589x_get_charging_status(bq);
 		if (!state.online)
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-		else if (chrg_status == STATUS_NOT_CHARGING)
+		else if (chrg_status == STATUS_NOT_CHARGING || chrg_status == STATUS_TERMINATION_DONE)
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		else if (chrg_status == STATUS_PRE_CHARGING || chrg_status == STATUS_FAST_CHARGING)
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
-		else if (chrg_status == STATUS_TERMINATION_DONE)
-			val->intval = POWER_SUPPLY_STATUS_FULL;
 		else
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		break;
