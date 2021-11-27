@@ -133,6 +133,7 @@ int tcpm_inquire_typec_remote_rp_curr(struct tcpc_device *tcpc)
 
 	return ret;
 }
+EXPORT_SYMBOL(tcpm_inquire_typec_remote_rp_curr);
 
 int tcpm_inquire_vbus_level(
 	struct tcpc_device *tcpc, bool from_ic)
