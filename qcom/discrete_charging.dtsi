@@ -104,6 +104,8 @@
 		compatible = "sgm,sgm41542";
 		reg = <0x3B>;
 		pinctrl-names = "default";
+		pinctrl-0 = <&sgm4154x_gpio_pins>;
+
 //add by zhanghuan
 //		pinctrl-0 = <&gpio6_adc_default>;
 //		io-channels = <&pm6125_vadc ADC5_GPIO3_DIV3>;
@@ -113,8 +115,8 @@
 		interrupts = <96 0>;            //irq num base on hardware design
 		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
 		sgm,chg-en-gpio = <&tlmm 36 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
-//add by zhanghuan
-//		dpdm-supply = <&usb2_phy0>;
+
+		dpdm-supply = <&usb2_phy0>;
 
 		/* sw jeita  parameter customer defined*/
 		enable_sw_jeita;
@@ -330,4 +332,5 @@
 				600000 300000>;
 	};
 };
+
 
