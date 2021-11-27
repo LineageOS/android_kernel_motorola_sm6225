@@ -11,12 +11,14 @@
  */
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/iio/qti_power_supply_iio.h>
 #include "khaje-moto-common-overlay.dtsi"
 #include "khaje-rhode-display.dtsi"
 #include "khaje-rhode-fps-overlay.dtsi"
 #include "khaje-rhode-touchscreen-overlay.dtsi"
 #include "sgm7220.dtsi"
 #include "discrete_charging.dtsi"
+#include "discrete-rt-pd-manger.dtsi"
 #include "khaje-rhode-wl2868c.dtsi"
 #include "camera/khaje-camera-sensor-mot-rhode-overlay.dtsi"
 #include "khaje-rhode-wl2866d.dtsi"
@@ -64,6 +66,20 @@
 		moto,vib-ldo-gpio = <&tlmm 25 0x0>;
 		status = "ok";
 	};
+
+       sgm4154x_gpio_pins: sgm4154x_gpio_pins {
+               mux {
+                       pins = "gpio96";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio96";
+                       drive-strength = <2>;
+                       bias-pull-up;
+                       input-enable;
+               };
+       };
 };
 
 
@@ -128,4 +144,10 @@
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
+};
+
+&usb0 {
+	dwc3@4e00000 {
+		dr_mode = "otg";
+	};
 };
