@@ -119,11 +119,12 @@
             chip_name = "AW96105";
             sar-num = <0>;
             cap_vcc-supply = <&pm6125_l21>;
-            aw9610x,channel_number = <0x4>;
-            ch0_name = "capsense_bottom_right";
-            ch1_name = "capsense_bottom_center";
-            ch2_name = "capsense_top_right";
-	    ch3_name = "capsense_top_left";
+            aw9610x,channel_number = <0x5>;
+            ch0_name = "Moto CapSense Ch0";
+            ch1_name = "Moto CapSense Ch1";
+            ch2_name = "Moto CapSense Ch2";
+            ch3_name = "Moto CapSense Ch3";
+            ch4_name = "Moto CapSense Ch4";
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
