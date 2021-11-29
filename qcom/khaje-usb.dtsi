@@ -154,7 +154,8 @@
 		compatible = "qcom,usb-ssphy-qmp-dp-combo";
 		reg = <0x01615000 0x3000>;
 		reg-names = "qmp_phy_base";
-
+		
+		vdd-supply = <&L4A>;
 		core-supply = <&L18A>;
 		qcom,vdd-voltage-level = <0 880000 880000>;
 		qcom,core-voltage-level = <0 1232000 1260000>;
