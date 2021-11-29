@@ -221,6 +221,23 @@
 };
 
 &soc {
+
+	dummy_cam_vreg_avdd: dummy_cam_vreg_avdd {
+		compatible = "regulator-fixed";
+		status = "ok";
+		regulator-name = "dummy_cam_vreg_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+	};
+
+	dummy_cam_vreg_dvdd: dummy_cam_vreg_dvdd {
+		compatible = "regulator-fixed";
+		status = "ok";
+		regulator-name = "dummy_cam_vreg_dvdd";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
 	qcom,cam-res-mgr {
 		compatible = "qcom,cam-res-mgr";
 		status = "ok";
@@ -260,8 +277,8 @@
 		compatible = "qcom,eeprom";
 		csiphy-sd-index = <1>;
 		cam_vio-supply = <&cam_ldo4>;
-		cam_vana-supply = <&cam_pmic2_ldo3>;
-		cam_vdig-supply = <&cam_pmic2_ldo1>;
+		cam_vana-supply = <&dummy_cam_vreg_avdd>;
+		cam_vdig-supply = <&dummy_cam_vreg_dvdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk";
@@ -317,7 +334,7 @@
 		reg = <0x2>;
 		compatible = "qcom,eeprom";
 		cam_vio-supply = <&cam_ldo4>;
-		cam_vana-supply = <&cam_pmic2_ldo3>;
+		cam_vana-supply = <&dummy_cam_vreg_avdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_clk";
 		rgltr-cntrl-support;
@@ -403,7 +420,7 @@
 		eeprom-src = <&eeprom_front>;
 		cam_vio-supply = <&cam_ldo4>;
 		cam_vana-supply = <&cam_ldo5>;
-		cam_vdig-supply = <&cam_pmic2_ldo2>;
+		cam_vdig-supply = <&dummy_cam_vreg_dvdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk";
@@ -445,7 +462,7 @@
 		eeprom-src = <&eeprom_macro>;
 		//led-flash-src = <&led_flash_main>;
 		cam_vio-supply = <&cam_ldo4>;
-		cam_vana-supply = <&cam_pmic2_ldo3>;
+		cam_vana-supply = <&dummy_cam_vreg_avdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_clk";
 		rgltr-cntrl-support;
@@ -487,8 +504,8 @@
 		//led-flash-src = <&led_flash_rear_aux>;
 		eeprom-src = <&eeprom_wide>;
 		cam_vio-supply = <&cam_ldo4>;
-		cam_vana-supply = <&cam_pmic2_ldo3>;
-		cam_vdig-supply = <&cam_pmic2_ldo1>;
+		cam_vana-supply = <&dummy_cam_vreg_avdd>;
+		cam_vdig-supply = <&dummy_cam_vreg_dvdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk";
