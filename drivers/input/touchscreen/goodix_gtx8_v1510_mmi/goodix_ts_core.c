@@ -56,6 +56,9 @@ struct goodix_module goodix_modules;
 #define CORE_MODULE_REMOVED     -2
 int core_module_prob_sate = CORE_MODULE_UNPROBED;
 
+#define GTP_VTG_MIN_UV                      2800000
+#define GTP_VTG_MAX_UV                      3300000
+
 /**
  * __do_register_ext_module - register external module
  * to register into touch core modules structure
@@ -1360,7 +1363,7 @@ static int goodix_ts_power_init(struct goodix_ts_core *core_data)
 			ts_err("set avdd load fail");
 			return r;
 		}
-		r = regulator_set_voltage(core_data->avdd, 2960000, 2960000);
+		r = regulator_set_voltage(core_data->avdd, GTP_VTG_MIN_UV, GTP_VTG_MAX_UV);
 		if (r) {
 			ts_err("set avdd voltage fail");
 			return r;

@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include "goodix_ts_core.h"
 #include "goodix_cfg_bin.h"
+#include <linux/mmi_device.h>
 
 #define TS_DRIVER_NAME			"gtx8"
 #define I2C_MAX_TRANSFER_SIZE		60
@@ -1882,6 +1883,11 @@ static int goodix_i2c_probe(struct i2c_client *client,
 	int r = 0;
 
 	ts_info("goodix_i2c_probe IN");
+
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+		ts_err("mmi: device not supported\n");
+		return -ENODEV;
+	}
 
 	r = i2c_check_functionality(client->adapter,
 		I2C_FUNC_I2C);
