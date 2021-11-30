@@ -859,10 +859,10 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		val->intval = cw_bat->fcc_design;
+		val->intval = cw_bat->fcc_design * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		val->intval = (cw_bat->fcc_design * cw_bat->soh)/100;
+		val->intval = (cw_bat->fcc_design * cw_bat->soh * 1000)/100;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = cw_bat->temp;

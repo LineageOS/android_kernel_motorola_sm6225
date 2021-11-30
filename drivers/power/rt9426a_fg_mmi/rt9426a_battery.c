@@ -1154,7 +1154,7 @@ static int rt_fg_get_property(struct power_supply *psy,
 		dev_info(chip->dev, "psp_capacity = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		val->intval = rt9426a_get_design_capacity(chip);
+		val->intval = rt9426a_get_design_capacity(chip) * 1000;
 		dev_info(chip->dev, "psp_charge_full_design = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
@@ -1175,7 +1175,7 @@ static int rt_fg_get_property(struct power_supply *psy,
 		dev_info(chip->dev, "ocv index = %d\n", chip->ocv_index);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		val->intval = rt9426a_get_full_capacity(chip);
+		val->intval = rt9426a_get_full_capacity(chip) * 1000;
 		dev_info(chip->dev, "psp_charge_full = %d\n", val->intval);
 		break;
 	default:
