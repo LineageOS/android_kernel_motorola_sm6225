@@ -511,6 +511,16 @@ static unsigned int rt9426a_get_full_capacity(struct rt9426a_chip *chip)
 	return chip->full_capacity;
 }
 
+static unsigned int rt9426a_get_charge_counter(struct rt9426a_chip *chip)
+{
+	int charge_counter;
+	int full_capacity;
+
+	full_capacity = rt9426a_get_full_capacity(chip) * 1000;
+	charge_counter = div_s64(full_capacity * chip->capacity, 100);
+
+	return charge_counter;
+}
 
 /* checking cycle_cnt & bccomp */
 static int rt9426a_set_cyccnt(struct rt9426a_chip *chip, unsigned int cyc_new)
@@ -1178,6 +1188,10 @@ static int rt_fg_get_property(struct power_supply *psy,
 		val->intval = rt9426a_get_full_capacity(chip) * 1000;
 		dev_info(chip->dev, "psp_charge_full = %d\n", val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = rt9426a_get_charge_counter(chip);
+		dev_info(chip->dev, "psp_charge_counter = %d\n", val->intval);
+		break;
 	default:
 		rc = -EINVAL;
 		break;
@@ -1260,6 +1274,7 @@ static enum power_supply_property rt_fg_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static struct power_supply_desc fg_psy_desc = {
