@@ -1,4 +1,4 @@
-/* #define DEBUG */
+ #define DEBUG 
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <sound/core.h>
@@ -40,7 +40,11 @@ static char *profile_name[AW_PROFILE_MAX] = {
 
 static char ext_dsp_prof_write = AW_EXT_DSP_WRITE_NONE;
 static DEFINE_MUTEX(g_ext_dsp_prof_wr_lock); /*lock ext wr flag*/
-static unsigned int g_fade_in_time = AW_1000_US / 10;
+static unsigned int aw_dev_ch_pri_l_fadein_time = AW_1000_US / 10;
+static unsigned int aw_dev_ch_pri_r_fadein_time = AW_1000_US / 10;
+static unsigned int aw_dev_ch_sec_l_fadein_time = AW_1000_US / 10;
+static unsigned int aw_dev_ch_sec_r_fadein_time = AW_1000_US / 10;
+
 static unsigned int g_fade_out_time = AW_1000_US >> 1;
 static LIST_HEAD(g_dev_list);
 static DEFINE_MUTEX(g_dev_lock);
@@ -684,18 +688,70 @@ static void aw_dev_fade_in(struct aw_device *aw_dev)
 	struct aw882xx *aw882xx = (struct aw882xx *)aw_dev->private_data;
 	int fade_flag = aw882xx->fade_flag;
 	struct aw_volume_desc *desc = &aw_dev->volume_desc;
-
-	if (fade_step == 0 || g_fade_in_time == 0 || fade_flag == 0) {
-		aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
-		return;
+	int channel = aw_dev->channel;
+	
+	switch (channel) {
+	case AW_DEV_CH_PRI_L:
+		if (fade_step == 0 || aw_dev_ch_pri_l_fadein_time == 0 || fade_flag == 0) {
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+			return;
+		}
+		
+		/*volume up*/
+		for (i = desc->mute_volume; i >= desc->init_volume; i -= fade_step) {
+			aw_dev->ops.aw_set_volume(aw_dev, i);
+			usleep_range(aw_dev_ch_pri_l_fadein_time, aw_dev_ch_pri_l_fadein_time + 10);
+		}
+		if (i != desc->init_volume)
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+		break;
+	case AW_DEV_CH_PRI_R:
+		if (fade_step == 0 || aw_dev_ch_pri_r_fadein_time == 0 || fade_flag == 0) {
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+			return;
+		}
+		
+		/*volume up*/
+		for (i = desc->mute_volume; i >= desc->init_volume; i -= fade_step) {
+			aw_dev->ops.aw_set_volume(aw_dev, i);
+			usleep_range(aw_dev_ch_pri_r_fadein_time, aw_dev_ch_pri_r_fadein_time + 10);
+		}
+		if (i != desc->init_volume)
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+		break;
+	case AW_DEV_CH_SEC_L:
+			if (fade_step == 0 || aw_dev_ch_sec_l_fadein_time == 0 || fade_flag == 0) {
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+			return;
+		}
+		
+		/*volume up*/
+		for (i = desc->mute_volume; i >= desc->init_volume; i -= fade_step) {
+			aw_dev->ops.aw_set_volume(aw_dev, i);
+			usleep_range(aw_dev_ch_sec_l_fadein_time, aw_dev_ch_sec_l_fadein_time + 10);
+		}
+		if (i != desc->init_volume)
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+		break;
+	case AW_DEV_CH_SEC_R:
+			if (fade_step == 0 || aw_dev_ch_sec_r_fadein_time == 0 || fade_flag == 0) {
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+			return;
+		}
+		
+		/*volume up*/
+		for (i = desc->mute_volume; i >= desc->init_volume; i -= fade_step) {
+			aw_dev->ops.aw_set_volume(aw_dev, i);
+			usleep_range(aw_dev_ch_sec_r_fadein_time, aw_dev_ch_sec_r_fadein_time + 10);
+		}
+		if (i != desc->init_volume)
+			aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
+		break;
+	default:
+		aw_dev_err(aw882xx->dev,
+			"%s: fade time can not set\n", __func__);
+		break;
 	}
-	/*volume up*/
-	for (i = desc->mute_volume; i >= desc->init_volume; i -= fade_step) {
-		aw_dev->ops.aw_set_volume(aw_dev, i);
-		usleep_range(g_fade_in_time, g_fade_in_time + 10);
-	}
-	if (i != desc->init_volume)
-		aw_dev->ops.aw_set_volume(aw_dev, desc->init_volume);
 }
 
 static void aw_dev_fade_out(struct aw_device *aw_dev)
@@ -763,7 +819,7 @@ static void aw_dev_amppd(struct aw_device *aw_dev, bool amppd)
 static void aw_dev_mute(struct aw_device *aw_dev, bool mute)
 {
 	struct aw_mute_desc *mute_desc = &aw_dev->mute_desc;
-
+	struct aw882xx *aw882xx = (struct aw882xx *)aw_dev->private_data;
 	aw_dev_dbg(aw_dev->dev, "enter");
 
 	if (mute) {
@@ -772,10 +828,22 @@ static void aw_dev_mute(struct aw_device *aw_dev, bool mute)
 				mute_desc->mask,
 				mute_desc->enable);
 	} else {
-		aw_dev->ops.aw_i2c_write_bits(aw_dev, mute_desc->reg,
-				mute_desc->mask,
-				mute_desc->disable);
-		aw_dev_fade_in(aw_dev);
+		if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_ON) {
+			aw_dev->ops.aw_i2c_write_bits(aw_dev, mute_desc->reg,
+					mute_desc->mask,
+					mute_desc->disable);
+			aw_dev_fade_in(aw_dev);
+		} else if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_OFF) {
+			aw_dev_ch_pri_l_fadein_time = AW_1000_US / 10;
+			aw_dev_ch_pri_r_fadein_time = AW_1000_US / 10;
+			aw_dev_ch_sec_l_fadein_time = AW_1000_US / 10;
+			aw_dev_ch_sec_r_fadein_time = AW_1000_US / 10;
+			
+			aw_dev->ops.aw_i2c_write_bits(aw_dev, mute_desc->reg,
+					mute_desc->mask,
+					mute_desc->disable);
+			aw_dev_fade_in(aw_dev);
+		}
 	}
 	aw_dev_info(aw_dev->dev, "done");
 }
@@ -1099,17 +1167,59 @@ void aw_dev_set_fade_vol_step(struct aw_device *aw_dev, unsigned int step)
 
 void aw_dev_get_fade_time(unsigned int *time, bool fade_in)
 {
-	if (fade_in)
-		*time = g_fade_in_time;
-	else
+	struct aw_device *aw_dev;
+	struct aw882xx *aw882xx = (struct aw882xx *)aw_dev->private_data;
+	int channel = aw_dev->channel;
+	
+	if (fade_in) {
+		switch (channel) {
+		case AW_DEV_CH_PRI_L:
+			*time  = aw_dev_ch_pri_l_fadein_time;
+			break;
+		case AW_DEV_CH_PRI_R:
+			*time  = aw_dev_ch_pri_r_fadein_time;
+			break;
+		case AW_DEV_CH_SEC_L:
+			*time  = aw_dev_ch_sec_l_fadein_time;
+			break;
+		case AW_DEV_CH_SEC_R:
+			*time  = aw_dev_ch_sec_r_fadein_time;
+			break;
+		default:
+			aw_dev_err(aw882xx->dev,
+				"%s: fade time can not set\n", __func__);
+			break;
+		}
+	} else
 		*time = g_fade_out_time;
 }
 
 void aw_dev_set_fade_time(unsigned int time, bool fade_in)
 {
-	if (fade_in)
-		g_fade_in_time = time;
-	else
+	struct aw_device *aw_dev;
+	struct aw882xx *aw882xx = (struct aw882xx *)aw_dev->private_data;
+	int channel = aw_dev->channel;
+	
+	if (fade_in) {
+		switch (channel) {
+		case AW_DEV_CH_PRI_L:
+			aw_dev_ch_pri_l_fadein_time = time;
+			break;
+		case AW_DEV_CH_PRI_R:
+			aw_dev_ch_pri_r_fadein_time = time;
+			break;
+		case AW_DEV_CH_SEC_L:
+			aw_dev_ch_sec_l_fadein_time = time;
+			break;
+		case AW_DEV_CH_SEC_R:
+			aw_dev_ch_sec_r_fadein_time = time;
+			break;
+		default:
+			aw_dev_err(aw882xx->dev,
+				"%s: fade time can not set\n", __func__);
+			break;
+		}
+	}else
 		g_fade_out_time = time;
 }
 

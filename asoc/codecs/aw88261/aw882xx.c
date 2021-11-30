@@ -12,7 +12,7 @@
  * option) any later version.
  */
 
-/*#define DEBUG*/
+#define DEBUG
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <sound/core.h>
@@ -35,7 +35,7 @@
 #include "aw_log.h"
 #include "aw_dsp.h"
 
-#define AW882XX_DRIVER_VERSION "v1.8.0.1"
+#define AW882XX_DRIVER_VERSION "v1.9.0"
 #define AW882XX_I2C_NAME "aw882xxacf_smartpa"
 
 #define AW_READ_CHIPID_RETRIES		5	/* 5 times */
@@ -56,7 +56,77 @@ static unsigned int g_runin_test;
 static DEFINE_MUTEX(g_aw882xx_lock);
 struct aw_container *g_awinic_cfg = NULL;
 
+
+#define AW882XX_SCENE_CALIBRATION_ID		0
+#define AW882XX_SCENE_BYPASS_ID				1
+#define AW882XX_SCENE_HANDSET_ID			2
+#define AW882XX_SCENE_VOICE_ID				3
+#define AW882XX_SCENE_VOIP_ID				4
+#define AW882XX_SCENE_DEEPBUFFER_ID			5
+#define AW882XX_SCENE_FASTTRACK_ID			6
+
+
+struct aw882xx_scene_info aw882xx_scene_state[AW_ALGO_PROFILE_ID_MAX] = {
+	{
+		AW882XX_SCENE_CALIBRATION_ID,
+		"Calibration",
+		1,
+		1,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_BYPASS_ID,
+		"Bypass",
+		2,
+		2,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_HANDSET_ID,
+		"Handset",
+		3,
+		3,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_VOICE_ID,
+		"Voice",
+		4,
+		4,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_VOIP_ID,
+		"Voip",
+		5,
+		5,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_DEEPBUFFER_ID,
+		"deepbuffer",
+		6,
+		6,
+		0,
+		0,
+	},
+	{
+		AW882XX_SCENE_FASTTRACK_ID,
+		"fasttrack",
+		7,
+		7,
+		0,
+		0,
+	},
+};
+
 static const char *const switch_status[] = { "Off", "On" };
+static const char *const aw882xx_ramp_status[] = { "Off", "On" };
 static const char *const aw882xx_switch[] = {"Disable", "Enable"};
 #ifdef AW_SPIN_ENABLE
 static const char *const aw882xx_spin[] = {"spin_0", "spin_90",
@@ -621,12 +691,71 @@ static int aw882xx_switch_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int aw882xx_ramp_status_info(struct snd_kcontrol *kcontrol,
+			 struct snd_ctl_elem_info *uinfo)
+{
+	int count;
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_ENUMERATED;
+	uinfo->count = 1;
+	count = 2;
+
+	uinfo->value.enumerated.items = count;
+
+	if (uinfo->value.enumerated.item >= count)
+		uinfo->value.enumerated.item = count - 1;
+	strlcpy(uinfo->value.enumerated.name,
+		aw882xx_ramp_status[uinfo->value.enumerated.item],
+		strlen(aw882xx_ramp_status[uinfo->value.enumerated.item]) + 1);
+
+	return 0;
+}
+
+static int aw882xx_ramp_status_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	aw_snd_soc_codec_t *codec =
+		aw_componet_codec_ops.kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx =
+		aw_componet_codec_ops.codec_get_drvdata(codec);
+	int *ramp_status = &aw882xx->aw882xx_ramp_status;
+
+	aw_dev_dbg(aw882xx->dev, "%s: aw_dev_ramp_status_switch=%d\n",
+			__func__, *ramp_status);
+
+	ucontrol->value.integer.value[0] = *ramp_status;
+
+	return 0;
+}
+
+static int aw882xx_ramp_status_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	aw_snd_soc_codec_t *codec =
+		aw_componet_codec_ops.kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx =
+		aw_componet_codec_ops.codec_get_drvdata(codec);
+	int *ramp_status = &aw882xx->aw882xx_ramp_status;
+
+	aw_dev_dbg(aw882xx->dev, "%s: ucontrol->value.integer.value[0]=%ld\n",
+		__func__, ucontrol->value.integer.value[0]);
+		
+	*ramp_status = ucontrol->value.integer.value[0];
+
+	if (*ramp_status == AW882XX_RAMP_ON)
+		aw882xx->aw882xx_ramp_status = AW882XX_RAMP_ON;
+	else if (*ramp_status == AW882XX_RAMP_OFF)
+		aw882xx->aw882xx_ramp_status = AW882XX_RAMP_OFF;
+	
+	return 0;
+}
+
 static int aw882xx_dynamic_create_controls(struct aw882xx *aw882xx)
 {
 	struct snd_kcontrol_new *aw882xx_dev_control = NULL;
 	char *kctl_name;
 
-	aw882xx_dev_control = devm_kzalloc(aw882xx->codec->dev, sizeof(struct snd_kcontrol_new) * 2, GFP_KERNEL);
+	aw882xx_dev_control = devm_kzalloc(aw882xx->codec->dev, sizeof(struct snd_kcontrol_new) * 3, GFP_KERNEL);
 	if (aw882xx_dev_control == NULL) {
 		aw_dev_err(aw882xx->codec->dev, "kcontrol malloc failed!");
 		return -ENOMEM;
@@ -655,9 +784,22 @@ static int aw882xx_dynamic_create_controls(struct aw882xx *aw882xx)
 	aw882xx_dev_control[1].info = aw882xx_switch_info;
 	aw882xx_dev_control[1].get = aw882xx_switch_get;
 	aw882xx_dev_control[1].put = aw882xx_switch_set;
+	
+	//ramp control
+	kctl_name = devm_kzalloc(aw882xx->codec->dev, AW_NAME_BUF_MAX, GFP_KERNEL);
+	if (!kctl_name)
+		return -ENOMEM;
 
+	snprintf(kctl_name, AW_NAME_BUF_MAX, "aw_dev_%d_ramp_status_switch", aw882xx->index);
+
+	aw882xx_dev_control[2].name = kctl_name;
+	aw882xx_dev_control[2].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	aw882xx_dev_control[2].info = aw882xx_ramp_status_info;
+	aw882xx_dev_control[2].get = aw882xx_ramp_status_get;
+	aw882xx_dev_control[2].put = aw882xx_ramp_status_set;
+	//end ramp control
 	aw_componet_codec_ops.add_codec_controls(aw882xx->codec,
-						aw882xx_dev_control, 2);
+						aw882xx_dev_control, 3);
 
 	return 0;
 }
@@ -1074,6 +1216,7 @@ static int aw882xx_get_spin(struct snd_kcontrol *kcontrol,
 }
 #endif
 
+
 static int aw882xx_set_prof_id(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1095,7 +1238,6 @@ static int aw882xx_set_prof_id(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
-
 static int aw882xx_get_prof_id(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1117,6 +1259,7 @@ static int aw882xx_get_prof_id(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+
 
 static int aw882xx_get_fade_in_time(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
@@ -1180,6 +1323,88 @@ static int aw882xx_set_fade_out_time(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int aw882xx_0_ramp_step_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	unsigned int time;
+
+	aw_dev_get_fade_time(&time, true);
+	ucontrol->value.integer.value[0] = time;
+
+	aw_pr_dbg("aw_dev_ch_pri_l_fadein_time time %ld", ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int aw882xx_0_ramp_step_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	aw_snd_soc_codec_t *codec =
+		aw_componet_codec_ops.kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx =
+		aw_componet_codec_ops.codec_get_drvdata(codec);
+	struct aw_device *aw_dev = aw882xx->aw_pa;
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	int channel = aw_dev->channel;
+
+	if (ucontrol->value.integer.value[0] > mc->max) {
+		aw_pr_dbg("set val %ld overflow %d",
+			ucontrol->value.integer.value[0], mc->max);
+		return 0;
+	}
+
+	if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_ON && channel == AW_DEV_CH_PRI_L)
+		aw_dev_set_fade_time(ucontrol->value.integer.value[0], true);
+	else if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_OFF)
+		aw_dev_info(aw882xx->dev,
+			"%s: fade status is off,time can not set\n", __func__);
+
+	aw_pr_dbg("step time %ld", ucontrol->value.integer.value[0]);
+	return 0;
+}
+
+static int aw882xx_1_ramp_step_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	unsigned int time;
+
+	aw_dev_get_fade_time(&time, true);
+	ucontrol->value.integer.value[0] = time;
+
+	aw_pr_dbg("aw_dev_ch_pri_r_fadein_time time %ld", ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int aw882xx_1_ramp_step_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	aw_snd_soc_codec_t *codec =
+		aw_componet_codec_ops.kcontrol_codec(kcontrol);
+	struct aw882xx *aw882xx =
+		aw_componet_codec_ops.codec_get_drvdata(codec);
+	struct aw_device *aw_dev = aw882xx->aw_pa;
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	int channel = aw_dev->channel;
+
+	if (ucontrol->value.integer.value[0] > mc->max) {
+		aw_pr_dbg("set val %ld overflow %d",
+			ucontrol->value.integer.value[0], mc->max);
+		return 0;
+	}
+
+	if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_ON && channel == AW_DEV_CH_PRI_L)
+		aw_dev_set_fade_time(ucontrol->value.integer.value[0], true);
+	else if (aw882xx->aw882xx_ramp_status == AW882XX_RAMP_OFF)
+		aw_dev_info(aw882xx->dev,
+			"%s: fade status is off,time can not set\n", __func__);
+	
+	aw_pr_dbg("step time %ld", ucontrol->value.integer.value[0]);
+	return 0;
+}
+
 #ifdef AW882XX_RUNIN_TEST
 static int aw882xx_runin_test_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
@@ -1233,6 +1458,110 @@ static void aw882xx_set_adsp_module_status(struct work_struct *work)
 }
 #endif
 
+
+static int aw882xx_get_algo_prof_id_by_scene_st(struct aw882xx *aw882xx)
+{
+	int index = -1;
+	int i = 0;
+
+	/* Get the highest priority array subscript from all active scene */
+	for (i = 0; i < AW_ALGO_PROFILE_ID_MAX; i++) {
+		if (aw882xx_scene_state[i].is_active) {
+			if (index < 0) {
+				index = i;
+			} else {
+				if(aw882xx_scene_state[i].priority <
+							aw882xx_scene_state[index].priority) {
+					index = i;
+				}
+			}
+		}
+	}
+
+	if (index >= 0) {
+		return aw882xx_scene_state[index].skt_profile_id;
+	}
+
+	return AW_ALGO_PROFILE_ID_MAX;
+}
+
+static void aw882xx_update_algo_scene_st(struct aw882xx *aw882xx, 
+										int scene_id, bool is_active) {
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[scene_id];
+
+	if (is_active) {
+		p_aw882xx_scene_st->active_cnt++;
+		p_aw882xx_scene_st->is_active = 1;
+	} else {
+		p_aw882xx_scene_st->active_cnt--;
+		if (p_aw882xx_scene_st->active_cnt < 0) {
+			p_aw882xx_scene_st->active_cnt = 0;
+		}
+		if (p_aw882xx_scene_st->active_cnt == 0) {
+			p_aw882xx_scene_st->is_active = 0;
+		}
+	}
+}
+
+
+static int aw882xx_update_algo_profile(struct aw882xx *aw882xx) 
+{
+	int ret = 0;
+	int new_skt_prof_id = 0;
+	int cur_skt_prof_id = aw882xx->cur_algo_prof_id;
+	struct aw_device *aw_dev = NULL;
+	aw_dev_info(aw882xx->dev, "enter");
+	
+	new_skt_prof_id = aw882xx_get_algo_prof_id_by_scene_st(aw882xx);
+	aw_dev_dbg(aw882xx->dev, "new_skt_prof_id = %d,cur_skt_prof_id=%d\n",
+			new_skt_prof_id,
+			cur_skt_prof_id);
+
+	if (new_skt_prof_id > AW_ALGO_PROFILE_ID_MAX) {
+		/* no active scene */
+		aw_dev_info(aw882xx->dev, "all scene disactive,do nothing");
+		return 0;
+	}
+
+	if (cur_skt_prof_id != new_skt_prof_id) {
+		aw_dev_info(aw882xx->dev, "algo scene switch. [new] %d,[old] %d", 
+					new_skt_prof_id, cur_skt_prof_id);
+		aw882xx->cur_algo_prof_id = new_skt_prof_id;
+		aw_dev = aw882xx->aw_pa;
+
+		/* set new scene pramas to skt */
+		ret = aw_dev_set_algo_prof(aw_dev, aw882xx->cur_algo_prof_id);
+		if (ret < 0) {
+			aw_dev_err(aw882xx->dev, "set algo prof failed");
+			return -1;
+		}
+	} else {
+		aw_dev_info(aw882xx->dev, "algo scene hold, cur scene %d", 
+					new_skt_prof_id);
+	}
+
+	return 0;
+
+}
+
+
+static int aw882xx_algo_dump_scene_st(struct aw882xx *aw882xx) 
+{
+	int i = 0;
+
+	aw_dev_info(aw882xx->dev, "aw882xx cur algo prof id =%d",
+								aw882xx->cur_algo_prof_id);
+	for (i = 0; i < AW_ALGO_PROFILE_ID_MAX; i++) {
+		aw_dev_info(aw882xx->dev, "scene[%s] %s active_cnt %d",
+				aw882xx_scene_state[i].name, 
+				aw882xx_scene_state[i].is_active? "[active]" : "[disactive]",
+				aw882xx_scene_state[i].active_cnt);
+	}
+	return 0;
+}
+
+
 static int aw882xx_monitor_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1241,7 +1570,7 @@ static int aw882xx_monitor_get(struct snd_kcontrol *kcontrol,
 	struct aw_device *aw_dev = aw882xx->aw_pa;
 	struct aw_monitor_cfg *monitor_cfg = &aw_dev->monitor_desc.monitor_cfg;
 
-	pr_debug("%s: aw882xx_monitor_get %d\n",
+	pr_debug("%s: aw882xx_monitor_get %d",
 		__func__, monitor_cfg->monitor_switch);
 
 	ucontrol->value.integer.value[0] = monitor_cfg->monitor_switch;
@@ -1270,6 +1599,272 @@ static int aw882xx_monitor_set(struct snd_kcontrol *kcontrol,
 	if (enable)
 		aw_monitor_start(&aw_dev->monitor_desc);
 	mutex_unlock(&aw882xx->lock);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_cali_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_CALIBRATION_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_set_algo_cali_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_CALIBRATION_ID, is_active);
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_bypass_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_BYPASS_ID];
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+	return 0;
+}
+
+static int aw882xx_set_algo_bypass_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_BYPASS_ID, is_active);
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_handset_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_HANDSET_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_handset_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_HANDSET_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_voice_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_VOICE_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_voice_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_VOICE_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	
+	return 0;
+}
+
+static int aw882xx_get_algo_voip_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_VOIP_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_voip_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_VOIP_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_music_deepbuffer_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_DEEPBUFFER_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_music_deepbuffer_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_DEEPBUFFER_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
+
+	return 0;
+}
+
+static int aw882xx_get_algo_music_fasttrack_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+
+	struct aw882xx_scene_info *p_aw882xx_scene_st = 
+			&aw882xx_scene_state[AW882XX_SCENE_FASTTRACK_ID];
+
+	aw_dev_info(aw882xx->dev, "%s: %s active_cnt %d",
+				__func__, 
+				p_aw882xx_scene_st->is_active? "[active]" : "[disactive]",
+				p_aw882xx_scene_st->active_cnt);
+	ucontrol->value.integer.value[0] = p_aw882xx_scene_st->is_active? 1 : 0;
+
+	return 0;
+}
+
+static int aw882xx_set_algo_music_fasttrack_switch(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
+	struct aw882xx *aw882xx = snd_soc_component_get_drvdata(codec);
+	bool is_active = false;
+
+	aw_dev_info(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
+			ucontrol->value.integer.value[0]);
+
+	is_active = ucontrol->value.integer.value[0]? true : false;
+	aw882xx_update_algo_scene_st(aw882xx, AW882XX_SCENE_FASTTRACK_ID, is_active);
+
+	aw882xx_update_algo_profile(aw882xx);
+
+	aw882xx_algo_dump_scene_st(aw882xx);
 
 	return 0;
 }
@@ -1305,6 +1900,24 @@ static struct snd_kcontrol_new aw882xx_controls[] = {
 		aw882xx_get_fade_out_time, aw882xx_set_fade_out_time),
 	SOC_SINGLE_EXT("aw882xx_algo_prof_switch", 0, 0, 100, 0,
 		aw882xx_get_prof_id, aw882xx_set_prof_id),
+	SOC_SINGLE_EXT("aw_dev_0_ramp_step_switch", 0, 0, 1000000, 0,
+		aw882xx_0_ramp_step_get, aw882xx_0_ramp_step_set),
+	SOC_SINGLE_EXT("aw_dev_1_ramp_step_switch", 0, 0, 1000000, 0,
+		aw882xx_1_ramp_step_get, aw882xx_1_ramp_step_set),	
+	SOC_ENUM_EXT("aw882xx_algo_cali_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_cali_switch, aw882xx_set_algo_cali_switch),
+	SOC_ENUM_EXT("aw882xx_algo_bypass_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_bypass_switch, aw882xx_set_algo_bypass_switch),
+	SOC_ENUM_EXT("aw882xx_algo_handset_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_handset_switch, aw882xx_set_algo_handset_switch),
+	SOC_ENUM_EXT("aw882xx_algo_voice_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_voice_switch, aw882xx_set_algo_voice_switch),
+	SOC_ENUM_EXT("aw882xx_algo_voip_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_voip_switch, aw882xx_set_algo_voip_switch),
+	SOC_ENUM_EXT("aw882xx_algo_music_deepbuffer_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_music_deepbuffer_switch, aw882xx_set_algo_music_deepbuffer_switch),
+	SOC_ENUM_EXT("aw882xx_algo_music_fasttrack_switch", aw882xx_snd_enum[1],
+		aw882xx_get_algo_music_fasttrack_switch, aw882xx_set_algo_music_fasttrack_switch),
 };
 
 static void aw882xx_add_codec_controls(struct aw882xx *aw882xx)
@@ -2372,6 +2985,8 @@ static int aw882xx_i2c_probe(struct i2c_client *i2c,
 	aw882xx->i2c_packet.reg_data = NULL;
 
 	aw882xx->index = g_aw882xx_dev_cnt;
+	
+	aw882xx->aw882xx_ramp_status = AW882XX_RAMP_OFF;
 #ifdef AW882XX_RUNIN_TEST
 	g_runin_test = 0;
 	INIT_DELAYED_WORK(&aw882xx->adsp_status, aw882xx_set_adsp_module_status);
