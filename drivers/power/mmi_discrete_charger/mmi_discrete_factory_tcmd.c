@@ -76,7 +76,7 @@ static ssize_t force_chg_usb_suspend_show(struct device *dev,
 
 	state = mmi_discrete_is_usb_suspended(mmi_chip);
 
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d", state);
 }
 
 static DEVICE_ATTR(force_chg_usb_suspend, 0664,
@@ -136,7 +136,7 @@ static ssize_t force_chg_auto_enable_show(struct device *dev,
 	}
 	state = value;
 end:
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", state);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d", state);
 }
 
 static DEVICE_ATTR(force_chg_auto_enable, 0664,
@@ -195,7 +195,7 @@ static ssize_t force_chg_ibatt_show(struct device *dev,
 
 	state /= 1000; /* Convert to mA */
 end:
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%ul\n", state);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%ul", state);
 }
 
 static DEVICE_ATTR(force_chg_ibatt, 0664,
@@ -250,7 +250,7 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 	}
 	usb_curr /= 1000; /* Convert to mA */
 end:
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", usb_curr);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d", usb_curr);
 }
 
 static DEVICE_ATTR(force_chg_iusb, 0664,
@@ -285,7 +285,7 @@ static ssize_t chg_type_show(struct device *dev,
 	else
 		charger_type = 1; // 1 is SDP in mkt platform
 end:
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", charger_type);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d", charger_type);
 }
 
 static DEVICE_ATTR(chg_type, 0664,
@@ -317,7 +317,7 @@ static ssize_t force_chg_fail_clear_show(struct device *dev,
 					char *buf)
 {
 	/* do nothing for mmi_discrete_charger */
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "0\n");
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "0");
 }
 
 static DEVICE_ATTR(force_chg_fail_clear, 0664,
