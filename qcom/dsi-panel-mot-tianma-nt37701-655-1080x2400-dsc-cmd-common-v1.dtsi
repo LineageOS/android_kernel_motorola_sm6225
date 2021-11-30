@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 &mdss_mdp {
-mot_tm_nt37701_655_1080x2400_dsc_cmd_v0: qcom,mdss_dsi_mot_tm_nt37701_655_1080x2400_dsc_cmd_v0 {
+mot_tm_nt37701_655_1080x2400_dsc_cmd_v1: qcom,mdss_dsi_mot_tm_nt37701_655_1080x2400_dsc_cmd_v1 {
 compatible = "qcom,mdss-dsi-panel";
 qcom,mdss-dsi-panel-name = "mipi_mot_cmd_tm_1080p_dsc_655";
 qcom,mdss-dsi-panel-supplier = "tianma";
