@@ -823,6 +823,17 @@ static int cw_battery_set_property(struct power_supply *psy,
 	return ret;
 }
 
+static unsigned int cw_get_charge_counter(struct cw_battery *cw_bat)
+{
+	int charge_counter;
+	int full_capacity;
+
+	full_capacity = (cw_bat->fcc_design * cw_bat->soh * 1000) / 100;
+	charge_counter = div_s64(full_capacity * cw_bat->ui_soc, 100);
+
+	return charge_counter;
+}
+
 static int cw_battery_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -867,6 +878,9 @@ static int cw_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = cw_bat->temp;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = cw_get_charge_counter(cw_bat);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -886,6 +900,7 @@ static enum power_supply_property cw_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 #endif
 
