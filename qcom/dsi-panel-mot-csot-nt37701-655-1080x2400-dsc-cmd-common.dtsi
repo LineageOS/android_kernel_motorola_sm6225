@@ -51,12 +51,12 @@ qcom,mdss-dsi-bl-min-level = <3>;
 qcom,mdss-dsi-bl-max-level = <4095>;
 qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 
-qcom,mdss-dsi-panel-hdr-enabled;
+/*qcom,mdss-dsi-panel-hdr-enabled;
 qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
 	        17000 15500 30000 8000 3000>;
 qcom,mdss-dsi-panel-peak-brightness = <4200000>;
 
-qcom,mdss-dsi-panel-blackness-level = <3230>;
+qcom,mdss-dsi-panel-blackness-level = <3230>;*/
 
 qcom,mdss-dsi-hbm-on-command = [
 		39 01 00 00 00 00 03 51 0F FF];
@@ -204,6 +204,10 @@ qcom,mdss-dsi-display-timings {
 		];
 
 		qcom,mdss-dsi-on-command = [
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 4B 22 4F //swire pulse
+
 			39 00 00 00 00 00 06 F0 55 AA 52 08 00
 			15 00 00 00 00 00 02 B2 18
 			15 00 00 00 00 00 02 6F 0F
@@ -217,13 +221,18 @@ qcom,mdss-dsi-display-timings {
 
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
-			39 01 00 00 00 00 06 C0 15 27 38 49 00
+			39 01 00 00 00 00 06 C0 03 14 25 A9 78
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
 			15 01 00 00 00 00 02 CB 06
 			39 01 00 00 00 00 06 F0 55 AA 52 08 01
 			39 01 00 00 00 00 03 CD 05 71
 
-                        39 01 00 00 00 00 05 3B 00 1A 00 20
+			39 01 00 00 00 00 05 FF AA 55 A5 80
+			15 01 00 00 00 00 02 6F 1D
+			15 01 00 00 00 00 02 F2 05 //Corner&Hole page0
+
+			39 01 00 00 00 00 05 3B 00 10 00 20
+
 
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
@@ -284,6 +293,10 @@ qcom,mdss-dsi-display-timings {
 		];
 
 		qcom,mdss-dsi-on-command = [
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 4B 22 4F //swire pulse
+
 			39 00 00 00 00 00 06 F0 55 AA 52 08 00
 			15 00 00 00 00 00 02 B2 18
 			15 00 00 00 00 00 02 6F 0F
@@ -297,13 +310,17 @@ qcom,mdss-dsi-display-timings {
 
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
-			39 01 00 00 00 00 06 C0 15 27 38 49 00
+			39 01 00 00 00 00 06 C0 03 14 25 A9 78
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
 			15 01 00 00 00 00 02 CB 06
 			39 01 00 00 00 00 06 F0 55 AA 52 08 01
 			39 01 00 00 00 00 03 CD 05 71
 
-                        39 01 00 00 00 00 05 3B 00 1A 00 20
+			39 01 00 00 00 00 05 FF AA 55 A5 80
+			15 01 00 00 00 00 02 6F 1D
+			15 01 00 00 00 00 02 F2 05 //Corner&Hole page0
+
+			39 01 00 00 00 00 05 3B 00 10 00 20
 
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
