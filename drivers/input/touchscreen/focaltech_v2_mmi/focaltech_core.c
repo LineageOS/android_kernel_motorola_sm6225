@@ -51,6 +51,7 @@
 #define FTS_SUSPEND_LEVEL 1     /* Early-suspend level */
 #endif
 #include "focaltech_core.h"
+#include <linux/mmi_device.h>
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 extern int fts_mmi_dev_register(struct fts_ts_data *ts_data);
@@ -1708,6 +1709,12 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 
     FTS_FUNC_ENTER();
     FTS_INFO("%s", FTS_DRIVER_VERSION);
+
+    if (ts_data->client->dev.of_node && !mmi_device_is_available(ts_data->client->dev.of_node)) {
+        FTS_ERROR("mmi: device not supported\n");
+        return -ENODEV;
+    }
+
     ts_data->pdata = kzalloc(pdata_size, GFP_KERNEL);
     if (!ts_data->pdata) {
         FTS_ERROR("allocate memory for platform_data fail");
