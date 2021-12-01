@@ -7,15 +7,15 @@
 &tlmm {
 	disp_vio_en_default: disp_vio_en_default {
 		mux {
-			pins = "gpio68";
+			pins = "gpio111";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio68";
+			pins = "gpio111";
 			drive-strength = <8>;
 			bias-disable = <0>;
-			output-high;
+			output-low;
 		};
 	};
 };
@@ -27,9 +27,9 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		vin-supply = <&L19A>;
-		gpio = <&tlmm 68 0>;
+		gpio = <&tlmm 111 1>;
 		startup-delay-us = <300>;
-		enable-active-high;
+		enable-active-low;
 		regulator-boot-on;
 		pinctrl-names = "default";
 		pinctrl-0 = <&disp_vio_en_default>;
@@ -50,10 +50,10 @@
 			qcom,supply-post-off-sleep = <0>;
 		};
 
-/*		qcom,panel-supply-entry@1 {
+		qcom,panel-supply-entry@1 {
 			reg = <1>;
 			qcom,supply-name = "dvdd";
-			qcom,supply-min-voltage = <1250000>;
+			qcom,supply-min-voltage = <1240000>;
 			qcom,supply-max-voltage = <1250000>;
 			qcom,supply-enable-load = <60700>;
 			qcom,supply-disable-load = <10>;
@@ -70,16 +70,15 @@
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <0>;
 			qcom,supply-post-off-sleep = <2>;
-		};*/
+		};
 	};
+};
 
-	sde_dsi {
-		qcom,dsi-default-panel = <&mot_csot_nt37701_655_1080x2400_dsc_cmd_v0>;
-
-		vddio-supply = <&disp_vio>;
-		//dvdd-supply = <&disp_vio>;
-		//vci-supply = <&disp_vio>;
-	};
+&sde_dsi {
+	qcom,dsi-default-panel = <&mot_csot_nt37701_655_1080x2400_dsc_cmd_v0>;
+	vddio-supply = <&disp_vio>;
+	dvdd-supply = <&cam_ldo2>;
+	vci-supply = <&cam_ldo6>;
 };
 
 &mot_csot_nt37701_655_1080x2400_dsc_cmd_v0 {
