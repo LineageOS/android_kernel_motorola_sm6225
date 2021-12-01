@@ -117,6 +117,7 @@ struct cw_battery {
 	struct power_supply cw_bat;
 #else
 	struct power_supply *cw_bat;
+	struct power_supply *batt_psy;
 #endif
 	int  chip_id;
 	int  voltage;
@@ -655,17 +656,20 @@ static void cw_bat_work(struct work_struct *work)
 	delay_work = container_of(work, struct delayed_work, work);
 	cw_bat = container_of(delay_work, struct cw_battery, battery_delay_work);
 
+	/* get battery power supply */
+	if (!cw_bat->batt_psy) {
+		cw_bat->batt_psy = power_supply_get_by_name("battery");
+		if (!cw_bat->batt_psy)
+			cw_printk("%s: get batt_psy fail\n", __func__);
+	}
+
 	ret = cw_update_data(cw_bat);
 	if (ret < 0)
 		printk(KERN_ERR "iic read error when update data");
 
-	#ifdef CW_PROPERTIES
-	#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
-	power_supply_changed(&cw_bat->cw_bat);
-	#else
-	power_supply_changed(cw_bat->cw_bat);
-	#endif
-	#endif
+	if (cw_bat->batt_psy) {
+		power_supply_changed(cw_bat->batt_psy);
+	}
 
 	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work, msecs_to_jiffies(queue_delayed_work_time));
 }
