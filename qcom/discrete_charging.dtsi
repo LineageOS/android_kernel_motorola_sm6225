@@ -278,6 +278,21 @@
 */
 };
 
+&tlmm {
+	sgm4154x_gpio_pins: sgm4154x_gpio_pins {
+		mux {
+			pins = "gpio96";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio96";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
 
 &tlmm {
 	bq2589x_irq: bq2589x_irq {
@@ -332,5 +347,4 @@
 				600000 300000>;
 	};
 };
-
 

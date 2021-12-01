@@ -66,20 +66,6 @@
 		moto,vib-ldo-gpio = <&tlmm 25 0x0>;
 		status = "ok";
 	};
-
-       sgm4154x_gpio_pins: sgm4154x_gpio_pins {
-               mux {
-                       pins = "gpio96";
-                       function = "gpio";
-               };
-
-               config {
-                       pins = "gpio96";
-                       drive-strength = <2>;
-                       bias-pull-up;
-                       input-enable;
-               };
-       };
 };
 
 
