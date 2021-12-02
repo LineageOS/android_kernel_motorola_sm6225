@@ -22,15 +22,7 @@
 #include <linux/delay.h>
 #include "wt6670f.h"
 
-#if 0
-extern struct pinctrl *i2c6_pinctrl;
-extern struct pinctrl_state *i2c6_i2c;
-extern struct pinctrl_state *i2c6_scl_low;
-extern struct pinctrl_state *i2c6_scl_high;
-extern struct pinctrl_state *i2c6_sda_low;
-extern struct pinctrl_state *i2c6_sda_high;
-#endif
-
+extern int wt6670f_isp_do_reset(void);
 //extern unsigned int get_i2c_speed(int id);
 //extern void set_i2c_speed(int id, unsigned int speed_hz);
 
@@ -847,127 +839,31 @@ unsigned int WT70F_QC3p_V02_210326_FBA1_bin_len = 3141;
 
 void wt_enter_isp_mode_sequence(struct wt6670f *chip)
 {
+	int ret;
+	u8 data[1]={0x00};
+	struct i2c_msg msgs[] = {
+        {
+			.addr = 0x2B,
+			.flags = 0,
+			.len = 1,
+			.buf = data,
+        },
+        {
+			.addr = 0x48,
+			.flags = 0,
+			.len = 1,
+			.buf = data,
+        },
+    };
+
 	mutex_lock(&chip->i2c_rw_lock);
-
-	gpio_direction_output(chip->reset_pin, 0);
-	msleep(5);
-	gpio_direction_output(chip->reset_pin, 1);
-	msleep(1);
-	gpio_direction_output(chip->reset_pin, 0);
-	mdelay(3);
-#if 0
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(2);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(2);
-
-	/* sequence */
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//1
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//2
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//3
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//4
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//5
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//6
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//7
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//8
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//9
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(8);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//10
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//11
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//12
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//13
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//14
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(4);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//15
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//16
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(5);
-	/* sequence end */
-
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//17
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);	//18
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_low);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_low);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_scl_high);
-	udelay(5);
-	pinctrl_select_state(i2c6_pinctrl, i2c6_sda_high);
-
-	msleep(10);
-
-	pinctrl_select_state(i2c6_pinctrl, i2c6_i2c);
-#endif
-	msleep(10);
-	mutex_unlock(&chip->i2c_rw_lock);
-
+	ret = i2c_transfer(chip->client->adapter, msgs, 2);
+	if (ret != 2)
+	{
+		pr_info("[%s] i2c transfer failed, ret:%d\n", __func__, ret);
+	}
+	 mutex_unlock(&chip->i2c_rw_lock);
 }
-
 /**
  * ENABLE ISP Command
  * (1) This command is used to enable ISP through I2C interface.
@@ -1310,18 +1206,17 @@ int wt6670f_isp_flow(struct wt6670f *chip)
 	int i = 0;
 	int len = 0;
 	int read_flash_cnt = 0x0;
+	u16 fw_ver = 0;
+	int ret = 0;
 
 	code = kzalloc(0x40, GFP_KERNEL);
 	if (code == NULL)
 		return -1;
+	wt6670f_isp_do_reset();
 
-	//pr_info("%s: i2c speed before set:%d\n", __func__, get_i2c_speed(6));
-	//wangtao remove
-	//set_i2c_speed(6, 100 * 1000);
-	//pr_info("%s: i2c speed after set:%d\n", __func__, get_i2c_speed(6));
+	wt_enter_isp_mode_sequence(chip);
 
-	wt_enter_isp_mode_sequence(chip);//wangtao remove
-
+	msleep(10);
 	//while(check_i2c_bus_free);
 
 	wt_enable_isp(chip);
@@ -1329,9 +1224,11 @@ int wt6670f_isp_flow(struct wt6670f *chip)
 	wt_read_chip_id(chip, &chip_id, 1);
 	if (chip_id != 0x70)
 	{
-		pr_info("[%s] err, chip_id:%d, skip isp\n", __func__, chip_id);
+		pr_info("[%s]wt6670 err, chip_id:%d, skip isp\n", __func__, chip_id);
+		ret = -1;
 		goto isp_err;
 	}
+	pr_info("[%s]wt6670 chip_id=%d \n", __func__, chip_id);
 
 	wt_enable_isp_flash_mode(chip);
 	wt_chip_erase(chip);
@@ -1403,6 +1300,7 @@ int wt6670f_isp_flow(struct wt6670f *chip)
 				{
 					pr_info("[%s] verify flash data failed, fail_addr:0x%x, fail_data:0x%x, correct_data:0x%x\n", __func__, read_flash_cnt + i,
 						code[i], WT70F_QC3p_V02_210326_FBA1_bin[read_flash_cnt + i]);
+						goto isp_err;
 				}
 			}
 
@@ -1416,29 +1314,21 @@ int wt6670f_isp_flow(struct wt6670f *chip)
 				{
 					pr_info("[%s] verify flash data failed, fail_addr:0x%x, fail_data:0x%x, correct_data:0x%x\n", __func__, read_flash_cnt + i,
 						code[i], WT70F_QC3p_V02_210326_FBA1_bin[read_flash_cnt + i]);
+						goto isp_err;
 				}
 			}
 		}
 
 		read_flash_cnt += 0x40;
 	}
-
-	wt_restart_chip(chip);
-
-	kfree(code);
-//wangtao remove
-	//set_i2c_speed(6, 400 * 1000);
-	//pr_info("%s: i2c speed resume:%dk\n", __func__, get_i2c_speed(6));
-
-	return 0;
-
+	pr_info("[%s] firmware update success!!!\n", __func__);
+	msleep(30);
 isp_err:
 	wt_restart_chip(chip);
 	kfree(code);
-//wangtao remove
-	//set_i2c_speed(6, 400 * 1000);
-	//pr_info("%s: i2c speed resume:%dk\n", __func__, get_i2c_speed(6));
-
-	return -1;
+	//do not comment this line
+	fw_ver = wt6670f_get_firmware_version();
+	pr_info("%s: wt6670f firmware:%d!\n", __func__,fw_ver);
+	return ret;
 }
 EXPORT_SYMBOL(wt6670f_isp_flow);
