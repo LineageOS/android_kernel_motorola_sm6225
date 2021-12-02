@@ -9,9 +9,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-/*&pm6125_vadc {
+&pm6125_vadc {
 	gpio6_div3{
-		reg = <ADC5_GPIO3_DIV3>;
+		reg = <ADC_GPIO3_DIV3>;
 		label = "gpio3_div3";
 		qcom,pre-scaling = <1 3>;
 	};
@@ -25,16 +25,9 @@
 			bias-high-impedance;
 		};
 	};
-
-	indicator_led {
-		indicator_led_default: indicator_led_default {
-			pins = "gpio8";
-			function = "func1";
-			output-low;
-		};
-	};
 };
 
+/*
 &soc {
 	indicator_led {
 		compatible = "qcom,indicator-pwm-led";
@@ -104,12 +97,10 @@
 		compatible = "sgm,sgm41542";
 		reg = <0x3B>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&sgm4154x_gpio_pins>;
+		pinctrl-0 = <&sgm4154x_gpio_pins &gpio6_adc_default>;
 
-//add by zhanghuan
-//		pinctrl-0 = <&gpio6_adc_default>;
-//		io-channels = <&pm6125_vadc ADC5_GPIO3_DIV3>;
-//		io-channel-names = "gpio3_div3";
+		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>;
+		io-channel-names = "gpio3_div3";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
@@ -117,7 +108,7 @@
 		sgm,chg-en-gpio = <&tlmm 36 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
 		dpdm-supply = <&usb2_phy0>;
-
+		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
 		enable_sw_jeita;
 		jeita_temp_above_t4_cv = <0>;
@@ -157,6 +148,7 @@
 		bq2589x_en-gpio = <&tlmm 36 0>;
 		dpdm-supply = <&usb2_phy0>;
 
+		mmi,qc3-support;
 		ti,bq2589x,vbus-volt-high-level = <8700>;/* tune adapter to output 9v */
 		ti,bq2589x,vbus-volt-low-level = <4400>;/* tune adapter to output 5v */
 		ti,bq2589x,vbat-min-volt-to-tuneup = <3000>;
