@@ -1833,11 +1833,11 @@ static int bq2597x_iio_write_raw(struct iio_dev *indio_dev,
 	int rc = 0;
 
 	switch (chan->channel) {
-	case PSY_IIO_CHARGING_ENABLED:
+	case PSY_IIO_CP_ENABLE:
 
 		bq2597x_enable_charge(bq, val1);
 		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
-		pr_info("PSY_IIO_CHARGING_ENABLED: %s\n",
+		pr_info("PSY_IIO_CP_ENABLE: %s\n",
 				val1 ? "enable" : "disable");
 
 		break;
