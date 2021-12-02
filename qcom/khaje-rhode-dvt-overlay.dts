@@ -19,8 +19,5 @@
 	model = "rhode";
 	compatible = "qcom,khaje-rhode", "qcom,khaje-moto", "qcom,khaje";
 	qcom,msm-id = <518 0x10000>;
-	qcom,board-id = <0 0xA000>;
+	qcom,board-id = <0 0xB000>;
 };
-
-
-#include "camera/khaje-camera-sensor-mot-rhode-overlay_evt.dtsi"
