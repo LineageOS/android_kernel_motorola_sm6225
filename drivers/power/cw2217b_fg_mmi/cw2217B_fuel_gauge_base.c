@@ -65,6 +65,7 @@
 
 #define CW_SLEEP_20MS           20
 #define CW_SLEEP_10MS           10
+#define CW_UI_FULL              100
 #define COMPLEMENT_CODE_U16     0x8000
 #define CW_SLEEP_100MS          100
 #define CW_SLEEP_200MS          200
@@ -123,7 +124,6 @@ struct cw_battery {
 	int  ic_soc_h;
 	int  ic_soc_l;
 	int  ui_soc;
-	int  raw_soc;
 	int  temp;
 	long cw_current;
 	int  cycle;
@@ -131,7 +131,6 @@ struct cw_battery {
 	int  fw_version;
 	int  fcc_design;
 	int  fcc;
-	int  ui_full;
 #if 0
 	long stb_current;
 #endif
@@ -329,7 +328,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 {
 	int ret;
 	unsigned char reg_val[2] = { 0, 0 };
-	int ui_100 = cw_bat->ui_full;
+	int ui_100 = CW_UI_FULL;
 	int soc_h;
 	int soc_l;
 	int ui_soc;
@@ -340,7 +339,6 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 		return ret;
 	soc_h = reg_val[0];
 	soc_l = reg_val[1];
-	cw_bat->raw_soc = soc_h;
 	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_100 * 256);
 	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_100 * 256)) % 100;
 	if (ui_soc >= 100){
@@ -518,8 +516,8 @@ static int cw_update_data(struct cw_battery *cw_bat)
 	ret += cw_get_current(cw_bat);
 	ret += cw_get_cycle_count(cw_bat);
 	ret += cw_get_soh(cw_bat);
-	cw_printk("vol = %d  current = %ld cap = %d temp = %d raw_soc = %d age=%d\n",
-		cw_bat->voltage, cw_bat->cw_current, cw_bat->ui_soc, cw_bat->temp, cw_bat->raw_soc, cw_bat->soh);
+	cw_printk("vol = %d  current = %ld cap = %d temp = %d age=%d\n",
+		cw_bat->voltage, cw_bat->cw_current, cw_bat->ui_soc, cw_bat->temp, cw_bat->soh);
 
 	return ret;
 }
@@ -536,8 +534,8 @@ static int cw_init_data(struct cw_battery *cw_bat)
 	ret += cw_get_cycle_count(cw_bat);
 	ret += cw_get_soh(cw_bat);
 	ret += cw_get_fw_version(cw_bat);
-	cw_printk("chip_id = %d vol = %d  cur = %ld cap = %d raw_soc = %d temp = %d  fw_version = %d\n",
-		cw_bat->chip_id, cw_bat->voltage, cw_bat->cw_current, cw_bat->ui_soc, cw_bat->raw_soc, cw_bat->temp, cw_bat->fw_version);
+	cw_printk("chip_id = %d vol = %d  cur = %ld cap = %d temp = %d  fw_version = %d\n",
+		cw_bat->chip_id, cw_bat->voltage, cw_bat->cw_current, cw_bat->ui_soc, cw_bat->temp, cw_bat->fw_version);
 
 	return ret;
 }
@@ -804,11 +802,6 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 	if (rc < 0)
 		cw_info("error,get fcc_design,exit \n");
 
-	rc = of_property_read_u32(batt_profile_node, "ui_full", &cw_bat->ui_full);
-	if (rc < 0) {
-		cw_bat->ui_full = 100;
-		cw_info("get ui_fall fail. use ui_full=100 \n");
-	}
 	return rc;
 }
 
