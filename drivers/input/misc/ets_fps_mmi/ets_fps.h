@@ -143,7 +143,8 @@ struct etspi_data {
 
 	unsigned int vdd_18v_Pin;	/* Reset GPIO pin number */
 	unsigned int vcc_33v_Pin;	/* Reset GPIO pin number */
-    struct input_dev	*input_dev;
+	struct input_dev	*input_dev;
+	struct regulator	*regulator_3v3_io;
 	bool property_navigation_enable;
 
 };

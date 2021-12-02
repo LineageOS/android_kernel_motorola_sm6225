@@ -454,6 +454,31 @@ void fps_interrupt_abort(void)
 	wake_up_interruptible(&interrupt_waitq);
 }
 
+static void etspi_power_set(struct etspi_data *etspi, unsigned char power_state)
+{
+	int status = 0;
+	DEBUG_PRINT("etspi:%s\n", __func__);
+	if (!IS_ERR_OR_NULL(etspi->regulator_3v3_io)) {
+		if (power_state == 0) {
+			status = regulator_disable(etspi->regulator_3v3_io);
+			DEBUG_PRINT("etspi:  regulator_3v3_io disable status %d\n", status);
+		} else {
+			status = regulator_enable(etspi->regulator_3v3_io);
+			DEBUG_PRINT("etspi:  regulator_3v3_io enable status %d\n", status);
+		}
+	}
+	if (gpio_is_valid(etspi->vcc_33v_Pin)) {
+		if (power_state == 0) {
+			gpio_direction_output(etspi->vcc_33v_Pin, 0);
+			pr_info("etspi:power gpio set 0,%s,%d\n", __func__, __LINE__);
+		} else {
+			gpio_direction_output(etspi->vcc_33v_Pin, 1);
+			pr_info("etspi:power gpio set 1,%s,%d\n", __func__, __LINE__);
+		}
+	}
+
+}
+
 /*-------------------------------------------------------------------------*/
 
 static void etspi_reset(struct etspi_data *etspi)
@@ -504,8 +529,8 @@ static int disp_panel_on = -1;  /* -1 for invalid, 0 for display-off, 1 for disp
 
 static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-
 	int retval = 0;
+	unsigned char power_state = 0;
 	struct etspi_data *etspi;
 	struct ioctl_cmd data;
 
@@ -533,6 +558,15 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		goto done;
 	case INT_TRIGGER_CLOSE:
 		pr_info("etspi: skip interrupt close request from HAL.");
+		goto done;
+	case FP_POWER_ONOFF:
+		if (copy_from_user(&power_state, (int __user *)arg, sizeof(power_state))) {
+			retval = -EFAULT;
+			pr_err("etspi:FP_POWER_ONOFF failed,%s,%d\n", __func__, __LINE__);
+			goto done;
+		}
+		DEBUG_PRINT("etspi:fp_ioctl >>> FP_POWER_ONOFF %d",power_state);
+		etspi_power_set(etspi, power_state);
 		goto done;
 	case INT_TRIGGER_ABORT:
 		DEBUG_PRINT("etspi:fp_ioctl <<< fp Trigger function abort\n");
@@ -682,17 +716,36 @@ int etspi_platformInit(struct etspi_data *etspi, bool init)
 			if (status < 0) {
 				pr_err("%s gpio_requset vcc_33v_Pin failed\n",
 					__func__);
-				goto etspi_platformInit_33v_failed;
+				goto etspi_platformInit_33v_gpio_failed;
 			}
 			gpio_direction_output(etspi->vcc_33v_Pin, 1);
 			if (status < 0) {
 				pr_err("%s gpio_direction_output vcc_33v_Pin failed\n",
 						__func__);
 				status = -EBUSY;
-				goto etspi_platformInit_33v_set_failed;
+				goto etspi_platformInit_33v_gpio_set_failed;
 			}
 			gpio_set_value(etspi->vcc_33v_Pin, 1);
 			pr_info("etspi:  vcc_33v_Pin set to high\n");
+			mdelay(2);
+		}
+		if (!IS_ERR_OR_NULL(etspi->regulator_3v3_io)) {
+			/*status = regulator_set_voltage(etspi->regulator_3v3_io, 3000000,
+					3000000);
+			if (status < 0) {
+				pr_err("etspi:  regulator_3v3_io set voltage failed\n");
+				status = -EBUSY;
+				goto etspi_platformInit_33v_set_failed;
+			}
+			pr_err("etspi:  regulator_3v3_io set voltage status %d\n",status);*/
+
+			status = regulator_enable(etspi->regulator_3v3_io);
+			if (status < 0) {
+				pr_err("etspi:  regulator_3v3_io enable failed\n");
+				status = -EBUSY;
+				goto etspi_platformInit_33v_set_failed;
+			}
+			pr_err("etspi:  regulator_3v3_io enable status %d\n",status);
 			mdelay(2);
 		}
 		/* Initial Reset Pin*/
@@ -737,9 +790,12 @@ etspi_platformInit_rst_set_failed:
 	gpio_free(etspi->rstPin);
 etspi_platformInit_rst_failed:
 etspi_platformInit_33v_set_failed:
+	if (!IS_ERR(etspi->regulator_3v3_io))
+		regulator_put(etspi->regulator_3v3_io);
+etspi_platformInit_33v_gpio_set_failed:
 	if (gpio_is_valid(etspi->vcc_33v_Pin))
 		gpio_free(etspi->vcc_33v_Pin);
-etspi_platformInit_33v_failed:
+etspi_platformInit_33v_gpio_failed:
 etspi_platformInit_18v_set_failed:
 	if (gpio_is_valid(etspi->vdd_18v_Pin))
 		gpio_free(etspi->vdd_18v_Pin);
@@ -785,6 +841,11 @@ static int etspi_parse_dt(struct device *dev,
 	} else {
 		data->vdd_18v_Pin = gpio;
 		pr_info("%s: 18v power pin=%d\n", __func__, data->vdd_18v_Pin);
+	}
+	data->regulator_3v3_io = regulator_get(dev, "vcc_3v3_io");
+	if (IS_ERR_OR_NULL(data->regulator_3v3_io)) {
+		data->regulator_3v3_io = NULL;
+		pr_err("%s: vcc_3v3_io regulator is not used\n", __func__);
 	}
 	DEBUG_PRINT("%s is successful\n", __func__);
 	return errorno;
