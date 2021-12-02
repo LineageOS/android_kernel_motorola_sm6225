@@ -80,9 +80,11 @@ bengal-caprip-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-caprip-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_RHODE_DTB) += \
-        khaje-rhode-evt-overlay.dtbo
+        khaje-rhode-evt-overlay.dtbo \
+        khaje-rhode-dvt-overlay.dtbo
 
 khaje-rhode-evt-overlay.dtbo-base := khaje-moto-base.dtb
+khaje-rhode-dvt-overlay.dtbo-base := khaje-moto-base.dtb
 
 dtbo-$(CONFIG_HAWAO_DTB) += \
         khaje-hawao-evt-overlay.dtbo
