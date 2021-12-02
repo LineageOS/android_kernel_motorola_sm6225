@@ -24,4 +24,5 @@ enum {
 };
 
 int wt6670f_isp_flow(struct wt6670f *chip);
+int wt6670f_get_firmware_version(void);
 #endif //__QC3P_WT6670_

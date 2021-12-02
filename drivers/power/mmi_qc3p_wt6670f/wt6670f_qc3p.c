@@ -5,6 +5,7 @@
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/unistd.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -22,7 +23,7 @@ static DEFINE_MUTEX(wt6670f_i2c_access);
 //static DEFINE_MUTEX(wt6670f_access_lock);
 //static struct i2c_client *new_client;
 //static int wt6670f_reset_pin = -1;
-static int wt6670f_int_pin = -1;
+//static int wt6670f_int_pin = -1;
 
 #if 0
 struct pinctrl *i2c6_pinctrl;
@@ -372,6 +373,17 @@ int wt6670f_do_reset(void)
 }
 EXPORT_SYMBOL_GPL(wt6670f_do_reset);
 
+int wt6670f_isp_do_reset(void)
+{
+	gpio_direction_output(_wt->reset_pin,1);
+	usleep_range(100,200);
+	gpio_direction_output(_wt->reset_pin,0);
+	usleep_range(2000,3000);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(wt6670f_isp_do_reset);
+
 void wt6670f_reset_chg_type(void)
 {
         _wt->chg_type = 0;
@@ -392,15 +404,15 @@ int moto_tcmd_wt6670f_get_firmware_version(void)
 }
 EXPORT_SYMBOL_GPL(moto_tcmd_wt6670f_get_firmware_version);
 
-static irqreturn_t wt6670f_intr_handler(int irq, void *data)
+/*static irqreturn_t wt6670f_intr_handler(int irq, void *data)
 {
 	pr_info("%s: read charger type!\n", __func__);
 	_wt->chg_ready = true;
 
 	return IRQ_HANDLED;
-}
+}*/
 
-static int wt6670f_parse_dt(struct device *dev)
+/*static int wt6670f_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	int ret = 0;
@@ -436,7 +448,7 @@ static int wt6670f_parse_dt(struct device *dev)
 		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "wt6670f int", dev);
 	enable_irq_wake(gpio_to_irq(wt6670f_int_pin));
 	return 0;
-}
+}*/
 
 extern int wt6670f_isp_flow(struct wt6670f *chip);
 
@@ -445,6 +457,7 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 {
 	int ret = 0;
 	u16 firmware_version = 0;
+	int in_isp_flow_count = 3;
 	struct wt6670f *wt;
 
 	pr_info("[%s]\n", __func__);
@@ -471,67 +484,28 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 	if (gpio_direction_output(wt->reset_pin, 0))
 		pr_info("[%s] gpio_direction_output failed", __func__);
 
-#if 0
-	i2c6_pinctrl = devm_pinctrl_get(&client->dev);
-	if (IS_ERR(i2c6_pinctrl)) {
-		ret = PTR_ERR(i2c6_pinctrl);
-		pr_info("fwq Cannot find i2c6_pinctrl!\n");
-		return ret;
-	}
-
-	i2c6_scl_low = pinctrl_lookup_state(i2c6_pinctrl, "wt6670_i2c_scl_low");
-	if (IS_ERR(i2c6_scl_low)) {
-		ret = PTR_ERR(i2c6_scl_low);
-		pr_info("Cannot find pinctrl state_i2c!\n");
-		return ret;
-	}
-
-	i2c6_scl_high = pinctrl_lookup_state(i2c6_pinctrl, "wt6670_i2c_scl_high");
-	if (IS_ERR(i2c6_scl_high)) {
-		ret = PTR_ERR(i2c6_scl_high);
-		pr_info("Cannot find pinctrl state_i2c!\n");
-		return ret;
-	}
-
-	i2c6_sda_low = pinctrl_lookup_state(i2c6_pinctrl, "wt6670_i2c_sda_low");
-	if (IS_ERR(i2c6_sda_low)) {
-		ret = PTR_ERR(i2c6_sda_low);
-		pr_info("Cannot find pinctrl state_i2c!\n");
-		return ret;
-	}
-
-	i2c6_sda_high = pinctrl_lookup_state(i2c6_pinctrl, "wt6670_i2c_sda_high");
-	if (IS_ERR(i2c6_sda_high)) {
-		ret = PTR_ERR(i2c6_sda_high);
-		pr_info("Cannot find pinctrl state_i2c!\n");
-		return ret;
-	}
-
-	i2c6_i2c = pinctrl_lookup_state(i2c6_pinctrl, "wt6670_i2c");
-	if (IS_ERR(i2c6_i2c)) {
-		ret = PTR_ERR(i2c6_i2c);
-		pr_info("Cannot find pinctrl state_i2c!\n");
-		return ret;
-	}
-#endif
-
 	_wt = wt;
 
-	ret = wt6670f_parse_dt(&client->dev);
+/*	ret = wt6670f_parse_dt(&client->dev);
 	if (ret < 0)
-		pr_info("%s: parse dt error\n", __func__);
+		pr_info("%s: parse dt error\n", __func__);*/
 
 	wt6670f_create_device_node(&(client->dev));
 
-	wt6670f_do_reset();
-	firmware_version = wt6670f_get_firmware_version();
+	//wt6670f_do_reset();
 	wt6670f_reset_chg_type();
+	firmware_version = wt6670f_get_firmware_version();
+
 	pr_info("[%s] firmware_version = %d, chg_type = 0x%x\n", __func__,firmware_version, _wt->chg_type);
 
 	if(firmware_version != WT6670_FIRMWARE_VERSION){
-            pr_info("[%s]: firmware need upgrade, run wt6670_isp!", __func__);
-            wt6670f_isp_flow(wt);
-        }
+		pr_info("[%s]: firmware need upgrade, run wt6670_isp!", __func__);
+		while(in_isp_flow_count--){
+			ret = wt6670f_isp_flow(wt);
+			if(ret == 0)
+				break;
+		}
+	}
 
 	return 0;
 }
