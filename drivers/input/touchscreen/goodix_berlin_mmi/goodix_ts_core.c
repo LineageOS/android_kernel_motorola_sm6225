@@ -1107,6 +1107,11 @@ static int goodix_parse_dt(struct device_node *node,
 	if (board_data->leather_mode_ctrl)
 		ts_info("support goodix leather mode");
 
+	board_data->film_mode_ctrl = of_property_read_bool(node,
+					"goodix,film_mode-ctrl");
+	if (board_data->film_mode_ctrl)
+		ts_info("support goodix film mode");
+
 	board_data->interpolation_ctrl = of_property_read_bool(node,
 					"goodix,interpolation-ctrl");
 	if (board_data->interpolation_ctrl)
