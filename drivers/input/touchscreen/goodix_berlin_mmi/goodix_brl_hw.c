@@ -202,7 +202,6 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 		if (ret < 0)
 			goto power_off;
 
-		msleep(GOODIX_NORMAL_RESET_DELAY_MS);
 		return 0;
 	}
 
@@ -278,6 +277,8 @@ static int brl_dev_confirm(struct goodix_ts_core *cd)
 		ret = -EINVAL;
 		ts_err("device confirm failed, rx_buf:%*ph", 8, rx_buf);
 	}
+
+	msleep(GOODIX_NORMAL_RESET_DELAY_MS);
 
 	ts_info("device connected");
 	return ret;
