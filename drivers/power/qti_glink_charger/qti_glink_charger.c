@@ -163,6 +163,7 @@ struct qti_charger {
 	struct fod_gain	rx_fod_gain;
 	u32				tx_mode;
 	bool				*debug_enabled;
+	u32	wls_curr_max;
 };
 
 static struct qti_charger *this_chip = NULL;
@@ -1378,6 +1379,48 @@ static DEVICE_ATTR(rx_connected, S_IRUGO,
 		rx_connected_show,
 		NULL);
 
+static ssize_t wls_input_current_limit_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wls_curr_max;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wls_curr_max);
+	if (r) {
+		mmi_err(chg, "Invalid TCMD = %lu\n", wls_curr_max);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_CURR_MAX,
+				&wls_curr_max,
+				sizeof(wls_curr_max));
+
+	chg->wls_curr_max = wls_curr_max;
+	return r ? r : count;
+}
+
+static ssize_t wls_input_current_limit_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->wls_curr_max);
+}
+static DEVICE_ATTR(wls_input_current_limit, S_IRUGO|S_IWUSR, wls_input_current_limit_show, wls_input_current_limit_store);
+
 static void wireless_psy_init(struct qti_charger *chg)
 {
 	int rc;
@@ -1395,11 +1438,38 @@ static void wireless_psy_init(struct qti_charger *chg)
 	rc = device_create_file(chg->wls_psy->dev.parent,
 				&dev_attr_tx_mode);
         if (rc)
-		pr_err("couldn't create pen control\n");
+		pr_err("couldn't create wireless tx mode\n");
+
 	rc = device_create_file(chg->wls_psy->dev.parent,
 				&dev_attr_rx_connected);
         if (rc)
-		pr_err("couldn't create wireless sysfs node error\n");
+		pr_err("couldn't create wireless rx_connected\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wls_input_current_limit);
+        if (rc)
+		pr_err("couldn't create wireless input current limit error\n");
+}
+
+static void wireless_psy_deinit(struct qti_charger *chg)
+{
+	if (!chg->wls_psy)
+		return;
+
+	chg->wls_psy = power_supply_get_by_name("wireless");
+	if (!chg->wls_psy) {
+		pr_err("No pen power supply found\n");
+		return;
+	}
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_tx_mode);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_rx_connected);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wls_input_current_limit);
 }
 
 static int qti_charger_init(struct qti_charger *chg)
@@ -1564,6 +1634,8 @@ static void qti_charger_deinit(struct qti_charger *chg)
 	device_remove_file(chg->dev, &dev_attr_addr);
 
 	device_remove_file(chg->dev, &dev_attr_data);
+
+	wireless_psy_deinit(chg);
 
 	/* unregister driver from mmi charger */
 	rc = mmi_unregister_charger_driver(chg->driver);
