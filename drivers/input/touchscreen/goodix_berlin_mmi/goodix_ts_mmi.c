@@ -122,6 +122,33 @@ static int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
 	return ret;
 }
 
+static int goodix_ts_film_mode(struct goodix_ts_core *core_data, int mode)
+{
+	int ret;
+
+	if (core_data->film_mode == mode) {
+		ts_debug("value is same,so not write.\n");
+		return 0;
+	}
+
+	if (core_data->power_on == 0) {
+		core_data->film_mode = mode;
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		return 0;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, FILM_MODE_SWITCH_CMD, 5, mode, 0x00);
+	if (ret < 0) {
+		ts_err("failed to send leather mode cmd");
+		return -EINVAL;
+	}
+
+	msleep(20);
+	core_data->film_mode = mode;
+	ts_info("Success to %s film mode", mode ? "Enable" : "Disable");
+	return ret;
+}
+
 static int goodix_ts_leather_mode(struct goodix_ts_core *core_data, int mode)
 {
 	int ret;
@@ -145,7 +172,7 @@ static int goodix_ts_leather_mode(struct goodix_ts_core *core_data, int mode)
 
 	msleep(20);
 	core_data->leather_mode = mode;
-	ts_info("Success to %s lather mode", mode ? "Enable" : "Disable");
+	ts_info("Success to %s leather mode", mode ? "Enable" : "Disable");
 	return ret;
 }
 /*
@@ -171,6 +198,14 @@ static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 	}
 
 	switch (mode) {
+		case 0x00:
+			if (core_data->board_data.film_mode_ctrl)
+				ret = goodix_ts_film_mode(core_data, EXIT_FILM_MODE);
+			break;
+		case 0x01:
+			if (core_data->board_data.film_mode_ctrl)
+				ret = goodix_ts_film_mode(core_data, ENTER_FILM_MODE);
+			break;
 		case 0x10:
 			if (core_data->board_data.leather_mode_ctrl)
 				ret = goodix_ts_leather_mode(core_data, EXIT_LEATHER_MODE);
@@ -795,6 +830,15 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 						core_data->leather_mode, 0x00);
 		if (!ret) {
 			ts_info("Success to %s leather mode", core_data->leather_mode ? "Enable" : "Disable");
+			msleep(20);
+		}
+	}
+
+	if (core_data->board_data.film_mode_ctrl && core_data->film_mode) {
+		ret = goodix_ts_send_cmd(core_data, FILM_MODE_SWITCH_CMD, 5,
+						core_data->film_mode, 0x00);
+		if (!ret) {
+			ts_info("Success to %s film mode", core_data->film_mode ? "Enable" : "Disable");
 			msleep(20);
 		}
 	}

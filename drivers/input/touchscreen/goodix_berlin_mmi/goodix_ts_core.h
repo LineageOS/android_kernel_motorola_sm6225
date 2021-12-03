@@ -289,6 +289,7 @@ struct goodix_ts_board_data {
 
 	bool sensitivity_ctrl;
 	bool stylus_mode_ctrl;
+	bool film_mode_ctrl;
 	bool leather_mode_ctrl;
 	bool interpolation_ctrl;
 	bool report_rate_ctrl;
@@ -511,6 +512,7 @@ struct goodix_ts_core {
 	struct notifier_block fb_notifier;
 #endif
 
+	int film_mode;
 	int leather_mode;
 	int stylus_mode;
 	int interpolation;
