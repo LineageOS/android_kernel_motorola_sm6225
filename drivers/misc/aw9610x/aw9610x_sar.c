@@ -1418,6 +1418,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 
         for (i = 0; i < aw9610x->aw_channel_number; i++)
         {
+		if (aw9610x->aw_ref_channel == i) continue;
                 if (!strcmp(sensors_cdev->name, aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + i])) {
                         if (enable == 1){
                                 input_report_abs(aw9610x->aw_pad[i].input, ABS_DISTANCE, 0);
@@ -1807,6 +1808,13 @@ static int32_t aw9610x_parse_dt(struct device *dev, struct aw9610x *aw9610x,
 		}
 		LOG_INFO("aw_channel_number = %d", aw9610x->aw_channel_number);
 	}
+	val = of_property_read_u32(np, "ref_channel", &aw9610x->aw_ref_channel);
+	if (val != 0) {
+		LOG_ERR("aw_ref_channel failed!");
+		return -AW_MULTIPLE_SAR_FAILED;
+	} else {
+		LOG_INFO("aw_ref_channel = %d", aw9610x->aw_ref_channel);
+	}
 
 	if (aw9610x->aw_channel_number == AW_CHANNEL_NUMBER_TWO) {
 		of_property_read_string(np, "ch0_name", &aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + 0]);
@@ -2101,6 +2109,7 @@ aw9610x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 #ifdef USE_SENSORS_CLASS
 	for (i = 0; i < aw9610x->aw_channel_number; i++){
+		if (aw9610x->aw_ref_channel == i) continue;
 		sensors_capsensor_chs[i].sensors_enable = capsensor_set_enable;
 		sensors_capsensor_chs[i].sensors_poll_delay = NULL;
 		sensors_capsensor_chs[i].name = aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + i];
@@ -2180,6 +2189,7 @@ static int32_t aw9610x_i2c_remove(struct i2c_client *i2c)
 #ifdef USE_SENSORS_CLASS
 	for (i = 0; i < aw9610x->aw_channel_number; i++)
 	{
+		if (aw9610x->aw_ref_channel == i) continue;
 		sensors_classdev_unregister(&sensors_capsensor_chs[i]);
 	}
 #endif

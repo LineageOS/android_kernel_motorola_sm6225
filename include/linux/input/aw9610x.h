@@ -192,6 +192,7 @@ struct aw9610x {
 	uint8_t mode_flag1;
 	uint8_t pad;
 	uint32_t aw_channel_number;
+        uint32_t aw_ref_channel;
 	const char *aw_ch_name[12];
 
 	uint32_t sar_num;
