@@ -1112,6 +1112,11 @@ static int goodix_parse_dt(struct device_node *node,
 	if (board_data->interpolation_ctrl)
 		ts_info("support goodix interpolation mode");
 
+	board_data->report_rate_ctrl = of_property_read_bool(node,
+					"goodix,report_rate-ctrl");
+	if (board_data->report_rate_ctrl)
+		ts_info("support goodix report rate switch mode");
+
 	board_data->edge_ctrl = of_property_read_bool(node,
 					"goodix,edge-ctrl");
 	if (board_data->edge_ctrl)
