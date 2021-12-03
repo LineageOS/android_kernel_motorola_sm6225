@@ -327,6 +327,53 @@ static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->stylus_mode);
 }
 
+#define DSI_REFRESH_RATE_144			144
+static int goodix_ts_mmi_set_report_rate(struct goodix_ts_core *core_data)
+{
+	int ret = 0;
+	int mode = 0;
+
+	if (core_data->interpolation == 0x00) {
+		mode = REPORT_RATE_DEFAULT;
+		goto ts_send_cmd;
+	}
+
+	if (core_data->board_data.report_rate_ctrl) {
+		if (core_data->refresh_rate == DSI_REFRESH_RATE_144)
+			mode = REPORT_RATE_576HZ;
+		else
+			mode = REPORT_RATE_480HZ;
+	} else
+		mode = REPORT_RATE_720HZ;
+
+ts_send_cmd:
+	if (mode == core_data->report_rate_mode) {
+		ts_debug("value is same, so not to write");
+		return 0;
+	}
+
+	core_data->report_rate_mode = mode;
+	if (core_data->power_on == 0) {
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		return 0;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5,
+						core_data->report_rate_mode, 0x00);
+	if (ret < 0) {
+		ts_err("failed to set report rate, mode = %d", mode);
+		return -EINVAL;
+	}
+
+	msleep(20);
+	ts_info("Success to set %s\n", mode == 0x00 ? "Default" :
+				(mode == 0x01 ? "REPORT_RATE_720HZ" :
+				(mode == 0x02 ? "REPORT_RATE_576HZ" :
+				"REPORT_RATE_480HZ")));
+
+	return ret;
+}
+
 static ssize_t goodix_ts_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -346,27 +393,12 @@ static ssize_t goodix_ts_interpolation_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (core_data->interpolation == mode) {
-		ts_debug("value is same,so not write.\n");
-		return size;
-	}
-
-	if (core_data->power_on == 0) {
-		core_data->interpolation = mode;
-		ts_debug("The touch is in sleep state, restore the value when resume\n");
-		return 0;
-	}
-
-	ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5, mode, 0x00);
-	if (ret < 0) {
-		ts_err("failed to send interpolation cmd");
-		return -EINVAL;
-	}
-
-	msleep(20);
 	core_data->interpolation = mode;
-	ts_info("Success to %s interpolation mode", mode ? "Enable" : "Disable");
-	return size;
+	ret = goodix_ts_mmi_set_report_rate(core_data);
+	if (ret)
+		return ret;
+	else
+		return size;
 }
 
 static ssize_t goodix_ts_interpolation_show(struct device *dev,
@@ -381,6 +413,22 @@ static ssize_t goodix_ts_interpolation_show(struct device *dev,
 	ts_info("interpolation = %d.\n", core_data->interpolation);
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->interpolation);
 }
+
+static int goodix_ts_mmi_refresh_rate(struct device *dev, int freq)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	GET_GOODIX_DATA(dev);
+
+	core_data->refresh_rate = freq;
+
+	if (core_data->board_data.interpolation_ctrl)
+		goodix_ts_mmi_set_report_rate(core_data);
+
+	return 0;
+}
+
 /*
  * HAL: args[0] suppression area, args[1] rotation direction.
  * CMD: [06 17 data0 data1],
@@ -753,9 +801,13 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 
 	if (core_data->board_data.interpolation_ctrl && core_data->interpolation) {
 		ret = goodix_ts_send_cmd(core_data, INTERPOLATION_SWITCH_CMD, 5,
-						core_data->interpolation, 0x00);
+						core_data->report_rate_mode, 0x00);
 		if (!ret) {
-			ts_info("Success to %s interpolation mode", core_data->interpolation ? "Enable" : "Disable");
+			ts_info("Success to %s interpolation mode\n",
+					core_data->report_rate_mode == 0x00 ? "Default" :
+					(core_data->report_rate_mode == 0x01 ? "REPORT_RATE_720HZ" :
+					(core_data->report_rate_mode == 0x02 ? "REPORT_RATE_576HZ" :
+					"REPORT_RATE_480HZ")));
 			msleep(20);
 		}
 	}
@@ -819,6 +871,7 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.drv_irq = goodix_ts_mmi_methods_drv_irq,
 	.power = goodix_ts_mmi_methods_power,
 	.charger_mode = goodix_ts_mmi_charger_mode,
+	.refresh_rate = goodix_ts_mmi_refresh_rate,
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
 	/* vendor specific attribute group */
