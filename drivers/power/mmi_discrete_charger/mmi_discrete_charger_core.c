@@ -1907,6 +1907,7 @@ static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 {
 	chip->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	chip->typec_mode = MMI_POWER_SUPPLY_TYPEC_NONE;
+	chip->pd_active = MMI_POWER_SUPPLY_PD_INACTIVE;
 	if (chip->use_extcon)
 		mmi_notify_device_mode(chip, false);
 	vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
