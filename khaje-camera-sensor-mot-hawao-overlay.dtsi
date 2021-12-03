@@ -1,0 +1,108 @@
+#include <dt-bindings/clock/qcom,gcc-khaje.h>
+#include <dt-bindings/msm/msm-camera.h>
+
+&tlmm {
+	cam_sensor_mclk0_active: cam_sensor_mclk0_active {
+		/* MCLK 0*/
+		mux {
+			pins = "gpio20";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio20";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_mclk0_suspend: cam_sensor_mclk0_suspend {
+		/* MCLK 0*/
+		mux {
+			pins = "gpio20";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio20";
+			bias-pull-down;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_rear0_reset_active: cam_sensor_rear0_reset_active {
+		mux {
+			pins = "gpio18";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio18";
+			bias-disable; /* No PULL */
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_rear0_reset_suspend: cam_sensor_rear0_reset_suspend {
+		mux {
+			pins = "gpio18";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio18";
+			bias-pull-down; /* PULL DOWN */
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+};
+
+&soc {
+	qcom,cam-res-mgr {
+		compatible = "qcom,cam-res-mgr";
+		status = "ok";
+	};
+};
+
+&cam_cci0 {
+	 /* main : JN1*/
+	qcom,cam-sensor@0 {
+		cell-index = <0>;
+		compatible = "qcom,cam-sensor";
+		csiphy-sd-index = <0>;
+		sensor-position-roll = <90>;
+		sensor-position-pitch = <0>;
+		sensor-position-yaw = <180>;
+		cam_vio-supply = <&cam_ldo7>;
+		cam_vana-supply = <&cam_ldo4>;
+		cam_vdig-supply = <&cam_ldo2>;
+		cam_clk-supply = <&gcc_camss_top_gdsc>;
+		regulator-names ="cam_vio", "cam_vana", "cam_vdig",
+			"cam_clk";
+		rgltr-cntrl-support;
+		pwm-switch;
+		rgltr-min-voltage = <1800000 2800000 1050000 0>;
+		rgltr-max-voltage = <1800000 2800000 1050000 0>;
+		rgltr-load-current = <1800000 2800000 1050000 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk0_active
+				&cam_sensor_rear0_reset_active>;
+		pinctrl-1 = <&cam_sensor_mclk0_suspend
+				&cam_sensor_rear0_reset_suspend>;
+		gpios = <&tlmm 20 0>,
+			<&tlmm 18 0>;
+		gpio-reset = <1>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK0",
+					"CAM_RESET0";
+		cci-master = <0>;
+		status = "ok";
+		clocks = <&gcc GCC_CAMSS_MCLK0_CLK>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <24000000>;
+	};
+};
