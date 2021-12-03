@@ -16,7 +16,7 @@
 #include "khaje-hawao-fps-overlay_evb.dtsi"
 #include "khaje-hawao-touchscreen-overlay.dtsi"
 #include "sgm7220.dtsi"
-#include "discrete_charging.dtsi"
+/*#include "discrete_charging.dtsi"*/
 
 &firmware {
 	android {
