@@ -692,8 +692,9 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 		break;
 	case TS_MMI_PM_DEEPSLEEP:
 		/* enter sleep mode or power off */
-		if (hw_ops->suspend)
-			hw_ops->suspend(core_data);
+		/* if (hw_ops->suspend)
+		       hw_ops->suspend(core_data);
+		 */
 		core_data->gesture_enabled = false;
 		break;
 	case TS_MMI_PM_ACTIVE:
