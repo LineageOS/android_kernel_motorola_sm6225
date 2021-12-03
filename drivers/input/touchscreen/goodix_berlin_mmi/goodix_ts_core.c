@@ -2341,6 +2341,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
+	/* confirm it's goodix touch dev or not */
+	ret = core_data->hw_ops->dev_confirm(core_data);
+	if (ret) {
+		ts_err("goodix device confirm failed");
+		goto err_out;
+	}
+
 	/* Pinctrl handle is optional. */
 	ret = goodix_ts_pinctrl_init(core_data);
 	if (!ret && core_data->pinctrl) {
@@ -2354,13 +2361,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	ret = goodix_ts_stylus_clk_init(core_data);
 	if (ret)
 		ts_err("failed get goodix stylus clock");
-
-	/* confirm it's goodix touch dev or not */
-	ret = core_data->hw_ops->dev_confirm(core_data);
-	if (ret) {
-		ts_err("goodix device confirm failed");
-		goto err_out;
-	}
 
 	/* generic notifier callback */
 	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
