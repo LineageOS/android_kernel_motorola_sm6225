@@ -20,6 +20,8 @@
 #include "sgm7220_hawao.dtsi"
 #include "discrete_charging_hawao.dtsi"
 #include "discrete-rt-pd-manger.dtsi"
+#include "camera/khaje-camera-sensor-mot-hawao-overlay.dtsi"
+#include "khaje-hawao-wl2864c.dtsi"
 
 &firmware {
 	android {
