@@ -193,6 +193,7 @@
             ch2_name = "Moto CapSense Ch2";
             ch3_name = "Moto CapSense Ch3";
             ch4_name = "Moto CapSense Ch4";
+            ref_channel = <1>;
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
