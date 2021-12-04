@@ -5,12 +5,12 @@
 
 		fingerfp_rst_high: fingerfp_rst_high {
 			mux {
-				pins = "gpio3";
+				pins = "gpio104";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio3";
+				pins = "gpio104";
 				drive-strength = <8>;
 				output-high;
 				bias-pull-up;
@@ -19,11 +19,11 @@
 
 		fingerfp_rst_low: fingerfp_rst_low {
 			mux {
-				pins = "gpio3";
+				pins = "gpio104";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio3";
+				pins = "gpio104";
 				drive-strength = <8>;
 				output-low;
 				bias-pull-down;
@@ -45,12 +45,12 @@
 
 		fingerfp_vcc_high: fingerfp_vcc_high {
 			mux {
-				pins = "gpio54";
+				pins = "gpio108";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio54";
+				pins = "gpio108";
 				drive-strength = <2>;
 				bias-disable;
 				output-high;
@@ -59,12 +59,12 @@
 	
 		fingerfp_vcc_low: fingerfp_vcc_low {
 			mux {
-				pins = "gpio54";
+				pins = "gpio108";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio54";
+				pins = "gpio108";
 				drive-strength = <2>;
 				bias-disable;
 				output-low;
@@ -163,10 +163,10 @@
 		compatible = "fp-egistec";
 		fp-ctrl-power;
 		fp-gpio-vcc-enable;
+		egistec,gpio_vcc_en = <&tlmm 108 0x00>;
+		egistec,gpio_reset = <&tlmm 104 0x00>;
 		egistec,gpio_irq = <&tlmm 83 0x00>;
-		egistec,gpio_reset = <&tlmm 3 0x00>;
-		egistec,gpio_vcc_en = <&tlmm 54 0x00>;
-		pinctrl-names = "egis_rst_high", "egis_rst_low", "egis_irq_active","egis_vcc_high","egis_vcc_low";
+		pinctrl-names = "egis_rst_high", "egis_rst_low", "egis_irq_active", "egis_vcc_high", "egis_vcc_low";
 		pinctrl-0 = <&fingerfp_rst_high>;
 		pinctrl-1 = <&fingerfp_rst_low>;
 		pinctrl-2 = <&fingerfp_irq_active>;
