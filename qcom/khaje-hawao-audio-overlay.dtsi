@@ -46,7 +46,7 @@
 
         aw882xx: aw882xx_smartpa@34 {
                 status = "okay";
-                compatible = "awinic,aw882xx_smartpa";
+                compatible = "awinic,aw882xxacf_smartpa";
                 reg = <0x34>;
                 /* reset-gpio = <&tlmm 107 0>; */
                 irq-gpio = <&tlmm 102 0x2008>;
@@ -62,10 +62,10 @@
                 aw-cali-mode = "aw_attr";
         };
 
-        aw882xx_recv: aw882xx_recv_smartpa@37 {
+        aw882xx_recv: aw882xx_recv_smartpa@35 {
                 status = "okay";
-                compatible = "awinic,aw882xx_smartpa";
-                reg = <0x37>;
+                compatible = "awinic,aw882xxacf_smartpa";
+                reg = <0x35>;
                 /* reset-gpio = <&tlmm 107 0>; */
                 irq-gpio = <&tlmm 107 0x2008>;
                 dc-flag = <0>;
