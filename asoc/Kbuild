@@ -100,6 +100,10 @@ ifeq ($(KERNEL_BUILD), 0)
                 INCS    +=  -include $(AUDIO_ROOT)/config/rhodeautoconf.h
         endif
 
+        ifneq (,$(filter hawao%, $(TARGET_PRODUCT)))
+                INCS    +=  -include $(AUDIO_ROOT)/config/hawaoautoconf.h
+        endif
+
 endif
 
 # As per target team, build is done as follows:

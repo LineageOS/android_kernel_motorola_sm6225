@@ -93,6 +93,10 @@ ifeq ($(KERNEL_BUILD), 0)
 	ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
                 INCS    +=  -include $(AUDIO_ROOT)/config/rhodeautoconf.h
         endif
+
+        ifneq (,$(filter hawao%, $(TARGET_PRODUCT)))
+                INCS    +=  -include $(AUDIO_ROOT)/config/hawaoautoconf.h
+        endif
 endif
 
 # As per target team, build is done as follows:
@@ -291,7 +295,7 @@ hdmi_dlkm-y := $(HDMICODEC_OBJS)
 
 #Add awinic driver begain
 ifdef CONFIG_SND_SMARTPA_AW882XX
-ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
+ifneq (,$(filter rhode% hawao%, $(TARGET_PRODUCT)))
 	SND_SOC_AW882XX_OBJS += aw88261/aw882xx.o
 	SND_SOC_AW882XX_OBJS += aw88261/aw_init.o
 	SND_SOC_AW882XX_OBJS += aw88261/aw_bin_parse.o
