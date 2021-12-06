@@ -1439,6 +1439,8 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		if (kthread_should_stop())
 			break;
 
+		down(&sgm->sem_dpdm);
+		dev_info(sgm->dev, "mmi_hvdcp_detect_kthread begin\n");
 		sgm->mmi_qc3_trig_flag = false;
 		sgm->mmi_is_qc3_authen = true;
 		sgm4154x_set_input_curr_lim(sgm, MMI_HVDCP_DETECT_ICL_LIMIT);
@@ -1471,6 +1473,8 @@ static int mmi_hvdcp_detect_kthread(void *param)
 	out:
 		sgm4154x_set_input_curr_lim(sgm, sgm->input_current_cache);
 		sgm->mmi_is_qc3_authen = false;
+		up(&sgm->sem_dpdm);
+		dev_info(sgm->dev, "mmi_hvdcp_detect_kthread end\n");
 	}while(!kthread_should_stop());
 
 	dev_dbg(sgm->dev, "qc3 kthread stop\n");
@@ -1479,11 +1483,10 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 {
-	dev_err(sgm->dev, "start hvdcp detect\n");
 
 	if (sgm->mmi_qc3_support
-		&& sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
-		&& !sgm->mmi_is_qc3_authen) {
+		&& sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
+		dev_info(sgm->dev, "start hvdcp detect\n");
 		sgm->mmi_qc3_trig_flag = true;
 		wake_up_interruptible(&sgm->mmi_qc3_wait_que);
 	}
@@ -1536,8 +1539,10 @@ static void charger_detect_work_func(struct work_struct *work)
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
 		(sgm->state.chrg_type == SGM4154x_UNKNOWN))
 		&& (!sgm->typec_apsd_rerun_done)) {
+		down(&sgm->sem_dpdm);
 		dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
 		schedule_work(&sgm->rerun_apsd_work);
+		up(&sgm->sem_dpdm);
 		goto err;
 	}
 
@@ -2352,6 +2357,8 @@ static int sgm4154x_probe(struct i2c_client *client,
 		pr_info("[%s] device not found !!!\n", __func__);
 		return ret;
 	}
+
+	sema_init(&sgm->sem_dpdm, 1);
 
 	// Customer customization
 	ret = sgm4154x_parse_dt(sgm);

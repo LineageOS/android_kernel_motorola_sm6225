@@ -324,6 +324,7 @@ struct sgm4154x_device {
 
 	/*mmi qc3*/
 	bool mmi_qc3_support;
+	struct	semaphore sem_dpdm;
 	struct task_struct	*mmi_qc3_authen_task;
 	wait_queue_head_t	mmi_qc3_wait_que;
 	bool			mmi_qc3_trig_flag;
