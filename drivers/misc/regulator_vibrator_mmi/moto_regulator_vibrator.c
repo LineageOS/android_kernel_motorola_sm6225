@@ -75,8 +75,16 @@ static void ext_vib_work(struct work_struct *work)
 			ret = regulator_disable(chip->vcc);
 		}
 	}
-	pr_info("vib:chip->state = %d,vib_play_ms=%lld vib_vol=%d\n",chip->state,
-			chip->vib_play_ms, regulator_get_voltage(chip->vcc));
+	if (chip->pwr_by_gpio)
+	{
+		pr_info("vib:chip->state = %d,vib_play_ms=%lld\n",chip->state,
+				chip->vib_play_ms);
+	}
+	else
+	{
+		pr_info("vib:chip->state = %d,vib_play_ms=%lld vib_vol=%d\n",chip->state,
+				chip->vib_play_ms, regulator_get_voltage(chip->vcc));
+	}
 }
 
 static enum hrtimer_restart vib_stop_timer(struct hrtimer *timer)
