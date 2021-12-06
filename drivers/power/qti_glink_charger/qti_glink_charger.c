@@ -162,6 +162,7 @@ struct qti_charger {
 	struct fod_curr	rx_fod_curr;
 	struct fod_gain	rx_fod_gain;
 	u32				tx_mode;
+	u32				folio_mode;
 	bool				*debug_enabled;
 	u32	wls_curr_max;
 };
@@ -1421,6 +1422,48 @@ static ssize_t wls_input_current_limit_show(struct device *dev,
 }
 static DEVICE_ATTR(wls_input_current_limit, S_IRUGO|S_IWUSR, wls_input_current_limit_show, wls_input_current_limit_store);
 
+static ssize_t folio_mode_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long folio_mode;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &folio_mode);
+	if (r) {
+		pr_err("Invalid folio_mode = %lu\n", folio_mode);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_FOLIO_MODE,
+				&folio_mode,
+				sizeof(folio_mode));
+	chg->folio_mode = folio_mode;
+
+	return r ? r : count;
+}
+
+static ssize_t folio_mode_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("PEN: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->folio_mode);
+}
+static DEVICE_ATTR(folio_mode, S_IRUGO|S_IWUSR, folio_mode_show, folio_mode_store);
+
 static void wireless_psy_init(struct qti_charger *chg)
 {
 	int rc;
@@ -1449,6 +1492,11 @@ static void wireless_psy_init(struct qti_charger *chg)
 				&dev_attr_wls_input_current_limit);
         if (rc)
 		pr_err("couldn't create wireless input current limit error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_folio_mode);
+        if (rc)
+		pr_err("couldn't create wireless folio mode error\n");
 }
 
 static void wireless_psy_deinit(struct qti_charger *chg)
@@ -1470,6 +1518,9 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_wls_input_current_limit);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_folio_mode);
 }
 
 static int qti_charger_init(struct qti_charger *chg)
