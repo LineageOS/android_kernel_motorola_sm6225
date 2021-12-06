@@ -36,10 +36,11 @@
                         <17>;
     };
 
-	ldo_vib {
-		compatible = "moto,vibrator-ldo";
-		moto,vib-ldo-gpio = <&pm6125_gpios 8 0>;
-		status = "ok";
+	ext_vib {
+		compatible = "ext-vibrator-ldo";
+		vib-gpio-vcc-enable;
+		vib,gpio_2v6_en = <&tlmm 25 0x00>;
+		vib,gpio_3v0_en = <&tlmm 97 0x00>;
 	};
 };
 
