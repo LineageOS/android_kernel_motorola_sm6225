@@ -170,7 +170,6 @@ static int cw_read_word(struct i2c_client *client, unsigned char reg, unsigned c
 	unsigned int temp_val_buff;
 	unsigned int temp_val_second;
 
-	msleep(1);
 	ret = i2c_smbus_read_i2c_block_data( client, reg, 2, reg_val );
 	if (ret < 0)
 		printk("IIC error %d\n", ret);
