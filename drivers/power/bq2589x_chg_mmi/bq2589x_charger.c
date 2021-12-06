@@ -164,6 +164,7 @@ struct bq2589x {
 
 	/*mmi qc3*/
 	bool mmi_qc3_support;
+	struct	semaphore sem_dpdm;
 	struct task_struct	*mmi_qc3_authen_task;
 	wait_queue_head_t	mmi_qc3_wait_que;
 	bool			mmi_qc3_trig_flag;
@@ -1708,6 +1709,8 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		if (kthread_should_stop())
 			break;
 
+		down(&bq->sem_dpdm);
+		dev_info(bq->dev, "mmi_hvdcp_detect_kthread begin\n");
 		bq->mmi_qc3_trig_flag = false;
 		bq->mmi_is_qc3_authen = true;
 		bq2589x_set_input_current_limit(bq, MMI_HVDCP_DETECT_ICL_LIMIT);
@@ -1740,6 +1743,8 @@ static int mmi_hvdcp_detect_kthread(void *param)
 	out:
 		bq2589x_set_input_current_limit(bq, bq->input_current_cache);
 		bq->mmi_is_qc3_authen = false;
+		up(&bq->sem_dpdm);
+		dev_info(bq->dev, "mmi_hvdcp_detect_kthread end\n");
 	}while(!kthread_should_stop());
 
 	dev_dbg(bq->dev, "qc3 kthread stop\n");
@@ -1748,14 +1753,16 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 static void mmi_start_hvdcp_detect(struct bq2589x *bq)
 {
-	dev_err(bq->dev, "start hvdcp detect\n");
 
 	if (bq->mmi_qc3_support
-		&& bq->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
-		&& !bq->mmi_is_qc3_authen) {
+		&& bq->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
+		//down(&bq->sem_dpdm);
+		dev_info(bq->dev, "start hvdcp detect\n");
 		bq->mmi_qc3_trig_flag = true;
 		wake_up_interruptible(&bq->mmi_qc3_wait_que);
+		//up(&bq->sem_dpdm);
 	}
+
 }
 
 static void bq2589x_adapter_in_func(struct bq2589x *bq)
@@ -1766,8 +1773,10 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		bq->vbus_type == BQ2589X_VBUS_NONSTAND ||
 		bq->vbus_type == BQ2589X_VBUS_UNKNOWN)
 		&& (!bq->typec_apsd_rerun_done)) {
+		down(&bq->sem_dpdm);
 		dev_err(bq->dev, "rerun apsd for 0x%x\n", bq->vbus_type);
 		bq2589x_rerun_apsd_if_required(bq);
+		up(&bq->sem_dpdm);
 		return;
 	}
 
@@ -2366,6 +2375,8 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	bq->batt_psy = power_supply_get_by_name("bms");
 
 	g_bq = bq;
+
+	sema_init(&bq->sem_dpdm, 1);
 
 	if (client->dev.of_node)
 		bq2589x_parse_dt(&client->dev, bq);
