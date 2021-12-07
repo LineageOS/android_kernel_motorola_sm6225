@@ -2684,6 +2684,8 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 
 	panel->reset_gpio_always_on = utils->read_bool(utils->data,
 			"qcom,platform-reset-gpio-always-on");
+	panel->reset_config.reset_force_pull_low = of_property_read_bool(utils->data,
+				"qcom,mdss-dsi-reset-force-pull-low");
 
 	return 0;
 }
