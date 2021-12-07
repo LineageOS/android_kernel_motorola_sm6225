@@ -43,9 +43,7 @@
 #include <linux/sched/rt.h>
 #endif /* #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)) */
 
-/* #define DEBUG_GPIO	66 */
-
-#define RT1711H_DRV_VERSION	"2.0.5_G"
+#define RT1711H_DRV_VERSION	"2.0.6_G"
 
 #define RT1711H_IRQ_WAKE_TIME	(500) /* ms */
 
@@ -55,17 +53,11 @@ struct rt1711_chip {
 #ifdef CONFIG_RT_REGMAP
 	struct rt_regmap_device *m_dev;
 #endif /* CONFIG_RT_REGMAP */
-	struct semaphore io_lock;
-	struct semaphore suspend_lock;
 	struct tcpc_desc *tcpc_desc;
 	struct tcpc_device *tcpc;
-	struct kthread_worker irq_worker;
-	struct kthread_work irq_work;
-	struct task_struct *irq_worker_task;
-	struct wakeup_source *irq_wake_lock;
 #ifdef CONFIG_TCPC_RT1711H
 	atomic_t poll_count;
-	struct delayed_work	poll_work;
+	struct delayed_work poll_work;
 #endif /* CONFIG_TCPC_RT1711H */
 	int irq_gpio;
 	int irq;
@@ -531,39 +523,6 @@ static inline void rt1711_poll_ctrl(struct rt1711_chip *chip)
 }
 #endif /* CONFIG_TCPC_RT1711H */
 
-static void rt1711_irq_work_handler(struct kthread_work *work)
-{
-	struct rt1711_chip *chip =
-			container_of(work, struct rt1711_chip, irq_work);
-	int regval = 0;
-	int gpio_val;
-
-#ifdef CONFIG_TCPC_RT1711H
-	rt1711_poll_ctrl(chip);
-#endif /* CONFIG_TCPC_RT1711H */
-	/* make sure I2C bus had resumed */
-	down(&chip->suspend_lock);
-	tcpci_lock_typec(chip->tcpc);
-
-#ifdef DEBUG_GPIO
-	gpio_set_value(DEBUG_GPIO, 1);
-#endif
-
-	do {
-		regval = tcpci_alert(chip->tcpc);
-		if (regval)
-			break;
-		gpio_val = gpio_get_value(chip->irq_gpio);
-	} while (gpio_val == 0);
-
-	tcpci_unlock_typec(chip->tcpc);
-	up(&chip->suspend_lock);
-
-#ifdef DEBUG_GPIO
-	gpio_set_value(DEBUG_GPIO, 1);
-#endif
-}
-
 #ifdef CONFIG_TCPC_RT1711H
 static void rt1711_poll_work(struct work_struct *work)
 {
@@ -579,88 +538,71 @@ static irqreturn_t rt1711_intr_handler(int irq, void *data)
 {
 	struct rt1711_chip *chip = data;
 
-	__pm_wakeup_event(chip->irq_wake_lock, RT1711H_IRQ_WAKE_TIME);
+	pm_wakeup_event(chip->dev, RT1711H_IRQ_WAKE_TIME);
 
-#ifdef DEBUG_GPIO
-	gpio_set_value(DEBUG_GPIO, 0);
-#endif
-	kthread_queue_work(&chip->irq_worker, &chip->irq_work);
+#ifdef CONFIG_TCPC_RT1711H
+	rt1711_poll_ctrl(chip);
+#endif /* CONFIG_TCPC_RT1711H */
+
+	tcpci_lock_typec(chip->tcpc);
+	tcpci_alert(chip->tcpc);
+	tcpci_unlock_typec(chip->tcpc);
+
 	return IRQ_HANDLED;
 }
 
 static int rt1711_init_alert(struct tcpc_device *tcpc)
 {
 	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
-	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
-	int ret;
-	char *name;
-	int len;
+	int ret = 0;
+	char *name = NULL;
 
 	/* Clear Alert Mask & Status */
 	rt1711_write_word(chip->client, TCPC_V10_REG_ALERT_MASK, 0);
 	rt1711_write_word(chip->client, TCPC_V10_REG_ALERT, 0xffff);
 
-	len = strlen(chip->tcpc_desc->name);
-	name = devm_kzalloc(chip->dev, len+5, GFP_KERNEL);
+	name = devm_kasprintf(chip->dev, GFP_KERNEL, "%s-IRQ",
+			      chip->tcpc_desc->name);
 	if (!name)
 		return -ENOMEM;
 
-	snprintf(name, PAGE_SIZE, "%s-IRQ", chip->tcpc_desc->name);
-
-	pr_info("%s name = %s, gpio = %d\n", __func__,
-				chip->tcpc_desc->name, chip->irq_gpio);
+	dev_info(chip->dev, "%s name = %s, gpio = %d\n",
+			    __func__, chip->tcpc_desc->name, chip->irq_gpio);
 
 	ret = devm_gpio_request(chip->dev, chip->irq_gpio, name);
-#ifdef DEBUG_GPIO
-	gpio_request(DEBUG_GPIO, "debug_latency_pin");
-	gpio_direction_output(DEBUG_GPIO, 1);
-#endif
 	if (ret < 0) {
-		pr_err("Error: failed to request GPIO%d (ret = %d)\n",
-		chip->irq_gpio, ret);
-		goto init_alert_err;
+		dev_notice(chip->dev, "%s request GPIO fail(%d)\n",
+				      __func__, ret);
+		return ret;
 	}
 
 	ret = gpio_direction_input(chip->irq_gpio);
 	if (ret < 0) {
-		pr_err("Error: failed to set GPIO%d as input pin(ret = %d)\n",
-		chip->irq_gpio, ret);
-		goto init_alert_err;
+		dev_notice(chip->dev, "%s set GPIO fail(%d)\n", __func__, ret);
+		return ret;
 	}
 
 	chip->irq = gpio_to_irq(chip->irq_gpio);
-	if (chip->irq <= 0) {
-		pr_err("%s gpio to irq fail, chip->irq(%d)\n",
-						__func__, chip->irq);
-		goto init_alert_err;
+	if (chip->irq < 0) {
+		dev_notice(chip->dev, "%s gpio to irq fail(%d)",
+				      __func__, ret);
+		return ret;
 	}
 
-	pr_info("%s : IRQ number = %d\n", __func__, chip->irq);
+	dev_info(chip->dev, "%s IRQ number = %d\n", __func__, chip->irq);
 
-	kthread_init_worker(&chip->irq_worker);
-	chip->irq_worker_task = kthread_run(kthread_worker_fn,
-			&chip->irq_worker, "%s", chip->tcpc_desc->name);
-	if (IS_ERR(chip->irq_worker_task)) {
-		pr_err("Error: Could not create tcpc task\n");
-		goto init_alert_err;
-	}
-
-	sched_setscheduler(chip->irq_worker_task, SCHED_FIFO, &param);
-	kthread_init_work(&chip->irq_work, rt1711_irq_work_handler);
-
-	pr_info("IRQF_NO_THREAD Test\n");
-	ret = request_irq(chip->irq, rt1711_intr_handler,
-		IRQF_TRIGGER_FALLING | IRQF_NO_THREAD, name, chip);
+	ret = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
+					rt1711_intr_handler,
+					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					name, chip);
 	if (ret < 0) {
-		pr_err("Error: failed to request irq%d (gpio = %d, ret = %d)\n",
-			chip->irq, chip->irq_gpio, ret);
-		goto init_alert_err;
+		dev_notice(chip->dev, "%s request irq fail(%d)\n",
+				      __func__, ret);
+		return ret;
 	}
+	device_init_wakeup(chip->dev, true);
 
-	enable_irq_wake(chip->irq);
 	return 0;
-init_alert_err:
-	return -EINVAL;
 }
 
 int rt1711_alert_status_clear(struct tcpc_device *tcpc, uint32_t mask)
@@ -1225,31 +1167,25 @@ static int rt1711_get_message(struct tcpc_device *tcpc, uint32_t *payload,
 			uint16_t *msg_head, enum tcpm_transmit_type *frame_type)
 {
 	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
-	int rv;
-	uint8_t type, cnt = 0;
+	int rv = 0;
+	uint8_t cnt = 0;
 	uint8_t buf[4];
-	const uint16_t alert_rx =
-		TCPC_V10_REG_ALERT_RX_STATUS|TCPC_V10_REG_RX_OVERFLOW;
 
-	rv = rt1711_block_read(chip->client,
-			TCPC_V10_REG_RX_BYTE_CNT, 4, buf);
+	rv = rt1711_block_read(chip->client, TCPC_V10_REG_RX_BYTE_CNT, 4, buf);
+	if (rv < 0)
+		return rv;
+
 	cnt = buf[0];
-	type = buf[1];
-	*msg_head = *(uint16_t *)&buf[2];
+	*frame_type = buf[1];
+	*msg_head = le16_to_cpu(*(uint16_t *)&buf[2]);
 
 	/* TCPC 1.0 ==> no need to subtract the size of msg_head */
-	if (rv >= 0 && cnt > 3) {
+	if (cnt > 3) {
 		cnt -= 3; /* MSG_HDR */
 		rv = rt1711_block_read(chip->client, TCPC_V10_REG_RX_DATA, cnt,
-				(uint8_t *) payload);
+				       payload);
 	}
 
-	*frame_type = (enum tcpm_transmit_type) type;
-
-	/* Read complete, clear RX status alert bit */
-	tcpci_alert_status_clear(tcpc, alert_rx);
-
-	/*mdelay(1); */
 	return rv;
 }
 
@@ -1621,15 +1557,10 @@ static int rt1711_i2c_probe(struct i2c_client *client,
 	}
 	chip->dev = &client->dev;
 	chip->client = client;
-	sema_init(&chip->io_lock, 1);
-	sema_init(&chip->suspend_lock, 1);
 	i2c_set_clientdata(client, chip);
 #ifdef CONFIG_TCPC_RT1711H
 	INIT_DELAYED_WORK(&chip->poll_work, rt1711_poll_work);
 #endif /* CONFIG_TCPC_RT1711H */
-	chip->irq_wake_lock =
-		wakeup_source_register(chip->dev, "rt1711h_irq_wake_lock");
-
 	chip->chip_id = chip_id;
 	pr_info("rt1711h_chipID = 0x%0x\n", chip_id);
 
@@ -1660,7 +1591,6 @@ err_irq_init:
 err_tcpc_reg:
 	rt1711_regmap_deinit(chip);
 err_regmap_init:
-	wakeup_source_unregister(chip->irq_wake_lock);
 	return ret;
 }
 
@@ -1682,28 +1612,24 @@ static int rt1711_i2c_remove(struct i2c_client *client)
 #ifdef CONFIG_PM
 static int rt1711_i2c_suspend(struct device *dev)
 {
-	struct rt1711_chip *chip;
-	struct i2c_client *client = to_i2c_client(dev);
+	struct rt1711_chip *chip = dev_get_drvdata(dev);
 
-	if (client) {
-		chip = i2c_get_clientdata(client);
-		if (chip)
-			down(&chip->suspend_lock);
-	}
+	dev_info(dev, "%s\n", __func__);
+	if (device_may_wakeup(dev))
+		enable_irq_wake(chip->irq);
+	disable_irq(chip->irq);
 
 	return 0;
 }
 
 static int rt1711_i2c_resume(struct device *dev)
 {
-	struct rt1711_chip *chip;
-	struct i2c_client *client = to_i2c_client(dev);
+	struct rt1711_chip *chip = dev_get_drvdata(dev);
 
-	if (client) {
-		chip = i2c_get_clientdata(client);
-		if (chip)
-			up(&chip->suspend_lock);
-	}
+	dev_info(dev, "%s\n", __func__);
+	enable_irq(chip->irq);
+	if (device_may_wakeup(dev))
+		disable_irq_wake(chip->irq);
 
 	return 0;
 }
@@ -1790,6 +1716,9 @@ MODULE_DESCRIPTION("RT1711 TCPC Driver");
 MODULE_VERSION(RT1711H_DRV_VERSION);
 
 /**** Release Note ****
+ * 2.0.6_G
+ * (1) Revise IRQ handling
+ *
  * 2.0.5_G
  * (1) Utilize rt-regmap to reduce I2C accesses
  * (2) Decrease VBUS present threshold (VBUS_CAL) by 60mV (2LSBs)
