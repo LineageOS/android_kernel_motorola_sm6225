@@ -16,7 +16,7 @@
 #include "khaje-hawao-fps-overlay_evb.dtsi"
 #include "khaje-hawao-touchscreen-overlay.dtsi"
 #include "khaje-hawao-nfc-overlay.dtsi"
-#include "sgm7220.dtsi"
+#include "sgm7220_hawao.dtsi"
 #include "discrete_charging_hawao.dtsi"
 
 &firmware {
@@ -102,4 +102,11 @@
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
+};
+
+
+&usb0 {
+	dwc3@4e00000 {
+		dr_mode = "otg";
+	};
 };
