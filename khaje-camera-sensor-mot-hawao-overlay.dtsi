@@ -270,6 +270,20 @@
 };
 
 &cam_cci0 {
+	eeprom_main: qcom,eeprom@0 {
+		cell-index = <0>;
+		reg = <0x0>;
+		compatible = "qcom,eeprom";
+		cam_vio-supply = <&cam_ldo7>;
+		regulator-names = "cam_vio";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <1800000>;
+		rgltr-max-voltage = <1800000>;
+		rgltr-load-current = <3000>;
+		cci-master = <0>;
+		status = "ok";
+	};
+
 	 /* main : JN1*/
 	qcom,cam-sensor@0 {
 		cell-index = <0>;
@@ -278,6 +292,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		eeprom-src = <&eeprom_main>;
 		cam_vio-supply = <&cam_ldo7>;
 		cam_vana-supply = <&cam_ldo4>;
 		cam_vdig-supply = <&cam_ldo2>;
