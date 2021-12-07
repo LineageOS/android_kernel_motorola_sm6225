@@ -284,6 +284,42 @@
 		status = "ok";
 	};
 
+	eeprom_macro: qcom,eeprom@2 {
+		cell-index = <2>;
+		reg = <0x2>;
+		compatible = "qcom,eeprom";
+		cam_vio-supply = <&cam_ldo7>;
+		cam_vana-supply = <&cam_ldo6>;
+		cam_clk-supply = <&gcc_camss_top_gdsc>;
+		regulator-names = "cam_vio", "cam_vana", "cam_clk";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <1800000 2800000 0>;
+		rgltr-max-voltage = <1800000 2800000 0>;
+		rgltr-load-current = <120000 80000 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk3_active
+				&cam_sensor_rear_macro_reset_active>;
+		pinctrl-1 = <&cam_sensor_mclk3_suspend
+				&cam_sensor_rear_macro_reset_suspend>;
+		gpios = <&tlmm 28 0>,
+			<&tlmm 65 0>,
+			<&tlmm 67 0>;
+		gpio-reset = <1>;
+		gpio-custom1 = <2>;//sel low for macro,high for wide
+		gpio-req-tbl-num = <0 1 2>;
+		gpio-req-tbl-flags = <1 0 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK3",
+					"CAM_RESET3",
+					"CAM_MIPI_SEL";
+		cci-master = <0>;
+		status = "ok";
+		clocks = <&gcc GCC_CAMSS_MCLK3_CLK>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <24000000>;
+	};
+
 	eeprom_wide:qcom,eeprom@3 {
 		cell-index = <3>;
 		compatible = "qcom,eeprom";
@@ -415,6 +451,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		eeprom-src = <&eeprom_macro>;
 		cam_vio-supply = <&cam_ldo7>;
 		cam_vana-supply = <&cam_ldo6>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
