@@ -146,6 +146,9 @@ struct cam_flash_private_soc {
 	uint32_t     torch_max_current[CAM_FLASH_MAX_LED_TRIGGERS];
 	bool         is_wled_flash;
 	uint32_t     flash_type;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+    uint32_t     flash_gpio_enable;
+#endif
 };
 
 struct cam_flash_func_tbl {

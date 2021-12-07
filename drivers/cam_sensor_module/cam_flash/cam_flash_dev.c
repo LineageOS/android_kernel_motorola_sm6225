@@ -126,8 +126,15 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			CAM_WARN(CAM_FLASH,
 				"Failed in destroying the device Handle");
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+		if (fctrl->func_tbl.power_ops) {
+			if (fctrl->func_tbl.power_ops(fctrl, false))
+				CAM_WARN(CAM_FLASH, "Power Down Failed");
+		}
+#else
 		if (fctrl->func_tbl.power_ops(fctrl, false))
 			CAM_WARN(CAM_FLASH, "Power Down Failed");
+#endif
 
 		fctrl->streamoff_count = 0;
 		fctrl->flash_state = CAM_FLASH_STATE_INIT;
@@ -512,7 +519,11 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 		/* PMIC Flash */
 		fctrl->func_tbl.parser = cam_flash_pmic_pkt_parser;
 		fctrl->func_tbl.apply_setting = cam_flash_pmic_apply_setting;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+		fctrl->func_tbl.power_ops = NULL;
+#else
 		fctrl->func_tbl.power_ops = cam_flash_pmic_power_ops;
+#endif
 		fctrl->func_tbl.flush_req = cam_flash_pmic_flush_request;
 	}
 
