@@ -16,7 +16,8 @@
 
 /*OEM receivers maps*/
 #define OEM_NOTIFY_RECEIVER_PEN_CHG	0x0
-#define OEM_NOTIFY_RECEIVER_EXT_CHG	0x1
+#define OEM_NOTIFY_RECEIVER_WLS_CHG	0x1
+#define OEM_NOTIFY_RECEIVER_EXT_CHG	0x2
 
 #define MAX_OEM_NOTIFY_DATA_LEN		8
 
@@ -58,6 +59,12 @@ enum oem_property_type {
 	OEM_PROP_WLS_TX_MODE,
 	OEM_PROP_WLS_FOLIO_MODE,
 	OEM_PROP_MAX,
+};
+
+enum wls_notify_event {
+  NOTIFY_EVENT_WLS_RX_CONNECTED,
+  NOTIFY_EVENT_WLS_RX_OVERTEMP,
+  NOTIFY_EVENT_WLS_ERROR,
 };
 
 struct qti_charger_notify_data {
