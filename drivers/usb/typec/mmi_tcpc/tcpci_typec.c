@@ -2799,7 +2799,6 @@ int tcpc_typec_init(struct tcpc_device *tcpc, uint8_t typec_role)
 
 	mutex_lock(&tcpc->access_lock);
 	tcpc->wake_lock_pd = 0;
-	tcpc->wake_lock_user = true;
 	mutex_unlock(&tcpc->access_lock);
 	tcpc->typec_usb_sink_curr = CONFIG_TYPEC_SNK_CURR_DFT;
 

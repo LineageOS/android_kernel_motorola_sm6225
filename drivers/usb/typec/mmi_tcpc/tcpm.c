@@ -176,20 +176,6 @@ uint8_t tcpm_inquire_typec_local_rp(
 	return tcpc->typec_local_rp_level;
 }
 
-int tcpm_typec_set_wake_lock(
-	struct tcpc_device *tcpc, bool user_lock)
-{
-	int ret;
-
-	mutex_lock(&tcpc->access_lock);
-	ret = tcpci_set_wake_lock(
-		tcpc, tcpc->wake_lock_pd, user_lock);
-	tcpc->wake_lock_user = user_lock;
-	mutex_unlock(&tcpc->access_lock);
-
-	return ret;
-}
-
 int tcpm_typec_set_usb_sink_curr(
 	struct tcpc_device *tcpc, int curr)
 {
