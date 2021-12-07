@@ -54,7 +54,7 @@
 			reg = <1>;
 			qcom,supply-name = "dvdd";
 			qcom,supply-min-voltage = <1240000>;
-			qcom,supply-max-voltage = <1250000>;
+			qcom,supply-max-voltage = <1245000>;
 			qcom,supply-enable-load = <60700>;
 			qcom,supply-disable-load = <10>;
 		        qcom,supply-post-on-sleep = <2>;
@@ -65,7 +65,7 @@
 			reg = <2>;
 			qcom,supply-name = "vci";
 			qcom,supply-min-voltage = <3000000>;
-			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-max-voltage = <3005000>;
 			qcom,supply-enable-load = <30000>;
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <0>;
@@ -91,12 +91,13 @@
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_amoled>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <9>;
 	qcom,mdss-dsi-bl-max-level = <3514>;
 	qcom,mdss-dsi-bl-default-level = <1757>;
 	qcom,mdss-brightness-max-level = <3514>;
-	qcom,platform-reset-gpio = <&tlmm 44 0>;
+	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,bl-dsc-cmd-state = "dsi_hs_mode";
 
 	/*qcom,mdss-dsi-panel-hdr-enabled;
@@ -142,12 +143,13 @@
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_amoled>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <9>;
 	qcom,mdss-dsi-bl-max-level = <3514>;
 	qcom,mdss-dsi-bl-default-level = <1757>;
 	qcom,mdss-brightness-max-level = <3514>;
-	qcom,platform-reset-gpio = <&tlmm 44 0>;
+	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,bl-dsc-cmd-state = "dsi_hs_mode";
 
 	/*qcom,mdss-dsi-panel-hdr-enabled;
@@ -193,12 +195,13 @@
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_amoled>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <9>;
 	qcom,mdss-dsi-bl-max-level = <3514>;
 	qcom,mdss-dsi-bl-default-level = <1757>;
 	qcom,mdss-brightness-max-level = <3514>;
-	qcom,platform-reset-gpio = <&tlmm 44 0>;
+	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,bl-dsc-cmd-state = "dsi_hs_mode";
 
 	/*qcom,mdss-dsi-panel-hdr-enabled;
@@ -244,12 +247,13 @@
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_amoled>;
 	qcom,mdss-dsi-no-panel-on-read-support;
+	qcom,mdss-dsi-reset-force-pull-low;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <9>;
 	qcom,mdss-dsi-bl-max-level = <3514>;
 	qcom,mdss-dsi-bl-default-level = <1757>;
 	qcom,mdss-brightness-max-level = <3514>;
-	qcom,platform-reset-gpio = <&tlmm 44 0>;
+	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,bl-dsc-cmd-state = "dsi_hs_mode";
 
 	/*qcom,mdss-dsi-panel-hdr-enabled;
