@@ -165,6 +165,8 @@ struct qti_charger {
 	u32				folio_mode;
 	bool				*debug_enabled;
 	u32	wls_curr_max;
+	u32  rx_connected;
+	struct notifier_block   wls_nb;
 };
 
 static struct qti_charger *this_chip = NULL;
@@ -1363,17 +1365,14 @@ static ssize_t rx_connected_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
-	int data;
-	struct qti_charger *chg = dev_get_drvdata(dev);
+	struct qti_charger *chg = this_chip;
 
 	if (!chg) {
 		pr_err("QTI: chip not valid\n");
 		return -ENODEV;
 	}
 
-      data = 0;
-
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "0x%04x\n", data);
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->rx_connected);
 }
 
 static DEVICE_ATTR(rx_connected, S_IRUGO,
@@ -1464,6 +1463,39 @@ static ssize_t folio_mode_show(struct device *dev,
 }
 static DEVICE_ATTR(folio_mode, S_IRUGO|S_IWUSR, folio_mode_show, folio_mode_store);
 
+static int wireless_charger_notify_callback(struct notifier_block *nb,
+		unsigned long event, void *data)
+{
+	struct qti_charger_notify_data *notify_data = data;
+	struct qti_charger *chg = container_of(nb, struct qti_charger, wls_nb);
+
+	if (notify_data->receiver != OEM_NOTIFY_RECEIVER_WLS_CHG) {
+		pr_err("Skip mis-matched receiver: %#x\n", notify_data->receiver);
+		return 0;
+	}
+
+        switch (event) {
+        case NOTIFY_EVENT_WLS_RX_CONNECTED:
+	/* RX connected update */
+		if (notify_data->data[0] != chg->rx_connected) {
+			if (chg->wls_psy) {
+				pr_info("report rx_connected\n");
+				sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "rx_connected");
+			}
+		}
+		chg->rx_connected = notify_data->data[0];
+	            break;
+        case NOTIFY_EVENT_WLS_RX_OVERTEMP:
+		break;
+        default:
+		pr_err("Unknown wireless event: %#lx\n", event);
+                break;
+        }
+
+        return 0;
+}
+
+
 static void wireless_psy_init(struct qti_charger *chg)
 {
 	int rc;
@@ -1497,6 +1529,11 @@ static void wireless_psy_init(struct qti_charger *chg)
 				&dev_attr_folio_mode);
         if (rc)
 		pr_err("couldn't create wireless folio mode error\n");
+
+	chg->wls_nb.notifier_call = wireless_charger_notify_callback;
+	rc = qti_charger_register_notifier(&chg->wls_nb);
+	if (rc)
+		pr_err("Failed to register notifier, rc=%d\n", rc);
 }
 
 static void wireless_psy_deinit(struct qti_charger *chg)
@@ -1521,6 +1558,7 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_folio_mode);
+	qti_charger_unregister_notifier(&chg->wls_nb);
 }
 
 static int qti_charger_init(struct qti_charger *chg)
