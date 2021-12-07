@@ -35,7 +35,7 @@
 #include "inc/pd_dbg_info.h"
 #include "inc/rt-regmap.h"
 
-#define TCPC_CORE_VERSION		"2.0.16_G"
+#define TCPC_CORE_VERSION		"2.0.17_G"
 
 static ssize_t tcpc_show_property(struct device *dev,
 				  struct device_attribute *attr, char *buf);
@@ -161,11 +161,11 @@ static ssize_t tcpc_show_property(struct device *dev,
 		snprintf(buf, 256, "%s\n", role_text[tcpc->desc.role_def]);
 		break;
 	case TCPC_DESC_RP_LEVEL:
-		if (tcpc->typec_local_rp_level == TYPEC_CC_RP_DFT)
+		if (tcpc->typec_local_rp_level == TYPEC_RP_DFT)
 			snprintf(buf, 256, "%s\n", "Default");
-		else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_1_5)
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_1_5)
 			snprintf(buf, 256, "%s\n", "1.5");
-		else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_3_0)
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_3_0)
 			snprintf(buf, 256, "%s\n", "3.0");
 		break;
 	case TCPC_DESC_PD_TEST:
@@ -180,11 +180,11 @@ static ssize_t tcpc_show_property(struct device *dev,
 			256, "|^|==( %s info )==|^|\n", tcpc->desc.name);
 		i += snprintf(buf + i,
 			256, "role = %s\n", role_text[tcpc->desc.role_def]);
-		if (tcpc->typec_local_rp_level == TYPEC_CC_RP_DFT)
+		if (tcpc->typec_local_rp_level == TYPEC_RP_DFT)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "Default");
-		else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_1_5)
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_1_5)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "1.5");
-		else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_3_0)
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_3_0)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "3.0");
 		break;
 #ifdef CONFIG_USB_POWER_DELIVERY
@@ -883,6 +883,12 @@ MODULE_VERSION(TCPC_CORE_VERSION);
 MODULE_LICENSE("GPL");
 
 /* Release Version
+ * 2.0.17_G
+ * (1) Add CONFIG_TYPEC_LEGACY3_ALWAYS_LOCAL_RP
+ * (2) Fix a synchronization/locking problem in pd_notify_pe_error_recovery()
+ * (3) Add USB_VID_MQP
+ * (4) Revise the return value checking of tcpc_device_register()
+ *
  * 2.0.16_G
  * (1) Check the return value of wait_event_interruptible()
  * (2) Revise *_get_cc()
