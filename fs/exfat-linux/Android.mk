@@ -1,4 +1,4 @@
-ifneq ($(TARGET_USE_EXFATLINUX),true)
+ifeq ($(TARGET_USE_EXFATLINUX),true)
 DLKM_DIR := motorola/kernel/modules
 LOCAL_PATH := $(call my-dir)
 
