@@ -18,7 +18,7 @@
 
 #define AW9610X_CHIP_ID				(0xa961)
 #define AW_SAR_SUCCESS				(0)
-#define AW_VCC_MIN_UV				(1700000)
+#define AW_VCC_MIN_UV				(2800000)
 #define AW_VCC_MAX_UV				(3600000)
 #define AW_SPE_REG_NUM				(8)
 #define AW_CLA1_SPE_REG_NUM			(6)
