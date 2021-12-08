@@ -347,6 +347,7 @@ int tcpci_alert(struct tcpc_device *tcpc)
 	int rv = 0, i = 0;
 	uint32_t alert_status = 0, alert_mask = 0;
 	const uint8_t typec_role = tcpc->typec_role;
+	uint32_t chip_id;
 
 	rv = tcpci_get_alert_status(tcpc, &alert_status);
 	if (rv < 0)
@@ -360,7 +361,9 @@ int tcpci_alert(struct tcpc_device *tcpc)
 	TCPC_INFO("Alert:0x%04x, Mask:0x%04x\n", alert_status, alert_mask);
 #endif /* CONFIG_USB_PD_DBG_ALERT_STATUS */
 
-	alert_status &= alert_mask;
+	rv = tcpci_get_chip_id(tcpc,&chip_id);
+	if (rv || SC2150A_DID != chip_id)
+		alert_status &= alert_mask;
 
 	if (typec_role == TYPEC_ROLE_UNKNOWN ||
 		typec_role >= TYPEC_ROLE_NR) {
