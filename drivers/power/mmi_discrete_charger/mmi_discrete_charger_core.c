@@ -1869,7 +1869,14 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 
 	if (val != chip->typec_mode) {
 		chip->typec_mode = val;
-		update_sw_icl_max(chip);
+
+		/*
+		 * Third charging ic IINLIM bits will be changed auto
+		 * when BC1.2 done. So we need to Ignore the Rp
+		 * changes unless BC1.2 done.
+		 */
+		if (chip->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN)
+			update_sw_icl_max(chip);
 
 		if (chip->usb_psy)
 			power_supply_changed(chip->usb_psy);
