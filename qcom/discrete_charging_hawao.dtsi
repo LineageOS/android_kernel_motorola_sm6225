@@ -52,16 +52,26 @@
 		};
 	};
 };
-/*
+
 &spmi_bus {
 	qcom,pm6125@1 {
 		#address-cells = <1>;
 		qcom,pwms@b300 {
 			status = "ok";
+			qcom,lut-patterns = <0 0 0 14 28 42 56 70 84 100
+						100 84 70 56 42 28 14 0 0 0>;
+			lpg@1 {
+				qcom,lpg-chan-id = <1>;
+				qcom,ramp-step-ms = <200>;
+				qcom,ramp-low-index = <0>;
+				qcom,ramp-high-index = <19>;
+				qcom,ramp-pattern-repeat;
+				qcom,lpg-sdam-base = <0x48>;
+			};
 		};
 	};
 };
-*/
+
 
 &tlmm {
 	sgm4154x_gpio_pins: sgm4154x_gpio_pins {
