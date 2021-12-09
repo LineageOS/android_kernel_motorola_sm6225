@@ -450,6 +450,146 @@ EXPORT_SYMBOL_GPL(moto_tcmd_wt6670f_get_firmware_version);
 	return 0;
 }*/
 
+static int wt6670_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	int rc = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_START_DETECTION:
+		wt6670f_reset_chg_type();
+		wt6670f_start_detection();
+		pr_info("wt6670 start detection\n");
+		break;
+	case PSY_IIO_BATTERY_DP_DM:
+		wt6670f_set_volt_count(val1);
+		pr_info("wt6670 set volt count:%d\n",val1);
+		break;
+	default:
+		pr_err("Unsupported wt6670 IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		pr_err("Couldn't write IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	int rc = 0;
+	int result;
+	*val1 = 0;
+
+	switch (chan->channel) {
+	case PSY_IIO_QC3P_POWER:
+		result = wt6670f_get_charger_type();
+		pr_info("wt6670 get charger type for qc3p power:%d\n",result);
+		if(result == WT6670_CHG_TYPE_QC3P_18W || result == WT6670_CHG_TYPE_QC3P_27W)
+			*val1 = result;
+		break;
+	case PSY_IIO_QC3P_REAL_TYPE:
+		wt6670f_get_protocol();
+		result = wt6670f_get_charger_type();
+		pr_info("wt6670 get charger type:%d\n", result);
+		*val1 = result;
+		break;
+	case PSY_IIO_DETECTION_READY:
+		result = wt6670f_is_charger_ready();
+		pr_info("wt6670 get wt6670f_is_charger_ready status:%d\n", result);
+		*val1 = result;
+		break;
+	default:
+		pr_err("Unsupported wt6670 IIO chan %d\n", chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		pr_err("Couldn't read IIO channel %d, rc = %d\n",
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int wt6670_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct wt6670f *bq = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = bq->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(wt6670_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info wt6670_iio_info = {
+	.read_raw	= wt6670_iio_read_raw,
+	.write_raw	= wt6670_iio_write_raw,
+	.of_xlate	= wt6670_iio_of_xlate,
+};
+
+static int wt6670_init_iio_psy(struct wt6670f *chip)
+{
+	struct iio_dev *indio_dev = chip->indio_dev;
+	struct iio_chan_spec *chan;
+	int wt6670_num_iio_channels = ARRAY_SIZE(wt6670_iio_psy_channels);
+	int rc, i;
+
+	chip->iio_chan = devm_kcalloc(chip->dev, wt6670_num_iio_channels,
+				sizeof(*chip->iio_chan), GFP_KERNEL);
+	if (!chip->iio_chan)
+		return -ENOMEM;
+
+	chip->int_iio_chans = devm_kcalloc(chip->dev,
+				wt6670_num_iio_channels,
+				sizeof(*chip->int_iio_chans),
+				GFP_KERNEL);
+	if (!chip->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &wt6670_iio_info;
+	indio_dev->dev.parent = chip->dev;
+	indio_dev->dev.of_node = chip->dev->of_node;
+	indio_dev->name = "wt6670";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = chip->iio_chan;
+	indio_dev->num_channels = wt6670_num_iio_channels;
+
+	for (i = 0; i < wt6670_num_iio_channels; i++) {
+		chip->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &chip->iio_chan[i];
+		chip->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = wt6670_iio_psy_channels[i].channel_num;
+		chan->type = wt6670_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			wt6670_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			wt6670_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			wt6670_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(chip->dev, indio_dev);
+	if (rc)
+		pr_err("Failed to register wt6670 IIO device, rc=%d\n", rc);
+
+	return rc;
+}
+
 extern int wt6670f_isp_flow(struct wt6670f *chip);
 
 static int wt6670f_i2c_probe(struct i2c_client *client,
@@ -459,12 +599,20 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 	u16 firmware_version = 0;
 	int in_isp_flow_count = 3;
 	struct wt6670f *wt;
+	struct iio_dev *indio_dev;
 
 	pr_info("[%s]\n", __func__);
 
-	wt = devm_kzalloc(&client->dev, sizeof(struct wt6670f), GFP_KERNEL);
-	if (!wt)
+	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*wt));
+	if (!indio_dev)
 		return -ENOMEM;
+
+	wt = iio_priv(indio_dev);
+	if (!wt) {
+		pr_err("Out of memory\n");
+		return -ENOMEM;
+	}
+	wt->indio_dev = indio_dev;
 
 	wt->dev = &client->dev;
 	wt->client = client;
@@ -506,6 +654,10 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 				break;
 		}
 	}
+
+	ret = wt6670_init_iio_psy(wt);
+	if (ret < 0)
+		pr_info("%s: init iio sys error\n", __func__);
 
 	return 0;
 }
