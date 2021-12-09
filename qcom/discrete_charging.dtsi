@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/iio/qti_power_supply_iio.h>
 &pm6125_vadc {
 	gpio6_div3{
 		reg = <ADC_GPIO3_DIV3>;
@@ -55,10 +56,11 @@
 &qupv3_se0_i2c {
 	status = "okay";
 
-	wt6670f@35 {
+	wt6670: wt6670f@35 {
                 status = "okay";
                 compatible = "mediatek,wt6670f_qc3p";
                 reg = <0x35>;
+		#io-channel-cells = <1>;
                 wt6670f-reset-gpio = <&tlmm 68 0x0>;
                 wt6670f-int-gpio = <&tlmm 93 0x0>;
                 //wt6670f-i2c-scl-pin = <&tlmm 1 0x0>;
@@ -98,9 +100,20 @@
 		reg = <0x3B>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sgm4154x_gpio_pins &gpio6_adc_default>;
+		#io-channel-cells = <1>;
+                io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+                                <&wt6670 PSY_IIO_QC3P_POWER>,
+                                <&wt6670 PSY_IIO_START_DETECTION>,
+                                <&wt6670 PSY_IIO_DETECTION_READY>,
+                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
 
-		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>;
-		io-channel-names = "gpio3_div3";
+                io-channel-names = "gpio3_div3",
+				   "wt6670_usb_real_type",
+                                   "wt6670_usb_qc3p_power",
+                                   "wt6670_start_detection",
+				   "wt6670_detection_ready",
+				   "qc3p_start_policy";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
@@ -162,9 +175,10 @@
 	};
 
 
-	bq2597x-charger@65 {
+	bq2597x: bq2597x-charger@65 {
 		compatible = "ti,bq25970-charger";
 		reg = <0x65>;
+		#io-channel-cells = <1>;
 		//ti,bq2597x,interrupt_gpios = <&pio 30 0>;
 		//interrupt-parent = <&pio>;
 		//interrupts = <2 IRQ_TYPE_EDGE_FALLING 2 0>;
@@ -337,6 +351,83 @@
 				2000000 1500000
 				1200000 900000
 				600000 300000>;
+	};
+};
+
+&soc {
+	mmi_chrg: mmi_chrg_manager {
+		compatible = "mmi,chrg-manager";
+		#io-channel-cells = <1>;
+		io-channels = <&mmi_discrete_charger PSY_IIO_HW_CURRENT_MAX>,
+				<&mmi_discrete_charger PSY_IIO_USB_CHARGING_ENABLED>,
+				<&mmi_discrete_charger PSY_IIO_TYPEC_MODE>,
+				<&mmi_discrete_charger PSY_IIO_INPUT_CURRENT_SETTLED>,
+				<&mmi_discrete_charger PSY_IIO_PD_ACTIVE>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+				<&wt6670 PSY_IIO_QC3P_POWER>,
+				<&wt6670 PSY_IIO_BATTERY_DP_DM>,
+				<&wt6670 PSY_IIO_START_DETECTION>,
+				<&bq2597x PSY_IIO_CP_ENABLE>,
+				<&bq2597x PSY_IIO_MMI_CP_INPUT_CURRENT_NOW>,
+				<&bq2597x PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW>,
+				<&bq2597x PSY_IIO_CP_STATUS1>,
+				<&bq2597x PSY_IIO_CP_CLEAR_ERROR>;
+
+		io-channel-names = "hw_current_max",
+					"charging_enabled",
+					"typec_mode",
+					"input_current_settled",
+					"pd_active",
+					"wt6670_usb_real_type",
+					"wt6670_usb_qc3p_power",
+					"wt6670_battery_dp_dm",
+					"wt6670_start_detection",
+					"bq2597x_cp_enabled",
+					"bq2597x_input_current_now",
+					"bq2597x_input_voltage_settled",
+					"bq2597x_cp_status1",
+					"bq2597x_cp_clear_error";
+
+	//	qcom,usbpd-phandle = <&pm7250b_pdphy>;
+		mmi,pps-volt-steps = <20000>;
+		mmi,pps-curr-steps = <100000>;
+		mmi,pd-volt-max = <10000000>;
+		mmi,pd-curr-max = <3000000>;
+		mmi,batt-curr-boost = <300000>;
+		mmi,batt-ovp-lmt = <4550000>;
+		mmi,pl-chrg-vbatt-min = <3600000>;
+		mmi,typec-middle-current = <2000000>;
+		mmi,pd-allow-min-current = <1000000>;
+		mmi,step-first-current-comp = <0>;
+		mmi,dont-rerun-aicl;
+		mmi,qc3p-max-ibus-ma = <3000>;
+		mmi,qc3p-volt-steps = <20000>;
+		mmi,qc3p-volt-max = <10000000>;
+		mmi,chrg-temp-zones-num = <5>;
+		mmi,mmi-chrg-temp-zones =
+					<0 4200 1000  0 0>,
+					<10 4250 3000 4450 1000>,
+					<15 4450 5000 0 0>,
+					<45 4450 5800 4480 4000>,
+					<60 4200 4000 0 0>;
+		mmi,thermal-mitigation =
+					<5800000>,
+					<5000000>,
+					<4000000>,
+					<3500000>,
+					<3000000>,
+					<2000000>,
+					<1000000>;
+		charger_device_0 {
+			chrg-name = "pmic-sw";
+			psy-name = "battery";
+			charging-curr-limited = <500000>;
+		};
+		charger_device_1 {
+			chrg-name = "cp-master";
+			psy-name = "cp-standalone";
+			charging-curr-min = <2000000>;
+		};
 	};
 };
 
