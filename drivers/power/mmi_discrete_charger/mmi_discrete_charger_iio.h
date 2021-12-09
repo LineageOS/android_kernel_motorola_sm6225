@@ -44,6 +44,9 @@ static const struct mmi_discrete_iio_channels mmi_discrete_iio_psy_channels[] = 
 	MMI_DISCRETE_CHAN_INDEX("otg_enable", PSY_IIO_MMI_OTG_ENABLE)
 	MMI_DISCRETE_CHAN_INDEX("typec_mode", PSY_IIO_TYPEC_MODE)
 	MMI_DISCRETE_CHAN_INDEX("pd_active", PSY_IIO_PD_ACTIVE)
+	MMI_DISCRETE_CHAN_INDEX("hw_current_max", PSY_IIO_HW_CURRENT_MAX)
+	MMI_DISCRETE_CHAN_INDEX("charging_enabled", PSY_IIO_USB_CHARGING_ENABLED)
+	MMI_DISCRETE_CHAN_INDEX("input_current_settled", PSY_IIO_INPUT_CURRENT_SETTLED)
 };
 
 int mmi_discrete_init_iio_psy(struct mmi_discrete_charger *chip,

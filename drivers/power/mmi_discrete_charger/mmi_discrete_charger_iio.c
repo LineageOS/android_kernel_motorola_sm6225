@@ -29,6 +29,12 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_PD_ACTIVE:
 		rc = mmi_discrete_config_pd_active(chip, val1);
 		break;
+	case PSY_IIO_USB_CHARGING_ENABLED:
+		rc = mmi_discrete_config_charging_enabled(chip, val1);
+		break;
+	case PSY_IIO_INPUT_CURRENT_SETTLED:
+		rc = mmi_discrete_config_input_current_settled(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
@@ -48,12 +54,19 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 {
 	struct mmi_discrete_charger *chip = iio_priv(indio_dev);
 	int rc = 0;
-
+	bool val_bool = false;
 	*val1 = 0;
 
 	switch (chan->channel) {
 	case PSY_IIO_USB_REAL_TYPE:
 		*val1 = chip->real_charger_type;
+		break;
+	case PSY_IIO_HW_CURRENT_MAX:
+		rc = mmi_discrete_get_hw_current_max(chip, val1);
+		break;
+	case PSY_IIO_USB_CHARGING_ENABLED:
+		rc = mmi_discrete_get_charging_enabled(chip, &val_bool);
+		*val1 = val_bool?1:0;
 		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
