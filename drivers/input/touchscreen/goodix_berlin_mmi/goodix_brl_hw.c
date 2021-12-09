@@ -1182,6 +1182,10 @@ static int brl_event_handler(struct goodix_ts_core *cd,
 	if (event_status & GOODIX_GESTURE_EVENT) {
 		ts_event->event_type = EVENT_GESTURE;
 		ts_event->gesture_type = pre_buf[4];
+#ifdef CONFIG_GTP_FOD
+		memcpy(ts_event->gesture_data, &pre_buf[8],
+				GOODIX_GESTURE_DATA_LEN);
+#endif
 	}
 	return 0;
 }

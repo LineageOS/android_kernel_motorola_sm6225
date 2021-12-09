@@ -1601,6 +1601,10 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 #endif
 
 	input_set_capability(input_dev, EV_KEY, KEY_POWER);
+#ifdef CONFIG_GTP_FOD
+	input_set_capability(input_dev, EV_KEY, BTN_TRIGGER_HAPPY1);
+	input_set_capability(input_dev, EV_KEY, BTN_TRIGGER_HAPPY2);
+#endif
 
 	r = input_register_device(input_dev);
 	if (r < 0) {
