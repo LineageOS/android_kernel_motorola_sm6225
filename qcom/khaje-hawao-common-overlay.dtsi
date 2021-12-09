@@ -11,6 +11,7 @@
  */
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/iio/qti_power_supply_iio.h>
 #include "khaje-moto-common-overlay.dtsi"
 #include "khaje-hawao-display.dtsi"
 #include "khaje-hawao-fps-overlay_evb.dtsi"
@@ -18,6 +19,7 @@
 #include "khaje-hawao-nfc-overlay.dtsi"
 #include "sgm7220_hawao.dtsi"
 #include "discrete_charging_hawao.dtsi"
+#include "discrete-rt-pd-manger.dtsi"
 
 &firmware {
 	android {
