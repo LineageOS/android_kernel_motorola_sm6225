@@ -36,8 +36,10 @@
 #define GOODIX_MAX_PEN_KEY 				2
 #define GOODIX_PEN_MAX_TILT				90
 #define GOODIX_CFG_MAX_SIZE				4096
+#define GOODIX_FW_MAX_SIEZE				(300 * 1024)
 #define GOODIX_MAX_STR_LABLE_LEN		64
 #define GOODIX_MAX_FRAMEDATA_LEN		1700
+#define GOODIX_GESTURE_DATA_LEN			16
 
 #define GOODIX_NORMAL_RESET_DELAY_MS	100
 #define GOODIX_HOLD_CPU_RESET_DELAY_MS  5
@@ -53,6 +55,12 @@
 #define PINCTRL_STYLUS_CLK_SUSPEND		"stylus_clk_suspend"
 #define STYLUS_CLK_SRC_GPIO				"stylus_clk_gpio"
 #define STYLUS_CLK_SRC_PMIC				"stylus_clk_pmic"
+
+enum GOODIX_GESTURE_TYP {
+	GESTURE_SINGLE_TAP = (1 << 0),
+	GESTURE_DOUBLE_TAP = (1 << 1),
+	GESTURE_FOD_PRESS  = (1 << 2)
+};
 
 enum CORD_PROB_STA {
 	CORE_MODULE_UNPROBED = 0,
@@ -389,6 +397,9 @@ struct goodix_ts_event {
 	u8 gesture_type;
 	struct goodix_touch_data touch_data;
 	struct goodix_pen_data pen_data;
+#ifdef CONFIG_GTP_FOD
+	u8 gesture_data[GOODIX_GESTURE_DATA_LEN];
+#endif
 };
 
 enum goodix_ic_bus_type {
@@ -473,7 +484,6 @@ struct goodix_ts_core {
 	struct goodix_ic_config *ic_configs[GOODIX_MAX_CONFIG_GROUP];
 	struct regulator *avdd;
 	struct regulator *iovdd;
-
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pin_sta_active;
 	struct pinctrl_state *pin_sta_suspend;
@@ -513,6 +523,9 @@ struct goodix_ts_core {
 	int gesture_enabled;
 	const char *supplier;
 	bool need_update_cfg;
+#ifdef CONFIG_GTP_FOD
+	unsigned char gesture_type;
+#endif
 };
 
 /* external module structures */

@@ -25,6 +25,10 @@ ifeq ($(findstring factory, $(TARGET_PRODUCT)), factory)
 	KBUILD_OPTIONS += CONFIG_TARGET_BUILD_FACROTY=y
 endif
 
+ifeq ($(TOUCHSCREEN_FOD),true)
+	KBUILD_OPTIONS += CONFIG_GTP_FOD=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := goodix_brl_mmi.ko
 LOCAL_MODULE_TAGS := optional
