@@ -436,6 +436,8 @@
 #define BQ2597X_REG_13					0x13
 #define BQ2597X_DEV_ID_MASK				0x0F
 #define BQ2597X_DEV_ID_SHIFT				0
+#define BQ2597X_DEV_REV_MASK				0xF0
+#define BQ2597X_DEV_REV_SHIFT				4
 
 /* Register 14h */
 #define BQ2597X_REG_14					0x14
@@ -786,5 +788,22 @@
 #define BQ2597X_IBUS_LOW_DG_SHIFT			3
 #define BQ2597X_IBUS_LOW_DG_10US			0
 #define BQ2597X_IBUS_LOW_DG_5MS				1
+
+
+#define SC8551_IBUS_ADC_LSB_MUL				15625
+#define SC8551_IBUS_ADC_LSB_DIV				10000
+#define SC8551_VBUS_ADC_LSB_MUL				375
+#define SC8551_VBUS_ADC_LSB_DIV				100
+#define SC8551_VAC_ADC_LSB				5
+#define SC8551_VOUT_ADC_LSB_MUL				125
+#define SC8551_VOUT_ADC_LSB_DIV				100
+#define SC8551_VBAT_ADC_LSB_MUL				125
+#define SC8551_VBAT_ADC_LSB_DIV				100
+#define SC8551_IBAT_ADC_LSB_MUL				3125
+#define SC8551_IBAT_ADC_LSB_DIV				1000
+
+#define SC8551_REG_34                                   0x34
+#define SC8551_ADC_TRIM_MASK                            0x01
+#define SC8551_ADC_TRIM_VAL                             1
 
 #endif

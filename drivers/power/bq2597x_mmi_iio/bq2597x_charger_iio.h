@@ -44,6 +44,7 @@ static const struct bq2597x_iio_channels bq2597x_iio_psy_channels[] = {
 	bq2597x_CHAN_INDEX("bq2597x_input_current_now", PSY_IIO_MMI_CP_INPUT_CURRENT_NOW)
 	bq2597x_CHAN_INDEX("bq2597x_input_voltage_settled", PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW)
 	bq2597x_CHAN_INDEX("bq2597x_cp_status1", PSY_IIO_CP_STATUS1)
+	bq2597x_CHAN_INDEX("bq2597x_cp_clear_error", PSY_IIO_CP_CLEAR_ERROR)
 };
 
 #endif

@@ -63,6 +63,9 @@ enum {
 	BQ25970 = 0x00,
 };
 
+#define BQ2597X_PART_NO	0x10
+#define SC8551_PART_NO	0x00
+#define SC8551A_PART_NO	0x51
 #define	BAT_OVP_ALARM		BIT(7)
 #define BAT_OCP_ALARM		BIT(6)
 #define	BUS_OVP_ALARM		BIT(5)
@@ -163,6 +166,7 @@ struct bq2597x {
 	struct device *dev;
 	struct i2c_client *client;
 
+	int device_id;
 	int part_no;
 	int revision;
 	struct iio_dev		*indio_dev;
@@ -991,6 +995,7 @@ static int bq2597x_get_adc_data(struct bq2597x *bq, int channel,  int *result)
 	int ret;
 	u16 val;
 	s16 t;
+	int tmp;
 
 	if (channel > ADC_MAX_NUM)
 		return -EINVAL;
@@ -1003,6 +1008,29 @@ static int bq2597x_get_adc_data(struct bq2597x *bq, int channel,  int *result)
 	t = val & 0xFF;
 	t <<= 8;
 	t |= (val >> 8) & 0xFF;
+
+	if (bq->part_no == SC8551_PART_NO
+		||bq->part_no == SC8551A_PART_NO) {
+		if (channel == ADC_IBUS) {
+			tmp = t * SC8551_IBUS_ADC_LSB_MUL;
+			t = tmp /SC8551_IBUS_ADC_LSB_DIV;
+		} else if (channel == ADC_VBUS) {
+			tmp = t * SC8551_VBUS_ADC_LSB_MUL;
+			t = tmp /SC8551_VBUS_ADC_LSB_DIV;
+		} else if (channel == ADC_VAC)
+			t *= SC8551_VAC_ADC_LSB;
+		else if (channel == ADC_VOUT) {
+			tmp = t * SC8551_VOUT_ADC_LSB_MUL;
+			t = tmp /SC8551_VOUT_ADC_LSB_DIV;
+		} else if (channel == ADC_VBAT) {
+			tmp = t * SC8551_VBAT_ADC_LSB_MUL;
+			t = tmp /SC8551_VBAT_ADC_LSB_DIV;
+		} else if (channel == ADC_IBAT) {
+			tmp = t * SC8551_IBAT_ADC_LSB_MUL;
+			t = tmp /SC8551_IBAT_ADC_LSB_DIV;
+		}
+	}
+
 	*result = t;
 
 	return 0;
@@ -1265,7 +1293,7 @@ static void bq2597x_dump_reg(struct bq2597x *bq)
 	u8 val;
 	u8 addr;
 
-	for (addr = 0x00; addr <= 0x2B; addr++) {
+	for (addr = 0x00; addr <= 0x2E; addr++) {
 		ret = bq2597x_read_byte(bq, addr, &val);
 		if (!ret)
 			pr_err("Reg[%02X] = 0x%02X\n", addr, val);
@@ -1278,7 +1306,7 @@ void bq2597x_dump_reg_g(void)
 	u8 val;
 	u8 addr;
 
-	for (addr = 0x00; addr <= 0x2B; addr++) {
+	for (addr = 0x00; addr <= 0x2E; addr++) {
 		ret = bq2597x_read_byte(g_chip, addr, &val);
 		if (!ret)
 			pr_err("Reg[%02X] = 0x%02X\n", addr, val);
@@ -1310,8 +1338,14 @@ static int bq2597x_detect_device(struct bq2597x *bq)
 
 	ret = bq2597x_read_byte(bq, BQ2597X_REG_13, &data);
 	if (ret == 0) {
-		bq->part_no = (data & BQ2597X_DEV_ID_MASK);
-		bq->part_no >>= BQ2597X_DEV_ID_SHIFT;
+		bq->part_no = data;
+		bq->device_id = (data & BQ2597X_DEV_ID_MASK);
+		bq->device_id >>= BQ2597X_DEV_ID_SHIFT;
+		bq->revision = (data & BQ2597X_DEV_REV_MASK);
+		bq->revision >>= BQ2597X_DEV_REV_SHIFT;
+
+		pr_info("detect device PN:%x, ID:%x, REV:%x \n!",
+				bq->part_no, bq->device_id, bq->revision);
 	}
 
 	return ret;
@@ -1465,14 +1499,13 @@ static int bq2597x_parse_dt(struct bq2597x *bq, struct device *dev)
 		return irqn;
 	}
 	bq->client->irq = irqn;
-#if 0
+
 	ret = of_property_read_u32(np, "ti,bq2597x,sense-resistor-mohm",
 			&bq->cfg->sense_r_mohm);
 	if (ret) {
 		pr_err("failed to read sense-resistor-mohm\n");
 		return ret;
 	}
-#endif
 
 	return 0;
 }
@@ -1599,7 +1632,7 @@ static int bq2597x_init_adc(struct bq2597x *bq)
 	bq2597x_set_adc_scan(bq, ADC_VBUS, true);
 	bq2597x_set_adc_scan(bq, ADC_VOUT, false);
 	bq2597x_set_adc_scan(bq, ADC_VBAT, true);
-	bq2597x_set_adc_scan(bq, ADC_IBAT, false);
+	bq2597x_set_adc_scan(bq, ADC_IBAT, true);
 	bq2597x_set_adc_scan(bq, ADC_TBUS, true);
 	bq2597x_set_adc_scan(bq, ADC_TBAT, true);
 	bq2597x_set_adc_scan(bq, ADC_TDIE, true);
@@ -1632,6 +1665,34 @@ static int bq2597x_init_int_src(struct bq2597x *bq)
 	return ret;
 }
 
+static int sc8551_init_adc_trim(struct bq2597x *bq)
+{
+	int ret;
+
+	ret = bq2597x_update_bits(bq, SC8551_REG_34,
+				SC8551_ADC_TRIM_MASK, SC8551_ADC_TRIM_VAL);
+	return ret;
+}
+
+static int sc8551_set_ibus_low_dg(struct bq2597x *bq, int low_dg)
+{
+	int ret;
+	u8 val;
+
+	if (low_dg == 10)
+		val = BQ2597X_IBUS_LOW_DG_10US;
+	else
+		val = BQ2597X_IBUS_LOW_DG_5MS;
+
+	val <<= BQ2597X_IBUS_LOW_DG_SHIFT;
+
+	ret = bq2597x_update_bits(bq, BQ2597X_REG_2E,
+				BQ2597X_IBUS_LOW_DG_MASK,
+				val);
+
+	return ret;
+}
+
 static int bq2597x_init_regulation(struct bq2597x *bq)
 {
 	bq2597x_set_ibat_reg_th(bq, 300);
@@ -1640,16 +1701,37 @@ static int bq2597x_init_regulation(struct bq2597x *bq)
 	bq2597x_set_vdrop_deglitch(bq, 5000);
 	bq2597x_set_vdrop_th(bq, 400);
 
-	bq2597x_enable_regulation(bq, true);
+	bq2597x_enable_regulation(bq, false);
 
 	return 0;
+}
+
+static int bq2597x_enable_vout(struct bq2597x *bq, bool enable)
+{
+	int ret;
+	u8 val;
+
+	if (enable)
+		val = BQ2597X_VOUT_OVP_ENABLE;
+	else
+		val = BQ2597X_VOUT_OVP_DISABLE;
+
+	val <<= BQ2597X_VOUT_OVP_DIS_SHIFT;
+
+	ret = bq2597x_update_bits(bq, BQ2597X_REG_2B,
+				BQ2597X_VOUT_OVP_DIS_MASK,
+				val);
+
+	return ret;
+
 }
 
 static int bq2597x_init_device(struct bq2597x *bq)
 {
 	bq2597x_enable_wdt(bq, false);
 
-	bq2597x_set_ss_timeout(bq, 1500);
+
+	bq2597x_set_ss_timeout(bq, 0);
 	bq2597x_set_sense_resistor(bq, bq->cfg->sense_r_mohm);
 	bq2597x_set_ucp_threshold(bq, 300);
 
@@ -1659,6 +1741,13 @@ static int bq2597x_init_device(struct bq2597x *bq)
 
 	bq2597x_init_regulation(bq);
 
+	bq2597x_enable_vout(bq, false);
+
+	if (bq->part_no == SC8551_PART_NO
+		||bq->part_no == SC8551A_PART_NO) {
+		sc8551_init_adc_trim(bq);
+		sc8551_set_ibus_low_dg(bq, 5000);
+	}
 	return 0;
 }
 
@@ -1683,7 +1772,7 @@ static ssize_t bq2597x_show_registers(struct device *dev,
 	int ret;
 
 	idx = snprintf(buf, PAGE_SIZE, "%s:\n", "bq25970");
-	for (addr = 0x0; addr <= 0x2B; addr++) {
+	for (addr = 0x0; addr <= 0x2E; addr++) {
 		ret = bq2597x_read_byte(bq, addr, &val);
 		if (ret == 0) {
 			len = snprintf(tmpbuf, PAGE_SIZE - idx,
@@ -1705,9 +1794,8 @@ static ssize_t bq2597x_store_register(struct device *dev,
 	unsigned int val;
 
 	ret = sscanf(buf, "%x %x", &reg, &val);
-	if (ret == 2 && reg <= 0x2B) {
+	if (ret == 2 && reg <= 0x2E)
 		bq2597x_write_byte(bq, (unsigned char)reg, (unsigned char)val);
-	}
 
 	return count;
 }
@@ -1834,16 +1922,20 @@ static int bq2597x_iio_write_raw(struct iio_dev *indio_dev,
 
 	switch (chan->channel) {
 	case PSY_IIO_CP_ENABLE:
-
 		bq2597x_enable_charge(bq, val1);
 		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
 		pr_info("PSY_IIO_CP_ENABLE: %s\n",
 				val1 ? "enable" : "disable");
-
 		break;
 	case PSY_IIO_ONLINE:
 		bq2597x_set_present(bq, !!val1);
 		pr_info("set present :%d\n", val1);
+		break;
+	case PSY_IIO_CP_CLEAR_ERROR:
+		bq->bat_ovp_fault = false;
+		bq->bat_ocp_fault = false;
+		bq->bus_ovp_fault = false;
+		bq->bus_ocp_fault = false;
 		break;
 	default:
 		pr_err("Unsupported bq2597x IIO chan %d\n", chan->channel);
@@ -1871,6 +1963,7 @@ static int bq2597x_iio_read_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_CP_ENABLE:
 		bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
 		*val1 = bq->charge_enabled;
+		pr_info("read bq2597x enable:%d\n",*val1);
 		break;
 	case PSY_IIO_ONLINE:
 		*val1 = bq->vbus_present;
