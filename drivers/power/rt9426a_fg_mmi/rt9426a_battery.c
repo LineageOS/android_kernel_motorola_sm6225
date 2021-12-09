@@ -36,6 +36,8 @@ struct rt9426a_chip {
 	int btemp;
 	int bvolt;
 	int bcurr;
+	unsigned cyccnt;
+	int soh;
 	u16 ic_ver;
 	int design_capacity;
 	int full_capacity;
@@ -397,28 +399,26 @@ static int rt9426a_get_temp(struct rt9426a_chip *chip)
 static unsigned int rt9426a_get_cyccnt(struct rt9426a_chip *chip)
 {
 	int ret;
-	unsigned int cyccnt = 0;
 
 	ret = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_CYC);
 	if (ret < 0)
 		dev_notice(chip->dev, "%s: read cycle count fail\n", __func__);
 	else
-		cyccnt = ret;
+		chip->cyccnt = ret;
 
-	return cyccnt;
+	return chip->cyccnt;
 }
 static int rt9426a_get_soh(struct rt9426a_chip *chip)
 {
 	int ret;
-	int soh = 100;
 
 	ret = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOH);
 	if (ret < 0)
 		dev_notice(chip->dev, "%s: read soh fail\n", __func__);
 	else
-		soh = ret;
+		chip->soh = ret;
 
-	return soh;
+	return chip->soh;
 }
 
 static int rt9426a_get_current(struct rt9426a_chip *chip)
@@ -501,7 +501,7 @@ static unsigned int rt9426a_get_design_capacity(struct rt9426a_chip *chip)
 
 static unsigned int rt9426a_get_full_capacity(struct rt9426a_chip *chip)
 {
-	int curr_soh = rt9426a_get_soh(chip);
+	int curr_soh = chip->soh;
 
 	chip->full_capacity = chip->design_capacity * curr_soh  / 100;
 	if (chip->full_capacity < 0) {
@@ -516,7 +516,7 @@ static unsigned int rt9426a_get_charge_counter(struct rt9426a_chip *chip)
 	int charge_counter;
 	int full_capacity;
 
-	full_capacity = rt9426a_get_full_capacity(chip) * 1000;
+	full_capacity = chip->full_capacity * 1000;
 	charge_counter = div_s64(full_capacity * chip->capacity, 100);
 
 	return charge_counter;
@@ -1147,50 +1147,39 @@ static int rt_fg_get_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = chip->online;
-		dev_info(chip->dev, "psp_online = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = rt9426a_get_volt(chip) * 1000;
-		dev_info(chip->dev, "psp_volt_now = %d\n", val->intval);
+		val->intval = chip->bvolt  * 1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = chip->pdata->battery_type;
-		dev_info(chip->dev, "psp_volt_max_design = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		/* add for smooth_soc */
 		/*chip->capacity = rt9426a_fg_get_soc(chip); */
 		val->intval = chip->capacity;
-		dev_info(chip->dev, "psp_capacity = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		val->intval = rt9426a_get_design_capacity(chip) * 1000;
-		dev_info(chip->dev, "psp_charge_full_design = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = rt9426a_get_current(chip) * 1000 * (-1);
-		dev_info(chip->dev, "psp_curr_now = %d\n", val->intval);
+		val->intval = chip->bcurr * 1000 * (-1);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		val->intval = rt9426a_get_temp(chip);
-		dev_info(chip->dev, "psp_temp = %d\n", val->intval);
+		val->intval = chip->btemp;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		val->intval = rt9426a_get_cyccnt(chip);
-		dev_info(chip->dev, "psp_cyccnt = %d\n", val->intval);
+		val->intval = chip->cyccnt;
 		break;
 	/* add for aging cv */
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		val->intval = chip->ocv_index;
-		dev_info(chip->dev, "ocv index = %d\n", chip->ocv_index);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		val->intval = rt9426a_get_full_capacity(chip) * 1000;
-		dev_info(chip->dev, "psp_charge_full = %d\n", val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		val->intval = rt9426a_get_charge_counter(chip);
-		dev_info(chip->dev, "psp_charge_counter = %d\n", val->intval);
 		break;
 	default:
 		rc = -EINVAL;
@@ -2879,6 +2868,8 @@ static int rt9426a_i2c_probe(struct i2c_client *i2c)
 	chip->bcurr = 1000;
 	chip->design_capacity = 2000;
 	chip->full_capacity = 2000;
+	chip->soh = 100;
+	chip->cyccnt = 0;
 	chip->ocv_checksum_ic = 0;
 	chip->ocv_index = 0;	/* init as 0 */
 	/* add for aging cv */
