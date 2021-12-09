@@ -30,6 +30,7 @@
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
 #define PD_VOTER			"PD_VOTER"
+#define QC3P_VOTER			"QC3P_VOTER"
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
@@ -129,5 +130,9 @@ int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
 int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip);
 int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val);
+int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *val);
+int mmi_discrete_config_charging_enabled(struct mmi_discrete_charger *chip, int val);
+int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *val);
+int mmi_discrete_config_input_current_settled(struct mmi_discrete_charger *chip, int val);
 
 #endif
