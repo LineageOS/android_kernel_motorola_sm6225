@@ -53,6 +53,7 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 	} else
 		chrg->charger_enabled  = false;
 
+	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,en);
 	return rc;
 }
 
@@ -73,7 +74,7 @@ static int cp_is_charging_enabled(struct mmi_charger_device *chrg, bool *en)
 		chrg->charger_enabled  = false;
 
 	*en = chrg->charger_enabled;
-
+	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,*en);
 	return rc;
 }
 
@@ -89,7 +90,7 @@ static int cp_get_charging_current(struct mmi_charger_device *chrg, u32 *uA)
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
 		*uA = !!prop.intval;
-
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
 
@@ -103,7 +104,7 @@ static int cp_get_vbus(struct mmi_charger_device *chrg, u32 *mv)
 	rc = mmi_charger_read_iio_chan(chip, CP_INPUT_VOLTAGE_NOW, &val);
 	if (!rc)
 		*mv = val;
-
+	chrg_dev_info(chrg, "%s end, mv:%d\n",__func__,*mv);
 	return rc;
 }
 
@@ -120,7 +121,7 @@ static int cp_get_input_current(struct mmi_charger_device *chrg, u32 *uA) //ibus
 
 	if (!rc)
 		*uA = value;
-
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
 
@@ -129,8 +130,14 @@ static int cp_update_charger_status(struct mmi_charger_device *chrg)
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 	union power_supply_propval prop = {0,};
+	static struct power_supply	*battery_psy = NULL;
 
 	if (!chrg->chrg_psy)
+		return -ENODEV;
+
+	if (!battery_psy)
+	battery_psy = power_supply_get_by_name("battery");
+	if (!battery_psy)
 		return -ENODEV;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
@@ -148,7 +155,7 @@ static int cp_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.ibatt_curr = prop.intval;
 
-	rc = power_supply_get_property(chrg->chrg_psy,
+	rc = power_supply_get_property(battery_psy,
 				POWER_SUPPLY_PROP_TEMP, &prop);
 	if (!rc)
 		chrg->charger_data.batt_temp = prop.intval;
@@ -195,6 +202,7 @@ static int cp_update_charger_error_status(struct mmi_charger_device *chrg)
 	if (!rc) {
 		chrg->charger_error.chrg_err_type = value;
 	}
+	chrg_dev_info(chrg, "%s end, status:%d\n",__func__,value);
 	return rc;
 }
 
@@ -208,7 +216,7 @@ static int cp_clear_charger_error(struct mmi_charger_device *chrg)
 		return -ENODEV;
 
 	rc = mmi_charger_write_iio_chan(chip, CP_CLEAR_ERROR, value);
-
+	chrg_dev_info(chrg, "%s end, status:%d\n",__func__,value);
 	return rc;
 }
 

@@ -30,6 +30,7 @@ struct mmi_charger_iio_channels {
 
 static const struct mmi_charger_iio_channels mmi_charger_iio_psy_channels[] = {
 	MMI_CHARGER_CHAN_INDEX("cp_charging_enabled", PSY_IIO_CP_ENABLE)
+	MMI_CHARGER_CHAN_INDEX("qc3p_start_policy", PSY_IIO_QC3P_START_POLICY)
 };
 enum mmi_charger_ext_iio_channels {
 	/*smb5*/
@@ -48,29 +49,31 @@ enum mmi_charger_ext_iio_channels {
 	CP_INPUT_VOLTAGE_NOW,
 	CP_STATUS1,
 	CP_CLEAR_ERROR,
+	SMB5_QC3P_START_DETECT,
 	/*mmi-smb5charger-iio*/
 	MMI_CP_ENABLE_STATUS,
 };
 
 static const char * const mmi_charger_ext_iio_chan_name[] = {
-	/*smb5*/
-	[SMB5_HW_CURRENT_MAX] = "usb_hw_current_max",
+	/*discrete*/
+	[SMB5_HW_CURRENT_MAX] = "hw_current_max",
 	[SMB5_CHARGING_ENABLED] = "charging_enabled",
-	[SMB5_TYPEC_MODE] = "usb_typec_mode",
-	[SMB5_USB_INPUT_CURRENT_SETTLED] = "usb_input_current_settled",
-	[SMB5_USB_PD_ACTIVE] = "usb_pd_active",
+	[SMB5_TYPEC_MODE] = "typec_mode",
+	[SMB5_USB_INPUT_CURRENT_SETTLED] = "input_current_settled",
+	[SMB5_USB_PD_ACTIVE] = "pd_active",
 	/*qc3p*/
-	[SMB5_USB_REAL_TYPE] = "usb_real_type",
-	[SMB5_DP_DM] = "battery_dp_dm",
-	[SMB5_QC3P_POWER] = "usb_qc3p_power",
+	[SMB5_USB_REAL_TYPE] = "wt6670_usb_real_type",
+	[SMB5_DP_DM] = "wt6670_battery_dp_dm",
+	[SMB5_QC3P_POWER] = "wt6670_usb_qc3p_power",
+	[SMB5_QC3P_START_DETECT] = "wt6670_start_detection",
 	/*cp*/
-	[CP_ENABLE] = "cp_enable",
-	[CP_INPUT_CURRENT_NOW] = "cp_input_current_now",
-	[CP_INPUT_VOLTAGE_NOW] = "cp_input_voltage_now",
-	[CP_STATUS1] = "cp_status1",
-	[CP_CLEAR_ERROR] = "cp_clear_error",
+	[CP_ENABLE] = "bq2597x_cp_enabled",
+	[CP_INPUT_CURRENT_NOW] = "bq2597x_input_current_now",
+	[CP_INPUT_VOLTAGE_NOW] = "bq2597x_input_voltage_settled",
+	[CP_STATUS1] = "bq2597x_cp_status1",
+	[CP_CLEAR_ERROR] = "bq2597x_cp_clear_error",
 	/*mmi-smb5charger-iio*/
-	[MMI_CP_ENABLE_STATUS] = "mmi_cp_enabled_status",
+	[MMI_CP_ENABLE_STATUS] = "bq2597x_cp_enabled",
 };
 
 int mmi_charger_read_iio_chan(struct mmi_charger_manager *chip,

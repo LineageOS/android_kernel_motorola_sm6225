@@ -52,7 +52,7 @@ static int qpnp_pmic_enable_charging(struct mmi_charger_device *chrg, bool en)
 	} else {
 		chrg->charger_enabled  = false;
 	}
-
+	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,en);
 	return rc;
 }
 
@@ -72,7 +72,7 @@ static int qpnp_pmic_is_charging_enabled(struct mmi_charger_device *chrg, bool *
 		chrg->charger_enabled  = false;
 
 	*en = chrg->charger_enabled;
-
+	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,*en);
 	return rc;
 }
 
@@ -80,15 +80,19 @@ static int qpnp_pmic_get_charging_current(struct mmi_charger_device *chrg, u32 *
 {
 	int rc;
 	union power_supply_propval prop = {0,};
+	static struct power_supply	*bms_psy;
 
-	if (!chrg->chrg_psy)
+	if (!bms_psy)
+		bms_psy = power_supply_get_by_name("bms");
+	if (!bms_psy)
 		return -ENODEV;
-
-	rc = power_supply_get_property(chrg->chrg_psy,
+	
+	rc = power_supply_get_property(bms_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
-		*uA = prop.intval;
+		*uA = prop.intval * -1;
 
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
 
@@ -107,7 +111,7 @@ static int qpnp_pmic_get_ibus(struct mmi_charger_device *chrg, u32 *uA)
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
 		*uA = prop.intval;
-
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
 
@@ -124,24 +128,25 @@ static int qpnp_pmic_set_charging_current(struct mmi_charger_device *chrg, u32 u
 				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
 //	if (!rc)
 //		chrg->charger_limited = true;
-
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,uA);
 	return rc;
 }
 
 static int qpnp_pmic_get_input_current_settled(struct mmi_charger_device *chrg, u32 *uA)
 {
 	int rc = 0;
-	int value;
-	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
+	union power_supply_propval prop = {0,};
+	static struct power_supply	*charger_psy = NULL;
 
-	if (!chip)
+	charger_psy = power_supply_get_by_name("charger");
+	if (!charger_psy)
 		return -ENODEV;
 
-	rc = mmi_charger_read_iio_chan(chip, SMB5_HW_CURRENT_MAX, &value);
+	rc = power_supply_get_property(charger_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &prop);
 	if (!rc)
-		chrg->input_curr_setted = value;
-	*uA = chrg->input_curr_setted;
-
+		*uA = prop.intval;
+	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
 
@@ -151,7 +156,14 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	bool value = 0;
 	static struct power_supply	*usb_psy = NULL;
 	union power_supply_propval prop = {0,};
+	static struct power_supply	*cp_psy = NULL;
+	static struct power_supply	*bms_psy;
 
+	if (!bms_psy)
+		bms_psy = power_supply_get_by_name("bms");
+	if (!bms_psy)
+		return -ENODEV;
+	
 	if (!chrg->chrg_psy)
 		return -ENODEV;
 
@@ -160,35 +172,35 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	if (!usb_psy)
 		return -ENODEV;
 
-	rc = power_supply_get_property(usb_psy,
-				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
-	if (!rc)
-		chrg->charger_data.ibus_curr= prop.intval;
+	if (!cp_psy)
+	cp_psy = power_supply_get_by_name("cp-standalone");
+	if (!cp_psy)
+		return -ENODEV;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
 	if (!rc)
 		chrg->charger_data.vbatt_volt = prop.intval;
 
-	rc = power_supply_get_property(chrg->chrg_psy,
+	rc = power_supply_get_property(bms_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
-		chrg->charger_data.ibatt_curr = prop.intval;
+		chrg->charger_data.ibatt_curr = prop.intval * -1;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_TEMP, &prop);
 	if (!rc)
 		chrg->charger_data.batt_temp = prop.intval / 10;
 
-	rc = power_supply_get_property(usb_psy,
+	rc = power_supply_get_property(cp_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
 	if (!rc)
 		chrg->charger_data.vbus_volt = prop.intval;
 
-	rc = power_supply_get_property(usb_psy,
+	rc = power_supply_get_property(cp_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
-		chrg->charger_data.ibus_curr = prop.intval;
+		chrg->charger_data.ibus_curr = 500000;//prop.intval;
 
 	rc = power_supply_get_property(usb_psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
