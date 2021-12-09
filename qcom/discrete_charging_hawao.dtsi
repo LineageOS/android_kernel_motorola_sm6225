@@ -187,8 +187,8 @@
 	};
 };
 
-
+/*
 &usb0 {
 	extcon = <&eud>,<&mmi_discrete_charger>;
 };
-
+*/
