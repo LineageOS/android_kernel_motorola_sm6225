@@ -333,6 +333,39 @@ struct sgm4154x_device {
 	int			pulse_cnt;
 
 	struct sgm4154x_iio		iio;
+	struct iio_channel	**ext_iio_chans;
 };
 
+enum WT_charger_type{
+	WT_CHG_TYPE_BEGIN = 0,
+	WT_CHG_TYPE_FC,
+	WT_CHG_TYPE_SDP,
+	WT_CHG_TYPE_CDP,
+	WT_CHG_TYPE_DCP,
+	WT_CHG_TYPE_QC2,
+	WT_CHG_TYPE_QC3,
+	WT_CHG_TYPE_OCP,
+	WT_CHG_TYPE_QC3P_18W,//0x8
+	WT_CHG_TYPE_QC3P_27W,
+	WT6670_CHG_TYPE_UNKNOWN,
+};
+
+enum mmi_qc3p_ext_iio_channels {
+	/*qc3p*/
+	SMB5_USB_REAL_TYPE,
+	SMB5_QC3P_POWER,
+	SMB5_QC3P_START_DETECT,
+	SMB5_QC3P_DETECTION_READY,
+	SMB5_QC3P_START_POLICY,
+};
+
+static const char * const mmi_qc3p_ext_iio_chan_name[] = {
+	/*qc3p*/
+	[SMB5_USB_REAL_TYPE] = "wt6670_usb_real_type",
+	[SMB5_QC3P_POWER] = "wt6670_usb_qc3p_power",
+	[SMB5_QC3P_START_DETECT] = "wt6670_start_detection",
+	[SMB5_QC3P_DETECTION_READY] "wt6670_detection_ready",
+	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
+};
+bool qc3p_update_policy(struct sgm4154x_device *chip);
 #endif /* _SGM4154x_CHARGER_H */
