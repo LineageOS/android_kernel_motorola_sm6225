@@ -1885,6 +1885,58 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 	return 0;
 }
 
+int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *val)
+{
+	update_sw_icl_max(chip);
+	*val = get_effective_result(chip->usb_icl_votable);
+	mmi_dbg(chip, "get input current max :%d\n",
+		   *val);
+
+	return 0;
+}
+
+int mmi_discrete_config_charging_enabled(struct mmi_discrete_charger *chip, int val)
+{
+	int rc = 0;
+
+	mmi_dbg(chip, "mmi_discrete_config_charging_enabled val:%d\n",val);
+
+	rc = charger_dev_enable_charging(chip->master_chg_dev,
+				val ? true:false);
+	if (rc)
+		mmi_err(chip, "Couldn't %s charging rc=%d\n",
+			val ? "enable":"disable", rc);
+
+	return rc;
+}
+
+int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *val)
+{
+	int rc = 0;
+
+	mmi_dbg(chip, "mmi_discrete_get_charging_enabled val:%d\n",*val);
+
+	rc = charger_dev_is_enabled_charging(chip->master_chg_dev, val);
+	if (rc)
+		mmi_err(chip, "Couldn't get charging status rc=%d\n", rc);
+
+	return rc;
+}
+
+
+int mmi_discrete_config_input_current_settled(struct mmi_discrete_charger *chip, int val)
+{
+
+	update_sw_icl_max(chip);
+
+	mmi_dbg(chip, "mmi_discrete_config_input_current_settled val:%d\n",val);
+
+	vote(chip->usb_icl_votable, QC3P_VOTER, true, val*1000);
+	if (chip->usb_psy)
+		power_supply_changed(chip->usb_psy);
+	return 0;
+}
+
 #define MMI_USBIN_500MA	500000
 int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
 {
@@ -1920,6 +1972,7 @@ static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 	vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
 	vote(chip->usb_icl_votable, USB_PSY_VOTER, false, 0);
 	vote(chip->usb_icl_votable, PD_VOTER, false, 0);
+	vote(chip->usb_icl_votable, QC3P_VOTER, false, 0);
 	vote(chip->chg_disable_votable, MMI_HB_VOTER, true, 0);
 	power_supply_changed(chip->usb_psy);
 	mmi_info(chip, "%s\n",__func__);
