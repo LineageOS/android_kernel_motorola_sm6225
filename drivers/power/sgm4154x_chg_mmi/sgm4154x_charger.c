@@ -24,6 +24,9 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/kthread.h>
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+static bool g_qc3p_detected = false;
+#endif
 
 static struct power_supply_desc sgm4154x_power_supply_desc;
 
@@ -319,6 +322,7 @@ static int sgm4154x_get_usb_voltage_now(struct sgm4154x_device *sgm, int *val)
 	return 0;
 }
 
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int sgm4154x_adjust_qc20_hvdcp_5v(struct sgm4154x_device *sgm)
 {
 	int ret;
@@ -336,7 +340,6 @@ static int sgm4154x_adjust_qc20_hvdcp_5v(struct sgm4154x_device *sgm)
 				  SGM4154x_DP_VSEL_MASK, dp_val); //dp 0.6v
 	return ret;
 }
-
 static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charger_type)
 {
 	int ret;
@@ -403,7 +406,7 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 
 	return ret;
 }
-
+#endif
 #if 0 //mahj:for build
 static int sgm4154x_enable_qc20_hvdcp_12v(struct sgm4154x_device *sgm)
 {
@@ -666,6 +669,23 @@ static int sgm4154x_get_icl(struct charger_device *chg_dev, u32 *uA)
 	*uA = sgm4154x_get_input_curr_lim(sgm);
 
 	pr_info("%s get icl curr = %d\n", __func__, *uA);
+
+	return 0;
+}
+
+static int sgm4154x_is_enabled_charging(struct charger_device *chg_dev, bool *en)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
+	int status = 0;
+
+	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_1, &status);
+	if(ret)
+		return false;
+
+	*en = (status & SGM4154x_CHRG_EN) ? true:false;
+
+	pr_info("%s status:%d\n", __func__, *en);
 
 	return 0;
 }
@@ -1367,6 +1387,10 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
 	dev_err(sgm->dev, "Vbus removed, disable charge\n");
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	g_qc3p_detected = false;
+	qc3p_update_policy(sgm);
+#endif
 	sgm->pulse_cnt = 0;
 	sgm->typec_apsd_rerun_done = false;
 	sgm->chg_dev->noti.apsd_done = false;
@@ -1374,7 +1398,7 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	sgm4154x_request_dpdm(sgm, false);
 }
-
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charger_type)
 {
 	int ret = 0;
@@ -1423,6 +1447,127 @@ static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charge
 
 	return ret;
 }
+#endif
+
+bool is_chan_valid(struct sgm4154x_device *chip,
+		enum mmi_qc3p_ext_iio_channels chan)
+{
+	int rc;
+
+	if (IS_ERR(chip->ext_iio_chans[chan]))
+		return false;
+
+	if (!chip->ext_iio_chans[chan]) {
+		chip->ext_iio_chans[chan] = iio_channel_get(chip->dev,
+					mmi_qc3p_ext_iio_chan_name[chan]);
+		if (IS_ERR(chip->ext_iio_chans[chan])) {
+			rc = PTR_ERR(chip->ext_iio_chans[chan]);
+			if (rc == -EPROBE_DEFER)
+				chip->ext_iio_chans[chan] = NULL;
+
+			dev_info(chip->dev, "Failed to get IIO channel %s, rc=%d\n",
+				mmi_qc3p_ext_iio_chan_name[chan], rc);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int mmi_charger_read_iio_chan(struct sgm4154x_device *chip,
+	enum mmi_qc3p_ext_iio_channels chan, int *val)
+{
+	int rc;
+
+	if (is_chan_valid(chip, chan)) {
+		rc = iio_read_channel_processed(
+				chip->ext_iio_chans[chan], val);
+		return (rc < 0) ? rc : 0;
+	}
+
+	return -EINVAL;
+}
+
+int mmi_charger_write_iio_chan(struct sgm4154x_device *chip,
+	enum mmi_qc3p_ext_iio_channels chan, int val)
+{
+	if (is_chan_valid(chip, chan))
+		return iio_write_channel_raw(chip->ext_iio_chans[chan],
+						val);
+
+	return -EINVAL;
+}
+
+static int mmi_init_iio_psy(struct sgm4154x_device *chip,
+				struct device *dev)
+{
+	chip->ext_iio_chans = devm_kcalloc(chip->dev,
+				ARRAY_SIZE(mmi_qc3p_ext_iio_chan_name),
+				sizeof(*chip->ext_iio_chans),
+				GFP_KERNEL);
+	if (!chip->ext_iio_chans)
+		return -ENOMEM;
+
+	return 0;
+}
+
+int qc3p_start_detection(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	ret = mmi_charger_write_iio_chan(chip, SMB5_QC3P_START_DETECT, true);
+	if(ret )
+		dev_err(chip->dev, "Cann't write SMB5_QC3P_START_DETECT IIO\n");
+
+	dev_info(chip->dev, "write SMB5_QC3P_START_DETECT IIO success\n");
+	return 0;
+}
+
+bool qc3p_detection_done(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	int val = 0;
+	int delay_count =0;
+
+	do {
+		ret = mmi_charger_read_iio_chan(chip, SMB5_QC3P_DETECTION_READY, &val);
+		if(ret )
+			dev_err(chip->dev, "Cann't read SMB5_QC3P_DETECTION_READY IIO\n");
+
+		dev_info(chip->dev, "read SMB5_QC3P_DETECTION_READY IIO :%d\n",val);
+
+		msleep(100);
+		delay_count ++;
+	}while(val == false && delay_count <= 35);
+
+	dev_info(chip->dev, "read SMB5_QC3P_DETECTION_READY IIO :%d\n",val);
+	return val;
+}
+
+int qc3p_read_charger_type(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	int val = 0;
+
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	if(ret )
+		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+
+	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	return val;
+}
+
+bool qc3p_update_policy(struct sgm4154x_device *chip )
+{
+	int ret = 0;
+	int val = 0;
+
+	ret = mmi_charger_write_iio_chan(chip, SMB5_QC3P_START_POLICY, val);
+	if(ret )
+		dev_err(chip->dev, "Cann't write SMB5_QC3P_START_POLICY IIO\n");
+
+	dev_info(chip->dev, "write SMB5_QC3P_START_POLICY IIO :%d\n",val);
+	return val;
+}
 
 static int mmi_hvdcp_detect_kthread(void *param)
 {
@@ -1445,6 +1590,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		sgm->mmi_is_qc3_authen = true;
 		sgm4154x_set_input_curr_lim(sgm, MMI_HVDCP_DETECT_ICL_LIMIT);
 
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 		//do qc2.0 detected
 		ret = sgm4154x_detected_qc20_hvdcp(sgm, &charger_type);
 		if (ret) {
@@ -1460,7 +1606,31 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		if (ret) {
 			dev_err(sgm->dev, "Cann't detected qc30 hvdcp\n");
 		}
+#else
+			qc3p_start_detection(sgm);
+			qc3p_detection_done(sgm);
+			ret = qc3p_read_charger_type(sgm);
 
+			switch(ret) {
+				case WT_CHG_TYPE_QC2:
+					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+					dev_info(sgm->dev, "HDVCP 2.0 detected\n");
+					break;
+				case WT_CHG_TYPE_QC3:
+				case WT_CHG_TYPE_QC3P_18W:
+					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+					dev_info(sgm->dev, "HDVCP 3.0 or qc3p 18W detected\n");
+					break;
+				case WT_CHG_TYPE_QC3P_27W:
+					dev_err(sgm->dev, "QC3P 27W have been detected !\n");
+					qc3p_update_policy(sgm);
+					g_qc3p_detected = true;
+					break;
+				default:
+					dev_info(sgm->dev, "No HDVCP detected\n");
+					goto out;
+			}
+#endif
 		sgm4154x_get_usb_present(sgm);
 		if (!sgm->state.vbus_gd)
 			goto out;
@@ -1560,7 +1730,10 @@ static void charger_detect_work_func(struct work_struct *work)
 		case SGM4154x_USB_DCP:
 			pr_err("SGM4154x charger type: DCP\n");
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-			mmi_start_hvdcp_detect(sgm);
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+			if(g_qc3p_detected == false)
+#endif
+				mmi_start_hvdcp_detect(sgm);
 			break;
 
 		case SGM4154x_UNKNOWN:
@@ -2320,6 +2493,7 @@ static struct charger_ops sgm4154x_chg_ops = {
 	.is_charge_halted = sgm4154x_is_charging_halted,
 
 	.dump_registers = sgm4154x_dump_registers,
+	.is_enabled_charging = sgm4154x_is_enabled_charging,
 
 };
 
@@ -2446,6 +2620,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 		if (ret)
 			goto error_out;
 		enable_irq_wake(client->irq);
+	}
+
+	ret = mmi_init_iio_psy(sgm, dev);
+	if (ret) {
+		dev_err(dev,
+			"mmi iio psy init failed\n");
 	}
 
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
