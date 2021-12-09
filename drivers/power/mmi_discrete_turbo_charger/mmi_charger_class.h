@@ -110,7 +110,6 @@ struct mmi_charger_ops {
 #define to_mmi_charger_device(obj) container_of(obj, struct mmi_charger_device, dev)
 #define mmi_chrg_name(x) (dev_name(&(x)->dev))
 
-extern struct mmi_charger_device *get_charger_by_name(const char *name);
 extern int is_charger_exist(const char *name);
 extern int mmi_charger_class_init(void);
 extern void mmi_charger_class_exit(void);

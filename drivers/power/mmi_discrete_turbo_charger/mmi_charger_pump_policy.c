@@ -559,7 +559,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 		}
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 		mmi_chrg_info(chip,"find pdo %d, max volt %d, max curr %d\n",
@@ -644,7 +644,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info,PD_MAX_PDO_NUM);
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 			if ((chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_AUGMENTED)
