@@ -51,6 +51,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
+#include <linux/mmi_discrete_charger_class.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -76,13 +77,11 @@ enum print_reason {
 	PR_MOTO         = BIT(7),
 };
 
-enum {
- 	POWER_SUPPLY_CHARGE_RATE_NONE = 0,
- 	POWER_SUPPLY_CHARGE_RATE_NORMAL,
- 	POWER_SUPPLY_CHARGE_RATE_WEAK,
- 	POWER_SUPPLY_CHARGE_RATE_TURBO,
- 	POWER_SUPPLY_CHARGE_RATE_TURBO_30W,
- 	POWER_SUPPLY_CHARGE_RATE_HYPER,
+enum mmi_qc3p_power {
+	QTI_POWER_SUPPLY_QC3P_NONE,
+	QTI_POWER_SUPPLY_QC3P_18W = 0x8,
+	QTI_POWER_SUPPLY_QC3P_27W,
+	QTI_POWER_SUPPLY_QC3P_45W,
 };
 
 static inline void wakeup_source_init_internal(struct wakeup_source *ws,

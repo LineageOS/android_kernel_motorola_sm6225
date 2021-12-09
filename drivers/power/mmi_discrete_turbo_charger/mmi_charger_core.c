@@ -47,7 +47,6 @@
 #include "mmi_charger_policy.h"
 #include "mmi_qc3p.h"
 #include <linux/iio/consumer.h>
-#include <linux/qti_power_supply.h>
 
 static int __debug_mask = 0x85;
 module_param_named(
@@ -119,6 +118,23 @@ int mmi_charger_write_iio_chan(struct mmi_charger_manager *chip,
 	return -EINVAL;
 }
 
+int start_qc3p_policy(struct mmi_charger_manager *chip)
+{
+	if(chip == NULL) {
+		mmi_chrg_err(chip, "mmi_charger_manager NULL\n");
+		return -EINVAL;
+	}
+
+	mmi_chrg_err(chip, "start_qc3p_policy\n");
+
+	schedule_work(&chip->psy_changed_work);
+	cancel_delayed_work(&chip->heartbeat_work);
+	schedule_delayed_work(&chip->heartbeat_work,
+				      msecs_to_jiffies(1000));
+
+	return 0;
+}
+
 static int mmi_charger_iio_write_raw(struct iio_dev *indio_dev,
 		struct iio_chan_spec const *chan, int val1,
 		int val2, long mask)
@@ -134,6 +150,8 @@ static int mmi_charger_iio_write_raw(struct iio_dev *indio_dev,
 			else if (chip->qc3p_active)
 				mmi_qc3p_chrg_enable_all_cp(chip, val1);
 		}
+	case PSY_IIO_QC3P_START_POLICY:
+		start_qc3p_policy(chip);
 		break;
 	default:
 		pr_err("Unsupported mmi_charger IIO chan %d\n", chan->channel);
@@ -937,9 +955,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, heartbeat_work.work);
-	int hb_resch_time = 0, ret = 0, i = 0;
+	int hb_resch_time = 0, ret = 0;
 	union power_supply_propval val;
-	bool pd_active;
 
 	mmi_chrg_info(chip, "MMI: Heartbeat!\n");
 	/* Have not been resumed so wait another 100 ms */
@@ -973,7 +990,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 
 	if (!chip->vbus_present)
 		mmi_awake_vote(chip, false);
-
+#if 0
 	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
@@ -1024,6 +1041,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 			}
 		}
 	}
+#endif
 	if (!chip->qc3p_sm_work_running && chip->vbus_present)
 		chip->qc3p_active = mmi_qc3p_power_active(chip);
 
@@ -1037,7 +1055,6 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		kick_qc3p_sm(chip, 100);
 	}
 
-schedule_work:
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
 }
@@ -1047,8 +1064,7 @@ static void psy_changed_work_func(struct work_struct *work)
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, psy_changed_work);
 	union power_supply_propval val;
-	bool pd_active;
-	int ret, i;
+	int ret;
 
 	mmi_chrg_info(chip, "kick psy changed work.\n");
 
@@ -1068,7 +1084,7 @@ static void psy_changed_work_func(struct work_struct *work)
 		return;
 	}
 	chip->vbus_present = val.intval;
-
+#if 0
 	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
@@ -1120,7 +1136,7 @@ static void psy_changed_work_func(struct work_struct *work)
 			}
 		}
 	}
-
+#endif
 	mmi_chrg_info(chip, "vbus present %d, pd pps support %d, "
 					"pps max voltage %d, pps max curr %d\n",
 					chip->vbus_present,
@@ -1624,7 +1640,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	chip->factory_mode = mmi_factory_check();
 
-	chip->qcom_psy = power_supply_get_by_name("qcom_battery");
+	chip->qcom_psy = power_supply_get_by_name("mmi_battery");
 	chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy) {
 		mmi_chrg_err(chip, "Could not get battery power_supply\n");
@@ -1639,7 +1655,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 			"mmi chrg policy init failed\n");
 		goto cleanup;
 	}
-
+#if 0
 	chip->pd_handle =
 			devm_usbpd_get_by_phandle(chip->dev, "qcom,usbpd-phandle");
 	if (IS_ERR_OR_NULL(chip->pd_handle)) {
@@ -1647,7 +1663,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 							PTR_ERR(chip->pd_handle));
 		chip->pd_handle = NULL;
 	}
-
+#endif
 	if (!chip->usb_psy) {
 		chip->usb_psy = power_supply_get_by_name("usb");
 		if (!chip->usb_psy)
