@@ -17,7 +17,7 @@
 #include "khaje-hawao-touchscreen-overlay.dtsi"
 #include "khaje-hawao-nfc-overlay.dtsi"
 #include "sgm7220.dtsi"
-/*#include "discrete_charging.dtsi"*/
+#include "discrete_charging_hawao.dtsi"
 
 &firmware {
 	android {
