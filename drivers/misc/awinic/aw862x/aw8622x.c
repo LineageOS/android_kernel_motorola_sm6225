@@ -131,6 +131,7 @@ static char aw8622x_rtp_name[][AW8622X_RTP_NAME_MAX] = {
 };
 
 struct pm_qos_request aw8622x_pm_qos_req_vb;
+static void aw8622x_haptic_auto_brk_enable(struct aw8622x *aw8622x, unsigned char flag);
 
  /******************************************************
  *
@@ -557,6 +558,7 @@ static int aw8622x_haptic_stop(struct aw8622x *aw8622x)
 				       AW8622X_BIT_SYSCTRL2_STANDBY_MASK,
 				       AW8622X_BIT_SYSCTRL2_STANDBY_OFF);
 	}
+	aw8622x_haptic_auto_brk_enable(aw8622x, false);
 	return 0;
 }
 
@@ -3593,8 +3595,10 @@ static void aw8622x_vibrator_work_routine(struct work_struct *work)
 			aw8622x_haptic_ram_vbat_comp(aw8622x, false);
 			aw8622x_haptic_ram_play(aw8622x,
 						AW8622X_HAPTIC_RAM_MODE);
+			aw8622x_haptic_auto_brk_enable(aw8622x, false);
 		} else if (aw8622x->activate_mode ==
 					AW8622X_HAPTIC_RAM_LOOP_MODE) {
+			aw8622x_haptic_auto_brk_enable(aw8622x, true);
 			aw8622x_haptic_ram_vbat_comp(aw8622x, true);
 			aw8622x_haptic_ram_play(aw8622x,
 					       AW8622X_HAPTIC_RAM_LOOP_MODE);
