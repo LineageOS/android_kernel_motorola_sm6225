@@ -85,6 +85,7 @@
 		reg = <0x64>;
 		status = "okay";
 
+		sense_r_mohm = <5>;
 		df-serialnum = "SB18D33989";
 		#include "bat_setting/CW_md50-scud-5000mah.dtsi"
 		#include "bat_setting/CW_md50-amperex-5000mah.dtsi"
