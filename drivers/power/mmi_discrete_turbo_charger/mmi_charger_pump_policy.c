@@ -39,6 +39,7 @@
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include "mmi_charger_core.h"
@@ -559,7 +560,11 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 		}
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
+#if (KERNEL_VERSION(4, 19, 157) >= LINUX_VERSION_CODE)
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+#else
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info, PD_MAX_PDO_NUM);
+#endif
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 		mmi_chrg_info(chip,"find pdo %d, max volt %d, max curr %d\n",
@@ -644,7 +649,11 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
+#if (KERNEL_VERSION(4, 19, 157) >= LINUX_VERSION_CODE)
 		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
+#else
+		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info, PD_MAX_PDO_NUM);
+#endif
 		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
 			if ((chip->mmi_pdo_info[i].type ==
 					PD_SRC_PDO_TYPE_AUGMENTED)
