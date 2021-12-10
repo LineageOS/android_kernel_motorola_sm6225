@@ -133,6 +133,7 @@ struct cw_battery {
 	int  fcc_design;
 	int  fcc;
 	int  ui_full;
+	int  sense_r_mohm;
 #if 0
 	long stb_current;
 #endif
@@ -417,7 +418,8 @@ static int cw_get_current(struct cw_battery *cw_bat)
 
 	current_reg = (reg_val[0] << 8) + reg_val[1];
 	cw_current = get_complement_code(current_reg);
-	cw_current = cw_current  * 160 * 1000 / USER_RSENSE / 100;
+//	cw_current = cw_current  * 160 * 1000 / USER_RSENSE / 100;
+	cw_current = cw_current  * 160 * 1000 / cw_bat->sense_r_mohm / 100;
 	cw_bat->cw_current = cw_current;
 
 	return 0;
@@ -792,6 +794,12 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 	struct device_node *batt_profile_node = NULL;
 	int rc;
 
+	rc = of_property_read_u32(np, "sense_r_mohm", &cw_bat->sense_r_mohm);
+	if(rc < 0)
+		cw_bat->sense_r_mohm = USER_RSENSE;
+	else
+		cw_bat->sense_r_mohm *= 1000;
+
 	batt_profile_node = cw_get_profile_by_serialnumber(np);
 	if (!batt_profile_node)
 		return -1;
@@ -876,6 +884,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		cw_get_current(cw_bat);
 		val->intval = cw_bat->cw_current * CW_CUR_UNIT * (-1);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
