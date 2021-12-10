@@ -367,13 +367,14 @@ static void update_work(struct work_struct *work)
 	/* FET BattFET paths */
 	/* Leave Balance dflt-en & toggle in/out parallel low-Z battplus fet */
 	balance_state = 0;
-	if ((main_mv - flip_mv) < RBALANCE_VDIFF_MV) {
+	if ( abs(main_mv - flip_mv) < RBALANCE_VDIFF_MV) {
 		battplus_state = 1;
 		pr_info("battplus-EN: %d\n", battplus_state);
 	} else {
 		battplus_state = 0;
 		pr_info("battplus-DIS: %d\n", battplus_state);
 	}
+
 	if (main_chg == 1)
 		hb_sched_time = HBDLY_CHARGE_SEC;
 
