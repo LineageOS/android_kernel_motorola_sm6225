@@ -35,20 +35,47 @@ struct pwm_device *pwm;
  * Function
  *****************************************************************************/
 
-void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, u64 flash_current){
+void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, enum camera_flash_opcode opcode, u64 flash_current){
 	struct pwm_state pstate;
 	int rc = 0;
+	u64 real_current = 0;
+
 	pwm_get_state(pwm, &pstate);
-	pstate.period = 50000;
-	pstate.duty_cycle = 50000 * flash_current / 10000;
+	PM6125_FLASH_PRINT("[pm6125_flash_gpio]Status duty_cycle = %u, period = %u\n",
+					pstate.duty_cycle, pstate.period);
+	pstate.period = PM6125_PWM_PERIOD;
 	switch (s) {
 	case PM6125_FLASH_GPIO_STATE_ACTIVE:
+		pstate.duty_cycle = 0;
+		pstate.enabled = false;
+		rc = pwm_apply_state(pwm, &pstate);
+		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Suspend before Active");
+
+		switch (opcode)
+		{
+		case CAMERA_SENSOR_FLASH_OP_FIRELOW:
+			real_current = (flash_current > FLASH_FIRE_LOW_MAXCURRENT?FLASH_FIRE_LOW_MAXCURRENT:flash_current);
+			pstate.duty_cycle = PM6125_PWM_PERIOD * real_current / FLASH_FIRE_LOW_MAXCURRENT;
+			break;
+		case CAMERA_SENSOR_FLASH_OP_FIREHIGH:
+			real_current = (flash_current > FLASH_FIRE_HIGH_MAXCURRENT?FLASH_FIRE_HIGH_MAXCURRENT:flash_current);
+			pstate.duty_cycle = PM6125_PWM_PERIOD * real_current / FLASH_FIRE_HIGH_MAXCURRENT;
+			break;
+		default:
+			pstate.duty_cycle = PM6125_PWM_PERIOD;
+			break;
+		}
+
 		pstate.enabled = true;
 		rc = pwm_apply_state(pwm, &pstate);
+
+		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Active duty_cycle = %u, period = %u, opcode = %u, real_current = %u\n",
+						pstate.duty_cycle, pstate.period, opcode, real_current);
 		break;
 	case PM6125_FLASH_GPIO_STATE_SUSPEND:
 		pstate.enabled = false;
 		rc = pwm_apply_state(pwm, &pstate);
+		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Suspend");
 		break;
 	default:
 		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Failed to control PWM use a err state!\n");
