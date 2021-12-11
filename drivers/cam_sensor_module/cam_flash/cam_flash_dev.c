@@ -8,6 +8,9 @@
 #include "cam_flash_soc.h"
 #include "cam_flash_core.h"
 #include "cam_common_util.h"
+#ifdef CONFIG_CAMERA_FLASH_PWM
+#include "pm6125_flash_gpio.h"
+#endif
 
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
@@ -323,6 +326,10 @@ static int cam_flash_platform_remove(struct platform_device *pdev)
 {
 	struct cam_flash_ctrl *fctrl;
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	pm6125_flash_control_remove_device(&pdev->dev);
+#endif
+
 	fctrl = platform_get_drvdata(pdev);
 	if (!fctrl) {
 		CAM_ERR(CAM_FLASH, "Flash device is NULL");
@@ -335,6 +342,9 @@ static int cam_flash_platform_remove(struct platform_device *pdev)
 	mutex_unlock(&fctrl->flash_mutex);
 	cam_unregister_subdev(&(fctrl->v4l2_dev_str));
 	platform_set_drvdata(pdev, NULL);
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	dev_set_drvdata(&pdev->dev, NULL);
+#endif
 	v4l2_set_subdevdata(&fctrl->v4l2_dev_str.sd, NULL);
 	kfree(fctrl);
 
@@ -438,6 +448,9 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	fctrl->of_node = pdev->dev.of_node;
 
 	platform_set_drvdata(pdev, fctrl);
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	dev_set_drvdata(&pdev->dev, fctrl);
+#endif
 
 	rc = cam_flash_get_dt_data(fctrl, &fctrl->soc_info);
 	if (rc) {
@@ -547,6 +560,10 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
 	CAM_DBG(CAM_FLASH, "Probe success");
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	pm6125_flash_control_create_device(&pdev->dev);
+#endif
+
 	return rc;
 
 free_cci_resource:
