@@ -12,8 +12,12 @@ typedef enum {
 	PM6125_FLASH_GPIO_STATE_MAX,	/* for array size */
 } PM6125_FLASH_GPIO_STATE;
 
+#define PM6125_PWM_PERIOD 50000
+#define FLASH_FIRE_HIGH_MAXCURRENT 1200
+#define FLASH_FIRE_LOW_MAXCURRENT 150
+
 /*****************************************************************************
  * Function Prototype
  *****************************************************************************/
-extern void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, u64 flash_current);
+extern void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, enum camera_flash_opcode opcode, u64 flash_current);
 #endif /* _PM6125_FLASH_GPIO_H_*/
