@@ -23,6 +23,13 @@
 #include <linux/platform_device.h>
 #include "pm6125_flash_gpio.h"
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+#include "cam_flash_dev.h"
+#include "cam_flash_soc.h"
+#include "cam_flash_core.h"
+#include "cam_common_util.h"
+#include "cam_res_mgr_api.h"
+#endif
 
 
 /*****************************************************************************
@@ -30,6 +37,10 @@
  *****************************************************************************/
 
 struct pwm_device *pwm;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+static unsigned int flashlight_enable = CAMERA_SENSOR_FLASH_STATUS_OFF;
+static unsigned int flashlight_brightness = 0;
+#endif
 
 /*****************************************************************************
  * Function
@@ -46,11 +57,6 @@ void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, enum camera_flash
 	pstate.period = PM6125_PWM_PERIOD;
 	switch (s) {
 	case PM6125_FLASH_GPIO_STATE_ACTIVE:
-		pstate.duty_cycle = 0;
-		pstate.enabled = false;
-		rc = pwm_apply_state(pwm, &pstate);
-		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Suspend before Active");
-
 		switch (opcode)
 		{
 		case CAMERA_SENSOR_FLASH_OP_FIRELOW:
@@ -85,6 +91,180 @@ void pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE s, enum camera_flash
 		PM6125_FLASH_PRINT("[pm6125_flash_gpio]Apply PWM state fail, rc = %d", rc);
 	}
 }
+
+#ifdef CONFIG_CAMERA_FLASH_PWM
+static ssize_t flashlight_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", flashlight_enable);
+}
+
+static ssize_t flashlight_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct cam_flash_ctrl *fctrl = dev_get_drvdata(dev);
+	struct cam_flash_private_soc *soc_private = fctrl->soc_info.soc_private;
+	unsigned long state_to_set;
+	ssize_t ret = -EINVAL;
+
+	CAM_INFO(CAM_FLASH, "Flash Enable Command: %s", buf);
+	ret = kstrtoul(buf, 10, &state_to_set);
+	if (ret)
+		return ret;
+
+	if (CAMERA_SENSOR_FLASH_STATUS_OFF != state_to_set) {
+		// enable flash
+		if (CAMERA_SENSOR_FLASH_STATUS_OFF == flashlight_enable) {
+			ret = cam_res_mgr_gpio_request(
+				fctrl->soc_info.dev,
+				soc_private->flash_gpio_enable, 0,
+				"CUSTOM_GPIO1");
+			if (ret) {
+				CAM_ERR(CAM_FLASH, "gpio %d request fails",
+					soc_private->flash_gpio_enable);
+				return ret;
+			}
+		}
+
+		flashlight_enable = state_to_set;
+		cam_res_mgr_gpio_set_value(
+			soc_private->flash_gpio_enable,
+			flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_HIGH);
+		if (flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_LOW) {
+			pm6125_flash_gpio_select_state(
+				PM6125_FLASH_GPIO_STATE_ACTIVE,
+				CAMERA_SENSOR_FLASH_OP_FIRELOW,
+				FLASH_FIRE_LOW_MAXCURRENT);
+			usleep_range(5000, 6000);
+		}
+		pm6125_flash_gpio_select_state(
+			PM6125_FLASH_GPIO_STATE_ACTIVE,
+			flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_HIGH ?
+					  CAMERA_SENSOR_FLASH_OP_FIREHIGH :
+					  CAMERA_SENSOR_FLASH_OP_FIRELOW,
+			(u64)flashlight_brightness);
+	}
+	else {
+		// disable flash
+		if (CAMERA_SENSOR_FLASH_STATUS_OFF != flashlight_enable) {
+			cam_res_mgr_gpio_set_value(
+				soc_private->flash_gpio_enable, 0);
+			cam_res_mgr_gpio_free(fctrl->soc_info.dev,
+						  soc_private->flash_gpio_enable);
+		}
+		flashlight_enable = CAMERA_SENSOR_FLASH_STATUS_OFF;
+		pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_SUSPEND,
+						   CAMERA_SENSOR_FLASH_OP_OFF, 0);
+	}
+	return size;
+}
+
+static ssize_t flashlight_brightness_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", flashlight_brightness);
+}
+
+static ssize_t flashlight_brightness_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct cam_flash_ctrl *fctrl = dev_get_drvdata(dev);
+	struct cam_flash_private_soc *soc_private = fctrl->soc_info.soc_private;
+	unsigned long brightness_to_set;
+	ssize_t ret = -EINVAL;
+
+	CAM_INFO(CAM_FLASH, "Flash Brightness Command: %s", buf);
+	ret = kstrtoul(buf, 10, &brightness_to_set);
+	if (ret)
+		return ret;
+
+	flashlight_brightness = brightness_to_set;
+
+	switch (flashlight_enable)
+	{
+	case CAMERA_SENSOR_FLASH_STATUS_LOW: // CAMERA_SENSOR_FLASH_OP_FIRELOW
+	case CAMERA_SENSOR_FLASH_STATUS_HIGH: // CAMERA_SENSOR_FLASH_OP_FIREHIGH
+
+		CAM_INFO(CAM_FLASH, "Flash Mode %s: %d",
+			 flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_HIGH ?
+					   "High" :
+					   "Low",
+			 flashlight_brightness);
+
+		// disable first
+		cam_res_mgr_gpio_set_value(
+			soc_private->flash_gpio_enable, 0);
+		cam_res_mgr_gpio_free(fctrl->soc_info.dev,
+						soc_private->flash_gpio_enable);
+		pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_SUSPEND, CAMERA_SENSOR_FLASH_OP_OFF, 0);
+
+		// get handle
+		ret = cam_res_mgr_gpio_request(
+			fctrl->soc_info.dev,
+			soc_private->flash_gpio_enable, 0,
+			"CUSTOM_GPIO1");
+		if (ret) {
+			CAM_ERR(CAM_FLASH, "gpio %d request fails",
+				soc_private->flash_gpio_enable);
+			return ret;
+		}
+
+		cam_res_mgr_gpio_set_value(
+			soc_private->flash_gpio_enable,
+			flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_HIGH);
+		if (flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_LOW) {
+			pm6125_flash_gpio_select_state(
+				PM6125_FLASH_GPIO_STATE_ACTIVE,
+				CAMERA_SENSOR_FLASH_OP_FIRELOW,
+				FLASH_FIRE_LOW_MAXCURRENT);
+			usleep_range(5000, 6000);
+		}
+		pm6125_flash_gpio_select_state(
+			PM6125_FLASH_GPIO_STATE_ACTIVE,
+			flashlight_enable == CAMERA_SENSOR_FLASH_STATUS_HIGH ?
+					  CAMERA_SENSOR_FLASH_OP_FIREHIGH :
+					  CAMERA_SENSOR_FLASH_OP_FIRELOW,
+			(u64)flashlight_brightness);
+		break;
+	default:
+		CAM_INFO(CAM_FLASH, "flashlight had not been enable yet.");
+		break;
+	}
+
+	return size;
+}
+static DEVICE_ATTR_RW(flashlight_enable);
+static DEVICE_ATTR_RW(flashlight_brightness);
+struct device_attribute *flashlight_attributes[] = {
+	&dev_attr_flashlight_enable,
+	&dev_attr_flashlight_brightness,
+};
+
+int pm6125_flash_control_create_device(struct device* dev)
+{
+	int i, ret = 0;
+	for (i = 0; i < ARRAY_SIZE(flashlight_attributes); i++) {
+		ret = device_create_file(dev,
+						flashlight_attributes[i]);
+		if (ret) {
+			dev_err(dev, "failed: sysfs file %s\n",
+					flashlight_attributes[i]->attr.name);
+			pm6125_flash_control_remove_device(dev);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+int pm6125_flash_control_remove_device(struct device* dev)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(flashlight_attributes); i++) {
+		device_remove_file(dev, flashlight_attributes[i]);
+	}
+	return 0;
+}
+#endif
 
 static int pm6125_flash_pwm_probe(struct platform_device *pdev)
 {
