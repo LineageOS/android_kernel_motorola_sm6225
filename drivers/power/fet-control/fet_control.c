@@ -291,7 +291,7 @@ ret:
 static void update_work(struct work_struct *work)
 {
 	struct fet_control_data *data = container_of(work, struct fet_control_data, update.work);
-	int main_curr, main_mv, flip_mv = 0, usbtype;
+	int main_curr, main_mv, main_ocv, flip_mv = 0, usbtype;
 	int main_chg = 1, rc = 0;
 	int hb_sched_time = HBDLY_DISCHARGE_SEC;
 	int vbatt2_sns_uv = -EINVAL;
@@ -305,11 +305,11 @@ static void update_work(struct work_struct *work)
 
 	/* For no Charger connected & battfet already closed, nothing more to be done */
 	if (mmi_is_factory()) {
-		pr_err("Factory Mode- Cancel Work.. \n");
+		pr_info("Factory Mode- Cancel Work.. \n");
 		cancel_delayed_work(&data->update);
 		return;
 	} else if (usbtype == POWER_SUPPLY_USB_TYPE_UNKNOWN && battplus_state) {
-		pr_err("BATTFET Closed & Not Charging- Cancel Work..\n");
+		pr_info("BATTFET Closed & Not Charging- Cancel Work..\n");
 		cancel_delayed_work(&data->update);
 		return;
 	}
@@ -318,6 +318,10 @@ static void update_work(struct work_struct *work)
 	main_mv = get_ps_int_prop(data->main_batt_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	main_mv /= 1000;
+
+	main_ocv = get_ps_int_prop(data->main_batt_psy,
+		POWER_SUPPLY_PROP_VOLTAGE_OCV);
+	main_ocv /= 1000;
 
 	/* Main current in uA */
 	main_curr = get_ps_int_prop(data->main_batt_psy,
@@ -362,19 +366,20 @@ static void update_work(struct work_struct *work)
 
 	pr_info("Main_curr:%d, main_Ichg_MAX:%d\n",
 		main_curr, data->main_chg_curr_max);
-	pr_err("Flip-Vbatt: %d, Main-Vbatt: %d\n", flip_mv, main_mv);
+	pr_err("Flip-Vbatt: %d, Main-Vbatt: %d, Main-OCV: %d\n", flip_mv, main_mv, main_ocv);
 
 	/* FET BattFET paths */
 	/* Leave Balance dflt-en & toggle in/out parallel low-Z battplus fet */
 	balance_state = 0;
-	if ( abs(main_mv - flip_mv) < RBALANCE_VDIFF_MV) {
-		battplus_state = 1;
-		pr_info("battplus-EN: %d\n", battplus_state);
-	} else {
-		battplus_state = 0;
-		pr_info("battplus-DIS: %d\n", battplus_state);
+	if (!battplus_state) {
+		if ( abs(main_ocv - flip_mv) < RBALANCE_VDIFF_MV) {
+			battplus_state = 1;
+			pr_info("battplus-EN: %d\n", battplus_state);
+		} else {
+			battplus_state = 0;
+			pr_info("battplus-DIS: %d\n", battplus_state);
+		}
 	}
-
 	if (main_chg == 1)
 		hb_sched_time = HBDLY_CHARGE_SEC;
 
