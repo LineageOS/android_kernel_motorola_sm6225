@@ -66,6 +66,10 @@ enum {
 #define BQ2597X_PART_NO	0x10
 #define SC8551_PART_NO	0x00
 #define SC8551A_PART_NO	0x51
+#define NU2105_PART_NO	0xC0
+#define NU2105_MAX_SHOW_REG_ADDR 		0x2F
+#define SC8551_MAX_SHOW_REG_ADDR 		0x36
+#define BQ25970_MAX_SHOW_REG_ADDR 		0x2A
 #define	BAT_OVP_ALARM		BIT(7)
 #define BAT_OCP_ALARM		BIT(6)
 #define	BUS_OVP_ALARM		BIT(5)
@@ -1346,8 +1350,19 @@ static int bq2597x_detect_device(struct bq2597x *bq)
 		bq->revision = (data & BQ2597X_DEV_REV_MASK);
 		bq->revision >>= BQ2597X_DEV_REV_SHIFT;
 
-		pr_info("detect device PN:%x, ID:%x, REV:%x \n!",
+		if (bq->part_no == NU2105_PART_NO) {
+			pr_info("detect device PN:%x, ID:%x, REV:%x chip_name:NU2105\n!",
 				bq->part_no, bq->device_id, bq->revision);
+		} else if ((bq->part_no == SC8551_PART_NO) || (bq->part_no == SC8551A_PART_NO)) {
+			pr_info("detect device PN:%x, ID:%x, REV:%x chip_name:SC8551\n!",
+				bq->part_no, bq->device_id, bq->revision);
+		} else if (bq->part_no == BQ2597X_PART_NO) {
+			pr_info("detect device PN:%x, ID:%x, REV:%x chip_name:BQ2597X\n!",
+				bq->part_no, bq->device_id, bq->revision);
+		} else {
+			pr_info("detect device PN:%x, ID:%x, REV:%x chip_name:unknow\n!",
+				bq->part_no, bq->device_id, bq->revision);
+		}
 	}
 
 	return ret;
@@ -1703,6 +1718,10 @@ static int bq2597x_init_regulation(struct bq2597x *bq)
 	bq2597x_set_vdrop_deglitch(bq, 5000);
 	bq2597x_set_vdrop_th(bq, 400);
 
+	if (bq->part_no == NU2105_PART_NO) {
+		bq2597x_update_bits(bq, BQ2597X_REG_0C,
+				BQ2597X_FREQ_SHIFT_MASK, (0x02 << BQ2597X_FREQ_SHIFT_SHIFT));
+	}
 	bq2597x_enable_regulation(bq, false);
 
 	return 0;
@@ -1772,8 +1791,18 @@ static ssize_t bq2597x_show_registers(struct device *dev,
 	int len;
 	int idx = 0;
 	int ret;
+	u8 max_addr = 0;
 
-	idx = snprintf(buf, PAGE_SIZE, "%s:\n", "bq25970");
+	if (bq->part_no == NU2105_PART_NO) {
+		max_addr = NU2105_MAX_SHOW_REG_ADDR;
+		idx = snprintf(buf, PAGE_SIZE, "%s:\n", "nu2105");
+	} else if ((bq->part_no == SC8551A_PART_NO) || (bq->part_no == SC8551_PART_NO)) {
+		max_addr = SC8551_MAX_SHOW_REG_ADDR;
+		idx = snprintf(buf, PAGE_SIZE, "%s:\n", "sc8551");
+	} else {
+		max_addr = BQ25970_MAX_SHOW_REG_ADDR;
+		idx = snprintf(buf, PAGE_SIZE, "%s:\n", "bq25970");
+	}
 	for (addr = 0x0; addr <= 0x2E; addr++) {
 		ret = bq2597x_read_byte(bq, addr, &val);
 		if (ret == 0) {
