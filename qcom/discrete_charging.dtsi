@@ -280,10 +280,9 @@
 		ti,bq2589x,use-absolute-vindpm;
 	};
 
-
-	bq2597x: bq2597x-charger@65 {
+	bq2597x: bq2597x-charger@66 {
 		compatible = "ti,bq25970-charger";
-		reg = <0x65>;
+		reg = <0x66>;
 		#io-channel-cells = <1>;
 		//ti,bq2597x,interrupt_gpios = <&pio 30 0>;
 		//interrupt-parent = <&pio>;
