@@ -23,16 +23,7 @@ static DEFINE_MUTEX(wt6670f_i2c_access);
 //static DEFINE_MUTEX(wt6670f_access_lock);
 //static struct i2c_client *new_client;
 //static int wt6670f_reset_pin = -1;
-//static int wt6670f_int_pin = -1;
-
-#if 0
-struct pinctrl *i2c6_pinctrl;
-struct pinctrl_state *i2c6_i2c;
-struct pinctrl_state *i2c6_scl_low;
-struct pinctrl_state *i2c6_scl_high;
-struct pinctrl_state *i2c6_sda_low;
-struct pinctrl_state *i2c6_sda_high;
-#endif
+static int wt6670f_int_pin = -1;
 struct wt6670f *_wt = NULL;
 
 static int __wt6670f_write_word(struct wt6670f *wt, u8 reg, u16 data)
@@ -215,7 +206,7 @@ EXPORT_SYMBOL_GPL(wt6670f_is_charger_ready);
 int wt6670f_get_firmware_version(void)
 {
 	int ret;
-	u16 data;
+	u16 data = 0;
 
 	ret = wt6670f_read_word(_wt, 0xBF, &data);
 	if (ret < 0)
@@ -404,15 +395,15 @@ int moto_tcmd_wt6670f_get_firmware_version(void)
 }
 EXPORT_SYMBOL_GPL(moto_tcmd_wt6670f_get_firmware_version);
 
-/*static irqreturn_t wt6670f_intr_handler(int irq, void *data)
+static irqreturn_t wt6670f_intr_handler(int irq, void *data)
 {
 	pr_info("%s: read charger type!\n", __func__);
 	_wt->chg_ready = true;
 
 	return IRQ_HANDLED;
-}*/
+}
 
-/*static int wt6670f_parse_dt(struct device *dev)
+static int wt6670f_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	int ret = 0;
@@ -422,33 +413,34 @@ EXPORT_SYMBOL_GPL(moto_tcmd_wt6670f_get_firmware_version);
 		pr_info("%s: no of node\n", __func__);
 		return -ENODEV;
 	}
-#if 0
-	wt6670f_reset_pin = of_get_named_gpio(np,"wt6670f-reset-gpio",0);
-	if(wt6670f_reset_pin < 0){
-	pr_info("%s: no reset\n", __func__);
-	return -ENODATA;
+
+	_wt->reset_pin = of_get_named_gpio(np, "wt6670f-reset-gpio", 0);
+	if (_wt->reset_pin < 0)
+		pr_info("[%s] of get wt6670 gpio failed, reset_pin:%d\n",__func__, _wt->reset_pin);
+
+	if (gpio_request(_wt->reset_pin, "wt6670_reset_pin")) {
+		pr_info("[%s]reset gpio_request failed", __func__);
 	}
-	else
-	pr_info("%s: wt6670f-reset-gpio = %d\n", __func__,wt6670f_reset_pin);
-	gpio_request(wt6670f_reset_pin,"wt6670f_reset");
-	gpio_direction_output(wt6670f_reset_pin,0);
-#endif
+	if (gpio_direction_output(_wt->reset_pin, 0))
+		pr_info("[%s] gpio_direction_output reset_pin failed", __func__);
 
 	wt6670f_int_pin = of_get_named_gpio(np,"wt6670f-int-gpio",0);
 	if(wt6670f_int_pin < 0){
-	pr_info("%s: no int\n", __func__);
-	return -ENODATA;
+		pr_info("%s: get wt6670f-int-gpio failed\n", __func__);
 	}
-	else
-	pr_info("%s: wt6670f-int-gpio = %d\n", __func__,wt6670f_int_pin);
-	gpio_request(wt6670f_int_pin,"wt6670f_int");
-	gpio_direction_input(wt6670f_int_pin);	//configure to input mode
+
+	if (gpio_request(wt6670f_int_pin,"wt6670f_int")) {
+		pr_info("[%s]wt6670f_int gpio_request failed", __func__);
+	}
+	if (gpio_direction_input(wt6670f_int_pin))
+		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
+	_wt->intb_pin = wt6670f_int_pin;
 
 	ret = request_irq(gpio_to_irq(wt6670f_int_pin), wt6670f_intr_handler,
 		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "wt6670f int", dev);
 	enable_irq_wake(gpio_to_irq(wt6670f_int_pin));
 	return 0;
-}*/
+}
 
 static int wt6670_iio_write_raw(struct iio_dev *indio_dev,
 		struct iio_chan_spec const *chan, int val1,
@@ -619,29 +611,20 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, wt);
 	mutex_init(&wt->i2c_rw_lock);
 
-	wt->reset_pin = of_get_named_gpio(wt->dev->of_node, "wt6670f-reset-gpio", 0);
-	if (wt->reset_pin < 0)
-		pr_info("[%s] of get wt6670 gpio failed, reset_pin:%d\n",
-			__func__, wt->reset_pin);
-
-	if (gpio_request(wt->reset_pin, "wt6670_reset_pin")) {
-		pr_info("[%s] gpio_request reset failed", __func__);
-		return 0;
-	}
-
-	if (gpio_direction_output(wt->reset_pin, 0))
-		pr_info("[%s] gpio_direction_output failed", __func__);
-
 	_wt = wt;
 
-/*	ret = wt6670f_parse_dt(&client->dev);
+	ret = wt6670f_parse_dt(&client->dev);
 	if (ret < 0)
-		pr_info("%s: parse dt error\n", __func__);*/
+		pr_info("%s: parse dt error\n", __func__);
 
 	wt6670f_create_device_node(&(client->dev));
 
 	//wt6670f_do_reset();
 	wt6670f_reset_chg_type();
+	gpio_direction_output(_wt->intb_pin,0);
+	usleep_range(5000,6000);
+	gpio_direction_output(_wt->intb_pin,1);
+	usleep_range(5000,6000);
 	firmware_version = wt6670f_get_firmware_version();
 
 	pr_info("[%s] firmware_version = %d, chg_type = 0x%x\n", __func__,firmware_version, _wt->chg_type);
@@ -658,7 +641,8 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 	ret = wt6670_init_iio_psy(wt);
 	if (ret < 0)
 		pr_info("%s: init iio sys error\n", __func__);
-
+	if (gpio_direction_input(wt6670f_int_pin))
+		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
 	return 0;
 }
 
