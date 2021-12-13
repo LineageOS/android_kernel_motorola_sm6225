@@ -505,6 +505,21 @@
 		clock-rates = <24000000>;
 	};
 
+	led_flash_macro_rhode: qcom,camera-flash@2 {
+		cell-index = <2>;
+		compatible = "qcom,camera-flash";
+		flash-type = <CAM_FLASH_TYPE_GPIO>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&flash_active>;
+		pinctrl-1 = <&flash_suspend>;
+		gpios = <&tlmm 85 0>;
+		gpio-custom1 = <0>;
+		gpio-req-tbl-num = <0>;
+		gpio-req-tbl-flags = <0>;
+		gpio-req-tbl-label = "CUSTOM_GPIO1";
+		status = "ok";
+	};
 
 	/* macro : gc02m1 */
 	qcom,cam-sensor@2 {
@@ -515,7 +530,7 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		eeprom-src = <&eeprom_macro>;
-		//led-flash-src = <&led_flash_main>;
+		led-flash-src = <&led_flash_macro_rhode>;
 		cam_vio-supply = <&cam_ldo4>;
 		cam_vana-supply = <&cam_pmic2_ldo3>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
@@ -548,6 +563,22 @@
 		clock-rates = <24000000>;
 	};
 
+	led_flash_wide_rhode: qcom,camera-flash@3{
+		cell-index = <3>;
+		compatible = "qcom,camera-flash";
+		flash-type = <CAM_FLASH_TYPE_GPIO>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&flash_active>;
+		pinctrl-1 = <&flash_suspend>;
+		gpios = <&tlmm 85 0>;
+		gpio-custom1 = <0>;
+		gpio-req-tbl-num = <0>;
+		gpio-req-tbl-flags = <0>;
+		gpio-req-tbl-label = "CUSTOM_GPIO1";
+		status = "ok";
+	};
+
 	/*Rear Aux*/
 	qcom,cam-sensor@3 {
 		cell-index = <3>;
@@ -556,7 +587,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//led-flash-src = <&led_flash_rear_aux>;
+		led-flash-src = <&led_flash_wide_rhode>;
 		eeprom-src = <&eeprom_wide>;
 		cam_vio-supply = <&cam_ldo4>;
 		cam_vana-supply = <&cam_pmic2_ldo3>;
