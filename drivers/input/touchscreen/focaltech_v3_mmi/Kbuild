@@ -1,0 +1,41 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_v3_mmi \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_v3_mmi/include
+
+obj-m := focaltech_v3_mmi.o
+focaltech_v3_mmi-objs += focaltech_core.o
+focaltech_v3_mmi-objs += focaltech_ex_fun.o
+focaltech_v3_mmi-objs += focaltech_ex_mode.o
+focaltech_v3_mmi-objs += focaltech_gesture.o
+focaltech_v3_mmi-objs += focaltech_esdcheck.o
+focaltech_v3_mmi-objs += focaltech_point_report_check.o
+focaltech_v3_mmi-objs += focaltech_flash.o
+focaltech_v3_mmi-objs += focaltech_i2c.o
+
+ifneq ($(filter ft3519,$(CONFIG_INPUT_FOCALTECH_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -DCONFIG_FTS_IC_NAME_FT3519
+	focaltech_v3_mmi-objs += focaltech_flash/focaltech_upgrade_ft5452i.o
+endif
+
+ifneq ($(filter ft3518u,$(CONFIG_INPUT_FOCALTECH_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -DCONFIG_FTS_IC_NAME_FT3518U
+	focaltech_v3_mmi-objs += focaltech_flash/focaltech_upgrade_ft3518u.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_FTS_TEST_SUPPORT)),)
+	EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_mtk_v2_mmi/focaltech_test
+	EXTRA_CFLAGS += -DFTS_TEST_SUPPORT
+	focaltech_mtk_v2_mmi-objs += focaltech_test/focaltech_test.o
+	focaltech_mtk_v2_mmi-objs += focaltech_test/focaltech_test_ini.o
+
+ifneq ($(filter ft3519,$(CONFIG_INPUT_FTS_MTK_V2_MMI_IC_NAME)),)
+	focaltech_mtk_v2_mmi-objs += focaltech_test/supported_ic/focaltech_test_ft5452i.o
+endif
+endif
+
