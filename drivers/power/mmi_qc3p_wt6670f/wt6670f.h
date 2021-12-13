@@ -13,6 +13,7 @@ struct wt6670f {
 	int i2c_scl_pin;
 	int i2c_sda_pin;
 	int reset_pin;
+	int intb_pin;
 
 	int count;
 	int chg_type;

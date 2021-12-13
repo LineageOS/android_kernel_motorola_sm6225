@@ -2,6 +2,8 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/power/mmi_qc3p_wt6670f
-
+ifneq ($(filter m y,$(CONFIG_MMI_QC3P_TURBO_CHARGER_ISP_5G)),)
+    EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_TURBO_CHARGER_ISP_5G
+endif
 mmi_qc3p_wt6670f-objs += wt6670f_qc3p.o wt6670f_upgrade.o
 obj-m += mmi_qc3p_wt6670f.o
