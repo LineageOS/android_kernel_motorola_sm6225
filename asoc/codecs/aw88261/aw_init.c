@@ -1062,7 +1062,12 @@ static int aw_pid_2055_dev_init(struct aw882xx *aw882xx, int index)
 
 	aw_pa->soft_rst.reg = AW_PID_2055_ID_REG;
 	aw_pa->soft_rst.reg_value = AW882XX_SOFT_RESET_VALUE;
-	
+
+	usleep_range(AW_2000_US, AW_2000_US +10);
+	aw_pa->ops.aw_i2c_write(aw_pa, AW_PID_2055_INIT_CHECK_REG,
+					AW_PID_2055_INIT_CHECK_VALUE);
+	usleep_range(AW_3000_US, AW_3000_US +10);
+
 	usleep_range(AW_2000_US, AW_2000_US +10);
 	aw_pa->ops.aw_i2c_write(aw_pa, AW_PID_2055_INIT_CHECK_REG,
 					AW_PID_2055_INIT_CHECK_VALUE);
@@ -1629,12 +1634,12 @@ static int aw_pid_2113_dev_init(struct aw882xx *aw882xx, int index)
 
 	aw_pa->soft_rst.reg = AW_PID_2113_ID_REG;
 	aw_pa->soft_rst.reg_value = AW882XX_SOFT_RESET_VALUE;
-	
+
 	usleep_range(AW_2000_US, AW_2000_US +10);
 	aw_pa->ops.aw_i2c_write(aw_pa, AW_PID_2113_INIT_CHECK_REG,
 					AW_PID_2113_INIT_CHECK_VALUE);
 	usleep_range(AW_3000_US, AW_3000_US +10);
-	
+
 	aw_pid_2113_efver_check(aw_pa);
 
 	ret = aw_device_probe(aw_pa);
