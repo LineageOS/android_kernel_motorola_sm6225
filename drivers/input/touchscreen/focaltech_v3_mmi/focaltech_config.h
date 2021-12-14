@@ -253,7 +253,7 @@
 /*
  * auto upgrade
  */
-#define FTS_AUTO_UPGRADE_EN                     0
+#define FTS_AUTO_UPGRADE_EN                     1
 
 /*
  * auto upgrade for lcd cfg
