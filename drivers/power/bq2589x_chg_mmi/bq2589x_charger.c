@@ -89,6 +89,7 @@ enum bq2589x_part_no {
 	BQ25890 = 0x03,
 	BQ25892 = 0x00,
 	BQ25895 = 0x07,
+	SC89890H = 0x04,
 };
 
 struct bq2589x_config {
@@ -2367,6 +2368,9 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	if (!ret && bq->part_no == BQ25890) {
 		bq->status |= BQ2589X_STATUS_EXIST;
 		dev_info(dev, "%s: charger device bq25890 detected, revision:%d\n", __func__, bq->revision);
+	} else if (!ret && bq->part_no == SC89890H) {
+		bq->status |= BQ2589X_STATUS_EXIST;
+		dev_info(dev, "%s: charger device sc89890h detected, revision:%d\n", __func__, bq->revision);
 	} else {
 		dev_info(dev, "%s: no bq25890 charger device found:%d\n", __func__, ret);
 		return -ENODEV;
