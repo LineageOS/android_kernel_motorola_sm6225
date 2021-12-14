@@ -242,7 +242,11 @@ int brl_gesture(struct goodix_ts_core *cd, int gesture_type)
 	struct goodix_ts_cmd cmd;
 
 	cmd.cmd = GOODIX_GESTURE_CMD;
+#ifdef CONFIG_GTP_FOD
+	cmd.len = 6;
+#else
 	cmd.len = 5;
+#endif
 	cmd.data[0] = gesture_type;
 	if (cd->hw_ops->send_cmd(cd, &cmd))
 		ts_err("failed send gesture cmd");
