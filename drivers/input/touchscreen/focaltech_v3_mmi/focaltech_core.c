@@ -1475,6 +1475,15 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
              pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
 
+	ret = of_property_read_string(np, "focaltech,panel-supplier",
+		&fts_data->panel_supplier);
+	if (ret < 0) {
+		fts_data->panel_supplier = NULL;
+		FTS_ERROR("Unable to read panel supplier\n");
+	} else {
+		FTS_INFO("panel supplier is %s", (char *)fts_data->panel_supplier);
+	}
+
     FTS_FUNC_EXIT();
     return 0;
 }
