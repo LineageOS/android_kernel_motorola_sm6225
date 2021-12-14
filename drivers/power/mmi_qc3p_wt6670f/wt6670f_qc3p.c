@@ -497,6 +497,16 @@ static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
 		pr_info("wt6670 get wt6670f_is_charger_ready status:%d\n", result);
 		*val1 = result;
 		break;
+	case PSY_IIO_QC3P_FIRMWARE_NUM:
+		gpio_direction_output(_wt->intb_pin,0);
+		usleep_range(5000,6000);
+		gpio_direction_output(_wt->intb_pin,1);
+		usleep_range(5000,6000);
+		result = wt6670f_get_firmware_version();
+		pr_info("wt6670 get wt6670f_firmware_num:%d\n", result);
+		*val1 = result;
+		gpio_direction_input(wt6670f_int_pin);
+		break;
 	default:
 		pr_err("Unsupported wt6670 IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
