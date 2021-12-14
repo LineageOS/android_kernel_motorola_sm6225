@@ -650,6 +650,33 @@ static ssize_t fts_bootmode_show(
     return count;
 }
 
+static ssize_t fts_productinfo_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%s\n", FTS_CHIP_NAME);
+}
+
+static ssize_t fts_ic_ver_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    u8 val = 0;
+    struct input_dev *input_dev = fts_data->input_dev;
+    mutex_lock(&input_dev->mutex);
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(1);
+#endif
+    fts_read_reg(FTS_REG_VENDOR_ID, &val);
+    count += snprintf(buf + count, PAGE_SIZE, "Product ID: 0x%02x\n", val);
+    fts_read_reg(FTS_REG_FW_VER, &val);
+    count += snprintf(buf + count, PAGE_SIZE, "Build ID: 0000-%02x\n", val);
+    count += scnprintf(buf + count, PAGE_SIZE, "IC: %s\n", FTS_CHIP_NAME);
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_proc_busy(0);
+#endif
+    mutex_unlock(&input_dev->mutex);
+    return count;
+}
+
 /* fts_tpfwver interface */
 static ssize_t fts_tpfwver_show(
     struct device *dev, struct device_attribute *attr, char *buf)
@@ -683,6 +710,32 @@ static ssize_t fts_tpfwver_store(
     struct device_attribute *attr, const char *buf, size_t count)
 {
     return -EPERM;
+}
+
+static ssize_t buildid_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *ts_data = fts_data;
+	struct input_dev *input_dev = ts_data->input_dev;
+	ssize_t num_read_chars = 0;
+	u8 fwver = 0;
+
+	mutex_lock(&input_dev->mutex);
+
+#if FTS_ESDCHECK_EN
+	fts_esdcheck_proc_busy(1);
+#endif
+	fts_read_reg(FTS_REG_FW_VER, &fwver);
+#if FTS_ESDCHECK_EN
+	fts_esdcheck_proc_busy(0);
+#endif
+	if ((fwver == 0xFF) || (fwver == 0x00))
+		num_read_chars = snprintf(buf, PAGE_SIZE, "get tp fw version fail!\n");
+	else
+		num_read_chars = snprintf(buf, PAGE_SIZE, "0000-%02x\n", fwver);
+
+	mutex_unlock(&input_dev->mutex);
+	return num_read_chars;
 }
 
 /* fts_rw_reg */
@@ -1146,6 +1199,18 @@ static ssize_t fts_log_level_store(
     return count;
 }
 
+static ssize_t fts_panel_supplier_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+
+	if (data->panel_supplier)
+		return scnprintf(buf, PAGE_SIZE, "%s\n",
+			data->panel_supplier);
+	return 0;
+}
+static DEVICE_ATTR(panel_supplier, 0444, fts_panel_supplier_show, NULL);
+
 /* get the fw version  example:cat fw_version */
 static DEVICE_ATTR(fts_fw_version, S_IRUGO | S_IWUSR, fts_tpfwver_show, fts_tpfwver_store);
 
@@ -1173,6 +1238,9 @@ static DEVICE_ATTR(fts_irq, S_IRUGO | S_IWUSR, fts_irq_show, fts_irq_store);
 static DEVICE_ATTR(fts_boot_mode, S_IRUGO | S_IWUSR, fts_bootmode_show, fts_bootmode_store);
 static DEVICE_ATTR(fts_touch_point, S_IRUGO | S_IWUSR, fts_tpbuf_show, fts_tpbuf_store);
 static DEVICE_ATTR(fts_log_level, S_IRUGO | S_IWUSR, fts_log_level_show, fts_log_level_store);
+static DEVICE_ATTR(buildid, S_IRUGO, buildid_show, NULL);
+static DEVICE_ATTR(productinfo, S_IRUGO, fts_productinfo_show, NULL);
+static DEVICE_ATTR(ic_ver, S_IRUGO, fts_ic_ver_show, NULL);
 
 /* add your attr in here*/
 static struct attribute *fts_attributes[] = {
@@ -1187,12 +1255,132 @@ static struct attribute *fts_attributes[] = {
     &dev_attr_fts_boot_mode.attr,
     &dev_attr_fts_touch_point.attr,
     &dev_attr_fts_log_level.attr,
+    &dev_attr_buildid.attr,
+    &dev_attr_productinfo.attr,
+    &dev_attr_ic_ver.attr,
+    &dev_attr_panel_supplier.attr,
     NULL
 };
 
 static struct attribute_group fts_attribute_group = {
     .attrs = fts_attributes
 };
+
+#include <linux/major.h>
+#include <linux/kdev_t.h>
+
+/* Attribute: path (RO) */
+static ssize_t path_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+	ssize_t blen;
+	const char *path;
+
+	if (!data) {
+		pr_err("cannot get ft_data pointer\n");
+		return (ssize_t)0;
+	}
+	path = kobject_get_path(&data->client->dev.kobj, GFP_KERNEL);
+	blen = scnprintf(buf, PAGE_SIZE, "%s", path ? path : "na");
+	kfree(path);
+	return blen;
+}
+
+/* Attribute: vendor (RO) */
+static ssize_t vendor_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "focaltech");
+}
+
+static ssize_t panel_supplier_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return fts_panel_supplier_show(dev, attr, buf);
+}
+
+static ssize_t ic_ver_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return fts_ic_ver_show(dev, attr, buf);
+}
+
+static struct device_attribute touchscreen_attributes[] = {
+	__ATTR_RO(path),
+	__ATTR_RO(vendor),
+	__ATTR_RO(ic_ver),
+	__ATTR_RO(panel_supplier),
+	__ATTR_NULL
+};
+
+#define TSDEV_MINOR_BASE 128
+#define TSDEV_MINOR_MAX 32
+
+static int ft_ts_sysfs_class(void *_data, bool create)
+{
+	struct fts_ts_data *data = _data;
+	struct device_attribute *attrs = touchscreen_attributes;
+	int i, error = 0;
+	static struct class *touchscreen_class;
+	static struct device *ts_class_dev;
+	static int minor;
+
+	if (create) {
+		minor = input_get_new_minor(data->client->addr,
+						1, false);
+		if (minor < 0)
+			minor = input_get_new_minor(TSDEV_MINOR_BASE,
+					TSDEV_MINOR_MAX, true);
+		pr_info("assigned minor %d\n", minor);
+
+		touchscreen_class = class_create(THIS_MODULE, "touchscreen");
+		if (IS_ERR(touchscreen_class)) {
+			error = PTR_ERR(touchscreen_class);
+			touchscreen_class = NULL;
+			return error;
+		}
+
+		ts_class_dev = device_create(touchscreen_class, NULL,
+				MKDEV(INPUT_MAJOR, minor),
+				data, "%s", FTS_CHIP_NAME);
+		if (IS_ERR(ts_class_dev)) {
+			error = PTR_ERR(ts_class_dev);
+			ts_class_dev = NULL;
+			return error;
+		}
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i) {
+			error = device_create_file(ts_class_dev, &attrs[i]);
+			if (error)
+				break;
+		}
+
+		if (error)
+			goto device_destroy;
+	} else {
+		if (!touchscreen_class || !ts_class_dev)
+			return -ENODEV;
+
+		for (i = 0; attrs[i].attr.name != NULL; ++i)
+			device_remove_file(ts_class_dev, &attrs[i]);
+
+		device_unregister(ts_class_dev);
+		class_unregister(touchscreen_class);
+	}
+
+	return 0;
+
+device_destroy:
+	for (--i; i >= 0; --i)
+		device_remove_file(ts_class_dev, &attrs[i]);
+	device_destroy(touchscreen_class, MKDEV(INPUT_MAJOR, minor));
+	ts_class_dev = NULL;
+	class_unregister(touchscreen_class);
+	pr_err("error creating touchscreen class\n");
+
+	return -ENODEV;
+}
 
 int fts_create_sysfs(struct fts_ts_data *ts_data)
 {
@@ -1207,11 +1395,19 @@ int fts_create_sysfs(struct fts_ts_data *ts_data)
         FTS_INFO("[EX]: sysfs_create_group() succeeded!!");
     }
 
+	ret = ft_ts_sysfs_class(ts_data, true);
+	if (ret) {
+		FTS_ERROR("[EX]: fts_sysfs_class() failed!!");
+		sysfs_remove_group(&ts_data->dev->kobj, &fts_attribute_group);
+		return -ENOMEM;
+	}
+
     return ret;
 }
 
 int fts_remove_sysfs(struct fts_ts_data *ts_data)
 {
     sysfs_remove_group(&ts_data->dev->kobj, &fts_attribute_group);
+	ft_ts_sysfs_class(ts_data, false);
     return 0;
 }

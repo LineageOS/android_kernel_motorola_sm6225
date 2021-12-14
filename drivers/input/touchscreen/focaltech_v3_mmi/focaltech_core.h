@@ -211,6 +211,7 @@ struct fts_ts_data {
     int key_state;
     int touch_point;
     int point_num;
+    const char *panel_supplier;
     struct regulator *vdd;
     struct regulator *vcc_i2c;
 #if FTS_PINCTRL_EN

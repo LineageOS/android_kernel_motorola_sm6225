@@ -176,10 +176,13 @@
  */
 #ifdef CONFIG_FTS_IC_NAME_FT3519
 #define FTS_CHIP_TYPE   _FT3519
+#define FTS_CHIP_NAME   "ft3519"
 #elif defined(CONFIG_FTS_IC_NAME_FT3518U)
 #define FTS_CHIP_TYPE   _FT3518U
+#define FTS_CHIP_NAME   "ft3518"
 #else
 #define FTS_CHIP_TYPE   _FT3519
+#define FTS_CHIP_NAME   "ft3519"
 #endif
 
 /******************* Enables *********************/
