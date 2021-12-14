@@ -211,6 +211,8 @@ struct aw_device {
 	unsigned int re_max;
 	unsigned int re_min;
 
+	int cur_gain;
+
 	struct device *dev;
 	struct i2c_client *i2c;
 	char acf_name[AW_NAME_MAX];

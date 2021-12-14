@@ -15,6 +15,7 @@
 #define AW882XX_LOAD_FW_DELAY_TIME	(0)
 #define AW_START_RETRIES	(5)
 #define AW882XX_RUNIN_TEST
+#define CONFIG_AW882XX_ALGO_BIN_PARAMS
 
 #define AW_I2C_RETRIES			5	/* 5 times */
 #define AW_I2C_RETRY_DELAY		5	/* 5 ms */
@@ -24,9 +25,6 @@
 #define AW882XX_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
 						SNDRV_PCM_FMTBIT_S24_LE | \
 						SNDRV_PCM_FMTBIT_S32_LE)
-						
-#define AW882XX_ALGO_SET_PROF_ENABLE  1
-#define AW882XX_ALGO_SET_PROF_DISABLE  0
 
 enum {
 	AW882XX_STREAM_CLOSE = 0,
@@ -52,6 +50,7 @@ enum aw882xx_int_type {
 	INT_TYPE_OTHI = 0x8,
 };
 
+#ifdef CONFIG_AW882XX_ALGO_BIN_PARAMS
 enum {
 	AW_ALGO_PROFILE_ID_0 = 0,
 	AW_ALGO_PROFILE_ID_1,
@@ -71,6 +70,7 @@ struct aw882xx_scene_info {
 	int is_active;
 	int active_cnt;
 };
+#endif
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 1)
@@ -139,6 +139,7 @@ enum {
 	AW882XX_RAMP_ON,
 };
 
+#ifdef CONFIG_AW882XX_ALGO_BIN_PARAMS
 enum {
 	AW_ALGO_CALI_OFF = 0,
 	AW_ALGO_CALI_ON,
@@ -173,7 +174,7 @@ enum {
 	AW_ALGO_MUSIC_FASTTRACK_OFF = 0,
 	AW_ALGO_MUSIC_FASTTRACK_ON,
 };
-
+#endif
 
 
 enum {
@@ -201,6 +202,7 @@ struct aw882xx {
 	int pstream;
 	int cstream;
 	int aw882xx_ramp_status;    /* ramp status */
+#ifdef CONFIG_AW882XX_ALGO_BIN_PARAMS
 	int aw882xx_algo_cali;
 	int aw882xx_algo_bypass;
 	int aw882xx_algo_handset;
@@ -208,9 +210,9 @@ struct aw882xx {
 	int aw882xx_algo_voip;
 	int aw882xx_algo_music_deepbuffer;
 	int aw882xx_algo_music_fasttrack;
-	
 	int aw882xx_algo_prof_id;
 	int cur_algo_prof_id;
+#endif
 
 
 	unsigned int fade_flag;
