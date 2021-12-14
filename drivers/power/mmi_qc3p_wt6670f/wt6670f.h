@@ -69,6 +69,7 @@ static const struct wt6670_iio_channels wt6670_iio_psy_channels[] = {
 	wt6670_CHAN_INDEX("wt6670_battery_dp_dm", PSY_IIO_BATTERY_DP_DM)
 	wt6670_CHAN_INDEX("wt6670_start_detection", PSY_IIO_START_DETECTION)
 	wt6670_CHAN_INDEX("wt6670_detection_ready", PSY_IIO_DETECTION_READY)
+	wt6670_CHAN_INDEX("wt6670_firmware_num", PSY_IIO_QC3P_FIRMWARE_NUM)
 };
 
 int wt6670f_isp_flow(struct wt6670f *chip);
