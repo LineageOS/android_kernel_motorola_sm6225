@@ -75,6 +75,11 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 	if (rc < 0)
 		chip->otg_cl_ua = MICRO_1PA;
 
+	rc = of_property_read_u32(node,
+				"mmi,bat-ocp-ua", &chip->bat_ocp_ua);
+	if (rc < 0)
+		chip->bat_ocp_ua = 0;
+
 	of_property_read_u32(node, "mmi,hvdcp2-max-icl-ua",
 					&chip->hvdcp2_max_icl_ua);
 	if (chip->hvdcp2_max_icl_ua <= 0)
@@ -709,23 +714,60 @@ int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en)
 			return rc;
 		}
 		chip->vbus_enabled = en;
+
+		if (chip->bat_ocp_ua) {
+			if (en == true)
+				schedule_delayed_work(&chip->monitor_ibat_work, msecs_to_jiffies(1000));
+			else
+				cancel_delayed_work(&chip->monitor_ibat_work);
+		}
 	}
 
 	return rc;
 }
 
+static void mmi_discrete_monitor_ibat_work(struct work_struct *work)
+{
+	struct mmi_discrete_charger *chip = container_of(work,
+				struct mmi_discrete_charger,
+				monitor_ibat_work.work);
+	union power_supply_propval val = {0, };
+	int ret = 0;
+	int total_current = 0;
+	int average_current = 0;
+	int i = 0;
+
+	for (i = 0; i < 3; i++) {
+		ret = get_batt_current_now(chip, &val);
+		if (ret) {
+			val.intval = 0;
+		}
+
+		total_current += val.intval;
+		val.intval = 0;
+		msleep(100);
+	}
+
+	average_current = total_current / i;
+
+	if (average_current < 0)
+		average_current = average_current * (-1);
+
+	if (average_current > chip->bat_ocp_ua) {
+		mmi_discrete_otg_enable(chip, false);
+		mmi_info(chip, "battery current %d > %d, disable OTG\n",
+					average_current, chip->bat_ocp_ua);
+	} else
+		schedule_delayed_work(&chip->monitor_ibat_work, msecs_to_jiffies(1000));
+
+}
+
 static void mmi_discrete_check_otg_power(struct mmi_discrete_charger *chip)
 {
-	int rc = 0;
 
 	if (chip->vbus_enabled) {
-		rc = charger_dev_enable_otg(chip->master_chg_dev, false);
-		if (rc)
-			mmi_err(chip, "Unable to disable vbus (%d)\n", rc);
-		else {
-			chip->vbus_enabled = false;
-			mmi_info(chip, "VBUS Disable due to Charger\n");
-		}
+		mmi_discrete_otg_enable(chip, false);
+		mmi_info(chip, "VBUS OTG Disable due to Charger\n");
 	}
 }
 
@@ -2720,6 +2762,7 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 		mmi_info(chip, "IPC logging is enabled for MMI DISCRETE\n");
 
 	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
+	INIT_DELAYED_WORK(&chip->monitor_ibat_work, mmi_discrete_monitor_ibat_work);
 
 	chip->batt_psy = devm_power_supply_register(chip->dev,
 						    &batt_psy_desc,

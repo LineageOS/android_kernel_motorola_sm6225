@@ -93,6 +93,9 @@ struct mmi_discrete_charger {
 	int			real_charger_type;
 	int 			hvdcp2_max_icl_ua;
 
+	struct delayed_work	monitor_ibat_work;
+	int			bat_ocp_ua;
+
 	/* extcon for VBUS / ID notification to USB for type-c only */
 	struct extcon_dev	*extcon;
 
