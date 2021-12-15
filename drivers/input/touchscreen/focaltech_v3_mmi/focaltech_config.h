@@ -253,7 +253,9 @@
 /*
  * auto upgrade
  */
-#define FTS_AUTO_UPGRADE_EN                     1
+#define FTS_AUTO_UPGRADE_EN                     0
+
+#define FTS_FW_FILE_I_INCELL_CHECK		1
 
 /*
  * auto upgrade for lcd cfg
@@ -264,6 +266,11 @@
  * Numbers of modules support
  */
 #define FTS_GET_MODULE_NUM                      0
+
+/*
+ * Usb detect support
+ */
+#define FTS_USB_DETECT_EN                       0
 
 /*
  * module_id: mean vendor_id generally, also maybe gpio or lcm_id...

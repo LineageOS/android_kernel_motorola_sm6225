@@ -24,6 +24,12 @@ ifneq ($(filter ft3518u,$(CONFIG_INPUT_FOCALTECH_MMI_IC_NAME)),)
 	focaltech_v3_mmi-objs += focaltech_flash/focaltech_upgrade_ft3518u.o
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+       KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+       EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+       focaltech_v3_mmi-objs += focaltech_ts_mmi.o
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_MMI_ENABLE_DOUBLE_TAP)),)
 	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
 endif

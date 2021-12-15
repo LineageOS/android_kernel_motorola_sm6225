@@ -56,9 +56,11 @@
 
 #define FTS_MAX_CHIP_IDS        8
 
+#if defined(CONFIG_FTS_IC_NAME_FT3519)
 #define FTS_CHIP_TYPE_MAPPING {{0x89, 0x54, 0x52, 0x54, 0x52, 0x54, 0x5B, 0x54, 0x5E}}
-
-
+#else
+#define FTS_CHIP_TYPE_MAPPING {{0x81, 0x54, 0x52, 0x54, 0x52, 0x00, 0x00, 0x54, 0x5C}}
+#endif
 
 #define FILE_NAME_LENGTH                    128
 #define ENABLE                              1
