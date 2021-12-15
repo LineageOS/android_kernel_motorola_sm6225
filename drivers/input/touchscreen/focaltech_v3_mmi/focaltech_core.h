@@ -62,6 +62,9 @@
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
 #include "focaltech_common.h"
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -192,6 +195,7 @@ struct fts_ts_data {
 #endif
     bool suspended;
     bool fw_loading;
+    bool force_reflash;
     bool irq_disabled;
     bool power_disabled;
     bool glove_mode;
@@ -224,6 +228,10 @@ struct fts_ts_data {
     struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     struct early_suspend early_suspend;
+#endif
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+    struct ts_mmi_class_methods *imports;
 #endif
 };
 
@@ -292,7 +300,9 @@ void fts_prc_queue_work(struct fts_ts_data *ts_data);
 int fts_fwupg_init(struct fts_ts_data *ts_data);
 int fts_fwupg_exit(struct fts_ts_data *ts_data);
 int fts_upgrade_bin(char *fw_name, bool force);
+void fts_fwupg_bin(void);
 int fts_enter_test_environment(bool test_state);
+int fts_fw_update_vendor_name(const char* name);
 
 /* Other */
 int fts_reset_proc(int hdelayms);
@@ -306,4 +316,5 @@ int fts_ex_mode_recovery(struct fts_ts_data *ts_data);
 
 void fts_irq_disable(void);
 void fts_irq_enable(void);
+int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable);
 #endif /* __LINUX_FOCALTECH_CORE_H__ */

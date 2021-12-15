@@ -40,11 +40,25 @@
 *****************************************************************************/
 #define FTS_FW_REQUEST_SUPPORT                      1
 /* Example: focaltech_ts_fw_tianma.bin */
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+#define FTS_FW_NAME_PREX_WITH_REQUEST               ""
+#else
 #define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
+#endif
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+u8 fw_file[] = {
+};
+
+u8 fw_file2[] = {
+};
+
+u8 fw_file3[] = {
+};
+#else
 u8 fw_file[] = {
 #include FTS_UPGRADE_FW_FILE
 };
@@ -56,6 +70,7 @@ u8 fw_file2[] = {
 u8 fw_file3[] = {
 #include FTS_UPGRADE_FW3_FILE
 };
+#endif
 
 struct upgrade_module module_list[] = {
     {FTS_MODULE_ID, FTS_MODULE_NAME, fw_file, sizeof(fw_file)},
@@ -1858,6 +1873,33 @@ static int fts_fwupg_get_module_info(struct fts_upgrade *upg)
     return 0;
 }
 
+int fts_fw_update_vendor_name(const char* name) {
+    struct fts_upgrade *upg = fwupgrade;
+    char* pos;
+    int len;
+
+    fts_fwupg_get_module_info(fwupgrade);
+
+    if (!upg || !upg->module_info) {
+        FTS_ERROR("upgrade struct not init");
+        return -EINVAL;
+    }
+
+    len = strlen(name);
+    if (len > FILE_NAME_LENGTH) {
+        FTS_ERROR("vendor name is too long");
+        return -EINVAL;
+    }
+    pos = strstr(name, ".bin");
+    if (pos == NULL)
+        snprintf(upg->module_info->vendor_name, FILE_NAME_LENGTH, "%s", name);
+    else {
+        len = len - strlen(".bin");
+        snprintf(upg->module_info->vendor_name, len + 1, "%s", name);
+    }
+    return 0;
+}
+
 static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 {
     int ret = 0;
@@ -1865,11 +1907,13 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
     u8 *tmpbuf = NULL;
     char fwname[FILE_NAME_LENGTH] = { 0 };
 
+    FTS_FUNC_ENTER();
     if (!upg || !upg->ts_data || !upg->ts_data->dev) {
         FTS_ERROR("upg/ts_data/dev is null");
         return -EINVAL;
     }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
     if (fts_data->panel_supplier) {
 	    FTS_INFO("fts_data->panel_supplier=%s\n", fts_data->panel_supplier);
         snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
@@ -1877,6 +1921,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
                  fts_data->panel_supplier);
 	}
     else
+#endif
     snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
              FTS_FW_NAME_PREX_WITH_REQUEST, \
              upg->module_info->vendor_name);
@@ -1908,6 +1953,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 
 static int fts_get_fw_file_via_i(struct fts_upgrade *upg)
 {
+    FTS_FUNC_ENTER();
     upg->fw = upg->module_info->fw_file;
     upg->fw_length = upg->module_info->fw_len;
     upg->fw_from_request = 0;
@@ -1951,7 +1997,13 @@ static int fts_fwupg_get_fw_file(struct fts_upgrade *upg)
 
     if (FTS_FW_REQUEST_SUPPORT) {
         ret = fts_get_fw_file_via_request_firmware(upg);
+#if FTS_FW_FILE_I_INCELL_CHECK
+        FTS_INFO("ret=%d, is_incell=%d",ret, upg->ts_data->ic_info.is_incell);
+        //only try get fw file i for non incell IC when load FW fail
+        if ((ret != 0) && upg->ts_data->ic_info.is_incell) {
+#else
         if (ret != 0) {
+#endif
             get_fw_i_flag = true;
         }
     } else {
@@ -1971,6 +2023,7 @@ static int fts_fwupg_get_fw_file(struct fts_upgrade *upg)
         return -ENODATA;
     }
 
+	FTS_INFO("return ret:%d", ret);
     return ret;
 }
 
@@ -1979,6 +2032,41 @@ static void fts_fwupg_init_ic_detail(struct fts_upgrade *upg)
     if (upg && upg->func && upg->func->init) {
         upg->func->init(upg->fw, upg->fw_length);
     }
+}
+
+void fts_fwupg_bin(void)
+{
+    int ret = 0;
+    struct fts_upgrade *upg = fwupgrade;
+
+    FTS_INFO("fw upgrade bin function");
+    if (!upg || !upg->ts_data) {
+        FTS_ERROR("upg/ts_data is null");
+        return ;
+    }
+
+    upg->ts_data->fw_loading = 1;
+    fts_irq_disable();
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_switch(DISABLE);
+#endif
+
+    /* get fw */
+    ret = fts_fwupg_get_fw_file(upg);
+    if (ret < 0) {
+        FTS_ERROR("get file fail, can't upgrade");
+    } else {
+        /* ic init if have */
+        fts_fwupg_init_ic_detail(upg);
+        /* run auto upgrade */
+        fts_fwupg_auto_upgrade(upg);
+    }
+
+#if FTS_ESDCHECK_EN
+    fts_esdcheck_switch(ENABLE);
+#endif
+    fts_irq_enable();
+    upg->ts_data->fw_loading = 0;
 }
 
 /*****************************************************************************
