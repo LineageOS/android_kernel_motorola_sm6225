@@ -111,6 +111,7 @@ void hall_enable(bool enable)
 		for (i = 0; i < hall_sensor_dev->gpio_num; i++)
 		{
 			disable_irq(hall_sensor_dev->gpio_list[i].irq);
+			disable_irq_wake(hall_sensor_dev->gpio_list[i].irq);
 		}
 		hall_sensor_dev->enable = 0;
 	}
