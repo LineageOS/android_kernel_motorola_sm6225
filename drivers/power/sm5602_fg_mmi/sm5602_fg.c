@@ -509,6 +509,7 @@ static int fg_read_temperature(struct sm_fg_chip *sm, enum sm_fg_temperature_typ
 		return -EINVAL;
 	}
 
+	temp = temp * 10;
 	return temp;
 }
 
@@ -535,7 +536,7 @@ static int fg_read_volt(struct sm_fg_chip *sm)
 
 	/*cal avgvoltage*/
 	sm->aver_batt_volt = (((sm->aver_batt_volt)*4) + volt)/5;
-
+	volt = volt * 1000;
 	return volt;
 }
 
