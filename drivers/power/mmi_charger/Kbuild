@@ -3,6 +3,10 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
+ifeq ($(TARGET_BUILD_VARIANT),userdebug)
+    EXTRA_CFLAGS += -DMMI_GKI_API_ALLOWANCE
+endif
+
 obj-m += mmi_charger.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
