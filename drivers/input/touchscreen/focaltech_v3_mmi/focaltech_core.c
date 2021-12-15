@@ -52,6 +52,11 @@
 #endif
 #include "focaltech_core.h"
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+extern int fts_mmi_dev_register(struct fts_ts_data *ts_data);
+extern void fts_mmi_dev_unregister(struct fts_ts_data *ts_data);
+#endif
+
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -74,8 +79,10 @@ struct fts_ts_data *fts_data;
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
+#endif
 
 int fts_check_cid(struct fts_ts_data *ts_data, u8 id_h)
 {
@@ -1144,7 +1151,7 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 }
 #endif /* FTS_PINCTRL_EN */
 
-static int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
+int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 {
     int ret = 0;
 
@@ -1278,6 +1285,7 @@ static int fts_power_source_exit(struct fts_ts_data *ts_data)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_power_source_suspend(struct fts_ts_data *ts_data)
 {
     int ret = 0;
@@ -1309,6 +1317,7 @@ static int fts_power_source_resume(struct fts_ts_data *ts_data)
 
     return ret;
 }
+#endif //CONFIG_INPUT_TOUCHSCREEN_MMI
 #endif /* FTS_POWER_SOURCE_CUST_EN */
 
 static int fts_gpio_configure(struct fts_ts_data *data)
@@ -1488,6 +1497,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static void fts_resume_work(struct work_struct *work)
 {
     struct fts_ts_data *ts_data = container_of(work, struct fts_ts_data,
@@ -1680,6 +1690,7 @@ static void fts_ts_late_resume(struct early_suspend *handler)
     queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
 }
 #endif
+#endif //CONFIG_INPUT_TOUCHSCREEN_MMI
 
 static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 {
@@ -1699,13 +1710,14 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         if (ret)
             FTS_ERROR("device-tree parse fail");
 
-#if defined(CONFIG_FB)
-#elif defined(CONFIG_DRM)
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
+#if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
         ret = drm_check_dt(ts_data->dev->of_node);
         if (ret) {
             FTS_ERROR("parse drm-panel fail");
         }
+#endif
 #endif
 #endif
     } else {
@@ -1821,15 +1833,18 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("init fw upgrade fail");
     }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
     if (ts_data->ts_workqueue) {
         INIT_WORK(&ts_data->resume_work, fts_resume_work);
     }
+#endif
 
 #if defined(CONFIG_PM) && FTS_PATCH_COMERR_PM
     init_completion(&ts_data->pm_completion);
     ts_data->pm_suspend = false;
 #endif
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_FB)
     ts_data->fb_notif.notifier_call = fb_notifier_callback;
     ret = fb_register_client(&ts_data->fb_notif);
@@ -1855,6 +1870,11 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     ts_data->early_suspend.suspend = fts_ts_early_suspend;
     ts_data->early_suspend.resume = fts_ts_late_resume;
     register_early_suspend(&ts_data->early_suspend);
+#endif
+#endif
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+    fts_mmi_dev_register(ts_data);
 #endif
 
     FTS_FUNC_EXIT();
@@ -1893,6 +1913,10 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 {
     FTS_FUNC_ENTER();
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+    fts_mmi_dev_unregister(ts_data);
+#endif
+
 #if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
 #endif
@@ -1923,6 +1947,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if defined(CONFIG_FB)
     if (fb_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
@@ -1936,6 +1961,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 #endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&ts_data->early_suspend);
+#endif
 #endif
 
     if (gpio_is_valid(ts_data->pdata->reset_gpio))
@@ -1959,6 +1985,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     return 0;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int fts_ts_suspend(struct device *dev)
 {
     int ret = 0;
@@ -2041,6 +2068,7 @@ static int fts_ts_resume(struct device *dev)
     FTS_FUNC_EXIT();
     return 0;
 }
+#endif
 
 #if defined(CONFIG_PM) && FTS_PATCH_COMERR_PM
 static int fts_pm_suspend(struct device *dev)

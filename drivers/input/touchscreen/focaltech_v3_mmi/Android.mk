@@ -11,6 +11,10 @@ ifneq ($(BOARD_USES_DOUBLE_TAP),)
 	KERNEL_CFLAGS += CONFIG_INPUT_FOCALTECH_MMI_ENABLE_DOUBLE_TAP=y
 endif
 
+ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+    KERNEL_CFLAGS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
+endif
+
 ifneq ($(FOCALTECH_TOUCH_TEST_SUPPORT),)
 	KERNEL_CFLAGS += CONFIG_INPUT_FTS_TEST_SUPPORT=y
 endif
@@ -19,4 +23,9 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := focaltech_v3_mmi.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+
+ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+	LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/touchscreen_mmi.ko
+endif
+
 include $(DLKM_DIR)/AndroidKernelModule.mk
