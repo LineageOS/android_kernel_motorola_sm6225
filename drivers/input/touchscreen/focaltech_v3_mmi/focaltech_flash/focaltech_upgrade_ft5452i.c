@@ -37,7 +37,7 @@
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 u8 pb_file_ft5452i[] = {
-#include "../include/pramboot/FT5452i_Pramboot_v4.1_20210427.i"
+#include "../include/pramboot/FT5452i_Pramboot_v4.1_20210427.h"
 };
 
 /*****************************************************************************
