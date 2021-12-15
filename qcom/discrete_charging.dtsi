@@ -86,9 +86,9 @@
 		status = "okay";
 
 		sense_r_mohm = <5>;
-		df-serialnum = "SB18D33989";
-		#include "bat_setting/CW_md50-scud-5000mah.dtsi"
-		#include "bat_setting/CW_md50-amperex-5000mah.dtsi"
+		df-serialnum = "SB18D38323";
+		#include "bat_setting/CW_ng50-ATL-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-SWD-5000mah-rhode.dtsi"
 	};
 };
 
