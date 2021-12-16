@@ -2697,10 +2697,10 @@ static int sm_fg_probe(struct i2c_client *client,
 	mutex_init(&sm->data_lock);
 
 	if (!hal_fg_init(client)) {
-	    pr_err("Failed to Initialize Fuelgauge\n");
-        goto err_0;
+		pr_err("Failed to Initialize Fuelgauge\n");
+		ret = -EIO;
+		goto err_0;
 	}
-
 
 	psy_desc = devm_kzalloc(&client->dev, sizeof(*psy_desc), GFP_KERNEL);
 	if (!psy_desc)
