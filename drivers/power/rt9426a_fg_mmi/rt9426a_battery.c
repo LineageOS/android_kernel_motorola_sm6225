@@ -1163,6 +1163,7 @@ static int rt_fg_get_property(struct power_supply *psy,
 		val->intval = rt9426a_get_design_capacity(chip) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		rt9426a_get_current(chip);
 		val->intval = chip->bcurr * 1000 * (-1);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
