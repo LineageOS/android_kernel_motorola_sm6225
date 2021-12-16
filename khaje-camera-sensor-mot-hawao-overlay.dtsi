@@ -316,7 +316,7 @@
 		reg = <0x2>;
 		compatible = "qcom,eeprom";
 		cam_vio-supply = <&cam_ldo7>;
-		cam_vana-supply = <&cam_ldo6>;
+		cam_vana-supply = <&cam_ldo3>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_clk";
 		rgltr-cntrl-support;
@@ -482,7 +482,7 @@
 		sensor-position-yaw = <180>;
 		eeprom-src = <&eeprom_macro>;
 		cam_vio-supply = <&cam_ldo7>;
-		cam_vana-supply = <&cam_ldo6>;
+		cam_vana-supply = <&cam_ldo3>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_clk";
 		rgltr-cntrl-support;
