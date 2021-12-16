@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include "goodix_ts_core.h"
+#include <linux/touchscreen_mmi.h>
 
 #define GSX_GESTURE_CMD				0x08
 
@@ -345,6 +346,19 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 		input_report_key(core_data->input_dev, KEY_POWER, 0);
 		input_sync(core_data->input_dev);
 		goto gesture_ist_exit;
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	} else if (gsx_type == 0x4C) {
+		if (core_data->imports && core_data->imports->report_gesture) {
+			struct gesture_event_data mmi_event;
+
+			ts_info("invoke imported report gesture function\n");
+			mmi_event.evcode = 1;
+
+			/* call class method */
+			ret = core_data->imports->report_gesture(&mmi_event);
+			goto gesture_ist_exit;
+		}
+#endif
 	} else {
 		ts_info("Unsupported gesture:%x", temp_data[2]);
 	}
@@ -387,6 +401,26 @@ static int gsx_gesture_before_suspend(struct goodix_ts_core *core_data,
 	return EVT_CANCEL_SUSPEND;
 }
 
+int gsx_gesture_before_suspend_mmi(struct goodix_ts_core *core_data)
+{
+	int ret;
+	const struct goodix_ts_hw_ops *hw_ops = core_data->ts_dev->hw_ops;
+
+	if (!core_data->gesture_enable || !hw_ops)
+		return EVT_CONTINUE;
+
+	atomic_set(&core_data->suspended, 1);
+	ret = gsx_enter_gesture_mode(core_data->ts_dev);
+	if (ret != 0)
+		ts_err("failed enter gesture mode");
+	else
+		ts_err("Set IC in gesture mode");
+
+	enable_irq_wake(core_data->irq);
+
+	return EVT_CANCEL_SUSPEND;
+}
+
 static struct goodix_ext_module_funcs gsx_gesture_funcs = {
 	.irq_event = gsx_gesture_ist,
 	.init = gsx_gesture_init,
@@ -394,7 +428,7 @@ static struct goodix_ext_module_funcs gsx_gesture_funcs = {
 	.before_suspend = gsx_gesture_before_suspend
 };
 
-static int __init goodix_gsx_gesture_init(void)
+int __init goodix_gsx_gesture_init(void)
 {
 	/* initialize core_data->ts_dev->gesture_cmd */
 	int result;
@@ -416,7 +450,7 @@ static int __init goodix_gsx_gesture_init(void)
 	return result;
 }
 
-static void __exit goodix_gsx_gesture_exit(void)
+void __exit goodix_gsx_gesture_exit(void)
 {
 	int i, ret;
 	ts_info("gesture module exit");
@@ -434,10 +468,3 @@ static void __exit goodix_gsx_gesture_exit(void)
 
 	kfree(gsx_gesture);
 }
-
-late_initcall(goodix_gsx_gesture_init);
-module_exit(goodix_gsx_gesture_exit);
-
-MODULE_DESCRIPTION("Goodix gsx Touchscreen Gesture Module");
-MODULE_AUTHOR("Goodix, Inc.");
-MODULE_LICENSE("GPL v2");
