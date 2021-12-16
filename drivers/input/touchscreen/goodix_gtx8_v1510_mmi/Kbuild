@@ -4,6 +4,15 @@ EXTRA_CFLAGS += \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
 obj-m := goodix_v1510_mmi.o
-goodix_v1510_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_ts_test.o goodix_cfg_bin.o goodix_gtx8_update.o
+goodix_v1510_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_ts_test.o goodix_cfg_bin.o goodix_gtx8_update.o goodix_ts_gesture.o
 
+ifneq ($(filter m y,$(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+    goodix_v1510_mmi-objs += goodix_ts_mmi.o
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers

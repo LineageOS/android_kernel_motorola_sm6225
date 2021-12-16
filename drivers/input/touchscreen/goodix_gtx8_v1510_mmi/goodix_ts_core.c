@@ -47,6 +47,10 @@ int goodix_start_later_init(struct goodix_ts_core *ts_core);
 void goodix_ts_dev_release(void);
 int goodix_fw_update_init(struct goodix_ts_core *core_data);
 void goodix_fw_update_uninit(void);
+extern int goodix_ts_mmi_dev_register(struct platform_device *ts_device);
+extern void goodix_ts_mmi_dev_unregister(struct platform_device *ts_device);
+extern int __init goodix_gsx_gesture_init(void);
+extern void __exit goodix_gsx_gesture_exit(void);
 
 struct goodix_module goodix_modules;
 
@@ -2246,7 +2250,8 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	core_data = kzalloc(sizeof(struct goodix_ts_core), GFP_KERNEL);
+	core_data = devm_kzalloc(&pdev->dev, sizeof(struct goodix_ts_core),
+				 GFP_KERNEL);
 	if (!core_data) {
 		ts_err("Failed to allocate memory for core data");
 		core_module_prob_sate = CORE_MODULE_PROB_FAILED;
@@ -2304,6 +2309,22 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ts_err("failed init fwupdate module, %d", r);
 		goto gpio_err;
 	}
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	r = goodix_ts_mmi_dev_register(pdev);
+	if (r) {
+		ts_err("Failed register touchscreen mmi.");
+		goto fw_update_init_err;
+	}
+#endif
+
+	r = goodix_gsx_gesture_init();
+	if (r) {
+		ts_err("Failed goodix_gsx_gesture_init.");
+		goto ts_mmi_dev_err;
+	}
+
 	/* Try start a thread to get config-bin info */
 	r = goodix_start_later_init(core_data);
 	if (r) {
@@ -2313,8 +2334,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	complete_all(&goodix_modules.core_comp);
 	ts_info("goodix_ts_core probe success");
 	return 0;
-
 later_thread_err:
+	goodix_gsx_gesture_exit();
+ts_mmi_dev_err:
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	goodix_ts_mmi_dev_unregister(pdev);
+fw_update_init_err:
+#endif
 	goodix_fw_update_uninit();
 gpio_err:
 	goodix_ts_power_off(core_data);
