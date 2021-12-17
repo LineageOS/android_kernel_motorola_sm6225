@@ -18,7 +18,7 @@
  *
  ********************************************************/
 #define AW8622X_I2C_RETRIES			(5)
-#define AW8622X_RTP_NAME_MAX			(64)
+#define AW8622X_RTP_NAME_MAX			(128)
 #define AW8622X_SEQUENCER_SIZE			(8)
 #define AW8622X_SEQUENCER_LOOP_SIZE		(4)
 #define AW8622X_OSC_CALI_MAX_LENGTH		(11000000)
@@ -62,7 +62,8 @@ enum aw8622x_haptic_work_mode {
 	AW8622X_HAPTIC_CONT_MODE = 3,
 	AW8622X_HAPTIC_RTP_MODE = 4,
 	AW8622X_HAPTIC_TRIG_MODE = 5,
-	AW8622X_HAPTIC_NULL = 6,
+	AW8622X_HAPTIC_LOOP_RTP_MODE = 6,
+	AW8622X_HAPTIC_NULL = 7,
 };
 
 enum aw8622x_haptic_cont_vbat_comp_mode {
@@ -125,6 +126,14 @@ enum aw8622X_awrw_flag {
 	AW8622X_READ = 1,
 };
 
+#define AW8622X_WAV_SEQ_SIZE            4
+#define AW8622X_MAX_FIRMWARE_LOAD_CNT 	20
+#define AW8622X_SEQ_NO_RTP_BASE 		102
+#define AW8622X_SEQ_NO_RTP_REPEAT 		100
+#define AW8622X_SEQ_NO_RTP_STOP 		120000
+
+#define AW8622X_REPEAT_RTP_PLAYING
+
 /*********************************************************
  *
  * struct
@@ -180,6 +189,8 @@ struct aw8622x {
 	unsigned char activate_mode;
 	unsigned char ram_state;
 	unsigned char duration_time_size;
+	unsigned char moto_mode_ctl[4];
+	unsigned moto_rtp_runing;
 	unsigned char seq[AW8622X_SEQUENCER_SIZE];
 	unsigned char loop[AW8622X_SEQUENCER_SIZE];
 
@@ -195,6 +206,7 @@ struct aw8622x {
 	int duration;
 	int amplitude;
 	int index;
+	int rtp_index;
 	int vmax;
 	int gain;
 	int sysclk;
@@ -215,6 +227,7 @@ struct aw8622x {
 	unsigned int cont_wait_num;
 	unsigned int cont_drv1_time;
 	unsigned int cont_drv2_time;
+	unsigned int cont_drv_width;
 	unsigned int theory_time;
 	unsigned int vbat;
 	unsigned int lra;
