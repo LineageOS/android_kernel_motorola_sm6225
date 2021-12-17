@@ -810,6 +810,21 @@ int sgm4154x_disable_watchdog(struct sgm4154x_device *sgm)
 	return ret;
 }
 
+static int sgm4154x_enable_termination(struct charger_device *chg_dev, bool enable)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+       int ret = 0;
+
+       ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_5, SGM4154x_EN_TERM_MASK,
+                     enable  ? SGM4154x_EN_TERM_ENABLE : SGM4154x_EN_TERM_DISABLE );
+
+	pr_info("%s, %s enable term %s\n", __func__,
+		enable ? "enable" : "disable",
+		ret ? "failed" : "success");
+
+       return ret;
+}
+EXPORT_SYMBOL_GPL(sgm4154x_enable_termination);
 int sgm4154x_enable_hw_jeita(struct charger_device *chg_dev, bool en)
 {
 	int rc = 0;
@@ -1388,6 +1403,7 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	dev_err(sgm->dev, "Vbus removed, disable charge\n");
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	sgm4154x_enable_termination(sgm->chg_dev, true);
 	g_qc3p_detected = false;
 	qc3p_update_policy(sgm);
 #endif
@@ -1607,6 +1623,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			dev_err(sgm->dev, "Cann't detected qc30 hvdcp\n");
 		}
 #else
+			sgm4154x_enable_termination(sgm->chg_dev, true);
 			qc3p_start_detection(sgm);
 			qc3p_detection_done(sgm);
 			ret = qc3p_read_charger_type(sgm);
@@ -1894,10 +1911,15 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+       ret = sgm4154x_set_recharge_volt(sgm, 100);//100~200mv
+       if (ret)
+               goto err_out;
+#else
 	ret = sgm4154x_set_recharge_volt(sgm, 200);//100~200mv
 	if (ret)
 		goto err_out;
-
+#endif
 	ret = sgm4154x_enable_hw_jeita(sgm->chg_dev, false);
 	if (ret)
 		goto err_out;
@@ -2494,7 +2516,7 @@ static struct charger_ops sgm4154x_chg_ops = {
 
 	.dump_registers = sgm4154x_dump_registers,
 	.is_enabled_charging = sgm4154x_is_enabled_charging,
-
+	.enable_termination = sgm4154x_enable_termination,
 };
 
 static int sgm4154x_probe(struct i2c_client *client,
