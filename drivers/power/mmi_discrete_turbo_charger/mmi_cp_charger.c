@@ -37,7 +37,6 @@
 #include <linux/power_supply.h>
 #include "mmi_charger_core.h"
 #include "mmi_charger_core_iio.h"
-
 static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 {
 	int rc;
@@ -52,6 +51,10 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 		chrg->charger_enabled = !!en;
 	} else
 		chrg->charger_enabled  = false;
+
+	rc = mmi_charger_write_iio_chan(chip, MMI_USB_TERMINATION_ENABLED, !chrg->charger_enabled);
+	if(rc)
+		chrg_dev_info(chrg, "%s, enable termination fail\n",__func__);
 
 	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,en);
 	return rc;
