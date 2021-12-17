@@ -37,6 +37,8 @@
 #include "aw8622x.h"
 #include "haptic_nv.h"
 
+#define AW8622X_Driver		"V1.5.1.0"
+
 /******************************************************
  *
  * Register Access
@@ -130,8 +132,67 @@ static char aw8622x_rtp_name[][AW8622X_RTP_NAME_MAX] = {
 	{"aw8622x_rtp_silk.bin"},
 };
 
+
+static char aw8622x_moto_rtp_name[][AW8622X_RTP_NAME_MAX] = {
+	{"aw8622x_rtp.bin"},
+	{"aw8622x_rtp_Argo_Navis.bin"},
+	{"aw8622x_rtp_Attentive.bin"},
+	{"aw8622x_rtp_Awake.bin"},
+	{"aw8622x_rtp_Bird_Loop.bin"},
+	{"aw8622x_rtp_Brilliant_Times.bin"},
+	{"aw8622x_rtp_Chimey_Phone.bin"},
+	{"aw8622x_rtp_Complex.bin"},
+	{"aw8622x_rtp_Crazy_Dream.bin"},
+	{"aw8622x_rtp_Curve_Ball_Blend.bin"},
+	{"aw8622x_rtp_Digital_Phone.bin"},
+	{"aw8622x_rtp_Electrovision.bin"},
+	{"aw8622x_rtp_Ether_Shake.bin"},
+	{"aw8622x_rtp_Fateful_Words.bin"},
+	{"aw8622x_rtp_Flutey_Phone.bin"},
+	{"aw8622x_rtp_Future_Funk.bin"},
+	{"aw8622x_rtp_Future_Hi_Tech.bin"},
+	{"aw8622x_rtp_Girtab.bin"},
+	{"aw8622x_rtp_Hello.bin"},
+	{"aw8622x_rtp_Hexagon.bin"},
+	{"aw8622x_rtp_Hydra.bin"},
+	{"aw8622x_rtp_Insert_Coin.bin"},
+	{"aw8622x_rtp_Jumping_Dots.bin"},
+	{"aw8622x_rtp_Keys.bin"},
+	{"aw8622x_rtp_Loopy.bin"},
+	{"aw8622x_rtp_Loopy_Lounge.bin"},
+	{"aw8622x_rtp_Modular.bin"},
+	{"aw8622x_rtp_Momentum.bin"},
+	{"aw8622x_rtp_Morning.bin"},
+	{"aw8622x_rtp_Moto.bin"},
+	{"aw8622x_rtp_Natural.bin"},
+	{"aw8622x_rtp_New_Player.bin"},
+	{"aw8622x_rtp_Onward.bin"},
+	{"aw8622x_rtp_Organ_Dub.bin"},
+	{"aw8622x_rtp_Overclocked.bin"},
+	{"aw8622x_rtp_Pegasus.bin"},
+	{"aw8622x_rtp_Pyxis.bin"},
+	{"aw8622x_rtp_Regrade.bin"},
+	{"aw8622x_rtp_Scarabaeus.bin"},
+	{"aw8622x_rtp_Sceptrum.bin"},
+	{"aw8622x_rtp_Simple.bin"},
+	{"aw8622x_rtp_Solarium.bin"},
+	{"aw8622x_rtp_Sparse.bin"},
+	{"aw8622x_rtp_Terrabytes.bin"},
+	{"aw8622x_rtp_Zero_Hour.bin"},
+	{"aw8622x_rtp_Play.bin"},
+	{"aw8622x_rtp_TJINGLE.bin"},
+	{"aw8622x_rtp_Verizon_Airwaves.bin"},
+	{"aw8622x_rtp_City_Lights.bin"},
+	{"aw8622x_rtp_Firefly.bin"},
+	{"aw8622x_rtp_Now_or_Never.bin"},
+	{"aw8622x_rtp_Moto_Retro.bin"},
+	{"aw8622x_rtp_rtp_Moto_Original.bin"},
+};
+
 struct pm_qos_request aw8622x_pm_qos_req_vb;
-static void aw8622x_haptic_auto_brk_enable(struct aw8622x *aw8622x, unsigned char flag);
+ static void
+ aw8622x_haptic_auto_brk_enable(struct aw8622x *aw8622x, unsigned char flag);
+
 
  /******************************************************
  *
@@ -975,6 +1036,7 @@ static int aw8622x_haptic_ram_config(struct aw8622x *aw8622x, int duration)
 	if (ret < 0)
 		return ret;
 
+#if 0
 	if ((duration > 0) && (duration <
 				aw8622x->dts_info.duration_time[0])) {
 		aw8622x->index = 3;	/*3*/
@@ -997,6 +1059,23 @@ static int aw8622x_haptic_ram_config(struct aw8622x *aw8622x, int duration)
 		aw8622x->activate_mode = AW8622X_HAPTIC_NULL;
 		ret = -ERANGE;
 	}
+
+
+	/* custom for moto */
+	if (duration <= aw8622x->dts_info.duration_time[2] && duration >= 0) {
+		aw8622x->index = 1; /*1  short */
+		aw8622x->activate_mode = AW8622X_HAPTIC_RAM_MODE;
+	} else if (duration > aw8622x->dts_info.duration_time[2]) {
+		aw8622x->index = 4; /*4 long haptic */
+		aw8622x->activate_mode = AW8622X_HAPTIC_RAM_LOOP_MODE;
+	} else {
+		aw_dev_err("%s: duration time error, duration= %d\n",
+			   __func__, duration);
+		aw8622x->index = 0;
+		aw8622x->activate_mode = AW8622X_HAPTIC_NULL;
+		ret = -ERANGE;
+	}
+#endif
 
 	return ret;
 }
@@ -1028,16 +1107,30 @@ static void aw8622x_rtp_work_routine(struct work_struct *work)
 	int ret = -1;
 	const struct firmware *rtp_file;
 	struct aw8622x *aw8622x = container_of(work, struct aw8622x, rtp_work);
+	char * p_rtp_file_name = NULL;
 
 	aw_dev_info("%s enter\n", __func__);
 	mutex_lock(&aw8622x->rtp_lock);
+	if (aw8622x->moto_rtp_runing) {
+		p_rtp_file_name = aw8622x_moto_rtp_name[aw8622x->rtp_file_num];
+	} else {
+		p_rtp_file_name = aw8622x_rtp_name[aw8622x->rtp_file_num];
+	}
+	if (p_rtp_file_name == NULL) {
+		aw_dev_err("%s: failed to read %s\n", __func__,
+			   p_rtp_file_name);
+		mutex_unlock(&aw8622x->rtp_lock);
+		return;
+	}
+
+	aw_dev_info("%s request file : %s\n", __func__, p_rtp_file_name);
 	/* fw loaded */
 	ret = request_firmware(&rtp_file,
-			       aw8622x_rtp_name[aw8622x->rtp_file_num],
+			       p_rtp_file_name,
 			       aw8622x->dev);
 	if (ret < 0) {
 		aw_dev_err("%s: failed to read %s\n", __func__,
-			   aw8622x_rtp_name[aw8622x->rtp_file_num]);
+			   p_rtp_file_name);
 		mutex_unlock(&aw8622x->rtp_lock);
 		return;
 	}
@@ -1052,7 +1145,7 @@ static void aw8622x_rtp_work_routine(struct work_struct *work)
 	}
 	aw8622x->rtp_container->len = rtp_file->size;
 	aw_dev_info("%s: rtp file:[%s] size = %dbytes\n",
-		    __func__, aw8622x_rtp_name[aw8622x->rtp_file_num],
+		    __func__, p_rtp_file_name,
 		    aw8622x->rtp_container->len);
 	memcpy(aw8622x->rtp_container->data, rtp_file->data, rtp_file->size);
 	mutex_unlock(&aw8622x->rtp_lock);
@@ -2358,6 +2451,7 @@ static ssize_t aw8622x_duration_store(struct device *dev,
 		return count;
 	}
 	aw8622x->duration = val;
+	aw_dev_info("%s: duration %d !\n", __func__, aw8622x->duration);
 	return count;
 }
 
@@ -2422,10 +2516,13 @@ static ssize_t aw8622x_seq_store(struct device *dev,
 				 struct device_attribute *attr, const char *buf,
 				 size_t count)
 {
-	unsigned int databuf[2] = { 0, 0 };
+	int i = 0;
+	int rc = 0;
+	unsigned int val = 0;
 	cdev_t *cdev = dev_get_drvdata(dev);
 	struct aw8622x *aw8622x = container_of(cdev, struct aw8622x, vib_dev);
 
+#if 0
 	if (sscanf(buf, "%x %x", &databuf[0], &databuf[1]) == 2) {
 		if (databuf[0] > AW8622X_SEQUENCER_SIZE ||
 		    databuf[1] > aw8622x->ram.ram_num) {
@@ -2441,6 +2538,24 @@ static ssize_t aw8622x_seq_store(struct device *dev,
 					   aw8622x->seq[databuf[0]]);
 		mutex_unlock(&aw8622x->lock);
 	}
+#endif
+	/* custom for moto */
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	//val = val << 24;
+	aw_dev_info("%s: seq=%d\n", __func__,val);
+
+	mutex_lock(&aw8622x->lock);
+	for(i=0; i<4; i++) {
+		/* moto_mode_ctl[0] get databuf[0] byte4 */
+		aw8622x->moto_mode_ctl[i] = (val>>((AW8622X_WAV_SEQ_SIZE-i-1)*8)) & 0xFF;
+		aw8622x_haptic_set_wav_seq(aw8622x, i, aw8622x->moto_mode_ctl[i]);
+		aw_dev_info("%s: moto_mode_ctl[%d]=%d\n", __func__,i, aw8622x->moto_mode_ctl[i]);
+	}
+	mutex_unlock(&aw8622x->lock);
+
 	return count;
 }
 
@@ -2517,10 +2632,12 @@ static ssize_t aw8622x_rtp_store(struct device *dev,
 		aw_dev_info("%s: kstrtouint fail\n", __func__);
 		return count;
 	}
+
 	mutex_lock(&aw8622x->lock);
 	aw8622x_haptic_stop(aw8622x);
 	aw8622x_haptic_set_rtp_aei(aw8622x, false);
 	aw8622x_interrupt_clear(aw8622x);
+	aw8622x->moto_rtp_runing = false;
 	if (val < (sizeof(aw8622x_rtp_name) / AW8622X_RTP_NAME_MAX)) {
 		aw8622x->rtp_file_num = val;
 		if (val) {
@@ -3584,40 +3701,88 @@ static void aw8622x_vibrator_work_routine(struct work_struct *work)
 	struct aw8622x *aw8622x = container_of(work, struct aw8622x,
 					       vibrator_work);
 
+	int moto_mode = 0;
 	aw_dev_info("%s enter\n", __func__);
 
 	mutex_lock(&aw8622x->lock);
 	/* Enter standby mode */
 	aw8622x_haptic_stop(aw8622x);
 	aw8622x_haptic_upload_lra(aw8622x, AW8622X_F0_CALI);
-	if (aw8622x->state) {
-		if (aw8622x->activate_mode == AW8622X_HAPTIC_RAM_MODE) {
-			aw8622x_haptic_ram_vbat_comp(aw8622x, false);
-			aw8622x_haptic_ram_play(aw8622x,
-						AW8622X_HAPTIC_RAM_MODE);
-			aw8622x_haptic_auto_brk_enable(aw8622x, false);
-		} else if (aw8622x->activate_mode ==
-					AW8622X_HAPTIC_RAM_LOOP_MODE) {
-			aw8622x_haptic_auto_brk_enable(aw8622x, true);
-			aw8622x_haptic_ram_vbat_comp(aw8622x, true);
-			aw8622x_haptic_ram_play(aw8622x,
-					       AW8622X_HAPTIC_RAM_LOOP_MODE);
-			/* run ms timer */
-			hrtimer_start(&aw8622x->timer,
-				      ktime_set(aw8622x->duration / 1000,
-				      (aw8622x->duration % 1000) * 1000000),
-				      HRTIMER_MODE_REL);
-		} else if (aw8622x->activate_mode ==
-					AW8622X_HAPTIC_CONT_MODE) {
-			aw8622x_haptic_cont(aw8622x);
-			/* run ms timer */
-			hrtimer_start(&aw8622x->timer,
-				      ktime_set(aw8622x->duration / 1000,
-				      (aw8622x->duration % 1000) * 1000000),
-				      HRTIMER_MODE_REL);
+
+	/* moto mode select */
+	moto_mode = aw8622x->moto_mode_ctl[0];
+	if (moto_mode > 2 || aw8622x->duration > 0) {
+		/* rtp mode */
+		if (moto_mode > AW8622X_SEQ_NO_RTP_BASE) {
+			aw8622x->rtp_file_num = moto_mode - AW8622X_SEQ_NO_RTP_BASE;
+			aw8622x->activate_mode = AW8622X_HAPTIC_RTP_MODE;
+			/* rtp mode and no stop */
+			if (moto_mode > (AW8622X_SEQ_NO_RTP_BASE + AW8622X_SEQ_NO_RTP_REPEAT)) {
+				aw8622x->rtp_file_num = moto_mode - AW8622X_SEQ_NO_RTP_REPEAT;
+				aw8622x->activate_mode = AW8622X_HAPTIC_LOOP_RTP_MODE;
+			}
+		} else if ( aw8622x->duration < 100 || moto_mode > 2) {
+			aw8622x->index = 1; /*1  short */
+			aw8622x->activate_mode = AW8622X_HAPTIC_RAM_MODE;
 		} else {
-			 aw_dev_err("%s: activate_mode error\n",
-				   __func__);
+			aw8622x->index = 4; /* long  */
+			aw8622x->activate_mode = AW8622X_HAPTIC_RAM_LOOP_MODE;
+		}
+		/* moto mode select end */
+
+		aw_dev_info("%s activate_mode = %d \n", __func__, aw8622x->activate_mode);
+		if (aw8622x->state) {
+			if (aw8622x->activate_mode == AW8622X_HAPTIC_RAM_MODE) {
+				aw8622x_haptic_ram_vbat_comp(aw8622x, false);
+				aw8622x_haptic_ram_play(aw8622x,
+							AW8622X_HAPTIC_RAM_MODE);
+			} else if (aw8622x->activate_mode ==
+						AW8622X_HAPTIC_RAM_LOOP_MODE) {
+				aw8622x_haptic_ram_vbat_comp(aw8622x, true);
+				aw8622x_haptic_auto_brk_enable(aw8622x, true);
+				aw8622x_haptic_ram_play(aw8622x,
+						       AW8622X_HAPTIC_RAM_LOOP_MODE);
+				/* run ms timer */
+				hrtimer_start(&aw8622x->timer,
+					      ktime_set(aw8622x->duration / 1000,
+					      (aw8622x->duration % 1000) * 1000000),
+					      HRTIMER_MODE_REL);
+			} else if (aw8622x->activate_mode ==
+						AW8622X_HAPTIC_CONT_MODE) {
+				aw8622x_haptic_cont(aw8622x);
+				/* run ms timer */
+				hrtimer_start(&aw8622x->timer,
+					      ktime_set(aw8622x->duration / 1000,
+					      (aw8622x->duration % 1000) * 1000000),
+					      HRTIMER_MODE_REL);
+			} else if (aw8622x->activate_mode ==
+						AW8622X_HAPTIC_RTP_MODE ||
+						aw8622x->activate_mode ==
+						AW8622X_HAPTIC_LOOP_RTP_MODE) {
+				if (aw8622x->activate_mode ==
+						AW8622X_HAPTIC_LOOP_RTP_MODE) {
+					/* enable timer to auto stop */
+					hrtimer_start(&aw8622x->timer,
+					      ktime_set(AW8622X_SEQ_NO_RTP_STOP / 1000,
+					      (AW8622X_SEQ_NO_RTP_STOP % 1000) * 1000000),
+						  HRTIMER_MODE_REL);
+				}
+				/* call moto rtp mode */
+				aw8622x->moto_rtp_runing = true;
+				aw8622x_haptic_set_rtp_aei(aw8622x, false);
+				aw8622x_interrupt_clear(aw8622x);
+				if (aw8622x->rtp_file_num < (sizeof(aw8622x_moto_rtp_name) / AW8622X_RTP_NAME_MAX)) {
+					schedule_work(&aw8622x->rtp_work);
+				} else {
+					aw_dev_err("rtp file num error, %d\n", aw8622x->rtp_file_num);
+				}
+			} else {
+				 aw_dev_err("%s: activate_mode error\n",
+					   __func__);
+			}
+
+			if (aw8622x->moto_mode_ctl[0] > 2)
+				aw8622x->moto_mode_ctl[0] = 0;
 		}
 	}
 	mutex_unlock(&aw8622x->lock);
@@ -3714,6 +3879,7 @@ static void aw8622x_haptic_misc_para_init(struct aw8622x *aw8622x)
 	aw8622x->cont_drv2_time = aw8622x->dts_info.cont_drv2_time_dt;
 	aw8622x->cont_brk_time = aw8622x->dts_info.cont_brk_time_dt;
 	aw8622x->cont_wait_num = aw8622x->dts_info.cont_wait_num_dt;
+	aw8622x->cont_drv_width = aw8622x->dts_info.cont_drv_width;
 
 	/* SIN_H */
 	reg_array[0] = (unsigned char)aw8622x->dts_info.sine_array[0];
@@ -3761,6 +3927,16 @@ static void aw8622x_haptic_misc_para_init(struct aw8622x *aw8622x)
 	} else {
 		reg_val = (unsigned char)aw8622x->cont_brk_time;
 		aw8622x_i2c_write(aw8622x, AW8622X_REG_CONTCFG10, &reg_val,
+				  AW_I2C_BYTE_ONE);
+	}
+
+	/* cont_brk_width */
+	if (!aw8622x->cont_drv_width) {
+		aw_dev_err("%s aw8622x->cont_drv_width = 0!\n",
+			   __func__);
+	} else {
+		reg_val = (unsigned char)aw8622x->cont_drv_width;
+		aw8622x_i2c_write(aw8622x, AW8622X_REG_CONTCFG3, &reg_val,
 				  AW_I2C_BYTE_ONE);
 	}
 
@@ -3999,9 +4175,14 @@ static int aw8622x_is_rtp_load_end(struct aw8622x *aw8622x)
 	if ((aw8622x->rtp_cnt == aw8622x->rtp_container->len)
 	    || ((glb_st & 0x0f) == 0)) {
 		if (aw8622x->rtp_cnt ==
-			aw8622x->rtp_container->len)
-			aw_dev_info("%s: rtp load completely!\n",
-				    __func__);
+			aw8622x->rtp_container->len) {
+			aw_dev_info("%s: rtp load completely, mode = %d!\n",
+				    __func__, aw8622x->activate_mode);
+			/* custom for moto  repeat play */
+			if (aw8622x->activate_mode == AW8622X_HAPTIC_RTP_MODE) {
+				schedule_work(&aw8622x->rtp_work);
+			}
+		}
 		else
 			aw_dev_err("%s rtp load failed!!\n",
 				   __func__);
