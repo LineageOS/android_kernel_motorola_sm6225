@@ -1136,9 +1136,20 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 		}
 	}
 
-	/* process custom info */
-	if (buffer[3] & 0x01)
-		ts_debug("TODO add custom info process function");
+	/* Need to resend the stylus cmd after abnormal reseting */
+	if (cd->board_data.stylus_mode_ctrl && cd->set_mode.stylus_mode) {
+		if ((buffer[3] & 0x20) == 0) {
+			struct goodix_ts_cmd stylus_cmd;
+			stylus_cmd.cmd = 0xA4;
+			stylus_cmd.len = 5;
+			stylus_cmd.data[0] = 0x01;
+			ret = brl_send_cmd(cd, &stylus_cmd);
+			if (ret < 0)
+				ts_err("Failed to send stylus enable command\n");
+			else
+				ts_info("IC abnormal reset, resend stylus enable command\n");
+		}
+	}
 
 	return 0;
 }
