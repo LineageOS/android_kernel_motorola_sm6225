@@ -887,6 +887,36 @@ static int bq2589x_get_vindpm_volt(struct bq2589x *bq)
 	}
 }
 
+static int bq2589x_loop_compensation(struct bq2589x *bq)
+{
+	int ret;
+
+	ret = bq2589x_write_byte(bq, 0x7E, 0x48);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x54);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x53);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x39);
+	ret |= bq2589x_write_byte(bq, 0x90, 0x62);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x48);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x54);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x53);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x38);
+	ret |= bq2589x_write_byte(bq, 0x82, 0xE4);
+	ret |= bq2589x_write_byte(bq, 0x85, 0x00);
+	ret |= bq2589x_enable_term(bq, false);
+	ret |= bq2589x_update_bits(bq, BQ2589X_REG_00, BQ2589X_ENILIM_MASK,
+			BQ2589X_ENILIM_DISABLE << BQ2589X_ENILIM_SHIFT);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x48);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x54);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x53);
+	ret |= bq2589x_write_byte(bq, 0x7E, 0x39);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x48);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x54);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x53);
+	ret |= bq2589x_write_byte(bq, 0x7D, 0x38);
+
+	return ret;
+}
+
 static int bq2589x_sync_state(struct bq2589x *bq, struct bq2589x_state *state)
 {
 	u8 chrg_stat, volt_stat, fault;
@@ -998,6 +1028,16 @@ static int bq2589x_init_device(struct bq2589x *bq)
 	if (ret) {
 		dev_err(bq->dev, "%s:Failed to enable pumpx:%d\n", __func__, ret);
 		return ret;
+	}
+
+     /*common initialization*/
+	if (bq->part_no == SC89890H) {
+		ret = bq2589x_loop_compensation(bq);
+		if (ret < 0) {
+			dev_err(bq->dev, "%s:Failed to initialize all loop compensation:%d\n", __func__, ret);
+		} else {
+			dev_err(bq->dev, "%s:sucess to initialize all loop compensation:%d\n", __func__, ret);
+		}
 	}
 
 	bq2589x_set_watchdog_timer(bq, 160);
@@ -2594,7 +2634,9 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	if (ret)
 		goto err_0;
 
-	bq2589x_set_ilim_enable(bq, true);
+	if (bq->part_no != SC89890H) {
+		bq2589x_set_ilim_enable(bq, true);
+	}
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
 	INIT_DELAYED_WORK(&bq->monitor_work, bq2589x_monitor_workfunc);
