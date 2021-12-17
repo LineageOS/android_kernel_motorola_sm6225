@@ -35,6 +35,9 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_INPUT_CURRENT_SETTLED:
 		rc = mmi_discrete_config_input_current_settled(chip, val1);
 		break;
+	case PSY_IIO_USB_TERMINATION_ENABLED:
+		rc = mmi_discrete_config_termination_enabled(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;

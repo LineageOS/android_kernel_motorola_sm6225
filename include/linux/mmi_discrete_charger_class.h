@@ -80,6 +80,7 @@ struct charger_ops {
 	int (*is_charge_halted)(struct charger_device *dev, bool *en);
 
 	int (*dump_registers)(struct charger_device *dev, struct seq_file *m);
+	int (*enable_termination)(struct charger_device *dev, bool en);
 };
 
 #define to_charger_device(obj) container_of(obj, struct charger_device, dev)
@@ -105,6 +106,8 @@ extern int charger_dev_set_charging_current(struct charger_device *chg_dev, u32 
 extern int charger_dev_get_charging_current(struct charger_device *chg_dev, u32 *uA);
 
 extern int charger_dev_enable_charging(struct charger_device *chg_dev, bool en);
+
+extern int charger_dev_enable_termination(struct charger_device *chg_dev, bool en);
 
 extern int charger_dev_is_enabled_charging(struct charger_device *chg_dev, bool *en);
 

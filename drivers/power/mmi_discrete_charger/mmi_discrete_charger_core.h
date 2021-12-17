@@ -137,5 +137,6 @@ int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *val)
 int mmi_discrete_config_charging_enabled(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *val);
 int mmi_discrete_config_input_current_settled(struct mmi_discrete_charger *chip, int val);
+int mmi_discrete_config_termination_enabled(struct mmi_discrete_charger *chip, int val);
 
 #endif

@@ -71,6 +71,16 @@ int charger_dev_enable_charging(struct charger_device *chg_dev, bool en)
 }
 EXPORT_SYMBOL(charger_dev_enable_charging);
 
+int charger_dev_enable_termination(struct charger_device *chg_dev, bool en)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->enable_termination)
+		return chg_dev->ops->enable_termination(chg_dev, en);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_enable_termination);
+
 int charger_dev_is_enabled_charging(struct charger_device *chg_dev, bool *en)
 {
 	if (chg_dev != NULL && chg_dev->ops != NULL &&
