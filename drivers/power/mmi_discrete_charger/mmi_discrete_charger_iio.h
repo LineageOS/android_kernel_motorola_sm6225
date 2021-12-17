@@ -47,6 +47,7 @@ static const struct mmi_discrete_iio_channels mmi_discrete_iio_psy_channels[] = 
 	MMI_DISCRETE_CHAN_INDEX("hw_current_max", PSY_IIO_HW_CURRENT_MAX)
 	MMI_DISCRETE_CHAN_INDEX("charging_enabled", PSY_IIO_USB_CHARGING_ENABLED)
 	MMI_DISCRETE_CHAN_INDEX("input_current_settled", PSY_IIO_INPUT_CURRENT_SETTLED)
+	MMI_DISCRETE_CHAN_INDEX("termination_enabled", PSY_IIO_USB_TERMINATION_ENABLED)
 };
 
 int mmi_discrete_init_iio_psy(struct mmi_discrete_charger *chip,

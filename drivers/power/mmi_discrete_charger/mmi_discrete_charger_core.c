@@ -1952,6 +1952,21 @@ int mmi_discrete_config_charging_enabled(struct mmi_discrete_charger *chip, int 
 	return rc;
 }
 
+int mmi_discrete_config_termination_enabled(struct mmi_discrete_charger *chip, int val)
+{
+	int rc = 0;
+
+	mmi_dbg(chip, "mmi_discrete_config_termination_enabled val:%d\n",val);
+
+	rc = charger_dev_enable_termination(chip->master_chg_dev,
+				val ? true:false);
+	if (rc)
+		mmi_err(chip, "Couldn't %s termination rc=%d\n",
+			val ? "enable":"disable", rc);
+
+	return rc;
+}
+
 int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *val)
 {
 	int rc = 0;
