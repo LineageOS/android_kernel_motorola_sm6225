@@ -1240,7 +1240,7 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	int ret;
 
 #ifdef CONFIG_GTP_ENABLE_PM_QOS
-	cpu_latency_qos_add_request(&core_data->goodix_pm_qos, 0);
+	cpu_latency_qos_update_request(&core_data->goodix_pm_qos, 0);
 #endif
 
 	ts_esd->irq_status = true;
@@ -1282,7 +1282,7 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 	ts_event->retry = 0;
 
 #ifdef CONFIG_GTP_ENABLE_PM_QOS
-	cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
+	cpu_latency_qos_update_request(&core_data->goodix_pm_qos, PM_QOS_DEFAULT_VALUE);
 #endif
 
 	return IRQ_HANDLED;
@@ -2389,6 +2389,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	}
 #endif
 
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+	cpu_latency_qos_add_request(&core_data->goodix_pm_qos, PM_QOS_DEFAULT_VALUE);
+#endif
+
 	/* Try start a thread to get config-bin info */
 	ret = goodix_start_later_init(core_data);
 	if (ret) {
@@ -2428,6 +2432,14 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	struct goodix_ts_core *core_data = platform_get_drvdata(pdev);
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
+
+#ifdef CONFIG_GTP_ENABLE_PM_QOS
+	cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
+#endif
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	goodix_ts_mmi_dev_unregister(pdev);
+#endif
 
 	goodix_ts_unregister_notifier(&core_data->ts_notifier);
 	goodix_tools_exit();
