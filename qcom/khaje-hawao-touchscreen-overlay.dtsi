@@ -79,6 +79,10 @@
 		pinctrl-2 = <&ts_release>;
 
 		panel = <&dsi_vtdr6110c_visionox_ft3519_643_video>;
+		//touchscreen_mmi
+		mmi,status = "/chosen","mmi,panel_name","contains","ft3519";
+		mmi,class-entry-name = "ft3519";
+		mmi,reset-on-resume = <0x01>;
 
 	};
 };
