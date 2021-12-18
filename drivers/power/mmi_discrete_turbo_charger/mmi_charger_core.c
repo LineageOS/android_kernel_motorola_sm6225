@@ -1616,6 +1616,16 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	chip->name = "mmi_chrg_manager";
 	chip->debug_mask = &__debug_mask;
 	chip->suspended = false;
+	chip->qcom_psy = power_supply_get_by_name("mmi_battery");
+	if (!chip->qcom_psy) {
+		mmi_chrg_err(chip, "Could not get mmi_battery power_supply\n");
+		return -EPROBE_DEFER;
+	}
+	chip->batt_psy = power_supply_get_by_name("battery");
+	if (!chip->batt_psy) {
+		mmi_chrg_err(chip, "zhi Could not get battery power_supply\n");
+		return -EPROBE_DEFER;
+	}
 
 	ret = mmi_charger_class_init();
 	if (ret < 0) {
@@ -1640,12 +1650,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	chip->factory_mode = mmi_factory_check();
 
-	chip->qcom_psy = power_supply_get_by_name("mmi_battery");
-	chip->batt_psy = power_supply_get_by_name("battery");
-	if (!chip->batt_psy) {
-		mmi_chrg_err(chip, "Could not get battery power_supply\n");
-		goto cleanup;
-	}
+
 
 
 	ret = mmi_chrg_policy_init(chip, chrg_name_list,
@@ -1692,7 +1697,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 cleanup:
 	mmi_charger_class_exit();
 	devm_kfree(&pdev->dev, chip);
-	return ret;
+	return -EIO;
 }
 
 static int mmi_chrg_manager_remove(struct platform_device *pdev)
