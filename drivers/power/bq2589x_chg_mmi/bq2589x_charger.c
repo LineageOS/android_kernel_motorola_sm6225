@@ -43,7 +43,10 @@
 
 static struct bq2589x *g_bq;
 static DEFINE_MUTEX(bq2589x_i2c_lock);
-
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+static bool g_qc3p_detected = false;
+bool qc3p_update_policy(struct bq2589x *chip);
+#endif
 #define MMI_HVDCP2_VOLTAGE_STANDARD		8000000
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500
@@ -173,6 +176,9 @@ struct bq2589x {
 	u32			input_current_cache;
 	int			pulse_cnt;
 	struct bq2589x_iio		iio;
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	struct iio_channel	**ext_iio_chans;
+#endif
 };
 
 struct pe_ctrl {
@@ -628,6 +634,22 @@ int bq2589x_get_hiz_mode(struct bq2589x *bq, u8 *state)
 
 	return 0;
 }
+
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+int bq2589x_is_enabled_charging(struct charger_device *chg_dev, bool *en)
+{
+	u8 val;
+	int ret;
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	ret = bq2589x_read_byte(bq, &val, BQ2589X_REG_03);
+	if (ret)
+		return ret;
+	*en = ((val & BQ2589X_CHG_CONFIG_MASK) >> BQ2589X_CHG_CONFIG_SHIFT)? true:false;
+
+	return 0;
+}
+#endif
 
 int bq2589x_pumpx_enable(struct bq2589x *bq, int enable)
 {
@@ -1514,6 +1536,7 @@ static void bq2589x_adjust_absolute_vindpm(struct bq2589x *bq)
 
 }
 
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int mmi_adjust_qc20_hvdcp_5v(struct bq2589x *bq)
 {
 	int ret;
@@ -1599,6 +1622,7 @@ static int mmi_detected_qc20_hvdcp(struct bq2589x *bq, int *charger_type)
 
 	return ret;
 }
+#endif
 
 // Must enter 3.0 mode to call ,otherwise cannot step correctly.
 static int mmi_qc30_step_up_vbus(struct bq2589x *bq)
@@ -1646,6 +1670,7 @@ static int mmi_qc30_step_down_vbus(struct bq2589x *bq)
 	return ret;
 }
 
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int mmi_detected_qc30_hvdcp(struct bq2589x *bq, int *charger_type)
 {
 	int ret = 0;
@@ -1694,6 +1719,129 @@ static int mmi_detected_qc30_hvdcp(struct bq2589x *bq, int *charger_type)
 
 	return ret;
 }
+#endif
+
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+bool is_chan_valid(struct bq2589x *chip,
+		enum mmi_qc3p_ext_iio_channels chan)
+{
+	int rc;
+
+	if (IS_ERR(chip->ext_iio_chans[chan]))
+		return false;
+
+	if (!chip->ext_iio_chans[chan]) {
+		chip->ext_iio_chans[chan] = iio_channel_get(chip->dev,
+					mmi_qc3p_ext_iio_chan_name[chan]);
+		if (IS_ERR(chip->ext_iio_chans[chan])) {
+			rc = PTR_ERR(chip->ext_iio_chans[chan]);
+			if (rc == -EPROBE_DEFER)
+				chip->ext_iio_chans[chan] = NULL;
+
+			dev_info(chip->dev, "Failed to get IIO channel %s, rc=%d\n",
+				mmi_qc3p_ext_iio_chan_name[chan], rc);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int mmi_charger_read_iio_chan(struct bq2589x *chip,
+	enum mmi_qc3p_ext_iio_channels chan, int *val)
+{
+	int rc;
+
+	if (is_chan_valid(chip, chan)) {
+		rc = iio_read_channel_processed(
+				chip->ext_iio_chans[chan], val);
+		return (rc < 0) ? rc : 0;
+	}
+
+	return -EINVAL;
+}
+
+int mmi_charger_write_iio_chan(struct bq2589x *chip,
+	enum mmi_qc3p_ext_iio_channels chan, int val)
+{
+	if (is_chan_valid(chip, chan))
+		return iio_write_channel_raw(chip->ext_iio_chans[chan],
+						val);
+
+	return -EINVAL;
+}
+
+static int mmi_init_iio_psy(struct bq2589x *chip,
+				struct device *dev)
+{
+	chip->ext_iio_chans = devm_kcalloc(chip->dev,
+				ARRAY_SIZE(mmi_qc3p_ext_iio_chan_name),
+				sizeof(*chip->ext_iio_chans),
+				GFP_KERNEL);
+	if (!chip->ext_iio_chans)
+		return -ENOMEM;
+
+	return 0;
+}
+
+int qc3p_start_detection(struct bq2589x *chip)
+{
+	int ret = 0;
+	ret = mmi_charger_write_iio_chan(chip, SMB5_QC3P_START_DETECT, true);
+	if(ret )
+		dev_err(chip->dev, "Cann't write SMB5_QC3P_START_DETECT IIO\n");
+
+	dev_info(chip->dev, "write SMB5_QC3P_START_DETECT IIO success\n");
+	return 0;
+}
+
+bool qc3p_detection_done(struct bq2589x *chip)
+{
+	int ret = 0;
+	int val = 0;
+	int delay_count =0;
+
+	do {
+		ret = mmi_charger_read_iio_chan(chip, SMB5_QC3P_DETECTION_READY, &val);
+		if(ret )
+			dev_err(chip->dev, "Cann't read SMB5_QC3P_DETECTION_READY IIO\n");
+
+		dev_info(chip->dev, "read SMB5_QC3P_DETECTION_READY IIO :%d\n",val);
+
+		msleep(100);
+		delay_count ++;
+	}while(val == false && delay_count <= 35);
+
+	dev_info(chip->dev, "read SMB5_QC3P_DETECTION_READY IIO :%d\n",val);
+	return val;
+}
+
+int qc3p_read_charger_type(struct bq2589x *chip)
+{
+	int ret = 0;
+	int val = 0;
+
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	if(ret )
+		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+
+	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	return val;
+}
+
+bool qc3p_update_policy(struct bq2589x *chip )
+{
+	int ret = 0;
+	int val = 0;
+
+	ret = mmi_charger_write_iio_chan(chip, SMB5_QC3P_START_POLICY, val);
+	if(ret )
+		dev_err(chip->dev, "Cann't write SMB5_QC3P_START_POLICY IIO\n");
+
+	dev_info(chip->dev, "write SMB5_QC3P_START_POLICY IIO :%d\n",val);
+	return val;
+}
+#endif
 
 static int mmi_hvdcp_detect_kthread(void *param)
 {
@@ -1716,6 +1864,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		bq->mmi_is_qc3_authen = true;
 		bq2589x_set_input_current_limit(bq, MMI_HVDCP_DETECT_ICL_LIMIT);
 
+#ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 		//do qc2.0 detected
 		ret = mmi_detected_qc20_hvdcp(bq, &charger_type);
 		if (ret) {
@@ -1731,7 +1880,31 @@ static int mmi_hvdcp_detect_kthread(void *param)
 		if (ret) {
 			dev_err(bq->dev, "Cann't detected qc30 hvdcp\n");
 		}
+#else
+			qc3p_start_detection(bq);
+			qc3p_detection_done(bq);
+			ret = qc3p_read_charger_type(bq);
 
+			switch(ret) {
+				case WT_CHG_TYPE_QC2:
+					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+					dev_info(bq->dev, "HDVCP 2.0 detected\n");
+					break;
+				case WT_CHG_TYPE_QC3:
+				case WT_CHG_TYPE_QC3P_18W:
+					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+					dev_info(bq->dev, "HDVCP 3.0 or qc3p 18W detected\n");
+					break;
+				case WT_CHG_TYPE_QC3P_27W:
+					dev_err(bq->dev, "QC3P 27W have been detected !\n");
+					qc3p_update_policy(bq);
+					g_qc3p_detected = true;
+					break;
+				default:
+					dev_info(bq->dev, "No HDVCP detected\n");
+					goto out;
+			}
+#endif
 		bq2589x_get_usb_present(bq);
 		if (!bq->state.vbus_gd)
 			goto out;
@@ -1795,6 +1968,9 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		case BQ2589X_VBUS_USB_DCP:
 			dev_info(bq->dev, "%s:DCP adapter plugged in\n", __func__);
 			bq->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+			if(g_qc3p_detected == false)
+#endif
 			mmi_start_hvdcp_detect(bq);
 			schedule_delayed_work(&bq->check_pe_tuneup_work, 0);
 			break;
@@ -1847,6 +2023,10 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 
 	cancel_delayed_work_sync(&bq->monitor_work);
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	g_qc3p_detected = false;
+	qc3p_update_policy(bq);
+#endif
 	bq->pulse_cnt = 0;
 	bq->typec_apsd_rerun_done = false;
 	bq->chg_dev->noti.apsd_done = false;
@@ -2344,7 +2524,9 @@ static struct charger_ops bq2589x_chg_ops = {
 	.is_charge_halted = bq2589x_is_charging_halted,
 
 	.dump_registers = bq2589x_dump_registers,
-
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	.is_enabled_charging = bq2589x_is_enabled_charging,
+#endif
 };
 
 static int bq2589x_charger_probe(struct i2c_client *client,
@@ -2445,6 +2627,14 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	} else {
 		dev_info(dev, "%s:irq = %d\n", __func__, client->irq);
 	}
+
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	ret = mmi_init_iio_psy(bq, dev);
+	if (ret) {
+		dev_err(dev,
+			"mmi iio psy init failed\n");
+	}
+#endif
 
 	pe.enable = false;
 
