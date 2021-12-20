@@ -279,7 +279,7 @@
 		ti,bq2589x,enable-ico;
 		ti,bq2589x,use-absolute-vindpm;
 	};
-
+/*
 	bq2597x: bq2597x-charger@66 {
 		compatible = "ti,bq25970-charger";
 		reg = <0x66>;
@@ -324,6 +324,7 @@
 		ti,bq2597x,ac-ovp-threshold = <17>;
 		ti,bq2597x,sense-resistor-mohm = <5>;
 	};
+*/
 };
 
 &tlmm {
