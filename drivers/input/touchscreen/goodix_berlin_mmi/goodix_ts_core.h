@@ -469,6 +469,15 @@ struct goodix_ic_config {
 	u8 data[GOODIX_CFG_MAX_SIZE];
 };
 
+struct goodix_mode_info {
+	int film_mode;
+	int leather_mode;
+	int stylus_mode;
+	int interpolation;
+	int report_rate_mode;
+	int edge_mode[2];
+};
+
 struct goodix_ts_core {
 	int init_stage;
 	struct platform_device *pdev;
@@ -512,14 +521,10 @@ struct goodix_ts_core {
 	struct notifier_block fb_notifier;
 #endif
 
-	int film_mode;
-	int leather_mode;
-	int stylus_mode;
-	int interpolation;
 	int refresh_rate;
-	int report_rate_mode;
-	int edge_mode[2];
 	struct clk *stylus_clk;
+	struct goodix_mode_info set_mode;
+	struct goodix_mode_info get_mode;
 
 	/* touchscreen_mmi */
 	struct ts_mmi_class_methods *imports;
