@@ -126,6 +126,8 @@ enum {
 #define IBAT_REG_STATUS_MASK		(1 << VBAT_REG_STATUS_SHIFT)
 /*end*/
 
+#define AUTO_ENABLE_SHOW_MAX_SIZE 50
+
 struct bq2597x_cfg {
 	bool bat_ovp_disable;
 	bool bat_ocp_disable;
@@ -2268,6 +2270,107 @@ static const struct regmap_config bq2597x_regmap_config = {
 	.max_register = 0xFFFF,
 };
 
+static ssize_t force_chg_auto_enable_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	unsigned long  r;
+	bool mode;
+
+	struct bq2597x *bq = dev_get_drvdata(dev->parent);
+	if (!bq) {
+		pr_err("bq2597x_mmi_charger: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtobool(buf, &mode);
+	if (r) {
+		pr_err("bq2597x_mmi_charger: Invalid chrg enable value = %d\n", mode);
+		return -EINVAL;
+	}
+
+	r = bq2597x_enable_charge(bq, mode);
+	if (r < 0) {
+		pr_err("bq2597x_mmi_charger Couldn't %s charging rc=%d\n",
+			   mode ? "enable" : "disable", (int)r);
+		return r;
+	}
+
+	return r ? r : count;
+}
+
+static ssize_t force_chg_auto_enable_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int ret;
+	int state = 0;
+
+	struct bq2597x *bq = dev_get_drvdata(dev->parent);
+
+	if (!bq) {
+		pr_err("mmi_discrete_charger: chip not valid\n");
+		state = -ENODEV;
+		goto end;
+	}
+
+	ret = bq2597x_check_charge_enabled(bq, &bq->charge_enabled);
+
+	state = bq->charge_enabled;
+
+end:
+	return scnprintf(buf, AUTO_ENABLE_SHOW_MAX_SIZE, "%d\n", state);
+}
+
+static DEVICE_ATTR(force_chg_auto_enable, 0664,
+		force_chg_auto_enable_show,
+		force_chg_auto_enable_store);
+
+static struct attribute *bq2597x_force_attributes[] = {
+	&dev_attr_force_chg_auto_enable.attr,
+	NULL,
+};
+
+static const struct attribute_group bq2597x_attribute_group = {
+	.attrs = bq2597x_force_attributes,
+};
+
+static int bq2597x_create_sys(struct device *dev, const struct attribute_group * grp)
+{
+	int err = 0;
+	struct power_supply *cp_ply;
+
+	pr_err("enter bq2597x create sys \n");
+	cp_ply = power_supply_get_by_name("cp-standalone");
+
+	if(NULL == dev){
+		pr_err("[BATT]: failed to register battery\n");
+		return -EINVAL;
+	}
+
+	if(cp_ply)
+	{
+		err = sysfs_create_group(&cp_ply->dev.kobj, grp);
+
+		if (!err)
+		{
+			pr_info("creat BMT sysfs group ok\n");
+		}
+		else
+		{
+			pr_err("creat BMT sysfs group fail\n");
+			err =  -EIO;
+		}
+		power_supply_put(cp_ply);
+	}
+	else
+	{
+		pr_err("don't have /sys/class/power_supply/cp-standalone dir\n");
+	}
+
+	return err;
+}
+
 static int bq2597x_charger_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -2370,6 +2473,12 @@ static int bq2597x_charger_probe(struct i2c_client *client,
 		goto free_irq;
 	}
 
+	ret = bq2597x_create_sys(&(client->dev), &bq2597x_attribute_group);
+	if(ret){
+		pr_err("[BATT]: Err failed to creat BMT attributes\n");
+		goto free_irq;
+	}
+
 	determine_initial_status(bq);
 
 	pr_info("bq2597x probe successfully-, Part Num:%d\n!",
@@ -2468,6 +2577,7 @@ static int bq2597x_charger_remove(struct i2c_client *client)
 	debugfs_remove_recursive(bq->debug_root);
 
 	sysfs_remove_group(&bq->dev->kobj, &bq2597x_attr_group);
+	sysfs_remove_group(&(bq->client->dev.kobj), &bq2597x_attribute_group);
 
 	return 0;
 }
