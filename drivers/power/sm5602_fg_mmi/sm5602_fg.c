@@ -45,6 +45,8 @@
 #define	INVALID_REG_ADDR	0xFF
 #define   RET_ERR -1
 #define queue_delayed_work_time  8000//8000
+#define queue_start_work_time    50
+
 enum sm_fg_reg_idx {
 	SM_FG_REG_DEVICE_ID = 0,
 	SM_FG_REG_CNTL,
@@ -1259,7 +1261,7 @@ static void fg_monitor_workfunc(struct work_struct *work)
 	struct delayed_work *delay_work;
 	struct sm_fg_chip *sm_bat;
 	int ret;
-	printk("wangtao 1111111\n");
+
 	delay_work = container_of(work, struct delayed_work, work);
 	sm_bat = container_of(delay_work, struct sm_fg_chip, monitor_work);
 
@@ -1269,7 +1271,7 @@ static void fg_monitor_workfunc(struct work_struct *work)
 		if (!sm_bat->batt_psy)
 			printk("%s: get batt_psy fail\n", __func__);
 	}
-	printk("wangtao 2222\n");
+
 	ret = sm_update_data(sm_bat);
 	if (ret < 0)
 		printk(KERN_ERR "iic read error when update data");
@@ -1277,7 +1279,7 @@ static void fg_monitor_workfunc(struct work_struct *work)
 	if (sm_bat->batt_psy) {
 		power_supply_changed(sm_bat->batt_psy);
 	}
-	printk("wangtao fg_monitor_workfunc\n");
+
 	queue_delayed_work(sm_bat->smfg_workqueue, &sm_bat->monitor_work, msecs_to_jiffies(queue_delayed_work_time));
 
 }
@@ -2722,7 +2724,7 @@ static int sm_fg_probe(struct i2c_client *client,
 
 	sm->smfg_workqueue = create_singlethread_workqueue("smfg_gauge");
 	INIT_DELAYED_WORK(&sm->monitor_work, fg_monitor_workfunc);
-	queue_delayed_work(sm->smfg_workqueue, &sm->monitor_work, msecs_to_jiffies(queue_delayed_work_time));
+	queue_delayed_work(sm->smfg_workqueue, &sm->monitor_work, msecs_to_jiffies(queue_start_work_time));
 
 	/*
 	if (sm->gpio_int != -EINVAL)
