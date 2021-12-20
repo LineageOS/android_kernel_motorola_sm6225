@@ -338,9 +338,12 @@ struct sgm4154x_device {
 	int			pulse_cnt;
 
 	struct sgm4154x_iio		iio;
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 	struct iio_channel	**ext_iio_chans;
+#endif
 };
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 enum WT_charger_type{
 	WT_CHG_TYPE_BEGIN = 0,
 	WT_CHG_TYPE_FC,
@@ -373,4 +376,5 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
 };
 bool qc3p_update_policy(struct sgm4154x_device *chip);
+#endif
 #endif /* _SGM4154x_CHARGER_H */
