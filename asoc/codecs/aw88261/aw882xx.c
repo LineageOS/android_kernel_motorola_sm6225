@@ -12,7 +12,7 @@
  * option) any later version.
  */
 
-#define DEBUG
+/*#define DEBUG*/
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <sound/core.h>
@@ -35,7 +35,7 @@
 #include "aw_log.h"
 #include "aw_dsp.h"
 
-#define AW882XX_DRIVER_VERSION "v1.9.0.2"
+#define AW882XX_DRIVER_VERSION "v1.9.0.3"
 #define AW882XX_I2C_NAME "aw882xxacf_smartpa"
 
 #define AW_READ_CHIPID_RETRIES		5	/* 5 times */
@@ -1530,7 +1530,7 @@ static int aw882xx_get_algo_prof_id_by_scene_st(struct aw882xx *aw882xx)
 		return aw882xx_scene_state[index].skt_profile_id;
 	}
 
-	return AW_ALGO_PROFILE_ID_0;
+	return 0;
 }
 
 static void aw882xx_update_algo_scene_st(struct aw882xx *aw882xx,
@@ -1563,28 +1563,26 @@ static int aw882xx_update_algo_profile(struct aw882xx *aw882xx)
 	aw_dev_info(aw882xx->dev, "enter");
 
 	new_skt_prof_id = aw882xx_get_algo_prof_id_by_scene_st(aw882xx);
-	if (new_skt_prof_id > AW_ALGO_PROFILE_ID_MAX) {
+	if (new_skt_prof_id < AW_ALGO_PROFILE_ID_1) {
 		/* no active scene */
 		aw_dev_info(aw882xx->dev, "all scene disactive,do nothing");
 		return 0;
 	}
 
-	if (cur_skt_prof_id != new_skt_prof_id) {
-		aw_dev_info(aw882xx->dev, "algo scene switch. [new] %d,[old] %d",
-					new_skt_prof_id, cur_skt_prof_id);
+	aw_dev_info(aw882xx->dev, "algo scene switch. [new] %d,[old] %d", 
+			new_skt_prof_id, cur_skt_prof_id);
 		aw882xx->cur_algo_prof_id = new_skt_prof_id;
 		aw_dev = aw882xx->aw_pa;
 
-		/* set new scene pramas to skt */
-		ret = aw_dev_set_algo_prof(aw_dev, aw882xx->cur_algo_prof_id);
-		if (ret < 0) {
-			aw_dev_err(aw882xx->dev, "set algo prof failed");
-			return -1;
-		}
-	} else {
-		aw_dev_info(aw882xx->dev, "algo scene hold, cur scene %d",
-					new_skt_prof_id);
+	/* set new scene pramas to skt */
+	ret = aw_dev_set_algo_prof(aw_dev, aw882xx->cur_algo_prof_id);
+	if (ret < 0) {
+		aw_dev_err(aw882xx->dev, "set algo prof failed");
+		return -1;
 	}
+		
+	aw_dev_info(aw882xx->dev, "algo scene hold, cur scene %d", 
+					new_skt_prof_id);
 
 	return 0;
 
