@@ -19,6 +19,8 @@
 #include <linux/regulator/driver.h>
 #include "wt6670f.h"
 
+#define GET_FIRMWARE_NUM_SHOW_MAX_SIZE 50
+
 static DEFINE_MUTEX(wt6670f_i2c_access);
 //static DEFINE_MUTEX(wt6670f_access_lock);
 //static struct i2c_client *new_client;
@@ -690,6 +692,132 @@ static int wt6670_init_iio_psy(struct wt6670f *chip)
 
 extern int wt6670f_isp_flow(struct wt6670f *chip);
 
+static enum power_supply_property wt6670f_charger_props[] = {
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+};
+
+static int wt6670f_charger_get_property(struct power_supply *psy,
+				enum power_supply_property psp,
+				union power_supply_propval *val)
+{
+	return 0;
+}
+
+static int wt6670f_charger_set_property(struct power_supply *psy,
+				       enum power_supply_property prop,
+				       const union power_supply_propval *val)
+{
+	return 0;
+}
+
+static const struct power_supply_desc wt6670f_psy_desc = {
+	.name = "QC3P",
+	.type = POWER_SUPPLY_TYPE_MAINS,
+	.properties = wt6670f_charger_props,
+	.num_properties = ARRAY_SIZE(wt6670f_charger_props),
+	.get_property = wt6670f_charger_get_property,
+	.set_property = wt6670f_charger_set_property,
+};
+
+static int wt6670f_psy_register(struct wt6670f *wt)
+{
+	struct power_supply_config wt6670f_cfg = {};
+
+	wt6670f_cfg.drv_data = wt;
+	wt6670f_cfg.of_node = wt->dev->of_node;
+	wt->qc3_psy = power_supply_register(wt->dev, &wt6670f_psy_desc, &wt6670f_cfg);
+	if (IS_ERR(wt->qc3_psy)) {
+		pr_err("Couldn't register wt6670f power supply\n");
+		return PTR_ERR(wt->qc3_psy);
+	}
+
+	pr_info("power supply register wt6670f successfully\n");
+	return 0;
+}
+
+static ssize_t firmware_num_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	return 0;
+}
+
+static ssize_t firmware_num_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int result;
+
+		gpio_direction_output(_wt->intb_pin,0);
+		usleep_range(5000,6000);
+		gpio_direction_output(_wt->intb_pin,1);
+		usleep_range(5000,6000);
+
+		if(QC3P_WT6670F == g_qc3p_id){
+			result = wt6670f_get_firmware_version();
+			pr_info("wt6670 get wt6670f_firmware_num:%d\n", result);
+		} else if(QC3P_Z350 == g_qc3p_id){
+			result = z350_get_firmware_version();
+			pr_info("z350 get z350_get_firmware_version:0x%x\n", result);
+		} else {
+			result = 0;
+			pr_info("could not get device id for used\n");
+		}
+
+		gpio_direction_input(wt6670f_int_pin);
+
+	return scnprintf(buf, GET_FIRMWARE_NUM_SHOW_MAX_SIZE, "%d\n", result);
+}
+
+static DEVICE_ATTR(firmware_num, 0664,
+		firmware_num_show,
+		firmware_num_store);
+
+static struct attribute *wt6670f_get_firmware_num_attributes[] = {
+	&dev_attr_firmware_num.attr,
+	NULL,
+};
+
+static const struct attribute_group wt6670f_attribute_group = {
+	.attrs = wt6670f_get_firmware_num_attributes,
+};
+
+static int wt6670f_create_sys(struct device *dev, const struct attribute_group * grp)
+{
+	int err = 0;
+	struct power_supply *cp_ply;
+
+	pr_err("enter wt6670f create sys \n");
+	cp_ply = power_supply_get_by_name("QC3P");
+
+	if(NULL == dev){
+		pr_err("[BATT]: failed to register battery\n");
+		return -EINVAL;
+	}
+
+	if(cp_ply)
+	{
+		err = sysfs_create_group(&cp_ply->dev.kobj, grp);
+
+		if (!err)
+		{
+			pr_info("creat BMT sysfs group ok\n");
+		}
+		else
+		{
+			pr_err("creat BMT sysfs group fail\n");
+			err =  -EIO;
+		}
+		power_supply_put(cp_ply);
+	}
+	else
+	{
+		pr_err("don't have /sys/class/power_supply/QC3P dir\n");
+	}
+
+	return err;
+}
+
 static int wt6670f_i2c_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -777,6 +905,16 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 		pr_info("%s: init iio sys error\n", __func__);
 	if (gpio_direction_input(wt6670f_int_pin))
 		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
+
+	ret = wt6670f_psy_register(wt);
+	if (ret) {
+		pr_err("Failed to register psy\n");
+	}
+	ret = wt6670f_create_sys(&(client->dev), &wt6670f_attribute_group);
+	if(ret){
+		pr_err("[BATT]: Err failed to creat BMT attributes\n");
+	}
+
 probe_out:
 	return 0;
 }
@@ -785,7 +923,10 @@ static void wt6670f_shutdown(struct i2c_client *client)
 {
 	int ret = 0;
 	u16 data = 0x01;
+	struct wt6670f *wt = i2c_get_clientdata(client);
 
+	sysfs_remove_group(&(wt->client->dev.kobj), &wt6670f_attribute_group);
+	power_supply_unregister(wt->qc3_psy);
 	if(QC3P_WT6670F == g_qc3p_id){
 		ret = wt6670f_write_word(_wt, 0xB6, data);
 		pr_info("%s set voltage ok wt6670\n", __func__);
