@@ -673,6 +673,7 @@ static int sgm4154x_get_icl(struct charger_device *chg_dev, u32 *uA)
 	return 0;
 }
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int sgm4154x_is_enabled_charging(struct charger_device *chg_dev, bool *en)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
@@ -689,6 +690,7 @@ static int sgm4154x_is_enabled_charging(struct charger_device *chg_dev, bool *en
 
 	return 0;
 }
+#endif
 
 /*mahj:for build
 static int sgm4154x_set_watchdog_timer(struct sgm4154x_device *sgm, int time)
@@ -1465,6 +1467,7 @@ static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charge
 }
 #endif
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 bool is_chan_valid(struct sgm4154x_device *chip,
 		enum mmi_qc3p_ext_iio_channels chan)
 {
@@ -1584,6 +1587,7 @@ bool qc3p_update_policy(struct sgm4154x_device *chip )
 	dev_info(chip->dev, "write SMB5_QC3P_START_POLICY IIO :%d\n",val);
 	return val;
 }
+#endif
 
 static int mmi_hvdcp_detect_kthread(void *param)
 {
@@ -2515,7 +2519,9 @@ static struct charger_ops sgm4154x_chg_ops = {
 	.is_charge_halted = sgm4154x_is_charging_halted,
 
 	.dump_registers = sgm4154x_dump_registers,
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 	.is_enabled_charging = sgm4154x_is_enabled_charging,
+#endif
 	.enable_termination = sgm4154x_enable_termination,
 };
 
@@ -2644,11 +2650,13 @@ static int sgm4154x_probe(struct i2c_client *client,
 		enable_irq_wake(client->irq);
 	}
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 	ret = mmi_init_iio_psy(sgm, dev);
 	if (ret) {
 		dev_err(dev,
 			"mmi iio psy init failed\n");
 	}
+#endif
 
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
 
