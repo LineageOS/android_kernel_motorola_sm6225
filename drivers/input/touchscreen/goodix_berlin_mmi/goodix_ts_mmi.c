@@ -770,9 +770,11 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
+		hw_ops->irq_enable(core_data, false);
 		if (hw_ops->gesture)
 			hw_ops->gesture(core_data, 0);
 		msleep(16);
+		hw_ops->irq_enable(core_data, true);
 		enable_irq_wake(core_data->irq);
 		core_data->gesture_enabled = true;
 		break;
@@ -786,7 +788,10 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	case TS_MMI_PM_ACTIVE:
 		if (hw_ops->resume)
 			hw_ops->resume(core_data);
-		core_data->gesture_enabled = false;
+		if (core_data->gesture_enabled) {
+			core_data->gesture_enabled = false;
+			hw_ops->irq_enable(core_data, true);
+		}
 		break;
 	default:
 		ts_err("Invalid power state parameter %d.\n", to);
@@ -806,8 +811,10 @@ static int goodix_ts_mmi_pre_resume(struct device *dev) {
 	hw_ops = core_data->hw_ops;
 
 	atomic_set(&core_data->suspended, 0);
-	if (core_data->gesture_enabled)
+	if (core_data->gesture_enabled) {
+		core_data->hw_ops->irq_enable(core_data, false);
 		disable_irq_wake(core_data->irq);
+	}
 
 	return 0;
 }
