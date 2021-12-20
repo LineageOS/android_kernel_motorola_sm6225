@@ -290,6 +290,9 @@ struct mmi_charger_manager {
 
 #define PPS_INIT_VOLT_COMP	500000
 #define QC3P_INIT_VOLT_COMP	500000
+//For discrete main charger have no ibus adc capability
+#define CP_ENABLED_MAIN_INPUT_LIMIT 300*1000
+#define CP_DISABLED_MAIN_INPUT_LIMIT 3000*1000
 extern void mmi_qc3p_chrg_sm_work_func(struct work_struct *work);
 extern struct mmi_cp_policy_dev g_chrg_list;
 extern const struct mmi_chrg_dev_ops dev_ops[];

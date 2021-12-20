@@ -200,7 +200,7 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	rc = power_supply_get_property(cp_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
 	if (!rc)
-		chrg->charger_data.ibus_curr = 100000;
+		chrg->charger_data.ibus_curr = CP_ENABLED_MAIN_INPUT_LIMIT;
 
 	rc = power_supply_get_property(usb_psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
