@@ -37,12 +37,20 @@
 #include <linux/power_supply.h>
 #include "mmi_charger_core.h"
 #include "mmi_charger_core_iio.h"
+
 static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 {
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
+	static struct power_supply	*charger_psy;
+	union power_supply_propval prop = {0,};
 
 	if (!chip)
+		return -ENODEV;
+
+	if (!charger_psy)
+		charger_psy = power_supply_get_by_name("charger");
+	if (!charger_psy)
 		return -ENODEV;
 
 	rc = mmi_charger_write_iio_chan(chip, CP_ENABLE, en);
@@ -55,6 +63,17 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 	rc = mmi_charger_write_iio_chan(chip, MMI_USB_TERMINATION_ENABLED, !chrg->charger_enabled);
 	if(rc)
 		chrg_dev_info(chrg, "%s, enable termination fail\n",__func__);
+
+	if(chrg->charger_enabled) {
+		prop.intval = CP_ENABLED_MAIN_INPUT_LIMIT;
+	}else {
+		prop.intval = CP_DISABLED_MAIN_INPUT_LIMIT;
+	}
+
+	rc = power_supply_set_property(charger_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &prop);
+	if(rc)
+		chrg_dev_info(chrg, "%s, set main charger input limit fail\n",__func__);
 
 	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,en);
 	return rc;
