@@ -239,7 +239,7 @@ struct sm_fg_chip {
 
 	struct delayed_work monitor_work;
 	struct workqueue_struct *smfg_workqueue;
-	unsigned long last_update;
+//	unsigned long last_update;
 
 	/* Debug */
 	int skip_reads;
@@ -415,7 +415,7 @@ static int fg_read_soc(struct sm_fg_chip *sm)
 		return ret;
 	} else {
 		/*integer bit;*/
-		soc = ((data&0x7f00)>>8);
+		soc = ((data&0x7f00)>>8) * 10;
 		/* integer + fractional bit*/
 		soc = soc + (((data&0x00ff)*10)/256);
 
@@ -559,19 +559,17 @@ static int fg_get_cycle(struct sm_fg_chip *sm)
 	return cycle;
 }
 
-
 static int fg_read_current(struct sm_fg_chip *sm)
 {
-	int ret, rsns = 0;
+	int ret = 0, rsns = 0;
 	u16 data = 0;
-	float curr = 0.0;
+	int curr = 0;
 
 	ret = fg_read_word(sm, sm->regs[SM_FG_REG_CURRENT], &data);
 	if (ret < 0) {
 		pr_err("could not read current, ret = %d\n", ret);
 		return ret;
 	} else {
-		/* */
 		if (sm->batt_rsns == -EINVAL) {
 			pr_err("could not read sm->batt_rsns, rsns = 10mohm\n");
 			rsns = 10;
@@ -579,14 +577,14 @@ static int fg_read_current(struct sm_fg_chip *sm)
 			sm->batt_rsns == 0 ? rsns = 5 : (rsns = sm->batt_rsns*10);
 		}
 
-		curr =(((float)(data & 0x7FFF) * 1000 / 4088) / ((float)rsns/10));
+		curr = ((data & 0x7FFF) * 1250 / 511 / rsns );
 
 		if (data & 0x8000)
 			curr *= -1;
 	}
-	pr_err("curr = %d,data=%d\n",(int)curr,data);
+	pr_err("curr = %d,data=%d\n",curr,data);
 
-	return (int)curr;
+	return curr;
 }
 
 static int fg_read_fcc(struct sm_fg_chip *sm)
@@ -655,6 +653,8 @@ static bool is_battery_charging(struct sm_fg_chip *sm)
 
 static void fg_vbatocv_check(struct sm_fg_chip *sm)
 {
+	pr_info("%s: sm->batt_curr (%d), sm->is_charging (%d), sm->top_off (%d), sm->batt_soc (%d)\n",
+		__func__, sm->batt_curr, sm->is_charging, sm->top_off, sm->batt_soc);
 
 	if((abs(sm->batt_curr)<50) ||
 	   ((sm->is_charging) && (sm->batt_curr<(sm->top_off)) &&
@@ -724,7 +724,7 @@ static int fg_cal_carc (struct sm_fg_chip *sm)
 	int curr_cal = 0, p_curr_cal=0, n_curr_cal=0, p_delta_cal=0, n_delta_cal=0, p_fg_delta_cal=0, n_fg_delta_cal=0, temp_curr_offset=0;
 	int temp_gap, fg_temp_gap = 0;
 	int ret = 0;
-	u16 data[2] = {0,};
+	u16 data[3] = {0,};
 
 	fg_vbatocv_check(sm);
 
@@ -835,12 +835,13 @@ static int fg_cal_carc (struct sm_fg_chip *sm)
 		p_curr_cal, n_curr_cal, curr_cal);
 
 	ret = fg_read_word(sm, 0x28, &data[0]);
-	ret |= fg_read_word(sm, 0x83, &data[1]);
+	ret |= fg_read_word(sm, 0x82, &data[1]);
+	ret |= fg_read_word(sm, 0x83, &data[2]);
 	if (ret < 0) {
 		pr_err("could not read , ret = %d\n", ret);
 		return ret;
 	} else
-		pr_info("0x28=0x%x, 0x83=0x%x\n", data[0],data[1]);
+		pr_info("0x28=0x%x, 0x82=0x%x, 0x83=0x%x\n", data[0],data[1],data[2]);
 
 	return 1;
 }
@@ -950,7 +951,8 @@ static int fg_get_property(struct power_supply *psy, enum power_supply_property 
 		mutex_lock(&sm->data_lock);
 		if (ret >= 0)
 			sm->batt_soc = ret;
-		val->intval = sm->batt_soc;
+		//val->intval = sm->batt_soc;
+		val->intval = sm->batt_soc/10;
 		mutex_unlock(&sm->data_lock);
 		break;
 
@@ -1191,7 +1193,7 @@ static void fg_refresh_status(struct sm_fg_chip *sm)
 			sm->batt_soc, sm->batt_volt, sm->batt_curr, sm->batt_temp);
 	}
 
-	sm->last_update = jiffies;
+//	sm->last_update = jiffies;
 
 }
 #endif
@@ -1248,8 +1250,8 @@ static int sm_update_data(struct sm_fg_chip *sm)
 			sm->batt_temp = -ENODATA;
 
 		fg_cal_carc(sm);
-		pr_info("RSOC:%d, Volt:%d, Current:%d, Temperature:%d\n",
-			sm->batt_soc, sm->batt_volt, sm->batt_curr, sm->batt_temp);
+		pr_info("RSOC:%d, Volt:%d, Current:%d, Temperature:%d, OCV:%d\n",
+			sm->batt_soc, sm->batt_volt, sm->batt_curr, sm->batt_temp, sm->batt_ocv);
 	}
 
 	return ret;
