@@ -925,9 +925,18 @@ static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 		}
 		mmi_set_pd30_cap(chg, req_pdo, req_pd_volt, req_pd_curr);
 	}
-	rc = vote(chg->usb_icl_votable, PD_VOTER, true, req_pd_curr * 1000);
-	if (rc < 0)
-		mmi_info(chg, "vote PD USB_ICL  failed %duA\n", req_pd_curr);
+
+	/*
+	 * Third charging ic IINLIM bits will be changed auto
+	 * when BC1.2 done. So we need to Ignore the PD
+	 * vote unless BC1.2 done.
+	 */
+	if (chg->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
+		rc = vote(chg->usb_icl_votable, PD_VOTER, true, req_pd_curr * 1000);
+		if (rc < 0)
+			mmi_info(chg, "vote PD USB_ICL  failed %duA\n", req_pd_curr);
+	} else
+		mmi_info(chg, "Ignore PD VOTER ICL before bc1.2\n");
 
 	mmi_info(chg,
 			"Request PD power, fixed %d, pps %d, pdo %d, "
