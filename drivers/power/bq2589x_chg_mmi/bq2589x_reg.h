@@ -127,6 +127,12 @@
 #define BQ2589X_VREG_BASE           3840
 #define BQ2589X_VREG_LSB            16
 
+/* recharge voltage  */
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+#define BQ2589X_VRECHRG_STEP_MV     100
+#define BQ2589X_VRECHRG_OFFSET_MV   100
+#endif
+
 /* Register 0x07*/
 #define BQ2589X_REG_07              0x07
 #define BQ2589X_EN_TERM_MASK        0x80
