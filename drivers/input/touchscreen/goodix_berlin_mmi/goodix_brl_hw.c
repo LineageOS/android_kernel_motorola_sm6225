@@ -1137,7 +1137,8 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 	}
 
 	/* Need to resend the stylus cmd after abnormal reseting */
-	if (cd->board_data.stylus_mode_ctrl && cd->set_mode.stylus_mode) {
+	if (cd->board_data.stylus_mode_ctrl && cd->get_mode.stylus_mode
+				&& cd->set_mode.stylus_mode) {
 		if ((buffer[3] & 0x20) == 0) {
 			struct goodix_ts_cmd stylus_cmd;
 			stylus_cmd.cmd = 0xA4;
