@@ -4,7 +4,7 @@ EXTRA_CFLAGS += \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
 obj-m := goodix_v1510_mmi.o
-goodix_v1510_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_ts_test.o goodix_cfg_bin.o goodix_gtx8_update.o goodix_ts_gesture.o
+goodix_v1510_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_ts_test.o goodix_cfg_bin.o goodix_gtx8_update.o goodix_ts_gesture.o goodix_ts_tools.o
 
 ifneq ($(filter m y,$(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
     EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
