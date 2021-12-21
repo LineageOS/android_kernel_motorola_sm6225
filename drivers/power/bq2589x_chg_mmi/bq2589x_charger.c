@@ -1045,6 +1045,18 @@ static int bq2589x_init_device(struct bq2589x *bq)
 	return ret;
 }
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+static int bq2589x_set_recharge_volt(struct bq2589x *bq, int recharge_volt)
+{
+	int val;
+	dev_err(bq->dev, "%s:%d", __func__, recharge_volt);
+	val = (recharge_volt - BQ2589X_VRECHRG_OFFSET_MV) / BQ2589X_VRECHRG_STEP_MV;
+
+	return bq2589x_update_bits(bq, BQ2589X_REG_06,
+				  BQ2589X_VRECHG_MASK, val);
+}
+#endif
+
 /*
 static int bq2589x_charge_status(struct bq2589x *bq)
 {
@@ -1883,6 +1895,26 @@ bool qc3p_update_policy(struct bq2589x *chip )
 }
 #endif
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+static int bq2589x_enable_termination(struct charger_device *chg_dev, bool enable)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	u8 val;
+	int ret;
+	if (enable)
+		val = BQ2589X_TERM_ENABLE << BQ2589X_EN_TERM_SHIFT;
+	else
+		val = BQ2589X_TERM_DISABLE << BQ2589X_EN_TERM_SHIFT;
+
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_07, BQ2589X_EN_TERM_MASK, val);
+	dev_info(bq->dev, "%s, %s enable term %s\n", __func__,
+			enable ? "enable" : "disable",
+			ret == 0 ? "success" : "failed");
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bq2589x_enable_termination);
+#endif
+
 static int mmi_hvdcp_detect_kthread(void *param)
 {
 	struct bq2589x * bq = param;
@@ -1921,6 +1953,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			dev_err(bq->dev, "Cann't detected qc30 hvdcp\n");
 		}
 #else
+			bq2589x_enable_termination(bq->chg_dev, true);
 			qc3p_start_detection(bq);
 			qc3p_detection_done(bq);
 			ret = qc3p_read_charger_type(bq);
@@ -2064,6 +2097,7 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 	cancel_delayed_work_sync(&bq->monitor_work);
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	bq2589x_enable_termination(bq->chg_dev, true);
 	g_qc3p_detected = false;
 	qc3p_update_policy(bq);
 #endif
@@ -2566,6 +2600,7 @@ static struct charger_ops bq2589x_chg_ops = {
 	.dump_registers = bq2589x_dump_registers,
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 	.is_enabled_charging = bq2589x_is_enabled_charging,
+	.enable_termination = bq2589x_enable_termination,
 #endif
 };
 
@@ -2671,6 +2706,10 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	}
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	ret = bq2589x_set_recharge_volt(bq, 100);//100mv
+	if (ret)
+		goto err_0;
+
 	ret = mmi_init_iio_psy(bq, dev);
 	if (ret) {
 		dev_err(dev,
