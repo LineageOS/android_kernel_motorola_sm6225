@@ -29,6 +29,11 @@
 }
 
 extern int gsx_gesture_before_suspend_mmi(struct goodix_ts_core *core_data);
+extern void goodix_cmd_init(struct goodix_ts_device *dev,
+			    struct goodix_ts_cmd *ts_cmd,
+			    u8 cmds, u16 cmd_data, u32 reg_addr);
+extern int goodix_send_command(struct goodix_ts_device *dev,
+		struct goodix_ts_cmd *cmd);
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
@@ -164,10 +169,38 @@ static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
 	}
 }
 
-#define CHARGER_MODE_CMD    0xAF
+#define CHARGER_ENTER_MODE_CMD    0x06
+#define CHARGER_EXIT_MODE_CMD    0x07
 static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 {
-	return 0;
+	int ret = 0;
+	struct goodix_ts_device *ts_dev;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	struct goodix_ts_cmd charge_cmd;
+
+	GET_GOODIX_DATA(dev);
+	ts_dev = core_data->ts_dev;
+
+	if (mode)
+		goodix_cmd_init(ts_dev, &charge_cmd, CHARGER_ENTER_MODE_CMD,
+			 0, ts_dev->reg.command);
+	else
+		goodix_cmd_init(ts_dev, &charge_cmd, CHARGER_EXIT_MODE_CMD,
+			 0, ts_dev->reg.command);
+
+	if (charge_cmd.initialized) {
+		ret= goodix_send_command(ts_dev, &charge_cmd);
+		if (ret < 0)
+			ts_err("Failed to set charger mode\n");
+	} else {
+		ts_err("Uninitialized charge command");
+	}
+
+	msleep(16);
+	ts_info("Success to %s charger mode\n", mode ? "Enable" : "Disable");
+
+	return ret;
 }
 
 static int goodix_ts_mmi_panel_state(struct device *dev,

@@ -51,6 +51,8 @@ extern int goodix_ts_mmi_dev_register(struct platform_device *ts_device);
 extern void goodix_ts_mmi_dev_unregister(struct platform_device *ts_device);
 extern int __init goodix_gsx_gesture_init(void);
 extern void __exit goodix_gsx_gesture_exit(void);
+extern int __init goodix_tools_init(void);
+extern void __exit goodix_tools_exit(void);
 
 struct goodix_module goodix_modules;
 
@@ -2222,7 +2224,8 @@ int goodix_ts_stage2_init(struct goodix_ts_core *core_data)
 	goodix_ts_procfs_init(core_data);
 
 	/* esd protector */
-	goodix_ts_esd_init(core_data);
+	if (core_data->ts_dev->board_data.esd_default_on)
+		goodix_ts_esd_init(core_data);
 	return 0;
 exit:
 	goodix_ts_pen_dev_remove(core_data);
@@ -2331,6 +2334,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ts_err("Failed start cfg_bin_proc, %d", r);
 		goto later_thread_err;
 	}
+
+	/* debug node init */
+	goodix_tools_init();
+
 	complete_all(&goodix_modules.core_comp);
 	ts_info("goodix_ts_core probe success");
 	return 0;
