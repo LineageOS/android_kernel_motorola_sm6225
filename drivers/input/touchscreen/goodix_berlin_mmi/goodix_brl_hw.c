@@ -1046,7 +1046,11 @@ static void goodix_parse_pen(struct goodix_pen_data *pen_data,
 		pen_data->keys[i].status = TS_TOUCH;
 	}
 }
-
+#ifdef   CONFIG_GTP_FOD
+#define  GOODIX_FP_EVENTS                   0x8
+#define  GOODIX_GESTURE_FOD_DOWN			0x46
+#define  GOODIX_GESTURE_FOD_UP			    0x55
+#endif
 static int goodix_touch_handler(struct goodix_ts_core *cd,
 				struct goodix_ts_event *ts_event,
 				u8 *pre_buf, u32 pre_buf_len)
@@ -1062,7 +1066,10 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 	u8 point_type = 0;
 	static u8 pre_finger_num;
 	static u8 pre_pen_num;
-
+#ifdef CONFIG_GTP_FOD
+	int  fp_flags = 0;
+	static int pre_flags = 0;
+#endif
 	/* clean event buffer */
 	memset(ts_event, 0, sizeof(*ts_event));
 	/* copy pre-data to buffer */
@@ -1109,7 +1116,17 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 			}
 		}
 	}
-
+#ifdef CONFIG_GTP_FOD
+	ts_debug("touch pre_buf[0]=0x%x", pre_buf[0]);
+	fp_flags = pre_buf[0] & GOODIX_FP_EVENTS;
+	if(pre_flags != fp_flags) {
+		if(fp_flags)
+			ts_event->gesture_type =  GOODIX_GESTURE_FOD_DOWN;
+		else
+			ts_event->gesture_type =  GOODIX_GESTURE_FOD_UP;
+	}
+	pre_flags = fp_flags;
+#endif
 	if (touch_num > 0 && (point_type == POINT_TYPE_STYLUS
 				|| point_type == POINT_TYPE_STYLUS_HOVER)) {
 		/* stylus info */

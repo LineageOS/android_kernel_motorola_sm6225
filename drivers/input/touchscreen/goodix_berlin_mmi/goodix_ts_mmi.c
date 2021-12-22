@@ -884,7 +884,12 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 				core_data->get_mode.edge_mode[1], core_data->get_mode.edge_mode[0]);
 		}
 	}
-
+#ifdef CONFIG_GTP_FOD
+	if(core_data->ts_event.gesture_data[0]) {
+		ts_info("FOD is down during PM active");
+	}
+	core_data->ts_event.gesture_data[0] = 0;
+#endif
 	return 0;
 }
 
