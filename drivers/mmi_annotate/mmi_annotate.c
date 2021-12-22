@@ -65,6 +65,7 @@ static DEFINE_MUTEX(mem_lock);
 static struct proc_dir_entry *procfs_file;
 static struct persist_data_t *persist_data;
 static struct mem_data_t mem_data;
+static int persist_unsupported = 0;
 
 static int mmi_annotate_seq_show(struct seq_file *f, void *ptr)
 {
@@ -94,7 +95,10 @@ static ssize_t mmi_annotate_write(struct file *file, const char __user *buf,
 	if (copy_from_user(buffer, buf, count > maxlen ? maxlen : count))
 		return -EFAULT;
 
-	mmi_annotate_persist("%s", buffer);
+	if (!persist_unsupported)
+		mmi_annotate_persist("%s", buffer);
+	else
+		mmi_annotate("%s", buffer);
 
 	return count;
 }
@@ -225,6 +229,10 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 	else
 		dev_info(dev, "mem-size %x", mem_data.size);
 
+	persist_unsupported = of_property_read_bool(dev->of_node, "persist_unsupported");
+	if (persist_unsupported )
+		dev_info(dev, "persist unsupported : 1");
+
 	mem_data.contents = kzalloc(mem_data.size, GFP_KERNEL);
 	if(!mem_data.contents) {
 		dev_err(dev, "Cannot allocate buffer of size %x\n",
@@ -296,14 +304,18 @@ int mmi_annotate_persist(const char *fmt, ...)
 	len += vsnprintf(line_buf, sizeof(line_buf), fmt, args);
 	va_end(args);
 
-	mutex_lock(&persist_lock);
-	if(persist_data &&
-		persist_data->cur_off + len < persist_data->size) {
-		memcpy(persist_data->contents + persist_data->cur_off,
-			line_buf, len);
-		persist_data->cur_off += len;
+	if (!persist_unsupported) {
+		mutex_lock(&persist_lock);
+		if(persist_data &&
+			persist_data->cur_off + len < persist_data->size) {
+			memcpy(persist_data->contents + persist_data->cur_off,
+				line_buf, len);
+			persist_data->cur_off += len;
+		}
+		mutex_unlock(&persist_lock);
+	} else {
+		mmi_annotate("%s", line_buf);
 	}
-	mutex_unlock(&persist_lock);
 
 	return 0;
 }
