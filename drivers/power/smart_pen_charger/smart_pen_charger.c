@@ -51,6 +51,7 @@ enum pen_status {
 	PEN_STAT_CHARGING,
 	PEN_STAT_DISCHARGING,
 	PEN_STAT_CHARGE_FULL,
+	PEN_STAT_CHARGE_DISABLED,
 	PEN_STAT_MAX,
 };
 
@@ -73,6 +74,7 @@ static char *pen_status_maps[] = {
 	"charging",
 	"discharging",
 	"charge_full",
+	"charge_disabled",
 };
 
 struct pen_mac {
@@ -522,7 +524,6 @@ static void pen_charger_handle_event(struct pen_charger *chg, int event)
 			data->soc);
 		if (chg->pen_psy)
 			sysfs_notify(&chg->pen_psy->dev.parent->kobj, NULL, "pen_soc");
-		break;
 		break;
 	case NOTIFY_EVENT_PEN_MAC:
 		scnprintf(event_string, CHG_SHOW_MAX_SIZE,
