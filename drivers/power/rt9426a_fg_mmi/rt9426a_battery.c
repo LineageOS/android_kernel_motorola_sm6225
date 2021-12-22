@@ -413,7 +413,7 @@ static int rt9426a_get_soh(struct rt9426a_chip *chip)
 	int ret;
 
 	ret = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOH);
-	if (ret < 0)
+	if (ret <= 0)
 		dev_notice(chip->dev, "%s: read soh fail\n", __func__);
 	else
 		chip->soh = ret;
