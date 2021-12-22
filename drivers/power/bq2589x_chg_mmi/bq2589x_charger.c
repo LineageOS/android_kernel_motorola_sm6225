@@ -468,7 +468,11 @@ int bq2589x_set_chargecurrent(struct bq2589x *bq, int curr)
 {
 	u8 ichg;
 
-	ichg = (curr - BQ2589X_ICHG_BASE)/BQ2589X_ICHG_LSB;
+	if (bq->part_no == SC89890H) {
+		ichg = (curr - SC89890H_ICHG_BASE)/SC89890H_ICHG_LSB;
+	} else {
+		ichg = (curr - BQ2589X_ICHG_BASE)/BQ2589X_ICHG_LSB;
+	}
 	return bq2589x_update_bits(bq, BQ2589X_REG_04, BQ2589X_ICHG_MASK, ichg << BQ2589X_ICHG_SHIFT);
 
 }
@@ -477,7 +481,11 @@ int bq2589x_set_term_current(struct bq2589x *bq, int curr)
 {
 	u8 iterm;
 
-	iterm = (curr - BQ2589X_ITERM_BASE) / BQ2589X_ITERM_LSB;
+	if (bq->part_no == SC89890H) {
+		iterm = (curr - SC89890H_ITERM_BASE) / SC89890H_ITERM_LSB;
+	} else {
+		iterm = (curr - BQ2589X_ITERM_BASE) / BQ2589X_ITERM_LSB;
+	}
 
 	return bq2589x_update_bits(bq, BQ2589X_REG_05, BQ2589X_ITERM_MASK, iterm << BQ2589X_ITERM_SHIFT);
 }
@@ -487,7 +495,11 @@ int bq2589x_set_prechg_current(struct bq2589x *bq, int curr)
 {
 	u8 iprechg;
 
-	iprechg = (curr - BQ2589X_IPRECHG_BASE) / BQ2589X_IPRECHG_LSB;
+	if (bq->part_no == SC89890H) {
+		iprechg = (curr - SC89890H_IPRECHG_BASE) / SC89890H_IPRECHG_LSB;
+	} else {
+		iprechg = (curr - BQ2589X_IPRECHG_BASE) / BQ2589X_IPRECHG_LSB;
+	}
 
 	return bq2589x_update_bits(bq, BQ2589X_REG_05, BQ2589X_IPRECHG_MASK, iprechg << BQ2589X_IPRECHG_SHIFT);
 }
