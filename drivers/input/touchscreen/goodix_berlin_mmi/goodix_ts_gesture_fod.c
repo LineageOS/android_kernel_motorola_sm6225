@@ -335,9 +335,8 @@ static int gsx_gesture_init(struct goodix_ts_core *cd,
 	gsx->ts_core = cd;
 	/*enable all gesture wakeup by default */
 	gsx->ts_core->gesture_type = GESTURE_SINGLE_TAP |GESTURE_FOD_PRESS;
-
+	cd->ts_event.gesture_data[0] = 0;
 	atomic_set(&gsx_gesture->registered, 1);
-
 	return 0;
 }
 
@@ -375,7 +374,8 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct gesture_event_data mmi_event;
 	static  unsigned  long  start = 0;
-	static bool fod_down = false;
+	int fod_down_interval;
+	int fod_down = cd->ts_event.gesture_data[0];
 #endif
 	if (atomic_read(&cd->suspended) == 0 || cd->gesture_type == 0)
 		return EVT_CONTINUE;
@@ -397,14 +397,15 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		if(cd->gesture_type & GESTURE_SINGLE_TAP && gs_event.gesture_type == GOODIX_GESTURE_SINGLE_TAP) {
 			ts_info("get SINGLE-TAP gesture");
 			mmi_event.evcode =1;
-			fod_down = false;
+			fod_down = 0;
+
 			/* call class method */
 			ret = cd->imports->report_gesture(&mmi_event);
 			if (!ret)
 				PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
 			goto gesture_ist_exit;
 		} else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_DOWN ){
-			int fod_down_interval = (int)jiffies_to_msecs(jiffies-start);
+			fod_down_interval = (int)jiffies_to_msecs(jiffies-start);
 			fodx = le16_to_cpup((__le16 *)gs_event.gesture_data);
 			fody = le16_to_cpup((__le16 *)(gs_event.gesture_data + 2));
 			overlay_area = gs_event.gesture_data[4];
@@ -412,38 +413,32 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			mmi_event.evcode = 2;
 			mmi_event.evdata.x= 540;
 			mmi_event.evdata.y= 2164;
-			ts_info("get FOD-DOWN gesture");
-			if(fod_down_interval < 5000) {
-				if(fod_down == true) {
-					ts_debug("filter same fod down within 5s");
-					goto gesture_ist_exit;
+			ts_info("get FOD-DOWN gesture %d   fod_down_interval=%d",fod_down,fod_down_interval);
+			if(fod_down_interval < 250)
+			{
+				if( fod_down) {
+					goto fod_exit;
 				}
 			} else {
-				fod_down= false;
+				fod_down = 0;
 			}
-			ret = cd->imports->report_gesture(&mmi_event);
-			if (!ret)
-				PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
-
-			input_report_key(cd->input_dev, BTN_TRIGGER_HAPPY1, 1);
-			input_sync(cd->input_dev);
-			input_report_key(cd->input_dev, BTN_TRIGGER_HAPPY1, 0);
-			input_sync(cd->input_dev);
-			fod_down = true;
-			start=jiffies;
+			start = jiffies;
+			if(fod_down <4) {
+				ret = cd->imports->report_gesture(&mmi_event);
+				if (!ret)
+					PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
+				}
+			}
+fod_exit:
+			fod_down++;
 			goto gesture_ist_exit;
-		}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
+	}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
 			ts_info("get FOD-UP gesture");
 			mmi_event.evcode = 3;
-			input_report_key(cd->input_dev, BTN_TRIGGER_HAPPY2, 1);
-			input_sync(cd->input_dev);
-			input_report_key(cd->input_dev, BTN_TRIGGER_HAPPY2, 0);
-			input_sync(cd->input_dev);
-			fod_down = false;
-		}
+			fod_down = 0;
 	} else {
 		ts_debug("not support gesture type[%02X] to wakeup, suspended =%d", gs_event.gesture_type, atomic_read(&cd->suspended));
-		fod_down = false;
+		fod_down = 0;
 	}
 #else
 	switch (gs_event.gesture_type) {
@@ -507,12 +502,14 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		break;
 	}
 #endif
+
 re_send_ges_cmd:
 	if (hw_ops->gesture(cd, 0))
 		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)
 		hw_ops->after_event_handler(cd);
+	cd->ts_event.gesture_data[0] = fod_down;
 	return EVT_CANCEL_IRQEVT;
 }
 
