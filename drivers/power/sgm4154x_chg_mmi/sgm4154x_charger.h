@@ -320,7 +320,8 @@ struct sgm4154x_device {
 	struct sgm4154x_jeita data;
 
 	struct regulator	*dpdm_reg;
-	struct mutex		dpdm_lock;
+	struct regulator	*otg_vbus_reg;
+	struct mutex		regulator_lock;
 	bool			dpdm_enabled;
 	bool			typec_apsd_rerun_done;
 	int			real_charger_type;
