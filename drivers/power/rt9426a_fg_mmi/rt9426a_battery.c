@@ -2285,11 +2285,17 @@ static int rt9426a_apply_pdata(struct rt9426a_chip *chip)
 	u8 page_idx=0,extend_reg_cmd_addr=0, array_idx=0;
 	int volt_now = 0, fd_vth_now = 0, fd_threshold = 0;
 	int wt_ocv_result = RT9426A_WRITE_OCV_FAIL;
+	int ocv_index = 0;
 
 	dev_info(chip->dev, "%s\n", __func__);
 
 	/* read ocv_index before using it */
-	chip->ocv_index = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_RSVD2);
+	ocv_index = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_RSVD2);
+	/* ocv_index only 0~4 is valid, if read a invalid ocv_index, using the default ocv_index */
+	if (ocv_index < 0 || ocv_index > 4)
+		chip->ocv_index = 0;
+	else
+		chip->ocv_index = ocv_index;
 	dev_info(chip->dev, "%s: ocv_index = %d\n",
 			    __func__, chip->ocv_index);
 	/* update ocv_checksum_dtsi after ocv_index updated */
