@@ -100,6 +100,8 @@
 #define BQ2589X_ICHG_SHIFT          0
 #define BQ2589X_ICHG_BASE           0
 #define BQ2589X_ICHG_LSB            64
+#define SC89890H_ICHG_BASE          0
+#define SC89890H_ICHG_LSB           60
 
 /* Register 0x05*/
 #define BQ2589X_REG_05              0x05
@@ -111,6 +113,10 @@
 #define BQ2589X_IPRECHG_LSB         64
 #define BQ2589X_ITERM_BASE          64
 #define BQ2589X_ITERM_LSB           64
+#define SC89890H_IPRECHG_BASE       60
+#define SC89890H_IPRECHG_LSB        60
+#define SC89890H_ITERM_BASE         30
+#define SC89890H_ITERM_LSB          60
 
 /* Register 0x06*/
 #define BQ2589X_REG_06              0x06
