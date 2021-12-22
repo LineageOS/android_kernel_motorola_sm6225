@@ -1254,6 +1254,7 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 {
 	int rc = 0;
 
+	mutex_lock(&sgm->regulator_lock);
 		/* fetch the DPDM regulator */
 	if (!sgm->dpdm_reg && of_get_property(sgm->dev->of_node,
 				"dpdm-supply", NULL)) {
@@ -1262,11 +1263,12 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 			rc = PTR_ERR(sgm->dpdm_reg);
 			dev_err(sgm->dev, "Couldn't get dpdm regulator rc=%d\n", rc);
 			sgm->dpdm_reg = NULL;
+			mutex_unlock(&sgm->regulator_lock);
 			return rc;
 		}
 	}
 
-	mutex_lock(&sgm->dpdm_lock);
+
 	if (enable) {
 		if (sgm->dpdm_reg && !sgm->dpdm_enabled) {
 			dev_err(sgm->dev, "enabling DPDM regulator\n");
@@ -1290,7 +1292,7 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 				sgm->dpdm_enabled = false;
 		}
 	}
-	mutex_unlock(&sgm->dpdm_lock);
+	mutex_unlock(&sgm->regulator_lock);
 
 	return rc;
 }
@@ -2233,7 +2235,6 @@ static int sgm4154x_is_enabled_vbus(struct regulator_dev *rdev)
 	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_1, &temp);
 	return (temp&SGM4154x_OTG_EN)? 1 : 0;
 }
-
 static struct regulator_ops sgm4154x_vbus_ops = {
 	.enable = sgm4154x_enable_vbus,
 	.disable = sgm4154x_disable_vbus,
@@ -2352,16 +2353,34 @@ static int sgm4154x_parse_dt_adc_channels(struct sgm4154x_device *sgm)
 static int sgm4154x_enable_otg(struct charger_device *chg_dev, bool enable)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
-	int rc = 0;
+	static struct regulator *vbus_reg = NULL;
+	int rc = -EINVAL;
 
-	if (enable)
-		rc = sgm4154x_enable_vbus(sgm->otg_rdev);
-	else
-		rc = sgm4154x_disable_vbus(sgm->otg_rdev);
+	if (!sgm) {
+		return rc;
+	}
 
+	mutex_lock(&sgm->regulator_lock);
+	if (!sgm->otg_vbus_reg) {
+		sgm->otg_vbus_reg = devm_regulator_get(sgm->dev, "usb-otg-vbus");
+		if (IS_ERR(vbus_reg)) {
+			rc = PTR_ERR(vbus_reg);
+			dev_err(sgm->dev, "Couldn't get vbus regulator rc=%d\n", rc);
+			sgm->otg_vbus_reg = NULL;
+			mutex_unlock(&sgm->regulator_lock);
+			return rc;
+		}
+	}
+
+	if (sgm->otg_vbus_reg) {
+		rc = (enable) ? regulator_enable(sgm->otg_vbus_reg) : regulator_disable(sgm->otg_vbus_reg);
+	}
+	
 	pr_info("%s, %s otg %s\n", __func__,
 		enable ? "enable" : "disable",
 		rc ? "failed" : "success");
+	
+	mutex_unlock(&sgm->regulator_lock);
 
 	return rc;
 }
@@ -2554,7 +2573,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 	sgm->dev = dev;
 
 	mutex_init(&sgm->lock);
-	mutex_init(&sgm->dpdm_lock);
+	mutex_init(&sgm->regulator_lock);
 
 	strncpy(sgm->model_name, id->name, I2C_NAME_SIZE);
 
