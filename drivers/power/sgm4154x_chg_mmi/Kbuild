@@ -7,10 +7,6 @@ ifneq ($(filter m y,$(CONFIG_MMI_QC3P_TURBO_CHARGER)),)
         EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_TURBO_CHARGER
 endif
 
-ifneq ($(filter m y,$(CONFIG_MMI_HAWAO_VBUS_SAMPLE_RATIO)),)
-        EXTRA_CFLAGS += -DCONFIG_MMI_HAWAO_VBUS_SAMPLE_RATIO
-endif
-
 obj-m += sgm4154x_charger.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_discrete_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
