@@ -2987,6 +2987,8 @@ static int rt9426a_i2c_suspend(struct device *dev)
 		enable_irq_wake(chip->alert_irq);
 	disable_irq(chip->alert_irq);
 
+	cancel_delayed_work(&chip->update_work);
+
 	return 0;
 }
 
@@ -2998,6 +3000,8 @@ static int rt9426a_i2c_resume(struct device *dev)
 	enable_irq(chip->alert_irq);
 	if (device_may_wakeup(dev))
 		disable_irq_wake(chip->alert_irq);
+
+	queue_delayed_work(system_power_efficient_wq, &chip->update_work, msecs_to_jiffies(20));
 
 	return 0;
 }
