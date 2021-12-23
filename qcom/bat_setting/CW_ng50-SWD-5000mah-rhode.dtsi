@@ -13,7 +13,7 @@
 ng50-SWD-5000mah-rhode {
 	serialnum = "SB18D38323";
 	fcc_design = <5000>;
-	config_profile_info = [5A 00 00 00 00 00 00 00
+	config_profile_info = [49 00 00 00 00 00 00 00
 				AD C7 C2 C1 B1 AE B3 7D
 				55 D4 C1 9B 82 6C 5D 55
 				51 51 51 7F D8 E0 31 DC
@@ -22,5 +22,5 @@ ng50-SWD-5000mah-rhode {
 				80 7F 86 98 AA 82 7E B8
 				20 00 57 10 02 A0 5C 00
 				00 00 64 21 C3 50 00 00
-				00 00 00 00 00 00 00 9F];
+				00 00 00 00 00 00 00 3E];
 };

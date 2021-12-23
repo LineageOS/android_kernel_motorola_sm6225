@@ -13,7 +13,7 @@
 ng50-ATL-5000mah-rhode {
 	serialnum = "SB18D38324";
 	fcc_design = <5000>;
-	config_profile_info = [5A 00 00 00 00 00 00 00
+	config_profile_info = [49 00 00 00 00 00 00 00
 				A6 C1 C0 C7 B9 B8 A4 69
 				3F FF DE A7 89 76 65 59
 				53 51 4E 84 DE E0 68 EA
@@ -22,5 +22,5 @@ ng50-ATL-5000mah-rhode {
 				78 7B 83 92 A9 85 80 AE
 				20 00 57 10 02 A0 57 00
 				00 00 64 23 C3 48 00 00
-				00 00 00 00 00 00 00 F9];
+				00 00 00 00 00 00 00 58];
 };
