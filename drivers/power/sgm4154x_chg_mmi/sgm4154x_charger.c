@@ -28,11 +28,6 @@
 static bool g_qc3p_detected = false;
 #endif
 
-#ifdef CONFIG_MMI_HAWAO_VBUS_SAMPLE_RATIO
-#define HAWAO_VBUS_ADC_PULL_UP_KOHM 180.0
-#define HAWAO_VBUS_ADC_PULL_DOWN_KOHM 39.0
-#endif
-
 static struct power_supply_desc sgm4154x_power_supply_desc;
 
 /* SGM4154x REG06 BOOST_LIM[5:4], uV */
@@ -49,7 +44,6 @@ static const unsigned int BOOST_CURRENT_LIMIT[] = {
 	500000, 1200000
 };
 #endif
-
 
 enum SGM4154x_VREG_FT {
 	VREG_FT_DISABLE,
@@ -309,8 +303,6 @@ static int sgm4154x_read_usbin_voltage_chan(struct sgm4154x_device *sgm, int *va
 		return rc;
 	}
 
-	dev_info(sgm->dev, "vbus raw voltage = %d\n", *val);
-
 	return 0;
 }
 
@@ -325,11 +317,7 @@ static int sgm4154x_get_usb_voltage_now(struct sgm4154x_device *sgm, int *val)
 		return rc;
 	}
 
-#ifdef CONFIG_MMI_HAWAO_VBUS_SAMPLE_RATIO
-        *val = (int)(raw_date * (float)((HAWAO_VBUS_ADC_PULL_UP_KOHM + HAWAO_VBUS_ADC_PULL_DOWN_KOHM)/HAWAO_VBUS_ADC_PULL_DOWN_KOHM));
-#else
 	*val = raw_date * 3;
-#endif
 
 	return 0;
 }
