@@ -46,6 +46,8 @@
 		vib-gpio-vcc-enable;
 		vib,gpio_2v6_en = <&tlmm 25 0x00>;
 		vib,gpio_3v0_en = <&tlmm 97 0x00>;
+		qcom,vib-dis-short-long;
+		qcom,vib-dis-short-long-val = <80>;
 	};
 };
 
