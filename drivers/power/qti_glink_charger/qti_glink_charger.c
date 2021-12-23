@@ -154,19 +154,19 @@ struct qti_charger {
 	struct mmi_charger_cfg		chg_cfg;
 	struct mmi_charger_constraint	constraint;
 	struct mmi_charger_driver	*driver;
-	struct power_supply	*wls_psy;
+	struct power_supply		*wls_psy;
 	u32				*profile_data;
 	struct charger_profile_info	profile_info;
 	struct lpd_info			lpd_info;
 	void				*ipc_log;
-	struct fod_curr	rx_fod_curr;
-	struct fod_gain	rx_fod_gain;
+	struct fod_curr			rx_fod_curr;
+	struct fod_gain			rx_fod_gain;
 	u32				tx_mode;
 	u32				folio_mode;
 	bool				*debug_enabled;
-	u32	wls_curr_max;
-	u32  rx_connected;
-	struct notifier_block   wls_nb;
+	u32				wls_curr_max;
+	u32				rx_connected;
+	struct notifier_block		wls_nb;
 };
 
 static struct qti_charger *this_chip = NULL;
@@ -345,8 +345,10 @@ static int qti_charger_write(struct qti_charger *chg, u32 property,
 		return -EINVAL;
 	}
 
-	if (atomic_read(&chg->state) == PMIC_GLINK_STATE_DOWN)
-		return 0;
+	if (atomic_read(&chg->state) == PMIC_GLINK_STATE_DOWN) {
+		mmi_err(chg, "ADSP glink state is down\n");
+		return -ENOTCONN;
+	}
 
 	memset(&oem_buf, 0, sizeof(oem_buf));
 	oem_buf.hdr.owner = MSG_OWNER_OEM;
@@ -398,8 +400,10 @@ static int qti_charger_read(struct qti_charger *chg, u32 property,
 		return -EINVAL;
 	}
 
-	if (atomic_read(&chg->state) == PMIC_GLINK_STATE_DOWN)
-		return 0;
+	if (atomic_read(&chg->state) == PMIC_GLINK_STATE_DOWN) {
+		mmi_err(chg, "ADSP glink state is down\n");
+		return -ENOTCONN;
+	}
 
 	oem_buf.hdr.owner = MSG_OWNER_OEM;
 	oem_buf.hdr.type = MSG_TYPE_REQ_RESP;
@@ -1541,12 +1545,6 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 	if (!chg->wls_psy)
 		return;
 
-	chg->wls_psy = power_supply_get_by_name("wireless");
-	if (!chg->wls_psy) {
-		pr_err("No pen power supply found\n");
-		return;
-	}
-
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_tx_mode);
 
@@ -1559,6 +1557,9 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_folio_mode);
 	qti_charger_unregister_notifier(&chg->wls_nb);
+
+	power_supply_put(chg->wls_psy);
+	chg->wls_psy = NULL;
 }
 
 static int qti_charger_init(struct qti_charger *chg)
@@ -1719,9 +1720,14 @@ static void qti_charger_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->dev, &dev_attr_tcmd);
 	device_remove_file(chg->dev, &dev_attr_force_pmic_icl);
-
+	device_remove_file(chg->dev, &dev_attr_force_wls_en);
+	device_remove_file(chg->dev, &dev_attr_force_usb_suspend);
+	device_remove_file(chg->dev, &dev_attr_force_wls_volt_max);
+	device_remove_file(chg->dev, &dev_attr_force_wls_curr_max);
+	device_remove_file(chg->dev, &dev_attr_wireless_chip_id);
+	device_remove_file(chg->dev, &dev_attr_wls_fod_curr);
+	device_remove_file(chg->dev, &dev_attr_wls_fod_gain);
 	device_remove_file(chg->dev, &dev_attr_addr);
-
 	device_remove_file(chg->dev, &dev_attr_data);
 
 	wireless_psy_deinit(chg);
@@ -1744,9 +1750,12 @@ static void qti_charger_setup_work(struct work_struct *work)
 
 	state = atomic_read(&chg->state);
 	if (state == PMIC_GLINK_STATE_UP) {
+		mmi_info(chg, "ADSP glink state is up\n");
 		qti_charger_init(chg);
 	} else if (state == PMIC_GLINK_STATE_DOWN) {
-		qti_charger_deinit(chg);
+		mmi_err(chg, "ADSP glink state is down\n");
+		memset(&chg->chg_cfg, 0, sizeof(struct mmi_charger_cfg));
+		memset(&chg->constraint, 0, sizeof(struct mmi_charger_constraint));
 	}
 }
 
