@@ -71,6 +71,10 @@
 #include "battery_profile/imported/smith_battery_flip_LS40_0826-bq27426G1-2766.gm.fs.h"
 #endif
 
+#ifdef ATL_NM40_712MAH_BATTERY_PROFILE
+#include "battery_profile/imported/alt_nm40_712mah_bq27426g1.gm.fs.h"
+#endif
+
 #undef pr_debug
 #define pr_debug pr_err
 #undef pr_info
@@ -197,6 +201,12 @@ static struct batt_chem_id batt_chem_id_arr[] = {
 	{3142, FG_SUBCMD_CHEM_C},
 };
 
+enum temp_source {
+	TEMP_SOURCE_INTERNAL = 0,
+	TEMP_SOURCE_EXTERNAL,
+	TEMP_SOURCE_HOST,
+};
+
 static const struct fg_batt_profile bqfs_image[] = {
 
 #ifdef ATL_4000MAH_8A_BATTERY_PROFILE
@@ -213,6 +223,10 @@ static const struct fg_batt_profile bqfs_image[] = {
 
 #ifdef ATL_LS40_1545MAH_BATTERY_PROFILE
 	{.batt_type_str = "LS40_ATL_1545MAH", .bqfs_image = smith_flip_bqfs_image, .array_size = ARRAY_SIZE(smith_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 5},
+#endif
+
+#ifdef ATL_NM40_712MAH_BATTERY_PROFILE
+	{.batt_type_str = "NM40_ATL_712MAH", .bqfs_image = li_alt_flip_bqfs_image, .array_size = ARRAY_SIZE(li_alt_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 5},
 #endif
 
 };
@@ -308,6 +322,7 @@ struct bq_fg_chip {
 	unsigned long last_update;
 	const char *batt_profile_name;
 	const char *batt_name;
+	u32 temp_source;
 
 	/* debug */
 	int	skip_reads;
@@ -671,7 +686,7 @@ static int fg_unseal(struct bq_fg_chip *bq, u32 key)
 }
 
 
-static int fg_unseal_fa(struct bq_fg_chip *bq, u32 key)
+int fg_unseal_fa(struct bq_fg_chip *bq, u32 key)
 {
 	int ret;
 	int retry = 0;
@@ -790,7 +805,7 @@ static int fg_read_dm_version(struct bq_fg_chip* bq, u8 *ver)
 }
 
 #define	CFG_UPDATE_POLLING_RETRY_LIMIT	50
-static int fg_dm_pre_access(struct bq_fg_chip *bq)
+int fg_dm_pre_access(struct bq_fg_chip *bq)
 {
 	int ret;
 	int i = 0;
@@ -822,7 +837,7 @@ static int fg_dm_pre_access(struct bq_fg_chip *bq)
 }
 EXPORT_SYMBOL_GPL(fg_dm_pre_access);
 
-static int fg_dm_post_access(struct bq_fg_chip *bq)
+int fg_dm_post_access(struct bq_fg_chip *bq)
 {
 	int ret;
 	int i = 0;
@@ -856,7 +871,7 @@ static int fg_dm_enter_cfg_mode(struct bq_fg_chip *bq)
 		return fg_dm_pre_access(bq);
 }
 
-static int fg_dm_exit_cfg_mode(struct bq_fg_chip *bq)
+int fg_dm_exit_cfg_mode(struct bq_fg_chip *bq)
 {
 	int ret;
 	int i = 0;
@@ -894,7 +909,7 @@ EXPORT_SYMBOL_GPL(fg_dm_exit_cfg_mode);
 #define	DM_ACCESS_BLOCK_DATA		0x40
 
 
-static int fg_dm_read_block(struct bq_fg_chip *bq, u8 classid,
+int fg_dm_read_block(struct bq_fg_chip *bq, u8 classid,
 							u8 offset, u8 *buf)
 {
 	int ret;
@@ -931,7 +946,7 @@ static int fg_dm_read_block(struct bq_fg_chip *bq, u8 classid,
 }
 EXPORT_SYMBOL_GPL(fg_dm_read_block);
 
-static int fg_dm_write_block(struct bq_fg_chip *bq, u8 classid,
+int fg_dm_write_block(struct bq_fg_chip *bq, u8 classid,
 							u8 offset, u8 *data)
 {
 	int ret;
@@ -1563,7 +1578,7 @@ static int fg_read_chem_id(struct bq_fg_chip *bq, u16 *chem_id)
 	return ret;
 }
 
-static int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
+int fg_change_chem_id(struct bq_fg_chip *bq, u16 new_id)
 {
 	int ret;
 	u16 old_id;
@@ -1662,7 +1677,7 @@ static int fg_check_update_necessary(struct bq_fg_chip *bq)
 	return 0;
 }
 
-static bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
+bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
 										const bqfs_cmd_t *cmd)
 {
 	int ret;
@@ -1710,7 +1725,7 @@ static bool fg_update_bqfs_execute_cmd(struct bq_fg_chip *bq,
 }
 EXPORT_SYMBOL_GPL(fg_update_bqfs_execute_cmd);
 
-static void fg_update_bqfs(struct bq_fg_chip *bq)
+void fg_update_bqfs(struct bq_fg_chip *bq)
 {
 	int i;
 	const bqfs_cmd_t *image;
@@ -1984,7 +1999,7 @@ static const struct attribute_group fg_attr_group = {
 	.attrs = fg_attributes,
 };
 
-static int fg_enable_sleep(struct bq_fg_chip *bq, bool enable)
+int fg_enable_sleep(struct bq_fg_chip *bq, bool enable)
 {
 
 	int ret;
@@ -2021,7 +2036,7 @@ static int fg_enable_sleep(struct bq_fg_chip *bq, bool enable)
 }
 EXPORT_SYMBOL_GPL(fg_enable_sleep);
 
-static int fg_set_term_voltage(struct bq_fg_chip *bq, int volt)
+int fg_set_term_voltage(struct bq_fg_chip *bq, int volt)
 {
 	int ret;
 	u8 rd_buf[64];
@@ -2054,7 +2069,7 @@ static int fg_set_term_voltage(struct bq_fg_chip *bq, int volt)
 }
 EXPORT_SYMBOL_GPL(fg_set_term_voltage);
 
-static int fg_set_term_curr(struct bq_fg_chip *bq, int val)
+int fg_set_term_curr(struct bq_fg_chip *bq, int val)
 {
 	int ret = -1, curr = 0;
 	u8 rd_buf[64];
@@ -2105,7 +2120,8 @@ static int fg_set_term_curr(struct bq_fg_chip *bq, int val)
 }
 EXPORT_SYMBOL_GPL(fg_set_term_curr);
 
-static int fg_select_external_temp(struct bq_fg_chip *bq)
+#define TEMP_SOURCE_MASK 0x03
+int fg_select_external_temp(struct bq_fg_chip *bq)
 {
 	int ret;
 	u8 rd_buf[64];
@@ -2125,7 +2141,8 @@ static int fg_select_external_temp(struct bq_fg_chip *bq)
 		return ret;
 	}
 
-	rd_buf[1] |=0x01;	// set external temp source
+	rd_buf[1] &= ~TEMP_SOURCE_MASK;
+	rd_buf[1] |= (bq->temp_source & TEMP_SOURCE_MASK);
 
 	ret = fg_dm_write_block(bq, 64, 0, rd_buf);
 
@@ -2136,7 +2153,7 @@ static int fg_select_external_temp(struct bq_fg_chip *bq)
 }
 EXPORT_SYMBOL_GPL(fg_select_external_temp);
 
-static int fg_dodateoc_delta_t(struct bq_fg_chip *bq)
+int fg_dodateoc_delta_t(struct bq_fg_chip *bq)
 {
 	int ret;
 	u8 rd_buf[64];
@@ -2344,6 +2361,10 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	if (rc < 0)
 		bq->batt_dc_conf = 0;;
 
+	rc = of_property_read_u32(node,	"mmi,temp-source", &bq->temp_source);
+	if (rc < 0)
+		bq->temp_source = TEMP_SOURCE_EXTERNAL;
+
 	return rc;
 }
 
@@ -2439,7 +2460,7 @@ static int bq_fg_probe(struct i2c_client *client,
 	bq->resume_completed = true;
 	bq->irq_waiting = false;
 
-	bq->regmap = regmap_init_i2c(client, &bq27426_regmap_config);
+	bq->regmap = devm_regmap_init_i2c(client, &bq27426_regmap_config);
 	if (IS_ERR(bq->regmap)) {
 		pr_err("Couldn't initialize register regmap rc = %ld\n",
 				PTR_ERR(bq->regmap));
@@ -2451,6 +2472,15 @@ static int bq_fg_probe(struct i2c_client *client,
 	if (ret < 0) {
 		dev_err(&client->dev, "Unable to parse DT nodes\n");
 		goto free_mem;
+	}
+
+	bq->vdd_i2c_vreg = devm_regulator_get_optional(&client->dev, "vdd-i2c");
+	if (IS_ERR_OR_NULL(bq->vdd_i2c_vreg)) {
+		dev_err(&client->dev, "Could not get vdd-i2c power regulator\n");
+	} else {
+		ret = regulator_enable(bq->vdd_i2c_vreg);
+		if (ret)
+			dev_err(&client->dev, "Could not enable vdd-i2c power regulator\n");
 	}
 
 	ret = fg_read_fw_version(bq);
@@ -2575,6 +2605,12 @@ static int bq_fg_remove(struct i2c_client *client)
 
 	debugfs_remove_recursive(bq->debug_root);
 	sysfs_remove_group(&bq->dev->kobj, &fg_attr_group);
+
+	if (!IS_ERR_OR_NULL(bq->vdd_i2c_vreg)) {
+		if (regulator_is_enabled(bq->vdd_i2c_vreg))
+			regulator_disable(bq->vdd_i2c_vreg);
+		devm_regulator_put(bq->vdd_i2c_vreg);
+	}
 
 	return 0;
 }
