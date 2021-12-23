@@ -741,11 +741,17 @@ static int goodix_ts_mmi_methods_power(struct device *dev, int on) {
 static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 {
 	int ret = 0;
+	int timeout = 50;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
 
 	GET_GOODIX_DATA(dev);
+
+	/* 5000ms timeout */
+	while (core_data->init_stage < CORE_INIT_STAGE2 && timeout--)
+		msleep(100);
+
 	hw_ops = core_data->hw_ops;
 
 	goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
