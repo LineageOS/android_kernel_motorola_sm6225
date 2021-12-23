@@ -96,6 +96,8 @@
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 		pinctrl-2 = <&ts_release>;
 		mmi,power-off-suspend;
+		mmi,enable-gestures;
+		mmi,usb-charger-detection;
 	};
 };
 
