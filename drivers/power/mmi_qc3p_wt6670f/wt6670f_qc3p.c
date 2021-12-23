@@ -242,12 +242,26 @@ int wt6670f_get_firmware_version(void)
 {
 	int ret;
 	u16 data = 0;
+	int read_firmware_retry = 3;
 
 	ret = wt6670f_read_word(_wt, 0xBF, &data);
 	if (ret < 0)
 	{
-		pr_err("wt6670f get firmware fail\n");
-		return ret;
+		pr_err("wt6670f get firmware fail,retry\n");
+		gpio_direction_output(_wt->intb_pin,0);
+		usleep_range(5000,6000);
+		gpio_direction_output(_wt->intb_pin,1);
+		usleep_range(5000,6000);
+		while(read_firmware_retry--){
+			ret = wt6670f_read_word(_wt, 0xBF, &data);
+			if(ret == 0)
+				break;
+		}
+		gpio_direction_input(wt6670f_int_pin);
+		if (ret < 0) {
+			pr_err("wt6670f get firmware fail\n");
+			return ret;
+		}
 	}
 
 	return data & 0xff;
@@ -586,10 +600,6 @@ static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
 		*val1 = result;
 		break;
 	case PSY_IIO_QC3P_FIRMWARE_NUM:
-		gpio_direction_output(_wt->intb_pin,0);
-		usleep_range(5000,6000);
-		gpio_direction_output(_wt->intb_pin,1);
-		usleep_range(5000,6000);
 
 		if(QC3P_WT6670F == g_qc3p_id){
 			result = wt6670f_get_firmware_version();
@@ -603,7 +613,6 @@ static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
 		}
 
 		*val1 = result;
-		gpio_direction_input(wt6670f_int_pin);
 		break;
 	default:
 		pr_err("Unsupported wt6670 IIO chan %d\n", chan->channel);
@@ -748,11 +757,6 @@ static ssize_t firmware_num_show(struct device *dev,
 {
 	int result;
 
-		gpio_direction_output(_wt->intb_pin,0);
-		usleep_range(5000,6000);
-		gpio_direction_output(_wt->intb_pin,1);
-		usleep_range(5000,6000);
-
 		if(QC3P_WT6670F == g_qc3p_id){
 			result = wt6670f_get_firmware_version();
 			pr_info("wt6670 get wt6670f_firmware_num:%d\n", result);
@@ -764,7 +768,6 @@ static ssize_t firmware_num_show(struct device *dev,
 			pr_info("could not get device id for used\n");
 		}
 
-		gpio_direction_input(wt6670f_int_pin);
 
 	return scnprintf(buf, GET_FIRMWARE_NUM_SHOW_MAX_SIZE, "%d\n", result);
 }
