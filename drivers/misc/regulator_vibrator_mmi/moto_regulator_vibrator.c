@@ -42,6 +42,10 @@ struct vib_ldo_chip {
 	struct regulator	 *vcc;
 	u32 			regulator_voltage_max;
 	u32 			regulator_voltage_min;
+
+	/*for long/short vibrator*/
+	bool                    dis_short_long;
+	int                     dis_long_ms;
 };
 
 static void ext_vib_work(struct work_struct *work)
@@ -53,8 +57,20 @@ static void ext_vib_work(struct work_struct *work)
 	static bool regulator_en_flag = false;
 	if (chip->state) {
 		if (chip->pwr_by_gpio) {
-			ret = gpio_direction_output(chip->vcc_3v0_Pin, chip->state);
-			ret = gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
+			if (chip->dis_short_long) {
+				pr_warn("vib in dis short and long, play ms=%lld, dis_longms=%d\n",chip->vib_play_ms, chip->dis_long_ms);
+				if (chip->vib_play_ms > chip->dis_long_ms) {
+					ret = gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
+				}
+				else {
+					ret = gpio_direction_output(chip->vcc_3v0_Pin, chip->state);
+					ret = gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
+				}
+			}
+			else {
+				ret = gpio_direction_output(chip->vcc_3v0_Pin, chip->state);
+				ret = gpio_direction_output(chip->vcc_2v6_Pin, chip->state);
+			}
 		}
 		else if (!regulator_en_flag) {
 			ret = regulator_enable(chip->vcc);
@@ -350,6 +366,19 @@ static int ext_vib_parse_dt(struct device *dev, struct vib_ldo_chip *chip)
 			return ret;
 		}
 		pr_info("vib: vcc_3v0_Pin gpio num is %d \n", chip->vcc_3v0_Pin);
+
+		chip->dis_short_long = of_property_read_bool(dev->of_node,
+                                        "qcom,vib-dis-short-long");
+		if (chip->dis_short_long) {
+			pr_warn("read dis_short_long true");
+			ret = of_property_read_u32(dev->of_node, "qcom,vib-dis-short-long-val",
+                                &chip->dis_long_ms);
+                	if (ret < 0) {
+                   	 	pr_err("qcom,vib-dis-short-long-val property read failed, ret=%d\n",ret);
+                   	 	return ret;
+               	 	}
+			pr_warn("read dis_long_ms=%d\n", chip->dis_long_ms);
+		}
 	}
 	else
 	{
