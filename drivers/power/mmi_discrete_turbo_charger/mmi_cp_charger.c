@@ -42,15 +42,12 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 {
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
-	static struct power_supply	*charger_psy;
 	union power_supply_propval prop = {0,};
 
 	if (!chip)
 		return -ENODEV;
 
-	if (!charger_psy)
-		charger_psy = power_supply_get_by_name("charger");
-	if (!charger_psy)
+	if (!chip->charger_psy)
 		return -ENODEV;
 
 	rc = mmi_charger_write_iio_chan(chip, CP_ENABLE, en);
@@ -70,7 +67,7 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 		prop.intval = CP_DISABLED_MAIN_INPUT_LIMIT;
 	}
 
-	rc = power_supply_set_property(charger_psy,
+	rc = power_supply_set_property(chip->charger_psy,
 				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &prop);
 	if(rc)
 		chrg_dev_info(chrg, "%s, set main charger input limit fail\n",__func__);
@@ -152,14 +149,14 @@ static int cp_update_charger_status(struct mmi_charger_device *chrg)
 	int rc;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 	union power_supply_propval prop = {0,};
-	static struct power_supply	*battery_psy = NULL;
+
+	if (!chip)
+		return -ENODEV;
 
 	if (!chrg->chrg_psy)
 		return -ENODEV;
 
-	if (!battery_psy)
-	battery_psy = power_supply_get_by_name("battery");
-	if (!battery_psy)
+	if (!chip->batt_psy)
 		return -ENODEV;
 
 	rc = power_supply_get_property(chrg->chrg_psy,
@@ -177,7 +174,7 @@ static int cp_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.ibatt_curr = prop.intval;
 
-	rc = power_supply_get_property(battery_psy,
+	rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_TEMP, &prop);
 	if (!rc)
 		chrg->charger_data.batt_temp = prop.intval;
