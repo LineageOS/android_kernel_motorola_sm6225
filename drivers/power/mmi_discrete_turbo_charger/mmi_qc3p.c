@@ -103,7 +103,7 @@ int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
 	}
 
 //	impendance_vubs_volt = (DEFAULT_VBUS_RESISTANCE * curr_vbus_ma) / 1000;
-	impendance_vubs_volt = 200;
+	impendance_vubs_volt = 0;//200;
 	curr_vbus_mv -= impendance_vubs_volt ;
 
 	if(target_mv < curr_vbus_mv) {
