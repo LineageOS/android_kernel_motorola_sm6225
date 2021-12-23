@@ -286,6 +286,9 @@ struct mmi_charger_manager {
 	int qc3p_ibus_max_volt;
 	int qc3p_volt_steps;
 	int qc3p_volt_max;
+	struct power_supply	*bms_psy;
+	struct power_supply	*charger_psy;
+	struct power_supply	*cp_psy;
 };
 
 #define PPS_INIT_VOLT_COMP	500000

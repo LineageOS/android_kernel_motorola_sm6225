@@ -751,6 +751,8 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	struct mmi_charger_manager *chip =
 					container_of(nb, struct mmi_charger_manager, psy_nb);
 
+	return NOTIFY_OK;
+
 	if (!chip->usb_psy) {
 		mmi_chrg_err(chip, "usb psy is NULL, direct return\n");
 		return NOTIFY_OK;
@@ -1623,7 +1625,31 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	}
 	chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy) {
-		mmi_chrg_err(chip, "zhi Could not get battery power_supply\n");
+		mmi_chrg_err(chip, "Could not get battery power_supply\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->bms_psy = power_supply_get_by_name("bms");
+	if (!chip->bms_psy) {
+		mmi_chrg_err(chip, "Could not get bms power_supply\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->charger_psy = power_supply_get_by_name("charger");
+	if (!chip->charger_psy) {
+		mmi_chrg_err(chip, "Could not get charger power_supply\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->cp_psy = power_supply_get_by_name("cp-standalone");
+	if (!chip->cp_psy) {
+		mmi_chrg_err(chip, "Could not get charger power_supply\n");
+		return -EPROBE_DEFER;
+	}
+
+	chip->usb_psy = power_supply_get_by_name("usb");
+	if (!chip->usb_psy) {
+		mmi_chrg_err(chip, "Could not get USB power_supply\n");
 		return -EPROBE_DEFER;
 	}
 
@@ -1669,11 +1695,6 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 		chip->pd_handle = NULL;
 	}
 #endif
-	if (!chip->usb_psy) {
-		chip->usb_psy = power_supply_get_by_name("usb");
-		if (!chip->usb_psy)
-			mmi_chrg_err(chip, "Could not get USB power_supply\n");
-	}
 
 	INIT_WORK(&chip->psy_changed_work, psy_changed_work_func);
 	INIT_DELAYED_WORK(&chip->heartbeat_work, mmi_heartbeat_work);
@@ -1691,7 +1712,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 
 	//create_sysfs_entries(chip);
-	schedule_work(&chip->psy_changed_work);
+	//schedule_work(&chip->psy_changed_work);
 	mmi_chrg_info(chip, "mmi chrg manager initialized successfully, ret %d\n", ret);
 	return 0;
 cleanup:
