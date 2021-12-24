@@ -52,33 +52,24 @@
 	};
 };*/
 
+&qupv3_se0_i2c {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	pinctrl-0 = <&qupv3_se0_i2c_act>;
+	pinctrl-1 = <&qupv3_se0_i2c_sle>;
+	wt6670: wt6670f@35 {
+		status = "okay";
+		compatible = "mediatek,wt6670f_qc3p";
+		reg = <0x35>;
+		#io-channel-cells = <1>;
+		wt6670f-reset-gpio = <&tlmm 68 0x0>;
+		wt6670f-int-gpio = <&tlmm 93 0x0>;
+	};
+};
 
 &qupv3_se0_i2c {
 	status = "okay";
-
-	wt6670: wt6670f@35 {
-                status = "okay";
-                compatible = "mediatek,wt6670f_qc3p";
-                reg = <0x35>;
-		#io-channel-cells = <1>;
-                wt6670f-reset-gpio = <&tlmm 68 0x0>;
-                wt6670f-int-gpio = <&tlmm 93 0x0>;
-                //wt6670f-i2c-scl-pin = <&tlmm 1 0x0>;
-                //wt6670f-i2c-sda-pin = <&tlmm 0 0x0>;
-
-		/*
-                pinctrl-names = "default",
-                                "wt6670_i2c_scl_low", "wt6670_i2c_scl_high",
-                                "wt6670_i2c_sda_low", "wt6670_i2c_sda_high",
-                                "wt6670_i2c";
-		*/
-               // pinctrl-0 = <&wt6670_pins_default>;
-                //pinctrl-1 = <&wt6670_pins_scl_low>;
-                //pinctrl-2 = <&wt6670_pins_scl_high>;
-               // pinctrl-3 = <&wt6670_pins_sda_low>;
-                //pinctrl-4 = <&wt6670_pins_sda_high>;
-                //pinctrl-5 = <&wt6670_pins_i2c>;
-        };
 
 	cw2217@64 {
 		compatible = "cellwise,cw2217";
@@ -256,13 +247,28 @@
 		temp_neg_10_thres = <0>;
 	};
 
-	bq25890@6A {
+	bq25890: bq25890@6A {
 		status = "okay";
 		compatible = "ti,bq2589x-1";
 		reg = <0x6A>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&bq2589x_irq>;
+		pinctrl-0 = <&bq2589x_irq &gpio6_adc_default>;
+		#io-channel-cells = <1>;
+		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+				<&wt6670 PSY_IIO_QC3P_POWER>,
+				<&wt6670 PSY_IIO_START_DETECTION>,
+				<&wt6670 PSY_IIO_DETECTION_READY>,
+				<&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
+
+		io-channel-names = "gpio3_div3",
+				"wt6670_usb_real_type",
+				"wt6670_usb_qc3p_power",
+ 				"wt6670_start_detection",
+				"wt6670_detection_ready",
+				"qc3p_start_policy";
+
 		bq2589x_irq-gpio = <&tlmm 96 0>;
 		bq2589x_en-gpio = <&tlmm 36 0>;
 		dpdm-supply = <&usb2_phy0>;
@@ -325,6 +331,37 @@
 		ti,bq2597x,sense-resistor-mohm = <5>;
 	};
 */
+};
+
+&tlmm{
+	qupv3_se0_i2c_pins: qupv3_se0_i2c_pins {
+		qupv3_se0_i2c_act: qupv3_se0_i2c_active {
+			mux {
+				pins = "gpio0", "gpio1";
+				function = "qup0";
+			};
+
+			config {
+				pins = "gpio0", "gpio1";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se0_i2c_sle: qupv3_se0_i2c_sleep {
+			mux {
+				pins = "gpio0", "gpio1";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio0", "gpio1";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
 };
 
 &tlmm {
