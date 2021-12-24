@@ -749,7 +749,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	if (ret){
 		ret = regmap_read(sgm->regmap, SGM4154x_CHRG_STAT, &chrg_stat);
 		if (ret){
-			pr_err("%s read SGM4154x_CHRG_STAT fail\n",__func__);
+			pr_err("%s read SGM4154x_CHRG_STAT fail: %d\n",__func__, ret);
 			return ret;
 		}
 	}
@@ -1349,7 +1349,7 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 	if (rc < 0)
 		dev_err(sgm->dev, "Couldn't to enable DPDM rc=%d\n", rc);
 
-	sgm->typec_apsd_rerun_done = true;
+	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_START;
 	sgm4154x_rerun_apsd(sgm);
 
 	while(check_count < 10) {
@@ -1362,6 +1362,7 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 		check_count ++;
 	}
 
+	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_DONE;
 	schedule_work(&sgm->charge_detect_work);
 }
 
@@ -1424,7 +1425,7 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	qc3p_update_policy(sgm);
 #endif
 	sgm->pulse_cnt = 0;
-	sgm->typec_apsd_rerun_done = false;
+	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_NO_START;
 	sgm->chg_dev->noti.apsd_done = false;
 	sgm->chg_dev->noti.hvdcp_done = false;
 	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
@@ -1713,6 +1714,9 @@ static void charger_detect_work_func(struct work_struct *work)
 		__pm_stay_awake(sgm->charger_wakelock);
 
 	ret = sgm4154x_get_state(sgm, &state);
+	if (ret)
+		goto err;
+
 	mutex_lock(&sgm->lock);
 	sgm->state = state;
 	mutex_unlock(&sgm->lock);
@@ -1742,13 +1746,20 @@ static void charger_detect_work_func(struct work_struct *work)
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	if (((sgm->state.chrg_type == SGM4154x_USB_SDP) ||
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
-		(sgm->state.chrg_type == SGM4154x_UNKNOWN))
-		&& (!sgm->typec_apsd_rerun_done)) {
-		down(&sgm->sem_dpdm);
-		dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
-		schedule_work(&sgm->rerun_apsd_work);
-		up(&sgm->sem_dpdm);
-		goto err;
+		(sgm->state.chrg_type == SGM4154x_UNKNOWN))) {
+
+		if (sgm->typec_apsd_rerun_status == MMI_APSD_RERUN_NO_START) {
+			down(&sgm->sem_dpdm);
+			dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
+			sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_START;
+			schedule_work(&sgm->rerun_apsd_work);
+			up(&sgm->sem_dpdm);
+			goto err;
+		} else if (sgm->typec_apsd_rerun_status != MMI_APSD_RERUN_DONE) {
+			dev_info(sgm->dev, "wait for rerun apsd done\n");
+			goto err;
+		}
+
 	}
 
 	switch(sgm->state.chrg_type) {

@@ -2303,6 +2303,8 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 	bool reapsd_complete = false;
 
 	ret = bq2589x_sync_state(bq, &state);
+	if (ret < 0)
+		return;
 	mutex_lock(&bq->lock);
 	bq->state = state;
 	mutex_unlock(&bq->lock);
