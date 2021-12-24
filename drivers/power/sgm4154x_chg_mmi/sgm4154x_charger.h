@@ -227,6 +227,12 @@ enum {
 	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
 };
 
+enum {
+	MMI_APSD_RERUN_NO_START = 0,
+	MMI_APSD_RERUN_START = 1,
+	MMI_APSD_RERUN_DONE = 2,
+};
+
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -323,7 +329,7 @@ struct sgm4154x_device {
 	struct regulator	*otg_vbus_reg;
 	struct mutex		regulator_lock;
 	bool			dpdm_enabled;
-	bool			typec_apsd_rerun_done;
+	int			typec_apsd_rerun_status;
 	int			real_charger_type;
 
 	struct work_struct rerun_apsd_work;
