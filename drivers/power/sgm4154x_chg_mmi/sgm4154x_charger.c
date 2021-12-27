@@ -1659,6 +1659,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 					break;
 				case WT_CHG_TYPE_QC3P_27W:
 					dev_err(sgm->dev, "QC3P 27W have been detected !\n");
+					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
 					qc3p_update_policy(sgm);
 					g_qc3p_detected = true;
 					break;
