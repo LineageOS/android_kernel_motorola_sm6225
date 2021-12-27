@@ -23,8 +23,6 @@ struct wt6670f {
 	struct iio_channel	*int_iio_chans;
 
 	struct mutex i2c_rw_lock;
-
-	struct power_supply *qc3_psy;
 };
 
 enum {
