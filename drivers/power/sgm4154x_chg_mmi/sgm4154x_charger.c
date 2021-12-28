@@ -1093,16 +1093,9 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 				union power_supply_propval *val)
 {
 	struct sgm4154x_device *sgm = power_supply_get_drvdata(psy);
-	struct sgm4154x_state state;
+	struct sgm4154x_state state = sgm->state;
 	int chrg_status = 0;
 	int ret = 0;
-
-	mutex_lock(&sgm->lock);
-	//ret = sgm4154x_get_state(sgm, &state);
-	state = sgm->state;
-	mutex_unlock(&sgm->lock);
-	if (ret)
-		return ret;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -1349,7 +1342,7 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 	if (rc < 0)
 		dev_err(sgm->dev, "Couldn't to enable DPDM rc=%d\n", rc);
 
-	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_START;
+	sgm->typec_apsd_rerun_done = true;
 	sgm4154x_rerun_apsd(sgm);
 
 	while(check_count < 10) {
@@ -1362,10 +1355,10 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 		check_count ++;
 	}
 
-	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_DONE;
 	schedule_work(&sgm->charge_detect_work);
 }
 
+/* for build
 static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 {
 	int chrg_stat;
@@ -1378,7 +1371,7 @@ static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 
 	return (chrg_stat&SGM4154x_DPDM_ONGOING)?true:false;
 }
-
+*/
 
 static void charger_monitor_work_func(struct work_struct *work)
 {
@@ -1415,22 +1408,6 @@ OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
 }
 
-static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
-{
-	dev_err(sgm->dev, "Vbus removed, disable charge\n");
-
-#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
-	sgm4154x_enable_termination(sgm->chg_dev, true);
-	g_qc3p_detected = false;
-	qc3p_update_policy(sgm);
-#endif
-	sgm->pulse_cnt = 0;
-	sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_NO_START;
-	sgm->chg_dev->noti.apsd_done = false;
-	sgm->chg_dev->noti.hvdcp_done = false;
-	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
-	sgm4154x_request_dpdm(sgm, false);
-}
 #ifndef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charger_type)
 {
@@ -1699,68 +1676,37 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 	}
 }
 
-static void charger_detect_work_func(struct work_struct *work)
+static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
-	struct sgm4154x_device * sgm = NULL;
-	struct sgm4154x_state state;
-	int ret;
+	dev_err(sgm->dev, "Vbus removed, disable charge\n");
 
-	sgm = container_of(work, struct sgm4154x_device, charge_detect_work);
-	if(sgm == NULL) {
-		pr_err("Cann't get sgm4154x_device\n");
-		goto err;
-	}
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	sgm4154x_enable_termination(sgm->chg_dev, true);
+	g_qc3p_detected = false;
+	qc3p_update_policy(sgm);
+#endif
+	sgm->pulse_cnt = 0;
+	sgm->typec_apsd_rerun_done = false;
+	sgm->chg_dev->noti.apsd_done = false;
+	sgm->chg_dev->noti.hvdcp_done = false;
+	sgm->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	sgm4154x_request_dpdm(sgm, false);
+	charger_dev_notify(sgm->chg_dev);
+}
 
-	if (!sgm->charger_wakelock->active)
-		__pm_stay_awake(sgm->charger_wakelock);
-
-	ret = sgm4154x_get_state(sgm, &state);
-	if (ret)
-		goto err;
-
-	mutex_lock(&sgm->lock);
-	sgm->state = state;
-	mutex_unlock(&sgm->lock);
-
-	if(!sgm->state.vbus_gd) {
-		sgm4154x_vbus_remove(sgm);
-		goto vbus_remove;
-	}
-
-	if (sgm->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
-		dev_err(sgm->dev, "BC1.2 have already detected\n");
-		return;
-	}
-
-	if(!state.online)
-	{
-		sgm4154x_request_dpdm(sgm, true);
-		dev_err(sgm->dev, "BC1.2 detecte not done\n");
-		goto err;
-	}
-
-	if(!sgm4154x_dpdm_detect_is_done(sgm)) {
-		dev_err(sgm->dev, "DPDM detecte not done, disable charge\n");
-		goto err;
-	}
+static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
+{
 
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	if (((sgm->state.chrg_type == SGM4154x_USB_SDP) ||
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
-		(sgm->state.chrg_type == SGM4154x_UNKNOWN))) {
-
-		if (sgm->typec_apsd_rerun_status == MMI_APSD_RERUN_NO_START) {
-			down(&sgm->sem_dpdm);
-			dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
-			sgm->typec_apsd_rerun_status = MMI_APSD_RERUN_START;
-			schedule_work(&sgm->rerun_apsd_work);
-			up(&sgm->sem_dpdm);
-			goto err;
-		} else if (sgm->typec_apsd_rerun_status != MMI_APSD_RERUN_DONE) {
-			dev_info(sgm->dev, "wait for rerun apsd done\n");
-			goto err;
-		}
-
+		(sgm->state.chrg_type == SGM4154x_UNKNOWN))
+		&& (!sgm->typec_apsd_rerun_done)) {
+		down(&sgm->sem_dpdm);
+		dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
+		schedule_work(&sgm->rerun_apsd_work);
+		up(&sgm->sem_dpdm);
+		return;
 	}
 
 	switch(sgm->state.chrg_type) {
@@ -1791,7 +1737,7 @@ static void charger_detect_work_func(struct work_struct *work)
 
 		case SGM4154x_OTG_MODE:
 			pr_err("SGM4154x OTG mode do nothing\n");
-			goto err;
+			return;
 
 		default:
 			pr_err("SGM4154x charger type: default\n");
@@ -1800,14 +1746,62 @@ static void charger_detect_work_func(struct work_struct *work)
 
 #endif
 
-	sgm4154x_dump_register(sgm);
 	//notify charging policy to update charger type
 	sgm->chg_dev->noti.apsd_done = true;
+	sgm->typec_apsd_rerun_done = false;
 	charger_dev_notify(sgm->chg_dev);
-	return;
+}
 
-vbus_remove:
-	charger_dev_notify(sgm->chg_dev);
+static void charger_detect_work_func(struct work_struct *work)
+{
+	struct sgm4154x_device * sgm = NULL;
+	struct sgm4154x_state state;
+	bool reapsd_complete = false;
+	int ret;
+
+	sgm = container_of(work, struct sgm4154x_device, charge_detect_work);
+	if(sgm == NULL) {
+		pr_err("Cann't get sgm4154x_device\n");
+		goto err;
+	}
+
+	if (!sgm->charger_wakelock->active)
+		__pm_stay_awake(sgm->charger_wakelock);
+
+	if (!sgm->dpdm_enabled) {
+		sgm4154x_request_dpdm(sgm, true);
+	}
+
+	ret = sgm4154x_get_state(sgm, &state);
+	if (ret)
+		goto err;
+
+	mutex_lock(&sgm->lock);
+	sgm->state = state;
+	mutex_unlock(&sgm->lock);
+
+	if(sgm->state.vbus_gd && sgm->state.online
+		&& (sgm->typec_apsd_rerun_done == true)
+		&& (sgm->state.chrg_type != SGM4154x_USB_NONE)
+		&& (sgm->state.chrg_type != SGM4154x_OTG_MODE)) {
+		reapsd_complete = sgm4154x_is_rerun_apsd_done(sgm);
+	}
+
+	if (((!sgm->state.vbus_gd) || (sgm->state.chrg_type == SGM4154x_OTG_MODE))
+		&& (sgm->status & SGM4154X_STATUS_PLUGIN)) {
+
+		dev_info(sgm->dev, "%s:adapter removed\n", __func__);
+		sgm->status &= ~SGM4154X_STATUS_PLUGIN;
+		sgm4154x_vbus_remove(sgm);
+	} else if ((sgm->state.chrg_type != SGM4154x_USB_NONE)
+			&& (sgm->state.chrg_type != SGM4154x_OTG_MODE)
+			&& (!(sgm->status & SGM4154X_STATUS_PLUGIN) || (reapsd_complete == true))
+			&& sgm->state.online) {
+
+		dev_info(sgm->dev, "%s:adapter plugged in\n", __func__);
+		sgm->status |= SGM4154X_STATUS_PLUGIN;
+		sgm4154x_vbus_plugin(sgm);
+	}
 
 err:
 	//release wakelock
@@ -2300,7 +2294,7 @@ static int sgm4154x_suspend_notifier(struct notifier_block *nb,
     case PM_POST_SUSPEND:
         pr_err("sgm4154x PM_RESUME \n");
 
-        schedule_delayed_work(&sgm->charge_monitor_work, 0);
+        schedule_delayed_work(&sgm->charge_monitor_work, msecs_to_jiffies(500));
 
         sgm->sgm4154x_suspend_flag = 0;
 
