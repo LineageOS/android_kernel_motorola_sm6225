@@ -2303,6 +2303,10 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 	int ret;
 	bool reapsd_complete = false;
 
+	if (!bq->dpdm_enabled) {
+		bq2589x_reuqest_dpdm(bq, true);
+	}
+
 	ret = bq2589x_sync_state(bq, &state);
 	if (ret < 0)
 		return;
@@ -2320,11 +2324,6 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 		return;
 
 	bq->vbus_type = (status & BQ2589X_VBUS_STAT_MASK) >> BQ2589X_VBUS_STAT_SHIFT;
-
-	if (state.vbus_gd && (!bq->dpdm_enabled)) {
-		dev_info(bq->dev, "BC1.2 detect is not done.\n");
-		bq2589x_reuqest_dpdm(bq, true);
-	}
 
 	if(state.vbus_gd && state.online
 		&& (bq->typec_apsd_rerun_done == true)
