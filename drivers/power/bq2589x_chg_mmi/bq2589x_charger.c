@@ -2710,13 +2710,18 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 		goto err_irq;
 	}
 
-	ret = devm_request_threaded_irq(dev, client->irq, NULL,
-				bq2589x_charger_interrupt, IRQF_TRIGGER_FALLING | IRQF_ONESHOT, BQ25890_IRQ_PIN, bq);
-	if (ret) {
-		dev_err(dev, "%s:Request IRQ %d failed: %d\n", __func__, client->irq, ret);
-		goto err_irq;
-	} else {
-		dev_info(dev, "%s:irq = %d\n", __func__, client->irq);
+	if (client->irq) {
+		ret = devm_request_threaded_irq(dev, client->irq, NULL,
+					bq2589x_charger_interrupt,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					BQ25890_IRQ_PIN, bq);
+		if (ret) {
+			dev_err(dev, "%s:Request IRQ %d failed: %d\n", __func__, client->irq, ret);
+			goto err_irq;
+		} else {
+			dev_info(dev, "%s:irq = %d\n", __func__, client->irq);
+			enable_irq_wake(client->irq);
+		}
 	}
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
