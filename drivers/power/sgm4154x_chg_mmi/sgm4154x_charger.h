@@ -9,6 +9,11 @@
 #include <linux/iio/consumer.h>
 
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
+#define SGM4154X_STATUS_PLUGIN			0x0001
+#define SGM4154X_STATUS_PG				0x0002
+#define SGM4154X_STATUS_CHARGE_ENABLE	0x0004
+#define SGM4154X_STATUS_FAULT			0x0008
+#define SGM4154X_STATUS_EXIST			0x0100
 
 //#define __SGM41541_CHIP_ID__
 #define __SGM41542_CHIP_ID__
@@ -110,10 +115,11 @@
 #define SGM4154x_PRECHRG		BIT(3)
 #define SGM4154x_FAST_CHRG	    BIT(4)
 #define SGM4154x_TERM_CHRG	    (BIT(3)| BIT(4))
+#define SGM4154x_NOT_CHRGING	0
 
 /* charge type  */
 #define SGM4154x_VBUS_STAT_MASK	GENMASK(7, 5)
-#define SGM4154x_NOT_CHRGING	0
+#define SGM4154x_USB_NONE		0
 #define SGM4154x_USB_SDP		BIT(5)
 #define SGM4154x_USB_CDP		BIT(6)
 #define SGM4154x_USB_DCP		(BIT(5) | BIT(6))
@@ -227,12 +233,6 @@ enum {
 	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
 };
 
-enum {
-	MMI_APSD_RERUN_NO_START = 0,
-	MMI_APSD_RERUN_START = 1,
-	MMI_APSD_RERUN_DONE = 2,
-};
-
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -311,6 +311,9 @@ struct sgm4154x_device {
 
 	struct sgm4154x_init_data init_data;
 	struct sgm4154x_state state;
+
+	unsigned int	status;
+
 	u32 watchdog_timer;
 	const char *chg_dev_name;
 	struct charger_device *chg_dev;
@@ -329,7 +332,7 @@ struct sgm4154x_device {
 	struct regulator	*otg_vbus_reg;
 	struct mutex		regulator_lock;
 	bool			dpdm_enabled;
-	int			typec_apsd_rerun_status;
+	int			typec_apsd_rerun_done;
 	int			real_charger_type;
 
 	struct work_struct rerun_apsd_work;
