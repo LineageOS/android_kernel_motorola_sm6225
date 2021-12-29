@@ -18,6 +18,10 @@
 #include <linux/power_supply.h>
 #include <linux/regulator/driver.h>
 #include "wt6670f.h"
+#include <linux/proc_fs.h>
+#include <linux/uaccess.h>
+
+#define MAX_USER_STR 1024
 
 static DEFINE_MUTEX(wt6670f_i2c_access);
 //static DEFINE_MUTEX(wt6670f_access_lock);
@@ -28,6 +32,55 @@ struct wt6670f *_wt = NULL;
 int g_qc3p_id = 0;
 int m_chg_type = 0;
 bool qc3p_z350_init_ok = false;
+static struct proc_dir_entry *procfs_file;
+int wt6670f_get_firmware_version(void);
+int z350_get_firmware_version(void);
+static int mmi_wt6670f_seq_show(struct seq_file *f, void *ptr)
+{
+	int result;
+
+	if(QC3P_WT6670F == g_qc3p_id){
+		result = wt6670f_get_firmware_version();
+		pr_info("wt6670 get wt6670f_firmware_num:%d\n", result);
+	} else if(QC3P_Z350 == g_qc3p_id){
+		result = z350_get_firmware_version();
+		pr_info("z350 get z350_get_firmware_version:0x%x\n", result);
+	} else {
+		result = 0;
+		pr_info("could not get device id for used\n");
+	}
+
+	seq_printf(f, "%d", result);
+
+	return 0;
+}
+
+static int mmi_wt6670f_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmi_wt6670f_seq_show, inode->i_private);
+}
+
+static ssize_t mmi_wt6670f_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *offset)
+{
+	char buffer[MAX_USER_STR];
+	const size_t maxlen = sizeof(buffer) - 1;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (copy_from_user(buffer, buf, count > maxlen ? maxlen : count))
+		return -EFAULT;
+
+	return count;
+}
+
+static const struct file_operations mmi_wt6670f_operations = {
+	.open		= mmi_wt6670f_open,
+	.read		= seq_read,
+	.write		= mmi_wt6670f_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 
 static int __wt6670f_write_word(struct wt6670f *wt, u8 reg, u16 data)
 {
@@ -787,6 +840,8 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 	if (gpio_direction_input(wt6670f_int_pin))
 		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
 probe_out:
+	/* Create the procfs file at /proc/driver/wt6670f_firmware_num */
+	procfs_file = proc_create("driver/wt6670f_firmware_num",0777, NULL, &mmi_wt6670f_operations);
 	return 0;
 }
 
