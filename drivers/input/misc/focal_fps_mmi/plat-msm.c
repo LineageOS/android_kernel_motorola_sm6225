@@ -50,40 +50,40 @@ int ff_ctl_init_pins(int *irq_num)
     struct device_node *dev_node = NULL;
     struct platform_device *pdev = NULL;
 
-    printk("'%s' enter.", __func__);
+    FF_LOGV("'%s' enter.", __func__);
 
     /* Find device tree node. */
     dev_node = of_find_compatible_node(NULL, NULL, FF_COMPATIBLE_NODE);
     if (!dev_node) {
-        printk("of_find_compatible_node(.., '%s') failed.", FF_COMPATIBLE_NODE);
+        FF_LOGE("of_find_compatible_node(.., '%s') failed.", FF_COMPATIBLE_NODE);
         return (-ENODEV);
     }
-    printk("dev_node :%s",dev_node->name);
+    FF_LOGI("dev_node :%s",dev_node->name);
 
     irq_num1 = irq_of_parse_and_map(dev_node, 0);
     *irq_num = irq_num1;
-    printk("irq number is %d.", irq_num1);
+    FF_LOGI("irq number is %d.", irq_num1);
 
     /* Convert to platform device. */
     pdev = of_find_device_by_node(dev_node);
     if (!pdev) {
-        printk("of_find_device_by_node(..) failed.");
+        FF_LOGE("of_find_device_by_node(..) failed.");
         return (-ENODEV);
     }
 
     /* Retrieve the pinctrl handler. */
     g_context->pinctrl = devm_pinctrl_get(&pdev->dev);
     if (!g_context->pinctrl) {
-        printk("devm_pinctrl_get(..) failed.");
+        FF_LOGE("devm_pinctrl_get(..) failed.");
         return (-ENODEV);
     }
 
-    printk("register pins.");
+    FF_LOGI("register pins.");
     /* Register all pins. */
     for (i = 0; i < FF_PINCTRL_STATE_MAXIMUM; ++i) {
         g_context->pin_states[i] = pinctrl_lookup_state(g_context->pinctrl, g_pinctrl_state_names[i]);
         if (!g_context->pin_states[i]) {
-            printk("can't find pinctrl state for '%s'.", g_pinctrl_state_names[i]);
+            FF_LOGE("can't find pinctrl state for '%s'.", g_pinctrl_state_names[i]);
             err = (-ENODEV);
             break;
         }
@@ -93,7 +93,7 @@ int ff_ctl_init_pins(int *irq_num)
     }
 
     /* Initialize the INT pin. */
-    printk("init int pin.");
+    FF_LOGI("init int pin.");
     err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_INT_ACT]);
 
     /* Initialize the RST pin. */
@@ -101,21 +101,21 @@ int ff_ctl_init_pins(int *irq_num)
 
     ff_ctl_enable_power(true);
 
-    printk("'%s' leave.", __func__);
+    FF_LOGV("'%s' leave.", __func__);
     return err;
 }
 
 int ff_ctl_free_pins(void)
 {
     int err = 0;
-    printk("'%s' enter.", __func__);
+    FF_LOGV("'%s' enter.", __func__);
 
     // TODO:
 	if (g_context->pinctrl) {
         pinctrl_put(g_context->pinctrl);
         g_context->pinctrl = NULL;
     }
-    printk("'%s' leave.", __func__);
+    FF_LOGV("'%s' leave.", __func__);
     return err;
 }
 
@@ -138,8 +138,8 @@ int ff_ctl_enable_spiclk(bool on)
 int ff_ctl_enable_power(bool on)
 {
     int err = 0;
-    printk("'%s' enter.", __func__);
-    printk("power: '%s'.", on ? "on" : "off");
+    FF_LOGV("'%s' enter.", __func__);
+    FF_LOGI("power: '%s'.", on ? "on" : "off");
 
     if (unlikely(!g_context->pinctrl)) {
         return (-ENOSYS);
@@ -151,31 +151,28 @@ int ff_ctl_enable_power(bool on)
         err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_PWR_CLR]);
     }
 
-    printk("'%s' leave.", __func__);
+    FF_LOGV("'%s' leave.", __func__);
     return err;
 }
 
-int ff_ctl_reset_device(void)
+int ff_ctl_reset_device(uint32_t level)
 {
     int err = 0;
-    printk("'%s' enter.", __func__);
+    FF_LOGV("'%s' enter.", __func__);
 
     if (unlikely(!g_context->pinctrl)) {
         return (-ENOSYS);
     }
 
-	err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_ACT]);
-	mdelay(1);
-    /* 3-1: Pull down RST pin. */
-	err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_CLR]);
+    if (level) {
+        /* Pull up RST pin. */
+        err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_ACT]);
+    } else {
+        /* Pull down RST pin. */
+        err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_CLR]);
+    }
 
-    /* 3-2: Delay for 10ms. */
-    mdelay(10);
-
-    /* Pull up RST pin. */
-    err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_ACT]);
-
-    printk("'%s' leave.", __func__);
+    FF_LOGV("'%s' leave.", __func__);
     return err;
 }
 
