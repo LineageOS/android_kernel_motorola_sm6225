@@ -1226,7 +1226,7 @@ static int rt_fg_set_property(struct power_supply *psy,
 		/* write aging fc_vth */
 		rt9426a_write_page_cmd(chip, RT9426A_PAGE_5);
 		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_SWINDOW3,
-				(chip->pdata->fc_vth[chip->ocv_index]) | (chip->pdata->extreg_table[5].data[5] << 8));
+				(chip->pdata->fc_vth[chip->ocv_index]) | (chip->pdata->extreg_table[4].data[5] << 8));
 		mutex_unlock(&chip->update_lock);
 		/* update ocv checksum */
 		chip->ocv_checksum_dtsi = *((u32 *)chip->pdata->ocv_table +
@@ -2828,13 +2828,10 @@ static void fg_update_work_func(struct work_struct *work)
 {
 	struct rt9426a_chip *chip = container_of(work, struct rt9426a_chip, update_work.work);
 
-	pm_wakeup_hard_event(chip->dev);
-	pm_stay_awake(chip->dev);
 	dev_info(chip->dev, "%s++\n", __func__);
 	rt9426a_update_info(chip);
 	queue_delayed_work(system_power_efficient_wq, &chip->update_work, 20 * HZ);
 	dev_info(chip->dev, "%s--\n", __func__);
-	pm_relax(chip->dev);
 }
 
 static int rt9426a_i2c_probe(struct i2c_client *i2c)
@@ -2982,7 +2979,7 @@ static int rt9426a_i2c_suspend(struct device *dev)
 {
 	struct rt9426a_chip *chip = dev_get_drvdata(dev);
 
-	dev_dbg(chip->dev, "%s\n", __func__);
+	dev_info(chip->dev, "%s\n", __func__);
 	if (device_may_wakeup(dev))
 		enable_irq_wake(chip->alert_irq);
 	disable_irq(chip->alert_irq);
@@ -2996,7 +2993,7 @@ static int rt9426a_i2c_resume(struct device *dev)
 {
 	struct rt9426a_chip *chip = dev_get_drvdata(dev);
 
-	dev_dbg(chip->dev, "%s\n", __func__);
+	dev_info(chip->dev, "%s\n", __func__);
 	enable_irq(chip->alert_irq);
 	if (device_may_wakeup(dev))
 		disable_irq_wake(chip->alert_irq);
