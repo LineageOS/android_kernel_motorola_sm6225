@@ -89,7 +89,7 @@ typedef struct {
 #define FF_IOC_FREE_DRIVER      _IO(FF_IOC_MAGIC, 0x01)
 
 /* HW reset the fingerprint module. */
-#define FF_IOC_RESET_DEVICE     _IO(FF_IOC_MAGIC, 0x02)
+#define FF_IOC_RESET_DEVICE     _IOW(FF_IOC_MAGIC, 0x02, uint32_t)
 
 /* Low-level IRQ control. */
 #define FF_IOC_ENABLE_IRQ       _IO(FF_IOC_MAGIC, 0x03)

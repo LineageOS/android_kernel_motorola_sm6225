@@ -51,7 +51,7 @@
 /*
  * Define the driver version string.
  */
-#define FF_DRV_VERSION "v2.1.2"
+#define FF_DRV_VERSION "v2.1.3"
 
 /*
  * Define the driver name.
@@ -75,6 +75,7 @@ typedef struct {
 #endif
     bool b_driver_inited;
     bool b_config_dirtied;
+    bool irq_wake_enabled;
 } ff_ctl_context_t;
 static ff_ctl_context_t *g_context = NULL;
 
@@ -182,7 +183,7 @@ extern int ff_ctl_free_pins(void);
 extern int ff_ctl_enable_spiclk(bool on);
 #endif
 extern int ff_ctl_enable_power(bool on);
-extern int ff_ctl_reset_device(void);
+extern int ff_ctl_reset_device(uint32_t level);
 extern const char *ff_ctl_arch_str(void);
 
 
@@ -389,9 +390,11 @@ static int ff_ctl_free_driver(void)
 
     /* Release IRQ resource. */
     if (g_context->irq_num > 0) {
-        err = disable_irq_wake(g_context->irq_num);
-        if (err) {
-            FF_LOGE("disable_irq_wake(%d) = %d.", g_context->irq_num, err);
+        if (g_context->irq_wake_enabled) {
+            err = disable_irq_wake(g_context->irq_num);
+            if (err) {
+                FF_LOGE("disable_irq_wake(%d) = %d.", g_context->irq_num, err);
+            }
         }
         free_irq(g_context->irq_num, (void*)g_context);
         g_context->irq_num = -1;
@@ -412,6 +415,8 @@ static int ff_ctl_init_driver(void)
     if (unlikely(!g_context)) {
         return (-ENOSYS);
     }
+
+    g_context->irq_wake_enabled = false;
 
     do {
         /* Initialize the PWR/SPI/RST/INT pins resource. */
@@ -437,6 +442,7 @@ static int ff_ctl_init_driver(void)
         if (err) {
             FF_LOGE("enable_irq_wake(%d) = %d.", g_context->irq_num, err);
         }
+        g_context->irq_wake_enabled = true;
 
         /* Register spidev device. For REE-Emulation solution only. */
         if (g_config && g_config->enable_spidev) {
@@ -498,6 +504,7 @@ static int ff_ctl_fasync(int fd, struct file *filp, int mode)
 static long ff_ctl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     int err = 0;
+    uint32_t level = 0;
     struct miscdevice *dev = (struct miscdevice *)filp->private_data;
     ff_ctl_context_t *ctx = container_of(dev, ff_ctl_context_t, miscdev);
     FF_LOGV("'%s' enter.", __func__);
@@ -539,7 +546,9 @@ static long ff_ctl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         }
         break;
     case FF_IOC_RESET_DEVICE:
-        err = ff_ctl_reset_device();
+        level = (uint32_t) arg;
+        FF_LOGD("level = %d", level);
+        err = ff_ctl_reset_device(level);
         break;
     case FF_IOC_ENABLE_IRQ:
         err = ff_ctl_enable_irq(1);
