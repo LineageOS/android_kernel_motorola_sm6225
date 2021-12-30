@@ -488,7 +488,7 @@ int do_egisfp_power_onoff(struct egisfp_dev_t *egis_dev, struct egisfp_ioctl_cmd
 		if (ret)
 			goto do_egisfp_power_onoff_failed;
 
-		msleep(Tpwr_on_delay);
+		mdelay(Tpwr_on_delay);
 		egis_dev->power_enable = 1;
 	}
 	else
@@ -501,7 +501,7 @@ int do_egisfp_power_onoff(struct egisfp_dev_t *egis_dev, struct egisfp_ioctl_cmd
 		if (ret)
 			goto do_egisfp_power_onoff_failed;
 
-		msleep(Tpwr_off_delay);
+		mdelay(Tpwr_off_delay);
 		egis_dev->power_enable = 0;
 	}
 	if (egis_dev->pwr_by_gpio)
