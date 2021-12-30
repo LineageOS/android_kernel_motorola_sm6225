@@ -1127,6 +1127,13 @@ static int goodix_parse_dt(struct device_node *node,
 	if (board_data->edge_ctrl)
 		ts_info("support goodix edge mode");
 
+	if (of_property_read_bool(node, "goodix,gesture-wait-pm")) {
+		ts_info("gesture-wait-pm set");
+		board_data->gesture_wait_pm = true;
+	} else {
+		board_data->gesture_wait_pm = false;
+	}
+
 	return 0;
 }
 #endif
@@ -2063,6 +2070,36 @@ static int goodix_ts_pm_resume(struct device *dev)
 
 	return goodix_ts_resume(core_data);
 }
+#elif defined (CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI)
+static int goodix_ts_pm_suspend(struct device *dev)
+{
+	struct goodix_ts_core *core_data =
+		dev_get_drvdata(dev);
+
+	ts_debug("CALL BACK TP PM SUSPEND");
+
+	atomic_set(&core_data->pm_resume, 0);
+
+	return 0;
+}
+/**
+ * goodix_ts_pm_resume - PM resume function
+ * Called by kernel during system wakeup
+ */
+static int goodix_ts_pm_resume(struct device *dev)
+{
+	struct goodix_ts_core *core_data =
+		dev_get_drvdata(dev);
+
+	ts_debug("CALL BACK TP PM RESUME");
+
+	atomic_set(&core_data->pm_resume, 1);
+
+	if (core_data->board_data.gesture_wait_pm)
+		wake_up_interruptible(&core_data->pm_wq);
+
+	return 0;
+}
 #endif
 #endif
 
@@ -2424,6 +2461,10 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto err_register_gesture_wakelock;
 	}
 
+	if (core_data->board_data.gesture_wait_pm)
+		init_waitqueue_head(&core_data->pm_wq);
+	atomic_set(&core_data->pm_resume, 1);
+
 	/* debug node init */
 	goodix_tools_init();
 
@@ -2487,6 +2528,9 @@ static int goodix_ts_remove(struct platform_device *pdev)
 static const struct dev_pm_ops dev_pm_ops = {
 #if !defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND) \
 		&& !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	.suspend = goodix_ts_pm_suspend,
+	.resume = goodix_ts_pm_resume,
+#elif defined (CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI)
 	.suspend = goodix_ts_pm_suspend,
 	.resume = goodix_ts_pm_resume,
 #endif
