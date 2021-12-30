@@ -23,7 +23,7 @@
 
 #define TS_DRIVER_NAME				"goodix_ts"
 #define I2C_MAX_TRANSFER_SIZE		256
-#define GOODIX_BUS_RETRY_TIMES		2
+#define GOODIX_BUS_RETRY_TIMES		20
 #define GOODIX_REG_ADDR_SIZE		4
 
 static struct platform_device *goodix_pdev;
