@@ -540,7 +540,7 @@
 		mmi,pd-curr-max = <3000000>;
 		mmi,batt-curr-boost = <300000>;
 		mmi,batt-ovp-lmt = <4550000>;
-		mmi,pl-chrg-vbatt-min = <3600000>;
+		mmi,pl-chrg-vbatt-min = <3400000>;
 		mmi,typec-middle-current = <2000000>;
 		mmi,pd-allow-min-current = <1000000>;
 		mmi,step-first-current-comp = <0>;
