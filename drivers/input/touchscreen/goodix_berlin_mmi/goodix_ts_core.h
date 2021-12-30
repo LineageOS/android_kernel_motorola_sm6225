@@ -294,6 +294,7 @@ struct goodix_ts_board_data {
 	bool interpolation_ctrl;
 	bool report_rate_ctrl;
 	bool edge_ctrl;
+	bool gesture_wait_pm;
 };
 
 enum goodix_fw_update_mode {
@@ -536,6 +537,8 @@ struct goodix_ts_core {
 #ifdef CONFIG_GTP_FOD
 	unsigned char gesture_type;
 #endif
+	atomic_t pm_resume;
+	wait_queue_head_t pm_wq;
 };
 
 /* external module structures */
