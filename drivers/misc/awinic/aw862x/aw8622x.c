@@ -37,7 +37,7 @@
 #include "aw8622x.h"
 #include "haptic_nv.h"
 
-#define AW8622X_Driver		"V1.5.1.0"
+#define AW8622X_Driver		"V1.5.1.1"
 
 /******************************************************
  *
@@ -3721,13 +3721,46 @@ static void aw8622x_vibrator_work_routine(struct work_struct *work)
 				aw8622x->rtp_file_num = moto_mode - AW8622X_SEQ_NO_RTP_REPEAT;
 				aw8622x->activate_mode = AW8622X_HAPTIC_LOOP_RTP_MODE;
 			}
-		} else if ( aw8622x->duration < 100 || moto_mode > 2) {
-			aw8622x->index = 1; /*1  short */
+		} else if ((aw8622x->duration < aw8622x->dts_info.duration_time[2]) || moto_mode > 2) {
+			/* mode -> index:3 -> 1 : simulate Home key or other hardware key down*/
+			/* mode -> index:4 -> 2 : simulate Home key or other hardware key up */
+			/* mode -> index:5 -> 3 : AOSP VIRTUAL_KEY */
+			/* mode -> index:6 -> 4 : AOSP CLOCK_TICK/GESTURE_END/GESTURE_START */
+			if (moto_mode > 2) { /* moto custom */
+				if (moto_mode == 3) {
+					aw8622x->index = 1;
+				} else if (moto_mode == 4) {
+					aw8622x->index = 3;
+				} else if (moto_mode == 5) {
+					aw8622x->index = 1;
+				} else if (moto_mode == 6) {
+					aw8622x->index = 2;
+				} else {
+					aw8622x->index = 1;
+				}
+			} else { /* duration ctl */
+				if ((aw8622x->duration > 0) && (aw8622x->duration <
+							aw8622x->dts_info.duration_time[0])) {
+					aw8622x->index = 3;	/* 1 level shrot shake */
+				} else if ((aw8622x->duration >= aw8622x->dts_info.duration_time[0]) &&
+					(aw8622x->duration < aw8622x->dts_info.duration_time[1])) {
+					aw8622x->index = 2;	/*2 level shrot shake*/
+				} else if ((aw8622x->duration >= aw8622x->dts_info.duration_time[1]) &&
+					(aw8622x->duration < aw8622x->dts_info.duration_time[2])) {
+					aw8622x->index = 1;	/*3 level shrot shake*/
+				}
+			}
+			if (aw8622x->index > AW8622x_MAX_RAM_MODE_NUM) {
+				aw_dev_err("%s index %d out of range use default 1\n", __func__, aw8622x->index);
+				aw8622x->index = 1;
+			}
+
 			aw8622x->activate_mode = AW8622X_HAPTIC_RAM_MODE;
 		} else {
 			aw8622x->index = 4; /* long  */
 			aw8622x->activate_mode = AW8622X_HAPTIC_RAM_LOOP_MODE;
 		}
+		aw_dev_info("%s index = %d \n", __func__, aw8622x->index);
 		/* moto mode select end */
 
 		aw_dev_info("%s activate_mode = %d \n", __func__, aw8622x->activate_mode);
@@ -3794,6 +3827,7 @@ int aw8622x_vibrator_init(struct aw8622x *aw8622x)
 
 	aw_dev_info("%s enter\n", __func__);
 
+	aw_dev_info("%s Custom Driver version %s\n", __func__, AW8622X_Driver);
 #ifdef TIMED_OUTPUT
 	aw_dev_info("%s: TIMED_OUT FRAMEWORK!\n", __func__);
 	aw8622x->vib_dev.name = "awinic_vibrator";
