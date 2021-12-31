@@ -404,8 +404,9 @@ ts_send_cmd:
 	msleep(20);
 	ts_info("Success to set %s\n", mode == 0x00 ? "Default" :
 				(mode == 0x01 ? "REPORT_RATE_720HZ" :
-				(mode == 0x02 ? "REPORT_RATE_576HZ" :
-				"REPORT_RATE_480HZ")));
+				(mode == 0x02 ? "REPORT_RATE_480HZ" :
+				(mode == 0x03 ? "REPORT_RATE_576HZ" :
+				"Unsupported"))));
 
 	return ret;
 }
@@ -855,8 +856,9 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 			ts_info("Success to %s interpolation mode\n",
 					core_data->get_mode.report_rate_mode == 0x00 ? "Default" :
 					(core_data->get_mode.report_rate_mode == 0x01 ? "REPORT_RATE_720HZ" :
-					(core_data->get_mode.report_rate_mode == 0x02 ? "REPORT_RATE_576HZ" :
-					"REPORT_RATE_480HZ")));
+					(core_data->get_mode.report_rate_mode == 0x02 ? "REPORT_RATE_480HZ" :
+					(core_data->get_mode.report_rate_mode == 0x03 ? "REPORT_RATE_576HZ" :
+					"Unsupported"))));
 		}
 	}
 

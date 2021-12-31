@@ -47,10 +47,10 @@ static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_devic
 
 #define STYLUS_MODE_SWITCH_CMD     0xA4
 
-#define INTERPOLATION_SWITCH_CMD   0xC2
+#define INTERPOLATION_SWITCH_CMD   0xC1
 #define REPORT_RATE_DEFAULT        0x00
 #define REPORT_RATE_720HZ          0x01
-#define REPORT_RATE_576HZ          0x02
-#define REPORT_RATE_480HZ          0x03
+#define REPORT_RATE_480HZ          0x02
+#define REPORT_RATE_576HZ          0x03
 
 #endif
