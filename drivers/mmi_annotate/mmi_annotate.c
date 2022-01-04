@@ -262,9 +262,15 @@ static int mmi_annotate_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 	/*Register annotate to minidump */
 	strlcpy(md_entry.name, "ANNOTATE", sizeof(md_entry.name));
-	md_entry.virt_addr = (uintptr_t)phys_to_virt(pdata->mem_address);
-	md_entry.phys_addr = pdata->mem_address;
-	md_entry.size = pdata->mem_size;
+	if (!persist_unsupported) {
+		md_entry.virt_addr = (uintptr_t)phys_to_virt(pdata->mem_address);
+		md_entry.phys_addr = pdata->mem_address;
+		md_entry.size = pdata->mem_size;
+	} else {
+		md_entry.virt_addr = (uintptr_t)mem_data.contents;
+		md_entry.phys_addr = virt_to_phys((void*)mem_data.contents);
+		md_entry.size = mem_data.size;
+	}
 	if (msm_minidump_add_region(&md_entry) < 0)
 		pr_err("Failed to add annotate in Minidump\n");
 #endif
