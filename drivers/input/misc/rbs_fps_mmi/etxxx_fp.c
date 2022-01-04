@@ -487,8 +487,11 @@ int do_egisfp_power_onoff(struct egisfp_dev_t *egis_dev, struct egisfp_ioctl_cmd
 
 		if (ret)
 			goto do_egisfp_power_onoff_failed;
-
+#ifdef ET721_FOD
 		mdelay(Tpwr_on_delay);
+#else
+		msleep(Tpwr_on_delay);
+#endif
 		egis_dev->power_enable = 1;
 	}
 	else
@@ -500,8 +503,11 @@ int do_egisfp_power_onoff(struct egisfp_dev_t *egis_dev, struct egisfp_ioctl_cmd
 
 		if (ret)
 			goto do_egisfp_power_onoff_failed;
-
+#ifdef ET721_FOD
 		mdelay(Tpwr_off_delay);
+#else
+		msleep(Tpwr_off_delay);
+#endif
 		egis_dev->power_enable = 0;
 	}
 	if (egis_dev->pwr_by_gpio)
@@ -523,12 +529,16 @@ int do_egisfp_reset_set(struct egisfp_dev_t *egis_dev, int reset_high_low)
 	if (reset_high_low)
 	{
 		ret = pinctrl_select_state(egis_dev->pinctrl, egis_dev->reset_high);
+#ifndef ET721_FOD
 		mdelay(Rst_on_delay);
+#endif
 	}
 	else
 	{
 		ret = pinctrl_select_state(egis_dev->pinctrl, egis_dev->reset_low);
+#ifndef ET721_FOD
 		mdelay(Rst_off_delay);
+#endif
 	}
 
 	if (ret)
