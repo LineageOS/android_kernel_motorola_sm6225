@@ -83,6 +83,7 @@
 		mmi,status = "/chosen","mmi,panel_name","contains","ft3519";
 		mmi,class-entry-name = "ft3519";
 		mmi,reset-on-resume = <0x01>;
+		mmi,enable-gestures;
 
 	};
 };
