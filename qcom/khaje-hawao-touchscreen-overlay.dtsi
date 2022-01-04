@@ -84,6 +84,7 @@
 		mmi,class-entry-name = "ft3519";
 		mmi,reset-on-resume = <0x01>;
 		mmi,enable-gestures;
+		mmi,usb-charger-detection;
 
 	};
 };
