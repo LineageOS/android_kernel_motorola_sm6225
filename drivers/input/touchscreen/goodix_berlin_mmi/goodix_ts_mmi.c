@@ -124,55 +124,60 @@ static int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
 
 static int goodix_ts_film_mode(struct goodix_ts_core *core_data, int mode)
 {
-	int ret;
+	int ret = 0;
 
+	mutex_lock(&core_data->mode_lock);
 	core_data->get_mode.film_mode = mode;
 	if (core_data->set_mode.film_mode == mode) {
 		ts_debug("The value = %d is same,so not write.\n", mode);
-		return 0;
+		goto exit;
 	}
 
 	if (core_data->power_on == 0) {
 		ts_debug("The touch is in sleep state, restore the value when resume\n");
-		return 0;
+		goto exit;
 	}
 
 	ret = goodix_ts_send_cmd(core_data, FILM_MODE_SWITCH_CMD, 5, mode, 0x00);
 	if (ret < 0) {
 		ts_err("failed to send leather mode cmd");
-		return -EINVAL;
+		goto exit;
 	}
 
 	core_data->set_mode.film_mode = mode;
 	msleep(20);
 	ts_info("Success to %s film mode", mode ? "Enable" : "Disable");
+exit:
+	mutex_unlock(&core_data->mode_lock);
 	return ret;
 }
 
 static int goodix_ts_leather_mode(struct goodix_ts_core *core_data, int mode)
 {
-	int ret;
+	int ret = 0;
 
+	mutex_lock(&core_data->mode_lock);
 	core_data->get_mode.leather_mode = mode;
 	if (core_data->set_mode.leather_mode == mode) {
 		ts_debug("The value = %d is same,so not write.\n", mode);
-		return 0;
+		goto exit;
 	}
 
 	if (core_data->power_on == 0) {
 		ts_debug("The touch is in sleep state, restore the value when resume\n");
-		return 0;
+		goto exit;
 	}
 
 	ret = goodix_ts_send_cmd(core_data, LEATHER_MODE_SWITCH_CMD, 5, mode, 0x00);
 	if (ret < 0) {
 		ts_err("failed to send leather mode cmd");
-		return -EINVAL;
+		goto exit;
 	}
-
 	core_data->set_mode.leather_mode = mode;
 	msleep(20);
 	ts_info("Success to %s leather mode", mode ? "Enable" : "Disable");
+exit:
+	mutex_unlock(&core_data->mode_lock);
 	return ret;
 }
 /*
@@ -327,26 +332,29 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	mutex_lock(&core_data->mode_lock);
 	core_data->get_mode.stylus_mode = mode;
 	if (core_data->set_mode.stylus_mode == mode) {
 		ts_debug("The value = %lu is same,so not write.\n", mode);
-		return size;
+		ret = size;
+		goto exit;
 	}
 
 	if (core_data->power_on == 0) {
 		ts_debug("The touch is in sleep state, restore the value when resume\n");
-		return size;
+		ret = size;
+		goto exit;
 	}
 
 	ret = goodix_stylus_mode(core_data, mode);
 	if (ret) {
-		return ret;
+		goto exit;
 	}
-
 	core_data->set_mode.stylus_mode = mode;
 	ts_info("Success to %s stylus mode", mode ? "Enable" : "Disable");
-
-	return size;
+exit:
+	mutex_unlock(&core_data->mode_lock);
+	return ret;
 }
 
 static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
@@ -430,13 +438,17 @@ static ssize_t goodix_ts_interpolation_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	mutex_lock(&core_data->mode_lock);
 	core_data->get_mode.interpolation = mode;
 	ret = goodix_ts_mmi_set_report_rate(core_data);
 	if (ret < 0)
-		return ret;
+		goto exit;
 
+	ret = size;
 	core_data->set_mode.interpolation = mode;
-	return size;
+exit:
+	mutex_unlock(&core_data->mode_lock);
+	return ret;
 }
 
 static ssize_t goodix_ts_interpolation_show(struct device *dev,
@@ -459,11 +471,12 @@ static int goodix_ts_mmi_refresh_rate(struct device *dev, int freq)
 
 	GET_GOODIX_DATA(dev);
 
+	mutex_lock(&core_data->mode_lock);
 	core_data->refresh_rate = freq;
 
 	if (core_data->board_data.interpolation_ctrl)
 		goodix_ts_mmi_set_report_rate(core_data);
-
+	mutex_unlock(&core_data->mode_lock);
 	return 0;
 }
 
@@ -512,28 +525,34 @@ static ssize_t goodix_ts_edge_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	mutex_lock(&core_data->mode_lock);
 	memcpy(core_data->get_mode.edge_mode, edge_cmd, sizeof(edge_cmd));
 	if (!memcmp(core_data->set_mode.edge_mode, edge_cmd, sizeof(edge_cmd))) {
 		ts_debug("The value (%02x %02x) is same,so not write.\n",
 					edge_cmd[0], edge_cmd[1]);
-		return size;
+		ret = size;
+		goto exit;
 	}
 
 	if (core_data->power_on == 0) {
 		ts_debug("The touch is in sleep state, restore the value when resume\n");
-		return size;
+		ret = size;
+		goto exit;
 	}
 
 	ret = goodix_ts_send_cmd(core_data, EDGE_SWITCH_CMD, 6, edge_cmd[0], edge_cmd[1]);
 	if (ret < 0) {
 		ts_err("failed to send edge switch cmd");
-		return -EINVAL;
+		goto exit;
 	}
 
 	memcpy(core_data->set_mode.edge_mode, edge_cmd, sizeof(edge_cmd));
 	msleep(20);
+	ret = size;
 	ts_info("Success to set edge = %02x, rotation = %02x", edge_cmd[1], edge_cmd[0]);
-	return size;
+exit:
+	mutex_unlock(&core_data->mode_lock);
+	return ret;
 }
 
 static ssize_t goodix_ts_edge_show(struct device *dev,
@@ -835,6 +854,7 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
 
+	mutex_lock(&core_data->mode_lock);
 	/* All IC status are cleared after reset */
 	memset(&core_data->set_mode, 0 , sizeof(core_data->set_mode));
 	/* restore data */
@@ -892,6 +912,7 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 				core_data->get_mode.edge_mode[1], core_data->get_mode.edge_mode[0]);
 		}
 	}
+	mutex_unlock(&core_data->mode_lock);
 #ifdef CONFIG_GTP_FOD
 	if(core_data->ts_event.gesture_data[0]) {
 		ts_info("FOD is down during PM active");
@@ -914,11 +935,13 @@ static int goodix_ts_mmi_pre_suspend(struct device *dev) {
 	atomic_set(&core_data->suspended, 1);
 
 	if (core_data->board_data.stylus_mode_ctrl && core_data->set_mode.stylus_mode) {
+		mutex_lock(&core_data->mode_lock);
 		ret = goodix_stylus_mode(core_data, 0x00);
 		if (!ret) {
 			ts_info("Success to exit stylus mode");
 			core_data->set_mode.stylus_mode = 0x00;
 		}
+		mutex_unlock(&core_data->mode_lock);
 	}
 
 	return 0;
@@ -973,9 +996,11 @@ int goodix_ts_mmi_dev_register(struct platform_device *pdev) {
 		ts_err("Failed to get driver data");
 		return -ENODEV;
 	}
+	mutex_init(&core_data->mode_lock);
 	ret = ts_mmi_dev_register(core_data->bus->dev, &goodix_ts_mmi_methods);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register ts mmi\n");
+		mutex_destroy(&core_data->mode_lock);
 		return ret;
 	}
 
@@ -994,5 +1019,6 @@ void goodix_ts_mmi_dev_unregister(struct platform_device *pdev) {
 	core_data = platform_get_drvdata(pdev);
 	if (!core_data)
 		ts_err("Failed to get driver data");
+	mutex_destroy(&core_data->mode_lock);
 	ts_mmi_dev_unregister(&pdev->dev);
 }
