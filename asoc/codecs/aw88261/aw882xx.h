@@ -2,6 +2,11 @@
 #define _AW882XX_H_
 #include <linux/version.h>
 #include <linux/kernel.h>
+
+#ifndef AW_SPIN_ENABLE
+#define AW_SPIN_ENABLE	1
+#endif
+
 #include "aw_device.h"
 
 /*
@@ -201,7 +206,7 @@ struct aw882xx {
 	int rate;
 	int pstream;
 	int cstream;
-	int aw882xx_ramp_status;    /* ramp status */
+	int aw882xx_ramp_status;	/* ramp status */
 #ifdef CONFIG_AW882XX_ALGO_BIN_PARAMS
 	int aw882xx_algo_cali;
 	int aw882xx_algo_bypass;

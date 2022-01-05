@@ -1494,6 +1494,18 @@ int aw_dev_set_algo_params_path(struct aw_device *aw_dev)
 	return aw_dsp_set_algo_params_path(aw_dev);
 }
 
+#ifdef AW_SPIN_ENABLE
+int aw_dev_set_spin_param(struct aw_device *aw_dev, uint32_t enable, uint32_t relase_time)
+{
+	return aw_dsp_set_spin_param(aw_dev, enable, relase_time);
+}
+
+int aw_dev_get_spin_param(struct aw_device *aw_dev, uint32_t *enable, uint32_t *relase_time)
+{
+	return aw_dsp_get_spin_param(aw_dev, enable, relase_time);
+}
+#endif
+
 static void aw_device_parse_sound_channel_dt(struct aw_device *aw_dev)
 {
 	int ret;

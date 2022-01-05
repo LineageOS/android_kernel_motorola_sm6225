@@ -48,6 +48,7 @@ static DEFINE_MUTEX(g_aw_dsp_lock);
 #define AW_MSG_ID_REAL_DATA_L		(0X10013D21)
 #define AW_MSG_ID_REAL_DATA_R		(0X10013D22)
 #define AW_MSG_ID_SET_BIN_PARAMS	(0X10013D30)
+#define AW_MSG_ID_SPIN_ENABLE		(0x10013D2F)
 
 #define AFE_MSG_ID_MSG_0	(0X10013D2A)
 #define AFE_MSG_ID_MSG_1	(0X10013D2B)
@@ -554,6 +555,57 @@ int aw_dsp_read_st(struct aw_device *aw_dev, int32_t *r0, int32_t *te)
 	aw_dev_dbg(aw_dev->dev, "read Re %d , Te %d", *r0, *te);
 	return 0;
 }
+
+#ifdef AW_SPIN_ENABLE
+int aw_dsp_get_spin_param(struct aw_device *aw_dev,
+				uint32_t *enable, uint32_t *relase_time)
+{
+	int ret;
+	struct aw_spin_param spin_param;
+
+	ret = aw_read_data_from_dsp(AW_MSG_ID_SPIN_ENABLE,
+				&spin_param,
+				sizeof(spin_param));
+	if (ret) {
+		spin_param.enable = 0;
+		spin_param.relase_time = 0;
+		aw_pr_err("yao,read spin params failed ");
+		return ret;
+	}
+
+	*enable = spin_param.enable;
+	*relase_time = spin_param.relase_time;
+
+	aw_pr_info("yao,get spin params done");
+	return 0;
+}
+
+int aw_dsp_set_spin_param(struct aw_device *aw_dev,
+				uint32_t enable, uint32_t relase_time)
+{
+	int ret;
+	struct aw_spin_param spin_param;
+
+	if (!enable) {
+		aw_pr_dbg("yao,need to set the rotation parameters");
+		return 0;
+	}
+
+	spin_param.enable = enable;
+	spin_param.relase_time = relase_time;
+
+	ret = aw_write_data_to_dsp(AW_MSG_ID_SPIN_ENABLE,
+				&spin_param,
+				sizeof(spin_param));
+	if (ret){
+		pr_err("yao,222,set spin params failed\n");
+		return -EINVAL;
+	}
+
+	pr_err("yao,222,set spin params with ret 0");
+	return 0;
+}
+#endif
 
 int aw_dsp_read_spin(int *spin_mode)
 {
