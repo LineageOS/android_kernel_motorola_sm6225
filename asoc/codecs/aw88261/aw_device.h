@@ -289,6 +289,10 @@ int aw_dev_set_algo_params_path(struct aw_device *aw_dev);
 int aw_device_probe(struct aw_device *aw_dev);
 int aw_device_remove(struct aw_device *aw_dev);
 int aw_dev_get_list_head(struct list_head **head);
+#ifdef AW_SPIN_ENABLE
+int aw_dev_set_spin_param(struct aw_device *aw_dev, uint32_t enable, uint32_t relase_time);
+int aw_dev_get_spin_param(struct aw_device *aw_dev, uint32_t* enable, uint32_t* relase_time);
+#endif
 
 #endif
 
