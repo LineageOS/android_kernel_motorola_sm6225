@@ -42,12 +42,6 @@
 #define AW9610X_I2C_NAME "aw9610x_sar"
 #define AW9610X_DRIVER_VERSION "v0.1.9"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
-#define USB_POWER_SUPPLY_NAME   "charger"
-#else
-#define USB_POWER_SUPPLY_NAME   "usb"
-#endif
-
 #define AW_READ_CHIPID_RETRIES		(5)
 #define AW_I2C_RETRIES			(5)
 #define AW9610X_SCAN_DEFAULT_TIME	(10000)
@@ -1580,10 +1574,10 @@ static int ps_notify_callback(struct notifier_block *self,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
 	if (event == PSY_EVENT_PROP_CHANGED
 #else
-	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED))
+	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
 #endif
 			&& psy && psy->desc->get_property && psy->desc->name &&
-			!strncmp(psy->desc->name, USB_POWER_SUPPLY_NAME, sizeof(USB_POWER_SUPPLY_NAME))){
+			!strncmp(psy->desc->name, "usb", sizeof("usb"))){
 		LOG_INFO("ps notification: event = %lu\n", event);
 		retval = ps_get_state(psy, &present);
 		if (retval) {
@@ -2135,7 +2129,7 @@ aw9610x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 		power_supply_unreg_notifier(&aw9610x->ps_notif);
 	}
 
-	psy = power_supply_get_by_name(USB_POWER_SUPPLY_NAME);
+	psy = power_supply_get_by_name("usb");
 	if (psy) {
 		ret = ps_get_state(psy, &aw9610x->ps_is_present);
 		if (ret) {

@@ -8,7 +8,7 @@ KERNEL_PLATFORM_PATH = $(shell find $(ANDROID_BUILD_TOP) -maxdepth 1 -name "kern
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
-ifneq ($(filter m y,$(CONFIG_SX933X_POWER_SUPPLY_ONLINE)),)
+ifneq ($(filter m y,$(CONFIG_AW9610X_POWER_SUPPLY_ONLINE)),)
 	EXTRA_CFLAGS += -DCONFIG_USE_POWER_SUPPLY_ONLINE
 endif
 
