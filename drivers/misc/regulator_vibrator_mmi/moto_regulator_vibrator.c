@@ -46,6 +46,11 @@ struct vib_ldo_chip {
 	/*for long/short vibrator*/
 	bool                    dis_short_long;
 	int                     dis_long_ms;
+
+	u32			long_voltage_supply;
+	u32			short_voltage_supply;
+	u32			long_play_threshold;
+	bool 			pwr_by_regulator;
 };
 
 static void ext_vib_work(struct work_struct *work)
@@ -155,6 +160,7 @@ static ssize_t ext_vib_store_duration(struct device *dev,
 						cdev);
 	u32 val;
 	int ret;
+	static bool long_vib_flag = true;
 
 	ret = kstrtouint(buf, 0, &val);
 	if (ret < 0)
@@ -169,6 +175,25 @@ static ssize_t ext_vib_store_duration(struct device *dev,
 
 	if (val > EXT_VIB_MAX_PLAY_MS)
 		val = EXT_VIB_MAX_PLAY_MS;
+
+	if (chip->pwr_by_regulator) {
+	    if((val >= chip->long_play_threshold) && long_vib_flag){
+		 chip->regulator_voltage_max = chip->long_voltage_supply;
+		 chip->regulator_voltage_min = chip->long_voltage_supply;
+		 ret = regulator_set_voltage(chip->vcc, chip->regulator_voltage_min, chip->regulator_voltage_max);
+		 if (ret)
+		     pr_info("set vcc regulator voltage failed\n");
+		 long_vib_flag = false;
+	    }
+	    if((val < chip->long_play_threshold) && (!long_vib_flag)){
+		chip->regulator_voltage_max = chip->short_voltage_supply;
+		chip->regulator_voltage_min = chip->short_voltage_supply;
+		ret = regulator_set_voltage(chip->vcc, chip->regulator_voltage_min, chip->regulator_voltage_max);
+		if (ret)
+			pr_info("set vcc regulator voltage failed\n");
+		long_vib_flag = true;
+	    }
+	}
 
 	mutex_lock(&chip->lock);
 	chip->vib_play_ms = val;
@@ -325,6 +350,8 @@ static int ext_vib_parse_dt(struct device *dev, struct vib_ldo_chip *chip)
 	int ret;
 	u32 voltage_supply[2];
 	u32 current_supply;
+	u32 long_play_threshold;
+	u32 voltage_supply_regulator;
 
 	chip->pwr_by_gpio = of_property_read_bool(dev->of_node, "vib-gpio-vcc-enable");
 	if (chip->pwr_by_gpio)
@@ -382,15 +409,48 @@ static int ext_vib_parse_dt(struct device *dev, struct vib_ldo_chip *chip)
 	}
 	else
 	{
-		ret = of_property_read_u32_array(dev->of_node, "vib,vcc-voltage", voltage_supply, 2);
-		if (ret < 0)
-		{
-			pr_info("%s: fail to get vcc regulator voltage \n", __func__);
-			return -ENODEV;
+		chip->pwr_by_regulator = of_property_read_bool(dev->of_node,
+                                          "vib,pwr-by-regulator-enable");
+		if (chip->pwr_by_regulator)	 {
+
+		    ret = of_property_read_u32_array(dev->of_node, "vib,long-vcc-voltage", &voltage_supply_regulator, 1);
+		    if (ret < 0)
+		    {
+			    pr_info(" fail to get long vcc regulator voltage \n");
+			    return -ENODEV;
+		    }
+		    chip->long_voltage_supply = voltage_supply_regulator;
+		    ret = of_property_read_u32_array(dev->of_node, "vib,short-vcc-voltage", &voltage_supply_regulator, 1);
+		    if (ret < 0)
+		    {
+			    pr_info(" fail to get short vcc regulator voltage \n");
+			    return -ENODEV;
+		    }
+		    chip->short_voltage_supply = voltage_supply_regulator;
+		    chip->regulator_voltage_max = chip->short_voltage_supply;
+		    chip->regulator_voltage_min = chip->short_voltage_supply;
+
+		    ret = of_property_read_u32_array(dev->of_node, "vib,long-play-threshold", &long_play_threshold, 1);
+		    if (ret < 0)
+		    {
+			    pr_info(" fail to get long_play_threshold \n");
+			    return -ENODEV;
+		    }
+		    chip->long_play_threshold = long_play_threshold;
+		    pr_info(" vcc regulator voltage get long vib = %d, short vib = %d long_play_threshold = %d\n",
+			    chip->long_voltage_supply, chip->short_voltage_supply, chip->long_play_threshold);
+		} else {
+		    ret = of_property_read_u32_array(dev->of_node, "vib,vcc-voltage", voltage_supply, 2);
+		    if (ret < 0)
+		    {
+			     pr_info("%s: fail to get vcc regulator voltage \n", __func__);
+			    return -ENODEV;
+		    }
+
+		    pr_info("vib: vcc regulator voltage get Max = %d, Min = %d \n",voltage_supply[1], voltage_supply[0]);
+		    chip->regulator_voltage_max = voltage_supply[1];
+		    chip->regulator_voltage_min = voltage_supply[0];
 		}
-		pr_info("vib: vcc regulator voltage get Max = %d, Min = %d \n",voltage_supply[1], voltage_supply[0]);
-		chip->regulator_voltage_max = voltage_supply[1];
-		chip->regulator_voltage_min = voltage_supply[0];
 
 		ret = of_property_read_u32_array(dev->of_node, "vib,vcc-current", &current_supply, 1);
 		if (ret < 0) {
