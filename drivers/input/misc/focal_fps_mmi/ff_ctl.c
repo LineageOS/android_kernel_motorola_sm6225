@@ -13,7 +13,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
  * Public License for more details.
 **/
-
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/signal.h>
@@ -30,7 +30,14 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/of_gpio.h>
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+#include <drm/drm_panel.h>
+#else
 #include <linux/fb.h>
+#endif
 #include <linux/notifier.h>
 #if 0
 #ifdef CONFIG_PM_WAKELOCKS
@@ -76,6 +83,9 @@ typedef struct {
     bool b_driver_inited;
     bool b_config_dirtied;
     bool irq_wake_enabled;
+#if defined(CONFIG_DRM_PANEL) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+	struct drm_panel *active_panel;
+#endif
 } ff_ctl_context_t;
 static ff_ctl_context_t *g_context = NULL;
 
@@ -281,9 +291,74 @@ static const char *ff_ctl_get_version(void)
     FF_LOGV("'%s' leave.", __func__);
     return (const char *)version;
 }
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+static int drm_check_dt(ff_ctl_context_t *g_context_t)
+{
+	int i = 0;
+	int count = 0;
+	struct device_node *np = of_find_compatible_node(NULL, NULL, "focaltech,fingerprint");
+	struct device_node *node = NULL;
+	struct drm_panel *panel = NULL;
+	if (!np) {
+		FF_LOGV("didn't find focal node");
+		return -ENODEV;
+	}
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	if (count <= 0) {
+		FF_LOGE("find drm_panel fail count = %d ", count);
+		return -ENODEV;
+	}
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			FF_LOGE(" ind drm_panel successfully ");
+			g_context_t->active_panel = panel;
+			return 0;
+		}
+	}
+	FF_LOGD("can not find drm_panel ");
+	return -ENODEV;
+}
+#endif
 static char screen_state[1];
 static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long action, void *data)
 {
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+	struct drm_panel_notifier *evdata = data;
+	//ff_ctl_context_t *g_context_t = NULL;
+	char *uevent_env[2];
+	unsigned int blank;
+	FF_LOGD("got notify value = %d \n", (int)action);
+	if (action != DRM_PANEL_EARLY_EVENT_BLANK)
+	{
+		return NOTIFY_OK;
+	}
+	//g_context_t = container_of(nb, ff_ctl_context_t, fb_notifier);
+	if (!evdata || !evdata->data || !g_context) {
+		FF_LOGE(" some parameters is null \n");
+		return NOTIFY_OK;
+	}
+	blank = *(int *)(evdata->data);
+	switch (blank) {
+	case DRM_PANEL_BLANK_UNBLANK:
+		uevent_env[0] = "FF_SCREEN_ON";
+		screen_state[0] = 0;
+		break;
+	case DRM_PANEL_BLANK_POWERDOWN:
+                uevent_env[0] = "FF_SCREEN_OFF";
+                screen_state[0] = 1;
+		break;
+	default:
+	        uevent_env[0] = "FF_SCREEN_??";
+		break;
+	}
+	uevent_env[1] = NULL;
+	kill_fasync(&g_context->async_queue, SIGIO, POLL_IN);
+	FF_LOGD("chenlj2 leave.%s",uevent_env[0]);
+#else
     struct fb_event *event;
     int blank;
     char *uevent_env[2];
@@ -316,6 +391,7 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
        kill_fasync(&g_context->async_queue, SIGIO, POLL_IN);
 
 	FF_LOGV("'%s' leave.", __func__);
+#endif
 	return NOTIFY_OK;
 }
 
@@ -363,7 +439,15 @@ static int ff_ctl_free_driver(void)
     FF_LOGV("'%s' enter.", __func__);
 
     /* Unregister framebuffer event notifier. */
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+		if (g_context->active_panel)
+		{
+			drm_panel_notifier_unregister(g_context->active_panel, &g_context->fb_notifier);
+			g_context->active_panel = NULL;
+		}
+#else
     err = fb_unregister_client(&g_context->fb_notifier);
+#endif
 
 #ifdef FF_SPI_SET
     /* Disable SPI clock. */
@@ -476,9 +560,22 @@ static int ff_ctl_init_driver(void)
     err = ff_ctl_enable_spiclk(1);
 #endif
 
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+    g_context->active_panel = NULL;
+    drm_check_dt(g_context);
+#endif
     /* Register screen on/off callback. */
     g_context->fb_notifier.notifier_call = ff_ctl_fb_notifier_callback;
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+    if (g_context->active_panel) {
+        FF_LOGV("register drm_panel_notifier \n");
+        err = drm_panel_notifier_register(g_context->active_panel, &g_context->fb_notifier);
+        if (err)
+            FF_LOGV("drm_panel_notifier_register fail: %d ", err);
+    }
+#else
     err = fb_register_client(&g_context->fb_notifier);
+#endif
 
 
     g_context->b_driver_inited = true;
