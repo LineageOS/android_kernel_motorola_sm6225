@@ -526,6 +526,7 @@ struct goodix_ts_core {
 	struct clk *stylus_clk;
 	struct goodix_mode_info set_mode;
 	struct goodix_mode_info get_mode;
+	struct mutex mode_lock;
 
 	/* touchscreen_mmi */
 	struct ts_mmi_class_methods *imports;
