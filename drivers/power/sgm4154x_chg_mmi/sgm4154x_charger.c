@@ -1673,6 +1673,8 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	g_qc3p_detected = false;
 	qc3p_update_policy(sgm);
 #endif
+
+	cancel_delayed_work_sync(&sgm->charge_monitor_work);
 	sgm->pulse_cnt = 0;
 	sgm->typec_apsd_rerun_done = false;
 	sgm->chg_dev->noti.apsd_done = false;
@@ -1733,6 +1735,8 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 	}
 
 #endif
+
+	schedule_delayed_work(&sgm->charge_monitor_work, 0);
 
 	//notify charging policy to update charger type
 	sgm->chg_dev->noti.apsd_done = true;
@@ -2273,16 +2277,12 @@ static int sgm4154x_suspend_notifier(struct notifier_block *nb,
     case PM_SUSPEND_PREPARE:
         pr_err("sgm4154x PM_SUSPEND \n");
 
-        cancel_delayed_work_sync(&sgm->charge_monitor_work);
-
         sgm->sgm4154x_suspend_flag = 1;
 
         return NOTIFY_OK;
 
     case PM_POST_SUSPEND:
         pr_err("sgm4154x PM_RESUME \n");
-
-        schedule_delayed_work(&sgm->charge_monitor_work, msecs_to_jiffies(500));
 
         sgm->sgm4154x_suspend_flag = 0;
 
