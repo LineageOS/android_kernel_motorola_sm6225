@@ -295,6 +295,7 @@
 		rgltr-max-voltage = <2805000>;
 		rgltr-load-current = <2800000>;
 		status = "ok";
+		multi-user-support;
 	};
 
 	eeprom_main: qcom,eeprom@0 {
@@ -429,18 +430,18 @@
 		led-flash-src = <&led_flash_rear_rhode>;
 		eeprom-src = <&eeprom_main>;
 		actuator-src = <&actuator_rear>;
-		//cam_vaf-supply = <&cam_ldo3>;
+		cam_vaf-supply = <&cam_ldo3>;
 		cam_vio-supply = <&cam_ldo4>;
 		cam_vana-supply = <&cam_ldo7>;
 		cam_vdig-supply = <&cam_ldo1>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names ="cam_vio", "cam_vana", "cam_vdig",
-			"cam_clk";
+			"cam_clk","cam_vaf";
 		rgltr-cntrl-support;
 		pwm-switch;
-		rgltr-min-voltage = <1800000 2800000 1056000 0>;
-		rgltr-max-voltage = <1805000 2805000 1101000 0>;
-		rgltr-load-current = <1800000 2800000 1056000 0>;
+		rgltr-min-voltage = <1800000 2800000 1056000 0 2800000>;
+		rgltr-max-voltage = <1805000 2805000 1101000 0 2800000>;
+		rgltr-load-current = <1800000 2800000 1056000 0 100000>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
