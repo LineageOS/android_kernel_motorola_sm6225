@@ -302,14 +302,24 @@ static int goodix_stylus_mode(struct goodix_ts_core *core_data, int mode) {
 
 	if (mode) {
 		goodix_clock_enable(core_data, mode);
+		msleep(50);
 		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
+		if (ret < 0) {
+			ts_err("Failed to Disable stylus mode\n");
+			return ret;
+		}
 		msleep(20);
 	} else {
 		ret = goodix_ts_send_cmd(core_data, STYLUS_MODE_SWITCH_CMD, 5, mode, 0x00);
-		msleep(20);
+		if (ret < 0) {
+			ts_err("Failed to Disable stylus mode\n");
+			return ret;
+		}
+		msleep(50);
 		goodix_clock_enable(core_data, mode);
 	}
 
+	ts_info("Success to %s stylus mode", mode ? "Enable" : "Disable");
 	return ret;
 }
 
@@ -347,11 +357,8 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 	}
 
 	ret = goodix_stylus_mode(core_data, mode);
-	if (ret) {
-		goto exit;
-	}
-	core_data->set_mode.stylus_mode = mode;
-	ts_info("Success to %s stylus mode", mode ? "Enable" : "Disable");
+	if (!ret)
+		core_data->set_mode.stylus_mode = mode;
 exit:
 	mutex_unlock(&core_data->mode_lock);
 	return ret;
@@ -774,11 +781,11 @@ static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 
 	hw_ops = core_data->hw_ops;
 
-	goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
+	ret = goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
 	if (ret < 0) {
 		ts_err("Failed to set charger mode\n");
 	}
-	msleep(16);
+	msleep(20);
 	ts_err("Success to %s charger mode\n", mode ? "Enable" : "Disable");
 
 	return 0;
@@ -854,6 +861,9 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
 
+	/* open esd */
+	goodix_ts_blocking_notify(NOTIFY_RESUME, NULL);
+
 	mutex_lock(&core_data->mode_lock);
 	/* All IC status are cleared after reset */
 	memset(&core_data->set_mode, 0 , sizeof(core_data->set_mode));
@@ -908,6 +918,7 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 		if (!ret) {
 			memcpy(core_data->set_mode.edge_mode, core_data->get_mode.edge_mode,
 					sizeof(core_data->get_mode.edge_mode));
+			msleep(20);
 			ts_info("Success to set edge area = %02x, rotation = %02x",
 				core_data->get_mode.edge_mode[1], core_data->get_mode.edge_mode[0]);
 		}
@@ -943,6 +954,12 @@ static int goodix_ts_mmi_pre_suspend(struct device *dev) {
 		}
 		mutex_unlock(&core_data->mode_lock);
 	}
+
+	/*
+	 * notify suspend event, inform the esd protector
+	 * and charger detector to turn off the work
+	 */
+	goodix_ts_blocking_notify(NOTIFY_SUSPEND, NULL);
 
 	return 0;
 }
