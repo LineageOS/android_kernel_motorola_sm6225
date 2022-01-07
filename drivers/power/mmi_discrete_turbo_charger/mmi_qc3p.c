@@ -42,17 +42,6 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-bool mmi_qc3p_start_detection(struct mmi_charger_manager *chg)
-{
-	int ret, iio_val;
-
-	ret = mmi_charger_read_iio_chan(chg, SMB5_QC3P_START_DETECT, &iio_val);
-	if (ret < 0) {
-		mmi_chrg_err(chg, "Couldn't operate qc3p detection rc=%d\n", ret);
-		return false;
-	}
-	return true;
-}
 
 bool mmi_qc3p_power_active(struct mmi_charger_manager *chg)
 {
@@ -63,9 +52,13 @@ bool mmi_qc3p_power_active(struct mmi_charger_manager *chg)
 		mmi_chrg_err(chg, "Couldn't read charger type rc=%d\n", ret);
 		return false;
 	}
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	if (iio_val != QTI_POWER_SUPPLY_QC3P_27W && iio_val != QTI_POWER_SUPPLY_QC3P_45W)
 		return false;
-
+#else
+	if (iio_val != POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+		return false;
+#endif
 	ret = mmi_charger_read_iio_chan(chg, SMB5_QC3P_POWER, &iio_val);
 	if (ret < 0) {
 		mmi_chrg_err(chg, "Couldn't read qc3p power rc=%d\n", ret);
@@ -81,6 +74,7 @@ bool mmi_qc3p_power_active(struct mmi_charger_manager *chg)
 		return false;
 }
 
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
 {
 	int rc = -EINVAL;
@@ -133,3 +127,70 @@ int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
 	mmi_chrg_info(chg, "result_vbus= %d\n",curr_vbus_mv);
 	return curr_vbus_mv;
 }
+
+#else
+
+enum {
+	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
+	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
+	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
+};
+
+#define QC3P_PULSE_COUNT_MAX 	((11000 - 5000) / 20 + 10)
+int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
+{
+	int rc = -EINVAL;
+	union power_supply_propval val = {0, };
+	int pulse_cnt, curr_vbus_mv, step, i;
+
+	rc = mmi_charger_read_iio_chan(chg, SMB5_DP_DM, &val.intval);
+	if (rc < 0) {
+		mmi_chrg_err(chg, "Couldn't read dpdm pulse count rc=%d\n", rc);
+		return -EINVAL;
+	} else {
+		mmi_chrg_info(chg, "DP DM pulse count = %d\n", val.intval);
+		pulse_cnt = val.intval;
+	}
+
+	rc = mmi_get_vbus(chg->chrg_list[CP_MASTER],
+							&curr_vbus_mv);
+	if (rc) {
+		mmi_chrg_err(chg, "Unable to read USB voltage: %d\n", rc);
+		return -EINVAL;
+	}
+
+	if(target_mv < curr_vbus_mv) {
+		step = (curr_vbus_mv - target_mv) / 20;
+		val.intval = MMI_POWER_SUPPLY_DP_DM_DM_PULSE;
+		if (pulse_cnt <= step)
+			step = pulse_cnt;
+	} else {
+		step = (target_mv - curr_vbus_mv) / 20;
+		val.intval = MMI_POWER_SUPPLY_DP_DM_DP_PULSE;
+		if (step + pulse_cnt > QC3P_PULSE_COUNT_MAX)
+			step = QC3P_PULSE_COUNT_MAX - pulse_cnt;
+	}
+
+	mmi_chrg_info(chg, "curr_vbus= %d, target_vbus = %d, step = %d\n",curr_vbus_mv, target_mv, step);
+	for (i = 0; i < step; i++) {
+		rc = mmi_charger_write_iio_chan(chg, SMB5_DP_DM, val.intval);
+		if (rc < 0) {
+			mmi_chrg_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
+			break;
+		}
+
+		if (i < step - 1)
+			udelay(5000);
+	}
+
+	rc = mmi_get_vbus(chg->chrg_list[CP_MASTER],
+							&curr_vbus_mv);
+	if (rc) {
+		mmi_chrg_err(chg, "Unable to read VBUS: %d\n", rc);
+		return -EINVAL;
+	}
+	mmi_chrg_info(chg, "result_vbus= %d\n",curr_vbus_mv);
+	return curr_vbus_mv;
+}
+#endif
+

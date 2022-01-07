@@ -3,6 +3,10 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_discrete_turbo_charger
 
+ifneq ($(filter m y,$(CONFIG_MMI_QC3P_WT6670_DETECTED)),)
+        EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_WT6670_DETECTED
+endif
+
 obj-m += mmi_discrete_turbo_charger.o
 mmi_discrete_turbo_charger-objs += mmi_charger_class.o
 mmi_discrete_turbo_charger-objs += mmi_charger_core.o
