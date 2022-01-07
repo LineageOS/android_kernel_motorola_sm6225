@@ -147,7 +147,7 @@ struct bq2589x {
 	struct	device *dev;
 	struct	i2c_client *client;
 	struct	regulator *dpdm_reg;
-	struct	mutex dpdm_lock;
+	struct	mutex regulator_lock;
 	struct	bq2589x_state state;
 	struct	mutex lock;
 
@@ -1478,6 +1478,7 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 {
 	int ret = 0;
 
+	mutex_lock(&bq->regulator_lock);
 	/* fetch the DPDM regulator */
 	if (!bq->dpdm_reg && of_get_property(bq->dev->of_node, "dpdm-supply", NULL)) {
 		bq->dpdm_reg = devm_regulator_get(bq->dev, "dpdm");
@@ -1485,11 +1486,12 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 			ret = PTR_ERR(bq->dpdm_reg);
 			dev_err(bq->dev, "Couldn't get dpdm regulator ret=%d\n", ret);
 			bq->dpdm_reg = NULL;
+			mutex_unlock(&bq->regulator_lock);
 			return ret;
 		}
 	}
 
-	mutex_lock(&bq->dpdm_lock);
+
 	if (enable) {
 		if (bq->dpdm_reg && !bq->dpdm_enabled) {
 		dev_err(bq->dev, "enabling DPDM regulator\n");
@@ -1509,7 +1511,7 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 				bq->dpdm_enabled = false;
 		}
 	}
-	mutex_unlock(&bq->dpdm_lock);
+	mutex_unlock(&bq->regulator_lock);
 
 	return ret;
 }
@@ -2651,6 +2653,8 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 
 	g_bq = bq;
 
+	mutex_init(&bq->lock);
+	mutex_init(&bq->regulator_lock);
 	sema_init(&bq->sem_dpdm, 1);
 
 	if (client->dev.of_node)
