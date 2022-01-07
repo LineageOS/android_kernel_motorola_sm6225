@@ -49,7 +49,6 @@ enum mmi_charger_ext_iio_channels {
 	CP_INPUT_VOLTAGE_NOW,
 	CP_STATUS1,
 	CP_CLEAR_ERROR,
-	SMB5_QC3P_START_DETECT,
 	/*mmi-smb5charger-iio*/
 	MMI_CP_ENABLE_STATUS,
 	MMI_USB_TERMINATION_ENABLED,
@@ -64,10 +63,15 @@ static const char * const mmi_charger_ext_iio_chan_name[] = {
 	[SMB5_USB_PD_ACTIVE] = "pd_active",
 	[MMI_USB_TERMINATION_ENABLED] = "termination_enabled",
 	/*qc3p*/
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	[SMB5_USB_REAL_TYPE] = "wt6670_usb_real_type",
 	[SMB5_DP_DM] = "wt6670_battery_dp_dm",
 	[SMB5_QC3P_POWER] = "wt6670_usb_qc3p_power",
-	[SMB5_QC3P_START_DETECT] = "wt6670_start_detection",
+#else
+	[SMB5_USB_REAL_TYPE] = "usb_real_type",
+	[SMB5_DP_DM] = "battery_dp_dm",
+	[SMB5_QC3P_POWER] = "usb_qc3p_power",
+#endif
 	/*cp*/
 	[CP_ENABLE] = "bq2597x_cp_enabled",
 	[CP_INPUT_CURRENT_NOW] = "bq2597x_input_current_now",

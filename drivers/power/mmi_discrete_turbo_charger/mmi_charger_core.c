@@ -751,7 +751,9 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	struct mmi_charger_manager *chip =
 					container_of(nb, struct mmi_charger_manager, psy_nb);
 
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	return NOTIFY_OK;
+#endif
 
 	if (!chip->usb_psy) {
 		mmi_chrg_err(chip, "usb psy is NULL, direct return\n");

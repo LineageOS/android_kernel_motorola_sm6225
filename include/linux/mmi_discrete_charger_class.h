@@ -47,6 +47,7 @@ struct charger_ops {
 	int (*get_pulse_cnt)(struct charger_device *dev, int *count);
 
 	int (*get_real_charger_type)(struct charger_device *dev, int *charger_type);
+	int (*get_qc3p_power)(struct charger_device *dev, int *qc3p_power);
 
 	/* enable/disable charger */
 	int (*enable_charging)(struct charger_device *dev, bool en);
@@ -136,6 +137,8 @@ extern int charger_dev_get_pulse_cnt(struct charger_device *chg_dev, int *count)
 extern int charger_dev_set_dp_dm(struct charger_device *chg_dev, int val);
 
 extern int charger_dev_get_real_charger_type(struct charger_device *chg_dev, int *charger_type);
+
+extern int charger_dev_get_qc3p_power(struct charger_device *chg_dev, int *qc3p_power);
 
 extern int register_charger_device_notifier(
 	struct charger_device *charger_dev,
