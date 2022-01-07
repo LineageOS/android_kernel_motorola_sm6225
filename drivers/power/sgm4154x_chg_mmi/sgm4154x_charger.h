@@ -233,6 +233,13 @@ enum {
 	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
 };
 
+enum mmi_qc3p_power {
+	MMI_POWER_SUPPLY_QC3P_NONE,
+	MMI_POWER_SUPPLY_QC3P_18W,
+	MMI_POWER_SUPPLY_QC3P_27W,
+	MMI_POWER_SUPPLY_QC3P_45W,
+};
+
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -347,13 +354,17 @@ struct sgm4154x_device {
 	u32			input_current_cache;
 	int			pulse_cnt;
 
+	/*mmi qc3p*/
+	bool			mmi_qc3p_rerun_done;
+	int			mmi_qc3p_power;
+
 	struct sgm4154x_iio		iio;
-#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;
 #endif
 };
 
-#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 enum WT_charger_type{
 	WT_CHG_TYPE_BEGIN = 0,
 	WT_CHG_TYPE_FC,

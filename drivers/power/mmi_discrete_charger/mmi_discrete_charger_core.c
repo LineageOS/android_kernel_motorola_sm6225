@@ -1980,15 +1980,53 @@ int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *v
 {
 	int rc = 0;
 
-	mmi_dbg(chip, "mmi_discrete_get_charging_enabled val:%d\n",*val);
-
 	rc = charger_dev_is_enabled_charging(chip->master_chg_dev, val);
 	if (rc)
 		mmi_err(chip, "Couldn't get charging status rc=%d\n", rc);
 
+	mmi_dbg(chip, "mmi_discrete_get_charging_enabled val:%d\n",*val);
+
 	return rc;
 }
 
+int mmi_discrete_get_qc3p_power(struct mmi_discrete_charger *chip, int *val)
+{
+	int rc = 0;
+
+	rc = charger_dev_get_qc3p_power(chip->master_chg_dev, val);
+	if (rc)
+		mmi_err(chip, "Couldn't get qc3p power rc=%d\n", rc);
+
+	mmi_dbg(chip, "mmi_discrete_get_qc3p_power val:%d\n",*val);
+
+	return rc;
+}
+
+int mmi_discrete_get_pulse_cnt(struct mmi_discrete_charger *chip, int *count)
+{
+	int rc = 0;
+
+	rc = charger_dev_get_pulse_cnt(chip->master_chg_dev, count);
+	if (rc)
+		mmi_err(chip, "Couldn't get pulse cnt rc=%d\n", rc);
+
+	mmi_dbg(chip, "mmi_discrete_get_pulse_cnt count:%d\n",*count);
+
+	return rc;
+}
+
+int mmi_discrete_set_dp_dm(struct mmi_discrete_charger *chip, int val)
+{
+	int rc = 0;
+
+	rc = charger_dev_set_dp_dm(chip->master_chg_dev, val);
+	if (rc)
+		mmi_err(chip, "Couldn't set dp dm rc=%d\n", rc);
+
+	mmi_dbg(chip, "mmi_discrete_set_dp_dm val:%d\n",val);
+
+	return rc;
+}
 
 int mmi_discrete_config_input_current_settled(struct mmi_discrete_charger *chip, int val)
 {

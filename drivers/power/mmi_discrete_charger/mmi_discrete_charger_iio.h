@@ -35,6 +35,10 @@ struct mmi_discrete_iio_channels {
 		.info_mask = _mask,			\
 	},
 
+#define MMI_DISCRETE_CHAN_COUNT(_name, _num)			\
+	MMI_DISCRETE_IIO_CHAN(_name, _num,IIO_COUNT,		\
+		BIT(IIO_CHAN_INFO_PROCESSED))
+
 #define MMI_DISCRETE_CHAN_INDEX(_name, _num)			\
 	MMI_DISCRETE_IIO_CHAN(_name, _num, IIO_INDEX,		\
 		BIT(IIO_CHAN_INFO_PROCESSED))
@@ -48,6 +52,8 @@ static const struct mmi_discrete_iio_channels mmi_discrete_iio_psy_channels[] = 
 	MMI_DISCRETE_CHAN_INDEX("charging_enabled", PSY_IIO_USB_CHARGING_ENABLED)
 	MMI_DISCRETE_CHAN_INDEX("input_current_settled", PSY_IIO_INPUT_CURRENT_SETTLED)
 	MMI_DISCRETE_CHAN_INDEX("termination_enabled", PSY_IIO_USB_TERMINATION_ENABLED)
+	MMI_DISCRETE_CHAN_COUNT("battery_dp_dm", PSY_IIO_DP_DM)
+	MMI_DISCRETE_CHAN_INDEX("usb_qc3p_power", PSY_IIO_MMI_QC3P_POWER)
 };
 
 int mmi_discrete_init_iio_psy(struct mmi_discrete_charger *chip,

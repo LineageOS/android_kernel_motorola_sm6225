@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/power_supply.h>
 #include "mmi_discrete_charger_iio.h"
 
 static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
@@ -37,6 +38,12 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 		break;
 	case PSY_IIO_USB_TERMINATION_ENABLED:
 		rc = mmi_discrete_config_termination_enabled(chip, val1);
+		break;
+	case PSY_IIO_DP_DM:
+		if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+			rc = mmi_discrete_set_dp_dm(chip, val1);
+		}
 		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
@@ -70,6 +77,12 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_USB_CHARGING_ENABLED:
 		rc = mmi_discrete_get_charging_enabled(chip, &val_bool);
 		*val1 = val_bool?1:0;
+		break;
+	case PSY_IIO_MMI_QC3P_POWER:
+		rc = mmi_discrete_get_qc3p_power(chip, val1);
+		break;
+	case PSY_IIO_DP_DM:
+		rc = mmi_discrete_get_pulse_cnt(chip, val1);
 		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
