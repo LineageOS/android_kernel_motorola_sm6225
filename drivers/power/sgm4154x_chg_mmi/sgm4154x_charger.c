@@ -1448,6 +1448,7 @@ static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charge
 	return ret;
 }
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charger_type)
 {
 	int ret = 0;
@@ -1556,6 +1557,7 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 
 	return ret;
 }
+#endif
 #endif
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
