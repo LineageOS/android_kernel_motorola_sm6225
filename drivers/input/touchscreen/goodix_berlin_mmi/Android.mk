@@ -21,6 +21,10 @@ ifeq ($(GTP_ENABLE_PM_QOS),true)
 	KBUILD_OPTIONS += CONFIG_GTP_ENABLE_PM_QOS=y
 endif
 
+ifeq ($(GOODIX_ESD_ENABLE),true)
+	KBUILD_OPTIONS += CONFIG_GOODIX_ESD_ENABLE=y
+endif
+
 ifeq ($(findstring factory, $(TARGET_PRODUCT)), factory)
 	KBUILD_OPTIONS += CONFIG_TARGET_BUILD_FACROTY=y
 endif
