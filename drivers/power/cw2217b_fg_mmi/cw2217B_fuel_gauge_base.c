@@ -133,6 +133,8 @@ struct cw_battery {
 	int  fcc_design;
 	int  fcc;
 	int  ui_full;
+	int  ntc_exist;
+	bool factory_mode;
 	int  sense_r_mohm;
 #if 0
 	long stb_current;
@@ -355,6 +357,34 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	return 0;
 }
 
+bool is_factory_mode(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
+
+	if (!np)
+		return factory_mode;
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "mot-factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
+	of_node_put(np);
+
+	return factory_mode;
+}
+
 /*
  * The TEMP register is an UNSIGNED 8bit read only register.
  * It reports the real-time battery temperature
@@ -372,6 +402,10 @@ static int cw_get_temp(struct cw_battery *cw_bat)
 		return ret;
 
 	temp = (int)reg_val * 10 / 2 - 400;
+
+	if(cw_bat->factory_mode && !cw_bat->ntc_exist && (-400 == temp))
+		temp = 250;
+
 	cw_bat->temp = temp;
 
 	return 0;
@@ -818,6 +852,14 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 		cw_info("dts get ui_full fail. use default ui_full=%d \n", CW_UI_FULL);
 		rc = 0;
 	}
+
+	rc = of_property_read_u32(np, "factory_mode_ntc_exist", &cw_bat->ntc_exist);
+	if (rc < 0) {
+		cw_bat->ntc_exist = true;
+		cw_info("dts get ntc_exist fail. use default ntc_exist=%d \n", cw_bat->ntc_exist);
+		rc = 0;
+	}
+
 	return rc;
 }
 
@@ -1001,6 +1043,9 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	INIT_WORK(&cw_bat->hw_init_work, cw_hw_init_work);
 	schedule_work(&cw_bat->hw_init_work);
+
+	if(is_factory_mode())
+		cw_bat->factory_mode = true;
 
 	cw_printk("cw2217 driver probe success!\n");
 
