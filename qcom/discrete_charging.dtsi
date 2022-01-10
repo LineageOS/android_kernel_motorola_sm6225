@@ -77,6 +77,7 @@
 		status = "okay";
 
 		sense_r_mohm = <5>;
+		factory_mode_ntc_exist = <0>;
 		df-serialnum = "SB18D38323";
 		#include "bat_setting/CW_ng50-ATL-5000mah-rhode.dtsi"
 		#include "bat_setting/CW_ng50-SWD-5000mah-rhode.dtsi"
@@ -97,6 +98,7 @@
 		sm,aging_ctrl = <0x0125>;
 		sm,cycle_cfg = <0x7000>;
 		sm,rsns = <0>;
+		factory_mode_ntc_exist = <0>;
 		sm,fg_irq_set = <0x07FF>;
 		sm,low_soc1 = <1>;
 		sm,low_soc2 = <15>;
