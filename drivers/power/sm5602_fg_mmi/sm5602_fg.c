@@ -538,14 +538,14 @@ static int fg_read_temperature(struct sm_fg_chip *sm, enum sm_fg_temperature_typ
 		} else {
 			temp = _calculate_battery_temp_ex(sm, data);
 		}
-		 pr_info("fg_read_temperature_ex temp_ex=%d\n", temp);
+		temp = temp * 10;
+		pr_info("fg_read_temperature_ex temp_ex=%d\n", temp);
 		break;
 
 	default:
 		return -EINVAL;
 	}
 
-	temp = temp * 10;
 	return temp;
 }
 
