@@ -46,6 +46,7 @@
 #define   RET_ERR -1
 #define queue_delayed_work_time  8000//8000
 #define queue_start_work_time    50
+#define SM_CUR_UNIT              1000
 
 enum sm_fg_reg_idx {
 	SM_FG_REG_DEVICE_ID = 0,
@@ -615,6 +616,8 @@ static int fg_read_current(struct sm_fg_chip *sm)
 		if (data & 0x8000)
 			curr *= -1;
 	}
+
+	curr *= SM_CUR_UNIT * (-1);
 	pr_err("curr = %d,data=%d\n",curr,data);
 
 	return curr;
