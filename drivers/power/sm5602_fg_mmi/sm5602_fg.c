@@ -175,6 +175,8 @@ struct sm_fg_chip {
 	bool iocv_man_mode;
 	int aging_ctrl;
 	int batt_rsns;	/* Sensing resistor value */
+	int ntc_exist;
+	bool factory_mode;
 	int cycle_cfg;
 	int fg_irq_set;
 	int low_soc1;
@@ -445,6 +447,35 @@ static unsigned int fg_read_ocv(struct sm_fg_chip *sm)
 	return ocv; //mV
 }
 
+bool is_factory_mode(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
+
+	if (!np)
+		return factory_mode;
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "mot-factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
+	of_node_put(np);
+
+	return factory_mode;
+}
+
+
 static int _calculate_battery_temp_ex(struct sm_fg_chip *sm, u16 uval)
 {
 	int i = 0, temp = 0;
@@ -474,6 +505,8 @@ static int _calculate_battery_temp_ex(struct sm_fg_chip *sm, u16 uval)
 
 	pr_info("uval = 0x%x, val = 0x%x, temp = %d\n",uval, val, temp);
 
+	if(sm->factory_mode && !sm->ntc_exist && (-20 == temp))
+		temp = 25;
 	return temp;
 }
 
@@ -2263,6 +2296,11 @@ static int fg_common_parse_dt(struct sm_fg_chip *sm)
 	if (rc < 0)
 		sm->batt_rsns = -EINVAL;
 
+	rc = of_property_read_u32(np, "factory_mode_ntc_exist",
+                        &sm->ntc_exist);
+	if (rc < 0)
+		sm->ntc_exist = true;
+
 	/* IRQ Mask */
 	rc = of_property_read_u32(np, "sm,fg_irq_set",
                         &sm->fg_irq_set);
@@ -2752,6 +2790,9 @@ static int sm_fg_probe(struct i2c_client *client,
 	create_debugfs_entry(sm);
 
 	fg_dump_debug(sm);
+
+	if(is_factory_mode())
+		sm->factory_mode = true;
 
 	//schedule_delayed_work(&sm->monitor_work, 10 * HZ);
 	pr_info("sm fuel gauge probe successfully, %s\n",device2str[sm->chip]);
