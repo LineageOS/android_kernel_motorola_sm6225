@@ -96,10 +96,15 @@ int ff_ctl_init_pins(int *irq_num)
     FF_LOGI("init int pin.");
     err = pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_INT_ACT]);
 
+    ff_ctl_enable_power(true);
+    /* Initialize the RST pin. */
+    pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_CLR]);
+
+    /* Delay for 10ms. */
+    mdelay(10);
+
     /* Initialize the RST pin. */
     pinctrl_select_state(g_context->pinctrl, g_context->pin_states[FF_PINCTRL_STATE_RST_ACT]);
-
-    ff_ctl_enable_power(true);
 
     FF_LOGV("'%s' leave.", __func__);
     return err;
