@@ -95,13 +95,13 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsi-v-bottom-border = <0>;
 		qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
 		qcom,mdss-dsi-timing-switch-command = [
-			15 01 00 00 14 00 02 2F 08 //08:48Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
+			15 01 00 00 14 00 02 2F 08 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
 		];
 
 		qcom,mdss-dsi-on-command = [
-			39 00 00 00 00 00 06 F0 55 AA 52 08 00
-			15 00 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 50 //swire pulse
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
 
 			39 00 00 00 00 00 06 F0 55 AA 52 08 00
 			15 00 00 00 00 00 02 B2 51
@@ -178,13 +178,13 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsi-v-bottom-border = <0>;
 		qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
 		qcom,mdss-dsi-timing-switch-command = [
-			15 01 00 00 10 00 02 2F 01 //08:49Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
+			15 01 00 00 10 00 02 2F 03 //08:49Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
 		];
 
 		qcom,mdss-dsi-on-command = [
-			39 00 00 00 00 00 06 F0 55 AA 52 08 00
-			15 00 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 50 //swire pulse
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
 
 			39 00 00 00 00 00 06 F0 55 AA 52 08 00
 			15 00 00 00 00 00 02 B2 51
@@ -261,13 +261,13 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsi-v-bottom-border = <0>;
 		qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
 		qcom,mdss-dsi-timing-switch-command = [
-			15 01 00 00 0b 00 02 2F 03 //08:49Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
+			15 01 00 00 0b 00 02 2F 07 //08:49Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
 		];
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 50 //swire pulse
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
 
 			39 00 00 00 00 00 06 F0 55 AA 52 08 00
 			15 00 00 00 00 00 02 B2 51

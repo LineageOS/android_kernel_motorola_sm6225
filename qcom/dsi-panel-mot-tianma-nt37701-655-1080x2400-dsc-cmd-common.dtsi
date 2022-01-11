@@ -100,6 +100,10 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
@@ -123,7 +127,7 @@ qcom,mdss-dsi-display-timings {
 
 			15 01 00 00 00 00 02 2F 08 //08:49Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
 
-			05 01 00 00 C8 00 01 11
+			05 01 00 00 78 00 01 11
 			05 01 00 00 00 00 01 29];	/* display on */
 		qcom,mdss-dsi-off-command = [
 			05 01 00 00 00 00 01 28		/* display_off */
@@ -169,6 +173,10 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
@@ -192,7 +200,7 @@ qcom,mdss-dsi-display-timings {
 
 			15 01 00 00 00 00 02 2F 01 //08:49Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
 
-			05 01 00 00 C8 00 01 11
+			05 01 00 00 78 00 01 11
 			05 01 00 00 00 00 01 29];	/* display on */
 		qcom,mdss-dsi-off-command = [
 			05 01 00 00 00 00 01 28		/* display_off */
@@ -238,6 +246,10 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
+			15 01 00 00 00 00 02 6F 06
+			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
@@ -261,7 +273,7 @@ qcom,mdss-dsi-display-timings {
 
 			15 01 00 00 00 00 02 2F 03 //08:49Hz 01:60Hz 03:90Hz 02:120Hz 04:144Hz
 
-			05 01 00 00 C8 00 01 11
+			05 01 00 00 78 00 01 11
 			05 01 00 00 00 00 01 29];	/* display on */
 		qcom,mdss-dsi-off-command = [
 			05 01 00 00 00 00 01 28		/* display_off */
