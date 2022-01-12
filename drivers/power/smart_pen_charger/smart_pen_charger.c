@@ -610,8 +610,11 @@ static int pen_charger_notify_callback(struct notifier_block *nb,
                 break;
         }
 
-	if (pen_changed)
+	if (pen_changed) {
+		pr_err("pen event: %#lx\n", event);
+		power_supply_changed(chg->pen_psy);
 		pen_charger_handle_event(chg, (int)event);
+	}
 
         return 0;
 }
