@@ -134,6 +134,37 @@ struct fod_gain {
 	u32	fod_array_gain[FOD_GAIN_MAX_LEN];
 };
 
+struct wls_dump
+{
+    u32  chip_id;
+    u32  mtp_fw_ver;
+    u32  irq_status;
+    u16  sys_mode;
+    u16  op_mode;
+    u16  rx_fop;
+    u16  rx_vout_mv;
+    u16  rx_vrect_mv;
+    u16  rx_irect_ma;
+    u16  rx_neg_power;
+    u16  tx_iin_ma;
+    u16  tx_vin_mv;
+    u16  tx_vrect_mv;
+    u16  tx_fod_I;
+    u16  tx_fod_II;
+    u16  tx_fod_rp;
+    u16  tx_det_rx_power;
+    u16  tx_power;
+    s16  power_loss;
+    u16  folio_mode;
+    u16  pen_status;
+    u16  pen_soc;
+    u16  pen_error;
+    u16  usb_otg;
+    u16  wls_boost;
+    u16  wls_icl_ma;
+    u16  wls_icl_therm_ma;
+};
+
 struct qti_charger {
 	char				*name;
 	struct device			*dev;
@@ -167,6 +198,7 @@ struct qti_charger {
 	u32				wls_curr_max;
 	u32				rx_connected;
 	struct notifier_block		wls_nb;
+	struct dentry		*debug_root;
 };
 
 static struct qti_charger *this_chip = NULL;
@@ -526,6 +558,7 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 {
 	int rc;
 	struct qti_charger *chg = data;
+	struct wls_dump wls_info;
 
 	rc = qti_charger_read(chg, OEM_PROP_CHG_INFO,
 				&chg->chg_info,
@@ -554,6 +587,45 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	chg->chg_info.vbus_present = chg->chg_info.chrg_mv > VBUS_MIN_MV;
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
+
+	rc =  qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
+				&wls_info,
+				sizeof(struct wls_dump));
+
+	mmi_info(chg, "Wireless dump info -1: CHIP_ID: 0x%04x, MTP_FW_VER: 0x%04x, IRQ STATUS: 0x%04x, "
+		"SYS_MODE:  RX/TX %d, OP_MODE:  BPP/EPP 0x%x, RX_FOP: %dkHz, RX_VOUT: %dmV, "
+		"RX_VRECT: %dmV, RX_IRECT: %dmV, RX_NEG_POWER: %dw ",
+		wls_info.chip_id,
+		wls_info.mtp_fw_ver,
+		wls_info.irq_status,
+		wls_info.sys_mode,
+		wls_info.op_mode,
+		wls_info.rx_fop,
+		wls_info.rx_vout_mv,
+		wls_info.rx_vrect_mv,
+		wls_info.rx_irect_ma,
+		wls_info.rx_neg_power);
+
+	mmi_info(chg, "Wireless dump info -2: TX_IIN: %dmA, TX_VIN: %dmV, TX_VRECT: %dmV, "
+		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, ",
+		wls_info.tx_iin_ma,
+		wls_info.tx_vin_mv,
+		wls_info.tx_vrect_mv,
+		wls_info.tx_det_rx_power,
+		wls_info.tx_power,
+		wls_info.power_loss,
+		(wls_info.irq_status & (0x01<<12)) ? 1 : 0);
+
+	mmi_info(chg, "Wireless dump info -3: FOLIO_MODE: %d, PEN_STATUS: %d, "
+		"PEN_SOC: %d, PEN_ERROR: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
+		wls_info.folio_mode,
+		wls_info.pen_status,
+		wls_info.pen_soc,
+		wls_info.pen_error,
+		wls_info.usb_otg,
+		wls_info.wls_boost,
+		wls_info.wls_icl_ma,
+		wls_info.wls_icl_therm_ma);
 
 	bm_ulog_print_log(OEM_BM_ULOG_SIZE);
 
@@ -1467,6 +1539,109 @@ static ssize_t folio_mode_show(struct device *dev,
 }
 static DEVICE_ATTR(folio_mode, S_IRUGO|S_IWUSR, folio_mode_show, folio_mode_store);
 
+//ATTRIBUTE_GROUPS(qti_charger);
+#define TX_INT_FOD      (0x01<<12)
+static int show_wls_dump_info(struct seq_file *m, void *data)
+{
+	struct qti_charger *chip = m->private;
+	struct wls_dump wls_info;
+
+	qti_charger_read(chip, OEM_PROP_WLS_DUMP_INFO,
+				&wls_info,
+				sizeof(struct wls_dump));
+
+	seq_printf(m, "CHIP_ID: 0x%04x\n", wls_info.chip_id);
+
+	seq_printf(m, "MTP_FW_VER: 0x%04x\n", wls_info.mtp_fw_ver);
+
+	seq_printf(m, "IRQ STATUS: 0x%04x\n", wls_info.irq_status);
+
+	seq_printf(m, "SYS_MODE:  RX/TX %d\n", wls_info.sys_mode);
+
+	seq_printf(m, "OP_MODE:  BPP/EPP 0x%x\n", wls_info.op_mode);
+
+	seq_printf(m, "RX_FOP:   %dkHz\n", wls_info.rx_fop);
+
+	seq_printf(m, "RX_VOUT: %dmV\n",  wls_info.rx_vout_mv);
+
+	seq_printf(m, "RX_VRECT: %dmV\n",  wls_info.rx_vrect_mv);
+
+	seq_printf(m, "RX_IRECT: %dmV\n",  wls_info.rx_irect_ma);
+
+	seq_printf(m, "RX_NEG_POWER: %dw\n",  wls_info.rx_neg_power);
+
+	seq_printf(m, "TX_IIN: %dmA\n",  wls_info.tx_iin_ma);
+
+	seq_printf(m, "TX_VIN: %dmV\n",  wls_info.tx_vin_mv);
+
+	seq_printf(m, "TX_VRECT: %dmV\n",  wls_info.tx_vrect_mv);
+
+	seq_printf(m, "TX_FOD_I: %d\n",  wls_info.tx_fod_I);
+
+	seq_printf(m, "TX_FOD_II: %d\n",  wls_info.tx_fod_II);
+
+	seq_printf(m, "TX_FOD_RP: %d\n",  wls_info.tx_fod_rp);
+
+	seq_printf(m, "TX_DET_RX_POWER: %dmW\n",  wls_info.tx_det_rx_power);
+
+	seq_printf(m, "TX_POWER: %dmW\n",  wls_info.tx_power);
+
+	seq_printf(m, "POWER_LOSS: %dmW\n",  wls_info.power_loss);
+
+	seq_printf(m, "TX_FOD: %d\n",  (wls_info.irq_status & TX_INT_FOD) ? 1 : 0);
+
+	seq_printf(m, "FOLIO_MODE: %d\n",  wls_info.folio_mode);
+
+	seq_printf(m, "PEN_STATUS: %d\n",  wls_info.pen_status);
+
+	seq_printf(m, "PEN_SOC: %d\n",  wls_info.pen_soc);
+
+	seq_printf(m, "PEN_ERROR: %d\n",  wls_info.pen_error);
+
+	seq_printf(m, "USB_OTG: %d\n",  wls_info.usb_otg);
+
+	seq_printf(m, "WLS_BOOST: %d\n",  wls_info.wls_boost);
+
+	seq_printf(m, "WLS_ICL_MA: %d\n",  wls_info.wls_icl_ma);
+
+	seq_printf(m, "WLS_ICL_THERM_MA: %d\n",  wls_info.wls_icl_therm_ma);
+
+	return 0;
+}
+
+static int wls_dump_info_debugfs_open(struct inode *inode, struct file *file)
+{
+	struct qti_charger *chip = inode->i_private;
+
+	return single_open(file, show_wls_dump_info, chip);
+}
+
+static const struct file_operations wls_dump_info_debugfs_ops = {
+	.owner		= THIS_MODULE,
+	.open		= wls_dump_info_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static void create_debugfs_entries(struct qti_charger *chip)
+{
+	struct dentry *ent;
+
+	chip->debug_root = debugfs_create_dir("qti_glink_charger", NULL);
+	if (!chip->debug_root) {
+		mmi_err(chip, "Couldn't create debug dir\n");
+		return;
+	}
+
+	ent = debugfs_create_file("wls_dump_info", S_IFREG | S_IRUGO,
+				  chip->debug_root, chip,
+				  &wls_dump_info_debugfs_ops);
+	if (!ent)
+		mmi_err(chip, "Couldn't create wls_dump_info debug file\n");
+}
+
+
 static int wireless_charger_notify_callback(struct notifier_block *nb,
 		unsigned long event, void *data)
 {
@@ -1491,10 +1666,17 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
 	            break;
         case NOTIFY_EVENT_WLS_RX_OVERTEMP:
 		break;
+        case NOTIFY_EVENT_WLS_CHANGE:
+		break;
         default:
 		pr_err("Unknown wireless event: %#lx\n", event);
                 break;
         }
+
+	if (chg->wls_psy) {
+		pr_info("wireless charger notify\n");
+		power_supply_changed(chg->wls_psy);
+	}
 
         return 0;
 }
@@ -1705,7 +1887,7 @@ static int qti_charger_init(struct qti_charger *chg)
 	bm_ulog_print_mask_log(BM_ALL, BM_LOG_LEVEL_INFO, OEM_BM_ULOG_SIZE);
 
 	wireless_psy_init(chg);
-
+	create_debugfs_entries(chg);
 	return 0;
 }
 
@@ -1731,6 +1913,9 @@ static void qti_charger_deinit(struct qti_charger *chg)
 	device_remove_file(chg->dev, &dev_attr_data);
 
 	wireless_psy_deinit(chg);
+
+	if (chg->debug_root)
+		debugfs_remove_recursive(chg->debug_root);
 
 	/* unregister driver from mmi charger */
 	rc = mmi_unregister_charger_driver(chg->driver);
@@ -1951,7 +2136,6 @@ static int qti_charger_probe(struct platform_device *pdev)
 	this_chip = chg;
 	device_init_wakeup(chg->dev, true);
 	qti_charger_init(chg);
-
 	return 0;
 }
 
@@ -1962,7 +2146,6 @@ static int qti_charger_remove(struct platform_device *pdev)
 	int rc;
 
 	qti_charger_deinit(chg);
-
 	rc = pmic_glink_unregister_client(chg->client);
 	if (rc < 0)
 		mmi_err(chg, "pmic_glink_unregister_client failed rc=%d\n",
