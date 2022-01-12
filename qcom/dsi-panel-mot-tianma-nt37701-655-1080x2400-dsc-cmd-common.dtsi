@@ -100,17 +100,12 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
-			15 01 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
-
-			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
 			15 01 00 00 00 00 02 CB 86
 			39 01 00 00 00 00 06 F0 55 AA 52 08 01
 			39 01 00 00 00 00 03 CD 05 62
-                        39 01 00 00 00 00 05 3B 00 10 00 20
 
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
@@ -145,7 +140,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
@@ -173,17 +168,12 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
-			15 01 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
-
-			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
 			15 01 00 00 00 00 02 CB 86
 			39 01 00 00 00 00 06 F0 55 AA 52 08 01
 			39 01 00 00 00 00 03 CD 05 62
-                        39 01 00 00 00 00 05 3B 00 10 00 20
 
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
@@ -218,7 +208,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
@@ -246,17 +236,12 @@ qcom,mdss-dsi-display-timings {
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 06 F0 55 AA 52 08 00
-			15 01 00 00 00 00 02 6F 06
-			39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
-
-			39 01 00 00 00 00 06 F0 55 AA 52 08 00
 			15 01 00 00 00 00 02 6F 1C
 			39 01 00 00 00 00 06 C0 15 27 38 49 00
 			39 01 00 00 00 00 06 F0 55 AA 52 08 04
 			15 01 00 00 00 00 02 CB 86
 			39 01 00 00 00 00 06 F0 55 AA 52 08 01
 			39 01 00 00 00 00 03 CD 05 62
-                        39 01 00 00 00 00 05 3B 00 10 00 20
 
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
@@ -291,7 +276,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
