@@ -7,10 +7,12 @@
 
 #include <linux/i2c.h>
 
+#include "mmi_charger.h"
+
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
 
 //#define __SGM41541_CHIP_ID__
-#define __SGM41542_CHIP_ID__
+//#define __SGM41542_CHIP_ID__
 //#define __SGM41516_CHIP_ID__
 //#define __SGM41516D_CHIP_ID__
 
@@ -48,7 +50,15 @@
 #define SGM4154x_INPUT_DET   	0x0e
 #define SGM4154x_CHRG_CTRL_f	0x0f
 
+/*rerun apsd*/
+#define SGM4154x_IINDET_EN_MASK		GENMASK(7, 7)
+#define SGM4154x_IINDET_EN				BIT(7)
+
 /* charge status flags  */
+#define SGM4154x_IINDPM_INT_MASK		GENMASK(0, 0)
+#define SGM4154x_IINDPM_INT_DISABLE	BIT(0)
+#define SGM4154x_VINDPM_INT_MASK		GENMASK(1, 1)
+#define SGM4154x_VINDPM_INT_DISABLE	BIT(1)
 #define SGM4154x_CHRG_EN		BIT(4)
 #define SGM4154x_HIZ_EN		    BIT(7)
 #define SGM4154x_TERM_EN		BIT(7)
@@ -56,6 +66,7 @@
 #define SGM4154x_DPDM_ONGOING   BIT(7)
 #define SGM4154x_VBUS_GOOD      BIT(7)
 
+#define SGM4154X_BOOST_LIM_MASK	GENMASK(7, 7)
 #define SGM4154x_OTG_MASK		GENMASK(5, 4)
 #define SGM4154x_OTG_EN		    BIT(5)
 
@@ -74,6 +85,11 @@
 #define SGM4154x_WDT_TIMER_160S        (BIT(4)| BIT(5))
 
 #define SGM4154x_WDT_RST_MASK          BIT(6)
+
+/*En termniataion*/
+#define SGM4154x_EN_TERM_MASK          GENMASK(7,7)
+#define SGM4154x_EN_TERM_DISABLE          0
+#define SGM4154x_EN_TERM_ENABLE          BIT(7)
 
 /* SAFETY TIMER SET  */
 #define SGM4154x_SAFETY_TIMER_MASK     GENMASK(3, 3)
@@ -173,6 +189,9 @@
 #define SGM4154x_PUMPX_DN           BIT(5)
 
 /* customer define jeita paramter */
+#define SGM4154x_JEITA_ENABLE_MASK GENMASK(0, 0)
+#define SGM4154x_JEITA_ENABLE		BIT(0)
+#define SGM4154x_JEITA_DISABLE		0
 #define JEITA_TEMP_ABOVE_T4_CV	0
 #define JEITA_TEMP_T3_TO_T4_CV	4100000
 #define JEITA_TEMP_T2_TO_T3_CV	4350000
@@ -208,6 +227,8 @@ struct sgm4154x_init_data {
 	u32 vlim;	/* minimum system voltage limit */
 	u32 max_ichg;
 	u32 max_vreg;
+	u32 vrechg;
+	bool charger_disabled;
 };
 
 struct sgm4154x_state {
@@ -225,6 +246,10 @@ struct sgm4154x_state {
 	u8 health;
 	u8 chrg_fault;
 	u8 ntc_fault;
+
+	u32 ibus_limit;
+	u32 vbus_adc;
+	u32 ibus_adc;
 };
 
 struct sgm4154x_jeita {
@@ -250,6 +275,17 @@ struct sgm4154x_jeita {
 	int temp_t0_thres;
 	int temp_t0_thres_plus_x_degree;
 	int temp_neg_10_thres;
+};
+
+struct sgm_mmi_charger {
+	struct sgm4154x_device		*sgm;
+	struct mmi_battery_info		batt_info;
+	struct mmi_charger_info		chg_info;
+	struct mmi_charger_cfg		chg_cfg;
+	struct mmi_charger_constraint	constraint;
+	struct mmi_charger_driver	*driver;
+	u32				chrg_taper_cnt;
+	struct power_supply		*fg_psy;
 };
 
 struct sgm4154x_device {
@@ -287,6 +323,15 @@ struct sgm4154x_device {
 	struct wakeup_source *charger_wakelock;
 	bool enable_sw_jeita;
 	struct sgm4154x_jeita data;
+	bool enable_hw_jeita;
+
+	struct dentry *debug_root;
+
+	int chg_en_gpio;
+	bool use_ext_usb_psy;
+	struct regulator *vdd_i2c_vreg;
+	struct notifier_block psy_nb;
+	struct sgm_mmi_charger *mmi_charger;
 };
 
 #endif /* _SGM4154x_CHARGER_H */
