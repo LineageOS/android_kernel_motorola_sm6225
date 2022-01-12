@@ -61,7 +61,7 @@ qcom,mdss-dsi-panel-blackness-level = <3230>;*/
 qcom,mdss-dsi-hbm-on-command = [
 		39 01 00 00 00 00 03 51 0F FF];
 qcom,mdss-dsi-hbm-off-command = [
-		39 01 00 00 00 00 03 51 07 FF];
+		39 01 00 00 00 00 03 51 0D BA];
 
 qcom,mdss-dsi-hbm-fod;
 qcom,mdss-dsi-hbm-fod-on-command = [
@@ -147,8 +147,6 @@ qcom,mdss-dsi-display-timings {
 			15 01 00 00 00 00 02 6F 1D
 			15 01 00 00 00 00 02 F2 05 //Corner&Hole page0
 
-                        39 01 00 00 00 00 05 3B 00 10 00 20
-
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
 			39 01 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
@@ -181,7 +179,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
@@ -231,8 +229,6 @@ qcom,mdss-dsi-display-timings {
 			15 01 00 00 00 00 02 6F 1D
 			15 01 00 00 00 00 02 F2 05 //Corner&Hole page0
 
-                        39 01 00 00 00 00 05 3B 00 10 00 20
-
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
 			39 01 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
@@ -265,7 +261,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
@@ -315,8 +311,6 @@ qcom,mdss-dsi-display-timings {
 			15 01 00 00 00 00 02 6F 1D
 			15 01 00 00 00 00 02 F2 05 //Corner&Hole page0
 
-                        39 01 00 00 00 00 05 3B 00 10 00 20
-
 			15 01 00 00 00 00 02 03 01
 			15 01 00 00 00 00 02 90 01
 			39 01 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
@@ -349,7 +343,7 @@ qcom,mdss-dsi-display-timings {
 		qcom,mdss-dsc-slice-height = <12>;
 		qcom,mdss-dsc-slice-width = <1080>;
 		qcom,mdss-dsc-slice-per-pkt = <1>;
-		qcom,mdss-dsc-bit-per-component = <8>;
+		qcom,mdss-dsc-bit-per-component = <10>;
 		qcom,mdss-dsc-bit-per-pixel = <8>;
 		qcom,mdss-dsc-block-prediction-enable;
 	};
