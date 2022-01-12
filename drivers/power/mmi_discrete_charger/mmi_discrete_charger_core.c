@@ -1365,6 +1365,15 @@ static int mmi_discrete_usb_get_prop(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
+		/*when in COM, pd will trigger hard reset to let source send source_cap.
+		*but pd hard reset will closed vbus and re-enable vbus by adaptor, so usb
+		*present will return 0 to let COM shutdown. Typec mode is always on.*/
+		if (chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
+			|| chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM
+			|| chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+			val->intval = 1;
+			break;
+		}
 		rc = get_prop_usb_present(chip, val);
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -2069,7 +2078,6 @@ int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
 static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 {
 	chip->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
-	chip->typec_mode = MMI_POWER_SUPPLY_TYPEC_NONE;
 	chip->pd_active = MMI_POWER_SUPPLY_PD_INACTIVE;
 	if (chip->use_extcon)
 		mmi_notify_device_mode(chip, false);
