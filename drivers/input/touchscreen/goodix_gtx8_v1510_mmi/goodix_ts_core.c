@@ -1870,7 +1870,7 @@ static void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 					false);
 		}
 		input_report_key(input_dev, BTN_TOUCH, 0);
-		/* input_mt_sync_frame(input_dev); */
+		input_mt_sync_frame(input_dev);
 		input_sync(input_dev);
 	}
 }
@@ -2022,7 +2022,6 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 	mutex_unlock(&goodix_modules.mutex);
 
 	goodix_ts_irq_enable(core_data, true);
-	disable_irq_wake(core_data->irq);
 
 	/*
 	 * notify resume event, inform the esd protector
