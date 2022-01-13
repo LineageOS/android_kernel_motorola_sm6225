@@ -45,7 +45,7 @@
 	};
 };
 
-&dsi_rm692c9_visionox_ft3519_643_video {
+&dsi_visionoxrm_ft3519_643_video {
 	qcom,platform-te-gpio = <&tlmm 81 0>;
 	qcom,platform-reset-gpio = <&tlmm 82 0>;
 	qcom,5v-boost-gpio = <&tlmm 3 0>;

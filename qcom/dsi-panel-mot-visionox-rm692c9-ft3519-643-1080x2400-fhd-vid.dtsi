@@ -1,5 +1,5 @@
 &mdss_mdp {
-	dsi_rm692c9_visionox_ft3519_643_video: qcom,mdss_dsi_rm692c9_ft3519_643_visionox_video {
+	dsi_visionoxrm_ft3519_643_video: qcom,mdss_dsi_visionoxrm_ft3519_643_video {
 		qcom,mdss-dsi-panel-name =
 				"mipi_mot_vid_visionoxrm_1080p_643";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
