@@ -35,8 +35,12 @@
 #include <linux/of_gpio.h>
 #if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 #include <drm/drm_panel.h>
+#else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+#include <linux/panel_notifier.h>
 #else
 #include <linux/fb.h>
+#endif
 #endif
 #include <linux/notifier.h>
 #if 0
@@ -348,8 +352,8 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
 		screen_state[0] = 0;
 		break;
 	case DRM_PANEL_BLANK_POWERDOWN:
-                uevent_env[0] = "FF_SCREEN_OFF";
-                screen_state[0] = 1;
+		uevent_env[0] = "FF_SCREEN_OFF";
+		screen_state[0] = 1;
 		break;
 	default:
 	        uevent_env[0] = "FF_SCREEN_??";
@@ -358,6 +362,31 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
 	uevent_env[1] = NULL;
 	kill_fasync(&g_context->async_queue, SIGIO, POLL_IN);
 	FF_LOGD("chenlj2 leave.%s",uevent_env[0]);
+#else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+	char *uevent_env[2];
+	FF_LOGD(" received a panel notification %d \n", (int)action);
+	switch(action) {
+		case PANEL_EVENT_DISPLAY_ON:
+			uevent_env[0] = "FF_SCREEN_ON";
+			screen_state[0] = 0;
+			break;
+		case PANEL_EVENT_DISPLAY_OFF:
+			uevent_env[0] = "FF_SCREEN_OFF";
+			screen_state[0] = 1;
+			break;
+		case PANEL_EVENT_PRE_DISPLAY_OFF:
+			break;
+		case PANEL_EVENT_PRE_DISPLAY_ON:
+			break;
+		default:
+			break;
+	}
+	if(action == PANEL_EVENT_DISPLAY_ON || action== PANEL_EVENT_DISPLAY_OFF) {
+		uevent_env[1] = NULL;
+		kobject_uevent_env(&g_context->miscdev.this_device->kobj, KOBJ_CHANGE, uevent_env);
+		FF_LOGD("'%s' leave %s.", __func__,uevent_env[0] );
+	}
 #else
     struct fb_event *event;
     int blank;
@@ -391,6 +420,7 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
        kill_fasync(&g_context->async_queue, SIGIO, POLL_IN);
 
 	FF_LOGV("'%s' leave.", __func__);
+#endif
 #endif
 	return NOTIFY_OK;
 }
@@ -445,8 +475,12 @@ static int ff_ctl_free_driver(void)
 			drm_panel_notifier_unregister(g_context->active_panel, &g_context->fb_notifier);
 			g_context->active_panel = NULL;
 		}
+#else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+	err = panel_unregister_notifier(&g_context->fb_notifier);
 #else
-    err = fb_unregister_client(&g_context->fb_notifier);
+	err = fb_unregister_client(&g_context->fb_notifier);
+#endif
 #endif
 
 #ifdef FF_SPI_SET
@@ -573,11 +607,15 @@ static int ff_ctl_init_driver(void)
         if (err)
             FF_LOGV("drm_panel_notifier_register fail: %d ", err);
     }
+#else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
+#if defined(CONFIG_PANEL_NOTIFICATIONS)
+	err = panel_register_notifier(&g_context->fb_notifier);
+	if (err)
+		FF_LOGE("  %s : panel_register_notifier fail: %d ", __func__, err);
 #else
     err = fb_register_client(&g_context->fb_notifier);
 #endif
-
-
+#endif
     g_context->b_driver_inited = true;
     FF_LOGV("'%s' leave.", __func__);
     return err;
