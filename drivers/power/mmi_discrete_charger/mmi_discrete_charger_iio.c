@@ -64,7 +64,7 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 {
 	struct mmi_discrete_charger *chip = iio_priv(indio_dev);
 	int rc = 0;
-	bool val_bool = false;
+	bool val_bool = false, val_suspend = false;
 	*val1 = 0;
 
 	switch (chan->channel) {
@@ -75,8 +75,12 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 		rc = mmi_discrete_get_hw_current_max(chip, val1);
 		break;
 	case PSY_IIO_USB_CHARGING_ENABLED:
-		rc = mmi_discrete_get_charging_enabled(chip, &val_bool);
-		*val1 = val_bool?1:0;
+		mmi_discrete_get_charging_enabled(chip, &val_bool);
+		mmi_discrete_get_charger_suspend(chip, &val_suspend);
+		if(val_bool && !val_suspend)
+			*val1 = 1;
+		else
+			*val1 = 0;
 		break;
 	case PSY_IIO_MMI_QC3P_POWER:
 		rc = mmi_discrete_get_qc3p_power(chip, val1);

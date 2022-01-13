@@ -1998,6 +1998,31 @@ int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *v
 	return rc;
 }
 
+int mmi_discrete_get_charger_suspend(struct mmi_discrete_charger *chip, bool *val)
+{
+	int i;
+	bool charger_suspend = false;
+	struct mmi_charger_cfg *cfg;
+
+	if (!chip->chg_clients || !chip->chg_client_num) {
+		mmi_err(chip, "Invalid charger client\n");
+		return -1;
+	}
+
+	for (i = 0; i < chip->chg_client_num; i++) {
+		cfg = &chip->chg_clients[i].chg_cfg;
+		if (cfg->charger_suspend) {
+			charger_suspend = true;
+			break;
+		}
+	}
+
+	*val = charger_suspend;
+	mmi_dbg(chip, "mmi_discrete_get_charger_suspend val:%d\n",*val);
+
+	return 0;
+}
+
 int mmi_discrete_get_qc3p_power(struct mmi_discrete_charger *chip, int *val)
 {
 	int rc = 0;
