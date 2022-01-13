@@ -40,6 +40,10 @@ ifneq ($(filter m y,$(CONFIG_FOCAL_SUPPORT_DRM_SCREEN)),)
 	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
 endif
 
+ifneq ($(filter m y, $(CONFIG_FOCAL_PANEL_NOTIFICATIONS)),)
+	EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
+endif
+
 obj-m += focal_fps_mmi.o
 
 
