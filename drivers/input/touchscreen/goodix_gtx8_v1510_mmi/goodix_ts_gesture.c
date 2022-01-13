@@ -416,8 +416,6 @@ int gsx_gesture_before_suspend_mmi(struct goodix_ts_core *core_data)
 	else
 		ts_err("Set IC in gesture mode");
 
-	enable_irq_wake(core_data->irq);
-
 	return EVT_CANCEL_SUSPEND;
 }
 
