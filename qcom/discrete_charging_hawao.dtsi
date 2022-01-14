@@ -313,7 +313,7 @@
 		mmi,lower-limit-capacity = <60>;
 		mmi,heartbeat-interval = <100000>;
 		mmi,dcp-power-max = <10000>;
-		mmi,hvdcp-power-max = <15000>;
+		mmi,hvdcp-power-max = <18000>;
 	};
 
 	mmi_discrete_charger: mmi,discrete-charging {
