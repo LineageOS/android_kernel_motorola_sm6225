@@ -661,10 +661,17 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		}
 	}
 
+	if (panel->disp_pre_reset && gpio_is_valid(panel->reset_config.reset_gpio) &&
+					!panel->reset_gpio_always_on
+			&& panel->reset_config.reset_force_pull_low) {
+		gpio_set_value(panel->reset_config.reset_gpio, 0);
+		usleep_range(3000, 3000 + 100);
+	}
+
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
-	if (gpio_is_valid(panel->reset_config.reset_gpio) &&
+	if (!panel->disp_pre_reset && gpio_is_valid(panel->reset_config.reset_gpio) &&
 					!panel->reset_gpio_always_on
 			&& panel->reset_config.reset_force_pull_low)
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
@@ -2745,6 +2752,8 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 
 	panel->reset_gpio_always_on = utils->read_bool(utils->data,
 			"qcom,platform-reset-gpio-always-on");
+	panel->disp_pre_reset = utils->read_bool(utils->data,
+			"qcom,disp_pre_reset");
 	panel->reset_config.reset_force_pull_low = of_property_read_bool(utils->data,
 				"qcom,mdss-dsi-reset-force-pull-low");
 
