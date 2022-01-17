@@ -2049,3 +2049,91 @@ int cam_flash_apply_request(struct cam_req_mgr_apply_request *apply)
 
 	return rc;
 }
+
+#ifdef CONFIG_CAMERA_FLASH_IIC_COMPATIBLE
+static int cam_flash_construct_power_vio_setting(
+	struct cam_sensor_power_ctrl_t *power_info)
+{
+	int rc = 0;
+
+	power_info->power_setting_size = 1;
+	power_info->power_setting =
+		kzalloc(sizeof(struct cam_sensor_power_setting),
+			GFP_KERNEL);
+	if (!power_info->power_setting)
+		return -ENOMEM;
+
+	power_info->power_setting[0].seq_type = SENSOR_VIO;
+	power_info->power_setting[0].seq_val = CAM_VIO;
+	power_info->power_setting[0].config_val = 1;
+	power_info->power_setting[0].delay = 2;
+
+	power_info->power_down_setting_size = 1;
+	power_info->power_down_setting =
+		kzalloc(sizeof(struct cam_sensor_power_setting),
+			GFP_KERNEL);
+	if (!power_info->power_down_setting) {
+		rc = -ENOMEM;
+		goto free_power_settings;
+	}
+
+	power_info->power_down_setting[0].seq_type = SENSOR_VIO;
+	power_info->power_down_setting[0].seq_val = CAM_VIO;
+	power_info->power_down_setting[0].config_val = 0;
+
+	return rc;
+
+free_power_settings:
+	kfree(power_info->power_setting);
+	power_info->power_setting = NULL;
+	power_info->power_setting_size = 0;
+	return rc;
+}
+
+int cam_flash_fill_vreg_setting(struct cam_flash_ctrl *fctrl)
+{
+	int rc = 0;
+
+	rc = cam_flash_construct_power_vio_setting(
+					&fctrl->power_info);
+	if (rc) {
+		CAM_ERR(CAM_FLASH, "Failed Flash Power VIO Setting: rc=%d\n", rc);
+		return rc;
+	}
+	rc = msm_camera_fill_vreg_params(&fctrl->soc_info,
+					fctrl->power_info.power_setting,
+					fctrl->power_info.power_setting_size);
+	if(rc)
+	{
+		CAM_ERR(CAM_FLASH, "Failed Flash Fill Power Up Params: rc=%d\n", rc);
+		return rc;
+	}
+	rc = msm_camera_fill_vreg_params(&fctrl->soc_info,
+				fctrl->power_info.power_down_setting,
+				fctrl->power_info.power_down_setting_size);
+	if(rc)
+	{
+		CAM_ERR(CAM_FLASH, "Failed Flash Fill Power Down Params: rc=%d\n", rc);
+		return rc;
+	}
+	return rc;
+}
+
+int cam_flash_fill_i2c_default_setting(struct cam_flash_ctrl *fctrl, uint32_t slave_addr)
+{
+	int rc = 0;
+
+	struct cam_cmd_i2c_info  i2c_info={0};
+	i2c_info.slave_addr = slave_addr;
+	i2c_info.i2c_freq_mode = I2C_STANDARD_MODE;
+
+	rc = cam_flash_slaveInfo_pkt_parser(
+					fctrl, (uint32_t *)&i2c_info, sizeof(struct cam_cmd_i2c_info));
+	if (rc < 0) {
+		CAM_ERR(CAM_FLASH,
+		"Failed parsing slave info: rc: %d",
+		rc);
+	}
+	return rc;
+}
+#endif
