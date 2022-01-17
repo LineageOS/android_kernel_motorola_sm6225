@@ -321,7 +321,9 @@
 		compatible = "qcom,cam-res-mgr";
 		status = "ok";
 	};
+};
 
+&cam_cci0 {
 	led_flash_rear: qcom,camera-flash@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera-flash";
@@ -345,6 +347,7 @@
 		gpio-req-tbl-flags = <0 0>;
 		gpio-req-tbl-label = "SENSOR_CUSTOM_GPIO1",
 				"SENSOR_CUSTOM_GPIO2";
+		distinguish-flash-supplier = <0xc6 0x0c 0x0a>;
 		status = "ok";
 	};
 
@@ -371,6 +374,7 @@
 		gpio-req-tbl-flags = <0 0>;
 		gpio-req-tbl-label = "SENSOR_CUSTOM_GPIO1",
 				"SENSOR_CUSTOM_GPIO2";
+		distinguish-flash-supplier = <0xc6 0x0c 0x0a>;
 		status = "ok";
 	};
 
@@ -397,11 +401,9 @@
 		gpio-req-tbl-flags = <0 0>;
 		gpio-req-tbl-label = "SENSOR_CUSTOM_GPIO1",
 				"SENSOR_CUSTOM_GPIO2";
+		distinguish-flash-supplier = <0xc6 0x0c 0x0a>;
 		status = "ok";
 	};
-};
-
-&cam_cci0 {
 	actuator_rear: qcom,actuator0 {
 		cell-index = <0>;
 		compatible = "qcom,actuator";
