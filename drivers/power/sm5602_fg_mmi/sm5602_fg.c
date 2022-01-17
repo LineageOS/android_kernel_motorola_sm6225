@@ -346,7 +346,10 @@ static int fg_read_status(struct sm_fg_chip *sm)
 			return ret;
 
 	mutex_lock(&sm->data_lock);
-	sm->batt_present	= !!(flags1 & FG_STATUS_BATT_PRESENT);
+	if(sm->factory_mode && !sm->ntc_exist)
+		sm->batt_present = true;
+	else
+		sm->batt_present	= !!(flags1 & FG_STATUS_BATT_PRESENT);
 	sm->batt_ot			= !!(flags1 & FG_STATUS_HIGH_TEMPERATURE);
 	sm->batt_ut			= !!(flags1 & FG_STATUS_LOW_TEMPERATURE);
 	sm->batt_fc			= !!(flags1 & FG_STATUS_TOPOFF);
