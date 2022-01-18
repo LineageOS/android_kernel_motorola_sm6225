@@ -2381,17 +2381,94 @@ static int fg_common_parse_dt(struct sm_fg_chip *sm)
 	return 0;
 }
 
-static int get_battery_id(struct sm_fg_chip *sm)
+static const char *get_battery_serialnumber(void)
 {
-	return 0;
+	struct device_node *np = of_find_node_by_path("/chosen");
+	const char *battsn_buf;
+	int retval;
+
+	battsn_buf = NULL;
+
+	if (np)
+		retval = of_property_read_string(np, "mmi,battid",
+						 &battsn_buf);
+	else
+		return NULL;
+
+	if ((retval == -EINVAL) || !battsn_buf) {
+		pr_info(" Battsn unused\n");
+		of_node_put(np);
+		return NULL;
+
+	} else
+		pr_info("Battsn = %s\n", battsn_buf);
+
+	of_node_put(np);
+
+	return battsn_buf;
+}
+
+static struct device_node *get_profile_by_serialnumber(
+		const struct device_node *np)
+{
+	struct device_node *node, *df_node, *sn_node;
+	const char *sn_buf, *df_sn, *dev_sn;
+	int rc;
+
+	if (!np)
+		return NULL;
+
+	dev_sn = NULL;
+	df_sn = NULL;
+	sn_buf = NULL;
+	df_node = NULL;
+	sn_node = NULL;
+
+	dev_sn = get_battery_serialnumber();
+
+	rc = of_property_read_string(np, "df-serialnum",
+				     &df_sn);
+	if (rc)
+		pr_info("No Default Serial Number defined\n");
+	else if (df_sn)
+		pr_info("Default Serial Number %s\n", df_sn);
+
+	for_each_child_of_node(np, node) {
+		rc = of_property_read_string(node, "serialnum",
+					     &sn_buf);
+		if (!rc && sn_buf) {
+			if (dev_sn)
+				if (strnstr(dev_sn, sn_buf, 32))
+					sn_node = node;
+			if (df_sn)
+				if (strnstr(df_sn, sn_buf, 32))
+					df_node = node;
+		}
+	}
+
+	if (sn_node) {
+		node = sn_node;
+		df_node = NULL;
+		pr_info("Battery Match Found using %s\n", sn_node->name);
+	} else if (df_node) {
+		node = df_node;
+		sn_node = NULL;
+		pr_info("Battery Match Found using default %s\n",
+				df_node->name);
+	} else {
+		pr_info("No Battery Match Found!\n");
+		return NULL;
+	}
+
+	return node;
 }
 
 static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 {
 	struct device *dev = &sm->client->dev;
 	struct device_node *np = dev->of_node;
+	struct device_node *batt_profile_node = NULL;
 	char prop_name[PROPERTY_NAME_SIZE];
-	int battery_id = -1;
 	int battery_temp_table[FG_TEMP_TABLE_CNT_MAX];
 	int table[FG_TABLE_LEN];
 	int rs_value[4];
@@ -2406,27 +2483,17 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	BUG_ON(dev == 0);
 	BUG_ON(np == 0);
-
-	/* battery_params node*/
-	np = of_find_node_by_name(of_node_get(np), "battery_params");
-	if (np == NULL) {
-		pr_info("Cannot find child node \"battery_params\"\n");
-		return -EINVAL;
+	batt_profile_node = get_profile_by_serialnumber(np);
+	if (!batt_profile_node) {
+		pr_err("sm5602 %s get battery parameter dts fail.\n", __func__);
+		return -1;
 	}
-
-	/* battery_id*/
-	if (of_property_read_u32(np, "battery,id", &battery_id) < 0)
-		pr_err("not battery,id property\n");
-	if (battery_id == -1)
-		battery_id = get_battery_id(sm);
-	pr_info("battery id = %d\n", battery_id);
-
 	/*  battery_table*/
 	for (i = BATTERY_TABLE0; i < BATTERY_TABLE2; i++) {
 		snprintf(prop_name, PROPERTY_NAME_SIZE,
-			 "battery%d,%s%d", battery_id, "battery_table", i);
+			 "battery,%s%d", "battery_table", i);
 
-		ret = of_property_read_u32_array(np, prop_name, table, FG_TABLE_LEN);
+		ret = of_property_read_u32_array(batt_profile_node, prop_name, table, FG_TABLE_LEN);
 		if (ret < 0)
 			pr_info("Can get prop %s (%d)\n", prop_name, ret);
 		for (j = 0; j < FG_TABLE_LEN; j++) {
@@ -2438,8 +2505,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	i = BATTERY_TABLE2;
 	snprintf(prop_name, PROPERTY_NAME_SIZE,
-		 "battery%d,%s%d", battery_id, "battery_table", i);
-	ret = of_property_read_u32_array(np, prop_name, table, FG_ADD_TABLE_LEN);
+		 "battery,%s%d", "battery_table", i);
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, table, FG_ADD_TABLE_LEN);
 	if (ret < 0)
 		pr_info("Can get prop %s (%d)\n", prop_name, ret);
 	else {
@@ -2452,22 +2519,22 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 	}
 
     /* rs */
-	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "rs");
-	ret = of_property_read_u32_array(np, prop_name, &sm->rs, 1);
+	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "rs");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->rs, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <0x%x>\n", prop_name, sm->rs);
 
     /* alpha */
-	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "alpha");
-	ret = of_property_read_u32_array(np, prop_name, &sm->alpha, 1);
+	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "alpha");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->alpha, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <0x%x>\n", prop_name, sm->alpha);
 
     /* beta */
-	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "beta");
-	ret = of_property_read_u32_array(np, prop_name, &sm->beta, 1);
+	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "beta");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->beta, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <0x%x>\n", prop_name, sm->beta);
@@ -2475,9 +2542,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 	/* rs_value*/
 	for (i = 0; i < 4; i++) {
 		snprintf(prop_name,
-			PROPERTY_NAME_SIZE, "battery%d,%s",
-			battery_id, "rs_value");
-		ret = of_property_read_u32_array(np, prop_name, rs_value, 4);
+			PROPERTY_NAME_SIZE, "battery,%s", "rs_value");
+		ret = of_property_read_u32_array(batt_profile_node, prop_name, rs_value, 4);
 		if (ret < 0)
 			pr_err("Can get prop %s (%d)\n", prop_name, ret);
 		sm->rs_value[i] = rs_value[i];
@@ -2487,17 +2553,16 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* vit_period*/
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s",
-		battery_id, "vit_period");
-	ret = of_property_read_u32_array(np,
+		PROPERTY_NAME_SIZE, "battery,%s", "vit_period");
+	ret = of_property_read_u32_array(batt_profile_node,
 		prop_name, &sm->vit_period, 1);
 	if (ret < 0)
 		pr_info("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <0x%x>\n", prop_name, sm->vit_period);
 
     /* battery_type*/
-    snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "battery_type");
-    ret = of_property_read_u32_array(np, prop_name, battery_type, 3);
+    snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "battery_type");
+    ret = of_property_read_u32_array(batt_profile_node, prop_name, battery_type, 3);
     if (ret < 0)
         pr_err("Can get prop %s (%d)\n", prop_name, ret);
     sm->batt_v_max = battery_type[0];
@@ -2508,8 +2573,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
         sm->batt_v_max, sm->min_cap, sm->cap);
 
 	/* tem poff level */
-	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "tem_poff");
-	ret = of_property_read_u32_array(np, prop_name, set_temp_poff, 2);
+	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "tem_poff");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, set_temp_poff, 2);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	sm->n_tem_poff = set_temp_poff[0];
@@ -2521,16 +2586,16 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
     /* max-voltage -mv*/
     snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "max_voltage_uv");
-	ret = of_property_read_u32(np, prop_name,
+		PROPERTY_NAME_SIZE, "battery,%s", "max_voltage_uv");
+	ret = of_property_read_u32(batt_profile_node, prop_name,
 				        &sm->batt_max_voltage_uv);
 	if (ret < 0)
 	    pr_err("couldn't find battery max voltage\n");
 
     // TOPOFF SOC
     snprintf(prop_name,
-    	PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "topoff_soc");
-    ret = of_property_read_u32_array(np, prop_name, topoff_soc, 2);
+    	PROPERTY_NAME_SIZE, "battery,%s", "topoff_soc");
+    ret = of_property_read_u32_array(batt_profile_node, prop_name, topoff_soc, 2);
     if (ret < 0)
         pr_err("Can get prop %s (%d)\n", prop_name, ret);
     sm->topoff_soc = topoff_soc[0];
@@ -2541,8 +2606,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
     // Mix
     snprintf(prop_name,
-    	PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "mix_value");
-    ret = of_property_read_u32_array(np, prop_name, &sm->mix_value, 1);
+    	PROPERTY_NAME_SIZE, "battery,%s", "mix_value");
+    ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->mix_value, 1);
     if (ret < 0)
         pr_err("Can get prop %s (%d)\n", prop_name, ret);
 
@@ -2550,16 +2615,16 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
         sm->mix_value);
 
     /* VOLT CAL */
-    snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "volt_cal");
-    ret = of_property_read_u32_array(np, prop_name, &sm->volt_cal, 1);
+    snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "volt_cal");
+    ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->volt_cal, 1);
     if (ret < 0)
         pr_err("Can get prop %s (%d)\n", prop_name, ret);
     pr_info("%s = <0x%x>\n", prop_name, sm->volt_cal);
 
 	/* CURR OFFSET */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "curr_offset");
-	ret = of_property_read_u32_array(np,
+		PROPERTY_NAME_SIZE, "battery,%s", "curr_offset");
+	ret = of_property_read_u32_array(batt_profile_node,
 		prop_name, &sm->curr_offset, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
@@ -2567,8 +2632,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* CURR SLOPE */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "curr_slope");
-	ret = of_property_read_u32_array(np,
+		PROPERTY_NAME_SIZE, "battery,%s", "curr_slope");
+	ret = of_property_read_u32_array(batt_profile_node,
 		prop_name, &sm->curr_slope, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
@@ -2576,16 +2641,16 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* temp_std */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "temp_std");
-	ret = of_property_read_u32_array(np, prop_name, &sm->temp_std, 1);
+		PROPERTY_NAME_SIZE, "battery,%s", "temp_std");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->temp_std, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <%d>\n", prop_name, sm->temp_std);
 
 	/* temp_offset */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "temp_offset");
-	ret = of_property_read_u32_array(np, prop_name, temp_offset, 6);
+		PROPERTY_NAME_SIZE, "battery,%s", "temp_offset");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, temp_offset, 6);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	sm->en_high_fg_temp_offset = temp_offset[0];
@@ -2602,8 +2667,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* temp_calc */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "temp_cal");
-	ret = of_property_read_u32_array(np, prop_name, temp_cal, 10);
+		PROPERTY_NAME_SIZE, "battery,%s", "temp_cal");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, temp_cal, 10);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	sm->en_high_fg_temp_cal = temp_cal[0];
@@ -2626,8 +2691,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* ext_temp_calc */
 	snprintf(prop_name,
-		PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "ext_temp_cal");
-	ret = of_property_read_u32_array(np, prop_name, ext_temp_cal, 10);
+		PROPERTY_NAME_SIZE, "battery,%s", "ext_temp_cal");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, ext_temp_cal, 10);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	sm->en_high_temp_cal = ext_temp_cal[0];
@@ -2650,9 +2715,9 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 
 	/* get battery_temp_table*/
 	 snprintf(prop_name, PROPERTY_NAME_SIZE,
-		  "battery%d,%s", battery_id, "thermal_table");
+		  "battery,%s", "thermal_table");
 
-	 ret = of_property_read_u32_array(np, prop_name, battery_temp_table, FG_TEMP_TABLE_CNT_MAX);
+	 ret = of_property_read_u32_array(batt_profile_node, prop_name, battery_temp_table, FG_TEMP_TABLE_CNT_MAX);
 	 if (ret < 0)
 		 pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	 for (i = 0; i < FG_TEMP_TABLE_CNT_MAX; i++) {
@@ -2662,8 +2727,8 @@ static int fg_battery_parse_dt(struct sm_fg_chip *sm)
 	 }
 
     /* Battery Paramter */
-	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery%d,%s", battery_id, "param_version");
-	ret = of_property_read_u32_array(np, prop_name, &sm->battery_param_version, 1);
+	snprintf(prop_name, PROPERTY_NAME_SIZE, "battery,%s", "param_version");
+	ret = of_property_read_u32_array(batt_profile_node, prop_name, &sm->battery_param_version, 1);
 	if (ret < 0)
 		pr_err("Can get prop %s (%d)\n", prop_name, ret);
 	pr_info("%s = <0x%x>\n", prop_name, sm->battery_param_version);
@@ -2689,7 +2754,11 @@ bool hal_fg_init(struct i2c_client *client)
 		/* Load common data from DTS*/
 		fg_common_parse_dt(sm);
 		/* Load battery data from DTS*/
-		fg_battery_parse_dt(sm);
+		ret = fg_battery_parse_dt(sm);
+		if (ret < 0) {
+			pr_err("%s: Load battery data fail,(%d)\n", __func__, ret);
+			return false;
+		}
 	}
 
 	if(!fg_init(client))
