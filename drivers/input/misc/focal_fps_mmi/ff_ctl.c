@@ -359,9 +359,11 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
 	        uevent_env[0] = "FF_SCREEN_??";
 		break;
 	}
-	uevent_env[1] = NULL;
-	kill_fasync(&g_context->async_queue, SIGIO, POLL_IN);
-	FF_LOGD("chenlj2 leave.%s",uevent_env[0]);
+	if(blank == DRM_PANEL_BLANK_UNBLANK || blank== DRM_PANEL_BLANK_POWERDOWN) {
+		uevent_env[1] = NULL;
+		kobject_uevent_env(&g_context->miscdev.this_device->kobj, KOBJ_CHANGE, uevent_env);
+		FF_LOGD("'%s' leave %s.", __func__,uevent_env[0] );
+	}
 #else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 	char *uevent_env[2];
