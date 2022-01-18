@@ -364,6 +364,9 @@ struct dsi_panel {
 
 	enum touch_state tp_state;
 	bool tp_state_check_enable;
+
+	int glbl_rescode_top_ctrl;
+	int glbl_rescode_bot_ctrl;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)

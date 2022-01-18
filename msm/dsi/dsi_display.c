@@ -5031,6 +5031,19 @@ static void dsi_display_validate_dms_fps(struct dsi_display_mode *cur_mode,
 	}
 }
 
+static int dsi_phy_update_mipi_driver_strength(struct dsi_panel *panel, struct msm_dsi_phy *phy)
+{
+	if((panel == NULL) || (phy == NULL))
+	{
+		return 1;
+	}
+
+	phy->cfg.dsi_phy_rescode_top = panel->glbl_rescode_top_ctrl;
+	phy->cfg.dsi_phy_rescode_bot = panel->glbl_rescode_bot_ctrl;
+	return 0;
+
+}
+
 
 static int dsi_display_set_mode_sub(struct dsi_display *display,
 				    struct dsi_display_mode *mode,
@@ -5157,6 +5170,7 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 				DSI_ERR("failed to add DSI PHY timing params\n");
 		}
 	}
+	dsi_phy_update_mipi_driver_strength(display->panel, ctrl->phy);
 error:
 	return rc;
 }
