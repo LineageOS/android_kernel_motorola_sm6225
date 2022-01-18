@@ -2721,7 +2721,6 @@ error:
 static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 {
 	struct dsi_parser_utils *utils = &panel->utils;
-	int mipi_temp = -1;
 
 	panel->ulps_feature_enabled =
 		utils->read_bool(utils->data, "qcom,ulps-enabled");
@@ -2748,23 +2747,6 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 			"qcom,platform-reset-gpio-always-on");
 	panel->reset_config.reset_force_pull_low = of_property_read_bool(utils->data,
 				"qcom,mdss-dsi-reset-force-pull-low");
-
-	if(!(utils->read_u32(utils->data,"qcom,mipi-glbl-rescode-top-ctrl", &mipi_temp)))
-	{
-		panel->glbl_rescode_top_ctrl = mipi_temp;
-	}
-	else
-	{
-		panel->glbl_rescode_top_ctrl = -1;
-	}
-	if(!(utils->read_u32(utils->data,"qcom,mipi-glbl-rescode-bot-ctrl", &mipi_temp)))
-	{
-		panel->glbl_rescode_bot_ctrl = mipi_temp;
-	}
-	else
-	{
-		panel->glbl_rescode_bot_ctrl = -1;
-	}
 
 	return 0;
 }
