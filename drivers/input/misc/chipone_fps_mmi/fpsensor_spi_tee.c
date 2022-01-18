@@ -101,6 +101,12 @@ static void fpsensor_power_on(fpsensor_data_t *fpsensor)
       gpio_set_value(fpsensor->power_gpio, 1);
       fpsensor_debug(ERR_LOG, "fpsensor fingerprint power on\n");
     }
+	if (fpsensor->reset_gpio != 0) {
+      // set reset_gpio high
+      gpio_direction_output(fpsensor->reset_gpio, 1);
+      gpio_set_value(fpsensor->reset_gpio, 1);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint reset_gpio high\n");
+    }
 }
 static void fpsensor_power_off(fpsensor_data_t *fpsensor)
 {
@@ -112,6 +118,12 @@ static void fpsensor_power_off(fpsensor_data_t *fpsensor)
       gpio_direction_output(fpsensor->power_gpio, 0);
       gpio_set_value(fpsensor->power_gpio, 0);
       fpsensor_debug(ERR_LOG, "fpsensor fingerprint power off\n");
+    }
+	if (fpsensor->reset_gpio != 0) {
+      // set reset_gpio low
+      gpio_direction_output(fpsensor->reset_gpio, 0);
+      gpio_set_value(fpsensor->reset_gpio, 0);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint reset_gpio low\n");
     }
 }
 #endif	
@@ -207,9 +219,16 @@ static int fpsensor_get_gpio_dts_info(fpsensor_data_t *fpsensor)
     gpio_set_value(fpsensor->power_gpio, 1);
 #endif
     // set reset direction output
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+    gpio_direction_output(fpsensor->reset_gpio, 1);
+    gpio_set_value(g_fpsensor->reset_gpio, 1);
+    mdelay(4);
+    //fpsensor_hw_reset(1250);
+#else
+    // set reset direction output
     gpio_direction_output(fpsensor->reset_gpio, 1);
     fpsensor_hw_reset(1250);
-
+#endif
     return ret;
 }
 
@@ -348,7 +367,11 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 
     case FPSENSOR_IOC_RESET:
         fpsensor_debug(INFO_LOG, "%s: chip reset command\n", __func__);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+        fpsensor_hw_reset(4000);
+#else
         fpsensor_hw_reset(1250);
+#endif
         break;
 
     case FPSENSOR_IOC_ENABLE_IRQ:
