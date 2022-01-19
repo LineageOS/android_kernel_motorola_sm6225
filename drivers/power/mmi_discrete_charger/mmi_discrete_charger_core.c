@@ -1855,7 +1855,8 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 	 * HVDCP 2/3, handled separately
 	 */
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
-			|| chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
+			|| chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
 		return;
 
 	/* TypeC rp med or high, use rp value */
