@@ -107,7 +107,7 @@ struct mmi_discrete_charger {
 	/*PD*/
 	struct adapter_device *pd_adapter_dev;
 	int			pd_active;
-	bool			pd_not_supported;
+	bool			pd_supported;
 
 	int			dc_cl_ma;
 	int			batt_profile_fv_uv;
