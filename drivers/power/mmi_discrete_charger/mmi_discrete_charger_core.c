@@ -108,7 +108,7 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 		}
 	}
 
-	chip->pd_not_supported = of_property_read_bool(node, "mmi,usb-pd-disable");
+	chip->pd_supported = of_property_read_bool(node, "mmi,usb-pd-supported");
 
 	return 0;
 }
@@ -1368,9 +1368,10 @@ static int mmi_discrete_usb_get_prop(struct power_supply *psy,
 		/*when in COM, pd will trigger hard reset to let source send source_cap.
 		*but pd hard reset will closed vbus and re-enable vbus by adaptor, so usb
 		*present will return 0 to let COM shutdown. Typec mode is always on.*/
-		if (chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
+		if (chip->pd_supported &&
+			(chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
 			|| chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM
-			|| chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH) {
+			|| chip->typec_mode == MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH)) {
 			val->intval = 1;
 			break;
 		}
