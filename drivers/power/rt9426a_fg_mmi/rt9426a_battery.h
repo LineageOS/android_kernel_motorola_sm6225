@@ -122,6 +122,11 @@
 #define RT9426A_OPCFG1_TEMP_SRC_MASK      0xC000
 #define RT9426A_OPCFG1_TEMP_SRC_HOST      0x4000
 
+/* for current compensation to get ocv */
+#define RT9426A_BATTERY_RESISTANCE	100	/* unit: mOhm */
+#define RT9426A_SET_SOC_KEY		0x8600
+#define RT9426A_WRITE_SOC_FAIL		(-1)
+
 struct data_point {
 	union {
 		int x;
@@ -189,6 +194,8 @@ struct rt9426a_platform_data {
 	u32 fc_vth[5];		/* for aging_sts=0~4 */
 	u32 ocv_table[5][10][8];	/* for aging_sts=0~4 */
 	u32 fcc_design;
+	/* add for init. soc by volt_comp */
+	u32 init_ocv_table[101];
 };
 
 enum {
