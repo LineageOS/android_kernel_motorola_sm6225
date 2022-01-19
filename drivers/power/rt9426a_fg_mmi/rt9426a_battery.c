@@ -66,6 +66,16 @@ static const struct rt9426a_platform_data def_platform_data = {
 	.fc_vth = { 0x78, 0x78, 0x78, 0x78, 0x78 },
 	/* add for smooth_soc */
 	.smooth_soc_en = 0,   /* default: disable */
+	.init_ocv_table = { 3400, 3485, 3571, 3614, 3657, 3683, 3683, 3686, 3690, 3695,
+			    3699, 3704, 3708, 3712, 3717, 3721, 3726, 3731, 3736, 3740,
+			    3745, 3750, 3754, 3759, 3764, 3767, 3771, 3775, 3778, 3782,
+			    3786, 3789, 3793, 3797, 3800, 3804, 3808, 3811, 3815, 3819,
+			    3822, 3827, 3831, 3835, 3840, 3844, 3849, 3853, 3857, 3863,
+			    3869, 3875, 3882, 3888, 3895, 3905, 3915, 3925, 3935, 3946,
+			    3956, 3966, 3976, 3985, 3995, 4005, 4014, 4024, 4033, 4043,
+			    4053, 4062, 4073, 4083, 4094, 4105, 4116, 4127, 4138, 4149,
+			    4160, 4171, 4182, 4193, 4204, 4215, 4227, 4238, 4249, 4260,
+			    4271, 4283, 4294, 4305, 4312, 4318, 4325, 4331, 4338, 4344, 4351},
 };
 
 static int rt9426a_block_read(struct i2c_client *i2c, u8 reg, int len, void *dst)
@@ -1099,6 +1109,30 @@ static int offset_li(int xnr, int ynr,
 	}
 	return (int)((retval + (1 << (PRECISION_ENHANCE - 1)))
 							>> PRECISION_ENHANCE);
+}
+
+/* add for init. soc ; 2022-01-18 */
+static int rt9426a_fg_set_soc(struct rt9426a_chip *chip, int soc_target)
+{
+	int i, regval, retry_times = 3, ret = RT9426A_WRITE_SOC_FAIL;
+
+	for (i = 0; i < retry_times; i++) {
+		regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_SOC);
+		if (regval == soc_target) {
+			ret = soc_target;
+			dev_info(chip->dev, "%s: Set SOC PASS.\n", __func__);
+			break;
+		} else {
+			regval = RT9426A_SET_SOC_KEY | ((soc_target * 2) & 0xFF);
+			rt9426a_reg_write_word(chip->i2c, RT9426A_REG_CNTL, regval);
+			rt9426a_reg_write_word(chip->i2c, RT9426A_REG_DUMMY, 0x0000);
+			mdelay(5);
+			if (i > 0)
+				dev_err(chip->dev, "%s: Set SOC FAIL Cnt = %d.\n", __func__, i);
+		}
+	}
+
+	return ret;
 }
 
 static int rt9426a_fg_get_offset(struct rt9426a_chip *chip, int soc_val, int temp)
@@ -2283,7 +2317,7 @@ static int rt9426a_apply_pdata(struct rt9426a_chip *chip)
 	u16 page_checksum=0;
 	u16 page_idx_cmd=0, extend_reg_data=0;
 	u8 page_idx=0,extend_reg_cmd_addr=0, array_idx=0;
-	int volt_now = 0, fd_vth_now = 0, fd_threshold = 0;
+	int volt_now = 0, curr_now = 0, volt_comp = 0;
 	int wt_ocv_result = RT9426A_WRITE_OCV_FAIL;
 	int ocv_index = 0;
 
@@ -2459,37 +2493,32 @@ BYPASS_EXT_REG:
 		for (i = 0 ; i < retry_times ; i++) {
 			regval = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_FLAG2);
 			if ((reg_flag2&RT9426A_RDY_MASK)&&(reg_flag2!=0xFFFF)) {
-				mdelay(200);
-				if(rt9426a_get_current(chip)>0){
-					volt_now = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_VBAT);
-					fd_vth_now = chip->pdata->extreg_table[RT9426A_FD_TBL_IDX].data[RT9426A_FD_DATA_IDX];
-					fd_threshold = RT9426A_FD_BASE + 5*(fd_vth_now);
-					dev_info(chip->dev, "RT9426A VBAT = %d\n",volt_now);
-					dev_info(chip->dev, "RT9426A FD_VTH = %d\n",fd_vth_now);
-					dev_info(chip->dev, "RT9426A FD Threshold = %d\n",fd_threshold);
+				/* get current & vbat for vbat compensation ; 2022-01-18 */
+				/* step-1. volt_comp = volt_now - ((curr_now * RT9426A_BATTERY_RESISTANCE) / 1000) */
+				curr_now = rt9426a_get_current(chip);
+				volt_now = rt9426a_reg_read_word(chip->i2c, RT9426A_REG_VBAT);
+				volt_comp = volt_now -
+					    DIV_ROUND_UP(curr_now * RT9426A_BATTERY_RESISTANCE, 1000);
+				dev_info(chip->dev, "curr_now = %d, volt_now = %d, volt_comp = %d\n",
+						    curr_now, volt_now, volt_comp);
 
-					if(volt_now > fd_threshold){
-						/* disable battery charging path before QS command */
-						rt9426a_request_charging_inhibit(true);
-						dev_info(chip->dev, "Enable Charging Inhibit and delay 1250ms\n");
-						mdelay(1250);
+				/* step-2. use volt_comp to lookup ocv table and get init. soc */
+				chip->capacity = 100;
+				for (i = 0; i <= 100; i++) {
+					if (volt_comp <= chip->pdata->init_ocv_table[i]) {
+						chip->capacity = i;	/* got soc by volt_comp ; index is soc */
+						break;
 					}
 				}
+				dev_info(chip->dev, "init. soc = %d\n", chip->capacity);
+				rt9426a_fg_set_soc(chip, chip->capacity);
 				break;
 			}
 			mdelay(10);
 		}
-		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_CNTL, 0x4000);
-		rt9426a_reg_write_word(chip->i2c, RT9426A_REG_DUMMY, 0x0000);
-		mdelay(5);
+
 		dev_info(chip->dev, "OCV checksum are different, QS is done.\n");
 
-		/* Power path recover check */
-		if(volt_now > fd_threshold){
-			/* enable battery charging path after QS command */
-			rt9426a_request_charging_inhibit(false);
-			dev_info(chip->dev, "Disable Charging Inhibit\n");
-		}
 	}
 	else
 		dev_info(chip->dev, "OCV checksum are the same, bypass QS.\n");
@@ -2766,6 +2795,11 @@ static int rt_parse_dt(struct device *dev, struct rt9426a_platform_data *pdata)
 		dev_notice(dev, "no fc_vth property, use default 4200mV\n");
 		for (i = 0; i < 5; i++)
 			pdata->fc_vth[i] = 0x0078;
+	}
+	/* parse init_ocv_table array for init soc ; 2022-01-18 */
+	ret = of_property_read_u32_array(batt_profile_node, "rt,init_ocv_table", pdata->init_ocv_table, 101);
+	if (ret < 0) {
+		dev_notice(dev, "no init ocv table property, use defaut\n");
 	}
 	/*  Read Ext. Reg Table for RT9426A  */
 	ret = of_property_read_u8_array(batt_profile_node, "rt,fg_extreg_table", (u8 *)pdata->extreg_table, 224);
