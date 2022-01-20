@@ -27,6 +27,7 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,keep-regulators-on;
+        qcom,mdss-dsi-reset-force-pull-low;
         qcom,disp_pre_reset;
 
 	qcom,esd-check-enabled;
