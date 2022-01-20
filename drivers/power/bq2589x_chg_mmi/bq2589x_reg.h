@@ -380,7 +380,7 @@
 #define BQ2589X_DEV_REV_SHIFT       0
 
 
-#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 enum WT_charger_type{
 	WT_CHG_TYPE_BEGIN = 0,
 	WT_CHG_TYPE_FC,
@@ -412,5 +412,6 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_DETECTION_READY] "wt6670_detection_ready",
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
 };
+bool qc3p_update_policy(struct bq2589x *chip);
 #endif
 #endif
