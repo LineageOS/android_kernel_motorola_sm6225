@@ -541,6 +541,11 @@ int dsi_panel_reset(struct dsi_panel *panel)
 					rc);
 	}
 
+	if(panel->reset_avdd_time_interval > 0)
+	{
+		usleep_range(panel->reset_avdd_time_interval * 1000, (panel->reset_avdd_time_interval * 1000) + 100);
+	}
+
 exit:
 	return rc;
 }
@@ -2775,6 +2780,10 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 		panel->glbl_rescode_bot_ctrl = -1;
 	}
 
+	if(utils->read_u32(utils->data,"qcom,reset-avdd-time-interval", &panel->reset_avdd_time_interval))
+	{
+		panel->reset_avdd_time_interval = 0;
+	}
 	return 0;
 }
 
