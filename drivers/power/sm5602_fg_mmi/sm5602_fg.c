@@ -509,7 +509,7 @@ static int _calculate_battery_temp_ex(struct sm_fg_chip *sm, u16 uval)
 
 	pr_info("uval = 0x%x, val = 0x%x, temp = %d\n",uval, val, temp);
 
-	if(sm->factory_mode && !sm->ntc_exist && (-20 == temp))
+	if(sm->factory_mode && !sm->ntc_exist && ((-20 == temp) || (80 == temp)))
 		temp = 25;
 	return temp;
 }
