@@ -474,7 +474,10 @@ static int ili_parse_tp_module()
 			if (strstr(active_panel_name, "ili7807s")) {
 				tp_module = MODEL_CSOT_7807S;
 			}
-		}
+		} else if (strstr(active_panel_name, "txd")) {
+			if (strstr(active_panel_name, "ili7807s")) {
+				tp_module = MODEL_TXD_7807S;
+			}
 	}
 	ILI_INFO("ili_parse_tp_module=%d\n", tp_module);
 	return tp_module;
