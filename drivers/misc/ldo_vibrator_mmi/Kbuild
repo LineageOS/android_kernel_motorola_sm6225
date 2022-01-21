@@ -2,6 +2,10 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
+ifneq ($(filter m y,$(CONFIG_VIBRATOR_NOISE_CAMERA)),)
+	EXTRA_CFLAGS += -DCONFIG_VIBRATOR_NOISE_CAMERA
+endif
+
 ldo_vibrator_mmi-y += moto_ldo_vibrator.o
 
 obj-m += ldo_vibrator_mmi.o
