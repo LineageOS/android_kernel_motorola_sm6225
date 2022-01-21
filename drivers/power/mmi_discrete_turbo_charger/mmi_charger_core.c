@@ -850,15 +850,10 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
-	int ret;
-
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
-	ret = mmi_charger_write_iio_chan(chip, MMI_CP_ENABLE_STATUS, false);
-	if (ret)
-		mmi_chrg_err(chip, "Unable to write CP disable status: %d\n", ret);
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
@@ -931,10 +926,15 @@ static void kick_qc3p_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_qc3p_sm(struct mmi_charger_manager *chip)
 {
+	int ret;
+
 	cancel_delayed_work_sync(&chip->mmi_qc3p_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_qc3p_chrg_sm_work);
 	mmi_qc3p_chrg_policy_clear(chip);
 	chip->qc3p_sm_work_running = false;
+	ret = mmi_charger_write_iio_chan(chip, MMI_CP_ENABLE_STATUS, false);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to write CP disable status: %d\n", ret);
 	chip->qc3p_volt_max = qc3p_volt_max_init;
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"cancel sync and flush mmi chrg qc3p sm work\n");
@@ -1159,10 +1159,10 @@ static void psy_changed_work_func(struct work_struct *work)
 		&& !chip->factory_mode) {
 		kick_qc3p_sm(chip, 100);
 	} else {
-		cancel_sm(chip);
 		cancel_qc3p_sm(chip);
-		chip->pd_pps_support =  false;
 		chip->qc3p_active =  false;
+		cancel_sm(chip);
+		chip->pd_pps_support =  false;
 	}
 
 	return;
