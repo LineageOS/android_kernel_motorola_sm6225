@@ -1,0 +1,62 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+obj-m := parade_tma5xx_mmi_core.o
+parade_tma5xx_mmi_core-objs := \
+                                                    cyttsp5_core.o \
+                                                    cyttsp5_mt_common.o \
+                                                    cyttsp5_platform.o \
+                                                    cyttsp5_devtree.o
+
+
+obj-m += parade_tma5xx_mmi_loader.o
+parade_tma5xx_mmi_loader-objs := cyttsp5_loader.o
+
+obj-m += parade_tma5xx_mmi_debug.o
+parade_tma5xx_mmi_debug-objs := cyttsp5_debug.o
+
+obj-m += parade_tma5xx_mmi_access.o
+parade_tma5xx_mmi_access-objs := cyttsp5_device_access.o
+
+
+ifneq ($(filter m y,$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_I2C)),)
+    parade_tma5xx_mmi_core-objs += cyttsp5_i2c.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_SPI)),)
+    parade_tma5xx_mmi_core-objs += cyttsp5_spi.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MT_A)),)
+    parade_tma5xx_mmi_core-objs += cyttsp5_mta.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MT_B)),)
+    parade_tma5xx_mmi_core-objs += cyttsp5_mtb.o
+endif
+
+ifneq ($(filter m y, $(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5)),)
+    EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5
+endif
+
+ifneq ($(filter m y, $(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICETREE_SUPPORT)),)
+    EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICETREE_SUPPORT
+endif
+
+ifneq ($(filter m y, $(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_BUTTON)),)
+    EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_BUTTON
+    parade_tma5xx_mmi_core-objs += cyttsp5_btn.o
+endif
+
+ifneq ($(filter m y, $(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_PROXIMITY)),)
+    EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_PROXIMITY
+    parade_tma5xx_mmi_core-objs += cyttsp5_proximity.o
+endif
+
+
+ifneq ($(filter m y, $(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICE_ACCESS_API)),)
+    EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICE_ACCESS_API
+endif
+
