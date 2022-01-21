@@ -190,6 +190,7 @@ static void cyttsp5_report_event(struct cyttsp5_mt_data *md, int event,
 		input_report_abs(md->input, sig, value);
 }
 
+#define CY_MAX_ID 32
 static void cyttsp5_get_mt_touches(struct cyttsp5_mt_data *md,
 		struct cyttsp5_touch *tch, int num_cur_tch)
 {
@@ -197,7 +198,7 @@ static void cyttsp5_get_mt_touches(struct cyttsp5_mt_data *md,
 	struct cyttsp5_sysinfo *si = md->si;
 	int sig;
 	int i, j, t = 0;
-	DECLARE_BITMAP(ids, si->tch_abs[CY_TCH_T].max);
+	DECLARE_BITMAP(ids, CY_MAX_ID);
 	int mt_sync_count = 0;
 	u8 *tch_addr;
 

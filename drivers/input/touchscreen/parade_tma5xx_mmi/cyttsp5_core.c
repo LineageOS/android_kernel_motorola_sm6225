@@ -28,6 +28,7 @@
 
 #include "cyttsp5_regs.h"
 #include <linux/kthread.h>
+#include <linux/i2c.h>
 
 #define CY_CORE_STARTUP_RETRY_COUNT		3
 
@@ -1960,7 +1961,7 @@ exit:
 	return 0;
 }
 
-static int cyttsp5_get_mfg_value_(struct cyttsp5_core_data *cd, u8 *mfg_buffer, u8 mfg_num)
+static __maybe_unused int cyttsp5_get_mfg_value_(struct cyttsp5_core_data *cd, u8 *mfg_buffer, u8 mfg_num)
 {
 	int rc;
 
@@ -3803,6 +3804,21 @@ queue_startup:
 	cyttsp5_start_wd_timer(cd);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+static void cyttsp5_watchdog_timer(struct timer_list *t)
+{
+	struct cyttsp5_core_data *cd = from_timer(cd, t, watchdog_timer);
+
+	if (!cd)
+		return;
+
+	parade_debug(cd->dev, DEBUG_LEVEL_2, "%s: Watchdog timer triggered\n",
+		__func__);
+
+	if (!work_pending(&cd->watchdog_work))
+		schedule_work(&cd->watchdog_work);
+}
+#else
 static void cyttsp5_watchdog_timer(unsigned long handle)
 {
 	struct cyttsp5_core_data *cd = (struct cyttsp5_core_data *)handle;
@@ -3816,6 +3832,7 @@ static void cyttsp5_watchdog_timer(unsigned long handle)
 	if (!work_pending(&cd->watchdog_work))
 		schedule_work(&cd->watchdog_work);
 }
+#endif
 
 static int cyttsp5_put_device_into_easy_wakeup_(struct cyttsp5_core_data *cd)
 {
@@ -5734,8 +5751,7 @@ static ssize_t cyttsp5_ttdl_restart_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	int rc;
-	struct i2c_client *client =
-		(struct i2c_client *)container_of(dev, struct i2c_client, dev);
+	struct i2c_client *client = to_i2c_client(dev);
 
 	if (is_cyttsp5_probe_success) {
 		dev_err(dev, "%s: previous cyttsp5_probe is successful, do nothing\n",
@@ -5868,7 +5884,9 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 	struct inode *inode = NULL;
 	unsigned int file_len = 0;
 	unsigned int read_len = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	mm_segment_t oldfs;
+#endif
 	int rc = 0;
 
 	if (file_path == NULL || buf == NULL) {
@@ -5878,8 +5896,10 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 
 	dev_info(dev, "%s: path = %s\n", __func__, file_path);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 	filp = filp_open(file_path, O_RDONLY, S_IRUSR);
 	if (IS_ERR(filp)) {
 		dev_err(dev, "%s: Failed to open %s\n", __func__,
@@ -5921,7 +5941,11 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 		goto exit;
 	}
 	filp->private_data = inode->i_private;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	if (vfs_read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
+#else
+	if (kernel_read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
+#endif
 		dev_err(dev, "%s: file read error.\n", __func__);
 		rc = -EINVAL;
 		goto exit;
@@ -5932,7 +5956,9 @@ exit:
 	if (filp_close(filp, NULL) != 0)
 		dev_err(dev, "%s: file close error.\n", __func__);
 err:
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	set_fs(oldfs);
+#endif
 	return rc;
 }
 
@@ -6414,8 +6440,13 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	}
 
 	/* Setup watchdog timer */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,19,0)
+	timer_setup(&cd->watchdog_timer, cyttsp5_watchdog_timer,
+			0);
+#else
 	setup_timer(&cd->watchdog_timer, cyttsp5_watchdog_timer,
 			(unsigned long)cd);
+#endif
 
 	rc = cyttsp5_setup_irq_gpio(cd);
 	if (rc < 0) {

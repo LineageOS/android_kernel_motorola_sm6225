@@ -927,9 +927,12 @@ struct cyttsp5_features {
 	uint8_t sensor_data;
 };
 
-#define NEED_SUSPEND_NOTIFIER \
-	((LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)) \
+#if ((LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)) \
 	&& defined(CONFIG_PM_SLEEP) && defined(CONFIG_PM_RUNTIME))
+#define NEED_SUSPEND_NOTIFIER 1
+#else
+#define NEED_SUSPEND_NOTIFIER 0
+#endif
 
 struct cyttsp5_module {
 	struct list_head node;

@@ -309,14 +309,24 @@ static int cyttsp5_ldr_prog_row_(struct device *dev,
 				 struct cyttsp5_hex_image *row_image)
 {
 	u16 length = row_image->row_size + 3;
-	u8 data[3 + row_image->row_size];
+	int ret = 0;
+	u8 *data = NULL;
 	u8 offset = 0;
+
+	data = (u8 *) kmalloc(length, GFP_KERNEL);
+	if(!data) {
+		dev_err(dev, "%s: failed to kmalloc\n", __func__);
+		return -ENOMEM;
+	}
 
 	data[offset++] = row_image->array_id;
 	data[offset++] = LOW_BYTE(row_image->row_num);
 	data[offset++] = HI_BYTE(row_image->row_num);
 	memcpy(data + 3, row_image->row_data, row_image->row_size);
-	return cmd->nonhid_cmd->prog_and_verify(dev, 0, length, data);
+	ret = cmd->nonhid_cmd->prog_and_verify(dev, 0, length, data);
+
+	kfree(data);
+	return ret;
 }
 
 static int cyttsp5_ldr_verify_chksum_(struct device *dev)

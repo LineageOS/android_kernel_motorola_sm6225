@@ -1207,11 +1207,11 @@ static int  cyttsp5_get_cmcp_info(struct cyttsp5_device_access_data *dad,
 	struct gd_sensor *gd_sensor_row = cmcp_info->gd_sensor_row;
 	struct result *result = dad->result;
 	int32_t cp_btn_cal = 0;
-	int32_t cm_btn_cal = 0;
+	//int32_t cm_btn_cal = 0;
 	int32_t cp_btn_ave = 0;
 	int32_t cm_ave_data_panel = 0;
 	int32_t cm_ave_data_btn = 0;
-	int32_t cm_delta_data_btn = 0;
+	//int32_t cm_delta_data_btn = 0;
 	int32_t cp_tx_ave_data_panel = 0;
 	int32_t cp_rx_ave_data_panel = 0;
 	u8 tmp_buf[3];
@@ -1795,7 +1795,7 @@ static ssize_t cyttsp5_cmcp_test_store(struct device *dev,
 	u8 test_item = 0;
 	u8 range_check = 0;
 	u8 force_calibrate = 0;
-	int ret;
+	int ret = 0;
 	static const char * const cmcp_test_case_array[] = {"Full Cm/Cp test",
 		"Cm panel test", "Cp panel test",
 		"Cm button test", "Cp button test"};
@@ -1853,8 +1853,9 @@ static ssize_t cyttsp5_cmcp_test_store(struct device *dev,
 	 * If it is not all Test, then range_check should be 0
 	 * because other test does not has concept of basic check
 	 */
-	if (test_item > 0 && test_item < 5)
+	if (test_item > 0 && test_item < 5) {
 		range_check = 0;
+	}
 		dad->cmcp_test_items = test_item;
 		dad->cmcp_range_check = range_check;
 		dad->cmcp_force_calibrate = force_calibrate;
@@ -1901,14 +1902,14 @@ int prepare_print_data(char *out_buf, int32_t *in_buf, int index, int data_num)
 
 int save_header(char *out_buf, int index, struct result *result)
 {
-	struct timex txc;
+	struct timespec64 txc;
 	struct rtc_time tm;
 	char time_buf[100] = {0};
 
-	do_gettimeofday(&(txc.time));
-	rtc_time_to_tm(txc.time.tv_sec, &tm);
+	ktime_get_real_ts64(&txc);
+	rtc_time64_to_tm(txc.tv_sec, &tm);
 	scnprintf(time_buf, 100, "%d/%d/%d,TIME,%d:%d:%d,", tm.tm_year+1900,
-		 tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+		 tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
 	index = prepare_print_string(out_buf, ",.header,\n", index);
 	index = prepare_print_string(out_buf, ",DATE,", index);
@@ -2074,11 +2075,12 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 						index = prepare_print_data(
 							out_buf,
 							&tmp, index, 1);
-					for (j = 1; j < tx_num; j++)
+					for (j = 1; j < tx_num; j++) {
 						index = prepare_print_data(
 						out_buf,
 			&cmcp_info->cm_sensor_column_delta[(j-1)*rx_num+i],
 						index, 1);
+					}
 						index = prepare_print_string(
 								out_buf,
 								"\n", index);
@@ -2112,11 +2114,12 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 						index = prepare_print_data(
 								out_buf, &i,
 								index, 1);
-					for (j = 0; j < tx_num; j++)
+					for (j = 0; j < tx_num; j++) {
 						index = prepare_print_data(
 							out_buf,
 				&cmcp_info->cm_sensor_row_delta[j*rx_num+i-1],
 							index, 1);
+					}
 						index = prepare_print_string(
 							out_buf,
 							"\n", index);
