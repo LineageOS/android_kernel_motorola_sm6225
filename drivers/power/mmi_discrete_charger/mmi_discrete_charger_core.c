@@ -506,6 +506,8 @@ static int mmi_get_rp_based_dcp_current(struct mmi_discrete_charger *chg, int ty
 		rp_ua = TYPEC_HIGH_CURRENT_UA;
 		break;
 	case MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+		rp_ua = TYPEC_MEDIUM_CURRENT_UA;
+		break;
 	case MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
 	/* fall through */
 	default:
