@@ -30,6 +30,7 @@
 #include <linux/err.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
+#include <linux/of_gpio.h>
 
 /* cyttsp */
 #include "cyttsp5_regs.h"
@@ -554,10 +555,13 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 	}
 
 	/* Required fields */
-	rc = of_property_read_u32(core_node, "cy,irq_gpio", &value);
-	if (rc)
+	rc = of_get_named_gpio(core_node, "cy,irq_gpio", 0);
+	if (!gpio_is_valid(rc)) {
+		pdata->irq_gpio = -EINVAL;
+		pr_err("%s, invalid irq-gpio in dt: %d", __func__, rc);
 		goto fail_free;
-	pdata->irq_gpio = value;
+	}
+	pdata->irq_gpio = rc;
 
 	rc = of_property_read_u32(core_node, "cy,hid_desc_register", &value);
 	if (rc)
@@ -568,9 +572,13 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 	/* rst_gpio is optional since a platform may use
 	 * power cycling instead of using the XRES pin
 	 */
-	rc = of_property_read_u32(core_node, "cy,rst_gpio", &value);
-	if (!rc)
-		pdata->rst_gpio = value;
+	rc = of_get_named_gpio(core_node, "cy,rst_gpio", 0);
+	if (!gpio_is_valid(rc)) {
+		pdata->rst_gpio = -EINVAL;
+		pr_err("%s, invalid rst-gpio in dt: %d", __func__, rc);
+		goto fail_free;
+	}
+	pdata->rst_gpio = rc;
 
 	rc = of_property_read_u32(core_node, "cy,level_irq_udelay", &value);
 	if (!rc)
