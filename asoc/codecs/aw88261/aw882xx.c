@@ -54,8 +54,6 @@ static uint32_t g_spin_en = 0;
 static unsigned int g_runin_test;
 #endif
 
-#define AW882XX_SPIN_FOR_LOW_LATENCY_ONLY 1
-
 #ifdef AW882XX_SPIN_FOR_LOW_LATENCY_ONLY
 static unsigned int g_skt_prof_id = 0;
 #endif
