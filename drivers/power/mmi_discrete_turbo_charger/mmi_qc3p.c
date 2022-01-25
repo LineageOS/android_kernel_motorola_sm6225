@@ -42,7 +42,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-
+#define USB_VBUS_IRQ_THRESHOLD		3800
 bool mmi_qc3p_power_active(struct mmi_charger_manager *chg)
 {
 	int ret, iio_val;
@@ -108,15 +108,17 @@ int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
 	}
 
 	mmi_chrg_info(chg, "curr_vbus= %d, target_vbus = %d, step = %d, impent_v:%d\n",curr_vbus_mv, target_mv, step,impendance_vubs_volt);
-	rc = mmi_charger_write_iio_chan(chg, SMB5_DP_DM, step);
-	if (rc < 0) {
-		mmi_chrg_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
-		return -EINVAL;
-	}
+	if (chg->vbus_present && (curr_vbus_mv >= VBUS_IRQ_THRESHOLD)) {
+		rc = mmi_charger_write_iio_chan(chg, SMB5_DP_DM, step);
+		if (rc < 0) {
+			mmi_chrg_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
+			return -EINVAL;
+		}
 
-	//need wait dp/dm send out
-	sleep_ms_wt = abs(step) * 10;
-	msleep(sleep_ms_wt);
+		//need wait dp/dm send out
+		sleep_ms_wt = abs(step) * 10;
+		msleep(sleep_ms_wt);
+	}
 
 	rc = mmi_get_vbus(chg->chrg_list[CP_MASTER],
 							&curr_vbus_mv);
