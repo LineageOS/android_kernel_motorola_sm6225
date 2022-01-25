@@ -781,12 +781,14 @@ static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 
 	hw_ops = core_data->hw_ops;
 
+	mutex_lock(&core_data->mode_lock);
 	ret = goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
 	if (ret < 0) {
 		ts_err("Failed to set charger mode\n");
 	}
 	msleep(20);
 	ts_err("Success to %s charger mode\n", mode ? "Enable" : "Disable");
+	mutex_unlock(&core_data->mode_lock);
 
 	return 0;
 }
