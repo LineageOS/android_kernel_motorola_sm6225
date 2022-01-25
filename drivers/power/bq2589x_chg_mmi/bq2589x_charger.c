@@ -2406,6 +2406,8 @@ static int mmi_set_dp_dm(struct charger_device *chg_dev, int val)
 	int rc = 0;
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
 
+	down(&bq->sem_dpdm);
+
 	switch(val) {
 	case MMI_POWER_SUPPLY_DP_DM_DP_PULSE:
 		bq->pulse_cnt++;
@@ -2428,6 +2430,8 @@ static int mmi_set_dp_dm(struct charger_device *chg_dev, int val)
 	default:
 		break;
 	}
+
+	up(&bq->sem_dpdm);
 
 	return rc;
 }

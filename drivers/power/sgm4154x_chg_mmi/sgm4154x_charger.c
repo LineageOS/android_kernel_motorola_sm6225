@@ -1355,11 +1355,14 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 	if (!sgm->state.vbus_gd)
 		return;
 
+	down(&sgm->sem_dpdm);
+
 	rc = sgm4154x_request_dpdm(sgm, true);
 	if (rc < 0)
 		dev_err(sgm->dev, "Couldn't to enable DPDM rc=%d\n", rc);
 
 	sgm->typec_apsd_rerun_done = true;
+
 	sgm4154x_rerun_apsd(sgm);
 
 	while(check_count < 10) {
@@ -1371,6 +1374,10 @@ static void sgm4154x_rerun_apsd_work_func(struct work_struct *work)
 		msleep(100);
 		check_count ++;
 	}
+
+	sgm->pulse_cnt = 0;
+
+	up(&sgm->sem_dpdm);
 
 	schedule_work(&sgm->charge_detect_work);
 }
@@ -1498,8 +1505,10 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 		|| vbus_voltage > QC3P_AUTHEN_HIGH_THR_MV) {
 		sgm->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 		/*do qc3p rerun*/
+		dev_err(sgm->dev, "qc3p voltage is invalid, rerun qc3p detect\n");
 		if (!sgm->mmi_qc3p_rerun_done) {
 			sgm->mmi_qc3p_rerun_done = true;
+			sgm->mmi_qc3p_wa = true;
 			dp_val = 0x0<<3;
 			ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_d,
 						  SGM4154x_DP_VSEL_MASK, dp_val); //dp HIZ
@@ -1571,6 +1580,7 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 		//do rerun qc3p
 		if (!sgm->mmi_qc3p_rerun_done) {
 			sgm->mmi_qc3p_rerun_done = true;
+			sgm->mmi_qc3p_wa = true;
 			dp_val = 0x0<<3;
 			ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_d,
 						  SGM4154x_DP_VSEL_MASK, dp_val); //dp HIZ
@@ -1836,6 +1846,7 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	cancel_delayed_work_sync(&sgm->charge_monitor_work);
 	sgm->pulse_cnt = 0;
 	sgm->mmi_qc3p_rerun_done = false;
+	sgm->mmi_qc3p_wa = false;
 	sgm->typec_apsd_rerun_done = false;
 	sgm->chg_dev->noti.apsd_done = false;
 	sgm->chg_dev->noti.hvdcp_done = false;
@@ -1853,13 +1864,18 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
 		(sgm->state.chrg_type == SGM4154x_UNKNOWN))
 		&& (!sgm->typec_apsd_rerun_done)) {
-		down(&sgm->sem_dpdm);
 		dev_err(sgm->dev, "rerun apsd for 0x%x\n", sgm->state.chrg_type);
 		schedule_work(&sgm->rerun_apsd_work);
-		up(&sgm->sem_dpdm);
 		return;
 	}
-
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	if (true == sgm->mmi_qc3p_wa) {
+		if (sgm->state.chrg_type != SGM4154x_USB_DCP) {
+			pr_err("SGM4154x charger type fix to DCP to workaroud BC1.2 rerun fail \n");
+			sgm->state.chrg_type = SGM4154x_USB_DCP;
+		}
+	}
+#endif
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			pr_err("SGM4154x charger type: SDP\n");
@@ -2640,6 +2656,8 @@ static int sgm4154x_set_dp_dm(struct charger_device *chg_dev, int val)
 	int rc = 0;
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
 
+	down(&sgm->sem_dpdm);
+
 	switch(val) {
 	case MMI_POWER_SUPPLY_DP_DM_DP_PULSE:
 		sgm->pulse_cnt++;
@@ -2662,6 +2680,8 @@ static int sgm4154x_set_dp_dm(struct charger_device *chg_dev, int val)
 	default:
 		break;
 	}
+
+	up(&sgm->sem_dpdm);
 
 	return rc;
 }

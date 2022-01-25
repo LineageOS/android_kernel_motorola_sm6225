@@ -356,6 +356,7 @@ struct sgm4154x_device {
 
 	/*mmi qc3p*/
 	bool			mmi_qc3p_rerun_done;
+	bool			mmi_qc3p_wa;
 	int			mmi_qc3p_power;
 
 	struct sgm4154x_iio		iio;
