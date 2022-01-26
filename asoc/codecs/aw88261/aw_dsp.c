@@ -569,14 +569,13 @@ int aw_dsp_get_spin_param(struct aw_device *aw_dev,
 	if (ret) {
 		spin_param.enable = 0;
 		spin_param.relase_time = 0;
-		aw_pr_err("yao,read spin params failed ");
+		aw_pr_err("read spin params failed ");
 		return ret;
 	}
 
 	*enable = spin_param.enable;
 	*relase_time = spin_param.relase_time;
 
-	aw_pr_info("yao,get spin params done");
 	return 0;
 }
 
@@ -587,7 +586,6 @@ int aw_dsp_set_spin_param(struct aw_device *aw_dev,
 	struct aw_spin_param spin_param;
 
 	if (!enable) {
-		aw_pr_dbg("yao,need to set the rotation parameters");
 		return 0;
 	}
 
@@ -598,11 +596,10 @@ int aw_dsp_set_spin_param(struct aw_device *aw_dev,
 				&spin_param,
 				sizeof(spin_param));
 	if (ret){
-		pr_err("yao,222,set spin params failed\n");
+		pr_err("set spin params failed\n");
 		return -EINVAL;
 	}
 
-	pr_err("yao,222,set spin params with ret 0");
 	return 0;
 }
 #endif
