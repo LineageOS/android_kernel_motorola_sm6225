@@ -2,13 +2,13 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
-prod_list := hawao
-find_target := $(foreach find, $(prod_list), $(findstring $(find), $(TARGET_PRODUCT)))
-find_target := $(strip $(find_target))
-$(warning find_target=$(find_target))
-ifneq ($(find_target),)
-$(warning define SUPPORT_POWER_GPIO)
-EXTRA_CFLAGS += -DSUPPORT_POWER_GPIO
-endif
+#prod_list := hawao
+#find_target := $(foreach find, $(prod_list), $(findstring $(find), $(TARGET_PRODUCT)))
+#find_target := $(strip $(find_target))
+#$(warning find_target=$(find_target))
+#ifneq ($(find_target),)
+#$(warning define SUPPORT_POWER_GPIO)
+#EXTRA_CFLAGS += -DSUPPORT_POWER_GPIO
+#endif
 
 obj-m += fpsensor_spi_tee.o
