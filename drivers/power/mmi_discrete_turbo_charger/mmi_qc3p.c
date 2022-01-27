@@ -108,7 +108,7 @@ int mmi_qc3p_set_vbus_voltage(struct mmi_charger_manager *chg, int target_mv)
 	}
 
 	mmi_chrg_info(chg, "curr_vbus= %d, target_vbus = %d, step = %d, impent_v:%d\n",curr_vbus_mv, target_mv, step,impendance_vubs_volt);
-	if (chg->vbus_present && (curr_vbus_mv >= VBUS_IRQ_THRESHOLD)) {
+	if (chg->vbus_present && (curr_vbus_mv >= USB_VBUS_IRQ_THRESHOLD)) {
 		rc = mmi_charger_write_iio_chan(chg, SMB5_DP_DM, step);
 		if (rc < 0) {
 			mmi_chrg_err(chg, "Couldn't set dpdm pulse rc=%d\n", rc);
