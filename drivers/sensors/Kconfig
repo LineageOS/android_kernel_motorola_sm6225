@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
+config SENSORS_CLASS
+	tristate "Enable Sensors Class Driver Support"
+	help
+	  Add support for sensors class driver.
+
 config SENSORS_SSC
 	bool "Enable Sensors Driver Support for SSC"
 	help

@@ -1,0 +1,11 @@
+#
+# Awinic Haptic
+#
+
+menuconfig INPUT_AWINIC_HAPTIC
+	bool "Awinic Haptic"
+	default n
+	help
+	  Enables Awinic Haptic driver.
+
+source "drivers/misc/awinic/aw8695/Kconfig"

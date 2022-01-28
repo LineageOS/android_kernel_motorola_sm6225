@@ -1,5 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
-
-obj-m += mmi_sys_temp.o
+obj-$(CONFIG_MMI_SYS_TEMP) += mmi_sys_temp.o

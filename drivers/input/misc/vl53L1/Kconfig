@@ -1,0 +1,19 @@
+config INPUT_STMVL53L1
+	tristate "STMVL53L1 support"
+	default n
+	help
+	  Say Y here if you wish to include support for laser sensor driver.
+
+config INPUT_MISC_TOF_USE_VL53L3
+	bool "STMVL53L3 support"
+	depends on INPUT_STMVL53L1
+	default n
+	help
+	  Say Y here if you wish to include support for VL53L3 laser sensor driver.
+
+config INPUT_MISC_PMIC_WL2864C
+	bool "WL2864C support"
+	depends on INPUT_STMVL53L1
+	default n
+	help
+	  Say Y here if you wish to include support for WL2864C PMIC driver.

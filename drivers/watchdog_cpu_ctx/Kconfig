@@ -1,0 +1,9 @@
+config WATCHDOG_CPU_CTX
+        tristate "WATCHDOG CPU CTX"
+        default n
+        help
+         Say Y here if you have a watchdog cpu ctx compatible
+         device defined.
+
+         This driver can also be built as a module.  If so, the module
+         will be called watchdog_cpu_ctx.

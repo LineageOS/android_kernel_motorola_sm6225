@@ -1,0 +1,9 @@
+config REGULATOR_WL2864C
+        tristate "WL2864C REGULATOR"
+        default n
+        help
+         Say Y here if you have a WL2864C compatible
+         device connected.
+
+         This driver can also be built as a module.  If so, the module
+         will be called wl2864c-regulator.

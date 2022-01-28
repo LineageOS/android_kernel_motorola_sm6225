@@ -232,4 +232,18 @@ source "drivers/sensors/Kconfig"
 source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+source "drivers/moto_f_usbnet/Kconfig"
+
+source "drivers/mmi_annotate/Kconfig"
+
+source "drivers/mmi_info/Kconfig"
+
+source "drivers/mmi_relay/Kconfig"
+
+source "drivers/tzlog_dump/Kconfig"
+
+source "drivers/watchdog_cpu_ctx/Kconfig"
+
+source "drivers/watchdogtest/Kconfig"
 endmenu

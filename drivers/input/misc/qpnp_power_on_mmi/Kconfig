@@ -1,0 +1,8 @@
+config INPUT_QPNP_POWER_ON_MMI
+        tristate "QPNP PMIC Power-on MMI support"
+        depends on SPMI
+        help
+          This option enables device driver support for the power-on
+          functionality of Qualcomm Technologies, Inc. PNP PMICs.  It supports
+          reporting the change in status of the KPDPWR_N line (connected to the
+          power-key) as well as reset features.

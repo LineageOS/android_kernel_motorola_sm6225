@@ -1,0 +1,14 @@
+#
+# UTAGS Driver
+#
+
+config MMI_SYS_TEMP
+	tristate "MMI sys temp driver"
+	help
+	  Say Y here if you have mmi_sys_temp
+	  support in your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called mmi_sys_temp.

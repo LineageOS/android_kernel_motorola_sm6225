@@ -1,0 +1,10 @@
+config P938X_CHARGER
+	tristate "P938X Charger Driver"
+	help
+	  Say Y here if you have P938X Charging Device in
+          your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called p938x_charger.

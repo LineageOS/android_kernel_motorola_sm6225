@@ -1,9 +1,4 @@
-# add -Wall to try to catch everything we canss
-# EXTRA_CFLAGS += -Wallss
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
-		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/stmicro_mmi
-
-obj-m := stmicro_mmi.o
+obj-$(CONFIG_TOUCHSCREEN_FTS_TS) := stmicro_mmi.o
 stmicro_mmi-objs := fts.o fts_proc.o
 stmicro_mmi-objs += fts_lib/ftsCompensation.o
 stmicro_mmi-objs += fts_lib/ftsCore.o
@@ -16,26 +11,5 @@ stmicro_mmi-objs += fts_lib/ftsTest.o
 stmicro_mmi-objs += fts_lib/ftsTime.o
 stmicro_mmi-objs += fts_lib/ftsTool.o
 
-ifneq ($(filter m y,$(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
-    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
-endif
-
-ifneq ($(filter m y, $(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
-	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
-endif
-
-ifneq ($(filter m y,$(CONFIG_ST_LIMIT_USE_SUPPLIER)),)
-    EXTRA_CFLAGS += -DCONFIG_ST_LIMIT_USE_SUPPLIER
-endif
-
-ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
-    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
-    stmicro_mmi-objs += fts_mmi_class.o
-
-	ifneq ($(filter m y, $(CONFIG_TOUCHCLASS_MMI_MULTIWAY_UPDATE_FW)),)
-		EXTRA_CFLAGS += -DTS_MMI_TOUCH_MULTIWAY_UPDATE_FW
-	endif
-endif
-
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+stmicro_mmi-$(CONFIG_INPUT_TOUCHSCREEN_MMI) += fts_mmi_class.o
+ccflags-$(CONFIG_TOUCHCLASS_MMI_MULTIWAY_UPDATE_FW) += -DTS_MMI_TOUCH_MULTIWAY_UPDATE_FW

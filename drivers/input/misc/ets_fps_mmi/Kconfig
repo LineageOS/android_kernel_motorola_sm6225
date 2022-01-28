@@ -1,0 +1,77 @@
+config INPUT_EGISTEC_FPS
+	tristate "Egistec fingerprint sensor MMI"
+	default n
+	help
+	 Say Y here if you wish to include support for MMI EGIS finger print sensor.
+	 If unsure, say N.
+
+menuconfig INPUT_EGISTEC_FPS_NAVI
+	bool "Egistec fingerprint sensor MMI navigation support"
+        depends on INPUT_EGISTEC_FPS
+	default n
+	help
+	 Say Y here if you wish to include support for MMI EGIS finger print sensor
+         navigation functions.
+	 If unsure, say N.
+
+if INPUT_EGISTEC_FPS_NAVI
+
+config INPUT_EGISTEC_FPS_NAVI_VERTICAL
+	bool "Egistec fingerprint sensor MMI navigation vertical support"
+	default y
+	help
+	 Say Y here if you wish to include support for MMI EGIS finger print sensor
+         vertical navigation functions.
+	 If unsure, say N.
+
+config INPUT_EGISTEC_FPS_NAVI_HORIZON
+	bool "Egistec fingerprint sensor MMI navigation horizon support"
+	default y
+	help
+	 Say Y here if you wish to include support for MMI EGIS finger print sensor
+         horizon navigation functions.
+	 If unsure, say N.
+
+endif
+
+config EGIS_DISPLAY_SPEED_UP
+	bool "Egistec fingerprint sensor display speed up support"
+        depends on INPUT_EGISTEC_FPS
+	default n
+	help
+	 Say Y here if you wish to include support for MMI EGIS finger print sensor
+         display speed up functions.
+	 If unsure, say N.
+
+config NAV_DOUBLE_TAP
+        bool "Egistec fingerprint sensor MMI double click support"
+        depends on INPUT_EGISTEC_FPS
+        default n
+        help
+         Say Y here if you wish to include support for MMI EGIS finger print sensor
+         double click functions.
+
+ choice
+	prompt "Egistec fingerprint sensor pose"
+        depends on INPUT_EGISTEC_FPS
+	default INPUT_EGISTEC_FPS_POSE_270
+
+	config INPUT_EGISTEC_FPS_POSE_0
+		bool "0 degree"
+
+	config INPUT_EGISTEC_FPS_POSE_90
+		bool "90 degree"
+
+	config INPUT_EGISTEC_FPS_POSE_180
+		bool "180 degree"
+
+	config INPUT_EGISTEC_FPS_POSE_270
+		bool "270 degree"
+endchoice
+
+config INPUT_EGISTEC_FPS_POSE
+	int
+	default 0 if INPUT_EGISTEC_FPS_POSE_0
+	default 90 if INPUT_EGISTEC_FPS_POSE_90
+	default 180 if INPUT_EGISTEC_FPS_POSE_180
+	default 270 if INPUT_EGISTEC_FPS_POSE_270

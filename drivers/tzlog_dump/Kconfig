@@ -1,0 +1,9 @@
+config TZLOG_DUMP
+        tristate "TZLOG DUMP"
+        default n
+        help
+         Say Y here if you have a tzlog compatible
+         device defined.
+
+         This driver can also be built as a module.  If so, the module
+         will be called tzlog_dump.

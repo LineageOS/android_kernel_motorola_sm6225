@@ -1,0 +1,9 @@
+config MMI_PARALLEL_CHARGER_QC3P
+	tristate "MMI PARALLEL CHARGER QC3P"
+	default n
+	help
+	  Say Y here if you have a mmi parallel charger compatible
+	  device connected.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called mmi_parallel_charger_qc3p.
