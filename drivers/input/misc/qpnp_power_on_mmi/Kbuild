@@ -1,7 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
-
-obj-m += qpnp-power-on-mmi.o
-
+obj-$(CONFIG_INPUT_QPNP_POWER_ON_MMI) += qpnp-power-on-mmi.o

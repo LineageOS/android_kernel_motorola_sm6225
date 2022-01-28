@@ -1,15 +1,3 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-
-ifneq ($(filter m y,$(CONFIG_USE_MMI_CHARGER)),)
-	EXTRA_CFLAGS += -DUSE_MMI_CHARGER
-	EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger
-	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
-endif
-
-ifneq ($(filter m y, $(ADAPTIVE_TOLERANCE_OPTIMIZATION)),)
-	EXTRA_CFLAGS += -DADAPTIVE_TOLERANCE_OPTIMIZATION
-endif
-
-obj-m += qpnp_adaptive_charge.o
+ccflags-$(CONFIG_USE_MMI_CHARGER) += -DUSE_MMI_CHARGER
+obj-$(CONFIG_QPNP_ADAPTIVE_CHARGE) += qpnp_adaptive_charge.o
+ccflags-$(CONFIG_ADAPTIVE_TOLERANCE_OPTIMIZATION) += -DADAPTIVE_TOLERANCE_OPTIMIZATION

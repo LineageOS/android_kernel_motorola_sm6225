@@ -1,0 +1,17 @@
+config QPNP_ADAPTIVE_CHARGE
+        tristate "QPNP ADAPTIVE CHARGE"
+        default n
+        help
+         Say Y here if you have a qpnp adaptive charge compatible device
+         connected.
+
+         This driver can also be built as a module. If so, the module will be
+         called qpnp_adaptive_charge.
+
+config ADAPTIVE_TOLERANCE_OPTIMIZATION
+        bool "Adaptive charger tolerance optimization"
+        depends on QPNP_ADAPTIVE_CHARGE
+        default n
+        help
+         Say Y here if you want adaptive charger tolerance optimization from 1
+         to 2 for more stable state switching.

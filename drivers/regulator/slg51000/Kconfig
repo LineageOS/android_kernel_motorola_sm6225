@@ -1,0 +1,9 @@
+config REGULATOR_SLG51000
+        tristate "SLG51000 REGULATOR"
+        default n
+        help
+         Say Y here if you have a SLG51000 compatible
+         device connected.
+
+         This driver can also be built as a module.  If so, the module
+         will be called slg51000-regulator.

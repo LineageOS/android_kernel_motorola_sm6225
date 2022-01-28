@@ -1,0 +1,9 @@
+config MOTO_F_USBNET
+        tristate "Moto USBNET Extension"
+        default n
+        help
+         Say Y here if you have a MOTO F USBNET compatible
+         device defined.
+
+         This driver can also be built as a module.  If so, the module
+         will be called f_usbnet.

@@ -2,21 +2,9 @@
 # Kbuild for the vl53L1 drivers.
 #
 
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1/inc -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1/ipp -I$(TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1
+ccflags-y	+= -I$(src)/inc
 
-# define this environment variable if you want to compile driver for an old
-# kernel
-ifdef OLD_NETLINK_API
-EXTRA_CFLAGS	+= -DOLD_NETLINK_API
-endif
-
-ifdef VL53L1_LOG_ENABLE
-EXTRA_CFLAGS	+= -DVL53L1_LOG_ENABLE
-endif
-
-obj-m	+= stmvl53l1.o
+obj-$(CONFIG_INPUT_STMVL53L1)	+= stmvl53l1.o
 stmvl53l1-objs		:= stmvl53l1_module.o stmvl53l1_module-i2c.o
 stmvl53l1-objs		+= stmvl53l1_i2c.o stmvl53l1_ipp_nl.o stmvl53l1_log.o
 stmvl53l1-objs		+= src/vl53l1_api.o src/vl53l1_api_core.o
@@ -30,11 +18,5 @@ stmvl53l1-objs		+= src/vl53l1_api_debug.o src/vl53l1_core_support.o
 stmvl53l1-objs		+= src/vl53l1_wait.o ipp/ipp_linux.o
 stmvl53l1-objs		+= src/vl53l1_nvm_debug.o
 
-ifneq ($(filter m y,$(CONFIG_INPUT_MISC_TOF_USE_VL53L3)),)
-	EXTRA_CFLAGS += -DTOF_USE_VL53L3_EN
-endif
-
-
-ifneq ($(filter m y,$(CONFIG_INPUT_MISC_PMIC_WL2864C)),)
-	EXTRA_CFLAGS += -DTOF_USE_PMIC_WL2864C
-endif
+ccflags-$(CONFIG_INPUT_MISC_TOF_USE_VL53L3) += -DTOF_USE_VL53L3_EN
+ccflags-$(CONFIG_INPUT_MISC_PMIC_WL2864C) += -DTOF_USE_PMIC_WL2864C

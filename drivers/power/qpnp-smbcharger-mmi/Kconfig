@@ -1,0 +1,18 @@
+config QPNP_SMBCHARGER_MMI
+	tristate "QPNP SMBCHARGER MMI"
+	default n
+	help
+	  Say Y here if you have a qpnp smbcharger mmi compatible
+	  device connected.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called qpnp_smbcharger_mmi.
+
+config PD_CHARGER_MMI
+	bool "PD CHARGER MMI"
+	depends on QPNP_SMBCHARGER_MMI
+	default n
+	help
+	  Say Y here if you have a PDO compatible device connected.
+
+	  If unsure, say N.

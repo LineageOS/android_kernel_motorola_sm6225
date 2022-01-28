@@ -1,0 +1,48 @@
+#
+# CapSense(TM) devices
+#
+
+config SARSENSOR_SX937X
+	tristate "sx937x Programming Driver"
+	depends on I2C
+	help
+	  CapSense devices is the analog system contains the capacitive sensing
+	  hardware. Several hardware algorithms are supported. This hardware
+	  performs capacitive sensing and scanning without requiring external
+	  components. It contains internal flash memory, which have to be programmed
+	  with firmware using HSSP interface. Host Sourced Serial Programming (HSSP)
+	  refers to the programming of the target device on the board by using a host
+	  microcontroller. The PSoC 4 target is programmed through the SWD interface -
+	  ARM Serial Ware Debug. This option enables firmware programming driver and
+	  allows automatically identify device and matching firmware. See file
+	  Documentation/devicetree/bindings/misc/capsense_hssp.txt for details.
+
+config SX937X_USB_CAL
+	bool "Enable sx937x usb calibration"
+	depends on SARSENSOR_SX937X
+	help
+	  Enable Cap-sensor calibration when usb plug.
+
+	  To use SX937X_USB_CAL open the feature that it can enable cap-sensor calibration
+	  when usb plug.
+
+config SX937X_FLIP_CAL
+	bool "Enable sx937x flip calibration"
+	depends on SARSENSOR_SX937X
+	help
+	  Enable Cap-sensor calibration when flipping.
+
+	  To use SX937X_FLIP_CAL open the feature that it can enable cap-sensor calibration
+	  when flipping.
+
+config SX937X_POWER_SUPPLY_ONLINE
+	bool "Enable sx937x power supply online usage"
+	depends on SARSENSOR_SX937X
+	help
+	  Enable online power supply usage.
+
+config CAPSENSE_HEADSET_STATE
+	bool "Enable sx937x headset state"
+	depends on SARSENSOR_SX937X
+	help
+	  Enable Cap-sensor headset state.

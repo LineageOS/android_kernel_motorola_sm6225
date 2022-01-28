@@ -1,13 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-
-ifneq ($(filter m y,$(CONFIG_PD_CHARGER_MMI)),)
-	EXTRA_CFLAGS += -DCONFIG_PD_CHARGER_MMI
-endif
-
-ifneq ($(filter m y, $(CONFIG_BQ2597X_DUAL)),)
-	EXTRA_CFLAGS += -DCONFIG_BQ2597X_DUAL
-endif
-
-obj-m += qpnp-smbcharger-mmi.o
+obj-$(CONFIG_QPNP_SMBCHARGER_MMI) += qpnp-smbcharger-mmi.o

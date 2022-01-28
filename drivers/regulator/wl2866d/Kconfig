@@ -1,0 +1,9 @@
+config REGULATOR_WL2866D
+        tristate "WL2866D REGULATOR"
+        default n
+        help
+         Say Y here if you have a WL2866D compatible
+         device connected.
+
+         This driver can also be built as a module.  If so, the module
+         will be called wl2866d-regulator.

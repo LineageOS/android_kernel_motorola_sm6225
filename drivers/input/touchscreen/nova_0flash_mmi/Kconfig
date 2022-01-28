@@ -1,0 +1,116 @@
+#
+# Novatek NT36xxx touchscreen driver configuration
+#
+menuconfig TOUCHSCREEN_NT36xxx_HOSTDL_SPI_MMI
+	tristate "Moto Novatek NT36xxx host download SPI driver"
+	default n
+	help
+	  Say Y here if you have a Moto Novatek NT36xxx no flash touchscreen
+	  connected to your system by SPI bus.
+
+	  If unsure, say N.
+
+if TOUCHSCREEN_NT36xxx_HOSTDL_SPI_MMI
+
+config INPUT_NOVA_0FLASH_MMI_ENABLE_DOUBLE_TAP
+	bool "Moto Novatek NT36xxx Double tap"
+	depends on SENSORS_CLASS
+	default n
+	help
+	  Say Y here if you want to have Double tap support on Moto Novatek
+	  NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_0FLASH_MMI_NOTIFY_TOUCH_STATE
+	bool "Moto Novatek NT36xxx notify touch state"
+	default n
+	help
+	  Say Y here if you want to have Double tap support on Moto Novatek
+	  NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_PANEL_NOTIFICATIONS
+	bool "Moto Novatek NT36xxx panel notification"
+	default n
+	help
+	  Say Y here if you want to have panel notification support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_DRM_PANEL
+	bool "Moto Novatek NT36xxx touch DRM panel"
+	default n
+	help
+	  Say Y here if you want to have touch DRM panel support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_CHIP_VER_1
+	bool "Moto Novatek NT36xxx touch chip ver 1"
+	default n
+	help
+	  Say Y here if you want to have touch chip ver 1 support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+config NOVA_ESD_ENABLE
+	bool "Moto Novatek NT36xxx ESD Detection"
+	default n
+	help
+	  Say Y here if you want to have ESD Detection support on Moto Novatek
+	  NT36xxx.
+
+	  If unsure, say N.
+
+config NOVA_LCM_FAST_LIGHTUP
+	bool "Moto Novatek NT36xxx lcm fast lightup"
+	default n
+	help
+	  Say Y here if you want to have lcm fast lightup support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_0FLASH_MMI_STYLUS_PALM
+	bool "Moto Novatek NT36xxx stylus palm"
+	default n
+	help
+	  Say Y here if you want to have stylus palm support on Moto Novatek
+	  NT36xxx.
+
+	  If unsure, say N.
+
+config INPUT_NOVA_0FLASH_MMI_STYLUS_PALM_RANGE
+	bool "Moto Novatek NT36xxx stylus palm range"
+	default n
+	help
+	  Say Y here if you want to have stylus palm range support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+# config INPUT_NOVA_0FLASH_MMI_PEN_NOTIFIER
+# 	bool "Moto Novatek NT36xxx pen notifier"
+# 	depends on PEN_BU520XX
+# 	default n
+# 	help
+# 	  Say Y here if you want to have pen notifier support on Moto Novatek
+# 	  NT36xxx.
+
+# 	If unsure, say N.
+
+config INPUT_NOVA_EDGE_SUPPRESSION
+	bool "Moto Novatek NT36xxx EDGE touch suppression"
+	default n
+	help
+	  Say Y here if you want to have EDGE touch suppression support on Moto
+	  Novatek NT36xxx.
+
+	  If unsure, say N.
+
+endif

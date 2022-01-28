@@ -1,0 +1,45 @@
+config INPUT_TOUCHSCREEN_MMI
+	tristate "Moto touchscreen gestures"
+	default n
+	help
+	 Say Y here if you wish to include support for Moto touchscreen gestures.
+	 If unsure, say N.
+
+if INPUT_TOUCHSCREEN_MMI
+
+config TOUCHCLASS_MMI_DEBUG_INFO
+	bool "Moto touchscreen gestures debug info"
+	default n
+	help
+	 Say Y here if you wish to include support for Moto touchscreen gestures debugging info.
+	 If unsure, say N.
+
+config TOUCHCLASS_MMI_GESTURE_POISON_EVENT
+	bool "Moto gestures event poison"
+	default n
+	help
+	 Say Y here if you wish to include support for Moto gestures event poison.
+	 If unsure, say N.
+
+config TOUCHCLASS_MMI_MULTIWAY_UPDATE_FW
+	bool "Moto TP firmware through the Parameter APK"
+	default n
+	help
+	  Say Y here if you want to have TP firmware through the Parameter APK.
+	  If unsure, say N.
+
+config DRM_PANEL_NOTIFICATIONS
+	bool "Moto DRM panel notifications"
+	default n
+	help
+	 Say Y here if your panel includes support for drm notifications.
+	 If unsure, say N.
+
+config DRM_PANEL_EVENT_NOTIFICATIONS
+	bool "Moto DRM panel event notifications"
+	default n
+	help
+	 Say Y here if your panel includes support for drm panel event notifications.
+	 If unsure, say N.
+
+endif

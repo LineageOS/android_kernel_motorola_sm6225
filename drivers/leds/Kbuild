@@ -1,6 +1,0 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-
-
-obj-m += leds-indicator-pwm.o

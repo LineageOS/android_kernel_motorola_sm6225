@@ -1,69 +1,8 @@
-KERNEL_DIR_PATH = $(shell find $(ANDROID_BUILD_TOP)/kernel/ -name "msm-*" -type d | head -1 | grep -i "kernel/msm-*")
+ccflags-y += -I$(srctree)/drivers/base
 
-KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
+ccflags-$(CONFIG_SX933X_USB_CAL) += -DCONFIG_CAPSENSE_USB_CAL
+ccflags-$(CONFIG_SX933X_FLIP_CAL) += -DCONFIG_CAPSENSE_FLIP_CAL
+ccflags-$(CONFIG_SX933X_ATTACH_CAL) += -DCONFIG_CAPSENSE_ATTACH_CAL
+ccflags-$(CONFIG_SX933X_HEADSET_STATE) += -DCONFIG_CAPSENSE_HEADSET_STATE
 
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
-
-ifneq ($(filter m y,$(CONFIG_SX933X_USB_CAL)),)
-	EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq ($(filter m y,$(CONFIG_SX933X_FLIP_CAL)),)
-	EXTRA_CFLAGS += -DCONFIG_CAPSENSE_FLIP_CAL
-endif
-
-ifneq (,$(filter river%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter doha%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter sofia%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter odin%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL \
-		-DCONFIG_CAPSENSE_ATTACH_CAL
-endif
-
-ifneq (,$(filter olson%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL \
-		-DCONFIG_CAPSENSE_FLIP_CAL
-endif
-
-ifneq (,$(filter rav%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter burton%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter smith% nairo%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(filter racer%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_HEADSET_STATE
-endif
-
-ifneq (,$(filter kiev%,$(TARGET_PRODUCT)))
-EXTRA_CFLAGS += -DCONFIG_CAPSENSE_USB_CAL
-endif
-
-ifneq (,$(KERNEL_DIR_PATH))
-        EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/kernel/$(KERNEL_VERSION_NAME)/drivers/base
-else
-        EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/kernel/drivers/base
-endif
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../sensors/Module.symvers
-
-sx932x_sar-y := sx933x_sar.o
-
-obj-m += sx933x_sar.o
+obj-$(CONFIG_SARSENSOR_SX933X) += sx933x_sar.o
