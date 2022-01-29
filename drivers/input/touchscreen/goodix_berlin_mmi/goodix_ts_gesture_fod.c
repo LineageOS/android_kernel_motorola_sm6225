@@ -374,7 +374,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct gesture_event_data mmi_event;
 	static  unsigned  long  start = 0;
-	int fod_down_interval;
+	int fod_down_interval = 0;
 	int fod_down = cd->ts_event.gesture_data[0];
 #endif
 	if (atomic_read(&cd->suspended) == 0 || cd->gesture_type == 0)
@@ -424,32 +424,34 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			mmi_event.evcode = 2;
 			mmi_event.evdata.x= 540;
 			mmi_event.evdata.y= 2164;
-			ts_info("get FOD-DOWN gesture %d   fod_down_interval=%d",fod_down,fod_down_interval);
-			if(fod_down_interval < 250)
-			{
-				if( fod_down) {
-					goto fod_exit;
-				}
-			} else {
+
+			ts_debug("Get FOD-DOWN gesture down:%d interval:%d",fod_down,fod_down_interval);
+			if(fod_down_interval > 2000)
 				fod_down = 0;
+			if(fod_down_interval > 0 && fod_down_interval < 250 && fod_down) {
+					goto gesture_ist_exit;
 			}
 			start = jiffies;
-			if(fod_down <4) {
+			//maximum allow send down event 7 times
+			if(fod_down < 6) {
 				ret = cd->imports->report_gesture(&mmi_event);
 				if (!ret)
 					PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
-				}
 			}
-fod_exit:
 			fod_down++;
-			goto gesture_ist_exit;
-	}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
-			ts_info("get FOD-UP gesture");
+		}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
+			ts_info("Get FOD-UP gesture");
 			mmi_event.evcode = 3;
+			mmi_event.evdata.x= 0;
+			mmi_event.evdata.y= 0;
+			ret = cd->imports->report_gesture(&mmi_event);
+			if (!ret)
+				PM_WAKEUP_EVENT(cd->gesture_wakelock, 500);
 			fod_down = 0;
-	} else {
-		ts_debug("not support gesture type[%02X] to wakeup, suspended =%d", gs_event.gesture_type, atomic_read(&cd->suspended));
-		fod_down = 0;
+		} else {
+			ts_debug("not support gesture type[%02X] to wakeup, suspended =%d", gs_event.gesture_type, atomic_read(&cd->suspended));
+			fod_down = 0;
+		}
 	}
 #else
 	switch (gs_event.gesture_type) {
