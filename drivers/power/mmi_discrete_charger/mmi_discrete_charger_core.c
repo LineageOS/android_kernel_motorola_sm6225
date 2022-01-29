@@ -2262,9 +2262,10 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 			chip->chg_info.chrg_pmax_mw = chip->constraint.dcp_pmax;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP)
 			chip->chg_info.chrg_pmax_mw = 7500;
-		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 ||
-			usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
 			chip->chg_info.chrg_pmax_mw = chip->constraint.hvdcp_pmax;
+		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+			chip->chg_info.chrg_pmax_mw = 30000;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_PD)
 			chip->chg_info.chrg_pmax_mw = chip->constraint.pd_pmax;
 		else
