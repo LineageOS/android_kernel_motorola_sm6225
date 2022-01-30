@@ -27,6 +27,7 @@
  */
 
 #include "cyttsp5_regs.h"
+#include "cyttsp5_ts_mmi.h"
 #include <linux/kthread.h>
 #include <linux/i2c.h>
 
@@ -6513,6 +6514,15 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	/* Probe registered modules */
 	cyttsp5_probe_modules(cd);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	dev_info(dev, "%s:cyttsp5_ts_mmi_dev_register",__func__);
+	rc = cyttsp5_ts_mmi_dev_register(dev);
+	if (rc) {
+		dev_info(dev, "Failed register touchscreen mmi.");
+		goto error_startup_btn;
+	}
+#endif
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	cyttsp5_setup_early_suspend(cd);
 #elif defined(CONFIG_FB)
@@ -6589,6 +6599,11 @@ int cyttsp5_release(struct cyttsp5_core_data *cd)
 	cancel_work_sync(&cd->startup_work);
 
 	cyttsp5_stop_wd_timer(cd);
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	dev_info(dev, "%s:cyttsp5_ts_mmi_dev_register", __func__);
+	cyttsp5_ts_mmi_dev_unregister(dev);
+#endif
 
 #if (KERNEL_VERSION(3, 16, 0) > LINUX_VERSION_CODE)
 	device_wakeup_disable(dev);
