@@ -1028,6 +1028,9 @@ struct cyttsp5_core_data {
 	u32 watchdog_interval;
 	u8 show_timestamp;
 	u8 mfg_data[MFG_DATA_NUM];
+
+	/* touchscreen_mmi */
+	struct ts_mmi_class_methods *imports;
 };
 struct gd_sensor {
 	int32_t cm_min;
