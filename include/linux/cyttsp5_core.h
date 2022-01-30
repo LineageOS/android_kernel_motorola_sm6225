@@ -56,6 +56,8 @@ __stringify(CY_DRIVER_NAME)		    \
 /* abs settings */
 #define CY_IGNORE_VALUE             -1
 
+#define CYTTSP5_MAX_STR_LABLE_LEN		64
+
 enum cyttsp5_core_platform_flags {
 	CY_CORE_FLAG_NONE,
 	CY_CORE_FLAG_POWEROFF_ON_SLEEP = 0x02,
@@ -119,6 +121,7 @@ struct cyttsp5_core_platform_data {
 	u16 hid_desc_register;
 	u16 vendor_id;
 	u16 product_id;
+	const char *class_entry_name;
 
 	int (*xres)(struct cyttsp5_core_platform_data *pdata,
 		struct device *dev);
@@ -169,6 +172,7 @@ struct cyttsp5_proximity_platform_data {
 };
 
 struct cyttsp5_platform_data {
+	char ic_name[CYTTSP5_MAX_STR_LABLE_LEN];
 	struct cyttsp5_core_platform_data *core_pdata;
 	struct cyttsp5_mt_platform_data *mt_pdata;
 	struct cyttsp5_btn_platform_data *btn_pdata;
