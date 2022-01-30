@@ -600,6 +600,11 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 	if (!rc)
 		pdata->easy_wakeup_gesture = (u8)value;
 
+	rc = of_property_read_string(core_node, "cy,class-entry-name",
+	    &pdata->class_entry_name);
+	if (!rc)
+	    pr_notice("%s, class entry name '%s'\n", __func__, pdata->class_entry_name);
+
 	for (i = 0; (unsigned int)i < ARRAY_SIZE(touch_setting_names); i++) {
 		if (touch_setting_names[i] == NULL)
 			continue;
@@ -656,6 +661,7 @@ int cyttsp5_devtree_create_and_get_pdata(struct device *adap_dev)
 	enum cyttsp5_device_type type;
 	int count = 0;
 	int rc = 0;
+	const char *name_tmp;
 
 	if (!adap_dev->of_node)
 		return 0;
@@ -666,6 +672,16 @@ int cyttsp5_devtree_create_and_get_pdata(struct device *adap_dev)
 
 	adap_dev->platform_data = pdata;
 	set_pdata_ptr(pdata);
+
+	/* get ic name */
+	rc = of_property_read_string(adap_dev->of_node, "ic_name", &name_tmp);
+	if (rc) {
+		pr_err("%s, get ic_name failed", __func__);
+		return rc;
+	} else {
+		pr_info("%s, ic_name form dt: %s", __func__, name_tmp);
+		strncpy(pdata->ic_name, name_tmp, sizeof(pdata->ic_name));
+	}
 
 	/* There should be only one core node */
 	for_each_child_of_node(adap_dev->of_node, core_node) {
