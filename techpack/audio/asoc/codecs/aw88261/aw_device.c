@@ -1183,7 +1183,7 @@ int aw_dev_init_cali_re(struct aw_device *aw_dev)
 
 	if (aw_dev->cali_desc.mode) {
 		if (aw_dev->cali_desc.cali_re == AW_ERRO_CALI_VALUE) {
-			ret = aw_cali_read_re_from_nvram(&aw_dev->cali_desc.cali_re, aw_dev->channel);
+			ret = aw_cali_read_re_from_nvram(aw_dev, &aw_dev->cali_desc.cali_re, aw_dev->channel);
 			if (ret) {
 				aw_dev_info(aw_dev->dev, "read nvram cali failed, use default Re");
 				aw_dev->cali_desc.cali_re = AW_ERRO_CALI_VALUE;

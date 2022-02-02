@@ -1,8 +1,6 @@
 #ifndef __AWINIC_CALIBRATION_H__
 #define __AWINIC_CALIBRATION_H__
 
-#define AW_CALI_STORE_EXAMPLE
-
 #define AW_CALI_READ_TIMES (3)
 #define AW_ERRO_CALI_VALUE (0)
 #define AW_CALI_RE_DEFAULT_TIMER	(3000)
@@ -136,7 +134,7 @@ struct aw_cali_desc {
 int aw_cali_init(struct aw_cali_desc *cali_desc);
 void aw_cali_deinit(struct aw_cali_desc *cali_desc);
 int aw_cali_svc_get_cali_status(void);
-int aw_cali_read_re_from_nvram(int32_t *cali_re, int32_t ch_index);
+int aw_cali_read_re_from_nvram(struct aw_device *aw_dev, int32_t *cali_re, int32_t ch_index);
 
 
 #endif
