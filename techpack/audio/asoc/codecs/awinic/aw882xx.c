@@ -26,7 +26,6 @@
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
@@ -64,9 +63,8 @@
 #define AW_READ_CHIPID_RETRY_DELAY	5	/* 5 ms */
 
 
-#define CALI_BUF_MAX 100
 #define DELAY_TIME_MAX 300
-#define AWINIC_CALI_FILE  "/mnt/vendor/persist/factory/audio/aw_cali.bin"
+#define AWINIC_CALI_FILE  "aw_cali.bin"
 
 #ifdef CONFIG_AW882XX_DSP
 extern int aw_send_afe_cal_apr(uint32_t rx_port_id, uint32_t tx_port_id,
@@ -96,7 +94,7 @@ static int aw_adm_param_enable(int port_id, int module_id, int param_id, int ena
 }
 #endif
 
-static int aw882xx_get_cali_re_from_nv(uint32_t *cali_re);
+static int aw882xx_get_cali_re_from_nv(struct aw882xx *aw882xx, uint32_t *cali_re);
 static int aw882xx_set_cali_re(struct aw882xx *aw882xx, uint32_t cali_re);
 static int aw882xx_load_profile_params(struct aw882xx *aw882xx);
 static int aw882xx_skt_set_dsp(int value);
@@ -496,7 +494,7 @@ static void aw882xx_start(struct aw882xx *aw882xx)
 	uint32_t cali_re;
 	pr_debug("%s: enter\n", __func__);
 
-	ret = aw882xx_get_cali_re_from_nv(&cali_re);
+	ret = aw882xx_get_cali_re_from_nv(aw882xx, &cali_re);
 	if (ret < 0) {
 		cali_re = ERRO_CALI_VALUE;
 		pr_err("%s: use default vaule %d", __func__ , ERRO_CALI_VALUE);
@@ -563,44 +561,38 @@ static void aw882xx_stop(struct aw882xx *aw882xx)
  * aw882xx config
  *
  ******************************************************/
-static int aw882xx_get_cali_re_from_nv(uint32_t *cali_re)
+static int aw882xx_get_cali_re_from_nv(struct aw882xx *aw882xx, uint32_t *cali_re)
 {
 	/*custom add, if success return value is 0 , else -1*/
-	struct file *fp;
-	char buf[CALI_BUF_MAX];
+	int rc = -EINVAL;
 	uint32_t read_re;
-	loff_t pos = 0;
-	mm_segment_t fs;
+	const struct firmware *fw = NULL;
 
-	memset(buf, 0, CALI_BUF_MAX);
 	/*open cali file*/
-	fp = filp_open(AWINIC_CALI_FILE, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
+	if (request_firmware(&fw, AWINIC_CALI_FILE, aw882xx->dev)) {
 		pr_err("%s: open %s failed!", __func__, AWINIC_CALI_FILE);
-		return -EINVAL;
+		return rc;
 	}
-	/*set fs kernel*/
-	fs = get_fs();
-	set_fs(get_ds());
 
-	/*read file*/
-	vfs_read(fp, buf, CALI_BUF_MAX - 1, &pos);
+	if (!fw || !fw->data || !fw->size) {
+		pr_err("%s: invalid firmware", __func__);
+		goto error;
+	}
 
 	/*get cali re value*/
-	if (sscanf(buf, "%d", &read_re) != 1) {
+	if (sscanf(fw->data, "%d", &read_re) != 1) {
 		pr_err("%s: file read error", __func__);
-		set_fs(fs);
-		filp_close(fp, NULL);
-		return -EINVAL;
+		goto error;
 	}
-	set_fs(fs);
-
-	/*close file*/
-	filp_close(fp, NULL);
 
 	*cali_re = read_re;
 	pr_info("%s: %d", __func__, read_re);
-	return  0;
+	rc = 0;
+
+error:
+	/*close file*/
+	release_firmware(fw);
+	return rc;
 }
 
 static int aw882xx_set_cali_re(struct aw882xx *aw882xx, uint32_t cali_re)
