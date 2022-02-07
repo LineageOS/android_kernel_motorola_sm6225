@@ -815,6 +815,9 @@ static int cyttsp5_check_firmware_config_version(struct device *dev, u16 fw_conf
 
 static int cyttsp5_check_firmware_version_builtin(struct device *dev, const struct firmware *fw)
 {
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+#endif
 	struct cyttsp5_loader_data *ld = cyttsp5_get_loader_data(dev);
 	u32 fw_ver_new;
 	u32 fw_revctrl_new;
@@ -828,6 +831,15 @@ static int cyttsp5_check_firmware_version_builtin(struct device *dev, const stru
 			 __func__);
 		return CYTTSP5_AUTO_LOAD_FOR_CORRUPTED_FW;
 	}
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	if(cd->force_fw_upgrade == 1) {
+		cd->force_fw_upgrade = 0;
+		return 1;
+	} else {
+		return 0;
+	}
+#endif
 
 	fw_ver_new = get_unaligned_be16(fw->data + 3);
 	/* 4 middle bytes are not used */
@@ -1067,7 +1079,7 @@ static DEVICE_ATTR(pt_bl_from_file, S_IRUGO | S_IWUSR,
  * - Panel ID not enabled: cyttsp5_fw.bin
  * - Panel ID enabled: cyttsp5_fw_pidXX.bin
  */
-static char *generate_firmware_filename(struct device *dev)
+static __maybe_unused char *generate_firmware_filename(struct device *dev)
 {
 	char *filename;
 	u8 panel_id;
@@ -1092,6 +1104,9 @@ static char *generate_firmware_filename(struct device *dev)
 
 static int upgrade_firmware_from_builtin(struct device *dev)
 {
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	struct cyttsp5_core_data *cd =  dev_get_drvdata(dev);
+#endif
 	struct cyttsp5_loader_data *ld = cyttsp5_get_loader_data(dev);
 	char *filename;
 	int retval;
@@ -1105,7 +1120,16 @@ retry_bl:
 		"%s: Enabling firmware class loader built-in\n",
 		__func__);
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	filename = kzalloc(CYTTSP5_FIRMWARE_NAME_MAX_LEN, GFP_KERNEL);
+	if (!filename)
+		return -ENOMEM;
+
+	snprintf(filename, CYTTSP5_FIRMWARE_NAME_MAX_LEN, "%s", cd->firmware_name);
+#else
 	filename = generate_firmware_filename(dev);
+#endif
+
 	if (!filename)
 		return -ENOMEM;
 
@@ -1732,8 +1756,22 @@ static DEVICE_ATTR(manual_upgrade, S_IWUSR,
 	NULL, cyttsp5_manual_upgrade_store);
 #endif
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+static int cyttsp5_loader_firmware_update(struct device *dev,
+            char *fwname)
+{
+	struct cyttsp5_loader_data *ld = cyttsp5_get_loader_data(dev);
+	cyttsp5_fw_and_config_upgrade(&ld->fw_and_config_upgrade);
+
+	return 0;
+}
+#endif
+
 static int cyttsp5_loader_probe(struct device *dev, void **data)
 {
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	struct cyttsp5_core_data *cd =  dev_get_drvdata(dev);
+#endif
 	struct cyttsp5_loader_data *ld;
 	struct cyttsp5_platform_data *pdata = dev_get_platdata(dev);
 	int rc;
@@ -1816,12 +1854,16 @@ static int cyttsp5_loader_probe(struct device *dev, void **data)
 	mutex_init(&ld->config_lock);
 #endif
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	cd->firmware_update = cyttsp5_loader_firmware_update;
+#else
 #ifdef UPGRADE_FW_AND_CONFIG_IN_PROBE
 	/* Call FW and config upgrade directly in probe */
 	cyttsp5_fw_and_config_upgrade(&ld->fw_and_config_upgrade);
 #else
 	INIT_WORK(&ld->fw_and_config_upgrade, cyttsp5_fw_and_config_upgrade);
 	schedule_work(&ld->fw_and_config_upgrade);
+#endif
 #endif
 
 	dev_info(dev, "%s: Successful probe %s\n", __func__, dev_name(dev));

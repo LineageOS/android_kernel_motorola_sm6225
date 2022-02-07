@@ -58,6 +58,8 @@ __stringify(CY_DRIVER_NAME)		    \
 
 #define CYTTSP5_MAX_STR_LABLE_LEN		64
 
+#define CYTTSP5_FIRMWARE_NAME_MAX_LEN		64
+
 enum cyttsp5_core_platform_flags {
 	CY_CORE_FLAG_NONE,
 	CY_CORE_FLAG_POWEROFF_ON_SLEEP = 0x02,
