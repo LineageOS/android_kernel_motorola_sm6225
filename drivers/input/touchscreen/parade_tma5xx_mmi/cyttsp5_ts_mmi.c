@@ -151,6 +151,27 @@ static int cyttsp5_ts_mmi_methods_reset(struct device *dev, int type) {
 	return 0;
 }
 
+static int cyttsp5_ts_firmware_update(struct device *dev, char *fwname) {
+	struct cyttsp5_core_data *cd =  dev_get_drvdata(dev);
+	ASSERT_PTR(cd);
+
+	dev_info(dev, "%s, HW request update fw, %s", __func__, fwname);
+
+	if (!fwname) {
+		dev_err(dev, "%s: Error, firmware name is null\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	if ( !cd->firmware_update)
+	    return -ENOSYS;
+
+	cd->force_fw_upgrade = 1;
+	snprintf(cd->firmware_name, CYTTSP5_FIRMWARE_NAME_MAX_LEN, "%s", fwname);
+
+	return cd->firmware_update(dev, fwname);
+}
+
 static struct ts_mmi_methods cyttsp5_ts_mmi_methods = {
 	.get_vendor = cyttsp5_ts_mmi_methods_get_vendor,
 	.get_class_entry_name = cyttsp5_mmi_get_class_entry_name,
@@ -164,6 +185,8 @@ static struct ts_mmi_methods cyttsp5_ts_mmi_methods = {
 	.get_flashprog = cyttsp5_ts_mmi_methods_get_flashprog,
 	/* SET methods */
 	.reset =  cyttsp5_ts_mmi_methods_reset,
+	/* Firmware */
+	.firmware_update = cyttsp5_ts_firmware_update,
 };
 
 int cyttsp5_ts_mmi_dev_register(struct device *dev) {
