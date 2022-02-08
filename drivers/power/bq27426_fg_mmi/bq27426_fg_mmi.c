@@ -2354,16 +2354,23 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	bq->name = bq->batt_name;
 
 	rc = of_property_read_string(node, "mmi,batt-profile-name", &bq->batt_profile_name);
-	if (rc)
+	if (rc) {
+		mmi_fg_err(bq, "battery profile name is not specified in dts\n");
 		bq->batt_profile_name = NULL;
+		return rc;
+	}
 
 	rc = of_property_read_u32(node,	"design-capacity", &bq->batt_dc_conf);
-	if (rc < 0)
-		bq->batt_dc_conf = 0;;
+	if (rc < 0) {
+		bq->batt_dc_conf = 0;
+		rc = 0;
+	}
 
 	rc = of_property_read_u32(node,	"mmi,temp-source", &bq->temp_source);
-	if (rc < 0)
+	if (rc < 0) {
 		bq->temp_source = TEMP_SOURCE_EXTERNAL;
+		rc = 0;
+	}
 
 	return rc;
 }
