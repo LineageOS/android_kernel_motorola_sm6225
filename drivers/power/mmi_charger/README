@@ -245,6 +245,15 @@ for each line is defined by the target user of the profile data.
  Definition: Unlimited array of arrays. Each internal array specifics a power supply
  name, the change of which the battery is sensitive to.
 
+- mmi,paired-id
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define the paired id for dual battery matching, high-16bits is used
+for reference battery paired id, low-16bits is used for target battery paired id,
+Only when the target battery paired id is equal to reference battery, then reference battery
+information will be notified to the target battery when it is updated.
+If not defined, defaults to 0.
+
 Example:
 qti_glink_charger: mmi,qti-glink-charger {
 	compatible = "mmi,qti-glink-charger";
@@ -280,6 +289,7 @@ qti_glink_charger: mmi,qti-glink-charger {
 			<45 4350 3000 2000>,
 			<60 4200 2185 0>;
 	profile-ids-map = "0", "unknown-sn", "100750", "SB18C85232";
+	mmi,paired-id = <0x00010000>;
 };
 
 Single-battery Pack:
@@ -328,6 +338,7 @@ pm7250b_mmi: qcom,qpnp-smb5-mmi {
 			<15 0 608 608>,
 			<45 4450 1210 1200>,
 			<60 4200 608 0>;
+	mmi,paired-id = <0x00010000>;
 };
 
 &flip_battery {
@@ -343,6 +354,7 @@ pm7250b_mmi: qcom,qpnp-smb5-mmi {
 			<15 0 750 750>,
 			<45 4450 1250 1200>,
 			<60 4200 750 0>;
+	mmi,paired-id = <0x00000001>;
 };
 
 ==========================
