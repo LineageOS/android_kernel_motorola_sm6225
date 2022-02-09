@@ -35,6 +35,9 @@
 #define WARM_TEMP 45
 #define COOL_TEMP 0
 
+#define BATT_PAIR_ID_BITS 16
+#define BATT_PAIR_ID_MASK ((1 << BATT_PAIR_ID_BITS) - 1)
+
 #define HEARTBEAT_DELAY_MS 60000
 #define HEARTBEAT_FACTORY_MS 1000
 #define HEARTBEAT_DISCHARGE_MS 100000
@@ -129,6 +132,8 @@ struct mmi_battery_pack {
 	int reference;
 	int charger_rate;
 	int soc_cycles_start;
+	int paired_id;
+	struct mmi_battery_pack *paired_batt;
 	struct mmi_battery_info *info;
 	char sn[MMI_BATT_SN_LEN];
 	struct list_head list;
@@ -1313,6 +1318,39 @@ exit:
 	}
 }
 
+static void mmi_update_paired_battery(
+				struct mmi_charger_chip *chip,
+				struct mmi_battery_pack *battery)
+{
+	struct mmi_battery_pack *batt = NULL;
+
+	if (!battery->paired_id) {
+		battery->paired_batt = NULL;
+		return;
+	}
+
+	list_for_each_entry(batt, &chip->battery_list, list) {
+		if ((batt->paired_id >> BATT_PAIR_ID_BITS) ==
+			(battery->paired_id & BATT_PAIR_ID_MASK)) {
+			battery->paired_batt = batt;
+		}
+		if ((battery->paired_id >> BATT_PAIR_ID_BITS) ==
+			(batt->paired_id & BATT_PAIR_ID_MASK)) {
+			batt->paired_batt = battery;
+		}
+	}
+}
+
+static void mmi_notify_paired_battery(struct mmi_charger *charger)
+{
+	if (!charger->battery->paired_batt ||
+	    !charger->driver->notify_paired_battery)
+		return;
+
+	charger->driver->notify_paired_battery(charger->driver->data,
+			charger->battery->paired_batt->info);
+}
+
 static void mmi_get_charger_info(struct mmi_charger_chip *chip,
 				struct mmi_charger *charger)
 {
@@ -1561,6 +1599,7 @@ static void mmi_configure_charger(struct mmi_charger_chip *chip,
 		cfg->charging_disable = false;
 	}
 
+	mmi_notify_paired_battery(charger);
 	charger->driver->set_constraint(charger->driver->data, &charger->constraint);
 	charger->driver->config_charge(charger->driver->data, cfg);
 
@@ -1992,6 +2031,8 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 		mmi_update_charger_profile(chip, charger);
 		mmi_reset_charger_configure(chip, charger);
 		mmi_update_charger_status(chip, charger);
+	}
+	list_for_each_entry(charger, &chip->charger_list, list) {
 		mmi_configure_charger(chip, charger);
 	}
 	mmi_update_battery_status(chip);
@@ -2257,6 +2298,9 @@ int mmi_register_charger_driver(struct mmi_charger_driver *driver)
 		battery->cycles = 0;
 		battery->soc_cycles_start = 100;
 		memcpy(battery->sn, batt_info.batt_sn, MMI_BATT_SN_LEN);
+		of_property_read_u32(driver->dev->of_node, "mmi,paired-id",
+					&battery->paired_id);
+		mmi_update_paired_battery(chip, battery);
 
 		mutex_lock(&chip->battery_lock);
 		list_add_tail(&battery->list, &chip->battery_list);
