@@ -56,8 +56,10 @@ static int cyttsp5_ts_mmi_methods_get_build_id(struct device *dev, void *cdata) 
 		return -EINVAL;
 
 	si = cmd->request_sysinfo(dev);
-	if (!si)
+	if (!si) {
 		dev_err(dev, "%s: Fail get sysinfo pointer from core\n", __func__);
+		return -EINVAL;
+	}
 
 	fw_ver_img = si->cydata.fw_ver_major << 8;
 	fw_ver_img += si->cydata.fw_ver_minor;
@@ -82,8 +84,10 @@ static int cyttsp5_ts_mmi_methods_get_config_id(struct device *dev, void *cdata)
 		return -EINVAL;
 
 	si = cmd->request_sysinfo(dev);
-	if (!si)
+	if (!si) {
 		dev_err(dev, "%s: Fail get sysinfo pointer from core\n", __func__);
+		return -EINVAL;
+	}
 
 	fw_ver_img = si->cydata.fw_ver_major << 8;
 	fw_ver_img += si->cydata.fw_ver_minor;
