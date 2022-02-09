@@ -286,6 +286,14 @@ struct sgm_mmi_charger {
 	struct mmi_charger_driver	*driver;
 	u32				chrg_taper_cnt;
 	struct power_supply		*fg_psy;
+	int ichg_polority;
+
+	int paired_ichg;
+	int paired_ichg_table_len;
+	int *paired_ichg_table;
+	int paired_load;
+	int paired_load_thres_len;
+	int *paired_load_thres;
 };
 
 struct sgm4154x_device {
@@ -326,6 +334,11 @@ struct sgm4154x_device {
 	bool enable_hw_jeita;
 
 	struct dentry *debug_root;
+
+	int high_load_en_gpio;
+	int low_load_en_gpio;
+	bool high_load_active_low;
+	bool low_load_active_low;
 
 	int chg_en_gpio;
 	bool use_ext_usb_psy;

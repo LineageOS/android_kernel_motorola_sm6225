@@ -72,11 +72,23 @@ enum SGM4154x_VINDPM_OS {
 	VINDPM_OS_10500mV,
 };
 
+enum {
+	PAIRED_LOAD_OFF,
+	PAIRED_LOAD_LOW,
+	PAIRED_LOAD_HIGH,
+};
+
 static enum power_supply_usb_type sgm4154x_usb_type[] = {
 	POWER_SUPPLY_USB_TYPE_UNKNOWN,
-	POWER_SUPPLY_USB_TYPE_SDP,
-	POWER_SUPPLY_USB_TYPE_DCP,
-	POWER_SUPPLY_USB_TYPE_CDP,
+	POWER_SUPPLY_USB_TYPE_SDP,		/* Standard Downstream Port */
+	POWER_SUPPLY_USB_TYPE_DCP,		/* Dedicated Charging Port */
+	POWER_SUPPLY_USB_TYPE_CDP,		/* Charging Downstream Port */
+	POWER_SUPPLY_USB_TYPE_ACA,		/* Accessory Charger Adapters */
+	POWER_SUPPLY_USB_TYPE_C,		/* Type C Port */
+	POWER_SUPPLY_USB_TYPE_PD,		/* Power Delivery Port */
+	POWER_SUPPLY_USB_TYPE_PD_DRP,		/* PD Dual Role Port */
+	POWER_SUPPLY_USB_TYPE_PD_PPS,		/* PD Programmable Power Supply */
+	POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID,	/* Apple Charging Method */
 };
 
 static int sgm4154x_usb_notifier(struct notifier_block *nb, unsigned long val,
@@ -1470,6 +1482,7 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	int ret;
 	//u32 val = 0;
 	int irq_gpio = 0, irqn = 0;
+	enum of_gpio_flags flags;
 	const char *usb_psy_name = NULL;
 
 	#if 0
@@ -1482,6 +1495,40 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	    sgm->watchdog_timer < SGM4154x_WATCHDOG_DIS)
 		return -EINVAL;
 	#endif
+	sgm->high_load_en_gpio = of_get_named_gpio_flags(sgm->dev->of_node,
+					"mmi,high-load-en-gpio", 0, &flags);
+	if (gpio_is_valid(sgm->high_load_en_gpio)) {
+		ret = gpio_request(sgm->high_load_en_gpio,
+					"high-load-en-gpio");
+		if (ret) {
+			dev_err(sgm->dev, "%s: %d gpio request failed\n",
+					__func__, sgm->high_load_en_gpio);
+			sgm->high_load_en_gpio = -EINVAL;
+		} else {
+			sgm->high_load_active_low = !!(flags & OF_GPIO_ACTIVE_LOW);
+			/* Disable batt high load switch by default */
+			gpio_direction_output(sgm->high_load_en_gpio,
+					sgm->high_load_active_low);
+		}
+	}
+
+	sgm->low_load_en_gpio = of_get_named_gpio_flags(sgm->dev->of_node,
+					"mmi,low-load-en-gpio", 0, &flags);
+	if (gpio_is_valid(sgm->low_load_en_gpio)) {
+		ret = gpio_request(sgm->low_load_en_gpio,
+					"low-load-en-gpio");
+		if (ret) {
+			dev_err(sgm->dev, "%s: %d gpio request failed\n",
+					__func__, sgm->low_load_en_gpio);
+			sgm->low_load_en_gpio = -EINVAL;
+		} else {
+			sgm->low_load_active_low = !!(flags & OF_GPIO_ACTIVE_LOW);
+			/* Disable batt low load switch by default */
+			gpio_direction_output(sgm->low_load_en_gpio,
+					sgm->low_load_active_low);
+		}
+	}
+
 	ret = device_property_read_string(sgm->dev,
 					"mmi,ext-usb-psy-name",
 					&usb_psy_name);
@@ -1933,7 +1980,7 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
 		chg->batt_info.batt_mv = val.intval / 1000;
 	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &val);
 	if (!rc)
-		chg->batt_info.batt_ma = val.intval / 1000;
+		chg->batt_info.batt_ma = val.intval / 1000 * chg->ichg_polority;
 	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CAPACITY, &val);
 	if (!rc)
 		chg->batt_info.batt_soc = val.intval;
@@ -1960,6 +2007,7 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
 
 static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_info)
 {
+	int ret;
 	struct sgm_mmi_charger *chg = data;
 	struct sgm4154x_state state = chg->sgm->state;
 
@@ -1968,6 +2016,18 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
 	chg->chg_info.chrg_type = get_charger_type(chg->sgm);
 	chg->chg_info.chrg_present = state.online;
 	chg->chg_info.vbus_present = state.vbus_gd;
+
+	if (state.ibus_limit > 0) {
+		ret = sgm4154x_get_input_curr_lim(chg->sgm);
+		if (ret < 0) {
+			chg->chg_info.chrg_pmax_mw = 0;
+		} else {
+			chg->chg_info.chrg_pmax_mw = (ret / 1000) *
+					(state.vbus_adc / 1000) / 1000;
+		}
+	} else {
+		chg->chg_info.chrg_pmax_mw = 0;
+	}
 
         memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
@@ -1991,7 +2051,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		}
 	}
 	if (config->target_fcc != chg->chg_cfg.target_fcc) {
-		value = config->target_fcc * 1000;
+		value = min(config->target_fcc * 1000, chg->paired_ichg);
 		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
 		if (!rc) {
 			cfg_changed = true;
@@ -2154,9 +2214,99 @@ static void sgm4154x_charger_set_constraint(void *data,
 	}
 }
 
+static void sgm4154x_paired_battery_notify(void *data,
+			struct mmi_battery_info *batt_info)
+{
+	int i;
+	int rc;
+	u32 value;
+	int delta_vbat;
+	int delta_soc;
+	bool high_load_en;
+	bool low_load_en;
+	struct sgm_mmi_charger *chg = data;
+	int paired_ichg = chg->paired_ichg;
+	int paired_load = chg->paired_load;
+	static bool initialized = false;
+
+	if (!batt_info)
+		return;
+
+	delta_vbat = chg->batt_info.batt_mv - batt_info->batt_mv;
+	delta_soc = chg->batt_info.batt_soc - batt_info->batt_soc;
+
+	if (chg->paired_ichg_table && chg->paired_ichg_table_len) {
+		paired_ichg = 0;
+		for (i = 0; i < chg->paired_ichg_table_len; i++) {
+			if (delta_soc <= chg->paired_ichg_table[i * 2]) {
+				paired_ichg = chg->paired_ichg_table[i * 2 + 1];
+				break;
+			}
+		}
+		paired_ichg *= 1000;
+	}
+	if (paired_ichg != chg->paired_ichg) {
+		value = min(chg->chg_cfg.target_fcc * 1000, chg->paired_ichg);
+		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
+		if (!rc)
+			chg->paired_ichg = paired_ichg;
+	}
+
+	if (!initialized &&
+	    chg->paired_load_thres && chg->paired_load_thres_len) {
+		initialized = true;
+		paired_load = PAIRED_LOAD_HIGH;
+		for (i = 0; i < chg->paired_load_thres_len; i++) {
+			if (delta_vbat > chg->paired_load_thres[i]) {
+				paired_load = i;
+				break;
+			}
+		}
+		WARN_ON(paired_load == PAIRED_LOAD_OFF);
+	}
+
+	if (initialized &&
+	    paired_ichg > 0 &&
+	    chg->paired_load != PAIRED_LOAD_HIGH) {
+		chg->paired_load = PAIRED_LOAD_HIGH;
+	}
+
+	if (paired_load != chg->paired_load) {
+		chg->paired_load = paired_load;
+		switch (paired_load) {
+		case PAIRED_LOAD_OFF:
+			high_load_en = false;
+			low_load_en = false;
+			break;
+		case PAIRED_LOAD_LOW:
+			high_load_en = false;
+			low_load_en = true;
+			break;
+		case PAIRED_LOAD_HIGH:
+		default:
+			high_load_en = true;
+			low_load_en = false;
+		}
+		if (gpio_is_valid(chg->sgm->high_load_en_gpio)) {
+			gpio_set_value(chg->sgm->high_load_en_gpio,
+				high_load_en ^ chg->sgm->high_load_active_low);
+		}
+		if (gpio_is_valid(chg->sgm->low_load_en_gpio)) {
+			gpio_set_value(chg->sgm->low_load_en_gpio,
+				low_load_en ^ chg->sgm->low_load_active_low);
+		}
+		initialized = true;
+	}
+
+	pr_info("delta_vbat: %dmV, delta_soc: %d, paired_ichg: %duA, paired_load: %d\n",
+		delta_vbat, delta_soc, paired_ichg, paired_load);
+}
+
 static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 {
 	int rc;
+	int i;
+	int byte_len;
 	const char *df_sn = NULL;
 	struct mmi_charger_driver *driver;
 
@@ -2190,6 +2340,68 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 	strcpy(chg->batt_info.batt_sn, df_sn);
 	chg->chg_cfg.charging_disable = chg->sgm->init_data.charger_disabled;
 
+	if (of_property_read_bool(chg->sgm->dev->of_node, "mmi,ichg-invert-polority"))
+		chg->ichg_polority = -1;
+	else
+		chg->ichg_polority = 1;
+	chg->paired_ichg = chg->sgm->init_data.max_ichg;
+	chg->paired_load = PAIRED_LOAD_OFF;
+	if (!chg->paired_ichg_table &&
+	    of_find_property(chg->sgm->dev->of_node, "mmi,paired-ichg-table", &byte_len)) {
+		if ((byte_len / sizeof(u32)) % 2) {
+			pr_err("DT error wrong paired-ichg-table\n");
+			return -ENODEV;
+		}
+
+		chg->paired_ichg_table = (int *)devm_kzalloc(chg->sgm->dev, byte_len, GFP_KERNEL);
+		if (chg->paired_ichg_table == NULL)
+			return -ENOMEM;
+
+		chg->paired_ichg_table_len = byte_len / sizeof(u32) / 2;
+		rc = of_property_read_u32_array(chg->sgm->dev->of_node,
+				"mmi,paired-ichg-table",
+				(u32 *)chg->paired_ichg_table,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			pr_err("Couldn't read paired-ichg-table rc = %d\n", rc);
+			devm_kfree(chg->sgm->dev, chg->paired_ichg_table);
+			chg->paired_ichg_table = NULL;
+			return rc;
+		}
+
+		pr_info("paired-ichg-table: len: %d\n", chg->paired_ichg_table_len);
+		for (i = 0; i < chg->paired_ichg_table_len; i++) {
+			pr_info("paired-ichg-table[%d]: delta_soc %d, fcc %dmA\n", i,
+				chg->paired_ichg_table[i * 2],
+				chg->paired_ichg_table[i * 2 + 1]);
+		}
+	}
+
+	if (!chg->paired_load_thres &&
+	    of_find_property(chg->sgm->dev->of_node, "mmi,paired-load-thres", &byte_len)) {
+		chg->paired_load_thres = (int *)devm_kzalloc(chg->sgm->dev, byte_len, GFP_KERNEL);
+		if (chg->paired_load_thres == NULL)
+			return -ENOMEM;
+
+		chg->paired_load_thres_len = byte_len / sizeof(u32);
+		rc = of_property_read_u32_array(chg->sgm->dev->of_node,
+				"mmi,paired-load-thres",
+				(u32 *)chg->paired_load_thres,
+				byte_len / sizeof(u32));
+		if (rc < 0) {
+			pr_err("Couldn't read paired-load-thres rc = %d\n", rc);
+			devm_kfree(chg->sgm->dev, chg->paired_load_thres);
+			chg->paired_load_thres = NULL;
+			return rc;
+		}
+
+		pr_info("paired-load-thres: len: %d\n", chg->paired_load_thres_len);
+		for (i = 0; i < chg->paired_load_thres_len; i++) {
+			pr_info("paired-load-thres[%d]: %d\n",
+				i, chg->paired_load_thres[i]);
+		}
+	}
+
 	driver = devm_kzalloc(chg->sgm->dev,
 				sizeof(struct mmi_charger_driver),
 				GFP_KERNEL);
@@ -2206,6 +2418,7 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 	driver->is_charge_tapered = sgm4154x_charger_is_charge_tapered;
 	driver->is_charge_halt = sgm4154x_charger_is_charge_halt;
 	driver->set_constraint = sgm4154x_charger_set_constraint;
+	driver->notify_paired_battery = sgm4154x_paired_battery_notify;
 	chg->driver = driver;
 
 	/* register driver to mmi charger */
@@ -2362,6 +2575,110 @@ static ssize_t chg_en_show(struct device *dev,
 	return sprintf(buf, "%d\n", enable);
 }
 DEVICE_ATTR_RW(chg_en);
+
+static ssize_t high_load_en_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int ret;
+	bool enable;
+	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
+
+	if (!sgm) {
+		pr_err("sgm chip not valid\n");
+		return -ENODEV;
+	}
+
+	ret = kstrtobool(buf, &enable);
+	if (ret) {
+		pr_err("Invalid high_load_en value, ret = %d\n", ret);
+		return ret;
+	}
+
+	if (gpio_is_valid(sgm->high_load_en_gpio)) {
+		gpio_set_value(sgm->high_load_en_gpio,
+				enable ^ sgm->high_load_active_low);
+		cancel_delayed_work(&sgm->charge_monitor_work);
+		schedule_delayed_work(&sgm->charge_monitor_work,
+						msecs_to_jiffies(200));
+	}
+
+	return count;
+}
+
+static ssize_t high_load_en_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	bool enable;
+	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
+
+	if (!sgm) {
+		pr_err("sgm chip not valid\n");
+		return -ENODEV;
+	}
+
+	if (gpio_is_valid(sgm->high_load_en_gpio))
+		enable = sgm->high_load_active_low
+			^ gpio_get_value(sgm->high_load_en_gpio);
+	else
+		enable = false;
+
+	return sprintf(buf, "%d\n", enable);
+}
+DEVICE_ATTR_RW(high_load_en);
+
+static ssize_t low_load_en_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int ret;
+	bool enable;
+	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
+
+	if (!sgm) {
+		pr_err("sgm chip not valid\n");
+		return -ENODEV;
+	}
+
+	ret = kstrtobool(buf, &enable);
+	if (ret) {
+		pr_err("Invalid low_load_en value, ret = %d\n", ret);
+		return ret;
+	}
+
+	if (gpio_is_valid(sgm->low_load_en_gpio)) {
+		gpio_set_value(sgm->low_load_en_gpio,
+				enable ^ sgm->low_load_active_low);
+		cancel_delayed_work(&sgm->charge_monitor_work);
+		schedule_delayed_work(&sgm->charge_monitor_work,
+						msecs_to_jiffies(200));
+	}
+
+	return count;
+}
+
+static ssize_t low_load_en_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	bool enable;
+	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
+
+	if (!sgm) {
+		pr_err("sgm chip not valid\n");
+		return -ENODEV;
+	}
+
+	if (gpio_is_valid(sgm->low_load_en_gpio))
+		enable = gpio_get_value(sgm->low_load_en_gpio)
+			^ sgm->low_load_active_low;
+	else
+		enable = false;
+
+	return sprintf(buf, "%d\n", enable);
+}
+DEVICE_ATTR_RW(low_load_en);
 
 static ssize_t charger_suspend_store(struct device *dev,
 				struct device_attribute *attr,
@@ -2530,6 +2847,14 @@ static int sgm4154x_probe(struct i2c_client *client,
 	if (ret)
 		pr_err("Couldn't create chg_en\n");
 
+	ret = device_create_file(sgm->dev, &dev_attr_high_load_en);
+	if (ret)
+		pr_err("Couldn't create high_load_en\n");
+
+	ret = device_create_file(sgm->dev, &dev_attr_low_load_en);
+	if (ret)
+		pr_err("Couldn't create low_load_en\n");
+
 	create_debugfs_entry(sgm);
 
 	dev_info(dev, "%s probe successfully.\n", SGM4154x_NAME);
@@ -2547,6 +2872,8 @@ static int sgm4154x_charger_remove(struct i2c_client *client)
 {
 	struct sgm4154x_device *sgm = i2c_get_clientdata(client);
 
+	device_remove_file(sgm->dev, &dev_attr_high_load_en);
+	device_remove_file(sgm->dev, &dev_attr_low_load_en);
 	device_remove_file(sgm->dev, &dev_attr_chg_en);
 	device_remove_file(sgm->dev, &dev_attr_charger_suspend);
 	debugfs_remove_recursive(sgm->debug_root);
@@ -2577,6 +2904,10 @@ static int sgm4154x_charger_remove(struct i2c_client *client)
 		devm_regulator_put(sgm->vdd_i2c_vreg);
 	}
 
+	if (gpio_is_valid(sgm->high_load_en_gpio))
+		gpio_free(sgm->high_load_en_gpio);
+	if (gpio_is_valid(sgm->low_load_en_gpio))
+		gpio_free(sgm->low_load_en_gpio);
 	if (gpio_is_valid(sgm->chg_en_gpio))
 		gpio_free(sgm->chg_en_gpio);
 
