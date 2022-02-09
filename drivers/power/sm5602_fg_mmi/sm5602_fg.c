@@ -155,6 +155,7 @@ struct sm_fg_chip {
 	int  batt_soc;
 	int batt_ocv;
 	int batt_fcc;	/* Full charge capacity */
+	int batt_fcc_design;	/* Design Full charge capacity */
 	int batt_volt;
 	int aver_batt_volt;
 	int batt_temp;
@@ -917,6 +918,18 @@ static int fg_get_batt_capacity_level(struct sm_fg_chip *sm)
 
 }
 
+static int fg_get_charge_counter(struct sm_fg_chip *sm)
+{
+	int charge_counter;
+	int full_capacity;
+	int ui_soc;
+
+	full_capacity = fg_read_fcc(sm) * 1000;
+	ui_soc = sm->batt_soc/10;
+	charge_counter = div_s64(full_capacity * ui_soc, 100);
+
+	return charge_counter;
+}
 
 static int fg_get_batt_health(struct sm_fg_chip *sm)
 {
@@ -1021,7 +1034,7 @@ static int fg_get_property(struct power_supply *psy, enum power_supply_property 
 		mutex_lock(&sm->data_lock);
 		if (ret > 0)
 			sm->batt_fcc = ret;
-		val->intval = sm->batt_fcc;
+		val->intval = sm->batt_fcc * 1000;
 		mutex_unlock(&sm->data_lock);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
@@ -1032,13 +1045,13 @@ static int fg_get_property(struct power_supply *psy, enum power_supply_property 
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		val->intval = 0;
+		val->intval = fg_get_cycle(sm);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		val->intval = 0;
+		val->intval = sm->batt_fcc_design * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		val->intval = 0;
+		val->intval = fg_get_charge_counter(sm);
 		break;
 
 	default:
@@ -2251,6 +2264,11 @@ static int fg_common_parse_dt(struct sm_fg_chip *sm)
 		sm->gpio_int = -EINVAL;
 	}
 	*/
+	rc = of_property_read_u32(np, "sm,fcc_design",
+					&sm->batt_fcc_design);
+	if (rc < 0)
+		sm->batt_fcc_design = 5000;
+	pr_info("sm,fcc_design = %d\n", sm->batt_fcc_design);
 
 	/* EN TEMP EX/IN */
 	if (of_property_read_bool(np, "sm,en_temp_ex"))
