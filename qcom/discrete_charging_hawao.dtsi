@@ -225,7 +225,7 @@
 		sm,v_l_alarm = <3400>;
 		sm,v_h_alarm = <4450>;
 		sm,battery_table_num = <0>;
-		sm,param_version = <2>;
+		sm,param_version = <1>;
 		sm,t_l_alarm_in = <54>;
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
