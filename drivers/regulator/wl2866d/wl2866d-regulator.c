@@ -218,7 +218,13 @@ static int wl2866d_regulator_init(struct wl2866d *chip)
 			"Disable all LDO output failed!!!\n");
 		return ret;
 	}
-
+	/* Enable all ldo discharge by default */
+	ret = regmap_write(chip->regmap, WL2866D_DISCHARGE_RESISTORS, 0x8f);
+	if (ret < 0) {
+		dev_err(chip->dev,
+			"Enable LDO discharge failed!!!\n");
+		return ret;
+	}
 	for (id = 0; id < WL2866D_MAX_REGULATORS; id++) {
 		chip->rdesc[id] = &wl2866d_regls_desc[id];
 		rdesc = chip->rdesc[id];
