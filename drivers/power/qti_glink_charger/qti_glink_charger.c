@@ -199,6 +199,7 @@ struct qti_charger {
 	u32				rx_connected;
 	struct notifier_block		wls_nb;
 	struct dentry		*debug_root;
+	struct power_supply		*batt_psy;
 };
 
 static struct qti_charger *this_chip = NULL;
@@ -1744,6 +1745,90 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 	chg->wls_psy = NULL;
 }
 
+/* Battery presence detection threshold on battery temperature */
+#define BPD_TEMP_THRE -3000
+static int battery_psy_get_prop(struct power_supply *psy,
+		enum power_supply_property prop,
+		union power_supply_propval *pval)
+{
+	int rc;
+	struct battery_info info = {0};
+	struct qti_charger *chg = power_supply_get_drvdata(psy);
+
+	pval->intval = -ENODATA;
+
+	rc = qti_charger_read(chg, OEM_PROP_BATT_INFO, &info,
+				sizeof(struct battery_info));
+	if (rc)
+		return rc;
+
+	switch (prop) {
+	case POWER_SUPPLY_PROP_STATUS:
+		pval->intval = info.batt_status;
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		pval->intval = info.batt_temp > BPD_TEMP_THRE? 1 : 0;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		pval->intval = info.batt_uv;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		pval->intval = info.batt_ua;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		pval->intval = info.batt_soc / 100;
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		pval->intval = info.batt_temp / 10;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		pval->intval = info.batt_full_uah;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		pval->intval = info.batt_design_uah;
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
+static int battery_psy_set_prop(struct power_supply *psy,
+		enum power_supply_property prop,
+		const union power_supply_propval *pval)
+{
+	struct qti_charger *chg = power_supply_get_drvdata(psy);
+
+	switch (prop) {
+	default:
+		mmi_err(chg, "Not supported property: %d\n", prop);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static enum power_supply_property battery_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+};
+
+static const struct power_supply_desc batt_psy_desc = {
+	.name			= "main_battery",
+	.type			= POWER_SUPPLY_TYPE_MAINS,
+	.properties		= battery_props,
+	.num_properties		= ARRAY_SIZE(battery_props),
+	.get_property		= battery_psy_get_prop,
+	.set_property		= battery_psy_set_prop,
+};
+
 static int qti_charger_init(struct qti_charger *chg)
 {
 	int rc;
@@ -1779,6 +1864,22 @@ static int qti_charger_init(struct qti_charger *chg)
 	if (rc) {
 		mmi_err(chg, "qti charger set profile data failed, rc=%d\n", rc);
 		return rc;
+	}
+
+	if (of_property_read_bool(chg->dev->of_node,
+				"mmi,main-battery-enabled")) {
+		struct power_supply_config psy_cfg = {};
+		psy_cfg.drv_data = chg;
+		psy_cfg.of_node = chg->dev->of_node;
+		chg->batt_psy = devm_power_supply_register(chg->dev,
+						&batt_psy_desc,
+						&psy_cfg);
+		if (IS_ERR(chg->batt_psy)) {
+			rc = PTR_ERR(chg->batt_psy);
+			chg->batt_psy = NULL;
+			mmi_err(chg, "Failed to register main psy, rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	driver = devm_kzalloc(chg->dev,
