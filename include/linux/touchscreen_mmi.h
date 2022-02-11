@@ -59,9 +59,16 @@ extern struct drm_panel *active_panel;
 
 #define REGISTER_PANEL_NOTIFIER { \
 	void *cookie = NULL; \
-	cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY, \
-		PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH, active_panel, \
-		&ts_mmi_panel_cb, touch_cdev); \
+	struct ts_mmi_dev_pdata *ppdata = &touch_cdev->pdata; \
+	if (!ppdata->ctrl_dsi) { \
+		cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY, \
+			PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH, touch_cdev->active_panel, \
+			&ts_mmi_panel_cb, touch_cdev); \
+	} else { \
+		cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_SECONDARY, \
+			PANEL_EVENT_NOTIFIER_CLIENT_SECONDARY_TOUCH, touch_cdev->active_panel, \
+			&ts_mmi_panel_cb, touch_cdev); \
+	} \
 	if (!cookie) \
 		ret = -1; \
 	else \
@@ -435,6 +442,9 @@ struct ts_mmi_dev {
 	int			forcereflash;
 	int			panel_status;
 	struct ts_mmi_dev_pdata	pdata;
+#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+	struct drm_panel *active_panel;
+#endif
 #ifdef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
 	void *notifier_cookie;
 #else
@@ -545,7 +555,7 @@ extern int ts_mmi_palm_remove(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_suspend(struct ts_mmi_dev *touch_cdev);
 #endif
 #if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
-int ts_mmi_check_drm_panel(struct device_node *of_node);
+int ts_mmi_check_drm_panel(struct ts_mmi_dev* touch_cdev, struct device_node *of_node);
 #endif
 extern bool ts_mmi_is_panel_match(const char *panel_node, char *touch_ic_name);
 
