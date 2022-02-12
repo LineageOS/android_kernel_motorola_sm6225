@@ -30,7 +30,7 @@
 
 /*=================ACTUATOR HW INFO====================*/
 #define DEVICE_NAME_LEN 32
-#define MAX_ACTUATOR_NUM 3
+#define MAX_ACTUATOR_NUM 4
 #define REGULATOR_NAME_MAX_LEN 32
 #define LENS_MAX_STAGES 10
 
@@ -53,6 +53,7 @@ typedef enum {
 	MOT_DEVICE_NIO,
 	MOT_DEVICE_CAPRIP,
 	MOT_DEVICE_RHODE,
+	MOT_DEVICE_HAWAO,
 	MOT_DEVICE_NUM,
 } mot_dev_type;
 
@@ -229,6 +230,31 @@ static const mot_dev_info mot_dev_list[MOT_DEVICE_NUM] = {
 				.cci_dev = 0x00,
 				.cci_master = 0x0,
 				.regulator_list = {"ldo4", "ldo3"},
+				.regulator_volt_uv = {1800000, 2800000},
+				.park_lens_needed = true,
+				.launch_lens = {
+						.launch_lens_needed = true,
+						.launch_lens_step = {
+									{300, 150},
+									{200, 100},
+									{100, 62}
+					},
+				},
+			},
+		},
+	},
+	{
+		.dev_type = MOT_DEVICE_HAWAO,
+		.dev_name = "hawao",
+		.actuator_info = {
+			[0] = {
+				.actuator_type = MOT_ACTUATOR_DW9800V,
+				.dac_pos = 0,
+				.init_pos = 512,
+				.cci_addr = 0x0c,
+				.cci_dev = 0x00,
+				.cci_master = 0x0,
+				.regulator_list = {"ldo7", "ldo5"},
 				.regulator_volt_uv = {1800000, 2800000},
 				.park_lens_needed = true,
 				.launch_lens = {
