@@ -43,7 +43,7 @@
 #include "mmi_charger_core.h"
 #include "mmi_qc3p.h"
 
-#define SWITCH_CHARGER_QC3P_VOLT		5000000
+#define SWITCH_CHARGER_QC3P_VOLT		5300000
 typedef enum  {
 	PM_QC3P_STATE_DISCONNECT,
 	PM_QC3P_STATE_ENTRY,
