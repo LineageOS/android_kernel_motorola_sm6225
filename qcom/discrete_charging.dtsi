@@ -81,6 +81,8 @@
 		df-serialnum = "SB18D38323";
 		#include "bat_setting/CW_ng50-ATL-5000mah-rhode.dtsi"
 		#include "bat_setting/CW_ng50-SWD-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-BA-ATL-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-IN-ATL-5000mah-rhode.dtsi"
 	};
 
 	sm5602@71 {
