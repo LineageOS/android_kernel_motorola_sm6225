@@ -95,8 +95,7 @@
 					05 01 00 00 14 00 01 28
 					05 01 00 00 78 00 01 10
 				];
-				qcom,mdss-dsi-t-clk-post = <0x0E>;
-				qcom,mdss-dsi-t-clk-pre = <0x35>;
+
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 			};
