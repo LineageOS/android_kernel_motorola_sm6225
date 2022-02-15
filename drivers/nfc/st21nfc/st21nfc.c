@@ -46,6 +46,12 @@
 
 #define DRIVER_VERSION "2.0.4"
 
+#ifdef ST_NFC_HW_DETECT
+#define HW_54J_PROP_NAME       "ese_st"
+#define HW_21J_PROP_NAME       "st"
+#define HW_UNKNOWN_PROP_NAME   "unknown"
+#endif
+
 /* prototypes */
 static irqreturn_t st21nfc_dev_irq_handler(int irq, void *dev_id);
 /*
@@ -69,6 +75,10 @@ struct st21nfc_platform {
 static bool irqIsAttached;
 
 static bool device_open; /* Is device open? */
+
+#ifdef ST_NFC_HW_DETECT
+static int chipsettype = -1;
+#endif
 
 struct st21nfc_dev {
 	wait_queue_head_t read_wq;
@@ -602,14 +612,35 @@ static ssize_t st21nfc_version(struct device *dev,
 	return snprintf(buf, strlen(DRIVER_VERSION)+2,  "%s\n", DRIVER_VERSION);
 }
 
+#ifdef ST_NFC_HW_DETECT
+static ssize_t st21nfc_hwversion(struct device *dev,
+			         struct device_attribute *attr, char *buf)
+{
+	if(chipsettype == 1)
+		return snprintf(buf, strlen(HW_54J_PROP_NAME)+2,  "%s\n", HW_54J_PROP_NAME);
+
+	if(chipsettype == 0)
+		return snprintf(buf, strlen(HW_21J_PROP_NAME)+2,  "%s\n", HW_21J_PROP_NAME);
+
+	return snprintf(buf, strlen(HW_UNKNOWN_PROP_NAME)+2,  "%s\n", HW_UNKNOWN_PROP_NAME);
+}
+#endif
+
 static DEVICE_ATTR(i2c_addr, S_IRUGO | S_IWUSR, st21nfc_show_i2c_addr,
 		   st21nfc_change_i2c_addr);
 
 static DEVICE_ATTR(version, S_IRUGO, st21nfc_version, NULL);
 
+#ifdef ST_NFC_HW_DETECT
+static DEVICE_ATTR(hwversion, S_IRUGO, st21nfc_hwversion, NULL);
+#endif
+
 static struct attribute *st21nfc_attrs[] = {
 	&dev_attr_i2c_addr.attr,
 	&dev_attr_version.attr,
+#ifdef ST_NFC_HW_DETECT
+	&dev_attr_hwversion.attr,
+#endif
 	NULL,
 };
 
@@ -664,6 +695,12 @@ static int st21nfc_probe(struct i2c_client *client,
 	int ret = 0;
 	struct st21nfc_platform_data *platform_data;
 	struct st21nfc_dev *st21nfc_dev;
+
+#ifdef ST_NFC_HW_DETECT
+	int core_reset_ntf_start_point = 0;
+	//int print_point = 0;
+	char *tmp = NULL;
+#endif
 
 	pr_info("st21nfc_probe\n");
 
@@ -833,6 +870,94 @@ static int st21nfc_probe(struct i2c_client *client,
 		goto err_request_irq_failed;
 	}
 	pr_info("done successfully\n");
+
+#ifdef ST_NFC_HW_DETECT
+        pr_info("Start hw checking, double pulse request");
+        if (st21nfc_dev->platform_data.reset_gpio != 0) {
+		if (st21nfc_st54spi_cb != 0)
+			(*st21nfc_st54spi_cb)(ST54SPI_CB_RESET_START,
+				st21nfc_st54spi_data);
+		/* pulse low for 20 millisecs */
+		gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
+		0);
+		msleep(20);
+		gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
+		1);
+		msleep(10);
+		/* pulse low for 20 millisecs */
+		gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
+		0);
+		msleep(20);
+		gpio_set_value(st21nfc_dev->platform_data.reset_gpio,
+		1);
+		msleep(20);
+		pr_info("done Double Pulse Request\n");
+		if (st21nfc_st54spi_cb != 0)
+			(*st21nfc_st54spi_cb)(ST54SPI_CB_RESET_END,
+				st21nfc_st54spi_data);
+	}
+
+	pr_info("Try read CORE_RESET_NTF from chipset");
+	tmp = st21nfc_dev->read_buf;
+	memset(tmp, 0x00, MAX_BUFFER_SIZE);
+
+	ret = gpio_get_value(st21nfc_dev->platform_data.irq_gpio);
+	if (ret <= 0) {
+		/* The CLF has nothing to send */
+		memset(tmp, 0x7E, MAX_BUFFER_SIZE);
+		ret = MAX_BUFFER_SIZE;
+	} else {
+		mutex_lock(&st21nfc_dev->platform_data.read_mutex);
+
+		/* Read data */
+		ret = i2c_master_recv(st21nfc_dev->platform_data.client, tmp, MAX_BUFFER_SIZE);
+		mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
+
+		if (ret < 0) {
+			pr_err("HW info detect:i2c_master_recv returned %d\n", ret);
+			chipsettype = -1;
+		}
+		if (ret > MAX_BUFFER_SIZE) {
+			pr_err("received too many bytes from i2c (%d)\n", ret);
+		}
+		if (ret > 0)
+		{
+			pr_info("read %d byte from ST NFC device", ret);
+			/* There will be some 0x7e byte at the beginning of the read buf. ignore them */
+
+			for (core_reset_ntf_start_point = 0;core_reset_ntf_start_point < ret;core_reset_ntf_start_point++) {
+				if(tmp[core_reset_ntf_start_point] != 0x7e)
+					break;
+			}
+
+			pr_info("core_reset_ntf start at %d" , core_reset_ntf_start_point);
+			//for (print_point = core_reset_ntf_start_point;print_point < ret -core_reset_ntf_start_point; print_point++)
+				//pr_info("%02x ", tmp[print_point]);
+
+			if (tmp[core_reset_ntf_start_point + 1] == 0x0 && tmp[core_reset_ntf_start_point + 3] == 0x1) {
+				pr_info("HW info detect: route mode NTF received");
+				if (tmp[core_reset_ntf_start_point + 8] == 0x05)
+					chipsettype = 1;
+				else if (tmp[core_reset_ntf_start_point + 8] == 0x04)
+					chipsettype = 0;
+				else
+					chipsettype = -1;
+
+			} else if (tmp[core_reset_ntf_start_point + 2] == 0x39 && tmp[core_reset_ntf_start_point + 3] == 0xA1) {
+				pr_info("HW info detect: loader mode NTF received");
+				if (tmp[core_reset_ntf_start_point + 16] == 0x01)
+					chipsettype = 1;
+				else if (tmp[core_reset_ntf_start_point + 16] == 0x02)
+					chipsettype = 0;
+				else
+					chipsettype = -1;
+			} else {
+				pr_info("HW info detect: No core_reset_ntf received");
+				chipsettype = -1;
+			}
+		}
+	}
+#endif
 	return 0;
 
 err_request_irq_failed:
