@@ -490,7 +490,6 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		if (chip->pd_pps_support
 			&& chrg_list->cp_master
-			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& chrg_step->chrg_step_cc_curr >=
 				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min
@@ -512,10 +511,9 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		} else {
 			mmi_chrg_dbg(chip, PR_MOTO, "Enter into PMIC switch charging, "
 							"the reason is : vbatt %d uV, "
-							"pl chrg vbatt min %d uV, "
 							"pps support %d, "
 							"chrg step %d\n",
-							vbatt_volt, chip->pl_chrg_vbatt_min,
+							vbatt_volt,
 							chip->pd_pps_support,
 			  				chrg_step->pres_chrg_step);
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
@@ -595,7 +593,6 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 	case PM_STATE_SW_LOOP:
 		if (chip->pd_pps_support
 			&& chip->cp_disable == false
-			&& vbatt_volt > chip->pl_chrg_vbatt_min
 			&& chrg_step->pres_chrg_step != chip->chrg_step_nums - 1
 			&& chrg_step->chrg_step_cc_curr >=
 				chrg_list->chrg_dev[CP_MASTER]->charging_curr_min

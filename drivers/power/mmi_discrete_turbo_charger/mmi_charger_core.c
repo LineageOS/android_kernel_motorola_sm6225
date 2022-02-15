@@ -1171,7 +1171,6 @@ static void psy_changed_work_func(struct work_struct *work)
 #define DEFAULT_QC3P_VOLT_STEPS	20000
 #define DEFAULT_QC3P_VOLT_MAX	11000000
 #define DEFAULT_BATT_OVP_LMT		4475000
-#define DEFAULT_PL_CHRG_VBATT_MIN	3000000
 #define DEFAULT_PPS_VOLT_STEPS	20000
 #define DEFAULT_PPS_CURR_STEPS	50000
 #define DEFAULT_PPS_VOLT_MAX	11000000
@@ -1189,13 +1188,6 @@ static int mmi_chrg_manager_parse_dt(struct mmi_charger_manager *chip)
 	if (rc < 0)
 		chip->batt_ovp_lmt =
 				DEFAULT_BATT_OVP_LMT;
-
-	rc = of_property_read_u32(node,
-				"mmi,pl-chrg-vbatt-min",
-				&chip->pl_chrg_vbatt_min);
-	if (rc < 0)
-		chip->pl_chrg_vbatt_min =
-				DEFAULT_PL_CHRG_VBATT_MIN;
 
 	chip->extrn_fg = of_property_read_bool(node,
 				"mmi,extrn-fg");
