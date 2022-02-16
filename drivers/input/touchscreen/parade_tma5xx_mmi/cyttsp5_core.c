@@ -5700,6 +5700,234 @@ static ssize_t cyttsp5_platform_data_show(struct device *dev,
 	return ret;
 }
 
+/***********************************************************************
+ *                         Show MFG test by sysfs
+ ***********************************************************************/
+#define PIP_CMD_MAX_LENGTH ((1 << 16) - 1)
+#define STATUS_SUCCESS	0
+#define STATUS_FAIL	-1
+
+static int prepare_print_buffer(int status, u8 *in_buf, int length,
+		u8 *out_buf, size_t out_buf_size)
+{
+	int index = 0;
+	int i;
+
+	index += scnprintf(out_buf, out_buf_size, "status %d\n", status);
+
+	for (i = 0; i < length; i++) {
+		index += scnprintf(&out_buf[index], out_buf_size - index,
+				"%02X\n", in_buf[i]);
+	}
+
+	return index;
+}
+
+static ssize_t cyttsp5_calibrate_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	u32 input_data[2];
+	int length;
+
+	/*maximal input two data*/
+	length = cyttsp5_ic_parse_input_dec(dev, buf, size, input_data,
+			3);
+	if (length <= 0) {
+		dev_err(dev, "%s: %s failed\n", __func__,
+				"cyttsp5_ic_parse_input_dec");
+		return -EINVAL;
+	}
+
+	mutex_lock(&cd->system_lock);
+	cd->calibrate_sensing_mode = input_data[0];
+	cd->calibrate_initialize_baselines = input_data[1];
+	mutex_unlock(&cd->system_lock);
+
+	return size;
+}
+
+static ssize_t cyttsp5_calibrate_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	ssize_t cnt = 0;
+	u8 status_cal = 0;
+	u8 status_baseline = 0;
+	int rc = 0;
+
+	pm_runtime_get_sync(dev);
+
+	rc = request_exclusive(cd, cd->dev, CY_REQUEST_EXCLUSIVE_TIMEOUT);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on request exclusive r=%d\n",
+				__func__, rc);
+		goto put_pm_runtime;
+	}
+
+	rc = cyttsp5_hid_output_suspend_scanning_(cd);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on suspend scan r=%d\n",
+				__func__, rc);
+		goto release_exclusive;
+	}
+
+	rc = cyttsp5_hid_output_calibrate_idacs_(
+	    cd, cd->calibrate_sensing_mode, &status_cal);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on calibrate idacs r=%d\n",
+				__func__, rc);
+		goto resume_scan;
+	}
+
+	/* Check if baseline initialization is requested */
+	if (cd->calibrate_initialize_baselines) {
+		/* Perform baseline initialization for all modes */
+		rc = cyttsp5_hid_output_initialize_baselines_(
+		    cd, CY_IB_SM_MUTCAP | CY_IB_SM_SELFCAP | CY_IB_SM_BUTTON,
+		    &status_baseline);
+		if (rc < 0) {
+			dev_err(dev, "%s: Error on initialize baselines r=%d\n",
+					__func__, rc);
+			goto resume_scan;
+		}
+	}
+
+resume_scan:
+	cyttsp5_hid_output_resume_scanning_(cd);
+
+release_exclusive:
+	release_exclusive(cd, cd->dev);
+
+put_pm_runtime:
+	pm_runtime_put(dev);
+
+	if (rc) {
+		cnt = sprintf(buf, "Status %d\n", rc);
+	} else if (!cd->calibrate_initialize_baselines) {
+		cnt = sprintf(buf, "Status %d\n%d\n", rc, status_cal);
+	} else {
+		cnt = sprintf(buf, "Status %d\n%d\n%d\n", rc, status_cal,
+			      status_baseline);
+	}
+
+	return cnt;
+}
+
+static ssize_t cyttsp5_run_and_get_selftest_result(struct device *dev,
+		char *buf, size_t buf_len, u8 test_id, u16 read_length,
+		bool get_result_on_pass)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	int status = STATUS_FAIL;
+	u8 cmd_status = 0;
+	u8 summary_result = 0;
+	u16 act_length = 0;
+	int length = 0;
+	int size;
+	int rc;
+
+	pm_runtime_get_sync(dev);
+
+	rc = request_exclusive(cd, dev, CY_REQUEST_EXCLUSIVE_TIMEOUT);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on request exclusive r=%d\n",
+				__func__, rc);
+		goto put_pm_runtime;
+	}
+
+	rc = cyttsp5_hid_output_suspend_scanning_(cd);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on suspend scan r=%d\n",
+				__func__, rc);
+		goto release_exclusive;
+	}
+
+	rc = cyttsp5_hid_output_run_selftest_(cd, test_id, 0,
+			&cmd_status, &summary_result, NULL);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on run self test for test_id:%d r=%d\n",
+				__func__, test_id, rc);
+		goto resume_scan;
+	}
+
+	/* Form response buffer */
+	cd->ic_buf[0] = cmd_status;
+	cd->ic_buf[1] = summary_result;
+
+	length = 2;
+
+	/* Get data if command status is success */
+	if (cmd_status != CY_CMD_STATUS_SUCCESS)
+		goto status_success;
+
+	/* Get data unless test result is pass */
+	if (summary_result == CY_ST_RESULT_PASS && !get_result_on_pass)
+		goto status_success;
+
+	rc = cyttsp5_hid_output_get_selftest_result_(cd, 0, read_length,
+			test_id, &cmd_status, &act_length, &cd->ic_buf[6]);
+	if (rc < 0) {
+		dev_err(dev, "%s: Error on get self test result r=%d\n",
+				__func__, rc);
+		goto resume_scan;
+	}
+
+	cd->ic_buf[2] = cmd_status;
+	cd->ic_buf[3] = test_id;
+	cd->ic_buf[4] = LOW_BYTE(act_length);
+	cd->ic_buf[5] = HI_BYTE(act_length);
+
+	length = 6 + act_length;
+
+status_success:
+	status = STATUS_SUCCESS;
+
+resume_scan:
+	cyttsp5_hid_output_resume_scanning_(cd);
+
+release_exclusive:
+	release_exclusive(cd, dev);
+
+put_pm_runtime:
+	pm_runtime_put(dev);
+
+	if (status == STATUS_FAIL)
+		length = 0;
+
+	size = prepare_print_buffer(status, cd->ic_buf, length, buf, buf_len);
+
+	return size;
+}
+
+static ssize_t auto_shorts_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+
+	/* Set length to PIP_CMD_MAX_LENGTH to read all */
+	cyttsp5_run_and_get_selftest_result(
+		dev, cd->pr_buf, sizeof(cd->pr_buf),
+		CY_ST_ID_AUTOSHORTS, PIP_CMD_MAX_LENGTH, false);
+
+	return snprintf(buf, CY_MAX_PRBUF_SIZE, "%s", cd->pr_buf);
+}
+
+static ssize_t cm_panel_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+
+	/* Set length to PIP_CMD_MAX_LENGTH to read all */
+	cyttsp5_run_and_get_selftest_result(
+		dev, cd->pr_buf, sizeof(cd->pr_buf),
+		CY_ST_ID_CM_PANEL, PIP_CMD_MAX_LENGTH, true);
+
+	return snprintf(buf, CY_MAX_PRBUF_SIZE, "%s", cd->pr_buf);
+}
+
+/* End MFG test support by sysfs */
+
 static struct device_attribute attributes[] = {
 	__ATTR(ic_ver, S_IRUGO, cyttsp5_ic_ver_show, NULL),
 	__ATTR(drv_ver, S_IRUGO, cyttsp5_drv_ver_show, NULL),
@@ -5720,6 +5948,10 @@ static struct device_attribute attributes[] = {
 #endif
 	__ATTR(panel_id, S_IRUGO, cyttsp5_panel_id_show, NULL),
 	__ATTR(platform_data, S_IRUGO, cyttsp5_platform_data_show, NULL),
+	__ATTR(calibrate, S_IRUSR | S_IWUSR, cyttsp5_calibrate_show,
+		cyttsp5_calibrate_store),
+	__ATTR(cm_panel, S_IRUGO, cm_panel_show, NULL),
+	__ATTR(auto_shorts, S_IRUGO, auto_shorts_show, NULL),
 };
 
 static int add_sysfs_interfaces(struct device *dev)

@@ -1021,13 +1021,14 @@ struct cyttsp5_core_data {
 	struct mutex tthe_lock;
 	u8 tthe_exit;
 #endif
-#ifdef VERBOSE_DEBUG
 	u8 pr_buf[CY_MAX_PRBUF_SIZE];
-#endif
 	u8 debug_level;
 	u32 watchdog_interval;
 	u8 show_timestamp;
 	u8 mfg_data[MFG_DATA_NUM];
+	u8 calibrate_sensing_mode;
+	u8 calibrate_initialize_baselines;
+	u8 ic_buf[CY_MAX_PRBUF_SIZE];
 
 	/* touchscreen_mmi */
 	struct ts_mmi_class_methods *imports;
