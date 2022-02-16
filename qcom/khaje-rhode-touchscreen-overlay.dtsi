@@ -2,12 +2,12 @@
 		pmx_ts_active {
 			ts_active: ts_active {
 				mux {
-					pins = "gpio69", "gpio86";
+					pins = "gpio69", "gpio86", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69", "gpio86";
+					pins = "gpio69", "gpio86", "gpio2";
 					drive-strength = <8>;
 					bias-pull-up;
 				};
@@ -17,12 +17,12 @@
 		pmx_ts_reset_suspend {
 			ts_reset_suspend: ts_reset_suspend {
 				mux {
-					pins = "gpio86";
+					pins = "gpio86", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio86";
+					pins = "gpio86", "gpio2";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
@@ -32,12 +32,12 @@
 		pmx_ts_int_suspend {
 			ts_int_suspend: ts_int_suspend {
 				mux {
-					pins = "gpio69";
+					pins = "gpio69", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69";
+					pins = "gpio69", "gpio2";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
@@ -47,12 +47,12 @@
 		pmx_ts_release {
 			ts_release: ts_release {
 				mux {
-					pins = "gpio69", "gpio86";
+					pins = "gpio69", "gpio86", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69", "gpio86";
+					pins = "gpio69", "gpio86", "gpio2";
 					drive-strength = <2>;
 					bias-disable;
 				};
@@ -75,7 +75,7 @@
 		compatible = "goodix,gt9916S";
 		reg = <0>;
 		spi-max-frequency = <1000000>;
-		mmi,status = "/chosen","mmi,panel_name","contains","nt37701";
+		mmi,status = "/chosen","mmi,panel_name","contains","v0","v1","v2";
 
 		goodix,avdd-gpio = <&tlmm 2 0x0>;
 		goodix,reset-gpio = <&tlmm 86 0x0>;
@@ -99,5 +99,30 @@
 		mmi,enable-gestures;
 		mmi,usb-charger-detection;
 	};
+
+	focaltech@1 {
+                compatible = "focaltech,fts";
+                reg = <1>;
+                spi-max-frequency = <1000000>;
+                mmi,status = "/chosen","mmi,panel_name","contains","v9";
+
+                interrupt-parent = <&tlmm>;
+                interrupts = <97 0x2>;
+                focaltech,reset-gpio = <&tlmm 86 0x0>;
+                focaltech,irq-gpio = <&tlmm 97 0x2800>;
+                focaltech,max-touch-number = <10>;
+                focaltech,display-coords =  <0 0 1080 2400>;
+
+                pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+                pinctrl-0 = <&ts_active>;
+                pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+                pinctrl-2 = <&ts_release>;
+
+                mmi,power-off-suspend;
+                mmi,enable-gestures;
+                mmi,usb-charger-detection;
+
+                panel = <&mot_csot_nt37701_655_1080x2400_dsc_cmd_v9>;
+        };
 };
 
