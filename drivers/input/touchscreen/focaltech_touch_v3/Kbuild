@@ -1,0 +1,46 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_touch_v3 \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_touch_v3/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_touch_v3/focaltech_test
+
+obj-m := focaltech_v3.o
+focaltech_v3-objs += focaltech_core.o
+focaltech_v3-objs += focaltech_ex_fun.o
+focaltech_v3-objs += focaltech_ex_mode.o
+focaltech_v3-objs += focaltech_gesture.o
+focaltech_v3-objs += focaltech_esdcheck.o
+focaltech_v3-objs += focaltech_point_report_check.o
+focaltech_v3-objs += focaltech_flash.o
+focaltech_v3-objs += focaltech_flash/focaltech_upgrade_ft3681.o
+focaltech_v3-objs += focaltech_spi.o
+focaltech_v3-objs += focaltech_test/focaltech_test.o
+focaltech_v3-objs += focaltech_test/focaltech_test_ini.o
+focaltech_v3-objs += focaltech_test/supported_ic/focaltech_test_ft3681.o
+
+ifneq ($(filter ft3681,$(CONFIG_INPUT_FOCALTECH_V3_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_V3_MMI_IC_NAME_FT3681
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+       KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+       EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+       focaltech_v3-objs += focaltech_ts_mmi.o
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_V3_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_V3_MMI_ENABLE_PALM)),)
+	EXTRA_CFLAGS += -DFOCALTECH_PALM_SENSOR_EN
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_V3_MMI_PEN_NOTIFIER)),)
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../misc/pen/Module.symvers
+	EXTRA_CFLAGS += -DFOCALTECH_PEN_NOTIFIER
+endif
+
+ifneq ($(filter m y, $(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
