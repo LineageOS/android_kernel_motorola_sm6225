@@ -56,6 +56,8 @@
 
 #define FG_TEMP_TABLE_CNT_MAX       0x65
 
+#define I2C_ERROR_COUNT_MAX			0x5
+
 #define FG_PARAM_VERION       		0x1E
 
 #define INIT_CHECK_MASK         	0x0010
