@@ -1804,6 +1804,9 @@ static void mmi_handle_hvdcp_check_timeout(struct mmi_discrete_charger *chg,
 {
 	u32 hvdcp_ua = 0;
 
+	if (chg->pd_active)
+		return;
+
 	if (hvdcp_done) {
 		hvdcp_ua = (chg->real_charger_type ==
 				POWER_SUPPLY_TYPE_USB_HVDCP) ?
