@@ -295,6 +295,13 @@ enum dsi_dyn_clk_feature_type {
  * @DSI_CMD_SET_COLOR_STD:                   COLOR STD mode
  * @DSI_CMD_SET_COLOR_GAME :                    COLOR GAME mode
  * @DSI_CMD_SET_COLOR_NONE:                   COLOR NONE mode
+ * @DSI_CMD_SET_BRIGHTNESS_1E:      Send demura codes when brightness changes to 0-1E
+ * @DSI_CMD_SET_BRIGHTNESS_1FD:      Send demura codes when brightness changes to 1F-1FD
+ * @DSI_CMD_SET_BRIGHTNESS_2FF:      Send demura codes when brightness changes to 1FE-2FF
+ * @DSI_CMD_SET_BRIGHTNESS_3FF:      Send demura codes when brightness changes to 300-3FF
+ * @DSI_CMD_SET_BRIGHTNESS_4FF:      Send demura codes when brightness changes to 400-4FF
+ * @DSI_CMD_SET_BRIGHTNESS_5FF:      Send demura codes when brightness changes to 500-5FF
+ * @DSI_CMD_SET_BRIGHTNESS_FFF:      Send demura codes when brightness changes to 600-FFF
  * @DSI_CMD_SET_MAX
  */
 enum dsi_cmd_set_type {
@@ -335,6 +342,13 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_COLOR_STD,
 	DSI_CMD_SET_COLOR_GAME,
 	DSI_CMD_SET_COLOR_NONE,
+	DSI_CMD_SET_BRIGHTNESS_1E,
+	DSI_CMD_SET_BRIGHTNESS_1FD,
+	DSI_CMD_SET_BRIGHTNESS_2FF,
+	DSI_CMD_SET_BRIGHTNESS_3FF,
+	DSI_CMD_SET_BRIGHTNESS_4FF,
+	DSI_CMD_SET_BRIGHTNESS_5FF,
+	DSI_CMD_SET_BRIGHTNESS_FFF,
 	DSI_CMD_SET_MAX
 };
 

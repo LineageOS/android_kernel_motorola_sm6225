@@ -165,6 +165,8 @@ struct dsi_backlight_config {
 	u32 bl_scale_sv;
 	u32 bl_level_align;
 	bool bl_inverted_dbv;
+	bool bl_demura_cmd;
+	u32 demura_type;
 	u32 bl_dcs_subtype;
 
 	int en_gpio;
