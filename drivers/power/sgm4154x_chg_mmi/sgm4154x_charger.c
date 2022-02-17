@@ -1814,6 +1814,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 	out:
 		sgm4154x_set_input_curr_lim(sgm, sgm->input_current_cache);
 		sgm->mmi_is_qc3_authen = false;
+		charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		up(&sgm->sem_dpdm);
 		dev_info(sgm->dev, "mmi_hvdcp_detect_kthread end\n");
 	}while(!kthread_should_stop());
