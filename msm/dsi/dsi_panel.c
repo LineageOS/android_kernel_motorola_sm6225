@@ -842,11 +842,14 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	int rc = 0;
 	struct mipi_dsi_device *dsi;
 	struct dsi_backlight_config *bl;
+	u32 bl_lvl_backup;
+	enum dsi_cmd_set_type type;
 
 	if (!panel || (bl_lvl > 0xffff)) {
 		DSI_ERR("invalid params\n");
 		return -EINVAL;
 	}
+	bl_lvl_backup = bl_lvl;
 
 	dsi = &panel->mipi_device;
 	bl = &panel->bl_config;
@@ -866,6 +869,44 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
+
+	if (bl->bl_demura_cmd) {
+		switch (bl_lvl_backup) {
+			case 0x00 ... 0x1e:
+				type = DSI_CMD_SET_BRIGHTNESS_1E;
+				break;
+			case 0x1f ... 0x1fd:
+				type = DSI_CMD_SET_BRIGHTNESS_1FD;
+				break;
+			case 0x1fe ... 0x2ff:
+				type = DSI_CMD_SET_BRIGHTNESS_2FF;
+				break;
+			case 0x300 ... 0x3ff:
+				type = DSI_CMD_SET_BRIGHTNESS_3FF;
+				break;
+			case 0x400 ... 0x4ff:
+				type = DSI_CMD_SET_BRIGHTNESS_4FF;
+				break;
+			case 0x500 ... 0x5ff:
+				type = DSI_CMD_SET_BRIGHTNESS_5FF;
+				break;
+			case 0x600 ... 0xfff:
+				type = DSI_CMD_SET_BRIGHTNESS_FFF;
+				break;
+			default:
+				type = DSI_CMD_SET_BRIGHTNESS_1E;
+				break;
+		}
+		if (bl->demura_type != type) {
+			DSI_INFO("update dcs backlight:0x%x, demura_type %d, type %d\n", bl_lvl_backup, bl->demura_type, type);
+			rc = dsi_panel_tx_cmd_set(panel, type);
+			if (rc)
+				DSI_ERR("[%s] failed to send DSI_CMD_SET_BRIGHTNESS cmds, rc=%d\n",
+				       panel->name, rc);
+			else
+				bl->demura_type = type;
+		}
+	}
 
 	return rc;
 }
@@ -2382,6 +2423,13 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-color-std-command",
 	"qcom,mdss-dsi-color-game-command",
 	"qcom,mdss-dsi-color-none-command",
+	"qcom,mdss-dsi-brightness-1e-command",
+	"qcom,mdss-dsi-brightness-1fd-command",
+	"qcom,mdss-dsi-brightness-2ff-command",
+	"qcom,mdss-dsi-brightness-3ff-command",
+	"qcom,mdss-dsi-brightness-4ff-command",
+	"qcom,mdss-dsi-brightness-5ff-command",
+	"qcom,mdss-dsi-brightness-fff-command",
 };
 
 const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
@@ -2422,6 +2470,13 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-color-std-command-state",
 	"qcom,mdss-dsi-color-game-command-state",
 	"qcom,mdss-dsi-color-none-command-state",
+	"qcom,mdss-dsi-brightness-1e-command-state",
+	"qcom,mdss-dsi-brightness-1fd-command-state",
+	"qcom,mdss-dsi-brightness-2ff-command-state",
+	"qcom,mdss-dsi-brightness-3ff-command-state",
+	"qcom,mdss-dsi-brightness-4ff-command-state",
+	"qcom,mdss-dsi-brightness-5ff-command-state",
+	"qcom,mdss-dsi-brightness-fff-command-state",
 };
 
 static int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt)
@@ -3092,6 +3147,12 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	DSI_INFO("[%s] bl_2bytes_enable=%d\n", panel->name,
 			panel->bl_config.bl_2bytes_enable);
+
+	panel->bl_config.bl_demura_cmd= utils->read_bool(utils->data,
+			"qcom,brightness-demura-command");
+
+	DSI_INFO("[%s] bl_demura_cmd=%d\n", panel->name,
+			panel->bl_config.bl_demura_cmd);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
