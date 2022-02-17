@@ -2032,6 +2032,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 	out:
 		bq2589x_set_input_current_limit(bq, bq->input_current_cache);
 		bq->mmi_is_qc3_authen = false;
+		charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		up(&bq->sem_dpdm);
 		dev_info(bq->dev, "mmi_hvdcp_detect_kthread end\n");
 	}while(!kthread_should_stop());
