@@ -2265,10 +2265,11 @@ static void sgm4154x_paired_battery_notify(void *data,
 		WARN_ON(paired_load == PAIRED_LOAD_OFF);
 	}
 
-	if (initialized &&
-	    paired_ichg > 0 &&
-	    chg->paired_load != PAIRED_LOAD_HIGH) {
-		chg->paired_load = PAIRED_LOAD_HIGH;
+	if (initialized && paired_ichg > 0) {
+		if (paired_ichg < chg->sgm->init_data.max_ichg / 2)
+			paired_load = PAIRED_LOAD_LOW;
+		else
+			paired_load = PAIRED_LOAD_HIGH;
 	}
 
 	if (paired_load != chg->paired_load) {
