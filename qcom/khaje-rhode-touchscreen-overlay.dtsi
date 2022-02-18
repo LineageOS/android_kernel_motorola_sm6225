@@ -2,12 +2,12 @@
 		pmx_ts_active {
 			ts_active: ts_active {
 				mux {
-					pins = "gpio69", "gpio86", "gpio2";
+					pins = "gpio97", "gpio86", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69", "gpio86", "gpio2";
+					pins = "gpio97", "gpio86", "gpio2";
 					drive-strength = <8>;
 					bias-pull-up;
 				};
@@ -32,12 +32,12 @@
 		pmx_ts_int_suspend {
 			ts_int_suspend: ts_int_suspend {
 				mux {
-					pins = "gpio69", "gpio2";
+					pins = "gpio97", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69", "gpio2";
+					pins = "gpio97", "gpio2";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
@@ -47,12 +47,12 @@
 		pmx_ts_release {
 			ts_release: ts_release {
 				mux {
-					pins = "gpio69", "gpio86", "gpio2";
+					pins = "gpio97", "gpio86", "gpio2";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio69", "gpio86", "gpio2";
+					pins = "gpio97", "gpio86", "gpio2";
 					drive-strength = <2>;
 					bias-disable;
 				};
