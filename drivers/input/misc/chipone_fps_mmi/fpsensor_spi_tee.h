@@ -64,6 +64,11 @@ typedef struct {
     u8 fb_status;
     int enable_report_blankon;
     int free_flag;
+    struct pinctrl *pinctrl;
+    struct pinctrl_state *reset_high;
+    struct pinctrl_state *reset_low;
+    struct pinctrl_state *vcc_high;
+    struct pinctrl_state *vcc_low;
 } fpsensor_data_t;
 
 #endif    /* __FPSENSOR_SPI_TEE_H */

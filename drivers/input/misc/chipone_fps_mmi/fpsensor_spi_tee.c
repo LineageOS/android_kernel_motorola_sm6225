@@ -11,7 +11,9 @@
 #include <linux/of_irq.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
-
+#ifdef SUPPORT_POWER_GPIO
+#include <linux/pinctrl/consumer.h>
+#endif
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
@@ -25,7 +27,11 @@
 #define FPSENSOR_WAKEUP_OLD     2
 
 #define FPSENSOR_SPI_VERSION              "fpsensor_spi_tee_qcomm_v1.23.1"
+#ifdef SUPPORT_POWER_GPIO
+#define FPSENSOR_USE_QCOM_POWER_GPIO     1
+#else
 #define FPSENSOR_USE_QCOM_POWER_GPIO     0
+#endif
 #define FPSENSOR_WAKEUP_TYPE              FPSENSOR_WAKEUP_SOURCE
 #define FP_NOTIFY                         1
 #define FP_NOTIFY_TYPE                    FPSENSOR_FB_DRM
@@ -84,6 +90,65 @@ static void fpsensor_gpio_free(fpsensor_data_t *fpsensor)
     }
 #endif
 }
+
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+static void fpsensor_power_on(fpsensor_data_t *fpsensor)
+{
+//    struct device *dev = &fpsensor->spi->dev;
+    int ret   = 0;
+    int value = 0;
+    if(fpsensor->pinctrl){
+        if(fpsensor->vcc_high){
+            ret = pinctrl_select_state(fpsensor->pinctrl, fpsensor->vcc_high);
+            if(ret){
+                fpsensor_debug(ERR_LOG, "Failed to  pinctl vcc_high  . ret = %d\n", ret);
+            }
+        }
+    }
+    fpsensor_debug(ERR_LOG, "fpsensor power_gpio=%d\n", fpsensor->power_gpio);
+    if (fpsensor->power_gpio != 0) {
+      // set power on
+      ret = gpio_direction_output(fpsensor->power_gpio, 1);
+      fpsensor_debug(ERR_LOG,"fpsensor power_gpio power on ret :%d\n",ret);
+      gpio_set_value(fpsensor->power_gpio, 1);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint power on\n");
+      value = gpio_get_value(fpsensor->power_gpio);
+      fpsensor_debug(ERR_LOG,"fpsensor power_gpio power on value :%d\n",value);
+    }
+    if (fpsensor->reset_gpio != 0) {
+      // set reset_gpio high
+      gpio_direction_output(fpsensor->reset_gpio, 1);
+      gpio_set_value(fpsensor->reset_gpio, 1);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint reset_gpio high\n");
+    }
+}
+static void fpsensor_power_off(fpsensor_data_t *fpsensor)
+{
+    int ret = 0;
+//    struct device *dev = &fpsensor->spi->dev;
+    if(fpsensor->pinctrl){
+       if(fpsensor->vcc_low){
+            ret = pinctrl_select_state(fpsensor->pinctrl, fpsensor->vcc_low);
+            if(ret){
+                fpsensor_debug(ERR_LOG, "Failed to  pinctl vcc_low  . ret = %d\n", ret);
+            }
+        }
+    }
+    fpsensor_debug(ERR_LOG, "fpsensor power_gpio=%d\n", fpsensor->power_gpio);
+    if (fpsensor->power_gpio != 0) {
+      // set power off
+      gpio_direction_output(fpsensor->power_gpio, 0);
+      gpio_set_value(fpsensor->power_gpio, 0);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint power off\n");
+    }
+    if (fpsensor->reset_gpio != 0) {
+      // set reset_gpio low
+      gpio_direction_output(fpsensor->reset_gpio, 0);
+      gpio_set_value(fpsensor->reset_gpio, 0);
+      fpsensor_debug(ERR_LOG, "fpsensor fingerprint reset_gpio low\n");
+    }
+}
+#endif
 
 static void fpsensor_irq_gpio_cfg(fpsensor_data_t *fpsensor)
 {
@@ -146,12 +211,70 @@ static void fpsensor_hw_reset(int delay)
     return;
 }
 
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+static int fpsensor_pinctrl_init(fpsensor_data_t *fpsensor)
+{
+	int rc = 0;
+
+	fpsensor->pinctrl = devm_pinctrl_get(&fpsensor->spi->dev);
+	if (IS_ERR_OR_NULL(fpsensor->pinctrl)) {
+		fpsensor_debug(ERR_LOG, "Failed to get pinctrl handler");
+		fpsensor->pinctrl = NULL;
+		return -EINVAL;
+	}
+
+
+	fpsensor->reset_high = pinctrl_lookup_state(fpsensor->pinctrl, "fps_rst_active");
+	if (IS_ERR(fpsensor->reset_high))
+	{
+		rc = PTR_ERR(fpsensor->reset_high);
+		fpsensor_debug(ERR_LOG," %s : can't find fingerprint pinctrl fps_rst_active \n", __func__);
+		goto fpsensorfp_pinctrl_fail;
+	}
+	fpsensor->reset_low = pinctrl_lookup_state(fpsensor->pinctrl, "fps_rst_suspend");
+	if (IS_ERR(fpsensor->reset_low))
+	{
+		rc = PTR_ERR(fpsensor->reset_low);
+		fpsensor_debug(ERR_LOG," %s : can't find fingerprint pinctrl fps_rst_suspend \n", __func__);
+		goto fpsensorfp_pinctrl_fail;
+	}
+
+	fpsensor->vcc_high = pinctrl_lookup_state(fpsensor->pinctrl, "fps_ido1p8_en_active");
+	if (IS_ERR(fpsensor->vcc_high))
+	{
+		rc = PTR_ERR(fpsensor->vcc_high);
+		fpsensor_debug(ERR_LOG," %s : can't find fingerprint pinctrl fps_ido1p8_en_active \n", __func__);
+		goto fpsensorfp_pinctrl_fail;
+	}
+	fpsensor->vcc_low = pinctrl_lookup_state(fpsensor->pinctrl, "fps_ido1p8_en_suspend");
+	if (IS_ERR(fpsensor->vcc_low))
+	{
+		rc = PTR_ERR(fpsensor->vcc_low);
+		fpsensor_debug(ERR_LOG," %s : can't find fingerprint pinctrl fps_ido1p8_en_suspend \n", __func__);
+		goto fpsensorfp_pinctrl_fail;
+	}
+	return rc;
+
+fpsensorfp_pinctrl_fail:
+    fpsensor_debug(ERR_LOG, "Failed to  pinctl lookup&select . rc = %d\n", rc);
+    devm_pinctrl_put(fpsensor->pinctrl);
+    fpsensor->pinctrl = NULL;
+    return rc;
+}
+#endif
+
 static int fpsensor_get_gpio_dts_info(fpsensor_data_t *fpsensor)
 {
     int ret = 0;
-
     FUNC_ENTRY();
     // get interrupt gpio resource
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+
+    ret = fpsensor_pinctrl_init(fpsensor);
+    if(ret){
+        fpsensor_debug(ERR_LOG, "Failed to  pinctl request . ret = %d\n", ret);
+    }
+#endif
     ret = fpsensor_request_named_gpio(fpsensor, "fp-gpio-int", &fpsensor->irq_gpio);
     if (ret) {
         fpsensor_debug(ERR_LOG, "Failed to request irq GPIO. ret = %d\n", ret);
@@ -165,6 +288,14 @@ static int fpsensor_get_gpio_dts_info(fpsensor_data_t *fpsensor)
         return -1;
     }
 #if FPSENSOR_USE_QCOM_POWER_GPIO
+    if(fpsensor->pinctrl){
+		if(fpsensor->vcc_high){
+			ret = pinctrl_select_state(fpsensor->pinctrl, fpsensor->vcc_high);
+			if(ret){
+				fpsensor_debug(ERR_LOG, "Failed to  pinctl vcc_high  . ret = %d\n", ret);
+			}
+		}
+	}
     // get power gpio resourece
     ret = fpsensor_request_named_gpio(fpsensor, "fp-gpio-power", &fpsensor->power_gpio);
     if (ret) {
@@ -172,13 +303,28 @@ static int fpsensor_get_gpio_dts_info(fpsensor_data_t *fpsensor)
         return -1;
     }
     // set power direction output
-    gpio_direction_output(fpsensor->power_gpio, 1);
+    ret = gpio_direction_output(fpsensor->power_gpio, 1);
+    fpsensor_debug(ERR_LOG,"fpsensor power_gpio power on dts ret:%d\n",ret);
     gpio_set_value(fpsensor->power_gpio, 1);
 #endif
     // set reset direction output
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+    if(fpsensor->pinctrl){
+        if(fpsensor->reset_high){
+            ret = pinctrl_select_state(fpsensor->pinctrl, fpsensor->reset_high);
+            if(ret){
+                fpsensor_debug(ERR_LOG, "Failed to  pinctl reset_high  . ret = %d\n", ret);
+            }
+        }
+    }
+    gpio_direction_output(fpsensor->reset_gpio, 1);
+    gpio_set_value(g_fpsensor->reset_gpio, 1);
+    mdelay(4);
+    //fpsensor_hw_reset(1250);
+#else
     gpio_direction_output(fpsensor->reset_gpio, 1);
     fpsensor_hw_reset(1250);
-
+#endif
     return ret;
 }
 
@@ -277,11 +423,14 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
     switch (cmd) {
     case FPSENSOR_IOC_INIT:
         fpsensor_debug(INFO_LOG, "%s: fpsensor init started======\n", __func__);
+
+#ifndef SUPPORT_POWER_GPIO
         retval = fpsensor_get_gpio_dts_info(fpsensor_dev);
         if (retval) {
             break;
         }
         fpsensor_irq_gpio_cfg(fpsensor_dev);
+#endif
         //regist irq
         irqf = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
         retval = devm_request_threaded_irq(&g_fpsensor->spi->dev, g_fpsensor->irq, fpsensor_irq,
@@ -308,7 +457,7 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
                 fpsensor_dev->irq_enabled = 0;
             }
             fpsensor_dev->device_available = 0;
-            fpsensor_gpio_free(fpsensor_dev);
+            //fpsensor_gpio_free(fpsensor_dev);
             fpsensor_debug(INFO_LOG, "%s: fpsensor exit finished======\n", __func__);
         } else {
             fpsensor_debug(INFO_LOG, "%s: IOC_EXIT with device_available = 0 ======\n", __func__);
@@ -317,7 +466,11 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 
     case FPSENSOR_IOC_RESET:
         fpsensor_debug(INFO_LOG, "%s: chip reset command\n", __func__);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+        fpsensor_hw_reset(4000);
+#else
         fpsensor_hw_reset(1250);
+#endif
         break;
 
     case FPSENSOR_IOC_ENABLE_IRQ:
@@ -346,9 +499,15 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
         break;
     case FPSENSOR_IOC_ENABLE_POWER:
         fpsensor_debug(INFO_LOG, "%s: FPSENSOR_IOC_ENABLE_POWER ======\n", __func__);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+        fpsensor_power_on(fpsensor_dev);
+#endif
         break;
     case FPSENSOR_IOC_DISABLE_POWER:
         fpsensor_debug(INFO_LOG, "%s: FPSENSOR_IOC_DISABLE_POWER ======\n", __func__);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+        fpsensor_power_off(fpsensor_dev);
+#endif
         break;
     case FPSENSOR_IOC_REMOVE:
         if(fpsensor_dev->device_available) {
@@ -358,6 +517,12 @@ static long fpsensor_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
                 fpsensor_dev->irq_enabled = 0;
             }
             fpsensor_gpio_free(fpsensor_dev);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+            if(fpsensor_dev->pinctrl){
+                devm_pinctrl_put(fpsensor_dev->pinctrl);
+                fpsensor_dev->pinctrl = NULL;
+            }
+#endif
             fpsensor_dev->device_available = 0;
         } else {
             fpsensor_debug(INFO_LOG, "%s: IOC_REMOVE with device_available = 0 ======\n", __func__);
@@ -643,6 +808,14 @@ static int fpsensor_probe(struct platform_device *pdev)
         fpsensor_debug(ERR_LOG, "fpsensor setup char device failed, %d", status);
         goto release_drv_data;
     }
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+    status = fpsensor_get_gpio_dts_info(fpsensor_dev);
+    if (status) {
+        fpsensor_debug(ERR_LOG, "fpsensor setup char device failed, %d", status);
+        goto release_drv_data;
+    }
+    fpsensor_irq_gpio_cfg(fpsensor_dev);
+#endif
     init_waitqueue_head(&fpsensor_dev->wq_irq_return);
 #if FPSENSOR_WAKEUP_TYPE == FPSENSOR_WAKEUP_SOURCE
     wakeup_source_init_internal(&g_ttw_wl, "fpsensor_ttw_wl");
@@ -685,6 +858,12 @@ static int fpsensor_remove(struct platform_device *pdev)
             devm_free_irq(&g_fpsensor->spi->dev, fpsensor_dev->irq, fpsensor_dev);
 
         fpsensor_gpio_free(fpsensor_dev);
+#if FPSENSOR_USE_QCOM_POWER_GPIO
+        if(fpsensor_dev->pinctrl){
+            devm_pinctrl_put(fpsensor_dev->pinctrl);
+            fpsensor_dev->pinctrl = NULL;
+        }
+#endif
         fpsensor_dev->device_available = 0;
     }
 
