@@ -223,7 +223,7 @@ static const mot_dev_info mot_dev_list[MOT_DEVICE_NUM] = {
 		.actuator_info = {
 			[0] = {
 				.actuator_type = MOT_ACTUATOR_DW9800V,
-				.dac_pos = 1023,
+				.dac_pos = 0,
 				.init_pos = 512,
 				.cci_addr = 0x0c,
 				.cci_dev = 0x00,
@@ -234,9 +234,9 @@ static const mot_dev_info mot_dev_list[MOT_DEVICE_NUM] = {
 				.launch_lens = {
 						.launch_lens_needed = true,
 						.launch_lens_step = {
-									{600, 200},
-									{800, 101},
-									{900, 100}
+									{300, 150},
+									{200, 100},
+									{100, 62}
 					},
 				},
 			},
