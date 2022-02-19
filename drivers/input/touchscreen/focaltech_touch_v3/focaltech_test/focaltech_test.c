@@ -1218,7 +1218,7 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
     snprintf(filepath, FILE_NAME_LENGTH, "%s%s", FTS_OUT_FILE_PATH, file_name);
     FTS_INFO("save test data to %s", filepath);
     if (NULL == pfile) {
-        pfile = filp_open(filepath, O_TRUNC | O_CREAT | O_RDWR, 0);
+        pfile = filp_open(filepath, O_TRUNC | O_CREAT | O_RDWR, 0664);
     }
     if (IS_ERR(pfile)) {
         FTS_TEST_ERROR("error occured while opening file %s.",  filepath);
@@ -2156,31 +2156,12 @@ test_err:
 }
 
 static ssize_t fts_test_show(
-    struct device *dev, struct device_attribute *attr, char *buf)
-{
-    struct fts_ts_data *ts_data = dev_get_drvdata(dev);
-    struct input_dev *input_dev = ts_data->input_dev;
-    ssize_t size = 0;
-
-    mutex_lock(&input_dev->mutex);
-    size += snprintf(buf + size, PAGE_SIZE, "FTS_INI_FILE_PATH:%s\n",
-                     FTS_INI_FILE_PATH);
-    size += snprintf(buf + size, PAGE_SIZE, "FTS_OUT_FILE_PATH:%s\n",
-                     FTS_OUT_FILE_PATH);
-    size += snprintf(buf + size, PAGE_SIZE, "FTS_CSV_FILE_NAME:%s\n",
-                     FTS_CSV_FILE_NAME);
-    size += snprintf(buf + size, PAGE_SIZE, "FTS_TXT_FILE_NAME:%s\n",
-                     FTS_TXT_FILE_NAME);
-    mutex_unlock(&input_dev->mutex);
-
-    return size;
-}
-
-static ssize_t fts_test_store(
     struct device *dev,
-    struct device_attribute *attr, const char *buf, size_t count)
+    struct device_attribute *attr, char *buf)
 {
     int ret = 0;
+    ssize_t size = 0;
+    char test_result[TEST_ICSERIES_LEN] = { 0 };
     char fwname[FILE_NAME_LENGTH] = { 0 };
     struct fts_ts_data *ts_data = dev_get_drvdata(dev);
     struct input_dev *input_dev = ts_data->input_dev;
@@ -2191,8 +2172,7 @@ static ssize_t fts_test_store(
     }
 
     memset(fwname, 0, sizeof(fwname));
-    snprintf(fwname, FILE_NAME_LENGTH, "%s", buf);
-    fwname[count - 1] = '\0';
+    strncpy(fwname, FTS_LIMIT_FILE_NAME, sizeof(FTS_LIMIT_FILE_NAME));
     FTS_TEST_DBG("fwname:%s.", fwname);
 
     mutex_lock(&input_dev->mutex);
@@ -2214,15 +2194,22 @@ static ssize_t fts_test_store(
     fts_esdcheck_switch(ts_data, ENABLE);
 #endif
     fts_irq_enable();
+    if (fts_ftest->result == true) {
+        strncpy(test_result, FTS_TEST_RESULT_PASS, sizeof(FTS_TEST_RESULT_PASS));
+    } else {
+        strncpy(test_result, FTS_TEST_RESULT_FAIL, sizeof(FTS_TEST_RESULT_FAIL));
+    }
+
+    size = snprintf(buf, PAGE_SIZE, "tp test result:[%s]\n", test_result);
     mutex_unlock(&input_dev->mutex);
 
-    return count;
+    return size;
 }
 
 /*  test from test.ini
 *    example:echo "***.ini" > fts_test
 */
-static DEVICE_ATTR(fts_test, S_IRUGO | S_IWUSR, fts_test_show, fts_test_store);
+static DEVICE_ATTR(fts_test, S_IRUGO, fts_test_show, NULL);
 
 static struct attribute *fts_test_attributes[] = {
     &dev_attr_fts_test.attr,
