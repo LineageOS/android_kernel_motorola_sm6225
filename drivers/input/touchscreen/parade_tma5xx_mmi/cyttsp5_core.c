@@ -6863,5 +6863,8 @@ int cyttsp5_release(struct cyttsp5_core_data *cd)
 EXPORT_SYMBOL_GPL(cyttsp5_release);
 
 MODULE_LICENSE("GPL");
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("Parade TrueTouch(R) Standard Product Core Driver");
 MODULE_AUTHOR("Parade Technologies <ttdrivers@paradetech.com>");
