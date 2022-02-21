@@ -303,6 +303,7 @@ struct sgm4154x_device {
 	struct power_supply *charger;
 	struct power_supply *usb;
 	struct power_supply *ac;
+	struct power_supply *battery;	/* enable dynamic adjust battery voltage */
 	struct mutex lock;
 	struct mutex i2c_rw_lock;
 
@@ -334,6 +335,12 @@ struct sgm4154x_device {
 	struct wakeup_source *charger_wakelock;
 	bool enable_sw_jeita;
 	struct sgm4154x_jeita data;
+
+	/* enable dynamic adjust battery voltage */
+	bool enable_dynamic_adjust_batvol;
+	int			final_cc;
+	int			final_cv;
+	int			cv_tune;
 
 	struct regulator	*dpdm_reg;
 	struct regulator	*otg_vbus_reg;
