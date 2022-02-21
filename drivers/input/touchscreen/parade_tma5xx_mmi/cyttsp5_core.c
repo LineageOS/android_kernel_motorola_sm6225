@@ -5705,15 +5705,15 @@ static ssize_t cyttsp5_platform_data_show(struct device *dev,
  ***********************************************************************/
 #define PIP_CMD_MAX_LENGTH ((1 << 16) - 1)
 #define STATUS_SUCCESS	0
-#define STATUS_FAIL	-1
+#define STATUS_FAIL	1
 
-static int prepare_print_buffer(int status, u8 *in_buf, int length,
+static int prepare_print_buffer(u8 status, u8 *in_buf, int length,
 		u8 *out_buf, size_t out_buf_size)
 {
 	int index = 0;
 	int i;
 
-	index += scnprintf(out_buf, out_buf_size, "status %d\n", status);
+	index += scnprintf(out_buf, out_buf_size, "%02X\n", status);
 
 	for (i = 0; i < length; i++) {
 		index += scnprintf(&out_buf[index], out_buf_size - index,
@@ -5803,12 +5803,12 @@ put_pm_runtime:
 	pm_runtime_put(dev);
 
 	if (rc) {
-		cnt = sprintf(buf, "Status %d\n", rc);
+		cnt = sprintf(buf, "command_result:%d\n", rc);
 	} else if (!cd->calibrate_initialize_baselines) {
-		cnt = sprintf(buf, "Status %d\n%d\n", rc, status_cal);
+		cnt = sprintf(buf, "command_result:%d\nstatus_calibration:%d\n", rc, status_cal);
 	} else {
-		cnt = sprintf(buf, "Status %d\n%d\n%d\n", rc, status_cal,
-			      status_baseline);
+		cnt = sprintf(buf, "command_result:%d\nstatus_calibration:%d\nstatus_baseline:%d\n",
+			rc, status_cal, status_baseline);
 	}
 
 	return cnt;
@@ -5819,7 +5819,7 @@ static ssize_t cyttsp5_run_and_get_selftest_result(struct device *dev,
 		bool get_result_on_pass)
 {
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
-	int status = STATUS_FAIL;
+	u8 status = STATUS_FAIL;
 	u8 cmd_status = 0;
 	u8 summary_result = 0;
 	u16 act_length = 0;
@@ -5908,7 +5908,7 @@ static ssize_t auto_shorts_show(struct device *dev,
 	/* Set length to PIP_CMD_MAX_LENGTH to read all */
 	cyttsp5_run_and_get_selftest_result(
 		dev, cd->pr_buf, sizeof(cd->pr_buf),
-		CY_ST_ID_AUTOSHORTS, PIP_CMD_MAX_LENGTH, false);
+		CY_ST_ID_AUTOSHORTS, PIP_CMD_MAX_LENGTH, true);
 
 	return snprintf(buf, CY_MAX_PRBUF_SIZE, "%s", cd->pr_buf);
 }
