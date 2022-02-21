@@ -43,7 +43,9 @@
 
 static struct bq2589x *g_bq;
 static DEFINE_MUTEX(bq2589x_i2c_lock);
-
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+bool qc3p_update_policy(struct bq2589x *chip);
+#endif
 #define MMI_HVDCP2_VOLTAGE_STANDARD		8000000
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500
@@ -2061,7 +2063,6 @@ bool qc3p_update_policy(struct bq2589x *chip )
 }
 #endif
 
-#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int bq2589x_enable_termination(struct charger_device *chg_dev, bool enable)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -2079,7 +2080,6 @@ static int bq2589x_enable_termination(struct charger_device *chg_dev, bool enabl
 	return ret;
 }
 EXPORT_SYMBOL_GPL(bq2589x_enable_termination);
-#endif
 
 static int mmi_hvdcp_detect_kthread(void *param)
 {
