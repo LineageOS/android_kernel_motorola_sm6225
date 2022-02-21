@@ -1830,6 +1830,7 @@ static int mmi_detected_qc30_hvdcp(struct bq2589x *bq, int *charger_type)
 	return ret;
 }
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 {
 	int ret = 0;
@@ -1939,6 +1940,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 
 	return ret;
 }
+#endif
 #endif
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
