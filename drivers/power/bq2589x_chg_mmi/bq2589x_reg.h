@@ -412,6 +412,5 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_DETECTION_READY] "wt6670_detection_ready",
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
 };
-bool qc3p_update_policy(struct bq2589x *chip);
 #endif
 #endif
