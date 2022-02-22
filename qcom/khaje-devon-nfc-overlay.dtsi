@@ -1,0 +1,90 @@
+
+&tlmm {
+
+       qupv3_se1_i2c_pins: qupv3_se1_i2c_pins{
+		qupv3_se1_i2c_act: qupv3_se1_i2c_active {
+			mux {
+				pins = "gpio4", "gpio5";
+				function = "qup1";
+			};
+
+			config {
+				pins = "gpio4", "gpio5";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se1_i2c_sle: qupv3_se1_i2c_sleep {
+			mux {
+				pins = "gpio4", "gpio5";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio4", "gpio5";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
+
+
+	nfc {
+		nfc_clk_req_active {
+			/* active state */
+			mux {
+				/* GPIO 71: NFC CLOCK REQUEST */
+				pins = "gpio71";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio71";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-up;
+			};
+		};
+
+		nfc_clk_req_suspend {
+			/* sleep state */
+			mux {
+				/* GPIO 71: NFC CLOCK REQUEST */
+				pins = "gpio71";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio71";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable;
+			};
+		};
+	};
+};
+
+&qupv3_se1_i2c {
+  #address-cells = <1>;
+  #size-cells = <0>;
+  status = "okay";
+  pinctrl-0 = <&qupv3_se1_i2c_act>;
+  pinctrl-1 = <&qupv3_se1_i2c_sle>;
+  sec-nfc@27 {
+    compatible = "sec-nfc";
+    reg = <0x27>;
+    sec-nfc,ven-gpio = <&tlmm 69 0x00>;
+    sec-nfc,firm-gpio = <&tlmm 31 0x00>;
+    sec-nfc,irq-gpio = <&tlmm 70 0x00>;
+    sec-nfc,clk_req-gpio = <&tlmm 71 0x00>;
+    interrupt-parent = <&tlmm>;
+    interrupts = <70 0>;
+    interrupt-names = "nfc_irq";
+    pinctrl-names = "nfc_active", "nfc_suspend";
+    pinctrl-0 = <&nfc_int_active &nfc_enable_active &nfc_clk_req_active>;
+    pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend &nfc_clk_req_suspend>;
+    clock-names = "OSC_NFC";
+
+  };
+};
+
