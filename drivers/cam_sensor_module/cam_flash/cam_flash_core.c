@@ -2056,9 +2056,9 @@ static int cam_flash_construct_power_vio_setting(
 {
 	int rc = 0;
 
-	power_info->power_setting_size = 1;
+	power_info->power_setting_size = 3;
 	power_info->power_setting =
-		kzalloc(sizeof(struct cam_sensor_power_setting),
+		kzalloc(sizeof(struct cam_sensor_power_setting)*3,
 			GFP_KERNEL);
 	if (!power_info->power_setting)
 		return -ENOMEM;
@@ -2067,20 +2067,33 @@ static int cam_flash_construct_power_vio_setting(
 	power_info->power_setting[0].seq_val = CAM_VIO;
 	power_info->power_setting[0].config_val = 1;
 	power_info->power_setting[0].delay = 2;
+	power_info->power_setting[1].seq_type = SENSOR_CUSTOM_GPIO1;
+	power_info->power_setting[1].seq_val = 0;
+	power_info->power_setting[1].config_val = 1;
+	power_info->power_setting[1].delay = 0;
+	power_info->power_setting[2].seq_type = SENSOR_CUSTOM_GPIO2;
+	power_info->power_setting[2].seq_val = 0;
+	power_info->power_setting[2].config_val = 1;
+	power_info->power_setting[2].delay = 0;
 
-	power_info->power_down_setting_size = 1;
+	power_info->power_down_setting_size = 3;
 	power_info->power_down_setting =
-		kzalloc(sizeof(struct cam_sensor_power_setting),
+		kzalloc(sizeof(struct cam_sensor_power_setting)*3,
 			GFP_KERNEL);
 	if (!power_info->power_down_setting) {
 		rc = -ENOMEM;
 		goto free_power_settings;
 	}
 
-	power_info->power_down_setting[0].seq_type = SENSOR_VIO;
-	power_info->power_down_setting[0].seq_val = CAM_VIO;
+	power_info->power_down_setting[0].seq_type = SENSOR_CUSTOM_GPIO2;
+	power_info->power_down_setting[0].seq_val = 0;
 	power_info->power_down_setting[0].config_val = 0;
-
+	power_info->power_down_setting[1].seq_type = SENSOR_CUSTOM_GPIO1;
+	power_info->power_down_setting[1].seq_val = 0;
+	power_info->power_down_setting[1].config_val = 0;
+	power_info->power_down_setting[2].seq_type = SENSOR_VIO;
+	power_info->power_down_setting[2].seq_val = CAM_VIO;
+	power_info->power_down_setting[2].config_val = 0;
 	return rc;
 
 free_power_settings:
