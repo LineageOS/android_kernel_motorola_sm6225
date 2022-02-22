@@ -28,7 +28,7 @@
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-reset-sequence = <0 3>, <1 5>, <0 3>, <1 5>;
+		qcom,mdss-dsi-reset-sequence = <0 3>, <1 5>, <0 3>, <1 42>;
 		qcom,mdss-pan-physical-width-dimension = <67>;
 		qcom,mdss-pan-physical-height-dimension = <149>;
 
@@ -135,6 +135,8 @@
 					15 00 00 00 00 00 02 17 07
 					15 00 00 00 00 00 02 20 10
 					15 00 00 00 00 00 02 29 0E
+					15 00 00 00 00 00 02 FE 40
+					15 00 00 00 00 00 02 75 32
 					15 00 00 00 00 00 02 FE 00
 					15 00 00 00 00 00 02 5E 01
 					15 00 00 00 00 00 02 C2 03
