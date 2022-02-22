@@ -21,6 +21,12 @@
 #include <linux/of_gpio.h>
 
 #include "sgm4154x_charger_lite.h"
+
+static bool paired_vbat_panic_enabled = false;
+module_param(paired_vbat_panic_enabled, bool, 0644);
+MODULE_PARM_DESC(paired_vbat_panic_enabled,
+	"Enable panic on abnormal paired vbat delta");
+
 static struct power_supply_desc sgm4154x_power_supply_desc;
 #ifdef SGM_BASE
 static struct reg_default sgm4154x_reg_defs[] = {
@@ -213,6 +219,7 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	else if ( chrg_curr > sgm->init_data.max_ichg)
 		chrg_curr = sgm->init_data.max_ichg;
 
+	pr_info("set ichg = %duA\n", chrg_curr);
 	reg_val = chrg_curr / SGM4154x_ICHRG_CURRENT_STEP_uA;
 
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2,
@@ -2262,7 +2269,14 @@ static void sgm4154x_paired_battery_notify(void *data,
 				break;
 			}
 		}
-		WARN_ON(paired_load == PAIRED_LOAD_OFF);
+		if (paired_load == PAIRED_LOAD_OFF) {
+			if (paired_vbat_panic_enabled)
+				panic("ERROR: delta_vbat=%dmV, delta_soc=%d",
+						delta_vbat, delta_soc);
+			else
+				pr_err("ERROR: delta_vbat=%dmV, delta_soc=%d",
+						delta_vbat, delta_soc);
+		}
 	}
 
 	if (initialized && paired_ichg > 0) {
@@ -2339,6 +2353,7 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 		df_sn = "unknown-sn";
 	}
 	strcpy(chg->batt_info.batt_sn, df_sn);
+	chg->chg_cfg.target_fcc = chg->sgm->init_data.ichg / 1000;
 	chg->chg_cfg.charging_disable = chg->sgm->init_data.charger_disabled;
 
 	if (of_property_read_bool(chg->sgm->dev->of_node, "mmi,ichg-invert-polority"))
