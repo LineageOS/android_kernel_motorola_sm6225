@@ -31,6 +31,7 @@
 	qcom,keep-regulators-on;
         qcom,mdss-dsi-reset-force-pull-low;
         qcom,disp_pre_reset;
+	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
@@ -102,6 +103,7 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,bklt-dcs-2bytes-enabled;
 	qcom,keep-regulators-on;
+	qcom,mdss-dsi-no-panel-on-read-support;
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
