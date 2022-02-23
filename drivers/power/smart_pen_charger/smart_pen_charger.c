@@ -202,6 +202,7 @@ static ssize_t pen_soc_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	int rc;
 	unsigned long r;
 	unsigned int soc;
 	struct pen_charger *chg = this_chip;
@@ -217,9 +218,18 @@ static ssize_t pen_soc_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (soc >= 0 && soc <= 100 && chg->pen_data.soc != soc) {
+		pr_info("Pen soc changed by user %d -> %d\n", chg->pen_data.soc, soc);
+		chg->pen_data.soc = soc;
+		rc = qti_charger_set_property(OEM_PROP_PEN_SOC,
+					&soc, sizeof(soc));
+		if (rc) {
+			pr_err("Failed to Update pen soc, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
 	if (soc > 0 && soc <= 100 && chg->simulator_data.soc != soc) {
-		pr_info("Pen soc changed by user %d -> %d\n",
-					chg->simulator_data.soc, soc);
 		chg->simulator_data.soc = soc;
 		if (simulator_enabled)
 			pen_charger_handle_event(chg, NOTIFY_EVENT_PEN_SOC);
