@@ -1424,6 +1424,12 @@ static int mmi_discrete_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = set_prop_sdp_current_max(chip, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (val->intval < 0) {
+			vote(chip->usb_icl_votable, USER_VOTER, false, 0);
+		} else
+			vote(chip->usb_icl_votable, USER_VOTER, true, val->intval);
+		break;
 	default:
 		pr_err("Set prop %d is not supported in usb psy\n",
 				psp);
@@ -1439,6 +1445,7 @@ static int mmi_discrete_usb_prop_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		return 1;
 	default:
 		break;
@@ -1952,13 +1959,61 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 	return 0;
 }
 
-int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *val)
+int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *total_current_ua)
 {
-	update_sw_icl_max(chip);
-	*val = get_effective_result(chip->usb_icl_votable);
-	mmi_dbg(chip, "get input current max :%d\n",
-		   *val);
+	int current_ua = 0;
 
+	if (chip->pd_active) {
+		*total_current_ua =
+			get_client_vote_locked(chip->usb_icl_votable, PD_VOTER);
+		return 0;
+	}
+
+	/* QC 2.0/3.0 adapter */
+	if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP) {
+		*total_current_ua = chip->hvdcp2_max_icl_ua;
+		return 0;
+	} else if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+		*total_current_ua = HVDCP_CURRENT_UA;
+		return 0;
+	}
+
+	switch (chip->typec_mode) {
+	case MMI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+		switch (chip->real_charger_type) {
+		case POWER_SUPPLY_TYPE_USB_CDP:
+			current_ua = CDP_CURRENT_UA;
+			break;
+		case POWER_SUPPLY_TYPE_USB_DCP:
+			current_ua = DCP_CURRENT_UA;
+			break;
+		case POWER_SUPPLY_TYPE_USB_FLOAT:
+		case POWER_SUPPLY_TYPE_USB:
+			current_ua = SDP_CURRENT_UA;
+			break;
+		default:
+			current_ua = 0;
+			break;
+		}
+		break;
+	case MMI_POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+		current_ua = TYPEC_MEDIUM_CURRENT_UA;
+		break;
+	case MMI_POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		current_ua = TYPEC_HIGH_CURRENT_UA;
+		break;
+	case MMI_POWER_SUPPLY_TYPEC_NON_COMPLIANT:
+	case MMI_POWER_SUPPLY_TYPEC_NONE:
+	default:
+		current_ua = 0;
+		break;
+	}
+
+	*total_current_ua = current_ua;
+
+	mmi_dbg(chip, "get input current max :%d\n",
+	   *total_current_ua);
 	return 0;
 }
 
