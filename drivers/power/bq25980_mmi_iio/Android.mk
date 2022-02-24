@@ -3,11 +3,8 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE := bq25980_charger.ko
+LOCAL_MODULE := bq25980_mmi_iio.ko
 
-ifeq ($(BQ2597X_DUAL_ENABLE),true)
-	KERNEL_CFLAGS += CONFIG_BQ2597X_DUAL=y
-endif
 
 ifeq ($(DLKM_INSTALL_TO_VENDOR_OUT),true)
 LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules/
