@@ -217,9 +217,15 @@ static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 static int fts_mmi_charger_mode(struct device *dev, int mode)
 {
 	struct fts_ts_data *ts_data;
+	int ret = 0;
 
 	GET_TS_DATA(dev);
-	ts_data->usb_detect_flag = !!mode;
+	ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, mode);
+	if(ret < 0){
+		FTS_ERROR("Failed to set charger mode\n");
+	}
+
+	FTS_INFO("Success to %s charger mode\n", mode ? "Enable" : "Disable");
 
 	return 0;
 }

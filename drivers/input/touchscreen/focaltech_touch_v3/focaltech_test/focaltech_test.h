@@ -53,7 +53,7 @@
 #define CSV_BUFFER_LEN                          (1024*80*5)
 #define TXT_BUFFER_LEN                          (1024*80*5)
 
-#define TEST_SAVE_FAIL_RESULT                   0
+#define TEST_SAVE_FAIL_RESULT                   1
 
 /*-----------------------------------------------------------
 Test Status
