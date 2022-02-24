@@ -1218,7 +1218,7 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
     snprintf(filepath, FILE_NAME_LENGTH, "%s%s", FTS_OUT_FILE_PATH, file_name);
     FTS_INFO("save test data to %s", filepath);
     if (NULL == pfile) {
-        pfile = filp_open(filepath, O_TRUNC | O_CREAT | O_RDWR, 0664);
+        pfile = filp_open(filepath, O_TRUNC | O_CREAT | O_RDWR, 0666);
     }
     if (IS_ERR(pfile)) {
         FTS_TEST_ERROR("error occured while opening file %s.",  filepath);
