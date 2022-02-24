@@ -1670,7 +1670,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	uint8_t input_id = 0;
 #if MT_PROTOCOL_B
 	uint8_t press_id[TOUCH_MAX_FINGER_NUM] = {0};
-	static uint8_t touchdown[TOUCH_MAX_FINGER_NUM];
 #endif /* MT_PROTOCOL_B */
 	int32_t i = 0;
 	int32_t finger_cnt = 0;
@@ -1827,21 +1826,14 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			if (input_p == 0)
 				input_p = 1;
 
-			press_id[input_id - 1] = 1;
-			/* log touch down event once */
-			if (touchdown[input_id - 1] == 0) {
 #if MT_PROTOCOL_B
-				ts->last_event_time = ktime_get();
-				pr_debug("TOUCH: [%d] logged timestamp\n", input_id - 1);
-				touchdown[input_id - 1] = 1;
-				pr_debug("TOUCH: [%d] pressed (event %d)\n", input_id - 1, point_data[position] & 0x07);
-				input_mt_slot(ts->input_dev, input_id - 1);
-				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+			press_id[input_id - 1] = 1;
+			input_mt_slot(ts->input_dev, input_id - 1);
+			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
 #else /* MT_PROTOCOL_B */
-				input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
-				input_report_key(ts->input_dev, BTN_TOUCH, 1);
+			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
+			input_report_key(ts->input_dev, BTN_TOUCH, 1);
 #endif /* MT_PROTOCOL_B */
-			}
 
 #ifdef PALM_GESTURE
 			if((point_data[position] & 0x07) == PALM_TOUCH) { //palm
@@ -1876,7 +1868,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 #if MT_PROTOCOL_B
 	for (i = 0; i < ts->max_touch_num; i++) {
-		if (!press_id[i] && touchdown[i]) {
+		if (press_id[i] != 1) {
 			input_mt_slot(ts->input_dev, i);
 #ifdef PALM_GESTURE_RANGE
 			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MINOR, 0);
@@ -1885,8 +1877,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
 			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
-			touchdown[i] = 0;
-			pr_debug("TOUCH: [%d] release\n", i);
 		}
 	}
 

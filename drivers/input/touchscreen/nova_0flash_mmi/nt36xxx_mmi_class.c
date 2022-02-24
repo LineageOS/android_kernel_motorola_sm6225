@@ -41,8 +41,6 @@ static ssize_t nvt_mmi_edge_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t nvt_mmi_edge_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
-static ssize_t nvt_mmi_timestamp_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
 
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
 	nvt_mmi_interpolation_show, nvt_mmi_interpolation_store);
@@ -52,7 +50,6 @@ static DEVICE_ATTR(jitter, (S_IRUGO | S_IWUSR | S_IWGRP),
 	nvt_mmi_jitter_show, nvt_mmi_jitter_store);
 static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	nvt_mmi_edge_show, nvt_mmi_edge_store);
-static DEVICE_ATTR(timestamp, S_IRUGO, nvt_mmi_timestamp_show, NULL);
 
 #define MAX_ATTRS_ENTRIES 10
 #define UI_FEATURE_ENABLE   1
@@ -102,8 +99,6 @@ static int nvt_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->edge_ctrl)
 		ADD_ATTR(edge);
-
-	ADD_ATTR(timestamp);
 
 	if (idx) {
 		ext_attributes[idx] = NULL;
@@ -192,22 +187,6 @@ static ssize_t nvt_mmi_interpolation_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", ts->interpolation_cmd[0]);
-}
-
-static ssize_t nvt_mmi_timestamp_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	ktime_t last_ktime;
-	struct timespec64 last_ts;
-
-	mutex_lock(&ts->lock);
-	last_ktime = ts->last_event_time;
-	ts->last_event_time = 0;
-	mutex_unlock(&ts->lock);
-
-	last_ts = ktime_to_timespec64(last_ktime);
-
-	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
 }
 
 static ssize_t nvt_mmi_jitter_store(struct device *dev,

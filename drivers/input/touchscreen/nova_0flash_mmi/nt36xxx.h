@@ -24,7 +24,6 @@
 #include <linux/spi/spi.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-#include <linux/ktime.h>
 #include <linux/mmi_kernel_common.h>
 
 #ifdef NVT_SENSOR_EN
@@ -280,7 +279,6 @@ struct nvt_ts_data {
 	uint8_t edge_cmd[3];	/* /< edge switching command */
 	uint8_t rotate_cmd;	/* /< rotate switching command */
 	bool edge_ctrl;	/* /< edge rate switching */
-	ktime_t last_event_time;
 };
 
 #if NVT_TOUCH_PROC
