@@ -253,7 +253,7 @@
 /*
  * auto upgrade
  */
-#define FTS_AUTO_UPGRADE_EN                     1
+#define FTS_AUTO_UPGRADE_EN                     0
 
 /*
  * auto upgrade for lcd cfg
@@ -289,7 +289,7 @@
  * You should rename fw to "focaltech_ts_fw_tianma", and push it into
  * etc/firmware or by customers
  */
-#define FTS_MODULE_NAME                         "csot"
+#define FTS_MODULE_NAME                         ""
 #define FTS_MODULE2_NAME                        ""
 #define FTS_MODULE3_NAME                        ""
 
