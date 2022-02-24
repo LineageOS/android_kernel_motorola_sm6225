@@ -124,6 +124,10 @@ struct cyttsp5_core_platform_data {
 	u16 vendor_id;
 	u16 product_id;
 	const char *class_entry_name;
+	char avdd_name[CYTTSP5_MAX_STR_LABLE_LEN];
+	char iovdd_name[CYTTSP5_MAX_STR_LABLE_LEN];
+	struct regulator *avdd;
+	struct regulator *iovdd;
 
 	int (*xres)(struct cyttsp5_core_platform_data *pdata,
 		struct device *dev);

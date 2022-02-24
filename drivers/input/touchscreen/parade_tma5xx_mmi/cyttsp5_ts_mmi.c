@@ -24,6 +24,9 @@
 		return -ENODEV; \
 	}
 
+extern int cyttsp5_core_suspend(struct device *dev);
+extern int cyttsp5_core_resume(struct device *dev);
+
 static int cyttsp5_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "parade");
 }
@@ -127,7 +130,12 @@ static int cyttsp5_ts_mmi_methods_get_drv_irq(struct device *dev, void *idata) {
 
 static int cyttsp5_ts_mmi_methods_get_poweron(struct device *dev, void *idata)
 {
-	TO_INT(idata) = 1;
+	struct cyttsp5_platform_data *pdata = dev_get_platdata(dev);
+	ASSERT_PTR(pdata);
+
+	TO_INT(idata) = (regulator_is_enabled(pdata->core_pdata->avdd) &&
+		regulator_is_enabled(pdata->core_pdata->iovdd)) ? 1 : 0;
+
 	return 0;
 }
 
@@ -173,7 +181,101 @@ static int cyttsp5_ts_firmware_update(struct device *dev, char *fwname) {
 	cd->force_fw_upgrade = 1;
 	snprintf(cd->firmware_name, CYTTSP5_FIRMWARE_NAME_MAX_LEN, "%s", fwname);
 
+	if(cd->sleep_state != SS_SLEEP_OFF) {
+		dev_err(dev, "%s: Error, touch IC is on sleep state, can not do upgrade\n",
+				__func__);
+		return -EINVAL;
+	}
+
 	return cd->firmware_update(dev, fwname);
+}
+
+static __maybe_unused int cyttsp5_ts_mmi_methods_drv_irq(struct device *dev, int state) {
+	int ret = -ENODEV;
+	struct cyttsp5_core_data *cd =  dev_get_drvdata(dev);
+	ASSERT_PTR(cd);
+
+	mutex_lock(&cd->system_lock);
+	switch (state) {
+	case 0:
+		if (cd->irq_enabled) {
+			cd->irq_enabled = false;
+			/* Disable IRQ */
+			disable_irq_nosync(cd->irq);
+			dev_info(dev, "%s: Driver IRQ now disabled\n",
+				__func__);
+		} else
+			dev_info(dev, "%s: Driver IRQ already disabled\n",
+				__func__);
+		ret = 0;
+		break;
+
+	case 1:
+		if (cd->irq_enabled == false) {
+			cd->irq_enabled = true;
+			/* Enable IRQ */
+			enable_irq(cd->irq);
+			dev_info(dev, "%s: Driver IRQ now enabled\n",
+				__func__);
+		} else
+			dev_info(dev, "%s: Driver IRQ already enabled\n",
+				__func__);
+		ret = 0;
+		break;
+
+	default:
+		dev_err(dev, "%s: Invalid value\n", __func__);
+	}
+	mutex_unlock(&(cd->system_lock));
+
+	return ret;
+}
+
+static int cyttsp5_ts_mmi_methods_power(struct device *dev, int on) {
+	int rc = 0;
+	atomic_t is_ignore;
+	struct cyttsp5_core_data *cd =  dev_get_drvdata(dev);
+	ASSERT_PTR(cd);
+
+	atomic_set(&is_ignore, 1);
+	/* Call platform power function */
+	if (cd->cpdata->power) {
+		dev_info(cd->dev, "%s: Touch IC power on/off \n", __func__);
+		if(on == TS_MMI_POWER_ON)
+		{
+			rc = cd->cpdata->power(cd->cpdata, TS_MMI_POWER_ON, cd->dev, &is_ignore);
+			if (rc) {
+				dev_info(cd->dev, "%s: Power on touch IC success\n", __func__);
+				rc = -ENODEV;
+			}
+		}
+		else if(on == TS_MMI_POWER_OFF)
+		{
+			rc = cd->cpdata->power(cd->cpdata, TS_MMI_POWER_OFF, cd->dev, &is_ignore);
+			if (rc) {
+				dev_info(cd->dev, "%s: Power on touch IC failed \n", __func__);
+				rc = -ENODEV;
+			}
+		}
+	}
+	else {
+		dev_info(cd->dev, "%s: No Power operation func\n", __func__);
+		rc = -ENODEV;
+	}
+
+	return rc;
+}
+
+static int cyttsp5_ts_mmi_post_suspend(struct device *dev) {
+	pr_info("%s: Post suspend end", __func__);
+	cyttsp5_core_suspend(dev);
+	return 0;
+}
+
+static int cyttsp5_ts_mmi_post_resume(struct device *dev) {
+	pr_info("%s: Post resume end", __func__);
+	cyttsp5_core_resume(dev);
+	return 0;
 }
 
 static struct ts_mmi_methods cyttsp5_ts_mmi_methods = {
@@ -189,8 +291,12 @@ static struct ts_mmi_methods cyttsp5_ts_mmi_methods = {
 	.get_flashprog = cyttsp5_ts_mmi_methods_get_flashprog,
 	/* SET methods */
 	.reset =  cyttsp5_ts_mmi_methods_reset,
+	.power = cyttsp5_ts_mmi_methods_power,
 	/* Firmware */
 	.firmware_update = cyttsp5_ts_firmware_update,
+	/* PM callback */
+	.post_resume = cyttsp5_ts_mmi_post_resume,
+	.post_suspend = cyttsp5_ts_mmi_post_suspend,
 };
 
 int cyttsp5_ts_mmi_dev_register(struct device *dev) {

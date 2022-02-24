@@ -188,7 +188,9 @@ static struct i2c_driver cyttsp5_i2c_driver = {
 	.driver = {
 		.name = CYTTSP5_I2C_NAME,
 		.owner = THIS_MODULE,
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 		.pm = &cyttsp5_pm_ops,
+#endif
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_DEVICETREE_SUPPORT
 		.of_match_table = cyttsp5_i2c_of_match,
 #endif
