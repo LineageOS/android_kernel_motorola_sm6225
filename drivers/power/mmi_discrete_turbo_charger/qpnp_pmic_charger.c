@@ -120,13 +120,17 @@ static int qpnp_pmic_get_ibus(struct mmi_charger_device *chrg, u32 *uA)
 static int qpnp_pmic_set_charging_current(struct mmi_charger_device *chrg, u32 uA)
 {
 	int rc;
+	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 	union power_supply_propval prop = {0,};
 
-	if (!chrg->chrg_psy)
+	if (!chip)
+		return -ENODEV;
+
+	if (!chip->usb_psy)
 		return -ENODEV;
 
 	prop.intval = uA;
-	rc = power_supply_set_property(chrg->chrg_psy,
+	rc = power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
 //	if (!rc)
 //		chrg->charger_limited = true;
@@ -137,19 +141,16 @@ static int qpnp_pmic_set_charging_current(struct mmi_charger_device *chrg, u32 u
 static int qpnp_pmic_get_input_current_settled(struct mmi_charger_device *chrg, u32 *uA)
 {
 	int rc = 0;
-	union power_supply_propval prop = {0,};
+	int value;
 	struct mmi_charger_manager *chip = dev_get_drvdata(&chrg->dev);
 
 	if (!chip)
 		return -ENODEV;
 
-	if (!chip->charger_psy)
-		return -ENODEV;
-
-	rc = power_supply_get_property(chip->charger_psy,
-				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &prop);
+	rc = mmi_charger_read_iio_chan(chip, SMB5_HW_CURRENT_MAX, &value);
 	if (!rc)
-		*uA = prop.intval;
+		chrg->input_curr_setted = value;
+	*uA = chrg->input_curr_setted;
 	chrg_dev_info(chrg, "%s end, uA:%d\n",__func__,*uA);
 	return rc;
 }
@@ -191,7 +192,7 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.batt_temp = prop.intval / 10;
 
-	rc = power_supply_get_property(chip->cp_psy,
+	rc = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
 	if (!rc)
 		chrg->charger_data.vbus_volt = prop.intval;
