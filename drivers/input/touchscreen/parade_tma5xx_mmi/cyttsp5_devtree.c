@@ -547,11 +547,40 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 	u32 value;
 	int rc;
 	int i;
+	const char *name_tmp;
 
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
 		rc = -ENOMEM;
 		goto fail;
+	}
+
+	/* get avdd power */
+	memset(pdata->avdd_name, 0, sizeof(pdata->avdd_name));
+	rc = of_property_read_string(core_node, "cyttsp5,avdd-name", &name_tmp);
+	if (!rc) {
+		pr_info("%s, avdd name from dt: %s", __func__, name_tmp);
+		if (strlen(name_tmp) < sizeof(pdata->avdd_name))
+			strncpy(pdata->avdd_name,
+				name_tmp, sizeof(pdata->avdd_name));
+		else
+			pr_info("%s, invalied avdd name length: %ld > %ld", __func__,
+				strlen(name_tmp),
+				sizeof(pdata->avdd_name));
+	}
+
+	/* get iovdd power */
+	memset(pdata->iovdd_name, 0, sizeof(pdata->iovdd_name));
+	rc = of_property_read_string(core_node, "cyttsp5,iovdd-name", &name_tmp);
+	if (!rc) {
+		pr_info("%s, iovdd name from dt: %s", __func__, name_tmp);
+		if (strlen(name_tmp) < sizeof(pdata->iovdd_name))
+			strncpy(pdata->iovdd_name,
+				name_tmp, sizeof(pdata->iovdd_name));
+		else
+			pr_info("%s, invalied iovdd name length: %ld > %ld", __func__,
+				strlen(name_tmp),
+				sizeof(pdata->iovdd_name));
 	}
 
 	/* Required fields */

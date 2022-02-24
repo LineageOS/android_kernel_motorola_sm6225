@@ -64,6 +64,7 @@
 #include <linux/timer.h>
 #include <linux/timex.h>
 #include <linux/rtc.h>
+#include <linux/regulator/consumer.h>
 
 //#define PT_PANEL_ID_FROM_MFG
 

@@ -185,6 +185,94 @@ int cyttsp5_xres(struct cyttsp5_core_platform_data *pdata,
 	return rc;
 }
 
+/**
+ * cyttsp5_ts_power_init - Get regulator for touch device
+ * @pdata: pointer to touch core platform data
+ * @dev: pointer to touch device
+ * return: 0 ok, <0 failed
+ */
+static int cyttsp5_ts_power_init(struct cyttsp5_core_platform_data *pdata, struct device *dev)
+{
+	int ret = 0;
+
+	dev_info(dev, "%s:Get regulator for touch device", __func__);
+	if (strlen(pdata->avdd_name)) {
+		pdata->avdd = devm_regulator_get(dev,
+				 pdata->avdd_name);
+		if (IS_ERR_OR_NULL(pdata->avdd)) {
+			ret = PTR_ERR(pdata->avdd);
+			pr_err("%s, Failed to get regulator avdd:%d", __func__, ret);
+			pdata->avdd = NULL;
+			return ret;
+		}
+	} else {
+		dev_info(dev, "%s: Avdd name is NULL", __func__);
+		return -1;
+	}
+
+	if (strlen(pdata->iovdd_name)) {
+		pdata->iovdd = devm_regulator_get(dev,
+				 pdata->iovdd_name);
+		if (IS_ERR_OR_NULL(pdata->iovdd)) {
+			ret = PTR_ERR(pdata->iovdd);
+			pr_err("%s: Failed to get regulator iovdd:%d", __func__, ret);
+			pdata->iovdd = NULL;
+			return ret;
+		}
+	} else {
+		dev_info(dev, "%s: iovdd name is NULL", __func__);
+		return -1;
+	}
+
+	return ret;
+}
+
+/**
+ * cyttsp5_ts_power_control - Set regulator power on or off
+ * @dev: pointer to touch device
+ * @on: indicating the on/off the power
+ * return: 0 ok, <0 failed
+ */
+static int cyttsp5_ts_power_control(struct cyttsp5_core_platform_data *pdata,
+		struct device *dev, int on)
+{
+	int ret =0;
+	if(on) {
+		pr_info("%s: Device power on", __func__);
+
+		if (!IS_ERR_OR_NULL(pdata->iovdd)) {
+			ret = regulator_enable(pdata->iovdd);
+			if (ret < 0) {
+				pr_err("%s: Failed to enable iovdd:%d", __func__, ret);
+				goto power_off;
+			}
+		}
+
+		if (!IS_ERR_OR_NULL(pdata->avdd)) {
+			ret = regulator_enable(pdata->avdd);
+			if (ret < 0) {
+				pr_err("%s: Failed to enable avdd:%d", __func__, ret);
+				goto power_off;
+			}
+		}
+		return 0;
+	}
+
+power_off:
+	pr_info("%s: Device power off", __func__);
+	if (!IS_ERR_OR_NULL(pdata->iovdd)) {
+		if (regulator_is_enabled(pdata->iovdd))
+			regulator_disable(pdata->iovdd);
+	}
+
+	if (!IS_ERR_OR_NULL(pdata->avdd)) {
+		if (regulator_is_enabled(pdata->avdd))
+			regulator_disable(pdata->avdd);
+	}
+
+	return ret;
+}
+
 int cyttsp5_init(struct cyttsp5_core_platform_data *pdata,
 		int on, struct device *dev)
 {
@@ -193,6 +281,20 @@ int cyttsp5_init(struct cyttsp5_core_platform_data *pdata,
 	int rc = 0;
 
 	if (on) {
+		rc = cyttsp5_ts_power_init(pdata, dev);
+		if(rc < 0) {
+			dev_err(dev,
+				"%s: Fail init cyttsp5 power regulator =%d\n", __func__, rc);
+			return rc;
+		}
+
+		rc = cyttsp5_ts_power_control(pdata, dev, 1);
+		if(rc < 0) {
+			dev_err(dev,
+				"%s: Power on cyttsp5 failed = %d\n", __func__, rc);
+			return rc;
+		}
+
 		rc = gpio_request(rst_gpio, NULL);
 		if (rc < 0) {
 			gpio_free(rst_gpio);
@@ -238,13 +340,31 @@ int cyttsp5_init(struct cyttsp5_core_platform_data *pdata,
 static int cyttsp5_wakeup(struct cyttsp5_core_platform_data *pdata,
 		struct device *dev, atomic_t *ignore_irq)
 {
-	return 0;
+	int ret =0;
+
+	ret = cyttsp5_ts_power_control(pdata, dev, 1);
+	if(ret < 0) {
+		dev_err(dev,
+			"%s: Power on cyttsp5 failed = %d\n", __func__, ret);
+			return ret;
+	}
+
+	return ret;
 }
 
 static int cyttsp5_sleep(struct cyttsp5_core_platform_data *pdata,
 		struct device *dev, atomic_t *ignore_irq)
 {
-	return 0;
+	int ret =0;
+
+	ret = cyttsp5_ts_power_control(pdata, dev, 0);
+	if(ret < 0) {
+		dev_err(dev,
+			"%s: Power off cyttsp5 failed = %d\n", __func__, ret);
+			return ret;
+	}
+
+	return ret;
 }
 
 int cyttsp5_power(struct cyttsp5_core_platform_data *pdata,
