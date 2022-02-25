@@ -74,7 +74,7 @@
 		status = "ok";
 		compatible = "goodix,gt9916S";
 		reg = <0>;
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <9600000>;
 		mmi,status = "/chosen","mmi,panel_name","contains","v0","v1","v2";
 
 		goodix,avdd-gpio = <&tlmm 2 0x0>;
@@ -103,7 +103,7 @@
 	focaltech@1 {
                 compatible = "focaltech,fts";
                 reg = <1>;
-                spi-max-frequency = <1000000>;
+                spi-max-frequency = <9600000>;
                 mmi,status = "/chosen","mmi,panel_name","contains","v9";
 
                 interrupt-parent = <&tlmm>;
