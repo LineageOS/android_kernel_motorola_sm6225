@@ -367,7 +367,7 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
 #else /* CONFIG_DRM_PANEL_NOTIFICATIONS */
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 	char *uevent_env[2];
-	FF_LOGD(" received a panel notification %d \n", (int)action);
+	FF_LOGI(" received a panel notification %d \n", (int)action);
 	switch(action) {
 		case PANEL_EVENT_DISPLAY_ON:
 			uevent_env[0] = "FF_SCREEN_ON";
@@ -387,7 +387,7 @@ static int ff_ctl_fb_notifier_callback(struct notifier_block *nb, unsigned long 
 	if(action == PANEL_EVENT_DISPLAY_ON || action== PANEL_EVENT_DISPLAY_OFF) {
 		uevent_env[1] = NULL;
 		kobject_uevent_env(&g_context->miscdev.this_device->kobj, KOBJ_CHANGE, uevent_env);
-		FF_LOGD("'%s' leave %s.", __func__,uevent_env[0] );
+		FF_LOGI("'%s' leave %s.", __func__,uevent_env[0] );
 	}
 #else
     struct fb_event *event;
@@ -728,7 +728,7 @@ static long ff_ctl_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         g_config = &driver_config;
 
         /* Take logging level effect. */
-        g_log_level = 3;//g_config->log_level;
+        g_log_level = g_config->log_level;
         break;
     }
     case FF_IOC_GET_VERSION: {
