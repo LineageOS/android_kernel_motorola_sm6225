@@ -216,7 +216,7 @@
 		sm,en_batt_det;
 		//sm,iocv_man_mode;
 		sm,misc = <0x0800>;
-		sm,aging_ctrl = <0x0125>;
+		sm,aging_ctrl = <0x0121>;
 		sm,cycle_cfg = <0x7000>;
 		sm,rsns = <0>;
 		sm,fg_irq_set = <0x07FF>;
@@ -225,7 +225,7 @@
 		sm,v_l_alarm = <3400>;
 		sm,v_h_alarm = <4450>;
 		sm,battery_table_num = <0>;
-		sm,param_version = <1>;
+		sm,param_version = <4>;
 		sm,t_l_alarm_in = <54>;
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
