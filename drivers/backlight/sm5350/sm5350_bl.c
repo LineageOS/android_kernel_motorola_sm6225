@@ -64,6 +64,7 @@ struct sm5350_data {
 	u8 pwm_cfg;
 	u8 boost_ctl;
 	u8 full_scale_current;
+	u8 map_mode;
 	bool brt_code_enable;
 	u16 *brt_code_table;
 	int en_gpio;
@@ -152,7 +153,7 @@ static int sm5350_init_registers(struct sm5350_data *drvdata)
 	sm5350_write_reg(drvdata->client, SM5350_BOOST_CTL_REG, drvdata->boost_ctl);
 	sm5350_write_reg(drvdata->client, SM5350_PWM_CFG_REG, drvdata->pwm_cfg);
 	sm5350_write_reg(drvdata->client, SM5350_CTL_B_BANK_EN_REG, drvdata->ctl_bank_en);
-	sm5350_write_reg(drvdata->client, SM5350_BRIGHTNESS_CFG_REG, SM5350_BRIGHTNESS_CFG);
+	sm5350_write_reg(drvdata->client, SM5350_BRIGHTNESS_CFG_REG, drvdata->map_mode);
 	sm5350_write_reg(drvdata->client, SM5350_HVLED_CURR_SINK_OUT_CFG_REG, SM5350_HVLED_CURR_SINK_OUT_CFG);
 	sm5350_write_reg(drvdata->client, SM5350_CTL_B_FULL_SCALE_CURR_REG, drvdata->full_scale_current);
 
@@ -303,8 +304,17 @@ static int sm5350_get_dt_data(struct device *dev, struct sm5350_data *drvdata)
 	}
 	drvdata->full_scale_current = (!rc ? tmp : 0);
 
-	pr_info("bank_A = %d, bank_B = %d, pwm_cfg = 0x%x, full_scale_current = 0x%x, boost_ctl = 0x%x.\n",
-		drvdata->bank_A, drvdata->bank_B, drvdata->pwm_cfg, drvdata->full_scale_current, drvdata->boost_ctl);
+	rc = of_property_read_u32(of_node, "map-mode", &tmp);
+	if (rc) {
+		pr_err("%s:%d, dt not specified\n",
+						__func__, __LINE__);
+		return -EINVAL;
+	}
+	drvdata->map_mode= (!rc ? tmp : 1); /* 1: linear, 0: expo, linear as default*/
+	pr_debug("%s : map_mode=0x%x\n",__func__, drvdata->map_mode);
+
+	pr_info("bank_A = %d, bank_B = %d, pwm_cfg = 0x%x, full_scale_current = 0x%x, map_mode = 0x%x, boost_ctl = 0x%x.\n",
+		drvdata->bank_A, drvdata->bank_B, drvdata->pwm_cfg, drvdata->full_scale_current, drvdata->map_mode, drvdata->boost_ctl);
 
 	drvdata->brt_code_enable = of_property_read_bool(of_node, "brt-code-enable");
 
