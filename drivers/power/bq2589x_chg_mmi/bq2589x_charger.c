@@ -185,6 +185,7 @@ struct bq2589x {
 
 	/*mmi qc3p*/
 	bool			mmi_qc3p_rerun_done;
+	bool			mmi_qc3p_wa;
 	int			mmi_qc3p_power;
 
 	struct bq2589x_iio		iio;
@@ -1573,6 +1574,7 @@ static int bq2589x_rerun_apsd_if_required(struct bq2589x *bq)
 
 	bq2589x_force_dpdm(bq);
 
+	bq->pulse_cnt = 0;
 	bq->typec_apsd_rerun_done = true;
 
 	dev_info(bq->dev,"rerun apsd done\n");
@@ -1821,6 +1823,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 		dev_err(bq->dev, "qc3p voltage is invalid, rerun qc3p detect\n");
 		if (!bq->mmi_qc3p_rerun_done) {
 			bq->mmi_qc3p_rerun_done = true;
+			bq->mmi_qc3p_wa = true;
 			dp_val = 0x0<<BQ2589X_DP_VSEL_SHIFT;
 			ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
 						  BQ2589X_DP_VSEL_MASK, dp_val); //dp HIZ
@@ -1892,6 +1895,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 		//do rerun qc3p
 		if (!bq->mmi_qc3p_rerun_done) {
 			bq->mmi_qc3p_rerun_done = true;
+			bq->mmi_qc3p_wa = true;
 			dp_val = 0x0<<BQ2589X_DP_VSEL_SHIFT;
 			ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
 						  BQ2589X_DP_VSEL_MASK, dp_val); //dp HIZ
@@ -2180,6 +2184,15 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		return;
 	}
 
+#ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
+	if (true == bq->mmi_qc3p_wa) {
+		if (bq->vbus_type != BQ2589X_VBUS_USB_DCP) {
+			pr_err("BQ2589x charger type fix to DCP to workaroud BC1.2 rerun fail \n");
+			bq->vbus_type = BQ2589X_VBUS_USB_DCP;
+		}
+	}
+#endif
+
 	switch (bq->vbus_type) {
 		case BQ2589X_VBUS_MAXC:
 			dev_info(bq->dev, "%s:HVDCP adapter plugged in\n", __func__);
@@ -2253,6 +2266,7 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 #endif
 #endif
 	bq->pulse_cnt = 0;
+	bq->mmi_qc3p_wa = false;
 	bq->mmi_qc3p_rerun_done = false;
 	bq->typec_apsd_rerun_done = false;
 	bq->chg_dev->noti.apsd_done = false;
