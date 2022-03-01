@@ -570,6 +570,113 @@ static char *aw_dev_get_prof_name(struct aw_device *aw_dev, int index)
 	return 0;
 }*/
 
+static int aw_dev_get_icalk(struct aw_device *aw_dev, int16_t *icalk)
+{
+	int ret = -1;
+	unsigned int reg_val = 0;
+	uint16_t reg_icalk = 0;
+	uint16_t reg_icalkl = 0;
+	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
+
+	if (desc->icalkl_reg == AW_REG_NONE) {
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalk_reg, &reg_val);
+		reg_icalk = (uint16_t)reg_val & (~desc->icalk_reg_mask);
+	} else {
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalk_reg, &reg_val);
+		reg_icalk = (uint16_t)reg_val & (~desc->icalk_reg_mask);
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalkl_reg, &reg_val);
+		reg_icalkl = (uint16_t)reg_val & (~desc->icalkl_reg_mask);
+		if (aw_dev->efuse_check == AW_EF_OR_CHECK)
+			reg_icalk = (reg_icalk >> desc->icalk_shift) | (reg_icalkl >> desc->icalkl_shift);
+		else
+			reg_icalk = (reg_icalk >> desc->icalk_shift) & (reg_icalkl >> desc->icalkl_shift);
+	}
+
+	if (reg_icalk & (~desc->icalk_sign_mask))
+		reg_icalk = reg_icalk | (~desc->icalk_neg_mask);
+
+	*icalk = (int16_t)reg_icalk;
+
+	return ret;
+}
+
+static int aw_dev_get_vcalk(struct aw_device *aw_dev, int16_t *vcalk)
+{
+	int ret = -1;
+	unsigned int reg_val = 0;
+	uint16_t reg_vcalk = 0;
+	uint16_t reg_vcalkl = 0;
+	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
+
+	if (desc->vcalkl_reg == AW_REG_NONE) {
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalk_reg, &reg_val);
+		reg_vcalk = (uint16_t)reg_val & (~desc->vcalk_reg_mask);
+	} else {
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalk_reg, &reg_val);
+		reg_vcalk = (uint16_t)reg_val & (~desc->vcalk_reg_mask);
+		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalkl_reg, &reg_val);
+		reg_vcalkl = (uint16_t)reg_val & (~desc->vcalkl_reg_mask);
+		if (aw_dev->efuse_check == AW_EF_OR_CHECK)
+			reg_vcalk = (reg_vcalk >> desc->vcalk_shift) | (reg_vcalkl >> desc->vcalkl_shift);
+		else
+			reg_vcalk = (reg_vcalk >> desc->vcalk_shift) & (reg_vcalkl >> desc->vcalkl_shift);
+	}
+
+	if (reg_vcalk & (~desc->vcalk_sign_mask))
+		reg_vcalk = reg_vcalk | (~desc->vcalk_neg_mask);
+
+	*vcalk = (int16_t)reg_vcalk;
+
+	return ret;
+}
+
+static int aw_dev_set_vcalb(struct aw_device *aw_dev)
+{
+	int ret = -1;
+	unsigned int reg_val;
+	int vcalb;
+	int icalk;
+	int vcalk;
+	int16_t icalk_val = 0;
+	int16_t vcalk_val = 0;
+
+	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
+
+	if (desc->icalk_reg == AW_REG_NONE || desc->vcalb_reg == AW_REG_NONE) {
+		aw_dev_info(aw_dev->dev, "REG None!");
+		return 0;
+	}
+
+	ret = aw_dev_get_icalk(aw_dev, &icalk_val);
+	if (ret < 0)
+		return ret;
+
+	ret = aw_dev_get_vcalk(aw_dev, &vcalk_val);
+	if (ret < 0)
+		return ret;
+
+	icalk = desc->cabl_base_value + desc->icalk_value_factor * icalk_val;
+	vcalk = desc->cabl_base_value + desc->vcalk_value_factor * vcalk_val;
+	if (!vcalk) {
+		aw_dev_err(aw_dev->dev, "vcalk is 0");
+		return -EINVAL;
+	}
+
+	vcalb = desc->vcal_factor * icalk / vcalk;
+
+	reg_val = (unsigned int)vcalb;
+	aw_dev_info(aw_dev->dev, "icalk=%d, vcalk=%d, vcalb=%d, reg_val=0x%04x",
+			icalk, vcalk, vcalb, reg_val);
+
+	ret =  aw_dev->ops.aw_i2c_write(aw_dev, desc->vcalb_reg, reg_val);
+
+	aw_dev_info(aw_dev->dev, "done");
+
+	return ret;
+}
+
+
+
 /*pwd enable update reg*/
 static int aw_dev_reg_fw_update(struct aw_device *aw_dev)
 {
@@ -579,6 +686,7 @@ static int aw_dev_reg_fw_update(struct aw_device *aw_dev)
 	unsigned int read_val;
 	int ret = -1;
 	unsigned int init_volume = 0;
+	unsigned int efcheck_val = 0;
 	struct aw_int_desc *int_desc = &aw_dev->int_desc;
 	struct aw_profctrl_desc *profctrl_desc = &aw_dev->profctrl_desc;
 	struct aw_bstctrl_desc *bstctrl_desc = &aw_dev->bstctrl_desc;
@@ -655,6 +763,16 @@ static int aw_dev_reg_fw_update(struct aw_device *aw_dev)
 			reg_val |= read_val;
 		}
 
+		if (reg_addr == aw_dev->efcheck_desc.reg) {
+			efcheck_val = reg_val & (~aw_dev->efcheck_desc.mask);
+			if (efcheck_val == aw_dev->efcheck_desc.or_val)
+				aw_dev->efuse_check = AW_EF_OR_CHECK;
+			else
+				aw_dev->efuse_check = AW_EF_AND_CHECK;
+
+			aw_dev_info(aw_dev->dev, "efuse check: %d", aw_dev->efuse_check);
+		}
+
 		if (reg_addr == aw_dev->vcalb_desc.vcalb_reg)
 			continue;
 
@@ -665,6 +783,12 @@ static int aw_dev_reg_fw_update(struct aw_device *aw_dev)
 			(unsigned int)reg_val);
 		if (ret < 0)
 			break;
+	}
+
+	ret = aw_dev_set_vcalb(aw_dev);
+	if (ret < 0) {
+		aw_dev_err(aw_dev->dev, "can't set vcalb");
+		return ret;
 	}
 
 	aw_dev->ops.aw_get_volume(aw_dev, &init_volume);
@@ -789,104 +913,6 @@ static void aw_dev_mute(struct aw_device *aw_dev, bool mute)
 	aw_dev_info(aw_dev->dev, "done");
 }
 
-static int aw_dev_get_icalk(struct aw_device *aw_dev, int16_t *icalk)
-{
-	int ret = -1;
-	unsigned int reg_val = 0;
-	uint16_t reg_icalk = 0;
-	uint16_t reg_icalkl = 0;
-	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
-
-	if (desc->icalkl_reg == AW_REG_NONE) {
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalk_reg, &reg_val);
-		reg_icalk = (uint16_t)reg_val & (~desc->icalk_reg_mask);
-	} else {
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalk_reg, &reg_val);
-		reg_icalk = (uint16_t)reg_val & (~desc->icalk_reg_mask);
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->icalkl_reg, &reg_val);
-		reg_icalkl = (uint16_t)reg_val & (~desc->icalkl_reg_mask);
-		reg_icalk = (reg_icalk >> desc->icalk_shift) | (reg_icalkl >> desc->icalkl_shift);
-	}
-
-	if (reg_icalk & (~desc->icalk_sign_mask))
-		reg_icalk = reg_icalk | (~desc->icalk_neg_mask);
-
-	*icalk = (int16_t)reg_icalk;
-
-	return ret;
-}
-
-static int aw_dev_get_vcalk(struct aw_device *aw_dev, int16_t *vcalk)
-{
-	int ret = -1;
-	unsigned int reg_val = 0;
-	uint16_t reg_vcalk = 0;
-	uint16_t reg_vcalkl = 0;
-	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
-
-	if (desc->vcalkl_reg == AW_REG_NONE) {
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalk_reg, &reg_val);
-		reg_vcalk = (uint16_t)reg_val & (~desc->vcalk_reg_mask);
-	} else {
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalk_reg, &reg_val);
-		reg_vcalk = (uint16_t)reg_val & (~desc->vcalk_reg_mask);
-		ret = aw_dev->ops.aw_i2c_read(aw_dev, desc->vcalkl_reg, &reg_val);
-		reg_vcalkl = (uint16_t)reg_val & (~desc->vcalkl_reg_mask);
-		reg_vcalk = (reg_vcalk >> desc->vcalk_shift) | (reg_vcalkl >> desc->vcalkl_shift);
-	}
-
-	if (reg_vcalk & (~desc->vcalk_sign_mask))
-		reg_vcalk = reg_vcalk | (~desc->vcalk_neg_mask);
-
-	*vcalk = (int16_t)reg_vcalk;
-
-	return ret;
-}
-
-static int aw_dev_set_vcalb(struct aw_device *aw_dev)
-{
-	int ret = -1;
-	unsigned int reg_val;
-	int vcalb;
-	int icalk;
-	int vcalk;
-	int16_t icalk_val = 0;
-	int16_t vcalk_val = 0;
-
-	struct aw_vcalb_desc *desc = &aw_dev->vcalb_desc;
-
-	if (desc->icalk_reg == AW_REG_NONE || desc->vcalb_reg == AW_REG_NONE) {
-		aw_dev_info(aw_dev->dev, "REG None!");
-		return 0;
-	}
-
-	ret = aw_dev_get_icalk(aw_dev, &icalk_val);
-	if (ret < 0)
-		return ret;
-
-	ret = aw_dev_get_vcalk(aw_dev, &vcalk_val);
-	if (ret < 0)
-		return ret;
-
-	icalk = desc->cabl_base_value + desc->icalk_value_factor * icalk_val;
-	vcalk = desc->cabl_base_value + desc->vcalk_value_factor * vcalk_val;
-	if (!vcalk) {
-		aw_dev_err(aw_dev->dev, "vcalk is 0");
-		return -EINVAL;
-	}
-
-	vcalb = desc->vcal_factor * icalk / vcalk;
-
-	reg_val = (unsigned int)vcalb;
-	aw_dev_info(aw_dev->dev, "icalk=%d, vcalk=%d, vcalb=%d, reg_val=0x%04x",
-			icalk, vcalk, vcalb, reg_val);
-
-	ret =  aw_dev->ops.aw_i2c_write(aw_dev, desc->vcalb_reg, reg_val);
-
-	aw_dev_info(aw_dev->dev, "done");
-
-	return ret;
-}
 
 int aw_dev_get_int_status(struct aw_device *aw_dev, uint16_t *int_status)
 {
@@ -1186,8 +1212,6 @@ int aw_device_irq_reinit(struct aw_device *aw_dev)
 	if (ret < 0)
 		return ret;
 
-	/*update vcalb*/
-	aw_dev_set_vcalb(aw_dev);
 
 	return 0;
 }
@@ -1217,10 +1241,10 @@ int aw_device_init(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 	if (ret < 0)
 		return ret;
 
-	ret = aw_dev_set_vcalb(aw_dev);
-	if (ret < 0) {
-		aw_dev_err(aw_dev->dev, "can't set vcalb");
-		return ret;
+	if (aw_dev->ops.aw_frcset_check) {
+		ret = aw_dev->ops.aw_frcset_check(aw_dev);
+		if (ret)
+			return ret;
 	}
 
 	aw_dev->status = AW_DEV_PW_ON;

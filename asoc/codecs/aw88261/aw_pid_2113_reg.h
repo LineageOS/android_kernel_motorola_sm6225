@@ -2270,6 +2270,17 @@ const unsigned char aw_pid_2113_reg_access[AW_PID_2113_REG_MAX] = {
 
 
 /* detail information of registers end */
+
+
+/********************************************
+ * Efdbmd
+ *******************************************/
+#define AW_PID_2113_EF_DBMD_MASK		(0xfff7)
+#define AW_PID_2113_AND_VALUE			(0x0000)
+#define AW_PID_2113_OR_VALUE			(0x0008)
+
+
+
 /********************************************
  * Volume Coefficient
  *******************************************/

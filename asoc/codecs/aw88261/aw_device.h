@@ -28,6 +28,12 @@ enum {
 	AW_DEV_TYPE_NONE = 1,
 };
 
+
+enum {
+	AW_EF_AND_CHECK = 0,
+	AW_EF_OR_CHECK,
+};
+
 enum {
 	AW_DEV_CH_PRI_L = 0,
 	AW_DEV_CH_PRI_R = 1,
@@ -68,6 +74,7 @@ struct aw_device_ops {
 	void (*aw_set_algo)(struct aw_device *aw_dev);
 	unsigned int (*aw_get_irq_type)(struct aw_device *aw_dev, unsigned int value);
 	void (*aw_reg_force_set)(struct aw_device *aw_dev);
+	int (*aw_frcset_check)(struct aw_device *aw_dev);
 };
 
 struct aw_int_desc {
@@ -195,12 +202,20 @@ struct aw_container {
 	uint8_t data[];
 };
 
+struct aw_efcheck_desc {
+	unsigned int reg;
+	unsigned int mask;
+	unsigned int and_val;
+	unsigned int or_val;
+};
+
 struct aw_device {
 	int index;
 	int status;
 	int bstcfg_enable;
 	int frcset_en;
 	int bop_en;
+	int efuse_check;
 	unsigned int mute_st;
 	unsigned int amppd_st;
 
@@ -238,6 +253,7 @@ struct aw_device {
 	struct aw_monitor_desc monitor_desc;
 	struct aw_soft_rst soft_rst;
 	struct aw_bop_desc bop_desc;
+	struct aw_efcheck_desc efcheck_desc;
 	struct aw_device_ops ops;
 	struct list_head list_node;
 };
