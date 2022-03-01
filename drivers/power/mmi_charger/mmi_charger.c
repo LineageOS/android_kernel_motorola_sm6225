@@ -1381,6 +1381,7 @@ static void mmi_update_charger_status(struct mmi_charger_chip *chip,
 				struct mmi_charger *charger)
 {
 	bool voltage_full;
+	int stop_recharge_hyst;
 	enum charging_limit_modes charging_limit_modes;
 	struct mmi_charger_profile *profile = &charger->profile;
 	struct mmi_charger_status *status = &charger->status;
@@ -1429,10 +1430,22 @@ static void mmi_update_charger_status(struct mmi_charger_chip *chip,
 	} else if (!status->temp_zone) {
 		status->pres_chrg_step = STEP_MAX;
 		/* Skip for empty temperature zone */
-	} else if ((status->pres_chrg_step == STEP_NONE) ||
-		   (status->pres_chrg_step == STEP_STOP)) {
+	} else if (status->pres_chrg_step == STEP_NONE) {
 		if (status->temp_zone->norm_mv &&
 		    ((batt_info->batt_mv + HYST_STEP_MV) >= status->temp_zone->norm_mv)) {
+			if (status->temp_zone->fcc_norm_ma)
+				status->pres_chrg_step = STEP_NORM;
+			else
+				status->pres_chrg_step = STEP_STOP;
+		} else
+			status->pres_chrg_step = STEP_MAX;
+	} else if (status->pres_chrg_step == STEP_STOP) {
+		if (batt_info->batt_temp > COOL_TEMP)
+			stop_recharge_hyst = 2 * HYST_STEP_MV;
+		else
+			stop_recharge_hyst = 5 * HYST_STEP_MV;
+		if (status->temp_zone->norm_mv &&
+			((batt_info->batt_mv + stop_recharge_hyst) >= status->temp_zone->norm_mv)) {
 			if (status->temp_zone->fcc_norm_ma)
 				status->pres_chrg_step = STEP_NORM;
 			else
