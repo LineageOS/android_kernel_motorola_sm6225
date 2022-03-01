@@ -29,7 +29,7 @@
 #ifndef _LINUX_CYTTSP5_PLATFORM_H
 #define _LINUX_CYTTSP5_PLATFORM_H
 
-#include <linux/cyttsp5_core.h>
+#include "cyttsp5_core.h"
 
 #if defined(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5) \
 	|| defined(CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MODULE)
