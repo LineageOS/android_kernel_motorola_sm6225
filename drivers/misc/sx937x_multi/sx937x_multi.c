@@ -59,6 +59,8 @@
 
 #define SX937X_I2C_WATCHDOG_TIME 10000
 #define SX937X_I2C_WATCHDOG_TIME_ERR 2000
+
+#define MAX_CHANNEL_NUMBER 8
 static struct class *capsense_class;
 
 
@@ -573,8 +575,23 @@ static ssize_t sx937x_fac_detect_show(struct device *dev,
 		char *buf)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	LOG_INFO("%s detect_show\n", this->hw->dbg_name);
-	return sprintf(buf, "%d\n", this->int_state);
+	u32 reg_value = 0;
+	char temp_id[7] ="0";
+	char sx93x_id[4] ="0";
+	sx937x_i2c_read_16bit(this->bus,SX937X_DEVICE_INFO,&reg_value);
+	LOG_INFO("Reading device id reg_value==%x\n",reg_value);
+	sprintf(temp_id, "%x\n",reg_value);
+	strncpy(sx93x_id,temp_id,sizeof(sx93x_id)-1);
+	if(strcmp(sx93x_id,"937")==0){
+
+		LOG_INFO("Detect ic sx937x\n");
+		return sprintf(buf, "%d\n",1);
+
+	}else{
+
+		LOG_INFO("Not found ic sx937x\n");
+		return sprintf(buf, "%d\n",0);
+	}
 }
 
 static ssize_t sx937x_fac_enable_store(struct device *dev,
@@ -583,10 +600,30 @@ static ssize_t sx937x_fac_enable_store(struct device *dev,
 
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	if (!count)
-		return -EINVAL;
-	LOG_INFO("%s sx937x_fac_enable_store\n", this->hw->dbg_name);
-
+	u32 temp = 0;
+	int ret = 0;
+	if ( !strncmp(buf, "1", 1)) {
+		LOG_INFO("enable cap sensor\n");
+				sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+				temp = temp | 0x0000007F;
+				LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
+				sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
+				if(ret <0){
+					LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
+					return -EINVAL;
+				}
+	}
+	if ( !strncmp(buf, "0", 1)) {
+		LOG_INFO("disnable cap sensor\n");
+				sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+				temp = temp | 0xFFFFFF00;
+				LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
+				sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
+				if(ret <0){
+					LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
+					return -EINVAL;
+				}
+	}
 	return count;
 }
 
@@ -596,20 +633,44 @@ static ssize_t sx937x_fac_cal_store(struct device *dev,
 
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	if (!count)
-		return -EINVAL;
 	LOG_INFO("%s sx937x_fac_cal_store\n", this->hw->dbg_name);
+	if ( !strncmp(buf, "1", 1)) {
+		manual_offset_calibration(this->hw);
+		LOG_INFO("set reg 0x%x val 0xe\n", SX937X_COMMAND);
+	}
 
 	return count;
 }
-
 static ssize_t sx937x_fac_comp_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	int i ,j= 0;
+	int read_ret;
+	u8 reg_data[MAX_CHANNEL_NUMBER*4+2] = {0};
+	u16 reg_addr;
+	u32 temp_val;
+	reg_addr = SX937X_OFFSET_PH0;
+
 	LOG_INFO("%s sx937x_fac_comp_show\n", this->hw->dbg_name);
-	return sprintf(buf, "%d\n", this->int_state);
+
+	for (i = 0; i < MAX_CHANNEL_NUMBER; i++) {
+		read_ret = sx937x_i2c_read_16bit(this->bus,reg_addr+0xc*i,&temp_val);
+		if(read_ret<0){
+			LOG_INFO("failed to read reg data 0x%x", reg_addr);
+		}
+		LOG_INFO("fac_cam i==%d reg_addr ==0x%x temp_val===%x\n",i,reg_addr+0xc*i,temp_val);
+		reg_data[2 * i] = (u8)((temp_val & 0x3FFF) >> 8);
+               reg_data[1 + 2 * i] = (u8)(temp_val & 0x3FFF);
+		LOG_INFO("tc_cmn_drv_cap_sense_read_cal_data reg[%d]==%x,reg[%d]==%x\n",
+					(2*i), reg_data[2 * i],
+					(1+2*i), reg_data[1 + 2 * i]);
+	}
+	for(j=0;j<sizeof(reg_data);j++){
+		buf[j] = reg_data[j];
+	}
+	return sizeof(reg_data);
 }
 
 static ssize_t sx937x_fac_raw_show(struct device *dev,
@@ -617,8 +678,37 @@ static ssize_t sx937x_fac_raw_show(struct device *dev,
 		char *buf)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	u16 reg_addr;
+        u32 temp_val;
+        int diff_val;
+	int read_ret;
+	int i;
+	u8 data[MAX_CHANNEL_NUMBER*4] = {0};
+        reg_addr = SX937X_DIFF_PH0;
+
 	LOG_INFO("%s sx937x_fac_raw_show\n", this->hw->dbg_name);
-	return sprintf(buf, "%d\n", this->int_state);
+	for ( i = 0; i < MAX_CHANNEL_NUMBER; i++) {
+		read_ret=sx937x_i2c_read_16bit(this->bus,reg_addr+0xc*i,&temp_val);
+		if(read_ret<0){
+			LOG_INFO("failed to read reg data 0x%x", reg_addr);
+		}
+		LOG_INFO("sx937x i==%d,reg_addr:0x%x",i, reg_addr + 0x4 * i);
+		diff_val = ((int)temp_val)>>10;
+		data[4 * i] = (u8)(diff_val >> 24);
+		data[1 + 4 * i] = (u8)(diff_val >> 16);
+		data[2 + 4 * i] = (u8)(diff_val >> 8);
+		data[3 + 4 * i] = (u8)(diff_val);
+	 	LOG_INFO("sx937x diff_val==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x",
+	 				diff_val,
+	 				(4*i), data[4 * i],
+	 				(1+4*i), data[1+4 * i],
+	 				(2+4*i), data[2+4 * i],
+	 				(3+4*i), data[3+4 * i]);
+        }
+	for(i=0;i<sizeof(data);i++){
+		buf[i] = data[i];
+	}
+	return sizeof(data);
 }
 
 static DEVICE_ATTR(name, 0444, capsense_name_show, NULL);
