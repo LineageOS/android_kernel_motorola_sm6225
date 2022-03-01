@@ -27,7 +27,7 @@
  */
 
 #include <linux/module.h>
-#include <linux/cyttsp5_device_access-api.h>
+#include "cyttsp5_device_access-api.h"
 #include <asm/unaligned.h>
 
 #define BUFFER_SIZE		256

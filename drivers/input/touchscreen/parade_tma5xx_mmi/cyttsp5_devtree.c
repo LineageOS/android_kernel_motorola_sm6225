@@ -34,7 +34,7 @@
 
 /* cyttsp */
 #include "cyttsp5_regs.h"
-#include <linux/cyttsp5_platform.h>
+#include "cyttsp5_platform.h"
 
 #define ENABLE_VIRTUAL_KEYS
 

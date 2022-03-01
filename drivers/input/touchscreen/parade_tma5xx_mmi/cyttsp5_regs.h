@@ -59,7 +59,7 @@
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 #include <linux/version.h>
-#include <linux/cyttsp5_core.h>
+#include "cyttsp5_core.h"
 
 #include <linux/timer.h>
 #include <linux/timex.h>
