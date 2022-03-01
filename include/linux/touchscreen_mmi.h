@@ -55,7 +55,6 @@
 #else /* CONFIG_PANEL_NOTIFICATIONS */
 #if defined(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
 #include <linux/soc/qcom/panel_event_notifier.h>
-extern struct drm_panel *active_panel;
 
 #define REGISTER_PANEL_NOTIFIER { \
 	void *cookie = NULL; \
@@ -98,14 +97,13 @@ extern struct drm_panel *active_panel;
 #else /* CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS */
 #if defined(CONFIG_DRM_PANEL_NOTIFICATIONS)
 #include <drm/drm_panel.h>
-extern struct drm_panel *active_panel;
 #define REGISTER_PANEL_NOTIFIER {\
 	touch_cdev->panel_nb.notifier_call = ts_mmi_panel_cb; \
-	ret = drm_panel_notifier_register(active_panel, &touch_cdev->panel_nb); \
+	ret = drm_panel_notifier_register(touch_cdev->active_panel, &touch_cdev->panel_nb); \
 }
 
 #define UNREGISTER_PANEL_NOTIFIER {\
-	drm_panel_notifier_unregister(active_panel, &touch_cdev->panel_nb);\
+	drm_panel_notifier_unregister(touch_cdev->active_panel, &touch_cdev->panel_nb);\
 }
 
 #define GET_CONTROL_DSI_INDEX \
