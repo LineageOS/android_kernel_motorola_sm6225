@@ -61,12 +61,11 @@
                 aw-re-max= <30000>;
                 aw-cali-mode = "aw_attr";
         };
-
-        aw882xx_recv: aw882xx_recv_smartpa@35 {
+/*
+        aw882xx_recv: aw882xx_recv_smartpa@36 {
                 status = "okay";
                 compatible = "awinic,aw882xxacf_smartpa";
-                reg = <0x35>;
-                /* reset-gpio = <&tlmm 107 0>; */
+                reg = <0x36>;
                 irq-gpio = <&tlmm 107 0x2008>;
                 dc-flag = <0>;
                 sync-flag = <0>;
@@ -79,6 +78,7 @@
                 aw-re-max= <30000>;
                 aw-cali-mode = "aw_attr";
         };
+*/
 };
 
 &q6core {
