@@ -252,6 +252,7 @@ struct sm_fg_chip {
 	int fake_temp;
 	struct dentry *debug_root;
 	struct power_supply *batt_psy;
+	struct power_supply *bms_psy;
 	//struct power_supply fg_psy;
 	struct power_supply_desc *fg_psy;
 };
@@ -1281,8 +1282,10 @@ static int sm_update_data(struct sm_fg_chip *sm)
 	if ((last_batt_inserted != sm->batt_present)
 		|| (last_batt_fc != sm->batt_fc)
 		|| (last_batt_ot != sm->batt_ot)
-		|| (last_batt_ut != sm->batt_ut))
-		power_supply_changed(sm->batt_psy);
+		|| (last_batt_ut != sm->batt_ut)) {
+		if (sm->batt_psy)
+			power_supply_changed(sm->batt_psy);
+	}
 
 	if (sm->batt_present) {
 		sm->batt_soc = fg_read_soc(sm);
@@ -2848,9 +2851,9 @@ static int sm_fg_probe(struct i2c_client *client,
 	psy_desc->num_properties = ARRAY_SIZE(fg_props);
 	psy_desc->get_property = fg_get_property;
 	psy_desc->set_property = fg_set_property;
-	sm->batt_psy = power_supply_register(&client->dev, psy_desc, &psy_cfg);
-	if (IS_ERR(sm->batt_psy)) {
-		ret = PTR_ERR(sm->batt_psy);
+	sm->bms_psy = power_supply_register(&client->dev, psy_desc, &psy_cfg);
+	if (IS_ERR(sm->bms_psy)) {
+		ret = PTR_ERR(sm->bms_psy);
 		printk(KERN_ERR"failed to register battery: %d\n", ret);
 		return ret;
 	}
