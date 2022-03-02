@@ -100,7 +100,11 @@ static int cyttsp5_ts_mmi_methods_get_config_id(struct device *dev, void *cdata)
 		"%s: img vers:0x%04X ,revctrl vers:0x%04X\n", __func__,
 			fw_ver_img, fw_revctrl_img);
 
-	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%04x", le32_to_cpu(fw_revctrl_img));
+	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%02d%02d%02d%02x",
+		(fw_revctrl_img>>24)&0xff,
+		(fw_revctrl_img>>16)&0xff,
+		(fw_revctrl_img>>8)&0xff,
+		(fw_revctrl_img)&0xff);
 }
 
 static int cyttsp5_ts_mmi_methods_get_bus_type(struct device *dev, void *idata) {
