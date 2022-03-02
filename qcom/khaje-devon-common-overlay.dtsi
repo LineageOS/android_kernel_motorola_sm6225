@@ -18,9 +18,9 @@
 #include "khaje-devon-fps-overlay_evb.dtsi"
 #include "khaje-devon-touchscreen-overlay.dtsi"
 #include "khaje-devon-nfc-overlay.dtsi"
-#include "sgm7220_devon.dtsi"
-#include "discrete_charging_hawao.dtsi"
-#include "discrete-rt-pd-manger.dtsi"
+//#include "sgm7220_devon.dtsi"
+//#include "discrete_charging_hawao.dtsi"
+//#include "discrete-rt-pd-manger.dtsi"
 #include "camera/khaje-camera-sensor-mot-hawao-overlay.dtsi"
 #include "khaje-devon-wl2864c.dtsi"
 
