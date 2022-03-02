@@ -91,28 +91,32 @@
 	status = "ok";
 };
 
-&qupv3_se0_i2c {
+&qupv3_se2_i2c {
         status = "ok";
         aw9610x_sar@12 {
             compatible = "awinic,aw9610x_sar_0";
             reg = <0x12>;
+            sar-gpio-vcc-enable;
+            sar-gpio_3v0_en = <&tlmm 67 0x00>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&capsense_sar_gpio_pins>;
             interrupt-parent = <&tlmm>;
             interrupts = <106 0x02>;
             irq-gpio = <&tlmm 106 0x02>;
             chip_name = "AW96105";
             sar-num = <0>;
             cap_vcc-supply = <&pm6125_l21>;
-            aw9610x,channel_number = <0x4>;
-            ch0_name = "Ch0capsense_bottom_left";
-            ch1_name = "Ch1capsense_reference";
-            ch2_name = "Ch2capsense_bottom_right";
-            ch3_name = "Ch3capsense_top";
-            ref_channel = <1>;
+            aw9610x,channel_number = <0x5>;
+            ch0_name = "Ch0capsense_reference";
+            ch1_name = "Ch1capsense_top_left";
+            ch2_name = "Ch2capsense_top_right";
+            ch3_name = "Ch3capsense_reference";
+            ch4_name = "Ch4capsense_bottom";
+            ref_channel = <0x9>;
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
 };
-
 
 &usb0 {
 	dwc3@4e00000 {
