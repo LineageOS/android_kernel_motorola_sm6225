@@ -1002,18 +1002,30 @@ static int bq2597x_get_adc_data(struct bq2597x *bq, int channel,  int *result)
 	u16 val;
 	s16 t;
 	int tmp;
+	u8 val_h, val_l;
 
 	if (channel > ADC_MAX_NUM)
 		return -EINVAL;
 
-	ret = bq2597x_read_word(bq, ADC_REG_BASE + (channel << 1), &val);
-	if (ret < 0) {
-		pr_err(" bq2597x i2c read failed!\n");
-		return ret;
+	if (bq->part_no == NU2105_PART_NO) {
+		ret = bq2597x_read_byte(bq, ADC_REG_BASE + (channel << 1), &val_h);
+		ret |= bq2597x_read_byte(bq, ADC_REG_BASE + (channel << 1) + 1, &val_l);
+		if (ret < 0) {
+			pr_err(" nu2105 i2c read failed!\n");
+			return ret;
+                }
+		t = (u16)val_l + ((u16)val_h << 8);
+	} else {
+
+		ret = bq2597x_read_word(bq, ADC_REG_BASE + (channel << 1), &val);
+		if (ret < 0) {
+			pr_err(" bq2597x i2c read failed!\n");
+			return ret;
+		}
+		t = val & 0xFF;
+		t <<= 8;
+		t |= (val >> 8) & 0xFF;
 	}
-	t = val & 0xFF;
-	t <<= 8;
-	t |= (val >> 8) & 0xFF;
 
 	if (bq->part_no == SC8551_PART_NO
 		||bq->part_no == SC8551A_PART_NO) {
