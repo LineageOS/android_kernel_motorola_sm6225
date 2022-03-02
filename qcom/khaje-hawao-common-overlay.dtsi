@@ -107,7 +107,7 @@
             ch1_name = "Ch1capsense_reference";
             ch2_name = "Ch2capsense_bottom_right";
             ch3_name = "Ch3capsense_top";
-            ref_channel = <1>;
+            ref_channel = <0x2>;
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
