@@ -3718,7 +3718,7 @@ static void aw8622x_vibrator_work_routine(struct work_struct *work)
 			aw8622x->activate_mode = AW8622X_HAPTIC_RTP_MODE;
 			/* rtp mode and no stop */
 			if (moto_mode > (AW8622X_SEQ_NO_RTP_BASE + AW8622X_SEQ_NO_RTP_REPEAT)) {
-				aw8622x->rtp_file_num = moto_mode - AW8622X_SEQ_NO_RTP_REPEAT;
+				aw8622x->rtp_file_num -= AW8622X_SEQ_NO_RTP_REPEAT;
 				aw8622x->activate_mode = AW8622X_HAPTIC_LOOP_RTP_MODE;
 			}
 		} else if ((aw8622x->duration < aw8622x->dts_info.duration_time[2]) || moto_mode > 2) {
