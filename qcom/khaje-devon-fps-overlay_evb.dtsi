@@ -162,12 +162,12 @@
 		pmx_fp_pwr_high {
 			fingerprint_pins_power_output1: fingerprint_pins_power_output1 {
 				mux {
-					pins = "gpio54";
+					pins = "gpio108";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio54";
+					pins = "gpio108";
 					drive-strength = <2>;
 					bias-disable;
 					output-high;
@@ -178,12 +178,12 @@
 		pmx_fp_pwr_low {
 			fingerprint_pins_power_output0: fingerprint_pins_power_output0 {
 				mux {
-					pins = "gpio54";
+					pins = "gpio108";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio54";
+					pins = "gpio108";
 					drive-strength = <2>;
 					bias-disable;
 					output-low;
@@ -212,12 +212,12 @@
 		pmx_fp_reset_active {
 			fingerprint_pins_rst_output1: fingerprint_pins_rst_output1 {
 				mux {
-					pins = "gpio3";
+					pins = "gpio104";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio3";
+					pins = "gpio104";
 					drive-strength = <8>;
 					bias-disable;
 					output-high;
@@ -228,12 +228,12 @@
 		pmx_fp_reset_suspend {
 			fingerprint_pins_rst_output0: fingerprint_pins_rst_output0 {
 				mux {
-					pins = "gpio3";
+					pins = "gpio104";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio3";
+					pins = "gpio104";
 					drive-strength = <8>;
 					bias-disable;
 					output-low;
@@ -259,6 +259,23 @@
 		pinctrl-2 = <&fingerfp_irq_active>;
 		pinctrl-3 = <&fingerfp_vcc_high>;
 		pinctrl-4 = <&fingerfp_vcc_low>;
+	};
+
+	fingerprint: fpc1020 {
+                status = "ok";
+		compatible = "fpc,fpc1020";
+		interrupt-parent = <&tlmm>;
+		interrupts = <83 IRQ_TYPE_EDGE_RISING 83 0>;
+                fp-gpio-ven = <&tlmm 108 0x0>;
+		rst = <&tlmm 104 0>;
+		irq = <&tlmm 83 0>;
+		fpc_pinctrl_on;
+	        pinctrl-names = "fpc_vdd_on","fpc_vdd_of","fpc_rst_lo","fpc_rst_hi","fpc_irq_en";
+		pinctrl-0 = <&fingerprint_pins_power_output1>;
+		pinctrl-1 = <&fingerprint_pins_power_output0>;
+		pinctrl-2 = <&fingerprint_pins_rst_output0>;
+		pinctrl-3 = <&fingerprint_pins_rst_output1>;
+		pinctrl-4 = <&fingerprint_pins_eint_as_int>;
 	};
 
         fpsensor_fp {
