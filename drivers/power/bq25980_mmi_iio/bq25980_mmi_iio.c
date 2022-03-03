@@ -394,7 +394,7 @@ static void dump_reg(struct bq25980_device *bq, int start, int end)
 	for (addr = start; addr <= end; addr++) {
 		ret = regmap_read(bq->regmap, addr, &val);
 		if (!ret)
-			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
+			dev_err(bq->dev, "[%s] Reg[%02X] = 0x%02X\n", bq->model_name, addr, val);
 	}
 }
 
@@ -407,7 +407,7 @@ static void dump_all_reg(struct bq25980_device *bq)
 	for (addr = 0x00; addr <= 0x37; addr++) {
 		ret = regmap_read(bq->regmap, addr, &val);
 		if (!ret)
-			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
+			dev_err(bq->dev, "[%s] Reg[%02X] = 0x%02X\n", bq->model_name, addr, val);
 	}
 }
 /*
@@ -896,9 +896,9 @@ static int bq25980_set_charger_property(struct power_supply *psy,
 		break;
 */
 	case POWER_SUPPLY_PROP_PRESENT:
-		bq25980_set_present(bq, !!val->intval);
-//		sc_info("set present :%d\n", val->intval);
-		dev_err(bq->dev,"%s,POWER_SUPPLY_PROP_PRESENT prop:%d,value:%d\n",__func__,prop,val->intval);
+		ret = bq25980_set_present(bq, !!val->intval);
+		pr_info("[%s] set present :%d ret=%d\n", bq->model_name, val->intval,ret);
+		//dev_err(bq->dev,"%s,POWER_SUPPLY_PROP_PRESENT prop:%d,value:%d\n",__func__,prop,val->intval);
 		break;
 /*	case POWER_SUPPLY_PROP_UPDATE_NOW:
 		dev_err(bq->dev,"%s,POWER_SUPPLY_PROP_UPDATE_NOW prop:%d,value:%d\n",__func__,prop,val->intval);
@@ -1113,7 +1113,7 @@ static irqreturn_t bq25980_irq_handler_thread(int irq, void *private)
 	struct bq25980_state state;
 	int ret;
 
-	dev_err(bq->dev,"%s enter\n",__func__);
+	dev_err(bq->dev,"[%s]%s enter\n",bq->model_name,__func__);
 	mutex_lock(&bq->irq_complete);
 	bq->irq_waiting = true;
 	if (!bq->resume_completed) {
@@ -1684,7 +1684,7 @@ static int bq25980_probe(struct i2c_client *client,
 	struct bq25980_device *bq;
 	int ret;//, irq_gpio, irqn;
 
-	printk("-------bq25980 driver probe--------\n");
+	printk("-------[%s] driver probe--------\n",id->name);
 	bq = devm_kzalloc(dev, sizeof(*bq), GFP_KERNEL);
 	if (!bq) {
 		dev_err(dev, "Out of memory\n");
@@ -1786,7 +1786,7 @@ static int bq25980_probe(struct i2c_client *client,
 	}
 
 	dump_reg(bq,0x00,0x37);
-	printk("-------bq25980 driver probe success--------\n");
+	printk("-------[%s] driver probe success--------\n",bq->model_name);
 	return 0;
 free_psy:
 	power_supply_unregister(bq->charger);
