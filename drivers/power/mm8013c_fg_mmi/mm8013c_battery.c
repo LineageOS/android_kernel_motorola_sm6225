@@ -18,6 +18,9 @@
 
 #define MM8XXX_MANUFACTURER	"MITSUMI ELECTRIC"
 
+#define mm_info(fmt, arg...)  \
+	printk("FG_MM8xxx : %s-%d : " fmt, __FUNCTION__ ,__LINE__,##arg)
+
 static DEFINE_IDR(battery_id);
 static DEFINE_MUTEX(battery_mutex);
 
@@ -58,6 +61,7 @@ struct mm8xxx_device_info {
 	unsigned long last_update;
 	struct delayed_work work;
 	struct power_supply *psy;
+	struct power_supply *batt_psy;
 	struct list_head list;
 	struct mutex lock;
 	u8 *cmds;
@@ -138,6 +142,8 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	char *name;
 	int num;
 
+	mm_info("MM8013 prob begin\n");
+
 	mutex_lock(&battery_mutex);
 	num = idr_alloc(&battery_id, client, 0, 0, GFP_KERNEL);
 	mutex_unlock(&battery_mutex);
@@ -152,6 +158,8 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	if (!di)
 		goto mem_err;
 
+	i2c_set_clientdata(client, di);
+
 	di->id = num;
 	di->dev = &client->dev;
 	di->chip = id->driver_data;
@@ -165,7 +173,6 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 		goto failed;
 
 	schedule_delayed_work(&di->work, 60 * HZ);
-	i2c_set_clientdata(client, di);
 
 	if (client->irq) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
@@ -181,6 +188,7 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 		}
 	}
 
+	mm_info("MM8013 driver probe success\n");
 	return 0;
 
 mem_err:
@@ -697,6 +705,14 @@ static void mm8xxx_battery_update(struct mm8xxx_device_info *di)
 	int cv;
 	int req = 0;
 #endif
+
+	/* get battery power supply */
+	if (!di->batt_psy) {
+		di->batt_psy = power_supply_get_by_name("battery");
+		if (!di->batt_psy)
+			mm_info("get batt_psy fail\n");
+	}
+
 	cache.flags = mm8xxx_read(di, MM8XXX_CMD_FLAGS);
 	if ((cache.flags & 0xFFFF) == 0xFFFF)
 		cache.flags = -1;
@@ -749,8 +765,10 @@ static void mm8xxx_battery_update(struct mm8xxx_device_info *di)
 
 out:
 	if ((di->cache.soc != cache.soc) ||
-	    (di->cache.flags != cache.flags))
-		power_supply_changed(di->psy);
+	    (di->cache.flags != cache.flags)) {
+		if (di->batt_psy)
+			power_supply_changed(di->batt_psy);
+	}
 
 	if (memcmp(&di->cache, &cache, sizeof(cache)) != 0)
 		di->cache = cache;
@@ -884,6 +902,7 @@ static int mm8xxx_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		ret = mm8xxx_battery_current(di, val);
+		val->intval = val->intval * (-1);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		ret = mm8xxx_simple_value(di->cache.soc, val);
@@ -896,7 +915,7 @@ static int mm8xxx_battery_get_property(struct power_supply *psy,
 		if (ret == 0)
 			val->intval += -2731;
 		break;
-	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW:
 		ret = mm8xxx_simple_value(di->cache.avg_time_to_empty, val);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
@@ -963,8 +982,8 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	if (!ps_desc)
 		return -ENOMEM;
 
-	ps_desc->name = di->name;
-	ps_desc->type = POWER_SUPPLY_TYPE_BATTERY;
+	ps_desc->name = "bms";
+	ps_desc->type = POWER_SUPPLY_TYPE_MAINS;
 	ps_desc->properties = mm8xxx_chip_data[di->chip].props;
 	ps_desc->num_properties = mm8xxx_chip_data[di->chip].props_size;
 	ps_desc->get_property = mm8xxx_battery_get_property;
