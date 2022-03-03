@@ -60,6 +60,18 @@
 #include <linux/pm_wakeup.h>
 #include "etxxx_fp.h"
 #include <linux/input.h>
+#ifdef MMI_RELAY_MODULE
+#include <linux/mmi_relay.h>
+#endif
+#ifdef MMI_RELAY_MODULE
+struct FPS_data {
+	unsigned int enabled;
+	unsigned int state;
+	struct notifier_block   relay_notif;
+} *fpsData= NULL;
+uint32_t g_fps_mode =0;
+#endif
+
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
 #define FP_NOTIFY_ON                                  PANEL_EVENT_DISPLAY_ON
@@ -125,6 +137,71 @@ static struct platform_driver egisfp_driver = {
 /* ------------------------------ Interrupt -----------------------------*/
 
 static DECLARE_WAIT_QUEUE_HEAD(interrupt_waitq);
+
+#ifdef MMI_RELAY_MODULE
+static int fps_mmi_relay_cb(struct notifier_block *self,
+					unsigned long event, void *p)
+{
+	struct FPS_data *mdata = container_of(
+			self, struct FPS_data, relay_notif);
+
+	if (!mdata)
+		return -ENODEV;
+
+	if (event == RELAY_NOTIFY_REGISTER) {
+		int state = mdata->state;
+		mdata->enabled = 1;
+		/* send current FPS state on register request */
+		relay_notifier_fire(BLOCKING, FPS, 0xBEEF, (void *)&state);
+		pr_info("%s: FPS reported state %d\n", __func__, state);
+
+	} else if (event == RELAY_NOTIFY_UNREGISTER)
+		mdata->enabled = 0;
+
+	return 0;
+}
+
+
+static struct FPS_data *FPS_init()
+{
+	int ret =0;
+	struct FPS_data *mdata = kzalloc(sizeof(struct FPS_data), GFP_KERNEL);
+	mdata = kzalloc(sizeof(struct egisfp_dev_t), GFP_KERNEL);
+	if (mdata == NULL)
+	{
+		ERROR_PRINT(" %s : Failed to FPS_init \n", __func__);
+		return  NULL;
+	}
+	mdata->relay_notif.notifier_call = fps_mmi_relay_cb;
+	/* register a blocking notification to receive notify form MMI_RELAY dev*/
+	ret = relay_register_action(BLOCKING, MMI_RELAY, &mdata->relay_notif);
+	INFO_PRINT("%s: relay_register_action ret= %d\n", __func__, ret);
+	return mdata;
+}
+
+void FPS_notify(unsigned long stype, int state)
+{
+	struct FPS_data *mdata = fpsData;
+	int ret =0;
+	INFO_PRINT("%s: Enter", __func__);
+
+
+	if (!mdata) {
+		INFO_PRINT("%s: FPS notifier not initialized yet\n", __func__);
+		return;
+	}
+
+	INFO_PRINT("%s: FPS current state %d -> (%d)\n", __func__,
+	       mdata->state, state);
+
+	if (mdata->state != state) {
+		mdata->state = state;
+		ret= relay_notifier_fire(BLOCKING, FPS, 0xBEEF, (void *)&state);
+		INFO_PRINT("%s: FPS notification sent ret= %d\n", __func__, ret);
+	} else
+		INFO_PRINT("%s: mdata->state==state", __func__);
+}
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 void egisfp_interrupt_timer_call(struct timer_list *t)
@@ -685,6 +762,17 @@ long egisfp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 		break;
+	case FP_SET_FPS_MODE:
+#ifdef MMI_RELAY_MODULE
+		if (copy_from_user(&data, (int __user *)arg, sizeof(data)))
+		{
+			return -EFAULT;
+		}
+		g_fps_mode = data.int_mode;
+		DEBUG_PRINT(" %s : FP_SET_FPS_MODE to %d \n", __func__,g_fps_mode);
+		FPS_notify(0xbeef, (g_fps_mode > 0)? 1: 0);
+#endif
+		break;
 	default:
 		retval = 0;
 		break;
@@ -1237,7 +1325,13 @@ int egisfp_remove(struct platform_device *pdev)
 	class_destroy(egisfp_class);
 
 	unregister_chrdev(EGIS_FP_MAJOR, egisfp_driver.driver.name);
-
+#ifdef MMI_RELAY_MODULE
+	if(fpsData) {
+		relay_unregister_action(BLOCKING, MMI_RELAY, &fpsData->relay_notif);
+		kfree(fpsData);
+		fpsData =  NULL;
+	}
+#endif
 	g_data = NULL;
 	return 0;
 }
@@ -1373,6 +1467,9 @@ int egisfp_probe(struct platform_device *pdev)
 #endif
 
 	g_data = egis_dev;
+#ifdef MMI_RELAY_MODULE
+	fpsData = FPS_init();
+#endif
 
 	DEBUG_PRINT(" %s : initialize success %d\n", __func__, status);
 

@@ -11,8 +11,14 @@ ifneq ($(filter m y,$(CONFIG_ET721_FOD)),)
     EXTRA_CFLAGS += -DET721_FOD
 endif
 
+ifneq ($(filter m y,$(CONFIG_MMI_RELAY)),)
+	EXTRA_CFLAGS += -DMMI_RELAY_MODULE
+endif
+
 rbs_fps_mmi-y += etxxx_fp.o
 
 
 obj-m += rbs_fps_mmi.o
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_relay/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
 
