@@ -537,6 +537,8 @@ struct goodix_ts_core {
 	bool need_update_cfg;
 #ifdef CONFIG_GTP_FOD
 	unsigned char gesture_type;
+	int zerotap_data[1];
+	int fod_enable;
 #endif
 	atomic_t pm_resume;
 	wait_queue_head_t pm_wq;

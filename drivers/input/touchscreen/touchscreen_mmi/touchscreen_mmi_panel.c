@@ -140,7 +140,16 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->max_x = coords[0] - 1;
 		ppdata->max_y = coords[1] - 1;
 	}
+	if (of_property_read_bool(of_node, "mmi,fod_detection")) {
+		dev_info(DEV_TS, "%s: using fod detection\n", __func__);
+		ppdata->fod_detection = true;
+	}
 
+	if (!of_property_read_u32_array(of_node, "mmi,fod_coords", coords, 2)) {
+		ppdata->fod_x = coords[0];
+		ppdata->fod_y = coords[1];
+		dev_info(DEV_TS, "%s: get fod_coords property x:%d y:%d\n", __func__,ppdata->fod_x,ppdata->fod_y);
+	}
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;

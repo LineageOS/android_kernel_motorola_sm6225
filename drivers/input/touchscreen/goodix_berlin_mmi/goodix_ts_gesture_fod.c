@@ -335,7 +335,7 @@ static int gsx_gesture_init(struct goodix_ts_core *cd,
 	gsx->ts_core = cd;
 	/*enable all gesture wakeup by default */
 	gsx->ts_core->gesture_type = GESTURE_SINGLE_TAP |GESTURE_FOD_PRESS;
-	cd->ts_event.gesture_data[0] = 0;
+	cd->zerotap_data[0] = 0;
 	atomic_set(&gsx_gesture->registered, 1);
 	return 0;
 }
@@ -375,7 +375,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	struct gesture_event_data mmi_event;
 	static  unsigned  long  start = 0;
 	int fod_down_interval = 0;
-	int fod_down = cd->ts_event.gesture_data[0];
+	int fod_down = cd->zerotap_data[0];
 #endif
 	if (atomic_read(&cd->suspended) == 0 || cd->gesture_type == 0)
 		return EVT_CONTINUE;
@@ -420,12 +420,16 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			fodx = le16_to_cpup((__le16 *)gs_event.gesture_data);
 			fody = le16_to_cpup((__le16 *)(gs_event.gesture_data + 2));
 			overlay_area = gs_event.gesture_data[4];
-			//goodix firmware do not send coordinate, we need hardcode a vaild coordinate
+			if(!cd->fod_enable) {
+				ts_info("Get FOD-DOWN gesture when fod is not enabled, ignore");
+				goto gesture_ist_exit;
+			}
+			//goodix firmware do not send coordinate, need mmi touch to define a vaild coordinate thru dts
 			mmi_event.evcode = 2;
-			mmi_event.evdata.x= 540;
-			mmi_event.evdata.y= 2164;
+			mmi_event.evdata.x= 0;
+			mmi_event.evdata.y= 0;
 
-			ts_debug("Get FOD-DOWN gesture down:%d interval:%d",fod_down,fod_down_interval);
+			ts_debug("Get FOD-DOWN gesture:%d interval:%d",fod_down,fod_down_interval);
 			if(fod_down_interval > 2000)
 				fod_down = 0;
 			if(fod_down_interval > 0 && fod_down_interval < 250 && fod_down) {
@@ -440,6 +444,11 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			}
 			fod_down++;
 		}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
+			if(!cd->fod_enable) {
+				ts_info("Get FOD-UP gesture when fod is not enabled, ignore");
+				fod_down = 0;
+				goto gesture_ist_exit;
+			}
 			ts_info("Get FOD-UP gesture");
 			mmi_event.evcode = 3;
 			mmi_event.evdata.x= 0;
@@ -522,7 +531,7 @@ re_send_ges_cmd:
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)
 		hw_ops->after_event_handler(cd);
-	cd->ts_event.gesture_data[0] = fod_down;
+	cd->zerotap_data[0] = fod_down;
 	return EVT_CANCEL_IRQEVT;
 }
 
