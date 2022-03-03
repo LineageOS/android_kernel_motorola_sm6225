@@ -370,6 +370,7 @@ enum ts_mmi_panel_event {
 	int	(*poison_distance)(struct device *dev, int dis);
 	int	(*poison_trigger_distance)(struct device *dev, int dis);
 	int	(*update_baseline)(struct device *dev, int enable);
+	int	(*update_fod_mode)(struct device *dev, int enable);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -397,6 +398,7 @@ enum ts_mmi_panel_event {
 struct ts_mmi_dev_pdata {
 	bool		power_off_suspend;
 	bool		fps_detection;
+	bool		fod_detection;
 	bool		usb_detection;
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
@@ -410,6 +412,8 @@ struct ts_mmi_dev_pdata {
 	bool		poison_slot_ctrl;
 	int		max_x;
 	int		max_y;
+	int		fod_x;
+	int		fod_y;
 	int 		ctrl_dsi;
 	int		reset;
 	const char	*class_entry_name;

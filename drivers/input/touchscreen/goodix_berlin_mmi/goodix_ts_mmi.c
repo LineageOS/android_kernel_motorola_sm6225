@@ -927,10 +927,10 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	}
 	mutex_unlock(&core_data->mode_lock);
 #ifdef CONFIG_GTP_FOD
-	if(core_data->ts_event.gesture_data[0]) {
-		ts_info("FOD is down during PM active");
+	if(core_data->zerotap_data[0]) {
+		ts_info("FOD is down during PM resume  fod_enable=%d",core_data->fod_enable);
 	}
-	core_data->ts_event.gesture_data[0] = 0;
+	core_data->zerotap_data[0] = 0;
 #endif
 	return 0;
 }
@@ -978,7 +978,18 @@ static int goodix_ts_mmi_post_suspend(struct device *dev) {
 	ts_info("Suspend end");
 	return 0;
 }
+#ifdef CONFIG_GTP_FOD
+static int goodix_ts_mmi_update_fps_mode(struct device *dev, int mode) {
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev;
 
+	GET_GOODIX_DATA(dev);
+
+	core_data->fod_enable = (mode >0) ? 0x01 : 0x00;
+	ts_info("  update_fps_mode %s:%d\n", (mode > 0) ? "enable" : "disable", mode);
+	return 0;
+}
+#endif
 static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.get_vendor = goodix_ts_mmi_methods_get_vendor,
 	.get_productinfo = goodix_ts_mmi_methods_get_productinfo,
@@ -1005,6 +1016,9 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.post_resume = goodix_ts_mmi_post_resume,
 	.pre_suspend = goodix_ts_mmi_pre_suspend,
 	.post_suspend = goodix_ts_mmi_post_suspend,
+#ifdef CONFIG_GTP_FOD
+	.update_fod_mode = goodix_ts_mmi_update_fps_mode,
+#endif
 };
 
 int goodix_ts_mmi_dev_register(struct platform_device *pdev) {
