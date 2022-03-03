@@ -5926,6 +5926,19 @@ static ssize_t cm_panel_show(struct device *dev,
 	return snprintf(buf, CY_MAX_PRBUF_SIZE, "%s", cd->pr_buf);
 }
 
+static ssize_t cp_panel_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+
+	/* Set length to PIP_CMD_MAX_LENGTH to read all */
+	cyttsp5_run_and_get_selftest_result(
+		dev, cd->pr_buf, sizeof(cd->pr_buf),
+		CY_ST_ID_CP_PANEL, PIP_CMD_MAX_LENGTH, true);
+
+	return snprintf(buf, CY_MAX_PRBUF_SIZE, "%s", cd->pr_buf);
+}
+
 /* End MFG test support by sysfs */
 
 static struct device_attribute attributes[] = {
@@ -5951,6 +5964,7 @@ static struct device_attribute attributes[] = {
 	__ATTR(calibrate, S_IRUSR | S_IWUSR, cyttsp5_calibrate_show,
 		cyttsp5_calibrate_store),
 	__ATTR(cm_panel, S_IRUGO, cm_panel_show, NULL),
+	__ATTR(cp_panel, S_IRUGO, cp_panel_show, NULL),
 	__ATTR(auto_shorts, S_IRUGO, auto_shorts_show, NULL),
 };
 
