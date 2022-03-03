@@ -261,13 +261,13 @@ irqreturn_t fp_eint_func_ll(int irq, void *dev_id)
 {
 	struct egisfp_dev_t *egis_dev = dev_id;
 	unsigned long irqflags;
-	INFO_PRINT(" %s \n", __func__);
+	//INFO_PRINT(" %s \n", __func__);
 	spin_lock_irqsave(&egis_dev->irq_lock, irqflags);
 	if (egis_dev->fps_ints.drdy_irq_flag == DRDY_IRQ_ENABLE)
 	{
 		egis_dev->fps_ints.finger_on = 1;
 		disable_irq_nosync(egis_dev->gpio_irq);
-		INFO_PRINT(" %s : DRDY_IRQ_DISABLE \n", __func__);
+		//INFO_PRINT(" %s : DRDY_IRQ_DISABLE \n", __func__);
 		egis_dev->fps_ints.drdy_irq_flag = DRDY_IRQ_DISABLE;
 	}
 	spin_unlock_irqrestore(&egis_dev->irq_lock, irqflags);
