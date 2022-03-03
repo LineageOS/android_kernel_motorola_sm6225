@@ -159,6 +159,7 @@ static int sgm4154x_get_prechrg_curr(struct sgm4154x_device *sgm)
 	reg_val = reg_val * SGM4154x_PRECHRG_CURRENT_STEP_uA + offset;
 	return reg_val;
 }
+#endif
 
 static int sgm4154x_get_ichg_curr(struct sgm4154x_device *sgm)
 {
@@ -173,7 +174,6 @@ static int sgm4154x_get_ichg_curr(struct sgm4154x_device *sgm)
 
 	return ichg * SGM4154x_ICHRG_CURRENT_STEP_uA;
 }
-#endif
 
 static int sgm4154x_set_term_curr(struct sgm4154x_device *sgm, int term_current)
 {
@@ -751,6 +751,25 @@ static int sgm4154x_set_hiz_en(struct sgm4154x_device *sgm, bool hiz_en)
 				  SGM4154x_HIZ_EN, reg_val);
 }
 
+static bool sgm4154x_is_enabled_charging(struct sgm4154x_device *sgm)
+{
+	int ret = 0;
+	int status = 0;
+	bool enabled = false;
+
+	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_CTRL_1, &status);
+	if(ret)
+		return false;
+
+	enabled = (status & SGM4154x_CHRG_EN) ? true:false;
+
+	if (gpio_is_valid(sgm->chg_en_gpio) &&
+	    gpio_get_value(sgm->chg_en_gpio))
+		enabled = false;
+
+	return enabled;
+}
+
 int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 {
 	int ret;
@@ -987,6 +1006,9 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = sgm4154x_set_input_volt_lim(sgm, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		ret = sgm4154x_set_ichrg_curr(sgm, val->intval);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1121,6 +1143,14 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 		val->intval = ret;
 		ret = 0;
 		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		ret = sgm4154x_get_ichg_curr(sgm);
+		if (ret < 0)
+			return ret;
+
+		val->intval = ret;
+		ret = 0;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1204,6 +1234,7 @@ static void charger_detect_work_func(struct work_struct *work)
 	int ret;
 	//static int charge_type_old = 0;
 	int curr_in_limit = 0;
+	static int prev_in_limit = 0;
 	bool state_changed = false;
 	struct sgm4154x_state state;
 	struct sgm4154x_device *sgm = container_of(work,
@@ -1246,13 +1277,11 @@ static void charger_detect_work_func(struct work_struct *work)
 
 	if(!sgm->state.vbus_gd) {
 		dev_err(sgm->dev, "Vbus not present, disable charge\n");
-		sgm4154x_disable_charger(sgm);
 		goto err;
 	}
 	if(!state.online)
 	{
 		dev_err(sgm->dev, "Vbus not online\n");
-		sgm4154x_disable_charger(sgm);
 		goto err;
 	}
 
@@ -1299,18 +1328,14 @@ static void charger_detect_work_func(struct work_struct *work)
 
 	if (sgm->use_ext_usb_psy && sgm->usb) {
 		curr_in_limit = sgm->state.ibus_limit;
+		if (prev_in_limit != curr_in_limit) {
+			dev_info(sgm->dev, "Update: curr_in_limit = %d\n",
+						curr_in_limit);
+			sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
+			prev_in_limit = curr_in_limit;
+		}
 	}
-
-	//set charge parameters
-	dev_info(sgm->dev, "Update: curr_in_limit = %d\n", curr_in_limit);
-	sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
 #endif
-	//enable charge
-	if (sgm->mmi_charger && sgm->mmi_charger->chg_cfg.charging_disable)
-		sgm4154x_disable_charger(sgm);
-	else
-		sgm4154x_enable_charger(sgm);
-
 	if (state_changed) {
 		sgm4154x_dump_register(sgm);
 		power_supply_changed(sgm->charger);
@@ -1347,6 +1372,7 @@ static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_USB_TYPE,
 	POWER_SUPPLY_PROP_PRESENT
@@ -2074,7 +2100,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	}
 	if (config->charging_disable != chg->chg_cfg.charging_disable) {
 		value = config->charging_disable;
-		if (value)
+		if (!value)
 			rc = sgm4154x_enable_charger(chg->sgm);
 		else
 			rc = sgm4154x_disable_charger(chg->sgm);
@@ -2235,6 +2261,7 @@ static void sgm4154x_paired_battery_notify(void *data,
 	int paired_ichg = chg->paired_ichg;
 	int paired_load = chg->paired_load;
 	static bool initialized = false;
+	static bool chg_present = false;
 
 	if (!batt_info)
 		return;
@@ -2279,15 +2306,17 @@ static void sgm4154x_paired_battery_notify(void *data,
 		}
 	}
 
-	if (initialized && paired_ichg > 0) {
+	if (paired_ichg > 0) {
 		if (paired_ichg < chg->sgm->init_data.max_ichg / 2)
 			paired_load = PAIRED_LOAD_LOW;
 		else
 			paired_load = PAIRED_LOAD_HIGH;
 	}
 
-	if (paired_load != chg->paired_load) {
+	if (paired_load != chg->paired_load ||
+	    chg_present != chg->chg_info.chrg_present) {
 		chg->paired_load = paired_load;
+		chg_present = chg->chg_info.chrg_present;
 		switch (paired_load) {
 		case PAIRED_LOAD_OFF:
 			high_load_en = false;
@@ -2302,6 +2331,12 @@ static void sgm4154x_paired_battery_notify(void *data,
 			high_load_en = true;
 			low_load_en = false;
 		}
+
+		if (chg_present) {
+			high_load_en = false;
+			low_load_en = false;
+		}
+
 		if (gpio_is_valid(chg->sgm->high_load_en_gpio)) {
 			gpio_set_value(chg->sgm->high_load_en_gpio,
 				high_load_en ^ chg->sgm->high_load_active_low);
@@ -2310,7 +2345,8 @@ static void sgm4154x_paired_battery_notify(void *data,
 			gpio_set_value(chg->sgm->low_load_en_gpio,
 				low_load_en ^ chg->sgm->low_load_active_low);
 		}
-		initialized = true;
+		pr_info("chg_present: %d, high_load_en: %d, low_load_en: %d\n",
+				chg_present, high_load_en, low_load_en);
 	}
 
 	pr_info("delta_vbat: %dmV, delta_soc: %d, paired_ichg: %duA, paired_load: %d\n",
@@ -2561,12 +2597,13 @@ static ssize_t chg_en_store(struct device *dev,
 		return ret;
 	}
 
-	if (gpio_is_valid(sgm->chg_en_gpio)) {
-		gpio_set_value(sgm->chg_en_gpio, !enable);
-		cancel_delayed_work(&sgm->charge_monitor_work);
-		schedule_delayed_work(&sgm->charge_monitor_work,
-						msecs_to_jiffies(200));
-	}
+	if (enable)
+		sgm4154x_enable_charger(sgm);
+	else
+		sgm4154x_disable_charger(sgm);
+	cancel_delayed_work(&sgm->charge_monitor_work);
+	schedule_delayed_work(&sgm->charge_monitor_work,
+					msecs_to_jiffies(200));
 
 	return count;
 }
@@ -2583,10 +2620,7 @@ static ssize_t chg_en_show(struct device *dev,
 		return -ENODEV;
 	}
 
-	if (gpio_is_valid(sgm->chg_en_gpio))
-		enable = !gpio_get_value(sgm->chg_en_gpio);
-	else
-		enable = true;
+	enable = sgm4154x_is_enabled_charging(sgm);
 
 	return sprintf(buf, "%d\n", enable);
 }
