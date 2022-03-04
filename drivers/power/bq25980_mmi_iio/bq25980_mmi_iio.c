@@ -22,7 +22,7 @@
 #include "bq25980_reg.h"
 
 //undef because of pinctrl
-//#define CONFIG_INTERRUPT_AS_GPIO
+#define CONFIG_INTERRUPT_AS_GPIO
 
 struct bq25980_state {
 	bool dischg;
@@ -1541,7 +1541,7 @@ static int bq25980_parse_dt(struct bq25980_device *bq)
 		bq->watchdog_timer = BQ25980_WATCHDOG_MIN;
 
 	if (bq->watchdog_timer > BQ25980_WATCHDOG_MAX ||
-	    bq->watchdog_timer < BQ25980_WATCHDOG_MIN)
+		bq->watchdog_timer < BQ25980_WATCHDOG_MIN)
 		return -EINVAL;
 
 	ret = device_property_read_u32(bq->dev,
@@ -1682,7 +1682,7 @@ static int bq25980_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct bq25980_device *bq;
-	int ret;//, irq_gpio, irqn;
+	int ret, irq_gpio, irqn;
 
 	printk("-------[%s] driver probe--------\n",id->name);
 	bq = devm_kzalloc(dev, sizeof(*bq), GFP_KERNEL);
