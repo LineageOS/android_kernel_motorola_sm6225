@@ -697,6 +697,7 @@ struct sde_hw_pp_vsync_info {
 	u32 rd_ptr_line_count;
 	u32 wr_ptr_line_count;
 	u32 intf_frame_count;
+	u32 intf_line_count;
 };
 
 #endif  /* _SDE_HW_MDSS_H */

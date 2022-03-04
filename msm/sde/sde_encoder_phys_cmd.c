@@ -675,7 +675,17 @@ static bool _sde_encoder_phys_cmd_is_ongoing_pptx(
 			phys_enc->hw_intf->idx - INTF_0,
 			atomic_read(&phys_enc->pending_kickoff_cnt),
 			info.wr_ptr_line_count,
+			info.intf_frame_count,
+			info.wr_ptr_line_count,
+			info.intf_frame_count,
+			info.intf_line_count,
 			phys_enc->cached_mode.vdisplay);
+
+	pr_err("%s enc:%d pp:%d intf:%d kickoff:%d wr_ptr:%d intf frame:%d int line:%d vdisp:%d\n",
+		__func__, DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
+		phys_enc->hw_intf->idx - INTF_0, atomic_read(&phys_enc->pending_kickoff_cnt),
+		info.wr_ptr_line_count, info.intf_frame_count,
+		info.intf_line_count, phys_enc->cached_mode.vdisplay);
 
 	if (info.wr_ptr_line_count > 0 && info.wr_ptr_line_count <
 			phys_enc->cached_mode.vdisplay)
@@ -1498,6 +1508,8 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 
 		ret = frame_pending ? ret : 0;
 
+		SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus", "panic");
+
 		/*
 		 * There can be few cases of ESD where CTL_START is cleared but
 		 * wr_ptr irq doesn't come. Signaling retire fence in these
@@ -1826,7 +1838,6 @@ static void _sde_encoder_autorefresh_disable_seq2(
 			> AUTOREFRESH_SEQ2_POLL_TIMEOUT) {
 			SDE_ERROR_CMDENC(cmd_enc,
 					"disable autorefresh failed\n");
-			SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus", "panic");
 			break;
 		}
 

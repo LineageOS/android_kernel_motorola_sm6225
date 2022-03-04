@@ -633,6 +633,9 @@ static int sde_hw_intf_get_vsync_info(struct sde_hw_intf *intf,
 	val = SDE_REG_READ(c, INTF_FRAME_COUNT);
 	info->intf_frame_count = val;
 
+	val = SDE_REG_READ(c, INTF_LINE_COUNT) & 0xffff;
+	info->intf_line_count = val;
+
 	return 0;
 }
 
