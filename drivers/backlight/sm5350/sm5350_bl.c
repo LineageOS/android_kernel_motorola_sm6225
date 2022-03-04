@@ -65,6 +65,7 @@ struct sm5350_data {
 	u8 boost_ctl;
 	u8 full_scale_current;
 	u8 map_mode;
+	unsigned int default_brightness;
 	bool brt_code_enable;
 	u16 *brt_code_table;
 	int en_gpio;
@@ -271,6 +272,14 @@ static int sm5350_get_dt_data(struct device *dev, struct sm5350_data *drvdata)
 	drvdata->boost_ctl = (!rc ? tmp : 0);
 	pr_debug("%s : boost_ctl=0x%x\n",__func__, drvdata->boost_ctl);
 
+	rc = of_property_read_u32(of_node, "map-mode", &tmp);
+	drvdata->map_mode= (!rc ? tmp : 1); /* 1: linear, 0: expo, linear as default*/
+	pr_debug("%s : map_mode=0x%x\n",__func__, drvdata->map_mode);
+
+	rc = of_property_read_u32(of_node, "sm5350,default-brightness", &tmp);
+	drvdata->default_brightness= (!rc ? tmp : MAX_BRIGHTNESS);
+	pr_debug("%s : default_brightness=0x%x\n",__func__, drvdata->default_brightness);
+
 	rc = of_property_read_u32(of_node, "pwm-cfg", &tmp);
 	if (rc) {
 		pr_err("%s:%d, dt not specified\n",
@@ -303,15 +312,6 @@ static int sm5350_get_dt_data(struct device *dev, struct sm5350_data *drvdata)
 		return -EINVAL;
 	}
 	drvdata->full_scale_current = (!rc ? tmp : 0);
-
-	rc = of_property_read_u32(of_node, "map-mode", &tmp);
-	if (rc) {
-		pr_err("%s:%d, dt not specified\n",
-						__func__, __LINE__);
-		return -EINVAL;
-	}
-	drvdata->map_mode= (!rc ? tmp : 1); /* 1: linear, 0: expo, linear as default*/
-	pr_debug("%s : map_mode=0x%x\n",__func__, drvdata->map_mode);
 
 	pr_info("bank_A = %d, bank_B = %d, pwm_cfg = 0x%x, full_scale_current = 0x%x, map_mode = 0x%x, boost_ctl = 0x%x.\n",
 		drvdata->bank_A, drvdata->bank_B, drvdata->pwm_cfg, drvdata->full_scale_current, drvdata->map_mode, drvdata->boost_ctl);
@@ -463,7 +463,7 @@ static int sm5350_probe(struct i2c_client *client,
 	drvdata->bl_dev = bl_dev;
 	sm5350_init_registers(drvdata);
 	dump_sm5350_regs(drvdata);
-	sm5350_set_brightness(drvdata, MAX_BRIGHTNESS);
+	sm5350_set_brightness(drvdata, drvdata->default_brightness);
 
 	printk("sm-sm5350 probe okay\n");
 	return 0;
