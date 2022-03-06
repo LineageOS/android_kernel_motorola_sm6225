@@ -1967,6 +1967,7 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 		}
 	}
 #endif
+	sgm->state.chrg_type = SGM4154x_USB_DCP;
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			pr_err("SGM4154x charger type: SDP\n");
@@ -2871,7 +2872,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 	ret = sgm4154x_hw_chipid_detect(sgm);
 	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID){
 		pr_info("[%s] device not found !!!\n", __func__);
-		return ret;
+		//return ret;
 	}
 
 	sema_init(&sgm->sem_dpdm, 1);
@@ -3028,6 +3029,7 @@ static const struct i2c_device_id sgm4154x_i2c_ids[] = {
 	{ "sgm41542", 0 },
 	{ "sgm41516", 0 },
 	{ "sgm41516D", 0 },
+	{ "sgm41513", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, sgm4154x_i2c_ids);
@@ -3037,6 +3039,7 @@ static const struct of_device_id sgm4154x_of_match[] = {
 	{ .compatible = "sgm,sgm41542" },
 	{ .compatible = "sgm,sgm41516" },
 	{ .compatible = "sgm,sgm41516D" },
+	{ .compatible = "sgm,sgm41513" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sgm4154x_of_match);
