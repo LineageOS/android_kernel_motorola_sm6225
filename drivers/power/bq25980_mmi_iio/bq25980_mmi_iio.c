@@ -18,11 +18,65 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/of_device.h>
+#include <linux/iio/consumer.h>
 
 #include "bq25980_reg.h"
+#include "bq25980_mmi_iio.h"
 
 //undef because of pinctrl
 #define CONFIG_INTERRUPT_AS_GPIO
+
+/*
+Pay attention to the order of the macro definitions
+for alarm_status and fault_status.You can't modify
+ bq25980_alarm_status and bq25980_fault_status.
+
+#define	BAT_OVP_ALARM_SHIFT			0
+#define	BAT_OCP_ALARM_SHIFT			1
+#define	BUS_OVP_ALARM_SHIFT			2
+#define	BUS_OCP_ALARM_SHIFT			3
+#define	BAT_THERM_ALARM_SHIFT			4
+#define	BUS_THERM_ALARM_SHIFT			5
+#define	DIE_THERM_ALARM_SHIFT			6
+#define BAT_UCP_ALARM_SHIFT			7
+
+#define	BAT_OVP_FAULT_SHIFT			8
+#define	BAT_OCP_FAULT_SHIFT			9
+#define	BUS_OVP_FAULT_SHIFT			10
+#define	BUS_OCP_FAULT_SHIFT			11
+#define	BAT_THERM_FAULT_SHIFT			12
+#define	BUS_THERM_FAULT_SHIFT			13
+#define	DIE_THERM_FAULT_SHIFT			14
+*/
+
+union bq25980_alarm_status {
+	struct {
+	unsigned char bat_ovp_alarm:1;
+	unsigned char bat_ocp_alarm:1;
+	unsigned char bus_ovp_alarm:1;
+	unsigned char bus_ocp_alarm:1;
+	unsigned char bat_therm_alarm:1;
+	unsigned char bus_therm_alarm:1;
+	unsigned char die_therm_alarm:1;
+	unsigned char bat_ucp_alarm:1;
+	}bits;
+	unsigned char status;
+};
+
+union bq25980_fault_status {
+	struct {
+	unsigned char bat_ovp_fault:1;
+	unsigned char bat_ocp_fault:1;
+	unsigned char bus_ovp_fault:1;
+	unsigned char bus_ocp_fault:1;
+	unsigned char bat_therm_fault:1;
+	unsigned char bus_therm_fault:1;
+	unsigned char die_therm_fault:1;
+	unsigned char :1;
+	}bits;
+	unsigned char status;
+};
 
 struct bq25980_state {
 	bool dischg;
@@ -151,6 +205,13 @@ struct bq25980_device {
 	bool irq_disabled;
 	bool resume_completed;
 	struct mutex irq_complete;
+
+	union bq25980_alarm_status alarm_status;
+	union bq25980_fault_status fault_status;
+	struct iio_dev *indio_dev;
+	struct iio_chan_spec *iio_chan;
+	struct iio_channel *int_iio_chans;
+	struct iio_channel **ext_iio_chans;
 };
 
 static struct reg_default bq25980_reg_init_val[] = {
@@ -619,7 +680,7 @@ static int bq25980_set_bypass(struct bq25980_device *bq, bool en_bypass)
 	return 0;
 }
 */
-/*
+
 static int bq25980_set_chg_en(struct bq25980_device *bq, bool en_chg)
 {
 	int ret;
@@ -637,8 +698,21 @@ static int bq25980_set_chg_en(struct bq25980_device *bq, bool en_chg)
 
 	return 0;
 }
-*/
-/*
+
+static int bq25980_is_chg_en(struct bq25980_device *bq, bool *en_chg)
+{
+	int ret;
+	unsigned int chg_ctrl_2;
+
+	ret = regmap_read(bq->regmap, BQ25980_CHRGR_CTRL_2, &chg_ctrl_2);
+	if (ret)
+		return ret;
+	bq->state.ce = chg_ctrl_2 & BQ25980_CHG_EN;
+	*en_chg = bq->state.ce;
+
+	return 0;
+}
+
 static int bq25980_get_adc_ibus(struct bq25980_device *bq)
 {
 	int ibus_adc_lsb, ibus_adc_msb;
@@ -660,8 +734,7 @@ static int bq25980_get_adc_ibus(struct bq25980_device *bq)
 
 	return ibus_adc * bq->chip_info->adc_curr_step;
 }
-*/
-/*
+
 static int bq25980_get_adc_vbus(struct bq25980_device *bq)
 {
 	int vbus_adc_lsb, vbus_adc_msb;
@@ -680,7 +753,6 @@ static int bq25980_get_adc_vbus(struct bq25980_device *bq)
 
 	return bq->chip_info->adc_vbus_volt_offset + vbus_adc * bq->chip_info->adc_vbus_volt_step /10;
 }
-*/
 
 static int bq25980_get_ibat_adc(struct bq25980_device *bq)
 {
@@ -769,6 +841,23 @@ static int bq25980_get_state(struct bq25980_device *bq,
 	state->ce = chg_ctrl_2 & BQ25980_CHG_EN;
 	state->hiz = chg_ctrl_2 & BQ25980_EN_HIZ;
 	state->bypass = chg_ctrl_2 & BQ25980_EN_BYPASS;
+
+	bq->alarm_status.bits.bat_ovp_alarm = stat1 & BQ25980_STAT1_BAT_OVP_ALM_MASK;
+	bq->alarm_status.bits.bat_ocp_alarm = stat1 & BQ25980_STAT1_BAT_OCP_ALM_MASK;
+	bq->alarm_status.bits.bus_ovp_alarm = stat1 & BQ25980_STAT1_BUS_OVP_ALM_MASK;
+	bq->alarm_status.bits.bus_ocp_alarm = stat2 & BQ25980_STAT2_BUS_OCP_ALM_MASK;
+	bq->alarm_status.bits.bat_therm_alarm = stat4 & BQ25980_STAT4_TSBUS_TSBAT_ALM_MASK;
+	bq->alarm_status.bits.bus_therm_alarm = stat4 & BQ25980_STAT4_TSBUS_TSBAT_ALM_MASK;
+	bq->alarm_status.bits.die_therm_alarm = stat4 & BQ25980_STAT4_TDIE_ALM_MASK;
+	bq->alarm_status.bits.bat_ucp_alarm = stat1 & BQ25980_STAT1_BAT_UCP_ALM_MASK;
+
+	bq->fault_status.bits.bat_ovp_fault = stat1 & BQ25980_STAT1_BAT_OVP_MASK;
+	bq->fault_status.bits.bat_ocp_fault = stat1 & BQ25980_STAT1_BAT_OCP_MASK;
+	bq->fault_status.bits.bus_ovp_fault = stat1 & BQ25980_STAT1_BUS_OVP_MASK;
+	bq->fault_status.bits.bus_ocp_fault = stat2 & BQ25980_STAT2_BUS_OCP_MASK;
+	bq->fault_status.bits.bat_therm_fault = stat4 & BQ25980_STAT4_TSBAT_FLT_MASK;
+	bq->fault_status.bits.bus_therm_fault = stat4 & BQ25980_STAT4_TSBUS_FLT_MASK;
+	bq->fault_status.bits.die_therm_fault = stat4 & BQ25980_STAT4_TDIE_FLT_MASK;
 
 	return 0;
 }
@@ -1641,6 +1730,216 @@ static int bq25980_check_device_id(struct bq25980_device *bq)
 	return 0;
 }
 
+static int bq25980_iio_write_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int val1,
+		int val2, long mask)
+{
+	struct bq25980_device *bq = iio_priv(indio_dev);
+	int rc = 0;
+
+	pr_err("[%s] iio_write_raw ch=%d val1=%d val2=%d\n",
+			bq->model_name, chan->channel, val1, val2);
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		bq25980_set_chg_en(bq, val1);
+		pr_info("[%s] set_chg_en: %s\n", bq->model_name,
+				val1 ? "enable" : "disable");
+		break;
+	case PSY_IIO_ONLINE:
+		bq25980_set_present(bq, !!val1);
+		pr_info("[%s] set_present :%d\n", bq->model_name, val1);
+		break;
+	case PSY_IIO_CP_CLEAR_ERROR:
+		bq->fault_status.status = 0;
+		bq->alarm_status.status = 0;
+		break;
+	default:
+		pr_err("Unsupported [%s] IIO chan %d\n",
+				bq->model_name, chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0)
+		pr_err("[%s] Couldn't write IIO channel %d, rc = %d\n",
+			bq->model_name,
+			chan->channel, rc);
+
+	return rc;
+}
+
+static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
+		struct iio_chan_spec const *chan, int *val1,
+		int *val2, long mask)
+{
+	struct bq25980_device *bq = iio_priv(indio_dev);
+	int rc = 0;
+	int result;
+	struct bq25980_state state;
+
+	*val1 = 0;
+	pr_err("[%s] iio_read_raw ch=%d \n",bq->model_name,chan->channel);
+	switch (chan->channel) {
+	case PSY_IIO_CP_ENABLE:
+		rc = regmap_read(bq->regmap, BQ25980_CHRGR_CTRL_2, &result);
+		if (!rc) {
+			bq->state.ce = result & BQ25980_CHG_EN;
+			*val1 = bq->state.ce;
+			pr_info("[%s] read charge enable:%d\n", bq->model_name, *val1);
+		}else
+			pr_err("[%s] read charge enable err\n", bq->model_name);
+		break;
+	case PSY_IIO_ONLINE:
+		rc = regmap_read(bq->regmap, BQ25980_STAT3, &result);
+		if (!rc) {
+			bq->state.online = result & BQ25980_PRESENT_MASK;
+			*val1 = bq->state.online;
+			pr_info("[%s] read online:%d\n", bq->model_name, *val1);
+		}else
+			pr_err("[%s] read online err\n", bq->model_name);
+		break;
+	case PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW:
+		rc = bq25980_get_adc_vbus(bq);
+		if ( rc < 0 ) {
+			pr_err("[%s] get_adc_vbus err %d\n", bq->model_name, rc);
+		}else {
+			*val1 = rc;
+			pr_info("[%s] get_adc_vbus %duV\n", bq->model_name, *val1);
+		}
+		break;
+	case PSY_IIO_MMI_CP_INPUT_CURRENT_NOW:
+		rc = bq25980_get_adc_ibus(bq);
+		if ( rc < 0 ) {
+			pr_err("[%s] get_adc_ibus err %d\n", bq->model_name, rc);
+		}else {
+			*val1 = rc;
+			pr_info("[%s] get_adc_ibus %duA\n", bq->model_name, *val1);
+		}
+		break;
+	case PSY_IIO_CP_STATUS1:
+		rc = bq25980_get_state(bq,&state);
+		if (rc) {
+			pr_err("[%s] get_state err\n", bq->model_name);
+			return rc;
+		}else {
+			if (!bq25980_state_changed(bq, &state)){
+				mutex_lock(&bq->lock);
+				bq->state = state;
+				mutex_unlock(&bq->lock);
+				power_supply_changed(bq->charger);
+			}
+			*val1 = bq->alarm_status.status | (bq->fault_status.status << 8);
+			pr_err("[%s] get_state fault:0x%02X , alarm:0x%02X\n",
+					bq->model_name,
+					bq->fault_status.status,
+					bq->alarm_status.status);
+		}
+		break;
+	case PSY_IIO_CURRENT_NOW:
+		rc = bq25980_get_ibat_adc(bq);
+		if ( rc < 0) {
+			pr_err("[%s] get_ibat_adc err %d\n", bq->model_name, rc);
+		}else {
+			*val1 = rc;
+			pr_info("[%s] get_ibat_adc %duA\n", bq->model_name, *val1);
+		}
+		break;
+	case PSY_IIO_VOLTAGE_NOW:
+		rc = bq25980_get_adc_vbat(bq);
+		if ( rc < 0 ) {
+			pr_err("[%s] get_adc_vbat err %d\n", bq->model_name, rc);
+		}else {
+			*val1 = rc;
+			pr_info("[%s] get_adc_vbat %duV\n", bq->model_name, *val1);
+		}
+		break;
+	default:
+		pr_err("[%s] Unsupported bq25980 IIO chan %d\n", bq->model_name, chan->channel);
+		rc = -EINVAL;
+		break;
+	}
+
+	if (rc < 0) {
+		pr_err("[%s] Couldn't read IIO channel %d, rc = %d\n", bq->model_name,
+			chan->channel, rc);
+		return rc;
+	}
+
+	return IIO_VAL_INT;
+}
+
+static int bq25980_iio_of_xlate(struct iio_dev *indio_dev,
+				const struct of_phandle_args *iiospec)
+{
+	struct bq25980_device *bq = iio_priv(indio_dev);
+	struct iio_chan_spec *iio_chan = bq->iio_chan;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(bq25980_iio_psy_channels);
+					i++, iio_chan++)
+		if (iio_chan->channel == iiospec->args[0])
+			return i;
+
+	return -EINVAL;
+}
+
+static const struct iio_info bq25980_iio_info = {
+	.read_raw	= bq25980_iio_read_raw,
+	.write_raw	= bq25980_iio_write_raw,
+	.of_xlate	= bq25980_iio_of_xlate,
+};
+
+static int bq25980_init_iio_psy(struct bq25980_device *bq)
+{
+	struct iio_dev *indio_dev = bq->indio_dev;
+	struct iio_chan_spec *chan;
+	int bq25980_num_iio_channels = ARRAY_SIZE(bq25980_iio_psy_channels);
+	int rc, i;
+
+	bq->iio_chan = devm_kcalloc(bq->dev, bq25980_num_iio_channels,
+				sizeof(*bq->iio_chan), GFP_KERNEL);
+	if (!bq->iio_chan)
+		return -ENOMEM;
+
+	bq->int_iio_chans = devm_kcalloc(bq->dev,
+				bq25980_num_iio_channels,
+				sizeof(*bq->int_iio_chans),
+				GFP_KERNEL);
+	if (!bq->int_iio_chans)
+		return -ENOMEM;
+
+	indio_dev->info = &bq25980_iio_info;
+	indio_dev->dev.parent = bq->dev;
+	indio_dev->dev.of_node = bq->dev->of_node;
+	indio_dev->name = bq->model_name;//"bq25980-charger";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->channels = bq->iio_chan;
+	indio_dev->num_channels = bq25980_num_iio_channels;
+
+	for (i = 0; i < bq25980_num_iio_channels; i++) {
+		bq->int_iio_chans[i].indio_dev = indio_dev;
+		chan = &bq->iio_chan[i];
+		bq->int_iio_chans[i].channel = chan;
+		chan->address = i;
+		chan->channel = bq25980_iio_psy_channels[i].channel_num;
+		chan->type = bq25980_iio_psy_channels[i].type;
+		chan->datasheet_name =
+			bq25980_iio_psy_channels[i].datasheet_name;
+		chan->extend_name =
+			bq25980_iio_psy_channels[i].datasheet_name;
+		chan->info_mask_separate =
+			bq25980_iio_psy_channels[i].info_mask;
+	}
+
+	rc = devm_iio_device_register(bq->dev, indio_dev);
+	if (rc)
+		pr_err("Failed to register [%s] IIO device, rc=%d\n", indio_dev->name,rc);
+	else
+		pr_err("Success to register [%s] IIO device\n", indio_dev->name);
+
+	return rc;
+}
+
 static int bq25980_parse_dt_id(struct bq25980_device *bq, int driver_data)
 {
 	switch (driver_data) {
@@ -1683,14 +1982,22 @@ static int bq25980_probe(struct i2c_client *client,
 	struct device *dev = &client->dev;
 	struct bq25980_device *bq;
 	int ret, irq_gpio, irqn;
+	struct iio_dev *indio_dev;
 
 	printk("-------[%s] driver probe--------\n",id->name);
-	bq = devm_kzalloc(dev, sizeof(*bq), GFP_KERNEL);
+
+	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*bq));
+
+	if (!indio_dev)
+		return -ENOMEM;
+
+	bq = iio_priv(indio_dev);
 	if (!bq) {
 		dev_err(dev, "Out of memory\n");
 		return -ENOMEM;
 	}
 
+	bq->indio_dev = indio_dev;
 	bq->client = client;
 	bq->dev = dev;
 
@@ -1785,7 +2092,10 @@ static int bq25980_probe(struct i2c_client *client,
 		goto free_psy;
 	}
 
+	bq25980_init_iio_psy(bq);
+
 	dump_reg(bq,0x00,0x37);
+
 	printk("-------[%s] driver probe success--------\n",bq->model_name);
 	return 0;
 free_psy:
@@ -1805,6 +2115,7 @@ static int bq25980_charger_remove(struct i2c_client *client)
 
 	mutex_destroy(&bq->lock);
 	mutex_destroy(&bq->irq_complete);
+	devm_iio_device_unregister(bq->dev, bq->indio_dev);
 	dev_err(bq->dev,"remove Successfully\n");
 	return 0;
 }
