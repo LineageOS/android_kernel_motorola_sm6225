@@ -31,7 +31,7 @@
 				output-low;
 			};
 		};
-
+#if 0
 		cam_flash_tx_active: cam_flash_tx_active {
 			/* TX */
 			mux {
@@ -60,7 +60,7 @@
 				output-low;
 			};
 		};
-
+#endif
 	nfc {
 			nfc_clk_req_active {
 				/* active state */
