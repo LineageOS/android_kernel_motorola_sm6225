@@ -13,9 +13,9 @@
 
 &qupv3_se1_i2c {
 	status = "okay";
-	sgm7220: sgm7220@47 {
+	sgm7220: sgm7220@67 {
 		compatible = "sgm,usb_type_c_sgm7220";
-		reg = <0x47>;
+		reg = <0x67>;
 		status = "okay";
 		tcpc-dual,supported_modes = <0>; /* 0: dfp/ufp, */
 						 /* 1: dfp, 2: ufp */
