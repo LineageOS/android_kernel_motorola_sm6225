@@ -41,7 +41,7 @@
 	status = "disabled";
 };
 
-&qupv3_se1_i2c {
+&qupv3_se2_i2c {
 	status = "ok";
 
         aw882xx: aw882xx_smartpa@34 {
@@ -61,11 +61,11 @@
                 aw-re-max= <30000>;
                 aw-cali-mode = "aw_attr";
         };
-/*
-        aw882xx_recv: aw882xx_recv_smartpa@36 {
+
+        aw882xx_recv: aw882xx_recv_smartpa@35 {
                 status = "okay";
                 compatible = "awinic,aw882xxacf_smartpa";
-                reg = <0x36>;
+                reg = <0x35>;
                 irq-gpio = <&tlmm 107 0x2008>;
                 dc-flag = <0>;
                 sync-flag = <0>;
@@ -78,7 +78,6 @@
                 aw-re-max= <30000>;
                 aw-cali-mode = "aw_attr";
         };
-*/
 };
 
 &q6core {
