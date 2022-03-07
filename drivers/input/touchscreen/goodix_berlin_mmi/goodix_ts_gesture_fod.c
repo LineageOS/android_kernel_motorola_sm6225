@@ -336,6 +336,8 @@ static int gsx_gesture_init(struct goodix_ts_core *cd,
 	/*enable all gesture wakeup by default */
 	gsx->ts_core->gesture_type = GESTURE_SINGLE_TAP |GESTURE_FOD_PRESS;
 	cd->zerotap_data[0] = 0;
+	//default on the fod event
+	cd->fod_enable = true;
 	atomic_set(&gsx_gesture->registered, 1);
 	return 0;
 }
