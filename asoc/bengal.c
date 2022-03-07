@@ -5446,12 +5446,11 @@ static struct snd_soc_dai_link_component awinic_codecs[] = {
                 .name = "aw882xxacf_smartpa.1-0035",
         },
 #elif defined(CONFIG_DEVON_AW882XX_SMARTPA)
-/*        {
+        {
                 .of_node = NULL,
-                .dai_name = "aw882xx-aif-1-36",
-                .name = "aw882xxacf_smartpa.1-0036",
+                .dai_name = "aw882xx-aif-1-35",
+                .name = "aw882xxacf_smartpa.1-0035",
         },
-*/
 #else
         {
                 .of_node = NULL,
