@@ -47,6 +47,13 @@
 #define queue_delayed_work_time  8000//8000
 #define queue_start_work_time    50
 #define SM_CUR_UNIT              1000
+#define ENABLE_MAP_SOC
+
+#ifdef ENABLE_MAP_SOC
+#define MAP_MAX_SOC		97
+#define MAP_RATE_SOC	975
+#define MAP_MIN_SOC		4
+#endif
 
 enum sm_fg_reg_idx {
 	SM_FG_REG_DEVICE_ID = 0,
@@ -254,7 +261,6 @@ struct sm_fg_chip {
 	struct power_supply *batt_psy;
 	struct power_supply *bms_psy;
 	//struct power_supply fg_psy;
-	struct power_supply_desc *fg_psy;
 };
 
 static int show_registers(struct seq_file *m, void *data);
@@ -926,7 +932,11 @@ static int fg_get_charge_counter(struct sm_fg_chip *sm)
 	int ui_soc;
 
 	full_capacity = fg_read_fcc(sm) * 1000;
+#ifdef ENABLE_MAP_SOC
+	ui_soc = (((100*(sm->batt_soc*10+MAP_MAX_SOC))/MAP_RATE_SOC)-MAP_MIN_SOC)/10;
+#else
 	ui_soc = sm->batt_soc/10;
+#endif
 	charge_counter = div_s64(full_capacity * ui_soc, 100);
 
 	return charge_counter;
@@ -1005,7 +1015,12 @@ static int fg_get_property(struct power_supply *psy, enum power_supply_property 
 		if (ret >= 0)
 			sm->batt_soc = ret;
 		//val->intval = sm->batt_soc;
+#ifdef ENABLE_MAP_SOC
+		val->intval = (((100*(sm->batt_soc*10+MAP_MAX_SOC))/MAP_RATE_SOC)-MAP_MIN_SOC)/10;
+#else
 		val->intval = sm->batt_soc/10;
+#endif
+		pr_info("fg POWER_SUPPLY_PROP_STATUS:%d\n", val->intval);
 		mutex_unlock(&sm->data_lock);
 		break;
 
@@ -1247,7 +1262,6 @@ static void fg_refresh_status(struct sm_fg_chip *sm)
 	}
 
 //	sm->last_update = jiffies;
-
 }
 #endif
 
@@ -1305,7 +1319,8 @@ static int sm_update_data(struct sm_fg_chip *sm)
 			sm->batt_temp = -ENODATA;
 
 		fg_cal_carc(sm);
-		pr_info("RSOC:%d, Volt:%d, Current:%d, Temperature:%d, OCV:%d\n",
+
+          	pr_info("RSOC:%d, Volt:%d, Current:%d, Temperature:%d, OCV:%d\n",
 			sm->batt_soc, sm->batt_volt, sm->batt_curr, sm->batt_temp, sm->batt_ocv);
 	}
 
