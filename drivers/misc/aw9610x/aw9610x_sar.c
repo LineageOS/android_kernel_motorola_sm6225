@@ -2000,6 +2000,7 @@ aw9610x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 			return ret;
 		}
 		LOG_ERR("vcc_3v0_Pin gpio num is %d", aw9610x->vcc_3v0_Pin);
+		msleep(20);
 	}else{
 #ifdef AW_POWER_ON
 		/* aw9610x power init */
