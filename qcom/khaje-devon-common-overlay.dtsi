@@ -18,7 +18,7 @@
 #include "khaje-devon-fps-overlay_evb.dtsi"
 #include "khaje-devon-touchscreen-overlay.dtsi"
 #include "khaje-devon-nfc-overlay.dtsi"
-//#include "sgm7220_devon.dtsi"
+#include "sgm7220_devon.dtsi"
 //#include "discrete_charging_hawao.dtsi"
 //#include "discrete-rt-pd-manger.dtsi"
 #include "camera/khaje-camera-sensor-mot-devon-overlay.dtsi"
@@ -40,14 +40,11 @@
                         <17>;
     };
 
-	ext_vib {
-		compatible = "ext-vibrator-ldo";
-		vib-gpio-vcc-enable;
-		vib,gpio_2v6_en = <&tlmm 25 0x00>;
-		vib,gpio_3v0_en = <&tlmm 97 0x00>;
-		qcom,vib-dis-short-long;
-		qcom,vib-dis-short-long-val = <80>;
-	};
+	ldo_vib {
+		compatible = "moto,vibrator-ldo";
+		moto,vib-ldo-gpio = <&tlmm 25 0x0>;
+		status = "ok";
+        };
 };
 
 
