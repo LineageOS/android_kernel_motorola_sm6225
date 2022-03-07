@@ -11,19 +11,33 @@
  */
 #include <dt-bindings/iio/qti_power_supply_iio.h>
 &pm6125_vadc {
+/*
 	gpio6_div3{
 		reg = <ADC_GPIO3_DIV3>;
 		label = "gpio3_div3";
 		qcom,pre-scaling = <1 3>;
 	};
+*/
 };
 
 &pm6125_gpios {
+/*
 	gpio6_adc{
 		gpio6_adc_default:gpio6_adc_default{
 			pins = "gpio6";
 			function = "normal";
 			bias-high-impedance;
+		};
+	};
+*/
+
+	gpio_7_dig_out {
+		gpio7_dig_out_default: gpio7_dig_out_default {
+			pins = "gpio7";
+			function = "normal";
+			power-source = <1>;
+			output-low;
+			input-disable;
 		};
 	};
 };
@@ -52,23 +66,25 @@
 	};
 };*/
 
-&qupv3_se0_i2c {
+&qupv3_se1_i2c {
 	#address-cells = <1>;
 	#size-cells = <0>;
 	status = "okay";
-	pinctrl-0 = <&qupv3_se0_i2c_act>;
-	pinctrl-1 = <&qupv3_se0_i2c_sle>;
+	//pinctrl-0 = <&qupv3_se0_i2c_act>;
+	//pinctrl-1 = <&qupv3_se0_i2c_sle>;
 	wt6670: wt6670f@35 {
 		status = "okay";
 		compatible = "mediatek,wt6670f_qc3p";
 		reg = <0x35>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wt6670_gpio_pins &gpio7_dig_out_default>;
 		#io-channel-cells = <1>;
-		wt6670f-reset-gpio = <&tlmm 68 0x0>;
+		wt6670f-reset-gpio = <&pm6125_gpios 7 0x0>;
 		wt6670f-int-gpio = <&tlmm 93 0x0>;
 	};
 };
 
-&qupv3_se0_i2c {
+&qupv3_se2_i2c {
 	status = "okay";
 
 	cw2217@64 {
@@ -97,17 +113,17 @@
 		sm,en_batt_det;
 		//sm,iocv_man_mode;
 		sm,misc = <0x0800>;
-		sm,aging_ctrl = <0x0125>;
+		sm,aging_ctrl = <0x0121>;
 		sm,cycle_cfg = <0x7000>;
 		sm,rsns = <0>;
 		factory_mode_ntc_exist = <0>;
 		sm,fg_irq_set = <0x07FF>;
 		sm,low_soc1 = <1>;
 		sm,low_soc2 = <15>;
-		sm,v_l_alarm = <3400>;
+		sm,v_l_alarm = <3450>;
 		sm,v_h_alarm = <4450>;
 		sm,battery_table_num = <0>;
-		sm,param_version = <2>;
+		sm,param_version = <1>;
 		sm,t_l_alarm_in = <54>;
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
@@ -121,12 +137,12 @@
 &qupv3_se1_i2c {
 	status = "okay";
 
-	sgm4154x: sgm4154x@3B {
+	sgm4154x: sgm4154x@1A {
 		status = "okay";
-		compatible = "sgm,sgm41542";
-		reg = <0x3B>;
+		compatible = "sgm,sgm41513";
+		reg = <0x1A>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&sgm4154x_gpio_pins &gpio6_adc_default>;
+		pinctrl-0 = <&sgm4154x_gpio_pins>;
 		#io-channel-cells = <1>;
                 io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
 				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
@@ -145,16 +161,16 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
 		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
-		sgm,chg-en-gpio = <&tlmm 36 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
+		//sgm,chg-en-gpio = <&pio 0 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
 		dpdm-supply = <&usb2_phy0>;
 		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
 		enable_sw_jeita;
 		jeita_temp_above_t4_cv = <0>;
-		jeita_temp_t3_to_t4_cv = <4100000>;
-		jeita_temp_t2_to_t3_cv = <4350000>;
-		jeita_temp_t1_to_t2_cv = <4350000>;
+		jeita_temp_t3_to_t4_cv = <4450000>;
+		jeita_temp_t2_to_t3_cv = <4450000>;
+		jeita_temp_t1_to_t2_cv = <4450000>;
 		jeita_temp_t0_to_t1_cv = <0>;
 		jeita_temp_below_t0_cv = <0>;
 
@@ -177,93 +193,6 @@
 		temp_neg_10_thres = <0>;
 	};
 
-
-//	bq25890: bq25890@6A {
-//		status = "okay";
-//		compatible = "ti,bq2589x-1";
-//		reg = <0x6A>;
-
-//		pinctrl-names = "default";
-//		pinctrl-0 = <&bq2589x_irq &gpio6_adc_default>;
-//		#io-channel-cells = <1>;
-//		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
-//				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
-//				<&wt6670 PSY_IIO_QC3P_POWER>,
-//				<&wt6670 PSY_IIO_START_DETECTION>,
-//				<&wt6670 PSY_IIO_DETECTION_READY>,
-//				<&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
-
-//		io-channel-names = "gpio3_div3",
-//				"wt6670_usb_real_type",
-//				"wt6670_usb_qc3p_power",
-// 				"wt6670_start_detection",
-//				"wt6670_detection_ready",
-//				"qc3p_start_policy";
-
-//		bq2589x_irq-gpio = <&tlmm 96 0>;
-//		bq2589x_en-gpio = <&tlmm 36 0>;
-//		dpdm-supply = <&usb2_phy0>;
-
-//		mmi,qc3-support;
-//		ti,bq2589x,vbus-volt-high-level = <8700>;/* tune adapter to output 9v */
-//		ti,bq2589x,vbus-volt-low-level = <4400>;/* tune adapter to output 5v */
-//		ti,bq2589x,vbat-min-volt-to-tuneup = <3000>;
-//		ti,bq2589x,charge-voltage = <4350>;
-//		ti,bq2589x,charge-current = <3250>;
-//		ti,bq2589x,term-current = <256>;
-//		ti,bq2589x,enable-auto-dpdm;
-//		ti,bq2589x,enable-termination;
-//		ti,bq2589x,enable-ico;
-//		ti,bq2589x,use-absolute-vindpm;
-//	};
-
-/*
-	bq2597x: bq2597x-charger@66 {
-		compatible = "ti,bq25970-charger";
-		reg = <0x66>;
-		#io-channel-cells = <1>;
-		//ti,bq2597x,interrupt_gpios = <&pio 30 0>;
-		//interrupt-parent = <&pio>;
-		//interrupts = <2 IRQ_TYPE_EDGE_FALLING 2 0>;
-		//interrupt-names = "bq2597x_irq";
-
-		//pinctrl-names = "default_slave";
-		//pinctrl-0 = <&bq2597x_int_default_slave>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <3 0>;            //irq num base on hardware design
-		bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
-
-		ti,bq2597x,bat-ovp-disable = <0>;
-		ti,bq2597x,bat-ocp_disable = <0>;
-		ti,bq2597x,bat-ovp-alarm-disable = <0>;
-		ti,bq2597x,bus-ocp-disable = <0>;
-		ti,bq2597x,bus-ovp-alarm-disable = <0>;
-		ti,bq2597x,bus-ocp-alarm-disable = <0>;
-		ti,bq2597x,bat-ucp-alarm-disable = <0>;
-		ti,bq2597x,bat-therm-disable = <0>;
-		ti,bq2597x,bus-therm-disable = <0>;
-
-		ti,bq2597x,bat-ovp-threshold = <4500>;
-		ti,bq2597x,bat-ovp-alarm-threshold = <4450>;
-		ti,bq2597x,bat-ocp-threshold = <8000>;
-		ti,bq2597x,bat-ocp-alarm-threshold = <7500>;
-
-		ti,bq2597x,bus-ovp-threshold = <12000>;
-		ti,bq2597x,bus-ovp-alarm-threshold = <11000>;
-		ti,bq2597x,bus-ocp-threshold = <3750>;
-		ti,bq2597x,bus-ocp-alarm-threshold = <3500>;
-
-		ti,bq2597x,bat-ucp-alarm-threshold = <2000>;
-
-		ti,bq2597x,bat-therm-threshold = <0x15>;
-		ti,bq2597x,bus-therm-threshold = <0x15>;
-		ti,bq2597x,die-therm-threshold = <125>;
-
-		ti,bq2597x,ac-ovp-threshold = <17>;
-		ti,bq2597x,sense-resistor-mohm = <5>;
-	};
-*/
-
         bq2597x: bq2597x-charger@66 {
                 compatible = "ti,bq25970-charger";
                 reg = <0x66>;
@@ -276,8 +205,8 @@
                 //pinctrl-names = "default_slave";
                 //pinctrl-0 = <&bq2597x_int_default_slave>;
                 interrupt-parent = <&tlmm>;
-                interrupts = <3 0>;            //irq num base on hardware design
-                bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
+		interrupts = <97 0>;            //irq num base on hardware design
+		bq2597x,irq-gpio = <&tlmm 97 0>;     //irq num base on hardware design
 
                 ti,bq2597x,bat-ovp-disable = <0>;
                 ti,bq2597x,bat-ocp_disable = <0>;
@@ -311,6 +240,7 @@
 };
 
 &tlmm{
+/*
 	qupv3_se0_i2c_pins: qupv3_se0_i2c_pins {
 		qupv3_se0_i2c_act: qupv3_se0_i2c_active {
 			mux {
@@ -339,9 +269,25 @@
 			};
 		};
 	};
+*/
+
+	wt6670_gpio_pins: wt6670_gpio_pins {
+		mux {
+			pins = "gpio93";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio93";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
 };
 
 &tlmm {
+/*
         wt6670_pins_default: wt6670_default_mode {
         };
         wt6670_pins_scl_low: wt6670_scl_low {
@@ -394,6 +340,7 @@
 			output-high;
 		};
         };
+*/
 /*
         wt6670_pins_i2c: wt6670_i2c_mode {
                 pins_cmd_dat {
@@ -420,23 +367,6 @@
 	};
 };
 
-/*
-&tlmm {
-	bq2589x_irq: bq2589x_irq {
-		mux {
-			pins = "gpio96";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio96";
-			drive-strength = <2>;
-			bias-pull-up;
-			input-enable;
-		};
-	};
-};
-*/
 
 &soc {
 	mmi_charger: mmi,charger {
@@ -464,13 +394,13 @@
 		mmi,demo-fv-mv = <4000>;
 		mmi,otg-cl-ua = <1200000>;
 		mmi,df-serialnum = "SB18D33989";
-		mmi,mmi-temp-zones = <0 4200 1000 0>,
-				<10 4250 3000 1000>,
-				<15 0 3000 3000>,
+		mmi,mmi-temp-zones = <0 4450 2500 0>,
+				<10 4450 2500 1000>,
+				<15 0 2500 2500>,
 				<45 0 4000 4000>,
-				<60 4200 3000 0>;
-		mmi,thermal-mitigation = <4000000 3500000
-				3000000 2500000
+				<60 4200 4000 0>;
+		mmi,thermal-mitigation = <3500000 3000000
+				2800000 2500000
 				2000000 1500000
 				1200000 900000
 				600000 300000>;
@@ -530,8 +460,8 @@
 		mmi,qc3p-volt-max = <10000000>;
 		mmi,chrg-temp-zones-num = <5>;
 		mmi,mmi-chrg-temp-zones =
-					<0 4200 1000  0 0>,
-					<10 4250 3000 4450 1000>,
+					<0 4450 1000  0 0>,
+					<10 4450 3000 4450 1000>,
 					<15 4450 3000 0 0>,
 					<45 4350 6000 4480 4000>,
 					<60 4200 4000 0 0>;
