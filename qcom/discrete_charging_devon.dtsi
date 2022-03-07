@@ -9,10 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include <dt-bindings/iio/qcom,spmi-vadc.h>
+#include <dt-bindings/iio/qti_power_supply_iio.h>
 &pm6125_vadc {
 	gpio6_div3{
-                reg = <ADC_GPIO3_DIV3>;
+		reg = <ADC_GPIO3_DIV3>;
 		label = "gpio3_div3";
 		qcom,pre-scaling = <1 3>;
 	};
@@ -26,17 +26,9 @@
 			bias-high-impedance;
 		};
 	};
-
-	indicator_led {
-		indicator_led_default: indicator_led_default {
-			pins = "gpio8";
-			function = "func1";
-			output-low;
-			power-source = <1>;
-		};
-	};
 };
 
+/*
 &soc {
 	indicator_led {
 		compatible = "qcom,indicator-pwm-led";
@@ -56,51 +48,73 @@
 		#address-cells = <1>;
 		qcom,pwms@b300 {
 			status = "ok";
-			qcom,lut-patterns = <0 0 0 14 28 42 56 70 84 100
-						100 84 70 56 42 28 14 0 0 0>;
-			lpg@1 {
-				qcom,lpg-chan-id = <1>;
-				qcom,ramp-step-ms = <200>;
-				qcom,ramp-low-index = <0>;
-				qcom,ramp-high-index = <19>;
-				qcom,ramp-pattern-repeat;
-				qcom,lpg-sdam-base = <0x48>;
-			};
 		};
+	};
+};*/
+
+&qupv3_se0_i2c {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	pinctrl-0 = <&qupv3_se0_i2c_act>;
+	pinctrl-1 = <&qupv3_se0_i2c_sle>;
+	wt6670: wt6670f@35 {
+		status = "okay";
+		compatible = "mediatek,wt6670f_qc3p";
+		reg = <0x35>;
+		#io-channel-cells = <1>;
+		wt6670f-reset-gpio = <&tlmm 68 0x0>;
+		wt6670f-int-gpio = <&tlmm 93 0x0>;
 	};
 };
 
+&qupv3_se0_i2c {
+	status = "okay";
 
-&tlmm {
-	sgm4154x_gpio_pins: sgm4154x_gpio_pins {
-		mux {
-			pins = "gpio96";
-			function = "gpio";
-		};
+	cw2217@64 {
+		compatible = "cellwise,cw2217";
+		reg = <0x64>;
+		status = "okay";
 
-		config {
-			pins = "gpio96";
-			drive-strength = <2>;
-			bias-pull-up;
-			input-enable;
-		};
+		sense_r_mohm = <5>;
+		factory_mode_ntc_exist = <0>;
+		df-serialnum = "SB18D38323";
+		#include "bat_setting/CW_ng50-ATL-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-SWD-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-BA-ATL-5000mah-rhode.dtsi"
+		#include "bat_setting/CW_ng50-IN-ATL-5000mah-rhode.dtsi"
 	};
-};
 
-//bq2589x
-&tlmm {
-	bq2589x_irq: bq2589x_irq {
-		mux {
-			pins = "gpio96";
-			function = "gpio";
-		};
+	sm5602@71 {
+		compatible = "sm,sm5602";
+		reg = <0x71>;
+		//interrupt-parent = <&tlmm>;
+		//interrupts = <38 2>;
+		//qcom,irq-gpio = <&tlmm 38 0x0>;
 
-		config {
-			pins = "gpio96";
-			drive-strength = <2>;
-			bias-pull-up;
-			input-enable;
-		};
+		sm,en_temp_ex;
+		//sm,en_temp_in;
+		sm,en_batt_det;
+		//sm,iocv_man_mode;
+		sm,misc = <0x0800>;
+		sm,aging_ctrl = <0x0125>;
+		sm,cycle_cfg = <0x7000>;
+		sm,rsns = <0>;
+		factory_mode_ntc_exist = <0>;
+		sm,fg_irq_set = <0x07FF>;
+		sm,low_soc1 = <1>;
+		sm,low_soc2 = <15>;
+		sm,v_l_alarm = <3400>;
+		sm,v_h_alarm = <4450>;
+		sm,battery_table_num = <0>;
+		sm,param_version = <2>;
+		sm,t_l_alarm_in = <54>;
+		sm,t_h_alarm_in = <1>;
+		sm,t_l_alarm_ex = <0xD3D8>;
+		sm,t_h_alarm_ex = <0x9245>;
+		df-serialnum = "SB18D38324";
+		#include "bat_setting/SM5602_NE50_ATL_Rhode.dtsi"
+		#include "bat_setting/SM5602_NE50_SWD_Rhode.dtsi"
 	};
 };
 
@@ -113,9 +127,20 @@
 		reg = <0x3B>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sgm4154x_gpio_pins &gpio6_adc_default>;
+		#io-channel-cells = <1>;
+                io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+                                <&wt6670 PSY_IIO_QC3P_POWER>,
+                                <&wt6670 PSY_IIO_START_DETECTION>,
+                                <&wt6670 PSY_IIO_DETECTION_READY>,
+                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
 
-		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>;
-		io-channel-names = "gpio3_div3";
+                io-channel-names = "gpio3_div3",
+				   "wt6670_usb_real_type",
+                                   "wt6670_usb_qc3p_power",
+                                   "wt6670_start_detection",
+				   "wt6670_detection_ready",
+				   "qc3p_start_policy";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
@@ -123,8 +148,7 @@
 		sgm,chg-en-gpio = <&tlmm 36 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
 		dpdm-supply = <&usb2_phy0>;
-                mmi,qc3-support;
-
+		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
 		enable_sw_jeita;
 		jeita_temp_above_t4_cv = <0>;
@@ -153,90 +177,266 @@
 		temp_neg_10_thres = <0>;
 	};
 
-	bq25890@6A {
-		status = "okay";
-		compatible = "ti,bq2589x-1";
-		reg = <0x6A>;
 
-		pinctrl-names = "default";
-		//pinctrl-0 = <&bq2589x_irq>;
-		pinctrl-0 = <&bq2589x_irq &gpio6_adc_default>;
-		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>;
-		io-channel-names = "gpio3_div3";
-	
+//	bq25890: bq25890@6A {
+//		status = "okay";
+//		compatible = "ti,bq2589x-1";
+//		reg = <0x6A>;
+
+//		pinctrl-names = "default";
+//		pinctrl-0 = <&bq2589x_irq &gpio6_adc_default>;
+//		#io-channel-cells = <1>;
+//		io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+//				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+//				<&wt6670 PSY_IIO_QC3P_POWER>,
+//				<&wt6670 PSY_IIO_START_DETECTION>,
+//				<&wt6670 PSY_IIO_DETECTION_READY>,
+//				<&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
+
+//		io-channel-names = "gpio3_div3",
+//				"wt6670_usb_real_type",
+//				"wt6670_usb_qc3p_power",
+// 				"wt6670_start_detection",
+//				"wt6670_detection_ready",
+//				"qc3p_start_policy";
+
+//		bq2589x_irq-gpio = <&tlmm 96 0>;
+//		bq2589x_en-gpio = <&tlmm 36 0>;
+//		dpdm-supply = <&usb2_phy0>;
+
+//		mmi,qc3-support;
+//		ti,bq2589x,vbus-volt-high-level = <8700>;/* tune adapter to output 9v */
+//		ti,bq2589x,vbus-volt-low-level = <4400>;/* tune adapter to output 5v */
+//		ti,bq2589x,vbat-min-volt-to-tuneup = <3000>;
+//		ti,bq2589x,charge-voltage = <4350>;
+//		ti,bq2589x,charge-current = <3250>;
+//		ti,bq2589x,term-current = <256>;
+//		ti,bq2589x,enable-auto-dpdm;
+//		ti,bq2589x,enable-termination;
+//		ti,bq2589x,enable-ico;
+//		ti,bq2589x,use-absolute-vindpm;
+//	};
+
+/*
+	bq2597x: bq2597x-charger@66 {
+		compatible = "ti,bq25970-charger";
+		reg = <0x66>;
+		#io-channel-cells = <1>;
+		//ti,bq2597x,interrupt_gpios = <&pio 30 0>;
+		//interrupt-parent = <&pio>;
+		//interrupts = <2 IRQ_TYPE_EDGE_FALLING 2 0>;
+		//interrupt-names = "bq2597x_irq";
+
+		//pinctrl-names = "default_slave";
+		//pinctrl-0 = <&bq2597x_int_default_slave>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <96 0>;
-		bq2589x_irq-gpio = <&tlmm 96 0>;
-		bq2589x_en-gpio = <&tlmm 36 0>;
-		dpdm-supply = <&usb2_phy0>;
+		interrupts = <3 0>;            //irq num base on hardware design
+		bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
 
-		mmi,qc3-support;
-		ti,bq2589x,vbus-volt-high-level = <8700>;/* tune adapter to output 9v */
-		ti,bq2589x,vbus-volt-low-level = <4400>;/* tune adapter to output 5v */
-		ti,bq2589x,vbat-min-volt-to-tuneup = <3000>;
-		ti,bq2589x,charge-voltage = <4450>;
-		ti,bq2589x,charge-current = <3000>;
-		ti,bq2589x,term-current = <210>;
-		ti,bq2589x,enable-auto-dpdm;
-		ti,bq2589x,enable-termination;
-		ti,bq2589x,enable-ico;
-		ti,bq2589x,use-absolute-vindpm;
+		ti,bq2597x,bat-ovp-disable = <0>;
+		ti,bq2597x,bat-ocp_disable = <0>;
+		ti,bq2597x,bat-ovp-alarm-disable = <0>;
+		ti,bq2597x,bus-ocp-disable = <0>;
+		ti,bq2597x,bus-ovp-alarm-disable = <0>;
+		ti,bq2597x,bus-ocp-alarm-disable = <0>;
+		ti,bq2597x,bat-ucp-alarm-disable = <0>;
+		ti,bq2597x,bat-therm-disable = <0>;
+		ti,bq2597x,bus-therm-disable = <0>;
+
+		ti,bq2597x,bat-ovp-threshold = <4500>;
+		ti,bq2597x,bat-ovp-alarm-threshold = <4450>;
+		ti,bq2597x,bat-ocp-threshold = <8000>;
+		ti,bq2597x,bat-ocp-alarm-threshold = <7500>;
+
+		ti,bq2597x,bus-ovp-threshold = <12000>;
+		ti,bq2597x,bus-ovp-alarm-threshold = <11000>;
+		ti,bq2597x,bus-ocp-threshold = <3750>;
+		ti,bq2597x,bus-ocp-alarm-threshold = <3500>;
+
+		ti,bq2597x,bat-ucp-alarm-threshold = <2000>;
+
+		ti,bq2597x,bat-therm-threshold = <0x15>;
+		ti,bq2597x,bus-therm-threshold = <0x15>;
+		ti,bq2597x,die-therm-threshold = <125>;
+
+		ti,bq2597x,ac-ovp-threshold = <17>;
+		ti,bq2597x,sense-resistor-mohm = <5>;
 	};
+*/
 
+        bq2597x: bq2597x-charger@66 {
+                compatible = "ti,bq25970-charger";
+                reg = <0x66>;
+                #io-channel-cells = <1>;
+                //ti,bq2597x,interrupt_gpios = <&pio 30 0>;
+                //interrupt-parent = <&pio>;
+                //interrupts = <2 IRQ_TYPE_EDGE_FALLING 2 0>;
+                //interrupt-names = "bq2597x_irq";
+
+                //pinctrl-names = "default_slave";
+                //pinctrl-0 = <&bq2597x_int_default_slave>;
+                interrupt-parent = <&tlmm>;
+                interrupts = <3 0>;            //irq num base on hardware design
+                bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
+
+                ti,bq2597x,bat-ovp-disable = <0>;
+                ti,bq2597x,bat-ocp_disable = <0>;
+                ti,bq2597x,bat-ovp-alarm-disable = <0>;
+                ti,bq2597x,bus-ocp-disable = <0>;
+                ti,bq2597x,bus-ovp-alarm-disable = <0>;
+                ti,bq2597x,bus-ocp-alarm-disable = <0>;
+                ti,bq2597x,bat-ucp-alarm-disable = <0>;
+                ti,bq2597x,bat-therm-disable = <0>;
+                ti,bq2597x,bus-therm-disable = <0>;
+
+                ti,bq2597x,bat-ovp-threshold = <4500>;
+                ti,bq2597x,bat-ovp-alarm-threshold = <4450>;
+                ti,bq2597x,bat-ocp-threshold = <8000>;
+                ti,bq2597x,bat-ocp-alarm-threshold = <7500>;
+
+                ti,bq2597x,bus-ovp-threshold = <12000>;
+                ti,bq2597x,bus-ovp-alarm-threshold = <11000>;
+                ti,bq2597x,bus-ocp-threshold = <3750>;
+                ti,bq2597x,bus-ocp-alarm-threshold = <3500>;
+
+                ti,bq2597x,bat-ucp-alarm-threshold = <2000>;
+
+                ti,bq2597x,bat-therm-threshold = <0x15>;
+                ti,bq2597x,bus-therm-threshold = <0x15>;
+                ti,bq2597x,die-therm-threshold = <125>;
+
+                ti,bq2597x,ac-ovp-threshold = <17>;
+                ti,bq2597x,sense-resistor-mohm = <5>;
+        };
 };
 
+&tlmm{
+	qupv3_se0_i2c_pins: qupv3_se0_i2c_pins {
+		qupv3_se0_i2c_act: qupv3_se0_i2c_active {
+			mux {
+				pins = "gpio0", "gpio1";
+				function = "qup0";
+			};
 
+			config {
+				pins = "gpio0", "gpio1";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
 
+		qupv3_se0_i2c_sle: qupv3_se0_i2c_sleep {
+			mux {
+				pins = "gpio0", "gpio1";
+				function = "gpio";
+			};
 
-&qupv3_se0_i2c {
-	status = "okay";
-
-	cw2217@64 {
-		compatible = "cellwise,cw2217";
-		reg = <0x64>;
-		status = "okay";
-
-		sense_r_mohm = <5>;
-		df-serialnum = "SB18D24973";
-		#include "bat_setting/CW_nd50-atl-5000mah.dtsi"
-		#include "bat_setting/CW_nd50-jiade-5000mah.dtsi"
-	};
-
-
-	sm5602@71 {
-		compatible = "sm,sm5602";
-		reg = <0x71>;
-		status = "okay";
-		//interrupt-parent = <&tlmm>;
-		//interrupts = <105 2>;
-		//qcom,irq-gpio = <&tlmm 105 0x0>;
-
-		sm,en_temp_ex;
-		//sm,en_temp_in;
-		sm,en_batt_det;
-		//sm,iocv_man_mode;
-		sm,misc = <0x0800>;
-		sm,aging_ctrl = <0x0125>;
-		sm,cycle_cfg = <0x7000>;
-		sm,rsns = <0>;
-		sm,fg_irq_set = <0x07FF>;
-		sm,low_soc1 = <1>;
-		sm,low_soc2 = <15>;
-		sm,v_l_alarm = <3400>;
-		sm,v_h_alarm = <4450>;
-		sm,battery_table_num = <0>;
-		sm,param_version = <1>;
-		sm,t_l_alarm_in = <54>;
-		sm,t_h_alarm_in = <1>;
-		sm,t_l_alarm_ex = <0xD3D8>;
-		sm,t_h_alarm_ex = <0x9245>;
-		df-serialnum = "SB18D24973";
-		#include "bat_setting/SM5602_nd50-atl-5000mah.dtsi"
-		#include "bat_setting/SM5602_nd50-jiade-5000mah.dtsi"
+			config {
+				pins = "gpio0", "gpio1";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
 	};
 };
 
+&tlmm {
+        wt6670_pins_default: wt6670_default_mode {
+        };
+        wt6670_pins_scl_low: wt6670_scl_low {
+		mux {
+			pins = "gpio1";
+			function = "gpio";
+		};
 
+		config {
+			pins = "gpio1";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+        };
+        wt6670_pins_scl_high: wt6670_scl_high {
+		mux {
+			pins = "gpio1";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio1";
+			drive-strength = <2>;
+			bias-pull-up;
+			output-high;
+		};
+        };
+        wt6670_pins_sda_low: wt6670_sda_low {
+		mux {
+			pins = "gpio0";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio0";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+        };
+        wt6670_pins_sda_high: wt6670_sda_high {
+		mux {
+			pins = "gpio0";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio0";
+			drive-strength = <2>;
+			bias-pull-up;
+			output-high;
+		};
+        };
+/*
+        wt6670_pins_i2c: wt6670_i2c_mode {
+                pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO90__FUNC_SDA6>,
+                                <PINMUX_GPIO89__FUNC_SCL6>;
+                };
+        };
+*/
+};
+
+&tlmm {
+	sgm4154x_gpio_pins: sgm4154x_gpio_pins {
+		mux {
+			pins = "gpio96";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio96";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
+/*
+&tlmm {
+	bq2589x_irq: bq2589x_irq {
+		mux {
+			pins = "gpio96";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio96";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+*/
 
 &soc {
 	mmi_charger: mmi,charger {
@@ -245,9 +445,9 @@
 		mmi,enable-charging-limit;
 		mmi,upper-limit-capacity = <65>;
 		mmi,lower-limit-capacity = <60>;
-		mmi,heartbeat-interval = <100000>;
+		mmi,heartbeat-interval = <5000>;
 		mmi,dcp-power-max = <10000>;
-		mmi,hvdcp-power-max = <18000>;
+		mmi,hvdcp-power-max = <15000>;
 	};
 
 	mmi_discrete_charger: mmi,discrete-charging {
@@ -263,22 +463,95 @@
 		mmi,max-fcc-ma = <4000>;
 		mmi,demo-fv-mv = <4000>;
 		mmi,otg-cl-ua = <1200000>;
-		mmi,df-serialnum = "SB18D24973";
+		mmi,df-serialnum = "SB18D33989";
 		mmi,mmi-temp-zones = <0 4200 1000 0>,
-				<10 4250 2500 1000>,
-				<15 0 2500 2500>,
+				<10 4250 3000 1000>,
+				<15 0 3000 3000>,
 				<45 0 4000 4000>,
-				<60 4200 4000 0>;
-		mmi,thermal-mitigation = <3500000 3000000
-				2800000 2500000
+				<60 4200 3000 0>;
+		mmi,thermal-mitigation = <4000000 3500000
+				3000000 2500000
 				2000000 1500000
 				1200000 900000
 				600000 300000>;
 	};
 };
 
-/*
-&usb0 {
-	extcon = <&eud>,<&mmi_discrete_charger>;
+&soc {
+	mmi_chrg: mmi_chrg_manager {
+		compatible = "mmi,chrg-manager";
+		#io-channel-cells = <1>;
+		io-channels = <&mmi_discrete_charger PSY_IIO_HW_CURRENT_MAX>,
+				<&mmi_discrete_charger PSY_IIO_USB_CHARGING_ENABLED>,
+				<&mmi_discrete_charger PSY_IIO_TYPEC_MODE>,
+				<&mmi_discrete_charger PSY_IIO_INPUT_CURRENT_SETTLED>,
+				<&mmi_discrete_charger PSY_IIO_PD_ACTIVE>,
+				<&mmi_discrete_charger PSY_IIO_USB_TERMINATION_ENABLED>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+				<&wt6670 PSY_IIO_QC3P_POWER>,
+				<&wt6670 PSY_IIO_BATTERY_DP_DM>,
+				<&wt6670 PSY_IIO_START_DETECTION>,
+				<&bq2597x PSY_IIO_CP_ENABLE>,
+				<&bq2597x PSY_IIO_MMI_CP_INPUT_CURRENT_NOW>,
+				<&bq2597x PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW>,
+				<&bq2597x PSY_IIO_CP_STATUS1>,
+				<&bq2597x PSY_IIO_CP_CLEAR_ERROR>;
+
+		io-channel-names = "hw_current_max",
+					"charging_enabled",
+					"typec_mode",
+					"input_current_settled",
+					"pd_active",
+					"termination_enabled",
+					"wt6670_usb_real_type",
+					"wt6670_usb_qc3p_power",
+					"wt6670_battery_dp_dm",
+					"wt6670_start_detection",
+					"bq2597x_cp_enabled",
+					"bq2597x_input_current_now",
+					"bq2597x_input_voltage_settled",
+					"bq2597x_cp_status1",
+					"bq2597x_cp_clear_error";
+
+	//	qcom,usbpd-phandle = <&pm7250b_pdphy>;
+		mmi,pps-volt-steps = <20000>;
+		mmi,pps-curr-steps = <100000>;
+		mmi,pd-volt-max = <10000000>;
+		mmi,pd-curr-max = <3000000>;
+		mmi,batt-curr-boost = <300000>;
+		mmi,batt-ovp-lmt = <4550000>;
+		mmi,pl-chrg-vbatt-min = <3000000>;
+		mmi,typec-middle-current = <2000000>;
+		mmi,pd-allow-min-current = <1000000>;
+		mmi,step-first-current-comp = <0>;
+		mmi,dont-rerun-aicl;
+		mmi,qc3p-max-ibus-ma = <3000>;
+		mmi,qc3p-volt-steps = <20000>;
+		mmi,qc3p-volt-max = <10000000>;
+		mmi,chrg-temp-zones-num = <5>;
+		mmi,mmi-chrg-temp-zones =
+					<0 4200 1000  0 0>,
+					<10 4250 3000 4450 1000>,
+					<15 4450 3000 0 0>,
+					<45 4350 6000 4480 4000>,
+					<60 4200 4000 0 0>;
+		mmi,thermal-mitigation =
+					<5800000>,
+					<5000000>,
+					<4000000>,
+					<3500000>,
+					<3000000>,
+					<2000000>,
+					<1000000>;
+		charger_device_0 {
+			chrg-name = "pmic-sw";
+			psy-name = "battery";
+			charging-curr-limited = <500000>;
+		};
+		charger_device_1 {
+			chrg-name = "cp-master";
+			psy-name = "cp-standalone";
+			charging-curr-min = <1500000>;
+		};
+	};
 };
-*/
