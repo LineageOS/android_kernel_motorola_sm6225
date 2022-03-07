@@ -270,7 +270,9 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 			touch_cdev->delay_baseline_update = false;
 		}
 	}
-
+	if (touch_cdev->pdata.fod_detection) {
+		TRY_TO_CALL(update_fod_mode, touch_cdev->fps_state);
+	}
 	if (NEED_TO_SET_POWER) {
 		/* power turn on in PANEL_EVENT_PRE_DISPLAY_ON.
 		 * IC need some time to boot up.
