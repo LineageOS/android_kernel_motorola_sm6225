@@ -671,7 +671,7 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		//led-flash-src = <&led_flash_rear_devon>;
-		//eeprom-src = <&eeprom_main>;
+		eeprom-src = <&eeprom_main>;
 		//actuator-src = <&actuator_rear>;
 		cam_vaf-supply = <&camera_main_afvdd>;
 		cam_vio-supply = <&camera_iovdd>;
@@ -714,7 +714,7 @@
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//eeprom-src = <&eeprom_front>;
+		eeprom-src = <&eeprom_front>;
 		cam_vio-supply = <&camera_iovdd>;
 		cam_vana-supply = <&camera_front_avdd>;
 		cam_vdig-supply = <&camera_front_dvdd>;
@@ -801,7 +801,7 @@
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//eeprom-src = <&eeprom_wide>;
+		eeprom-src = <&eeprom_wide>;
 		cam_vio-supply = <&camera_iovdd>;
 		cam_vdig-supply = <&camera_wide_dvdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
