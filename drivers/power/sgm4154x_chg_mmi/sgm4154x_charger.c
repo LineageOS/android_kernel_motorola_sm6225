@@ -2883,13 +2883,13 @@ static int sgm4154x_probe(struct i2c_client *client,
 		dev_err(dev, "Failed to read device tree properties%d\n", ret);
 		return ret;
 	}
-
+#if !defined(__SGM41513_CHIP_ID__)
 	ret = sgm4154x_parse_dt_adc_channels(sgm);
 	if (ret) {
 		dev_err(dev, "Failed to get adc channels%d\n", ret);
 		return ret;
 	}
-
+#endif
 	sgm->chg_dev = charger_device_register(sgm->chg_dev_name,
 					      &client->dev, sgm,
 					      &sgm4154x_chg_ops,
