@@ -323,6 +323,7 @@ struct bq_fg_chip {
 	const char *batt_profile_name;
 	const char *batt_name;
 	u32 temp_source;
+	int ibat_polority;
 
 	/* debug */
 	int	skip_reads;
@@ -1348,7 +1349,7 @@ static int fg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		mutex_lock(&bq->data_lock);
 		fg_read_current(bq, &bq->batt_curr);
-		val->intval = -bq->batt_curr * 1000;
+		val->intval = -bq->batt_curr * 1000 * bq->ibat_polority;
 		mutex_unlock(&bq->data_lock);
 		break;
 
@@ -2371,6 +2372,11 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 		bq->temp_source = TEMP_SOURCE_EXTERNAL;
 		rc = 0;
 	}
+
+	if (of_property_read_bool(node, "mmi,ibat-invert-polority"))
+		bq->ibat_polority = -1;
+	else
+		bq->ibat_polority = 1;
 
 	return rc;
 }
