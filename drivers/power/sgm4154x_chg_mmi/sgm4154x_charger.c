@@ -2583,7 +2583,7 @@ static int sgm4154x_hw_chipid_detect(struct sgm4154x_device *sgm)
 
 	return val;
 }
-
+#if !defined(__SGM41513_CHIP_ID__)
 static int sgm4154x_get_iio_channel(struct sgm4154x_device *sgm, const char *propname,
 					struct iio_channel **chan)
 {
@@ -2617,7 +2617,7 @@ static int sgm4154x_parse_dt_adc_channels(struct sgm4154x_device *sgm)
 
 	return 0;
 }
-
+#endif
 static int sgm4154x_enable_otg(struct charger_device *chg_dev, bool enable)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
