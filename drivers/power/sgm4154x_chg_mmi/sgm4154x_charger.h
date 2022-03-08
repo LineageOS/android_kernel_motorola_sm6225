@@ -19,6 +19,7 @@
 #define __SGM41542_CHIP_ID__
 //#define __SGM41516_CHIP_ID__
 //#define __SGM41516D_CHIP_ID__
+#define __SGM41513_CHIP_ID__
 
 #ifdef __SGM41541_CHIP_ID__
 #define SGM4154x_NAME		"sgm41541"
@@ -80,6 +81,7 @@
 #define SGM4154x_PN_41516_ID    (BIT(6)| BIT(5))
 #define SGM4154x_PN_41542_ID    (BIT(6)| BIT(5)| BIT(3))
 #define SGM4154x_PN_41516D_ID   (BIT(6)| BIT(5)| BIT(3))
+#define SGM4154x_PN_41513_ID    0
 
 /* WDT TIMER SET  */
 #define SGM4154x_WDT_TIMER_MASK        GENMASK(5, 4)
