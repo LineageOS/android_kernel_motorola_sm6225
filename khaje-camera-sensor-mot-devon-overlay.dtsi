@@ -672,7 +672,7 @@
 		sensor-position-yaw = <180>;
 		//led-flash-src = <&led_flash_rear_devon>;
 		eeprom-src = <&eeprom_main>;
-		//actuator-src = <&actuator_rear>;
+		actuator-src = <&actuator_rear>;
 		cam_vaf-supply = <&camera_main_afvdd>;
 		cam_vio-supply = <&camera_iovdd>;
 		cam_vana-supply = <&camera_main_avdd>;
