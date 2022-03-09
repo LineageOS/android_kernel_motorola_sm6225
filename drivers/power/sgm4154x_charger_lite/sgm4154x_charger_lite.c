@@ -1489,10 +1489,13 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
-	if (sgm->init_data.charger_disabled)
+	if (sgm->init_data.charger_disabled) {
 		ret = sgm4154x_disable_charger(sgm);
-	else
+		ret |= sgm4154x_set_hiz_en(sgm, true);
+	} else {
+		ret |= sgm4154x_set_hiz_en(sgm, false);
 		ret = sgm4154x_enable_charger(sgm);
+	}
 	if (ret)
 		goto err_out;
 
@@ -2034,6 +2037,12 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
                 chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
 
         memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
+	if (chg->paired_batt_info.batt_soc == 0) {
+		batt_info->batt_soc = 0;
+		pr_warn("Force %s to empty from %d for empty paired battery\n",
+					chg->fg_psy->desc->name,
+					chg->batt_info.batt_soc);
+	}
 
         return rc;
 }
@@ -2247,6 +2256,8 @@ static void sgm4154x_charger_set_constraint(void *data,
 	}
 }
 
+/* Battery presence detection threshold on battery temperature */
+#define BPD_TEMP_THRE (-30)
 static void sgm4154x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
@@ -2257,14 +2268,33 @@ static void sgm4154x_paired_battery_notify(void *data,
 	int delta_soc;
 	bool high_load_en;
 	bool low_load_en;
+	bool batt_present;
+	union power_supply_propval val = {0};
 	struct sgm_mmi_charger *chg = data;
 	int paired_ichg = chg->paired_ichg;
 	int paired_load = chg->paired_load;
 	static bool initialized = false;
 	static bool chg_present = false;
 
-	if (!batt_info)
+	if (!batt_info || batt_info->batt_mv <= 0) {
+		pr_warn("Invalid paired battery info\n");
 		return;
+	}
+
+	memcpy(&chg->paired_batt_info, batt_info, sizeof(struct mmi_battery_info));
+	batt_present = (chg->batt_info.batt_temp >= BPD_TEMP_THRE)? true : false;
+
+	if (batt_present) {
+		rc = power_supply_get_property(chg->fg_psy,
+				POWER_SUPPLY_PROP_PRESENT, &val);
+		if (!rc && !val.intval)
+			batt_present = false;
+	}
+	if (!batt_present) {
+		sgm4154x_set_hiz_en(chg->sgm, true);
+		pr_warn("%s is absent\n", chg->fg_psy->desc->name);
+		return;
+	}
 
 	delta_vbat = chg->batt_info.batt_mv - batt_info->batt_mv;
 	delta_soc = chg->batt_info.batt_soc - batt_info->batt_soc;
@@ -2389,8 +2419,10 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 		df_sn = "unknown-sn";
 	}
 	strcpy(chg->batt_info.batt_sn, df_sn);
+	chg->paired_batt_info.batt_soc = -EINVAL;
 	chg->chg_cfg.target_fcc = chg->sgm->init_data.ichg / 1000;
 	chg->chg_cfg.charging_disable = chg->sgm->init_data.charger_disabled;
+	chg->chg_cfg.charger_suspend = chg->sgm->init_data.charger_disabled;
 
 	if (of_property_read_bool(chg->sgm->dev->of_node, "mmi,ichg-invert-polority"))
 		chg->ichg_polority = -1;
