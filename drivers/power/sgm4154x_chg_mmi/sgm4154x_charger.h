@@ -19,7 +19,9 @@
 #define __SGM41542_CHIP_ID__
 //#define __SGM41516_CHIP_ID__
 //#define __SGM41516D_CHIP_ID__
+#ifdef CONFIG_MMI_SGM41513_CHARGER
 #define __SGM41513_CHIP_ID__
+#endif
 
 #ifdef __SGM41541_CHIP_ID__
 #define SGM4154x_NAME		"sgm41541"
