@@ -237,7 +237,7 @@ void mmi_qc3p_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define QC3P_DISABLE_CHRG_LIMIT -1
 #define QC3P_CP_CHRG_SOC_LIMIT 90
 #define QC3P_CONT_PWR_CNT 5
-#define CP_CV_VOLT_TOLERANCE 40000  //40mV
+#define CP_CV_VOLT_TOLERANCE 10000  //10mV
 
 void qc3p_clear_chg_manager(struct mmi_charger_manager *chip)
 {
@@ -799,7 +799,7 @@ void mmi_qc3p_chrg_sm_work_func(struct work_struct *work)
 			goto schedule;
 		}
 
-		if (vbatt_volt >= (chrg_step->chrg_step_cv_volt - CP_CV_VOLT_TOLERANCE)
+		if (((vbatt_volt + CP_CV_VOLT_TOLERANCE) >= chrg_step->chrg_step_cv_volt)
 			&& ((!chrg_step->last_step &&
 				ibatt_curr < chrg_step->chrg_step_cv_tapper_curr)
 				|| ibatt_curr < chrg_list->chrg_dev[CP_MASTER]->charging_curr_min)) {
@@ -811,12 +811,12 @@ void mmi_qc3p_chrg_sm_work_func(struct work_struct *work)
 								"chrg step %d, ibatt %dmA\n",
 			  					chrg_step->pres_chrg_step, ibatt_curr);
 					mmi_find_chrg_step(chip,
-							chip->pres_temp_zone, vbatt_volt);
+							chip->pres_temp_zone, vbatt_volt + CP_CV_VOLT_TOLERANCE);
 					mmi_chrg_qc3p_sm_move_state(chip, PM_QC3P_STATE_CP_QUIT);
 					heartbeat_dely_ms = QC3P_HEARTBEAT_NEXT_STATE_MS;
 				} else {
 					if (mmi_find_chrg_step(chip,
-							chip->pres_temp_zone, vbatt_volt)) {
+							chip->pres_temp_zone, vbatt_volt + CP_CV_VOLT_TOLERANCE)) {
 						heartbeat_dely_ms = QC3P_HEARTBEAT_NEXT_STATE_MS;
 						mmi_chrg_info(chip,"Jump to next chrg step\n");
 						mmi_chrg_qc3p_sm_move_state(chip,
