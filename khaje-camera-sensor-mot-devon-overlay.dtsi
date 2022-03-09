@@ -596,6 +596,38 @@
 		status = "ok";
 	};
 
+	led_flash_marco_devon: qcom,camera-flash@1 {
+		cell-index = <1>;
+		compatible = "qcom,camera-flash";
+		flash-type = <CAM_FLASH_TYPE_GPIO>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&flash_active>;
+		pinctrl-1 = <&flash_suspend>;
+		gpios = <&tlmm 85 0>;
+		gpio-custom1 = <0>;
+		gpio-req-tbl-num = <0>;
+		gpio-req-tbl-flags = <0>;
+		gpio-req-tbl-label = "CUSTOM_GPIO1";
+		status = "ok";
+	};
+
+	led_flash_wide_devon: qcom,camera-flash@2 {
+		cell-index = <2>;
+		compatible = "qcom,camera-flash";
+		flash-type = <CAM_FLASH_TYPE_GPIO>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&flash_active>;
+		pinctrl-1 = <&flash_suspend>;
+		gpios = <&tlmm 85 0>;
+		gpio-custom1 = <0>;
+		gpio-req-tbl-num = <0>;
+		gpio-req-tbl-flags = <0>;
+		gpio-req-tbl-label = "CUSTOM_GPIO1";
+		status = "ok";
+	};
+
 	eeprom_main: qcom,eeprom@0 {
 		cell-index = <0>;
 		reg = <0x0>;
@@ -670,7 +702,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//led-flash-src = <&led_flash_rear_devon>;
+		led-flash-src = <&led_flash_rear_devon>;
 		eeprom-src = <&eeprom_main>;
 		actuator-src = <&actuator_rear>;
 		cam_vaf-supply = <&camera_main_afvdd>;
@@ -758,6 +790,7 @@
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		led-flash-src = <&led_flash_marco_devon>;
 		cam_vio-supply = <&camera_iovdd>;
 		cam_clk-supply = <&gcc_camss_top_gdsc>;
 		regulator-names = "cam_vio", "cam_clk";
@@ -801,6 +834,7 @@
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		led-flash-src = <&led_flash_wide_devon>;
 		eeprom-src = <&eeprom_wide>;
 		cam_vio-supply = <&camera_iovdd>;
 		cam_vdig-supply = <&camera_wide_dvdd>;
