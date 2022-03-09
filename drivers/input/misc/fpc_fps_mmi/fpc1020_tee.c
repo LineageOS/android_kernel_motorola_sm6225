@@ -205,7 +205,26 @@ static int hw_reset(struct fpc1020_data *fpc1020)
 exit:
 	return rc;
 }
-
+#ifdef SUPPORT_PIN_CTRl
+static void fpc_pinctrl_on(struct device *dev)
+{
+    struct pinctrl *ptl = devm_pinctrl_get(dev);
+    const char ptl_name[6][16] = {"fpc_vdd_of", "fpc_vdd_on", "fpc_rst_hi", "fpc_rst_lo", "fpc_rst_hi", "fpc_irq_en"};
+    struct pinctrl_state *ptl_state = NULL;
+    int i = 0;
+    for (i = 0; i < 6; i++) {
+            ptl_state = pinctrl_lookup_state(ptl, ptl_name[i]);
+            if (!IS_ERR(ptl_state)) {
+                pinctrl_select_state(ptl, ptl_state);
+                pr_info("%s, by pinctrl:%s\n", __func__, ptl_name[i]);
+                msleep(5);
+            } else {
+                pr_err("%s, no found:%s\n", __func__, ptl_name[i]);
+            }
+    }
+    devm_pinctrl_put(ptl);
+}
+#endif
 static ssize_t hw_reset_set(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -218,7 +237,15 @@ static ssize_t hw_reset_set(struct device *dev,
 		rc = fpc1020_power_off(fpc1020);
 	} else if (!strncmp(buf, "poweron", strlen("poweron"))) {
 		rc = fpc1020_power_on(fpc1020);
-	} else {
+	}
+  #ifdef SUPPORT_PIN_CTRl
+  	  else if (!strncmp(buf, "pinctrl", strlen("pinctrl"))) {
+		fpc_pinctrl_on(dev);
+		pr_info("fpc IRQ after reset %d\n", gpio_get_value(fpc1020->irq_gpio));
+                rc = count;
+	}
+  #endif
+  	  else {
 		return -EINVAL;
 	}
 	return rc ? rc : count;
@@ -396,7 +423,11 @@ static int fpc1020_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto exit;
 	}
-
+  #ifdef SUPPORT_PIN_CTRl
+	if(of_property_read_bool(np,"fpc_pinctrl_on")) {
+            fpc_pinctrl_on(dev);
+	}
+  #endif
 	fpsData = FPS_init(dev);
 
 	fpc1020->dev = dev;
@@ -452,6 +483,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 	}
 
 	fpc1020_power_on(fpc1020);
+
 	rc = fpc1020_request_named_gpio(fpc1020, "irq",
 			&fpc1020->irq_gpio);
 	gpio_direction_input(fpc1020->irq_gpio);
