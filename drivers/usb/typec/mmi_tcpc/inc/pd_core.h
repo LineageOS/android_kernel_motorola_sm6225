@@ -854,6 +854,9 @@ struct pd_port {
 	struct tcpc_device *tcpc;
 	struct mutex pd_lock;
 
+	/* miss msg */
+	bool miss_msg;
+	uint8_t rx_cap;
 	/* PD */
 	bool msg_output_lock;
 
@@ -1612,6 +1615,9 @@ enum {	/* pd_traffic_control */
 
 #define PD30_SINK_TX_OK		TYPEC_CC_RP_3_0
 #define PD30_SINK_TX_NG		TYPEC_CC_RP_1_5
+
+void pd_add_miss_msg(struct pd_port *pd_port,struct pd_event *pd_event,
+				uint8_t msg);
 
 void pd_set_sink_tx(struct pd_port *pd_port, uint8_t cc);
 void pd_sync_sop_spec_revision(struct pd_port *pd_port);
