@@ -123,14 +123,14 @@
 		sm,v_l_alarm = <3450>;
 		sm,v_h_alarm = <4450>;
 		sm,battery_table_num = <0>;
-		sm,param_version = <1>;
+		sm,param_version = <2>;
 		sm,t_l_alarm_in = <54>;
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
 		sm,t_h_alarm_ex = <0x9245>;
 		df-serialnum = "SB18D38324";
-		#include "bat_setting/SM5602_NE50_ATL_Rhode.dtsi"
-		#include "bat_setting/SM5602_NE50_SWD_Rhode.dtsi"
+		#include "bat_setting/SM5602_NC50_ATL_Devon.dtsi"
+		#include "bat_setting/SM5602_NC50_SWD_Devon.dtsi"
 	};
 };
 
