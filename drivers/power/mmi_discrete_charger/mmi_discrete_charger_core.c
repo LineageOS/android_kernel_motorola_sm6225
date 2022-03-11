@@ -1389,7 +1389,7 @@ static int mmi_discrete_usb_get_prop(struct power_supply *psy,
 		rc = get_prop_usb_current_now(chip, val);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = get_effective_result(chip->usb_icl_votable);
+		rc = mmi_discrete_get_hw_current_max(chip, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_USB_PD;
