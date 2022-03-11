@@ -212,6 +212,9 @@ struct bq25980_device {
 	struct iio_chan_spec *iio_chan;
 	struct iio_channel *int_iio_chans;
 	struct iio_channel **ext_iio_chans;
+
+	int reg_addr;
+	int reg_data;
 };
 
 static struct reg_default bq25980_reg_init_val[] = {
@@ -1730,6 +1733,175 @@ static int bq25980_check_device_id(struct bq25980_device *bq)
 	return 0;
 }
 
+static ssize_t show_reg_addr(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+	return sprintf(buf, "reg addr 0x%02x\n", bq->reg_addr);
+}
+
+static ssize_t store_reg_addr(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int tmp;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+
+	tmp = simple_strtoul(buf, NULL, 0);
+	bq->reg_addr = tmp;
+
+	return count;
+}
+static DEVICE_ATTR(reg_addr, 0664, show_reg_addr, store_reg_addr);
+
+
+static ssize_t show_reg_data(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	ssize_t size = 0;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+	if( ( bq->reg_addr >= 0 ) && (bq->reg_addr <= 0x37) )
+	{
+		ret = regmap_read(bq->regmap, bq->reg_addr, &bq->reg_data);
+		size = sprintf(buf, "reg[%02X]=0x%02X\n", bq->reg_addr, bq->reg_data);
+	}else
+	{
+		size = sprintf(buf, "reg addr error\n");
+	}
+	return size;
+}
+
+static ssize_t store_reg_data(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int tmp;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+
+	tmp = simple_strtoul(buf, NULL, 0);
+	bq->reg_data = tmp;
+
+	if( (bq->reg_addr >= 0) && (bq->reg_addr <= 0x37) ) {
+		if( (bq->reg_data >= 0) && (bq->reg_data <= 0xFF) ) {
+			regmap_write(bq->regmap, bq->reg_addr, bq->reg_data);
+		}else
+			pr_err("reg data error : data=0x%X\n", bq->reg_data);
+	}else
+		pr_err("reg addr error : addr=0x%X\n", bq->reg_addr);
+
+	return count;
+}
+static DEVICE_ATTR(reg_data, 0664, show_reg_data, store_reg_data);
+
+static ssize_t show_force_chg_auto_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	int state = 0;
+	bool enable;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		state = -ENODEV;
+	}else {
+		ret = bq25980_is_chg_en(bq, &enable);
+		if (ret < 0) {
+			pr_err("[%s] bq25980_is_chg_en not valid\n", bq->model_name);
+			state = -ENODEV;
+		}else
+			state = enable;
+	}
+	return sprintf(buf, "%d\n", state);
+}
+
+static ssize_t store_force_chg_auto_enable(struct device *dev,
+						 struct device_attribute *attr,
+						 const char *buf, size_t count)
+{
+	int ret;
+	bool enable;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+
+	enable = simple_strtoul(buf, NULL, 0);
+	ret = bq25980_set_chg_en(bq, enable);
+	if (ret) {
+		pr_err("[%s] Couldn't %s charging rc=%d\n", bq->model_name,
+			   enable ? "enable" : "disable", (int)ret);
+		return ret;
+	}
+
+	pr_info("[%s] %s charging \n", bq->model_name,
+			   enable ? "enable" : "disable");
+
+	return count;
+}
+static DEVICE_ATTR(force_chg_auto_enable, 0664, show_force_chg_auto_enable, store_force_chg_auto_enable);
+
+static ssize_t show_reg_dump(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	unsigned int val;
+	int addr;
+	ssize_t size = 0;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+
+	for (addr = 0; addr <= 0x3a; addr++) {
+		ret = regmap_read(bq->regmap, addr, &val);
+		if (!ret) {
+			dev_err(bq->dev, "Reg[%02X] = 0x%02X\n", addr, val);
+			size += snprintf(buf + size, PAGE_SIZE - size,
+				"reg[%02X]=[0x%02X]\n", addr,val);
+		}else {
+			size += snprintf(buf + size, PAGE_SIZE - size,
+				"reg[%02X]=[failed]\n", addr);
+		}
+	}
+
+	return size;
+}
+static DEVICE_ATTR(reg_dump, 0664, show_reg_dump, NULL);
+
+static ssize_t show_vbus(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int vbus;
+	struct bq25980_device *bq = dev_get_drvdata(dev);
+	if (!bq) {
+		pr_err("[%s] chip not valid\n", bq->model_name);
+		return -ENODEV;
+	}
+	vbus = bq25980_get_adc_vbus(bq);
+
+	return sprintf(buf, "%d\n", vbus);
+}
+static DEVICE_ATTR(vbus, 0664, show_vbus, NULL);
+
+static void bq25980_create_device_node(struct device *dev)
+{
+	device_create_file(dev, &dev_attr_force_chg_auto_enable);
+	device_create_file(dev, &dev_attr_reg_addr);
+	device_create_file(dev, &dev_attr_reg_data);
+	device_create_file(dev, &dev_attr_reg_dump);
+	device_create_file(dev, &dev_attr_vbus);
+}
+
 static int bq25980_iio_write_raw(struct iio_dev *indio_dev,
 		struct iio_chan_spec const *chan, int val1,
 		int val2, long mask)
@@ -2093,6 +2265,8 @@ static int bq25980_probe(struct i2c_client *client,
 	}
 
 	bq25980_init_iio_psy(bq);
+
+	bq25980_create_device_node(bq->dev);
 
 	dump_reg(bq,0x00,0x37);
 
