@@ -1922,7 +1922,6 @@ static inline bool typec_check_false_ra_detach(struct tcpc_device *tcpc)
 
 	if (drp) {
 		tcpci_set_cc(tcpc, TYPEC_CC_DRP);
-		typec_enable_low_power_mode(tcpc, TYPEC_CC_DRP);
 		tcpci_alert_status_clear(tcpc,
 			TCPC_REG_ALERT_EXT_RA_DETACH);
 	}
