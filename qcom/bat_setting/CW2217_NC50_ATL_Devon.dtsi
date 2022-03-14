@@ -1,0 +1,27 @@
+/*
+ * Copyright (C) 2022 Motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+CW2217_NC50_ATL_DEVON {
+	serialnum = "SB18D38324";
+	fcc_design = <4700>;
+	ui_full = <97>;
+	config_profile_info = [5A 00 00 00 00 00 00 00
+				A6 C1 C4 C7 BB B3 A7 6C
+				47 FF DF A8 8D 7A 66 57
+				50 4D 49 7F D3 E0 81 F0
+				DC CD D3 D7 D6 D4 D0 CC
+				C8 C5 D1 C5 A0 92 89 81
+				74 72 80 90 A9 90 65 A2
+				20 00 AB 10 00 A0 59 00
+				00 00 64 21 C3 4B 00 00
+				00 00 00 00 00 00 00 9B];
+};
