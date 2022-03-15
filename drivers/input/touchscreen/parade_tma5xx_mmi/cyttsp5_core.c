@@ -6109,6 +6109,7 @@ static const struct file_operations tthe_debugfs_fops = {
 };
 #endif
 
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 /*******************************************************************************
  * FUNCTION: _pt_read_us_file
  *
@@ -6208,6 +6209,7 @@ err:
 #endif
 	return rc;
 }
+#endif
 
 static struct cyttsp5_core_nonhid_cmd _cyttsp5_core_nonhid_cmd = {
 	.start_bl = _cyttsp5_request_hid_output_start_bl,
@@ -6235,7 +6237,9 @@ static struct cyttsp5_core_nonhid_cmd _cyttsp5_core_nonhid_cmd = {
 	.verify_app_integrity =
 		_cyttsp5_request_hid_output_bl_verify_app_integrity,
 	.get_panel_id = _cyttsp5_request_hid_output_bl_get_panel_id,
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 	.read_us_file          = _pt_read_us_file,
+#endif
 };
 
 static struct cyttsp5_core_commands _cyttsp5_core_commands = {
