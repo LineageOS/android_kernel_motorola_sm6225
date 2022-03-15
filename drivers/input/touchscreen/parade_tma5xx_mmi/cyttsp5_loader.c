@@ -913,6 +913,7 @@ static int upgrade_firmware_from_class(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 /*******************************************************************************
  * FUNCTION: _pt_pip1_bl_from_file
  *
@@ -1074,6 +1075,7 @@ static ssize_t pt_pip_bl_from_file_store(struct device *dev,
 
 static DEVICE_ATTR(pt_bl_from_file, S_IRUGO | S_IWUSR,
 		pt_bl_from_file_show, pt_pip_bl_from_file_store);
+#endif
 /*
  * Generates binary FW filename as following:
  * - Panel ID not enabled: cyttsp5_fw.bin
@@ -1806,12 +1808,14 @@ static int cyttsp5_loader_probe(struct device *dev, void **data)
 	}
 #endif
 
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 	rc = device_create_file(dev, &dev_attr_pt_bl_from_file);
 	if (rc) {
 		dev_err(dev, "%s: Error creating pt_bl_from_file\n",
 			__func__);
 		goto error_create_pt_bl_from_file;
 	}
+#endif
 
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_MANUAL_TTCONFIG_UPGRADE
 	rc = device_create_file(dev, &dev_attr_config_loading);
@@ -1833,7 +1837,9 @@ static int cyttsp5_loader_probe(struct device *dev, void **data)
 	ld->dev = dev;
 	*data = ld;
 
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 	INIT_WORK(&ld->bl_from_file, pt_bl_from_file_work);
+#endif
 
 #if CYTTSP5_FW_UPGRADE
 	init_completion(&ld->int_running);
@@ -1874,8 +1880,10 @@ error_create_config_data:
 	device_remove_file(dev, &dev_attr_config_loading);
 error_create_config_loading:
 #endif
+#ifdef CONFIG_CYTTSP5_CREATE_PT_BL_FROM_FILE
 error_create_pt_bl_from_file:
 	device_remove_file(dev, &dev_attr_pt_bl_from_file);
+#endif
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_BINARY_FW_UPGRADE
 	device_remove_file(dev, &dev_attr_manual_upgrade);
 error_create_manual_upgrade:
