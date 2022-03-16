@@ -65,11 +65,11 @@ struct mm8xxx_device_info {
 	struct list_head list;
 	struct mutex lock;
 	u8 *cmds;
+
+	bool fake_battery;
 };
 
 static void mm8xxx_battery_update(struct mm8xxx_device_info *di);
-static int mm8xxx_battery_setup(struct mm8xxx_device_info *di);
-static void mm8xxx_battery_teardown(struct mm8xxx_device_info *di);
 
 static irqreturn_t mm8xxx_battery_irq_handler_thread(int irq, void *data)
 {
@@ -133,116 +133,6 @@ static int mm8xxx_battery_write(struct mm8xxx_device_info *di, u8 cmd,
 
 	return 0;
 }
-
-static int mm8xxx_battery_probe(struct i2c_client *client,
-				const struct i2c_device_id *id)
-{
-	struct mm8xxx_device_info *di;
-	int ret;
-	char *name;
-	int num;
-
-	mm_info("MM8013 prob begin\n");
-
-	mutex_lock(&battery_mutex);
-	num = idr_alloc(&battery_id, client, 0, 0, GFP_KERNEL);
-	mutex_unlock(&battery_mutex);
-	if (num < 0)
-		return num;
-
-	name = devm_kasprintf(&client->dev, GFP_KERNEL, "%s-%d", id->name, num);
-	if (!name)
-		goto mem_err;
-
-	di = devm_kzalloc(&client->dev, sizeof(*di), GFP_KERNEL);
-	if (!di)
-		goto mem_err;
-
-	i2c_set_clientdata(client, di);
-
-	di->id = num;
-	di->dev = &client->dev;
-	di->chip = id->driver_data;
-	di->name = name;
-
-	di->bus.read = mm8xxx_battery_read;
-	di->bus.write = mm8xxx_battery_write;
-
-	ret = mm8xxx_battery_setup(di);
-	if (ret)
-		goto failed;
-
-	schedule_delayed_work(&di->work, 60 * HZ);
-
-	if (client->irq) {
-		ret = devm_request_threaded_irq(&client->dev, client->irq,
-				NULL, mm8xxx_battery_irq_handler_thread,
-				IRQF_ONESHOT,
-				di->name, di);
-		if (ret) {
-			dev_err(&client->dev,
-				"Unable to register IRQ %d error %d\n",
-				client->irq, ret);
-
-			return ret;
-		}
-	}
-
-	mm_info("MM8013 driver probe success\n");
-	return 0;
-
-mem_err:
-	ret = -ENOMEM;
-
-failed:
-	mutex_lock(&battery_mutex);
-	idr_remove(&battery_id, num);
-	mutex_unlock(&battery_mutex);
-
-	return ret;
-}
-
-static int mm8xxx_battery_remove(struct i2c_client *client)
-{
-	struct mm8xxx_device_info *di = i2c_get_clientdata(client);
-
-	mm8xxx_battery_teardown(di);
-
-	mutex_lock(&battery_mutex);
-	idr_remove(&battery_id, di->id);
-	mutex_unlock(&battery_mutex);
-
-	return 0;
-}
-
-static const struct i2c_device_id mm8xxx_battery_id_table[] = {
-	{ "mm8118g01", MM8118G01 },
-	{ "mm8118w02", MM8118W02 },
-	{ "mm8013c10", MM8013C10 },
-	{},
-};
-MODULE_DEVICE_TABLE(i2c, mm8xxx_battery_id_table);
-
-#ifdef CONFIG_OF
-static const struct of_device_id mm8xxx_battery_of_match_table[] = {
-	{ .compatible = "mitsumi,mm8118g01" },
-	{ .compatible = "mitsumi,mm8118w02" },
-	{ .compatible = "mitsumi,mm8013c10" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, mm8xxx_battery_of_match_table);
-#endif
-
-static struct i2c_driver mm8xxx_battery_driver = {
-	.driver = {
-		.name = "mm8xxx-battery",
-		.of_match_table = of_match_ptr(mm8xxx_battery_of_match_table),
-	},
-	.probe = mm8xxx_battery_probe,
-	.remove = mm8xxx_battery_remove,
-	.id_table = mm8xxx_battery_id_table,
-};
-module_i2c_driver(mm8xxx_battery_driver);
 
 /* MM8XXX Flags */
 #define MM8XXX_FLAG_DSG		BIT(0)
@@ -976,8 +866,6 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	INIT_DELAYED_WORK(&di->work, mm8xxx_battery_poll);
 	mutex_init(&di->lock);
 
-	di->cmds = mm8xxx_chip_data[di->chip].cmds;
-
 	ps_desc = devm_kzalloc(di->dev, sizeof(*ps_desc), GFP_KERNEL);
 	if (!ps_desc)
 		return -ENOMEM;
@@ -1017,6 +905,299 @@ static void mm8xxx_battery_teardown(struct mm8xxx_device_info *di)
 
 	mutex_destroy(&di->lock);
 }
+
+static void mm8xxx_fake_battery_update(struct mm8xxx_device_info *di)
+{
+	di->cache.temperature = 250;
+	di->cache.avg_time_to_empty = 3600;
+	di->cache.soc = 50;
+	di->cache.full_charge_capacity = 4020000;
+	di->cache.flags = 0;
+	di->cache.health = POWER_SUPPLY_HEALTH_GOOD;
+	di->cache.cycle_count = 0;
+
+	di->charge_design_full = 4020000;
+
+	di->last_update = jiffies;
+}
+
+static void mm8xxx_fake_battery_poll(struct work_struct *work)
+{
+	struct mm8xxx_device_info *di =
+		container_of(work, struct mm8xxx_device_info, work.work);
+
+	mm8xxx_fake_battery_update(di);
+
+	if (poll_interval > 0)
+		schedule_delayed_work(&di->work, poll_interval * HZ);
+}
+
+static int mm8xxx_fake_battery_get_property(struct power_supply *psy,
+				       enum power_supply_property psp,
+				       union power_supply_propval *val)
+{
+	int ret = 0;
+	struct mm8xxx_device_info *di = power_supply_get_drvdata(psy);
+
+	mutex_lock(&di->lock);
+	if (time_is_before_jiffies(di->last_update + 5 * HZ)) {
+		cancel_delayed_work_sync(&di->work);
+		mm8xxx_fake_battery_poll(&di->work.work);
+	}
+	mutex_unlock(&di->lock);
+
+	if ((psp != POWER_SUPPLY_PROP_PRESENT) && (di->cache.flags < 0))
+		return -ENODEV;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = 3800 * 1000;
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		val->intval = 1;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		ret = mm8xxx_simple_value(di->cache.soc, val);
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
+		val->intval = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = di->cache.temperature;
+		break;
+	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW:
+		ret = mm8xxx_simple_value(di->cache.avg_time_to_empty, val);
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_NOW:
+		val->intval = di->cache.full_charge_capacity * di->cache.soc / 100;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		ret = mm8xxx_simple_value(di->cache.full_charge_capacity, val);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		ret = mm8xxx_simple_value(di->charge_design_full, val);
+		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		ret = mm8xxx_simple_value(di->cache.cycle_count, val);
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		ret = mm8xxx_simple_value(di->cache.health, val);
+		break;
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		val->strval = MM8XXX_MANUFACTURER;
+		break;
+
+	/*
+	 * TODO: Implement appropriate POWER_SUPPLY_PROP property and read
+	 * elapsed time.
+	 *
+	 *   di->cache.elapsed_months
+	 *   di->cache.elapsed_days
+	 *   di->cache.elapsed_hours
+	 */
+
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static void mm8xxx_fake_external_power_changed(struct power_supply *psy)
+{
+	struct mm8xxx_device_info *di = power_supply_get_drvdata(psy);
+
+	cancel_delayed_work_sync(&di->work);
+	schedule_delayed_work(&di->work, 0);
+}
+
+static int mm8xxx_fake_battery_setup(struct mm8xxx_device_info *di)
+{
+	struct power_supply_desc *ps_desc;
+	struct power_supply_config ps_cfg = {
+		.of_node = di->dev->of_node,
+		.drv_data = di,
+	};
+
+	INIT_DELAYED_WORK(&di->work, mm8xxx_fake_battery_poll);
+	mutex_init(&di->lock);
+
+	ps_desc = devm_kzalloc(di->dev, sizeof(*ps_desc), GFP_KERNEL);
+	if (!ps_desc)
+		return -ENOMEM;
+
+	ps_desc->name = "bms";
+	ps_desc->type = POWER_SUPPLY_TYPE_MAINS;
+	ps_desc->properties = mm8xxx_chip_data[di->chip].props;
+	ps_desc->num_properties = mm8xxx_chip_data[di->chip].props_size;
+	ps_desc->get_property = mm8xxx_fake_battery_get_property;
+	ps_desc->external_power_changed = mm8xxx_fake_external_power_changed;
+
+	di->psy = power_supply_register_no_ws(di->dev, ps_desc, &ps_cfg);
+	if (IS_ERR(di->psy)) {
+		dev_err(di->dev, "failed to register battery\n");
+		return PTR_ERR(di->psy);
+	}
+
+	mm8xxx_fake_battery_update(di);
+
+	mutex_lock(&mm8xxx_list_lock);
+	list_add(&di->list, &mm8xxx_battery_devices);
+	mutex_unlock(&mm8xxx_list_lock);
+
+	return 0;
+}
+
+static int mmi_get_hw_version(struct mm8xxx_device_info *di)
+{
+	int ret = 0;
+	u16 value = 0x0003;
+	ret = mm8xxx_write(di, MM8XXX_CMD_CONTROL, value);
+	if (ret < 0) {
+		dev_err(di->dev, "error writing cmd control\n");
+		return ret;
+	}
+
+	ret = mm8xxx_read(di, MM8XXX_CMD_CONTROL);
+	if (ret < 0) {
+		dev_err(di->dev, "error read cmd control\n");
+		return ret;
+	}
+	mm_info("get HW version 0x%x\n", ret);
+	return ret;
+}
+
+#define MM8013_HW_VERSION 0x0021
+
+static int mm8xxx_battery_probe(struct i2c_client *client,
+				const struct i2c_device_id *id)
+{
+	struct mm8xxx_device_info *di;
+	int ret;
+	char *name;
+	int num;
+
+	mm_info("MM8013 prob begin\n");
+
+	mutex_lock(&battery_mutex);
+	num = idr_alloc(&battery_id, client, 0, 0, GFP_KERNEL);
+	mutex_unlock(&battery_mutex);
+	if (num < 0)
+		return num;
+
+	name = devm_kasprintf(&client->dev, GFP_KERNEL, "%s-%d", id->name, num);
+	if (!name)
+		goto mem_err;
+
+	di = devm_kzalloc(&client->dev, sizeof(*di), GFP_KERNEL);
+	if (!di)
+		goto mem_err;
+
+	i2c_set_clientdata(client, di);
+
+	di->id = num;
+	di->dev = &client->dev;
+	di->chip = id->driver_data;
+	di->name = name;
+
+	di->bus.read = mm8xxx_battery_read;
+	di->bus.write = mm8xxx_battery_write;
+	di->cmds = mm8xxx_chip_data[di->chip].cmds;
+
+	ret = mmi_get_hw_version(di);
+	if (ret != MM8013_HW_VERSION) {
+		di->fake_battery = true;
+		mm_info("don't have real battery,use fake battery\n");
+	}
+
+	if (di->fake_battery)
+		ret = mm8xxx_fake_battery_setup(di);
+	else
+		ret = mm8xxx_battery_setup(di);
+
+	if (ret)
+		goto failed;
+
+	schedule_delayed_work(&di->work, 60 * HZ);
+
+	if (client->irq) {
+		ret = devm_request_threaded_irq(&client->dev, client->irq,
+				NULL, mm8xxx_battery_irq_handler_thread,
+				IRQF_ONESHOT,
+				di->name, di);
+		if (ret) {
+			dev_err(&client->dev,
+				"Unable to register IRQ %d error %d\n",
+				client->irq, ret);
+
+			return ret;
+		}
+	}
+
+	mm_info("MM8013 driver probe success\n");
+	return 0;
+
+mem_err:
+	ret = -ENOMEM;
+
+failed:
+	mutex_lock(&battery_mutex);
+	idr_remove(&battery_id, num);
+	mutex_unlock(&battery_mutex);
+
+	return ret;
+}
+
+static int mm8xxx_battery_remove(struct i2c_client *client)
+{
+	struct mm8xxx_device_info *di = i2c_get_clientdata(client);
+
+	mm8xxx_battery_teardown(di);
+
+	mutex_lock(&battery_mutex);
+	idr_remove(&battery_id, di->id);
+	mutex_unlock(&battery_mutex);
+
+	return 0;
+}
+
+static const struct i2c_device_id mm8xxx_battery_id_table[] = {
+	{ "mm8118g01", MM8118G01 },
+	{ "mm8118w02", MM8118W02 },
+	{ "mm8013c10", MM8013C10 },
+	{},
+};
+MODULE_DEVICE_TABLE(i2c, mm8xxx_battery_id_table);
+
+#ifdef CONFIG_OF
+static const struct of_device_id mm8xxx_battery_of_match_table[] = {
+	{ .compatible = "mitsumi,mm8118g01" },
+	{ .compatible = "mitsumi,mm8118w02" },
+	{ .compatible = "mitsumi,mm8013c10" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, mm8xxx_battery_of_match_table);
+#endif
+
+static struct i2c_driver mm8xxx_battery_driver = {
+	.driver = {
+		.name = "mm8xxx-battery",
+		.of_match_table = of_match_ptr(mm8xxx_battery_of_match_table),
+	},
+	.probe = mm8xxx_battery_probe,
+	.remove = mm8xxx_battery_remove,
+	.id_table = mm8xxx_battery_id_table,
+};
+module_i2c_driver(mm8xxx_battery_driver);
 
 MODULE_AUTHOR("Takayuki Sugaya");
 MODULE_AUTHOR("Yasuhiro Kinoshita");
