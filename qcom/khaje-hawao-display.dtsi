@@ -140,6 +140,7 @@
 	qcom,5v-boost-gpio = <&tlmm 3 0>;
 
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+	qcom,reset-avdd-time-interval = <15>;
 
 	qcom,mdss-dsi-bl-min-level = <16>;
 	qcom,mdss-dsi-bl-max-level = <2047>;
@@ -147,6 +148,8 @@
 	qcom,mdss-brightness-max-level = <2047>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,bklt-dcs-2bytes-enabled;
+	    qcom,mdss-dsi-reset-force-pull-low;
+        qcom,disp_pre_reset;
 	qcom,keep-regulators-on;
 	qcom,mdss-dsi-no-panel-on-read-support;
 
