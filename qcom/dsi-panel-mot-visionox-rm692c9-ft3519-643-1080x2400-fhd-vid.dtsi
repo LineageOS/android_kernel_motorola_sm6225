@@ -149,7 +149,6 @@
 					15 00 00 00 00 00 02 FE 00
 					05 01 00 00 23 00 01 28
 					05 01 00 00 11 00 01 10
-					15 01 00 00 00 00 02 4F 01
 				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
