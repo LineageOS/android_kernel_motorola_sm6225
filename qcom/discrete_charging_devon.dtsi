@@ -159,16 +159,16 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
 		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
-		//sgm,chg-en-gpio = <&pio 0 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
+		//sgm,chg-en-gpio = <&tlmm 0 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
-		//dpdm-supply = <&usb2_phy0>;
+		dpdm-supply = <&usb2_phy0>;
 		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
 		enable_sw_jeita;
 		jeita_temp_above_t4_cv = <0>;
-		jeita_temp_t3_to_t4_cv = <4450000>;
-		jeita_temp_t2_to_t3_cv = <4450000>;
-		jeita_temp_t1_to_t2_cv = <4450000>;
+		jeita_temp_t3_to_t4_cv = <4100000>;
+		jeita_temp_t2_to_t3_cv = <4350000>;
+		jeita_temp_t1_to_t2_cv = <4350000>;
 		jeita_temp_t0_to_t1_cv = <0>;
 		jeita_temp_below_t0_cv = <0>;
 
@@ -392,13 +392,13 @@
 		mmi,demo-fv-mv = <4000>;
 		mmi,otg-cl-ua = <1200000>;
 		mmi,df-serialnum = "SB18D33989";
-		mmi,mmi-temp-zones = <0 4450 2500 0>,
-				<10 4450 2500 1000>,
-				<15 0 2500 2500>,
+		mmi,mmi-temp-zones = <0 4200 1000 0>,
+				<10 4250 3000 1000>,
+				<15 0 3000 3000>,
 				<45 0 4000 4000>,
-				<60 4200 4000 0>;
-		mmi,thermal-mitigation = <3500000 3000000
-				2800000 2500000
+				<60 4200 3000 0>;
+		mmi,thermal-mitigation = <4000000 3500000
+				3000000 2500000
 				2000000 1500000
 				1200000 900000
 				600000 300000>;
@@ -458,8 +458,8 @@
 		mmi,qc3p-volt-max = <10000000>;
 		mmi,chrg-temp-zones-num = <5>;
 		mmi,mmi-chrg-temp-zones =
-					<0 4450 1000  0 0>,
-					<10 4450 3000 4450 1000>,
+					<0 4200 1000  0 0>,
+					<10 4250 3000 4450 1000>,
 					<15 4450 3000 0 0>,
 					<45 4350 6000 4480 4000>,
 					<60 4200 4000 0 0>;
