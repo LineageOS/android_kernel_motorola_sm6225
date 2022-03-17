@@ -1,0 +1,10 @@
+menu "Qualcomm Technologies Inc Charger and Fuel Gauge support"
+
+config CPS_WLS_CHARGER
+        bool "CPS wireless charger driver"
+        depends on POWER_SUPPLY
+        depends on I2C
+        help
+          Say Y to enable support for CPS wireless charger.
+
+endmenu
