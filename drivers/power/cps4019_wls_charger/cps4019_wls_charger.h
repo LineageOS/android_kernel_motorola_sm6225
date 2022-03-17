@@ -10,7 +10,6 @@
 #ifndef __CPS_WLS_CHARGER_H__
 #define __CPS_WLS_CHARGER_H__
 
-
 #define CPS_WLS_FAIL    -1
 #define CPS_WLS_SUCCESS 0
 
@@ -69,65 +68,5 @@
 #define FAIL                0xAA
 #define ILLEGAL             0x40
 #define CPS_PROGRAM_BUFFER_SIZE 64
-
-
-/*****************************************************************************
- *  Log
- ****************************************************************************/
-#define CPS_LOG_NONE    0
-#define CPS_LOG_ERR     1
-#define CPS_LOG_DEBG    2
-#define CPS_LOG_FULL    3
-    
-#define ENABLE_CPS_LOG CPS_LOG_FULL
-    
-#define cps_wls_log(num, fmt, args...) \
-    do { \
-            if (ENABLE_CPS_LOG >= (int)num) \
-                pr_err(fmt, ##args); \
-    } while (0)
-    
-/*-------------------------------------------------------------------*/
-struct cps_wls_chrg_chip {
-    struct i2c_client *client;
-    struct device *dev;
-    struct regmap *regmap;
-    char *name;
-    struct power_supply *wl_psy;
-    struct power_supply *batt_psy;
-    struct power_supply *usb_psy;
-    struct power_supply *dc_psy;
-    struct power_supply_desc wl_psd;
-    struct power_supply_config wl_psc; 
-    struct power_supply_desc batt_psd;    
-    struct power_supply_desc usb_psd;
-    struct power_supply_desc dc_psd;
-    struct pinctrl *cps_pinctrl;
-    struct pinctrl_state *cps_gpio_active;
-    struct pinctrl_state *cps_gpio_suspend;
-
-    struct wake_lock cps_wls_wake_lock;
-    struct mutex   irq_lock;
-    struct mutex   i2c_lock;
-    int state;
-    int wls_charge_int;
-    int cps_wls_irq;
-    int reg_addr;
-    int reg_data;
-    int rx_ovp;
-    int rx_ocp;
-    int rx_opp;
-    int rx_ht_thl;
-    int rx_vout_target;
-    int rx_ept_rsn;
-    int rx_iout;
-    int rx_vrect;
-    int rx_vout;
-    int rx_die_temp;
-    int rx_ntc;
-    int rx_neg_power;
-    int rx_neg_protocol;
-    int command_flag;
-};
 
 #endif
