@@ -41,6 +41,23 @@
 		//qcom,mdss-dsi-force-clock-lane-hs;   //check
 		qcom,mdss-pan-physical-width-dimension = <67>;
 		qcom,mdss-pan-physical-height-dimension = <150>;
+
+		qcom,mdss-dsi-cabc-mv-command = [
+			15 01 00 00 00 00 02 FF 10
+			15 01 00 00 00 00 02 FB 01
+			15 01 00 00 00 00 02 55 03];
+		qcom,mdss-dsi-cabc-mv-command-state =  "dsi_hs_mode";
+		qcom,mdss-dsi-cabc-ui-command = [
+			15 01 00 00 00 00 02 FF 10
+			15 01 00 00 00 00 02 FB 01
+			15 01 00 00 00 00 02 55 01];
+		qcom,mdss-dsi-cabc-ui-command-state =  "dsi_hs_mode";
+		qcom,mdss-dsi-cabc-dis-command = [
+			15 01 00 00 00 00 02 FF 10
+			15 01 00 00 00 00 02 FB 01
+			15 01 00 00 00 00 02 55 00];
+		qcom,mdss-dsi-cabc-dis-command-state =  "dsi_hs_mode";
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-width = <1080>;
@@ -79,6 +96,9 @@
 				15 01 00 00 00 00 02 18 21			//Table A:20 B:21 C:22
 				15 01 00 00 00 00 02 FF 10
 				15 01 00 00 00 00 02 FB 01
+				39 00 00 00 00 00 03 51 06 66
+				15 00 00 00 00 00 02 53 2C
+				15 00 00 00 00 00 02 55 01
 				15 01 00 00 00 00 02 C0 03			   //DSC:03  NO DSC:0
 				15 01 00 00 78 00 02 11 00
 				15 01 00 00 32 00 02 29 00];
