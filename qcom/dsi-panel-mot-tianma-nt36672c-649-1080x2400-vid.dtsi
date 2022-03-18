@@ -38,7 +38,7 @@
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
 
-	  //  qcom,mdss-dsi-force-clock-lane-hs;   //check
+		//qcom,mdss-dsi-force-clock-lane-hs;   //check
 		qcom,mdss-pan-physical-width-dimension = <67>;
 		qcom,mdss-pan-physical-height-dimension = <150>;
 		qcom,mdss-dsi-display-timings {
@@ -51,81 +51,35 @@
 
 				qcom,mdss-dsi-h-sync-skew = <0>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
-				qcom,mdss-dsi-v-back-porch = <20>;
+				qcom,mdss-dsi-v-back-porch = <16>;
 				qcom,mdss-dsi-v-front-porch = <54>;
-				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-framerate = <90>;
 				qcom,mdss-dsi-on-command = [
-				15 01 00 00 00 00 02 FF	25
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 18	21
-				15 01 00 00 00 00 02 FF	10
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 36	00
-				39 01 00 00 00 00 06 3B	03 24 30 04 04
-				15 01 00 00 00 00 02 B0	00
-				15 01 00 00 00 00 02 C0	00
-				15 01 00 00 00 00 02 FF	27
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 E3	02
-				15 01 00 00 00 00 02 E4	DD
-				15 01 00 00 00 00 02 E9	03
-				15 01 00 00 00 00 02 EA	2D
-				15 01 00 00 00 00 02 FF	2A
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 45	0E
-				15 01 00 00 00 00 02 46	40
-				15 01 00 00 00 00 02 47	03
-				15 01 00 00 00 00 02 4A	9F
-				15 01 00 00 00 00 02 4E	0F
-				15 01 00 00 00 00 02 4F	28
-				15 01 00 00 00 00 02 52	0E
-				15 01 00 00 00 00 02 53	FC
-				15 01 00 00 00 00 02 54	24
-				15 01 00 00 00 00 02 56	30
-				15 01 00 00 00 00 02 57	76
-				15 01 00 00 00 00 02 58	76
-				15 01 00 00 00 00 02 59	76
-				15 01 00 00 00 00 02 FF	2C
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 00	03
-				15 01 00 00 00 00 02 01	03
-				15 01 00 00 00 00 02 02	03
-				15 01 00 00 00 00 02 03	1E
-				15 01 00 00 00 00 02 04	1E
-				15 01 00 00 00 00 02 05	1E
-				15 01 00 00 00 00 02 0D	01
-				15 01 00 00 00 00 02 0E	01
-				15 01 00 00 00 00 02 16	03
-				15 01 00 00 00 00 02 17	6C
-				15 01 00 00 00 00 02 18	6C
-				15 01 00 00 00 00 02 19	6C
-				15 01 00 00 00 00 02 2D	AF
-				15 01 00 00 00 00 02 2F	10
-				15 01 00 00 00 00 02 30	F2
-				15 01 00 00 00 00 02 32	00
-				15 01 00 00 00 00 02 33	F2
-				15 01 00 00 00 00 02 35	1E
-				15 01 00 00 00 00 02 37	1E
-				15 01 00 00 00 00 02 4D	21
-				15 01 00 00 00 00 02 4E	04
-				15 01 00 00 00 00 02 4F	01
-				15 01 00 00 00 00 02 FF	F0
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 1C	01
-				15 01 00 00 00 00 02 33	01
-				15 01 00 00 00 00 02 5A	00
-				15 01 00 00 00 00 02 FF E0
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 35	82
-				15 01 00 00 00 00 02 FF	C0
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 9C	11
-				15 01 00 00 00 00 02 9D	11
-				15 01 00 00 00 00 02 FF	D0
-				15 01 00 00 00 00 02 FB	01
-				15 01 00 00 00 00 02 53	22
-				15 01 00 00 00 00 02 54	02
-				15 01 00 00 00 00 02 FF	10
+				15 01 00 00 00 00 02 FF 10
+				15 01 00 00 00 00 02 FB 01
+				39 01 00 00 00 00 06 3B 03 14 36 04 04
+				15 01 00 00 00 00 02 B0 00
+				15 01 00 00 00 00 02 C0 03
+				39 01 00 00 00 00 03 C2 1B A0
+				15 01 00 00 00 00 02 FF F0
+				15 01 00 00 00 00 02 FB 01
+				15 01 00 00 00 00 02 1C 01
+				15 01 00 00 00 00 02 33 01
+				15 01 00 00 00 00 02 5A 00
+				15 01 00 00 00 00 02 FF D0
+				15 01 00 00 00 00 02 FB 01
+				15 01 00 00 00 00 02 53 22
+				15 01 00 00 00 00 02 54 02
+				15 01 00 00 00 00 02 FF C0
+				15 01 00 00 00 00 02 FB 01
+				15 01 00 00 00 00 02 9C 11
+				15 01 00 00 00 00 02 9D 11
+				15 01 00 00 00 00 02 FF 25
+				15 01 00 00 00 00 02 FB 01
+				15 01 00 00 00 00 02 18 21			//Table A:20 B:21 C:22
+				15 01 00 00 00 00 02 FF 10
+				15 01 00 00 00 00 02 FB 01
+				15 01 00 00 00 00 02 C0 03			   //DSC:03  NO DSC:0
 				15 01 00 00 78 00 02 11 00
 				15 01 00 00 32 00 02 29 00];
 				qcom,mdss-dsi-off-command = [
@@ -133,13 +87,14 @@
 						15 01 00 00 96 00 02 10 00];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
-						 // qcom,compression-mode = "dsc";
-           //qcom,mdss-dsc-slice-height = <12>;
-             //               qcom,mdss-dsc-slice-width = <540>;
-               //             qcom,mdss-dsc-slice-per-pkt = <1>;
-                 //          qcom,mdss-dsc-bit-per-component = <8>;
-                   //        qcom,mdss-dsc-bit-per-pixel = <8>;
-                     //       qcom,mdss-dsc-block-prediction-enable;
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <12>;
+				qcom,mdss-dsc-slice-width = <540>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <8>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
 			};
 		};
 	};
