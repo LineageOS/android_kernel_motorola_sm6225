@@ -1527,6 +1527,11 @@ static int cyttsp5_cmcp_get_test_item(int item_input)
 	return test_item;
 }
 
+#define PT_PARAM_FORCE_SINGLE_TX		0x1F
+#define PT_PARAM_ACT_LFT_EN				0x1A
+#define PT_PARAM_BL_H2O_RJCT			0x05
+#define PT_PARAM_LOW_POWER_ENABLE		0x06
+
 static ssize_t cyttsp5_cmcp_test_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1545,6 +1550,9 @@ static ssize_t cyttsp5_cmcp_test_show(struct device *dev,
 	int rc;
 	u8 status;
 	int self_test_id_supported = 0;
+	u32 ram_reg_lft;
+	u32 ram_reg_h2o;
+	u32 ram_reg_lpwg;
 
 	dev = dad->dev;
 	if ((configuration == NULL) || (cmcp_info == NULL))
@@ -1605,6 +1613,29 @@ start_testing:
 	rc = cmd->nonhid_cmd->set_param(dev, 0, 0x1F, 1, 1);
 	if (rc)
 		dev_err(dev, "force single tx failed");
+
+	/* Save self CP Param */
+	rc = cmd->nonhid_cmd->get_param(dev, 0, PT_PARAM_ACT_LFT_EN, &ram_reg_lft);
+	if (rc)
+		dev_err(dev, "Save ram_reg_lft failed");
+	rc = cmd->nonhid_cmd->get_param(dev, 0, PT_PARAM_BL_H2O_RJCT, &ram_reg_h2o);
+	if (rc)
+		dev_err(dev, "Save ram_reg_h2o failed");
+	rc = cmd->nonhid_cmd->get_param(dev, 0, PT_PARAM_LOW_POWER_ENABLE, &ram_reg_lpwg);
+	if (rc)
+		dev_err(dev, "Save ram_reg_lpwg failed");
+
+	/* Disable self CP scanning */
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_ACT_LFT_EN, 0, 1);
+	if (rc)
+		dev_err(dev, "Disable ram_reg_lft failed");
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_BL_H2O_RJCT, 0, 1);
+	if (rc)
+		dev_err(dev, "Disable ram_reg_h2o failed");
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_LOW_POWER_ENABLE, 0, 1);
+	if (rc)
+		dev_err(dev, "Disable ram_reg_lpwg failed");
+
 	/*suspend_scanning */
 	rc = cmd->nonhid_cmd->suspend_scanning(dev, 0);
 	if (rc)
@@ -1632,6 +1663,9 @@ start_testing:
 	rc = cmd->nonhid_cmd->resume_scanning(dev, 0);
 	if (rc)
 		dev_err(dev, "resume_scanning failed");
+
+	/* Delay 300ms to for IIR filter */
+	msleep(300);
 
 	/*get all cmcp data from FW*/
 	self_test_id_supported =
@@ -1673,10 +1707,24 @@ start_testing:
 	if (rc)
 		dev_err(dev, "resume_scanning failed");
 
+	/* Delay 300ms to for IIR filter */
+	msleep(300);
+
 	self_test_id_supported =
 		cyttsp5_get_cm_cal(dad, cmcp_info);
 	if (self_test_id_supported)
 		dev_err(dev, "cyttsp5_get_cmcp_info failed");
+
+	/* Restore Param */
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_ACT_LFT_EN, ram_reg_lft, 1);
+	if (rc)
+		dev_err(dev, "Restore ram_reg_lft failed");
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_BL_H2O_RJCT, ram_reg_h2o, 1);
+	if (rc)
+		dev_err(dev, "Restore ram_reg_h2o failed");
+	rc = cmd->nonhid_cmd->set_param(dev, 0, PT_PARAM_LOW_POWER_ENABLE, ram_reg_lpwg, 1);
+	if (rc)
+		dev_err(dev, "Restore ram_reg_lpwg failed");
 
 	/*start  watchdog*/
 	rc = cmd->request_start_wd(dev);
@@ -2841,6 +2889,97 @@ static const struct file_operations cmcp_results_debugfs_fops = {
 	.release = cmcp_results_debugfs_close,
 	.read = cmcp_results_debugfs_read,
 	.write = NULL,
+};
+
+static ssize_t cmcp_results_show(struct file *filp,
+		struct kobject *kobj, struct bin_attribute *bin_attr,
+		char *buf, loff_t offset, size_t count)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct cyttsp5_device_access_data *dad
+		= cyttsp5_get_device_access_data(dev);
+	struct cmcp_data *cmcp_info = dad->cmcp_info;
+	struct result *result = dad->result;
+	struct configuration *configuration = dad->configs;
+	static int pr_left;
+	static int pr_index;
+	static u8 *pr_buf;
+	int index = 0;
+	int rc = 0;
+	int test_item;
+	int no_builtin_file = 0;
+	int test_executed = 0;
+
+	if (pr_left) {
+		if (count < pr_left) {
+			index = count;
+			memcpy(buf, pr_buf + pr_index, index);
+			pr_left -= count;
+			pr_index += count;
+		} else {
+			index = pr_left;
+			memcpy(buf, pr_buf + pr_index, index);
+			pr_left = 0;
+			pr_index = 0;
+			kfree(pr_buf);
+		}
+		return index;
+	}
+
+	if (offset == 0) {
+		mutex_lock(&dad->sysfs_lock);
+		test_executed = dad->test_executed;
+		test_item = cyttsp5_cmcp_get_test_item(dad->cmcp_test_items);
+		if (dad->builtin_cmcp_threshold_status < 0) {
+			dev_err(dev, "%s: No cmcp threshold file.\n", __func__);
+			no_builtin_file = 1;
+		}
+		mutex_unlock(&dad->sysfs_lock);
+		if (test_executed) {
+			pr_buf = kzalloc(MAX_BUF_LEN, GFP_KERNEL);
+			if (configuration == NULL)
+				dev_err(dev, "config is NULL");
+			if (result == NULL)
+				dev_err(dev, "result is NULL");
+			if (cmcp_info == NULL)
+				dev_err(dev, "cmcp_info is NULL");
+
+			index = save_header(pr_buf, index, result);
+			index = save_engineering_data(dev, pr_buf, index,
+				cmcp_info, configuration, result,
+				test_item, no_builtin_file);
+
+		} else {
+			char warning_info[] =
+			"No test result available!\n";
+			dev_err(dev, "%s: No test result available!\n", __func__);
+			index += scnprintf(&pr_buf[index], MAX_BUF_LEN - index,
+				"%s", warning_info);
+		}
+
+		if (count < index) {
+			memcpy(buf, pr_buf, count);
+			pr_left = index - count;
+			pr_index = count;
+			index = count;
+		} else {
+			memcpy(buf, pr_buf, index);
+			pr_left = 0;
+			pr_index = 0;
+			kfree(pr_buf);
+		}
+		return index;
+	}
+
+	return rc;
+}
+
+static struct bin_attribute bin_attr_cmcp_results = {
+	.attr = {
+		.name = "cmcp_results",
+		.mode = (0444),
+	},
+	.read = cmcp_results_show,
 };
 
 static ssize_t cyttsp5_cmcp_threshold_loading_show(struct device *dev,
@@ -4687,11 +4826,19 @@ static int cyttsp5_setup_sysfs(struct device *dev)
 		goto unregister_status;
 	}
 
+	rc = device_create_bin_file(dev, &bin_attr_cmcp_results);
+	if (rc) {
+		dev_err(dev,
+			"%s: Error, could not create node cmcp_results\n",
+			__func__);
+		goto unregister_response;
+	}
+
 	dad->base_dentry = debugfs_create_dir(dev_name(dev), NULL);
 	if (IS_ERR_OR_NULL(dad->base_dentry)) {
 		dev_err(dev, "%s: Error, could not create base directory\n",
 				__func__);
-		goto unregister_response;
+		goto unregister_cmcp_results;
 	}
 
 	dad->mfg_test_dentry = debugfs_create_dir("mfg_test",
@@ -4825,6 +4972,8 @@ unregister_cmcp_test:
 	device_remove_file(dev, &dev_attr_cmcp_test);
 unregister_base_dir:
 	debugfs_remove_recursive(dad->base_dentry);
+unregister_cmcp_results:
+	device_remove_bin_file(dev, &bin_attr_cmcp_results);
 unregister_response:
 	device_remove_file(dev, &dev_attr_response);
 unregister_status:
@@ -5236,6 +5385,7 @@ static void cyttsp5_device_access_release(struct device *dev, void *data)
 		device_remove_file(dev, &dev_attr_command);
 		device_remove_file(dev, &dev_attr_status);
 		device_remove_file(dev, &dev_attr_response);
+		device_remove_bin_file(dev, &bin_attr_cmcp_results);
 		debugfs_remove(dad->cmcp_results_debugfs);
 		debugfs_remove_recursive(dad->base_dentry);
 #ifdef TTHE_TUNER_SUPPORT
