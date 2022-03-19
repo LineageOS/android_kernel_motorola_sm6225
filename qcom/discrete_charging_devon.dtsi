@@ -147,14 +147,18 @@
                                 <&wt6670 PSY_IIO_QC3P_POWER>,
                                 <&wt6670 PSY_IIO_START_DETECTION>,
                                 <&wt6670 PSY_IIO_DETECTION_READY>,
-                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>;
+                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>,
+				<&wt6670 PSY_IIO_START_BC12_DETECTION>,
+				<&wt6670 PSY_IIO_DETECTION_BC12_READY>;
 
                 io-channel-names = "gpio3_div3",
 				   "wt6670_usb_real_type",
                                    "wt6670_usb_qc3p_power",
                                    "wt6670_start_detection",
 				   "wt6670_detection_ready",
-				   "qc3p_start_policy";
+				   "qc3p_start_policy",
+				   "wt6670_start_bc12_detection",
+				   "wt6670_detection_bc12_ready";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
