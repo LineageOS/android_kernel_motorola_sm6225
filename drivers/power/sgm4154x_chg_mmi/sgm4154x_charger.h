@@ -398,6 +398,8 @@ enum mmi_qc3p_ext_iio_channels {
 	SMB5_QC3P_START_DETECT,
 	SMB5_QC3P_DETECTION_READY,
 	SMB5_QC3P_START_POLICY,
+	SMB5_BC12_START_DETECT,
+	SMB5_BC12_DETECTION_READY,
 };
 
 static const char * const mmi_qc3p_ext_iio_chan_name[] = {
@@ -407,6 +409,8 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_START_DETECT] = "wt6670_start_detection",
 	[SMB5_QC3P_DETECTION_READY] "wt6670_detection_ready",
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
+	[SMB5_BC12_START_DETECT] = "wt6670_start_bc12_detection",
+	[SMB5_BC12_DETECTION_READY] = "wt6670_detection_bc12_ready",
 };
 bool qc3p_update_policy(struct sgm4154x_device *chip);
 #endif
