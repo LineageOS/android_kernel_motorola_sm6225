@@ -1809,6 +1809,53 @@ bool qc3p_update_policy(struct sgm4154x_device *chip )
 	dev_info(chip->dev, "write SMB5_QC3P_START_POLICY IIO :%d\n",val);
 	return val;
 }
+
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+int bc12_start_detection(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	ret = mmi_charger_write_iio_chan(chip, SMB5_BC12_START_DETECT, true);
+	if(ret )
+		dev_err(chip->dev, "Cann't write SMB5_BC12_START_DETECT IIO\n");
+
+	dev_info(chip->dev, "write SMB5_BC12_START_DETECT IIO success\n");
+	return 0;
+}
+
+bool bc12_detection_done(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	int val = 0;
+	int delay_count =0;
+
+	do {
+		ret = mmi_charger_read_iio_chan(chip, SMB5_BC12_DETECTION_READY, &val);
+		if(ret )
+			dev_err(chip->dev, "Cann't read SMB5_BC12_DETECTION_READY IIO\n");
+
+		dev_info(chip->dev, "read SMB5_BC12_DETECTION_READY IIO :%d\n",val);
+
+		msleep(100);
+		delay_count ++;
+	}while(val == false && delay_count <= 35);
+
+	dev_info(chip->dev, "read SMB5_BC12_DETECTION_READY IIO :%d\n",val);
+	return val;
+}
+
+int bc12_read_charger_type(struct sgm4154x_device *chip)
+{
+	int ret = 0;
+	int val = 0;
+
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	if(ret )
+		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+
+	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	return val;
+}
+#endif
 #endif
 
 static int mmi_hvdcp_detect_kthread(void *param)
@@ -1918,6 +1965,50 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 	}
 }
 
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int *real_charger_type)
+{
+	bool result;
+	int ret;
+
+	bc12_start_detection(sgm);
+	bc12_detection_done(sgm);
+	ret = bc12_read_charger_type(sgm);
+
+	switch(ret)	{
+		case WT6670_CHG_TYPE_UNKNOWN:
+		case WT_CHG_TYPE_FC:
+		case WT_CHG_TYPE_OCP:
+			dev_err(sgm->dev, "unkown type have been detected !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+			result = true;
+			break;
+		case WT_CHG_TYPE_SDP:
+			dev_err(sgm->dev, "SDP have been detected !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB;
+			result = true;
+			break;
+		case WT_CHG_TYPE_CDP:
+			dev_err(sgm->dev, "CDP have been detected !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
+			result = true;
+			break;
+		case WT_CHG_TYPE_DCP:
+			dev_err(sgm->dev, "DCP have been detected !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+			mmi_start_hvdcp_detect(sgm);
+			result = true;
+			break;
+		default:
+			pr_err("bc12 charger type: default\n");
+			result = false;
+			break;
+	}
+
+	return result;
+}
+#endif
+
 static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
 	dev_err(sgm->dev, "Vbus removed, disable charge\n");
@@ -1949,7 +2040,9 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 
 static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 {
-
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+	bool ret;
+#endif
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	if (((sgm->state.chrg_type == SGM4154x_USB_SDP) ||
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
@@ -1967,11 +2060,17 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 		}
 	}
 #endif
-	sgm->state.chrg_type = SGM4154x_USB_DCP;
+
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			pr_err("SGM4154x charger type: SDP\n");
+#ifndef CONFIG_MMI_SGM41513_CHARGER
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB;
+#else
+			ret = mmi_start_bc12_charger_type_detect(sgm, &sgm->real_charger_type);
+			if (!ret)
+				return;
+#endif
 			break;
 
 		case SGM4154x_USB_CDP:
@@ -1999,7 +2098,6 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 			pr_err("SGM4154x charger type: default\n");
 			return;
 	}
-
 #endif
 
 	schedule_delayed_work(&sgm->charge_monitor_work, 0);
