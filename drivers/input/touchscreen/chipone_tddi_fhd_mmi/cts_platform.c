@@ -7,6 +7,8 @@
 #include "cts_firmware.h"
 #include "cts_sysfs.h"
 
+extern struct chipone_ts_data *chipone_ts;
+
 #ifdef CFG_CTS_FW_LOG_REDIRECT
 size_t cts_plat_get_max_fw_log_size(struct cts_platform_data *pdata)
 {
@@ -1237,14 +1239,18 @@ int cts_plat_process_gesture_info(struct cts_platform_data *pdata,
 	for (i = 0; i < CFG_CTS_NUM_GESTURE; i++) {
 		if (gesture_info->gesture_id == pdata->gesture_keymap[i][0]) {
 			cts_info("Report key[%u]", pdata->gesture_keymap[i][1]);
-			input_report_key(pdata->ts_input_dev,
+/*			input_report_key(pdata->ts_input_dev,
 					 pdata->gesture_keymap[i][1], 1);
 			input_sync(pdata->ts_input_dev);
 
 			input_report_key(pdata->ts_input_dev,
 					 pdata->gesture_keymap[i][1], 0);
 			input_sync(pdata->ts_input_dev);
-
+*/
+			input_report_key(chipone_ts->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+			input_sync(chipone_ts->sensor_pdata->input_sensor_dev);
+			input_report_key(chipone_ts->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+			input_sync(chipone_ts->sensor_pdata->input_sensor_dev);
 			return 0;
 		}
 	}
