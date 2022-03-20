@@ -3,6 +3,12 @@
 #define CTS_CORE_H
 
 #include "cts_config.h"
+#include <linux/mmi_wake_lock.h>
+#include <linux/panel_notifier.h>
+
+#ifdef CHIPONE_SENSOR_EN
+#include <linux/sensors.h>
+#endif
 
 enum cts_dev_hw_reg {
 	CTS_DEV_HW_REG_HARDWARE_ID = 0x30000u,
@@ -401,6 +407,29 @@ struct cts_device {
 
 struct cts_platform_data;
 
+#define MAX_PANEL_IDX 2
+enum touch_panel_id {
+	TOUCH_PANEL_IDX_PRIMARY = 0,
+	TOUCH_PANEL_MAX_IDX,
+};
+
+#ifdef CHIPONE_SENSOR_EN
+/* display state */
+enum display_state {
+	SCREEN_UNKNOWN,
+	SCREEN_OFF,
+	SCREEN_ON,
+};
+struct chipone_sensor_platform_data {
+	struct input_dev *input_sensor_dev;
+	struct sensors_classdev ps_cdev;
+	int sensor_opened;
+	char sensor_data; /* 0 near, 1 far */
+	struct chipone_ts_data *data;
+};
+#define REPORT_MAX_COUNT 10000
+#endif
+
 struct chipone_ts_data {
 #ifdef CONFIG_CTS_I2C_HOST
 	struct i2c_client *i2c_client;
@@ -429,6 +458,21 @@ struct chipone_ts_data {
 #endif				/* CONFIG_CTS_LEGACY_TOOL */
 
 	bool force_reflash;
+
+#ifdef CHIPONE_SENSOR_EN
+	bool wakeable;
+	bool should_enable_gesture;
+	bool gesture_enabled;
+	uint32_t report_gesture_key;
+	enum display_state screen_state;
+	struct mutex state_mutex;
+	struct chipone_sensor_platform_data *sensor_pdata;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock gesture_wakelock;
+#else
+	struct wakeup_source *gesture_wakelock;
+#endif
+#endif
 
 };
 
@@ -887,4 +931,7 @@ extern bool cts_is_fwid_valid(u16 fwid);
 extern void cts_deinit_rtdata(struct cts_device *cts_dev);
 
 extern int cts_reset_device(struct cts_device *cts_dev);
+
+int touch_set_state(int state, int panel_idx);
+int check_touch_state(int *state, int panel_idx);
 #endif /* CTS_CORE_H */
