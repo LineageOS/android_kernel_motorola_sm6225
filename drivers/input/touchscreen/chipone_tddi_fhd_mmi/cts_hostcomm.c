@@ -2,7 +2,7 @@
 #include "cts_config.h"
 #include "cts_firmware.h"
 #include "cts_platform.h"
-
+#include "cts_core.h"
 #include "cts_hostcomm.h"
 
 extern bool set_short_test_type(const struct cts_device *cts_dev, u8 type);
@@ -454,6 +454,21 @@ int cts_hostcomm_reset_device(const struct cts_device *cts_dev)
 	return cts_plat_reset_device(cts_dev->pdata);
 }
 
+int cts_hostcomm_set_int_pin(const struct cts_device *cts_dev, u8 high)
+{
+	int ret;
+
+	if (high)
+		ret = cts_send_command(cts_dev, CTS_CMD_WRTITE_INT_HIGH);
+	else
+		ret = cts_send_command(cts_dev, CTS_CMD_WRTITE_INT_LOW);
+
+	if (ret)
+		cts_err("Send command WRTITE_INT_%s failed %d", high ? "HIGH" : "LOW", ret);
+
+	return ret;
+}
+
 struct cts_dev_ops hostcomm_ops = {
 	.get_fw_ver = cts_hostcomm_get_fw_ver,
 	.get_lib_ver = cts_hostcomm_get_lib_ver,
@@ -527,6 +542,10 @@ struct cts_dev_ops hostcomm_ops = {
 	.top_get_cnegdata = cts_hostcomm_top_get_cnegdata,
 
 	.reset_device = cts_hostcomm_reset_device,
+
+	.set_int_test = NULL,
+	.set_int_pin = cts_hostcomm_set_int_pin,
+	.get_module_id = NULL,
 };
 
 //TODO:

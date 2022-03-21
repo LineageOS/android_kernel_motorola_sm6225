@@ -512,6 +512,16 @@ int cts_tcs_get_data_ready_flag(const struct cts_device *cts_dev, u8 *ready)
 	return ret;
 }
 
+int cts_tcs_clr_gstr_ready_flag(const struct cts_device *cts_dev)
+{
+	int ret;
+	u8 ready = 0;
+
+	ret = cts_tcs_spi_write(cts_dev, TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW,
+				&ready, sizeof(ready));
+	return ret;
+}
+
 int cts_tcs_clr_data_ready_flag(const struct cts_device *cts_dev)
 {
 	int ret;
@@ -891,6 +901,11 @@ int cts_tcs_calc_int_data_size(struct cts_device *cts_dev)
 	if (data_method == INT_DATA_METHOD_NONE) {
 		cts_dev->fwdata.int_data_size = data_size;
 		return 0;
+	} else if (data_method == INT_DATA_METHOD_DEBUG) {
+		data_size += INT_DATA_INFO_SIZ;
+		data_size += (INT_DATA_TYPE_LEN_SIZ + INT_DATA_TYPE_U16_SIZ);
+		cts_dev->fwdata.int_data_size = data_size;
+		return 0;
 	}
 
 	cts_info("data_method:%d, data_type:%d", data_method, data_types);
@@ -934,6 +949,9 @@ static int cts_tcs_polling_data(const struct cts_device *cts_dev, u8 *buf,
 	int retries = 100;
 	u8 ready = 0;
 	size_t data_size = cts_dev->fwdata.int_data_size;
+
+	if (!data_size)
+		data_size = TOUCH_INFO_SIZ + TCS_REPLY_TAIL_SIZ;
 
 	do {
 		ret = cts_tcs_get_data_ready_flag(cts_dev, &ready);
@@ -1087,41 +1105,129 @@ int cts_tcs_reset_device(const struct cts_device *cts_dev)
 		return cts_plat_reset_device(cts_dev->pdata);
 }
 
+int cts_tcs_set_int_test(const struct cts_device *cts_dev, u8 enable)
+{
+	int ret;
+
+	ret = cts_tcs_spi_write(cts_dev, TP_STD_CMD_SYS_STS_INT_TEST_EN_RW, &enable, sizeof(enable));
+	if (!ret)
+		return 0;
+
+	return -1;
+}
+
+int cts_tcs_set_int_pin(const struct cts_device *cts_dev, u8 high)
+{
+	int ret;
+
+	ret = cts_tcs_spi_write(cts_dev, TP_STD_CMD_SYS_STS_SET_INT_PIN_RW, &high, sizeof(high));
+	if (!ret)
+		return 0;
+
+	return -1;
+}
+
+int cts_tcs_get_module_id(const struct cts_device *cts_dev, u32 *modId)
+{
+	int ret;
+	u8 buf[4];
+
+	ret = cts_tcs_spi_read(cts_dev, TP_STD_CMD_INFO_MODULE_ID_RO,
+		buf, sizeof(buf));
+	if (!ret) {
+		*modId = *(u32 *)buf;
+		return 0;
+	}
+	return -1;
+}
+
+int cts_tcs_get_gestureinfo(const struct cts_device *cts_dev,
+		struct cts_device_gesture_info *gesture_info)
+{
+	int ret = 0;
+	size_t size = cts_dev->fwdata.int_data_size;
+
+	if (!size)
+		size = TOUCH_INFO_SIZ + TCS_REPLY_TAIL_SIZ;
+
+	memset(gesture_info, 0, sizeof(*gesture_info));
+
+	if ((cts_dev->fwdata.int_data_method == INT_DATA_METHOD_NONE) ||
+		(cts_dev->fwdata.int_data_method == INT_DATA_METHOD_DEBUG)) {
+		dump_flag = 0;
+		ret =
+			cts_tcs_spi_read_1_cs(cts_dev,
+				TP_STD_CMD_TP_DATA_COORDINATES_RO,
+				cts_dev->rtdata.int_data, size);
+		dump_flag = 1;
+		mdelay(1);
+		if (cts_tcs_clr_gstr_ready_flag(cts_dev))
+			cts_err("Clear gesture ready flag failed");
+
+		if (!ret)
+			memcpy(gesture_info, cts_dev->rtdata.int_data,
+			       sizeof(*gesture_info));
+
+		return ret;
+	} else if (cts_dev->fwdata.int_data_method == INT_DATA_METHOD_HOST ||
+			cts_dev->fwdata.int_data_method == INT_DATA_METHOD_POLLING) {
+		dump_flag = 0;
+		ret =
+			cts_tcs_spi_read_1_cs(cts_dev,
+						TP_STD_CMD_TP_DATA_COORDINATES_RO,
+						cts_dev->rtdata.int_data, size);
+		dump_flag = 1;
+		mdelay(1);
+		if (cts_tcs_clr_gstr_ready_flag(cts_dev))
+			cts_err("Clear gesture ready flag failed");
+
+		if (!ret)
+			memcpy(gesture_info, cts_dev->rtdata.int_data, sizeof(*gesture_info));
+		return ret;
+	}
+
+	return ret;
+}
+
 int cts_tcs_get_touchinfo(const struct cts_device *cts_dev,
 			  struct cts_device_touch_info *touch_info)
 {
 	int ret = -1;
 	size_t size = cts_dev->fwdata.int_data_size;
 
+	if (!size)
+		size = TOUCH_INFO_SIZ + TCS_REPLY_TAIL_SIZ;
+
 	memset(touch_info, 0, sizeof(*touch_info));
 
-	if (cts_dev->fwdata.int_data_method == INT_DATA_METHOD_NONE) {
+	if ((cts_dev->fwdata.int_data_method == INT_DATA_METHOD_NONE) ||
+			(cts_dev->fwdata.int_data_method == INT_DATA_METHOD_DEBUG)) {
 		dump_flag = 0;
 		ret =
-		    cts_tcs_spi_read_1_cs(cts_dev,
-					  TP_STD_CMD_TP_DATA_COORDINATES_RO,
-					  cts_dev->rtdata.int_data, size);
+			cts_tcs_spi_read_1_cs(cts_dev,
+						TP_STD_CMD_TP_DATA_COORDINATES_RO,
+						cts_dev->rtdata.int_data, size);
 		dump_flag = 1;
 		if (!ret) {
 			memcpy(touch_info, cts_dev->rtdata.int_data,
-			       sizeof(*touch_info));
+				sizeof(*touch_info));
 		}
 
 		return ret;
 	} else if (cts_dev->fwdata.int_data_method == INT_DATA_METHOD_HOST ||
-		   cts_dev->fwdata.int_data_method == INT_DATA_METHOD_POLLING) {
+			cts_dev->fwdata.int_data_method == INT_DATA_METHOD_POLLING) {
 		dump_flag = 0;
 		ret =
-		    cts_tcs_spi_read_1_cs(cts_dev,
-					  TP_STD_CMD_TP_DATA_COORDINATES_RO,
-					  cts_dev->rtdata.int_data, size);
+			cts_tcs_spi_read_1_cs(cts_dev,
+						TP_STD_CMD_TP_DATA_COORDINATES_RO,
+						cts_dev->rtdata.int_data, size);
 		dump_flag = 1;
 		mdelay(1);
 		if (cts_tcs_clr_data_ready_flag(cts_dev))
 			cts_err("Clear data ready flag failed");
 		if (!ret)
 			memcpy(touch_info, cts_dev->rtdata.int_data,
-			       sizeof(*touch_info));
+					sizeof(*touch_info));
 		return ret;
 	}
 
@@ -1492,8 +1598,10 @@ int cts_tcs_init_int_data(struct cts_device *cts_dev)
 
 int cts_tcs_deinit_int_data(struct cts_device *cts_dev)
 {
-	if (cts_dev->rtdata.int_data)
+	if (cts_dev->rtdata.int_data) {
+		kfree(cts_dev->rtdata.int_data);
 		cts_dev->rtdata.int_data = NULL;
+	}
 
 	return 0;
 }
@@ -1589,6 +1697,7 @@ struct cts_dev_ops tcs_ops = {
 	.get_int_mode = cts_tcs_get_int_mode,
 	.get_int_keep_time = cts_tcs_get_int_keep_time,
 	.get_esd_method = cts_tcs_get_esd_method,
+	.get_gestureinfo		= cts_tcs_get_gestureinfo,
 	.get_touchinfo = cts_tcs_get_touchinfo,
 	.get_esd_protection = cts_tcs_get_esd_protection,
 	.get_data_ready_flag = cts_tcs_get_data_ready_flag,
@@ -1648,4 +1757,8 @@ struct cts_dev_ops tcs_ops = {
 	.top_get_cnegdata = cts_tcs_top_get_cnegdata,
 
 	.reset_device = cts_tcs_reset_device,
+
+	.set_int_test           = cts_tcs_set_int_test,
+	.set_int_pin            = cts_tcs_set_int_pin,
+	.get_module_id          = cts_tcs_get_module_id,
 };

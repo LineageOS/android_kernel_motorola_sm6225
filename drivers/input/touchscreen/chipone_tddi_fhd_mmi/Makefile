@@ -19,4 +19,5 @@ chipone-tddi-objs += cts_tcs.o
 chipone-tddi-objs += cts_platform.o
 chipone-tddi-objs += cts_tool.o
 chipone-tddi-objs += cts_sysfs.o
+chipone-tddi-objs += cts_strerror.o
 

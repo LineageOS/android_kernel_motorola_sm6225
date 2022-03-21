@@ -8,6 +8,7 @@
 #include "cts_sfctrl.h"
 #include "cts_spi_flash.h"
 #include "cts_firmware.h"
+#include "cts_strerror.h"
 
 #ifdef CONFIG_CTS_SYSFS
 
@@ -1284,32 +1285,57 @@ static const struct attribute_group cts_dev_flash_attr_group = {
 };
 
 static ssize_t open_test_show(struct device *dev,
-			      struct device_attribute *attr, char *buf)
+		struct device_attribute *attr, char *buf)
 {
 	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
 	struct cts_device *cts_dev = &cts_data->cts_dev;
-	u16 threshold;
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_OPEN,
+		.flags = CTS_TEST_FLAG_VALIDATE_DATA |
+				 CTS_TEST_FLAG_VALIDATE_MIN |
+				 CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
+		.test_data_filepath =
+		    "/sdcard/open-test-data.txt",
+		.num_invalid_node = 0,
+		.invalid_nodes = NULL,
+	};
+	int min = 0;
 	int ret;
+	ktime_t start_time, end_time, delta_time;
 
 	if (argc != 1)
-		return snprintf(buf, PAGE_SIZE, "Invalid num args %d\n", argc);
+		return scnprintf(buf, PAGE_SIZE, "Invalid num args %d\n", argc);
 
-	ret = kstrtou16(argv[0], 0, &threshold);
+	ret = kstrtoint(argv[0], 0, &min);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid threshold: %s\n",
-				argv[0]);
+		return scnprintf(buf, PAGE_SIZE, "Invalid min thres: %s\n", argv[0]);
 
-	cts_info("Open test, threshold = %u", threshold);
+	cts_info("Open test, threshold = %u", min);
 
-	ret = cts_open_test(cts_dev, threshold);
-	if (ret)
-		return snprintf(buf, PAGE_SIZE,
-				"Open test FAILED %d, threshold = %u\n", ret,
-				threshold);
+	test_param.min = &min;
+
+	start_time = ktime_get();
+
+	ret = cts_test_open(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret > 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Open test has %d nodes FAIL, min: %u, ELAPSED TIME: %lldms\n",
+			ret, min, ktime_to_ms(delta_time));
+	else if (ret < 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Open test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+			ret, cts_strerror(ret), ktime_to_ms(delta_time));
 	else
-		return snprintf(buf, PAGE_SIZE,
-				"Open test PASSED, threshold = %u\n",
-				threshold);
+		return scnprintf(buf, PAGE_SIZE,
+			"Open test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
+
 }
 
 /* echo threshod > open_test */
@@ -1326,32 +1352,56 @@ static DEVICE_ATTR(open_test, S_IWUSR | S_IRUGO, open_test_show,
 		   open_test_store);
 
 static ssize_t short_test_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+		struct device_attribute *attr, char *buf)
 {
 	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
 	struct cts_device *cts_dev = &cts_data->cts_dev;
-	u16 threshold;
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_SHORT,
+		.flags = CTS_TEST_FLAG_VALIDATE_DATA |
+				 CTS_TEST_FLAG_VALIDATE_MIN |
+				 CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
+		.test_data_filepath =
+		    "/sdcard/short-test-data.txt",
+		.num_invalid_node = 0,
+		.invalid_nodes = NULL,
+	};
+	int min = 0;
 	int ret;
+	ktime_t start_time, end_time, delta_time;
 
 	if (argc != 1)
-		return snprintf(buf, PAGE_SIZE, "Invalid num args %d\n", argc);
+		return scnprintf(buf, PAGE_SIZE, "Invalid num args %d\n", argc);
 
-	ret = kstrtou16(argv[0], 0, &threshold);
+	ret = kstrtoint(argv[0], 0, &min);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid threshold: %s\n",
-				argv[0]);
+		return scnprintf(buf, PAGE_SIZE, "Invalid min thres: %s\n", argv[0]);
 
-	cts_info("Short test, threshold = %u", threshold);
+	cts_info("Short test, threshold = %u", min);
 
-	ret = cts_short_test(cts_dev, threshold);
-	if (ret)
-		return snprintf(buf, PAGE_SIZE,
-				"Short test FAILED %d, threshold = %u\n", ret,
-				threshold);
+	test_param.min = &min;
+
+	start_time = ktime_get();
+
+	ret = cts_test_short(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret > 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Short test has %d nodes FAIL, min: %u, ELAPSED TIME: %lldms\n",
+			ret, min, ktime_to_ms(delta_time));
+	else if (ret < 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Short test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+			ret, cts_strerror(ret), ktime_to_ms(delta_time));
 	else
-		return snprintf(buf, PAGE_SIZE,
-				"Short test PASSED, threshold = %u\n",
-				threshold);
+		return scnprintf(buf, PAGE_SIZE,
+			"Short test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
 }
 
 /* echo threshod > short_test */
@@ -1379,63 +1429,137 @@ static ssize_t testing_show(struct device *dev,
 static DEVICE_ATTR(testing, S_IRUGO, testing_show, NULL);
 
 #ifdef CFG_CTS_HAS_RESET_PIN
-static ssize_t reset_test_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+static ssize_t reset_pin_test_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
+#ifdef CFG_CTS_HAS_RESET_PIN
 	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
 	struct cts_device *cts_dev = &cts_data->cts_dev;
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_RESET_PIN,
+		.flags = 0,
+	};
 	int ret;
-	int count;
+	ktime_t start_time, end_time, delta_time;
 
-	ret = cts_reset_test(cts_dev);
-	if (ret == 0)
-		count = snprintf(buf, PAGE_SIZE, "reset pin test sucessful\n");
+	start_time = ktime_get();
+
+	ret = cts_test_reset_pin(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret)
+		return scnprintf(buf, PAGE_SIZE,
+				"Reset-Pin test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+				ret, cts_strerror(ret), ktime_to_ms(delta_time));
 	else
-		count = snprintf(buf, PAGE_SIZE, "reset pin test failed\n");
+		return scnprintf(buf, PAGE_SIZE,
+			"Reset-Pin test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
 
-	return count;
+#else /* CFG_CTS_HAS_RESET_PIN */
+	return scnprintf(buf, PAGE_SIZE,
+		"Reset-Pin test NOT supported(CFG_CTS_HAS_RESET_PIN not defined)\n");
+#endif
 }
-
-static DEVICE_ATTR(reset_test, S_IRUGO, reset_test_show, NULL);
+static DEVICE_ATTR(reset_pin_test, S_IRUGO, reset_pin_test_show, NULL);
 #endif
 
-static ssize_t compensate_cap_test_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
+static ssize_t int_pin_test_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
 	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
 	struct cts_device *cts_dev = &cts_data->cts_dev;
-	u8 min_thres, max_thres;
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_INT_PIN,
+		.flags = 0,
+	};
 	int ret;
+	ktime_t start_time, end_time, delta_time;
+
+	start_time = ktime_get();
+
+	ret = cts_test_int_pin(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret)
+		return scnprintf(buf, PAGE_SIZE,
+			"Int-Pin test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+				ret, cts_strerror(ret), ktime_to_ms(delta_time));
+	else
+		return scnprintf(buf, PAGE_SIZE,
+			"Int-Pin test PASS, ELAPSED TIME: %lldms\n",
+				ktime_to_ms(delta_time));
+}
+static DEVICE_ATTR(int_pin_test, S_IRUGO, int_pin_test_show, NULL);
+
+static ssize_t compensate_cap_test_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
+	struct cts_device *cts_dev = &cts_data->cts_dev;
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_COMPENSATE_CAP,
+		.flags = CTS_TEST_FLAG_VALIDATE_DATA |
+				 CTS_TEST_FLAG_VALIDATE_MIN |
+				 CTS_TEST_FLAG_VALIDATE_MAX |
+				 CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
+		.test_data_filepath =
+			"/sdcard/comp-cap-test-data.txt",
+		.num_invalid_node = 0,
+		.invalid_nodes = NULL,
+	};
+	int min = 0, max = 0;
+	int ret;
+	ktime_t start_time, end_time, delta_time;
 
 	if (argc != 2)
-		return snprintf(buf, PAGE_SIZE, "Invalid num args\n"
-				"USAGE:\n"
-				"  1. echo min max > compensate_cap_test\n"
-				"  2. cat compensate_cap_test\n");
+		return scnprintf(buf, PAGE_SIZE, "Invalid num args\n"
+					"USAGE:\n"
+					"  1. echo min max > compensate_cap_test\n"
+					"  2. cat compensate_cap_test\n");
 
-	ret = kstrtou8(argv[0], 0, &min_thres);
+	ret = kstrtoint(argv[0], 0, &min);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid min_thres: %s\n",
-				argv[0]);
+		return scnprintf(buf, PAGE_SIZE,
+				"Invalid min thres: %s\n", argv[0]);
 
-	ret = kstrtou8(argv[1], 0, &max_thres);
+	ret = kstrtoint(argv[1], 0, &max);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid max_thres: %s\n",
-				argv[1]);
+		return scnprintf(buf, PAGE_SIZE,
+			"Invalid max thres: %s\n", argv[1]);
 
-	cts_info("Compensate cap test, min_thres = %u, max_thres = %u",
-		 min_thres, max_thres);
+	cts_info("Compensate cap test, min: %u, max: %u",
+		 min, max);
 
-	ret = cts_compensate_cap_test(cts_dev, min_thres, max_thres);
-	if (ret)
-		return snprintf(buf, PAGE_SIZE,
-				"Compensate cap test FAILED, min_thres = %u, max_thres=%u\n",
-				min_thres, max_thres);
+	test_param.min = &min;
+	test_param.max = &max;
+
+	start_time = ktime_get();
+
+	ret = cts_test_compensate_cap(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret > 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Compensate cap test has %d nodes FAIL, "
+			"threshold[%u, %u], ELAPSED TIME: %lldms\n",
+			ret, min, max, ktime_to_ms(delta_time));
+	else if (ret < 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Compensate cap test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+			ret, cts_strerror(ret), ktime_to_ms(delta_time));
 	else
-		return snprintf(buf, PAGE_SIZE,
-				"Compensate cap test PASSED, min_thres = %u, max_thres=%u\n",
-				min_thres, max_thres);
+		return scnprintf(buf, PAGE_SIZE,
+			"Compensate cap test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
 }
 
 /* echo threshod > short_test */
@@ -1452,41 +1576,81 @@ static DEVICE_ATTR(compensate_cap_test, S_IWUSR | S_IRUGO,
 		   compensate_cap_test_show, compensate_cap_test_store);
 
 static ssize_t rawdata_test_show(struct device *dev,
-				 struct device_attribute *attr, char *buf)
+		struct device_attribute *attr, char *buf)
 {
 	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
 	struct cts_device *cts_dev = &cts_data->cts_dev;
-	u16 min_thres, max_thres;
+	struct cts_rawdata_test_priv_param priv_param = {
+		.frames = 16,
+	};
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_RAWDATA,
+		.flags = CTS_TEST_FLAG_VALIDATE_DATA |
+				 CTS_TEST_FLAG_VALIDATE_MIN |
+				 CTS_TEST_FLAG_VALIDATE_MAX |
+				 CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
+		.test_data_filepath =
+			"/sdcard/rawdata-test-data.txt",
+		.num_invalid_node = 0,
+		.invalid_nodes = NULL,
+		.priv_param = &priv_param,
+		.priv_param_size = sizeof(priv_param),
+	};
+
+	int min, max;
 	int ret;
+	ktime_t start_time, end_time, delta_time;
 
-	if (argc != 2)
-		return snprintf(buf, PAGE_SIZE, "Invalid num args\n"
-				"USAGE:\n"
-				"  1. echo min max > rawdata_test\n"
-				"  2. cat rawdata_test\n");
+	if (argc < 2 || argc > 3)
+		return scnprintf(buf, PAGE_SIZE, "Invalid num args\n"
+			"USAGE:\n"
+			"  1. echo min max [frames] > rawdata_test\n"
+			"  2. cat rawdata_test\n");
 
-	ret = kstrtou16(argv[0], 0, &min_thres);
+	ret = kstrtoint(argv[0], 0, &min);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid min_thres: %s\n",
-				argv[0]);
+		return scnprintf(buf, PAGE_SIZE,
+			"Invalid min thres: %s\n", argv[0]);
 
-	ret = kstrtou16(argv[1], 0, &max_thres);
+	ret = kstrtoint(argv[1], 0, &max);
 	if (ret)
-		return snprintf(buf, PAGE_SIZE, "Invalid max_thres: %s\n",
-				argv[1]);
+		return scnprintf(buf, PAGE_SIZE,
+			"Invalid max thres: %s\n", argv[1]);
 
-	cts_info("Rawdata test, min_thres = %u, max_thres = %u", min_thres,
-		 max_thres);
+	if (argc > 2) {
+		ret = kstrtou32(argv[2], 0, &priv_param.frames);
+		if (ret)
+			return scnprintf(buf, PAGE_SIZE,
+				"Invalid frames: %s\n", argv[2]);
+	}
+	cts_info("Rawdata test, frames: %u min: %d, max: %d",
+		priv_param.frames, min, max);
 
-	ret = cts_rawdata_test(cts_dev, min_thres, max_thres);
-	if (ret)
-		return snprintf(buf, PAGE_SIZE,
-				"Rawdata test FAILED, min_thres = %u, max_thres=%u\n",
-				min_thres, max_thres);
+	test_param.min = &min;
+	test_param.max = &max;
+
+	start_time = ktime_get();
+
+	ret = cts_test_rawdata(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret > 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Rawdata test has %d nodes FAIL, threshold[%u, %u], "
+			"ELAPSED TIME: %lldms\n",
+			ret, min, max, ktime_to_ms(delta_time));
+	else if (ret < 0)
+		return scnprintf(buf, PAGE_SIZE,
+		    "Rawdata test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+		    ret, cts_strerror(ret), ktime_to_ms(delta_time));
 	else
-		return snprintf(buf, PAGE_SIZE,
-				"Rawdata test PASSED, min_thres = %u, max_thres=%u\n",
-				min_thres, max_thres);
+		return scnprintf(buf, PAGE_SIZE,
+			"Rawdata test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
 }
 
 /* echo threshod > short_test */
@@ -1502,15 +1666,97 @@ static ssize_t rawdata_test_store(struct device *dev,
 static DEVICE_ATTR(rawdata_test, S_IWUSR | S_IRUGO,
 		   rawdata_test_show, rawdata_test_store);
 
+static ssize_t noise_test_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
+	struct cts_device *cts_dev = &cts_data->cts_dev;
+	struct cts_noise_test_priv_param priv_param = {
+		.frames = 50,
+	};
+	struct cts_test_param test_param = {
+		.test_item = CTS_TEST_NOISE,
+		.flags = CTS_TEST_FLAG_VALIDATE_DATA |
+				 CTS_TEST_FLAG_VALIDATE_MAX |
+				 CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
+				 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
+		.test_data_filepath =
+			"/sdcard/noise-test-data.txt",
+		.num_invalid_node = 0,
+		.invalid_nodes = NULL,
+		.priv_param = &priv_param,
+		.priv_param_size = sizeof(priv_param),
+	};
+
+	int max;
+	int ret;
+	ktime_t start_time, end_time, delta_time;
+
+	if (argc < 1 || argc > 2)
+		return scnprintf(buf, PAGE_SIZE, "Invalid num args\n"
+			"USAGE:\n"
+			"  1. echo threshold [frames] > noise_test\n"
+			"  2. cat noise_test\n");
+
+	ret = kstrtoint(argv[0], 0, &max);
+	if (ret)
+		return scnprintf(buf, PAGE_SIZE,
+			"Invalid max thres: %s\n", argv[0]);
+
+	if (argc > 1) {
+		ret = kstrtou32(argv[1], 0, &priv_param.frames);
+		if (ret)
+			return scnprintf(buf, PAGE_SIZE,
+				"Invalid frames: %s\n", argv[1]);
+	}
+	cts_info("Noise test, frames: %u threshold: %d",
+		priv_param.frames, max);
+
+	test_param.max = &max;
+
+	start_time = ktime_get();
+
+	ret = cts_test_noise(cts_dev, &test_param);
+
+	end_time = ktime_get();
+	delta_time = ktime_sub(end_time, start_time);
+
+	if (ret > 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Noise test has %d nodes FAIL, max: %u, ELAPSED TIME: %lldms\n",
+			ret, max, ktime_to_ms(delta_time));
+	else if (ret < 0)
+		return scnprintf(buf, PAGE_SIZE,
+			"Noise test FAIL %d(%s), ELAPSED TIME: %lldms\n",
+			ret, cts_strerror(ret), ktime_to_ms(delta_time));
+	else
+		return scnprintf(buf, PAGE_SIZE,
+			"Noise test PASS, ELAPSED TIME: %lldms\n",
+			ktime_to_ms(delta_time));
+}
+
+static ssize_t noise_test_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	parse_arg(buf, count);
+
+	return count;
+}
+static DEVICE_ATTR(noise_test, S_IWUSR | S_IRUGO,
+		noise_test_show, noise_test_store);
+
 static struct attribute *cts_dev_test_atts[] = {
 	&dev_attr_open_test.attr,
 	&dev_attr_short_test.attr,
 	&dev_attr_testing.attr,
 #ifdef CFG_CTS_HAS_RESET_PIN
-	&dev_attr_reset_test.attr,
+	&dev_attr_reset_pin_test.attr,
 #endif
+	&dev_attr_int_pin_test.attr,
 	&dev_attr_compensate_cap_test.attr,
 	&dev_attr_rawdata_test.attr,
+	&dev_attr_noise_test.attr,
 	NULL
 };
 
@@ -2462,7 +2708,7 @@ static ssize_t int_data_method_store(struct device *dev,
 	if (ret) {
 		cts_err("Invalid int data method: %s", argv[0]);
 		return -EINVAL;
-	} else if (method > INT_DATA_METHOD_POLLING) {
+	} else if (method >= INT_DATA_METHOD_CNT) {
 		cts_err("Invalid int data method: %s", argv[0]);
 		return -EINVAL;
 	}
