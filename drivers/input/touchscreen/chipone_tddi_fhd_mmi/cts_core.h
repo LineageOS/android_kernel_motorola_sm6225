@@ -164,11 +164,10 @@ struct cts_device_touch_info {
 struct cts_device_gesture_point {
 	__le16 x;
 	__le16 y;
-	u8 pressure;
-	u8 event;
 };
 
 /** Gesture information read back from chip */
+/* total size 112 bytes */
 struct cts_device_gesture_info {
 	u8 gesture_id;
 #define CTS_GESTURE_UP                  (0x11)
@@ -186,11 +185,13 @@ struct cts_device_gesture_info {
 #define CTS_GESTURE_Z                   (0x1D)
 #define CTS_GESTURE_V                   (0x1E)
 #define CTS_GESTURE_D_TAP               (0x50)
+#define CTS_GESTURE_TAP                 (0x7F)
 
 	u8 num_points;
 
-#define CTS_CHIP_MAX_GESTURE_TRACE_POINT    (64u)
+#define CTS_CHIP_MAX_GESTURE_TRACE_POINT    (27u)
 	struct cts_device_gesture_point points[CTS_CHIP_MAX_GESTURE_TRACE_POINT];
+	u8 reserved[2];
 
 };
 #pragma pack()
@@ -230,9 +231,11 @@ enum int_data_type {
 };
 
 enum int_data_method {
-	INT_DATA_METHOD_NONE,
-	INT_DATA_METHOD_HOST,
-	INT_DATA_METHOD_POLLING,
+	INT_DATA_METHOD_NONE = 0,
+	INT_DATA_METHOD_HOST = 1,
+	INT_DATA_METHOD_POLLING = 2,
+	INT_DATA_METHOD_DEBUG = 3,
+	INT_DATA_METHOD_CNT = 4,
 };
 
 /** Chip firmware data */
@@ -274,6 +277,7 @@ struct cts_device_rtdata {
 	bool glove_mode_enabled;
 
 	struct cts_device_touch_info touch_info;
+	struct cts_device_gesture_info gesture_info;
 
 	u8 *int_data;
 };
@@ -295,6 +299,8 @@ struct cts_dev_ops {
 				 u16 *int_keep_time);
 	int (*get_esd_method)(const struct cts_device *cts_dev,
 			      u8 *esd_method);
+	int (*get_gestureinfo)(const struct cts_device *cts_dev,
+			struct cts_device_gesture_info *gesture_info);
 	int (*get_touchinfo)(const struct cts_device *cts_dev,
 			     struct cts_device_touch_info *touch_info);
 	int (*get_esd_protection)(const struct cts_device *cts_dev,
@@ -386,6 +392,10 @@ struct cts_dev_ops {
 				size_t size);
 
 	int (*reset_device)(const struct cts_device *cts_dev);
+
+	int (*set_int_test)(const struct cts_device *cts_dev, u8 enable);
+	int (*set_int_pin)(const struct cts_device *cts_dev, u8 high);
+	int (*get_module_id)(const struct cts_device *cts_dev, u32 *modId);
 };
 
 struct cts_device {
@@ -456,6 +466,8 @@ struct chipone_ts_data {
 #ifdef CONFIG_CTS_LEGACY_TOOL
 	struct proc_dir_entry *procfs_entry;
 #endif				/* CONFIG_CTS_LEGACY_TOOL */
+
+	void *oem_data;
 
 	bool force_reflash;
 
@@ -828,8 +840,7 @@ extern int cts_read_sram_normal_mode(const struct cts_device *cts_dev,
 extern void cts_enable_gesture_wakeup(struct cts_device *cts_dev);
 extern void cts_disable_gesture_wakeup(struct cts_device *cts_dev);
 extern bool cts_is_gesture_wakeup_enabled(const struct cts_device *cts_dev);
-extern int cts_get_gesture_info(const struct cts_device *cts_dev,
-				void *gesture_info, bool trace_point);
+extern int cts_get_gesture_info(const struct cts_device *cts_dev, void *gesture_info);
 #endif /* CFG_CTS_GESTURE */
 
 extern int cts_set_int_data_types(struct cts_device *cts_dev, u16 types);
