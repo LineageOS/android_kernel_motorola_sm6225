@@ -532,6 +532,17 @@ int moto_tcmd_wt6670f_get_firmware_version(void)
 }
 EXPORT_SYMBOL_GPL(moto_tcmd_wt6670f_get_firmware_version);
 
+static void clear_irq_signal(void)
+{
+	int ret = 0;
+	u16 data = 0;
+
+	if(QC3P_Z350 == g_qc3p_id){
+		ret = wt6670f_read_word(_wt, 0x11, &data);
+		pr_err("%s: data:%x, ret:%d\n", __func__, data, ret);
+	}
+}
+
 static irqreturn_t wt6670f_intr_handler(int irq, void *data)
 {
 	m_chg_type = 0xff;
@@ -597,6 +608,7 @@ static int wt6670_iio_write_raw(struct iio_dev *indio_dev,
 		pr_info("wt6670 set volt count:%d\n",val1);
 		break;
 	case PSY_IIO_START_BC12_DETECTION:
+		clear_irq_signal();
 		wt6670f_reset_chg_type();
 		wt6670f_start_detection();
 		pr_info("wt6670 start bc1.2 detection\n");
