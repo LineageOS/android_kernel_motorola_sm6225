@@ -2968,9 +2968,15 @@ static int sgm4154x_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, sgm);
 
 	ret = sgm4154x_hw_chipid_detect(sgm);
-	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID){
+	if ((ret & SGM4154x_PN_MASK) !=
+#ifdef __SGM41513_CHIP_ID__
+            SGM4154x_PN_41513_ID
+#else
+            SGM4154x_PN_41542_ID
+#endif
+        ){
 		pr_info("[%s] device not found !!!\n", __func__);
-		//return ret;
+		return ret;
 	}
 
 	sema_init(&sgm->sem_dpdm, 1);
