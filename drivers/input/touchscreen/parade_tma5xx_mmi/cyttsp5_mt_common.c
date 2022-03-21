@@ -364,7 +364,7 @@ static void cyttsp5_mt_send_dummy_event(struct cyttsp5_core_data *cd,
 #else
 	/* TSG6 FW1.3 and above only. TSG6 FW1.0 - 1.2 does not */
 	/*  support EasyWake, and this function will not be called */
-	u8 key_value;
+	u8 key_value = 0;
 
 	switch (cd->gesture_id) {
 	case GESTURE_DOUBLE_TAP:
@@ -374,7 +374,11 @@ static void cyttsp5_mt_send_dummy_event(struct cyttsp5_core_data *cd,
 		key_value = KEY_F2;
 	break;
 	case GESTURE_TOUCH_DETECTED:
+#ifdef CYTTSP5_SENSOR_EN
+		key_value = KEY_F1;
+#else
 		key_value = KEY_F3;
+#endif
 	break;
 	case GESTURE_PUSH_BUTTON:
 		key_value = KEY_F4;
@@ -395,10 +399,23 @@ static void cyttsp5_mt_send_dummy_event(struct cyttsp5_core_data *cd,
 	break;
 	}
 
+#ifdef CYTTSP5_SENSOR_EN
+	if (!(cd->easy_wakeup_gesture && cd->should_enable_gesture)) {
+		dev_info(cd->dev, "Gesture got but wakeable not set. Skip this gesture.");
+		return;
+	}
+	input_report_key(cd->sensor_pdata->input_sensor_dev, key_value, 1);
+	input_sync(cd->sensor_pdata->input_sensor_dev);
+	input_report_key(cd->sensor_pdata->input_sensor_dev, key_value, 0);
+	input_sync(cd->sensor_pdata->input_sensor_dev);
+	dev_info(cd->dev, "%s: report single tap, cd->gesture_id = %d, key_value = %d\n",
+		__func__, cd->gesture_id, key_value);
+#else
 	input_report_key(md->input, key_value, 1);
 	mdelay(10);
 	input_report_key(md->input, key_value, 0);
 	input_sync(md->input);
+#endif
 #endif
 }
 
