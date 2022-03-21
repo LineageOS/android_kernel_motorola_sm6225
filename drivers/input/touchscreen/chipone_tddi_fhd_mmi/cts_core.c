@@ -1381,11 +1381,6 @@ static int cts_get_touchinfo(const struct cts_device *cts_dev,
 		return -ENODEV;
 	}
 
-	if (cts_dev->rtdata.suspended) {
-		cts_warn("Get touch info while is suspended");
-		return -ENODEV;
-	}
-
 	return cts_dev->ops->get_touchinfo(cts_dev, touch_info);
 }
 
@@ -1844,8 +1839,8 @@ static int cts_init_fwdata(struct cts_device *cts_dev)
 					     ret);
 					return -EINVAL;
 				}
-				if (fwdata->int_data_method >
-				    INT_DATA_METHOD_POLLING) {
+				if (fwdata->int_data_method >=
+				    INT_DATA_METHOD_CNT) {
 					cts_err("Invalid int data method: %d",
 						fwdata->int_data_method);
 					return -EINVAL;
@@ -1944,6 +1939,7 @@ void cts_show_fw_log(struct cts_device *cts_dev)
 
 int cts_irq_handler(struct cts_device *cts_dev)
 {
+	u8 pwrmode = 3;
 	int ret;
 
 	cts_dbg("Enter IRQ handler");
@@ -1956,11 +1952,12 @@ int cts_irq_handler(struct cts_device *cts_dev)
 	if (unlikely(cts_dev->rtdata.suspended)) {
 #ifdef CFG_CTS_GESTURE
 		if (cts_dev->rtdata.gesture_wakeup_enabled) {
-			struct cts_device_gesture_info gesture_info;
+			struct cts_device_gesture_info *gesture_info;
 
-			ret = cts_get_gesture_info(cts_dev,
-						   &gesture_info,
-						   CFG_CTS_GESTURE_REPORT_TRACE);
+			gesture_info = &cts_dev->rtdata.gesture_info;
+
+			ret = cts_get_gesture_info(cts_dev, gesture_info);
+
 			if (ret)
 				cts_warn("Get gesture info failed %d", ret);
 				/* return ret; */
@@ -1968,11 +1965,10 @@ int cts_irq_handler(struct cts_device *cts_dev)
 /** - Issure another suspend with gesture wakeup command to device
  * after get gesture info.
  */
-			cts_send_command(cts_dev, CTS_CMD_SUSPEND_WITH_GESTURE);
-
-			ret =
-			    cts_plat_process_gesture_info(cts_dev->pdata,
-							  &gesture_info);
+			ret = cts_dev->ops->set_pwr_mode(cts_dev, pwrmode);
+			if (ret)
+				cts_warn("Reenter suspend with gesture wakeup failed %d", ret);
+			ret = cts_plat_process_gesture_info(cts_dev->pdata, gesture_info);
 			if (ret) {
 				cts_err("Process gesture info failed %d", ret);
 				return ret;
@@ -1985,27 +1981,18 @@ int cts_irq_handler(struct cts_device *cts_dev)
 		struct cts_device_touch_info *touch_info;
 
 		touch_info = &cts_dev->rtdata.touch_info;
-#ifdef CFG_CTS_FW_LOG_REDIRECT
-		ret = cts_fw_reg_readsb(cts_dev, CTS_DEVICE_FW_REG_TOUCH_INFO,
-					touch_info, 1);
-		if (ret) {
-			cts_err("Get vkey_state failed %d", ret);
-			return ret;
-		}
 
-		if (touch_info->vkey_state == CTS_FW_LOG_REDIRECT_SIGN) {
-			if (cts_is_fw_log_redirect(cts_dev))
-				cts_show_fw_log(cts_dev);
-
-			return 0;
-		}
-#endif
 		ret = cts_get_touchinfo(cts_dev, touch_info);
 		if (ret) {
 			cts_err("Get touch info failed %d", ret);
 			return ret;
 		}
-
+#ifdef CFG_CTS_FW_LOG_REDIRECT
+		if (touch_info->vkey_state == CTS_FW_LOG_REDIRECT_SIGN) {
+			if (cts_is_fw_log_redirect(cts_dev))
+				cts_show_fw_log(cts_dev);
+		}
+#endif
 		cts_dbg("Touch info: vkey_state %x, num_msg %u",
 			touch_info->vkey_state, touch_info->num_msg);
 
@@ -2041,10 +2028,6 @@ int cts_suspend_device(struct cts_device *cts_dev)
 
 	cts_info("Suspend device");
 
-	if (cts_dev->rtdata.suspended) {
-		cts_warn("Suspend device while already suspended");
-		return 0;
-	}
 	if (cts_dev->rtdata.program_mode) {
 		cts_info("Quit programming mode before suspend");
 		ret = cts_enter_normal_mode(cts_dev);
@@ -2055,7 +2038,10 @@ int cts_suspend_device(struct cts_device *cts_dev)
 		}
 	}
 
-	buf = cts_dev->rtdata.gesture_wakeup_enabled ? 2 : 3;
+	cts_info("Set suspend mode:%s",
+		cts_dev->rtdata.gesture_wakeup_enabled ? "gesture" : "sleep");
+
+	buf = cts_dev->rtdata.gesture_wakeup_enabled ? 3 : 2;
 	ret = cts_dev->ops->set_pwr_mode(cts_dev, buf);
 	if (ret) {
 		cts_err("Suspend device failed %d", ret);
@@ -2764,8 +2750,7 @@ bool cts_is_gesture_wakeup_enabled(const struct cts_device *cts_dev)
 	return cts_dev->rtdata.gesture_wakeup_enabled;
 }
 
-int cts_get_gesture_info(const struct cts_device *cts_dev,
-			 void *gesture_info, bool trace_point)
+int cts_get_gesture_info(const struct cts_device *cts_dev, void *gesture_info)
 {
 	int ret;
 
@@ -2786,24 +2771,10 @@ int cts_get_gesture_info(const struct cts_device *cts_dev,
 		return -ENODEV;
 	}
 
-	ret = cts_fw_reg_readsb(cts_dev, CTS_DEVICE_FW_REG_GESTURE_INFO,
-				gesture_info, 2);
+	ret = cts_dev->ops->get_gestureinfo(cts_dev, gesture_info);
 	if (ret) {
 		cts_err("Read gesture info header failed %d", ret);
 		return ret;
-	}
-
-	if (trace_point) {
-		ret =
-		    cts_fw_reg_readsb(cts_dev,
-				      CTS_DEVICE_FW_REG_GESTURE_INFO + 2,
-				      gesture_info + 2,
-				      (((u8 *) gesture_info))[1] *
-				      sizeof(struct cts_device_gesture_point));
-		if (ret) {
-			cts_err("Read gesture trace points failed %d", ret);
-			return ret;
-		}
 	}
 
 	return 0;
@@ -2812,19 +2783,10 @@ int cts_get_gesture_info(const struct cts_device *cts_dev,
 
 int cts_set_int_data_types(struct cts_device *cts_dev, u16 types)
 {
-	int ret;
-	u8 old_method = cts_dev->fwdata.int_data_method;
+	int ret = 0;
 	u16 realtypes = types & INT_DATA_TYPE_MASK;
 
 	cts_info("Set int data types: %#06x, mask to %#06x", types, realtypes);
-
-	if (old_method != INT_DATA_METHOD_NONE) {
-		ret = cts_set_int_data_method(cts_dev, INT_DATA_METHOD_NONE);
-		if (ret) {
-			cts_err("Set int data method failed: %d", ret);
-			return -EIO;
-		}
-	}
 
 	if (cts_dev->ops->set_int_data_types) {
 		ret = cts_dev->ops->set_int_data_types(cts_dev, realtypes);
@@ -2836,14 +2798,8 @@ int cts_set_int_data_types(struct cts_device *cts_dev, u16 types)
 		ret = 0;
 	}
 
-	if (old_method != INT_DATA_METHOD_NONE) {
-		ret = cts_set_int_data_method(cts_dev, old_method);
-		if (ret) {
-			cts_err("Set int data method failed: %d", ret);
-			return -EIO;
-		}
-		cts_dev->fwdata.int_data_method = old_method;
-	}
+	if (cts_dev->ops->calc_int_data_size)
+		cts_dev->ops->calc_int_data_size(cts_dev);
 
 	return ret;
 }
@@ -2854,7 +2810,7 @@ int cts_set_int_data_method(struct cts_device *cts_dev, u8 method)
 
 	cts_info("Set int data method: %d", method);
 
-	if (method > INT_DATA_METHOD_POLLING) {
+	if (method >= INT_DATA_METHOD_CNT) {
 		cts_err("Invalid int data method");
 		return -EINVAL;
 	}
@@ -3260,4 +3216,125 @@ int cts_reset_device(struct cts_device *cts_dev)
 
 	cts_err("BUG! reset_device should NOT be null!");
 	return -EIO;
+}
+static struct file *cts_log_filp;
+static int cts_log_to_file_level;
+extern int cts_write_file(struct file *filp, const void *data, size_t size);
+
+static char *cts_log_buffer;
+static int cts_log_buf_size;
+static int cts_log_buf_wr_size;
+
+static bool cts_log_redirect;
+
+extern int cts_mkdir_for_file(const char *filepath, umode_t mode);
+
+int cts_start_driver_log_redirect(const char *filepath, bool append_to_file,
+	char *log_buffer, int log_buf_size, int log_level)
+{
+#define START_BANNER \
+	">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n"
+
+	int ret = 0;
+
+	cts_info("Start driver log redirect");
+
+	cts_log_to_file_level = log_level;
+
+	if (log_buffer && log_buf_size) {
+		cts_info(" - Start driver log to buffer: %p size: %d level: %d",
+			log_buffer, log_buf_size, log_level);
+		cts_log_buffer = log_buffer;
+		cts_log_buf_size = log_buf_size;
+		cts_log_buf_wr_size = 0;
+	}
+
+	if (filepath && filepath[0]) {
+		cts_info(" - Start driver log to file  : '%s' level: %d",
+			filepath, log_level);
+		cts_log_filp = filp_open(filepath,
+			O_WRONLY | O_CREAT | (append_to_file ? O_APPEND : O_TRUNC),
+			S_IRUGO | S_IWUGO);
+		if (IS_ERR(cts_log_filp)) {
+			ret = PTR_ERR(cts_log_filp);
+			cts_log_filp = NULL;
+			cts_err("Open file '%s' for driver log failed %d",
+				filepath, ret);
+		} else {
+			cts_write_file(cts_log_filp, START_BANNER, strlen(START_BANNER));
+		}
+	}
+
+	cts_log_redirect = true;
+
+	return ret;
+#undef START_BANNER
+}
+
+void cts_stop_driver_log_redirect(void)
+{
+#define END_BANNER \
+	"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
+
+	cts_log_redirect = false;
+
+	cts_info("Stop driver log redirect");
+
+	if (cts_log_filp) {
+		int ret;
+
+		cts_info(" - Stop driver log to file");
+
+		cts_write_file(cts_log_filp, END_BANNER, strlen(END_BANNER));
+		ret = filp_close(cts_log_filp, NULL);
+		if (ret)
+			cts_err("Close driver log file failed %d", ret);
+
+		cts_log_filp = NULL;
+	}
+
+	if (cts_log_buffer) {
+		cts_info(" - Stop driver log to buffer");
+
+		cts_log_buffer = NULL;
+		cts_log_buf_size = 0;
+		cts_log_buf_wr_size = 0;
+	}
+
+#undef END_BANNER
+}
+
+int cts_get_driver_log_redirect_size(void)
+{
+	if (cts_log_redirect && cts_log_buffer && cts_log_buf_wr_size)
+		return cts_log_buf_wr_size;
+	else
+		return 0;
+}
+
+void cts_log(int level, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+
+	if (cts_log_redirect) {
+		if (cts_log_buffer &&
+			cts_log_buf_wr_size < cts_log_buf_size &&
+			level <= cts_log_to_file_level)
+			cts_log_buf_wr_size += vscnprintf(cts_log_buffer + cts_log_buf_wr_size,
+				cts_log_buf_size - cts_log_buf_wr_size, fmt, args);
+
+		if (cts_log_filp != NULL && level <= cts_log_to_file_level) {
+			char buf[512];
+			int count = vscnprintf(buf, sizeof(buf), fmt, args);
+
+			cts_write_file(cts_log_filp, buf, count);
+		}
+	}
+
+	if (level < CTS_DRIVER_LOG_DEBUG || cts_show_debug_log)
+		vprintk(fmt, args);
+
+	va_end(args);
 }

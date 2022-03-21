@@ -36,4 +36,5 @@ chipone_tddi_fhd_mmi-objs += cts_test.o
 chipone_tddi_fhd_mmi-objs += cts_charger_detect.o
 chipone_tddi_fhd_mmi-objs += cts_hostcomm.o
 chipone_tddi_fhd_mmi-objs += cts_tcs.o
+chipone_tddi_fhd_mmi-objs += cts_strerror.o
 

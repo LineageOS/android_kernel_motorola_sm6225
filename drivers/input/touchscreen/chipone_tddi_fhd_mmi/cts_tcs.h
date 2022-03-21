@@ -56,6 +56,7 @@ int cts_tcs_get_esd_protection(const struct cts_device *cts_dev,
 
 int cts_tcs_get_data_ready_flag(const struct cts_device *cts_dev, u8 *ready);
 int cts_tcs_clr_data_ready_flag(const struct cts_device *cts_dev);
+int cts_tcs_clr_gstr_ready_flag(const struct cts_device *cts_dev);
 int cts_tcs_enable_get_rawdata(const struct cts_device *cts_dev);
 int cts_tcs_is_enabled_get_rawdata(const struct cts_device *cts_dev,
 				   u8 *enabled);
@@ -117,6 +118,7 @@ enum TcsCmdIndex {
 	TP_STD_CMD_INFO_CHIP_FW_ID_RO,
 	TP_STD_CMD_INFO_FW_VER_RO,
 	TP_STD_CMD_INFO_TOUCH_XY_INFO_RO,
+	TP_STD_CMD_INFO_MODULE_ID_RO,
 
 	TP_STD_CMD_TP_DATA_OFFSET_AND_TYPE_CFG_RW,
 	TP_STD_CMD_TP_DATA_READ_START_RO,
@@ -139,6 +141,8 @@ enum TcsCmdIndex {
 	TP_STD_CMD_SYS_STS_VSTIM_LVL_RW,
 	TP_STD_CMD_SYS_STS_CNEG_RDY_FLAG_RW,
 	TP_STD_CMD_SYS_STS_RESET_WO,
+	TP_STD_CMD_SYS_STS_INT_TEST_EN_RW,
+	TP_STD_CMD_SYS_STS_SET_INT_PIN_RW,
 	TP_STD_CMD_SYS_STS_CNEG_RD_EN_RW,
 	TP_STD_CMD_SYS_STS_INT_MODE_RW,
 	TP_STD_CMD_SYS_STS_INT_KEEP_TIME_RW,
@@ -146,6 +150,10 @@ enum TcsCmdIndex {
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_SUPPORT_RO,
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_EN_RW,
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_FUNC_MAP_RW,
+
+	TP_STD_CMD_GSTR_WAKEUP_EN_RW,
+	TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW,
+	TP_STD_CMD_GSTR_ENTER_MAP_RW,
 
 	TP_STD_CMD_MNT_EN_RW,
 	TP_STD_CMD_MNT_FORCE_EXIT_MNT_WO,
@@ -174,6 +182,7 @@ static TcsCmdValue_t TcsCmdValue[] = {
 	{ 0, 0, 3, 1, 0, 0 },	/* TP_STD_CMD_INFO_CHIP_FW_ID_RO */
 	{ 0, 0, 5, 1, 0, 0 },	/* TP_STD_CMD_INFO_FW_VER_RO */
 	{ 0, 0, 7, 1, 0, 0 },	/* TP_STD_CMD_INFO_TOUCH_XY_INFO_RO */
+	{ 0, 0, 17, 1, 0, 0 },	/* TP_STD_CMD_INFO_MODULE_ID_RO */
 
 	{ 0, 1, 1, 1, 1, 0 },	/* TP_STD_CMD_TP_DATA_OFFSET_AND_TYPE_CFG_RW */
 	{ 0, 1, 2, 1, 0, 1 },	/* TP_STD_CMD_TP_DATA_READ_START_RO */
@@ -196,6 +205,8 @@ static TcsCmdValue_t TcsCmdValue[] = {
 	{ 0, 2, 8, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_VSTIM_LVL_RW */
 	{ 0, 2, 17, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_CNEG_RDY_FLAG_RW */
 	{ 0, 2, 22, 0, 1, 0 },	/* TP_STD_CMD_SYS_STS_RESET_WO */
+	{ 0, 2, 23, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_INT_TEST_EN_RW */
+	{ 0, 2, 24, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_SET_INT_PIN_RW */
 	{ 0, 2, 25, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_CNEG_RD_EN_RW */
 	{ 0, 2, 35, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_INT_MODE_RW */
 	{ 0, 2, 36, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_INT_KEEP_TIME_RW */
@@ -203,6 +214,10 @@ static TcsCmdValue_t TcsCmdValue[] = {
 	{ 0, 2, 63, 1, 0, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_SUPPORT_RO */
 	{ 0, 2, 64, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_EN_RW */
 	{ 0, 2, 65, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_FUNC_MAP_RW */
+
+	{ 0,  3,  1,  1,  1,  0 }, /* TP_STD_CMD_GSTR_WAKEUP_EN_RW */
+	{ 0,  3, 30,  1,  1,  0 }, /* TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW */
+	{ 0,  3, 40,  1,  1,  0 }, /* TP_STD_CMD_GSTR_ENTER_MAP_RW */
 
 	{ 0, 4, 1, 1, 1, 0 },	/* TP_STD_CMD_MNT_EN_RW */
 	{ 0, 4, 3, 0, 1, 0 },	/* TP_STD_CMD_MNT_FORCE_EXIT_MNT_WO */

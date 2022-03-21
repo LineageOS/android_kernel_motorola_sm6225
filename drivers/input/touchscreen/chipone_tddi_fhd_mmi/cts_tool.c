@@ -61,52 +61,22 @@ enum cts_tool_cmd_code {
 
 };
 
-struct cts_test_rawdata_ioctl_data {
-	int frames;
-	int min;
-	int max;
+struct cts_test_ioctl_data {
+	__u32 ntests;
+	struct cts_test_param __user *tests;
 };
 
-struct cts_test_noise_ioctl_data {
-	int frames;
-	int max;
-};
 
-struct cts_test_open_ioctl_data {
-	int min;
-	int max;
-};
+#define CTS_TOOL_IOCTL_GET_DRIVER_VERSION   _IOR('C', 0x00, unsigned int *)
+#define CTS_TOOL_IOCTL_GET_DEVICE_TYPE      _IOR('C', 0x01, unsigned int *)
+#define CTS_TOOL_IOCTL_GET_FW_VERSION       _IOR('C', 0x02, unsigned short *)
+#define CTS_TOOL_IOCTL_GET_RESOLUTION       _IOR('C', 0x03, unsigned int *) /* X in LSW, Y in MSW */
+#define CTS_TOOL_IOCTL_GET_ROW_COL          _IOR('C', 0x04, unsigned int *) /* row in LSW, col in MSW */
+#define CTS_TOOL_IOCTL_GET_MODULE_ID        _IOWR('C', 0x05, unsigned int *)
 
-struct cts_test_short_ioctl_data {
-	int min;
-	int max;
-	bool display_on;
-	bool disable_gas;
-};
-
-struct cts_test_comp_cap_ioctl_data {
-	int min;
-	int max;
-};
-
-#define CTS_TOOL_IOCTL_GET_DRIVER_VERSION _IOR('C', 0x00, unsigned int)
-#define CTS_TOOL_IOCTL_GET_DEVICE_TYPE    _IOR('C', 0x01, unsigned int)
-#define CTS_TOOL_IOCTL_GET_FW_VERSION     _IOR('C', 0x02, unsigned short)
-
-#define CTS_TOOL_IOCTL_TEST_RESET_PIN   _IO('C',  0x11)
-#define CTS_TOOL_IOCTL_TEST_INT_PIN     _IO('C',  0x12)
-#define CTS_TOOL_IOCTL_TEST_DEVICE_TYPE _IOW('C', 0x13, unsigned int)
-#define CTS_TOOL_IOCTL_TEST_FW_VERSION  _IOW('C', 0x14, unsigned short)
-#define CTS_TOOL_IOCTL_TEST_RAWDATA     \
-	_IOW('C', 0x15, struct cts_test_rawdata_ioctl_data *)
-#define CTS_TOOL_IOCTL_TEST_NOISE       \
-	_IOW('C', 0x16, struct cts_test_noise_ioctl_data *)
-#define CTS_TOOL_IOCTL_TEST_OPEN        \
-	_IOW('C', 0x17, struct cts_test_open_ioctl_data *)
-#define CTS_TOOL_IOCTL_TEST_SHORT       \
-	_IOW('C', 0x18, struct cts_test_short_ioctl_data *)
-#define CTS_TOOL_IOCTL_TEST_COMP_CAP    \
-	_IOW('C', 0x19, struct cts_test_comp_cap_ioctl_data *)
+#define CTS_TOOL_IOCTL_TEST                 _IOWR('C', 0x10, struct cts_test_ioctl_data *)
+#define CTS_TOOL_IOCTL_RDWR_REG             _IOWR('C', 0x20, struct cts_rdwr_reg_ioctl_data *)
+#define CTS_TOOL_IOCTL_UPGRADE_FW           _IOWR('C', 0x21, struct cts_upgrade_fw_ioctl_data *)
 
 #define CTS_DRIVER_VERSION_CODE ((CFG_CTS_DRIVER_MAJOR_VERSION << 16) | \
 		(CFG_CTS_DRIVER_MINOR_VERSION << 8) | \
@@ -230,7 +200,7 @@ static ssize_t cts_tool_read(struct file *file,
 
 #ifdef CFG_CTS_GESTURE
 	case CTS_TOOL_CMD_READ_GESTURE_INFO:
-		ret = cts_get_gesture_info(cts_dev, cmd->data, true);
+		ret = cts_get_gesture_info(cts_dev, cmd->data);
 		if (ret)
 			cts_err("Get gesture info failed %d", ret);
 		break;
@@ -668,11 +638,432 @@ static ssize_t cts_tool_write(struct file *file,
 	return ret ? 0 : cmd->data_len + CTS_TOOL_CMD_HEADER_LENGTH;
 }
 
+static int cts_ioctl_test(struct cts_device *cts_dev,
+	u32 ntests, struct cts_test_param *tests)
+{
+	u32 num_nodes = 0;
+	int i, ret = 0;
+
+	cts_info("ioctl test total %u items", ntests);
+
+	num_nodes = cts_dev->fwdata.rows * cts_dev->fwdata.cols;
+
+	for (i = 0; i < ntests; i++) {
+		bool validate_data = false;
+		bool validate_data_per_node = false;
+		bool validate_min = false;
+		bool validate_max = false;
+		bool skip_invalid_node = false;
+		bool stop_test_if_validate_fail = false;
+		bool dump_test_data_to_console = false;
+		bool dump_test_data_to_user = false;
+		bool dump_test_data_to_file = false;
+		bool dump_test_data_to_file_append = false;
+		bool driver_log_to_user = false;
+		bool driver_log_to_file = false;
+		bool driver_log_to_file_append = false;
+		u32 __user *user_min_threshold = NULL;
+		u32 __user *user_max_threshold = NULL;
+		u32 __user *user_invalid_nodes = NULL;
+		int  __user *user_test_result = NULL;
+		void __user *user_test_data = NULL;
+		int  __user *user_test_data_wr_size = NULL;
+		const char __user *user_test_data_filepath = NULL;
+		void __user *user_driver_log_buf = NULL;
+		int  __user *user_driver_log_wr_size = NULL;
+		const char __user *user_driver_log_filepath = NULL;
+		void __user *user_priv_param = NULL;
+		int test_result = 0;
+		int test_data_wr_size = 0;
+		int driver_log_wr_size = 0;
+
+		cts_info("ioctl test item %d: %d(%s) flags: %08x priv param size: %d",
+			i, tests[i].test_item, cts_test_item_str(tests[i].test_item),
+			tests[i].flags, tests[i].priv_param_size);
+		/*
+		 * Validate arguement
+		 */
+		validate_data =
+			!!(tests[i].flags & CTS_TEST_FLAG_VALIDATE_DATA);
+		validate_data_per_node =
+			!!(tests[i].flags & CTS_TEST_FLAG_VALIDATE_PER_NODE);
+		validate_min =
+			!!(tests[i].flags & CTS_TEST_FLAG_VALIDATE_MIN);
+		validate_max =
+			!!(tests[i].flags & CTS_TEST_FLAG_VALIDATE_MAX);
+		skip_invalid_node =
+			!!(tests[i].flags & CTS_TEST_FLAG_VALIDATE_SKIP_INVALID_NODE);
+		stop_test_if_validate_fail =
+			!!(tests[i].flags & CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED);
+		dump_test_data_to_user =
+			!!(tests[i].flags & CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE);
+		dump_test_data_to_file =
+			!!(tests[i].flags & CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE);
+		dump_test_data_to_file_append =
+			!!(tests[i].flags & CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE_APPEND);
+		driver_log_to_user =
+			!!(tests[i].flags & CTS_TEST_FLAG_DRIVER_LOG_TO_USERSPACE);
+		driver_log_to_file =
+			!!(tests[i].flags & CTS_TEST_FLAG_DRIVER_LOG_TO_FILE);
+		driver_log_to_file_append =
+			!!(tests[i].flags & CTS_TEST_FLAG_DRIVER_LOG_TO_FILE_APPEND);
+
+		if (tests[i].test_result == NULL) {
+			cts_err("Result pointer = NULL");
+			return -EFAULT;
+		}
+
+		if (validate_data) {
+			cts_info("  - Flag: Validate data");
+
+			if (validate_data_per_node)
+				cts_info("  - Flag: Validate data per-node");
+
+			if (validate_min)
+				cts_info("  - Flag: Validate min threshold");
+
+			if (validate_max)
+				cts_info("  - Flag: Validate max threshold");
+
+			if (stop_test_if_validate_fail)
+				cts_info("  - Flag: Stop test if validate fail");
+
+			if (validate_min && tests[i].min == NULL) {
+				cts_err("Min threshold pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (validate_max && tests[i].max == NULL) {
+				cts_err("Max threshold pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (skip_invalid_node) {
+				cts_info("  - Flag: Skip invalid node");
+
+				if (tests[i].num_invalid_node == 0 ||
+					tests[i].num_invalid_node >= num_nodes) {
+					cts_err("Num invalid node %u out of range[0, %u]",
+						tests[i].num_invalid_node, num_nodes);
+					ret = -EINVAL;
+					goto store_result;
+				}
+
+				if (tests[i].invalid_nodes == NULL) {
+					cts_err("Invalid nodes pointer = NULL");
+					ret = -EINVAL;
+					goto store_result;
+				}
+			}
+		}
+
+		if (dump_test_data_to_console)
+			cts_info("  - Flag: Dump test data to console");
+
+		if (dump_test_data_to_user) {
+			cts_info("  - Flag: Dump test data to user, size: %d",
+				tests[i].test_data_buf_size);
+
+			if (tests[i].test_data_buf == NULL) {
+				cts_err("Test data pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (tests[i].test_data_wr_size == NULL) {
+				cts_err("Test data write size pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (tests[i].test_data_buf_size < num_nodes) {
+				cts_err("Test data size %d too small < %u",
+					tests[i].test_data_buf_size, num_nodes);
+				ret = -EINVAL;
+				goto store_result;
+			}
+		}
+
+		if (dump_test_data_to_file) {
+			cts_info("  - Flag: Dump test data to file%s",
+				dump_test_data_to_file_append ? "[Append]" : "");
+
+			if (tests[i].test_data_filepath == NULL) {
+				cts_err("Test data filepath = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+		}
+
+		if (driver_log_to_user) {
+			cts_info("  - Flag: Dump driver log to user, size: %d",
+				tests[i].driver_log_buf_size);
+
+			if (tests[i].driver_log_buf == NULL) {
+				cts_err("Driver log buf pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (tests[i].driver_log_wr_size == NULL) {
+				cts_err("Driver log write size pointer = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+			if (tests[i].driver_log_buf_size < 1024) {
+				cts_err("Driver log buf size %d too small < 1024",
+					tests[i].test_data_buf_size);
+				ret = -EINVAL;
+				goto store_result;
+			}
+		}
+
+		if (driver_log_to_file) {
+			cts_info("  - Flag: Dump driver log to file %s",
+				driver_log_to_file_append ? "[Append]" : "");
+
+			if (tests[i].driver_log_filepath == NULL) {
+				cts_err("Driver log filepath = NULL");
+				ret = -EINVAL;
+				goto store_result;
+			}
+		}
+
+		/*
+		 * Dump input parameter from user,
+		 * Aallocate memory for output,
+		 * Replace __user pointer with kernel pointer.
+		 */
+		user_test_result = (int __user *)tests[i].test_result;
+		tests[i].test_result = &test_result;
+
+		if (validate_data) {
+			int num_threshold = validate_data_per_node ? num_nodes : 1;
+			int threshold_size = num_threshold * sizeof(tests[i].min[0]);
+
+			if (validate_min) {
+				user_min_threshold = (int __user *)tests[i].min;
+				tests[i].min = memdup_user(user_min_threshold, threshold_size);
+				if (IS_ERR(tests[i].min)) {
+					ret = PTR_ERR(tests[i].min);
+					tests[i].min = NULL;
+					cts_err("Memdup min threshold from user failed %d", ret);
+					goto store_result;
+				}
+			} else {
+				tests[i].min = NULL;
+			}
+			if (validate_max) {
+				user_max_threshold = (int __user *)tests[i].max;
+				tests[i].max = memdup_user(user_max_threshold, threshold_size);
+				if (IS_ERR(tests[i].max)) {
+					ret = PTR_ERR(tests[i].max);
+					tests[i].max = NULL;
+					cts_err("Memdup max threshold from user failed %d", ret);
+					goto store_result;
+				}
+			} else {
+				tests[i].max = NULL;
+			}
+			if (skip_invalid_node) {
+				user_invalid_nodes = (u32 __user *)tests[i].invalid_nodes;
+				tests[i].invalid_nodes = memdup_user(user_invalid_nodes,
+					tests[i].num_invalid_node * sizeof(tests[i].invalid_nodes[0]));
+				if (IS_ERR(tests[i].invalid_nodes)) {
+					ret = PTR_ERR(tests[i].invalid_nodes);
+					tests[i].invalid_nodes = NULL;
+					cts_err("Memdup invalid node from user failed %d", ret);
+					goto store_result;
+				}
+			}
+		}
+
+		if (dump_test_data_to_user) {
+			user_test_data = (void __user *)tests[i].test_data_buf;
+			tests[i].test_data_buf = vmalloc(tests[i].test_data_buf_size);
+			if (tests[i].test_data_buf == NULL) {
+				ret = -ENOMEM;
+				cts_err("Alloc test data mem failed");
+				goto store_result;
+			}
+			user_test_data_wr_size = (int __user *)tests[i].test_data_wr_size;
+			tests[i].test_data_wr_size = &test_data_wr_size;
+		}
+
+		if (dump_test_data_to_file) {
+			user_test_data_filepath = (const char __user *)tests[i].test_data_filepath;
+			tests[i].test_data_filepath = strndup_user(user_test_data_filepath, PATH_MAX);
+			if (tests[i].test_data_filepath == NULL) {
+				cts_err("Strdup test data filepath failed");
+				goto store_result;
+			}
+		}
+
+		if (driver_log_to_user) {
+			user_driver_log_buf = (void __user *)tests[i].driver_log_buf;
+			tests[i].driver_log_buf = kmalloc(tests[i].driver_log_buf_size, GFP_KERNEL);
+			if (tests[i].driver_log_buf == NULL) {
+				ret = -ENOMEM;
+				cts_err("Alloc driver log mem failed");
+				goto store_result;
+			}
+			user_driver_log_wr_size = (int __user *)tests[i].driver_log_wr_size;
+			tests[i].driver_log_wr_size = &driver_log_wr_size;
+		}
+
+		if (driver_log_to_file) {
+			user_driver_log_filepath = (const char __user *)tests[i].driver_log_filepath;
+			tests[i].driver_log_filepath = strndup_user(user_driver_log_filepath, PATH_MAX);
+			if (tests[i].driver_log_filepath == NULL) {
+				cts_err("Strdup driver log filepath failed");
+				goto store_result;
+			}
+			cts_info("Log driver log to file '%s'", tests[i].driver_log_filepath);
+		}
+
+		if (driver_log_to_file || driver_log_to_user) {
+			ret = cts_start_driver_log_redirect(
+				tests[i].driver_log_filepath, driver_log_to_file_append,
+				tests[i].driver_log_buf, tests[i].driver_log_buf_size,
+				tests[i].driver_log_level);
+			if (ret) {
+				cts_err("Start driver log redirect failed %d", ret);
+				goto store_result;
+			}
+		}
+
+		if (tests[i].priv_param_size && tests[i].priv_param) {
+			user_priv_param = (void __user *)tests[i].priv_param;
+			tests[i].priv_param = memdup_user(user_priv_param, tests[i].priv_param_size);
+			if (IS_ERR(tests[i].priv_param)) {
+				ret = PTR_ERR(tests[i].priv_param);
+				tests[i].priv_param = NULL;
+				cts_err("Memdup priv param from user failed %d", ret);
+				goto store_result;
+			}
+		}
+
+		switch (tests[i].test_item) {
+		case CTS_TEST_RESET_PIN:
+			ret = cts_test_reset_pin(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_INT_PIN:
+			ret = cts_test_int_pin(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_RAWDATA:
+			ret = cts_test_rawdata(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_NOISE:
+			ret = cts_test_noise(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_OPEN:
+			ret = cts_test_open(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_SHORT:
+			ret = cts_test_short(cts_dev, &tests[i]);
+			break;
+		case CTS_TEST_COMPENSATE_CAP:
+			ret = cts_test_compensate_cap(cts_dev, &tests[i]);
+			break;
+		default:
+			ret = ENOTSUPP;
+			cts_err("Un-supported test item");
+			break;
+		}
+
+/*
+ * Copy result and test data back to userspace.
+ */
+store_result:
+		if (dump_test_data_to_user) {
+			if (user_test_data != NULL && test_data_wr_size > 0) {
+				cts_info("Copy test data to user, size: %d", test_data_wr_size);
+				if (copy_to_user(user_test_data, tests[i].test_data_buf,
+					test_data_wr_size)) {
+					cts_err("Copy test data to user failed");
+					test_data_wr_size = 0;
+				}
+			}
+
+			if (user_test_data_wr_size != NULL)
+				put_user(test_data_wr_size, user_test_data_wr_size);
+		}
+
+		if (driver_log_to_user) {
+			driver_log_wr_size = cts_get_driver_log_redirect_size();
+			if (user_driver_log_buf != NULL && driver_log_wr_size > 0) {
+				cts_info("Copy driver log to user, size: %d", driver_log_wr_size);
+				if (copy_to_user(user_driver_log_buf, tests[i].driver_log_buf,
+						driver_log_wr_size)) {
+					cts_err("Copy driver log to user failed");
+					driver_log_wr_size = 0;
+				}
+			}
+
+			if (user_driver_log_wr_size != NULL)
+				put_user(driver_log_wr_size, user_driver_log_wr_size);
+		}
+
+		if (user_test_result != NULL)
+			put_user(ret, user_test_result);
+		else if (tests[i].test_result != NULL)
+			put_user(ret, tests[i].test_result);
+
+		if (dump_test_data_to_user) {
+			if (user_test_data != NULL && tests[i].test_data_buf != NULL)
+				vfree(tests[i].test_data_buf);
+		}
+		if (validate_data) {
+			if (validate_min && user_min_threshold != NULL && tests[i].min != NULL)
+				kfree(tests[i].min);
+			if (validate_max && user_max_threshold != NULL && tests[i].max != NULL)
+				kfree(tests[i].max);
+			if (skip_invalid_node) {
+				if (user_invalid_nodes != NULL && tests[i].invalid_nodes != NULL)
+					kfree(tests[i].invalid_nodes);
+			}
+		}
+
+		if (dump_test_data_to_file &&
+			user_test_data_filepath != NULL &&
+			tests[i].test_data_filepath != NULL) {
+			kfree(tests[i].test_data_filepath);
+		}
+
+		if (driver_log_to_user) {
+			if (user_driver_log_buf != NULL &&
+				tests[i].driver_log_buf != NULL) {
+				kfree(tests[i].driver_log_buf);
+			}
+		}
+
+		if (driver_log_to_file) {
+			if (user_driver_log_filepath != NULL &&
+				tests[i].driver_log_filepath != NULL) {
+				kfree(tests[i].driver_log_filepath);
+			}
+		}
+
+		if (driver_log_to_file || driver_log_to_user)
+			cts_stop_driver_log_redirect();
+
+		if (user_priv_param && tests[i].priv_param)
+			kfree(tests[i].priv_param);
+
+		if (ret && stop_test_if_validate_fail)
+			break;
+	}
+
+	kfree(tests);
+
+	return ret;
+}
+
+
 static long cts_tool_ioctl(struct file *file, unsigned int cmd,
 			   unsigned long arg)
 {
 	struct chipone_ts_data *cts_data;
 	struct cts_device *cts_dev;
+	unsigned int modid;
+	int ret;
 
 	cts_info("ioctl, cmd=0x%04x, arg=0x%02lx", cmd, arg);
 
@@ -694,72 +1085,42 @@ static long cts_tool_ioctl(struct file *file, unsigned int cmd,
 	case CTS_TOOL_IOCTL_GET_FW_VERSION:
 		return put_user(cts_dev->fwdata.version,
 				(unsigned short __user *)arg);
-
-	case CTS_TOOL_IOCTL_TEST_RESET_PIN:
-		return cts_reset_test(cts_dev);
-	case CTS_TOOL_IOCTL_TEST_INT_PIN:
-		return cts_test_int_pin(cts_dev);
-	case CTS_TOOL_IOCTL_TEST_DEVICE_TYPE:
-		if (cts_dev->hwdata->hwid == (u32) arg)
-			return 0;
-		return -EINVAL;
-	case CTS_TOOL_IOCTL_TEST_FW_VERSION:
-		if (cts_dev->fwdata.version == (u16) arg)
-			return 0;
-		return -EINVAL;
-	case CTS_TOOL_IOCTL_TEST_RAWDATA:{
-			struct cts_test_rawdata_ioctl_data param;
-
-			if (copy_from_user(&param,
-					   (struct cts_test_rawdata_ioctl_data
-					    __user *)arg, sizeof(param)))
-				return -EFAULT;
-
-			return cts_rawdata_test(cts_dev, param.min, param.max);
+	case CTS_TOOL_IOCTL_GET_MODULE_ID:
+		ret = cts_dev->ops->get_module_id(cts_dev, &modid);
+		if (ret) {
+			cts_err("Get module Id failed");
+			return -EFAULT;
 		}
-	case CTS_TOOL_IOCTL_TEST_NOISE:{
-			struct cts_test_noise_ioctl_data param;
+		return put_user(modid,
+				(unsigned int __user *)arg);
 
-			if (copy_from_user(&param,
-					   (struct
-					    cts_test_noise_ioctl_data__user *)
-					   arg, sizeof(param)))
+	case CTS_TOOL_IOCTL_TEST:{
+		struct cts_test_ioctl_data test_arg;
+		struct cts_test_param *tests_pa;
+
+		if (copy_from_user(&test_arg,
+				(struct cts_test_ioctl_data __user *)arg,
+					sizeof(test_arg))) {
+			cts_err("Copy ioctl test arg to kernel failed");
 				return -EFAULT;
-
-			return cts_noise_test(cts_dev, param.frames, param.max);
 		}
-	case CTS_TOOL_IOCTL_TEST_OPEN:{
-			struct cts_test_open_ioctl_data param;
 
-			if (copy_from_user(&param,
-					   (struct cts_test_open_ioctl_data
-					    __user *)arg, sizeof(param)))
-				return -EFAULT;
-
-			return cts_open_test(cts_dev, param.max);
+		if (test_arg.ntests > 8) {
+			cts_err("ioctl test with too many tests %u",
+				test_arg.ntests);
+			return -EINVAL;
 		}
-	case CTS_TOOL_IOCTL_TEST_SHORT:{
-			struct cts_test_short_ioctl_data param;
 
-			if (copy_from_user
-			    (&param,
-			     (struct cts_test_short_ioctl_data __user *)arg,
-			     sizeof(param)))
-				return -EFAULT;
+		tests_pa = memdup_user(test_arg.tests,
+			test_arg.ntests * sizeof(struct cts_test_param));
+		if (IS_ERR(tests_pa)) {
+			int ret = PTR_ERR(tests_pa);
 
-			return cts_short_test(cts_dev, param.max);
+			cts_err("Memdump test param to kernel failed %d", ret);
+			return ret;
 		}
-	case CTS_TOOL_IOCTL_TEST_COMP_CAP:{
-			struct cts_test_comp_cap_ioctl_data param;
 
-			if (copy_from_user
-			    (&param,
-			     (struct cts_test_comp_cap_ioctl_data __user *)arg,
-			     sizeof(param)))
-				return -EFAULT;
-
-			return cts_compensate_cap_test(cts_dev, param.min,
-						       param.max);
+		return cts_ioctl_test(cts_dev, test_arg.ntests, tests_pa);
 		}
 
 	default:
@@ -783,7 +1144,7 @@ int cts_tool_init(struct chipone_ts_data *cts_data)
 	cts_info("Init");
 
 	cts_data->procfs_entry = proc_create_data(CFG_CTS_TOOL_PROC_FILENAME,
-						  0600, NULL, &cts_tool_fops,
+						  0660, NULL, &cts_tool_fops,
 						  cts_data);
 	if (cts_data->procfs_entry == NULL) {
 		cts_err("Create proc entry failed");

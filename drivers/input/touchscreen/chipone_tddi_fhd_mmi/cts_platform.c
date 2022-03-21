@@ -1172,16 +1172,18 @@ int cts_plat_release_all_vkey(struct cts_platform_data *pdata)
 #ifdef CFG_CTS_GESTURE
 int cts_plat_enable_irq_wake(struct cts_platform_data *pdata)
 {
+	int ret;
+
 	cts_info("Enable IRQ wake");
 
 	if (pdata->irq > 0) {
-		if (!pdata->irq_wake_enabled) {
-			pdata->irq_wake_enabled = true;
-			return enable_irq_wake(pdata->irq);
+		ret = enable_irq_wake(pdata->irq);
+		if (ret < 0) {
+			cts_err("Enable irq wake failed");
+			return -EINVAL;
 		}
-
-		cts_warn("Enable irq wake while already disabled");
-		return -EINVAL;
+		pdata->irq_wake_enabled = true;
+		return 0;
 	}
 
 	cts_warn("Enable irq wake while irq invalid %d", pdata->irq);
@@ -1190,16 +1192,18 @@ int cts_plat_enable_irq_wake(struct cts_platform_data *pdata)
 
 int cts_plat_disable_irq_wake(struct cts_platform_data *pdata)
 {
+	int ret;
+
 	cts_info("Disable IRQ wake");
 
 	if (pdata->irq > 0) {
-		if (pdata->irq_wake_enabled) {
-			pdata->irq_wake_enabled = false;
-			return disable_irq_wake(pdata->irq);
+		ret = disable_irq_wake(pdata->irq);
+		if (ret < 0) {
+			cts_warn("Disable irq wake while already disabled");
+			return -EINVAL;
 		}
-
-		cts_warn("Disable irq wake while already disabled");
-		return -EINVAL;
+		pdata->irq_wake_enabled = false;
+		return 0;
 	}
 
 	cts_warn("Disable irq wake while irq invalid %d", pdata->irq);
