@@ -36,6 +36,7 @@
 
 #define CY_CMCP_THRESHOLD_FILE_NAME "cyttsp5_thresholdfile.csv"
 #define CMCP_THRESHOLD_FILE_NAME "ttdl_cmcp_thresholdfile.csv"
+#define PARADE_TEST_FILE_NAME "parade"
 
 /* Max test case number */
 #define MAX_CASE_NUM            (22)
@@ -5148,6 +5149,8 @@ static void cyttsp5_parse_cmcp_threshold_builtin(
 		cmcp_threshold_update);
 	struct device *dev = dad->dev;
 	int retval;
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	char limit_file[100] = {0};
 
 	dad->si = cmd->request_sysinfo(dev);
 	if (!dad->si) {
@@ -5160,9 +5163,17 @@ static void cyttsp5_parse_cmcp_threshold_builtin(
 		"%s: Enabling cmcp threshold class loader built-in\n",
 		__func__);
 
+	if (cd->supplier)
+		snprintf(limit_file, sizeof(limit_file), "%s_%s_test_limits.csv",
+			cd->supplier, PARADE_TEST_FILE_NAME);
+	else
+		snprintf(limit_file, sizeof(limit_file), "%s",
+			CMCP_THRESHOLD_FILE_NAME);
+	dev_info(dev, "limit_file_name:%s", limit_file);
+
 	/* Open threshold file */
 	retval = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-			CMCP_THRESHOLD_FILE_NAME, dev, GFP_KERNEL, dev,
+			limit_file, dev, GFP_KERNEL, dev,
 			cyttsp5_cmcp_parse_threshold_file);
 	if (retval < 0) {
 		dev_err(dev, "%s: Failed loading cmcp threshold file, attempting legacy file\n",

@@ -316,6 +316,11 @@ int cyttsp5_ts_mmi_dev_register(struct device *dev) {
 
 	cd->imports = &cyttsp5_ts_mmi_methods.exports;
 
+#if defined(CONFIG_GTP_LIMIT_USE_SUPPLIER)
+	if (cd->imports && cd->imports->get_supplier) {
+		ret = cd->imports->get_supplier(cd->dev, &cd->supplier);
+	}
+#endif
 	return 0;
 }
 

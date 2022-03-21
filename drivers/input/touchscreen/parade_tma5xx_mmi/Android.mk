@@ -38,6 +38,9 @@ ifeq ($(DRM_PANEL_NOTIFICATIONS),true)
     KBUILD_OPTIONS += CONFIG_DRM_PANEL_NOTIFICATIONS=y
 endif
 
+ifeq ($(GTP_LIMIT_USE_SUPPLIER),true)
+    KBUILD_OPTIONS += CONFIG_GTP_LIMIT_USE_SUPPLIER=y
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := parade_tma5xx_mmi_core.ko
