@@ -118,6 +118,28 @@ struct cyttsp5_hid_output {
 	u16 timeout_ms;
 };
 
+#if defined (CYTTSP5_SENSOR_EN)
+static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
+    .name = "s-dt-gesture",
+    .vendor = "Parade",
+    .version = 1,
+    .type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+    .max_range = "5.0",
+    .resolution = "5.0",
+    .sensor_power = "1",
+    .min_delay = 0,
+    .max_delay = 0,
+    /* WAKE_UP & SPECIAL_REPORT */
+    .flags = 1 | 6,
+    .fifo_reserved_event_count = 0,
+    .fifo_max_event_count = 0,
+    .enabled = 0,
+    .delay_msec = 200,
+    .sensors_enable = NULL,
+    .sensors_poll_delay = NULL,
+};
+#endif
+
 #define SET_CMD_OPCODE(byte, opcode) SET_CMD_LOW(byte, opcode)
 #define SET_CMD_REPORT_TYPE(byte, type) SET_CMD_HIGH(byte, ((type) << 4))
 #define SET_CMD_REPORT_ID(byte, id) SET_CMD_LOW(byte, id)
@@ -3840,6 +3862,8 @@ static int cyttsp5_put_device_into_easy_wakeup_(struct cyttsp5_core_data *cd)
 	int rc;
 	u8 status = 0;
 
+	dev_info(cd->dev, "%s: put device into easy wakeup state\n", __func__);
+
 	mutex_lock(&cd->system_lock);
 	cd->wait_until_wake = 0;
 	mutex_unlock(&cd->system_lock);
@@ -3908,7 +3932,10 @@ static int cyttsp5_core_sleep_(struct cyttsp5_core_data *cd)
 	cancel_work_sync(&cd->startup_work);
 	cyttsp5_stop_wd_timer(cd);
 
-	if (cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)
+	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture) &&
+		(cd->should_enable_gesture ==1)) {
+		rc = cyttsp5_put_device_into_sleep_(cd);
+	} else if (cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)
 		rc = cyttsp5_core_poweroff_device_(cd);
 	else
 		rc = cyttsp5_put_device_into_sleep_(cd);
@@ -3979,7 +4006,9 @@ exit:
 	if (cd->input_buf[2] != 4)
 		rc = -EINVAL;
 
+#if 0
 	cd->wake_initiated_by_device = 1;
+#endif
 
 	parade_debug(cd->dev, DEBUG_LEVEL_1, "%s: rc=%d\n", __func__, rc);
 
@@ -4514,6 +4543,8 @@ static int cyttsp5_core_wake_device_from_deep_sleep_(
 {
 	int rc;
 
+	dev_info(cd->dev, "%s: wake device from deep sleep state\n", __func__);
+
 	rc = cyttsp5_hid_cmd_set_power_(cd, HID_POWER_ON);
 	if (rc)
 		rc =  -EAGAIN;
@@ -4533,10 +4564,12 @@ static int cyttsp5_core_wake_device_(struct cyttsp5_core_data *cd)
 		wake_up(&cd->wait_q);
 		msleep(20);
 
+#if 0
 		if (cd->wake_initiated_by_device) {
 			cd->wake_initiated_by_device = 0;
 			return 0;
 		}
+#endif
 	}
 
 	return cyttsp5_core_wake_device_from_deep_sleep_(cd);
@@ -4663,7 +4696,10 @@ static int cyttsp5_core_wake_(struct cyttsp5_core_data *cd)
 	}
 	mutex_unlock(&cd->system_lock);
 
-	if (cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)
+	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture) &&
+		(cd->should_enable_gesture ==1)) {
+		rc = cyttsp5_core_wake_device_(cd);
+	} else if (cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)
 		rc = cyttsp5_core_poweron_device_(cd);
 	else
 		rc = cyttsp5_core_wake_device_(cd);
@@ -5059,17 +5095,19 @@ int cyttsp5_core_suspend(struct device *dev)
 	 * This will not prevent resume
 	 * Required to prevent interrupts before i2c awake
 	 */
-	disable_irq(cd->irq);
-	cd->irq_disabled = 1;
-
-	if (device_may_wakeup(dev)) {
-		parade_debug(dev, DEBUG_LEVEL_2, "%s Device MAY wakeup\n",
-			__func__);
-		if (!enable_irq_wake(cd->irq))
-			cd->irq_wake = 1;
+	if (!cd->should_enable_gesture) {
+		disable_irq(cd->irq);
+		cd->irq_disabled = 1;
 	} else {
-		parade_debug(dev, DEBUG_LEVEL_1, "%s Device MAY NOT wakeup\n",
-			__func__);
+		if (device_may_wakeup(dev)) {
+			parade_debug(dev, DEBUG_LEVEL_2, "%s Device MAY wakeup\n",
+				__func__);
+			if (!enable_irq_wake(cd->irq))
+				cd->irq_wake = 1;
+		} else {
+			parade_debug(dev, DEBUG_LEVEL_1, "%s Device MAY NOT wakeup\n",
+				__func__);
+		}
 	}
 
 	return 0;
@@ -5091,18 +5129,19 @@ int cyttsp5_core_resume(struct device *dev)
 		cd->irq_disabled = 0;
 	}
 
-	if (device_may_wakeup(dev)) {
-		parade_debug(dev, DEBUG_LEVEL_2, "%s Device MAY wakeup\n",
-			__func__);
-		if (cd->irq_wake) {
-			disable_irq_wake(cd->irq);
-			cd->irq_wake = 0;
+	if (cd->should_enable_gesture) {
+		if (device_may_wakeup(dev)) {
+			parade_debug(dev, DEBUG_LEVEL_2, "%s Device MAY wakeup\n",
+				__func__);
+			if (cd->irq_wake) {
+				disable_irq_wake(cd->irq);
+				cd->irq_wake = 0;
+			}
+		} else {
+			parade_debug(dev, DEBUG_LEVEL_1, "%s Device MAY NOT wakeup\n",
+				__func__);
 		}
-	} else {
-		parade_debug(dev, DEBUG_LEVEL_1, "%s Device MAY NOT wakeup\n",
-			__func__);
 	}
-
 exit:
 	cyttsp5_core_wake(cd);
 
@@ -6562,6 +6601,95 @@ static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 	return rc;
 }
 
+#ifdef CYTTSP5_SENSOR_EN
+static int cyttsp5_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	struct cyttsp5_sensor_platform_data *sensor_pdata = container_of(
+			sensors_cdev, struct cyttsp5_sensor_platform_data, ps_cdev);
+	struct cyttsp5_core_data *cd = sensor_pdata->data;
+
+	pr_info("%s: Gesture set enable %d!", __func__, enable);
+	mutex_lock(&cd->state_mutex);
+	if (enable == 1) {
+		cd->should_enable_gesture = true;
+	} else if (enable == 0) {
+		cd->should_enable_gesture = false;
+	} else {
+		pr_info("%s: unknown enable symbol\n", __func__);
+	}
+	mutex_unlock(&cd->state_mutex);
+	return 0;
+}
+
+static int cyttsp5_sensor_init(struct cyttsp5_core_data *data)
+{
+	struct cyttsp5_sensor_platform_data *sensor_pdata;
+	struct input_dev *sensor_input_dev;
+	int err;
+
+	sensor_input_dev = input_allocate_device();
+	if (!sensor_input_dev) {
+		pr_err("%s: Failed to allocate device", __func__);
+		goto exit;
+	}
+
+	sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+			sizeof(struct cyttsp5_sensor_platform_data),
+			GFP_KERNEL);
+	if (!sensor_pdata) {
+		pr_err("%s: Failed to allocate memory", __func__);
+		goto free_sensor_pdata;
+	}
+	data->sensor_pdata = sensor_pdata;
+
+	__set_bit(EV_KEY, sensor_input_dev->evbit);
+	__set_bit(KEY_F1, sensor_input_dev->keybit);
+	__set_bit(EV_SYN, sensor_input_dev->evbit);
+
+	sensor_input_dev->name = "s-double-tap";
+	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+	err = input_register_device(sensor_input_dev);
+	if (err) {
+		pr_err("%s: Unable to register device, err=%d", __func__, err);
+		goto free_sensor_input_dev;
+	}
+
+	sensor_pdata->ps_cdev = sensors_touch_cdev;
+	sensor_pdata->ps_cdev.sensors_enable = cyttsp5_sensor_set_enable;
+	sensor_pdata->data = data;
+
+	err = sensors_classdev_register(&sensor_input_dev->dev,
+				&sensor_pdata->ps_cdev);
+	if (err)
+		goto unregister_sensor_input_device;
+
+	return 0;
+
+unregister_sensor_input_device:
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+	input_free_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+	devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+	data->sensor_pdata = NULL;
+exit:
+	return 1;
+}
+
+int cyttsp5_sensor_remove(struct cyttsp5_core_data *data)
+{
+	sensors_classdev_unregister(&data->sensor_pdata->ps_cdev);
+	input_unregister_device(data->sensor_pdata->input_sensor_dev);
+	devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
+		data->sensor_pdata);
+	data->sensor_pdata = NULL;
+	data->should_enable_gesture = false;
+	return 0;
+}
+#endif
+
 int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 		u16 irq, size_t xfer_buf_size)
 {
@@ -6569,6 +6697,9 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	struct cyttsp5_platform_data *pdata = dev_get_platdata(dev);
 	enum cyttsp5_atten_type type;
 	int rc = 0;
+#ifdef CYTTSP5_SENSOR_EN
+    static bool initialized_sensor;
+#endif
 
 	/* Set default values on first probe */
 	if (cyttsp5_first_probe) {
@@ -6770,6 +6901,15 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	if (rc) {
 		dev_info(dev, "Failed register touchscreen mmi.");
 		goto error_startup_btn;
+	}
+#endif
+
+#if defined (CYTTSP5_SENSOR_EN)
+	if (!initialized_sensor) {
+		if (!cyttsp5_sensor_init(cd))
+			initialized_sensor = true;
+		else
+			dev_err(dev, "%s: cyttsp5 init sensor fail.\n", __func__);
 	}
 #endif
 

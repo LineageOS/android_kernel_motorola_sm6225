@@ -77,4 +77,9 @@ ifneq ($(filter m y,$(CONFIG_GTP_LIMIT_USE_SUPPLIER)),)
     EXTRA_CFLAGS += -DCONFIG_GTP_LIMIT_USE_SUPPLIER
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_CYTTSP5_MMI_ENABLE_DOUBLE_TAP)),)
+    EXTRA_CFLAGS += -DCYTTSP5_SENSOR_EN
+    KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+endif
+
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
