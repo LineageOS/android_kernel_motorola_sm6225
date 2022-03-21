@@ -66,9 +66,13 @@
 #include <linux/rtc.h>
 #include <linux/regulator/consumer.h>
 
+#ifdef CYTTSP5_SENSOR_EN
+#include <linux/sensors.h>
+#endif
+
 //#define PT_PANEL_ID_FROM_MFG
 
-/* #define EASYWAKE_TSG6 */
+#define EASYWAKE_TSG6
 #define PT_PIP2_MAX_FILE_SIZE           0x18000
 #define CY_FW_FILE_PREFIX	"cyttsp5_fw"
 #define CY_FW_FILE_SUFFIX	".bin"
@@ -942,6 +946,16 @@ struct cyttsp5_module {
 	void (*release)(struct device *dev, void *data);
 };
 
+#ifdef CYTTSP5_SENSOR_EN
+struct cyttsp5_sensor_platform_data {
+    struct input_dev *input_sensor_dev;
+    struct sensors_classdev ps_cdev;
+    int sensor_opened;
+    char sensor_data; /* 0 near, 1 far */
+    struct cyttsp5_core_data *data;
+};
+#endif
+
 struct cyttsp5_core_data {
 	struct list_head node;
 	struct list_head module_list; /* List of probed modules */
@@ -1022,6 +1036,11 @@ struct cyttsp5_core_data {
 	struct mutex tthe_lock;
 	u8 tthe_exit;
 #endif
+#ifdef CYTTSP5_SENSOR_EN
+	bool should_enable_gesture;
+	struct mutex state_mutex;
+	struct cyttsp5_sensor_platform_data *sensor_pdata;
+ #endif
 	u8 pr_buf[CY_MAX_PRBUF_SIZE];
 	u8 debug_level;
 	u32 watchdog_interval;
