@@ -1036,6 +1036,7 @@ struct cyttsp5_core_data {
 	int (*firmware_update)(struct device *dev, char *fwname);
 	char firmware_name[CYTTSP5_FIRMWARE_NAME_MAX_LEN];
 	bool force_fw_upgrade;
+	const char *supplier;
 };
 struct gd_sensor {
 	int32_t cm_min;
