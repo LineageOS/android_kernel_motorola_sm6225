@@ -8,6 +8,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/delay.h>
 #include <linux/component.h>
 #include <soc/soundwire.h>
 
