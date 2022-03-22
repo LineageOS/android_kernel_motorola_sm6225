@@ -41,6 +41,19 @@ static const unsigned int BOOST_CURRENT_LIMIT[] = {
 };
 #endif
 
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+
+static const unsigned int IPRECHG_CURRENT_STABLE[] = {
+	5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000,
+	80000, 100000, 120000, 140000, 160000, 180000, 200000, 240000
+};
+
+static const unsigned int ITERM_CURRENT_STABLE[] = {
+	5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000,
+	80000, 100000, 120000, 140000, 160000, 180000, 200000, 240000
+};
+#endif
+
 enum SGM4154x_VREG_FT {
 	VREG_FT_DISABLE,
 	VREG_FT_UP_8mV,
@@ -176,6 +189,12 @@ static int sgm4154x_get_ichg_curr(struct sgm4154x_device *sgm)
 static int sgm4154x_set_term_curr(struct sgm4154x_device *sgm, int term_current)
 {
 	int reg_val;
+
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+	for(reg_val = 1; reg_val < 16 && term_current >= ITERM_CURRENT_STABLE[reg_val]; reg_val++)
+		;
+	reg_val--;
+#else
 	int offset = SGM4154x_TERMCHRG_I_MIN_uA;
 
 	if (term_current < SGM4154x_TERMCHRG_I_MIN_uA)
@@ -184,7 +203,7 @@ static int sgm4154x_set_term_curr(struct sgm4154x_device *sgm, int term_current)
 		term_current = SGM4154x_TERMCHRG_I_MAX_uA;
 
 	reg_val = (term_current - offset) / SGM4154x_TERMCHRG_CURRENT_STEP_uA;
-
+#endif
 	return mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_3,
 				  SGM4154x_TERMCHRG_CUR_MASK, reg_val);
 }
@@ -192,6 +211,12 @@ static int sgm4154x_set_term_curr(struct sgm4154x_device *sgm, int term_current)
 static int sgm4154x_set_prechrg_curr(struct sgm4154x_device *sgm, int pre_current)
 {
 	int reg_val;
+
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+	for(reg_val = 1; reg_val < 16 && pre_current >= IPRECHG_CURRENT_STABLE[reg_val]; reg_val++)
+		;
+	reg_val--;
+#else
 	int offset = SGM4154x_PRECHRG_I_MIN_uA;
 
 	if (pre_current < SGM4154x_PRECHRG_I_MIN_uA)
@@ -200,6 +225,7 @@ static int sgm4154x_set_prechrg_curr(struct sgm4154x_device *sgm, int pre_curren
 		pre_current = SGM4154x_PRECHRG_I_MAX_uA;
 
 	reg_val = (pre_current - offset) / SGM4154x_PRECHRG_CURRENT_STEP_uA;
+#endif
 	reg_val = reg_val << 4;
 	return mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_3,
 				  SGM4154x_PRECHRG_CUR_MASK, reg_val);
@@ -212,6 +238,22 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	int ret;
 	int reg_val;
 
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+	if (chrg_curr <= 40000)
+		reg_val = chrg_curr / 5000;
+	else if (chrg_curr <= 110000)
+		reg_val = 0x08 + (chrg_curr -40000) / 10000;
+	else if (chrg_curr <= 270000)
+		reg_val = 0x0F + (chrg_curr -110000) / 20000;
+	else if (chrg_curr <= 540000)
+		reg_val = 0x17 + (chrg_curr -270000) / 30000;
+	else if (chrg_curr <= 1500000)
+		reg_val = 0x20 + (chrg_curr -540000) / 60000;
+	else if (chrg_curr <= 2940000)
+		reg_val = 0x30 + (chrg_curr -1500000) / 120000;
+	else
+		reg_val = 0x3d;
+#else
 	if (chrg_curr < SGM4154x_ICHRG_I_MIN_uA)
 		chrg_curr = SGM4154x_ICHRG_I_MIN_uA;
 	else if ( chrg_curr > sgm->init_data.max_ichg)
@@ -222,6 +264,7 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	    sgm->final_cc = chrg_curr;
 
 	reg_val = chrg_curr / SGM4154x_ICHRG_CURRENT_STEP_uA;
+#endif
 
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_2,
 				  SGM4154x_ICHRG_CUR_MASK, reg_val);
@@ -371,8 +414,11 @@ static int sgm4154x_get_usb_voltage_now(struct sgm4154x_device *sgm, int *val)
 		dev_err(sgm->dev, "Couldn't read USBIN over vadc rc=%d\n", rc);
 		return rc;
 	}
-
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+	*val = raw_date * 1000;
+#else
 	*val = raw_date * 3;
+#endif
 
 	return 0;
 }
@@ -675,11 +721,15 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 		reg_val = 0;
 	else if (iindpm >= SGM4154x_IINDPM_I_MAX_uA)
 		reg_val = 0x1F;
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+	reg_val = (iindpm-SGM4154x_IINDPM_I_MIN_uA) / SGM4154x_IINDPM_STEP_uA;
+#else
 	else if (iindpm >= SGM4154x_IINDPM_I_MIN_uA && iindpm <= 3100000)//default
 		reg_val = (iindpm-SGM4154x_IINDPM_I_MIN_uA) / SGM4154x_IINDPM_STEP_uA;
 	else if (iindpm > 3100000 && iindpm < SGM4154x_IINDPM_I_MAX_uA)
 		reg_val = 0x1E;
 
+#endif
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_0,
 				  SGM4154x_IINDPM_I_MASK, reg_val);
 	return ret;
@@ -1049,10 +1099,11 @@ static int sgm4154x_set_otg_current(struct sgm4154x_device *sgm, int ua)
 	return ret;
 }
 
-#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 static int get_charger_type(struct sgm4154x_device * sgm)
 {
 	enum power_supply_usb_type usb_type;
+
+#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
 			usb_type = POWER_SUPPLY_USB_TYPE_SDP;
@@ -1074,10 +1125,33 @@ static int get_charger_type(struct sgm4154x_device * sgm)
 			usb_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 			break;
 	}
+#else
+	switch(sgm->real_charger_type) {
+		case POWER_SUPPLY_TYPE_USB:
+			usb_type = POWER_SUPPLY_USB_TYPE_SDP;
+			break;
+
+		case POWER_SUPPLY_TYPE_USB_CDP:
+			usb_type = POWER_SUPPLY_USB_TYPE_CDP;
+			break;
+
+		case POWER_SUPPLY_TYPE_USB_DCP:
+		case POWER_SUPPLY_TYPE_USB_HVDCP:
+		case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		case POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
+			usb_type = POWER_SUPPLY_USB_TYPE_DCP;
+			break;
+
+		default:
+			usb_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+			break;
+	}
+#endif
+
 	pr_err("%s usb_type:%d\n",__func__,usb_type);
 	return usb_type;
 }
-#endif
+
 static int sgm4154x_property_is_writeable(struct power_supply *psy,
 					 enum power_supply_property prop)
 {
@@ -1837,7 +1911,7 @@ bool bc12_detection_done(struct sgm4154x_device *chip)
 
 		msleep(100);
 		delay_count ++;
-	}while(val == false && delay_count <= 35);
+	}while(val == false && delay_count <= 10);
 
 	dev_info(chip->dev, "read SMB5_BC12_DETECTION_READY IIO :%d\n",val);
 	return val;
@@ -2043,7 +2117,7 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 #ifdef CONFIG_MMI_SGM41513_CHARGER
 	bool ret;
 #endif
-#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)  || defined(__SGM41513_CHIP_ID__)
 	if (((sgm->state.chrg_type == SGM4154x_USB_SDP) ||
 		(sgm->state.chrg_type == SGM4154x_NON_STANDARD) ||
 		(sgm->state.chrg_type == SGM4154x_UNKNOWN))
@@ -2172,7 +2246,7 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 
 	//lock wakelock
 	pr_err("%s entry\n",__func__);
-	#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+	#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__) || defined(__SGM41513_CHIP_ID__)
 	schedule_work(&sgm->charge_detect_work);
 	//power_supply_changed(sgm->charger);
 	#endif
@@ -2681,7 +2755,7 @@ static int sgm4154x_hw_chipid_detect(struct sgm4154x_device *sgm)
 
 	return val;
 }
-#if !defined(__SGM41513_CHIP_ID__)
+
 static int sgm4154x_get_iio_channel(struct sgm4154x_device *sgm, const char *propname,
 					struct iio_channel **chan)
 {
@@ -2708,14 +2782,20 @@ static int sgm4154x_parse_dt_adc_channels(struct sgm4154x_device *sgm)
 {
 	int rc = 0;
 
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+	rc = sgm4154x_get_iio_channel(sgm, "read_usbin_voltage",
+					&sgm->iio.usbin_v_chan);
+#else
 	rc = sgm4154x_get_iio_channel(sgm, "gpio3_div3",
 					&sgm->iio.usbin_v_chan);
+#endif
+
 	if (rc < 0)
 		return rc;
 
 	return 0;
 }
-#endif
+
 static int sgm4154x_enable_otg(struct charger_device *chg_dev, bool enable)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
@@ -2987,13 +3067,13 @@ static int sgm4154x_probe(struct i2c_client *client,
 		dev_err(dev, "Failed to read device tree properties%d\n", ret);
 		return ret;
 	}
-#if !defined(__SGM41513_CHIP_ID__)
+
 	ret = sgm4154x_parse_dt_adc_channels(sgm);
 	if (ret) {
 		dev_err(dev, "Failed to get adc channels%d\n", ret);
 		return ret;
 	}
-#endif
+
 	sgm->chg_dev = charger_device_register(sgm->chg_dev_name,
 					      &client->dev, sgm,
 					      &sgm4154x_chg_ops,

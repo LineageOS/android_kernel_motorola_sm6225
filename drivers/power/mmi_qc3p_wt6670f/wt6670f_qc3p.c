@@ -687,6 +687,11 @@ static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
 		pr_info("wt6670 get bc1.2 ready status:%d\n", result);
 		*val1 = result;
 		break;
+	case PSY_IIO_READ_USBIN_VOLTAGE:
+		result = wt6670f_get_vbus_voltage();
+		pr_info("wt6670 get vbus voltage:%d\n", result);
+		*val1 = result;
+		break;
 	default:
 		pr_err("Unsupported wt6670 IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
