@@ -20,6 +20,7 @@
 //#define __SGM41516_CHIP_ID__
 //#define __SGM41516D_CHIP_ID__
 #ifdef CONFIG_MMI_SGM41513_CHARGER
+#undef __SGM41542_CHIP_ID__
 #define __SGM41513_CHIP_ID__
 #endif
 
@@ -37,6 +38,10 @@
 
 #ifdef __SGM41516D_CHIP_ID__
 #define SGM4154x_NAME		"sgm41516D"
+#endif
+
+#ifdef __SGM41513_CHIP_ID__
+#define SGM4154x_NAME		"sgm41513"
 #endif
 
 /*define register*/
@@ -176,7 +181,11 @@
 /* iindpm current  */
 #define SGM4154x_IINDPM_I_MASK		GENMASK(4, 0)
 #define SGM4154x_IINDPM_I_MIN_uA	100000
+#if (defined(__SGM41513_CHIP_ID__) || defined(__SGM41513A_CHIP_ID__) || defined(__SGM41513D_CHIP_ID__))
+#define SGM4154x_IINDPM_I_MAX_uA	3200000
+#else
 #define SGM4154x_IINDPM_I_MAX_uA	3800000
+#endif
 #define SGM4154x_IINDPM_STEP_uA	    100000
 #define SGM4154x_IINDPM_DEF_uA	    2400000
 
@@ -400,6 +409,7 @@ enum mmi_qc3p_ext_iio_channels {
 	SMB5_QC3P_START_POLICY,
 	SMB5_BC12_START_DETECT,
 	SMB5_BC12_DETECTION_READY,
+	SMB5_READ_USBIN_VOLTAGE,
 };
 
 static const char * const mmi_qc3p_ext_iio_chan_name[] = {
@@ -411,6 +421,7 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
 	[SMB5_BC12_START_DETECT] = "wt6670_start_bc12_detection",
 	[SMB5_BC12_DETECTION_READY] = "wt6670_detection_bc12_ready",
+	[SMB5_READ_USBIN_VOLTAGE] = "read_usbin_voltage",
 };
 bool qc3p_update_policy(struct sgm4154x_device *chip);
 #endif
