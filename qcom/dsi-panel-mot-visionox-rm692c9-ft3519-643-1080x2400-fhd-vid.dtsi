@@ -115,7 +115,7 @@
 				qcom,mdss-dsi-panel-height = <2400>;
 				qcom,mdss-dsi-h-front-porch = <40>;
 				qcom,mdss-dsi-h-back-porch = <40>;
-				qcom,mdss-dsi-h-pulse-width = <2>;
+				qcom,mdss-dsi-h-pulse-width = <4>;
 				qcom,mdss-dsi-h-sync-skew = <0>;
 				qcom,mdss-dsi-h-sync-pulse = <0>;
 				qcom,mdss-dsi-v-back-porch = <12>;
