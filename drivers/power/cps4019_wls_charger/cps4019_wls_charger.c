@@ -71,7 +71,7 @@
 #define cps_wls_log(num, fmt, args...) \
 	do { \
 			if (ENABLE_CPS_LOG >= (int)num) \
-				pr_err(fmt, ##args); \
+				pr_err("cps4019 " fmt,##args); \
 	} while (0)
 
 /*-------------------------------------------------------------------*/
@@ -79,6 +79,7 @@ struct cps_wls_chrg_chip {
 	struct i2c_client *client;
 	struct device *dev;
 	struct regmap *regmap;
+	struct regmap *regmap32;
 	char *name;
 	struct power_supply *wl_psy;
 	struct power_supply *batt_psy;
@@ -171,6 +172,57 @@ static const struct regmap_config cps4019_regmap_config = {
 	.val_bits = 8,
 };
 
+static const struct regmap_config cps4019_regmap_32bit_config = {
+	.reg_bits = 32,
+	.val_bits = 8,
+};
+
+
+static int cps_wls_read_word_addr32(int reg)
+{
+	int ret;
+	int value;
+	unsigned char data[4];
+	int i ;
+
+	mutex_lock(&chip->i2c_lock);
+	ret = regmap_raw_read(chip->regmap32, reg, data, 4);
+	mutex_unlock(&chip->i2c_lock);
+
+	if (ret < 0) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] i2c read error!\n", __func__);
+		return CPS_WLS_FAIL;
+	}
+	//pr_err("cps read32[%08X] %02X %02X %02X %02X\n", reg,data[0], data[1], data[2], data[3]);
+	value = 0;
+	for(i = 3 ; i >= 0 ; i--) {
+		value = (value <<8) | (data[i]);
+	}
+
+	return value;
+}
+static int cps_wls_write_word_addr32(int reg, int value)
+{
+	int ret;
+	unsigned char data[4];
+	int i ;
+
+	for(i = 0; i < 4; i++) {
+		data[i] = (value >> (8*i) ) & 0xFF;
+	}
+	mutex_lock(&chip->i2c_lock);
+	ret = regmap_raw_write(chip->regmap32, reg, data, 4);
+	mutex_unlock(&chip->i2c_lock);
+
+	if (ret < 0) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] i2c write error!\n", __func__);
+		return CPS_WLS_FAIL;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+
 static int cps_wls_write(int reg, int value)
 {
 	int ret;
@@ -212,8 +264,7 @@ return -1 means fail, 0 means success
 static int cps_wls_write_reg(int reg, int value, int byte_len)
 {
 	int i=0, tmp=0;
-	for(i = 0; i < byte_len; i++)
-	{
+	for(i = 0; i < byte_len; i++) {
 		tmp = (value >> (i * 8)) & 0xff;
 		if(cps_wls_write((reg & 0xffff) + i, tmp) == CPS_WLS_FAIL)
 			goto write_fail;
@@ -230,15 +281,13 @@ return -1 means fail, 0 means success
 static int cps_wls_read_reg(int reg, int byte_len)
 {
 	int i=0,tmp=0,read_data=0;
-	for(i = 0; i < byte_len; i++)
-	{
+	for(i = 0; i < byte_len; i++) {
 		tmp = cps_wls_read((reg & 0xffff) + i);
 		if(tmp == CPS_WLS_FAIL)
 			goto read_fail;
 		read_data |= (tmp << (8 * i));
 	}
 	return read_data;
-
 
 read_fail:
 	return CPS_WLS_FAIL;
@@ -263,12 +312,12 @@ int big_little_endian_convert(int dat)
 }
 //*****************************for program************************
 
-static int cps_wls_program_sram(int addr, u8 *data, int len)
+static int cps_wls_program_sram_addr32(int addr, u8 *data, int len)
 {
 	int ret;
 
 	mutex_lock(&chip->i2c_lock);
-	ret = regmap_raw_write(chip->regmap, addr, data, len);
+	ret = regmap_raw_write(chip->regmap32, addr, data, len);
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
@@ -317,16 +366,15 @@ static int cps_wls_read_word(int addr)
 
 static int cps_wls_program_cmd_send(int cmd)
 {
-	return cps_wls_write_word(ADDR_CMD, big_little_endian_convert(cmd));
+	return cps_wls_write_word_addr32(ADDR_CMD, big_little_endian_convert(cmd));
 }
 
 static int cps_wls_program_wait_cmd_done(void)
 {
 	int ret;
 	int wait_time_out = 50;//ms
-	while(1)
-	{
-		ret = cps_wls_read_word(ADDR_FLAG);
+	while(1) {
+		ret = cps_wls_read_word_addr32(ADDR_FLAG);
 		if(ret == CPS_WLS_FAIL)
 			return CPS_WLS_FAIL;
 		wait_time_out--;
@@ -350,10 +398,11 @@ static int fp_size(struct file *f)
 	error = vfs_getattr(&f->f_path, &stat, STATX_SIZE, KSTAT_QUERY_FLAGS );
 
 	if (error == 0) {
+		pr_err("cps4019 get file file size:%d\n", (int)stat.size);
 		return stat.size;
 	}
 	else {
-		pr_err("get file file stat error\n");
+		pr_err("cps4019 get file file stat error\n");
 		return error;
 	}
 }
@@ -367,19 +416,19 @@ static int cps_file_read(char *filename, char **buf)
 
 	fp = filp_open(filename, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
-		pr_err("open %s file error\n", filename);
+		pr_err("cps4019 open %s file error\n", filename);
 		goto end;
 	}
 
 	size = fp_size(fp);
 	if (size <= 0) {
-		pr_err("load file:%s error\n", filename);
+		pr_err("cps4019 load file:%s error\n", filename);
 		goto error;
 	}
 
 	*buf = kzalloc(size + 1, GFP_KERNEL);
-	if( *buf != NULL ) {
-		pr_err("kzalloc error\n");
+	if( *buf == NULL ) {
+		pr_err("cps4019 kzalloc error\n");
 		goto error;
 	}
 
@@ -388,6 +437,7 @@ static int cps_file_read(char *filename, char **buf)
 	//vfs_read(fp, *buf, size, &pos);//it's not EXPORT_SYMBOL
 
 	size = kernel_read(fp, *buf, size, &pos);
+	pr_err("cps4019 kernel_read %s size:%d\n", filename, size);
 error:
 	filp_close(fp, NULL);
 	//set_fs(fs);
@@ -442,21 +492,23 @@ static int bootloader_load(unsigned char *bootloader, int *bootloader_length)
 	char *buf = NULL;
 	int size = 0;
 
+	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
 	size = cps_file_read(BOOTLOADER_FILE_NAME, &buf);
 	if (size > 0) {
 		if (bootloader == NULL) {
 			kfree(buf);
-			pr_err("file alloc error.\n");
+			pr_err("cps4019 file alloc error.\n");
 			return -EINVAL;
 		}
 
 		if(file_parse(buf, size, bootloader, bootloader_length) == NULL) {
 			kfree(buf);
-			pr_err("file parse error\n");
+			pr_err("cps4019 file parse error\n");
 			return -EINVAL;
 		}
 		kfree(buf);
 	}
+	cps_wls_log(CPS_LOG_DEBG,"cps_[%s] bootloader_length=%d\n", __func__, *bootloader_length);
 
 	return 0;
 }
@@ -466,16 +518,17 @@ static int firmware_load(unsigned char *firmeware, int *firmeware_length)
 	char *buf = NULL;
 	int size = 0;
 
+	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
 	size = cps_file_read(FIRMWARE_FILE_NAME, &buf);
 	if (size > 0) {
 		if (firmeware == NULL) {
 			kfree(buf);
-			pr_err("file alloc error.\n");
+			pr_err("cps4019 file alloc error.\n");
 			return -EINVAL;
 		}
 		if(file_parse(buf, size, firmeware, firmeware_length) == NULL) {
 			kfree(buf);
-			pr_err("file parse error\n");
+			pr_err("cps4019 file parse error\n");
 			return -EINVAL;
 		}
 		kfree(buf);
@@ -492,7 +545,7 @@ static int update_firmware(void)
 	unsigned char *bootloader_buf;
 	unsigned char *firmware_buf;
 	unsigned char *p;
-	//unsigned short int chip_id;
+	unsigned short int chip_id;
 	int result;
 	int *p_convert;
 
@@ -508,28 +561,28 @@ static int update_firmware(void)
 		goto update_fail;
 	}
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
 		goto update_fail; /*enable 32bit i2c*/
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0x40040070, big_little_endian_convert(0x0000A061)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040070, big_little_endian_convert(0x0000A061)))
 		goto update_fail; /*write password*/
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0x40040004, big_little_endian_convert(0x00000008)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040004, big_little_endian_convert(0x00000008)))
 		goto update_fail; /*reset and halt mcu*/
 
-	if(CPS_WLS_FAIL == cps_wls_program_sram(0x20000000, bootloader_buf, bootloader_length))
+	if(CPS_WLS_FAIL == cps_wls_program_sram_addr32(0x20000000, bootloader_buf, bootloader_length))
 		goto update_fail;//program sram
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0x40040010, big_little_endian_convert(0x00000001)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040010, big_little_endian_convert(0x00000001)))
 		goto update_fail; /*triming load function is disabled*/
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0x40040004, big_little_endian_convert(0x00000066)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040004, big_little_endian_convert(0x00000066)))
 		goto update_fail; /*enable remap function and reset the mcu*/
 
 	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- system restart\n", __func__);
 
 	msleep(10);
-	if(CPS_WLS_FAIL == cps_wls_write_word(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
 		goto update_fail; /*enable 32bit i2c*/
 	msleep(10);
 
@@ -577,11 +630,10 @@ start_write_app_code:
 	p = (unsigned char*)p_convert;
 	write_count++;
 
-	for (k = 0; k < (16 * 1024 / 4) / CPS_PROGRAM_BUFFER_SIZE; k++)
-	{
+	for (k = 0; k < (16 * 1024 / 4) / CPS_PROGRAM_BUFFER_SIZE; k++) {
 		if (buff0_flag == 0) {
 			//write buf0
-			cps_wls_program_sram(ADDR_BUFFER0, p, CPS_PROGRAM_BUFFER_SIZE*4);
+			cps_wls_program_sram_addr32(ADDR_BUFFER0, p, CPS_PROGRAM_BUFFER_SIZE*4);
 			p = p + CPS_PROGRAM_BUFFER_SIZE*4;
 			if (buff1_flag == 1) {
 				//wait finish
@@ -599,7 +651,7 @@ start_write_app_code:
 		}
 		if (buff1_flag == 0) {
 			//write buf1
-			cps_wls_program_sram(ADDR_BUFFER1, p, CPS_PROGRAM_BUFFER_SIZE*4);
+			cps_wls_program_sram_addr32(ADDR_BUFFER1, p, CPS_PROGRAM_BUFFER_SIZE*4);
 			p = p + CPS_PROGRAM_BUFFER_SIZE*4;
 			if (buff0_flag == 1) {
 				//wait finish
@@ -616,8 +668,7 @@ start_write_app_code:
 			continue;
 		}
 	}
-	if (buff0_flag == 1)
-	{
+	if (buff0_flag == 1) {
 		//wait finish
 		cps_wls_program_wait_cmd_done();
 		if(result != CPS_WLS_SUCCESS) {
@@ -627,8 +678,7 @@ start_write_app_code:
 		buff0_flag = 0;
 	}
 
-	if (buff1_flag == 1)
-	{
+	if (buff1_flag == 1) {
 		//wait finish
 		cps_wls_program_wait_cmd_done();
 		if(result != CPS_WLS_SUCCESS) {
@@ -648,6 +698,8 @@ start_write_app_code:
 		cps_wls_log(CPS_LOG_ERR, "[%s] ---- TEST APP CRC fail", __func__);
 		if(write_count < 3) goto start_write_app_code;
 		else goto update_fail;
+	}else {
+		cps_wls_log(CPS_LOG_ERR, "[%s] ---- TEST APP CRC success", __func__);
 	}
 
 /***************************************************************************************
@@ -659,23 +711,26 @@ start_write_app_code:
 	if(result != CPS_WLS_SUCCESS) {
 		cps_wls_log(CPS_LOG_ERR, "[%s] ---- WRITE MCU START FLAG fail", __func__);
 		goto update_fail;
+	}else {
+		cps_wls_log(CPS_LOG_ERR, "[%s] ---- WRITE MCU START FLAG success", __func__);
 	}
 
-	if(CPS_WLS_FAIL == cps_wls_write_word(0x40040004, big_little_endian_convert(0x00000001)))
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040004, big_little_endian_convert(0x00000001)))
 		goto update_fail; /*reset all system*/
 	msleep(100);
 
 /***************************************************************************************
  *                          Step6, check chip id                                       *
  ***************************************************************************************/
-	//chip_id = cps_wls_read(0x0000);
-	//if(chip_id != 0x4019)
-	//{
-		//cps_wls_log(CPS_LOG_DEBG, "[%s] ---- CHECK CHIP ID fail = %x\n", __func__, chip_id);
-		//goto update_fail;
-	//}
+	chip_id = cps_wls_read_word(0x0000);
+	pr_err("cps4019 FW_MAJOR=0x%04X\n",big_little_endian_convert(cps_wls_read_word(0x0002))&0xFFFF);
+	pr_err("cps4019 FW_MINOR=0x%04X\n",big_little_endian_convert(cps_wls_read_word(0x0004))&0xFFFF);
+	if(chip_id != 0x4019) {
+		cps_wls_log(CPS_LOG_DEBG, "[%s] ---- CHECK CHIP ID fail = %x\n", __func__, chip_id);
+		goto update_fail;
+	}
 
-	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- Program successful\n", __func__);
+	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- Program successful CHIP ID=0x%04x\n", __func__, chip_id);
 
 	return CPS_WLS_SUCCESS;
 
@@ -834,8 +889,7 @@ static irqreturn_t cps_wls_irq_handler(int irq, void *dev_id)
 
 	int_flag = cps_wls_get_int_flag();
 	cps_wls_log(CPS_LOG_DEBG, ">>>>>int_flag = %x\n", int_flag);
-	if(int_flag == CPS_WLS_FAIL)
-	{
+	if(int_flag == CPS_WLS_FAIL) {
 		cps_wls_log(CPS_LOG_ERR, "[%s] read wls irq reg failed\n", __func__);
 		mutex_unlock(&chip->irq_lock);
 		return IRQ_HANDLED;
@@ -1205,6 +1259,12 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 		devm_kfree(&client->dev, chip);
 		return PTR_ERR(chip->regmap);
 	}
+	chip->regmap32 = devm_regmap_init_i2c(client, &cps4019_regmap_32bit_config);
+	if (IS_ERR(chip->regmap32)) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] Failed to allocate regmap32!\n", __func__);
+		devm_kfree(&client->dev, chip);
+		return PTR_ERR(chip->regmap32);
+	}
 	i2c_set_clientdata(client, chip);
 	dev_set_drvdata(&(client->dev), chip);
 
@@ -1238,6 +1298,8 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 		cps_wls_log(CPS_LOG_ERR, "[%s] power_supply_register wireless failed , ret = %d\n", __func__, ret);
 		goto free_source;
 	}
+
+	cps_wls_log(CPS_LOG_DEBG,"cps_wls_get_chip_id 0x%04X\n",cps_wls_get_chip_id() );
 
 	//wake_lock(&chip->cps_wls_wake_lock);
 
