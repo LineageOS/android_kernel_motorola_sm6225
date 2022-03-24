@@ -1612,11 +1612,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 	chip->name = "mmi_chrg_manager";
 	chip->debug_mask = &__debug_mask;
 	chip->suspended = false;
-	chip->qcom_psy = power_supply_get_by_name("mmi_battery");
-	if (!chip->qcom_psy) {
-		mmi_chrg_err(chip, "Could not get mmi_battery power_supply\n");
-		return -EPROBE_DEFER;
-	}
+
 	chip->batt_psy = power_supply_get_by_name("battery");
 	if (!chip->batt_psy) {
 		mmi_chrg_err(chip, "Could not get battery power_supply\n");
@@ -1631,12 +1627,6 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 
 	chip->charger_psy = power_supply_get_by_name("charger");
 	if (!chip->charger_psy) {
-		mmi_chrg_err(chip, "Could not get charger power_supply\n");
-		return -EPROBE_DEFER;
-	}
-
-	chip->cp_psy = power_supply_get_by_name("cp-standalone");
-	if (!chip->cp_psy) {
 		mmi_chrg_err(chip, "Could not get charger power_supply\n");
 		return -EPROBE_DEFER;
 	}
