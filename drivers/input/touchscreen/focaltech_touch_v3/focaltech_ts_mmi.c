@@ -293,10 +293,10 @@ static int fts_mmi_post_resume(struct device *dev)
 
 	GET_TS_DATA(dev);
 
-/*	if (!ts_data->pdata->always_on_vio) {
+	if (ts_data->gesture_support == true) {
 		FTS_INFO("Reset IC in resume");
 		fts_reset_proc(200);
-    }*/
+	}
 
 	fts_tp_state_recovery(ts_data);
 
