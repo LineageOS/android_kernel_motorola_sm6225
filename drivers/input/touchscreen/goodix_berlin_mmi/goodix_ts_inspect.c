@@ -1480,7 +1480,7 @@ static int goodix_cache_rawdata(struct goodix_ts_test *ts_test)
 			frame_head = (struct frame_head *)frame_buf;
 			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
 				ts_err("frame body checksum error");
-				return -EINVAL;
+				//return -EINVAL;
 			}
 			cur_ptr = frame_buf;
 			cur_ptr += cd->ic_info.misc.frame_data_head_len;
