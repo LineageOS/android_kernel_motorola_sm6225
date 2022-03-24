@@ -183,7 +183,6 @@ struct mmi_charger_manager {
 	const char	*name;
 	struct device	*dev;
 	struct power_supply	*batt_psy;
-	struct power_supply	*qcom_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*mmi_chrg_mgr_psy;
 	struct usbpd	*pd_handle;
@@ -291,7 +290,6 @@ struct mmi_charger_manager {
 	int qc3p_volt_max;
 	struct power_supply	*bms_psy;
 	struct power_supply	*charger_psy;
-	struct power_supply	*cp_psy;
 };
 
 #define PPS_INIT_VOLT_COMP	500000

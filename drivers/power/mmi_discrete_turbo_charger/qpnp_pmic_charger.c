@@ -174,9 +174,6 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	if (!chip->usb_psy)
 		return -ENODEV;
 
-	if (!chip->cp_psy)
-		return -ENODEV;
-
 	rc = power_supply_get_property(chrg->chrg_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
 	if (!rc)
@@ -197,10 +194,8 @@ static int qpnp_pmic_update_charger_status(struct mmi_charger_device *chrg)
 	if (!rc)
 		chrg->charger_data.vbus_volt = prop.intval;
 
-	rc = power_supply_get_property(chip->cp_psy,
-				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
-	if (!rc)
-		chrg->charger_data.ibus_curr = CP_ENABLED_MAIN_INPUT_LIMIT;
+	/*main charger of discrete IC don't support detecting input current.*/
+	chrg->charger_data.ibus_curr = CP_ENABLED_MAIN_INPUT_LIMIT;
 
 	rc = power_supply_get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_PRESENT, &prop);
