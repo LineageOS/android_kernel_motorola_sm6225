@@ -1,10 +1,15 @@
-KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+all: modules
 
-all:
-	$(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules $(KBUILD_OPTIONS)
+modules:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
 
 modules_install:
-	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
+	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(M) modules_install
+
+%:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
 
 clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(PWD) clean
+	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
+	rm -rf .tmp_versions
+
