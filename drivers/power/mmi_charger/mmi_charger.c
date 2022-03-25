@@ -1951,7 +1951,8 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 	if (voltage_mv > 0 && chip->combo_voltage_mv != voltage_mv) {
 		chip->combo_voltage_mv = voltage_mv;
 	}
-	if (current_ma > 0 && chip->combo_current_ma != current_ma) {
+	if (chip->combo_current_ma != current_ma) {
+		mmi_changed = true;
 		chip->combo_current_ma = current_ma;
 	}
 	if (chip->max_charger_rate != max_charger_rate) {
