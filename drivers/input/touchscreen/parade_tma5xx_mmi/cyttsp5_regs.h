@@ -1036,8 +1036,8 @@ struct cyttsp5_core_data {
 	struct mutex tthe_lock;
 	u8 tthe_exit;
 #endif
-#ifdef CYTTSP5_SENSOR_EN
 	bool should_enable_gesture;
+#ifdef CYTTSP5_SENSOR_EN
 	struct mutex state_mutex;
 	struct cyttsp5_sensor_platform_data *sensor_pdata;
  #endif
