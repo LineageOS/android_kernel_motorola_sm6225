@@ -137,9 +137,9 @@
 		aw99703,default-brightness = <1023>;
 	};
 
-        lm3697@35 {
+        lm3697@37 {
                 compatible = "ti,lm3697";
-                reg = <0x35>;
+                reg = <0x37>;
 
 		/* TI, lm3697*/
 		enable-gpios = <&tlmm 36 0>;
