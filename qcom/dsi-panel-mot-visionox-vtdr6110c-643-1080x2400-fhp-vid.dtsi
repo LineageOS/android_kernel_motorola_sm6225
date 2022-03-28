@@ -2,6 +2,7 @@
 	dsi_vtdr6110c_visionox_ft3519_643_video: qcom,mdss_dsi_vtdr6110c_ft3519_643_visionox_video {
 		qcom,mdss-dsi-panel-name =
 				"mipi_mot_vid_visionox_1080p_643";
+		qcom,mdss-dsi-panel-supplier = "visionox";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
 		qcom,mdss-dsi-panel-physical-type = "oled";
 		qcom,dsi-ctrl-num = <0>;
