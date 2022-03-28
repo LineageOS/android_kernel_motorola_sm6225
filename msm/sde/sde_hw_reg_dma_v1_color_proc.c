@@ -490,7 +490,7 @@ void reg_dmav1_setup_dspp_vlutv18(struct sde_hw_dspp *ctx, void *cfg)
 		return;
 	}
 
-	data = kzalloc(VLUT_LEN, GFP_KERNEL);
+	data = vzalloc(VLUT_LEN);
 	if (!data)
 		return;
 
@@ -537,7 +537,7 @@ void reg_dmav1_setup_dspp_vlutv18(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 exit:
-	kfree(data);
+	vfree(data);
 	/* update flush bit */
 	if (!rc && ctl && ctl->ops.update_bitmask_dspp_pavlut) {
 		int dspp_idx;
@@ -1152,7 +1152,7 @@ int reg_dmav1_setup_rc_datav1(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	DRM_DEBUG_DRIVER("allocating %u bytes of memory for dma\n", buf_sz);
-	data = kzalloc(buf_sz, GFP_KERNEL);
+	data = vzalloc(buf_sz);
 	if (!data) {
 		DRM_ERROR("memory allocation failed ret %d\n", rc);
 		return -ENOMEM;
@@ -1188,7 +1188,7 @@ int reg_dmav1_setup_rc_datav1(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 exit:
-	kfree(data);
+	vfree(data);
 	return rc;
 }
 
@@ -1291,7 +1291,7 @@ void reg_dmav1_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 		return;
 	}
 
-	data = kzalloc(PCC_LEN, GFP_KERNEL);
+	data = vzalloc(PCC_LEN);
 	if (!data)
 		return;
 
@@ -1357,7 +1357,7 @@ void reg_dmav1_setup_dspp_pccv4(struct sde_hw_dspp *ctx, void *cfg)
 		DRM_ERROR("failed to kick off ret %d\n", rc);
 
 exit:
-	kfree(data);
+	vfree(data);
 }
 
 void reg_dmav1_setup_dspp_pa_hsicv17(struct sde_hw_dspp *ctx, void *cfg)
@@ -2333,7 +2333,7 @@ static int reg_dmav1_setup_vig_igc_common(struct sde_hw_reg_dma_ops *dma_ops,
 				hw_cfg->len, sizeof(struct drm_msm_igc_lut));
 	}
 
-	data = kzalloc(VIG_1D_LUT_IGC_LEN * sizeof(u32), GFP_KERNEL);
+	data = vzalloc(VIG_1D_LUT_IGC_LEN * sizeof(u32));
 	if (!data)
 		return -ENOMEM;
 
@@ -2395,7 +2395,7 @@ static int reg_dmav1_setup_vig_igc_common(struct sde_hw_reg_dma_ops *dma_ops,
 	if (rc)
 		DRM_ERROR("setting opcode failed ret %d\n", rc);
 exit:
-	kfree(data);
+	vfree(data);
 	return rc;
 }
 
@@ -2597,7 +2597,7 @@ void reg_dmav1_setup_dma_igcv5(struct sde_hw_pipe *ctx, void *cfg,
 		return;
 	}
 
-	data = kzalloc(DMA_1D_LUT_IGC_LEN * sizeof(u32), GFP_KERNEL);
+	data = vzalloc(DMA_1D_LUT_IGC_LEN * sizeof(u32));
 	if (!data) {
 		DRM_ERROR("failed to allocate memory for igc\n");
 		return;
@@ -2658,7 +2658,7 @@ void reg_dmav1_setup_dma_igcv5(struct sde_hw_pipe *ctx, void *cfg,
 	if (rc)
 		DRM_ERROR("failed to kick off ret %d\n", rc);
 igc_exit:
-	kfree(data);
+	vfree(data);
 }
 
 static void dma_gcv5_off(struct sde_hw_pipe *ctx, void *cfg,
