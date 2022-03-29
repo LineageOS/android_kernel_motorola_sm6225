@@ -245,7 +245,7 @@
 
 &soc {
 
-	et528: et528 {
+	fp_egistec {
 		status = "ok";
 		compatible = "fp-egistec";
 		fp-ctrl-power;
