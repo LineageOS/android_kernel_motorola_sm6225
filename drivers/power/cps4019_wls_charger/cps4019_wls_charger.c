@@ -1037,7 +1037,7 @@ static ssize_t store_update_fw(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR(update_fw, 0664, NULL, store_update_fw);
+static DEVICE_ATTR(update_fw, 0220, NULL, store_update_fw);
 
 static ssize_t show_iout(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1094,7 +1094,7 @@ static ssize_t store_vout_target(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR(set_vout_target, 0664, NULL, store_vout_target);
+static DEVICE_ATTR(set_vout_target, 0220, NULL, store_vout_target);
 
 static ssize_t store_ocp_thres(struct device *dev,
 			struct device_attribute *attr,
@@ -1109,7 +1109,7 @@ static ssize_t store_ocp_thres(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR(set_ocp_thres, 0664, NULL, store_ocp_thres);
+static DEVICE_ATTR(set_ocp_thres, 0220, NULL, store_ocp_thres);
 
 static void cps_wls_create_device_node(struct device *dev)
 {
