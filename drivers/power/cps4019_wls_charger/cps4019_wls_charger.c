@@ -372,12 +372,13 @@ static int cps_wls_program_cmd_send(int cmd)
 static int cps_wls_program_wait_cmd_done(void)
 {
 	int ret;
-	int wait_time_out = 50;//ms
+	int wait_time_out = 500;//ms
 	while(1) {
 		ret = cps_wls_read_word_addr32(ADDR_FLAG);
 		if(ret == CPS_WLS_FAIL)
 			return CPS_WLS_FAIL;
 		wait_time_out--;
+		//pr_err("cps wait_time_out=%d\n",wait_time_out);
 		msleep(1);
 		if((big_little_endian_convert(ret) & 0xff) == PASS) {
 			break;
@@ -608,7 +609,7 @@ static int update_firmware(void)
 		cps_wls_log(CPS_LOG_ERR, "[%s] ---- firmware get error %d\n", __func__, ret);
 		goto update_fail;
 	}
-
+	pr_err("cps4019 firmware_length=%d\n", firmware_length);
 	//set write buffer size   defalt 64 word
 	cps_wls_write_word(ADDR_BUF_SIZE, big_little_endian_convert(CPS_PROGRAM_BUFFER_SIZE));
 	write_count = 0;
