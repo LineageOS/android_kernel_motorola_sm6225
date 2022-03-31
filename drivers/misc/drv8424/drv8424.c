@@ -58,9 +58,7 @@ static const char *position_labels[] = {
 
 enum status_id {
 	STATUS_UNKNOWN,
-	STATUS_STOPPED_COMPACT,
-	STATUS_STOPPED_EXPANDED,
-	STATUS_STOPPED_PEEK,
+	STATUS_STOPPED,
 	STATUS_MOVING_IN,
 	STATUS_MOVING_OUT,
 };
@@ -176,6 +174,47 @@ static const char* const pins_state[] = {
     NULL
 };
 
+enum regime_idx {
+	SQ_FULL,
+	SQ_SHORTENED,
+	SQ_SHORT,
+	SQ_TINY,
+	SQ_MAX
+};
+
+static const char *regime_names[SQ_MAX] = {
+	"FULL",
+	"SHORTENED",
+	"SHORT",
+	"TINY"
+};
+
+/*             PPS Pulses
+	stage 1:   400   24
+	stage 2:  1400   56
+	stage 3:  3000  6252
+	stage 4:  2000   12
+*/
+#define MAX_STAGE_LEGS 10
+typedef struct {
+	unsigned freq, ceiling;
+} motor_stage;
+
+static motor_stage initial_data[SQ_MAX][MAX_STAGE_LEGS] = {
+	{ /* FULL 44mm */
+		{400,24}, {1400,56}, {3000,6252}, {2000,12}
+	},
+	{ /* SHORTENED 39mm */
+		{400,24}, {1400,56}, {3000,5530}, {2000,12}
+	},
+	{ /* SHORT 5mm */
+		{400,24}, {1400,56}, {3000,630}, {2000,12}
+	},
+	{ /* TINY 1mm */
+		{400,24}, {1400,56}, {2000,65}
+	}
+};
+
 #define MAX_GPIOS MOTOR_UNKNOWN
 typedef struct motor_control {
     struct regulator    *vdd;
@@ -184,7 +223,7 @@ typedef struct motor_control {
     struct pinctrl* pins;
     struct pinctrl_state *pin_state[PINS_END];
     const char* const * plabels;
-}motor_control;
+} motor_control;
 
 #define CLOCK_NAME_LEN 16
 typedef struct motor_device {
@@ -217,6 +256,8 @@ typedef struct motor_device {
     unsigned time_out;
     unsigned half;
 	unsigned stage, max_stages;
+	unsigned regime;
+	motor_stage sequencer[SQ_MAX][MAX_STAGE_LEGS];
     bool     double_edge;
     bool     hw_clock;
     bool     power_default_off;
@@ -237,7 +278,6 @@ typedef struct motor_device {
 
 static int set_pinctrl_state(motor_device* md, unsigned state_index);
 static void moto_drv8424_set_step_freq(motor_device* md, unsigned freq);
-static bool motor_drive_stage_init(motor_device* md, int step_count);
 
 static ktime_t adapt_time_helper(ktime_t usec)
 {
@@ -547,7 +587,7 @@ static void moto_drv8424_set_power_en(motor_device* md)
     usleep_range(500, 1000);
 	/* signal sensor hub to start/stop sampling hall effect */
 	GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], md->power_en);
-	LOGD("gpios BOOST & ACTIVE updated\n");
+	LOGD("gpios BOOST & ACTIVE set: %u\n", md->power_en);
 }
 
 //Power sequence: PowerEn On->nSleep On->nSleep Off->PowerEn Off
@@ -580,6 +620,28 @@ static int moto_drv8424_set_power(motor_device* md, unsigned power)
 exit:
     return ret;
 }
+
+static void moto_drv8424_set_regime(motor_device *md, unsigned regime)
+{
+	unsigned msn;
+    unsigned long flags;
+
+	for (msn = 0; msn < MAX_STAGE_LEGS; msn++) {
+		if (md->sequencer[regime][msn].freq && md->sequencer[regime][msn].ceiling)
+			continue;
+		break;
+	}
+
+    spin_lock_irqsave(&md->mlock, flags);
+	md->regime = regime;
+	md->stage = 0;
+    md->max_stages = msn;
+    spin_unlock_irqrestore(&md->mlock, flags);
+
+	dev_info(md->dev, "Set active regime: %s, stages # %u\n",
+			regime_names[md->regime], msn);
+}
+
 #if 0
 static int moto_drv8424_enable_clk(motor_device* md, bool en)
 {
@@ -588,31 +650,45 @@ static int moto_drv8424_enable_clk(motor_device* md, bool en)
 #endif
 #ifdef MOTOR_SLOT_DBG
 static ktime_t timesA[20];
+static unsigned	slot;
 
-static void inline logtime_store(motor_device* md)
+static void inline logtime_store(void)
 {
-	if ((md->slot + 1) < sizeof(timesA)/sizeof(timesA[0])) {
-		timesA[md->slot++] = ktime_get();
+	if ((slot + 1) < sizeof(timesA)/sizeof(timesA[0])) {
+		timesA[slot++] = ktime_get();
 	}
 }
 
-static void logtime_show(motor_device* md)
+static void logtime_show(void)
 {
 	int i;
 	ktime_t diff;
 
-	for (i = 1; i < md->slot; i++) {
+	if (!slot)
+		return;
+
+	for (i = 1; i < slot; i++) {
 		diff = ktime_sub(timesA[i], timesA[i-1]);
 		pr_err("step[%d]=%lldus\n", i, ktime_to_us(diff));
 	}
 }
-#endif
-static void moto_drv8424_drive_init(motor_device* md, int step_count)
-{
-	md->slot = 0U;
-    atomic_set(&md->stepping, 1);
-    atomic_set(&md->step_count, step_count);
 
+static void inline logtime_reset(void)
+{
+	slot = 0U;
+}
+#else
+#define logtime_store()
+#define logtime_show()
+#define logtime_reset()
+#endif
+
+static void moto_drv8424_drive_stage_init(motor_device* md)
+{
+	logtime_reset();
+
+    atomic_set(&md->stepping, 1);
+    atomic_set(&md->step_count, 1);
     md->double_edge = false;
     md->half = md->step_period >> 1;
     md->level = 1;
@@ -621,22 +697,41 @@ static void moto_drv8424_drive_init(motor_device* md, int step_count)
         || md->mode == STEP_32_BOTH_EDEG) {
             md->double_edge = true;
     }
-	atomic_set(&md->status, md->dir ? STATUS_MOVING_IN : STATUS_MOVING_OUT);
+}
+
+static bool moto_drv8424_next_stage(motor_device* md)
+{
+	unsigned freq;
+	motor_stage *ms;
+
+	if (++md->stage > md->max_stages) {
+		md->max_stages = 0;
+		md->stage = 0;
+		return false;
+	}
+
+	logtime_show();
+
+	ms = &md->sequencer[md->regime][md->stage - 1];
+	freq = ms->freq;
+	md->step_ceiling = ms->ceiling;
+	moto_drv8424_set_step_freq(md, freq);
+	moto_drv8424_drive_stage_init(md);
+
+	return true;
 }
 
 static int moto_drv8424_drive_sequencer(motor_device* md)
 {
-    unsigned long flags;
-
-	spin_lock_irqsave(&md->mlock, flags);
-	moto_drv8424_drive_init(md, 0);
-    spin_unlock_irqrestore(&md->mlock, flags);
-	LOGD("ceiling %lu, freq %uHz period %luns, half %uns\n", md->step_ceiling, md->step_freq, md->step_period, md->half);
+	moto_drv8424_next_stage(md);
     moto_drv8424_set_motor_torque(md);
     moto_drv8424_set_motor_dir(md);
     moto_drv8424_set_motor_mode(md);
     moto_drv8424_set_motor_opmode(md);
-	LOGD("sequencer init done\n");
+	atomic_set(&md->status, md->dir ? STATUS_MOVING_IN : STATUS_MOVING_OUT);
+	LOGD("sequencer init: stages %u ceiling %lu, freq %uHz period %luns, half %uns\n",
+			md->max_stages, md->step_ceiling, md->step_freq, md->step_period, md->half);
+
     if(atomic_read(&md->stepping)) {
         motor_control* mc = &md->mc;
 
@@ -644,9 +739,7 @@ static int moto_drv8424_drive_sequencer(motor_device* md)
         GPIO_OUTPUT_DIR(mc->ptable[MOTOR_STEP], md->level);
         atomic_inc(&md->step_count);
         hrtimer_start(&md->stepping_timer, adapt_time_helper(md->half), HRTIMER_MODE_REL);
-#ifdef MOTOR_SLOT_DBG
-		logtime_store(md);
-#endif
+		logtime_store();
     }
 
     return 0;
@@ -674,7 +767,7 @@ static __ref int motor_kthread(void *arg)
 
     sched_setscheduler(current, SCHED_FIFO, &param);
     while (!kthread_should_stop()) {
-        dev_info(md->dev, "wait for event\n");
+        LOGD("wait for event\n");
         do {
             ret = wait_event_interruptible(md->sync_complete,
                         md->user_sync_complete || kthread_should_stop());
@@ -689,7 +782,7 @@ static __ref int motor_kthread(void *arg)
             dev_info(md->dev, "vdd power off\n");
             moto_drv8424_set_regulator_power(md, false);
         }
-
+#if 0
 		switch (atomic_read(&md->position)) {
 		case POS_COMPACT:
 				value = STATUS_STOPPED_COMPACT;
@@ -702,13 +795,13 @@ static __ref int motor_kthread(void *arg)
 					break;
 		default: value = STATUS_UNKNOWN;
 		}
+#endif
+		value = STATUS_STOPPED;
 		atomic_set(&md->status, value);
-		dev_info(md->dev, "status %d, position %d\n",
+		LOGD("status %d, position %d\n",
 				atomic_read(&md->status), atomic_read(&md->position));
         sysfs_notify(&md->dev->kobj, NULL, "status");
-#ifdef MOTOR_SLOT_DBG
-		logtime_show(md);
-#endif
+		logtime_show();
     }
 
     return 0;
@@ -756,12 +849,8 @@ static enum hrtimer_restart motor_stepping_timer_action(struct hrtimer *h)
 
     spin_lock_irqsave(&md->mlock, flags);
 
-    if(!atomic_read(&md->stepping)) {
-		motor_stop(md, true);
-        GPIO_OUTPUT_DIR(md->mc.ptable[MOTOR_STEP], 0);
-        spin_unlock_irqrestore(&md->mlock, flags);
-        return HRTIMER_NORESTART;
-    }
+    if(!atomic_read(&md->stepping))
+    	goto next_stage;
 
     md->level = !md->level;
     GPIO_OUTPUT_DIR(md->mc.ptable[MOTOR_STEP], md->level);
@@ -771,12 +860,13 @@ static enum hrtimer_restart motor_stepping_timer_action(struct hrtimer *h)
     } else if(md->level) {
         atomic_inc(&md->step_count);
     }
-#ifdef MOTOR_SLOT_DBG
-	logtime_store(md); /* log timestamp */
-#endif
+
+	logtime_store();
+
     if(md->step_ceiling && atomic_read(&md->step_count) > md->step_ceiling) {
+next_stage:
 		/* multi stage sequence */
-		if (!(md->max_stages && motor_drive_stage_init(md, 1))) {
+		if (!moto_drv8424_next_stage(md)) {
 			motor_stop(md, true);
 			GPIO_OUTPUT_DIR(md->mc.ptable[MOTOR_STEP], 0);
 			spin_unlock_irqrestore(&md->mlock, flags);
@@ -1176,98 +1266,102 @@ exit:
     return len;
 }
 
-/*             PPS Pulses
-	stage 1:   400   24
-	stage 2:  1400   56
-	stage 3:  3000  6252
-	stage 4:  2000   12
-*/
-#define MAX_STAGE_LEGS 10
-struct stage_data {
-	unsigned freq, ceiling;
-} multi_stage_sequencer[MAX_STAGE_LEGS];
-
-static int motor_stage_sequence_init(char *buffer, size_t len, motor_device* md)
-{
-	char *next, *pair = buffer;
-	int msn;
-    unsigned freq, ceiling;
-
-	for (msn = 0; pair && msn < MAX_STAGE_LEGS; msn++, pair = next ) {
-		next = strnchr(pair, len, ' ');
-		if (next) {
-			*next++ = '\0';
-			len -= strlen(pair);
-		}
-		if (sscanf(pair, "%u:%u", &freq, &ceiling) == 2) {
-			multi_stage_sequencer[msn].freq = freq;
-			multi_stage_sequencer[msn].ceiling = ceiling;
-			dev_info(md->dev, "stage[%d]: freq=%u, ceiling=%u\n", msn, freq, ceiling);
-		}
-    }
-
-	return msn;
-}
-
-static bool motor_drive_stage_init(motor_device* md, int step_count)
-{
-	unsigned freq;
-
-	if (++md->stage > md->max_stages) {
-		md->max_stages = 0;
-		md->stage = 0;
-		return false;
-	}
-#ifdef MOTOR_SLOT_DBG
-	if (md->slot)
-		logtime_show(md);
-#endif
-	freq = multi_stage_sequencer[md->stage - 1].freq;
-	md->step_ceiling = multi_stage_sequencer[md->stage - 1].ceiling;
-
-	//LOGD("stage %u, freq %u, ceiling %lu\n", md->stage, freq, md->step_ceiling);
-	//FIXME the next function calls spinlock!!!
-	moto_drv8424_set_step_freq(md, freq);
-	moto_drv8424_drive_init(md, step_count);
-
-	return true;
-}
-
-/* main interface to control motor  via sysfs */
-/* valid parameter values: 0 - roll in, 1 - roll out */
-static ssize_t motor_command_store(struct device *dev, struct device_attribute *attr,
+/* store new motor sequencer */
+/* Format: index freq0:ceiling0 [... freqN:ceilingN] */
+/* Example: 0 400:24 1400:56 3000:6252 2000:12 */
+static ssize_t motor_sequencer_store(struct device *dev, struct device_attribute *attr,
         const char *buf, size_t len)
 {
     motor_device* md = (motor_device*)dev_get_drvdata(dev);
-    //unsigned long flags;
-	char *buffer;
-
-    if(md->faulting) {
-        dev_err(dev, "Device faulting\n");
-        return -EBUSY;
-    }
+	char *buffer, *next, *pair;
+    unsigned msn = 0;
+	unsigned value, idx, freq, ceiling;
 
 	buffer = kmalloc(len + 1, GFP_KERNEL);
 	if (!buffer)
 		return -ENOMEM;
 	strlcpy(buffer, buf, len);
 	buffer[len + 1] = '\0';
-	md->max_stages = motor_stage_sequence_init(buffer, len, md);
+
+	next = strnchr(buffer, len, ' ');
+    if(kstrtouint(buffer, 10, &value) ||
+    	(value < 0 || value >= SQ_MAX)) {
+        dev_err(dev, "Invalid index: %s\n", buffer);
+        goto exit;
+    }
+	idx = value;
+	for (msn = 0, pair = next; pair && msn < MAX_STAGE_LEGS; msn++, pair = next ) {
+		next = strnchr(pair, len, ' ');
+		if (next) {
+			*next++ = '\0';
+			len -= strlen(pair);
+		}
+		if (sscanf(pair, "%u:%u", &freq, &ceiling) == 2) {
+			md->sequencer[idx][msn].freq = freq;
+			md->sequencer[idx][msn].ceiling = ceiling;
+			dev_info(md->dev, "[%u][%u]: freq=%u, ceiling=%u\n", idx, msn, freq, ceiling);
+		}
+    }
+exit:
+	md->max_stages = msn;
 	kfree(buffer);
+
     if (md->max_stages == 0) {
         dev_err(dev, "Error value: %s\n", buf);
         return -EINVAL;
     }
 
-	LOGD("max_stages %u\n", md->max_stages);
-    //spin_lock_irqsave(&md->mlock, flags);
-	/* hrtimer controlled stepper mechanism */
-	md->stage = 0;
-	motor_drive_stage_init(md, 0);
-    //spin_unlock_irqrestore(&md->mlock, flags);
-    moto_drv8424_drive_sequencer(md);
+    return len;
+}
+
+static ssize_t motor_sequencer_show(struct device *dev, struct device_attribute *attr,
+        char *buf)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	ssize_t blen = 0;
+	unsigned idx, msn;
+
+	for (idx = 0; idx < SQ_MAX; idx++) {
+		blen += snprintf(buf + blen, PAGE_SIZE - blen, "regime %s: ",
+					regime_names[idx]);
+		for (msn = 0; msn < MAX_STAGE_LEGS; msn++) {
+			if (md->sequencer[idx][msn].freq == 0 &&
+				md->sequencer[idx][msn].ceiling == 0)
+				continue;
+
+			blen += snprintf(buf + blen, PAGE_SIZE - blen, "%u:%u ",
+				md->sequencer[idx][msn].freq,
+				md->sequencer[idx][msn].ceiling);
+		}
+		blen += snprintf(buf + blen, PAGE_SIZE - blen, "\n");
+	}
+
+    return blen;
+}
+
+static ssize_t motor_regime_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t len)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	unsigned value;
+
+    if(kstrtouint(buf, 10, &value) ||
+		(value < SQ_FULL || value >= SQ_MAX)) {
+        dev_err(dev, "Error value: %s\n", buf);
+        return -EINVAL;
+    }
+
+    moto_drv8424_set_regime(md, value);
 
     return len;
+}
+
+static ssize_t motor_regime_show(struct device *dev, struct device_attribute *attr,
+        char *buf)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+
+    return snprintf(buf, 20, "%s\n", regime_names[md->regime]);
 }
 
 static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR|S_IWGRP, motor_enable_show, motor_enable_store);
@@ -1275,13 +1369,14 @@ static DEVICE_ATTR(dir, S_IRUGO|S_IWUSR|S_IWGRP, motor_dir_show, motor_dir_store
 static DEVICE_ATTR(step, S_IRUGO|S_IWUSR|S_IWGRP, motor_step_show, motor_step_store);
 static DEVICE_ATTR(ceiling, S_IRUGO|S_IWUSR|S_IWGRP, motor_ceiling_show, motor_ceiling_store);
 static DEVICE_ATTR(mode, S_IRUGO|S_IWUSR|S_IWGRP, motor_mode_show, motor_mode_store);
+static DEVICE_ATTR(sequencer, S_IRUGO|S_IWUSR|S_IWGRP, motor_sequencer_show, motor_sequencer_store);
 static DEVICE_ATTR(torque, S_IRUGO|S_IWUSR|S_IWGRP, motor_torque_show, motor_torque_store);
 static DEVICE_ATTR(time_out, S_IRUGO|S_IWUSR|S_IWGRP, motor_time_out_show, motor_time_out_store);
 static DEVICE_ATTR(reset, S_IRUGO|S_IWUSR|S_IWGRP, NULL, motor_reset_store);
-static DEVICE_ATTR(command, S_IRUGO|S_IWUSR|S_IWGRP, NULL, motor_command_store);
+static DEVICE_ATTR(regime, S_IRUGO|S_IWUSR|S_IWGRP, motor_regime_show, motor_regime_store);
 
-#define ATTRS_STATIC 7
-#define ATTRS_MAX 10
+#define ATTRS_STATIC 8
+#define ATTRS_MAX 11
 
 static int last_idx = ATTRS_STATIC;
 
@@ -1292,7 +1387,8 @@ static struct attribute *motor_attributes[ATTRS_MAX + 1] = {
     &dev_attr_ceiling.attr,
     &dev_attr_reset.attr,
     &dev_attr_time_out.attr,
-    &dev_attr_command.attr,
+    &dev_attr_regime.attr,
+    &dev_attr_sequencer.attr,
     NULL
 };
 
@@ -1427,7 +1523,7 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 {
     struct device* dev = &pdev->dev;
     motor_device* md;
-    int i = MOTOR_POWER_EN;
+    int i;
     int ret = 0;
 
     md = kzalloc(sizeof(motor_device), GFP_KERNEL);
@@ -1443,6 +1539,10 @@ static int moto_drv8424_probe(struct platform_device *pdev)
     platform_set_drvdata(pdev, md);
     moto_drv8424_set_step_freq(md, DEFAULT_STEP_FREQ);
     md->time_out = MOTOR_DEFAULT_EXPIRE;
+
+	/* populate sequencer with initial values */
+	for (i = SQ_FULL; i < SQ_MAX; i++)
+		memcpy(md->sequencer[i], initial_data[i], sizeof(initial_data[i]));
 
 	/* assign default values for optional parameters */
 	md->mode = FULL_STEP;
@@ -1477,8 +1577,9 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 
     md->user_sync_complete = false;
     init_waitqueue_head(&md->sync_complete);
-	atomic_set(&md->position, POS_COMPACT);
-	atomic_set(&md->status, STATUS_STOPPED_COMPACT);
+	atomic_set(&md->position, POS_UNKNOWN);
+	//atomic_set(&md->status, STATUS_STOPPED_COMPACT);
+	atomic_set(&md->status, STATUS_STOPPED);
     md->motor_task = kthread_create(motor_kthread, md, "motor_task");
     if (IS_ERR(md->motor_task)) {
         ret = PTR_ERR(md->motor_task);
@@ -1545,6 +1646,7 @@ static int moto_drv8424_probe(struct platform_device *pdev)
         /*Here motor can work,  but have not irq*/
         dev_info(dev, "Failed to set device irq\n");
     }
+
     dev_info(dev, "Success init device\n");
     return 0;
 
