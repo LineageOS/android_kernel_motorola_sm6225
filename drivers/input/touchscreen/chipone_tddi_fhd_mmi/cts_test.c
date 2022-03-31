@@ -977,6 +977,7 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
 	int num_nodes;
 	int tsdata_frame_size;
 	int frame;
+	int  fail_frame = 0;
 	u16 *rawdata = NULL;
 	ktime_t start_time, end_time, delta_time;
 	int i;
@@ -1095,6 +1096,8 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
 					      param->min, param->max);
 			if (ret) {
 				cts_err("Rawdata test failed %d", ret);
+				fail_frame++;
+				cts_err("Rawdata test has %d nodes failed", ret);
 				if (stop_test_if_validate_fail)
 					break;
 			}
@@ -1122,17 +1125,16 @@ free_mem:
 show_test_result:
 	end_time = ktime_get();
 	delta_time = ktime_sub(end_time, start_time);
-	if (ret > 0)
-		cts_info("Rawdata test has %d nodes FAIL, ELAPSED TIME: %lldms",
-			 ret, ktime_to_ms(delta_time));
-	else if (ret < 0)
-		cts_info("Rawdata test FAIL %d(%s), ELAPSED TIME: %lldms",
-			 ret, cts_strerror(ret), ktime_to_ms(delta_time));
-	else
-		cts_info("Rawdata test PASS, ELAPSED TIME: %lldms",
-			 ktime_to_ms(delta_time));
 
-	return ret;
+	if (fail_frame > 0) {
+		cts_info("Rawdata test has %d frame(s) FAIL, ELAPSED TIME: %lldms",
+			fail_frame, ktime_to_ms(delta_time));
+	} else if (fail_frame == 0) {
+		cts_info("Rawdata test PASS, ELAPSED TIME: %lldms",
+			ktime_to_ms(delta_time));
+	}
+
+	return fail_frame;
 }
 
 int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)

@@ -1371,7 +1371,7 @@ int cts_send_command(const struct cts_device *cts_dev, u8 cmd)
 				       0);
 }
 
-static int cts_get_touchinfo(const struct cts_device *cts_dev,
+static int cts_get_touchinfo(struct cts_device *cts_dev,
 			     struct cts_device_touch_info *touch_info)
 {
 	cts_dbg("Get touch info");
@@ -1937,8 +1937,11 @@ void cts_show_fw_log(struct cts_device *cts_dev)
 }
 #endif
 
+extern int cts_tcs_clr_data_ready_flag(const struct cts_device *cts_dev);
+extern int cts_tcs_clr_gstr_ready_flag(const struct cts_device *cts_dev);
 int cts_irq_handler(struct cts_device *cts_dev)
 {
+	struct cts_device_touch_info *touch_info;
 	u8 pwrmode = 3;
 	int ret;
 
@@ -1949,52 +1952,62 @@ int cts_irq_handler(struct cts_device *cts_dev)
 		return -EINVAL;
 	}
 
+	touch_info = &cts_dev->rtdata.touch_info;
+	ret = cts_get_touchinfo(cts_dev, touch_info);
+	if (ret) {
+		cts_err("Get touch info failed %d", ret);
+		return ret;
+	}
 	if (unlikely(cts_dev->rtdata.suspended)) {
 #ifdef CFG_CTS_GESTURE
 		if (cts_dev->rtdata.gesture_wakeup_enabled) {
 			struct cts_device_gesture_info *gesture_info;
 
 			gesture_info = &cts_dev->rtdata.gesture_info;
+			memcpy(gesture_info, touch_info, sizeof(struct cts_device_gesture_info));
 
-			ret = cts_get_gesture_info(cts_dev, gesture_info);
+			ret = cts_plat_process_gesture_info(cts_dev->pdata, gesture_info);
 
-			if (ret)
-				cts_warn("Get gesture info failed %d", ret);
+			if (cts_dev->fwdata.int_data_method != INT_DATA_METHOD_HOST) {
+				if (ret)
+					cts_err("Process gesture info failed %d", ret);
 				/* return ret; */
+				if (cts_tcs_clr_gstr_ready_flag(cts_dev))
+					cts_err("Clear gesture ready flag failed");
 
 /** - Issure another suspend with gesture wakeup command to device
  * after get gesture info.
  */
-			ret = cts_dev->ops->set_pwr_mode(cts_dev, pwrmode);
-			if (ret)
-				cts_warn("Reenter suspend with gesture wakeup failed %d", ret);
-			ret = cts_plat_process_gesture_info(cts_dev->pdata, gesture_info);
-			if (ret) {
-				cts_err("Process gesture info failed %d", ret);
+				ret = cts_dev->ops->set_pwr_mode(cts_dev, pwrmode);
+				if (ret)
+					cts_warn("Reenter suspend with gesture wakeup failed %d", ret);
+			} else {
+				if (cts_tcs_clr_data_ready_flag(cts_dev))
+					cts_err("Clear data ready flag failed");
 				return ret;
 			}
-		} else
+		} else {
 			cts_warn("IRQ triggered while device suspended "
 				 "without gesture wakeup enable");
+		}
 #endif /* CFG_CTS_GESTURE */
 	} else {
-		struct cts_device_touch_info *touch_info;
-
-		touch_info = &cts_dev->rtdata.touch_info;
-
-		ret = cts_get_touchinfo(cts_dev, touch_info);
-		if (ret) {
-			cts_err("Get touch info failed %d", ret);
-			return ret;
-		}
-#ifdef CFG_CTS_FW_LOG_REDIRECT
-		if (touch_info->vkey_state == CTS_FW_LOG_REDIRECT_SIGN) {
-			if (cts_is_fw_log_redirect(cts_dev))
-				cts_show_fw_log(cts_dev);
-		}
-#endif
 		cts_dbg("Touch info: vkey_state %x, num_msg %u",
 			touch_info->vkey_state, touch_info->num_msg);
+
+		if (cts_dev->fwdata.int_data_method != INT_DATA_METHOD_NONE
+		&& cts_dev->fwdata.int_data_method != INT_DATA_METHOD_DEBUG) {
+			if (cts_tcs_clr_data_ready_flag(cts_dev)) {
+				cts_err("Clear data ready flag failed");
+			}
+		}
+#ifdef CFG_CTS_PALM_DETECT
+		if (CFG_CTS_PALM_ID == touch_info->vkey_state) {
+			cts_report_palm_event(cts_dev->pdata);
+			cts_plat_release_all_touch(cts_dev->pdata);
+			return 0;
+		}
+#endif
 
 		ret = cts_plat_process_touch_msg(cts_dev->pdata,
 						 touch_info->msgs,
@@ -2063,12 +2076,17 @@ int cts_resume_device(struct cts_device *cts_dev)
 {
 	int ret = 0;
 	int retries = 3;
+	u8 tdata[4] = { 'R', 'S', 'T', '!' };
 
 	cts_info("Resume device");
 
 	/* Check whether device is in normal mode */
 	while (--retries >= 0) {
 #ifdef CFG_CTS_HAS_RESET_PIN
+		ret = cts_hw_reg_writesb_retry(cts_dev, 0x300F8, tdata,
+			sizeof(tdata), 3, 1);
+		if (ret != 0)
+			cts_err("0x300F8 write 0 failed");
 		cts_reset_device(cts_dev);
 #endif
 		cts_set_normal_addr(cts_dev);
@@ -3217,6 +3235,16 @@ int cts_reset_device(struct cts_device *cts_dev)
 	cts_err("BUG! reset_device should NOT be null!");
 	return -EIO;
 }
+
+int cts_spi_xtrans(const struct cts_device *cts_dev, u8 *tx, size_t txlen, u8 *rx, size_t rxlen)
+{
+	if (cts_dev->ops->spi_xtrans) {
+		return cts_dev->ops->spi_xtrans(cts_dev, tx, txlen, rx, rxlen);
+	}
+
+	return -1;
+}
+
 static struct file *cts_log_filp;
 static int cts_log_to_file_level;
 extern int cts_write_file(struct file *filp, const void *data, size_t size);

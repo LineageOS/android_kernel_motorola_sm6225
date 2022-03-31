@@ -1145,90 +1145,57 @@ int cts_tcs_get_gestureinfo(const struct cts_device *cts_dev,
 		struct cts_device_gesture_info *gesture_info)
 {
 	int ret = 0;
-	size_t size = cts_dev->fwdata.int_data_size;
+	size_t size = sizeof(*gesture_info) + TCS_REPLY_TAIL_SIZ;
 
-	if (!size)
-		size = TOUCH_INFO_SIZ + TCS_REPLY_TAIL_SIZ;
-
-	memset(gesture_info, 0, sizeof(*gesture_info));
-
-	if ((cts_dev->fwdata.int_data_method == INT_DATA_METHOD_NONE) ||
-		(cts_dev->fwdata.int_data_method == INT_DATA_METHOD_DEBUG)) {
-		dump_flag = 0;
-		ret =
-			cts_tcs_spi_read_1_cs(cts_dev,
-				TP_STD_CMD_TP_DATA_COORDINATES_RO,
-				cts_dev->rtdata.int_data, size);
-		dump_flag = 1;
-		mdelay(1);
-		if (cts_tcs_clr_gstr_ready_flag(cts_dev))
-			cts_err("Clear gesture ready flag failed");
-
-		if (!ret)
-			memcpy(gesture_info, cts_dev->rtdata.int_data,
-			       sizeof(*gesture_info));
-
+	ret = cts_tcs_spi_read_1_cs(cts_dev, TP_STD_CMD_TP_DATA_COORDINATES_RO,
+			cts_dev->rtdata.int_data, size);
+	if (cts_tcs_clr_gstr_ready_flag(cts_dev)) {
+		cts_err("Clear gesture ready flag failed");
+	}
+	if (ret < 0) {
+		cts_err("Get gesture info failed: ret=%d", ret);
 		return ret;
-	} else if (cts_dev->fwdata.int_data_method == INT_DATA_METHOD_HOST ||
-			cts_dev->fwdata.int_data_method == INT_DATA_METHOD_POLLING) {
-		dump_flag = 0;
-		ret =
-			cts_tcs_spi_read_1_cs(cts_dev,
-						TP_STD_CMD_TP_DATA_COORDINATES_RO,
-						cts_dev->rtdata.int_data, size);
-		dump_flag = 1;
-		mdelay(1);
-		if (cts_tcs_clr_gstr_ready_flag(cts_dev))
-			cts_err("Clear gesture ready flag failed");
-
-		if (!ret)
-			memcpy(gesture_info, cts_dev->rtdata.int_data, sizeof(*gesture_info));
-		return ret;
+	}
+	if (!ret) {
+		memcpy(gesture_info, cts_dev->rtdata.int_data, sizeof(*gesture_info));
 	}
 
 	return ret;
 }
 
-int cts_tcs_get_touchinfo(const struct cts_device *cts_dev,
+#ifdef CFG_DUMP_INT_DATA
+extern void cts_dump_int_tsdata(const u8 *data, size_t size);
+#endif
+int cts_tcs_get_touchinfo(struct cts_device *cts_dev,
 			  struct cts_device_touch_info *touch_info)
 {
 	int ret = -1;
 	size_t size = cts_dev->fwdata.int_data_size;
+	u8 method = cts_dev->fwdata.int_data_method;
 
 	if (!size)
-		size = TOUCH_INFO_SIZ + TCS_REPLY_TAIL_SIZ;
+		size = TOUCH_INFO_SIZ;
 
 	memset(touch_info, 0, sizeof(*touch_info));
 
-	if ((cts_dev->fwdata.int_data_method == INT_DATA_METHOD_NONE) ||
-			(cts_dev->fwdata.int_data_method == INT_DATA_METHOD_DEBUG)) {
-		dump_flag = 0;
-		ret =
-			cts_tcs_spi_read_1_cs(cts_dev,
-						TP_STD_CMD_TP_DATA_COORDINATES_RO,
-						cts_dev->rtdata.int_data, size);
-		dump_flag = 1;
-		if (!ret) {
-			memcpy(touch_info, cts_dev->rtdata.int_data,
-				sizeof(*touch_info));
-		}
+	ret = cts_tcs_spi_read_1_cs(cts_dev, TP_STD_CMD_TP_DATA_COORDINATES_RO,
+			cts_dev->rtdata.int_data, size);
+	if (ret) {
+		cts_err("tcs_spi_read_1_cs failed");
+		return ret;
+	}
 
-		return ret;
-	} else if (cts_dev->fwdata.int_data_method == INT_DATA_METHOD_HOST ||
-			cts_dev->fwdata.int_data_method == INT_DATA_METHOD_POLLING) {
-		dump_flag = 0;
-		ret =
-			cts_tcs_spi_read_1_cs(cts_dev,
-						TP_STD_CMD_TP_DATA_COORDINATES_RO,
-						cts_dev->rtdata.int_data, size);
-		dump_flag = 1;
-		mdelay(1);
-		if (cts_tcs_clr_data_ready_flag(cts_dev))
-			cts_err("Clear data ready flag failed");
-		if (!ret)
-			memcpy(touch_info, cts_dev->rtdata.int_data,
-					sizeof(*touch_info));
-		return ret;
+	memcpy(touch_info, cts_dev->rtdata.int_data, sizeof(*touch_info));
+
+	if (method == INT_DATA_METHOD_HOST) {
+#ifdef CFG_DUMP_INT_DATA
+		if (cts_dev->rtdata.dumping) {
+			if ((--cts_dev->rtdata.dump_cnt) == 0)
+				cts_dev->rtdata.dumping = false;
+			cts_dump_int_tsdata(cts_dev->rtdata.int_data, size - 5);
+		}
+#endif
+		udelay(200);
 	}
 
 	return ret;
@@ -1697,7 +1664,7 @@ struct cts_dev_ops tcs_ops = {
 	.get_int_mode = cts_tcs_get_int_mode,
 	.get_int_keep_time = cts_tcs_get_int_keep_time,
 	.get_esd_method = cts_tcs_get_esd_method,
-	.get_gestureinfo		= cts_tcs_get_gestureinfo,
+	.get_gestureinfo = cts_tcs_get_gestureinfo,
 	.get_touchinfo = cts_tcs_get_touchinfo,
 	.get_esd_protection = cts_tcs_get_esd_protection,
 	.get_data_ready_flag = cts_tcs_get_data_ready_flag,
