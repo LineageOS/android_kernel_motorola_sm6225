@@ -52,6 +52,11 @@
 #define SM5350_HVLED_SHORT_FAULTS_REG			0xB2
 #define SM5350_LED_FAULT_ENABLES_REG			0xB4
 
+enum backlight_exp_current_align {
+	ALIGN_NONE,
+	ALIGN_AW99703
+};
+
 struct sm5350_data {
 	struct i2c_client *client;
 	struct i2c_adapter *adapter;
@@ -65,6 +70,7 @@ struct sm5350_data {
 	u8 boost_ctl;
 	u8 full_scale_current;
 	u8 map_mode;
+	unsigned int led_current_align; /* Align boost current to AW chip */
 	unsigned int default_brightness;
 	bool brt_code_enable;
 	u16 *brt_code_table;
@@ -175,6 +181,10 @@ int sm5350_set_brightness(struct sm5350_data *drvdata, int brt_val)
 	int index = 0, remainder;
 	int code, code1, code2;
 	printk("%s backlight_val = %d\n",__func__, brt_val);
+
+	if ((drvdata->map_mode == 0) && (drvdata->led_current_align == ALIGN_AW99703))
+		brt_val = brt_val*8383/10000+324;
+
 	if (drvdata->brt_code_enable) {
 		index = brt_val / 10;
 		remainder = brt_val % 10;
@@ -275,6 +285,10 @@ static int sm5350_get_dt_data(struct device *dev, struct sm5350_data *drvdata)
 	rc = of_property_read_u32(of_node, "map-mode", &tmp);
 	drvdata->map_mode= (!rc ? tmp : 1); /* 1: linear, 0: expo, linear as default*/
 	pr_debug("%s : map_mode=0x%x\n",__func__, drvdata->map_mode);
+
+	if (of_property_read_u32(of_node, "current-align-type", &drvdata->led_current_align))
+		drvdata->led_current_align = ALIGN_NONE;
+	pr_debug("%s : led_current_align=0x%x\n",__func__, drvdata->led_current_align);
 
 	rc = of_property_read_u32(of_node, "sm5350,default-brightness", &tmp);
 	drvdata->default_brightness= (!rc ? tmp : MAX_BRIGHTNESS);
