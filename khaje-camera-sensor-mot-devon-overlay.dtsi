@@ -578,6 +578,7 @@
 		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <2800000>;
 		status = "ok";
+		multi-user-support;
 	};
 
 	led_flash_rear_devon: qcom,camera-flash@0 {
