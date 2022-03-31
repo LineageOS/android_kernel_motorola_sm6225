@@ -4,6 +4,7 @@
 
 #include "cts_config.h"
 #include <linux/firmware.h>
+#include <linux/vmalloc.h>
 
 struct cts_firmware {
 	const char *name;	/* MUST set to non-NULL if driver builtin firmware */
