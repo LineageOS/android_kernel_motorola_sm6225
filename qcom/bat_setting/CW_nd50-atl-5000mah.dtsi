@@ -13,7 +13,7 @@
 nd50-atl-5000mah {
 	serialnum = "SB18D24973";
 	fcc_design = <4700>;
-        ui_full = <98>;
+        ui_full = <99>;
 	config_profile_info = [5A 00 00 00 00 00 00 00
                         B3 B7 BC CA C0 B7 A7 6A
 			43 FF FF C0 92 81 67 58
