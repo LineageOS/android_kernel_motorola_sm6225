@@ -50,8 +50,8 @@
 #define ENABLE_MAP_SOC
 
 #ifdef ENABLE_MAP_SOC
-#define MAP_MAX_SOC		97
-#define MAP_RATE_SOC	975
+#define MAP_MAX_SOC		98
+#define MAP_RATE_SOC	985
 #define MAP_MIN_SOC		4
 #endif
 
