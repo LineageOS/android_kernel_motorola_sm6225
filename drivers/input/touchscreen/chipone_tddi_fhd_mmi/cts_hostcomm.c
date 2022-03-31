@@ -251,7 +251,7 @@ int cts_hostcomm_write_fw_reg(const struct cts_device *cts_dev, u32 addr,
 	return cts_fw_reg_writesb(cts_dev, addr, regbuf, size);
 }
 
-int cts_hostcomm_get_touchinfo(const struct cts_device *cts_dev,
+int cts_hostcomm_get_touchinfo(struct cts_device *cts_dev,
 			       struct cts_device_touch_info *touch_info)
 {
 	memset(touch_info, 0, sizeof(*touch_info));

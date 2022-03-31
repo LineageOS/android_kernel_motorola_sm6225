@@ -2671,7 +2671,9 @@ static ssize_t int_data_types_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	cts_lock_device(&cts_data->cts_dev);
 	ret = cts_set_int_data_types(&cts_data->cts_dev, type);
+	cts_unlock_device(&cts_data->cts_dev);
 	if (ret)
 		return -EIO;
 	return count;
@@ -2713,7 +2715,9 @@ static ssize_t int_data_method_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	cts_lock_device(&cts_data->cts_dev);
 	ret = cts_set_int_data_method(&cts_data->cts_dev, method);
+	cts_unlock_device(&cts_data->cts_dev);
 	if (ret)
 		return -EIO;
 	return count;
@@ -2721,6 +2725,195 @@ static ssize_t int_data_method_store(struct device *dev,
 
 static DEVICE_ATTR(int_data_method, S_IWUSR | S_IRUGO,
 		   int_data_method_show, int_data_method_store);
+
+
+#ifdef CFG_DUMP_INT_DATA
+/* For dump bin file */
+static int cts_write_intdata(struct file *filp, const void *data, size_t size)
+{
+	loff_t  pos;
+	ssize_t ret;
+
+	pos = filp->f_pos;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	ret = kernel_write(filp, data, size, &pos);
+#else
+	ret = kernel_write(filp, data, size, pos);
+#endif
+
+	if (ret >= 0) {
+		filp->f_pos += ret;
+	}
+
+	return ret;
+}
+
+u32 old_cnt;
+struct file *cts_int_data_filp = NULL;
+char chipone_bin_path[64] = "/sdcard/chipone.bin";
+void cts_dump_int_tsdata(const u8 *data, size_t size)
+{
+	if (cts_int_data_filp) {
+		cts_write_intdata(cts_int_data_filp, data, size);
+	}
+}
+
+static int cts_start_dump_int_data_to_file(const char *filepath, bool append)
+{
+	int ret;
+	u8 header[24] = { 0x00 };
+
+	cts_info("Start dump test data to file '%s'", filepath);
+
+	cts_int_data_filp = filp_open(filepath,
+		O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC),
+		S_IRUGO | S_IWUGO);
+	if (IS_ERR(cts_int_data_filp)) {
+		ret = PTR_ERR(cts_int_data_filp);
+		cts_int_data_filp = NULL;
+		cts_err("Open file '%s' for test data failed %d",
+			filepath, ret);
+		return ret;
+	}
+
+	if (cts_int_data_filp)
+		cts_dump_int_tsdata(header, sizeof(header));
+
+	return 0;
+}
+
+static void cts_stop_dump_int_data_to_file(void)
+{
+	int r;
+
+	cts_info("Stop dump test data to file");
+
+	if (cts_int_data_filp) {
+		r = filp_close(cts_int_data_filp, NULL);
+		if (r) {
+			cts_err("Close test data file failed %d", r);
+		}
+		cts_int_data_filp = NULL;
+	} else {
+		cts_warn("Stop dump tsdata to file with filp = NULL");
+	}
+}
+
+static void cts_redump_header_data_to_file(struct chipone_ts_data *cts_data,
+		const char *filepath, bool append)
+{
+	int ret;
+	u32 cnt;
+	u8 header[24] = {
+			/* Flag */				'C', 'h', 'i', 'p', 'o', 'n', 'e',
+			/* Header len */		0x10,
+			/* Version */			0x00, 0x00, 0x01 , 0x00,
+			/* Data type */			0x00, 0x00,
+			/* Rows and Cols */		32, 18,
+			/* Frame cnt */			0x00, 0x00, 0x00, 0x00,
+			/* Total time */		0x00, 0x00, 0x00, 0x00
+	};
+
+	header[12] = cts_data->cts_dev.fwdata.int_data_types & 0xFF;
+	header[13] = (cts_data->cts_dev.fwdata.int_data_types >> 8) & 0xFF;
+	header[14] = cts_data->cts_dev.fwdata.rows;
+	header[15] = cts_data->cts_dev.fwdata.cols;
+
+	if (old_cnt == 0) {
+		cnt = 0xffffffff - cts_data->cts_dev.rtdata.dump_cnt;
+	} else {
+		cnt = old_cnt;
+	}
+
+	header[16] = cnt & 0xff;
+	header[17] = (cnt >> 8) & 0xff;
+	header[18] = (cnt >> 16) & 0xff;
+	header[19] = (cnt >> 24) & 0xff;
+
+	cts_int_data_filp = filp_open(filepath,
+		O_WRONLY | O_CREAT | O_WRONLY,
+		S_IRUGO | S_IWUGO);
+	if (IS_ERR(cts_int_data_filp)) {
+		ret = PTR_ERR(cts_int_data_filp);
+		cts_int_data_filp = NULL;
+		cts_err("Open file '%s' for test data failed %d",
+			filepath, ret);
+		return;
+	}
+
+	if (cts_int_data_filp)
+		cts_dump_int_tsdata(header, sizeof(header));
+
+	if (cts_int_data_filp) {
+		int r = filp_close(cts_int_data_filp, NULL);
+		if (r) {
+			cts_err("Close test data file failed %d", r);
+		}
+		cts_int_data_filp = NULL;
+	} else {
+		cts_warn("Stop dump tsdata to file with filp = NULL");
+	}
+
+	return;
+}
+
+static ssize_t dump_int_data_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "Dumping: %s\n",
+		cts_data->cts_dev.rtdata.dumping ? "Y" : "N");
+}
+
+static ssize_t dump_int_data_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct chipone_ts_data *cts_data = dev_get_drvdata(dev);
+	u8 dumping = 0;
+	int ret = 0;
+
+	parse_arg(buf, count);
+
+	if (argc != 2) {
+		cts_err("Invalid num args != 2%d", argc);
+		return -EFAULT;
+	}
+
+	ret = kstrtou8(argv[0], 0, &dumping);
+	if (ret) {
+		cts_err("Invalid int data dumping: %s", argv[0]);
+		return -EINVAL;
+	}
+	if (!!dumping) {
+		if (cts_int_data_filp) {
+			cts_err("IS Dumpping ... , please stop dumping then restart.");
+			return -EINVAL;
+		}
+	}
+
+	ret = kstrtou32(argv[1], 0, &old_cnt);
+	if (ret) {
+		cts_err("Invalid int data dump cnt: %s", argv[1]);
+		return -EINVAL;
+	}
+
+	if (!!dumping) {
+		cts_data->cts_dev.rtdata.dump_cnt = old_cnt;
+		cts_start_dump_int_data_to_file(chipone_bin_path, false);
+	} else {
+		cts_stop_dump_int_data_to_file();
+		cts_redump_header_data_to_file(cts_data, chipone_bin_path, true);
+	}
+	cts_data->cts_dev.rtdata.dumping = !!dumping;
+
+	return count;
+}
+
+static DEVICE_ATTR(dump_int_data, S_IWUSR | S_IRUGO,
+		dump_int_data_show, dump_int_data_store);
+#endif
 
 static struct attribute *cts_dev_misc_atts[] = {
 	&dev_attr_ic_type.attr,
@@ -2748,6 +2941,9 @@ static struct attribute *cts_dev_misc_atts[] = {
 #endif /* CFG_CTS_GESTURE */
 	&dev_attr_int_data_types.attr,
 	&dev_attr_int_data_method.attr,
+#ifdef CFG_DUMP_INT_DATA
+	&dev_attr_dump_int_data.attr,
+#endif
 	NULL
 };
 

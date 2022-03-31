@@ -49,7 +49,7 @@ int cts_tcs_get_int_keep_time(const struct cts_device *cts_dev,
 			      u16 *int_keep_time);
 int cts_tcs_get_esd_method(const struct cts_device *cts_dev, u8 *esd_method);
 
-int cts_tcs_get_touchinfo(const struct cts_device *cts_dev,
+int cts_tcs_get_touchinfo(struct cts_device *cts_dev,
 			  struct cts_device_touch_info *touch_info);
 int cts_tcs_get_esd_protection(const struct cts_device *cts_dev,
 			       u8 *esd_protection);
@@ -136,6 +136,7 @@ enum TcsCmdIndex {
 	TP_STD_CMD_SYS_STS_WORK_MODE_RW,
 	TP_STD_CMD_SYS_STS_DAT_RDY_FLAG_RW,
 	TP_STD_CMD_SYS_STS_PWR_STATE_RW,
+	TP_STD_CMD_SYS_STS_CHARGER_PLUGIN_RW,
 	TP_STD_CMD_SYS_STS_DDI_CODE_VER_RO,
 	TP_STD_CMD_SYS_STS_DAT_TRANS_IN_NORMAL_RW,
 	TP_STD_CMD_SYS_STS_VSTIM_LVL_RW,
@@ -150,6 +151,8 @@ enum TcsCmdIndex {
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_SUPPORT_RO,
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_EN_RW,
 	TP_STD_CMD_SYS_STS_DATA_CAPTURE_FUNC_MAP_RW,
+	TP_STD_CMD_SYS_STS_PANEL_DIRECTION_RW,
+	TP_STD_CMD_SYS_STS_GAME_MODE_RW,
 
 	TP_STD_CMD_GSTR_WAKEUP_EN_RW,
 	TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW,
@@ -200,6 +203,7 @@ static TcsCmdValue_t TcsCmdValue[] = {
 	{ 0, 2, 1, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_WORK_MODE_RW */
 	{ 0, 2, 3, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DAT_RDY_FLAG_RW */
 	{ 0, 2, 4, 1, 1, 1 },	/* TP_STD_CMD_SYS_STS_PWR_STATE_RW */
+	{ 0, 2, 5, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_CHARGER_PLUGIN_RW */
 	{ 0, 2, 6, 1, 0, 0 },	/* TP_STD_CMD_SYS_STS_DDI_CODE_VER_RO */
 	{ 0, 2, 7, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DAT_TRANS_IN_NORMAL_RW */
 	{ 0, 2, 8, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_VSTIM_LVL_RW */
@@ -214,6 +218,8 @@ static TcsCmdValue_t TcsCmdValue[] = {
 	{ 0, 2, 63, 1, 0, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_SUPPORT_RO */
 	{ 0, 2, 64, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_EN_RW */
 	{ 0, 2, 65, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DATA_CAPTURE_FUNC_MAP_RW */
+	{ 0, 2, 66, 1, 1,  0 }, /* TP_STD_CMD_SYS_STS_PANEL_DIRECTION_RW */
+	{ 0, 2, 78, 1, 1,  0 }, /* TP_STD_CMD_SYS_STS_GAME_MODE_RW */
 
 	{ 0,  3,  1,  1,  1,  0 }, /* TP_STD_CMD_GSTR_WAKEUP_EN_RW */
 	{ 0,  3, 30,  1,  1,  0 }, /* TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW */

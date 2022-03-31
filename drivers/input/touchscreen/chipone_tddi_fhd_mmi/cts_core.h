@@ -271,6 +271,11 @@ struct cts_device_rtdata {
 	bool updating;
 	bool testing;
 
+#ifdef CFG_DUMP_INT_DATA
+	bool dumping;
+	u32 dump_cnt;
+#endif
+
 	bool gesture_wakeup_enabled;
 	bool charger_exist;
 	bool fw_log_redirect_enabled;
@@ -301,7 +306,7 @@ struct cts_dev_ops {
 			      u8 *esd_method);
 	int (*get_gestureinfo)(const struct cts_device *cts_dev,
 			struct cts_device_gesture_info *gesture_info);
-	int (*get_touchinfo)(const struct cts_device *cts_dev,
+	int (*get_touchinfo)(struct cts_device *cts_dev,
 			     struct cts_device_touch_info *touch_info);
 	int (*get_esd_protection)(const struct cts_device *cts_dev,
 				  u8 *esd_protection);
@@ -396,6 +401,7 @@ struct cts_dev_ops {
 	int (*set_int_test)(const struct cts_device *cts_dev, u8 enable);
 	int (*set_int_pin)(const struct cts_device *cts_dev, u8 high);
 	int (*get_module_id)(const struct cts_device *cts_dev, u32 *modId);
+	int (*spi_xtrans)(const struct cts_device *cts_dev, u8 *tx, size_t txlen, u8 *rx, size_t rxlen);
 };
 
 struct cts_device {
@@ -942,7 +948,7 @@ extern bool cts_is_fwid_valid(u16 fwid);
 extern void cts_deinit_rtdata(struct cts_device *cts_dev);
 
 extern int cts_reset_device(struct cts_device *cts_dev);
-
+extern int cts_spi_xtrans(const struct cts_device *cts_dev, u8 *tx, size_t txlen, u8 *rx, size_t rxlen);
 int touch_set_state(int state, int panel_idx);
 int check_touch_state(int *state, int panel_idx);
 #endif /* CTS_CORE_H */

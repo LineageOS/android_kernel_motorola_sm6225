@@ -9,6 +9,10 @@
 
 #ifdef CONFIG_CTS_LEGACY_TOOL
 
+#define CTS_TOOL_IOCTL_TCS_RW_BUF_MAX_SIZ     1024
+#define CTS_TOOL_IOCTL_TCS_RW_OPFLAG_READ     1
+#define CTS_TOOL_IOCTL_TCS_RW_OPFLAG_WRITE    2
+
 #pragma pack(1)
 /** Tool command structure */
 struct cts_tool_cmd {
@@ -23,6 +27,13 @@ struct cts_tool_cmd {
 	u8 tcs[2];
 	u8 data[PAGE_SIZE];
 
+};
+struct cts_ioctl_tcs_rw_data {
+	u32 opflags;
+	u32 txlen;
+	u32 rxlen;
+	u8 __user *txbuf;
+	u8 __user *rxbuf;
 };
 #pragma pack()
 
@@ -45,6 +56,7 @@ enum cts_tool_cmd_code {
 	CTS_TOOL_CMD_TCS_READ_DDI_CMD = 30,
 	CTS_TOOL_CMD_TCS_READ_FW_CMD = 32,
 	CTS_TOOL_CMD_GET_BASE_DATA = 34,
+	CTS_TOOL_CMD_GET_INT_DATAS = 36,
 
 	CTS_TOOL_CMD_UPDATE_PANEL_PARAM_IN_SRAM = 1,
 	CTS_TOOL_CMD_DOWNLOAD_FIRMWARE_WITH_FILENAME = 3,
@@ -58,6 +70,7 @@ enum cts_tool_cmd_code {
 	CTS_TOOL_CMD_TCS_WRITE_FW_CMD = 25,
 	CTS_TOOL_CMD_TCS_ENABLE_GET_RAWDATA_CMD = 27,
 	CTS_TOOL_CMD_TCS_DISABLE_GET_RAWDATA_CMD = 29,
+	CTS_TOOL_CMD_SET_INT_DATA_TYPE_AND_METHOD = 31,
 
 };
 
@@ -67,16 +80,18 @@ struct cts_test_ioctl_data {
 };
 
 
-#define CTS_TOOL_IOCTL_GET_DRIVER_VERSION   _IOR('C', 0x00, unsigned int *)
-#define CTS_TOOL_IOCTL_GET_DEVICE_TYPE      _IOR('C', 0x01, unsigned int *)
-#define CTS_TOOL_IOCTL_GET_FW_VERSION       _IOR('C', 0x02, unsigned short *)
-#define CTS_TOOL_IOCTL_GET_RESOLUTION       _IOR('C', 0x03, unsigned int *) /* X in LSW, Y in MSW */
-#define CTS_TOOL_IOCTL_GET_ROW_COL          _IOR('C', 0x04, unsigned int *) /* row in LSW, col in MSW */
-#define CTS_TOOL_IOCTL_GET_MODULE_ID        _IOWR('C', 0x05, unsigned int *)
+#define CTS_TOOL_IOCTL_GET_DRIVER_VERSION   _IOR('C', 0x00, u32 *)
+#define CTS_TOOL_IOCTL_GET_DEVICE_TYPE      _IOR('C', 0x01, u32 *)
+#define CTS_TOOL_IOCTL_GET_FW_VERSION       _IOR('C', 0x02, u16 *)
+#define CTS_TOOL_IOCTL_GET_RESOLUTION       _IOR('C', 0x03, u32 *) /* X in LSW, Y in MSW */
+#define CTS_TOOL_IOCTL_GET_ROW_COL          _IOR('C', 0x04, u32 *) /* row in LSW, col in MSW */
+#define CTS_TOOL_IOCTL_GET_MODULE_ID        _IOWR('C', 0x05, u32 *)
 
 #define CTS_TOOL_IOCTL_TEST                 _IOWR('C', 0x10, struct cts_test_ioctl_data *)
 #define CTS_TOOL_IOCTL_RDWR_REG             _IOWR('C', 0x20, struct cts_rdwr_reg_ioctl_data *)
 #define CTS_TOOL_IOCTL_UPGRADE_FW           _IOWR('C', 0x21, struct cts_upgrade_fw_ioctl_data *)
+
+#define CTS_TOOL_IOCTL_TCS_RW               _IOWR('C', 0x30, struct cts_ioctl_tcs_rw_data *)
 
 #define CTS_DRIVER_VERSION_CODE ((CFG_CTS_DRIVER_MAJOR_VERSION << 16) | \
 		(CFG_CTS_DRIVER_MINOR_VERSION << 8) | \
@@ -185,7 +200,10 @@ static ssize_t cts_tool_read(struct file *file,
 				ret);
 		}
 		break;
-
+	case CTS_TOOL_CMD_GET_INT_DATAS:
+		memcpy((u8 *)cmd->data, cts_dev->rtdata.int_data, cts_dev->fwdata.int_data_size);
+		cmd->data_len = cts_dev->fwdata.int_data_size;
+		break;
 	case CTS_TOOL_CMD_READ_HOSTCOMM:
 		ret = cts_fw_reg_readb(cts_dev, get_unaligned_le16(cmd->addr),
 				       cmd->data);
@@ -447,6 +465,10 @@ static ssize_t cts_tool_write(struct file *file,
 		if (ret)
 			cts_err("Disable get touch data failed");
 		break;
+	case CTS_TOOL_CMD_SET_INT_DATA_TYPE_AND_METHOD:
+		cts_set_int_data_types(cts_dev, cmd->data[0]);
+		cts_set_int_data_method(cts_dev, cmd->data[1]);
+		break;
 	case CTS_TOOL_CMD_UPDATE_PANEL_PARAM_IN_SRAM:
 		cts_info("Write panel param len %u data\n", cmd->data_len);
 		ret = cts_fw_reg_writesb(cts_dev, CTS_DEVICE_FW_REG_PANEL_PARAM,
@@ -636,6 +658,89 @@ static ssize_t cts_tool_write(struct file *file,
 	cts_unlock_device(cts_dev);
 
 	return ret ? 0 : cmd->data_len + CTS_TOOL_CMD_HEADER_LENGTH;
+}
+
+
+static long cts_ioctl_tcs_rw(struct cts_device *cts_dev,
+		struct file *file, unsigned int cmd, unsigned long arg)
+{
+	int ret;
+	struct cts_ioctl_tcs_rw_data rwdata;
+	u8 *txbuf = NULL;
+	u8 *rxbuf = NULL;
+
+	if (copy_from_user(&rwdata,
+			(struct cts_ioctl_tcs_rw_data __user *)arg,
+			sizeof(rwdata))) {
+		cts_err("Copy ioctl tcs rw arg to kernel failed");
+		return -EFAULT;
+	}
+
+	if ((rwdata.opflags != CTS_TOOL_IOCTL_TCS_RW_OPFLAG_READ) &&
+		(rwdata.opflags != CTS_TOOL_IOCTL_TCS_RW_OPFLAG_WRITE))
+	{
+		cts_err("ioctl tcs rw with invalid opflags %u", rwdata.opflags);
+		return -EINVAL;
+	}
+
+	if (rwdata.txlen > CTS_TOOL_IOCTL_TCS_RW_BUF_MAX_SIZ) {
+		cts_err("Send too long: %d", rwdata.txlen);
+		return -EINVAL;
+	}
+
+	if (rwdata.rxlen > CTS_TOOL_IOCTL_TCS_RW_BUF_MAX_SIZ) {
+		cts_err("Recv too long: %d", rwdata.rxlen);
+		return -EINVAL;
+	}
+
+	if (!rwdata.txbuf || !rwdata.rxbuf) {
+		cts_err("Txbuf of Rxbuf is NULL!");
+		return -EINVAL;
+	}
+
+	txbuf = memdup_user(rwdata.txbuf, rwdata.txlen);
+	if (IS_ERR(txbuf)) {
+		ret = PTR_ERR(txbuf);
+		cts_err("Memdup txbuf failed %d", ret);
+		txbuf = NULL;
+		goto free_buf;
+	}
+
+	rxbuf = memdup_user(rwdata.rxbuf, rwdata.rxlen);
+	if (IS_ERR(rxbuf)) {
+		ret = PTR_ERR(rxbuf);
+		cts_err("Memdup rxbuf failed %d", ret);
+		rxbuf = NULL;
+		goto free_buf;
+	}
+
+	cts_lock_device(cts_dev);
+	ret = cts_spi_xtrans(cts_dev, txbuf, rwdata.txlen, rxbuf, rwdata.rxlen);
+	cts_unlock_device(cts_dev);
+	if (ret < 0) {
+		cts_err("Trans failed %d", ret);
+		goto free_buf;
+	}
+
+	ret = copy_to_user(rwdata.rxbuf, rxbuf, rwdata.rxlen);
+	if (ret < 0) {
+		cts_err("Copy to user failed %d", ret);
+		goto free_buf;
+	}
+
+	ret = 0;
+
+free_buf:
+	if (txbuf) {
+		kfree(txbuf);
+		txbuf = NULL;
+	}
+	if (rxbuf) {
+		kfree(rxbuf);
+		rxbuf = NULL;
+	}
+
+	return ret;
 }
 
 static int cts_ioctl_test(struct cts_device *cts_dev,
@@ -1065,7 +1170,7 @@ static long cts_tool_ioctl(struct file *file, unsigned int cmd,
 	unsigned int modid;
 	int ret;
 
-	cts_info("ioctl, cmd=0x%04x, arg=0x%02lx", cmd, arg);
+	cts_info("ioctl, cmd=0x%016x, arg=0x%016lx", cmd, arg);
 
 	cts_data = file->private_data;
 	if (cts_data == NULL) {
@@ -1121,7 +1226,10 @@ static long cts_tool_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		return cts_ioctl_test(cts_dev, test_arg.ntests, tests_pa);
-		}
+	}
+	case CTS_TOOL_IOCTL_TCS_RW:{
+		return cts_ioctl_tcs_rw(cts_dev, file, cmd, arg);
+	}
 
 	default:
 		break;
