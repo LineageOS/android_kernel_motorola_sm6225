@@ -73,13 +73,13 @@ static const char * const mmi_charger_ext_iio_chan_name[] = {
 	[SMB5_QC3P_POWER] = "usb_qc3p_power",
 #endif
 	/*cp*/
-	[CP_ENABLE] = "bq2597x_cp_enabled",
-	[CP_INPUT_CURRENT_NOW] = "bq2597x_input_current_now",
-	[CP_INPUT_VOLTAGE_NOW] = "bq2597x_input_voltage_settled",
-	[CP_STATUS1] = "bq2597x_cp_status1",
-	[CP_CLEAR_ERROR] = "bq2597x_cp_clear_error",
+	[CP_ENABLE] = "cp_enabled",
+	[CP_INPUT_CURRENT_NOW] = "cp_input_current_now",
+	[CP_INPUT_VOLTAGE_NOW] = "cp_input_voltage_settled",
+	[CP_STATUS1] = "cp_status1",
+	[CP_CLEAR_ERROR] = "cp_clear_error",
 	/*mmi-smb5charger-iio*/
-	[MMI_CP_ENABLE_STATUS] = "bq2597x_cp_enabled",
+	[MMI_CP_ENABLE_STATUS] = "mmi_cp_enabled_status",
 };
 
 int mmi_charger_read_iio_chan(struct mmi_charger_manager *chip,
