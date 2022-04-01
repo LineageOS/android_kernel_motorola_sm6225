@@ -1908,10 +1908,12 @@ bool bc12_detection_done(struct sgm4154x_device *chip)
 			dev_err(chip->dev, "Cann't read SMB5_BC12_DETECTION_READY IIO\n");
 
 		dev_info(chip->dev, "read SMB5_BC12_DETECTION_READY IIO :%d\n",val);
+		if (val)
+			break;
 
-		msleep(100);
+		msleep(50);
 		delay_count ++;
-	}while(val == false && delay_count <= 10);
+	}while(delay_count <= 20);
 
 	dev_info(chip->dev, "read SMB5_BC12_DETECTION_READY IIO :%d\n",val);
 	return val;
