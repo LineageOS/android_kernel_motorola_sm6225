@@ -441,11 +441,11 @@
 					"wt6670_usb_qc3p_power",
 					"wt6670_battery_dp_dm",
 					"wt6670_start_detection",
-					"bq2597x_cp_enabled",
-					"bq2597x_input_current_now",
-					"bq2597x_input_voltage_settled",
-					"bq2597x_cp_status1",
-					"bq2597x_cp_clear_error";
+					"cp_enabled",
+					"cp_input_current_now",
+					"cp_input_voltage_settled",
+					"cp_status1",
+					"cp_clear_error";
 
 	//	qcom,usbpd-phandle = <&pm7250b_pdphy>;
 		mmi,pps-volt-steps = <20000>;
