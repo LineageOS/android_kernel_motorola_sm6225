@@ -733,9 +733,9 @@ static int bq25980_get_adc_ibus(struct bq25980_device *bq)
 	ibus_adc = (ibus_adc_msb << 8) | ibus_adc_lsb;
 
 	if (ibus_adc_msb & BQ25980_ADC_POLARITY_BIT)
-		return ((ibus_adc ^ 0xffff) + 1) * bq->chip_info->adc_curr_step;
+		return (((ibus_adc ^ 0xffff) + 1) * bq->chip_info->adc_curr_step) /1000;//mA
 
-	return ibus_adc * bq->chip_info->adc_curr_step;
+	return (ibus_adc * bq->chip_info->adc_curr_step) /1000; //mA
 }
 
 static int bq25980_get_adc_vbus(struct bq25980_device *bq)
@@ -754,7 +754,7 @@ static int bq25980_get_adc_vbus(struct bq25980_device *bq)
 
 	vbus_adc = (vbus_adc_msb << 8) | vbus_adc_lsb;
 
-	return bq->chip_info->adc_vbus_volt_offset + vbus_adc * bq->chip_info->adc_vbus_volt_step /10;
+	return (bq->chip_info->adc_vbus_volt_offset + vbus_adc * bq->chip_info->adc_vbus_volt_step /10) /1000;//mV
 }
 
 static int bq25980_get_ibat_adc(struct bq25980_device *bq)
@@ -774,9 +774,9 @@ static int bq25980_get_ibat_adc(struct bq25980_device *bq)
 	ibat_adc = (ibat_adc_msb << 8) | ibat_adc_lsb;
 
 	if (ibat_adc_msb & BQ25980_ADC_POLARITY_BIT)
-		return ((ibat_adc ^ 0xffff) + 1) * BQ25960_ADC_CURR_STEP_uA;
+		return (((ibat_adc ^ 0xffff) + 1) * BQ25960_ADC_CURR_STEP_uA) /1000;//mA
 
-	return ibat_adc * BQ25960_ADC_CURR_STEP_uA;
+	return (ibat_adc * BQ25960_ADC_CURR_STEP_uA) /1000; //mA
 }
 
 static int bq25980_get_adc_vbat(struct bq25980_device *bq)
@@ -795,7 +795,7 @@ static int bq25980_get_adc_vbat(struct bq25980_device *bq)
 
 	vsys_adc = (vsys_adc_msb << 8) | vsys_adc_lsb;
 
-	return vsys_adc * bq->chip_info->adc_vbat_volt_step / 10;
+	return (vsys_adc * bq->chip_info->adc_vbat_volt_step / 10) /1000;//mV
 }
 
 static int bq25980_get_state(struct bq25980_device *bq,
@@ -1164,7 +1164,7 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 		break;
 */
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = bq->usb_present;
+		val->intval = bq->state.online;
 		break;
 //	case POWER_SUPPLY_PROP_UPDATE_NOW:
 //		break;
@@ -1264,8 +1264,8 @@ static enum power_supply_property bq25980_power_supply_props[] = {
 	//POWER_SUPPLY_PROP_CP_STATUS1,//
 	POWER_SUPPLY_PROP_PRESENT,
 //	POWER_SUPPLY_PROP_CHARGING_ENABLED,//undeclared identifier
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_CURRENT_NOW,
+//	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+//	POWER_SUPPLY_PROP_CURRENT_NOW,
 	//POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,//undeclared identifier
 	//POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, //undeclared identifier
 	//POWER_SUPPLY_PROP_CP_IRQ_STATUS,//undeclared identifier

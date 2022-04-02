@@ -49,6 +49,12 @@ enum mmi_charger_ext_iio_channels {
 	CP_INPUT_VOLTAGE_NOW,
 	CP_STATUS1,
 	CP_CLEAR_ERROR,
+	/*cp_slave*/
+	CP_SLAVE_ENABLE,
+	CP_SLAVE_INPUT_CURRENT_NOW,
+	CP_SLAVE_INPUT_VOLTAGE_NOW,
+	CP_SLAVE_STATUS1,
+	CP_SLAVE_CLEAR_ERROR,
 	/*mmi-smb5charger-iio*/
 	MMI_CP_ENABLE_STATUS,
 	MMI_USB_TERMINATION_ENABLED,
@@ -78,6 +84,12 @@ static const char * const mmi_charger_ext_iio_chan_name[] = {
 	[CP_INPUT_VOLTAGE_NOW] = "cp_input_voltage_settled",
 	[CP_STATUS1] = "cp_status1",
 	[CP_CLEAR_ERROR] = "cp_clear_error",
+	/*cp_slave*/
+	[CP_SLAVE_ENABLE] = "cp_slave_enabled",
+	[CP_SLAVE_INPUT_CURRENT_NOW] = "cp_slave_input_current_now",
+	[CP_SLAVE_INPUT_VOLTAGE_NOW] = "cp_slave_input_voltage_settled",
+	[CP_SLAVE_STATUS1] = "cp_slave_status1",
+	[CP_SLAVE_CLEAR_ERROR] = "cp_slave_clear_error",
 	/*mmi-smb5charger-iio*/
 	[MMI_CP_ENABLE_STATUS] = "mmi_cp_enabled_status",
 };
