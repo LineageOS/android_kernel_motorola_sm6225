@@ -1,6 +1,6 @@
-ifeq ($(TARGET_BOARD_PLATFORM),taro)
+ifeq ($(call is-board-platform-in-list,taro kalama), true)
 ifneq (,$(findstring $(LOCAL_MODULE),$(BOARD_VENDOR_KERNEL_MODULES)))
-#Taro is using a new mechanisim to build kernel modules
+#Taro and beyond are using a new mechanisim to build kernel modules
 include device/qcom/common/dlkm/Build_external_kernelmodule.mk
 endif
 else
@@ -186,4 +186,4 @@ KBUILD_OPTIONS :=
 endif
 endif
 endif  #(findstring gki,$(KERNEL_DEFCONFIG))
-endif #($(TARGET_BOARD_PLATFORM),taro)
+endif #(is-board-platform-in-list,taro....)
