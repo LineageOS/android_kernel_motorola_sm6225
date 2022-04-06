@@ -11,7 +11,7 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 SM5602_NC50_SWD {
-	serialnum = "SB18D38323";
+	serialnum = "SB18D20541";
 
 	battery,param_version = <2>;
 	battery,max_voltage_uv = <4450000>;

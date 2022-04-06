@@ -11,7 +11,7 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 CW2217_NC50_ATL_DEVON {
-	serialnum = "SB18D38324";
+	serialnum = "SB18D20540";
 	fcc_design = <4700>;
 	ui_full = <97>;
 	config_profile_info = [5A 00 00 00 00 00 00 00
