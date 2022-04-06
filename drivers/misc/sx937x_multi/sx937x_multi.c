@@ -477,16 +477,40 @@ static ssize_t capsense_reset_store(struct device *dev,
 
 {
 	u32 temp = 0;
+	int i = 0;
 	psx93XX_t this = dev_get_drvdata(dev);
 	sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
 	if (!count)
 		return -EINVAL;
 
-	if (!strncmp(buf, "reset", 5) || !strncmp(buf, "1", 1)) {
+	LOG_INFO("%s sx937x_fac_cal_store\n", this->hw->dbg_name);
+	if (!strncmp(buf, "cal", 3) ) {
+
 		if (temp & 0x000000FF) {
-			LOG_DBG("Going to refresh baseline\n");
+			LOG_INFO("Going to refresh baseline %s\n",buf);
 			manual_offset_calibration(this->hw);
 		}
+	}
+
+	if (!strncmp(buf, "flip_near", 9)){
+		for (i = 0; i < this->hw->flip_reg_num; i++)
+		{
+			sx937x_i2c_write_16bit(this->bus, this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
+			LOG_INFO("flip near download params set Reg 0x%x Value: 0x%x\n",
+					this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
+		}
+
+	}
+
+	if (!strncmp(buf, "flip_far", 8))
+	{
+		for (i = 0; i < this->hw->flip_reg_num; i++)
+		{
+			sx937x_i2c_write_16bit(this->bus, this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+			LOG_INFO("flip far download params set Reg 0x%x Value: 0x%x\n",
+					this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+		}
+
 	}
 
 	return count;
@@ -533,9 +557,10 @@ static ssize_t sx937x_register_write_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	LOG_INFO("%s sx937x_fac_cal_store\n", this->hw->dbg_name);
 	sx937x_i2c_write_16bit(this->bus, reg_address, val);
 
-	LOG_DBG("%s Register(0x%x) data(0x%x)\n", this->hw->dbg_name, reg_address, val);
+	LOG_INFO("%s Register(0x%x) data(0x%x)\n", this->hw->dbg_name, reg_address, val);
 	return count;
 }
 
@@ -555,9 +580,10 @@ static ssize_t sx937x_register_read_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	LOG_INFO("%s sx937x_fac_cal_store\n", this->hw->dbg_name);
 	sx937x_i2c_read_16bit(this->bus, sx937x_temp_regist, &sx937x_temp_val);
 
-	LOG_DBG("%s Register(0x%2x) data(0x%4x)\n", this->hw->dbg_name, sx937x_temp_regist, sx937x_temp_val);
+	LOG_INFO("%s Register(0x%2x) data(0x%4x)\n", this->hw->dbg_name, sx937x_temp_regist, sx937x_temp_val);
 	return count;
 }
 
@@ -604,25 +630,25 @@ static ssize_t sx937x_fac_enable_store(struct device *dev,
 	int ret = 0;
 	if ( !strncmp(buf, "1", 1)) {
 		LOG_INFO("enable cap sensor\n");
-				sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
-				temp = temp | 0x0000007F;
-				LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
-				sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
-				if(ret <0){
-					LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
-					return -EINVAL;
-				}
+		sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+		temp = temp | 0x0000007F;
+		LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
+		sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
+		if(ret <0){
+			LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
+			return -EINVAL;
+		}
 	}
 	if ( !strncmp(buf, "0", 1)) {
 		LOG_INFO("disnable cap sensor\n");
-				sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
-				temp = temp | 0xFFFFFF00;
-				LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
-				sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
-				if(ret <0){
-					LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
-					return -EINVAL;
-				}
+		sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+		temp = temp | 0xFFFFFF00;
+		LOG_INFO("set reg 0x%x val 0x%x\n", SX937X_GENERAL_SETUP, temp);
+		sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp);
+		if(ret <0){
+			LOG_ERR("enable write enable sx937x error ret =%d\n",ret);
+			return -EINVAL;
+		}
 	}
 	return count;
 }
@@ -662,10 +688,10 @@ static ssize_t sx937x_fac_comp_show(struct device *dev,
 		}
 		LOG_INFO("fac_cam i==%d reg_addr ==0x%x temp_val===%x\n",i,reg_addr+0xc*i,temp_val);
 		reg_data[2 * i] = (u8)((temp_val & 0x3FFF) >> 8);
-               reg_data[1 + 2 * i] = (u8)(temp_val & 0x3FFF);
+		reg_data[1 + 2 * i] = (u8)(temp_val & 0x3FFF);
 		LOG_INFO("tc_cmn_drv_cap_sense_read_cal_data reg[%d]==%x,reg[%d]==%x\n",
-					(2*i), reg_data[2 * i],
-					(1+2*i), reg_data[1 + 2 * i]);
+				(2*i), reg_data[2 * i],
+				(1+2*i), reg_data[1 + 2 * i]);
 	}
 	for(j=0;j<sizeof(reg_data);j++){
 		buf[j] = reg_data[j];
@@ -679,12 +705,12 @@ static ssize_t sx937x_fac_raw_show(struct device *dev,
 {
 	psx93XX_t this = dev_get_drvdata(dev);
 	u16 reg_addr;
-        u32 temp_val;
-        int diff_val;
+	u32 temp_val;
+	int diff_val;
 	int read_ret;
 	int i;
 	u8 data[MAX_CHANNEL_NUMBER*4] = {0};
-        reg_addr = SX937X_DIFF_PH0;
+	reg_addr = SX937X_DIFF_PH0;
 
 	LOG_INFO("%s sx937x_fac_raw_show\n", this->hw->dbg_name);
 	for ( i = 0; i < MAX_CHANNEL_NUMBER; i++) {
@@ -698,13 +724,13 @@ static ssize_t sx937x_fac_raw_show(struct device *dev,
 		data[1 + 4 * i] = (u8)(diff_val >> 16);
 		data[2 + 4 * i] = (u8)(diff_val >> 8);
 		data[3 + 4 * i] = (u8)(diff_val);
-	 	LOG_INFO("sx937x diff_val==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x",
-	 				diff_val,
-	 				(4*i), data[4 * i],
-	 				(1+4*i), data[1+4 * i],
-	 				(2+4*i), data[2+4 * i],
-	 				(3+4*i), data[3+4 * i]);
-        }
+		LOG_INFO("sx937x diff_val==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x,data[%d]==%x",
+				diff_val,
+				(4*i), data[4 * i],
+				(1+4*i), data[1+4 * i],
+				(2+4*i), data[2+4 * i],
+				(3+4*i), data[3+4 * i]);
+	}
 	for(i=0;i<sizeof(data);i++){
 		buf[i] = data[i];
 	}
@@ -923,9 +949,11 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 {
 	struct device_node *dNode = dev->of_node;
 	enum of_gpio_flags flags;
-	int i, rc;
+	int i,j, rc;
 	const char *reg_group_name = "Semtech,reg-init";
 	int name_index,name_count;
+
+
 	if (dNode == NULL)
 		return -ENODEV;
 
@@ -1020,6 +1048,47 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 		// initialize the array
 		if (of_property_read_u32_array(dNode,reg_group_name,(u32*)&(pdata->pi2c_reg[0]),sizeof(struct smtc_reg_data)*pdata->i2c_reg_num/sizeof(u32)))
 			return -ENOMEM;
+	}
+
+	//load param when flip near
+	of_property_read_u32(dNode,"Semtech,flip_operation_num",&pdata->flip_reg_num);
+	LOG_INFO("size of elements %d \n", pdata->flip_reg_num);
+	if(pdata->flip_reg_num >0)
+	{
+		pdata->flip_near_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->flip_reg_num, GFP_KERNEL);
+		if (unlikely(pdata->flip_near_reg == NULL))
+		{
+			LOG_ERR("size of elements %d alloc error\n", pdata->flip_reg_num);
+			return -ENOMEM;
+		}
+
+		pdata->flip_far_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->flip_reg_num, GFP_KERNEL);
+		if (unlikely(pdata->flip_far_reg == NULL))
+		{
+			LOG_ERR("size of elements %d alloc error\n", pdata->flip_reg_num);
+			return -ENOMEM;
+		}
+
+		// initialize the array
+		if (of_property_read_u32_array(dNode,"Semtech,flip_near_init",(u32*)&(pdata->flip_near_reg[0]),sizeof(struct smtc_reg_data)*pdata->flip_reg_num/sizeof(u32)))
+			return -ENOMEM;
+
+
+	}
+	//extract register and value when flip far
+	for(i = 0;i<pdata->flip_reg_num;i++)
+	{
+		for(j =0;j<pdata->i2c_reg_num;j++)
+		{
+			if(pdata->flip_near_reg[i].reg == pdata->pi2c_reg[j].reg)
+			{
+				pdata->flip_far_reg[i].reg =pdata->pi2c_reg[j].reg;
+				pdata->flip_far_reg[i].val =pdata->pi2c_reg[j].val;
+			}
+		}
+
+		LOG_INFO("flip_far_reg params set Reg 0x%x Value: 0x%x\n",
+				pdata->flip_far_reg[i].reg,pdata->flip_far_reg[i].val);
 	}
 
 	LOG_INFO("-[%d] parse_dt complete\n", pdata->irq_gpio);
@@ -1441,7 +1510,7 @@ static int sx937x_resume(struct device *dev)
 	//psx937x_platform_data_t pdata = 0;
 
 	if (this) {
-		LOG_INFO(LOG_TAG "sx937x resume:enable irq!\n");
+
 		sx93XX_schedule_work(this,0);
 		enable_irq(this->irq);
 		sx937x_i2c_write_16bit(this->bus,SX937X_COMMAND,0xC);//Exit from Sleep mode
