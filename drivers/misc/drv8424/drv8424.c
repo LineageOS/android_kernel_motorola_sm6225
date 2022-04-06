@@ -26,6 +26,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk.h>
+#include <linux/kfifo.h>
 #include <linux/clk-provider.h>
 
 #define DEFAULT_STEP_FREQ 2400
@@ -58,18 +59,20 @@ static const char *position_labels[] = {
 
 enum status_id {
 	STATUS_UNKNOWN,
-	STATUS_STOPPED,
-	STATUS_MOVING_IN,
+	STATUS_STOPPED_COMPACT,
+	STATUS_STOPPED_EXPANDED,
+	STATUS_STOPPED_PEEK,
 	STATUS_MOVING_OUT,
+	STATUS_MOVING_IN,
 };
 
 static const char *status_labels[] = {
     "UNKNOWN",
     "STOPPED_COMPACT",
-	"STOPPED_EXPANDED",
+    "STOPPED_EXPANDED",
 	"STOPPED_PEEK",
-	"MOVING_IN",
-	"MOVING_OUT",
+	"EXPANDING",
+	"WITHDRAWING",
 };
 
 enum gpios_index {
@@ -215,6 +218,13 @@ static motor_stage initial_data[SQ_MAX][MAX_STAGE_LEGS] = {
 	}
 };
 
+enum cmds {
+	CMD_FAULT,
+	CMD_STATUS,
+	CMD_POSITION,
+	CMD_POLL,
+};
+
 #define MAX_GPIOS MOTOR_UNKNOWN
 typedef struct motor_control {
     struct regulator    *vdd;
@@ -233,9 +243,11 @@ typedef struct motor_device {
     struct class*   drv8424_class;
     struct workqueue_struct* motor_wq;
     struct clk * pwm_clk;
-    struct work_struct motor_irq_work;
+    struct delayed_work motor_work;
     struct task_struct *motor_task;
     wait_queue_head_t sync_complete;
+    wait_queue_head_t status_wait;
+    wait_queue_head_t position_wait;
     struct hrtimer stepping_timer;
     motor_control mc;
     spinlock_t mlock;
@@ -250,6 +262,8 @@ typedef struct motor_device {
     atomic_t stepping;
     atomic_t status;
     atomic_t position;
+    atomic_t destination;
+    atomic_t sensor_data;
     unsigned slot;
     unsigned mode, cur_mode;
     unsigned torque;
@@ -269,6 +283,9 @@ typedef struct motor_device {
     unsigned nEN:1;
     unsigned dir:1;
     unsigned user_sync_complete:1;
+	unsigned status_update_ready:1;
+	unsigned position_update_ready:1;
+	struct kfifo cmd_pipe;
 }motor_device;
 
 #define GPIO_OUTPUT_DIR(g, p) do { \
@@ -721,6 +738,13 @@ static bool moto_drv8424_next_stage(motor_device* md)
 	return true;
 }
 
+static void inline moto_drv8424_cmd_push(motor_device* md,
+				int cmd, unsigned long delay)
+{
+	kfifo_put(&md->cmd_pipe, cmd);
+	queue_delayed_work(md->motor_wq, &md->motor_work, delay);
+}
+
 static int moto_drv8424_drive_sequencer(motor_device* md)
 {
 	moto_drv8424_next_stage(md);
@@ -728,7 +752,9 @@ static int moto_drv8424_drive_sequencer(motor_device* md)
     moto_drv8424_set_motor_dir(md);
     moto_drv8424_set_motor_mode(md);
     moto_drv8424_set_motor_opmode(md);
-	atomic_set(&md->status, md->dir ? STATUS_MOVING_IN : STATUS_MOVING_OUT);
+	/* can judge about moving direction based on DIR or destination position */
+	atomic_set(&md->status, md->dir ? STATUS_MOVING_OUT : STATUS_MOVING_IN);
+	moto_drv8424_cmd_push(md, CMD_STATUS, 0);
 	LOGD("sequencer init: stages %u ceiling %lu, freq %uHz period %luns, half %uns\n",
 			md->max_stages, md->step_ceiling, md->step_freq, md->step_period, md->half);
 
@@ -736,6 +762,7 @@ static int moto_drv8424_drive_sequencer(motor_device* md)
         motor_control* mc = &md->mc;
 
         sysfs_notify(&md->dev->kobj, NULL, "status");
+		LOGD("Status updated: status %d\n", atomic_read(&md->status));
         GPIO_OUTPUT_DIR(mc->ptable[MOTOR_STEP], md->level);
         atomic_inc(&md->step_count);
         hrtimer_start(&md->stepping_timer, adapt_time_helper(md->half), HRTIMER_MODE_REL);
@@ -782,7 +809,13 @@ static __ref int motor_kthread(void *arg)
             dev_info(md->dev, "vdd power off\n");
             moto_drv8424_set_regulator_power(md, false);
         }
-#if 0
+		/* FIXME: determine position based on sensor data */
+		/* for now just update position with desired destination */
+		atomic_set(&md->position, atomic_read(&md->destination));
+		moto_drv8424_cmd_push(md, CMD_POSITION, 0);
+		/* this will stop polling */
+		atomic_set(&md->destination, 0);
+
 		switch (atomic_read(&md->position)) {
 		case POS_COMPACT:
 				value = STATUS_STOPPED_COMPACT;
@@ -795,12 +828,13 @@ static __ref int motor_kthread(void *arg)
 					break;
 		default: value = STATUS_UNKNOWN;
 		}
-#endif
-		value = STATUS_STOPPED;
+
 		atomic_set(&md->status, value);
-		LOGD("status %d, position %d\n",
-				atomic_read(&md->status), atomic_read(&md->position));
+		moto_drv8424_cmd_push(md, CMD_STATUS, 0);
         sysfs_notify(&md->dev->kobj, NULL, "status");
+
+		LOGD("Status updated: status %d, position %d\n",
+				atomic_read(&md->status), atomic_read(&md->position));
 		logtime_show();
     }
 
@@ -881,19 +915,51 @@ next_stage:
 }
 
 #define RESET_TIME 1000
-static void motor_fault_work(struct work_struct *work)
+static void motor_cmd_work(struct work_struct *work)
 {
-    motor_device* md = container_of(work, motor_device, motor_irq_work);
+	struct delayed_work *dw = container_of(work, struct delayed_work, work);
+    motor_device* md = container_of(dw, motor_device, motor_work);
+	bool polling = false;
+	int cmd = 0;
 
-    disable_irq(md->fault_irq);
-    if(atomic_read(&md->stepping)) {
-        disable_motor(md->dev);
-    }
-    moto_drv8424_set_power(md, 0);
-    msleep(RESET_TIME);
-    moto_drv8424_set_power(md, 1);
-    md->faulting = false;
-    enable_irq(md->fault_irq);
+	while (kfifo_get(&md->cmd_pipe, &cmd)) {
+		switch (cmd) {
+		case CMD_FAULT:
+			disable_irq(md->fault_irq);
+			if(atomic_read(&md->stepping)) {
+				disable_motor(md->dev);
+			}
+			moto_drv8424_set_power(md, 0);
+			msleep(RESET_TIME);
+			moto_drv8424_set_power(md, 1);
+			md->faulting = false;
+			enable_irq(md->fault_irq);
+				break;
+		case CMD_STATUS:
+			md->status_update_ready = true;
+			wake_up_interruptible(&md->status_wait);
+				break;
+		case CMD_POSITION:
+			md->position_update_ready = true;
+			wake_up_interruptible(&md->position_wait);
+				break;
+		case CMD_POLL:
+			if (atomic_read(&md->destination) > 0) {
+				LOGD("sensor data: %d\n", atomic_read(&md->sensor_data));
+				polling = true;
+			} else {
+				LOGD("stop polling\n");
+			}
+				break;
+		default:
+			dev_err(md->dev, "Unsupported command %d\n", cmd);
+				break;
+		}
+	}
+
+	if (polling) {
+		moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(100));
+	}
 }
 
 static irqreturn_t motor_fault_irq(int irq, void *pdata)
@@ -907,7 +973,7 @@ static irqreturn_t motor_fault_irq(int irq, void *pdata)
 #if 0
     md->faulting = true;
     dev_err(md->dev, "Motor fault irq is happened\n");
-    queue_work(md->motor_wq, &md->motor_irq_work);
+	moto_drv8424_cmd_push(md, CMD_FAULT, 0);
 #endif
     return IRQ_HANDLED;
 }
@@ -1410,6 +1476,7 @@ static const struct attribute_group * motor_attr_groups[] = {
     NULL
 };
 
+/* HAL communicates desired position through this sysfs */
 static ssize_t motor_position_store(struct device *dev, struct device_attribute *attr,
         const char *buf, size_t len)
 {
@@ -1425,11 +1492,10 @@ static ssize_t motor_position_store(struct device *dev, struct device_attribute 
     }
 
     spin_lock_irqsave(&md->mlock, flags);
-	/* cause timer to stop firing */
-	//atomic_set(&md->stepping, 0);
-	atomic_set(&md->position, value);
+	atomic_set(&md->destination, value);
     spin_unlock_irqrestore(&md->mlock, flags);
-	dev_info(md->dev, "position %s reported\n", position_labels[value]);
+	moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(200));
+	dev_info(md->dev, "expected position %s\n", position_labels[value]);
 
     return len;
 }
@@ -1438,25 +1504,56 @@ static ssize_t motor_position_show(struct device *dev, struct device_attribute *
         char *buf)
 {
     motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	int ret;
 
-    return snprintf(buf, 20, "%s", position_labels[atomic_read(&md->position)]);
+	ret = wait_event_interruptible(md->position_wait, md->position_update_ready);
+	if (ret)
+		return -EFAULT;
+	md->position_update_ready = false;
+	LOGD("Position update: %s\n", position_labels[atomic_read(&md->position)]);
+
+    return snprintf(buf, 20, "%d", atomic_read(&md->position));
 }
 
 static ssize_t motor_status_show(struct device *dev, struct device_attribute *attr,
         char *buf)
 {
     motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	int ret;
 
-    return snprintf(buf, 20, "%s", status_labels[atomic_read(&md->status)]);
+	ret = wait_event_interruptible(md->status_wait, md->status_update_ready);
+	if (ret)
+		return -EFAULT;
+	md->status_update_ready = false;
+	LOGD("Status update: %s\n", status_labels[atomic_read(&md->status)]);
+
+    return snprintf(buf, 20, "%d", atomic_read(&md->status));
 }
 
-/* sysfs for sensor HAL to report known position */
+static ssize_t motor_sensor_data_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t len)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+    int value = 0;
+
+	if(kstrtoint(buf, 10, &value)) {
+        dev_err(dev, "Error value: %s\n", buf);
+        return -EINVAL;
+    }
+	atomic_set(&md->sensor_data, value);
+
+    return len;
+}
+
+/* sysfs polled from  HAL */
 static DEVICE_ATTR(position, S_IRUGO|S_IWUSR|S_IWGRP, motor_position_show, motor_position_store);
-static DEVICE_ATTR(status, S_IRUGO|S_IWUSR|S_IWGRP, motor_status_show, NULL);
+static DEVICE_ATTR(status, S_IRUGO, motor_status_show, NULL);
+static DEVICE_ATTR(sensor_data, S_IWUSR|S_IWGRP, NULL, motor_sensor_data_store);
 
 static struct attribute *status_attributes[] = {
     &dev_attr_status.attr,
     &dev_attr_position.attr,
+    &dev_attr_sensor_data.attr,
     NULL
 };
 
@@ -1573,18 +1670,29 @@ static int moto_drv8424_probe(struct platform_device *pdev)
         dev_err(dev, "Out of memory for work queue\n");
         goto failed_mem;
     }
-    INIT_WORK(&md->motor_irq_work, motor_fault_work);
+    INIT_DELAYED_WORK(&md->motor_work, motor_cmd_work);
+	ret = kfifo_alloc(&md->cmd_pipe, sizeof(unsigned int)* 10, GFP_KERNEL);
+	if (ret) {
+        dev_err(dev, "Failed create fifo\n");
+        goto failed_work;
+	}
 
     md->user_sync_complete = false;
     init_waitqueue_head(&md->sync_complete);
-	atomic_set(&md->position, POS_UNKNOWN);
-	//atomic_set(&md->status, STATUS_STOPPED_COMPACT);
-	atomic_set(&md->status, STATUS_STOPPED);
+	md->status_update_ready = false;
+    init_waitqueue_head(&md->status_wait);
+	md->position_update_ready = false;
+    init_waitqueue_head(&md->position_wait);
+
+	/* TODO: replace static assignment with detection */
+	atomic_set(&md->position, POS_COMPACT);
+	atomic_set(&md->status, STATUS_STOPPED_COMPACT);
+
     md->motor_task = kthread_create(motor_kthread, md, "motor_task");
     if (IS_ERR(md->motor_task)) {
         ret = PTR_ERR(md->motor_task);
         dev_err(dev, "Failed create motor kthread\n");
-        goto failed_work;
+        goto failed_kfifo;
     }
 
     hrtimer_init(&md->stepping_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -1665,6 +1773,8 @@ failed_sys:
     kthread_stop(md->motor_task);
 failed_work:
     destroy_workqueue(md->motor_wq);
+failed_kfifo:
+	kfifo_free(&md->cmd_pipe);
 failed_mem:
     kfree(md);
 
@@ -1685,6 +1795,7 @@ static int moto_drv8424_remove(struct platform_device *pdev)
     disable_motor(md->dev);
     kthread_stop(md->motor_task);
     destroy_workqueue(md->motor_wq);
+	kfifo_free(&md->cmd_pipe);
     kfree(md);
 
     return 0;
@@ -1694,7 +1805,8 @@ void moto_drv8424_platform_shutdown(struct platform_device *pdev)
 {
     motor_device* md = (motor_device*)platform_get_drvdata(pdev);
 
-    if(atomic_read(&md->status) != POS_COMPACT) {
+    if(atomic_read(&md->position) != POS_COMPACT) {
+		/* FIXME: check dir, set regime and perhaps more */
         md->dir = 1;
         moto_drv8424_set_motor_dir(md);
         md->power_en = 0;
