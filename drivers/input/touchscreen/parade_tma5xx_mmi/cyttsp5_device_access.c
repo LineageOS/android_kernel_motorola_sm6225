@@ -1745,7 +1745,7 @@ start_testing:
 	if (test_item)
 		validate_cp_test_results(dev, configuration, cmcp_info,
 		result, &final_pass, test_item);
-no_builtin:
+
 	if ((dad->cmcp_test_items == CMCP_FULL)
 	&& (dad->cmcp_range_check == 0)) {
 		/*full test and full check*/
@@ -1828,10 +1828,17 @@ cmcp_not_ready:
 	index = snprintf(buf, CY_MAX_PRBUF_SIZE,
 			"Status 0\n");
 	goto cmcp_ready;
+no_builtin:
+	mutex_lock(&dad->sysfs_lock);
+	dad->test_executed = 1;
+	mutex_unlock(&dad->sysfs_lock);
+	index = snprintf(buf, CY_MAX_PRBUF_SIZE,
+			"Status 7\nNo cmcp threshold file!\n");
 cmcp_ready:
 	mutex_lock(&dad->sysfs_lock);
 	dad->cmcp_test_in_progress = 0;
 	mutex_unlock(&dad->sysfs_lock);
+	dev_info(dev, "%s: cmcp test show %s", __func__, buf);
 exit:
 	return index;
 }
