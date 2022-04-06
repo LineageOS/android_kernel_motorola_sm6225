@@ -88,6 +88,9 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_DP_DM:
 		rc = mmi_discrete_get_pulse_cnt(chip, val1);
 		break;
+	case PSY_IIO_TYPEC_ACCESSORY_MODE:
+		rc = mmi_discrete_get_typec_accessory_mode(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;

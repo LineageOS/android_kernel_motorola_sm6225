@@ -142,5 +142,6 @@ int mmi_discrete_get_qc3p_power(struct mmi_discrete_charger *chip, int *val);
 int mmi_discrete_get_pulse_cnt(struct mmi_discrete_charger *chip, int *count);
 int mmi_discrete_set_dp_dm(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_get_charger_suspend(struct mmi_discrete_charger *chip, bool *val);
+int mmi_discrete_get_typec_accessory_mode(struct mmi_discrete_charger *chip, int *val);
 
 #endif
