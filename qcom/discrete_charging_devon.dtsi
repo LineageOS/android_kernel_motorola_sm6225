@@ -94,7 +94,7 @@
 
 		sense_r_mohm = <5>;
 		factory_mode_ntc_exist = <0>;
-		df-serialnum = "SB18D38323";
+		df-serialnum = "SB18D20540";
 		#include "bat_setting/CW2217_NC50_ATL_Devon.dtsi"
 		#include "bat_setting/CW2217_NC50_SWD_Devon.dtsi"
 	};
@@ -126,7 +126,7 @@
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
 		sm,t_h_alarm_ex = <0x9245>;
-		df-serialnum = "SB18D38324";
+		df-serialnum = "SB18D20540";
 		#include "bat_setting/SM5602_NC50_ATL_Devon.dtsi"
 		#include "bat_setting/SM5602_NC50_SWD_Devon.dtsi"
 	};
@@ -397,12 +397,12 @@
 		mmi,max-fcc-ma = <4000>;
 		mmi,demo-fv-mv = <4000>;
 		mmi,otg-cl-ua = <1200000>;
-		mmi,df-serialnum = "SB18D33989";
+		mmi,df-serialnum = "SB18D20540";
 		mmi,mmi-temp-zones = <0 4200 1000 0>,
-				<10 4250 3000 1000>,
-				<15 0 3000 3000>,
-				<45 0 4000 4000>,
-				<60 4200 3000 0>;
+				<10 4250 2500 1000>,
+				<15 0 2500 2500>,
+				<45 4300 6000 4000>,
+				<60 4200 4000 0>;
 		mmi,thermal-mitigation = <4000000 3500000
 				3000000 2500000
 				2000000 1500000
@@ -465,9 +465,9 @@
 		mmi,chrg-temp-zones-num = <5>;
 		mmi,mmi-chrg-temp-zones =
 					<0 4200 1000  0 0>,
-					<10 4250 3000 4450 1000>,
-					<15 4450 3000 0 0>,
-					<45 4350 6000 4480 4000>,
+					<10 4250 2500 4450 1000>,
+					<15 4450 2500 0 0>,
+					<45 4300 6000 4480 4000>,
 					<60 4200 4000 0 0>;
 		mmi,thermal-mitigation =
 					<5800000>,
