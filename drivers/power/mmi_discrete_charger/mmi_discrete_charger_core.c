@@ -1959,6 +1959,26 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 	return 0;
 }
 
+int mmi_discrete_get_typec_accessory_mode(struct mmi_discrete_charger *chip, int *val)
+{
+	mmi_info(chip, ": %d\n", chip->typec_mode);
+
+	switch (chip->typec_mode) {
+	case MMI_POWER_SUPPLY_TYPEC_NONE:
+		*val = MMI_POWER_SUPPLY_TYPEC_ACCESSORY_NONE;
+		break;
+	case MMI_POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER:
+		*val = MMI_POWER_SUPPLY_TYPEC_ACCESSORY_AUDIO;
+		break;
+	case MMI_POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY:
+		*val = MMI_POWER_SUPPLY_TYPEC_ACCESSORY_DEBUG;
+		break;
+	default:
+		*val = -EINVAL;
+	}
+	return 0;
+}
+
 int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *total_current_ua)
 {
 	int current_ua = 0;

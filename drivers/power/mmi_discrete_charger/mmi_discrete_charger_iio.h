@@ -54,6 +54,7 @@ static const struct mmi_discrete_iio_channels mmi_discrete_iio_psy_channels[] = 
 	MMI_DISCRETE_CHAN_INDEX("termination_enabled", PSY_IIO_USB_TERMINATION_ENABLED)
 	MMI_DISCRETE_CHAN_COUNT("battery_dp_dm", PSY_IIO_DP_DM)
 	MMI_DISCRETE_CHAN_INDEX("usb_qc3p_power", PSY_IIO_MMI_QC3P_POWER)
+	MMI_DISCRETE_CHAN_INDEX("typec_accessory_mode", PSY_IIO_TYPEC_ACCESSORY_MODE)
 };
 
 int mmi_discrete_init_iio_psy(struct mmi_discrete_charger *chip,
