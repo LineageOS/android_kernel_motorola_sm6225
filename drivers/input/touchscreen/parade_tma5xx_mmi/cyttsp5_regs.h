@@ -956,6 +956,13 @@ struct cyttsp5_sensor_platform_data {
 };
 #endif
 
+enum cyttsp5_pm_mode {
+	CYTTSP5_PM_POWEROFF = 0,
+	CYTTSP5_PM_DEEPSLEEP,
+	CYTTSP5_PM_EASY_WAKEUP,
+	CYTTSP5_PM_ACTIVE,
+};
+
 struct cyttsp5_core_data {
 	struct list_head node;
 	struct list_head module_list; /* List of probed modules */
@@ -1036,6 +1043,7 @@ struct cyttsp5_core_data {
 	struct mutex tthe_lock;
 	u8 tthe_exit;
 #endif
+	enum cyttsp5_pm_mode pm_mode;
 	bool should_enable_gesture;
 #ifdef CYTTSP5_SENSOR_EN
 	struct mutex state_mutex;
