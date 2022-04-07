@@ -3873,6 +3873,10 @@ static int cyttsp5_put_device_into_easy_wakeup_(struct cyttsp5_core_data *cd)
 	if (rc || status == 0)
 		return -EBUSY;
 
+	mutex_lock(&cd->system_lock);
+	cd->pm_mode = CYTTSP5_PM_EASY_WAKEUP;
+	mutex_unlock(&cd->system_lock);
+
 	return rc;
 }
 
@@ -3883,6 +3887,12 @@ static int cyttsp5_put_device_into_deep_sleep_(struct cyttsp5_core_data *cd)
 	rc = cyttsp5_hid_cmd_set_power_(cd, HID_POWER_SLEEP);
 	if (rc)
 		rc = -EBUSY;
+	else {
+		mutex_lock(&cd->system_lock);
+		cd->pm_mode = CYTTSP5_PM_DEEPSLEEP;
+		mutex_unlock(&cd->system_lock);
+	}
+
 	return rc;
 }
 
@@ -3911,6 +3921,12 @@ static int cyttsp5_core_poweroff_device_(struct cyttsp5_core_data *cd)
 	if (rc < 0)
 		dev_err(cd->dev, "%s: HW Power down fails r=%d\n",
 				__func__, rc);
+	else {
+		mutex_lock(&cd->system_lock);
+		cd->pm_mode = CYTTSP5_PM_POWEROFF;
+		mutex_unlock(&cd->system_lock);
+	}
+
 	return rc;
 }
 
@@ -4697,15 +4713,19 @@ static int cyttsp5_core_wake_(struct cyttsp5_core_data *cd)
 	mutex_unlock(&cd->system_lock);
 
 	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture) &&
-		(cd->should_enable_gesture ==1)) {
+		(cd->should_enable_gesture ==1) &&
+		(cd->pm_mode == CYTTSP5_PM_DEEPSLEEP ||
+		cd->pm_mode == CYTTSP5_PM_EASY_WAKEUP)) {
 		rc = cyttsp5_core_wake_device_(cd);
-	} else if (cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)
+	} else if ((cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP) &&
+		(cd->pm_mode == CYTTSP5_PM_POWEROFF))
 		rc = cyttsp5_core_poweron_device_(cd);
 	else
 		rc = cyttsp5_core_wake_device_(cd);
 
 	mutex_lock(&cd->system_lock);
 	cd->sleep_state = SS_SLEEP_OFF;
+	cd->pm_mode = CYTTSP5_PM_ACTIVE;
 	mutex_unlock(&cd->system_lock);
 
 	cyttsp5_start_wd_timer(cd);
@@ -5110,6 +5130,12 @@ int cyttsp5_core_suspend(struct device *dev)
 		}
 	}
 
+	dev_info(dev, "%s: suspend power state %s \n", __func__,
+		cd->pm_mode == CYTTSP5_PM_POWEROFF ? "CYTTSP5_PM_POWEROFF" :
+		(cd->pm_mode == CYTTSP5_PM_DEEPSLEEP ? "CYTTSP5_PM_DEEPSLEEP" :
+		(cd->pm_mode == CYTTSP5_PM_EASY_WAKEUP ?   "CYTTSP5_PM_EASY_WAKEUP" :
+		(cd->pm_mode == CYTTSP5_PM_ACTIVE ? "CYTTSP5_PM_ACTIVE" : "Unknown"))));
+
 	return 0;
 }
 
@@ -5144,6 +5170,12 @@ int cyttsp5_core_resume(struct device *dev)
 	}
 exit:
 	cyttsp5_core_wake(cd);
+
+	dev_info(dev, "%s: resume power state %s \n", __func__,
+		cd->pm_mode == CYTTSP5_PM_POWEROFF ? "CYTTSP5_PM_POWEROFF" :
+		(cd->pm_mode == CYTTSP5_PM_DEEPSLEEP ? "CYTTSP5_PM_DEEPSLEEP" :
+		(cd->pm_mode == CYTTSP5_PM_EASY_WAKEUP ?   "CYTTSP5_PM_EASY_WAKEUP" :
+		(cd->pm_mode == CYTTSP5_PM_ACTIVE ? "CYTTSP5_PM_ACTIVE" : "Unknown"))));
 
 	return 0;
 }
@@ -6808,6 +6840,11 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	}
 	if (rc < 0)
 		dev_err(cd->dev, "%s: HW Init fail r=%d\n", __func__, rc);
+	else {
+		mutex_lock(&cd->system_lock);
+		cd->pm_mode = CYTTSP5_PM_ACTIVE;
+		mutex_unlock(&cd->system_lock);
+	}
 
 	/* Call platform detect function */
 	if (cd->cpdata->detect) {
