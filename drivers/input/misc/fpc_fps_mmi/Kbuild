@@ -6,7 +6,7 @@ prod_list := devon
 find_target := $(foreach find, $(prod_list), $(findstring $(find), $(TARGET_PRODUCT)))
 find_target := $(strip $(find_target))
 $(warning find_target=$(find_target))
-ifeq ($(find_target),y)
+ifneq ($(find_target),)
 $(warning define SUPPORT_PIN_CTRL)
 EXTRA_CFLAGS += -DSUPPORT_PIN_CTRL
 endif

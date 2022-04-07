@@ -205,7 +205,7 @@ static int hw_reset(struct fpc1020_data *fpc1020)
 exit:
 	return rc;
 }
-#ifdef SUPPORT_PIN_CTRl
+#ifdef SUPPORT_PIN_CTRL
 static void fpc_pinctrl_on(struct device *dev)
 {
     struct pinctrl *ptl = devm_pinctrl_get(dev);
@@ -238,7 +238,7 @@ static ssize_t hw_reset_set(struct device *dev,
 	} else if (!strncmp(buf, "poweron", strlen("poweron"))) {
 		rc = fpc1020_power_on(fpc1020);
 	}
-  #ifdef SUPPORT_PIN_CTRl
+  #ifdef SUPPORT_PIN_CTRL
   	  else if (!strncmp(buf, "pinctrl", strlen("pinctrl"))) {
 		fpc_pinctrl_on(dev);
 		pr_info("fpc IRQ after reset %d\n", gpio_get_value(fpc1020->irq_gpio));
@@ -423,7 +423,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto exit;
 	}
-  #ifdef SUPPORT_PIN_CTRl
+  #ifdef SUPPORT_PIN_CTRL
 	if(of_property_read_bool(np,"fpc_pinctrl_on")) {
             fpc_pinctrl_on(dev);
 	}
