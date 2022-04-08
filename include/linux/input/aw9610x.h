@@ -198,6 +198,9 @@ struct aw9610x {
 	int32_t vcc_3v0_Pin;
 	int32_t pwr_by_gpio;
 	uint32_t sar_num;
+#ifdef  CONFIG_USE_HARDWARE_VERSION
+        uint32_t hw_version;
+#endif
 	int32_t irq_gpio;
 	int32_t to_irq;
 	uint32_t irq_status;
