@@ -6929,9 +6929,6 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 		goto error_startup_btn;
 	}
 
-	/* Probe registered modules */
-	cyttsp5_probe_modules(cd);
-
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 	dev_info(dev, "%s:cyttsp5_ts_mmi_dev_register",__func__);
 	rc = cyttsp5_ts_mmi_dev_register(dev);
@@ -6940,6 +6937,9 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 		goto error_startup_btn;
 	}
 #endif
+
+	/* Probe registered modules */
+	cyttsp5_probe_modules(cd);
 
 #if defined (CYTTSP5_SENSOR_EN)
 	if (!initialized_sensor) {
