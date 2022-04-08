@@ -1,0 +1,16 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/rt9471_chg_mmi
+
+ifneq ($(filter m y,$(CONFIG_MMI_QC3P_TURBO_CHARGER)),)
+        EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_TURBO_CHARGER
+endif
+
+ifneq ($(filter m y,$(CONFIG_MMI_QC3P_WT6670_DETECTED)),)
+        EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_WT6670_DETECTED
+endif
+
+obj-m += rt9471_charger.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_discrete_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
