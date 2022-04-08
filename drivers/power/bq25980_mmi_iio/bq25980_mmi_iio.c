@@ -1877,7 +1877,7 @@ static ssize_t show_reg_dump(struct device *dev, struct device_attribute *attr, 
 
 	return size;
 }
-static DEVICE_ATTR(reg_dump, 0664, show_reg_dump, NULL);
+static DEVICE_ATTR(reg_dump, 0444, show_reg_dump, NULL);
 
 static ssize_t show_vbus(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1891,7 +1891,7 @@ static ssize_t show_vbus(struct device *dev, struct device_attribute *attr, char
 
 	return sprintf(buf, "%d\n", vbus);
 }
-static DEVICE_ATTR(vbus, 0664, show_vbus, NULL);
+static DEVICE_ATTR(vbus, 0444, show_vbus, NULL);
 
 static void bq25980_create_device_node(struct device *dev)
 {
