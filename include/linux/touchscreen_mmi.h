@@ -238,6 +238,7 @@ static inline unsigned long long timediff_ms(
 #define TS_MMI_MAX_CLASS_NAME_LEN	16
 #define TS_MMI_MAX_PANEL_LEN		16
 #define TS_MMI_PILL_REGION_REQ_ARGS_NUM	3
+#define TS_MMI_ACTIVE_REGION_REQ_ARGS_NUM 4
 #define TS_MMI_FW_PARAM_PATH	"/data/vendor/param/touch/"
 
 enum touch_event_mode {
@@ -352,6 +353,7 @@ enum ts_mmi_panel_event {
 	int	(*get_poison_timeout)(struct device *dev, void *idata);
 	int	(*get_poison_distance)(struct device *dev, void *idata);
 	int	(*get_poison_trigger_distance)(struct device *dev, void *idata);
+	int	(*get_active_region)(struct device *dev, void *uiadata);
 	/* SET methods */
 	int	(*reset)(struct device *dev, int type);
 	int	(*drv_irq)(struct device *dev, int state);
@@ -371,6 +373,7 @@ enum ts_mmi_panel_event {
 	int	(*poison_trigger_distance)(struct device *dev, int dis);
 	int	(*update_baseline)(struct device *dev, int enable);
 	int	(*update_fod_mode)(struct device *dev, int enable);
+	int	(*active_region)(struct device *dev, int *region_array);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -410,6 +413,7 @@ struct ts_mmi_dev_pdata {
 	bool		gs_distance_ctrl;
 	bool		hold_grip_ctrl;
 	bool		poison_slot_ctrl;
+	bool		active_region_ctrl;
 	int		max_x;
 	int		max_y;
 	int		fod_x;
@@ -493,6 +497,7 @@ struct ts_mmi_dev {
 	int			flashprog;
 	int			suppression;
 	unsigned int		pill_region[TS_MMI_PILL_REGION_REQ_ARGS_NUM];
+	unsigned int		active_region[TS_MMI_ACTIVE_REGION_REQ_ARGS_NUM];
 	int			hold_distance;
 	int			gs_distance;
 	int			hold_grip;

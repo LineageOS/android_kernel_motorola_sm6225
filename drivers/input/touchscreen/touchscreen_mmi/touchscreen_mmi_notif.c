@@ -234,6 +234,8 @@ static inline void ts_mmi_restore_settings(struct ts_mmi_dev *touch_cdev)
 		TRY_TO_CALL(hold_distance, (int)touch_cdev->hold_distance);
 	if (touch_cdev->pdata.gs_distance_ctrl)
 		TRY_TO_CALL(gs_distance, (int)touch_cdev->gs_distance);
+	if (touch_cdev->pdata.active_region_ctrl)
+		TRY_TO_CALL(active_region, (unsigned int *)touch_cdev->active_region);
 
 	dev_dbg(DEV_MMI, "%s: done\n", __func__);
 }

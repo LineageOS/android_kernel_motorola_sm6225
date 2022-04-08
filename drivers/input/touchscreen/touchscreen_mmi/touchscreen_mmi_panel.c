@@ -110,6 +110,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->pill_region_ctrl = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,active-region-control")) {
+		dev_info(DEV_TS, "%s: using active region\n", __func__);
+		ppdata->active_region_ctrl = true;
+	}
+
 	if (of_property_read_bool(of_node, "mmi,hold-distance-control")) {
 		dev_info(DEV_TS, "%s: using hold distance\n", __func__);
 		ppdata->hold_distance_ctrl = true;
