@@ -160,6 +160,12 @@ static struct page *addr_to_page(void *addr)
 		return virt_to_page(addr);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+#define NR_BIO_MAX_PAGES BIO_MAX_VECS
+#else
+#define NR_BIO_MAX_PAGES BIO_MAX_PAGES
+#endif
+
 static int utags_submit_bio(struct block_device *bdev, void *buf, int pages, int opf)
 {
 	int i, ret;
@@ -168,7 +174,7 @@ static int utags_submit_bio(struct block_device *bdev, void *buf, int pages, int
 
 	pr_debug("%s: pages %d left_pages %d begin\n", __func__, pages, left_pages);
 	while (left_pages > 0) {
-		num = (left_pages >= BIO_MAX_PAGES) ? BIO_MAX_PAGES : left_pages;
+		num = (left_pages >= NR_BIO_MAX_PAGES) ? NR_BIO_MAX_PAGES : left_pages;
 
 		bio = bio_alloc(GFP_KERNEL, num);
 		if (!bio)
@@ -1261,12 +1267,13 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 	size_t tags_size;
 	char *datap = NULL;
 	int rc = 0;
-	mm_segment_t fs;
-	struct file *fp;
 	struct blkdev *cb = &ctrl->main;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+	mm_segment_t fs;
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 
 	pr_debug("[%s] utags partition blk_sz=%zu\n", ctrl->dir_name, cb->size);
 
@@ -1280,7 +1287,6 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 		rc = -EIO;
 		goto err_free;
 	}
-	fp = cb->filep;
 
 	written = kernel_write_stub(cb, datap, tags_size);
 	if (written < tags_size) {
@@ -1296,7 +1302,6 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 			rc = -EIO;
 			goto err_free;
 		}
-		fp = cb->filep;
 
 		written = kernel_write_stub(cb, datap, tags_size);
 		if (written < tags_size) {
@@ -1309,7 +1314,9 @@ static int store_utags(struct ctrl *ctrl, struct utag *tags)
 err_free:
 	vfree(datap);
 out:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	set_fs(fs);
+#endif
 	return rc;
 }
 
