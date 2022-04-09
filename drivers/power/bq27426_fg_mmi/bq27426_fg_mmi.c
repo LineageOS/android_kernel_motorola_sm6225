@@ -226,7 +226,7 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef ATL_NM40_712MAH_BATTERY_PROFILE
-	{.batt_type_str = "NM40_ATL_712MAH", .bqfs_image = li_alt_flip_bqfs_image, .array_size = ARRAY_SIZE(li_alt_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 5},
+	{.batt_type_str = "NM40_ATL_712MAH", .bqfs_image = li_alt_flip_bqfs_image, .array_size = ARRAY_SIZE(li_alt_flip_bqfs_image), .chem_id = 0x5725, .dm_ver = 0},
 #endif
 
 };
