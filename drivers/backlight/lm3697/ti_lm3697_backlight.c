@@ -179,6 +179,14 @@ int ti_hbm_set(enum backlight_hbm_mode hbm_mode)
 		regmap_write(regmap, 0x18, 0x1C);//27.4mA
 		pr_err("This is hbm mode 3\n");
 		break;
+	case HBM_MODE_LEVEL3:
+		regmap_write(regmap, 0x18, 0x17);//23.4mA
+		pr_err("This is hbm mode 4\n");
+		break;
+	case HBM_MODE_LEVEL4:
+		regmap_write(regmap, 0x18, 0x18);//24.2mA
+		pr_err("This is hbm mode 5\n");
+		break;
 	default:
 		pr_err("This isn't hbm mode\n");
 		break;
