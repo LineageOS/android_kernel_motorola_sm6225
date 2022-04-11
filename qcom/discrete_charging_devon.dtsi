@@ -211,7 +211,8 @@
                                 <&mmi_chrg PSY_IIO_QC3P_START_POLICY>,
 				<&wt6670 PSY_IIO_START_BC12_DETECTION>,
 				<&wt6670 PSY_IIO_DETECTION_BC12_READY>,
-				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>;
+				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>,
+				<&wt6670 PSY_IIO_BC12_CHG_TYPE>;
 
                 io-channel-names = "gpio3_div3",
 				   "wt6670_usb_real_type",
@@ -221,7 +222,8 @@
 				   "qc3p_start_policy",
 				   "wt6670_start_bc12_detection",
 				   "wt6670_detection_bc12_ready",
-				   "read_usbin_voltage";
+				   "read_usbin_voltage",
+				   "wt6670_bc12_chg_type";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
