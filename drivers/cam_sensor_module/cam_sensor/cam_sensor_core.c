@@ -613,6 +613,10 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
+#ifdef CONFIG_CAM_SENSOR_PROBE_RETRY
+	int retries = 5;
+	bool matched = false;
+#endif
 	uint32_t chipid = 0;
 	struct cam_camera_slave_info *slave_info;
 
@@ -623,7 +627,28 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 			 slave_info);
 		return -EINVAL;
 	}
+#ifdef CONFIG_CAM_SENSOR_PROBE_RETRY
+	while (retries-- && !matched) {
+		rc = camera_io_dev_read(
+			&(s_ctrl->io_master_info),
+			slave_info->sensor_id_reg_addr,
+			&chipid,
+			s_ctrl->sensor_probe_addr_type,
+			s_ctrl->sensor_probe_data_type);
 
+		CAM_INFO(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
+			chipid, slave_info->sensor_id);
+
+		if (cam_sensor_id_by_mask(s_ctrl, chipid) == slave_info->sensor_id)
+			matched = true;
+
+		if (!matched && !retries) {
+			CAM_ERR(CAM_SENSOR, "Failed read id: 0x%x expected id 0x%x:",
+			chipid, slave_info->sensor_id);
+
+		}
+	}
+#else
 	rc = camera_io_dev_read(
 		&(s_ctrl->io_master_info),
 		slave_info->sensor_id_reg_addr,
@@ -639,6 +664,7 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 				chipid, slave_info->sensor_id);
 		return -ENODEV;
 	}
+#endif
 	return rc;
 }
 
