@@ -88,6 +88,7 @@
 #define SGM4154x_PN_41516_ID    (BIT(6)| BIT(5))
 #define SGM4154x_PN_41542_ID    (BIT(6)| BIT(5)| BIT(3))
 #define SGM4154x_PN_41516D_ID   (BIT(6)| BIT(5)| BIT(3))
+#define SGM4154x_PN_41543D_ID   (BIT(6)| BIT(3))
 #define SGM4154x_PN_41513_ID    0
 
 /* WDT TIMER SET  */
