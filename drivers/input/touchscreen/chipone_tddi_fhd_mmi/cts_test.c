@@ -999,7 +999,7 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
 		return -EINVAL;
 	}
 
-	num_nodes = cts_dev->fwdata.rows * cts_dev->fwdata.cols;
+	num_nodes = cts_dev->hwdata->num_row * cts_dev->hwdata->num_col;
 	tsdata_frame_size = 2 * num_nodes;
 
 	driver_validate_data = !!(param->flags & CTS_TEST_FLAG_VALIDATE_DATA);
@@ -1368,7 +1368,7 @@ int cts_test_open(struct cts_device *cts_dev, struct cts_test_param *param)
 		return -EINVAL;
 	}
 
-	num_nodes = cts_dev->fwdata.rows * cts_dev->fwdata.cols;
+	num_nodes = cts_dev->hwdata->num_row * cts_dev->hwdata->num_col;
 	tsdata_frame_size = 2 * num_nodes;
 
 	driver_validate_data = !!(param->flags & CTS_TEST_FLAG_VALIDATE_DATA);
@@ -1566,7 +1566,7 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
 		return -EINVAL;
 	}
 
-	num_nodes = cts_dev->fwdata.rows * cts_dev->fwdata.cols;
+	num_nodes = cts_dev->hwdata->num_row * cts_dev->hwdata->num_col;
 	tsdata_frame_size = 2 * num_nodes;
 
 	driver_validate_data = !!(param->flags & CTS_TEST_FLAG_VALIDATE_DATA);
