@@ -1416,10 +1416,12 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 	if (gpio_is_valid(bq->wls_en_gpio))
 	{
 		ret = gpio_request(bq->wls_en_gpio, "mmi wls en pin");
-		if (ret)
+		if (ret) {
 			dev_err(bq->dev, "%s: %d gpio(wls en) request failed\n", __func__, bq->wls_en_gpio);
-		else
-			gpio_direction_output(bq->wls_en_gpio, 0);//default enable wls charge
+			return ret;
+		}
+
+		gpio_direction_output(bq->wls_en_gpio, 0);//default enable wls charge
 	}
 
 	ret = of_property_read_u32(np, "ti,bq2589x,vbus-volt-high-level", &pe.high_volt_level);

@@ -2495,10 +2495,12 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	if (gpio_is_valid(sgm->wls_en_gpio))
 	{
 		ret = gpio_request(sgm->wls_en_gpio, "mmi wls en pin");
-		if (ret)
+		if (ret) {
 			dev_err(sgm->dev, "%s: %d gpio(wls en) request failed\n", __func__, sgm->wls_en_gpio);
-		else
-			gpio_direction_output(sgm->wls_en_gpio, 0);//default enable wls charge
+			return ret;
+		}
+
+		gpio_direction_output(sgm->wls_en_gpio, 0);//default enable wls charge
 	}
 
 	/* sw jeita */
