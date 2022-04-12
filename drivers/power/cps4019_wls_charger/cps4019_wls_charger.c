@@ -153,8 +153,8 @@ typedef struct
 cps_reg_s cps_reg_cfg[CPS_REG_MAX] = {
 	/* reg name			bytes number		reg address	*/
 	{CPS_REG_CHIP_ID,		2,			0x0000},
-	{CPS_REG_FW_MAJOR_REV,		2,			0x0004},
-	{CPS_REG_FW_MINOR_REV,		2,			0x0006},
+	{CPS_REG_FW_MAJOR_REV,		2,			0x0002},
+	{CPS_REG_FW_MINOR_REV,		2,			0x0004},
 	{CPS_REG_INT,			2,			0x0022},
 	{CPS_REG_INT_ENABLE,		2,			0x0024},
 	{CPS_REG_INT_CLEAR,		2,			0x0026},
