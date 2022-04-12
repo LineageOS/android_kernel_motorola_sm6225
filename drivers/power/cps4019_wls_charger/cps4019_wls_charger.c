@@ -49,6 +49,7 @@
 #endif
 
 #include "cps4019_wls_charger.h"
+#include "cps4019_bl.h"
 
 //namespace VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver;
 
@@ -126,9 +127,11 @@ struct cps_wls_chrg_chip {
 	int rx_neg_power;
 	int rx_neg_protocol;
 	int command_flag;
+
+	bool use_bl_in_h;
 };
 
-struct cps_wls_chrg_chip *chip = NULL;
+static struct cps_wls_chrg_chip *chip = NULL;
 
 /*define cps rx reg enum*/
 typedef enum
@@ -605,22 +608,30 @@ static int bootloader_load(unsigned char *bootloader, int *bootloader_length)
 	char *buf = NULL;
 	int size = 0;
 
-	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
-	size = cps_file_read(BOOTLOADER_FILE_NAME, &buf);
-	if (size > 0) {
-		if (bootloader == NULL) {
-			kfree(buf);
-			pr_err("cps4019 file alloc error.\n");
-			return -EINVAL;
-		}
+	cps_wls_log(CPS_LOG_DEBG,"%s use h file %d\n",__func__, chip->use_bl_in_h);
 
-		if(file_parse(buf, size, bootloader, bootloader_length) == NULL) {
+	if (chip->use_bl_in_h) {
+		memcpy(bootloader, CPS4019_BL, CPS4019_BL_SIZE);
+		*bootloader_length = CPS4019_BL_SIZE;
+	} else {
+		size = cps_file_read(BOOTLOADER_FILE_NAME, &buf);
+		if (size > 0) {
+			if (bootloader == NULL) {
+				pr_err("cps4019 file alloc error.\n");
+				kfree(buf);
+				return -EINVAL;
+			}
+
+			if(file_parse(buf, size, bootloader, bootloader_length) == NULL) {
+				pr_err("cps4019 file parse error\n");
+				kfree(buf);
+				return -EINVAL;
+			}
+
 			kfree(buf);
-			pr_err("cps4019 file parse error\n");
-			return -EINVAL;
 		}
-		kfree(buf);
 	}
+
 	cps_wls_log(CPS_LOG_DEBG,"cps_[%s] bootloader_length=%d\n", __func__, *bootloader_length);
 
 	return 0;
@@ -1256,6 +1267,9 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 	chip->wls_charge_int = of_get_named_gpio(node, "cps_wls_int", 0);
 	if(!gpio_is_valid(chip->wls_charge_int))
 		return -EINVAL;
+
+	chip->use_bl_in_h = of_property_read_bool(node, "use_bl_in_h");
+
 	return 0;
 }
 
@@ -1352,12 +1366,11 @@ static int cps_wls_register_psy(struct cps_wls_chrg_chip *chip)
 	return CPS_WLS_SUCCESS;
 }
 
-
 static int cps_wls_chrg_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	int ret=0;
-	cps_wls_log(CPS_LOG_ERR, "[%s] ---->start\n", __func__);
+
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip) {
 		cps_wls_log(CPS_LOG_ERR,"[%s] cps_debug: Unable to allocate memory\n", __func__);
