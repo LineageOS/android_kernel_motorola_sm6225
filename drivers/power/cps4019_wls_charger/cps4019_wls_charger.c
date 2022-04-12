@@ -49,6 +49,8 @@
 #include <linux/mmi_wake_lock.h>
 #endif
 
+#include <soc/qcom/mmi_boot_info.h>
+
 #include "cps4019_wls_charger.h"
 #include "cps4019_bl.h"
 
