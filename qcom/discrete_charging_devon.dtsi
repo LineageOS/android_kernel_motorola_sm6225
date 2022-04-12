@@ -135,6 +135,67 @@
 &qupv3_se1_i2c {
 	status = "okay";
 
+	rt-swchg@53 {
+		compatible = "richtek,swchg";
+		reg = <0x53>;
+		status = "okay";
+
+		rt,intr_gpio = <&tlmm 96 0x0>; /* GPIO */
+		rt,intr_gpio_num = <96>; /* direct defined GPIO num */
+
+		#io-channel-cells = <1>;
+                io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+                                <&wt6670 PSY_IIO_QC3P_POWER>,
+                                <&wt6670 PSY_IIO_START_DETECTION>,
+                                <&wt6670 PSY_IIO_DETECTION_READY>,
+                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>,
+				<&wt6670 PSY_IIO_START_BC12_DETECTION>,
+				<&wt6670 PSY_IIO_DETECTION_BC12_READY>,
+				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>;
+
+                io-channel-names = "gpio3_div3",
+				   "wt6670_usb_real_type",
+                                   "wt6670_usb_qc3p_power",
+                                   "wt6670_start_detection",
+				   "wt6670_detection_ready",
+				   "qc3p_start_policy",
+				   "wt6670_start_bc12_detection",
+				   "wt6670_detection_bc12_ready",
+				   "read_usbin_voltage";
+
+		dpdm-supply = <&usb2_phy0>;
+		mmi,qc3-support;
+
+		rt9471 {
+			chg_name = "primary_chg";
+			chg_alias_name = "rt9471_chg";
+			rm-dev-addr = /bits/ 8 <0x53>;
+			rm-name = "rt9471";
+			interrupt-names = "wdt", "chg_mivr", "vbus_gd",
+					  "bc12_done", "detach", "vac_ov",
+					  "otg_fault", "chg_rdy", "chg_done",
+					  "aicc_done", "pe_done", "chg_tout",
+					  "rechg", "chg_batov";
+			vac_ovp = <14000000>;		/* uV */
+			mivr = <4500000>;		/* uV */
+			aicr = <500000>;		/* uA */
+			cv = <4450000>;			/* uV */
+			ichg = <1000000>;		/* uA */
+			ieoc = <243000>;		/* uA */
+			safe_tmr = <10>;		/* hour */
+			wdt = <0>;			/* sec */
+			mivr_track = <0>;
+			/* en_safe_tmr; */
+			en_te;
+			/* en_jeita; */
+			/* ceb_invert; */
+			/* dis_i2c_tout; */
+			en_qon_rst;
+			/* auto_aicr; */
+		};
+	};
+
 	sgm4154x: sgm4154x@1A {
 		status = "okay";
 		compatible = "sgm,sgm41513";
