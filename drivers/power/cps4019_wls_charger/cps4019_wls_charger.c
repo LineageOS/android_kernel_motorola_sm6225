@@ -39,6 +39,7 @@
 #include <linux/types.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/iio/consumer.h>
 
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
@@ -68,6 +69,9 @@
 
 #define ENABLE_CPS_LOG CPS_LOG_FULL
 
+#define CPS4019_CHIP_ID 	0x4019
+#define CPS4019_WORK_VOL 	2700000 //mV
+
 #define cps_wls_log(num, fmt, args...) \
 	do { \
 			if (ENABLE_CPS_LOG >= (int)num) \
@@ -93,6 +97,7 @@ struct cps_wls_chrg_chip {
 	struct pinctrl *cps_pinctrl;
 	struct pinctrl_state *cps_gpio_active;
 	struct pinctrl_state *cps_gpio_suspend;
+	struct iio_channel *otg_channel;
 
 	#ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock cps_wls_wake_lock;
@@ -177,6 +182,17 @@ static const struct regmap_config cps4019_regmap_32bit_config = {
 	.val_bits = 8,
 };
 
+static int cps_wls_get_int_flag(void);
+static int cps_wls_set_int_clr(int value);
+static int cps_wls_get_chip_id(void);
+static int cps_wls_get_sys_fw_major_version(void);
+static int cps_wls_get_sys_fw_minor_version(void);
+static int cps_wls_get_vrect(void);
+static int cps_wls_get_iout(void);
+static int cps_wls_get_vout(void);
+static int cps_wls_get_die_tmp(void);
+static int cps_wls_set_rx_vout_target(int value);
+static int cps_wls_set_rx_ocp_threshold(int value);
 
 static int cps_wls_read_word_addr32(int reg)
 {
@@ -385,6 +401,102 @@ static int cps_wls_program_wait_cmd_done(void)
 		}
 		if(wait_time_out < 0)
 			return CPS_WLS_FAIL;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+static bool cps_check_chip_id(void)
+{
+	int id = cps_wls_get_chip_id();
+
+	cps_wls_log(CPS_LOG_DEBG, "[%s] chip id 0x%x\n", __func__, id);
+
+	return ((id == CPS4019_CHIP_ID) || (id == -1)) ? TRUE : FALSE;
+}
+
+static void cps_wls_pm_set_awake(int awake)
+{
+
+	cps_wls_log(CPS_LOG_DEBG,"%s lock %d wak %d\n", __func__, chip->cps_wls_wake_lock->active, awake);
+
+	if(!chip->cps_wls_wake_lock->active && awake) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock(chip->cps_wls_wake_lock);
+#else
+		__pm_stay_awake(chip->cps_wls_wake_lock);
+#endif
+	} else if(chip->cps_wls_wake_lock->active && !awake) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_unlock(chip->cps_wls_wake_lock);
+#else
+		__pm_relax(chip->cps_wls_wake_lock);
+#endif
+	}
+}
+
+static int cps_mux_switch(bool on)
+{
+	cps_wls_log(CPS_LOG_DEBG,"%s set mux = %d\n", __func__, on);
+
+	if (!chip->otg_channel) {
+		cps_wls_log(CPS_LOG_ERR,"%s otg iio dev exist\n", __func__);
+		return CPS_WLS_FAIL;
+	}
+
+	iio_write_channel_raw(chip->otg_channel, !!on);
+
+	return CPS_WLS_SUCCESS;
+}
+
+static int cps_check_power(bool *en)
+{
+	static struct power_supply *chg_psy = NULL;
+	union power_supply_propval data;
+
+	if (!chg_psy) {
+		chg_psy = power_supply_get_by_name("charger");
+		if (!chg_psy || IS_ERR(chg_psy)) {
+			cps_wls_log(CPS_LOG_ERR,"%s Couldn't get chg_psy\n",__func__);
+			*en = true;
+			return CPS_WLS_FAIL;
+		}
+	}
+
+	power_supply_get_property(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &data);
+	if (data.intval > CPS4019_WORK_VOL) {
+		cps_wls_log(CPS_LOG_ERR,"%s chg vol %d. Do not need to set power\n",
+				__func__, data.intval);
+		*en = false;
+	} else {
+		*en = true;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+static int cps_set_power(bool en)
+{
+	static bool flag = false;
+
+	/*only work in enable*/
+	if (en)
+		cps_check_power(&flag);
+
+	cps_wls_pm_set_awake(!!en);
+
+	/*only work when check power result is true*/
+	if (flag) {
+		if (cps_mux_switch(!!en)) {
+			cps_wls_pm_set_awake(false);
+			return CPS_WLS_FAIL;
+		}
+
+		/*wait 50ms for vbus boost stable*/
+		msleep(50);
+
+		if (!en)
+			flag = false;
 	}
 
 	return CPS_WLS_SUCCESS;
