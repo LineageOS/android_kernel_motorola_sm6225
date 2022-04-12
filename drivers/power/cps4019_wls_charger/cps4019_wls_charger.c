@@ -673,7 +673,17 @@ static int update_firmware(void)
 	int result;
 	int *p_convert;
 
-	bootloader_buf = kzalloc(0x800, GFP_KERNEL);// 2K buffer
+	if (cps_set_power(true)) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] en power fail!!\n", __func__);
+		goto update_fail;
+	}
+
+	if (cps_check_chip_id()) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] fw is exist OR chip do not exist. Skip!!\n", __func__);
+		goto update_fail;
+	}
+
+	bootloader_buf = kzalloc(CPS4019_BL_SIZE, GFP_KERNEL);// 2K buffer
 	firmware_buf = kzalloc(0x4000, GFP_KERNEL);// 16K buffer
 
 /***************************************************************************************
@@ -854,14 +864,19 @@ start_write_app_code:
 		goto update_fail;
 	}
 
+	cps_set_power(false);
+
 	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- Program successful CHIP ID=0x%04x\n", __func__, chip_id);
 
 	return CPS_WLS_SUCCESS;
 
 update_fail:
+	cps_set_power(false);
 	cps_wls_log(CPS_LOG_ERR, "[%s] ---- update fail\n", __func__);
+
 	return CPS_WLS_FAIL;
 }
+
 //-------------------CPS4019 system interface-------------------
 static int cps_wls_get_int_flag(void)
 {
@@ -1419,6 +1434,13 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 
 	cps_wls_create_device_node(&(client->dev));
 
+	chip->otg_channel = devm_iio_channel_get(chip->dev, "otg_enable");
+	if (IS_ERR(chip->otg_channel)) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] get otg iio dev failed. Waiting for retry\n", __func__);
+		ret = -1;//EPROBE_DEFER;
+		goto free_source;
+	}
+
 	ret = cps_wls_register_psy(chip);
 	if(IS_ERR(chip->wl_psy)) {
 		cps_wls_log(CPS_LOG_ERR, "[%s] power_supply_register wireless failed , ret = %d\n", __func__, ret);
@@ -1428,13 +1450,14 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 	cps_wls_log(CPS_LOG_DEBG,"cps_wls_get_chip_id 0x%04X\n",cps_wls_get_chip_id() );
 
 	//wake_lock(&chip->cps_wls_wake_lock);
-
 	cps_wls_log(CPS_LOG_DEBG, "[%s] wireless charger addr low probe successful!\n", __func__);
+
 	return ret;
 
 free_source:
 	cps_wls_free_gpio(chip);
 	cps_wls_lock_destroy(chip);
+	kfree(chip);
 	cps_wls_log(CPS_LOG_ERR, "[%s] error: free resource.\n", __func__);
 
 	return ret;
