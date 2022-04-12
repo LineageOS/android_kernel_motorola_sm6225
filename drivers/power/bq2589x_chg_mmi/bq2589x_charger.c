@@ -147,6 +147,7 @@ struct bq2589x {
 	int		vbat_volt;
 	int		rsoc;
 	int		chg_en_gpio;
+	int		wls_en_gpio;
 
 	const char *chg_dev_name;
 
@@ -590,6 +591,11 @@ void bq2589x_set_otg(struct bq2589x *bq, int enable)
 	int ret;
 
 	if (enable) {
+		/*disable wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 1);
+		}
+
 		ret = bq2589x_enable_otg(bq);
 		if (ret < 0) {
 			dev_err(bq->dev, "%s:Failed to enable otg-%d\n", __func__, ret);
@@ -599,6 +605,11 @@ void bq2589x_set_otg(struct bq2589x *bq, int enable)
 		ret = bq2589x_disable_otg(bq);
 		if (ret < 0)
 			dev_err(bq->dev, "%s:Failed to disable otg-%d\n", __func__, ret);
+
+		/*resume wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 0);
+		}
 	}
 }
 
@@ -1398,6 +1409,17 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 			return ret;
 		}
 		gpio_direction_output(bq->chg_en_gpio,0);//default enable charge
+	}
+
+	/*wls outout en control*/
+	bq->wls_en_gpio = of_get_named_gpio(bq->dev->of_node, "mmi,wls-en-gpio", 0);
+	if (gpio_is_valid(bq->wls_en_gpio))
+	{
+		ret = gpio_request(bq->wls_en_gpio, "mmi wls en pin");
+		if (ret)
+			dev_err(bq->dev, "%s: %d gpio(wls en) request failed\n", __func__, bq->wls_en_gpio);
+		else
+			gpio_direction_output(bq->wls_en_gpio, 0);//default enable wls charge
 	}
 
 	ret = of_property_read_u32(np, "ti,bq2589x,vbus-volt-high-level", &pe.high_volt_level);
@@ -2650,20 +2672,32 @@ static int bq2589x_set_otg_enable(struct charger_device *chg_dev, bool enable)
 	int ret = 0;
 
 	if (enable) {
+		/*disable wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 1);
+		}
+
 	        if (bq->part_no == SC89890H) {
                         ret = bq2589x_disable_charger(bq);
                 }
 		val = BQ2589X_OTG_ENABLE << BQ2589X_OTG_CONFIG_SHIFT;
+		ret = bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
 	}
 	else {
 		val = BQ2589X_OTG_DISABLE << BQ2589X_OTG_CONFIG_SHIFT;
 		if (bq->part_no == SC89890H) {
                         ret = bq2589x_enable_charger(bq);
                 }
+		ret = bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
+
+		/*resume wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 0);
+		}
 	}
 	dev_info(bq->dev, "%s: %s otg\n", __func__, enable ? "enable" : "disable");
 
-	return bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
+	return ret;
 }
 
 static int bq2589x_set_boost_current_limit(struct charger_device *chg_dev, u32 uA)
