@@ -37,7 +37,8 @@
 #define N_SPI_MINORS 32	  /* ... up to 256 */
 
 #define EGIS_DEV_NAME "esfp0"
-#define EGIS_INPUT_NAME "egis_fp" /*"egis_fp" */
+//#define EGIS_INPUT_NAME "egis_fp" /*"egis_fp" */
+#define EGIS_INPUT_NAME "uinput-egis" /*"uinput-egis" */
 
 #define EGIS_CHRD_DRIVER_NAME "egis_fp"
 #define EGIS_CLASS_NAME "egis_fp"
@@ -102,7 +103,8 @@
 #define EGIS_NAV_INPUT_LEFT KEY_LEFT
 #define EGIS_NAV_INPUT_RIGHT KEY_RIGHT
 #define EGIS_NAV_INPUT_CLICK KEY_PAGEUP
-#define EGIS_NAV_INPUT_DOUBLE_CLICK KEY_PAGEDOWN
+//#define EGIS_NAV_INPUT_DOUBLE_CLICK KEY_PAGEDOWN
+#define EGIS_NAV_INPUT_DOUBLE_CLICK 622
 #define EGIS_NAV_INPUT_LONG_PRESS KEY_HOME
 #define EGIS_NAV_INPUT_FINGER_DOWN 254
 #define EGIS_NAV_INPUT_FINGER_UP KEY_MENU
