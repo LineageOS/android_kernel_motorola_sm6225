@@ -143,6 +143,7 @@ typedef enum
 	CPS_REG_CHIP_ID,
 	CPS_REG_FW_MAJOR_REV,
 	CPS_REG_FW_MINOR_REV,
+	CPS_REG_STATUS,
 	CPS_REG_INT,
 	CPS_REG_INT_ENABLE,
 	CPS_REG_INT_CLEAR,
@@ -167,6 +168,7 @@ cps_reg_s cps_reg_cfg[CPS_REG_MAX] = {
 	{CPS_REG_CHIP_ID,		2,			0x0000},
 	{CPS_REG_FW_MAJOR_REV,		2,			0x0002},
 	{CPS_REG_FW_MINOR_REV,		2,			0x0004},
+	{CPS_REG_STATUS,		2,			0x0007},
 	{CPS_REG_INT,			2,			0x0022},
 	{CPS_REG_INT_ENABLE,		2,			0x0024},
 	{CPS_REG_INT_CLEAR,		2,			0x0026},
@@ -984,6 +986,19 @@ static int cps_wls_get_vout(void)
 	return cps_wls_read_reg((int)cps_reg->reg_addr, (int)cps_reg->reg_bytes_len);
 }
 
+static int cps_wls_get_state(void)
+{
+	cps_reg_s *cps_reg;
+
+	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_STATUS]);
+	return cps_wls_read_reg(cps_reg->reg_addr, (int)cps_reg->reg_bytes_len);
+}
+
+static bool cps_wls_get_vout_state(void)
+{
+	return !!(cps_wls_get_state() & (1<<6));
+}
+
 static int cps_wls_get_die_tmp(void)
 {
 	cps_reg_s *cps_reg;
@@ -1125,7 +1140,7 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 	int ret = 0;
 	switch(psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
-			val->intval = 0;
+			val->intval = cps_wls_get_vout_state();
 			break;
 /*
 		case POWER_SUPPLY_PROP_VRECT:
