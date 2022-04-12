@@ -383,6 +383,9 @@ struct sgm4154x_device {
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;
 #endif
+
+	/*wls output en/dis control*/
+	int			wls_en_gpio;
 };
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED

@@ -2489,6 +2489,18 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		}
 		gpio_direction_output(chg_en_gpio,0);//default enable charge
 	}
+
+	/*wls outout en control*/
+	sgm->wls_en_gpio = of_get_named_gpio(sgm->dev->of_node, "mmi,wls-en-gpio", 0);
+	if (gpio_is_valid(sgm->wls_en_gpio))
+	{
+		ret = gpio_request(sgm->wls_en_gpio, "mmi wls en pin");
+		if (ret)
+			dev_err(sgm->dev, "%s: %d gpio(wls en) request failed\n", __func__, sgm->wls_en_gpio);
+		else
+			gpio_direction_output(sgm->wls_en_gpio, 0);//default enable wls charge
+	}
+
 	/* sw jeita */
 	sgm->enable_sw_jeita = of_property_read_bool(sgm->dev->of_node, "enable_sw_jeita");
 	/* enable dynamic adjust battery voltage */
@@ -2656,6 +2668,12 @@ static int sgm4154x_enable_vbus(struct regulator_dev *rdev)
 	struct sgm4154x_device *sgm = rdev_get_drvdata(rdev);
 	int ret = 0;
 
+	/*disable wls output*/
+	if (gpio_is_valid(sgm->wls_en_gpio)) {
+		pr_err("%s,set wls en\n",__func__);
+		gpio_direction_output(sgm->wls_en_gpio, 1);
+	}
+
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_1, SGM4154x_OTG_EN,
                      SGM4154x_OTG_EN);
 	return ret;
@@ -2668,6 +2686,12 @@ static int sgm4154x_disable_vbus(struct regulator_dev *rdev)
 
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_1, SGM4154x_OTG_EN,
                      0);
+
+	/*resume wls output*/
+	if (gpio_is_valid(sgm->wls_en_gpio)) {
+		pr_err("%s,set wls dis\n",__func__);
+		gpio_direction_output(sgm->wls_en_gpio, 0);
+	}
 
 	return ret;
 }
