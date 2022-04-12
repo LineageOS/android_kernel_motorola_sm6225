@@ -39,6 +39,7 @@
 #include <linux/types.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/firmware.h>
 #include <linux/iio/consumer.h>
 
 #ifdef CONFIG_HAS_WAKELOCK
@@ -128,6 +129,7 @@ struct cps_wls_chrg_chip {
 	int rx_neg_protocol;
 	int command_flag;
 
+	const char *wls_fw_name;
 	bool use_bl_in_h;
 };
 
@@ -505,6 +507,37 @@ static int cps_set_power(bool en)
 	return CPS_WLS_SUCCESS;
 }
 
+static bool mmi_is_factory_mode(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
+
+	if (!strncmp(bi_bootmode(), "mot-factory", 11))
+		return true;
+
+	if (!np)
+		return factory_mode;
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
+	of_node_put(np);
+
+	return factory_mode;
+}
+
 static int fp_size(struct file *f)
 {
 	int error = -EBADF;
@@ -641,9 +674,24 @@ static int firmware_load(unsigned char *firmeware, int *firmeware_length)
 {
 	char *buf = NULL;
 	int size = 0;
+	int ret;
+	const struct firmware *fw;
 
-	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
-	size = cps_file_read(FIRMWARE_FILE_NAME, &buf);
+	if (chip->wls_fw_name) {
+		ret = request_firmware(&fw, chip->wls_fw_name, chip->dev);
+		if (ret || fw->size <=0 ) {
+			cps_wls_log(CPS_LOG_ERR,"Couldn't get firmware  rc=%d\n", ret);
+			return -EINVAL;
+		}
+
+		size =  fw->size;
+		buf = kzalloc(size+1, GFP_KERNEL);  // 18K buffer
+		memset(buf, 0, size+1);
+		memcpy(buf, fw->data, size);
+	} else {
+		size = cps_file_read(FIRMWARE_FILE_NAME, &buf);
+	}
+
 	if (size > 0) {
 		if (firmeware == NULL) {
 			kfree(buf);
@@ -1280,11 +1328,19 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 	}
 
 	chip->wls_charge_int = of_get_named_gpio(node, "cps_wls_int", 0);
-	if(!gpio_is_valid(chip->wls_charge_int))
+	if(!gpio_is_valid(chip->wls_charge_int)) {
+		cps_wls_log(CPS_LOG_ERR, "wls_charge_int is not valid %d\n",chip->wls_charge_int );
 		return -EINVAL;
+	}
+
+	chip->wls_fw_name = NULL;
+	of_property_read_string(node, "wireless-fw-name", &chip->wls_fw_name);
 
 	chip->use_bl_in_h = of_property_read_bool(node, "use_bl_in_h");
 
+	cps_wls_log(CPS_LOG_ERR, "[%s]  wls_charge_int %d wls_fw_name: %s use_bl_h %d\n",
+			__func__, chip->wls_charge_int,
+			chip->wls_fw_name ? chip->wls_fw_name : "null", chip->use_bl_in_h);
 	return 0;
 }
 
@@ -1447,10 +1503,11 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 		goto free_source;
 	}
 
-	cps_wls_log(CPS_LOG_DEBG,"cps_wls_get_chip_id 0x%04X\n",cps_wls_get_chip_id() );
-
-	//wake_lock(&chip->cps_wls_wake_lock);
 	cps_wls_log(CPS_LOG_DEBG, "[%s] wireless charger addr low probe successful!\n", __func__);
+
+	/*check firmwware, only work in factory mode*/
+	if (mmi_is_factory_mode())
+		update_firmware();
 
 	return ret;
 
