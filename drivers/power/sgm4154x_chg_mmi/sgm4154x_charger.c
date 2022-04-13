@@ -3077,7 +3077,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	ret = sgm4154x_hw_chipid_detect(sgm);
 #ifdef __SGM41513_CHIP_ID__
-	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41513_ID)){
+	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41513_ID){
 
 #else
 	if (((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID) && ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41543D_ID)){
