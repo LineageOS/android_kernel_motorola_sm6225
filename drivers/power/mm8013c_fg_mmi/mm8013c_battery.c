@@ -877,7 +877,7 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	ps_desc->get_property = mm8xxx_battery_get_property;
 	ps_desc->external_power_changed = mm8xxx_external_power_changed;
 
-	di->psy = power_supply_register_no_ws(di->dev, ps_desc, &ps_cfg);
+	di->psy = power_supply_register(di->dev, ps_desc, &ps_cfg);
 	if (IS_ERR(di->psy)) {
 		dev_err(di->dev, "failed to register battery\n");
 		return PTR_ERR(di->psy);
@@ -1042,7 +1042,7 @@ static int mm8xxx_fake_battery_setup(struct mm8xxx_device_info *di)
 	ps_desc->get_property = mm8xxx_fake_battery_get_property;
 	ps_desc->external_power_changed = mm8xxx_fake_external_power_changed;
 
-	di->psy = power_supply_register_no_ws(di->dev, ps_desc, &ps_cfg);
+	di->psy = power_supply_register(di->dev, ps_desc, &ps_cfg);
 	if (IS_ERR(di->psy)) {
 		dev_err(di->dev, "failed to register battery\n");
 		return PTR_ERR(di->psy);
