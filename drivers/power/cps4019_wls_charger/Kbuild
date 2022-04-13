@@ -4,3 +4,5 @@ EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/drivers/power/cps4019_wls_charger
 
 obj-m += cps4019_wls_charger.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
