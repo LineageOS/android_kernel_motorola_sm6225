@@ -2483,7 +2483,7 @@ static int bq25980_charger_remove(struct i2c_client *client)
 
 	mutex_destroy(&bq->lock);
 	mutex_destroy(&bq->irq_complete);
-	devm_iio_device_unregister(bq->dev, bq->indio_dev);
+
 	dev_err(bq->dev,"remove Successfully\n");
 	return 0;
 }
