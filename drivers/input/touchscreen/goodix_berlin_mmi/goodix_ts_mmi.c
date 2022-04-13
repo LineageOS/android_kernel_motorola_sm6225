@@ -43,6 +43,10 @@ static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
+#ifdef CONFIG_GTP_LAST_TIME
+static ssize_t goodix_ts_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+#endif
 
 static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_edge_show, goodix_ts_edge_store);
@@ -52,6 +56,9 @@ static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_stylus_mode_show, goodix_ts_stylus_mode_store);
 static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
 	NULL, goodix_ts_sensitivity_store);
+#ifdef CONFIG_GTP_LAST_TIME
+static DEVICE_ATTR(timestamp, S_IRUGO, goodix_ts_timestamp_show, NULL);
+#endif
 
 /* hal settings */
 #define ROTATE_0   0
@@ -97,6 +104,10 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 
 	if (core_data->board_data.sensitivity_ctrl)
 		ADD_ATTR(sensitivity);
+
+#ifdef CONFIG_GTP_LAST_TIME
+	ADD_ATTR(timestamp);
+#endif
 
 	if (idx) {
 		ext_attributes[idx] = NULL;
@@ -576,6 +587,29 @@ static ssize_t goodix_ts_edge_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "0x%02x 0x%02x",
 		core_data->set_mode.edge_mode[1], core_data->set_mode.edge_mode[0]);
 }
+
+#ifdef CONFIG_GTP_LAST_TIME
+static ssize_t goodix_ts_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	ktime_t last_ktime;
+	struct timespec64 last_ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	mutex_lock(&core_data->mode_lock);
+	last_ktime = core_data->last_event_time;
+	core_data->last_event_time = 0;
+	mutex_unlock(&core_data->mode_lock);
+
+	last_ts = ktime_to_timespec64(last_ktime);
+
+	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+#endif
 
 static int goodix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata) {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "goodix");
