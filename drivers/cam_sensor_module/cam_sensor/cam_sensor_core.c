@@ -645,7 +645,7 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 		if (!matched && !retries) {
 			CAM_ERR(CAM_SENSOR, "Failed read id: 0x%x expected id 0x%x:",
 			chipid, slave_info->sensor_id);
-
+			return -ENODEV;
 		}
 	}
 #else
