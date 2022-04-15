@@ -1488,8 +1488,14 @@ static void mmi_update_charger_status(struct mmi_charger_chip *chip,
 				status->pres_chrg_step = STEP_FULL;
 		}
 	} else if (status->pres_chrg_step == STEP_FULL) {
+#ifdef CONFIG_MMI_RECHARGER_HAWAO_MODE
+		if ((batt_info->batt_soc <= 98) ||
+			batt_info->batt_mv < (profile->max_fv_mv - 100 * 2))
+#else
 		if ((batt_info->batt_soc <= 99) ||
-			batt_info->batt_mv < (profile->max_fv_mv - HYST_STEP_MV * 2)) {
+			batt_info->batt_mv < (profile->max_fv_mv - HYST_STEP_MV * 2))
+#endif
+		{
 			cfg->taper_kickoff = true;
 			status->pres_chrg_step = STEP_NORM;
 		}
