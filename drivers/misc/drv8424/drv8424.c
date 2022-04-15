@@ -761,7 +761,6 @@ static int moto_drv8424_drive_sequencer(motor_device* md)
     if(atomic_read(&md->stepping)) {
         motor_control* mc = &md->mc;
 
-        sysfs_notify(&md->dev->kobj, NULL, "status");
 		LOGD("Status updated: status %d\n", atomic_read(&md->status));
         GPIO_OUTPUT_DIR(mc->ptable[MOTOR_STEP], md->level);
         atomic_inc(&md->step_count);
@@ -831,7 +830,6 @@ static __ref int motor_kthread(void *arg)
 
 		atomic_set(&md->status, value);
 		moto_drv8424_cmd_push(md, CMD_STATUS, 0);
-        sysfs_notify(&md->dev->kobj, NULL, "status");
 
 		LOGD("Status updated: status %d, position %d\n",
 				atomic_read(&md->status), atomic_read(&md->position));
@@ -936,12 +934,14 @@ static void motor_cmd_work(struct work_struct *work)
 			enable_irq(md->fault_irq);
 				break;
 		case CMD_STATUS:
+        		sysfs_notify(&md->dev->kobj, NULL, "status");
 			md->status_update_ready = true;
-			wake_up_interruptible(&md->status_wait);
+			wake_up(&md->status_wait);
 				break;
 		case CMD_POSITION:
+        		sysfs_notify(&md->dev->kobj, NULL, "position");
 			md->position_update_ready = true;
-			wake_up_interruptible(&md->position_wait);
+			wake_up(&md->position_wait);
 				break;
 		case CMD_POLL:
 			if (atomic_read(&md->destination) > 0) {
