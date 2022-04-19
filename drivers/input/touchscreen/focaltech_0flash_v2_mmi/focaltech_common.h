@@ -56,9 +56,13 @@
 
 #define FTS_MAX_CHIP_IDS        8
 
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8726)
 #define FTS_CHIP_TYPE_MAPPING {{0x1C, 0x87, 0x20, 0x87, 0x20, 0x87, 0xA0, 0x00, 0x00}}
-
 #define FTS_CHIP_ID_MAPPING {{0x1C, {0x8726, 0x872A, 0x872B}}}
+#else
+#define FTS_CHIP_TYPE_MAPPING {{0x1C, 0x87, 0x20, 0x87, 0x20, 0x87, 0xA0, 0x00, 0x00}}
+#define FTS_CHIP_ID_MAPPING {{0x1C, {0x8726, 0x872A, 0x872B}}}
+#endif
 
 #define FILE_NAME_LENGTH                    128
 #define ENABLE                              1
@@ -163,9 +167,17 @@ struct ts_ic_info {
     printk("[FTS_TS]%s: Exit(%d)\n", __func__, __LINE__); \
 } while (0)
 #else /* #if FTS_DEBUG_EN*/
-#define FTS_DEBUG(fmt, args...)
-#define FTS_FUNC_ENTER()
-#define FTS_FUNC_EXIT()
+#define FTS_DEBUG(fmt, args...) do { \
+    pr_debug("[FTS_TS]%s:"fmt"\n", __func__, ##args); \
+} while (0)
+
+#define FTS_FUNC_ENTER() do { \
+    pr_debug("[FTS_TS]%s: Enter\n", __func__); \
+} while (0)
+
+#define FTS_FUNC_EXIT() do { \
+    pr_debug("[FTS_TS]%s: Exit(%d)\n", __func__, __LINE__); \
+} while (0)
 #endif
 
 #define FTS_INFO(fmt, args...) do { \

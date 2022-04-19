@@ -36,6 +36,7 @@
 *****************************************************************************/
 #include "focaltech_core.h"
 
+#if FTS_POINT_REPORT_CHECK_EN
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -183,3 +184,4 @@ int fts_point_report_check_exit(struct fts_ts_data *ts_data)
     FTS_FUNC_EXIT();
     return 0;
 }
+#endif /* FTS_POINT_REPORT_CHECK_EN */
