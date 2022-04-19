@@ -37,20 +37,29 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-#if defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
 #include <drm/drm_panel.h>
 #else
 #include <linux/msm_drm_notify.h>
 #endif
+#elif defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 #define FTS_SUSPEND_LEVEL 1     /* Early-suspend level */
 #endif
 #include "focaltech_core.h"
+
+#ifdef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
+#define register_panel_notifier panel_register_notifier
+#define unregister_panel_notifier panel_unregister_notifier
+enum touch_state {
+	TOUCH_DEEP_SLEEP_STATE = 0,
+	TOUCH_LOW_POWER_STATE,
+};
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -144,7 +153,9 @@ void fts_tp_state_recovery(struct fts_ts_data *ts_data)
     /* recover TP cover state 0xC1 */
     fts_ex_mode_recovery(ts_data);
     /* recover TP gesture state 0xD0 */
+#if FTS_GESTURE_EN
     fts_gesture_recovery(ts_data);
+#endif
     FTS_FUNC_EXIT();
 }
 
@@ -697,7 +708,9 @@ static int fts_read_touchdata(struct fts_ts_data *ts_data, u8 *buf)
 static int fts_read_parse_touchdata(struct fts_ts_data *ts_data, u8 *touch_buf)
 {
     int ret = 0;
+#if FTS_GESTURE_EN
     u8 gesture_en = 0xFF;
+#endif
 
     memset(touch_buf, 0xFF, FTS_MAX_TOUCH_BUF);
     ts_data->ta_size = ts_data->touch_size;
@@ -715,6 +728,7 @@ static int fts_read_parse_touchdata(struct fts_ts_data *ts_data, u8 *touch_buf)
     if (ret)
         return TOUCH_IGNORE;
 
+#if FTS_GESTURE_EN
     /*gesture*/
     if (ts_data->suspended && ts_data->gesture_support) {
         ret = fts_read_reg(FTS_REG_GESTURE_EN, &gesture_en);
@@ -723,6 +737,7 @@ static int fts_read_parse_touchdata(struct fts_ts_data *ts_data, u8 *touch_buf)
         else
             FTS_DEBUG("gesture not enable in fw, don't process gesture");
     }
+#endif
 
     if ((touch_buf[1] == 0xFF) && (touch_buf[2] == 0xFF)
         && (touch_buf[3] == 0xFF) && (touch_buf[4] == 0xFF)) {
@@ -886,11 +901,13 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
         mutex_unlock(&ts_data->report_mutex);
         break;
 
+#if FTS_GESTURE_EN
     case TOUCH_GESTURE:
         if (0 == fts_gesture_readdata(ts_data, touch_buf)) {
             FTS_INFO("succuss to get gesture data in irq handler");
         }
         break;
+#endif
 
     case TOUCH_FW_INIT:
         fts_release_all_finger();
@@ -927,7 +944,9 @@ static irqreturn_t fts_irq_handler(int irq, void *data)
 #endif
 
     ts_data->intr_jiffies = jiffies;
+#if FTS_POINT_REPORT_CHECK_EN
     fts_prc_queue_work(ts_data);
+#endif
     fts_irq_read_report(ts_data);
     if (ts_data->touch_analysis_support && ts_data->ta_flag) {
         ts_data->ta_flag = 0;
@@ -1518,6 +1537,14 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
              pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
 
+	ret = of_property_read_string(np, "focaltech,panel-supplier",
+		&fts_data->panel_supplier);
+	if (ret < 0) {
+		fts_data->panel_supplier = NULL;
+		FTS_ERROR("Unable to read panel supplier\n");
+	} else {
+		FTS_INFO("panel supplier is %s", (char *)fts_data->panel_supplier);
+	}
     FTS_FUNC_EXIT();
     return 0;
 }
@@ -1530,51 +1557,7 @@ static void fts_resume_work(struct work_struct *work)
     fts_ts_resume(ts_data->dev);
 }
 
-#if defined(CONFIG_FB)
-static int fb_notifier_callback(struct notifier_block *self,
-                                unsigned long event, void *data)
-{
-    struct fb_event *evdata = data;
-    int *blank = NULL;
-    struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
-                                  fb_notif);
-
-    if (!evdata) {
-        FTS_ERROR("evdata is null");
-        return 0;
-    }
-
-    if (!(event == FB_EARLY_EVENT_BLANK || event == FB_EVENT_BLANK)) {
-        FTS_INFO("event(%lu) do not need process\n", event);
-        return 0;
-    }
-
-    blank = evdata->data;
-    FTS_INFO("FB event:%lu,blank:%d", event, *blank);
-    switch (*blank) {
-    case FB_BLANK_UNBLANK:
-        if (FB_EARLY_EVENT_BLANK == event) {
-            FTS_INFO("resume: event = %lu, not care\n", event);
-        } else if (FB_EVENT_BLANK == event) {
-            queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
-        }
-        break;
-    case FB_BLANK_POWERDOWN:
-        if (FB_EARLY_EVENT_BLANK == event) {
-            cancel_work_sync(&fts_data->resume_work);
-            fts_ts_suspend(ts_data->dev);
-        } else if (FB_EVENT_BLANK == event) {
-            FTS_INFO("suspend: event = %lu, not care\n", event);
-        }
-        break;
-    default:
-        FTS_INFO("FB BLANK(%d) do not need process\n", *blank);
-        break;
-    }
-
-    return 0;
-}
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
 static struct drm_panel *active_panel;
 
@@ -1609,7 +1592,7 @@ static int drm_check_dt(struct device_node *np)
 static int drm_notifier_callback(struct notifier_block *self,
                                  unsigned long event, void *data)
 {
-    struct msm_drm_notifier *evdata = data;
+	struct drm_panel_notifier *evdata = data;
     int *blank = NULL;
     struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
                                   fb_notif);
@@ -1651,6 +1634,7 @@ static int drm_notifier_callback(struct notifier_block *self,
     return 0;
 }
 #else
+#ifndef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
 static int drm_notifier_callback(struct notifier_block *self,
                                  unsigned long event, void *data)
 {
@@ -1695,7 +1679,91 @@ static int drm_notifier_callback(struct notifier_block *self,
 
     return 0;
 }
+#else
+int drm_notifier_callback(struct notifier_block *self,
+				unsigned long event, void *data)
+{
+	struct msm_drm_notifier *evdata = data;
+	struct fts_ts_data *ts_data =
+		container_of(self, struct fts_ts_data, fb_notif);
+
+	if (!evdata || (evdata->id != 0)) {
+		return 0;
+    }
+
+    FTS_INFO("DRM event:%lu", event);
+    switch (event) {
+    case PANEL_EVENT_DISPLAY_ON:
+            queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+        break;
+    case PANEL_EVENT_PRE_DISPLAY_OFF:
+            cancel_work_sync(&fts_data->resume_work);
+            fts_ts_suspend(ts_data->dev);
+#ifdef FOCALTECH_SENSOR_EN
+            if (fts_data->should_enable_gesture) {
+                FTS_INFO("double tap gesture suspend\n");
+		  touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+		  fts_gesture_suspend(ts_data);
+            } else {
 #endif
+                touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+                fts_ts_suspend(ts_data->dev);
+#ifdef FOCALTECH_SENSOR_EN
+            }
+#endif
+        break;
+    default:
+        break;
+    }
+
+	return 0;
+}
+#endif
+#endif
+#elif defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+                                unsigned long event, void *data)
+{
+    struct fb_event *evdata = data;
+    int *blank = NULL;
+    struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
+                                  fb_notif);
+
+    if (!evdata) {
+        FTS_ERROR("evdata is null");
+        return 0;
+    }
+
+    if (!(event == FB_EARLY_EVENT_BLANK || event == FB_EVENT_BLANK)) {
+        FTS_INFO("event(%lu) do not need process\n", event);
+        return 0;
+    }
+
+    blank = evdata->data;
+    FTS_INFO("FB event:%lu,blank:%d", event, *blank);
+    switch (*blank) {
+    case FB_BLANK_UNBLANK:
+        if (FB_EARLY_EVENT_BLANK == event) {
+            FTS_INFO("resume: event = %lu, not care\n", event);
+        } else if (FB_EVENT_BLANK == event) {
+            queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+        }
+        break;
+    case FB_BLANK_POWERDOWN:
+        if (FB_EARLY_EVENT_BLANK == event) {
+            cancel_work_sync(&fts_data->resume_work);
+            fts_ts_suspend(ts_data->dev);
+        } else if (FB_EVENT_BLANK == event) {
+            FTS_INFO("suspend: event = %lu, not care\n", event);
+        }
+        break;
+    default:
+        FTS_INFO("FB BLANK(%d) do not need process\n", *blank);
+        break;
+    }
+
+    return 0;
+}
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void fts_ts_early_suspend(struct early_suspend *handler)
 {
@@ -1738,6 +1806,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         ret = drm_check_dt(ts_data->dev->of_node);
         if (ret) {
             FTS_ERROR("parse drm-panel fail");
+            return -ENODEV;
         }
 #endif
 #endif
@@ -1813,20 +1882,24 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         FTS_ERROR("create sysfs node fail");
     }
 
+#if FTS_POINT_REPORT_CHECK_EN
     ret = fts_point_report_check_init(ts_data);
     if (ret) {
         FTS_ERROR("init point report check fail");
     }
+#endif
 
     ret = fts_ex_mode_init(ts_data);
     if (ret) {
         FTS_ERROR("init glove/cover/charger fail");
     }
 
+#if FTS_GESTURE_EN
     ret = fts_gesture_init(ts_data);
     if (ret) {
         FTS_ERROR("init gesture fail");
     }
+#endif
 
 
     ret = fts_esdcheck_init(ts_data);
@@ -1854,13 +1927,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     ts_data->pm_suspend = false;
 #endif
 
-#if defined(CONFIG_FB)
-    ts_data->fb_notif.notifier_call = fb_notifier_callback;
-    ret = fb_register_client(&ts_data->fb_notif);
-    if (ret) {
-        FTS_ERROR("[FB]Unable to register fb_notifier: %d", ret);
-    }
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
     ts_data->fb_notif.notifier_call = drm_notifier_callback;
 #if defined(CONFIG_DRM_PANEL)
     if (active_panel) {
@@ -1869,11 +1936,24 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
             FTS_ERROR("[DRM]drm_panel_notifier_register fail: %d\n", ret);
     }
 #else
+#ifndef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
     ret = msm_drm_register_client(&ts_data->fb_notif);
     if (ret) {
         FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
     }
+#else
+    ret = register_panel_notifier(&ts_data->fb_notif);
+    if(ret) {
+        FTS_ERROR("register panel_notifier failed. ret=%d\n", ret);
+    }
+#endif    
 #endif
+#elif defined(CONFIG_FB)
+    ts_data->fb_notif.notifier_call = fb_notifier_callback;
+    ret = fb_register_client(&ts_data->fb_notif);
+    if (ret) {
+        FTS_ERROR("[FB]Unable to register fb_notifier: %d", ret);
+    }
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     ts_data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + FTS_SUSPEND_LEVEL;
     ts_data->early_suspend.suspend = fts_ts_early_suspend;
@@ -1917,7 +1997,10 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     FTS_FUNC_ENTER();
 
     cancel_work_sync(&fts_data->resume_work);
+
+#if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
+#endif
     fts_release_apk_debug_channel(ts_data);
     fts_remove_sysfs(ts_data);
     fts_ex_mode_exit(ts_data);
@@ -1927,7 +2010,9 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 
     fts_esdcheck_exit(ts_data);
 
+#if FTS_GESTURE_EN
     fts_gesture_exit(ts_data);
+#endif
 
     free_irq(ts_data->irq, ts_data);
 
@@ -1941,10 +2026,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
 
-#if defined(CONFIG_FB)
-    if (fb_unregister_client(&ts_data->fb_notif))
-        FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
 #if defined(CONFIG_DRM_PANEL)
     if (active_panel)
         drm_panel_notifier_unregister(active_panel, &ts_data->fb_notif);
@@ -1952,6 +2034,9 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     if (msm_drm_unregister_client(&ts_data->fb_notif))
         FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
 #endif
+#elif defined(CONFIG_FB)
+    if (fb_unregister_client(&ts_data->fb_notif))
+        FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     unregister_early_suspend(&ts_data->early_suspend);
 #endif
@@ -1993,10 +2078,13 @@ static int fts_ts_suspend(struct device *dev)
 
     fts_esdcheck_suspend(ts_data);
 
+#if FTS_GESTURE_EN
     if (ts_data->gesture_support) {
         fts_gesture_suspend(ts_data);
-    } else {
 
+    } else
+#endif
+    {
         FTS_INFO("make TP enter into sleep mode");
         ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP);
         if (ret < 0)
@@ -2043,9 +2131,11 @@ static int fts_ts_resume(struct device *dev)
 
     fts_esdcheck_resume(ts_data);
 
+#if FTS_GESTURE_EN
     if (ts_data->gesture_support) {
         fts_gesture_resume(ts_data);
     }
+#endif
 
     FTS_FUNC_EXIT();
     return 0;

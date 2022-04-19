@@ -34,6 +34,7 @@
 *****************************************************************************/
 #include "focaltech_core.h"
 
+#if FTS_GESTURE_EN
 /******************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -502,3 +503,4 @@ int fts_gesture_exit(struct fts_ts_data *ts_data)
     FTS_FUNC_EXIT();
     return 0;
 }
+#endif

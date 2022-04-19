@@ -38,7 +38,7 @@
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
-#define FTS_FW_REQUEST_SUPPORT                      0
+#define FTS_FW_REQUEST_SUPPORT                      1
 /* Example: focaltech_ts_fw_tianma.bin */
 #define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
 #define FTS_READ_BOOT_ID_TIMEOUT                    3
@@ -1063,7 +1063,14 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
     u8 *tmpbuf = NULL;
     char fwname[FILE_NAME_LENGTH] = { 0 };
 
-    snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
+    if (fts_data->panel_supplier) {
+        FTS_INFO("fts_data->panel_supplier=%s\n", fts_data->panel_supplier);
+        snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
+                 FTS_FW_NAME_PREX_WITH_REQUEST, \
+                 fts_data->panel_supplier);
+        }
+    else
+        snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
              FTS_FW_NAME_PREX_WITH_REQUEST, \
              upg->module_info->vendor_name);
 

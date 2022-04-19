@@ -182,7 +182,13 @@
 /*
  * choose your ic chip type of focaltech
  */
+#if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8726)
 #define FTS_CHIP_TYPE   _FT8726
+#define FTS_CHIP_NAME   "ft8726"
+#else
+#define FTS_CHIP_TYPE   _FT8726
+#define FTS_CHIP_NAME   "ft8726"
+#endif
 
 /******************* Enables *********************/
 /*********** 1 to enable, 0 to disable ***********/
@@ -215,13 +221,21 @@
  * Gesture function enable
  * default: disable
  */
+#ifdef FOCALTECH_SENSOR_EN
+#define FTS_GESTURE_EN                          1
+#else
 #define FTS_GESTURE_EN                          0
+#endif
 
 /*
  * ESD check & protection
  * default: disable
  */
+#ifdef FOCALTECH_ESD_EN
+#define FTS_ESDCHECK_EN                         1
+#else
 #define FTS_ESDCHECK_EN                         0
+#endif
 
 
 /*
@@ -243,7 +257,7 @@
 /*
  * auto upgrade
  */
-#define FTS_AUTO_UPGRADE_EN                     0
+#define FTS_AUTO_UPGRADE_EN                     1
 
 /*
  * auto upgrade for lcd cfg
@@ -282,6 +296,7 @@
  * FW.i file for auto upgrade, you must replace it with your own
  * define your own fw_file, the sample one to be replaced is invalid
  * NOTE: if FTS_GET_MODULE_NUM > 1, it's the fw corresponding with FTS_VENDOR_ID
+ * NOTE: git may ignore xxx.i file
  */
 #define FTS_UPGRADE_FW_FILE                     "include/firmware/fw_sample.h"
 
