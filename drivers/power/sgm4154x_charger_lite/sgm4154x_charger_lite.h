@@ -294,6 +294,8 @@ struct sgm_mmi_charger {
 	int paired_load;
 	int paired_load_thres_len;
 	int *paired_load_thres;
+	int paired_esr;
+	int batt_esr;
 	struct mmi_battery_info		paired_batt_info;
 };
 

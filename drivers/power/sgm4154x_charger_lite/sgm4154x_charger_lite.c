@@ -2258,13 +2258,16 @@ static void sgm4154x_charger_set_constraint(void *data,
 
 /* Battery presence detection threshold on battery temperature */
 #define BPD_TEMP_THRE (-30)
+#define PANIC_DEB_CNT_MAX (3)
 static void sgm4154x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
 	int i;
 	int rc;
 	u32 value;
-	int delta_vbat;
+	int batt_ocv;
+	int paired_ocv;
+	int delta_ocv;
 	int delta_soc;
 	bool high_load_en;
 	bool low_load_en;
@@ -2273,7 +2276,7 @@ static void sgm4154x_paired_battery_notify(void *data,
 	struct sgm_mmi_charger *chg = data;
 	int paired_ichg = chg->paired_ichg;
 	int paired_load = chg->paired_load;
-	static bool initialized = false;
+	static int panic_deb_cnt = 0;
 	static bool chg_present = false;
 
 	if (!batt_info || batt_info->batt_mv <= 0) {
@@ -2296,7 +2299,12 @@ static void sgm4154x_paired_battery_notify(void *data,
 		return;
 	}
 
-	delta_vbat = chg->batt_info.batt_mv - batt_info->batt_mv;
+	batt_ocv = chg->batt_info.batt_mv;
+	batt_ocv -= (chg->batt_info.batt_ma * chg->batt_esr) / 1000;
+	paired_ocv = batt_info->batt_mv;
+	paired_ocv -= (batt_info->batt_ma * chg->paired_esr) / 1000;
+
+	delta_ocv = batt_ocv - paired_ocv;
 	delta_soc = chg->batt_info.batt_soc - batt_info->batt_soc;
 
 	if (chg->paired_ichg_table && chg->paired_ichg_table_len) {
@@ -2316,31 +2324,28 @@ static void sgm4154x_paired_battery_notify(void *data,
 			chg->paired_ichg = paired_ichg;
 	}
 
-	if (!initialized &&
-	    chg->paired_load_thres && chg->paired_load_thres_len) {
-		initialized = true;
+	if (chg->paired_load_thres && chg->paired_load_thres_len) {
 		paired_load = PAIRED_LOAD_HIGH;
 		for (i = 0; i < chg->paired_load_thres_len; i++) {
-			if (delta_vbat > chg->paired_load_thres[i]) {
+			if (delta_ocv > chg->paired_load_thres[i]) {
 				paired_load = i;
 				break;
 			}
 		}
 		if (paired_load == PAIRED_LOAD_OFF) {
-			if (paired_vbat_panic_enabled)
-				panic("ERROR: delta_vbat=%dmV, delta_soc=%d",
-						delta_vbat, delta_soc);
-			else
-				pr_err("ERROR: delta_vbat=%dmV, delta_soc=%d",
-						delta_vbat, delta_soc);
+			panic_deb_cnt++;
+			if (paired_vbat_panic_enabled &&
+			    panic_deb_cnt >= PANIC_DEB_CNT_MAX) {
+				panic("ERROR: delta_ocv=%dmV, delta_soc=%d",
+						delta_ocv, delta_soc);
+				panic_deb_cnt = 0;
+			} else {
+				pr_err("ERROR: delta_ocv=%dmV, delta_soc=%d",
+						delta_ocv, delta_soc);
+			}
+		} else {
+			panic_deb_cnt = 0;
 		}
-	}
-
-	if (paired_ichg > 0) {
-		if (paired_ichg < chg->sgm->init_data.max_ichg / 2)
-			paired_load = PAIRED_LOAD_LOW;
-		else
-			paired_load = PAIRED_LOAD_HIGH;
 	}
 
 	if (paired_load != chg->paired_load ||
@@ -2375,12 +2380,23 @@ static void sgm4154x_paired_battery_notify(void *data,
 			gpio_set_value(chg->sgm->low_load_en_gpio,
 				low_load_en ^ chg->sgm->low_load_active_low);
 		}
-		pr_info("chg_present: %d, high_load_en: %d, low_load_en: %d\n",
-				chg_present, high_load_en, low_load_en);
 	}
 
-	pr_info("delta_vbat: %dmV, delta_soc: %d, paired_ichg: %duA, paired_load: %d\n",
-		delta_vbat, delta_soc, paired_ichg, paired_load);
+	if (gpio_is_valid(chg->sgm->high_load_en_gpio))
+		high_load_en = gpio_get_value(chg->sgm->high_load_en_gpio)
+				^ chg->sgm->high_load_active_low;
+	else
+		high_load_en = false;
+	if (gpio_is_valid(chg->sgm->low_load_en_gpio))
+		low_load_en = gpio_get_value(chg->sgm->low_load_en_gpio)
+				^ chg->sgm->low_load_active_low;
+	else
+		low_load_en = false;
+
+	pr_info("paired_ocv: %dmV, batt_ocv: %dmV, delta_ocv: %dmV, delta_soc: %d\n",
+				paired_ocv, batt_ocv, delta_ocv, delta_soc);
+	pr_info("chg_present: %d, high_load_en: %d, low_load_en: %d, paired_ichg: %d\n",
+				chg_present, high_load_en, low_load_en, paired_ichg);
 }
 
 static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
@@ -2485,6 +2501,20 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 				i, chg->paired_load_thres[i]);
 		}
 	}
+
+	rc = of_property_read_u32(chg->sgm->dev->of_node,
+				"mmi,paired-esr",
+				&chg->paired_esr);
+	if (rc)
+		chg->paired_esr = 60;
+	pr_info("paired battery ESR: %d\n", chg->paired_esr);
+
+	rc = of_property_read_u32(chg->sgm->dev->of_node,
+				"mmi,batt-esr",
+				&chg->batt_esr);
+	if (rc)
+		chg->batt_esr = 40;
+	pr_info("battery ESR: %d\n", chg->batt_esr);
 
 	driver = devm_kzalloc(chg->sgm->dev,
 				sizeof(struct mmi_charger_driver),
