@@ -2480,13 +2480,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	cpu_latency_qos_add_request(&core_data->goodix_pm_qos, PM_QOS_DEFAULT_VALUE);
 #endif
 
-	/* Try start a thread to get config-bin info */
-	ret = goodix_start_later_init(core_data);
-	if (ret) {
-		ts_err("Failed start cfg_bin_proc, %d", ret);
-		goto err_out;
-	}
-
 	PM_WAKEUP_REGISTER(bus_interface->dev, core_data->gesture_wakelock,
 			"goodix_gesture_wakelock");
 	if (!core_data->gesture_wakelock) {
@@ -2505,6 +2498,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
 	core_module_prob_sate = CORE_MODULE_PROB_SUCCESS;
+
+	/* Try start a thread to get config-bin info */
+	ret = goodix_start_later_init(core_data);
+	if (ret) {
+		ts_err("Failed start cfg_bin_proc, %d", ret);
+		goto err_register_gesture_wakelock;
+	}
 
 	ts_info("goodix_ts_core probe success");
 	return 0;
