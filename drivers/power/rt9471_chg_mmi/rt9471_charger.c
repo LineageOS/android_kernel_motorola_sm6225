@@ -2215,7 +2215,8 @@ static int rt9471_charger_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		} else if (ic_stat == RT9471_ICSTAT_BGCHG ||
 					ic_stat == RT9471_ICSTAT_IEOC ||
-					ic_stat == RT9471_ICSTAT_CHGDONE) {
+					ic_stat == RT9471_ICSTAT_CHGDONE ||
+					ic_stat == RT9471_ICSTAT_VBUSRDY) {
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		} else {
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
