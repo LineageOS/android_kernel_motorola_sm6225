@@ -708,4 +708,11 @@ void goodix_ts_release_connects(struct goodix_ts_core *core_data);
 int goodix_ts_power_on(struct goodix_ts_core *cd);
 int goodix_ts_power_off(struct goodix_ts_core *cd);
 
+#ifdef CONFIG_GTP_DDA_STYLUS
+void goodix_stylus_dda_init(void);
+void goodix_stylus_dda_exit(void);
+int goodix_stylus_dda_register_cdevice(void);
+void goodix_dda_process_pen_report(struct goodix_pen_data *pen_data);
+#endif
+
 #endif

@@ -1162,6 +1162,11 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 		input_report_key(dev, BTN_TOUCH, 0);
 		input_report_key(dev, pen_data->coords.tool_type, 0);
 	}
+
+#ifdef CONFIG_GTP_DDA_STYLUS
+	goodix_dda_process_pen_report(pen_data);
+#endif
+
 	/* report pen button */
 	for (i = 0; i < GOODIX_MAX_PEN_KEY; i++) {
 		if (pen_data->keys[i].status == TS_TOUCH)
@@ -2495,6 +2500,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	/* debug node init */
 	goodix_tools_init();
 
+#ifdef CONFIG_GTP_DDA_STYLUS
+	goodix_stylus_dda_init();
+	ret = goodix_stylus_dda_register_cdevice();
+	if (ret)
+		ts_err("Failed register stylus dda device, %d", ret);
+#endif
+
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
 	core_module_prob_sate = CORE_MODULE_PROB_SUCCESS;
@@ -2533,6 +2545,9 @@ static int goodix_ts_remove(struct platform_device *pdev)
 #endif
 
 	goodix_ts_unregister_notifier(&core_data->ts_notifier);
+#ifdef CONFIG_GTP_DDA_STYLUS
+	goodix_stylus_dda_exit();
+#endif
 	goodix_tools_exit();
 
 	if (core_data->init_stage >= CORE_INIT_STAGE2) {
