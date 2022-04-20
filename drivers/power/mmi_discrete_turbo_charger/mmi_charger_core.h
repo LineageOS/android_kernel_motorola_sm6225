@@ -52,6 +52,7 @@
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/mmi_discrete_charger_class.h>
+#include <linux/usb/adapter_class.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -185,8 +186,8 @@ struct mmi_charger_manager {
 	struct power_supply	*batt_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*mmi_chrg_mgr_psy;
-	struct usbpd	*pd_handle;
-	struct usbpd_pdo_info	mmi_pdo_info[PD_MAX_PDO_NUM];
+	struct adapter_device	*pd_adapter_dev;
+	struct adapter_power_cap	mmi_pdo_info;
 	struct notifier_block	psy_nb;
 
 	struct iio_channel	**ext_iio_chans;
@@ -229,6 +230,7 @@ struct mmi_charger_manager {
 	int pd_target_curr;
 	/*the final commited request PD power*/
 
+	bool pps_start;
 	int pps_result;
 	int pps_result_history[PPS_RET_HISTORY_SIZE];
 	int pps_result_history_idx;
