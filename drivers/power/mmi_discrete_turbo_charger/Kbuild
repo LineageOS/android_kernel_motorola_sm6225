@@ -18,3 +18,5 @@ mmi_discrete_turbo_charger-objs += mmi_qc3p_cp_policy.o
 
 #ifeq ($(CONFIG_MMI_PL_CP_POLICY), y)
 #endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../usb/typec/adapter_class/$(GKI_OBJ_MODULE_DIR)/Module.symvers

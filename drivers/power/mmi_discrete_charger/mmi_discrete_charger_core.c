@@ -844,7 +844,8 @@ static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 	}
 	vbus_present = val.intval;
 	if (chg->pd_active == MMI_POWER_SUPPLY_PD_INACTIVE
-		|| !vbus_present) {
+		|| !vbus_present
+		|| chg->cp_active) {
 		pps_start = false;
 		fixed_power_done = false;
 		return;

@@ -261,9 +261,10 @@ static void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->sys_therm_force_pmic_chrg = false;
 	chip->batt_therm_cooling = false;
 	chip->batt_therm_cooling_cnt = 0;
+	chip->pps_start = false;
 
-	memset(chip->mmi_pdo_info, 0,
-			sizeof(struct usbpd_pdo_info) * PD_MAX_PDO_NUM);
+	memset(&chip->mmi_pdo_info, 0,
+			sizeof(struct adapter_power_cap));
 }
 
 void mmi_chrg_policy_clear(struct mmi_charger_manager *chip) {
@@ -327,10 +328,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 	if (!rc)
 		pmic_sys_therm_level = prop.intval;
 
-	rc = power_supply_get_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
-	if (!rc)
-		ibatt_curr = prop.intval;
+	ibatt_curr = chrg_list->chrg_dev[PMIC_SW]->charger_data.ibatt_curr;
 
 	rc = power_supply_get_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_TEMP, &prop);
@@ -558,24 +556,23 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 			mmi_enable_charging(chrg_list->chrg_dev[PMIC_SW], true);
 		}
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
-#if (KERNEL_VERSION(4, 19, 157) >= LINUX_VERSION_CODE)
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
-#else
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info, PD_MAX_PDO_NUM);
-#endif
+
+		rc = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
+		if (MMI_ADAPTER_OK != rc) {
+			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", rc);
+		}
+
 		mmi_chrg_info(chip, "Select FIXED pdo for switch charging !\n");
-		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
+		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
 		mmi_chrg_info(chip,"find pdo %d, max volt %d, max curr %d\n",
-						chip->mmi_pdo_info[i].type,
-						chip->mmi_pdo_info[i].uv_max,
-						chip->mmi_pdo_info[i].ua);
-			if (chip->mmi_pdo_info[i].type ==
-					PD_SRC_PDO_TYPE_FIXED
-				&& chip->mmi_pdo_info[i].uv_max >= SWITCH_CHARGER_PPS_VOLT
-				&& chip->mmi_pdo_info[i].ua >= TYPEC_HIGH_CURRENT_UA) {
+						chip->mmi_pdo_info.type[i],
+						chip->mmi_pdo_info.max_mv[i],
+						chip->mmi_pdo_info.ma[i]);
+			if (chip->mmi_pdo_info.type[i] == MMI_PD_FIXED
+				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= SWITCH_CHARGER_PPS_VOLT
+				&& (chip->mmi_pdo_info.ma[i] * 1000) >= TYPEC_HIGH_CURRENT_UA) {
 					mmi_chrg_dbg(chip, PR_MOTO, "select 5V/3A pps, pdo %d\n", i);
-					chip->mmi_pd_pdo_idx =
-						chip->mmi_pdo_info[i].pdo_pos;
+					chip->mmi_pd_pdo_idx = i ;
 					break;
 				}
 		}
@@ -646,35 +643,35 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		}
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
-#if (KERNEL_VERSION(4, 19, 157) >= LINUX_VERSION_CODE)
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info);
-#else
-		usbpd_get_pdo_info(chip->pd_handle, chip->mmi_pdo_info, PD_MAX_PDO_NUM);
-#endif
-		for (i = 0; i < PD_MAX_PDO_NUM; i++) {
-			if ((chip->mmi_pdo_info[i].type ==
-					PD_SRC_PDO_TYPE_AUGMENTED)
-				&& chip->mmi_pdo_info[i].uv_max >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& chip->mmi_pdo_info[i].ua >= chip->typec_middle_current) {
-					chip->mmi_pd_pdo_idx = chip->mmi_pdo_info[i].pdo_pos;
+
+		rc = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
+		if (MMI_ADAPTER_OK != rc) {
+			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", rc);
+		}
+
+		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
+			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
+				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
+				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
+					chip->mmi_pd_pdo_idx = i ;
 					mmi_chrg_info(chip,
 							"Pd charger support pps, pdo %d, "
 							"volt %d, curr %d \n",
 							chip->mmi_pd_pdo_idx,
-							chip->mmi_pdo_info[i].uv_max,
-							chip->mmi_pdo_info[i].ua);
+							chip->mmi_pdo_info.max_mv[i],
+							chip->mmi_pdo_info.ma[i]);
 					chip->pd_pps_support = true;
 
-					if (chip->mmi_pdo_info[i].uv_max <
+					if ((chip->mmi_pdo_info.max_mv[i] * 1000) <
 							chip->pd_volt_max) {
 						chip->pd_volt_max =
-						chip->mmi_pdo_info[i].uv_max;
+						chip->mmi_pdo_info.max_mv[i] * 1000;
 					}
 
-					if (chip->mmi_pdo_info[i].ua <
+					if ((chip->mmi_pdo_info.ma[i] * 1000) <
 							chip->pd_curr_max) {
 						chip->pd_curr_max =
-						chip->mmi_pdo_info[i].ua;
+						chip->mmi_pdo_info.ma[i] * 1000;
 					}
 
 				break;
@@ -727,7 +724,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		heartbeat_dely_ms = HEARTBEAT_NEXT_STATE_MS;
 		if (chrg_list->cp_master
 			&& (!chrg_list->chrg_dev[CP_MASTER]->charger_enabled
-			|| !(chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
+			|| (chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into "
 								"SW directly\n");
 			chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
@@ -776,7 +773,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		if (chrg_list->cp_master
 			&& (!chrg_list->chrg_dev[CP_MASTER]->charger_enabled
-			|| !(chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
+			|| (chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, "
 							"Enter into SW directly\n");
 			chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
@@ -845,7 +842,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 								chrg_step->chrg_step_cv_volt);
 		if (chrg_list->cp_master
 			&& (!chrg_list->chrg_dev[CP_MASTER]->charger_enabled
-			|| !(chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
+			|| (chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into SW directly\n");
 			chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
@@ -980,7 +977,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 								chrg_step->chrg_step_cv_tapper_curr);
 		if (chrg_list->cp_master
 			&& (!chrg_list->chrg_dev[CP_MASTER]->charger_enabled
-			|| !(chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
+			|| (chrg_list->chrg_dev[CP_MASTER]->charger_error.chrg_err_type & (1<< MMI_CP_SWITCH_BIT)))) {
 			mmi_chrg_info(chip,"CP MASTER was disabled, Enter into SW directly\n");
 			chip->pps_volt_comp = PPS_INIT_VOLT_COMP;
 			mmi_chrg_sm_move_state(chip, PM_STATE_SW_ENTRY);
@@ -1484,10 +1481,24 @@ schedule:
 		goto skip_pd_select;
 	}
 
-	chip->pps_result = usbpd_select_pdo(chip->pd_handle,
-								chip->mmi_pd_pdo_idx,
-								chip->pd_target_volt,
-								chip->pd_target_curr);
+	if (!chip->pps_start) {
+		chip->pps_result = adapter_dev_set_cap(chip->pd_adapter_dev, MMI_PD_APDO_START,
+											chip->mmi_pd_pdo_idx,
+											chip->pd_target_volt / 1000,
+											chip->pd_target_curr / 1000);
+		if (chip->pps_result != MMI_ADAPTER_OK)
+			mmi_chrg_err(chip, "set pd30 cap start fail ret=%d\n", chip->pps_result);
+		else
+			chip->pps_start = true;
+	} else {
+		chip->pps_result = adapter_dev_set_cap(chip->pd_adapter_dev, MMI_PD_APDO,
+											chip->mmi_pd_pdo_idx,
+											chip->pd_target_volt / 1000,
+											chip->pd_target_curr / 1000);
+		if (chip->pps_result != MMI_ADAPTER_OK)
+			mmi_chrg_err(chip, "set pd30 cap fail ret=%d\n", chip->pps_result);
+	}
+
 	mmi_set_pps_result_history(chip, chip->pps_result);
 	if (!chip->pps_result) {
 		chip->pd_request_volt_prev = chip->pd_target_volt;

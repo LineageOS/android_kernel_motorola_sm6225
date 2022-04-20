@@ -106,6 +106,9 @@ struct mmi_discrete_charger {
 	struct iio_chan_spec	*iio_chan;
 	struct iio_channel	*int_iio_chans;
 
+	/*CP*/
+	bool			cp_active;
+
 	/*PD*/
 	struct adapter_device *pd_adapter_dev;
 	int			pd_active;
