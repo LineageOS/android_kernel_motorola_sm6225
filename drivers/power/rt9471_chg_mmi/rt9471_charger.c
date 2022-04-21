@@ -3143,6 +3143,8 @@ static int rt9471_probe(struct i2c_client *client,
 		goto err_create_file;
 	}
 
+	schedule_work(&chip->charge_detect_work);
+
 	__rt9471_dump_registers(chip);
 	dev_info(chip->dev, "%s successfully\n", __func__);
 	return 0;
