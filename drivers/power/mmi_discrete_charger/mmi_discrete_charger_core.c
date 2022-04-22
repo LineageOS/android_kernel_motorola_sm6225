@@ -85,6 +85,11 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 	if (chip->hvdcp2_max_icl_ua <= 0)
 		chip->hvdcp2_max_icl_ua = MICRO_1P5A;
 
+	of_property_read_u32(node, "mmi,wls-max-icl-ua",
+					&chip->wls_max_icl_ua);
+	if (chip->wls_max_icl_ua <= 0)
+		chip->wls_max_icl_ua = WIRELESS_CURRENT_DEFAULT_UA;
+
 	rc = of_property_read_u32(node, "mmi,dc-icl-ma",
 				  &chip->dc_cl_ma);
 	if (rc)
@@ -629,6 +634,13 @@ static int mmi_discrete_update_usb_type(struct mmi_discrete_charger *chip)
 
 	if (!chip->master_chg_dev)
 		return -EINVAL;
+
+	if (is_wls_online(chip)) {
+		mmi_info(chip, "wireless charger detected\n");
+		chip->real_charger_type = POWER_SUPPLY_TYPE_WIRELESS;
+
+		return 0;
+	}
 
 	rc = charger_dev_get_real_charger_type(chip->master_chg_dev, &chg_type);
 
@@ -1903,6 +1915,10 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
 					SDP_CURRENT_UA);
 		break;
+	case POWER_SUPPLY_TYPE_WIRELESS:
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
+					chg->wls_max_icl_ua);
+		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
@@ -2011,6 +2027,9 @@ int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *tota
 		case POWER_SUPPLY_TYPE_USB_FLOAT:
 		case POWER_SUPPLY_TYPE_USB:
 			current_ua = SDP_CURRENT_UA;
+			break;
+		case POWER_SUPPLY_TYPE_WIRELESS:
+			current_ua = chip->wls_max_icl_ua;
 			break;
 		default:
 			current_ua = 0;
@@ -2346,6 +2365,8 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 			chip->chg_info.chrg_pmax_mw = 30000;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_PD)
 			chip->chg_info.chrg_pmax_mw = chip->constraint.pd_pmax;
+		else if (usb_type == POWER_SUPPLY_TYPE_WIRELESS)
+			chip->chg_info.chrg_pmax_mw = chip->constraint.wls_pmax;
 		else
 			chip->chg_info.chrg_pmax_mw = 2500;
 
