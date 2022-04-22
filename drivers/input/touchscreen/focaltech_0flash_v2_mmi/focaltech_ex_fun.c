@@ -1554,9 +1554,23 @@ static ssize_t vendor_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "focaltech");
 }
 
+static ssize_t panel_supplier_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+    return fts_panel_supplier_show(dev, attr, buf);
+}
+
+static ssize_t ic_ver_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return fts_ic_ver_show(dev, attr, buf);
+}
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
+	__ATTR_RO(ic_ver),
+	__ATTR_RO(panel_supplier),
 	__ATTR_NULL
 };
 
