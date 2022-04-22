@@ -23,6 +23,10 @@ ifneq ($(filter m y,$(CONFIG_TCPC_SGM7220)),)
 	obj-m	+= tcpc_sgm7220.o
 endif
 
+ifneq ($(filter m y,$(CONFIG_TCPC_DEVON_POLLING_TIME)),)
+        EXTRA_CFLAGS += -DCONFIG_TCPC_DEVON_POLLING_TIME
+endif
+
 tcpc_class-objs			+= tcpci_core.o tcpci_typec.o tcpci_timer.o \
 		tcpm.o tcpci.o pd_dbg_info.o tcpci_alert.o rt-regmap.o tcpci_dual_role.o
 
