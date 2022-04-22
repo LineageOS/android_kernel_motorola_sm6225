@@ -30,7 +30,11 @@
 #define PROBE_CNT_MAX			3
 /* 10ms * 100 = 1000ms = 1s */
 #define USB_TYPE_POLLING_INTERVAL	10
+#ifdef CONFIG_TCPC_DEVON_POLLING_TIME
+#define USB_TYPE_POLLING_CNT_MAX	130
+#else
 #define USB_TYPE_POLLING_CNT_MAX	100
+#endif
 
 enum dr {
 	DR_IDLE,
