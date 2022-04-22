@@ -20,9 +20,15 @@ enum{
 };
 #endif
 
+#ifdef CONFIG_DEVON_CAMERA_FLASH
+#define PM6125_PWM_PERIOD 50000
+#define FLASH_FIRE_HIGH_MAXCURRENT 1750
+#define FLASH_FIRE_LOW_MAXCURRENT 285
+#else
 #define PM6125_PWM_PERIOD 50000
 #define FLASH_FIRE_HIGH_MAXCURRENT 1200
 #define FLASH_FIRE_LOW_MAXCURRENT 150
+#endif
 
 /*****************************************************************************
  * Function Prototype

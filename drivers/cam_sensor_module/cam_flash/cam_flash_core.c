@@ -582,8 +582,16 @@ static int cam_flash_low(
 	}
 
 	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+#ifdef CONFIG_DEVON_CAMERA_FLASH
+	cam_res_mgr_gpio_request(soc_info.dev, DEVON_CAMERA_PWM_GPIO, 0, "torch_enable");
+	cam_res_mgr_gpio_set_value(DEVON_CAMERA_PWM_GPIO, 1);
+	usleep_range(5000,6000);
+	cam_res_mgr_gpio_set_value(DEVON_CAMERA_PWM_GPIO, 0);
+	cam_res_mgr_gpio_free(soc_info.dev, DEVON_CAMERA_PWM_GPIO);
+#else
 	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_ACTIVE, CAMERA_SENSOR_FLASH_OP_FIRELOW, FLASH_FIRE_LOW_MAXCURRENT);
 	usleep_range(5000,6000);
+#endif
 	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_ACTIVE, CAMERA_SENSOR_FLASH_OP_FIRELOW, flash_data->led_current_ma[0]);
 #endif
 
