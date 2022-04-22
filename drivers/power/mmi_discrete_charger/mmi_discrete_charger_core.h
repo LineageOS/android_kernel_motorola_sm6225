@@ -40,6 +40,7 @@
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
 #define TYPEC_HIGH_CURRENT_UA		3000000
+#define WIRELESS_CURRENT_DEFAULT_UA	1000000
 
 static const unsigned int mmi_discrete_extcon_cable[] = {
 	EXTCON_USB,
@@ -92,6 +93,7 @@ struct mmi_discrete_charger {
 	bool			vbus_enabled;
 	int			real_charger_type;
 	int 			hvdcp2_max_icl_ua;
+	int 			wls_max_icl_ua;
 
 	struct delayed_work	monitor_ibat_work;
 	int			bat_ocp_ua;
