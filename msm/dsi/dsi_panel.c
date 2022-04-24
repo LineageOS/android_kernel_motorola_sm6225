@@ -2835,6 +2835,15 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 		panel->glbl_rescode_bot_ctrl = -1;
 	}
 
+	if(!(utils->read_u32(utils->data,"qcom,mipi-glbl-hstx-str-ctrl-0", &mipi_temp)))
+	{
+		panel->glbl_hstx_str_ctrl_0 = mipi_temp;
+	}
+	else
+	{
+		panel->glbl_hstx_str_ctrl_0 = -1;
+	}
+
 	if(utils->read_u32(utils->data,"qcom,reset-avdd-time-interval", &panel->reset_avdd_time_interval))
 	{
 		panel->reset_avdd_time_interval = 0;
