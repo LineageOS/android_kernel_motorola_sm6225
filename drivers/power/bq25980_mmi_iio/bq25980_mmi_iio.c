@@ -1324,13 +1324,16 @@ static irqreturn_t bq25980_irq_handler_thread(int irq, void *private)
 	else
 		bq->irq_counts++;
 
-	dump_all_reg(bq);
+
 	mutex_unlock(&bq->irq_complete);
 
 	ret = bq25980_get_state(bq, &state);
 	if (ret < 0)
 		goto irq_out;
 
+	if(bq->alarm_status.status > 0 ||
+		bq->fault_status.status > 0)
+		dump_all_reg(bq);
 	if (!bq25980_state_changed(bq, &state))
 		goto irq_out;
 
