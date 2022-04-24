@@ -125,9 +125,9 @@
         qcom,mdss-dsi-pan-enable-dynamic-fps;
         qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 
-	qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 FF 07];
+	qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 FF 0F];
 	qcom,mdss-dsi-hbm-on-command-state =  "dsi_lp_mode";
-	qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 66 06];
+	qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 CC 0C];
 	qcom,mdss-dsi-hbm-off-command-state =  "dsi_lp_mode";
 	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
 
