@@ -4048,6 +4048,9 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 			esd_config->status_mode = ESD_MODE_REG_READ;
 		} else if (!strcmp(string, "te_signal_check_video")) {
 			esd_config->status_mode = ESD_MODE_PANEL_TE_VIDEO;
+		} else if (!strcmp(string, "te_signal_check_vdo")) {
+			//some video mode need esd te check
+			esd_config->status_mode = ESD_MODE_PANEL_TE;
 		} else if (!strcmp(string, "te_signal_check")) {
 			if (panel->panel_mode == DSI_OP_CMD_MODE) {
 				esd_config->status_mode = ESD_MODE_PANEL_TE;
