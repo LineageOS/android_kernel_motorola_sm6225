@@ -370,6 +370,7 @@ struct dsi_panel {
 
 	int glbl_rescode_top_ctrl;
 	int glbl_rescode_bot_ctrl;
+	int glbl_hstx_str_ctrl_0;
 	int reset_avdd_time_interval;
 };
 

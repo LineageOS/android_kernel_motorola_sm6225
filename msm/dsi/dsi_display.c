@@ -5040,6 +5040,7 @@ static int dsi_phy_update_mipi_driver_strength(struct dsi_panel *panel, struct m
 
 	phy->cfg.dsi_phy_rescode_top = panel->glbl_rescode_top_ctrl;
 	phy->cfg.dsi_phy_rescode_bot = panel->glbl_rescode_bot_ctrl;
+	phy->cfg.dsi_phy_hstx_str_ctrl_0 = panel->glbl_hstx_str_ctrl_0;
 	return 0;
 
 }

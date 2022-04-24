@@ -365,6 +365,11 @@ static void dsi_phy_hw_dphy_enable(struct dsi_phy_hw *phy,
 		}
 		glbl_str_swi_cal_sel_ctrl = 0x00;
 		glbl_hstx_str_ctrl_0 = 0x88;
+		if(cfg->dsi_phy_hstx_str_ctrl_0 > 0)
+		{
+			glbl_hstx_str_ctrl_0 = cfg->dsi_phy_hstx_str_ctrl_0;
+			DSI_PHY_INFO(phy, "glbl_hstx_str_ctrl_0=0x%2x\n", glbl_hstx_str_ctrl_0);
+		}
 	} else {
 		vreg_ctrl_0 = less_than_1500_mhz ? 0x5B : 0x59;
 		glbl_str_swi_cal_sel_ctrl = less_than_1500_mhz ? 0x03 : 0x00;
