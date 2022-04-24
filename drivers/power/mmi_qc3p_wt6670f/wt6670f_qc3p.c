@@ -20,6 +20,7 @@
 #include "wt6670f.h"
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
+#include <asm/neon.h>
 
 #define MAX_USER_STR 1024
 
@@ -154,7 +155,10 @@ static u16 wt6670f_get_vbus_voltage(void)
 
 	pr_err(">>>>>>wt6670f get vbus voltage = %04x  %02x  %02x\n", tmp,
 			data[0], data[1]);
-	return (u16)(tmp * 18.98);
+        kernel_neon_begin();
+	tmp = (u16)(tmp * 18.98);
+        kernel_neon_end();
+        return tmp;
 }
 
 static u16 wt6670f_get_id(u8 reg)
