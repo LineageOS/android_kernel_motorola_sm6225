@@ -2203,6 +2203,8 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		&& (!bq->typec_apsd_rerun_done)) {
 		down(&bq->sem_dpdm);
 		dev_err(bq->dev, "rerun apsd for 0x%x\n", bq->vbus_type);
+		if (bq->part_no == SC89890H)
+			msleep(100);
 		bq2589x_rerun_apsd_if_required(bq);
 		up(&bq->sem_dpdm);
 		return;
