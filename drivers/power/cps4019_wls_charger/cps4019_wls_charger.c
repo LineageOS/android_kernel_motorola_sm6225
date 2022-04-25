@@ -996,7 +996,12 @@ static int cps_wls_get_state(void)
 
 static bool cps_wls_get_vout_state(void)
 {
-	return !!(cps_wls_get_state() & (1<<6));
+	int ret = cps_wls_get_state();
+
+	if (ret == CPS_WLS_FAIL)
+		ret = 0;
+
+	return !!(ret & (1<<6));
 }
 
 static int cps_wls_get_die_tmp(void)
