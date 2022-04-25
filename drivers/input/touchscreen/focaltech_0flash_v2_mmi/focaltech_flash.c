@@ -40,7 +40,12 @@
 *****************************************************************************/
 #define FTS_FW_REQUEST_SUPPORT                      1
 /* Example: focaltech_ts_fw_tianma.bin */
+#if FTS_AUTO_UPGRADE_EN
 #define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
+#else
+#define FTS_FW_NAME_PREX_WITH_REQUEST               ""
+#endif
+
 #define FTS_READ_BOOT_ID_TIMEOUT                    3
 #define FTS_FLASH_PACKET_LENGTH_SPI_LOW             (4 * 1024 - 4)
 #define FTS_FLASH_PACKET_LENGTH_SPI                 (32 * 1024 - 16)
@@ -53,15 +58,12 @@
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 u8 fw_file[] = {
-#include FTS_UPGRADE_FW_FILE
 };
 
 u8 fw_file2[] = {
-#include FTS_UPGRADE_FW2_FILE
 };
 
 u8 fw_file3[] = {
-#include FTS_UPGRADE_FW3_FILE
 };
 
 struct upgrade_module module_list[] = {
@@ -991,6 +993,7 @@ int fts_fw_recovery(void)
     }
 
     upg->ts_data->fw_is_running = false;
+  if (!upg->ts_data->force_reflash) {
     ret = fts_check_bootid();
     if (ret < 0) {
         FTS_ERROR("check boot id fail");
@@ -1012,6 +1015,8 @@ int fts_fw_recovery(void)
     }
 
     FTS_INFO("abnormal situation,need download fw");
+  } //!force_reflash
+
     ret = fts_fw_resume(false);
     if (ret < 0) {
         FTS_ERROR("fts_fw_resume fail");
@@ -1056,6 +1061,43 @@ static int fts_fwupg_get_module_info(struct fts_upgrade *upg)
     return 0;
 }
 
+int fts_fw_update_vendor_name(const char* name) {
+    struct fts_upgrade *upg = fwupgrade;
+    char* pos;
+    int len;
+
+    FTS_FUNC_ENTER();
+    if (!upg) {
+        FTS_ERROR("fwupgrade null");
+        return -EINVAL;
+    }
+
+    if (!upg->module_info) {
+        FTS_INFO("upgrade get module_info");
+        fts_fwupg_get_module_info(upg);
+    }
+
+    if (!upg->module_info) {
+        FTS_ERROR("upgrade module_info init fail");
+        return -EINVAL;
+    }
+
+    len = strlen(name);
+    if (len > FILE_NAME_LENGTH) {
+        FTS_ERROR("vendor name is too long");
+        return -EINVAL;
+    }
+    pos = strstr(name, ".bin");
+    if (pos == NULL)
+        snprintf(upg->module_info->vendor_name, FILE_NAME_LENGTH, "%s", name);
+    else {
+        len = len - strlen(".bin");
+        snprintf(upg->module_info->vendor_name, len + 1, "%s", name);
+    }
+    FTS_INFO("upgrade name=%s", name);
+    return 0;
+}
+
 static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 {
     int ret = 0;
@@ -1063,6 +1105,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
     u8 *tmpbuf = NULL;
     char fwname[FILE_NAME_LENGTH] = { 0 };
 
+#if !FTS_AUTO_UPGRADE_EN
     if (fts_data->panel_supplier) {
         FTS_INFO("fts_data->panel_supplier=%s\n", fts_data->panel_supplier);
         snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
@@ -1070,6 +1113,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
                  fts_data->panel_supplier);
         }
     else
+#endif
         snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
              FTS_FW_NAME_PREX_WITH_REQUEST, \
              upg->module_info->vendor_name);
@@ -1171,11 +1215,6 @@ static void fts_fwupg_work(struct work_struct *work)
     u8 chip_id = 0;
     struct fts_upgrade *upg = fwupgrade;
 
-#if !FTS_AUTO_UPGRADE_EN
-    FTS_INFO("FTS_AUTO_UPGRADE_EN is disabled, not upgrade when power on");
-    return ;
-#endif
-
     FTS_INFO("fw upgrade work function");
     if (!upg || !upg->ts_data) {
         FTS_ERROR("upg/ts_data is null");
@@ -1185,9 +1224,18 @@ static void fts_fwupg_work(struct work_struct *work)
     /* get fw */
     ret = fts_fwupg_get_fw_file(upg);
     if (ret < 0) {
+#if !FTS_AUTO_UPGRADE_EN
+        FTS_INFO("FTS_AUTO_UPGRADE_EN disabled, upgrade later");
+#else
         FTS_ERROR("get file fail, can't upgrade");
+#endif
         return ;
     }
+
+#if !FTS_AUTO_UPGRADE_EN
+    FTS_INFO("FTS_AUTO_UPGRADE_EN is disabled, not upgrade when power on");
+    return;
+#endif
 
     if (upg->ts_data->fw_loading) {
         FTS_INFO("fw is loading, not download again");
@@ -1211,6 +1259,7 @@ int fts_fwupg_init(struct fts_ts_data *ts_data)
     int setting_count =
         sizeof(upgrade_setting_list) / sizeof(upgrade_setting_list[0]);
 
+    FTS_FUNC_ENTER();
     FTS_INFO("fw upgrade init function");
     if (!ts_data || !ts_data->ts_workqueue) {
         FTS_ERROR("ts_data/workqueue is NULL, can't run upgrade function");
@@ -1254,6 +1303,7 @@ int fts_fwupg_init(struct fts_ts_data *ts_data)
     INIT_WORK(&ts_data->fwupg_work, fts_fwupg_work);
     queue_work(ts_data->ts_workqueue, &ts_data->fwupg_work);
 
+    FTS_FUNC_EXIT();
     return 0;
 }
 
