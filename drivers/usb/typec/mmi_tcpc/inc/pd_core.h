@@ -671,6 +671,7 @@
 #define USB_VID_RICHTEK		0x29cf  /* demo uvdm */
 #define USB_VID_DIRECTCHARGE	0x29cf  /* direct charge */
 #define USB_VID_MQP		0x1748
+#define USB_VID_MMI_ADAPTER  0x22b8
 
 /* PD counter definitions */
 #define PD_MESSAGE_ID_COUNT	7
@@ -857,6 +858,11 @@ struct pd_port {
 	/* miss msg */
 	bool miss_msg;
 	uint8_t rx_cap;
+
+#ifdef CONFIG_SUPPORT_MMI_ADAPTER
+	uint8_t mmi_adapter_state;
+#endif /* CONFIG_SUPPORT_MMI_ADAPTER */
+
 	/* PD */
 	bool msg_output_lock;
 
