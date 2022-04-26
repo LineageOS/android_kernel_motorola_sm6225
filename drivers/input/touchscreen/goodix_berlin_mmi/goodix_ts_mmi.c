@@ -1087,5 +1087,5 @@ void goodix_ts_mmi_dev_unregister(struct platform_device *pdev) {
 	if (!core_data)
 		ts_err("Failed to get driver data");
 	mutex_destroy(&core_data->mode_lock);
-	ts_mmi_dev_unregister(&pdev->dev);
+	ts_mmi_dev_unregister(core_data->bus->dev);
 }

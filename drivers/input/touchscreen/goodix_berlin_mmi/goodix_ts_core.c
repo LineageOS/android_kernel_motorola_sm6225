@@ -2528,7 +2528,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
 #endif
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
-	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	ts_info("%s:goodix_ts_mmi_dev_unregister",__func__);
 	goodix_ts_mmi_dev_unregister(pdev);
 #endif
 
