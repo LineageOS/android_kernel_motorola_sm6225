@@ -748,6 +748,55 @@ static int fts_read_parse_touchdata(struct fts_ts_data *ts_data, u8 *touch_buf)
     return ((touch_buf[FTS_TOUCH_E_NUM] >> 4) & 0x0F);
 }
 
+#if FTS_USB_DETECT_EN
+static void fts_mcu_usb_detect_set(uint8_t usb_connected)
+{
+	uint8_t write_data = 0;
+	uint8_t read_data = 0;
+	uint8_t retry_cnt = 0;
+	int	ret = 0;
+
+	do{
+		if (usb_connected == 0x01) {
+			write_data= 0x01;
+			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, write_data);
+			if (ret < 0)
+				FTS_ERROR("set register USB IN fail, ret=%d", ret);
+			FTS_INFO("%s: USB detect status IN!\n", __func__);
+		} else {
+			write_data= 0x00;
+			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, write_data);
+			if (ret < 0)
+				FTS_ERROR("set register USB OUT fail, ret=%d", ret);
+			FTS_INFO("%s: USB detect status OUT!\n", __func__);
+		}
+
+		ret = fts_read_reg(FTS_REG_CHARGER_MODE_EN, &read_data);
+		if (ret < 0)
+			FTS_ERROR("read 8b register fail, ret=%d", ret);
+		retry_cnt++;
+	}while((write_data != read_data) && retry_cnt < FTS_REG_RETRY_TIMES);
+}
+
+void fts_cable_detect_func(bool force_renew)
+{
+	struct fts_ts_data *ts_data = fts_data;
+	uint8_t connect_status = 0;
+	connect_status = ts_data->usb_detect_flag;
+
+	if ((connect_status != ts_data->usb_connected) || force_renew) {
+		if (connect_status) {
+			ts_data->usb_connected = 0x01;
+		} else {
+			ts_data->usb_connected = 0x00;
+		}
+
+		fts_mcu_usb_detect_set(ts_data->usb_connected);
+		FTS_INFO("%s: Cable status change: 0x%2.2X\n", __func__, ts_data->usb_connected);
+	}
+}
+#endif
+
 static int fts_irq_read_report(struct fts_ts_data *ts_data)
 {
     int i = 0;
@@ -759,6 +808,10 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
     u8 base = 0;
     u8 *touch_buf = ts_data->touch_buf;
     struct ts_event *events = ts_data->events;
+
+#if FTS_USB_DETECT_EN
+	fts_cable_detect_func(false);
+#endif
 
     touch_etype = fts_read_parse_touchdata(ts_data, touch_buf);
     switch (touch_etype) {
@@ -1783,6 +1836,35 @@ static void fts_ts_late_resume(struct early_suspend *handler)
 }
 #endif
 
+#if FTS_USB_DETECT_EN
+static int fts_charger_notifier_callback(struct notifier_block *nb,
+								unsigned long val, void *v) {
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	struct fts_ts_data *ts = container_of(nb, struct fts_ts_data, charger_notif);
+	union power_supply_propval prop;
+
+	psy= power_supply_get_by_name("usb");
+	if (!psy) {
+		FTS_ERROR("Couldn't get usbpsy\n");
+		return -EINVAL;
+	}
+	if (!strcmp(psy->desc->name, "usb")) {
+		if (psy && ts && val == POWER_SUPPLY_PROP_STATUS) {
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,&prop);
+			if (ret < 0) {
+				FTS_ERROR("Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+				return ret;
+			} else {
+				ts->usb_detect_flag = prop.intval;
+				//FTS_ERROR("usb prop.intval =%d\n", prop.intval);
+			}
+		}
+	}
+	return 0;
+}
+#endif
+
 static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 {
     int ret = 0;
@@ -1961,8 +2043,24 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     register_early_suspend(&ts_data->early_suspend);
 #endif
 
+#if FTS_USB_DETECT_EN
+	ts_data->usb_connected = 0x00;
+	ts_data->charger_notif.notifier_call = fts_charger_notifier_callback;
+	ret = power_supply_reg_notifier(&ts_data->charger_notif);
+	if (ret) {
+		FTS_ERROR("Unable to register charger_notifier: %d\n",ret);
+		goto err_register_charger_notify_failed;
+	}
+#endif
+
     FTS_FUNC_EXIT();
     return 0;
+
+#if FTS_USB_DETECT_EN
+err_register_charger_notify_failed:
+if (ts_data->charger_notif.notifier_call)
+	power_supply_unreg_notifier(&ts_data->charger_notif);
+#endif
 
 err_irq_req:
 #if FTS_POWER_SOURCE_CUST_EN
@@ -1997,6 +2095,11 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     FTS_FUNC_ENTER();
 
     cancel_work_sync(&fts_data->resume_work);
+
+#if FTS_USB_DETECT_EN
+	if (ts_data->charger_notif.notifier_call)
+		power_supply_unreg_notifier(&ts_data->charger_notif);
+#endif
 
 #if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
@@ -2135,6 +2238,10 @@ static int fts_ts_resume(struct device *dev)
     if (ts_data->gesture_support) {
         fts_gesture_resume(ts_data);
     }
+#endif
+
+#if FTS_USB_DETECT_EN
+	fts_cable_detect_func(true);
 #endif
 
     FTS_FUNC_EXIT();
