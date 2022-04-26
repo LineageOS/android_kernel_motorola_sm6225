@@ -216,7 +216,11 @@ int fsg_lun_open(struct fsg_lun *curlun, const char *filename)
 		blksize = 2048;
 		blkbits = 11;
 	} else if (S_ISBLK(inode->i_mode)) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+		blksize = bdev_logical_block_size(inode->i_bdev);
+#else
 		blksize = bdev_logical_block_size(I_BDEV(inode));
+#endif
 		blkbits = blksize_bits(blksize);
 	} else {
 		blksize = 512;
