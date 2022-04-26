@@ -62,6 +62,9 @@
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
 #include "focaltech_common.h"
+#ifdef FTS_USB_DETECT_EN
+#include <linux/power_supply.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -113,6 +116,7 @@
 #define FTS_PATCH_COMERR_PM                 0
 #define FTS_TIMEOUT_COMERR_PM               700
 
+#define FTS_REG_RETRY_TIMES                 5
 
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
@@ -238,6 +242,12 @@ struct fts_ts_data {
     struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     struct early_suspend early_suspend;
+#endif
+
+#if FTS_USB_DETECT_EN
+	bool usb_detect_flag;
+	uint8_t usb_connected;
+	struct notifier_block charger_notif;
 #endif
 };
 
