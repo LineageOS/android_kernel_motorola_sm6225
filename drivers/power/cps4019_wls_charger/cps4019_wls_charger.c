@@ -131,7 +131,10 @@ struct cps_wls_chrg_chip {
 	int rx_neg_protocol;
 	int command_flag;
 
+	/*fw relative*/
 	const char *wls_fw_name;
+	int fw_ver_major;
+	int fw_ver_minor;
 	bool use_bl_in_h;
 };
 
@@ -422,6 +425,26 @@ static bool cps_check_chip_id(void)
 	cps_wls_log(CPS_LOG_DEBG, "[%s] chip id 0x%x\n", __func__, id);
 
 	return ((id == CPS4019_CHIP_ID) || (id == -1)) ? TRUE : FALSE;
+}
+*/
+
+static bool cps_check_fw_ver(void)
+{
+	int fw_major, fw_minor;
+	int ret;
+
+	fw_major = cps_wls_get_sys_fw_major_version();
+	fw_minor = cps_wls_get_sys_fw_minor_version();
+
+	cps_wls_log(CPS_LOG_ERR, "[%s] chip id %d.%d\n", __func__, fw_major, fw_minor);
+
+	if ((chip->fw_ver_major > fw_major)
+			|| (chip->fw_ver_minor > fw_minor))
+		ret = true;
+	else
+		ret = false;
+
+	return ret;
 }
 
 static void cps_wls_pm_set_awake(int awake)
@@ -730,8 +753,8 @@ static int update_firmware(void)
 		goto update_fail;
 	}
 
-	if (cps_check_chip_id()) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] fw is exist OR chip do not exist. Skip!!\n", __func__);
+	if (!cps_check_fw_ver()) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] fw already exist OR chip do not exist. Skip!!\n", __func__);
 		goto update_fail;
 	}
 
@@ -1355,6 +1378,11 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 		return -EINVAL;
 	}
 
+	chip->fw_ver_major = 0;
+	chip->fw_ver_minor = 0;
+	of_property_read_u32(node, "fw_ver_major", &chip->fw_ver_major);
+	of_property_read_u32(node, "fw_ver_minor", &chip->fw_ver_minor);
+
 	chip->wls_fw_name = NULL;
 	of_property_read_string(node, "wireless-fw-name", &chip->wls_fw_name);
 
@@ -1363,6 +1391,7 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 	cps_wls_log(CPS_LOG_ERR, "[%s]  wls_charge_int %d wls_fw_name: %s use_bl_h %d\n",
 			__func__, chip->wls_charge_int,
 			chip->wls_fw_name ? chip->wls_fw_name : "null", chip->use_bl_in_h);
+
 	return 0;
 }
 
