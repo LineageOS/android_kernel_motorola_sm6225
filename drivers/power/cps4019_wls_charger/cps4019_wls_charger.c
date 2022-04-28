@@ -49,7 +49,7 @@
 #include <linux/mmi_wake_lock.h>
 #endif
 
-#include <soc/qcom/mmi_boot_info.h>
+#include <linux/mmi_discrete_charger_class.h>
 
 #include "cps4019_wls_charger.h"
 #include "cps4019_bl.h"
@@ -131,6 +131,10 @@ struct cps_wls_chrg_chip {
 	int rx_neg_protocol;
 	int command_flag;
 
+	/*main charger*/
+	const char *main_charger_name;
+	struct charger_device *main_chg_dev;
+
 	/*fw relative*/
 	const char *wls_fw_name;
 	int fw_ver_major;
@@ -193,6 +197,8 @@ static const struct regmap_config cps4019_regmap_32bit_config = {
 	.reg_bits = 32,
 	.val_bits = 8,
 };
+
+extern bool mmi_is_factory_mode(void);
 
 static int cps_wls_get_int_flag(void);
 static int cps_wls_set_int_clr(int value);
@@ -522,37 +528,6 @@ static int cps_set_power(bool en)
 	}
 
 	return CPS_WLS_SUCCESS;
-}
-
-static bool mmi_is_factory_mode(void)
-{
-	struct device_node *np = of_find_node_by_path("/chosen");
-	bool factory_mode = false;
-	const char *bootargs = NULL;
-	char *bootmode = NULL;
-	char *end = NULL;
-
-	if (!strncmp(bi_bootmode(), "mot-factory", 11))
-		return true;
-
-	if (!np)
-		return factory_mode;
-
-	if (!of_property_read_string(np, "bootargs", &bootargs)) {
-		bootmode = strstr(bootargs, "androidboot.mode=");
-		if (bootmode) {
-			end = strpbrk(bootmode, " ");
-			bootmode = strpbrk(bootmode, "=");
-		}
-		if (bootmode &&
-		    end > bootmode &&
-		    strnstr(bootmode, "factory", end - bootmode)) {
-				factory_mode = true;
-		}
-	}
-	of_node_put(np);
-
-	return factory_mode;
 }
 
 static int fp_size(struct file *f)
@@ -1368,6 +1343,9 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 		return -EINVAL;
 	}
 
+	chip->main_charger_name = NULL;
+	of_property_read_string(node, "main-charger-name", &chip->main_charger_name);
+
 	chip->fw_ver_major = 0;
 	chip->fw_ver_minor = 0;
 	of_property_read_u32(node, "fw_ver_major", &chip->fw_ver_major);
@@ -1528,6 +1506,13 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 		enable_irq_wake(chip->cps_wls_irq);
 	}
 	cps_wls_lock_work_init(chip);
+
+	if (chip->main_charger_name) {
+		chip->main_chg_dev = get_charger_by_name(chip->main_charger_name);
+		if (!chip->main_chg_dev) {
+			cps_wls_log(chip, "*** Error : can't find main charger %s***\n", chip->main_charger_name);
+		}
+	}
 
 	cps_wls_create_device_node(&(client->dev));
 
