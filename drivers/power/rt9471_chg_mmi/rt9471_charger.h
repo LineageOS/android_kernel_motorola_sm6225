@@ -14,6 +14,8 @@
 #ifndef __RT9471_CHARGER_H
 #define __RT9471_CHARGER_H
 
+#define RT9471_I2C_NO_MUTEX
+
 #define RT9471_DEVICE_ADDR	0x53
 #define RT9470_DEVID		0x09
 #define RT9470D_DEVID		0x0A

@@ -206,6 +206,7 @@ static enum power_supply_usb_type rt9471_usb_type[] = {
 
 struct rt9471_state {
 	bool online;
+	bool vbus_gd;
 };
 
 struct rt9471_iio {
@@ -675,7 +676,11 @@ static int __rt9471_get_ic_stat(struct rt9471_chip *chip,
 	int ret = 0;
 	u8 regval = 0;
 
+#ifdef RT9471_I2C_NO_MUTEX
+	ret = __rt9471_i2c_read_byte(chip, RT9471_REG_STATUS, &regval);
+#else
 	ret = rt9471_i2c_read_byte(chip, RT9471_REG_STATUS, &regval);
+#endif
 	if (ret < 0)
 		return ret;
 	*stat = (regval & RT9471_ICSTAT_MASK) >> RT9471_ICSTAT_SHIFT;
@@ -688,7 +693,11 @@ static int __rt9471_get_mivr(struct rt9471_chip *chip, u32 *mivr)
 	int ret = 0;
 	u8 regval = 0;
 
+#ifdef RT9471_I2C_NO_MUTEX
+	ret = __rt9471_i2c_read_byte(chip, RT9471_REG_VBUS, &regval);
+#else
 	ret = rt9471_i2c_read_byte(chip, RT9471_REG_VBUS, &regval);
+#endif
 	if (ret < 0)
 		return ret;
 
@@ -704,7 +713,11 @@ static int __rt9471_get_aicr(struct rt9471_chip *chip, u32 *aicr)
 	int ret = 0;
 	u8 regval = 0;
 
+#ifdef RT9471_I2C_NO_MUTEX
+	ret = __rt9471_i2c_read_byte(chip, RT9471_REG_IBUS, &regval);
+#else
 	ret = rt9471_i2c_read_byte(chip, RT9471_REG_IBUS, &regval);
+#endif
 	if (ret < 0)
 		return ret;
 
@@ -2268,7 +2281,7 @@ static int rt9471_charger_get_property(struct power_supply *psy,
 		val->intval = chip->state.online;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = rt9471_is_vbus_gd(chip);
+		val->intval = chip->state.vbus_gd;
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = rt9471_power_supply_desc.type;
@@ -2915,6 +2928,7 @@ static void charger_detect_work_func(struct work_struct *work)
 	chg_ready =  rt9471_is_vbus_ready_for_chg(chip);
 	dev_info(chip->dev, "%s: vbus_gd:%d, chg_ready:%d\n", __func__, vbus_gd, chg_ready);
 	chip->state.online = chg_ready;
+	chip->state.vbus_gd = vbus_gd;
 
 	if ((!vbus_gd) && (chip->status & RT9471_STATUS_PLUGIN)) {
 		dev_info(chip->dev, "%s:adapter removed\n", __func__);
