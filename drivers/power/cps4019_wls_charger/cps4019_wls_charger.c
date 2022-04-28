@@ -418,16 +418,6 @@ static int cps_wls_program_wait_cmd_done(void)
 	return CPS_WLS_SUCCESS;
 }
 
-static bool cps_check_chip_id(void)
-{
-	int id = cps_wls_get_chip_id();
-
-	cps_wls_log(CPS_LOG_DEBG, "[%s] chip id 0x%x\n", __func__, id);
-
-	return ((id == CPS4019_CHIP_ID) || (id == -1)) ? TRUE : FALSE;
-}
-*/
-
 static bool cps_check_fw_ver(void)
 {
 	int fw_major, fw_minor;
