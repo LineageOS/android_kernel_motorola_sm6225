@@ -224,6 +224,11 @@ struct qti_charger {
 	struct fod_gain			rx_fod_gain;
 	u32				tx_mode;
 	u32				folio_mode;
+	u32				wlc_light_ctl;
+	u32				wlc_fan_speed;
+	u32				wlc_status;
+	u32				wlc_tx_type;
+	u32				wlc_tx_power;
 	bool				*debug_enabled;
 	u32				wls_curr_max;
 	u32				rx_connected;
@@ -696,7 +701,7 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
-	rc =  qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
+	qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
 				&wls_info,
 				sizeof(struct wls_dump));
 
@@ -1512,6 +1517,141 @@ static ssize_t tx_mode_show(struct device *dev,
 }
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 
+static ssize_t wlc_light_ctl_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wlc_light_ctl;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wlc_light_ctl);
+	if (r) {
+		pr_err("Invalid wlc_light_ctl = %lu\n", wlc_light_ctl);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_WLC_LIGHT_CTL,
+				&wlc_light_ctl,
+				sizeof(wlc_light_ctl));
+	chg->wlc_light_ctl = wlc_light_ctl;
+	if (chg->wls_psy)
+		sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "wlc_light_ctl");
+
+	return r ? r : count;
+}
+
+static ssize_t wlc_light_ctl_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("PEN: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->wlc_light_ctl);
+}
+static DEVICE_ATTR(wlc_light_ctl, S_IRUGO|S_IWUSR, wlc_light_ctl_show, wlc_light_ctl_store);
+
+
+static ssize_t wlc_fan_speed_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	unsigned long r;
+	unsigned long wlc_fan_speed;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	r = kstrtoul(buf, 0, &wlc_fan_speed);
+	if (r) {
+		pr_err("Invalid wlc_fan_speed = %lu\n", wlc_fan_speed);
+		return -EINVAL;
+	}
+
+	r = qti_charger_write(chg, OEM_PROP_WLS_WLC_FAN_SPEED,
+				&wlc_fan_speed,
+				sizeof(wlc_fan_speed));
+	chg->wlc_fan_speed = wlc_fan_speed;
+	if (chg->wls_psy)
+		sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "wlc_fan_speed");
+
+	return r ? r : count;
+}
+
+static ssize_t wlc_fan_speed_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("PEN: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->wlc_fan_speed);
+}
+static DEVICE_ATTR(wlc_fan_speed, S_IRUGO|S_IWUSR, wlc_fan_speed_show, wlc_fan_speed_store);
+
+static ssize_t wlc_tx_type_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	u32 type = 0;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_WLC_TX_TYPE,
+				&type,
+				sizeof(type));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", type);
+}
+
+static DEVICE_ATTR(wlc_tx_type, S_IRUGO,
+		wlc_tx_type_show,
+		NULL);
+
+static ssize_t wlc_tx_power_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	u32 power = 0;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_WLC_TX_POWER,
+				&power,
+				sizeof(power));
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", power);
+}
+
+static DEVICE_ATTR(wlc_tx_power, S_IRUGO,
+		wlc_tx_power_show,
+		NULL);
+
 static ssize_t rx_connected_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -1528,6 +1668,24 @@ static ssize_t rx_connected_show(struct device *dev,
 
 static DEVICE_ATTR(rx_connected, S_IRUGO,
 		rx_connected_show,
+		NULL);
+
+static ssize_t wlc_st_changed_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->wlc_status);
+}
+
+static DEVICE_ATTR(wlc_st_changed, S_IRUGO,
+		wlc_st_changed_show,
 		NULL);
 
 static ssize_t wls_input_current_limit_store(struct device *dev,
@@ -1807,13 +1965,23 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
 		break;
         case NOTIFY_EVENT_WLS_CHANGE:
 		break;
+        case NOTIFY_EVENT_WLS_WLC_CHANGE:
+	/* WLC status update */
+		if (notify_data->data[0] != chg->wlc_status) {
+			chg->wlc_status = notify_data->data[0];
+			if (chg->wls_psy) {
+				pr_info("report wlc_st_changed\n");
+				sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "wlc_st_changed");
+			}
+		}
+		break;
         default:
 		pr_err("Unknown wireless event: %#lx\n", event);
                 break;
         }
 
 	if (chg->wls_psy) {
-		pr_info("wireless charger notify\n");
+		pr_info("wireless charger notify, event %lu\n", event);
 		power_supply_changed(chg->wls_psy);
 	}
 
@@ -1855,6 +2023,31 @@ static void wireless_psy_init(struct qti_charger *chg)
         if (rc)
 		pr_err("couldn't create wireless folio mode error\n");
 
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_light_ctl);
+        if (rc)
+		pr_err("couldn't create wireless wlc light control error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_fan_speed);
+        if (rc)
+		pr_err("couldn't create wireless wlc fan speed error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_type);
+        if (rc)
+		pr_err("couldn't create wireless wlc tx type error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_power);
+        if (rc)
+		pr_err("couldn't create wireless wlc tx power capacity error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_st_changed);
+        if (rc)
+		pr_err("couldn't create wireless wlc status changed error\n");
+
 	chg->wls_nb.notifier_call = wireless_charger_notify_callback;
 	rc = qti_charger_register_notifier(&chg->wls_nb);
 	if (rc)
@@ -1877,6 +2070,22 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_folio_mode);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_light_ctl);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_fan_speed);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_type);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_power);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_st_changed);
+
 	qti_charger_unregister_notifier(&chg->wls_nb);
 
 	power_supply_put(chg->wls_psy);
