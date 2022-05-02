@@ -13,7 +13,8 @@ goodix_brl_mmi-objs := \
 					goodix_ts_utils.o \
 					goodix_brl_fwupdate.o \
 					goodix_ts_inspect.o \
-					goodix_ts_tools.o
+					goodix_ts_tools.o \
+					goodix_ts_config.o
 
 ifneq ($(filter m y, $(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
 	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
@@ -63,6 +64,25 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o
 endif
+
+ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
+USE_TARGET_PRODUCT := $(strip $(subst _factory,, $(TARGET_PRODUCT)))
+else
+USE_TARGET_PRODUCT := $(TARGET_PRODUCT)
+endif
+
+ifneq ($(filter oneli, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_ONELI
+else ifneq ($(filter hiphi, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_HIPHI
+else ifneq ($(filter hiphic, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_HIPHIC
+else ifneq ($(filter li, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_LI
+else ifneq ($(filter eqs, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_EQS
+endif
+$(warning "william EXTRA_CFLAGS = $(EXTRA_CFLAGS)")
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
