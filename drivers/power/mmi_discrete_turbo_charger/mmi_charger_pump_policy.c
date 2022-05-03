@@ -644,39 +644,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 
 		mmi_chrg_info(chip, "Check all effective pdo info again\n");
 
-		rc = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
-		if (MMI_ADAPTER_OK != rc) {
-			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", rc);
-		}
-
-		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
-			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
-				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
-					chip->mmi_pd_pdo_idx = i ;
-					mmi_chrg_info(chip,
-							"Pd charger support pps, pdo %d, "
-							"volt %d, curr %d \n",
-							chip->mmi_pd_pdo_idx,
-							chip->mmi_pdo_info.max_mv[i],
-							chip->mmi_pdo_info.ma[i]);
-					chip->pd_pps_support = true;
-
-					if ((chip->mmi_pdo_info.max_mv[i] * 1000) <
-							chip->pd_volt_max) {
-						chip->pd_volt_max =
-						chip->mmi_pdo_info.max_mv[i] * 1000;
-					}
-
-					if ((chip->mmi_pdo_info.ma[i] * 1000) <
-							chip->pd_curr_max) {
-						chip->pd_curr_max =
-						chip->mmi_pdo_info.ma[i] * 1000;
-					}
-
-				break;
-			}
-		}
+		mmi_charger_update_pd_capacity(chip);
 
 		/*Initial setup pps request power by the battery voltage*/
 		chip->pd_request_volt = (2 * vbatt_volt) % 20000;

@@ -179,6 +179,7 @@ struct mmi_cp_policy_dev {
 #define PD_ALLOW_MIN_CURRENT_UA		1500000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
 #define PUMP_CHARGER_PPS_MIN_VOLT	8000000
+#define PUMP_CHARGER_PPS_MAX_VOLT	11000000
 #define COOLING_HYSTERISIS_DEGC 2
 struct mmi_charger_manager {
 	const char	*name;
@@ -317,6 +318,7 @@ extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
 extern void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 									struct mmi_charger_device *chrg_dev);
 extern bool mmi_is_cable_plugout(struct mmi_charger_manager *chip);
+extern int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip);
 extern ssize_t mmi_get_factory_image_mode(void);
 extern ssize_t mmi_set_factory_image_mode(int mode);
 extern ssize_t mmi_get_factory_charge_upper(void);
