@@ -112,6 +112,7 @@ struct mmi_discrete_charger {
 	/*PD*/
 	struct adapter_device *pd_adapter_dev;
 	int			pd_active;
+	int			pd_vdm_verify;
 	bool			pd_supported;
 
 	int			dc_cl_ma;
@@ -138,6 +139,7 @@ int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);
 int mmi_discrete_is_usb_suspended(struct mmi_discrete_charger *chip);
 int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val);
+int mmi_charger_pd_vdm_verify(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *val);
 int mmi_discrete_config_charging_enabled(struct mmi_discrete_charger *chip, int val);
 int mmi_discrete_get_charging_enabled(struct mmi_discrete_charger *chip, bool *val);

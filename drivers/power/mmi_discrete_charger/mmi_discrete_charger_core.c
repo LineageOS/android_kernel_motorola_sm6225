@@ -2202,10 +2202,27 @@ int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
 
 	return 0;
 }
+
+int mmi_charger_pd_vdm_verify(struct mmi_discrete_charger *chip, int val)
+{
+	mmi_info(chip, "config pd_vdm_verify is %d old mode is %d\n", val, chip->pd_vdm_verify);
+
+	if (chip->pd_vdm_verify && chip->pd_vdm_verify == val)
+		return 0;
+
+	chip->pd_vdm_verify = val;
+
+	if (chip->usb_psy && chip->pd_vdm_verify)
+		power_supply_changed(chip->usb_psy);
+
+	return 0;
+}
+
 static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 {
 	chip->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	chip->pd_active = MMI_POWER_SUPPLY_PD_INACTIVE;
+	chip->pd_vdm_verify = false;
 	if (chip->use_extcon)
 		mmi_notify_device_mode(chip, false);
 	vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
