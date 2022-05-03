@@ -868,6 +868,7 @@ struct pd_port {
 
 	uint8_t state_machine;
 	uint8_t pd_connect_state;
+	uint8_t pd_vdm_verify_state;
 
 	uint8_t pe_pd_state;
 	uint8_t pe_vdm_state;
@@ -1233,6 +1234,7 @@ void pd_lock_msg_output(struct pd_port *pd_port);
 void pd_unlock_msg_output(struct pd_port *pd_port);
 
 int pd_update_connect_state(struct pd_port *pd_port, uint8_t state);
+int pd_update_vdm_verify_state(struct pd_port *pd_port, uint8_t state);
 
 /* ---- PD notify TCPC Policy Engine State Changed ---- */
 

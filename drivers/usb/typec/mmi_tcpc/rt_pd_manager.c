@@ -81,11 +81,13 @@ enum iio_psy_property {
        POWER_SUPPLY_IIO_OTG_ENABLE,
        POWER_SUPPLY_IIO_TYPEC_MODE,
        POWER_SUPPLY_IIO_PD_ACTIVE,
+       POWER_SUPPLY_IIO_MMI_PD_VDM_VERIFY,
        POWER_SUPPLY_IIO_PROP_MAX,
 };
 
 static const char * const iio_channel_map[] = {
 	"usb_real_type", "otg_enable", "typec_mode", "pd_active",
+	"mmi_pd_vdm_verify",
 };
 
 static int mmi_get_psy_iio_property(struct rt_pd_manager_data *rpmd,
@@ -634,6 +636,13 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		default:
 			break;
 		}
+		break;
+	case TCP_NOTIFY_PD_VDM_VERIFY:
+		dev_info(rpmd->dev, "%s mmi pd vdm verify state = %d\n",
+					__func__, noti->pd_state.vdm_verify);
+		val.intval = noti->pd_state.vdm_verify;
+		mmi_set_psy_iio_property(rpmd,
+				POWER_SUPPLY_IIO_MMI_PD_VDM_VERIFY, &val);
 		break;
 	default:
 		break;
