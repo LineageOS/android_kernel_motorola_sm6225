@@ -280,6 +280,9 @@ int mmi_notify_pe_ready(struct pd_port *pd_port,
     case MMI_VERIFY:
         mmi_adapter_verify(pd_port,svid_data);
         break;
+    case MMI_READY:
+        pd_update_vdm_verify_state(pd_port, true);
+        break;
     default:
         break;
     }
