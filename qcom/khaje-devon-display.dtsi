@@ -148,11 +148,13 @@
 
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
-	qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 ab
+	06 01 00 01 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
-	qcom,mdss-dsi-panel-status-value = <0x9c>;
+	qcom,mdss-dsi-panel-status-value = <0x00 0x00>,<0x9c>;
 	qcom,mdss-dsi-panel-on-check-value = <0x9c>;
-	qcom,mdss-dsi-panel-status-read-length = <1>;
+	qcom,mdss-dsi-panel-status-read-length = <2 1>;
+	qcom,mdss-dsi-panel-max-error-count = <3>;
 
         qcom,dsi-supported-dfps-list = <90 60>;
         qcom,mdss-dsi-pan-enable-dynamic-fps;
