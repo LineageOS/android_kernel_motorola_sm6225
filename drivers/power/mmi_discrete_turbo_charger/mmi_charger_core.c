@@ -952,6 +952,86 @@ static void mmi_awake_vote(struct mmi_charger_manager *chip, bool awake)
 		pm_relax(chip->dev);
 }
 
+int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip)
+{
+	union power_supply_propval val;
+	bool pd_active;
+	int ret = 0, i = 0;
+	int maxwatt = 0, max_mv = 0, max_ma = 0;
+
+	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
+	if (ret) {
+		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
+		return -EINVAL;
+	}
+	pd_active = val.intval;
+
+	if (pd_active) {
+
+		if (!chip->pd_adapter_dev) {
+			chip->pd_adapter_dev = get_adapter_by_name("pd_adapter");
+			if (IS_ERR_OR_NULL(chip->pd_adapter_dev)) {
+				mmi_chrg_err(chip, "Error getting the pd phandle %ld\n",
+					PTR_ERR(chip->pd_adapter_dev));
+				chip->pd_adapter_dev = NULL;
+				return -EINVAL;
+			}
+		}
+
+		ret = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
+		if (MMI_ADAPTER_OK != ret) {
+			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", ret);
+			return -EINVAL;
+		}
+
+		mmi_chrg_info(chip, "check all effective pdo info\n");
+		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
+			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
+				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
+				&& (chip->mmi_pdo_info.max_mv[i] * 1000) <= PUMP_CHARGER_PPS_MAX_VOLT
+				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
+
+					chip->pd_pps_support = true;
+
+					if (maxwatt == 0) {
+						maxwatt = chip->mmi_pdo_info.maxwatt[i];
+						max_mv = chip->mmi_pdo_info.max_mv[i];
+						max_ma = chip->mmi_pdo_info.ma[i];
+						chip->mmi_pd_pdo_idx = i ;
+					} else if (maxwatt == chip->mmi_pdo_info.maxwatt[i]
+							&& (max_mv < chip->mmi_pdo_info.max_mv[i])) {
+						max_mv = chip->mmi_pdo_info.max_mv[i];
+						max_ma = chip->mmi_pdo_info.ma[i];
+						chip->mmi_pd_pdo_idx = i ;
+					} else if (maxwatt < chip->mmi_pdo_info.maxwatt[i]) {
+						maxwatt = chip->mmi_pdo_info.maxwatt[i];
+						max_mv = chip->mmi_pdo_info.max_mv[i];
+						max_ma = chip->mmi_pdo_info.ma[i];
+						chip->mmi_pd_pdo_idx = i ;
+					}
+
+			}
+		}
+
+		mmi_chrg_info(chip,
+			"pd charger support pps, pdo %d, "
+			"volt %d, curr %d \n",
+			chip->mmi_pd_pdo_idx,
+			chip->mmi_pdo_info.max_mv[chip->mmi_pd_pdo_idx],
+			chip->mmi_pdo_info.ma[chip->mmi_pd_pdo_idx]);
+		if ((max_mv * 1000) <= pd_volt_max_init) {
+			chip->pd_volt_max = max_mv * 1000;
+		}
+
+		if ((max_ma * 1000) <= pd_curr_max_init) {
+			chip->pd_curr_max = max_ma * 1000;
+		}
+
+	}
+
+	return 0;
+}
+
 #define HEARTBEAT_DELAY_MS 60000
 #define SMBCHG_HEARTBEAT_INTRVAL_NS	70000000000
 #define CHG_SHOW_MAX_SIZE 50
@@ -959,9 +1039,8 @@ static void mmi_heartbeat_work(struct work_struct *work)
 {
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, heartbeat_work.work);
-	int hb_resch_time = 0, ret = 0, i = 0;
+	int hb_resch_time = 0, ret = 0;
 	union power_supply_propval val;
-	bool pd_active;
 
 	mmi_chrg_info(chip, "MMI: Heartbeat!\n");
 	/* Have not been resumed so wait another 100 ms */
@@ -996,61 +1075,10 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	if (!chip->vbus_present)
 		mmi_awake_vote(chip, false);
 
-	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
-	if (ret) {
-		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
-		goto schedule_work;
-	}
-	pd_active = val.intval;
-
-	if (!chip->sm_work_running && chip->vbus_present
-		&& pd_active) {
-
-		if (!chip->pd_adapter_dev) {
-			chip->pd_adapter_dev = get_adapter_by_name("pd_adapter");
-			if (IS_ERR_OR_NULL(chip->pd_adapter_dev)) {
-				mmi_chrg_err(chip, "Error getting the pd phandle %ld\n",
-					PTR_ERR(chip->pd_adapter_dev));
-				chip->pd_adapter_dev = NULL;
-				goto schedule_work;
-			}
-		}
-
-		ret = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
-		if (MMI_ADAPTER_OK != ret) {
-			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", ret);
+	if (!chip->sm_work_running && chip->vbus_present) {
+		ret = mmi_charger_update_pd_capacity(chip);
+		if (ret)
 			goto schedule_work;
-		}
-
-		mmi_chrg_info(chip, "check all effective pdo info\n");
-		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
-			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
-				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
-					chip->mmi_pd_pdo_idx = i ;
-					mmi_chrg_info(chip,
-							"pd charger support pps, pdo %d, "
-							"volt %d, curr %d \n",
-							chip->mmi_pd_pdo_idx,
-							chip->mmi_pdo_info.max_mv[i],
-							chip->mmi_pdo_info.ma[i]);
-					chip->pd_pps_support = true;
-
-					if ((chip->mmi_pdo_info.max_mv[i] * 1000) <
-							chip->pd_volt_max) {
-						chip->pd_volt_max =
-						chip->mmi_pdo_info.max_mv[i] * 1000;
-					}
-
-					if ((chip->mmi_pdo_info.ma[i] * 1000) <
-							chip->pd_curr_max) {
-						chip->pd_curr_max =
-						chip->mmi_pdo_info.ma[i] * 1000;
-					}
-
-				break;
-			}
-		}
 	}
 
 	if (!chip->qc3p_sm_work_running && chip->vbus_present)
@@ -1076,8 +1104,6 @@ static void psy_changed_work_func(struct work_struct *work)
 	struct mmi_charger_manager *chip = container_of(work,
 				struct mmi_charger_manager, psy_changed_work);
 	union power_supply_propval val;
-	bool pd_active;
-	int i;
 	int ret;
 
 	mmi_chrg_info(chip, "kick psy changed work.\n");
@@ -1099,61 +1125,8 @@ static void psy_changed_work_func(struct work_struct *work)
 	}
 	chip->vbus_present = val.intval;
 
-	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
-	if (ret) {
-		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
-		return;
-	}
-	pd_active = val.intval;
-
-	if (pd_active && chip->vbus_present) {
-
-		if (!chip->pd_adapter_dev) {
-			chip->pd_adapter_dev = get_adapter_by_name("pd_adapter");
-			if (IS_ERR_OR_NULL(chip->pd_adapter_dev)) {
-				mmi_chrg_err(chip, "Error getting the pd_adapter %ld\n",
-					PTR_ERR(chip->pd_adapter_dev));
-				chip->pd_adapter_dev = NULL;
-				return;
-			}
-		}
-
-		ret = adapter_dev_get_cap(chip->pd_adapter_dev, MMI_PD_ALL, &chip->mmi_pdo_info);
-		if (MMI_ADAPTER_OK != ret) {
-			mmi_chrg_err(chip, "Couldn't get pdo rc = %d\n", ret);
-			return;
-		}
-
-		mmi_chrg_info(chip, "check all effective pdo info\n");
-		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
-			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
-				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
-					chip->mmi_pd_pdo_idx = i ;
-					mmi_chrg_info(chip,
-							"pd charger support pps, pdo %d, "
-							"volt %d, curr %d \n",
-							chip->mmi_pd_pdo_idx,
-							chip->mmi_pdo_info.max_mv[i],
-							chip->mmi_pdo_info.ma[i]);
-					chip->pd_pps_support = true;
-
-					if ((chip->mmi_pdo_info.max_mv[i] * 1000) <
-							chip->pd_volt_max) {
-						chip->pd_volt_max =
-						chip->mmi_pdo_info.max_mv[i] * 1000;
-					}
-
-					if ((chip->mmi_pdo_info.ma[i] * 1000) <
-							chip->pd_curr_max) {
-						chip->pd_curr_max =
-						chip->mmi_pdo_info.ma[i] * 1000;
-					}
-
-				break;
-			}
-		}
-	}
+	if (chip->vbus_present)
+		mmi_charger_update_pd_capacity(chip);
 
 	mmi_chrg_info(chip, "vbus present %d, pd pps support %d, "
 					"pps max voltage %d, pps max curr %d\n",
