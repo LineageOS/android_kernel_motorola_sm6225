@@ -48,6 +48,9 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_CP_ENABLE:
 		chip->cp_active = !!val1;
 		break;
+	case PSY_IIO_MMI_PD_VDM_VERIFY:
+		rc = mmi_charger_pd_vdm_verify(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
@@ -99,6 +102,9 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 		break;
 	case PSY_IIO_CP_ENABLE:
 		*val1 = chip->cp_active;
+		break;
+	case PSY_IIO_MMI_PD_VDM_VERIFY:
+		*val1 = chip->pd_vdm_verify;
 		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
