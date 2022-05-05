@@ -1068,13 +1068,15 @@ exit_free_dev:
     if (sr100_dev->rx_buffer) {
       kfree(sr100_dev->rx_buffer);
     }
-    kfree(sr100_dev);
+    misc_deregister(&sr100_dev->sr100_device);
   }
-  misc_deregister(&sr100_dev->sr100_device);
 err_exit0:
-  mutex_destroy(&sr100_dev->sr100_access_lock);
   if (sr100_dev != NULL) kfree(sr100_dev);
+  if (sr100_dev != NULL) {
+    mutex_destroy(&sr100_dev->sr100_access_lock);
+  }
 err_exit:
+  if (sr100_dev != NULL) kfree(sr100_dev);
   SR100_DBG_MSG("ERROR: Exit : %s ret %d\n", __FUNCTION__, ret);
   return ret;
 }
@@ -1104,9 +1106,11 @@ static int sr100_remove(struct spi_device* spi) {
   gpio_free(sr100_dev->vbat_3v6_gpio);
 #endif
   misc_deregister(&sr100_dev->sr100_device);
-  if (sr100_dev->tx_buffer != NULL) kfree(sr100_dev->tx_buffer);
-  if (sr100_dev->rx_buffer != NULL) kfree(sr100_dev->rx_buffer);
-  if (sr100_dev != NULL) kfree(sr100_dev);
+  if (sr100_dev != NULL) {
+    if (sr100_dev->tx_buffer != NULL) kfree(sr100_dev->tx_buffer);
+    if (sr100_dev->rx_buffer != NULL) kfree(sr100_dev->rx_buffer);
+    if (sr100_dev != NULL) kfree(sr100_dev);
+  }
   SR100_DBG_MSG("Exit : %s\n", __FUNCTION__);
   return 0;
 }
