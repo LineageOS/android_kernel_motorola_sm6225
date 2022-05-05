@@ -64,6 +64,7 @@ static bool is_fw_dwnld_enabled = false;
 #define SR100_RXBUF_SIZE 4096
 #define SR100_MAX_TX_BUF_SIZE 2053
 #define MAX_READ_RETRY_COUNT 10
+#define UCI_MT_MASK 0xE0
 /* Macro to define SPI clock frequency */
 
 #define SR100_SPI_CLOCK 16000000L;
@@ -472,13 +473,19 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         pr_info("sr100_dev_read: spi read error %d\n ", ret);
         goto transcive_end;
       }
-      sr100_dev->IsExtndLenIndication = (sr100_dev->rx_buffer[EXTND_LEN_INDICATOR_OFFSET] & EXTND_LEN_INDICATOR_OFFSET_MASK);
-      sr100_dev->totalBtyesToRead = sr100_dev->rx_buffer[NORMAL_MODE_LEN_OFFSET];
-      if(sr100_dev->IsExtndLenIndication){
+
+      if ((sr100_dev->rx_buffer[0] & UCI_MT_MASK) == 0) {
+        sr100_dev->totalBtyesToRead = sr100_dev->rx_buffer[NORMAL_MODE_LEN_OFFSET];
         sr100_dev->totalBtyesToRead = ((sr100_dev->totalBtyesToRead << 8) | sr100_dev->rx_buffer[EXTENDED_LENGTH_OFFSET]);
+      } else {
+        sr100_dev->IsExtndLenIndication = (sr100_dev->rx_buffer[EXTND_LEN_INDICATOR_OFFSET] & EXTND_LEN_INDICATOR_OFFSET_MASK);
+        sr100_dev->totalBtyesToRead = sr100_dev->rx_buffer[NORMAL_MODE_LEN_OFFSET];
+        if (sr100_dev->IsExtndLenIndication) {
+          sr100_dev->totalBtyesToRead = ((sr100_dev->totalBtyesToRead << 8) | sr100_dev->rx_buffer[EXTENDED_LENGTH_OFFSET]);
+        }
       }
-      if(sr100_dev->totalBtyesToRead > MAX_UCI_PKT_SIZE) {
-        printk("Length %d  exceeds the max limit %d....",(int)sr100_dev->totalBtyesToRead,(int)SR100_RXBUF_SIZE);
+      if(sr100_dev->totalBtyesToRead > (MAX_UCI_PKT_SIZE - NORMAL_MODE_HEADER_LEN)) {
+        printk("Length %d  exceeds the max limit %d....",(int)sr100_dev->totalBtyesToRead,(int)MAX_UCI_PKT_SIZE);
         ret = -1;
         goto transcive_end;
       }
@@ -495,7 +502,7 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
         usleep_range(10,15);
         retry_count++;
         if(retry_count == 1000){
-          printk("Slave not released the IRQ even after 1ms");
+          printk("Slave not released the IRQ even after 10ms");
           break;
         }
       }while(gpio_get_value(sr100_dev->irq_gpio));
