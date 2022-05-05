@@ -60,9 +60,9 @@ extern int ese_cold_reset(ese_cold_reset_origin_t src);
 #endif
 static bool read_abort_requested = false;
 static bool is_fw_dwnld_enabled = false;
-#define SR100_TXBUF_SIZE 4096
-#define SR100_RXBUF_SIZE 4096
-#define SR100_MAX_TX_BUF_SIZE 2053
+#define SR100_TXBUF_SIZE 4200
+#define SR100_RXBUF_SIZE 4200
+#define SR100_MAX_TX_BUF_SIZE 4200
 #define MAX_READ_RETRY_COUNT 10
 #define UCI_MT_MASK 0xE0
 /* Macro to define SPI clock frequency */
@@ -71,7 +71,7 @@ static bool is_fw_dwnld_enabled = false;
 #define ENABLE_THROUGHPUT_MEASUREMENT 0
 
 /* Maximum UCI packet size supported from the driver */
-#define MAX_UCI_PKT_SIZE 2048
+#define MAX_UCI_PKT_SIZE 4200
 
 /* Different driver debug lever */
 enum SR100_DEBUG_LEVEL { SR100_DEBUG_OFF, SR100_FULL_DEBUG };
