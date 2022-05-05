@@ -392,8 +392,6 @@ static int sr100_dev_transceive(struct sr100_dev* sr100_dev, int op_mode, int co
   sr100_dev->IsExtndLenIndication = 0;
   ret = -1;
   retry_count = 0;
-  /*500ms timeout in jiffies*/
-  sr100_dev->timeOutInMs = ((500*HZ)/1000);
 
   switch(sr100_dev->mode){
     case SR100_WRITE_MODE:
@@ -612,10 +610,25 @@ write_end:
  ****************************************************************************/
 static ssize_t sr100_hbci_read(struct sr100_dev *sr100_dev,char* buf, size_t count){
   int ret = -EIO;
-  ret = wait_event_interruptible(sr100_dev->read_wq, sr100_dev->irq_received);
-  if (ret) {
-    printk("wait_event_interruptible() : Failed.\n");
+
+  if(count > SR100_RXBUF_SIZE) {
+    SR100_ERR_MSG("count(%lu) out of range(0-%d)\n", count, SR100_RXBUF_SIZE);
+    ret = -EINVAL;
     goto hbci_fail;
+  }
+
+  /* wait for inetrrupt upto 500ms after that timeout will happen and returns read fail */
+  ret = wait_event_interruptible_timeout(sr100_dev->read_wq, sr100_dev->irq_received, sr100_dev->timeOutInMs);
+  if (ret == 0) {
+    printk("wait_event_interruptible() : Failed.\n");
+    ret = -1;
+    goto hbci_fail;
+  }
+
+  if (read_abort_requested) {
+    read_abort_requested = false;
+    printk("HBCI Abort Read pending......");
+    return ret;
   }
   if(!gpio_get_value(sr100_dev->irq_gpio)){
    printk("IRQ is low during firmware download");
@@ -660,6 +673,8 @@ static ssize_t sr100_dev_read(struct file* filp, char* buf, size_t count,
                               loff_t* offset) {
   struct sr100_dev* sr100_dev = filp->private_data;
   int ret = -EIO;
+  /*500ms timeout in jiffies*/
+  sr100_dev->timeOutInMs = ((500*HZ)/1000);
   memset(sr100_dev->rx_buffer, 0x00, SR100_RXBUF_SIZE);
   if (!gpio_get_value(sr100_dev->irq_gpio)) {
     if (filp->f_flags & O_NONBLOCK) {
