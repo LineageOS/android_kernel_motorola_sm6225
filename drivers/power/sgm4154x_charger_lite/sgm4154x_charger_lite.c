@@ -2310,7 +2310,7 @@ static void sgm4154x_paired_battery_notify(void *data,
 	if (chg->paired_ichg_table && chg->paired_ichg_table_len) {
 		paired_ichg = 0;
 		for (i = 0; i < chg->paired_ichg_table_len; i++) {
-			if (delta_soc <= chg->paired_ichg_table[i * 2]) {
+			if (delta_ocv <= chg->paired_ichg_table[i * 2]) {
 				paired_ichg = chg->paired_ichg_table[i * 2 + 1];
 				break;
 			}
@@ -2393,10 +2393,10 @@ static void sgm4154x_paired_battery_notify(void *data,
 	else
 		low_load_en = false;
 
-	pr_info("paired_ocv: %dmV, batt_ocv: %dmV, delta_ocv: %dmV, delta_soc: %d\n",
-				paired_ocv, batt_ocv, delta_ocv, delta_soc);
-	pr_info("chg_present: %d, high_load_en: %d, low_load_en: %d, paired_ichg: %d\n",
-				chg_present, high_load_en, low_load_en, paired_ichg);
+	pr_info("charger_present:%d, charger_suspend:%d, paired_ocv:%dmV, batt_ocv:%dmV\n",
+				chg_present, chg->sgm->state.hiz_en, paired_ocv, batt_ocv);
+	pr_info("delta_ocv:%dmV, delta_soc:%d, high_load:%d, low_load:%d, ichg:%duA\n",
+				delta_ocv, delta_soc, high_load_en, low_load_en, paired_ichg);
 }
 
 static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
