@@ -2211,6 +2211,14 @@ static int utags_remove(struct platform_device *pdev)
 		kfree(ctrl->main.name);
 	if (ctrl->backup.name)
 		kfree(ctrl->backup.name);
+
+	if (bootargs_str) {
+		kfree(bootargs_str);
+		bootargs_str = NULL;
+	}
+
+	devm_kfree(&pdev->dev, ctrl);
+	dev_set_drvdata(&pdev->dev, NULL);
 	return 0;
 }
 
