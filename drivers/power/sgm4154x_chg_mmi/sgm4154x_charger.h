@@ -7,6 +7,7 @@
 
 #include <linux/i2c.h>
 #include <linux/iio/consumer.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
 #define SGM4154X_STATUS_PLUGIN			0x0001
@@ -240,19 +241,6 @@
 #define MMI_HVDCP2_VOLTAGE_STANDARD		8000000
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500000
-
-enum {
-	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
-	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
-	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
-};
-
-enum mmi_qc3p_power {
-	MMI_POWER_SUPPLY_QC3P_NONE,
-	MMI_POWER_SUPPLY_QC3P_18W,
-	MMI_POWER_SUPPLY_QC3P_27W,
-	MMI_POWER_SUPPLY_QC3P_45W,
-};
 
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;

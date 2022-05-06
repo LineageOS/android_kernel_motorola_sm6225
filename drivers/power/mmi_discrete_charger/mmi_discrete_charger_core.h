@@ -17,7 +17,7 @@
 #include <linux/iio/iio.h>
 #include <linux/extcon-provider.h>
 #include "mmi_charger.h"
-#include <linux/usb/mmi_discrete_typec.h>
+#include <linux/mmi_discrete_power_supply.h>
 #include <linux/usb/adapter_class.h>
 
 #define MMI_HB_VOTER			"MMI_HB_VOTER"
@@ -46,12 +46,6 @@ static const unsigned int mmi_discrete_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
 	EXTCON_NONE,
-};
-
-enum {
-	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
-	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
-	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
 };
 
 struct mmi_discrete_chg_client {

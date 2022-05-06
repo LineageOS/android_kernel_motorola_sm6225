@@ -23,7 +23,7 @@
 #include <linux/version.h>
 #include <linux/iio/consumer.h>
 #include "inc/tcpci_typec.h"
-#include <linux/usb/mmi_discrete_typec.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
 
