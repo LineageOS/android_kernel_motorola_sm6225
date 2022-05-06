@@ -2017,6 +2017,8 @@ static void utags_bootdevice_expand(const char **name_ptr, const char *name)
 	char *bootdevice = NULL;
 	char *replace, *suffix, *expanded;
 
+	if (name == NULL)
+		return;
 #ifndef CONFIG_BOOT_CONFIG
 	rc = utag_get_bootarg("androidboot.bootdevice=", &bootdevice, "bootargs", " ");
 	if (rc || !bootdevice)
@@ -2053,7 +2055,7 @@ static void utags_bootdevice_expand(const char **name_ptr, const char *name)
 	return;
 
 need_no_expansion:
-	*name_ptr = name;
+	*name_ptr = kstrdup(name, GFP_KERNEL);
 }
 
 static int utags_dt_init(struct platform_device *pdev)
@@ -2204,6 +2206,11 @@ static int utags_remove(struct platform_device *pdev)
 		filp_close(ctrl->main.filep, NULL);
 	if (ctrl->backup.filep)
 		filp_close(ctrl->backup.filep, NULL);
+
+	if (ctrl->main.name)
+		kfree(ctrl->main.name);
+	if (ctrl->backup.name)
+		kfree(ctrl->backup.name);
 	return 0;
 }
 
