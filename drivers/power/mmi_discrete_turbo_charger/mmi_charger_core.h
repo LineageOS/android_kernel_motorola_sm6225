@@ -53,6 +53,7 @@
 #include <linux/compiler.h>
 #include <linux/mmi_discrete_charger_class.h>
 #include <linux/usb/adapter_class.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -76,17 +77,6 @@ enum print_reason {
 	PR_INTERRUPT    = BIT(0),
 	PR_MISC         = BIT(2),
 	PR_MOTO         = BIT(7),
-};
-
-enum mmi_qc3p_power {
-	QTI_POWER_SUPPLY_QC3P_NONE,
-#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
-	QTI_POWER_SUPPLY_QC3P_18W = 0x8,
-#else
-	QTI_POWER_SUPPLY_QC3P_18W,
-#endif
-	QTI_POWER_SUPPLY_QC3P_27W,
-	QTI_POWER_SUPPLY_QC3P_45W,
 };
 
 static inline void wakeup_source_init_internal(struct wakeup_source *ws,
