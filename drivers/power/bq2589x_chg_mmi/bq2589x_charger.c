@@ -623,8 +623,25 @@ int bq2589x_reset_watchdog_timer(struct bq2589x *bq)
 int bq2589x_force_dpdm(struct bq2589x *bq)
 {
 	int ret;
-	u8 val = BQ2589X_FORCE_DPDM << BQ2589X_FORCE_DPDM_SHIFT;
+	u8 val = 0;
 
+	if (bq->part_no == SC89890H) {
+		val = 0x2 << BQ2589X_DP_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DP_VSEL_MASK, val);
+		val = 0x1 << BQ2589X_DM_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DM_VSEL_MASK, val);
+
+		msleep(30);
+
+		val = 0x1 << BQ2589X_DP_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DP_VSEL_MASK, val);
+		val = 0x1 << BQ2589X_DM_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DM_VSEL_MASK, val);
+
+		msleep(30);
+	}
+
+	val = BQ2589X_FORCE_DPDM << BQ2589X_FORCE_DPDM_SHIFT;
 	ret = bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_FORCE_DPDM_MASK, val);
 	if (ret)
 		return ret;
@@ -2191,8 +2208,6 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		&& (!bq->typec_apsd_rerun_done)) {
 		down(&bq->sem_dpdm);
 		dev_err(bq->dev, "rerun apsd for 0x%x\n", bq->vbus_type);
-		if (bq->part_no == SC89890H)
-			msleep(100);
 		bq2589x_rerun_apsd_if_required(bq);
 		up(&bq->sem_dpdm);
 		return;
