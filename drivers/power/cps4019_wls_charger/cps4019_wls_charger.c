@@ -1041,38 +1041,27 @@ static int cps_wls_irq_process(int int_flag)
 {
 	int rc = 0;
 
-	if ( int_flag & INT_TX_DATA_RECEIVED ) {
+	if (int_flag & INT_TX_DATA_RECEIVED) {
 		//todo
 	}
 
-	if( int_flag & INT_UV ) {
+	if(int_flag & INT_UV) {
 		//todo
 	}
 
 	if(int_flag & INT_OT) {
-		}
-
+	}
 	if(int_flag & INT_OC) {
-		}
-
+	}
 	if(int_flag & INT_OV) {
-		}
-
-	if(int_flag & INT_OPERATION_MODE) {
-		}
-
-	if(int_flag & INT_STAT_VRECT) {
+	}
+	if(int_flag & INT_ID_CFG_FINISH) {
 		cps_wls_set_int_enable();
 	}
-
-	if(int_flag & INT_STAT_VOUT) {
+	if(int_flag & INT_VOUT_STATE) {
 	}
-
-	if(int_flag & INT_DATA_STORE) {
-	}
-
-	if(int_flag & INT_AC_MIS_DET) {
-	}
+	//if(int_flag & INT_DATA_STORE){}
+	//if(int_flag & INT_AC_MIS_DET){}
 
 	return rc;
 }
