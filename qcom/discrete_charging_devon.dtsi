@@ -96,7 +96,7 @@
 		factory_mode_ntc_exist = <0>;
 		df-serialnum = "SB18D20540";
 		#include "bat_setting/CW2217_NC50_ATL_Devon.dtsi"
-		#include "bat_setting/CW2217_NC50_SWD_Devon.dtsi"
+		#include "bat_setting/CW2217_NC50_SCUD_Devon.dtsi"
 	};
 
 	sm5602@71 {
@@ -128,7 +128,7 @@
 		sm,t_h_alarm_ex = <0x9245>;
 		df-serialnum = "SB18D20540";
 		#include "bat_setting/SM5602_NC50_ATL_Devon.dtsi"
-		#include "bat_setting/SM5602_NC50_SWD_Devon.dtsi"
+		#include "bat_setting/SM5602_NC50_SCUD_Devon.dtsi"
 	};
 };
 
