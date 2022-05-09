@@ -1247,9 +1247,9 @@ static DEVICE_ATTR(get_vout, 0444, show_vout, NULL);
 
 static ssize_t show_chip_id(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "chip id = %x\n", cps_wls_get_chip_id());
+	return sprintf(buf, "0x%x\n", cps_wls_get_chip_id());
 }
-static DEVICE_ATTR(get_chip_id, 0444, show_chip_id, NULL);
+static DEVICE_ATTR(chip_id, 0444, show_chip_id, NULL);
 
 static ssize_t show_fw_major_ver(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1331,7 +1331,7 @@ static void cps_wls_create_device_node(struct device *dev)
 	device_create_file(dev, &dev_attr_get_iout);
 	device_create_file(dev, &dev_attr_get_vrect);
 	device_create_file(dev, &dev_attr_get_vout);
-	device_create_file(dev, &dev_attr_get_chip_id);
+	device_create_file(dev, &dev_attr_chip_id);
 
 	device_create_file(dev, &dev_attr_get_fw_major_ver);
 	device_create_file(dev, &dev_attr_get_fw_minor_ver);
