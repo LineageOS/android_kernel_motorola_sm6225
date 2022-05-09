@@ -50,6 +50,7 @@
 #endif
 
 #include <linux/mmi_discrete_charger_class.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #include "cps4019_wls_charger.h"
 #include "cps4019_bl.h"
@@ -112,6 +113,7 @@ struct cps_wls_chrg_chip {
 	struct mutex irq_lock;
 	struct mutex i2c_lock;
 	int state;
+	int gpio_force_wls;
 	int wls_charge_int;
 	int cps_wls_irq;
 	int reg_addr;
@@ -286,7 +288,7 @@ static int cps_wls_read(int reg)
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] i2c read error!\n", __func__);
+		cps_wls_log(CPS_LOG_ERR, "[%s] Chip not exist(rd %x!)\n", __func__, reg);
 		return CPS_WLS_FAIL;
 	}
 	return value;
@@ -1122,6 +1124,7 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 	int ret = 0;
 	switch(psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
+		case POWER_SUPPLY_PROP_PRESENT:
 			val->intval = cps_wls_get_vout_state();
 			break;
 /*
@@ -1296,6 +1299,27 @@ static ssize_t store_ocp_thres(struct device *dev,
 }
 static DEVICE_ATTR(set_ocp_thres, 0220, NULL, store_ocp_thres);
 
+static ssize_t store_force_wls(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	bool force_wls;
+
+	force_wls = !!simple_strtoul(buf, NULL, 0);
+
+	if (chip->main_chg_dev)
+		charger_dev_set_dp_dm(chip->main_chg_dev, force_wls ?
+				MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM :
+				MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM);
+
+	if(gpio_is_valid(chip->gpio_force_wls))
+		gpio_direction_output(chip->gpio_force_wls, force_wls);
+
+	return count;
+}
+static DEVICE_ATTR(force_wls, 0220, NULL, store_force_wls);
+
 static void cps_wls_create_device_node(struct device *dev)
 {
 	device_create_file(dev, &dev_attr_reg_addr);
@@ -1315,6 +1339,8 @@ static void cps_wls_create_device_node(struct device *dev)
 
 	device_create_file(dev, &dev_attr_set_vout_target);
 	device_create_file(dev, &dev_attr_set_ocp_thres);
+
+	device_create_file(dev, &dev_attr_force_wls);
 }
 
 static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
@@ -1332,6 +1358,15 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 		return -EINVAL;
 	}
 
+	chip->gpio_force_wls = of_get_named_gpio(node, "force_wls_pin", 0);
+	if(gpio_is_valid(chip->gpio_force_wls)) {
+		if (!gpio_request(chip->gpio_force_wls, "mmi force wls pin"))
+			gpio_direction_output(chip->gpio_force_wls, 0);
+		else
+			dev_err(chip->dev, "%s: %d gpio(wls en) request failed\n",
+					__func__, chip->gpio_force_wls);
+	}
+
 	chip->main_charger_name = NULL;
 	of_property_read_string(node, "main-charger-name", &chip->main_charger_name);
 
@@ -1343,12 +1378,18 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 	chip->wls_fw_name = NULL;
 	of_property_read_string(node, "wireless-fw-name", &chip->wls_fw_name);
 
+
 	chip->use_bl_in_h = of_property_read_bool(node, "use_bl_in_h");
 
-	cps_wls_log(CPS_LOG_ERR, "[%s]  wls_charge_int %d wls_fw_name: %s use_bl_h %d\n",
-			__func__, chip->wls_charge_int,
-			chip->wls_fw_name ? chip->wls_fw_name : "null", chip->use_bl_in_h);
-
+	cps_wls_log(CPS_LOG_ERR,
+		"[%s]  wls_charge_int %d gpio_force_wls %d \
+		main_charger_name %s wls_fw_name: %s ver %d.%d use_bl_h %s\n",
+		__func__,
+		chip->wls_charge_int, chip->gpio_force_wls,
+		chip->main_charger_name ? chip->main_charger_name : "null",
+		chip->wls_fw_name ? chip->wls_fw_name : "null",
+		chip->fw_ver_major, chip->fw_ver_minor,
+		chip->use_bl_in_h ? "true" : "false");
 	return 0;
 }
 
