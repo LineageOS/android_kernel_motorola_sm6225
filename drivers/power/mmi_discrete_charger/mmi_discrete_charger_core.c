@@ -304,6 +304,24 @@ int get_prop_usb_online(struct mmi_discrete_charger *chip,
 	return rc;
 }
 
+static int is_wls_online(struct mmi_discrete_charger *chip)
+{
+	int rc;
+	union power_supply_propval val;
+
+	if (!chip->wls_psy)
+		return 0;
+
+	rc = power_supply_get_property(chip->wls_psy,
+			POWER_SUPPLY_PROP_ONLINE, &val);
+	if (rc < 0) {
+		mmi_err(chip, "Error wls online rc = %d\n", rc);
+		return 0;
+	}
+
+	return val.intval;
+}
+
 static int get_usb_online(struct mmi_discrete_charger *chip,
 				union power_supply_propval *val)
 {
@@ -319,6 +337,9 @@ static int get_usb_online(struct mmi_discrete_charger *chip,
 		val->intval = 0;
 	else
 		val->intval = 1;
+
+	if (is_wls_online(chip))
+		val->intval = 0;
 
 	if (chip->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN)
 		val->intval = 0;
@@ -607,24 +628,6 @@ static int set_prop_sdp_current_max(struct mmi_discrete_charger *chg,
 	}
 
 	return rc;
-}
-
-static int is_wls_online(struct mmi_discrete_charger *chip)
-{
-	int rc;
-	union power_supply_propval val;
-
-	if (!chip->wls_psy)
-		return 0;
-
-	rc = power_supply_get_property(chip->wls_psy,
-			POWER_SUPPLY_PROP_ONLINE, &val);
-	if (rc < 0) {
-		mmi_err(chip, "Error wls online rc = %d\n", rc);
-		return 0;
-	}
-
-	return val.intval;
 }
 
 static int mmi_discrete_update_usb_type(struct mmi_discrete_charger *chip)
@@ -1669,7 +1672,7 @@ static int mmi_discrete_dc_prop_is_writeable(struct power_supply *psy,
 
 static const struct power_supply_desc dc_psy_desc = {
 	.name = "dc",
-	.type = POWER_SUPPLY_TYPE_MAINS,
+	.type = POWER_SUPPLY_TYPE_WIRELESS,
 	.properties = mmi_discrete_dc_props,
 	.num_properties = ARRAY_SIZE(mmi_discrete_dc_props),
 	.get_property = mmi_discrete_dc_get_prop,
@@ -2430,6 +2433,7 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 
 	/* Wireless charger */
 	if (is_wls_online(chip)) {
+		chip->real_charger_type = POWER_SUPPLY_TYPE_WIRELESS;
 		chip->chg_info.chrg_present = 1;
 		val.intval = 0;
 		rc = get_prop_dc_voltage_now(chip, &val);
