@@ -1468,7 +1468,7 @@ static int cps_wls_register_psy(struct cps_wls_chrg_chip *chip)
 	struct power_supply_config cps_wls_psy_cfg = {};
 
 	chip->wl_psd.name = CPS_WLS_CHRG_PSY_NAME;
-	chip->wl_psd.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	chip->wl_psd.type = POWER_SUPPLY_TYPE_WIRELESS;
 	chip->wl_psd.properties = cps_wls_chrg_props;
 	chip->wl_psd.num_properties = ARRAY_SIZE(cps_wls_chrg_props);
 	chip->wl_psd.get_property = cps_wls_chrg_get_property;
