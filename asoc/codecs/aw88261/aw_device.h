@@ -58,6 +58,12 @@ enum AW_DEV_FW_STATUS {
 	AW_DEV_FW_OK,
 };
 
+enum {
+	AW_DEV_CH_GROUP_PRI = 0,
+	AW_DEV_CH_GROUP_SEC = 1,
+	AW_DEV_CH_GROUP_MAX,
+};
+
 struct aw_device_ops {
 	int (*aw_i2c_write)(struct aw_device *aw_dev, unsigned char reg_addr, unsigned int reg_data);
 	int (*aw_i2c_read)(struct aw_device *aw_dev, unsigned char reg_addr, unsigned int *reg_data);
@@ -234,6 +240,7 @@ struct aw_device {
 	char monitor_name[AW_NAME_MAX];
 	void *private_data;
 	char algo_path[AW_ALGO_PATH_MAX];
+	int pre_prof_id;
 
 	struct aw_int_desc int_desc;
 	struct aw_pwd_desc pwd_desc;
@@ -249,6 +256,7 @@ struct aw_device {
 	struct aw_ipeak_desc ipeak_desc;
 	struct aw_volume_desc volume_desc;
 	struct aw_prof_info prof_info;
+	struct aw_prof_info skt_prof_info;
 	struct aw_cali_desc cali_desc;
 	struct aw_monitor_desc monitor_desc;
 	struct aw_soft_rst soft_rst;
@@ -258,10 +266,11 @@ struct aw_device {
 	struct list_head list_node;
 };
 
-
+struct aw_sec_data_desc *aw_dev_get_algo_prof_data(struct aw_device *aw_dev, int prof_id);
 int aw_dev_load_acf_check(struct aw_container *aw_cfg);
 void aw_dev_deinit(struct aw_device *aw_dev);
 int aw_device_init(struct aw_device *aw_dev, struct aw_container *aw_cfg);
+int aw_dev_parse_skt_bin(struct aw_device *aw_dev, struct aw_container *aw_cfg);
 int aw_device_start(struct aw_device *aw_dev);
 int aw_device_stop(struct aw_device *aw_dev);
 int aw_dev_reg_update(struct aw_device *aw_dev, bool force);
@@ -298,6 +307,8 @@ int aw_dev_get_afe_module_en(int type, int *status);
 int aw_dev_set_copp_module_en(bool enable);
 int aw_dev_set_spin(int spin_mode);
 int aw_dev_get_spin(int *spin_mode);
+int aw_dev_skt_prof_mode(struct aw_device *aw_dev, int prof_id);
+int aw_dev_set_algo_prof_data(struct aw_device *aw_dev, void *prof_data, unsigned int prof_len);
 int aw_dev_set_algo_prof(struct aw_device *aw_dev, int prof_id);
 int aw_dev_get_algo_prof(struct aw_device *aw_dev, int *prof_id);
 int aw_dev_set_algo_params_path(struct aw_device *aw_dev);

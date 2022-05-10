@@ -18,12 +18,14 @@ struct aw_msg_hdr {
 #define CUSTOMER_NAME_MAX (16)
 #define CFG_VERSION_MAX (4)
 #define DEV_NAME_MAX (16)
+#define PROFILE_STR_MAX (32)
 
 #define ACF_FILE_ID (0xa15f908)
 
 
 enum aw_cfg_hdr_version {
 	AW_CFG_HDR_VER_0_0_0_1 = 0x00000001,
+	AW_CFG_HDR_VER_1_0_0_0 = 0x01000000,
 };
 
 enum aw_cfg_dde_type {
@@ -52,6 +54,12 @@ enum profile_data_type {
 	AW_PROFILE_DATA_TYPE_DSP,
 	AW_PROFILE_DATA_TYPE_MAX,
 };
+
+enum algo_profile_data_type {
+	AW_PROFILE_DATA_TYPE_ALGO_DSP,
+	AW_PROFILE_DATA_TYPE_ALGO_MAX,
+};
+
 
 enum aw_prof_type {
 	AW_PROFILE_MUSIC = 0,
@@ -100,6 +108,22 @@ struct aw_cfg_dde {
 	uint32_t reserve[5];
 };
 
+struct aw_cfg_dde_v_1_0_0_0 {
+	uint32_t type;					/*DDE type id*/
+	char dev_name[DEV_NAME_MAX];
+	uint16_t dev_index;				/*dev id*/
+	uint16_t dev_bus;				/*dev bus id*/
+	uint16_t dev_addr;				/*dev addr id*/
+	uint16_t dev_profile;				/*dev profile id*/
+	uint32_t data_type;				/*data type id*/
+	uint32_t data_size;
+	uint32_t data_offset;
+	uint32_t data_crc;
+	char dev_profile_str[PROFILE_STR_MAX];
+	uint32_t chip_id;
+	uint32_t reserve[4];
+};
+
 struct aw_sec_data_desc {
 	uint32_t len;
 	unsigned char *data;
@@ -108,6 +132,7 @@ struct aw_sec_data_desc {
 struct aw_prof_desc {
 	uint32_t id;
 	uint32_t prof_st;
+	char *prf_str;
 	struct aw_sec_data_desc sec_desc[AW_PROFILE_DATA_TYPE_MAX];
 };
 
@@ -117,6 +142,7 @@ struct aw_all_prof_info {
 
 struct aw_prof_info {
 	int count;
+	char **prof_name_list;
 	struct aw_prof_desc *prof_desc;
 };
 

@@ -67,6 +67,7 @@ int aw_dsp_set_copp_module_en(bool enable);
 int aw_dsp_write_spin(int spin_mode);
 int aw_dsp_read_spin(int *spin_mode);
 int aw_get_algo_version(struct aw_device *aw_dev, char *algo_ver_buf);
+int aw_dsp_set_algo_prof_data(struct aw_device *aw_dev, void *data, unsigned int size);
 int aw_dsp_set_algo_prof(struct aw_device *aw_dev, int prof_id);
 int aw_dsp_get_algo_prof(struct aw_device *aw_dev, int *prof_id);
 int aw_dsp_set_algo_params_path(struct aw_device *aw_dev);
