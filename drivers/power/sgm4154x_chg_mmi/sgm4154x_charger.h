@@ -323,6 +323,7 @@ struct sgm4154x_device {
 	struct sgm4154x_state state;
 
 	unsigned int	status;
+	bool	ignore_request_dpdm;
 
 	u32 watchdog_timer;
 	const char *chg_dev_name;
