@@ -842,6 +842,10 @@ static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 	struct adapter_power_cap cap;
 	int vbus_mv;
 
+	if (chg->pd_active && chg->cp_active) {
+		vote(chg->usb_icl_votable, PD_VOTER, true, TYPEC_HIGH_CURRENT_UA);
+	}
+
 	rc = get_prop_usb_present(chg, &val);
 	if (rc < 0) {
 		mmi_err(chg, "Couldn't get usb present rc = %d\n", rc);
