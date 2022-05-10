@@ -380,6 +380,18 @@ struct sgm4154x_device {
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 enum WT_charger_type{
+#ifdef CONFIG_MMI_QC3P_Z350_DETECTED
+	WT_CHG_TYPE_OCP = 0,
+	WT_CHG_TYPE_FC = 0x1,
+	WT_CHG_TYPE_SDP = 0x2,
+	WT_CHG_TYPE_CDP = 0x3,
+	WT_CHG_TYPE_DCP = 0x4,
+	WT_CHG_TYPE_QC2 = 0x5,
+	WT_CHG_TYPE_QC3 = 0x6,
+	WT_CHG_TYPE_QC3P_18W = 0x8,//0x8
+	WT_CHG_TYPE_QC3P_27W = 0x9,
+	WT6670_CHG_TYPE_UNKNOWN = 0x11,
+#else
 	WT_CHG_TYPE_BEGIN = 0,
 	WT_CHG_TYPE_FC,
 	WT_CHG_TYPE_SDP,
@@ -391,6 +403,7 @@ enum WT_charger_type{
 	WT_CHG_TYPE_QC3P_18W,//0x8
 	WT_CHG_TYPE_QC3P_27W,
 	WT6670_CHG_TYPE_UNKNOWN,
+#endif
 };
 
 enum mmi_qc3p_ext_iio_channels {
