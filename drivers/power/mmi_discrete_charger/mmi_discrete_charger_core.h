@@ -86,6 +86,7 @@ struct mmi_discrete_charger {
 
 	bool			vbus_enabled;
 	int			real_charger_type;
+	int			bc1p2_charger_type;
 	int 			hvdcp2_max_icl_ua;
 	int 			wls_max_icl_ua;
 
@@ -114,9 +115,6 @@ struct mmi_discrete_charger {
 	int			batt_profile_fcc_ua;
 	int			hw_max_icl_ua;
 	int			otg_cl_ua;
-
-	/*qc3.5*/
-	bool			qc3p5_detected;
 
 	bool			*debug_enabled;
 	void			*ipc_log;
