@@ -35,7 +35,7 @@
 #include "aw_log.h"
 #include "aw_dsp.h"
 
-#define AW882XX_DRIVER_VERSION "v1.9.0.6"
+#define AW882XX_DRIVER_VERSION "v1.9.0.7"
 #define AW882XX_I2C_NAME "aw882xxacf_smartpa"
 
 #define AW_READ_CHIPID_RETRIES		5	/* 5 times */
@@ -54,12 +54,9 @@ static uint32_t g_spin_en = 0;
 static unsigned int g_runin_test;
 #endif
 
-#ifdef AW882XX_SPIN_FOR_LOW_LATENCY_ONLY
-static unsigned int g_skt_prof_id = 0;
-#endif
-
 static DEFINE_MUTEX(g_aw882xx_lock);
 struct aw_container *g_awinic_cfg = NULL;
+struct aw_container *g_awinic_skt_cfg = NULL;
 
 
 #define AW882XX_MOTO_MAX_GAIN				(127)
@@ -493,6 +490,7 @@ static int aw882xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 
 	if (mute) {
 		aw882xx->pstream = false;
+		aw882xx->aw_pa->pre_prof_id = AW_DEFAULT_PRO_ID;
 		cancel_delayed_work_sync(&aw882xx->dc_work);
 		cancel_delayed_work_sync(&aw882xx->start_work);
 		mutex_lock(&aw882xx->lock);
@@ -900,6 +898,8 @@ static void aw882xx_request_firmware(struct work_struct *work)
 			container_of(work, struct aw882xx, fw_work.work);
 	const struct firmware *cont = NULL;
 	struct aw_container *aw_cfg = NULL;
+	const struct firmware *skt_cont = NULL;
+	struct aw_container *aw_skt_cfg = NULL;
 	int ret = -1;
 
 	aw882xx->fw_status = AW_DEV_FW_FAILED;
@@ -949,6 +949,56 @@ static void aw882xx_request_firmware(struct work_struct *work)
 		aw_dev_info(aw882xx->dev, "[%s] already loaded...", aw882xx->aw_pa->acf_name);
 	}
 	mutex_unlock(&g_aw882xx_lock);
+
+
+	/*load skt bin*/
+	if (aw882xx->skt_prof_mode == AW_PARAMS_DATA_MODE) {
+		ret = request_firmware(&skt_cont, AW_ALGO_SKT_BIN, aw882xx->dev);
+		if ((ret) || (!skt_cont)) {
+			aw_dev_info(aw882xx->dev, "load [%s] failed!", AW_ALGO_SKT_BIN);
+			return;
+		}
+
+		aw_dev_info(aw882xx->dev, "load [%s] , file size: [%zu]",
+				AW_ALGO_SKT_BIN, skt_cont ? skt_cont->size : 0);
+
+		if (g_awinic_skt_cfg == NULL) {
+			aw_skt_cfg = vzalloc(skt_cont->size + sizeof(int));
+			if (aw_skt_cfg == NULL) {
+				release_firmware(skt_cont);
+				aw_dev_err(aw882xx->dev, "malloc failed");
+				return;
+			}
+			aw_skt_cfg->len = skt_cont->size;
+			memcpy(aw_skt_cfg->data, skt_cont->data, skt_cont->size);
+			release_firmware(skt_cont);
+
+			ret = aw_dev_load_acf_check(aw_skt_cfg);
+			if (ret) {
+				aw_dev_err(aw882xx->dev, "Load [%s] failed ....!", AW_ALGO_SKT_BIN);
+				vfree(aw_skt_cfg);
+				aw_skt_cfg = NULL;
+				return;
+			}
+			g_awinic_skt_cfg = aw_skt_cfg;
+			/*set init algo prof*/
+			aw882xx->aw_pa->pre_prof_id = AW_DEFAULT_PRO_ID;
+
+		} else {
+			aw_skt_cfg = g_awinic_skt_cfg;
+			release_firmware(skt_cont);
+			aw_dev_info(aw882xx->dev, "[%s] already loaded...", AW_ALGO_SKT_BIN);
+		}
+
+		/*parse skt bin*/
+		if ((aw882xx->aw_pa->channel == AW_DEV_CH_PRI_L) || (aw882xx->aw_pa->channel == AW_DEV_CH_SEC_L)) {
+			ret = aw_dev_parse_skt_bin(aw882xx->aw_pa, aw_skt_cfg);
+			if (ret < 0) {
+				aw_dev_info(aw882xx->dev, "parse skt bin failed");
+				return;
+			}
+		}
+	}
 
 	mutex_lock(&aw882xx->lock);
 	/*aw device init*/
@@ -1095,10 +1145,22 @@ static int aw882xx_set_rx_en(struct snd_kcontrol *kcontrol,
 	g_algo_rx_en = ctrl_value;
 	aw_dev_info(aw882xx->dev, "set value %d", ctrl_value);
 
-	if (ctrl_value) {
-		ret = aw_dev_set_algo_params_path(aw_dev);
-		if (ret < 0)
-			aw_dev_err(aw882xx->dev, "set algo params path failed, ret=%d", ret);
+	if (aw882xx->skt_prof_mode == AW_PARAMS_PATH_MODE) {
+		if (ctrl_value) {
+			ret = aw_dev_set_algo_params_path(aw_dev);
+			if (ret < 0)
+				aw_dev_err(aw882xx->dev, "set algo params path failed, ret=%d", ret);
+		}
+	} else {
+		if (aw882xx->aw_pa->pre_prof_id != AW_DEFAULT_PRO_ID) {
+			aw882xx->cur_algo_prof_id = aw882xx->aw_pa->pre_prof_id;
+			aw882xx->aw_pa->pre_prof_id = AW_DEFAULT_PRO_ID;
+			ret = aw_dev_skt_prof_mode(aw_dev, aw882xx->cur_algo_prof_id);
+			if (ret < 0) {
+				aw_dev_err(aw882xx->dev, "set algo prof failed");
+				return -EINVAL;
+			}
+		}
 	}
 	return 0;
 }
@@ -1264,21 +1326,12 @@ static int aw882xx_set_spin(struct snd_kcontrol *kcontrol,
 	aw_dev = aw882xx->aw_pa;
 
 	ctrl_value = ucontrol->value.integer.value[0];
-
-#ifdef AW882XX_SPIN_FOR_LOW_LATENCY_ONLY
-	if (g_skt_prof_id == (AW882XX_SCENE_FASTTRACK_ID+1)) {
-#else
 	if (aw882xx->pstream) {
-#endif
 		ret = aw_dev_set_spin(ctrl_value);
 		if (ret)
 			aw_dev_err(aw882xx->dev, "set spin error, ret=%d", ret);
 	} else {
-#ifdef AW882XX_SPIN_FOR_LOW_LATENCY_ONLY
-		aw_dev_info(aw882xx->dev, "fasttrack stream no start");
-#else
 		aw_dev_info(aw882xx->dev, "stream no start only record");
-#endif
 	}
 
 	g_spin_value = ctrl_value;
@@ -1602,6 +1655,7 @@ static int aw882xx_set_prof_id(struct snd_kcontrol *kcontrol,
 	struct aw882xx *aw882xx =
 		aw_componet_codec_ops.codec_get_drvdata(codec);
 	int ctrl_value;
+	int ret = -1;
 
 	aw_dev_dbg(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
 			ucontrol->value.integer.value[0]);
@@ -1610,7 +1664,15 @@ static int aw882xx_set_prof_id(struct snd_kcontrol *kcontrol,
 
 	ctrl_value = ucontrol->value.integer.value[0];
 
-	aw_dev_set_algo_prof(aw_dev, ctrl_value);
+	if (aw882xx->skt_prof_mode == AW_PARAMS_PATH_MODE) {
+		aw_dev_set_algo_prof(aw_dev, ctrl_value);
+	} else {
+		ret = aw_dev_skt_prof_mode(aw_dev, ctrl_value);
+		if (ret < 0) {
+			aw_dev_err(aw882xx->dev, "set_prof failed!, ret = %d", ret);
+		}
+		aw882xx->cur_algo_prof_id = ctrl_value;
+	}
 
 	return 0;
 }
@@ -1628,10 +1690,14 @@ static int aw882xx_get_prof_id(struct snd_kcontrol *kcontrol,
 	aw_dev = aw882xx->aw_pa;
 
 	if (aw882xx->pstream) {
-		ret = aw_dev_get_algo_prof(aw_dev, &ctrl_value);
-		if (ret) {
-			aw_dev_err(aw882xx->dev, "get algo prof id failed!, ret = %d", ret);
-			ctrl_value = 0;
+		if (aw882xx->skt_prof_mode == AW_PARAMS_PATH_MODE) {
+			ret = aw_dev_get_algo_prof(aw_dev, &ctrl_value);
+			if (ret) {
+				aw_dev_err(aw882xx->dev, "get algo prof id failed!, ret = %d", ret);
+				ctrl_value = 0;
+			}
+		} else {
+			ctrl_value = aw882xx->cur_algo_prof_id;
 		}
 		ucontrol->value.integer.value[0] = ctrl_value;
 	} else {
@@ -1692,7 +1758,7 @@ static void aw882xx_update_algo_scene_st(struct aw882xx *aw882xx,
 
 static int aw882xx_update_algo_profile(struct aw882xx *aw882xx)
 {
-	int ret = 0;
+	int ret = -1;
 	int new_skt_prof_id = 0;
 	int cur_skt_prof_id = aw882xx->cur_algo_prof_id;
 	struct aw_device *aw_dev = NULL;
@@ -1712,32 +1778,15 @@ static int aw882xx_update_algo_profile(struct aw882xx *aw882xx)
 	aw_dev = aw882xx->aw_pa;
 
 	/* set new scene pramas to skt */
-	ret = aw_dev_set_algo_prof(aw_dev, aw882xx->cur_algo_prof_id);
-	if (ret < 0) {
-		aw_dev_err(aw882xx->dev, "set algo prof failed");
-		return -1;
+	if (aw882xx->skt_prof_mode == AW_PARAMS_PATH_MODE) {
+		ret = aw_dev_set_algo_prof(aw_dev, aw882xx->cur_algo_prof_id);
+	} else {
+		ret = aw_dev_skt_prof_mode(aw_dev, aw882xx->cur_algo_prof_id);
+		if (ret < 0) {
+			aw_dev_err(aw882xx->dev, "set algo prof failed");
+			return -1;
+		}
 	}
-
-	aw_dev_info(aw882xx->dev, "algo scene hold, cur scene %d",
-					new_skt_prof_id);
-
-#ifdef AW882XX_SPIN_FOR_LOW_LATENCY_ONLY
-	aw_dev_info(aw882xx->dev, "g_skt_prof_id=%d\n",g_skt_prof_id);
-
-	if (new_skt_prof_id == (AW882XX_SCENE_FASTTRACK_ID+1)){
-		ret = aw_dev_set_spin(g_spin_value);
-		if (ret)
-			aw_dev_err(aw882xx->dev, "set spin error when switch prof id to %d, ret=%d", ret, new_skt_prof_id);
-	} else if ((g_skt_prof_id == (AW882XX_SCENE_FASTTRACK_ID+1))
-		&& (new_skt_prof_id != (AW882XX_SCENE_FASTTRACK_ID+1))){
-		ret = aw_dev_set_spin(1);
-		if (ret)
-			aw_dev_err(aw882xx->dev, "set spin error when switch prof id to %d, ret=%d", ret, new_skt_prof_id);
-	}
-
-	g_skt_prof_id = new_skt_prof_id;
-#endif
-
 	return 0;
 
 }
@@ -2490,6 +2539,15 @@ static int aw882xx_parse_dt(struct device *dev, struct aw882xx *aw882xx,
 			__func__, aw882xx->fade_flag);
 	}
 
+	ret = of_property_read_u32(np, "skt-prof-mode", &aw882xx->skt_prof_mode);
+	if (ret) {
+		aw882xx->skt_prof_mode = AW_PARAMS_PATH_MODE;
+		dev_err(dev, "%s: skt-prof-mode get failed,use default value!\n", __func__);
+	} else {
+		dev_info(dev, "%s: skt-prof-mode = %d\n",
+			__func__, aw882xx->skt_prof_mode);
+	}
+
 	return 0;
 }
 
@@ -3195,6 +3253,10 @@ static int aw882xx_i2c_remove(struct i2c_client *i2c)
 		if (g_awinic_cfg) {
 			vfree(g_awinic_cfg);
 			g_awinic_cfg = NULL;
+		}
+		if (g_awinic_skt_cfg) {
+			vfree(g_awinic_skt_cfg);
+			g_awinic_skt_cfg = NULL;
 		}
 	}
 	mutex_unlock(&g_aw882xx_lock);

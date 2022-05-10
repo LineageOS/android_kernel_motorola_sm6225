@@ -29,6 +29,8 @@ static DEFINE_MUTEX(g_aw_dsp_lock);
 #define AW_MSG_ID_ALGO_PARAMS_PATH	(0x00000014)
 #define AW_MSG_ID_VERSION		(0x00000008)
 #define AW_MSG_ID_VERSION_NEW		(0x00000012)
+#define AW_MSG_ID_SET_ALGO_PROF_PRI	(0x10013D25)
+#define AW_MSG_ID_SET_ALGO_PROF_SEC	(0x10013D2C)
 
 
 /*dsp params id*/
@@ -389,6 +391,32 @@ static int aw_write_data_to_dsp(uint32_t param_id, void *data, int size)
 }
 
 /************************* dsp communication function *****************************/
+int aw_dsp_set_algo_prof_data(struct aw_device *aw_dev, void *data, unsigned int size)
+{
+	int ret = 0;
+	uint32_t params_id = 0;
+
+	if (aw_dev->channel == AW_DEV_CH_PRI_L) {
+		params_id = AW_MSG_ID_SET_ALGO_PROF_PRI;
+	} else if (aw_dev->channel == AW_DEV_CH_SEC_L) {
+		params_id = AW_MSG_ID_SET_ALGO_PROF_SEC;
+	} else {
+		aw_dev_err(aw_dev->dev, "unsupport dev channel");
+		return -EINVAL;
+	}
+
+	aw_dev_dbg(aw_dev->dev, "params_id=%u,prof_data:%p, len=%u", params_id, data, size);
+
+	ret = aw_qcom_write_data_to_dsp(params_id, data, size);
+	if (ret < 0) {
+		aw_pr_err("write prof_id failed ");
+		return ret;
+	}
+
+	aw_pr_dbg("write prof_id done");
+	return 0;
+
+}
 
 int aw_dsp_set_algo_prof(struct aw_device *aw_dev, int prof_id)
 {
