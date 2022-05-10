@@ -465,6 +465,49 @@ static void cps_wls_pm_set_awake(int awake)
 	}
 }
 
+static int cps_get_power_supply_prop(char* name,
+			enum power_supply_property psp,
+			union power_supply_propval* val) {
+	struct psy_in_chip_s {
+		char* name;
+		struct power_supply **ppsy;
+	};
+	struct psy_in_chip_s psy_in_chip[] = {
+		{"battery", 	&chip->batt_psy},
+		{"wireless", 	&chip->wl_psy},
+		{"usb", 		&chip->usb_psy},
+		{"dc", 		&chip->dc_psy}
+	};
+	struct power_supply **ppsy = NULL;
+	struct power_supply *tmp_psy = NULL;
+	int i;
+
+	/*Use a tmp psy as default for the psy that not in chip list*/
+	ppsy = &tmp_psy;
+	for (i = 0; i < ARRAY_SIZE(psy_in_chip); i++) {
+		if (!strcmp(name, psy_in_chip[i].name)) {
+			ppsy = psy_in_chip[i].ppsy;
+			break;
+		}
+	}
+
+	if ((!*ppsy) || IS_ERR(*ppsy)) {
+		*ppsy = power_supply_get_by_name(name);
+		if (!*ppsy || IS_ERR(*ppsy)) {
+			cps_wls_log(CPS_LOG_ERR,"%s Couldn't get psy %s\n",__func__, name);
+			val->intval = -1;
+			return CPS_WLS_FAIL;
+		}
+	}
+
+	if (power_supply_get_property(*ppsy, psp, val)) {
+		val->intval = -1;
+		return CPS_WLS_FAIL;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
 static int cps_mux_switch(bool on)
 {
 	cps_wls_log(CPS_LOG_DEBG,"%s set mux = %d\n", __func__, on);
@@ -1097,9 +1140,9 @@ static enum power_supply_property cps_wls_chrg_props[] = {
 	//POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
-	//POWER_SUPPLY_PROP_VOUT_NOW,
-	//POWER_SUPPLY_PROP_VRECT,
-	//POWER_SUPPLY_PROP_IOUT,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 static int cps_wls_chrg_property_is_writeable(struct power_supply *psy,
@@ -1127,23 +1170,15 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_PROP_PRESENT:
 			val->intval = cps_wls_get_vout_state();
 			break;
-/*
-		case POWER_SUPPLY_PROP_VRECT:
-			ret = cps_wls_get_vrect();
-			if(ret != CPS_WLS_FAIL) {
-				chip->rx_vrect = ret;
-			}
-			val->intval = chip->rx_vrect;
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+			val->intval = 5000000;//Have no usage, just for voltage max propety.
 			break;
-
-		case POWER_SUPPLY_PROP_IOUT:
-			ret = cps_wls_get_iout();
-			if(ret != CPS_WLS_FAIL) {
-				chip->rx_iout = ret;
-			}
-			val->intval = chip->rx_iout;
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+			ret = cps_get_power_supply_prop("usb", psp, val);
 			break;
-*/
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+			ret = cps_get_power_supply_prop("battery", psp, val);
+			break;
 		default:
 			return -EINVAL;
 			break;
@@ -1299,7 +1334,7 @@ static ssize_t store_ocp_thres(struct device *dev,
 }
 static DEVICE_ATTR(set_ocp_thres, 0220, NULL, store_ocp_thres);
 
-static ssize_t store_force_wls(struct device *dev,
+static ssize_t store_usb_keep_on(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf,
 			size_t count)
@@ -1318,7 +1353,7 @@ static ssize_t store_force_wls(struct device *dev,
 
 	return count;
 }
-static DEVICE_ATTR(force_wls, 0220, NULL, store_force_wls);
+static DEVICE_ATTR(usb_keep_on, 0220, NULL, store_usb_keep_on);
 
 static void cps_wls_create_device_node(struct device *dev)
 {
@@ -1340,7 +1375,7 @@ static void cps_wls_create_device_node(struct device *dev)
 	device_create_file(dev, &dev_attr_set_vout_target);
 	device_create_file(dev, &dev_attr_set_ocp_thres);
 
-	device_create_file(dev, &dev_attr_force_wls);
+	device_create_file(dev, &dev_attr_usb_keep_on);
 }
 
 static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
