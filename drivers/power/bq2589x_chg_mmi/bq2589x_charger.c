@@ -136,6 +136,7 @@ struct bq2589x {
 	int		rsoc;
 	int		chg_en_gpio;
 	int		wls_en_gpio;
+	bool	ignore_request_dpdm;
 
 	const char *chg_dev_name;
 
@@ -196,6 +197,8 @@ struct pe_ctrl {
 	int vbat_min_volt;  /* to tune up voltage only when vbat > this threshold */
 };
 static struct pe_ctrl pe;
+
+extern bool mmi_is_factory_mode(void);
 
 static int bq2589x_read_byte(struct bq2589x *bq, u8 *data, u8 reg)
 {
@@ -1418,8 +1421,7 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 
 	/*wls outout en control*/
 	bq->wls_en_gpio = of_get_named_gpio(bq->dev->of_node, "mmi,wls-en-gpio", 0);
-	if (gpio_is_valid(bq->wls_en_gpio))
-	{
+	if (gpio_is_valid(bq->wls_en_gpio)) {
 		ret = gpio_request(bq->wls_en_gpio, "mmi wls en pin");
 		if (ret) {
 			dev_err(bq->dev, "%s: %d gpio(wls en) request failed\n", __func__, bq->wls_en_gpio);
@@ -1517,6 +1519,10 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 {
 	int ret = 0;
 
+	if(mmi_is_factory_mode() && bq->ignore_request_dpdm) {
+		dev_err(bq->dev, "%s ignore_request_dpdm\n", __func__);
+		return ret;
+	}
 	mutex_lock(&bq->regulator_lock);
 	/* fetch the DPDM regulator */
 	if (!bq->dpdm_reg && of_get_property(bq->dev->of_node, "dpdm-supply", NULL)) {
@@ -2617,6 +2623,14 @@ static int mmi_set_dp_dm(struct charger_device *chg_dev, int val)
 		dev_dbg(bq->dev, "DP_DM_DM_PULSE rc=%d cnt=%d\n",
 				rc, bq->pulse_cnt);
 		break;
+	case MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM:
+		bq->ignore_request_dpdm = true;
+		dev_err(bq->dev, "MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM\n");
+		break;
+	case MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM:
+		bq->ignore_request_dpdm = false;
+		dev_err(bq->dev, "MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM\n");
+		break;
 	default:
 		break;
 	}
@@ -2849,6 +2863,8 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	bq->dev = dev;
 	bq->client = client;
 	i2c_set_clientdata(client, bq);
+
+	bq->ignore_request_dpdm = false;
 
 	ret = bq2589x_detect_device(bq);
 	if (!ret && bq->part_no == BQ25890) {
