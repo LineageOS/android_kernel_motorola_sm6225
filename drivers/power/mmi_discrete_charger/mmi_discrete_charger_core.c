@@ -652,14 +652,16 @@ static int mmi_discrete_update_usb_type(struct mmi_discrete_charger *chip)
 		return rc;
 	}
 
-	if (chip->qc3p5_detected) {
-		chip->real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
+	chip->bc1p2_charger_type = chg_type;
+
+	if (chip->pd_active) {
+		chip->real_charger_type = POWER_SUPPLY_TYPE_USB_PD;
 	} else {
 		chip->real_charger_type = chg_type;
 	}
 
-	mmi_info(chip, "APSD=%d PD=%d QC3P5=%d\n",
-			chip->real_charger_type, chip->pd_active, chip->qc3p5_detected);
+	mmi_info(chip, "APSD=%d PD=%d real type=%d\n",
+			chip->bc1p2_charger_type, chip->pd_active, chip->real_charger_type);
 	return rc;
 }
 
@@ -949,7 +951,7 @@ static void mmi_discrete_config_pd_charger(struct mmi_discrete_charger *chg)
 	 * when BC1.2 done. So we need to Ignore the PD
 	 * vote unless BC1.2 done.
 	 */
-	if (chg->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
+	if (chg->bc1p2_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
 		rc = vote(chg->usb_icl_votable, PD_VOTER, true, req_pd_curr * 1000);
 		if (rc < 0)
 			mmi_info(chg, "vote PD USB_ICL  failed %duA\n", req_pd_curr);
@@ -1969,7 +1971,7 @@ int mmi_discrete_config_typec_mode(struct mmi_discrete_charger *chip, int val)
 		 * when BC1.2 done. So we need to Ignore the Rp
 		 * changes unless BC1.2 done.
 		 */
-		if (chip->real_charger_type != POWER_SUPPLY_TYPE_UNKNOWN)
+		if (chip->bc1p2_charger_type != POWER_SUPPLY_TYPE_UNKNOWN)
 			update_sw_icl_max(chip);
 
 		if (chip->usb_psy)
@@ -2200,6 +2202,8 @@ int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
 
 	}
 
+	mmi_discrete_update_usb_type(chip);
+
 	if (chip->usb_psy)
 		power_supply_changed(chip->usb_psy);
 
@@ -2224,6 +2228,7 @@ int mmi_charger_pd_vdm_verify(struct mmi_discrete_charger *chip, int val)
 static int mmi_discrete_usb_plugout(struct mmi_discrete_charger * chip)
 {
 	chip->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+	chip->bc1p2_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	chip->pd_active = MMI_POWER_SUPPLY_PD_INACTIVE;
 	chip->pd_vdm_verify = false;
 	if (chip->use_extcon)

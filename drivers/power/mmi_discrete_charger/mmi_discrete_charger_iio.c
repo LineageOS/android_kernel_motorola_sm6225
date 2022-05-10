@@ -75,7 +75,7 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 
 	switch (chan->channel) {
 	case PSY_IIO_USB_REAL_TYPE:
-		*val1 = chip->real_charger_type;
+		*val1 = chip->bc1p2_charger_type;
 		break;
 	case PSY_IIO_HW_CURRENT_MAX:
 		rc = mmi_discrete_get_hw_current_max(chip, val1);
