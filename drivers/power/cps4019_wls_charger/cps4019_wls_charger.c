@@ -178,15 +178,16 @@ cps_reg_s cps_reg_cfg[CPS_REG_MAX] = {
 	{CPS_REG_FW_MAJOR_REV,		2,			0x0002},
 	{CPS_REG_FW_MINOR_REV,		2,			0x0004},
 	{CPS_REG_STATUS,		2,			0x0007},
-	{CPS_REG_INT,			2,			0x0022},
-	{CPS_REG_INT_ENABLE,		2,			0x0024},
-	{CPS_REG_INT_CLEAR,		2,			0x0026},
-	{CPS_REG_VOUT_SET,		2,			0x0030},
-	{CPS_REG_ILIM_SET,		1,			0x0033},
-	{CPS_REG_ADC_VOUT,		2,			0x0034},
-	{CPS_REG_ADC_VRECT,		2,			0x0036},
-	{CPS_REG_ADC_IOUT,		2,			0x0038},
-	{CPS_REG_ADC_DIE_TEMP,		2,			0x003C}
+	{CPS_REG_INT,			2,			0x0009},
+	{CPS_REG_INT_ENABLE,		2,			0x000B},
+	{CPS_REG_INT_CLEAR,		2,			0x000D},
+	{CPS_REG_CMD,			2,			0x000F},
+	{CPS_REG_VOUT_SET,		2,			0x0013},
+	{CPS_REG_ILIM_SET,		1,			0x0016},
+	{CPS_REG_ADC_VOUT,		2,			0x0017},
+	{CPS_REG_ADC_VRECT,		2,			0x0019},
+	{CPS_REG_ADC_IOUT,		2,			0x001B},
+	{CPS_REG_ADC_DIE_TEMP,		2,			0x001D}
 };
 
 //-------------------I2C APT start--------------------
