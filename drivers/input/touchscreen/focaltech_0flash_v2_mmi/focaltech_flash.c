@@ -964,11 +964,29 @@ int fts_fw_resume(bool need_reset)
         FTS_ERROR("fw resume download failed");
     }
 
-    if (FTS_FW_REQUEST_SUPPORT) {
-        if (fw != NULL) {
-            release_firmware(fw);
-            fw = NULL;
+    /* update to newest fw if needed */
+    if (fw != NULL) {
+        u8 *tmpbuf = NULL;
+        if (upg->fw_from_request)
+            vfree(upg->fw);
+        tmpbuf = vmalloc(fw->size);
+        if (NULL == tmpbuf) {
+            FTS_ERROR("fw buffer vmalloc fail");
+            ret = -ENOMEM;
+            goto FTS_FW_RESUME_VMALLOC_ERROR;
+        } else {
+            memcpy(tmpbuf, fw->data, fw->size);
+            upg->fw = tmpbuf;
+            upg->fw_length = fw->size;
+            upg->fw_from_request = 1;
+            FTS_INFO("upg->fw_length = %d", upg->fw_length);
         }
+    }
+
+FTS_FW_RESUME_VMALLOC_ERROR:
+    if (FTS_FW_REQUEST_SUPPORT && fw != NULL) {
+        release_firmware(fw);
+        fw = NULL;
     }
 
     return ret;
