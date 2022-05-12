@@ -13,6 +13,10 @@
 #define CPS_WLS_FAIL    -1
 #define CPS_WLS_SUCCESS 0
 
+/*regester operation*/
+#define REG_CMD_SEND_RX_SHIFT	0
+#define REG_CMD_SEND_RX_MASK		(1 << REG_CMD_SEND_RX_SHIFT)
+
 /*interupt define*/
 #define INT_TX_DATA_RECEIVED            (0x01 << 0)
 #define INT_UV                          (0x01 << 1)
