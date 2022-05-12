@@ -68,6 +68,10 @@
 #define GESTURE_Z                               0x41
 #define GESTURE_C                               0x34
 
+#ifdef FOCALTECH_SENSOR_EN
+#define REPORT_MAX_COUNT 10000
+#endif
+
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
@@ -86,12 +90,39 @@ struct fts_gesture_st {
     u8 point_num;
     u16 coordinate_x[FTS_GESTURE_POINTS_MAX];
     u16 coordinate_y[FTS_GESTURE_POINTS_MAX];
+    u8 active;
 };
 
 /*****************************************************************************
 * Static variables
 *****************************************************************************/
 static struct fts_gesture_st fts_gesture_data;
+#ifdef FOCALTECH_SENSOR_EN
+#ifdef CONFIG_HAS_WAKELOCK
+static struct wake_lock gesture_wakelock;
+#else
+static struct wakeup_source *gesture_wakelock;
+#endif
+static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
+    .name = "dt-gesture",
+    .vendor = "Focaltech",
+    .version = 1,
+    .type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+    .max_range = "5.0",
+    .resolution = "5.0",
+    .sensor_power = "1",
+    .min_delay = 0,
+    .max_delay = 0,
+    /* WAKE_UP & SPECIAL_REPORT */
+    .flags = 1 | 6,
+    .fifo_reserved_event_count = 0,
+    .fifo_max_event_count = 0,
+    .enabled = 0,
+    .delay_msec = 200,
+    .sensors_enable = NULL,
+    .sensors_poll_delay = NULL,
+};
+#endif
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
@@ -125,10 +156,10 @@ static ssize_t fts_gesture_store(
 
     mutex_lock(&ts_data->input_dev->mutex);
     if (FTS_SYSFS_ECHO_ON(buf)) {
-        FTS_DEBUG("enable gesture");
+        FTS_INFO("enable gesture");
         ts_data->gesture_support = ENABLE;
     } else if (FTS_SYSFS_ECHO_OFF(buf)) {
-        FTS_DEBUG("disable gesture");
+        FTS_INFO("disable gesture");
         ts_data->gesture_support = DISABLE;
     }
     mutex_unlock(&ts_data->input_dev->mutex);
@@ -248,6 +279,10 @@ static int fts_create_gesture_sysfs(struct device *dev)
 static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 {
     int gesture;
+#ifdef FOCALTECH_SENSOR_EN
+    int ret = 0;
+    static int report_cnt = 0;
+#endif
 
     FTS_DEBUG("gesture_id:0x%x", gesture_id);
     switch (gesture_id) {
@@ -300,12 +335,135 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
     /* report event key */
     if (gesture != -1) {
         FTS_DEBUG("Gesture Code=%d", gesture);
+#ifdef FOCALTECH_SENSOR_EN
+        if (!(fts_data->wakeable && fts_data->gesture_support)) {
+            FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
+            return;
+        }
+        if (fts_data->pdata->report_gesture_key) {
+            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+            ++report_cnt;
+        } else {
+            input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
+                            ABS_DISTANCE, ++report_cnt);
+            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+        }
+
+        FTS_INFO("input report: %d", report_cnt);
+        if (report_cnt >= REPORT_MAX_COUNT)
+            report_cnt = 0;
+
+        if (!ret) {
+#ifdef CONFIG_HAS_WAKELOCK
+            wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
+#else
+            PM_WAKEUP_EVENT(gesture_wakelock, 5000);
+#endif
+        }
+#else
         input_report_key(input_dev, gesture, 1);
         input_sync(input_dev);
         input_report_key(input_dev, gesture, 0);
         input_sync(input_dev);
+#endif
     }
 }
+
+#ifdef FOCALTECH_SENSOR_EN
+static int fts_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+    unsigned int enable)
+{
+    FTS_INFO("Gesture set enable %d!", enable);
+    mutex_lock(&fts_data->state_mutex);
+    if (enable == 1)
+        fts_data->gesture_support = true;
+    else if (enable == 0)
+        fts_data->gesture_support = false;
+    else
+        FTS_INFO("unknown enable symbol\n");
+
+    mutex_unlock(&fts_data->state_mutex);
+    return 0;
+}
+
+static int fts_sensor_init(struct fts_ts_data *data)
+{
+    struct focaltech_sensor_platform_data *sensor_pdata;
+    struct input_dev *sensor_input_dev;
+    int err;
+
+    sensor_input_dev = input_allocate_device();
+    if (!sensor_input_dev) {
+        FTS_ERROR("Failed to allocate device");
+        goto exit;
+    }
+
+    sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+                                sizeof(struct focaltech_sensor_platform_data),
+                                GFP_KERNEL);
+    if (!sensor_pdata) {
+        FTS_ERROR("Failed to allocate memory");
+        goto free_sensor_pdata;
+    }
+    data->sensor_pdata = sensor_pdata;
+
+    if (data->pdata->report_gesture_key) {
+        __set_bit(EV_KEY, sensor_input_dev->evbit);
+        __set_bit(KEY_F1, sensor_input_dev->keybit);
+    }
+    else {
+        __set_bit(EV_ABS, sensor_input_dev->evbit);
+        input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+                                0, REPORT_MAX_COUNT, 0, 0);
+    }
+    __set_bit(EV_SYN, sensor_input_dev->evbit);
+
+    sensor_input_dev->name = "double-tap";
+    data->sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+    err = input_register_device(sensor_input_dev);
+    if (err) {
+        FTS_ERROR("Unable to register device, err=%d", err);
+        goto free_sensor_input_dev;
+    }
+
+    sensor_pdata->ps_cdev = sensors_touch_cdev;
+    sensor_pdata->ps_cdev.sensors_enable = fts_sensor_set_enable;
+    sensor_pdata->data = data;
+
+    err = sensors_classdev_register(&sensor_input_dev->dev,
+                                    &sensor_pdata->ps_cdev);
+    if (err)
+        goto unregister_sensor_input_device;
+
+    return 0;
+
+unregister_sensor_input_device:
+    input_unregister_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+    input_free_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+    devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+    data->sensor_pdata = NULL;
+exit:
+    return 1;
+}
+
+int fts_sensor_remove(struct fts_ts_data *data)
+{
+    sensors_classdev_unregister(&data->sensor_pdata->ps_cdev);
+    input_unregister_device(data->sensor_pdata->input_sensor_dev);
+    devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
+               data->sensor_pdata);
+    data->sensor_pdata = NULL;
+    data->wakeable = false;
+    data->gesture_support = false;
+    return 0;
+}
+#endif
 
 /*****************************************************************************
 * Name: fts_gesture_readdata
@@ -330,8 +488,7 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *touch_buf)
     struct input_dev *input_dev = ts_data->input_dev;
     struct fts_gesture_st *gesture = &fts_gesture_data;
 
-    if (!ts_data->gesture_support) {
-        FTS_ERROR("gesture no support");
+    if (!ts_data->gesture_support || !ts_data->suspended) {
         return -EINVAL;
     }
 
@@ -370,7 +527,7 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *touch_buf)
 
 void fts_gesture_recovery(struct fts_ts_data *ts_data)
 {
-    if (ts_data->gesture_support && ts_data->suspended) {
+    if (ts_data->gesture_support && (ENABLE == fts_gesture_data.active)) {
         FTS_DEBUG("gesture recovery...");
         fts_write_reg(0xD1, 0xFF);
         fts_write_reg(0xD2, 0xFF);
@@ -388,8 +545,10 @@ int fts_gesture_suspend(struct fts_ts_data *ts_data)
     u8 state = 0xFF;
 
     FTS_FUNC_ENTER();
-    if (enable_irq_wake(ts_data->irq)) {
-        FTS_DEBUG("enable_irq_wake(irq:%d) fail", ts_data->irq);
+    /* gesture not enable, return immediately */
+    if (!ts_data->gesture_support) {
+        FTS_INFO("gesture is disabled");
+        return -EINVAL;
     }
 
     for (i = 0; i < 5; i++) {
@@ -406,11 +565,18 @@ int fts_gesture_suspend(struct fts_ts_data *ts_data)
             break;
     }
 
-    if (i >= 5)
+    if (i >= 5) {
         FTS_ERROR("make IC enter into gesture(suspend) fail,state:%x", state);
-    else
-        FTS_INFO("Enter into gesture(suspend) successfully");
+        fts_gesture_data.active = DISABLE;
+        return -EIO;
+    }
 
+    if (enable_irq_wake(ts_data->irq)) {
+        FTS_DEBUG("enable_irq_wake(irq:%d) fail", ts_data->irq);
+    }
+
+    fts_gesture_data.active = ENABLE;
+    FTS_INFO("Enter into gesture(suspend) successfully");
     FTS_FUNC_EXIT();
     return 0;
 }
@@ -421,10 +587,22 @@ int fts_gesture_resume(struct fts_ts_data *ts_data)
     u8 state = 0xFF;
 
     FTS_FUNC_ENTER();
+
+    /* gesture not enable, return immediately */
+    if (!ts_data->gesture_support) {
+        FTS_INFO("gesture is disabled");
+        return -EINVAL;
+    }
+
+    if (fts_gesture_data.active == DISABLE) {
+        FTS_DEBUG("gesture active is disable, return immediately");
+        return -EINVAL;
+    }
+
     if (disable_irq_wake(ts_data->irq)) {
         FTS_DEBUG("disable_irq_wake(irq:%d) fail", ts_data->irq);
     }
-
+    fts_gesture_data.active = DISABLE;
     for (i = 0; i < 5; i++) {
         fts_write_reg(FTS_REG_GESTURE_EN, DISABLE);
         msleep(1);
@@ -445,6 +623,9 @@ int fts_gesture_resume(struct fts_ts_data *ts_data)
 int fts_gesture_init(struct fts_ts_data *ts_data)
 {
     struct input_dev *input_dev = ts_data->input_dev;
+#ifdef FOCALTECH_SENSOR_EN
+    static bool initialized_sensor;
+#endif
 
     FTS_FUNC_ENTER();
     input_set_capability(input_dev, EV_KEY, KEY_POWER);
@@ -478,11 +659,30 @@ int fts_gesture_init(struct fts_ts_data *ts_data)
     __set_bit(KEY_GESTURE_C, input_dev->keybit);
     __set_bit(KEY_GESTURE_Z, input_dev->keybit);
 
+#ifdef FOCALTECH_SENSOR_EN
+    if (!initialized_sensor) {
+#ifdef CONFIG_HAS_WAKELOCK
+        wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "poll-wake-lock");
+#else
+        PM_WAKEUP_REGISTER(ts_data->dev, gesture_wakelock, "poll-wake-lock");
+        if (!gesture_wakelock) {
+            FTS_ERROR("failed to allocate wakeup source\n");
+            return -ENOMEM;
+        }
+#endif
+
+        if (!fts_sensor_init(ts_data))
+            initialized_sensor = true;
+
+    }
+#endif
+
     fts_create_gesture_sysfs(ts_data->dev);
 
     memset(&fts_gesture_data, 0, sizeof(struct fts_gesture_st));
     ts_data->gesture_bmode = GESTURE_BM_REG;
-    ts_data->gesture_support = FTS_GESTURE_EN;
+    ts_data->gesture_support = DISABLE; // disable by default
+    fts_gesture_data.active = DISABLE;
 
     if ((ts_data->ic_info.ids.type <= 0x25)
         || (ts_data->ic_info.ids.type == 0x87)

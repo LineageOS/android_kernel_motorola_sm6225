@@ -14,6 +14,10 @@ focaltech_0flash_v2_mmi-objs += focaltech_gesture.o
 focaltech_0flash_v2_mmi-objs += focaltech_point_report_check.o
 focaltech_0flash_v2_mmi-objs += focaltech_spi.o
 
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_PANEL_NOTIFICATIONS)),)
 EXTRA_CFLAGS += -DFOCALTECH_CONFIG_PANEL_NOTIFICATIONS
 endif

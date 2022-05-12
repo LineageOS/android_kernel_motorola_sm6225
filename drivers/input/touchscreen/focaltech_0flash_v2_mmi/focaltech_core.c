@@ -700,6 +700,13 @@ static int fts_read_touchdata(struct fts_ts_data *ts_data, u8 *buf)
         return ret;
     }
 
+#if FTS_GESTURE_EN
+    ret = fts_gesture_readdata(ts_data, buf + FTS_TOUCH_DATA_LEN);
+    if (0 == ret) {
+        FTS_INFO("succuss to get gesture data in irq handler");
+        return 1;
+    }
+#endif
 
     return 0;
 }
@@ -1569,6 +1576,10 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     if (pdata->reset_gpio < 0)
         FTS_ERROR("Unable to get reset_gpio");
 
+    pdata->report_gesture_key = of_property_read_bool(np, "focaltech,report_gesture_key");
+    if (pdata->report_gesture_key)
+        FTS_INFO("Report tap gesture as key.");
+
     pdata->irq_gpio = of_get_named_gpio_flags(np, "focaltech,irq-gpio",
                       0, &pdata->irq_gpio_flags);
     if (pdata->irq_gpio < 0)
@@ -1721,6 +1732,12 @@ static int drm_notifier_callback(struct notifier_block *self,
         if (MSM_DRM_EARLY_EVENT_BLANK == event) {
             cancel_work_sync(&fts_data->resume_work);
             fts_ts_suspend(ts_data->dev);
+#ifdef FOCALTECH_SENSOR_EN
+            if (fts_data->gesture_support) {
+                FTS_INFO("double tap gesture suspend\n");
+                return 1;
+            }
+#endif
         } else if (MSM_DRM_EVENT_BLANK == event) {
             FTS_INFO("suspend: event = %lu, not care\n", event);
         }
@@ -1753,7 +1770,7 @@ int drm_notifier_callback(struct notifier_block *self,
             cancel_work_sync(&fts_data->resume_work);
             fts_ts_suspend(ts_data->dev);
 #ifdef FOCALTECH_SENSOR_EN
-            if (fts_data->should_enable_gesture) {
+            if (fts_data->gesture_support) {
                 FTS_INFO("double tap gesture suspend\n");
 		  touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
 		  fts_gesture_suspend(ts_data);
@@ -1910,6 +1927,11 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     mutex_init(&ts_data->report_mutex);
     mutex_init(&ts_data->bus_lock);
     init_waitqueue_head(&ts_data->ts_waitqueue);
+#ifdef FOCALTECH_SENSOR_EN
+    mutex_init(&ts_data->state_mutex);
+    //unknown screen state
+    ts_data->screen_state = SCREEN_UNKNOWN;
+#endif
 
     /* Init communication interface */
     ret = fts_bus_init(ts_data);
@@ -2168,13 +2190,23 @@ static int fts_ts_suspend(struct device *dev)
     int ret = 0;
     struct fts_ts_data *ts_data = fts_data;
 
+#ifdef FOCALTECH_SENSOR_EN
+    mutex_lock(&ts_data->state_mutex);
+#endif
+
     FTS_FUNC_ENTER();
     if (ts_data->suspended) {
+#ifdef FOCALTECH_SENSOR_EN
+        mutex_unlock(&ts_data->state_mutex);
+#endif
         FTS_INFO("Already in suspend state");
         return 0;
     }
 
     if (ts_data->fw_loading) {
+#ifdef FOCALTECH_SENSOR_EN
+        mutex_unlock(&ts_data->state_mutex);
+#endif
         FTS_INFO("fw upgrade in process, can't suspend");
         return 0;
     }
@@ -2182,30 +2214,47 @@ static int fts_ts_suspend(struct device *dev)
     fts_esdcheck_suspend(ts_data);
 
 #if FTS_GESTURE_EN
-    if (ts_data->gesture_support) {
-        fts_gesture_suspend(ts_data);
-
-    } else
+#ifdef FOCALTECH_SENSOR_EN
+    if (ts_data->gesture_support && (fts_gesture_suspend(ts_data) == 0)) {
+        ts_data->screen_state = SCREEN_OFF;
+        ts_data->wakeable = true;
+        mutex_unlock(&ts_data->state_mutex);
+        FTS_INFO("tap gesture suspend\n");
+        touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#else
+    if (fts_gesture_suspend(ts_data) == 0) {
 #endif
-    {
-        FTS_INFO("make TP enter into sleep mode");
-        ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP);
-        if (ret < 0)
-            FTS_ERROR("set TP to sleep mode fail, ret=%d", ret);
+        /* Enter into gesture mode(suspend) */
+        ts_data->suspended = true;
+        return 0;
+    }
+#endif
 
-        if (!ts_data->ic_info.is_incell) {
+    FTS_INFO("make TP enter into sleep mode");
+    ret = fts_write_reg(FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP);
+    if (ret < 0)
+        FTS_ERROR("set TP to sleep mode fail, ret=%d", ret);
+
+#ifdef FOCALTECH_SENSOR_EN
+    touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+
+    if (!ts_data->ic_info.is_incell) {
 #if FTS_POWER_SOURCE_CUST_EN
-            ret = fts_power_source_suspend(ts_data);
-            if (ret < 0) {
-                FTS_ERROR("power enter suspend fail");
-            }
-#endif
+        ret = fts_power_source_suspend(ts_data);
+        if (ret < 0) {
+            FTS_ERROR("power enter suspend fail");
         }
+#endif
     }
 
     fts_release_all_finger();
     ts_data->suspended = true;
     FTS_FUNC_EXIT();
+#ifdef FOCALTECH_SENSOR_EN
+    ts_data->screen_state = SCREEN_OFF;
+    mutex_unlock(&ts_data->state_mutex);
+#endif
     return 0;
 }
 
@@ -2213,8 +2262,15 @@ static int fts_ts_resume(struct device *dev)
 {
     struct fts_ts_data *ts_data = fts_data;
 
+#ifdef FOCALTECH_SENSOR_EN
+    mutex_lock(&ts_data->state_mutex);
+#endif
+
     FTS_FUNC_ENTER();
     if (!ts_data->suspended) {
+#ifdef FOCALTECH_SENSOR_EN
+        mutex_unlock(&ts_data->state_mutex);
+#endif
         FTS_DEBUG("Already in awake state");
         return 0;
     }
@@ -2235,16 +2291,33 @@ static int fts_ts_resume(struct device *dev)
     fts_esdcheck_resume(ts_data);
 
 #if FTS_GESTURE_EN
-    if (ts_data->gesture_support) {
-        fts_gesture_resume(ts_data);
+#ifdef FOCALTECH_SENSOR_EN
+    if (ts_data->wakeable && (fts_gesture_resume(ts_data) == 0)) {
+        ts_data->screen_state = SCREEN_ON;
+        ts_data->wakeable = false;
+        mutex_unlock(&ts_data->state_mutex);
+        FTS_INFO("Exit from tap gesture suspend mode.");
+#else
+    if (fts_gesture_resume(ts_data) == 0) {
+#endif
+        ts_data->suspended = false;
+
+        return 0;
     }
 #endif
+
+    ts_data->suspended = false;
 
 #if FTS_USB_DETECT_EN
 	fts_cable_detect_func(true);
 #endif
 
     FTS_FUNC_EXIT();
+#ifdef FOCALTECH_SENSOR_EN
+    mutex_unlock(&ts_data->state_mutex);
+    ts_data->screen_state = SCREEN_ON;
+#endif
+
     return 0;
 }
 

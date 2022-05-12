@@ -61,9 +61,17 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
+#include <linux/mmi_wake_lock.h>
 #include "focaltech_common.h"
 #ifdef FTS_USB_DETECT_EN
 #include <linux/power_supply.h>
+#endif
+
+#if defined(FOCALTECH_SENSOR_EN)
+#include <linux/sensors.h>
+#endif
+#ifdef FOCALTECH_CONFIG_PANEL_NOTIFICATIONS
+#include <linux/panel_notifier.h>
 #endif
 
 /*****************************************************************************
@@ -121,6 +129,15 @@
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
+#ifdef FOCALTECH_SENSOR_EN
+/* display state */
+enum display_state {
+    SCREEN_UNKNOWN,
+    SCREEN_OFF,
+    SCREEN_ON,
+};
+#endif
+
 struct ftxxxx_proc {
     struct proc_dir_entry *proc_entry;
     u8 opmode;
@@ -133,6 +150,7 @@ struct fts_ts_platform_data {
     u32 irq_gpio_flags;
     u32 reset_gpio;
     u32 reset_gpio_flags;
+    bool report_gesture_key;
     bool have_key;
     u32 key_number;
     u32 keys[FTS_MAX_KEYS];
@@ -153,6 +171,16 @@ struct ts_event {
     int id;     /*touch ID */
     int area;
 };
+
+#if defined(FOCALTECH_SENSOR_EN)
+struct focaltech_sensor_platform_data {
+    struct input_dev *input_sensor_dev;
+    struct sensors_classdev ps_cdev;
+    int sensor_opened;
+    char sensor_data; /* 0 near, 1 far */
+    struct fts_ts_data *data;
+};
+#endif
 
 struct pen_event {
     int down;
@@ -212,6 +240,12 @@ struct fts_ts_data {
 
     bool gesture_support;   /* gesture enable or disable, default: disable */
     u8 gesture_bmode;       /*gesture buffer mode*/
+#ifdef FOCALTECH_SENSOR_EN
+    bool wakeable;
+    enum display_state screen_state;
+    struct mutex state_mutex;
+    struct focaltech_sensor_platform_data *sensor_pdata;
+#endif
 
     u8 pen_etype;
     struct pen_event pevent;
@@ -295,12 +329,14 @@ int fts_bus_exit(struct fts_ts_data *ts_data);
 int fts_spi_transfer_direct(u8 *writebuf, u32 writelen, u8 *readbuf, u32 readlen);
 
 /* Gesture functions */
+#if FTS_GESTURE_EN
 int fts_gesture_init(struct fts_ts_data *ts_data);
 int fts_gesture_exit(struct fts_ts_data *ts_data);
 void fts_gesture_recovery(struct fts_ts_data *ts_data);
 int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *data);
 int fts_gesture_suspend(struct fts_ts_data *ts_data);
 int fts_gesture_resume(struct fts_ts_data *ts_data);
+#endif
 
 /* Apk and functions */
 int fts_create_apk_debug_channel(struct fts_ts_data *);
