@@ -52,7 +52,12 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 	struct device_node *node = chip->dev->of_node;
 
 	rc = of_property_read_u32(node,
+				"mmi,batt-profile-fv-mv", &chip->batt_profile_fv_uv);
+	if (rc < 0) {
+		rc = of_property_read_u32(node,
 				"mmi,max-fv-mv", &chip->batt_profile_fv_uv);
+	}
+
 	if (rc < 0)
 		chip->batt_profile_fv_uv = -EINVAL;
 	else

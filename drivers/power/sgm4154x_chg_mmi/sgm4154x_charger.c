@@ -343,6 +343,7 @@ static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 	reg_val = (chrg_volt-SGM4154x_VREG_V_MIN_uV) / SGM4154x_VREG_V_STEP_uV;
 
 	switch(chrg_volt) {
+	case 4512000:
 	case 4480000:
 	case 4450000:
 		reg_val++;
