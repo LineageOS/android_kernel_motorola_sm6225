@@ -141,6 +141,11 @@ struct mmi_battery_pack {
 };
 
 struct mmi_charger_profile {
+	//for not FFC battery profile
+	int noffc_fg_iterm;
+	int noffc_chrg_iterm;
+	int noffc_max_fv_mv;
+
 	int fg_iterm;
         int chrg_iterm;
         int max_fv_mv;
@@ -937,10 +942,14 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 	if (rc)
 		charger->profile.chrg_iterm = 300;
 
+	charger->profile.noffc_chrg_iterm = charger->profile.chrg_iterm;
+
 	rc = of_property_read_u32(node, "mmi,fg-iterm-ma",
 				  &charger->profile.fg_iterm);
 	if (rc)
 		charger->profile.fg_iterm = charger->profile.chrg_iterm + 50;
+
+	charger->profile.noffc_fg_iterm = charger->profile.fg_iterm;
 
 	rc = of_property_read_u32(node, "mmi,vfloat-comp-uv",
 				  &charger->profile.vfloat_comp_mv);
@@ -952,6 +961,8 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 				  &charger->profile.max_fv_mv);
 	if (rc)
 		charger->profile.max_fv_mv = 4400;
+
+	charger->profile.noffc_max_fv_mv = charger->profile.max_fv_mv;
 
 	rc = of_property_read_u32(node, "mmi,max-fcc-ma",
 				  &charger->profile.max_fcc_ma);
@@ -1050,6 +1061,7 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 	return 0;
 }
 
+#define TURBO_CHRG_FFC_THRSH_MW 25000
 static void mmi_update_charger_profile(struct mmi_charger_chip *chip,
 			       struct mmi_charger *charger)
 {
@@ -1057,9 +1069,17 @@ static void mmi_update_charger_profile(struct mmi_charger_chip *chip,
 	int temp;
 	int num_zones;
 	struct mmi_ffc_zone *zones;
+	struct mmi_charger_info *chg_info = &charger->chg_info;
 
 	if (!chip) {
 		pr_err("called before chg valid!\n");
+		return;
+	}
+
+	if (!(chg_info->chrg_pmax_mw > TURBO_CHRG_FFC_THRSH_MW)) {
+		charger->profile.max_fv_mv = charger->profile.noffc_max_fv_mv;
+		charger->profile.fg_iterm = charger->profile.noffc_fg_iterm;
+		charger->profile.chrg_iterm = charger->profile.noffc_chrg_iterm;
 		return;
 	}
 
