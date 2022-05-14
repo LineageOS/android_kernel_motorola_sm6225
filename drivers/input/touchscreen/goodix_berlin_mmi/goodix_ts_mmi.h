@@ -24,7 +24,7 @@ void goodix_ts_mmi_dev_unregister(struct platform_device *ts_device);
 static int inline goodix_ts_mmi_dev_register(struct platform_device *ts_device) {
 	return -ENOSYS;
 }
-static void inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device) {
+static int inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device) {
 	return -ENOSYS;
 }
 #endif

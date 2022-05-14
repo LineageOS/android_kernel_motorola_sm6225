@@ -1269,7 +1269,6 @@ static inline void goodix_release_firmware(struct firmware_data *fw_data)
 static int goodix_fw_update_thread(void *data)
 {
 	struct fw_update_ctrl *fwu_ctrl = data;
-	struct firmware *temp_firmware = NULL;
 	ktime_t start, end;
 	int r = -EINVAL;
 
@@ -1308,7 +1307,6 @@ static int goodix_fw_update_thread(void *data)
 	if (fwu_ctrl->mode & UPDATE_MODE_SRC_HEAD) {
 		kfree(fwu_ctrl->fw_data.firmware);
 		fwu_ctrl->fw_data.firmware = NULL;
-		temp_firmware = NULL;
 	} else if (fwu_ctrl->mode & UPDATE_MODE_SRC_REQUEST) {
 		goodix_release_firmware(&fwu_ctrl->fw_data);
 	}
