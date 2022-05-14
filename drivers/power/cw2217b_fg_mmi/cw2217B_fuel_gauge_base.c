@@ -12,10 +12,11 @@
 #include <linux/slab.h>
 #include <linux/version.h>
 #include <linux/sizes.h>
+#include <linux/regulator/consumer.h>
 
 #define CWFG_ENABLE_LOG 1 /* CHANGE Customer need to change this for enable/disable log */
 
-#define CW_PROPERTIES "bms"
+#define CW_PROPERTIES cw_bat->bms_name
 
 #define REG_CHIP_ID             0x00
 #define REG_VCELL_H             0x02
@@ -80,6 +81,8 @@
 #define CW2217_PROFILE_NOT_READY   2
 #define CW2217_PROFILE_NEED_UPDATE 3
 
+#define CW_BPD_TEMP (-400)
+
 #define cw_printk(fmt, arg...)                                                 \
 	{                                                                          \
 		if (CWFG_ENABLE_LOG)                                                   \
@@ -139,6 +142,9 @@ struct cw_battery {
 #if 0
 	long stb_current;
 #endif
+	int ibat_polority;
+	const char *bms_name;
+	struct regulator *vdd_i2c_vreg;
 };
 
 /* CW2217 iic read function */
@@ -860,6 +866,17 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 		rc = 0;
 	}
 
+	rc = of_property_read_string(np, "fg-psy-name", &cw_bat->bms_name);
+	if (rc) {
+		cw_bat->bms_name = "bms";
+		rc = 0;
+	}
+
+	if (of_property_read_bool(np, "ibat-invert-polority"))
+		cw_bat->ibat_polority = -1;
+	else
+		cw_bat->ibat_polority = 1;
+
 	return rc;
 }
 
@@ -920,7 +937,12 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval= POWER_SUPPLY_HEALTH_GOOD;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = cw_bat->voltage <= 0 ? 0 : 1;
+		if (cw_bat->voltage <= 0)
+			val->intval = 0;
+		else if (cw_bat->temp <= CW_BPD_TEMP)
+			val->intval = 0;
+		else
+			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
@@ -928,6 +950,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		cw_get_current(cw_bat);
 		val->intval = cw_bat->cw_current * CW_CUR_UNIT * (-1);
+		val->intval *= cw_bat->ibat_polority;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -989,20 +1012,31 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	i2c_set_clientdata(client, cw_bat);
 	cw_bat->client = client;
 
-	ret = cw_get_chip_id(cw_bat);
-	if (ret < 0) {
-		printk("iic read write error");
-		return ret;
-	}
-	if (cw_bat->chip_id != IC_VCHIP_ID){
-		printk("not cw2217B\n");
-		return ret;
-	}
-
 	ret = cw_parse_dts(cw_bat);
 	if (ret) {
 		printk("%s : cw2217 prase dts  fail!\n", __func__);
 		return ret;
+	}
+
+	cw_bat->vdd_i2c_vreg = devm_regulator_get_optional(
+					&cw_bat->client->dev,
+					"vdd-i2c");
+	if (IS_ERR_OR_NULL(cw_bat->vdd_i2c_vreg)) {
+		printk("%s: Could not get vdd-i2c power regulator\n", __func__);
+		cw_bat->vdd_i2c_vreg = NULL;
+		ret = 0;
+	} else {
+		regulator_enable(cw_bat->vdd_i2c_vreg);
+	}
+
+	ret = cw_get_chip_id(cw_bat);
+	if (ret < 0) {
+		printk("iic read write error");
+		goto error;
+	}
+	if (cw_bat->chip_id != IC_VCHIP_ID){
+		printk("not cw2217B\n");
+		goto error;
 	}
 
 #ifdef CW_PROPERTIES
@@ -1016,12 +1050,14 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ret = power_supply_register(&client->dev, &cw_bat->cw_bat);
 	if (ret < 0) {
 		power_supply_unregister(&cw_bat->cw_bat);
-		return ret;
+		goto error;
 	}
 #else
 	psy_desc = devm_kzalloc(&client->dev, sizeof(*psy_desc), GFP_KERNEL);
-	if (!psy_desc)
-		return -ENOMEM;
+	if (!psy_desc) {
+		ret = -ENOMEM;
+		goto error;
+	}
 	psy_cfg.drv_data = cw_bat;
 	psy_desc->name = CW_PROPERTIES;
 	psy_desc->type = POWER_SUPPLY_TYPE_MAINS;
@@ -1033,7 +1069,7 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (IS_ERR(cw_bat->cw_bat)) {
 		ret = PTR_ERR(cw_bat->cw_bat);
 		printk(KERN_ERR"failed to register battery: %d\n", ret);
-		return ret;
+		goto error;
 	}
 #endif
 #endif
@@ -1050,11 +1086,26 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	cw_printk("cw2217 driver probe success!\n");
 
 	return 0;
+
+error:
+	if (cw_bat->vdd_i2c_vreg) {
+		if (regulator_is_enabled(cw_bat->vdd_i2c_vreg))
+			regulator_disable(cw_bat->vdd_i2c_vreg);
+		devm_regulator_put(cw_bat->vdd_i2c_vreg);
+	}
+	return ret;
 }
 
 static int cw2217_remove(struct i2c_client *client)
 {
+	struct cw_battery *cw_bat = i2c_get_clientdata(client);
+
 	cw_printk("\n");
+	if (cw_bat->vdd_i2c_vreg) {
+		if (regulator_is_enabled(cw_bat->vdd_i2c_vreg))
+			regulator_disable(cw_bat->vdd_i2c_vreg);
+		devm_regulator_put(cw_bat->vdd_i2c_vreg);
+	}
 	return 0;
 }
 
