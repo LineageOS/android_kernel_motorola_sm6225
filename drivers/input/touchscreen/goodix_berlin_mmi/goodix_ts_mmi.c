@@ -1024,6 +1024,32 @@ static int goodix_ts_mmi_update_fps_mode(struct device *dev, int mode) {
 	return 0;
 }
 #endif
+
+static int rdArray[4];
+
+static int goodix_ts_mmi_active_region(struct device *dev, int *reg_data)
+{
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev;
+
+	GET_GOODIX_DATA(dev);
+
+	memcpy(rdArray, reg_data, sizeof(rdArray));
+	ts_info("set active region: %d %d %d %d\n", rdArray[0], rdArray[1], rdArray[2], rdArray[3]);
+	return 0;
+}
+
+static int goodix_ts_mmi_methods_get_active_region(struct device *dev, void *uidata)
+{
+	struct goodix_ts_core *core_data;
+	struct platform_device *pdev;
+
+	GET_GOODIX_DATA(dev);
+
+	memcpy((int *)uidata, rdArray, sizeof(rdArray));
+        return 0;
+}
+
 static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.get_vendor = goodix_ts_mmi_methods_get_vendor,
 	.get_productinfo = goodix_ts_mmi_methods_get_productinfo,
@@ -1034,12 +1060,14 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.get_drv_irq = goodix_ts_mmi_methods_get_drv_irq,
 	.get_poweron = goodix_ts_mmi_methods_get_poweron,
 	.get_flashprog = goodix_ts_mmi_methods_get_flashprog,
+	.get_active_region = goodix_ts_mmi_methods_get_active_region,
 	/* SET methods */
 	.reset =  goodix_ts_mmi_methods_reset,
 	.drv_irq = goodix_ts_mmi_methods_drv_irq,
 	.power = goodix_ts_mmi_methods_power,
 	.charger_mode = goodix_ts_mmi_charger_mode,
 	.refresh_rate = goodix_ts_mmi_refresh_rate,
+	.active_region = goodix_ts_mmi_active_region,
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
 	/* vendor specific attribute group */
