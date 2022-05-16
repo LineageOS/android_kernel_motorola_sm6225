@@ -2005,11 +2005,12 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     }
 #endif
 
-
+#if FTS_ESDCHECK_EN
     ret = fts_esdcheck_init(ts_data);
     if (ret) {
         FTS_ERROR("init esd check fail");
     }
+#endif
 
     ret = fts_irq_registration(ts_data);
     if (ret) {
@@ -2133,7 +2134,9 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     fts_fwupg_exit(ts_data);
 
 
+#if FTS_ESDCHECK_EN
     fts_esdcheck_exit(ts_data);
+#endif
 
 #if FTS_GESTURE_EN
     fts_gesture_exit(ts_data);
@@ -2211,7 +2214,9 @@ static int fts_ts_suspend(struct device *dev)
         return 0;
     }
 
+#if FTS_ESDCHECK_EN
     fts_esdcheck_suspend(ts_data);
+#endif
 
 #if FTS_GESTURE_EN
 #ifdef FOCALTECH_SENSOR_EN
@@ -2288,7 +2293,9 @@ static int fts_ts_resume(struct device *dev)
     fts_wait_tp_to_valid();
     fts_ex_mode_recovery(ts_data);
 
+#if FTS_ESDCHECK_EN
     fts_esdcheck_resume(ts_data);
+#endif
 
 #if FTS_GESTURE_EN
 #ifdef FOCALTECH_SENSOR_EN

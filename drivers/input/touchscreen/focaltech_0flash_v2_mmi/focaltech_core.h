@@ -347,12 +347,14 @@ int fts_create_sysfs(struct fts_ts_data *ts_data);
 int fts_remove_sysfs(struct fts_ts_data *ts_data);
 
 /* ESD */
+#if FTS_ESDCHECK_EN
 int fts_esdcheck_init(struct fts_ts_data *ts_data);
 int fts_esdcheck_exit(struct fts_ts_data *ts_data);
 void fts_esdcheck_switch(struct fts_ts_data *ts_data, bool enable);
 void fts_esdcheck_proc_busy(struct fts_ts_data *ts_data, bool proc_debug);
 void fts_esdcheck_suspend(struct fts_ts_data *ts_data);
 void fts_esdcheck_resume(struct fts_ts_data *ts_data);
+#endif
 
 /* Host test */
 
