@@ -49,6 +49,7 @@ static unsigned int g_algo_copp_en = false;
 #ifdef AW_SPIN_ENABLE
 static unsigned int g_spin_value = 0;
 static uint32_t g_spin_en = 0;
+static uint32_t g_spin_relase_time = 100;
 #endif
 #ifdef AW882XX_RUNIN_TEST
 static unsigned int g_runin_test;
@@ -1406,7 +1407,7 @@ static int aw882xx_set_spin_status(struct snd_kcontrol *kcontrol,
 		aw_componet_codec_ops.kcontrol_codec(kcontrol);
 	struct aw882xx *aw882xx =
 		aw_componet_codec_ops.codec_get_drvdata(codec);
-	struct aw_spin_param spin_param;
+	//struct aw_spin_param spin_param;
 
 	aw_dev_dbg(aw882xx->dev, "ucontrol->value.integer.value[0]=%ld",
 			ucontrol->value.integer.value[0]);
@@ -1416,7 +1417,7 @@ static int aw882xx_set_spin_status(struct snd_kcontrol *kcontrol,
 	ctrl_value = ucontrol->value.integer.value[0];
 
 	if (g_algo_rx_en == true) {
-		ret = aw_dev_set_spin_param(aw_dev, ctrl_value, spin_param.relase_time);
+		ret = aw_dev_set_spin_param(aw_dev, ctrl_value, g_spin_relase_time);
 		if (ret)
 			aw_dev_err(aw882xx->dev, "set spin status error, ret=%d", ret);
 
@@ -1449,9 +1450,10 @@ static int aw882xx_get_spin_relase_time(struct snd_kcontrol *kcontrol,
 			ctrl_value = 0;
 		}
 		ucontrol->value.integer.value[0] = ctrl_value;
+		g_spin_relase_time = ctrl_value;
 	} else {
 		aw_dev_info(aw882xx->dev, "no stream, use record value");
-
+		ucontrol->value.integer.value[0] = g_spin_relase_time;
 	}
 	aw_dev_dbg(aw882xx->dev, "spin value is %ld", ucontrol->value.integer.value[0]);
 	return 0;
@@ -1481,9 +1483,10 @@ static int aw882xx_set_spin_relase_time(struct snd_kcontrol *kcontrol,
 		if (ret)
 			aw_dev_err(aw882xx->dev, "set spin release time error, ret=%d", ret);
 	} else {
-		aw_dev_info(aw882xx->dev, "set release time failed");
+		aw_dev_info(aw882xx->dev, "set release time failed, g_spin_en=%d, g_algo_rx_en=%d\n",
+				g_spin_en, g_algo_rx_en);
 	}
-
+	g_spin_relase_time = ucontrol->value.integer.value[0];
 	return 0;
 }
 
