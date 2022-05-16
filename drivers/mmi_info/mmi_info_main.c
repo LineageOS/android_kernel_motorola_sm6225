@@ -54,15 +54,16 @@ bool mmi_device_is_available(struct device_node *np)
 	}
 	path = prop->value;
 
-	mmi_np = of_find_node_by_path(path);
-	if (mmi_np == NULL)
-		return false;
-
 	mmi_dts = of_prop_next_string(prop, path);
 	if (mmi_dts == NULL)
 		return false;
 
+	mmi_np = of_find_node_by_path(path);
+	if (mmi_np == NULL)
+		return false;
+
 	mmi_dts_val = of_get_property(mmi_np, mmi_dts, &len);
+	of_node_put(mmi_np);
 	if (mmi_dts_val == NULL || len <= 0)
 		return false;
 
@@ -105,6 +106,7 @@ struct device_node *mmi_check_dynamic_device_node(char *dev_name)
 		return NULL;
 
 	prop = of_find_property(node, "mmi,dynamic_devices", &len);
+	of_node_put(node);
 	if (prop == NULL || len < 0) {
 		pr_err("%s: cannot find mmi,dynamic_devices property\n", __func__);
 		return NULL;
