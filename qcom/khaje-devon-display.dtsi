@@ -1,6 +1,6 @@
 #include "dsi-panel-mot-tianma-nt36672c-649-1080x2400-vid.dtsi"
 #include "dsi-panel-mot-txd-ili7807s-649-1080x2400-vid.dtsi"
-#include "dsi-panel-mot-focal-ft8726-649-1080x2400-vid.dtsi"
+#include "dsi-panel-mot-txd-ft8726-649-1080x2400-vid.dtsi"
 #include "dsi-panel-mot-dummy-qhd-video.dtsi"
 
 &tlmm {
