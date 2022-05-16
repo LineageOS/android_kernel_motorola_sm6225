@@ -228,6 +228,7 @@
 		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
 		//sgm,chg-en-gpio = <&tlmm 0 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
+		dynamic-vindpm-tracking-uv = <250000>;
 		dpdm-supply = <&usb2_phy0>;
 		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
