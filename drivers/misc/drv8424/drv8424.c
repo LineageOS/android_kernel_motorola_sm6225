@@ -204,6 +204,7 @@ enum motor_pins_mode {
     INT_DEFAULT,
     CLK_ACTIVE,
     CLK_SLEEP,
+    INIT_STATE,
     PINS_END
 };
 
@@ -215,6 +216,7 @@ static const char* const pins_state[] = {
     "t1_low", "t1_high", "t1_disable",
     "drv8424_int_default",
     "drv8424_clk_active", "drv8424_clk_sleep",
+    "init_state",
     NULL
 };
 
@@ -1961,6 +1963,8 @@ static int moto_drv8424_probe(struct platform_device *pdev)
         }
     }
 
+    /* set initial pinctrl */
+    set_pinctrl_state(md, INIT_STATE);
     //Init software clock pin.
     set_pinctrl_state(md, CLK_SLEEP);
     for (i = 0; i < MOTOR_UNKNOWN; i++) {
