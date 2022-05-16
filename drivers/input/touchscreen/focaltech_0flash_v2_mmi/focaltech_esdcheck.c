@@ -39,6 +39,7 @@
 *****************************************************************************/
 #include "focaltech_core.h"
 
+#if FTS_ESDCHECK_EN
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
@@ -447,3 +448,5 @@ int fts_esdcheck_exit(struct fts_ts_data *ts_data)
     sysfs_remove_group(&ts_data->dev->kobj, &fts_esd_group);
     return 0;
 }
+#endif /* FTS_ESDCHECK_EN */
+
