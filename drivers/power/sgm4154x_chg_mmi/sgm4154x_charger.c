@@ -52,6 +52,10 @@ static const unsigned int ITERM_CURRENT_STABLE[] = {
 	5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000,
 	80000, 100000, 120000, 140000, 160000, 180000, 200000, 240000
 };
+
+static const unsigned int DYNAMIC_VINDPM_TRACK[] = {
+	0, 200000, 250000, 300000
+};
 #endif
 
 enum SGM4154x_VREG_FT {
@@ -714,6 +718,24 @@ static int sgm4154x_get_input_volt_lim(struct sgm4154x_device *sgm)
 	vlim = offset + (vlim & 0x0F) * SGM4154x_VINDPM_STEP_uV;
 	return vlim;
 }
+
+#ifdef __SGM41513_CHIP_ID__
+static int sgm4154x_set_dynamic_vindpm_track(struct sgm4154x_device *sgm, int track_uv)
+{
+	int reg_val = 0;
+	int ret = 0;
+
+	for(reg_val = 1; reg_val < 4 && track_uv >= DYNAMIC_VINDPM_TRACK[reg_val]; reg_val++);
+	reg_val--;
+
+	pr_info("%s track_uv: %d, reg_val: %d\n", __func__, track_uv, reg_val);
+
+	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_7,
+				  SGM4154x_DYNAMIC_VINDPM_TRACK_MASK, reg_val);
+
+	return ret;
+}
+#endif
 
 static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 {
@@ -2088,6 +2110,20 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 			break;
 	}
 
+#ifdef __SGM41513_CHIP_ID__
+	if (*real_charger_type == POWER_SUPPLY_TYPE_USB_CDP) {
+		ret = sgm4154x_set_dynamic_vindpm_track(sgm, sgm->init_data.vdpm_bat_track);
+		if (ret) {
+			dev_err(sgm->dev, "%s set dynamic vindpm track:%d failed\n", __func__, sgm->init_data.vdpm_bat_track);
+		}
+	} else {
+		ret = sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+		if (ret) {
+			dev_err(sgm->dev, "%s disable dynamic vindpm track failed\n", __func__);
+		}
+	}
+#endif
+
 	return result;
 }
 #endif
@@ -2119,6 +2155,10 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	sgm->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 	sgm4154x_request_dpdm(sgm, false);
 	charger_dev_notify(sgm->chg_dev);
+
+#ifdef __SGM41513_CHIP_ID__
+	sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+#endif
 }
 
 static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
@@ -2379,6 +2419,12 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
+#ifdef __SGM41513_CHIP_ID__
+	ret = sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+	if (ret)
+		goto err_out;
+#endif
+
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
        ret = sgm4154x_set_recharge_volt(sgm, 100);//100~200mv
        if (ret)
@@ -2466,6 +2512,16 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	if (sgm->init_data.ilim > SGM4154x_IINDPM_I_MAX_uA ||
 	    sgm->init_data.ilim < SGM4154x_IINDPM_I_MIN_uA)
 		return -EINVAL;
+
+#ifdef __SGM41513_CHIP_ID__
+	if (of_property_read_u32(sgm->dev->of_node, "dynamic-vindpm-tracking-uv", &val) >= 0) {
+		sgm->init_data.vdpm_bat_track = val;
+		dev_err(sgm->dev, "dynamic-vindpm-tracking-uv: %d\n", sgm->init_data.vdpm_bat_track);
+	} else {
+		dev_err(sgm->dev, "no dynamic-vindpm-tracking-uv\n");
+		sgm->init_data.vdpm_bat_track = 0;
+	}
+#endif
 
 	irq_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio))

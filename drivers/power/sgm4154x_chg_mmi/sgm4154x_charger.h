@@ -199,6 +199,9 @@
 #define SGM4154x_VINDPM_DEF_uV	    4600000
 #define SGM4154x_VINDPM_OS_MASK     GENMASK(1, 0)
 
+/* dynamic vindpm track  */
+#define SGM4154x_DYNAMIC_VINDPM_TRACK_MASK	GENMASK(1, 0)
+
 /* DP DM SEL  */
 #define SGM4154x_DP_VSEL_MASK       GENMASK(4, 3)
 #define SGM4154x_DM_VSEL_MASK       GENMASK(2, 1)
@@ -255,6 +258,7 @@ struct sgm4154x_init_data {
 	u32 vlim;	/* minimum system voltage limit */
 	u32 max_ichg;
 	u32 max_vreg;
+	u32 vdpm_bat_track;
 };
 
 struct sgm4154x_state {
