@@ -295,6 +295,7 @@ struct goodix_ts_board_data {
 	bool film_mode_ctrl;
 	bool leather_mode_ctrl;
 	bool interpolation_ctrl;
+	bool sample_ctrl;
 	bool report_rate_ctrl;
 	bool edge_ctrl;
 	bool gesture_wait_pm;
@@ -478,6 +479,7 @@ struct goodix_mode_info {
 	int leather_mode;
 	int stylus_mode;
 	int interpolation;
+	int sample;
 	int report_rate_mode;
 	int edge_mode[2];
 };

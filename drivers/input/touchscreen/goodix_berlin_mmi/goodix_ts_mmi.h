@@ -48,4 +48,5 @@ static int inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device
 #define STYLUS_MODE_SWITCH_CMD     0xA4
 
 #define EXIT_HIGH_REPORT_RATE_CMD 0xC100
+#define SAMPLE_SWITCH_CMD   0xC2
 #endif

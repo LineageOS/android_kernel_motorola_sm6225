@@ -38,6 +38,10 @@ static ssize_t goodix_ts_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t goodix_ts_interpolation_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t goodix_ts_sample_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t goodix_ts_sample_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t goodix_ts_stylus_mode_show(struct device *dev,
@@ -53,6 +57,8 @@ static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_edge_show, goodix_ts_edge_store);
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_interpolation_show, goodix_ts_interpolation_store);
+static DEVICE_ATTR(sample, (S_IRUGO | S_IWUSR | S_IWGRP),
+	goodix_ts_sample_show, goodix_ts_sample_store);
 static DEVICE_ATTR(stylus_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_stylus_mode_show, goodix_ts_stylus_mode_store);
 static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -99,6 +105,9 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 
 	if (core_data->board_data.interpolation_ctrl)
 		ADD_ATTR(interpolation);
+
+	if (core_data->board_data.sample_ctrl)
+		ADD_ATTR(sample);
 
 	if (core_data->board_data.stylus_mode_ctrl)
 		ADD_ATTR(stylus_mode);
@@ -487,6 +496,69 @@ static ssize_t goodix_ts_interpolation_show(struct device *dev,
 
 	ts_info("interpolation = %d.\n", core_data->set_mode.interpolation);
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->set_mode.interpolation);
+}
+
+static ssize_t goodix_ts_sample_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+	const struct goodix_ts_hw_ops *hw_ops;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+	hw_ops = core_data->hw_ops;
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		pr_info("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&core_data->mode_lock);
+	core_data->get_mode.sample= mode;
+	if (core_data->set_mode.sample == mode) {
+		ts_debug("The value = %lu is same, so not to write", mode);
+		ret = size;
+		goto exit;
+	}
+
+	if (core_data->power_on == 0) {
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		ret = size;
+		goto exit;
+	}
+
+	ret = goodix_ts_send_cmd(core_data, SAMPLE_SWITCH_CMD, 5,
+						core_data->get_mode.sample, 0x00);
+	if (ret < 0) {
+		ts_err("failed to set sample rate, mode = %lu", mode);
+		goto exit;
+	}
+
+	core_data->set_mode.sample = mode;
+	msleep(20);
+	ts_info("Success to set %lu\n", mode);
+
+	ret = size;
+exit:
+	mutex_unlock(&core_data->mode_lock);
+	return ret;
+}
+
+static ssize_t goodix_ts_sample_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	ts_info("sample = %d.\n", core_data->set_mode.sample);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", core_data->set_mode.sample);
 }
 
 static int goodix_ts_mmi_refresh_rate(struct device *dev, int freq)
@@ -935,6 +1007,16 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 				(core_data->get_mode.report_rate_mode == REPORT_RATE_CMD_576HZ ? "REPORT_RATE_576HZ" :
 				(core_data->get_mode.report_rate_mode == REPORT_RATE_CMD_720HZ ? "REPORT_RATE_720HZ" :
 				"Unsupported")))));
+		}
+	}
+
+	if (core_data->board_data.sample_ctrl && core_data->get_mode.sample) {
+		ret = goodix_ts_send_cmd(core_data, SAMPLE_SWITCH_CMD, 5,
+						core_data->get_mode.sample, 0x00);
+		if (!ret) {
+			core_data->set_mode.sample = core_data->get_mode.sample;
+			msleep(20);
+			ts_info("Success to %d sample mode\n", core_data->get_mode.sample);
 		}
 	}
 
