@@ -100,6 +100,7 @@ struct bq2589x_config {
 	int	charge_voltage;
 	int	charge_current;
 	int	term_current;
+	int	vindpm;
 };
 
 struct bq2589x_state {
@@ -1461,6 +1462,10 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 	if (ret)
 		return ret;
 
+	ret = of_property_read_u32(np, "ti,bq2589x,vindpm",&bq->cfg.vindpm);
+	if (ret)
+		bq->cfg.vindpm = 4600;
+
 	bq->mmi_qc3_support = of_property_read_bool(np, "mmi,qc3-support");
 
 	ret = mmi_parse_dt_adc_channels(bq);
@@ -2267,11 +2272,11 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 		if (ret < 0)
 			dev_err(bq->dev,"%s:force vindpm failed:%d\n",__func__,ret);
 
-		ret = bq2589x_set_input_volt_limit(bq, 4600);
+		ret = bq2589x_set_input_volt_limit(bq, bq->cfg.vindpm);
 		if (ret < 0)
-			dev_err(bq->dev,"%s:reset vindpm threshold to 4600 failed:%d\n",__func__,ret);
+			dev_err(bq->dev,"%s:reset vindpm threshold to %d failed:%d\n",__func__,bq->cfg.vindpm,ret);
 		else
-			dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
+			dev_info(bq->dev,"%s:reset vindpm threshold to %d successfully\n",__func__,bq->cfg.vindpm);
 	}
 
 	schedule_delayed_work(&bq->monitor_work, 0);
@@ -2286,11 +2291,11 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 {
 	int ret;
 
-	ret = bq2589x_set_input_volt_limit(bq, 4600);
+	ret = bq2589x_set_input_volt_limit(bq, bq->cfg.vindpm);
 	if (ret < 0)
-		dev_err(bq->dev,"%s:reset vindpm threshold to 4600 failed:%d\n",__func__,ret);
+		dev_err(bq->dev,"%s:reset vindpm threshold to %d failed:%d\n",__func__,bq->cfg.vindpm,ret);
 	else
-		dev_info(bq->dev,"%s:reset vindpm threshold to 4600 successfully\n",__func__);
+		dev_info(bq->dev,"%s:reset vindpm threshold to %d successfully\n",__func__,bq->cfg.vindpm);
 
 	cancel_delayed_work_sync(&bq->monitor_work);
 
