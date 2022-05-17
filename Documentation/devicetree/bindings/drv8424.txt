@@ -1,0 +1,63 @@
+DRV8424 stepper motor driver from Texas Instruments
+
+Motor driver is a platform device. Motorola specific HW layout
+allows for the following controllable GPIOs:
+
+ - MOTOR_POWER_EN
+ - MOTOR_FAULT_INT
+ - MOTOR_STEP
+ - MOTOR_DIR
+ - MOTOR_EN
+ - MOTOR_SLEEP
+ - MOTOR_ACTIVE
+
+There is no kernel configuration option associated with DRV8424 DLKM
+
+Required properties:
+ - compatible: only one supported "moto,drv8424"
+ - drv8424-gpio-cells: number of elements allocated for gpio array in the driver
+ - MOTOR_POWER_EN-gpio: gpio enabling power to the motor
+ - MOTOR_FAULT_INT-gpio: gpio used as IRQ to indicate motor fault
+ - MOTOR_STEP-gpio: gpio used as input for pulse generator
+ - MOTOR_DIR-gpio: gpio to control motor direction
+ - MOTOR_EN-gpio: gpio to control drv8424 EN state
+ - MOTOR_SLEEP-gpio: gpio to control drv8424 SLEEP state
+ - MOTOR_ACTIVE-gpio: gpio to control hall effect sensor measurements
+ - pinctrl-names: pinctrl state "drv8424_int_default" required for motor fault IRQ
+
+Optional properties:
+ - pinctrl-names: list of pre-defined name (currently only "init_state" supported)
+ - power-default-off: keep power off when not in use
+ - support-mode: driver supports MODE0 and MODE1 setup
+ - support-torque: driver supports T0 and T1 setup
+ - no-sensors: ignore sensors data (mostly debug option)
+
+Note:
+Only following pinctrl state names are valid!!!
+    "m0_low", "m0_high", "m0_disable",
+    "m1_low", "m1_high", "m1_disable",
+    "t0_low", "t0_high", "t0_disable",
+    "t1_low", "t1_high", "t1_disable",
+    "drv8424_int_default",
+    "drv8424_clk_active",
+    "drv8424_clk_sleep",
+    "init_state"
+
+Example:
+
+	moto_drv8424_support {
+		compatible = "moto,drv8424";
+		drv8424-gpios-cells = <11>;
+		pinctrl-names = "drv8424_int_default", "init_state";
+		pinctrl-0 = <&drv8424_int_default>;
+		pinctrl-1 = <&drv8424_pwr_en_init &drv8424_step_init &drv8424_dir_init
+				&drv8424_sleep_init &drv8424_en_init &drv8424_step_init &drv8424_active_init>;
+		MOTOR_POWER_EN-gpio = <&tlmm 102>;
+		MOTOR_FAULT_INT-gpio = <&tlmm 112>;
+		MOTOR_STEP-gpio = <&tlmm 182>;
+		MOTOR_DIR-gpio = <&tlmm 183>;
+		MOTOR_SLEEP-gpio = <&tlmm 184>;
+		MOTOR_ACTIVE-gpio = <&tlmm 185>;
+		vdd-supply = <&S10B>;
+		power-default-off;
+	};

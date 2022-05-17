@@ -29,8 +29,6 @@
 #include <linux/kfifo.h>
 #include <linux/clk-provider.h>
 
-#define DRV8424_INIT_DETECTION 1
-
 #define DEFAULT_STEP_FREQ 2400
 #define MOTOR_CLASS_NAME  "drv8424"
 #define MOTOR_CONTROL  "control"
@@ -39,15 +37,15 @@
 
 #define MOTOR_DEFAULT_EXPIRE 3000 //3000ms timeout
 
-#if defined(DRV8424_INIT_DETECTION)
+#if 0
 #define MOTOR_DETECT_EXPIRE 600000 //10min timeout
 #define POLL_INIT_INT 5000 //start polling sensor data in Xms
 #define POLL_NEXT_INT 1000
-#else
+#endif
+
 #define MOTOR_DETECT_EXPIRE 500 //500ms timeout
 #define POLL_INIT_INT 100 //start polling sensor data in Xms
 #define POLL_NEXT_INT 50
-#endif
 
 #define MOTOR_MODE_SPEED 0
 #define MOTOR_MODE_STEP 1
@@ -222,7 +220,7 @@ static const char* const pins_state[] = {
 
 enum regime_idx {
 	SQ_FULL,
-	SQ_SHORTENED,
+	SQ_PROLONGED,
 	SQ_SHORT,
 	SQ_TINY,
 	SQ_MAX,
@@ -231,7 +229,7 @@ enum regime_idx {
 
 static const char *regime_names[] = {
 	"FULL",
-	"SHORTENED",
+	"PROLONGED",
 	"SHORT",
 	"TINY",
 	"dummy",
@@ -250,11 +248,11 @@ typedef struct {
 } motor_stage;
 
 static motor_stage initial_data[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
-	{ /* FULL 44mm */
-		{400,24}, {1400,56}, {3000,6252}, {2000,12}
-	},
-	{ /* SHORTENED 39mm */
+	{ /* FULL 39mm */
 		{400,24}, {1400,56}, {3000,5530}, {2000,12}
+	},
+	{ /* PROLONGED 44mm */
+		{400,24}, {1400,56}, {3000,6252}, {2000,12}
 	},
 	{ /* SHORT 5mm */
 		{400,24}, {1400,56}, {3000,630}, {2000,12}
@@ -331,6 +329,7 @@ typedef struct motor_device {
     bool     power_default_off;
     bool     support_mode;
     bool     support_torque;
+    bool     sensors_off;
     int      level:1;
     unsigned power_en:1;
     unsigned nsleep:1;
@@ -458,6 +457,7 @@ static int set_pinctrl_state(motor_device* md, unsigned state_index)
 
     if(state_index >= PINS_END) {
         dev_err(md->dev, "Illegal pin index\n");
+        ret = -EINVAL;
         goto err;
     }
 
@@ -665,14 +665,20 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 {
     motor_control* mc = &md->mc;
 
+	if (md->sensors_off)
+		return;
+
 	if (en) {
 		/* signal sensor hub to start/stop sampling hall effect */
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 1);
 		hrtimer_start(&md->timeout_timer, adapt_time_helper(md->time_out), HRTIMER_MODE_REL);
 		moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(POLL_INIT_INT));
-		/* declare sensor querying stage */
-		atomic_set(&md->status, STATUS_QUERYING_POS);
-		moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(POLL_INIT_INT));
+		if (!md->power_en) {
+			/* declare sensor querying stage when powered off */
+			/* when motor powered status will indicate direction */
+			atomic_set(&md->status, STATUS_QUERYING_POS);
+			moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(POLL_INIT_INT));
+		}
 	} else {
 		hrtimer_try_to_cancel(&md->timeout_timer);
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 0);
@@ -740,6 +746,8 @@ static void moto_drv8424_set_regime(motor_device *md, unsigned regime)
     md->max_stages = msn;
 	md->time_out = timeoutMs[regime];
     spin_unlock_irqrestore(&md->mlock, flags);
+    /* TODO: make time out based on sequence duration? */
+    md->time_out = MOTOR_DEFAULT_EXPIRE;
 
 	dev_info(md->dev, "Set active regime: %s, stages # %u\n",
 			regime_names[md->regime], msn);
@@ -979,21 +987,21 @@ static void motor_set_motion_params(motor_device *md, int start, int end)
 		if (end == POS_COMPACT)
 			regime = SQ_FULL;
 		else // end == PEEK
-			regime = SQ_SHORTENED;
+			regime = SQ_PROLONGED;
 	} else if (start == POS_COMPACT) {
-		md->dir = DIR_EXTEND;
-		if (end == POS_EXPANDED)
-			regime = SQ_FULL;
-		else // end == PEEK
-			regime = SQ_SHORT;
-	} else { // start == PEEK
 		if (end == POS_EXPANDED) {
 			md->dir = DIR_EXTEND;
-			regime = SQ_SHORTENED;
-		} else { // end == COMPACT
+			regime = SQ_FULL;
+		} else { // end == PEEK
 			md->dir = DIR_WITHDRAW;
 			regime = SQ_SHORT;
 		}
+	} else { // start == PEEK
+		md->dir = DIR_EXTEND;
+		if (end == POS_EXPANDED)
+			regime = SQ_PROLONGED;
+		else // end == COMPACT
+			regime = SQ_SHORT;
 	}
 
 	moto_drv8424_set_motor_dir(md);
@@ -1186,11 +1194,11 @@ static irqreturn_t motor_fault_irq(int irq, void *pdata)
     if(value) {
         dev_info(md->dev, "dummy motor irq event\n");
     }
-#if 0
+
     md->faulting = true;
     dev_err(md->dev, "Motor fault irq is happened\n");
 	moto_drv8424_cmd_push(md, CMD_FAULT, 0);
-#endif
+
     return IRQ_HANDLED;
 }
 
@@ -1847,6 +1855,10 @@ static int moto_drv8424_init_from_dt(motor_device* md)
 	if (md->support_torque)
 		ATTR_ADD(torque);
 
+    md->sensors_off = of_property_read_bool(np, "no-sensors");
+    if (md->sensors_off)
+        dev_info(pdev, "Ignore sensors data\n");
+
     md->power_default_off = of_property_read_bool(np, "power-default-off");
     dev_info(pdev, "power is default off:  %d\n", md->power_default_off);
 
@@ -1994,18 +2006,20 @@ static int moto_drv8424_probe(struct platform_device *pdev)
     }
 
 	RESET_SENSOR_DATA;
-#if defined(DRV8424_INIT_DETECTION)
-    md->time_out = MOTOR_DETECT_EXPIRE;
-	atomic_set(&md->position, POS_UNKNOWN);
-	atomic_set(&md->destination, POS_UNKNOWN);
-	atomic_set(&md->status, STATUS_UNKNOWN);
-	/* run position detection */
-	moto_drv8424_set_sensing(md, true);
-#else
-    md->time_out = MOTOR_DEFAULT_EXPIRE;
-	atomic_set(&md->position, POS_COMPACT);
-	atomic_set(&md->status, STATUS_STOPPED_COMPACT);
-#endif
+    if (!md->sensors_off) {
+        md->time_out = MOTOR_DETECT_EXPIRE;
+        atomic_set(&md->position, POS_UNKNOWN);
+        atomic_set(&md->status, STATUS_UNKNOWN);
+        atomic_set(&md->destination, POS_UNKNOWN);
+        /* run position detection */
+        moto_drv8424_set_sensing(md, true);
+    } else {
+        md->time_out = MOTOR_DEFAULT_EXPIRE;
+        atomic_set(&md->position, POS_COMPACT);
+        atomic_set(&md->status, STATUS_STOPPED_COMPACT);
+        dev_info(dev, "Assume COMPACT position\n");
+    }
+
     dev_info(dev, "Success init device; running position detection...\n");
     return 0;
 
