@@ -94,33 +94,42 @@ bool mmi_device_is_available(struct device_node *np)
 }
 EXPORT_SYMBOL(mmi_device_is_available);
 
-struct device_node *mmi_check_dynamic_device_node(char *dev_name)
+bool mmi_check_dynamic_device_node(char *dev_name)
 {
 	struct property *prop;
-	struct device_node *node, *dst_node;
+	struct device_node *node, *dst_node = NULL;
 	int len;
 	char *val = NULL;
+	bool result = true;
 
 	node = of_find_node_by_path("/chosen");
 	if (node == NULL)
-		return NULL;
+		goto out;
 
 	prop = of_find_property(node, "mmi,dynamic_devices", &len);
 	of_node_put(node);
 	if (prop == NULL || len < 0) {
 		pr_err("%s: cannot find mmi,dynamic_devices property\n", __func__);
-		return NULL;
+		goto out;
 	}
 
 	while ((val = (char *)of_prop_next_string(prop, val))) {
 		if (strstr(val, dev_name)) {
 			pr_info("%s: find matched dev name string %s\n", __func__, val);
 			dst_node = of_find_node_by_path(val);
-			return dst_node;
+			break;
 		}
 	}
-	pr_err("%s: cannot find any node with dev_name %s\n", __func__, dev_name);
-	return NULL;
+
+	if (dst_node == NULL) {
+		pr_err("%s: cannot find any node with dev_name %s\n", __func__, dev_name);
+		goto out;
+	}
+
+	result = mmi_device_is_available(dst_node);
+	of_node_put(dst_node);
+out:
+	return result;
 }
 EXPORT_SYMBOL(mmi_check_dynamic_device_node);
 
