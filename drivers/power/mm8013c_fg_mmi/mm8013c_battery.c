@@ -71,7 +71,6 @@ struct mm8xxx_device_info {
 };
 
 static void mm8xxx_battery_update(struct mm8xxx_device_info *di);
-
 static irqreturn_t mm8xxx_battery_irq_handler_thread(int irq, void *data)
 {
 	struct mm8xxx_device_info *di = data;
@@ -163,6 +162,7 @@ enum mm8xxx_cmd_index {
 	MM8XXX_CMD_FULLCHARGECAPACITY,
 	MM8XXX_CMD_AVERAGECURRENT,
 	MM8XXX_CMD_AVERAGETIMETOEMPTY,
+	MM8XXX_CMD_CHARGETYPE,
 	MM8XXX_CMD_CYCLECOUNT,
 	MM8XXX_CMD_STATEOFCHARGE,
 	MM8XXX_CMD_CHARGEVOLTAGE,
@@ -218,6 +218,7 @@ static u8
 		[MM8XXX_CMD_FULLCHARGECAPACITY]	= 0x12,
 		[MM8XXX_CMD_AVERAGECURRENT]	= 0x14,
 		[MM8XXX_CMD_AVERAGETIMETOEMPTY]	= 0x16,
+		[MM8XXX_CMD_CHARGETYPE]		= 0x20,
 		[MM8XXX_CMD_CYCLECOUNT]		= 0x2A,
 		[MM8XXX_CMD_STATEOFCHARGE]	= 0x2C,
 		[MM8XXX_CMD_CHARGEVOLTAGE]	= 0x30,
@@ -262,6 +263,7 @@ static enum power_supply_property mm8013c10_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 };
 
@@ -349,6 +351,52 @@ static inline int mm8xxx_write(struct mm8xxx_device_info *di, int cmd_index,
 	if (ret < 0)
 		dev_dbg(di->dev, "failed to write command 0x%02x (index %d)\n",
 			di->cmds[cmd_index], cmd_index);
+
+	return ret;
+}
+
+ static int mm8xxx_battery_temp(struct mm8xxx_device_info *di, int *temp)
+{
+	return iio_read_channel_processed(di->Batt_NTC_channel, temp);
+}
+
+static int mm8xxx_battery_temp_to_FG(struct mm8xxx_device_info *di)
+{
+	static int pre_temp=250;
+	int temp = 0;
+	int ret = 0;
+
+	ret = mm8xxx_battery_temp(di, &temp);
+	if (ret < 0) {
+		dev_err(di->dev, "error mm8xxx_battery_temp \n");
+		return ret;
+	}
+	temp = temp / 100;
+
+	if(temp < 0) {
+		temp = 65536 - temp;
+	}
+
+	if ( pre_temp != temp)
+	{
+		pre_temp = temp;
+		ret =mm8xxx_write(di, MM8XXX_CMD_TEMPERATURE, (u16)temp);
+		if (ret < 0) {
+			dev_err(di->dev, "error writing temperature to fg \n");
+		}
+	}
+
+	return ret;
+}
+
+static int mm8xxx_battery_chargeType_to_FG(struct mm8xxx_device_info *di, int type)
+{
+	int ret = 0;
+
+	ret =mm8xxx_write(di, MM8XXX_CMD_CHARGETYPE, (u16)type);
+	if (ret < 0) {
+		dev_err(di->dev, "error writing temperature to fg\n");
+	}
 
 	return ret;
 }
@@ -617,6 +665,7 @@ static void mm8xxx_battery_update(struct mm8xxx_device_info *di)
 	di->cache.flags = cache.flags;
 	cache.health = mm8xxx_battery_read_health(di);
 	cache.cycle_count = mm8xxx_battery_read_cyclecount(di);
+	mm8xxx_battery_temp_to_FG(di);
 
 	if (di->charge_design_full <= 0)
 		di->charge_design_full = mm8xxx_battery_read_designcapacity(di);
@@ -698,10 +747,6 @@ static int mm8xxx_battery_current(struct mm8xxx_device_info *di,
 	return 0;
 }
 
- static int mm8xxx_battery_temp(struct mm8xxx_device_info *di, union power_supply_propval *val)
-{
-	return iio_read_channel_processed(di->Batt_NTC_channel, &val->intval);
-}
 static int mm8xxx_battery_status(struct mm8xxx_device_info *di,
 				 union power_supply_propval *val)
 {
@@ -768,6 +813,30 @@ static int mm8xxx_simple_value(int value, union power_supply_propval *val)
 	return 0;
 }
 
+
+static int mm8xxx_battery_set_property(struct power_supply *psy,
+				       enum power_supply_property psp,
+				       const union power_supply_propval *val)
+{
+	int ret = 0;
+	struct mm8xxx_device_info *di = power_supply_get_drvdata(psy);
+
+	if ((psp != POWER_SUPPLY_PROP_PRESENT) && (di->cache.flags < 0))
+		return -ENODEV;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_TEMP:
+		mm8xxx_battery_temp_to_FG(di);
+		break;
+	case POWER_SUPPLY_PROP_TYPE:
+		mm8xxx_battery_chargeType_to_FG(di, val->intval);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
 static int mm8xxx_battery_get_property(struct power_supply *psy,
 				       enum power_supply_property psp,
 				       union power_supply_propval *val)
@@ -806,7 +875,7 @@ static int mm8xxx_battery_get_property(struct power_supply *psy,
 		ret = mm8xxx_battery_capacity_level(di, val);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		mm8xxx_battery_temp(di, val);
+		mm8xxx_battery_temp(di, &val->intval);
 		val->intval = val->intval / 100;
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW:
@@ -879,6 +948,7 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	ps_desc->properties = mm8xxx_chip_data[di->chip].props;
 	ps_desc->num_properties = mm8xxx_chip_data[di->chip].props_size;
 	ps_desc->get_property = mm8xxx_battery_get_property;
+	ps_desc->set_property = mm8xxx_battery_set_property;
 	ps_desc->external_power_changed = mm8xxx_external_power_changed;
 
 	di->psy = power_supply_register(di->dev, ps_desc, &ps_cfg);
