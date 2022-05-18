@@ -208,21 +208,26 @@ exit:
 #ifdef SUPPORT_PIN_CTRL
 static void fpc_pinctrl_on(struct device *dev)
 {
-    struct pinctrl *ptl = devm_pinctrl_get(dev);
-    const char ptl_name[6][16] = {"fpc_vdd_of", "fpc_vdd_on", "fpc_rst_hi", "fpc_rst_lo", "fpc_rst_hi", "fpc_irq_en"};
-    struct pinctrl_state *ptl_state = NULL;
-    int i = 0;
-    for (i = 0; i < 6; i++) {
-            ptl_state = pinctrl_lookup_state(ptl, ptl_name[i]);
-            if (!IS_ERR(ptl_state)) {
-                pinctrl_select_state(ptl, ptl_state);
-                pr_info("%s, by pinctrl:%s\n", __func__, ptl_name[i]);
-                msleep(5);
-            } else {
-                pr_err("%s, no found:%s\n", __func__, ptl_name[i]);
-            }
-    }
-    devm_pinctrl_put(ptl);
+	struct pinctrl *ptl = NULL;
+	struct pinctrl_state *ptl_state = NULL;
+
+        pr_info("fpc fpc_pinctrl_on begin\n");
+    	ptl = devm_pinctrl_get(dev);
+	ptl_state = pinctrl_lookup_state(ptl, "fpc_irq_en");
+	pinctrl_select_state(ptl, ptl_state);
+        ptl_state = pinctrl_lookup_state(ptl, "fpc_vdd_on");
+        pinctrl_select_state(ptl, ptl_state);
+        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_hi");
+        pinctrl_select_state(ptl, ptl_state);
+        msleep(10);
+        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_lo");
+        pinctrl_select_state(ptl, ptl_state);
+        msleep(5);
+        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_hi");
+        pinctrl_select_state(ptl, ptl_state);
+        msleep(3);
+    	devm_pinctrl_put(ptl);
+        pr_info("fpc fpc_pinctrl_on end\n");
 }
 #endif
 static ssize_t hw_reset_set(struct device *dev,
