@@ -314,8 +314,12 @@ static int is_wls_online(struct mmi_discrete_charger *chip)
 	int rc;
 	union power_supply_propval val;
 
-	if (!chip->wls_psy)
-		return 0;
+	if (!chip->wls_psy){
+		chip->wls_psy = power_supply_get_by_name("wireless");
+		if (!chip->wls_psy) {
+			return 0;
+		}
+	}
 
 	rc = power_supply_get_property(chip->wls_psy,
 			POWER_SUPPLY_PROP_ONLINE, &val);
@@ -393,8 +397,12 @@ static int get_prop_dc_present(struct mmi_discrete_charger *chip,
 {
 	int rc;
 
-	if (!chip->wls_psy)
-		return -EINVAL;
+	if (!chip->wls_psy) {
+		chip->wls_psy = power_supply_get_by_name("wireless");
+		if (!chip->wls_psy) {
+			return -EINVAL;
+		}
+	}
 
 	rc = power_supply_get_property(chip->wls_psy,
 				       POWER_SUPPLY_PROP_PRESENT, val);
@@ -409,8 +417,12 @@ static int get_prop_dc_online(struct mmi_discrete_charger *chip,
 {
 	int rc;
 
-	if (!chip->wls_psy)
-		return -EINVAL;
+	if (!chip->wls_psy) {
+		chip->wls_psy = power_supply_get_by_name("wireless");
+		if (!chip->wls_psy) {
+			return -EINVAL;
+		}
+	}
 
 	rc = power_supply_get_property(chip->wls_psy,
 				       POWER_SUPPLY_PROP_ONLINE, val);
@@ -1061,10 +1073,14 @@ static void mmi_discrete_config_qc_charger(struct mmi_discrete_charger *chg)
 	}
 }
 
-#define WLS_POWER_MIN 5000
+/*MIN is 2.5W -> default icl 500mA * input vol 5V*/
+#define WLS_POWER_MIN 2500
 static void mmi_discrete_config_wls_charger(struct mmi_discrete_charger *chg)
 {
 	mmi_dbg(chg, "Configure wireless charger\n");
+
+	if (chg->bc1p2_charger_type != POWER_SUPPLY_TYPE_UNKNOWN)
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, chg->wls_max_icl_ua);
 }
 
 static void mmi_discrete_config_charger_input(struct mmi_discrete_charger *chip)

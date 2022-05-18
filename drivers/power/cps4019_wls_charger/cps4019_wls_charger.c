@@ -1787,6 +1787,11 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 	if (mmi_is_factory_mode())
 		update_firmware();
 
+	if (cps_wls_get_vout_state() &&
+			chip->main_chg_dev) {
+		charger_dev_notify(chip->main_chg_dev);
+	}
+
 	return ret;
 
 free_source:
