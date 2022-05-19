@@ -1024,9 +1024,10 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (IS_ERR_OR_NULL(cw_bat->vdd_i2c_vreg)) {
 		printk("%s: Could not get vdd-i2c power regulator\n", __func__);
 		cw_bat->vdd_i2c_vreg = NULL;
-		ret = 0;
 	} else {
-		regulator_enable(cw_bat->vdd_i2c_vreg);
+		ret = regulator_enable(cw_bat->vdd_i2c_vreg);
+		printk("%s: Enable vdd-i2c, ret=%d\n", __func__, ret);
+		ret = 0;
 	}
 
 	ret = cw_get_chip_id(cw_bat);
