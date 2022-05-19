@@ -2367,7 +2367,8 @@ static void sgm4154x_paired_battery_notify(void *data,
 			low_load_en = false;
 		}
 
-		if (chg_present) {
+		/* Turn off load switch if paired battery is charging */
+		if (chg_present && batt_info->batt_ma > 0) {
 			high_load_en = false;
 			low_load_en = false;
 		}
