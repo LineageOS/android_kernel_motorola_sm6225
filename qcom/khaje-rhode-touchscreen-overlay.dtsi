@@ -119,8 +119,7 @@
 			 &mot_csot_nt37701_655_1080x2400_dsc_cmd_v1
                          &mot_tm_nt37701_655_1080x2400_dsc_cmd_v0
 			 &mot_tm_nt37701_655_1080x2400_dsc_cmd_v1
-			 &mot_tm_nt37701_655_1080x2400_dsc_cmd_v2
-			 &mot_visionox_rm692e5_655_1080x2400_dsc_cmd_v0>;
+			 &mot_tm_nt37701_655_1080x2400_dsc_cmd_v2>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend", "pmx_ts_release";
 		pinctrl-0 = <&ts_active>;
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
@@ -160,7 +159,7 @@
                 compatible = "synaptics,tcm-spi";
                 reg = <2>;
                 spi-max-frequency = <9600000>;
-		mmi,status = "/chosen","mmi,panel_name","contains","visionox";
+		mmi,status = "/chosen","mmi,panel_name","contains","visionox","vtdr6130";
                 interrupt-parent = <&tlmm>;
                 interrupts = <97 0x2008>;
                 //synaptics,vdd-gpio = <&pm8916_l15>;
@@ -184,7 +183,8 @@
 		mmi,enable-gestures;
 		mmi,usb-charger-detection;
 
-		panel = <&mot_visionox_rm692e5_655_1080x2400_dsc_cmd_v0>;
+		panel = <&mot_visionox_rm692e5_655_1080x2400_dsc_cmd_v0
+			&mot_csot_vtdr6130_655_1080x2400_dsc_cmd_v0>;
          };
 
 };
