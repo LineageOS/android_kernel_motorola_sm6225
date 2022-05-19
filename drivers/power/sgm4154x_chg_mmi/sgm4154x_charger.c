@@ -79,8 +79,6 @@ static enum power_supply_usb_type sgm4154x_usb_type[] = {
 	POWER_SUPPLY_USB_TYPE_CDP,
 };
 
-extern bool mmi_is_factory_mode(void);
-
 #define WAIT_I2C_COUNT 50
 #define WAIT_I2C_TIME 10
 int mmi_regmap_update_bits(struct sgm4154x_device *sgm, unsigned int reg,
@@ -1387,7 +1385,7 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 {
 	int rc = 0;
 
-	if(mmi_is_factory_mode() && sgm->ignore_request_dpdm) {
+	if(sgm->ignore_request_dpdm) {
 		dev_err(sgm->dev, "%s ignore_request_dpdm\n", __func__);
 		return rc;
 	}

@@ -24,6 +24,7 @@
 #include <linux/iio/consumer.h>
 #include "inc/tcpci_typec.h"
 #include <linux/mmi_discrete_power_supply.h>
+#include <linux/mmi_discrete_charger_class.h>
 
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
 
@@ -68,6 +69,8 @@ struct rt_pd_manager_data {
 	struct typec_partner *partner;
 	struct typec_partner_desc partner_desc;
 	struct usb_pd_identity partner_identity;
+
+	struct charger_device	*master_chg_dev;
 };
 
 static const unsigned int rpm_extcon_cable[] = {
@@ -163,9 +166,31 @@ out:
 	return ret;
 }
 
+static void mmi_ignore_require_dpdm(struct rt_pd_manager_data *rpmd, bool value)
+{
+	int rc = 0;
+
+	if (!rpmd->master_chg_dev)
+		rpmd->master_chg_dev = get_charger_by_name("master_chg");
+
+	if (!rpmd->master_chg_dev)
+		return;
+
+	if (value) {
+		rc = charger_dev_set_dp_dm(rpmd->master_chg_dev,
+				MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM);
+		dev_info(rpmd->dev, "%s ignore dp dm request rc=%d\n", rc? "Couldn't" : " ", rc);
+	} else {
+		rc = charger_dev_set_dp_dm(rpmd->master_chg_dev,
+				MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM);
+		dev_info(rpmd->dev, "%s enable dp dm request rc=%d\n", rc? "Couldn't" : " ", rc);
+	}
+}
+
 static inline void stop_usb_host(struct rt_pd_manager_data *rpmd)
 {
 	extcon_set_state_sync(rpmd->extcon, EXTCON_USB_HOST, false);
+	mmi_ignore_require_dpdm(rpmd, false);
 }
 
 static inline void start_usb_host(struct rt_pd_manager_data *rpmd)
@@ -181,6 +206,7 @@ static inline void start_usb_host(struct rt_pd_manager_data *rpmd)
 			    EXTCON_PROP_USB_SS, val);
 
 	extcon_set_state_sync(rpmd->extcon, EXTCON_USB_HOST, true);
+	mmi_ignore_require_dpdm(rpmd, true);
 }
 
 static inline void stop_usb_peripheral(struct rt_pd_manager_data *rpmd)
