@@ -73,6 +73,7 @@ static const struct wt6670_iio_channels wt6670_iio_psy_channels[] = {
 	wt6670_CHAN_INDEX("wt6670_start_bc12_detection", PSY_IIO_START_BC12_DETECTION)
 	wt6670_CHAN_INDEX("wt6670_detection_bc12_ready", PSY_IIO_DETECTION_BC12_READY)
 	wt6670_CHAN_INDEX("read_usbin_voltage", PSY_IIO_READ_USBIN_VOLTAGE)
+        wt6670_CHAN_INDEX("wt6670_bc12_chg_type", PSY_IIO_BC12_CHG_TYPE)
 };
 
 int wt6670f_isp_flow(struct wt6670f *chip);

@@ -1872,6 +1872,13 @@ bool qc3p_detection_done(struct sgm4154x_device *chip)
 	int val = 0;
 	int delay_count =0;
 
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+        if(chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP) {
+              dev_info(chip->dev, "qc3p hvdcp detection already done, do not wait\n");
+	      return true;
+        }
+#endif
+
 	do {
 		ret = mmi_charger_read_iio_chan(chip, SMB5_QC3P_DETECTION_READY, &val);
 		if(ret )
@@ -1953,11 +1960,11 @@ int bc12_read_charger_type(struct sgm4154x_device *chip)
 	int ret = 0;
 	int val = 0;
 
-	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	ret = mmi_charger_read_iio_chan(chip, SMB5_READ_BC12_CHG_TYPE, &val);
 	if(ret )
-		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+		dev_err(chip->dev, "Cann't read SMB5_READ_BC12_CHG_TYPE IIO\n");
 
-	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	dev_info(chip->dev, "read SMB5_READ_BC12_CHG_TYPE IIO :%d\n",val);
 	return val;
 }
 #endif
@@ -2063,7 +2070,11 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 {
 
 	if (sgm->mmi_qc3_support
-		&& sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
+		&& (sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+                || sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
+#endif
+        )) {
 		dev_info(sgm->dev, "start hvdcp detect\n");
 		sgm->mmi_qc3_trig_flag = true;
 		wake_up_interruptible(&sgm->mmi_qc3_wait_que);
@@ -2104,6 +2115,12 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 			mmi_start_hvdcp_detect(sgm);
 			result = true;
 			break;
+                case WT_CHG_TYPE_HVDCP:
+                        dev_err(sgm->dev, "quick plug out/in, HVDCP have been detected already !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+			mmi_start_hvdcp_detect(sgm);
+			result = true;
+                        break;
 		default:
 			pr_err("bc12 charger type: default\n");
 			result = false;
