@@ -643,6 +643,12 @@ static int wt6670_iio_read_raw(struct iio_dev *indio_dev,
 		if(result == WT6670_CHG_TYPE_QC3P_18W || result == WT6670_CHG_TYPE_QC3P_27W)
 			*val1 = result;
 		break;
+	case PSY_IIO_BC12_CHG_TYPE:
+		wt6670f_get_protocol();
+		result = wt6670f_get_charger_type();
+		pr_info("wt6670 get bc1.2 charger type:%d\n", result);
+		*val1 = result;
+		break;
 	case PSY_IIO_QC3P_REAL_TYPE:
 		wt6670f_get_protocol();
 		result = wt6670f_get_charger_type();
