@@ -528,7 +528,8 @@ static bool cps_check_fw_ver(void)
 	cps_wls_log(CPS_LOG_ERR, "[%s] chip id %d.%d\n", __func__, fw_major, fw_minor);
 
 	if ((chip->fw_ver_major > fw_major)
-			|| (chip->fw_ver_minor > fw_minor))
+			|| (chip->fw_ver_minor > fw_minor)
+			|| ((fw_major > 0xB0) && (fw_minor > 0xB0)))/*For blank chip, fw ver may be B4B5.B6B7*/
 		ret = true;
 	else
 		ret = false;
