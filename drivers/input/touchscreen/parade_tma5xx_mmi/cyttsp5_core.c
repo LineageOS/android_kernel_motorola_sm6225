@@ -5107,6 +5107,7 @@ int cyttsp5_core_suspend(struct device *dev)
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
 
 	cyttsp5_core_sleep(cd);
+	call_atten_cb(cd, CY_ATTEN_SUSPEND, 0);
 
 	if (IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
@@ -5169,6 +5170,7 @@ int cyttsp5_core_resume(struct device *dev)
 		}
 	}
 exit:
+	call_atten_cb(cd, CY_ATTEN_RESUME, 0);
 	cyttsp5_core_wake(cd);
 
 	dev_info(dev, "%s: resume power state %s \n", __func__,
