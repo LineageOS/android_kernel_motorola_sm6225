@@ -528,13 +528,23 @@ static bool cps_check_fw_ver(void)
 	cps_wls_log(CPS_LOG_ERR, "[%s] chip id %d.%d\n", __func__, fw_major, fw_minor);
 
 	if ((chip->fw_ver_major > fw_major)
-			|| (chip->fw_ver_minor > fw_minor)
-			|| ((fw_major > 0xB0) && (fw_minor > 0xB0)))/*For blank chip, fw ver may be B4B5.B6B7*/
+			|| (chip->fw_ver_minor > fw_minor))
 		ret = true;
 	else
 		ret = false;
 
 	return ret;
+}
+
+static bool cps_check_chipid(void)
+{
+	int chip_id;
+
+	chip_id = cps_wls_get_chip_id();
+
+	cps_wls_log(CPS_LOG_ERR, "[%s] chip id 0x%x\n", __func__, chip_id);
+
+	return chip_id == CPS4019_CHIP_ID ? true : false;
 }
 
 static void cps_wls_pm_set_awake(int awake)
@@ -855,7 +865,9 @@ static int update_firmware(void)
 		goto update_fail;
 	}
 
-	if (!cps_check_fw_ver()) {
+	/*Judge fw version(fw.hex file ver > fw in chip) and chip id(active chipid is 0x4019)*/
+	if ( cps_check_chipid() &&
+			!cps_check_fw_ver()) {
 		cps_wls_log(CPS_LOG_ERR, "[%s] fw already exist OR chip do not exist. Skip!!\n", __func__);
 		goto update_fail;
 	}
@@ -1036,7 +1048,7 @@ start_write_app_code:
 	chip_id = cps_wls_read_word(0x0000);
 	pr_err("cps4019 FW_MAJOR=0x%04X\n",big_little_endian_convert(cps_wls_read_word(0x0002))&0xFFFF);
 	pr_err("cps4019 FW_MINOR=0x%04X\n",big_little_endian_convert(cps_wls_read_word(0x0004))&0xFFFF);
-	if(chip_id != 0x4019) {
+	if(chip_id != CPS4019_CHIP_ID) {
 		cps_wls_log(CPS_LOG_DEBG, "[%s] ---- CHECK CHIP ID fail = %x\n", __func__, chip_id);
 		goto update_fail;
 	}
@@ -1050,6 +1062,88 @@ start_write_app_code:
 update_fail:
 	cps_set_power(false);
 	cps_wls_log(CPS_LOG_ERR, "[%s] ---- update fail\n", __func__);
+
+	return CPS_WLS_FAIL;
+}
+
+static int erase_firmware(void)
+{
+	int ret;
+	int bootloader_length;
+	unsigned char *bootloader_buf;
+	unsigned short int chip_id;
+	int result;
+
+	bootloader_buf = kzalloc(CPS4019_BL_SIZE, GFP_KERNEL);// 2K buffer
+
+/***************************************************************************************
+ *                                  Step1, load to sram                                *
+ ***************************************************************************************/
+	ret = bootloader_load(bootloader_buf, &bootloader_length);//load bootloader
+	if (ret != 0) {
+		cps_wls_log(CPS_LOG_DEBG, "[%s] ---- bootloader get error %d\n", __func__, ret);
+		goto erase_fail;
+	}
+
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
+		goto erase_fail; /*enable 32bit i2c*/
+
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040070, big_little_endian_convert(0x0000A061)))
+		goto erase_fail; /*write password*/
+
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040004, big_little_endian_convert(0x00000008)))
+		goto erase_fail; /*reset and halt mcu*/
+
+	if(CPS_WLS_FAIL == cps_wls_program_sram_addr32(0x20000000, bootloader_buf, bootloader_length))
+		goto erase_fail;//program sram
+
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040010, big_little_endian_convert(0x00000001)))
+		goto erase_fail; /*triming load function is disabled*/
+
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0x40040004, big_little_endian_convert(0x00000066)))
+		goto erase_fail; /*enable remap function and reset the mcu*/
+
+	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- system restart\n", __func__);
+
+	msleep(10);
+	if(CPS_WLS_FAIL == cps_wls_write_word_addr32(0xFFFFFF00, big_little_endian_convert(0x0E000000)))
+		goto erase_fail; /*enable 32bit i2c*/
+	msleep(10);
+
+/***************************************************************************************
+ *                          Step2, bootloader crc check                                *
+ ***************************************************************************************/
+	cps_wls_program_cmd_send(CACL_CRC_TEST);
+	result = cps_wls_program_wait_cmd_done();
+
+	if(result != CPS_WLS_SUCCESS) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] ---- bootloader crc fail\n", __func__);
+		goto erase_fail;
+	}
+	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- load bootloader successful\n", __func__);
+
+	cps_wls_program_cmd_send(PGM_ERASER_0);
+	result = cps_wls_program_wait_cmd_done();
+
+	if(result != CPS_WLS_SUCCESS) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] ---- bootloader crc fail\n", __func__);
+		goto erase_fail;
+	}
+
+
+/***************************************************************************************
+ *                          check chip id                                       *
+ ***************************************************************************************/
+	chip_id = cps_wls_read_word(0x0000);
+	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- CHECK CHIP ID = %x\n", __func__, chip_id);
+	if(chip_id == CPS4019_CHIP_ID) {
+		goto erase_fail;
+	}
+
+	return CPS_WLS_SUCCESS;
+
+erase_fail:
+	cps_wls_log(CPS_LOG_ERR, "[%s] ---- erase fail\n", __func__);
 
 	return CPS_WLS_FAIL;
 }
@@ -1381,6 +1475,30 @@ static ssize_t store_update_fw(struct device *dev,
 }
 static DEVICE_ATTR(update_fw, 0220, NULL, store_update_fw);
 
+static ssize_t store_erase_fw(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	int tmp;
+
+	/*Only work in factory mode*/
+	if (!mmi_is_factory_mode())
+		return count;
+
+	tmp = simple_strtoul(buf, NULL, 0);
+	/*TO void unfriend attacking, we just regard 0x55aa as a valid cmd value*/
+	if(tmp == 0x55aa) {
+		cps_wls_log(CPS_LOG_DEBG, "[%s] -------start erase fw\n", __func__);
+		erase_firmware();
+	} else {
+		cps_wls_log(CPS_LOG_DEBG, "[%s] unsupport operation\n", __func__);
+	}
+
+	return count;
+}
+static DEVICE_ATTR(erase_fw, 0220, NULL, store_erase_fw);
+
 static ssize_t show_iout(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "iout = %dmA\n", cps_wls_get_iout());
@@ -1503,6 +1621,7 @@ static void cps_wls_create_device_node(struct device *dev)
 	device_create_file(dev, &dev_attr_reg_data);
 //-----------------------program---------------------
 	device_create_file(dev, &dev_attr_update_fw);
+	device_create_file(dev, &dev_attr_erase_fw);
 
 //-----------------------RX--------------------------
 	device_create_file(dev, &dev_attr_get_iout);
@@ -1784,9 +1903,7 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 
 	cps_wls_log(CPS_LOG_DEBG, "[%s] wireless charger addr low probe successful!\n", __func__);
 
-	/*check firmwware, only work in factory mode*/
-	if (mmi_is_factory_mode())
-		update_firmware();
+	update_firmware();
 
 	if (cps_wls_get_vout_state() &&
 			chip->main_chg_dev) {
