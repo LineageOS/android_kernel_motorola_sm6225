@@ -125,6 +125,9 @@ struct mmi_discrete_charger {
 	int			*thermal_mitigation;
 	int			typec_mode;
 	bool			use_extcon;
+
+	/*FG*/
+	bool			chgmod_to_fg;
 };
 
 int mmi_discrete_otg_enable(struct mmi_discrete_charger *chip, bool en);

@@ -120,6 +120,9 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 
 	chip->pd_supported = of_property_read_bool(node, "mmi,usb-pd-supported");
 
+	/*mm8013 fg need charging mode info*/
+	chip->chgmod_to_fg = of_property_read_bool(node, "mmi,cfg-chgmod-to-fg");
+
 	return 0;
 }
 
@@ -1198,6 +1201,35 @@ static void mmi_discrete_config_charger_output(struct mmi_discrete_charger *chip
 	}
 }
 
+enum {
+	MMI_CHARGER_MODE_FFC = 0,
+	MMI_CHARGER_MODE_NORMAL,
+	MMI_CHARGER_MODE_USB,
+};
+
+#define TURBO_CHRG_FFC_THRSH_MW 25000
+
+static void mmi_discrete_config_chgmod_to_fg(struct mmi_discrete_charger *chip)
+{
+	union power_supply_propval val;
+	int rc = 0;
+
+	if (!chip->bms_psy || !chip->chgmod_to_fg)
+		return;
+
+	if (chip->chg_info.chrg_pmax_mw > TURBO_CHRG_FFC_THRSH_MW) {
+		val.intval = MMI_CHARGER_MODE_FFC;
+	} else if (chip->chg_info.chrg_type == POWER_SUPPLY_TYPE_USB) {
+		val.intval = MMI_CHARGER_MODE_USB;
+	} else {
+		val.intval = MMI_CHARGER_MODE_NORMAL;
+	}
+
+	rc = power_supply_set_property(chip->bms_psy, POWER_SUPPLY_PROP_TYPE, &val);
+	mmi_dbg(chip, "%s config charger mode to fg\n", rc? "Can't" : "success");
+
+}
+
 static void mmi_discrete_charger_work(struct work_struct *work)
 {
 	struct mmi_discrete_charger *chip = container_of(work,
@@ -1212,6 +1244,8 @@ static void mmi_discrete_charger_work(struct work_struct *work)
 	}
 	mmi_discrete_config_charger_input(chip);
 	mmi_discrete_config_charger_output(chip);
+
+	mmi_discrete_config_chgmod_to_fg(chip);
 
 	mmi_info(chip, "FV=%d, FCC=%d, CHGDIS=%d, USBICL=%d, USBDIS=%d\n",
 		get_effective_result(chip->fv_votable),
