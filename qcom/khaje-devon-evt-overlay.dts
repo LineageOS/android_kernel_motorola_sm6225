@@ -15,6 +15,8 @@
 
 #include "khaje-devon-common-overlay.dtsi"
 #include "khaje-devon-audio-overlay.dtsi"
+#include "khaje-devon-display-evt-overlay.dtsi"
+
 / {
 	model = "devon";
 	compatible = "qcom,khaje-devon", "qcom,khaje-moto", "qcom,khaje";

@@ -15,6 +15,7 @@
 
 #include "khaje-devon-common-overlay.dtsi"
 #include "khaje-devon-audio-overlay.dtsi"
+#include "khaje-devon-display-pvt-overlay.dtsi"
 
 / {
 	model = "devon";
