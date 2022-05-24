@@ -182,7 +182,7 @@
 			aicr = <500000>;		/* uA */
 			cv = <4450000>;			/* uV */
 			ichg = <1000000>;		/* uA */
-			ieoc = <243000>;		/* uA */
+			ieoc = <120000>;		/* uA */
 			safe_tmr = <10>;		/* hour */
 			wdt = <0>;			/* sec */
 			mivr_track = <0>;
