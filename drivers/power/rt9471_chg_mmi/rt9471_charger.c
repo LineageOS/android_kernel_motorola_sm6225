@@ -810,6 +810,12 @@ static int __rt9471_enable_safe_tmr(struct rt9471_chip *chip, bool en)
 		(chip, RT9471_REG_CHGTIMER, RT9471_SAFETMR_EN_MASK);
 }
 
+static int __rt9471_eoc_rst(struct rt9471_chip *chip)
+{
+	dev_info(chip->dev, "%s\n", __func__);
+	return rt9471_set_bit(chip, RT9471_REG_EOC, RT9471_EOC_RST_MASK);
+}
+
 static int __rt9471_enable_te(struct rt9471_chip *chip, bool en)
 {
 	dev_info(chip->dev, "%s en = %d\n", __func__, en);
@@ -2467,8 +2473,35 @@ static int rt9471_set_ichg(struct charger_device *chg_dev, u32 uA)
 static int rt9471_enable_te(struct charger_device *chg_dev, bool en)
 {
 	struct rt9471_chip *chip = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
 
-	return __rt9471_enable_te(chip, en);
+	if (en) {
+        	ret = __rt9471_eoc_rst(chip);
+		if (ret < 0) {
+			dev_notice(chip->dev, "%s __rt9471_eoc_rst fail(%d)\n", __func__, ret);
+			return ret;
+		}
+
+		ret = __rt9471_enable_te(chip, en);
+		if (ret < 0) {
+			dev_notice(chip->dev, "%s __rt9471_enable_te fail(%d)\n", __func__, ret);
+			return ret;
+                }
+        } else {
+        	ret = __rt9471_enable_te(chip, en);
+		if (ret < 0) {
+			dev_notice(chip->dev, "%s __rt9471_enable_te fail(%d)\n", __func__, ret);
+			return ret;
+                }
+
+		ret = __rt9471_eoc_rst(chip);
+		if (ret < 0) {
+			dev_notice(chip->dev, "%s __rt9471_eoc_rst fail(%d)\n", __func__, ret);
+			return ret;
+		}
+        }
+
+	return ret;
 }
 
 static int rt9471_enable_otg(struct charger_device *chg_dev, bool en)
