@@ -755,7 +755,9 @@ long egisfp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		g_fps_mode = data.int_mode;
 		DEBUG_PRINT(" %s : FP_SET_FPS_MODE to %d \n", __func__,g_fps_mode);
-		FPS_notify(0xbeef, (g_fps_mode > 0)? 1: 0);
+		if(g_fps_mode < 5) {
+			FPS_notify(0xbeef, (g_fps_mode > 0)? 1: 0);
+		}
 #endif
 		break;
 	default:
