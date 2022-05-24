@@ -129,8 +129,6 @@
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command =
 				[
-					15 00 00 00 00 00 02 FE 40
-					15 00 00 00 00 00 02 1F 00
 					15 00 00 00 00 00 02 FE 60
 					15 00 00 00 00 00 02 09 E0
 					15 00 00 00 00 00 02 0E 08
