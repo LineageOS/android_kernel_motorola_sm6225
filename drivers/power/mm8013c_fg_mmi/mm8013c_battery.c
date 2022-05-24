@@ -14,8 +14,14 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/delay.h>
 #include <asm/unaligned.h>
 #include <linux/iio/consumer.h>
+#include <linux/firmware.h>
+#include <linux/time.h>
+#include <linux/types.h>
+#include <linux/file.h>
+#include <linux/fs.h>
 
 #define MM8XXX_MANUFACTURER	"MITSUMI ELECTRIC"
 
@@ -68,8 +74,627 @@ struct mm8xxx_device_info {
 	u8 *cmds;
 	struct iio_channel *Batt_NTC_channel;
 	bool fake_battery;
+	u32 latest_fw_version;
+	u32 latest_parameter_version;
+	u32 first_battery_serialnum;
+	u32 second_battery_serialnum;
+	u32 default_battery_serialnum;
 };
 
+
+static int mm8xxx_battery_read_Nbyte(struct mm8xxx_device_info *di, u8 cmd, unsigned char *data, unsigned char length);
+static int mm8xxx_battery_read(struct mm8xxx_device_info *di, u8 cmd);
+static int mm8xxx_battery_write(struct mm8xxx_device_info *di, u8 cmd,int value);
+static int mm8xxx_battery_write_Nbyte(struct mm8xxx_device_info *di, u8 cmd,unsigned int value, int byte_num);
+static int mm8xxx_battery_write_4byteCmd(struct mm8xxx_device_info *di, unsigned int cmd,unsigned int value);
+static u32 mmi_get_battery_info(struct mm8xxx_device_info *di, u32 cmd);
+/****************************FW / Parameter update****************************************/
+#define ENABLE_VERIFICATION
+
+#define MM8013_HW_VERSION 0x0021
+#define MM8013_LATEST_FW_VERSION 0x0812
+#define MM8013_PARAMETER_FW_VERSION 0x0201
+
+#define MM8013_DEFAULT_BATTERY_ID 0x0103
+#define MM8013_1TH_BATTERY_ID 0x0103
+#define MM8013_2TH_BATTERY_ID 0x0102
+
+#define ADDRESS_PROGRAM		(0x00008000)
+#define ADDRESS_PARAMETER	(0x00014000)
+#define SIZE_PROGRAM		(0x4000)
+#define SIZE_PARAMETER		(0x3C0)
+#ifdef ENABLE_VERIFICATION
+#define SIZE_READBUFFER		(16)
+#endif
+
+#define COMMAND_CONTROL		(0x00)
+#define COMMAND_FGCONDITION	(0x6E)
+#define COMMAND_MODECONTROL	(0x88)
+#ifdef ENABLE_VERIFICATION
+#define COMMAND_READNVMDATA	(0x8B)
+#endif
+#define COMMAND_ERASENVM	(0x8C)
+#define COMMAND_WRITENVMDATA	(0x8D)
+#define REQCODE_CONTROL_STATUS	(0x0000)
+#define FG_CMD_READ_FAILED	(0x10000)
+#define BIT_SS			(0x2000)
+
+#define FW_VER_CMD		(0x0002)
+#define HW_VER_CMD		(0x0003)
+#define PARAM_VER_CMD		(0x000C)
+#define BATTERY_ID_CMD		(0x0008)
+
+enum PARTITION_INDEX {
+	PARTITION_PROGRAM = 0,
+	PARTITION_PARAMETER,
+	PARTITION_MAX
+};
+
+enum UPDATE_INDEX {
+	UPDATE_PROGRAM = 0,
+	UPDATE_PARAMETER,
+	UPDATE_ALL,
+	UPDATE_NONE
+};
+
+static unsigned char chartoBcd(char iChar)
+{
+	unsigned char mBCD = 0;
+
+	if (iChar >= '0' && iChar <= '9')
+		mBCD = iChar - '0';
+	else if (iChar >= 'A' && iChar <= 'F')
+		mBCD = iChar - 'A' + 0x0A;
+	else if (iChar >= 'a' && iChar <= 'f')
+		mBCD = iChar - 'a' + 0x0a;
+
+	return mBCD;
+}
+
+static int tohex(char *pbuf, unsigned char length)
+{
+	int i = 0;
+	int  value = 0;
+
+	if  (length >4)
+		return -EINVAL;
+
+	for(i = 0; i < length; i++)
+	{
+		value += (chartoBcd(pbuf[i]) << (4*(length -1-i)));
+	}
+
+	return value;
+}
+/**
+ * parse a FG firmware / parameter file
+ *  arguments:
+ *    hexfile_path - file path of FGFW/parameter
+ *
+ *  return value:
+ *    pointer of jagged arrays
+ *    or NULL if it fails
+ *    jagged arrays details are below.
+ *      [0] - pointer of PROGRAM data array
+ *            or NULL if the specfied file does not contain any PROGRAM data.
+ *      [1] - pointer of PARAMETER data array
+ *            or NULL if the specfied file does not contain any PARAMETER data.
+ */
+static unsigned char *parse_hexfile(char *hexfile_name, struct mm8xxx_device_info *di)
+{
+	unsigned char *result = NULL;
+	char *fbuf = NULL;
+	char *pbuf = NULL;
+	char *ebuf = NULL;
+	int i,j;
+	unsigned int bcnt;
+	unsigned int addr;
+	unsigned int rtype;
+	unsigned int csum;
+	unsigned int eladdr;
+	int offset;
+	int cont;
+	int tmp;
+	int ptsize;
+	int size = 0;
+	int ret;
+	const struct firmware *fw;
+
+	ret = request_firmware(&fw, hexfile_name, di->dev);
+	if (ret || fw->size <=0 ) {
+		mm_info("Couldn't get firmware  rc=%d\n", ret);
+		goto FAILED;
+	}
+	size =  fw->size;
+	fbuf = kzalloc(size+1, GFP_KERNEL);
+	memset(fbuf, 0, size+1);
+	memcpy(fbuf, fw->data, size);
+	fbuf[size] = '\0';
+	j = 0;
+	for (i = 0; i < size; i++) {
+		if (iscntrl(fbuf[i]) || (fbuf[i] == ' ')) {
+			continue;
+		}
+		fbuf[j++] = fbuf[i];
+	}
+
+	ebuf = fbuf + j;
+	*ebuf = '\0';
+	cont = 1;
+	pbuf = fbuf;
+	eladdr = 0;
+	do {
+		if ((ebuf - pbuf) < 11)
+			goto FAILED;
+		if ((*pbuf) != ':')
+			goto FAILED;
+		pbuf++;
+		/* Byte count */
+		if ((tmp = tohex(pbuf, 2)) < 0)
+			goto FAILED;
+		bcnt = tmp;
+		pbuf += 2;
+
+		if ((ebuf - pbuf) < (8 + bcnt * 2))
+			goto FAILED;
+		csum = bcnt;
+		/* Address */
+		if ((tmp = tohex(pbuf, 4)) < 0)
+			goto FAILED;
+		addr = tmp;
+		pbuf += 4;
+
+		csum = (csum + ((addr & 0xFF00) >> 8) + (addr & 0x00FF)) & 0xFF;
+		/* Record type */
+		if ((tmp = tohex(pbuf, 2)) < 0)
+			goto FAILED;
+		rtype = tmp;
+		pbuf += 2;
+
+		csum = (csum + rtype) & 0xFF;
+		/* Data */
+		switch (rtype)
+		{
+		case 0:
+			/* Data */
+			offset = addr + eladdr;
+			if ((offset >= ADDRESS_PROGRAM) &&
+			    ((offset + bcnt) <= (ADDRESS_PROGRAM + SIZE_PROGRAM))) {
+				offset = offset - ADDRESS_PROGRAM;
+				ptsize = SIZE_PROGRAM;
+			} else if ((offset >= ADDRESS_PARAMETER) &&
+				   ((offset + bcnt) <= (ADDRESS_PARAMETER + SIZE_PARAMETER))) {
+				offset = offset - ADDRESS_PARAMETER;
+				ptsize = SIZE_PARAMETER;
+			} else {
+				offset = -1;
+				ptsize = 0;
+			}
+
+			if (offset >= 0) {
+				if (!result) {
+					result = (unsigned char *)kzalloc(4 * ptsize, GFP_KERNEL);
+					for (i = 0; i < ptsize; i++) {
+						result[i] = (unsigned char)0xFF;
+					}
+				}
+			}
+
+			for (i = 0; i < bcnt; i++) {
+				if ((tmp = tohex(pbuf, 2)) < 0)
+					goto FAILED;
+				j = tmp;
+				pbuf += 2;
+				csum = (csum + j) & 0xFF;
+
+				if ((0 <= offset) && (offset < ptsize))
+					result[offset++] = (unsigned char)j;
+			}
+			break;
+		case 1:
+			/* EOF */
+			cont = 0;
+			break;
+		case 2:
+			/* Extended Segment Address */
+			if (bcnt != 2)
+				goto FAILED;
+			if ((tmp = tohex(pbuf, 4)) < 0)
+				goto FAILED;
+			eladdr = tmp;
+			pbuf += 4;
+			csum = (csum + ((eladdr & 0xFF00) >> 8) + (eladdr & 0x00FF)) & 0xFF;
+			eladdr <<= 4;
+			break;
+		case 4:
+			/* Extended Linear Address */
+			if (bcnt != 2)
+				goto FAILED;
+			if ((tmp = tohex(pbuf, 4)) < 0)
+				goto FAILED;
+			eladdr = tmp;
+			pbuf += 4;
+			csum = (csum + ((eladdr & 0xFF00) >> 8) + (eladdr & 0x00FF)) & 0xFF;
+			eladdr <<= 16;
+			break;
+		case 3:
+		case 5:
+			/* skip: Start Segment Address */
+			/* skip: Start Linear Address */
+			for (i = 0; i < bcnt; i++) {
+				if ((tmp = tohex(pbuf, 2)) < 0)
+					goto FAILED;
+				j = tmp;
+				pbuf += 2;
+				csum = (csum + j) & 0xFF;
+			}
+			break;
+		default:
+			goto FAILED;
+		}
+
+		/* Checksum */
+		if ((tmp = tohex(pbuf, 2)) < 0)
+			goto FAILED;
+		j = tmp;
+		pbuf += 2;
+		if ((csum + j) & 0xFF)
+			goto FAILED;
+	} while (cont);
+
+	kfree(fbuf);
+
+	return result;
+FAILED:
+	if (fbuf) {
+		kfree(fbuf);
+		fbuf = NULL;
+	}
+	if (result) {
+		kfree(result);
+		result = NULL;
+	}
+	return NULL;
+}
+
+static int fg_read_control_status(struct mm8xxx_device_info *di)
+{
+	if (mm8xxx_battery_write(di, COMMAND_CONTROL,REQCODE_CONTROL_STATUS) < 0)
+		return -EINVAL;
+
+	return mm8xxx_battery_read(di, COMMAND_CONTROL);
+}
+
+/* Additional library functions */
+/**
+ * set FG to UNSEAL mode
+ *
+ *  arguments:
+ *    fd         - file descriptor of an i2c device
+ *    s2us_code  - Seal to Unseal code
+ *
+ *  return value:
+ *    0 if it successes
+ *    or 1 if it fails.
+ *
+ */
+static int unseal_request(struct mm8xxx_device_info *di, unsigned int s2us_code)
+{
+	int ret;
+	/* Check CONTROL_STATUS */
+	ret=fg_read_control_status(di);
+	if (  ret < 0 ) {
+		return -EINVAL;
+	}
+
+	if (ret & BIT_SS) {
+		if ((mm8xxx_battery_write(di, COMMAND_CONTROL,  s2us_code & 0xFFFF) < 0) ||
+		     (mm8xxx_battery_write(di, COMMAND_CONTROL,  (s2us_code >> 16) & 0xFFFF) <0)) {
+			return -EINVAL;
+		}
+
+		if ((ret = fg_read_control_status(di)) < 0) {
+			return -EINVAL;
+		}
+		if (ret & BIT_SS) {
+			/* failed to set to UNSEALED mode. */
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int Lock_release_request(struct mm8xxx_device_info *di)
+{
+	return mm8xxx_battery_write(di, COMMAND_FGCONDITION, 0x0340);
+}
+
+static int NVM_write_mode(struct mm8xxx_device_info *di)
+{
+	if (mm8xxx_battery_write(di, COMMAND_FGCONDITION, 0x00A0) < 0)
+		return -EINVAL;
+
+	mdelay(100);
+
+	if (mm8xxx_battery_write_Nbyte(di, COMMAND_MODECONTROL, 0x88, 1) < 0)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int erase_param_nvm(struct mm8xxx_device_info *di)
+{
+
+	if ( (mm8xxx_battery_write(di, 0x00, 0x2E03) < 0) ||
+		(mm8xxx_battery_write(di, 0x02, 0x0000) < 0) ||
+		(mm8xxx_battery_write(di, 0x04, 0xDE83) < 0) ||
+		(mm8xxx_battery_write(di, 0x64, 0x0192) < 0)) {
+		return -EINVAL;
+	}
+	mdelay(100);
+
+	if ( (mm8xxx_battery_write(di, 0x00, 0x2F03) < 0) ||
+		(mm8xxx_battery_write(di, 0x02, 0x0000) < 0) ||
+		(mm8xxx_battery_write(di, 0x04, 0xDE83) < 0) ||
+		(mm8xxx_battery_write(di, 0x64, 0x0193) < 0)) {
+		return -EINVAL;
+	}
+	mdelay(100);
+
+	return 0;
+}
+
+static int erase_program_nvm(struct mm8xxx_device_info *di)
+{
+	if (mm8xxx_battery_write_Nbyte(di, COMMAND_ERASENVM, 0x80, 1) < 0)
+		return -EINVAL;
+	mdelay(2000);
+
+	return 0;
+}
+
+static int write_nvm(struct mm8xxx_device_info *di, enum PARTITION_INDEX ptindex, unsigned char *data)
+{
+	unsigned int offset;
+	unsigned int size;
+	int i;
+#ifdef ENABLE_VERIFICATION
+	int j;
+	int addr;
+	unsigned char rbuf[SIZE_READBUFFER];
+#endif
+
+	if (!data) {
+		/* specified pointer is NULL */
+		return  -EINVAL;
+	}
+
+	switch (ptindex) {
+		case PARTITION_PROGRAM:
+			offset = ADDRESS_PROGRAM;
+			size = SIZE_PROGRAM;
+			break;
+
+		case PARTITION_PARAMETER:
+			offset = ADDRESS_PARAMETER;
+			size = SIZE_PARAMETER;
+			break;
+
+		default:
+			/* unexpected partition index */
+			return  -EINVAL;
+	}
+
+	for (i = 0; i < size; i += 4) {
+		if (mm8xxx_battery_write_4byteCmd(di, offset + i,
+			data[i] | (data[i + 1] << 8) | (data[i + 2] << 16) | (data[i + 3] << 24)) < 0) {
+			mm_info("%s, mm8xxx_battery_write_4byteCmd fail\n", __func__);
+			return  -EINVAL;
+		}
+	}
+
+#ifdef ENABLE_VERIFICATION
+	for (i = 0; i < size; i += SIZE_READBUFFER) {
+		addr = offset + i;
+
+		if ((mm8xxx_battery_write_Nbyte(di, COMMAND_READNVMDATA, addr, 4) < 0) ||
+		    (mm8xxx_battery_read_Nbyte(di, COMMAND_READNVMDATA, rbuf, SIZE_READBUFFER) < 0)) {
+			mm_info("%s, verification fail\n", __func__);
+			return  -EINVAL;
+		}
+
+		for (j = 0; j < SIZE_READBUFFER; j++) {
+			if (data[i + j] != rbuf[j]) {
+				mm_info("%s, verification fail\n", __func__);
+				return  -EINVAL;
+			}
+		}
+	}
+#endif
+
+	return 0;
+}
+
+static int Write_program_data(struct mm8xxx_device_info *di, unsigned char *array)
+{
+	return write_nvm(di, PARTITION_PROGRAM, array);
+}
+static int Write_parameter_data(struct mm8xxx_device_info *di, unsigned char *array)
+{
+	return write_nvm(di, PARTITION_PARAMETER, array);
+}
+
+static int mm8xxx_battery_write_program_and_parameter(struct mm8xxx_device_info *di,
+					 unsigned char *program_array,
+					 unsigned char *parameter_array)
+{
+	int ret = -EINVAL;
+
+	/* Unseal Request */
+	mm_info("Requesting set to Unseal mode ... ");
+	if (unseal_request(di, 0x56781234) < 0) {
+		mm_info("unseal_request failed\n");
+		goto EXIT;
+	}
+
+	/* Lock Release Request */
+	mm_info("Requesting lock releasing ... ");
+	if (Lock_release_request(di) < 0) {
+		mm_info("Lock_release_request failed\n");
+		goto EXIT;
+	}
+
+	/* NVM Write mode Request */
+	mm_info("Requesting set to NVM Write mode ... ");
+	if (NVM_write_mode(di) < 0) {
+		mm_info("Requesting set to NVM Write mode failed\n");
+		goto EXIT;
+	}
+
+	/* Program Erase And wait 2 second */
+	if (program_array) {
+		mm_info("Erasing 'PROGRAM' partition ... ");
+		if(erase_program_nvm(di) < 0) {
+			mm_info("Erasing 'PROGRAM' failed\n");
+			goto EXIT;
+		}
+	}
+
+	/* Parameter Erase And wait 2 second */
+	if (parameter_array) {
+		mm_info("Erasing 'PARAMETER' partition ... ");
+		if(erase_param_nvm(di) < 0) {
+			mm_info("Erasing 'PARAMETER' failed\n");
+			goto EXIT;
+		}
+	}
+
+	/*
+	 * Initialization of variables
+	 * Copy the data of the target from the hex file
+	 * Write Command 0x8D and Data
+	 * Increment the write size
+	 * 16384byte / 4 = 4096Loop
+	 */
+	if (program_array) {
+		mm_info("Writing 'PROGRAM' partition ... ");
+		if(Write_program_data(di, program_array) < 0) {
+			mm_info("Writing 'PROGRAM' failed\n");
+			goto EXIT;
+		}
+	}
+
+	/*
+	 * Initialization of variables
+	 * Copy the data of the target from the hex file
+	 * Write Command 0x8D and Data
+	 * Increment the write size
+	 * 960byte / 4 = 250Loop
+	 */
+	if (parameter_array) {
+		mm_info("Writing 'PARAMETER' partition ... ");
+		if(Write_parameter_data(di, parameter_array) < 0) {
+			mm_info("Writing 'PARAMETER' failed\n");
+			goto EXIT;
+		}
+	}
+
+	/* System Reset Request */
+	mm_info("Requesting system resetting ... ");
+	if (mm8xxx_battery_write_Nbyte(di, COMMAND_MODECONTROL, 0x80, 1) < 0) {
+		mm_info("Reset fg system failed\n");
+		goto EXIT;
+	}
+	mdelay(100);
+	ret = 0;
+
+EXIT:
+	return ret;
+}
+
+static int mm8xxx_battery_update_program_and_parameter(struct mm8xxx_device_info *di, enum UPDATE_INDEX update_index)
+{
+	unsigned char *fw_hexfile_data = NULL;
+	unsigned char *param_hexfile_data = NULL;
+	u32 battery_di;
+	int ret = -EINVAL;
+	char param_name[30] = {0};
+
+	if (update_index != UPDATE_PROGRAM){
+		battery_di = mmi_get_battery_info(di, BATTERY_ID_CMD);
+		if (battery_di !=0)
+		{
+			if (battery_di != di->first_battery_serialnum && battery_di != di->second_battery_serialnum){
+				 mm_info("Error: the battery is not suitable for this poject.\n");
+				goto EXIT;
+			}
+
+			sprintf(param_name,"%s%04x%s", "mm8013c_parameter_", battery_di, ".hex");
+			mm_info("battery parameter name=%s\n", param_name);
+		}
+		else {
+			mm_info("Error: can't get battery_id exit update battery parameter program\n");
+			goto EXIT;
+		}
+	}
+
+	switch (update_index )
+	{
+		case UPDATE_PROGRAM:
+			mm_info("Parsing the FW_HEX file ... ");
+			if (!(fw_hexfile_data = parse_hexfile("mm8013c_fw.hex", di))) {
+				mm_info("Parse fw hex data failed\n");
+				goto EXIT;
+			}
+			break;
+		case UPDATE_PARAMETER:
+			mm_info("Parsing the parameter_HEX file ... ");
+			if (!(param_hexfile_data = parse_hexfile(param_name, di))) {
+				mm_info("Parse parameter hex date failed\n");
+				goto EXIT;
+			}
+			break;
+		case UPDATE_ALL:
+			mm_info("Parsing the FW_HEX file ... ");
+			if (!(fw_hexfile_data = parse_hexfile("mm8013c_fw.hex", di))) {
+				mm_info("failed\n");
+				goto EXIT;
+			}
+			mm_info("Parsing the parameter_HEX file ... ");
+			if (!(param_hexfile_data = parse_hexfile(param_name, di))) {
+				mm_info("failed\n");
+				goto EXIT;
+			}
+			break;
+		default:
+		return -EINVAL;
+	}
+
+	/* start TRM sequence */
+	if (mm8xxx_battery_write_program_and_parameter(di,
+					fw_hexfile_data, param_hexfile_data) < 0) {
+		mm_info("\nFAILED TO UPDATE program_and_parameter!!\n");
+		goto EXIT;
+	}
+	mm_info("successfully update program_and_parameter !!\n");
+
+	ret = 0;
+
+EXIT:
+	if (fw_hexfile_data) {
+		kfree(fw_hexfile_data);
+		fw_hexfile_data = NULL;
+	}
+	if (param_hexfile_data) {
+		kfree(param_hexfile_data);
+		param_hexfile_data = NULL;
+	}
+
+	return ret;
+}
+
+/********************************************************************/
 static void mm8xxx_battery_update(struct mm8xxx_device_info *di);
 static irqreturn_t mm8xxx_battery_irq_handler_thread(int irq, void *data)
 {
@@ -105,6 +730,32 @@ static int mm8xxx_battery_read(struct mm8xxx_device_info *di, u8 cmd)
 
 	return ret;
 }
+#ifdef ENABLE_VERIFICATION
+static int mm8xxx_battery_read_Nbyte(struct mm8xxx_device_info *di, u8 cmd, unsigned char *data, unsigned char length)
+{
+	struct i2c_client *client = to_i2c_client(di->dev);
+	struct i2c_msg msg[2];
+	int ret;
+//mm_info("%s, begin\n", __func__);
+	if (!client->adapter)
+		return -ENODEV;
+
+	msg[0].addr = client->addr;
+	msg[0].flags = 0;
+	msg[0].buf = &cmd;
+	msg[0].len = sizeof(cmd);
+	msg[1].addr = client->addr;
+	msg[1].flags = I2C_M_RD;
+	msg[1].buf = data;
+	msg[1].len = length;
+
+	ret = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
+	if (ret < 0)
+		return ret;
+//mm_info("%s, end\n", __func__);
+	return ret;
+}
+#endif
 
 static int mm8xxx_battery_write(struct mm8xxx_device_info *di, u8 cmd,
 				int value)
@@ -134,6 +785,75 @@ static int mm8xxx_battery_write(struct mm8xxx_device_info *di, u8 cmd,
 	return 0;
 }
 
+static int mm8xxx_battery_write_Nbyte(struct mm8xxx_device_info *di, u8 cmd,
+				unsigned int value, int byte_num)
+{
+	struct i2c_client *client = to_i2c_client(di->dev);
+	struct i2c_msg msg;
+	u8 data[16];
+	int ret,i=0;
+
+	if (byte_num > 15)
+		return -ENODEV;
+	if (!client->adapter)
+		return -ENODEV;
+
+	data[0] = cmd;
+	for (i=0; i < byte_num; i++)
+	{
+		data[i+1] = (value >> (8 * i)) & 0xFF;
+	}
+
+	msg.len = byte_num+1;
+
+	msg.buf = data;
+	msg.addr = client->addr;
+	msg.flags = 0;
+
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret < 0)
+		return ret;
+	else if (ret != 1)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int mm8xxx_battery_write_4byteCmd(struct mm8xxx_device_info *di, unsigned int cmd, unsigned int value)
+{
+	struct i2c_client *client = to_i2c_client(di->dev);
+	struct i2c_msg msg;
+	u8 data[9];
+	int ret;
+
+	if (!client->adapter)
+		return -ENODEV;
+
+	data[0] = COMMAND_WRITENVMDATA;
+	data[1] = cmd & 0xFF;
+	data[2] = (cmd >> 8) & 0xFF;
+	data[3] = (cmd >> 16) & 0xFF;
+	data[4] = (cmd >> 24) & 0xFF;
+
+	data[5] = value & 0xFF;
+	data[6] = (value >> 8) & 0xFF;
+	data[7] = (value >> 16) & 0xFF;
+	data[8] = (value >> 24) & 0xFF;
+
+	msg.len = 9;
+	msg.buf = data;
+	msg.addr = client->addr;
+	msg.flags = 0;
+
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret < 0)
+		return ret;
+	else if (ret != 1)
+		return -EINVAL;
+
+	return 0;
+}
+
 /* MM8XXX Flags */
 #define MM8XXX_FLAG_DSG		BIT(0)
 #define MM8XXX_FLAG_SOCF	BIT(1)
@@ -148,8 +868,8 @@ static int mm8xxx_battery_write(struct mm8xxx_device_info *di, u8 cmd,
 #define MM8XXX_FLAG_CHGINH	BIT(11)
 #define MM8XXX_FLAG_BATLOW	BIT(12)
 #define MM8XXX_FLAG_BATHI	BIT(13)
-#define MM8XXX_FLAG_OTD		BAT(14)
-#define MM8XXX_FLAG_OTC		BAT(15)
+#define MM8XXX_FLAG_OTD		BIT(14)
+#define MM8XXX_FLAG_OTC		BIT(15)
 
 #define INVALID_COMMAND		0xff
 
@@ -1131,11 +1851,11 @@ static int mm8xxx_fake_battery_setup(struct mm8xxx_device_info *di)
 	return 0;
 }
 
-static int mmi_get_hw_version(struct mm8xxx_device_info *di)
+static u32 mmi_get_battery_info(struct mm8xxx_device_info *di, u32 cmd)
 {
 	int ret = 0;
-	u16 value = 0x0003;
-	ret = mm8xxx_write(di, MM8XXX_CMD_CONTROL, value);
+
+	ret = mm8xxx_write(di, MM8XXX_CMD_CONTROL, cmd);
 	if (ret < 0) {
 		dev_err(di->dev, "error writing cmd control\n");
 		return ret;
@@ -1146,11 +1866,45 @@ static int mmi_get_hw_version(struct mm8xxx_device_info *di)
 		dev_err(di->dev, "error read cmd control\n");
 		return ret;
 	}
-	mm_info("get HW version 0x%x\n", ret);
+	mm_info("get addr=0x%04x, value=0x%04x\n", cmd, ret);
+
 	return ret;
 }
 
-#define MM8013_HW_VERSION 0x0021
+static int mm8xxx_battery_parse_dts(struct mm8xxx_device_info *di)
+{
+	struct device_node *np = di->dev->of_node;
+	int rc;
+
+	rc = of_property_read_u32(np, "latest_fw_version", &di->latest_fw_version);
+	if(rc < 0){
+		di->latest_fw_version = MM8013_LATEST_FW_VERSION;
+		mm_info("dts no config fw version, use default fw version=0x%04x\n", di->latest_fw_version);
+	}
+
+	rc = of_property_read_u32(np, "latest_parameter_version", &di->latest_parameter_version);
+	if (rc < 0) {
+		di->latest_parameter_version = MM8013_PARAMETER_FW_VERSION;
+		mm_info("dts no config parameter version, use default fw parameter=0x%04x\n", di->latest_parameter_version);
+	}
+
+	rc = of_property_read_u32(np, "default_battery_serialnum", &di->default_battery_serialnum);
+	if (rc < 0) {
+		di->default_battery_serialnum = MM8013_DEFAULT_BATTERY_ID;
+	}
+
+	rc = of_property_read_u32(np, "first_battery_serialnum", &di->first_battery_serialnum);
+	if (rc < 0) {
+		di->first_battery_serialnum = MM8013_1TH_BATTERY_ID;
+	}
+
+	rc = of_property_read_u32(np, "second_battery_serialnum", &di->second_battery_serialnum);
+	if (rc < 0) {
+		di->second_battery_serialnum = MM8013_2TH_BATTERY_ID;
+	}
+
+	return rc;
+}
 
 static int mm8xxx_battery_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
@@ -1159,6 +1913,9 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	int ret;
 	char *name;
 	int num;
+	u32 fg_fw_ver;
+	u32 fg_param_ver;
+	enum UPDATE_INDEX update_index =UPDATE_NONE;
 
 	mm_info("MM8013 prob begin\n");
 
@@ -1187,10 +1944,34 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	di->bus.write = mm8xxx_battery_write;
 	di->cmds = mm8xxx_chip_data[di->chip].cmds;
 
-	ret = mmi_get_hw_version(di);
+	mm8xxx_battery_parse_dts(di);
+
+	ret = mmi_get_battery_info(di, HW_VER_CMD);
 	if (ret != MM8013_HW_VERSION) {
 		di->fake_battery = true;
 		mm_info("don't have real battery,use fake battery\n");
+	}
+
+	if (!di->fake_battery)
+	{
+		fg_fw_ver = mmi_get_battery_info(di, FW_VER_CMD);
+		fg_param_ver = mmi_get_battery_info(di, PARAM_VER_CMD);
+
+		if (fg_fw_ver < di->latest_fw_version && \
+			fg_param_ver < di->latest_parameter_version) {
+			update_index = UPDATE_ALL;
+		}
+		else if (fg_fw_ver < di->latest_fw_version && \
+			fg_param_ver == di->latest_parameter_version) {
+			update_index = UPDATE_PROGRAM;
+		}
+		else if (fg_fw_ver == di->latest_fw_version && \
+			fg_param_ver < di->latest_parameter_version) {
+			update_index = UPDATE_PARAMETER;
+		}
+
+		if (update_index != UPDATE_NONE)
+			mm8xxx_battery_update_program_and_parameter(di, update_index);
 	}
 
 	di->Batt_NTC_channel = devm_iio_channel_get(&client->dev, "batt_therm");
