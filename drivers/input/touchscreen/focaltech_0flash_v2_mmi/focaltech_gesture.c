@@ -351,6 +351,7 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
                 input_sync(fts_data->sensor_pdata->input_sensor_dev);
                 ++report_cnt;
             } else {
+                FTS_DEBUG("report_gesture_key not set, input_report_abs");
                 input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
                                 ABS_DISTANCE, ++report_cnt);
                 input_sync(fts_data->sensor_pdata->input_sensor_dev);
