@@ -686,7 +686,7 @@ static int fts_read_touchdata(struct fts_ts_data *ts_data, u8 *buf)
     int ret = 0;
 
     ts_data->touch_addr = 0x01;
-    FTS_DEBUG("touch_size=%d", ts_data->touch_size);
+    //FTS_DEBUG("touch_size=%d", ts_data->touch_size);
     ret = fts_read(&ts_data->touch_addr, 1, buf, ts_data->touch_size);
 
     if (((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3]))
