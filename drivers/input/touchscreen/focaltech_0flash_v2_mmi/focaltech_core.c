@@ -686,6 +686,7 @@ static int fts_read_touchdata(struct fts_ts_data *ts_data, u8 *buf)
     int ret = 0;
 
     ts_data->touch_addr = 0x01;
+    FTS_DEBUG("touch_size=%d", ts_data->touch_size);
     ret = fts_read(&ts_data->touch_addr, 1, buf, ts_data->touch_size);
 
     if (((0xEF == buf[1]) && (0xEF == buf[2]) && (0xEF == buf[3]))
@@ -699,14 +700,6 @@ static int fts_read_touchdata(struct fts_ts_data *ts_data, u8 *buf)
         FTS_ERROR("touch data(%x) abnormal,ret:%d", buf[1], ret);
         return ret;
     }
-
-#if FTS_GESTURE_EN
-    ret = fts_gesture_readdata(ts_data, buf + FTS_TOUCH_DATA_LEN);
-    if (0 == ret) {
-        FTS_INFO("succuss to get gesture data in irq handler");
-        return 1;
-    }
-#endif
 
     return 0;
 }
@@ -963,6 +956,7 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
 
 #if FTS_GESTURE_EN
     case TOUCH_GESTURE:
+        FTS_DEBUG("handle TOUCH_GESTURE");
         if (0 == fts_gesture_readdata(ts_data, touch_buf)) {
             FTS_INFO("succuss to get gesture data in irq handler");
         }
