@@ -340,16 +340,21 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
             FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
             return;
         }
-        if (fts_data->pdata->report_gesture_key) {
-            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 1);
-            input_sync(fts_data->sensor_pdata->input_sensor_dev);
-            input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 0);
-            input_sync(fts_data->sensor_pdata->input_sensor_dev);
-            ++report_cnt;
-        } else {
-            input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
-                            ABS_DISTANCE, ++report_cnt);
-            input_sync(fts_data->sensor_pdata->input_sensor_dev);
+
+        /* report single tap */
+        if (gesture == KEY_GESTURE_U) {
+            if (fts_data->pdata && fts_data->pdata->report_gesture_key) {
+                FTS_DEBUG("report_gesture_key");
+                input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 1);
+                input_sync(fts_data->sensor_pdata->input_sensor_dev);
+                input_report_key(fts_data->sensor_pdata->input_sensor_dev, KEY_F1, 0);
+                input_sync(fts_data->sensor_pdata->input_sensor_dev);
+                ++report_cnt;
+            } else {
+                input_report_abs(fts_data->sensor_pdata->input_sensor_dev,
+                                ABS_DISTANCE, ++report_cnt);
+                input_sync(fts_data->sensor_pdata->input_sensor_dev);
+            }
         }
 
         FTS_INFO("input report: %d", report_cnt);
@@ -492,6 +497,7 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *touch_buf)
         return -EINVAL;
     }
 
+    FTS_FUNC_ENTER();
     if (ts_data->gesture_bmode == GESTURE_BM_TOUCH) {
         memcpy(buf, touch_buf + FTS_TOUCH_DATA_LEN, FTS_GESTURE_DATA_LEN);
     } else {
@@ -527,6 +533,7 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *touch_buf)
 
 void fts_gesture_recovery(struct fts_ts_data *ts_data)
 {
+    FTS_FUNC_ENTER();
     if (ts_data->gesture_support && (ENABLE == fts_gesture_data.active)) {
         FTS_DEBUG("gesture recovery...");
         fts_write_reg(0xD1, 0xFF);
