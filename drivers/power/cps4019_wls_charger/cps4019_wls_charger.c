@@ -1202,7 +1202,7 @@ static int cps_wls_get_vout(void)
 {
 	cps_reg_s *cps_reg;
 	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_ADC_VOUT]);
-	return cps_wls_read_reg((int)cps_reg->reg_addr, (int)cps_reg->reg_bytes_len);
+	return cps_wls_read_reg((int)cps_reg->reg_addr, (int)cps_reg->reg_bytes_len) * 10;//request unit is 0.1mV
 }
 
 static int cps_wls_get_state(void)
@@ -1387,7 +1387,7 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 			val->intval = 5000000;//Have no usage, just for voltage max propety.
 			break;
 		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-			ret = cps_get_power_supply_prop("usb", psp, val);
+			val->intval = cps_wls_get_vout();
 			break;
 		case POWER_SUPPLY_PROP_CURRENT_NOW:
 			ret = cps_get_power_supply_prop("battery", psp, val);
