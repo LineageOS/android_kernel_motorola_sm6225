@@ -81,6 +81,8 @@ else ifneq ($(filter li, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_LI
 else ifneq ($(filter eqs, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_EQS
+else ifneq ($(filter tundra%, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_TUNDRA
 endif
 $(warning "william EXTRA_CFLAGS = $(EXTRA_CFLAGS)")
 

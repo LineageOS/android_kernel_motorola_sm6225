@@ -13,7 +13,7 @@
 #include "goodix_ts_config.h"
 
 struct goodix_ic_report_rate_config report_rate_config_info = {
-#if defined(PRODUCT_LI) || defined(PRODUCT_ONELI)
+#if defined(PRODUCT_LI) || defined(PRODUCT_ONELI) || defined(PRODUCT_TUNDRA)
 	.rate_config_count = 2,
 	.refresh_rate_ctrl = 0,
 	.interpolation_ctrl = 1,
