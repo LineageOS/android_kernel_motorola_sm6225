@@ -1654,6 +1654,25 @@ static void bq2589x_adjust_absolute_vindpm(struct bq2589x *bq)
 }
 
 #ifndef CONFIG_MMI_QC3P_WT6670_DETECTED
+static int mmi_reset_dpdm(struct bq2589x *bq)
+{
+	int ret;
+	int dp_val, dm_val;
+
+	/* dp HIZ and dm HIZ */
+
+	dm_val = 0x0<<BQ2589X_DM_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DM_VSEL_MASK, dm_val); //dm hiz
+	if (ret)
+		return ret;
+
+	dp_val = 0x0<<BQ2589X_DP_VSEL_SHIFT;
+	ret = bq2589x_update_bits(bq, BQ2589X_REG_01,
+				  BQ2589X_DP_VSEL_MASK, dp_val); //dp hiz
+	return ret;
+}
+
 static int mmi_adjust_qc20_hvdcp_5v(struct bq2589x *bq)
 {
 	int ret;
@@ -2298,6 +2317,14 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 		dev_info(bq->dev,"%s:reset vindpm threshold to %d successfully\n",__func__,bq->cfg.vindpm);
 
 	cancel_delayed_work_sync(&bq->monitor_work);
+
+#ifndef CONFIG_MMI_QC3P_WT6670_DETECTED
+	if (bq->mmi_qc3_support) {
+		down(&bq->sem_dpdm);
+		mmi_reset_dpdm(bq);
+		up(&bq->sem_dpdm);
+	}
+#endif
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 	bq2589x_enable_termination(bq->chg_dev, true);
