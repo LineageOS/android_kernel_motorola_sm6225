@@ -1207,7 +1207,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				touch_data->coords[i].w);
 			if (touchdown[i] == 0) {
 #ifdef CONFIG_GTP_LAST_TIME
-				core_data->last_event_time = ktime_get();
+				core_data->last_event_time = ktime_get_boottime();
 				ts_debug("TOUCH: [%d] logged timestamp\n", i);
 #endif
 				touchdown[i] = 1;
