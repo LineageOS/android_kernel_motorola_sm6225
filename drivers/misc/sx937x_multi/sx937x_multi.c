@@ -131,13 +131,14 @@ static void sx93XX_worker_func(struct work_struct *work)
 		/* since we are not in an interrupt don't need to disable irq. */
 		status = this->refreshStatus(this);
 		counter = -1;
-		LOG_DBG("Worker_func - Refresh Status %d, use_timer_in_irq:%d\n", status, this->useIrqTimer);
-
+		if(status != 0){
+			LOG_INFO("Worker_func - Refresh Status %d, use_timer_in_irq:%d\n", status, this->useIrqTimer);
+		}
 		while((++counter) < MAX_NUM_STATUS_BITS)   /* counter start from MSB */
 		{
 			if (((status>>counter) & 0x01) && (this->statusFunc[counter]))
 			{
-				LOG_DBG("SX937x Function Pointer Found. Calling\n");
+				LOG_INFO("SX937x Function Pointer Found. Calling counter==%d\n",counter);
 				this->statusFunc[counter](this);
 			}
 		}
@@ -874,7 +875,7 @@ static void touchProcess(psx93XX_t this)
 	if (this)
 	{
 		sx937x_i2c_read_16bit(this->bus, SX937X_DEVICE_STATUS_A, &i);
-		LOG_DBG("touchProcess STAT0_REG:0x%08x\n", i);
+		LOG_INFO("touchProcess STAT0_REG:0x%x val 0x%08x\n", SX937X_DEVICE_STATUS_A, i);
 
 		buttons = this->hw->buttons;
 		numberOfButtons = this->hw->buttonSize;
@@ -938,7 +939,6 @@ static void touchProcess(psx93XX_t this)
 				}
 			}
 		}
-		LOG_INFO("Leaving touchProcess()\n");
 	}
 }
 
