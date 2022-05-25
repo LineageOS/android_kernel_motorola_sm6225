@@ -1079,12 +1079,15 @@ int cts_tcs_reset_device(const struct cts_device *cts_dev)
 	bool use_soft_tp_reset;
 	int ret;
 
-	if (cts_dev->hwdata->hwid == CTS_DEV_HWID_ICNL9916)
+	if (!cts_dev->hwdata) {
+		use_soft_tp_reset = true;
+	} else if (cts_dev->hwdata->hwid == CTS_DEV_HWID_ICNL9916) {
 		use_soft_tp_reset = false;
-	else if (cts_dev->hwdata->hwid == CTS_DEV_HWID_ICNL9922)
+	} else if (cts_dev->hwdata->hwid == CTS_DEV_HWID_ICNL9922) {
 		use_soft_tp_reset = true;
-	else
+	} else {
 		use_soft_tp_reset = true;
+	}
 
 	cts_info("use_soft_tp_reset=%d", use_soft_tp_reset);
 	if (use_soft_tp_reset) {
