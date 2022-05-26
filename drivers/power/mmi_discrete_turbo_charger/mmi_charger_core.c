@@ -959,6 +959,8 @@ int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip)
 	int ret = 0, i = 0;
 	int maxwatt = 0, max_mv = 0, max_ma = 0;
 
+	chip->pd_pps_support = false;
+	chip->mmi_pd_pdo_idx = 0;
 	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_PD_ACTIVE, &val.intval);
 	if (ret) {
 		mmi_chrg_err(chip, "Unable to read PD ACTIVE: %d\n", ret);
@@ -988,10 +990,13 @@ int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip)
 		for (i = 0; i < chip->mmi_pdo_info.nr; i++) {
 			if ((chip->mmi_pdo_info.type[i] == MMI_PD_APDO)
 				&& (chip->mmi_pdo_info.max_mv[i] * 1000) >= PUMP_CHARGER_PPS_MIN_VOLT
-				&& (chip->mmi_pdo_info.max_mv[i] * 1000) <= PUMP_CHARGER_PPS_MAX_VOLT
 				&& (chip->mmi_pdo_info.ma[i] * 1000) >= chip->typec_middle_current) {
 
 					chip->pd_pps_support = true;
+					if ((chip->mmi_pdo_info.max_mv[i] * 1000) > PUMP_CHARGER_PPS_MAX_VOLT) {
+						chip->mmi_pdo_info.max_mv[i] = PUMP_CHARGER_PPS_MAX_VOLT / 1000;
+						chip->mmi_pdo_info.maxwatt[i] = chip->mmi_pdo_info.ma[i] * chip->mmi_pdo_info.max_mv[i];
+					}
 
 					if (maxwatt == 0) {
 						maxwatt = chip->mmi_pdo_info.maxwatt[i];

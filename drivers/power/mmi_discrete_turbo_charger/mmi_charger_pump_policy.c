@@ -262,6 +262,7 @@ static void clear_chg_manager(struct mmi_charger_manager *chip)
 	chip->batt_therm_cooling = false;
 	chip->batt_therm_cooling_cnt = 0;
 	chip->pps_start = false;
+	chip->mmi_pd_pdo_idx = 0;
 
 	memset(&chip->mmi_pdo_info, 0,
 			sizeof(struct adapter_power_cap));
