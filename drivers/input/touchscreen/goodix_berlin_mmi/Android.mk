@@ -10,7 +10,11 @@ ifeq ($(DRM_PANEL_NOTIFICATIONS),true)
 endif
 
 ifeq ($(TOUCHSCREEN_GOODIX_BRL_SPI),true)
+ifeq ($(call is-board-platform-in-list,taro kalama), true)
+	KBUILD_OPTIONS += CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI=y
+else
 	KERNEL_CFLAGS += CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI=y
+endif
 endif
 
 ifeq ($(GTP_LIMIT_USE_SUPPLIER),true)
