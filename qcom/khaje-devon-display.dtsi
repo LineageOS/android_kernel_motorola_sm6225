@@ -131,6 +131,46 @@
 	};
 };
 
+&soc {
+	dsi_panel_pwr_supply_devon_txd: dsi_panel_pwr_supply_devon_txd{
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-post-on-sleep = <20>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "lab";
+			qcom,supply-min-voltage = <5500000>;
+			qcom,supply-max-voltage = <5500000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-on-sleep = <3>;
+		};
+
+		qcom,panel-supply-entry@2 {
+			reg = <2>;
+			qcom,supply-name = "ibb";
+			qcom,supply-min-voltage = <5500000>;
+			qcom,supply-max-voltage = <5500000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-on-sleep = <3>;
+			qcom,supply-pre-off-sleep = <3>;
+			qcom,supply-post-on-sleep = <3>;
+			qcom,supply-post-off-sleep = <3>;
+		};
+	};
+};
+
 &dsi_tm_nt36672c_fhd_plus_90_video {
         qcom,platform-te-gpio = <&tlmm 81 0>;
         qcom,platform-reset-gpio = <&tlmm 82 0>;
@@ -186,7 +226,7 @@
         qcom,platform-te-gpio = <&tlmm 81 0>;
         qcom,platform-reset-gpio = <&tlmm 82 0>;
 
-        qcom,panel-supply-entries = <&dsi_panel_pwr_supply_devon>;
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply_devon_txd>;
         qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
         qcom,mdss-dsi-bl-min-level = <8>;
         qcom,mdss-dsi-bl-max-level = <2047>;
@@ -194,8 +234,7 @@
         qcom,mdss-brightness-max-level = <2047>;
 	qcom,bklt-dcs-2bytes-enabled;
         qcom,mdss-dsi-no-panel-on-read-support;
-        qcom,mdss-dsi-reset-force-pull-low;
-        qcom,disp_pre_reset;
+        qcom,platform-reset-gpio-always-on;
         qcom,tp_state_check_enable;
 
         qcom,esd-check-enabled;
