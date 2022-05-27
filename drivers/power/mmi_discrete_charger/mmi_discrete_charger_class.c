@@ -231,6 +231,16 @@ int charger_dev_get_qc3p_power(struct charger_device *chg_dev, int *qc3p_power)
 }
 EXPORT_SYMBOL(charger_dev_get_qc3p_power);
 
+int charger_dev_config_pd_active(struct charger_device *chg_dev, int val)
+{
+	if (chg_dev != NULL && chg_dev->ops != NULL &&
+	    chg_dev->ops->config_pd_active)
+		return chg_dev->ops->config_pd_active(chg_dev, val);
+
+	return -ENOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_config_pd_active);
+
 int charger_dev_notify(struct charger_device *chg_dev)
 {
 	return srcu_notifier_call_chain(

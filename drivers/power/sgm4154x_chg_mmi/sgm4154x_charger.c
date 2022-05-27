@@ -1693,7 +1693,7 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 		sgm->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 		/*do qc3p rerun*/
 		dev_err(sgm->dev, "qc3p voltage is invalid, rerun qc3p detect\n");
-		if (!sgm->mmi_qc3p_rerun_done) {
+		if (!sgm->mmi_qc3p_rerun_done && !sgm->pd_active) {
 			sgm->mmi_qc3p_rerun_done = true;
 			sgm->mmi_qc3p_wa = true;
 			dp_val = 0x0<<3;
@@ -1765,7 +1765,7 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 	} else {
 		dev_err(sgm->dev, "qc3p power is invalid, rerun qc3p detect\n");
 		//do rerun qc3p
-		if (!sgm->mmi_qc3p_rerun_done) {
+		if (!sgm->mmi_qc3p_rerun_done && !sgm->pd_active) {
 			sgm->mmi_qc3p_rerun_done = true;
 			sgm->mmi_qc3p_wa = true;
 			dp_val = 0x0<<3;
@@ -1999,7 +1999,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			goto out;
 		}
 
-		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP)
+		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP || sgm->pd_active)
 			goto out;
 
 		//do qc3.0 detected
@@ -2011,7 +2011,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 		//do qc3p detected
-		if (charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+		if (charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 && !sgm->pd_active) {
 			ret = sgm4154x_detected_qc3p_hvdcp(sgm, &charger_type);
 			if (ret) {
 				dev_err(sgm->dev, "Cann't detected qc3p hvdcp\n");
@@ -2046,7 +2046,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			}
 #endif
 		sgm4154x_get_usb_present(sgm);
-		if (!sgm->state.vbus_gd)
+		if (!sgm->state.vbus_gd || sgm->pd_active)
 			goto out;
 
 		sgm->real_charger_type = charger_type;
@@ -2070,6 +2070,7 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 {
 
 	if (sgm->mmi_qc3_support
+		&& (!sgm->pd_active)
 		&& (sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
 #ifdef CONFIG_MMI_SGM41513_CHARGER
                 || sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
@@ -3093,6 +3094,15 @@ static int sgm4154x_get_real_charger_type(struct charger_device *chg_dev, int *c
 	return 0;
 }
 
+static int sgm4154x_config_pd_active(struct charger_device *chg_dev, int val)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+
+	sgm->pd_active = val;
+
+	return 0;
+}
+
 static int sgm4154x_dump_registers(struct charger_device *chg_dev, struct seq_file *m)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
@@ -3132,6 +3142,7 @@ static struct charger_ops sgm4154x_chg_ops = {
 	.is_enabled_charging = sgm4154x_is_enabled_charging,
 	.enable_termination = sgm4154x_enable_termination,
 	.get_qc3p_power = sgm4154x_get_qc3p_power,
+	.config_pd_active = sgm4154x_config_pd_active,
 };
 
 static int sgm4154x_probe(struct i2c_client *client,

@@ -373,6 +373,9 @@ struct sgm4154x_device {
 	bool			mmi_qc3p_wa;
 	int			mmi_qc3p_power;
 
+	/*mmi PD*/
+	int			pd_active;
+
 	struct sgm4154x_iio		iio;
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;

@@ -2250,6 +2250,8 @@ int mmi_discrete_config_pd_active(struct mmi_discrete_charger *chip, int val)
 		return 0;
 
 	chip->pd_active = val;
+
+	charger_dev_config_pd_active(chip->master_chg_dev, chip->pd_active);
 	update_sw_icl_max(chip);
 
 	if (chip->pd_active) {

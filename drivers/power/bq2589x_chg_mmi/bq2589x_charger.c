@@ -179,6 +179,9 @@ struct bq2589x {
 	bool			mmi_qc3p_wa;
 	int			mmi_qc3p_power;
 
+	/*mmi PD*/
+	int			pd_active;
+
 	struct bq2589x_iio		iio;
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;
@@ -1880,7 +1883,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 		bq->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 		/*do qc3p rerun*/
 		dev_err(bq->dev, "qc3p voltage is invalid, rerun qc3p detect\n");
-		if (!bq->mmi_qc3p_rerun_done) {
+		if (!bq->mmi_qc3p_rerun_done && !bq->pd_active) {
 			bq->mmi_qc3p_rerun_done = true;
 			bq->mmi_qc3p_wa = true;
 			dp_val = 0x0<<BQ2589X_DP_VSEL_SHIFT;
@@ -1952,7 +1955,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 	} else {
 		dev_err(bq->dev, "qc3p power is invalid, rerun qc3p detect\n");
 		//do rerun qc3p
-		if (!bq->mmi_qc3p_rerun_done) {
+		if (!bq->mmi_qc3p_rerun_done && !bq->pd_active) {
 			bq->mmi_qc3p_rerun_done = true;
 			bq->mmi_qc3p_wa = true;
 			dp_val = 0x0<<BQ2589X_DP_VSEL_SHIFT;
@@ -2148,7 +2151,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			goto out;
 		}
 
-		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP)
+		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP || bq->pd_active)
 			goto out;
 
 		//do qc3.0 detected
@@ -2159,7 +2162,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 		//do qc3p detected
-		if (charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+		if (charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 && !bq->pd_active) {
 			ret = bq2589x_detected_qc3p_hvdcp(bq, &charger_type);
 			if (ret) {
 				dev_err(bq->dev, "Cann't detected qc3p hvdcp\n");
@@ -2194,7 +2197,7 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			}
 #endif
 		bq2589x_get_usb_present(bq);
-		if (!bq->state.vbus_gd)
+		if (!bq->state.vbus_gd || bq->pd_active)
 			goto out;
 
 		bq->real_charger_type = charger_type;
@@ -2218,6 +2221,7 @@ static void mmi_start_hvdcp_detect(struct bq2589x *bq)
 {
 
 	if (bq->mmi_qc3_support
+		&& !bq->pd_active
 		&& bq->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
 		//down(&bq->sem_dpdm);
 		dev_info(bq->dev, "start hvdcp detect\n");
@@ -2611,6 +2615,15 @@ static irqreturn_t bq2589x_charger_interrupt(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int mmi_config_pd_active(struct charger_device *chg_dev, int val)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+
+	bq->pd_active = val;
+
+	return 0;
+}
+
 static int mmi_get_qc3p_power(struct charger_device *chg_dev, int *qc3p_power)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -2877,6 +2890,7 @@ static struct charger_ops bq2589x_chg_ops = {
 	.is_enabled_charging = bq2589x_is_enabled_charging,
 	.enable_termination = bq2589x_enable_termination,
 	.get_qc3p_power = mmi_get_qc3p_power,
+	.config_pd_active = mmi_config_pd_active,
 };
 
 static int bq2589x_charger_probe(struct i2c_client *client,
