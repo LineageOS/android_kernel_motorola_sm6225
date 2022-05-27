@@ -819,7 +819,7 @@ static void sx937x_reg_init(psx93XX_t this)
  */
 static int initialize(psx93XX_t this)
 {
-	int ret, retry;
+	int retry;
 	bool reset_ok = false;
 	if (this)
 	{
@@ -843,7 +843,11 @@ static int initialize(psx93XX_t this)
 		LOG_INFO("Sent Software Reset. Waiting until device is back from reset to continue.\n");
 		/* just sleep for awhile instead of using a loop with reading irq status */
 		msleep(100);
-		ret = sx937x_global_variable_init(this);
+
+		if(sx937x_global_variable_init(this)==0)
+		{
+			LOG_INFO("sx937x_global_variable_init success.\n");
+		}
 		sx937x_reg_init(this);
 
 		/* re-enable interrupt handling */
