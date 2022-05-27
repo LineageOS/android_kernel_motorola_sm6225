@@ -4269,13 +4269,19 @@ static int cyttsp5_read_input(struct cyttsp5_core_data *cd)
 	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture)) {
 		if (cd->sleep_state == SS_SLEEP_ON) {
 			mutex_unlock(&cd->system_lock);
+
+			dev_info(dev, "%s: is_suspended = %d, wait_until_wake = %d", __func__,
+				dev->power.is_suspended, cd->wait_until_wake);
+
 			if (!dev->power.is_suspended)
 				goto read;
 			t = wait_event_timeout(cd->wait_q,
 					(cd->wait_until_wake == 1),
 					msecs_to_jiffies(2000));
-			if (IS_TMO(t))
+			if (IS_TMO(t)) {
+				dev_info(dev, "%s: wait event timeout", __func__);
 				cyttsp5_queue_startup(cd);
+			}
 			goto read;
 		}
 	}
@@ -5073,7 +5079,7 @@ static void cyttsp5_startup_work_function(struct work_struct *work)
  */
 #if defined(CONFIG_PM_RUNTIME) || \
 		(KERNEL_VERSION(3, 19, 0) <= LINUX_VERSION_CODE)
-static int cyttsp5_core_rt_suspend(struct device *dev)
+static __maybe_unused int cyttsp5_core_rt_suspend(struct device *dev)
 {
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
 	int rc;
@@ -5086,7 +5092,7 @@ static int cyttsp5_core_rt_suspend(struct device *dev)
 	return 0;
 }
 
-static int cyttsp5_core_rt_resume(struct device *dev)
+static __maybe_unused int cyttsp5_core_rt_resume(struct device *dev)
 {
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
 	int rc;
@@ -5102,6 +5108,32 @@ static int cyttsp5_core_rt_resume(struct device *dev)
 #endif
 
 #if defined(CONFIG_PM_SLEEP) || defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+int cyttsp5_core_mmi_suspend(struct device *dev)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "%s: system PM suspend\n", __func__);
+	mutex_lock(&cd->system_lock);
+	cd->wait_until_wake = 0;
+	mutex_unlock(&cd->system_lock);
+	return 0;
+}
+
+int cyttsp5_core_mmi_resume(struct device *dev)
+{
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "%s: system PM resume\n", __func__);
+	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture)) {
+		mutex_lock(&cd->system_lock);
+		cd->wait_until_wake = 1;
+		mutex_unlock(&cd->system_lock);
+		wake_up(&cd->wait_q);
+		msleep(20);
+	}
+	return 0;
+}
+
 int cyttsp5_core_suspend(struct device *dev)
 {
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
@@ -5209,9 +5241,13 @@ static int cyttsp5_pm_notifier(struct notifier_block *nb,
 #endif
 
 const struct dev_pm_ops cyttsp5_pm_ops = {
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	SET_SYSTEM_SLEEP_PM_OPS(cyttsp5_core_mmi_suspend, cyttsp5_core_mmi_resume)
+#else
 	SET_SYSTEM_SLEEP_PM_OPS(cyttsp5_core_suspend, cyttsp5_core_resume)
 	SET_RUNTIME_PM_OPS(cyttsp5_core_rt_suspend, cyttsp5_core_rt_resume,
 			NULL)
+#endif
 };
 EXPORT_SYMBOL_GPL(cyttsp5_pm_ops);
 
