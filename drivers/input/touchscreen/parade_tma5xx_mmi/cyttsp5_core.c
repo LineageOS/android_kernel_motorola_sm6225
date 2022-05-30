@@ -6698,6 +6698,8 @@ static int cyttsp5_sensor_init(struct cyttsp5_core_data *data)
 	struct input_dev *sensor_input_dev;
 	int err;
 
+	mutex_init(&data->state_mutex);
+
 	sensor_input_dev = input_allocate_device();
 	if (!sensor_input_dev) {
 		pr_err("%s: Failed to allocate device", __func__);
