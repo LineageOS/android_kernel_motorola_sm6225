@@ -2766,7 +2766,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, sgm);
 
 	ret = sgm4154x_hw_chipid_detect(sgm);
-	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID){
+	if (((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID) && ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41543D_ID)){
 		pr_info("[%s] device not found !!!\n", __func__);
 		return ret;
 	}
@@ -2920,6 +2920,7 @@ static const struct i2c_device_id sgm4154x_i2c_ids[] = {
 	{ "sgm41542", 0 },
 	{ "sgm41516", 0 },
 	{ "sgm41516D", 0 },
+	{ "sgm41543D", 0},
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, sgm4154x_i2c_ids);
@@ -2929,6 +2930,7 @@ static const struct of_device_id sgm4154x_of_match[] = {
 	{ .compatible = "sgm,sgm41542" },
 	{ .compatible = "sgm,sgm41516" },
 	{ .compatible = "sgm,sgm41516D" },
+	{ .compatible = "sgm,sgm41543D"},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sgm4154x_of_match);
