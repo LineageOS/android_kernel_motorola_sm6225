@@ -667,8 +667,8 @@ static int cps_set_power(bool en)
 			return CPS_WLS_FAIL;
 		}
 
-		/*wait 50ms for vbus boost stable*/
-		msleep(50);
+		/*wait 150ms for vbus boost stable*/
+		msleep(150);
 
 		if (!en)
 			flag = false;
