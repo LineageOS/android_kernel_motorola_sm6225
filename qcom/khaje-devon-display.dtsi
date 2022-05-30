@@ -235,6 +235,7 @@
 	qcom,bklt-dcs-2bytes-enabled;
         qcom,mdss-dsi-no-panel-on-read-support;
         qcom,platform-reset-gpio-always-on;
+        qcom,suspend-ulps-enabled;
         qcom,tp_state_check_enable;
 
         qcom,esd-check-enabled;
