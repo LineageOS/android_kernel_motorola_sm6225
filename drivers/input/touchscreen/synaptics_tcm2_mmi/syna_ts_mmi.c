@@ -351,7 +351,7 @@ static int syna_ts_mmi_pre_resume(struct device *dev)
 	if (!tcm) {
 		return -ENODEV;
 	}
-	if (tcm->pwr_state)
+	if (!tcm->pwr_state)
 	{
 		return 0;
 	}
@@ -391,7 +391,7 @@ static int syna_ts_mmi_post_suspend(struct device *dev)
 
 	tcm->dev_suspend(&tcm->pdev->dev);
 
-	tcm->pwr_state = false;
+	//tcm->pwr_state = false;
 	return 0;
 }
 
@@ -419,6 +419,38 @@ static int syna_ts_mmi_pre_suspend(struct device *dev)
 	return 0;
 }
 
+static int syna_ts_mmi_panel_state(struct device *dev,
+	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
+{
+	struct syna_tcm *tcm;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+	if (!pdev) {
+		LOGE("Failed to get platform device");
+		return -ENODEV;
+	}
+	tcm = platform_get_drvdata(pdev);
+	if (!tcm) {
+		LOGE("Failed to get driver data");
+		return -ENODEV;
+	}
+	switch (to) {
+		case TS_MMI_PM_DEEPSLEEP:
+			tcm->lpwg_enabled = false;
+			tcm->dev_suspend(&tcm->pdev->dev);
+			break;
+		case TS_MMI_PM_GESTURE:
+			tcm->lpwg_enabled = true;
+			tcm->dev_suspend(&tcm->pdev->dev);
+			break;
+		case TS_MMI_PM_ACTIVE:
+			break;
+		default:
+			LOGI("panel mode %d is invalid.\n",to);
+			return -EINVAL;
+	}
+	return 0;
+};
+
 static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_vendor = syna_ts_mmi_methods_get_vendor,
 	.get_productinfo = syna_ts_mmi_methods_get_productinfo,
@@ -436,6 +468,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	/* PM callback */
+	.panel_state = syna_ts_mmi_panel_state,
 	.pre_resume = syna_ts_mmi_pre_resume,
 	.pre_suspend = syna_ts_mmi_pre_suspend,
 	.post_suspend = syna_ts_mmi_post_suspend,

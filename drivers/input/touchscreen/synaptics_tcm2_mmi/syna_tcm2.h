@@ -115,7 +115,7 @@
  * @brief ENABLE_WAKEUP_GESTURE
  *        Open if having wake-up gesture support.
  */
-/* #define ENABLE_WAKEUP_GESTURE */
+#define ENABLE_WAKEUP_GESTURE
 
 /**
  * @brief REPORT_SWAP_XY
