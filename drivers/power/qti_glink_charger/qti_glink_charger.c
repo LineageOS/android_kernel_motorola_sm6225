@@ -1517,6 +1517,30 @@ static ssize_t tx_mode_show(struct device *dev,
 }
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 
+static ssize_t tx_mode_vout_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct qti_charger *chg = this_chip;
+	struct wls_dump wls_info;
+	u32 tx_vout = 0;
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
+				&wls_info,
+				sizeof(struct wls_dump));
+
+	tx_vout = wls_info.tx_vrect_mv;
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", tx_vout);
+}
+
+static DEVICE_ATTR(tx_mode_vout, S_IRUGO,
+		tx_mode_vout_show,
+		NULL);
+
 static ssize_t wlc_light_ctl_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
@@ -2009,6 +2033,11 @@ static void wireless_psy_init(struct qti_charger *chg)
 		pr_err("couldn't create wireless tx mode\n");
 
 	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_tx_mode_vout);
+        if (rc)
+		pr_err("couldn't create wireless tx mode vout\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
 				&dev_attr_rx_connected);
         if (rc)
 		pr_err("couldn't create wireless rx_connected\n");
@@ -2061,6 +2090,9 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_tx_mode);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_tx_mode_vout);
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_rx_connected);
