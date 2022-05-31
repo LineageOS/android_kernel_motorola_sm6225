@@ -450,6 +450,52 @@ static int syna_ts_mmi_panel_state(struct device *dev,
 	}
 	return 0;
 };
+static int syna_ts_mmi_charger_mode(struct device *dev, int mode)
+{
+	struct syna_tcm *tcm;
+	struct platform_device *pdev = dev_get_drvdata(dev);
+	unsigned short cval = 0;
+	int retval = 0;
+	struct syna_hw_attn_data *attn;
+
+	if (!pdev) {
+		LOGE("Failed to get platform device");
+		return -ENODEV;
+	}
+
+	tcm = platform_get_drvdata(pdev);
+	if (!tcm) {
+		LOGE("Failed to get driver data");
+		return -ENODEV;
+	}
+	attn = &tcm->hw_if->bdata_attn;
+	if(attn->irq_enabled == false) {
+		LOGI("Interrupt is closed, so cannot access CHARGER_CONNECTED\n");
+		return -EINVAL;
+	}
+	mutex_lock(&tcm->tp_event_mutex);
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev,DC_ENABLE_CHARGER_CONNECTED,&cval,RESP_IN_ATTN);
+	if(retval < 0) {
+		LOGE("Failed to get charger_connected mode\n");
+		goto exit;
+	}
+	if(cval != mode){
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,DC_ENABLE_CHARGER_CONNECTED,mode,RESP_IN_ATTN);
+		if (retval < 0) {
+			LOGE("Failed to get charger_connected mode\n");
+			goto exit;
+		}
+		LOGI("%s: charger mode success %d\n",__func__,cval);
+	} else {
+		LOGI("%s: charger mode already %d\n",__func__,cval);
+	}
+exit:
+
+	mutex_unlock(&tcm->tp_event_mutex);
+	return 0;
+};
+
 
 static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.get_vendor = syna_ts_mmi_methods_get_vendor,
@@ -465,6 +511,7 @@ static struct ts_mmi_methods syna_ts_mmi_methods = {
 	.reset =  syna_ts_mmi_methods_reset,
 	.drv_irq = syna_ts_mmi_methods_drv_irq,
 	.power = syna_ts_mmi_methods_power,
+	.charger_mode = syna_ts_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = syna_ts_firmware_update,
 	/* PM callback */
