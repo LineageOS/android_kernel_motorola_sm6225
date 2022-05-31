@@ -1219,15 +1219,15 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 
 		val->intval = ret;
 		break;
-/*	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED: //undeclared identifier
+	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = bq25980_get_adc_vbus(bq);
 		if (ret < 0)
 			return ret;
 
 		val->intval = ret;
 		break;
-*/
-/*	case POWER_SUPPLY_PROP_INPUT_CURRENT_NOW: //undeclared identifier
+
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		ret = bq25980_get_adc_ibus(bq);
 		if (ret < 0)
 			return ret;
@@ -1235,7 +1235,7 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 		val->intval = ret;
 		//dump_all_reg(bq);
 		break;
-*/
+
 /*	case POWER_SUPPLY_PROP_CHARGING_ENABLED://undeclared identifier
 		ret = regmap_read(bq->regmap, BQ25980_CHRGR_CTRL_2, &chg_ctrl_2);
 		if (ret)
@@ -1369,8 +1369,8 @@ static enum power_supply_property bq25980_power_supply_props[] = {
 //	POWER_SUPPLY_PROP_CHARGING_ENABLED,//undeclared identifier
 //	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 //	POWER_SUPPLY_PROP_CURRENT_NOW,
-	//POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,//undeclared identifier
-	//POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, //undeclared identifier
+	POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	//POWER_SUPPLY_PROP_CP_IRQ_STATUS,//undeclared identifier
 	//POWER_SUPPLY_PROP_CHIP_VERSION,
 };
