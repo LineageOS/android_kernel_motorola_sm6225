@@ -326,7 +326,7 @@ static int ts_mmi_touch_event_edge_handler(struct touch_event_data *tev,  struct
 static int ts_mmi_touch_event_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
 {
 	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
-	int ret = 0;
+	__maybe_unused int ret = 0;
 
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 	ts_mmi_touch_event_edge_handler(tev, input_dev);
@@ -367,9 +367,7 @@ static int ts_mmi_touch_event_handler(struct touch_event_data *tev,  struct inpu
 
 bool ts_mmi_is_sensor_enable(void)
 {
-	struct ts_mmi_dev *touch_cdev;
 	if (sensor_pdata != NULL) {
-		touch_cdev = sensor_pdata->touch_cdev;
 		return !!sensor_pdata->sensor_opened;
 	}
 	else

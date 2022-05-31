@@ -351,11 +351,9 @@ static ssize_t goodix_ts_stylus_mode_store(struct device *dev,
 	unsigned long mode = 0;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
@@ -460,11 +458,9 @@ static ssize_t goodix_ts_interpolation_store(struct device *dev,
 	unsigned long mode = 0;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
@@ -505,11 +501,9 @@ static ssize_t goodix_ts_sample_store(struct device *dev,
 	unsigned long mode = 0;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	ret = kstrtoul(buf, 0, &mode);
 	if (ret < 0) {
@@ -590,11 +584,9 @@ static ssize_t goodix_ts_edge_store(struct device *dev,
 	unsigned int args[2] = { 0 };
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	dev = MMI_DEV_TO_TS_DEV(dev);
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	ret = sscanf(buf, "%d %d", &args[0], &args[1]);
 	if (ret < 2)
@@ -884,15 +876,12 @@ static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 	int timeout = 50;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	GET_GOODIX_DATA(dev);
 
 	/* 5000ms timeout */
 	while (core_data->init_stage < CORE_INIT_STAGE2 && timeout--)
 		msleep(100);
-
-	hw_ops = core_data->hw_ops;
 
 	mutex_lock(&core_data->mode_lock);
 	ret = goodix_ts_send_cmd(core_data, CHARGER_MODE_CMD, 5, mode, 0x00);
@@ -952,11 +941,9 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 static int goodix_ts_mmi_pre_resume(struct device *dev) {
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	ts_info("Resume start");
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	atomic_set(&core_data->suspended, 0);
 	if (core_data->gesture_enabled) {
@@ -971,10 +958,8 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	int ret = 0;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	/* open esd */
 	goodix_ts_blocking_notify(NOTIFY_RESUME, NULL);
@@ -1065,10 +1050,8 @@ static int goodix_ts_mmi_pre_suspend(struct device *dev) {
 	int ret = 0;
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
-	const struct goodix_ts_hw_ops *hw_ops;
 
 	GET_GOODIX_DATA(dev);
-	hw_ops = core_data->hw_ops;
 
 	ts_info("Suspend start");
 	atomic_set(&core_data->suspended, 1);
