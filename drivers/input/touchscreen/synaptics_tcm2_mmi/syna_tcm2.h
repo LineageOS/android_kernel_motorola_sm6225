@@ -60,10 +60,10 @@
 
 #define IS_NOT_FW_MODE(mode) \
         ((mode != MODE_APPLICATION_FIRMWARE) && (mode != MODE_HOSTDOWNLOAD_FIRMWARE))
-
-#define IS_FW_MODE(mode) \
+/*
+#define IS_NOT_FW_MODE(mode) \
         ((mode == MODE_APPLICATION_FIRMWARE) || (mode == MODE_HOSTDOWNLOAD_FIRMWARE))
-
+*/
 /**
  * @section: Driver Configurations
  *
@@ -370,6 +370,11 @@ struct syna_tcm {
 	struct syna_tcm_helper helper;
 #endif
 
+	/* testing */
+	char *testing_log_data;
+	unsigned int testing_log_size;
+	syna_pal_mutex_t testing_mutex;
+
 	/* Specific function pointer to do device connection.
 	 *
 	 * This function will power on and identify the connected device.
@@ -435,7 +440,7 @@ struct syna_tcm {
  * @brief: Helpers for cdevice nodes and sysfs nodes creation
  *
  * These functions are implemented in syna_touchcom_sysfs.c
- * and available only when HAS_SYSFS_INTERFACE is enabled.
+ * and available only whentesting_ HAS_SYSFS_INTERFACE is enabled.
  */
 #ifdef HAS_SYSFS_INTERFACE
 
@@ -470,3 +475,5 @@ void syna_dev_reflash_startup_work(struct work_struct *work);
 int syna_set_fw_name(struct syna_tcm *tcm, char *name);
 int syna_reflash_do_reflash(struct syna_tcm *tcm, char *fwname);
 //int syna_dev_early_suspend(struct device *dev);
+bool syna_check_panel(struct device_node *np);
+extern bool limit_panel;
