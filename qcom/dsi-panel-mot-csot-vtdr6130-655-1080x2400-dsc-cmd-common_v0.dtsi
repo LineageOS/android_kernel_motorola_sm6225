@@ -69,12 +69,12 @@
 
 		qcom,mdss-dsi-dc-off-command = [
 				15 01 00 00 00 00 02 62 00
-				15 01 00 00 00 00 02 6C 00];
+				15 01 00 00 00 00 02 6C 01];
 		qcom,mdss-dsi-dc-off-command-state = "dsi_lp_mode";
 
 		qcom,mdss-dsi-dc-on-command = [
-				15 01 00 00 00 00 02 62 01
-				15 01 00 00 00 00 02 6C 00];
+				15 01 00 00 00 00 02 62 00
+				15 01 00 00 00 00 02 6C 02];
 		qcom,mdss-dsi-dc-on-command-state = "dsi_lp_mode";
 
 		qcom,mdss-dsi-display-timings {
