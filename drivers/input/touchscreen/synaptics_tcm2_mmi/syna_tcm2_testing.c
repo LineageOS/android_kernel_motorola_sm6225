@@ -54,10 +54,14 @@ static unsigned char testing_config_id_data[MAX_SIZE_CONFIG_ID];
 static void syna_save2file(char *buf, int size)
 {
 #if 1 // output to dmesg, only for debug
+	int retval = 0;
 	char *str = NULL;
 	char *src = NULL;
-	char c = 'T';
+	char c = '\n';
+	int str_size = 0;
 	int offset = 0;
+	#define STR_MAX_SIZE 512
+    char str_buf[STR_MAX_SIZE] = {0};
 
 	if (!buf || (size == 0)) {
 		LOGE("Invalid test result data or size\n");
@@ -68,14 +72,25 @@ static void syna_save2file(char *buf, int size)
 
 	offset = 0;
 	while (offset < size) {
-		src = buf + offset;
-		LOGW("%s", src);
-		str = strchr(src, c);
-		if (str == NULL)
-			break;
+		syna_pal_mem_set(str_buf, 0, sizeof(str_buf));
 
-		offset = &str[0] - &buf[0] + 1;
-		//LOGI("offset = %d\n", offset);
+		// fine next '\n'
+		src = buf + offset;
+		str = strchr(src, c);
+		if (str == NULL) {
+            // print the last
+            LOGI("%s", src);
+            break;
+        }
+
+	    str_size = &str[0] - &src[0] + 1;
+        retval = syna_pal_mem_cpy(str_buf, STR_MAX_SIZE, &buf[offset], str_size, str_size);
+        if (retval < 0) {
+	        LOGE("Fail to copy part number string\n");
+	        goto exit;
+        }
+        LOGW("[%3d %4d]%s", str_size, offset, str_buf);
+        offset += str_size;
 	}
 #endif
 
