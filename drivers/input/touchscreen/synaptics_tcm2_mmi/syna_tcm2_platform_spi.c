@@ -52,7 +52,7 @@ static unsigned int buf_size;
 static struct spi_transfer *xfer;
 
 static struct platform_device *syna_spi_device;
-
+bool limit_panel;
 
 /**
  * syna_request_managed_device()
@@ -91,10 +91,12 @@ static void syna_spi_hw_reset(struct syna_hw_interface *hw_if)
 	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
 
 	if (rst->reset_gpio >= 0) {
+		LOGI("hw reset start ...\n");
 		gpio_set_value(rst->reset_gpio, rst->reset_on_state);
 		syna_pal_sleep_ms(rst->reset_active_ms);
 		gpio_set_value(rst->reset_gpio, !rst->reset_on_state);
 		syna_pal_sleep_ms(rst->reset_delay_ms);
+		LOGI("hw reset done\n");
 	}
 }
 
@@ -1089,6 +1091,43 @@ static struct syna_hw_interface syna_spi_hw_if = {
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
+
+ bool syna_check_panel(struct device_node *np)
+{
+	struct property *prop;
+	int len;
+	struct device_node *mmi_np;
+	const char *mmi_dts_val;
+	const char *path, *mmi_dts;
+	prop = of_find_property(np, "mmi,status", &len);
+	if (prop == NULL || len < 0) {
+		return true;
+	}
+	path = prop->value;
+	mmi_np = of_find_node_by_path(path);
+	if (mmi_np == NULL)
+	{
+		return false;
+	}
+
+	mmi_dts = of_prop_next_string(prop, path);
+	if (mmi_dts == NULL)
+	{
+		return false;
+	}
+
+	mmi_dts_val = of_get_property(mmi_np, mmi_dts, &len);
+	if (mmi_dts_val == NULL || len <= 0)
+	{
+		return false;
+	}
+	if (strstr(mmi_dts_val,"visionox"))
+	{
+		return true;
+	}
+	return false;
+}
+
 static int syna_spi_probe(struct spi_device *spi)
 {
 	int retval;
@@ -1099,6 +1138,14 @@ static int syna_spi_probe(struct spi_device *spi)
 	if (spi->dev.of_node && !mmi_device_is_available(spi->dev.of_node)) {
 		LOGE("mmi: device not supported\n");
 	        return -ENODEV;
+	}
+
+	limit_panel = syna_check_panel(spi->dev.of_node);
+
+	if(limit_panel){
+		LOGI("i am five");
+	}else{
+		LOGI("i am four");
 	}
 
 	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {

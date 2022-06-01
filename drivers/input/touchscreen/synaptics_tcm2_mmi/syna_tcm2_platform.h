@@ -48,7 +48,7 @@
  *
  * Declare read/write capability in bytes (0 = unlimited)
  */
-#define RD_CHUNK_SIZE (512)
+#define RD_CHUNK_SIZE (0)
 #define WR_CHUNK_SIZE (512)
 
 /**
