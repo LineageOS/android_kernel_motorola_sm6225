@@ -2317,7 +2317,8 @@ static void sgm4154x_paired_battery_notify(void *data,
 		}
 		paired_ichg *= 1000;
 	}
-	if (paired_ichg != chg->paired_ichg) {
+	if (!chg->constraint.factory_mode &&
+	    paired_ichg != chg->paired_ichg) {
 		value = min(chg->chg_cfg.target_fcc * 1000, chg->paired_ichg);
 		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
 		if (!rc)
