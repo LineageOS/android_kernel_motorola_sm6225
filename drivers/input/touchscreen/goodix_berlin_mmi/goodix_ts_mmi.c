@@ -909,7 +909,11 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	case TS_MMI_PM_GESTURE:
 		hw_ops->irq_enable(core_data, false);
 		if (hw_ops->gesture)
+#if defined(PRODUCT_TUNDRA)
+			hw_ops->gesture(core_data, 0x80);
+#else
 			hw_ops->gesture(core_data, 0);
+#endif
 		msleep(16);
 		hw_ops->irq_enable(core_data, true);
 		enable_irq_wake(core_data->irq);

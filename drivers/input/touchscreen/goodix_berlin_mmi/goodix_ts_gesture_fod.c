@@ -519,7 +519,11 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 #endif
 
 re_send_ges_cmd:
+#if defined(PRODUCT_TUNDRA)
+	if (hw_ops->gesture(cd, 0x80))
+#else
 	if (hw_ops->gesture(cd, 0))
+#endif
 		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)
