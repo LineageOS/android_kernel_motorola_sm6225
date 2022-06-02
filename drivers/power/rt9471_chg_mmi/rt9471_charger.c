@@ -2230,15 +2230,20 @@ static int rt9471_charger_get_property(struct power_supply *psy,
 		__rt9471_get_ic_stat(chip, &ic_stat);
 		if (ic_stat == RT9471_ICSTAT_TRICKLECHG ||
 			ic_stat == RT9471_ICSTAT_PRECHG ||
-			ic_stat == RT9471_ICSTAT_FASTCHG) {
+			ic_stat == RT9471_ICSTAT_FASTCHG ||
+			ic_stat == RT9471_ICSTAT_IEOC ||
+			ic_stat == RT9471_ICSTAT_BGCHG) {
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
-		} else if (ic_stat == RT9471_ICSTAT_BGCHG ||
-					ic_stat == RT9471_ICSTAT_IEOC ||
-					ic_stat == RT9471_ICSTAT_CHGDONE ||
+		} else if (ic_stat == RT9471_ICSTAT_CHGFAULT ||
 					ic_stat == RT9471_ICSTAT_VBUSRDY) {
 			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		} else {
+		} else if (ic_stat == RT9471_ICSTAT_SLEEP ||
+					ic_stat == RT9471_ICSTAT_OTG){
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		} else if (ic_stat == RT9471_ICSTAT_CHGDONE){
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		} else {
+			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
@@ -2249,11 +2254,15 @@ static int rt9471_charger_get_property(struct power_supply *psy,
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
 				break;
 			case RT9471_ICSTAT_FASTCHG:
+			case RT9471_ICSTAT_IEOC:
+			case RT9471_ICSTAT_BGCHG:
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
 				break;
-			case RT9471_ICSTAT_BGCHG:
-			case RT9471_ICSTAT_IEOC:
+			case RT9471_ICSTAT_SLEEP:
+			case RT9471_ICSTAT_VBUSRDY:
 			case RT9471_ICSTAT_CHGDONE:
+			case RT9471_ICSTAT_CHGFAULT:
+			case RT9471_ICSTAT_OTG:
 				val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
 				break;
 			default:
