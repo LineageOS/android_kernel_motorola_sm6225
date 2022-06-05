@@ -262,6 +262,42 @@ static ssize_t usbnet_desc_show(struct device *dev,
 
 static DEVICE_ATTR(description, S_IRUGO, usbnet_desc_show, NULL);
 
+static ssize_t usbnet_ip_addr_show(struct device *dev,
+				struct device_attribute *attr, char *buff)
+{
+	ssize_t status = 0;
+	struct net_device *ndev = to_net_dev(dev);
+	struct usbnet_context *context = netdev_priv(ndev);
+
+	status = snprintf(buff, 30, "0x%08x\n", context->ip_addr);
+	return status;
+};
+static DEVICE_ATTR(ip_addr, S_IRUGO, usbnet_ip_addr_show, NULL);
+
+static ssize_t usbnet_subnet_mask_show(struct device *dev,
+				struct device_attribute *attr, char *buff)
+{
+	ssize_t status = 0;
+	struct net_device *ndev = to_net_dev(dev);
+	struct usbnet_context *context = netdev_priv(ndev);
+
+	status = snprintf(buff, 30, "0x%08x\n", context->subnet_mask);
+	return status;
+};
+static DEVICE_ATTR(subnet_mask, S_IRUGO, usbnet_subnet_mask_show, NULL);
+
+static ssize_t usbnet_iff_flag_show(struct device *dev,
+				struct device_attribute *attr, char *buff)
+{
+	ssize_t status = 0;
+	struct net_device *ndev = to_net_dev(dev);
+	struct usbnet_context *context = netdev_priv(ndev);
+
+	status = snprintf(buff, 30, "0x%08x\n", context->iff_flag);
+	return status;
+};
+static DEVICE_ATTR(iff_flag, S_IRUGO, usbnet_iff_flag_show, NULL);
+
 static inline struct usbnet_device *usbnet_func_to_dev(struct usb_function *f)
 {
 	return container_of(f, struct usbnet_device, function);
@@ -810,6 +846,9 @@ static void do_set_config(struct usb_function *f, u16 new_config)
 		context->subnet_mask = 0;
 		context->router_ip = 0;
 		context->iff_flag = 0;
+		sysfs_notify(&context->dev->dev.kobj, NULL, "ip_addr");
+		sysfs_notify(&context->dev->dev.kobj, NULL, "subnet_mask");
+		sysfs_notify(&context->dev->dev.kobj, NULL, "iff_flag");
 		schedule_work(&context->usbnet_config_wq);
 	}
 }
@@ -842,10 +881,12 @@ static int usbnet_ctrlrequest(
 		case USBNET_SET_IP_ADDRESS:
 			context->ip_addr = (wValue << 16) | wIndex;
 			rc = 0;
+			sysfs_notify(&context->dev->dev.kobj, NULL, "ip_addr");
 			break;
 		case USBNET_SET_SUBNET_MASK:
 			context->subnet_mask = (wValue << 16) | wIndex;
 			rc = 0;
+			sysfs_notify(&context->dev->dev.kobj, NULL, "subnet_mask");
 			break;
 		case USBNET_SET_HOST_IP:
 			context->router_ip = (wValue << 16) | wIndex;
@@ -858,6 +899,7 @@ static int usbnet_ctrlrequest(
 		if (context->ip_addr && context->subnet_mask
 		    && context->router_ip) {
 			context->iff_flag = IFF_UP;
+			sysfs_notify(&context->dev->dev.kobj, NULL, "iff_flag");
 			/* schedule a work queue to do this because we
 				 need to be able to sleep */
 			schedule_work(&context->usbnet_config_wq);
@@ -937,6 +979,51 @@ static int usbnet_set_inst_name(struct usb_function_instance *fi,
 	return 0;
 }
 
+static int usbnet_add_files(struct usbnet_context *context)
+{
+	int ret;
+	struct net_device *net_dev = context->dev;
+
+	ret = device_create_file(&net_dev->dev, &dev_attr_description);
+	if (ret < 0) {
+		pr_err("%s: description creation error=%d\n", __func__, ret);
+		return ret;
+	}
+	ret = device_create_file(&net_dev->dev, &dev_attr_ip_addr);
+	if (ret < 0) {
+		pr_err("%s: ip_addr creation error=%d\n", __func__, ret);
+		device_remove_file(&net_dev->dev, &dev_attr_description);
+		return ret;
+	}
+	ret = device_create_file(&net_dev->dev, &dev_attr_subnet_mask);
+	if (ret < 0) {
+		pr_err("%s: subnet_mask creation error=%d\n", __func__, ret);
+		device_remove_file(&net_dev->dev, &dev_attr_description);
+		device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
+		return ret;
+	}
+	ret = device_create_file(&net_dev->dev, &dev_attr_iff_flag);
+	if (ret < 0) {
+		pr_err("%s: iff_flag creation error=%d\n", __func__, ret);
+		device_remove_file(&net_dev->dev, &dev_attr_description);
+		device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
+		device_remove_file(&net_dev->dev, &dev_attr_subnet_mask);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void usbnet_remove_files(struct usbnet_context *context)
+{
+	struct net_device *net_dev = context->dev;
+
+	device_remove_file(&net_dev->dev, &dev_attr_description);
+	device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
+	device_remove_file(&net_dev->dev, &dev_attr_subnet_mask);
+	device_remove_file(&net_dev->dev, &dev_attr_iff_flag);
+}
+
 static void usbnet_free_inst(struct usb_function_instance *f)
 {
 	struct usbnet_opts *opts;
@@ -949,6 +1036,7 @@ static void usbnet_free_inst(struct usb_function_instance *f)
 	if (!IS_ERR(dev)) {
 		context = (struct usbnet_context *)dev->net_ctxt;
 		if (context) {
+			usbnet_remove_files(context);
 			sk = context->socket;
 			if (sk) {
 				sk->ops->shutdown(sk, SHUT_RDWR);
@@ -1005,22 +1093,22 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 		return ERR_PTR(-EINVAL);
 	}
 
-	ret = device_create_file(&net_dev->dev, &dev_attr_description);
+	context = netdev_priv(net_dev);
+	ret = usbnet_add_files(context);
 	if (ret < 0) {
 		pr_err("%s: sys file creation  error\n", __func__);
 		unregister_netdev(net_dev);
 		free_netdev(net_dev);
 		kfree(opts);
 		kfree(dev);
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(ret);
 	}
 
-	context = netdev_priv(net_dev);
 	ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM,
 					0, &context->socket);
 	if (ret < 0) {
 		pr_err("%s: socket creation error, ret=%d\n", __func__, ret);
-		device_remove_file(&net_dev->dev, &dev_attr_description);
+		usbnet_remove_files(context);
 		unregister_netdev(net_dev);
 		free_netdev(net_dev);
 		kfree(opts);
