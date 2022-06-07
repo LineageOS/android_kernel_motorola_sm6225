@@ -75,10 +75,10 @@ struct mm8xxx_device_info {
 	struct iio_channel *Batt_NTC_channel;
 	bool fake_battery;
 	u32 latest_fw_version;
-	u32 latest_parameter_version;
-	u32 first_battery_serialnum;
-	u32 second_battery_serialnum;
-	u32 default_battery_serialnum;
+	u32 first_battery_param_ver;
+	u32 second_battery_param_ver;
+	u32 first_battery_id;
+	u32 second_battery_id;
 };
 
 
@@ -93,7 +93,7 @@ static u32 mmi_get_battery_info(struct mm8xxx_device_info *di, u32 cmd);
 
 #define MM8013_HW_VERSION 0x0021
 #define MM8013_LATEST_FW_VERSION 0x0812
-#define MM8013_PARAMETER_FW_VERSION 0x0201
+#define MM8013_PARAMETER_VERSION 0x0201
 
 #define MM8013_DEFAULT_BATTERY_ID 0x0103
 #define MM8013_1TH_BATTERY_ID 0x0103
@@ -525,7 +525,7 @@ static int Write_parameter_data(struct mm8xxx_device_info *di, unsigned char *ar
 	return write_nvm(di, PARTITION_PARAMETER, array);
 }
 
-static int mm8xxx_battery_write_program_and_parameter(struct mm8xxx_device_info *di,
+static int write_program_and_parameter(struct mm8xxx_device_info *di,
 					 unsigned char *program_array,
 					 unsigned char *parameter_array)
 {
@@ -625,7 +625,7 @@ static int mm8xxx_battery_update_program_and_parameter(struct mm8xxx_device_info
 		battery_di = mmi_get_battery_info(di, BATTERY_ID_CMD);
 		if (battery_di !=0)
 		{
-			if (battery_di != di->first_battery_serialnum && battery_di != di->second_battery_serialnum){
+			if (battery_di != di->first_battery_id && battery_di != di->first_battery_id){
 				 mm_info("Error: the battery is not suitable for this poject.\n");
 				goto EXIT;
 			}
@@ -672,7 +672,7 @@ static int mm8xxx_battery_update_program_and_parameter(struct mm8xxx_device_info
 	}
 
 	/* start TRM sequence */
-	if (mm8xxx_battery_write_program_and_parameter(di,
+	if (write_program_and_parameter(di,
 					fw_hexfile_data, param_hexfile_data) < 0) {
 		mm_info("\nFAILED TO UPDATE program_and_parameter!!\n");
 		goto EXIT;
@@ -1866,9 +1866,8 @@ static u32 mmi_get_battery_info(struct mm8xxx_device_info *di, u32 cmd)
 		dev_err(di->dev, "error read cmd control\n");
 		return ret;
 	}
-	mm_info("get addr=0x%04x, value=0x%04x\n", cmd, ret);
 
-	return ret;
+	return (u32)ret;
 }
 
 static int mm8xxx_battery_parse_dts(struct mm8xxx_device_info *di)
@@ -1882,25 +1881,26 @@ static int mm8xxx_battery_parse_dts(struct mm8xxx_device_info *di)
 		mm_info("dts no config fw version, use default fw version=0x%04x\n", di->latest_fw_version);
 	}
 
-	rc = of_property_read_u32(np, "latest_parameter_version", &di->latest_parameter_version);
+	rc = of_property_read_u32(np, "first_battery_param_ver", &di->first_battery_param_ver);
 	if (rc < 0) {
-		di->latest_parameter_version = MM8013_PARAMETER_FW_VERSION;
-		mm_info("dts no config parameter version, use default fw parameter=0x%04x\n", di->latest_parameter_version);
+		di->first_battery_param_ver = MM8013_PARAMETER_VERSION;
+		mm_info("dts no config parameter version, first_battery_param_ver=0x%04x\n", di->first_battery_param_ver);
 	}
 
-	rc = of_property_read_u32(np, "default_battery_serialnum", &di->default_battery_serialnum);
+	rc = of_property_read_u32(np, "second_battery_param_ver", &di->second_battery_param_ver);
 	if (rc < 0) {
-		di->default_battery_serialnum = MM8013_DEFAULT_BATTERY_ID;
+		di->second_battery_param_ver = MM8013_PARAMETER_VERSION;
+		mm_info("dts no config parameter version, second_battery_param_ver=0x%04x\n", di->second_battery_param_ver);
 	}
 
-	rc = of_property_read_u32(np, "first_battery_serialnum", &di->first_battery_serialnum);
+	rc = of_property_read_u32(np, "first_battery_id", &di->first_battery_id);
 	if (rc < 0) {
-		di->first_battery_serialnum = MM8013_1TH_BATTERY_ID;
+		di->first_battery_id = MM8013_1TH_BATTERY_ID;
 	}
 
-	rc = of_property_read_u32(np, "second_battery_serialnum", &di->second_battery_serialnum);
+	rc = of_property_read_u32(np, "second_battery_id", &di->second_battery_id);
 	if (rc < 0) {
-		di->second_battery_serialnum = MM8013_2TH_BATTERY_ID;
+		di->second_battery_id = MM8013_2TH_BATTERY_ID;
 	}
 
 	return rc;
@@ -1915,6 +1915,8 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	int num;
 	u32 fg_fw_ver;
 	u32 fg_param_ver;
+	u32 fg_battery_id;
+	u32 parameter_version = 0xFFFF;
 	enum UPDATE_INDEX update_index =UPDATE_NONE;
 
 	mm_info("MM8013 prob begin\n");
@@ -1956,20 +1958,36 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	{
 		fg_fw_ver = mmi_get_battery_info(di, FW_VER_CMD);
 		fg_param_ver = mmi_get_battery_info(di, PARAM_VER_CMD);
+		fg_battery_id = mmi_get_battery_info(di, BATTERY_ID_CMD);
+
+		mm_info("From fg ic,fg_fw_ver=0x%04x, battery_id=0x%04x,fg_param_ver=0x%04x\n", \
+					fg_fw_ver, fg_battery_id, fg_param_ver);
+
+		if (fg_fw_ver < 0 || fg_param_ver < 0 || fg_battery_id < 0) {
+			update_index = UPDATE_NONE;
+			goto update_begin;
+		}
+		else if (fg_battery_id == di->first_battery_id) {
+			parameter_version = di->first_battery_param_ver;
+		}
+		else if (fg_battery_id == di->second_battery_id) {
+			parameter_version = di->second_battery_param_ver;
+		}
 
 		if (fg_fw_ver < di->latest_fw_version && \
-			fg_param_ver < di->latest_parameter_version) {
+			fg_param_ver < parameter_version) {
 			update_index = UPDATE_ALL;
 		}
 		else if (fg_fw_ver < di->latest_fw_version && \
-			fg_param_ver == di->latest_parameter_version) {
+			fg_param_ver == parameter_version) {
 			update_index = UPDATE_PROGRAM;
 		}
 		else if (fg_fw_ver == di->latest_fw_version && \
-			fg_param_ver < di->latest_parameter_version) {
+			fg_param_ver < parameter_version) {
 			update_index = UPDATE_PARAMETER;
 		}
 
+update_begin:
 		if (update_index != UPDATE_NONE)
 			mm8xxx_battery_update_program_and_parameter(di, update_index);
 	}
