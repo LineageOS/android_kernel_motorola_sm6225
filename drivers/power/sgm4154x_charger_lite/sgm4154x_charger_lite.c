@@ -2005,6 +2005,7 @@ static int sgm4154x_hw_chipid_detect(struct sgm4154x_device *sgm)
 	return val;
 }
 
+#define EMPTY_BATTERY_VBAT 3200
 static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *batt_info)
 {
 	int rc;
@@ -2037,7 +2038,8 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
                 chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
 
         memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
-	if (chg->paired_batt_info.batt_soc == 0) {
+	if (chg->paired_batt_info.batt_soc == 0 &&
+	    chg->paired_batt_info.batt_mv < EMPTY_BATTERY_VBAT) {
 		batt_info->batt_soc = 0;
 		pr_warn("Force %s to empty from %d for empty paired battery\n",
 					chg->fg_psy->desc->name,
@@ -2277,7 +2279,8 @@ static void sgm4154x_paired_battery_notify(void *data,
 	int paired_ichg = chg->paired_ichg;
 	int paired_load = chg->paired_load;
 	static int panic_deb_cnt = 0;
-	static bool chg_present = false;
+	static bool prev_high_load_en = false;
+	static bool prev_low_load_en = false;
 
 	if (!batt_info || batt_info->batt_mv <= 0) {
 		pr_warn("Invalid paired battery info\n");
@@ -2347,56 +2350,54 @@ static void sgm4154x_paired_battery_notify(void *data,
 		} else {
 			panic_deb_cnt = 0;
 		}
+		chg->paired_load = paired_load;
 	}
 
-	if (paired_load != chg->paired_load ||
-	    chg_present != chg->chg_info.chrg_present) {
-		chg->paired_load = paired_load;
-		chg_present = chg->chg_info.chrg_present;
-		switch (paired_load) {
-		case PAIRED_LOAD_OFF:
-			high_load_en = false;
-			low_load_en = false;
-			break;
-		case PAIRED_LOAD_LOW:
-			high_load_en = false;
-			low_load_en = true;
-			break;
-		case PAIRED_LOAD_HIGH:
-		default:
-			high_load_en = true;
-			low_load_en = false;
-		}
+	switch (chg->paired_load) {
+	case PAIRED_LOAD_OFF:
+		high_load_en = false;
+		low_load_en = false;
+		break;
+	case PAIRED_LOAD_LOW:
+		high_load_en = false;
+		low_load_en = true;
+		break;
+	case PAIRED_LOAD_HIGH:
+		high_load_en = true;
+		low_load_en = false;
+		break;
+	default:
+		high_load_en = prev_high_load_en;
+		low_load_en = prev_low_load_en;
+	}
 
-		/* Turn off load switch if paired battery is charging */
-		if (chg_present && batt_info->batt_ma > 0) {
-			high_load_en = false;
-			low_load_en = false;
-		}
+	 /* Turn off load switch to stop charging by paired battery */
+	if (delta_ocv < 0 ||
+	    (chg->chg_info.chrg_present &&
+	     chg->chg_info.chrg_ma > 0 &&
+	     batt_info->batt_ma >= 0)) {
+		high_load_en = false;
+		low_load_en = false;
+	}
 
+	if (high_load_en != prev_high_load_en) {
 		if (gpio_is_valid(chg->sgm->high_load_en_gpio)) {
 			gpio_set_value(chg->sgm->high_load_en_gpio,
 				high_load_en ^ chg->sgm->high_load_active_low);
 		}
+		prev_high_load_en = high_load_en;
+	}
+	if (low_load_en != prev_low_load_en) {
 		if (gpio_is_valid(chg->sgm->low_load_en_gpio)) {
 			gpio_set_value(chg->sgm->low_load_en_gpio,
 				low_load_en ^ chg->sgm->low_load_active_low);
 		}
+		prev_low_load_en = low_load_en;
 	}
 
-	if (gpio_is_valid(chg->sgm->high_load_en_gpio))
-		high_load_en = gpio_get_value(chg->sgm->high_load_en_gpio)
-				^ chg->sgm->high_load_active_low;
-	else
-		high_load_en = false;
-	if (gpio_is_valid(chg->sgm->low_load_en_gpio))
-		low_load_en = gpio_get_value(chg->sgm->low_load_en_gpio)
-				^ chg->sgm->low_load_active_low;
-	else
-		low_load_en = false;
-
 	pr_info("charger_present:%d, charger_suspend:%d, paired_ocv:%dmV, batt_ocv:%dmV\n",
-				chg_present, chg->sgm->state.hiz_en, paired_ocv, batt_ocv);
+				chg->chg_info.chrg_present, chg->sgm->state.hiz_en,
+				paired_ocv, batt_ocv);
 	pr_info("delta_ocv:%dmV, delta_soc:%d, high_load:%d, low_load:%d, ichg:%duA\n",
 				delta_ocv, delta_soc, high_load_en, low_load_en, paired_ichg);
 }
