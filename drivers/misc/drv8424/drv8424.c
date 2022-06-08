@@ -2016,7 +2016,9 @@ static int moto_drv8424_probe(struct platform_device *pdev)
     } else {
         md->time_out = MOTOR_DEFAULT_EXPIRE;
         atomic_set(&md->position, POS_COMPACT);
+	moto_drv8424_cmd_push(md, CMD_POSITION, 0);
         atomic_set(&md->status, STATUS_STOPPED_COMPACT);
+	moto_drv8424_cmd_push(md, CMD_STATUS, 0);
         dev_info(dev, "Assume COMPACT position\n");
     }
 
