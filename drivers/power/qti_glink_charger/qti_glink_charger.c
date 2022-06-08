@@ -65,6 +65,7 @@ struct battery_info {
 	int batt_status;
 	int batt_full_uah;
 	int batt_design_uah;
+	int batt_chg_counter;
 };
 
 struct charger_info {
@@ -2012,7 +2013,6 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
         return 0;
 }
 
-
 static void wireless_psy_init(struct qti_charger *chg)
 {
 	int rc;
@@ -2166,6 +2166,9 @@ static int battery_psy_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		pval->intval = info.batt_design_uah;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		pval->intval = info.batt_chg_counter;
+		break;
 	default:
 		break;
 	}
@@ -2197,6 +2200,7 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static const struct power_supply_desc batt_psy_desc = {
