@@ -1076,14 +1076,36 @@ static void mmi_discrete_config_qc_charger(struct mmi_discrete_charger *chg)
 	}
 }
 
+#define WLS_ICL_INCREASE_STEP 100000
+static void mmi_discrete_wireless_icl_work(struct work_struct *work)
+{
+	struct mmi_discrete_charger *chip = container_of(work,
+				struct mmi_discrete_charger,
+				wireless_icl_work.work);
+	int wls_icl = 0;
+
+	wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
+	while((wls_icl + WLS_ICL_INCREASE_STEP) <= chip->wls_max_icl_ua) {
+		if(!is_wls_online(chip))
+			break;
+		wls_icl += WLS_ICL_INCREASE_STEP;
+		vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, wls_icl);
+		msleep(200);
+		wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
+		mmi_info(chip, "vote wireless charging icl %d ua\n", wls_icl);
+	}
+}
+
 /*MIN is 2.5W -> default icl 500mA * input vol 5V*/
 #define WLS_POWER_MIN 2500
 static void mmi_discrete_config_wls_charger(struct mmi_discrete_charger *chg)
 {
 	mmi_dbg(chg, "Configure wireless charger\n");
 
-	if (chg->bc1p2_charger_type != POWER_SUPPLY_TYPE_UNKNOWN)
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, chg->wls_max_icl_ua);
+	if (chg->bc1p2_charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
+		cancel_delayed_work(&chg->wireless_icl_work);
+		schedule_delayed_work(&chg->wireless_icl_work, msecs_to_jiffies(0));
+	}
 }
 
 static void mmi_discrete_config_charger_input(struct mmi_discrete_charger *chip)
@@ -1981,8 +2003,9 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 					SDP_CURRENT_UA);
 		break;
 	case POWER_SUPPLY_TYPE_WIRELESS:
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-					chg->wls_max_icl_ua);
+		cancel_delayed_work(&chg->wireless_icl_work);
+		schedule_delayed_work(&chg->wireless_icl_work,
+					msecs_to_jiffies(0));
 		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
@@ -3061,6 +3084,7 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chip->charger_work, mmi_discrete_charger_work);
 	INIT_DELAYED_WORK(&chip->monitor_ibat_work, mmi_discrete_monitor_ibat_work);
+	INIT_DELAYED_WORK(&chip->wireless_icl_work, mmi_discrete_wireless_icl_work);
 
 	chip->batt_psy = devm_power_supply_register(chip->dev,
 						    &batt_psy_desc,

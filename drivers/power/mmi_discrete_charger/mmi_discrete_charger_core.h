@@ -93,6 +93,8 @@ struct mmi_discrete_charger {
 	struct delayed_work	monitor_ibat_work;
 	int			bat_ocp_ua;
 
+	struct delayed_work	wireless_icl_work;
+
 	/* extcon for VBUS / ID notification to USB for type-c only */
 	struct extcon_dev	*extcon;
 
