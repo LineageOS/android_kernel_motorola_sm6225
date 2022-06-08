@@ -35,7 +35,7 @@
 #include "aw_log.h"
 #include "aw_dsp.h"
 
-#define AW882XX_DRIVER_VERSION "v1.9.0.7"
+#define AW882XX_DRIVER_VERSION "v1.9.0.9"
 #define AW882XX_I2C_NAME "aw882xxacf_smartpa"
 
 #define AW_READ_CHIPID_RETRIES		5	/* 5 times */
@@ -797,9 +797,11 @@ static int aw882xx_dev_gain_ctl_set(struct snd_kcontrol *kcontrol,
 
 	int value = 0;
 	int aw882xx_volume = 0;
+	int useful_range = 0;
 
+	mutex_lock(&aw882xx->lock);
 	/* Note: The larger the volume value is, the smaller the actual volume */
-	int useful_range = desc->mute_volume - desc->init_volume;
+	useful_range = desc->mute_volume - desc->init_volume;
 
 	aw_dev_info(aw882xx->dev, "desc->init_volume = %d mute_volume = %d",
 								desc->init_volume, desc->mute_volume );
@@ -817,7 +819,7 @@ static int aw882xx_dev_gain_ctl_set(struct snd_kcontrol *kcontrol,
 	aw882xx_volume = ((AW882XX_MOTO_MAX_GAIN - value) * useful_range) / AW882XX_MOTO_MAX_GAIN
 					+ desc->init_volume;
 
-	mutex_lock(&aw882xx->lock);
+
 	aw_dev->ops.aw_set_volume(aw_dev, aw882xx_volume);
 	mutex_unlock(&aw882xx->lock);
 	aw_dev_info(aw882xx->dev,"set value = %d, set aw882xx volume = %d", value, aw882xx_volume);
