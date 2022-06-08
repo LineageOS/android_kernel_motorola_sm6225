@@ -1321,6 +1321,7 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 #ifdef ENABLE_EXTENDED_BATT_PROPS
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
@@ -1445,6 +1446,16 @@ static int fg_get_property(struct power_supply *psy,
 		val->intval = bq->batt_vocv * 1000;
 		mutex_unlock(&bq->data_lock);
 		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		ret = fg_read_rm(bq);
+		mutex_lock(&bq->data_lock);
+		if (ret >= 0)
+			bq->batt_rm = ret;
+		val->intval = bq->batt_rm * 1000;
+		mutex_unlock(&bq->data_lock);
+		break;
+
 #ifdef ENABLE_EXTENDED_BATT_PROPS
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = bq->connected_rid ;
