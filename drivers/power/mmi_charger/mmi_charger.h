@@ -66,6 +66,7 @@ struct mmi_battery_info {
 	int batt_status;
 	int batt_full_uah;
 	int batt_design_uah;
+	int batt_chg_counter;
 	char batt_sn[MMI_BATT_SN_LEN];
 };
 
