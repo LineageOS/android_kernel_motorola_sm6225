@@ -251,6 +251,7 @@ struct rt9471_chip {
 	bool dpdm_enabled;
 	u32 input_current_cache;
 	struct	delayed_work monitor_work;
+	struct	delayed_work recheck_charger_work;
 	struct work_struct charge_detect_work;
 	unsigned int status;
 	struct rt9471_state state;
@@ -2801,11 +2802,11 @@ int bc12_read_charger_type(struct rt9471_chip *chip)
 	int ret = 0;
 	int val = 0;
 
-	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	ret = mmi_charger_read_iio_chan(chip, SMB5_READ_BC12_CHG_TYPE, &val);
 	if(ret )
-		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+		dev_err(chip->dev, "Cann't read SMB5_READ_BC12_CHG_TYPE IIO\n");
 
-	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	dev_info(chip->dev, "read SMB5_READ_BC12_CHG_TYPE IIO :%d\n",val);
 	return val;
 }
 #endif
@@ -2901,6 +2902,54 @@ static void mmi_start_hvdcp_detect(struct rt9471_chip *chip)
 }
 #endif
 
+static void rt9471_recheck_charger_type_workfunc(struct work_struct *work)
+{
+	int ret;
+	struct rt9471_chip *chip = container_of(work, struct rt9471_chip, recheck_charger_work.work);
+
+	bc12_start_detection(chip);
+	bc12_detection_done(chip);
+	ret = bc12_read_charger_type(chip);
+
+	switch(ret)	{
+		case WT_CHG_TYPE_FC:
+		case WT_CHG_TYPE_OCP:
+			dev_err(chip->dev, "rerun, float type have been detected !\n");
+			chip->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+			break;
+		case WT_CHG_TYPE_SDP:
+			dev_err(chip->dev, "rerun, SDP have been detected !\n");
+			chip->real_charger_type = POWER_SUPPLY_TYPE_USB;
+			break;
+		case WT_CHG_TYPE_CDP:
+			dev_err(chip->dev, "rerun, CDP have been detected !\n");
+			chip->real_charger_type = POWER_SUPPLY_TYPE_USB_CDP;
+			break;
+		case WT_CHG_TYPE_DCP:
+		case WT_CHG_TYPE_QC2:
+		case WT_CHG_TYPE_QC3:
+		case WT_CHG_TYPE_QC3P_18W:
+		case WT_CHG_TYPE_QC3P_27W:
+		case Z350_CHG_TYPE_HVDCP:
+			dev_err(chip->dev, "rerun, DCP have been detected !\n");
+			chip->real_charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+			mmi_start_hvdcp_detect(chip);
+			break;
+		default:
+			pr_err("rerun, bc12: no charge type detected\n");
+			if (chip->state.online) {
+				rt9471_request_dpdm(chip, false);
+				msleep(10);
+				rt9471_request_dpdm(chip, true);
+				schedule_delayed_work(&chip->recheck_charger_work, 3*HZ);
+			}
+			break;
+	}
+
+	chip->chg_dev->noti.apsd_done = true;
+	charger_dev_notify(chip->chg_dev);
+}
+
 static void rt9471_plug_in_func(struct rt9471_chip *chip)
 {
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
@@ -2941,9 +2990,14 @@ static void rt9471_plug_in_func(struct rt9471_chip *chip)
 	}
 #endif
 	schedule_delayed_work(&chip->monitor_work, 0);
-
 	chip->chg_dev->noti.apsd_done = true;
 	charger_dev_notify(chip->chg_dev);
+
+	if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB ||
+		chip->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT ||
+		(chip->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN && chip->state.online == true)) {
+		schedule_delayed_work(&chip->recheck_charger_work, 3*HZ);
+	}
 }
 
 static void rt9471_plug_out_func(struct rt9471_chip *chip)
@@ -3146,6 +3200,7 @@ static int rt9471_probe(struct i2c_client *client,
 	}
 
 	INIT_DELAYED_WORK(&chip->monitor_work, rt9471_monitor_workfunc);
+	INIT_DELAYED_WORK(&chip->recheck_charger_work, rt9471_recheck_charger_type_workfunc);
 	INIT_WORK(&chip->charge_detect_work, charger_detect_work_func);
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
