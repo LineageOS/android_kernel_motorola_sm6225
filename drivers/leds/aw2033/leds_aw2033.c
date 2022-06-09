@@ -200,7 +200,10 @@ static void aw2033_led_blink_set(struct aw2033_led *led, unsigned long blinking)
 		msleep(2);
 	}
 
-	led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
+	led->cdev.brightness = blinking;
+	if (led->cdev.brightness > led->cdev.max_brightness)
+		led->cdev.brightness = led->cdev.max_brightness;
+	pr_info("aw2033_led_blink_set %ld %d\n", blinking, led->cdev.brightness);
 	if (blinking > 0) {
 		aw2033_write(led, AW2033_REG_GCR2, led->pdata->imax);
 		aw2033_write(led, AW2033_REG_PWM0 + led->id, led->cdev.brightness);
@@ -234,6 +237,7 @@ static void aw2033_set_brightness(struct led_classdev *cdev,
 	struct aw2033_led *led = container_of(cdev, struct aw2033_led, cdev);
 
 	led->cdev.brightness = brightness;
+	pr_info("aw2033_set_brightness %d\n", brightness);
 
 	schedule_work(&led->brightness_work);
 }
