@@ -50,4 +50,5 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE := rt_pd_manager.ko
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(KERNEL_MODULES_OUT)/mmi_discrete_charger_class.ko
 include $(DLKM_DIR)/AndroidKernelModule.mk

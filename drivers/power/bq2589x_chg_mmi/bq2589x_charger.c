@@ -202,8 +202,6 @@ struct pe_ctrl {
 };
 static struct pe_ctrl pe;
 
-extern bool mmi_is_factory_mode(void);
-
 static int bq2589x_read_byte(struct bq2589x *bq, u8 *data, u8 reg)
 {
 	int ret;
@@ -1527,7 +1525,7 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 {
 	int ret = 0;
 
-	if(mmi_is_factory_mode() && bq->ignore_request_dpdm) {
+	if(bq->ignore_request_dpdm) {
 		dev_err(bq->dev, "%s ignore_request_dpdm\n", __func__);
 		return ret;
 	}

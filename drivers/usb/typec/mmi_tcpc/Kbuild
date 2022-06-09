@@ -48,3 +48,4 @@ obj-m	+= tcpc_class.o
 obj-m	+= rt_pd_manager.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../adapter_class/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../power/mmi_discrete_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
