@@ -848,7 +848,7 @@ static int firmware_load(unsigned char *firmeware, int *firmeware_length)
 	return 0;
 }
 
-static int update_firmware(void)
+static int update_firmware(bool forece)
 {
 	int ret, write_count, k;
 	int bootloader_length, firmware_length;
@@ -866,7 +866,7 @@ static int update_firmware(void)
 	}
 
 	/*Judge fw version(fw.hex file ver > fw in chip) and chip id(active chipid is 0x4019)*/
-	if ( cps_check_chipid() &&
+	if ( !forece && cps_check_chipid() &&
 			!cps_check_fw_ver()) {
 		cps_wls_log(CPS_LOG_ERR, "[%s] fw already exist OR chip do not exist. Skip!!\n", __func__);
 		goto update_fail;
@@ -1468,7 +1468,7 @@ static ssize_t store_update_fw(struct device *dev,
 	tmp = simple_strtoul(buf, NULL, 0);
 	if(tmp != 0) {
 		cps_wls_log(CPS_LOG_DEBG, "[%s] -------start update fw\n", __func__);
-		update_firmware();
+		update_firmware(true);
 	}
 
 	return count;
@@ -1903,7 +1903,7 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 
 	cps_wls_log(CPS_LOG_DEBG, "[%s] wireless charger addr low probe successful!\n", __func__);
 
-	update_firmware();
+	update_firmware(false);
 
 	if (cps_wls_get_vout_state() &&
 			chip->main_chg_dev) {
