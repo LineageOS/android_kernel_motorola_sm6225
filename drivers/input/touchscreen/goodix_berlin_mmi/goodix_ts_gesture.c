@@ -250,8 +250,13 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		if (cd->imports && cd->imports->report_gesture) {
 			struct gesture_event_data mmi_event;
 
-			ts_info("invoke imported report gesture function\n");
-			mmi_event.evcode = 1;
+			ts_info("invoke imported report gesture function, gesture_type = %d\n",
+				gs_event.gesture_type);
+			if(gs_event.gesture_type == GOODIX_GESTURE_SINGLE_TAP) {
+				mmi_event.evcode = 1;
+			} else if(gs_event.gesture_type == GOODIX_GESTURE_DOUBLE_TAP) {
+				mmi_event.evcode =4;
+			}
 
 			/* call class method */
 			ret = cd->imports->report_gesture(&mmi_event);

@@ -60,11 +60,33 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 
 	TRY_TO_CALL(pre_suspend);
 	if (touch_cdev->pdata.gestures_enabled) {
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+		if(touch_cdev->gesture_mode_type != 0) {
+			if(touch_cdev->gesture_mode_type & 0x01) {
+				dev_info(DEV_MMI, "%s: try to enter zero Gesture mode\n", __func__);
+				TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE_ZERO);
+			}
+			if(touch_cdev->gesture_mode_type & 0x02) {
+				dev_info(DEV_MMI, "%s: try to enter single Gesture mode\n", __func__);
+				TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE_SINGLE);
+			}
+			if(touch_cdev->gesture_mode_type & 0x04) {
+				dev_info(DEV_MMI, "%s: try to enter double Gesture mode\n", __func__);
+				TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE_DOUBLE);
+			}
+
+			dev_info(DEV_MMI, "%s: notify touch driver to switch gesture mode\n", __func__);
+			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE_SWITCH);
+
+			touch_cdev->pm_mode = TS_MMI_PM_GESTURE;
+		}
+#else
 		if(ts_mmi_is_sensor_enable()) {
 			dev_info(DEV_MMI, "%s: try to enter Gesture mode\n", __func__);
 			TRY_TO_CALL(panel_state, touch_cdev->pm_mode, TS_MMI_PM_GESTURE);
 			touch_cdev->pm_mode = TS_MMI_PM_GESTURE;
 		}
+#endif
 	}
 	if (IS_ACTIVE_MODE) {
 		/* IC power is off. IRQ pin status is floated. So disable IRQ. */

@@ -233,6 +233,10 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 		key_code = KEY_F3;
 		pr_info("%s: zero tap up\n", __func__);
 		break;
+	case 4:
+		key_code = KEY_F4;
+		pr_info("%s: double tap\n", __func__);
+		break;
 	default:
 		need2report = false;
 		pr_info("%s: unknown id=%x\n", __func__, gev->evcode);
@@ -377,6 +381,7 @@ bool ts_mmi_is_sensor_enable(void)
 static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
+#ifndef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	struct ts_mmi_sensor_platform_data *sensor_pdata = container_of(
 			sensors_cdev, struct ts_mmi_sensor_platform_data, ps_cdev);
 	struct ts_mmi_dev *touch_cdev = sensor_pdata->touch_cdev;
@@ -389,6 +394,7 @@ static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 	} else {
 		dev_err(DEV_TS, "%s: unknown enable symbol\n", __func__);
 	}
+#endif
 	return 0;
 }
 
@@ -491,6 +497,7 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 	__set_bit(KEY_F1, sensor_input_dev->keybit);
 	__set_bit(KEY_F2, sensor_input_dev->keybit);
 	__set_bit(KEY_F3, sensor_input_dev->keybit);
+	__set_bit(KEY_F4, sensor_input_dev->keybit);
 	__set_bit(EV_ABS, sensor_input_dev->evbit);
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
 	/* TODO: fill in real screen resolution */

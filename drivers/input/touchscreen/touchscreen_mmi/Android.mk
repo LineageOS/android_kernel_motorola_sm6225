@@ -33,6 +33,10 @@ ifneq (,$(findstring gki, $(KERNEL_DEFCONFIG)))
 	 KERNEL_CFLAGS += CONFIG_TS_KERNEL_USE_GKI=y
 endif
 
+ifeq ($(BOARD_USES_DOUBLE_TAP_CTRL),true)
+	KBUILD_OPTIONS += CONFIG_BOARD_USES_DOUBLE_TAP_CTRL=y
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := touchscreen_mmi.ko
 LOCAL_MODULE_TAGS := optional

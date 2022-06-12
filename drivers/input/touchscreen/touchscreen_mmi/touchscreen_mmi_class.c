@@ -327,6 +327,67 @@ static ssize_t pwr_store(struct device *dev,
 }
 static DEVICE_ATTR(pwr, (S_IWUSR | S_IWGRP), NULL, pwr_store);
 
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+/*
+ * gesture value used to indicate which gesture mode type is enabled
+ */
+static ssize_t gesture_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%02x\n", touch_cdev->pdata.supported_gesture_type);
+}
+static ssize_t gesture_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+	unsigned int value = 0;
+	int err = 0;
+
+	mutex_lock(&touch_cdev->extif_mutex);
+	err = sscanf(buf, "%d", &value);
+	if (err < 0) {
+		dev_err(dev, "forcereflash: Failed to convert value\n");
+		return -EINVAL;
+	}
+	switch (value) {
+		case 0x10:
+			dev_info(dev, "%s: zero tap disable\n", __func__);
+			touch_cdev->gesture_mode_type &= 0xFE;
+			break;
+		case 0x11:
+			dev_info(dev, "%s: zero tap enable\n", __func__);
+			touch_cdev->gesture_mode_type |= 0x01;
+			break;
+		case 0x20:
+			dev_info(dev, "%s: single tap disable\n", __func__);
+			touch_cdev->gesture_mode_type &= 0xFD;
+			break;
+		case 0x21:
+			dev_info(dev, "%s: single tap enable\n", __func__);
+			touch_cdev->gesture_mode_type |= 0x02;
+			break;
+		case 0x30:
+			dev_info(dev, "%s: double tap disable\n", __func__);
+			touch_cdev->gesture_mode_type &= 0xFB;
+			break;
+		case 0x31:
+			dev_info(dev, "%s: double tap enable\n", __func__);
+			touch_cdev->gesture_mode_type |= 0x04;
+			break;
+		default:
+			dev_info(dev, "%s: unsupport gesture mode type\n", __func__);
+			;
+	}
+	mutex_unlock(&touch_cdev->extif_mutex);
+	dev_info(dev, "%s: gesture_mode_type = 0x%02x \n", __func__, touch_cdev->gesture_mode_type);
+
+	return size;
+}
+static DEVICE_ATTR(gesture, (S_IWUSR | S_IWGRP | S_IRUGO), gesture_show, gesture_store);
+#endif
+
 static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_path.attr,
 	&dev_attr_vendor.attr,
@@ -355,6 +416,9 @@ static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_poison_timeout.attr,
 	&dev_attr_poison_distance.attr,
 	&dev_attr_poison_trigger_distance.attr,
+#endif
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+	&dev_attr_gesture.attr,
 #endif
 	NULL,
 };

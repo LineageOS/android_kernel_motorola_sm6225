@@ -155,6 +155,13 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->fod_y = coords[1];
 		dev_info(DEV_TS, "%s: get fod_coords property x:%d y:%d\n", __func__,ppdata->fod_x,ppdata->fod_y);
 	}
+
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+	if (!of_property_read_u32(of_node, "mmi,supported_gesture_type", &ppdata->supported_gesture_type))
+		dev_info(DEV_TS, "%s: supported_gesture_type property %02x\n",
+				__func__, ppdata->supported_gesture_type);
+#endif
+
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;

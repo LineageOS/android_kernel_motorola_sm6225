@@ -30,12 +30,6 @@
 #include "goodix_ts_core.h"
 #include "goodix_ts_mmi.h"
 
-
-
-#define GOODIX_GESTURE_DOUBLE_TAP		0xCC
-#define GOODIX_GESTURE_SINGLE_TAP		0x4C
-#define GOODIX_GESTURE_FOD_DOWN			0x46
-#define GOODIX_GESTURE_FOD_UP			0x55
 /*
  * struct gesture_module - gesture module data
  * @registered: module register state
@@ -334,7 +328,7 @@ static int gsx_gesture_init(struct goodix_ts_core *cd,
 
 	gsx->ts_core = cd;
 	/*enable all gesture wakeup by default */
-	gsx->ts_core->gesture_type = GESTURE_SINGLE_TAP |GESTURE_FOD_PRESS;
+	gsx->ts_core->gesture_type = GESTURE_SINGLE_TAP |GESTURE_FOD_PRESS | GESTURE_DOUBLE_TAP;
 	cd->zerotap_data[0] = 0;
 	//default on the fod event
 	cd->fod_enable = true;
@@ -403,13 +397,23 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			gs_event.event_type);
 		goto re_send_ges_cmd;
 	}
-	ts_debug("got  gesture type 0x%x", gs_event.gesture_type);
+	ts_info("got  gesture type 0x%x", gs_event.gesture_type);
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	mmi_event.evcode =0;
 	if ( cd->imports && cd->imports->report_gesture) {
 		if(cd->gesture_type & GESTURE_SINGLE_TAP && gs_event.gesture_type == GOODIX_GESTURE_SINGLE_TAP) {
 			ts_info("get SINGLE-TAP gesture");
 			mmi_event.evcode =1;
+			fod_down = 0;
+
+			/* call class method */
+			ret = cd->imports->report_gesture(&mmi_event);
+			if (!ret)
+				PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
+			goto gesture_ist_exit;
+		} else if(cd->gesture_type & GESTURE_DOUBLE_TAP && gs_event.gesture_type == GOODIX_GESTURE_DOUBLE_TAP) {
+			ts_info("get DOUBLE-TAP gesture");
+			mmi_event.evcode =4;
 			fod_down = 0;
 
 			/* call class method */
@@ -427,7 +431,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			mmi_event.evdata.x= 0;
 			mmi_event.evdata.y= 0;
 
-			ts_debug("Get FOD-DOWN gesture:%d interval:%d",fod_down,fod_down_interval);
+			ts_info("Get FOD-DOWN gesture:%d interval:%d",fod_down,fod_down_interval);
 			if(fod_down_interval > 2000)
 				fod_down = 0;
 			if(fod_down_interval > 0 && fod_down_interval < 250 && fod_down) {

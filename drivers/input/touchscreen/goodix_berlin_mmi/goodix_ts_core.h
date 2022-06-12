@@ -59,6 +59,11 @@
 #define STYLUS_CLK_SRC_GPIO				"stylus_clk_gpio"
 #define STYLUS_CLK_SRC_PMIC				"stylus_clk_pmic"
 
+#define GOODIX_GESTURE_DOUBLE_TAP		0xCC
+#define GOODIX_GESTURE_SINGLE_TAP		0x4C
+#define GOODIX_GESTURE_FOD_DOWN			0x46
+#define GOODIX_GESTURE_FOD_UP			0x55
+
 enum GOODIX_GESTURE_TYP {
 	GESTURE_SINGLE_TAP = (1 << 0),
 	GESTURE_DOUBLE_TAP = (1 << 1),
