@@ -741,8 +741,10 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 	int reg_val = 0;
 
 	/*As sgm41542 ic input current positive error, so limit 100ma for wls attestation*/
-	if (sgm->wls_max_icl && iindpm == sgm->wls_max_icl)
+	if (sgm->wls_max_icl && iindpm == sgm->wls_max_icl) {
 		iindpm -= SGM4154x_IINDPM_I_MIN_uA;
+		pr_info("wls_max_icl = %d, iindpm = %d\n",sgm->wls_max_icl, iindpm);
+	}
 
 	if (iindpm < SGM4154x_IINDPM_I_MIN_uA)
 		reg_val = 0;
@@ -2508,6 +2510,8 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 				       &sgm->wls_max_icl);
 	if (ret)
 		sgm->wls_max_icl = 0;
+
+	dev_info(sgm->dev, "mmi,wls-max-icl = %d\n",sgm->wls_max_icl);
 
 	#if 0
 	ret = device_property_read_u32(sgm->dev, "watchdog-timer",
