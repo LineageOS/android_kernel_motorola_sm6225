@@ -64,9 +64,11 @@ static int cp_enable_charging(struct mmi_charger_device *chrg, bool en)
 	} else
 		chrg->charger_enabled  = false;
 
-	rc = mmi_charger_write_iio_chan(chip, MMI_USB_TERMINATION_ENABLED, !chrg->charger_enabled);
-	if(rc)
-		chrg_dev_info(chrg, "%s, enable termination fail\n",__func__);
+	if (!is_cp_slave_pump(chrg)) {
+		rc = mmi_charger_write_iio_chan(chip, MMI_USB_TERMINATION_ENABLED, !chrg->charger_enabled);
+		if(rc)
+			chrg_dev_info(chrg, "%s, enable termination fail\n",__func__);
+	}
 
 	chrg_dev_info(chrg, "%s end, en:%d\n",__func__,en);
 	return rc;
