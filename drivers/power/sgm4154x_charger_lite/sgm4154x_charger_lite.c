@@ -2033,6 +2033,9 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
 	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN, &val);
 	if (!rc)
 		chg->batt_info.batt_design_uah = val.intval;
+	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER, &val);
+	if (!rc)
+		chg->batt_info.batt_chg_counter = val.intval;
 
         if (chg->chg_cfg.full_charged)
                 chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
