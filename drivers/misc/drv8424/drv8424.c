@@ -53,6 +53,8 @@
 #define DIR_EXTEND 1
 #define DIR_WITHDRAW 0
 
+#define RESET_TIME 1000
+
 #define LOGD(fmt, args...) pr_err(fmt, ##args)
 #undef MOTOR_SLOT_DBG
 
@@ -82,16 +84,14 @@ typedef struct {
  * to the range of angles from -50 degrees to 50 degrees.
  * Each value represented by float with 2 digits precision and then
  * multiplied by 100 to fit decimal range above.
- * Assumption is that in PEEK position sensor will not be aligned exactly
- * above the magnet and thus value of 1500 corresponds to the angle of
- * 15 degrees. Everything is just for the reference purpose and will be
+ * Everything is just for the reference purpose and will be
  * adjusted as more details become available
  */
 static sensor_scan_t scanner[POS_MAX] = {
 	{-1, -1},
-	{0, 0},		/* compact position: sensor[0], value 0 degrees */
-	{1, 0},		/* expanded position: sensor[1], value 0 degrees */
-	{1, 1500},	/* peek position: sensor[1], value 15 degrees */
+	{0, 0},	/* compact position: magnet[0], value 0 degrees */
+	{1, 0},	/* expanded position: magnet[1], value 0 degrees */
+	{2, 0},	/* peek position: magnet[2], value 0 degrees */
 };
 
 enum status_id {
@@ -102,6 +102,7 @@ enum status_id {
 	STATUS_MOVING_OUT,
 	STATUS_MOVING_IN,
 	STATUS_QUERYING_POS,
+	STATUS_FAULTING,
 };
 
 static const char *status_labels[] = {
@@ -112,11 +113,13 @@ static const char *status_labels[] = {
 	"EXPANDING",
 	"WITHDRAWING",
 	"QUERYING_POSITION",
+	"FAULTING",
 };
 
 enum gpios_index {
     MOTOR_POWER_EN = 0, /* BOOST */
-    MOTOR_FAULT_INT,	/* nFAULT INT */
+    MOTOR_FAULT1_INT,	/* nFAULT1 INT */
+    MOTOR_FAULT2_INT,	/* nFAULT2 INT */
     MOTOR_STEP,			/* STEP */
     MOTOR_DIR,			/* DIR */
     MOTOR_MODE1,		/* set to 0 in HW */
@@ -126,12 +129,14 @@ enum gpios_index {
     MOTOR_T0,			/* set to 0 in HW */
     MOTOR_T1,			/* set to 0 in HW */
 	MOTOR_ACTIVE,		/* signal GPIO */
-    MOTOR_UNKNOWN
+    MOTOR_MAX_GPIO,
+    MOTOR_UNKNOWN = MOTOR_MAX_GPIO
 };
 
 static const char* const gpios_labels[] = {
     "MOTOR_POWER_EN",
-    "MOTOR_FAULT_INT",
+    "MOTOR_FAULT1_INT",
+    "MOTOR_FAULT2_INT",
     "MOTOR_STEP",
     "MOTOR_DIR",
     "MOTOR_MODE1",
@@ -142,11 +147,6 @@ static const char* const gpios_labels[] = {
     "MOTOR_T1",
 	"MOTOR_ACTIVE",
     "MOTOR_UNKNOWN"
-};
-
-static const int def_gpios_table[] = {
-    0, 0, 136, 0, 0, 0, 0, 0, 0, 0, 0
-//    52, 57, 21, 32, 30, 51, 29, 50, 49, 33, -1
 };
 
 static const unsigned long hw_clocks[] = {
@@ -247,18 +247,19 @@ typedef struct {
 	unsigned freq, ceiling;
 } motor_stage;
 
+/* Default sequences for 2.8pitch */
 static motor_stage initial_data[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
 	{ /* FULL 39mm */
-		{400,24}, {1400,56}, {3000,5530}, {2000,12}
+		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,3915}, {2000,12}
 	},
 	{ /* PROLONGED 44mm */
-		{400,24}, {1400,56}, {3000,6252}, {2000,12}
+		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,4430}, {2000,12}
 	},
 	{ /* SHORT 5mm */
-		{400,24}, {1400,56}, {3000,630}, {2000,12}
+		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,418}, {2000,12}
 	},
 	{ /* TINY 1mm */
-		{400,24}, {1400,56}, {2000,65}
+		{400,16}, {800,20}, {1200,24}, {1600,32}, {2000,12}
 	},
 	{ /* dummy to continue beyond SQ_MAX */
 		{0, 0},
@@ -275,12 +276,14 @@ enum cmds {
 	CMD_STATUS,
 	CMD_POSITION,
 	CMD_POLL,
+	CMD_INTEGRITY_CHK,
+	CMD_PWR_OFF,
 };
 
 #define MAX_GPIOS MOTOR_UNKNOWN
 typedef struct motor_control {
     struct regulator    *vdd;
-    int32_t ptable[MAX_GPIOS];
+    int32_t ptable[MOTOR_MAX_GPIO];
     size_t tab_cells;
     struct pinctrl* pins;
     struct pinctrl_state *pin_state[PINS_END];
@@ -305,7 +308,7 @@ typedef struct motor_device {
     motor_control mc;
     spinlock_t mlock;
     struct mutex mx_lock;
-    int fault_irq;
+    atomic_t fault_irq;
     bool faulting;
     unsigned step_freq;
     unsigned long step_period;
@@ -330,6 +333,7 @@ typedef struct motor_device {
     bool     support_mode;
     bool     support_torque;
     bool     sensors_off;
+    bool     irq_enabled;
     int      level:1;
     unsigned power_en:1;
     unsigned nsleep:1;
@@ -350,6 +354,25 @@ typedef struct motor_device {
 #define GPIO_OUTPUT_DIR(g, p) do { \
 		if (gpio_is_valid(g)) \
 			gpio_direction_output(g, p); \
+	} while(0)
+
+#define POSITION_DETECT_INIT(_Pos, _Sta) do { \
+		if (!md->sensors_off) { \
+			md->time_out = MOTOR_DETECT_EXPIRE; \
+			atomic_set(&md->position, POS_UNKNOWN); \
+			atomic_set(&md->status, STATUS_UNKNOWN); \
+			atomic_set(&md->destination, POS_UNKNOWN); \
+			/* run position detection */ \
+			moto_drv8424_set_sensing(md, true); \
+			dev_info(md->dev, "Start position detection\n"); \
+		} else { \
+			md->time_out = MOTOR_DEFAULT_EXPIRE; \
+			atomic_set(&md->position, _Pos); \
+			moto_drv8424_cmd_push(md, CMD_POSITION, 0); \
+			atomic_set(&md->status, _Sta); \
+			moto_drv8424_cmd_push(md, CMD_STATUS, 0); \
+			dev_info(md->dev, "Assume %s position\n", position_labels[_Pos]); \
+		} \
 	} while(0)
 
 static int set_pinctrl_state(motor_device* md, unsigned state_index);
@@ -380,20 +403,21 @@ static int moto_drv8424_set_regulator_power(motor_device* md, bool en)
 {
     motor_control * mc = &md->mc;
     int err = 0;
-//FIXME
-return 0;
+
     if(en) {
         err = regulator_enable(mc->vdd);
         if (err) {
             dev_err(md->dev, "Failed to enable VDD ret=%d\n", err);
             goto exit;
         }
+	LOGD("regulator enabled\n");
     } else {
         err = regulator_disable(mc->vdd);
         if (err) {
             dev_err(md->dev, "Failed to disable VDD ret=%d\n", err);
             goto exit;
         }
+	LOGD("regulator disabled\n");
     }
 
     return 0;
@@ -461,6 +485,7 @@ static int set_pinctrl_state(motor_device* md, unsigned state_index)
         goto err;
     }
 
+    dev_dbg(md->dev, "setting punctrl for state '%s'\n", pins_state[state_index]);
     mc->pins = devm_pinctrl_get(md->dev);
     if(IS_ERR_OR_NULL(mc->pins)) {
         ret = PTR_ERR(mc->pins);
@@ -471,13 +496,13 @@ static int set_pinctrl_state(motor_device* md, unsigned state_index)
     mc->pin_state[state_index] = pinctrl_lookup_state(mc->pins, pins_state[state_index]);
     if (IS_ERR_OR_NULL(mc->pin_state[state_index])) {
         ret = PTR_ERR(mc->pin_state[state_index]);
-        dev_err(md->dev, "Failed to lookup pin_state[%d] %d\n", state_index, ret);
+        dev_err(md->dev, "Cannot find pin_state '%s' %d\n", pins_state[state_index], ret);
         goto err_pin_state;
     }
 
     ret = pinctrl_select_state(mc->pins, mc->pin_state[state_index]);
     if(ret) {
-        dev_err(md->dev, "Failed to set pin_state[%d] %d\n", state_index, ret);
+        dev_err(md->dev, "Cannot set pin_state '%s' %d\n", pins_state[state_index], ret);
     }
 
 err_pin_state:
@@ -608,7 +633,7 @@ static void moto_drv8424_set_motor_dir(motor_device* md)
 
     GPIO_OUTPUT_DIR(mc->ptable[MOTOR_DIR], md->dir);
     usleep_range(800, 900);
-	LOGD("pin DIR updated\n");
+	LOGD("pin DIR set %d\n", md->dir);
 }
 
 /* Set operating modes, only control nSleep
@@ -626,7 +651,7 @@ static void moto_drv8424_set_motor_opmode(motor_device* md)
     //Twake 0.5ms Tsleep 0.7ms
     usleep_range(800, 1000);
 	GPIO_OUTPUT_DIR(mc->ptable[MOTOR_EN], md->nEN);
-	LOGD("pins nSLEEP & ENABLE updated\n");
+	LOGD("pin SLEEP set %d\n", md->nsleep);
 }
 
 static int moto_drv8424_set_opmode(motor_device* md, unsigned opmode)
@@ -645,7 +670,7 @@ static int moto_drv8424_set_opmode(motor_device* md, unsigned opmode)
     md->nEN = !md->nsleep;
     spin_unlock_irqrestore(&md->mlock, flags);
 
-	LOGD("opmode: nsleep=%d, en=%d\n", md->nsleep, md->nEN);
+	LOGD("nsleep=%d, en=%d\n", md->nsleep, md->nEN);
 
     return 0;
 
@@ -694,7 +719,7 @@ static void moto_drv8424_set_power_en(motor_device* md)
     GPIO_OUTPUT_DIR(mc->ptable[MOTOR_POWER_EN], md->power_en);
     //Tpower 0.5ms
     usleep_range(500, 1000);
-	LOGD("gpio BOOST set: %u\n", md->power_en);
+	LOGD("BOOST set %d\n", md->power_en);
 	moto_drv8424_set_sensing(md, md->power_en ? true : false);
 }
 
@@ -834,6 +859,11 @@ static bool moto_drv8424_next_stage(motor_device* md)
 
 static int moto_drv8424_drive_sequencer(motor_device* md)
 {
+    if (md->faulting) {
+	dev_warn(md->dev, "Motor faulting: action cancelled!!!\n");
+	return -EBUSY;
+    }
+
 	moto_drv8424_next_stage(md);
     moto_drv8424_set_motor_torque(md);
     moto_drv8424_set_motor_dir(md);
@@ -890,12 +920,21 @@ static __ref int motor_kthread(void *arg)
             break;
 
         md->user_sync_complete = false;
+	if (md->faulting) {
+		moto_drv8424_cmd_push(md, CMD_FAULT, 0);
+		atomic_set(&md->status, STATUS_FAULTING);
+		moto_drv8424_cmd_push(md, CMD_STATUS, 0);
+		dev_warn(md->dev, "Motor #%d failure reported!!!\n",
+			irq_to_gpio(atomic_read(&md->fault_irq)) ==
+			md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);;
+	} else {
 		/* it's safe to call the following functions even if motor was not running */
-        moto_drv8424_set_power(md, 0);
-        if (md->power_default_off) {
-            dev_info(md->dev, "vdd power off\n");
-            moto_drv8424_set_regulator_power(md, false);
-        }
+		moto_drv8424_set_power(md, 0);
+		if (md->power_default_off) {
+			dev_info(md->dev, "vdd power off\n");
+			moto_drv8424_set_regulator_power(md, false);
+		}
+
 		/* if position detected based on sensor data,
 		 * current position will be set to destination
 		 * to follow the same logic flow
@@ -925,6 +964,7 @@ static __ref int motor_kthread(void *arg)
 		LOGD("Status updated: status %d, position %d\n",
 				atomic_read(&md->status), atomic_read(&md->position));
 		logtime_show();
+	}
     }
 
     return 0;
@@ -1106,7 +1146,8 @@ static int moto_drv8424_detect_position(motor_device *md)
 		start = POS_COMPACT;
 		end = POS_MAX;
 	}
-	LOGD("scan sensor(s): %d - %d\n", start, end);
+	LOGD("MOTOR_ACTIVE gpio=%d; scan sensor(s): %d - %d\n",
+		gpio_get_value(md->mc.ptable[MOTOR_ACTIVE]), start, end);
 	mutex_lock(&md->mx_lock);
 	for (i = start; i < end; i++) {
 		if (IN_RANGE(md->sensor_data[scanner[i].index], scanner[i].value)) {
@@ -1126,26 +1167,72 @@ static int moto_drv8424_detect_position(motor_device *md)
 	return ret;
 }
 
-#define RESET_TIME 1000
+static void motor_reset(motor_device *md)
+{
+	if (atomic_read(&md->stepping))
+		disable_motor(md->dev);
+
+	moto_drv8424_set_power(md, 1);
+	msleep(RESET_TIME);
+	moto_drv8424_set_power(md, 0);
+}
+
+static void motor_fault_handler(motor_device *md)
+{
+	int fault_irq = atomic_read(&md->fault_irq);
+	int position, status;
+
+	if (!fault_irq) {
+		dev_warn(md->dev, "Called w/o IRQ!!!\n");
+		return;
+	}
+
+	motor_reset(md);
+	if (md->irq_enabled == false) {
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+		enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+		enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+	    md->irq_enabled = true;
+	}
+
+	position = atomic_read(&md->position);
+	status = atomic_read(&md->status);
+	POSITION_DETECT_INIT(position, status);
+
+	md->faulting = false;
+	atomic_set(&md->fault_irq, 0);
+
+	dev_warn(md->dev, "Device reset due to motor #%d fault\n",
+		irq_to_gpio(fault_irq) == md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);
+	LOGD("Pos: %s, status: %s\n",
+		position_labels[position], status_labels[status]);
+}
+
 static void motor_cmd_work(struct work_struct *work)
 {
 	struct delayed_work *dw = container_of(work, struct delayed_work, work);
     motor_device* md = container_of(dw, motor_device, motor_work);
 	bool polling = false;
-	int ret, cmd = 0;
+	int ret;
+	int next_cmd_delay = 0;
+	int next_cmd = 0;
+	int cmd = 0;
 
 	while (kfifo_get(&md->cmd_pipe, &cmd)) {
 		switch (cmd) {
-		case CMD_FAULT:
-			disable_irq(md->fault_irq);
-			if(atomic_read(&md->stepping)) {
-				disable_motor(md->dev);
-			}
-			moto_drv8424_set_power(md, 0);
-			msleep(RESET_TIME);
+		case CMD_INTEGRITY_CHK:
+			/* set operational mode directly to provoke */
+			/* rasing nFAULT signal if motor isn't ready */
 			moto_drv8424_set_power(md, 1);
-			md->faulting = false;
-			enable_irq(md->fault_irq);
+			next_cmd = CMD_PWR_OFF;
+			next_cmd_delay = RESET_TIME;
+				break;
+		case CMD_PWR_OFF:
+			moto_drv8424_set_power(md, 0);
+				break;
+		case CMD_FAULT:
+			motor_fault_handler(md);
 				break;
 		case CMD_STATUS:
 			sysfs_notify(&md->dev->kobj, NULL, "status");
@@ -1184,20 +1271,32 @@ static void motor_cmd_work(struct work_struct *work)
 	if (polling) {
 		moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(POLL_NEXT_INT));
 	}
+
+	if (next_cmd && next_cmd_delay) {
+		moto_drv8424_cmd_push(md, next_cmd, msecs_to_jiffies(next_cmd_delay));
+	}
 }
 
 static irqreturn_t motor_fault_irq(int irq, void *pdata)
 {
     motor_device * md = (motor_device*) pdata;
-    int value = gpio_get_value(md->mc.ptable[MOTOR_FAULT_INT]);
 
-    if(value) {
-        dev_info(md->dev, "dummy motor irq event\n");
+    atomic_set(&md->fault_irq, irq);
+    /* no need to wake up twice if device is faulting */
+    if (!md->faulting) {
+	md->user_sync_complete = true;
+	wake_up(&md->sync_complete);
     }
-
     md->faulting = true;
-    dev_err(md->dev, "Motor fault irq is happened\n");
-	moto_drv8424_cmd_push(md, CMD_FAULT, 0);
+
+    if (md->irq_enabled) {
+	/* disable both IRQ here and enable them both in fault handler */
+	if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+	    disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+	if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+	    disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+	md->irq_enabled = false;
+    }
 
     return IRQ_HANDLED;
 }
@@ -1525,21 +1624,14 @@ static ssize_t motor_reset_store(struct device *dev, struct device_attribute *at
     motor_device* md = (motor_device*)dev_get_drvdata(dev);
     unsigned value = 0;
 
-    mutex_lock(&md->mx_lock);
-
-    if(kstrtouint(buf, 10, &value)) {
+    if (kstrtouint(buf, 10, &value)) {
         dev_err(dev, "Error value: %s\n", buf);
-        goto exit;
+    } else {
+	mutex_lock(&md->mx_lock);
+	motor_reset(md);
+	mutex_unlock(&md->mx_lock);
+        dev_info(dev, "Device reset\n");
     }
-    disable_motor(md->dev);
-    moto_drv8424_set_power(md, 0);
-    moto_drv8424_set_regulator_power(md, false);
-    msleep(10);
-    moto_drv8424_set_regulator_power(md, true);
-    msleep(10);
-    moto_drv8424_set_power(md, 0);
-exit:
-    mutex_unlock(&md->mx_lock);
     return len;
 }
 
@@ -1663,6 +1755,48 @@ static ssize_t motor_regime_show(struct device *dev, struct device_attribute *at
     return snprintf(buf, 20, "%s\n", regime_names[md->regime]);
 }
 
+static ssize_t motor_irq_store(struct device *dev, struct device_attribute *attr,
+        const char *buf, size_t len)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+    unsigned value;
+
+    if(kstrtouint(buf, 10, &value)) {
+        dev_err(dev, "Error value: %s\n", buf);
+        return -EINVAL;
+    }
+
+    if (!!value) {
+	if (md->irq_enabled == false) {
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+		enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+		enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+	    md->irq_enabled = true;
+	    dev_info(dev, "Enabled fault IRQ\n");
+	}
+    } else {
+	if (md->irq_enabled == true) {
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+		disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+	    if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+		disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+	    md->irq_enabled = false;
+	    dev_info(dev, "Disabled fault IRQ\n");
+	}
+    }
+
+    return len;
+}
+
+static ssize_t motor_irq_show(struct device *dev, struct device_attribute *attr,
+        char *buf)
+{
+    motor_device* md = (motor_device*)dev_get_drvdata(dev);
+
+    return sprintf(buf, "%d\n", md->irq_enabled ? 1 : 0);
+}
+
 static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR|S_IWGRP, motor_enable_show, motor_enable_store);
 static DEVICE_ATTR(dir, S_IRUGO|S_IWUSR|S_IWGRP, motor_dir_show, motor_dir_store);
 static DEVICE_ATTR(step, S_IRUGO|S_IWUSR|S_IWGRP, motor_step_show, motor_step_store);
@@ -1673,6 +1807,7 @@ static DEVICE_ATTR(torque, S_IRUGO|S_IWUSR|S_IWGRP, motor_torque_show, motor_tor
 static DEVICE_ATTR(time_out, S_IRUGO|S_IWUSR|S_IWGRP, motor_time_out_show, motor_time_out_store);
 static DEVICE_ATTR(reset, S_IRUGO|S_IWUSR|S_IWGRP, NULL, motor_reset_store);
 static DEVICE_ATTR(regime, S_IRUGO|S_IWUSR|S_IWGRP, motor_regime_show, motor_regime_store);
+static DEVICE_ATTR(irq, S_IRUGO|S_IWUSR|S_IWGRP, motor_irq_show, motor_irq_store);
 
 #define ATTRS_STATIC 8
 #define ATTRS_MAX 11
@@ -1688,6 +1823,7 @@ static struct attribute *motor_attributes[ATTRS_MAX + 1] = {
     &dev_attr_time_out.attr,
     &dev_attr_regime.attr,
     &dev_attr_sequencer.attr,
+    &dev_attr_irq.attr,
     NULL
 };
 
@@ -1812,58 +1948,69 @@ static int moto_drv8424_init_from_dt(motor_device* md)
     struct device* pdev = md->dev;
     struct device_node *np = pdev->of_node;
     motor_control* mc = &md->mc;
-    uint32_t temp_value;
-    int i, gpio, rc = 0;
+    int i, rc = 0;
 	char gpio_name[32];
     const char *clock_name;
 
-    rc = of_property_read_u32(np, "drv8424-gpios-cells", &temp_value);
-    if (rc) {
-        dev_err(pdev, "%d:Failed to get gpios cells\n", rc);
-        goto exit;
-    }
-    mc->tab_cells = temp_value;
-
-    if(mc->tab_cells > MAX_GPIOS) {
-        dev_err(pdev, "Occupied too many gpios, max limited is %d\n", MAX_GPIOS);
-        mc->tab_cells = MAX_GPIOS;
-    }
-
-	for (i = 0; i < mc->tab_cells; i++) {
-		snprintf(gpio_name, sizeof(gpio_name)-1, "%s-gpio", gpios_labels[i]);
-		gpio = of_get_named_gpio(np, gpio_name, 0);
-		md->mc.ptable[i] = gpio_is_valid(gpio) ? gpio : -EINVAL;
+    mc->tab_cells = MOTOR_MAX_GPIO;
+    for (i = 0; i < mc->tab_cells; i++) {
+	snprintf(gpio_name, sizeof(gpio_name)-1, "%s-gpio", gpios_labels[i]);
+	md->mc.ptable[i] = of_get_named_gpio(np, gpio_name, 0);
+	if (gpio_is_valid(md->mc.ptable[i])) {
 		dev_info(pdev, "gpio %s = %d\n", gpios_labels[i], md->mc.ptable[i]);
+	}
     }
 
     if (!of_property_read_string(np, "clock-names", &clock_name))
         strlcpy(md->clock_name, clock_name, CLOCK_NAME_LEN);
     else
         strlcpy(md->clock_name, MOTOR_HW_CLK_NAME, CLOCK_NAME_LEN);
-    dev_info(pdev, "hw clock name: %s\n", md->clock_name);
+    dev_dbg(pdev, "Clock name: %s\n", md->clock_name);
 
     md->hw_clock = of_property_read_bool(np, "enable-hw-clock");
-    dev_info(pdev, "Enable hw clock %d\n", md->hw_clock);
+    dev_dbg(pdev, "Enable hw clock %d\n", md->hw_clock);
 	
     md->support_mode = of_property_read_bool(np, "support-mode");
-    dev_info(pdev, "Enable hw clock %d\n", md->support_mode);
-	if (md->support_mode)
-		ATTR_ADD(mode);
+    if (md->support_mode) {
+	ATTR_ADD(mode);
+	dev_info(pdev, "Support mode %d\n", md->support_mode);
+    }
 
-	md->support_torque = of_property_read_bool(np, "support-torque");
-    dev_info(pdev, "Enable hw clock %d\n", md->support_torque);
-	if (md->support_torque)
-		ATTR_ADD(torque);
+    md->support_torque = of_property_read_bool(np, "support-torque");
+    if (md->support_torque) {
+	ATTR_ADD(torque);
+	dev_info(pdev, "Support torque %d\n", md->support_torque);
+    };
 
     md->sensors_off = of_property_read_bool(np, "no-sensors");
     if (md->sensors_off)
         dev_info(pdev, "Ignore sensors data\n");
 
     md->power_default_off = of_property_read_bool(np, "power-default-off");
-    dev_info(pdev, "power is default off:  %d\n", md->power_default_off);
+    dev_info(pdev, "power is default off: %d\n", md->power_default_off);
 
-exit:
     return rc;
+}
+
+static int moto_drv8424_irq_setup(motor_device *md, unsigned gidx)
+{
+    static int id;
+    int ret, irq_gpio = md->mc.ptable[gidx];
+    char irq_name[32];
+
+    if (!gpio_is_valid(irq_gpio))
+	return ENOTCONN;
+
+    snprintf(irq_name, sizeof(irq_name)-1, "fault_motor%d", ++id);
+    ret = devm_request_threaded_irq(md->dev,
+		gpio_to_irq(irq_gpio), motor_fault_irq, NULL,
+		IRQF_TRIGGER_LOW | IRQF_ONESHOT, irq_name, md);
+    if (ret)
+	dev_err(md->dev, "Failed to register \'%s\': %d\n", irq_name, ret);
+    else
+	dev_info(md->dev, "Registered IRQ %d as '%s'\n", gpio_to_irq(irq_gpio), irq_name);
+
+    return ret;
 }
 
 static int moto_drv8424_probe(struct platform_device *pdev)
@@ -1894,17 +2041,14 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 	md->mode = FULL_STEP;
 	md->torque = TORQUE_FULL;
 
-    ret = moto_drv8424_init_from_dt(md);
-    if (ret)
-        memcpy((void*)md->mc.ptable, def_gpios_table, sizeof(def_gpios_table));
-#if 0
+    moto_drv8424_init_from_dt(md);
     md->mc.vdd = devm_regulator_get(md->dev, "vdd");
     if (IS_ERR(md->mc.vdd)) {
         ret = PTR_ERR(md->mc.vdd);
         dev_err(md->dev, "Failed to get VDD ret=%d\n", ret);
         goto failed_mem;
     }
-#endif
+
     if (!md->power_default_off) {
         ret = moto_drv8424_set_regulator_power(md, true);
         if(ret) {
@@ -1987,40 +2131,30 @@ static int moto_drv8424_probe(struct platform_device *pdev)
             pr_err("Failed to request %s, errno %d\n", gpios_labels[i--], ret);
             goto failed_gpio;
         }
-        gpio_direction_output(md->mc.ptable[i], 0);
     }
 
     wake_up_process(md->motor_task);
 
     if(!set_pinctrl_state(md, INT_DEFAULT)) {
-        md->fault_irq = gpio_to_irq(md->mc.ptable[MOTOR_FAULT_INT]);
-        ret = devm_request_threaded_irq(&pdev->dev, md->fault_irq, motor_fault_irq,
-                motor_fault_irq, IRQF_TRIGGER_FALLING, "motor_irq", md);
-        if(ret < 0) {
-            dev_err(dev, "Failed to request irq %d\n", ret);
-            goto failed_gpio;
-        }
+	ret = moto_drv8424_irq_setup(md, MOTOR_FAULT1_INT);
+        if (ret < 0)
+	   goto failed_gpio;
+
+	ret = moto_drv8424_irq_setup(md, MOTOR_FAULT2_INT);
+        if (ret < 0)
+	   goto failed_gpio;
+
+	md->irq_enabled = true;
+	/* enforce integrity check to handle fault state */
+	moto_drv8424_cmd_push(md, CMD_INTEGRITY_CHK, 0);
     } else {
-        /*Here motor can work,  but have not irq*/
-        dev_info(dev, "Failed to set device irq\n");
+        /* motor can work, but have no fault irq */
+        dev_info(dev, "Device has no fault irq\n");
     }
 
-	RESET_SENSOR_DATA;
-    if (!md->sensors_off) {
-        md->time_out = MOTOR_DETECT_EXPIRE;
-        atomic_set(&md->position, POS_UNKNOWN);
-        atomic_set(&md->status, STATUS_UNKNOWN);
-        atomic_set(&md->destination, POS_UNKNOWN);
-        /* run position detection */
-        moto_drv8424_set_sensing(md, true);
-    } else {
-        md->time_out = MOTOR_DEFAULT_EXPIRE;
-        atomic_set(&md->position, POS_COMPACT);
-	moto_drv8424_cmd_push(md, CMD_POSITION, 0);
-        atomic_set(&md->status, STATUS_STOPPED_COMPACT);
-	moto_drv8424_cmd_push(md, CMD_STATUS, 0);
-        dev_info(dev, "Assume COMPACT position\n");
-    }
+    /* get ready for initial position detection */
+    RESET_SENSOR_DATA;
+    POSITION_DETECT_INIT(POS_COMPACT, STATUS_STOPPED_COMPACT);
 
     dev_info(dev, "Success init device; running position detection...\n");
     return 0;
@@ -2052,7 +2186,12 @@ static int moto_drv8424_remove(struct platform_device *pdev)
 {
     motor_device* md = (motor_device*)platform_get_drvdata(pdev);
 
-    disable_irq(md->fault_irq);
+    if (md->irq_enabled) {
+	if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+	    disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+	if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+	    disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+    }
     moto_drv8424_set_power(md, 0);
     moto_drv8424_set_regulator_power(md, false);
     devm_regulator_put(md->mc.vdd);
