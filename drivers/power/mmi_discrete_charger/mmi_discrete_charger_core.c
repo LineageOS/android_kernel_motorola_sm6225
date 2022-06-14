@@ -2753,8 +2753,10 @@ static int mmi_discrete_charger_init(struct mmi_discrete_charger *chip)
 			pmic_vote_force_active_set(chip->usb_icl_votable, 1);
 		}
 
-		mmi_discrete_create_factory_testcase(chip);
 	}
+
+	/*export charging operation interface for AUTHEN version*/
+	mmi_discrete_create_factory_testcase(chip);
 
 	return 0;
 free_mem:
