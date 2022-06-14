@@ -22,9 +22,10 @@
 #include <linux/types.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/types.h>
 
 #define MM8XXX_MANUFACTURER	"MITSUMI ELECTRIC"
-
+#define MM8XXX_BATT_PHY "bms"
 #define mm_info(fmt, arg...)  \
 	printk("FG_MM8xxx : %s-%d : " fmt, __FUNCTION__ ,__LINE__,##arg)
 
@@ -81,6 +82,7 @@ struct mm8xxx_device_info {
 	u32 second_battery_id;
 };
 
+struct mm8xxx_device_info *di = NULL;
 
 static int mm8xxx_battery_read_Nbyte(struct mm8xxx_device_info *di, u8 cmd, unsigned char *data, unsigned char length);
 static int mm8xxx_battery_read(struct mm8xxx_device_info *di, u8 cmd);
@@ -695,6 +697,36 @@ EXIT:
 }
 
 /********************************************************************/
+
+static ssize_t  mm8xxx_battery_fw_ver_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%04x\n", mmi_get_battery_info(di, FW_VER_CMD));
+}
+static DEVICE_ATTR(fw_ver, S_IRUGO| (S_IWUSR|S_IWGRP), mm8xxx_battery_fw_ver_show, NULL);
+
+static ssize_t  mm8xxx_battery_param_ver_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%04x\n", mmi_get_battery_info(di, PARAM_VER_CMD));
+}
+static DEVICE_ATTR(param_ver, S_IRUGO| (S_IWUSR|S_IWGRP), mm8xxx_battery_param_ver_show, NULL);
+
+static ssize_t  mm8xxx_battery_batt_id_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%04x\n", mmi_get_battery_info(di, BATTERY_ID_CMD));
+}
+static DEVICE_ATTR(batt_id, S_IRUGO| (S_IWUSR|S_IWGRP), mm8xxx_battery_batt_id_show, NULL);
+
+static struct attribute *mm8xxx_attributes[] = {
+	&dev_attr_fw_ver.attr,
+	&dev_attr_param_ver.attr,
+	&dev_attr_batt_id.attr,
+	NULL,
+};
+
+static struct attribute_group mm8xxx_attribute_group = {
+	.attrs = mm8xxx_attributes,
+};
+
 static void mm8xxx_battery_update(struct mm8xxx_device_info *di);
 static irqreturn_t mm8xxx_battery_irq_handler_thread(int irq, void *data)
 {
@@ -1663,7 +1695,7 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	if (!ps_desc)
 		return -ENOMEM;
 
-	ps_desc->name = "bms";
+	ps_desc->name = MM8XXX_BATT_PHY;
 	ps_desc->type = POWER_SUPPLY_TYPE_MAINS;
 	ps_desc->properties = mm8xxx_chip_data[di->chip].props;
 	ps_desc->num_properties = mm8xxx_chip_data[di->chip].props_size;
@@ -1675,6 +1707,10 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	if (IS_ERR(di->psy)) {
 		dev_err(di->dev, "failed to register battery\n");
 		return PTR_ERR(di->psy);
+	}
+
+	if (sysfs_create_group(&di->psy->dev.kobj, &mm8xxx_attribute_group)) {
+		mm_info(" Error failed to creat attributes\n");
 	}
 
 	mm8xxx_battery_update(di);
@@ -1909,7 +1945,6 @@ static int mm8xxx_battery_parse_dts(struct mm8xxx_device_info *di)
 static int mm8xxx_battery_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
-	struct mm8xxx_device_info *di;
 	int ret;
 	char *name;
 	int num;
