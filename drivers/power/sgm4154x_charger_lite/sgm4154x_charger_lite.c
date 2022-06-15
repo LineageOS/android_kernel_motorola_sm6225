@@ -2040,6 +2040,9 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
         if (chg->chg_cfg.full_charged)
                 chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
 
+	if (!chg->sgm->state.online)
+		chg->batt_info.batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+
         memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
 	if (chg->paired_batt_info.batt_soc == 0 &&
 	    chg->paired_batt_info.batt_mv < EMPTY_BATTERY_VBAT) {
