@@ -1740,7 +1740,7 @@ static void mm8xxx_fake_battery_update(struct mm8xxx_device_info *di)
 {
 	di->cache.temperature = 250;
 	di->cache.avg_time_to_empty = 3600;
-	di->cache.soc = 50;
+	di->cache.soc = 10;
 	di->cache.full_charge_capacity = 4020000;
 	di->cache.flags = 0;
 	di->cache.health = POWER_SUPPLY_HEALTH_GOOD;
@@ -1784,7 +1784,7 @@ static int mm8xxx_fake_battery_get_property(struct power_supply *psy,
 		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = 3800 * 1000;
+		val->intval = 4200 * 1000;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = 1;
