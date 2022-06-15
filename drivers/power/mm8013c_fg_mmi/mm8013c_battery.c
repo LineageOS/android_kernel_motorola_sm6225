@@ -2021,6 +2021,9 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 			fg_param_ver < parameter_version) {
 			update_index = UPDATE_PARAMETER;
 		}
+		//TDBO: tempary remove the update program, there is low probablilty update fail
+		//then the phone will can't be bootup.
+		update_index = UPDATE_NONE;
 
 update_begin:
 		if (update_index != UPDATE_NONE)
