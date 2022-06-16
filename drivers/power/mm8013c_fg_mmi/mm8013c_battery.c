@@ -615,30 +615,83 @@ EXIT:
 	return ret;
 }
 
+static const char *get_battery_serialnumber(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	const char *battsn_buf;
+	int retval;
+
+	battsn_buf = NULL;
+
+	if (np)
+		retval = of_property_read_string(np, "mmi,battid",
+						 &battsn_buf);
+	else
+		return NULL;
+
+	if ((retval == -EINVAL) || !battsn_buf) {
+		mm_info(" Battsn unused\n");
+		of_node_put(np);
+		return NULL;
+
+	} else
+		mm_info("Battsn = %s\n", battsn_buf);
+
+	of_node_put(np);
+
+	return battsn_buf;
+}
+
+static u32 seach_batt_id(void)
+{
+	struct device_node *np = di->dev->of_node;
+	const char *dev_sn = NULL;
+	const char *first_batt_sn = NULL;
+	const char *second_batt_sn = NULL;
+	u32 battery_id = di->first_battery_id;;
+
+	dev_sn = get_battery_serialnumber();
+	if (dev_sn != NULL) {
+		of_property_read_string(np, "first_batt_sn",
+					     &first_batt_sn);
+		of_property_read_string(np, "second_batt_sn",
+					     &second_batt_sn);
+		if (first_batt_sn != NULL && second_batt_sn != NULL)
+		{
+			if (strnstr(dev_sn, first_batt_sn, 10))
+				battery_id = di->first_battery_id;
+			else if (strnstr(dev_sn, second_batt_sn, 10))
+				battery_id = di->second_battery_id;
+		}
+	}
+
+	return battery_id;
+}
+
 static int mm8xxx_battery_update_program_and_parameter(struct mm8xxx_device_info *di, enum UPDATE_INDEX update_index)
 {
 	unsigned char *fw_hexfile_data = NULL;
 	unsigned char *param_hexfile_data = NULL;
-	u32 battery_di;
-	int ret = -EINVAL;
+	u32 battery_id;
+	int i;
 	char param_name[30] = {0};
 
 	if (update_index != UPDATE_PROGRAM){
-		battery_di = mmi_get_battery_info(di, BATTERY_ID_CMD);
-		if (battery_di !=0)
+		battery_id = mmi_get_battery_info(di, BATTERY_ID_CMD);
+		if (battery_id !=0)
 		{
-			if (battery_di != di->first_battery_id && battery_di != di->first_battery_id){
+			if (battery_id != di->first_battery_id && battery_id != di->second_battery_id){
 				 mm_info("Error: the battery is not suitable for this poject.\n");
 				goto EXIT;
 			}
-
-			sprintf(param_name,"%s%04x%s", "mm8013c_parameter_", battery_di, ".hex");
-			mm_info("battery parameter name=%s\n", param_name);
 		}
 		else {
-			mm_info("Error: can't get battery_id exit update battery parameter program\n");
-			goto EXIT;
+			battery_id = seach_batt_id();
+                      mm_info("Error getting battery_id , try to get batt sn via utag info and get the correct batt_id=%04x\n", battery_id);
 		}
+
+		sprintf(param_name,"%s%04x%s", "mm8013c_parameter_", battery_id, ".hex");
+		mm_info("battery parameter name=%s\n", param_name);
 	}
 
 	switch (update_index )
@@ -673,15 +726,18 @@ static int mm8xxx_battery_update_program_and_parameter(struct mm8xxx_device_info
 		return -EINVAL;
 	}
 
-	/* start TRM sequence */
-	if (write_program_and_parameter(di,
-					fw_hexfile_data, param_hexfile_data) < 0) {
-		mm_info("\nFAILED TO UPDATE program_and_parameter!!\n");
-		goto EXIT;
+	for (i=1; i<= 3; i++)
+	{
+		/* start TRM sequence */
+		if (write_program_and_parameter(di,
+						fw_hexfile_data, param_hexfile_data) < 0) {
+			mm_info("FAILED TO UPDATE program_and_parameter,fail count=%d\n", i);
+		}
+		else {
+			mm_info("successfully update program_and_parameter !!\n");
+			break;
+		}
 	}
-	mm_info("successfully update program_and_parameter !!\n");
-
-	ret = 0;
 
 EXIT:
 	if (fw_hexfile_data) {
@@ -693,7 +749,7 @@ EXIT:
 		param_hexfile_data = NULL;
 	}
 
-	return ret;
+	return 0;
 }
 
 /********************************************************************/
@@ -1942,6 +1998,34 @@ static int mm8xxx_battery_parse_dts(struct mm8xxx_device_info *di)
 	return rc;
 }
 
+bool is_factory_mode(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
+
+	if (!np)
+		return factory_mode;
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "mot-factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
+	of_node_put(np);
+
+	return factory_mode;
+}
+
 static int mm8xxx_battery_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1994,40 +2078,39 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 		fg_fw_ver = mmi_get_battery_info(di, FW_VER_CMD);
 		fg_param_ver = mmi_get_battery_info(di, PARAM_VER_CMD);
 		fg_battery_id = mmi_get_battery_info(di, BATTERY_ID_CMD);
-
 		mm_info("From fg ic,fg_fw_ver=0x%04x, battery_id=0x%04x,fg_param_ver=0x%04x\n", \
 					fg_fw_ver, fg_battery_id, fg_param_ver);
 
-		if (fg_fw_ver < 0 || fg_param_ver < 0 || fg_battery_id < 0) {
-			update_index = UPDATE_NONE;
-			goto update_begin;
-		}
-		else if (fg_battery_id == di->first_battery_id) {
-			parameter_version = di->first_battery_param_ver;
-		}
-		else if (fg_battery_id == di->second_battery_id) {
-			parameter_version = di->second_battery_param_ver;
-		}
+		if (is_factory_mode())
+		{
+			if (fg_fw_ver < 0 || fg_param_ver < 0 || fg_battery_id < 0) {
+				update_index = UPDATE_NONE;
+				goto update_begin;
+			}
+			else if (fg_battery_id == di->first_battery_id) {
+				parameter_version = di->first_battery_param_ver;
+			}
+			else if (fg_battery_id == di->second_battery_id) {
+				parameter_version = di->second_battery_param_ver;
+			}
 
-		if (fg_fw_ver < di->latest_fw_version && \
-			fg_param_ver < parameter_version) {
-			update_index = UPDATE_ALL;
-		}
-		else if (fg_fw_ver < di->latest_fw_version && \
-			fg_param_ver == parameter_version) {
-			update_index = UPDATE_PROGRAM;
-		}
-		else if (fg_fw_ver == di->latest_fw_version && \
-			fg_param_ver < parameter_version) {
-			update_index = UPDATE_PARAMETER;
-		}
-		//TDBO: tempary remove the update program, there is low probablilty update fail
-		//then the phone will can't be bootup.
-		update_index = UPDATE_NONE;
+			if (fg_fw_ver < di->latest_fw_version && \
+				fg_param_ver < parameter_version) {
+				update_index = UPDATE_ALL;
+			}
+			else if (fg_fw_ver < di->latest_fw_version && \
+				fg_param_ver == parameter_version) {
+				update_index = UPDATE_PROGRAM;
+			}
+			else if (fg_fw_ver == di->latest_fw_version && \
+				fg_param_ver < parameter_version) {
+				update_index = UPDATE_PARAMETER;
+			}
 
-update_begin:
-		if (update_index != UPDATE_NONE)
-			mm8xxx_battery_update_program_and_parameter(di, update_index);
+			update_begin:
+			if (update_index != UPDATE_NONE)
+				mm8xxx_battery_update_program_and_parameter(di, update_index);
+		}
 	}
 
 	di->Batt_NTC_channel = devm_iio_channel_get(&client->dev, "batt_therm");
