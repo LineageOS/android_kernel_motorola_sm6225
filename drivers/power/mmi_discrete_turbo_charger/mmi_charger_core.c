@@ -831,6 +831,7 @@ static bool mmi_factory_check(void)
 
 static void kick_sm(struct mmi_charger_manager *chip, int ms)
 {
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	int ret;
 
 	if (!chip->sm_work_running) {
@@ -840,6 +841,17 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_chrg_sm_work,
 				msecs_to_jiffies(ms));
 		chip->sm_work_running = true;
+
+		ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_ENABLE_ADC);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to write master CP adc enable status: %d\n", ret);
+
+		if (chrg_list->cp_slave) {
+			ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_ENABLE_ADC);
+			if (ret)
+				mmi_chrg_err(chip, "Unable to write slave CP adc enable status: %d\n", ret);
+		}
+
 		ret = mmi_charger_write_iio_chan(chip, MMI_CP_ENABLE_STATUS, true);
 		if (ret)
 			mmi_chrg_err(chip, "Unable to write CP enable status: %d\n", ret);
@@ -850,12 +862,26 @@ static void kick_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_sm(struct mmi_charger_manager *chip)
 {
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	int ret;
+
 	cancel_delayed_work_sync(&chip->mmi_chrg_sm_work);
 	flush_delayed_work(&chip->mmi_chrg_sm_work);
 	mmi_chrg_policy_clear(chip);
 	chip->sm_work_running = false;
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
+
+	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_DISABLE_ADC);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to write master CP adc disable status: %d\n", ret);
+
+	if (chrg_list->cp_slave) {
+		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_DISABLE_ADC);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to write slave CP adc disable status: %d\n", ret);
+	}
+
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"cancel sync and flush mmi chrg sm work\n");
 }
@@ -910,7 +936,8 @@ void clear_chrg_dev_error_cnt(struct mmi_charger_manager *chip, struct mmi_cp_po
 
 static void kick_qc3p_sm(struct mmi_charger_manager *chip, int ms)
 {
-
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
+	int ret;
 
 	if (!chip->qc3p_sm_work_running) {
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
@@ -919,6 +946,16 @@ static void kick_qc3p_sm(struct mmi_charger_manager *chip, int ms)
 		schedule_delayed_work(&chip->mmi_qc3p_chrg_sm_work, //
 				msecs_to_jiffies(ms)); //todo
 		chip->qc3p_sm_work_running = true;
+
+		ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_ENABLE_ADC);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to write master CP adc enable status: %d\n", ret);
+
+		if (chrg_list->cp_slave) {
+			ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_ENABLE_ADC);
+			if (ret)
+				mmi_chrg_err(chip, "Unable to write slave CP adc enable status: %d\n", ret);
+		}
 	} else
 		mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"mmi chrg qc3p sm work already existed\n");
@@ -926,6 +963,7 @@ static void kick_qc3p_sm(struct mmi_charger_manager *chip, int ms)
 
 static void cancel_qc3p_sm(struct mmi_charger_manager *chip)
 {
+	struct mmi_cp_policy_dev *chrg_list = &g_chrg_list;
 	int ret;
 
 	cancel_delayed_work_sync(&chip->mmi_qc3p_chrg_sm_work);
@@ -936,6 +974,17 @@ static void cancel_qc3p_sm(struct mmi_charger_manager *chip)
 	if (ret)
 		mmi_chrg_err(chip, "Unable to write CP disable status: %d\n", ret);
 	chip->qc3p_volt_max = qc3p_volt_max_init;
+
+	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_DISABLE_ADC);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to write master CP adc disable status: %d\n", ret);
+
+	if (chrg_list->cp_slave) {
+		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_DISABLE_ADC);
+		if (ret)
+			mmi_chrg_err(chip, "Unable to write slave CP adc disable status: %d\n", ret);
+	}
+
 	mmi_chrg_dbg(chip, PR_INTERRUPT,
 					"cancel sync and flush mmi chrg qc3p sm work\n");
 }

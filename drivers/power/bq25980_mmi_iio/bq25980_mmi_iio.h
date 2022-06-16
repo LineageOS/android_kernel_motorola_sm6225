@@ -16,6 +16,11 @@ struct bq25980_iio_channels {
 	long info_mask;
 };
 
+enum {
+	MMI_DISABLE_ADC = 0,
+	MMI_ENABLE_ADC,
+};
+
 #define bq25980_IIO_CHAN(_name, _num, _type, _mask)		\
 	{						\
 		.datasheet_name = _name,		\

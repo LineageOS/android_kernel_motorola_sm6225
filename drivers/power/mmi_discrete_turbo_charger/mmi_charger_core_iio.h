@@ -16,6 +16,11 @@ struct mmi_charger_iio_channels {
 	long info_mask;
 };
 
+enum {
+	MMI_DISABLE_ADC = 0,
+	MMI_ENABLE_ADC,
+};
+
 #define MMI_CHARGER_IIO_CHAN(_name, _num, _type, _mask)		\
 	{						\
 		.datasheet_name = _name,		\

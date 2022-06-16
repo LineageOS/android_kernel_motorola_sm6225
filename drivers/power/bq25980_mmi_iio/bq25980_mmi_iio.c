@@ -282,7 +282,7 @@ static struct reg_default sc8541_reg_init_val[] = {
 	{BQ25980_MASK4,		0x00},
 	{BQ25980_MASK5,		0x00},
 
-	{BQ25980_ADC_CONTROL1,	0x80},
+	{BQ25980_ADC_CONTROL1,	0x00},
 	{BQ25980_ADC_CONTROL2,	0x06}, //0x26: enable vac1 vac2 adc and vout adc
 
 };
@@ -314,7 +314,7 @@ static struct reg_default bq25960_reg_init_val[] = {
 	{BQ25980_MASK4,		0x00},
 	{BQ25980_MASK5,		0x80},
 
-	{BQ25980_ADC_CONTROL1,	0x84},//sample 14 bit
+	{BQ25980_ADC_CONTROL1,	0x04},//sample 14 bit
 	{BQ25980_ADC_CONTROL2,	0xE6},
 
 };
@@ -2115,6 +2115,12 @@ static int bq25980_iio_write_raw(struct iio_dev *indio_dev,
 	case PSY_IIO_CP_CLEAR_ERROR:
 		bq->fault_status.status = 0;
 		bq->alarm_status.status = 0;
+		break;
+	case PSY_IIO_CP_STATUS1:
+		if (val1 == MMI_DISABLE_ADC)
+			bq25980_set_adc_enable(bq, false);
+		else if (val1 == MMI_ENABLE_ADC)
+			bq25980_set_adc_enable(bq, true);
 		break;
 	default:
 		pr_err("Unsupported [%s] IIO chan %d\n",
