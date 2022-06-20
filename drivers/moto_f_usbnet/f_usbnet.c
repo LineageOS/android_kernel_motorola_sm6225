@@ -459,14 +459,16 @@ static struct net_device_stats *usb_ether_get_stats(struct net_device *dev)
 	return &context->stats;
 }
 
+static int usbnet_add_files(struct usbnet_context *context);
+static void usbnet_remove_files(struct usbnet_context *context);
 static void usbnet_if_config(struct work_struct *work)
 {
-	struct ifreq ifr;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+	struct ifreq ifr;
 	mm_segment_t saved_fs;
-#endif
-	unsigned err;
 	struct sockaddr_in *sin;
+	unsigned err;
+#endif
 	struct usbnet_context *context = container_of(work,
 				 struct usbnet_context, usbnet_config_wq);
 	struct socket *sock = context->socket;
@@ -481,6 +483,8 @@ static void usbnet_if_config(struct work_struct *work)
 		__func__, context->config, context->ip_addr);
 	pr_info("subnet = 0x%08x, router_ip = 0x%08x, flags = 0x%08x\n",
 		context->subnet_mask, context->router_ip, context->iff_flag);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	memset(&ifr, 0, sizeof(ifr));
 	sin = (void *) &(ifr.ifr_ifru.ifru_addr);
 	strlcpy(ifr.ifr_ifrn.ifrn_name, context->dev->name,
@@ -488,10 +492,9 @@ static void usbnet_if_config(struct work_struct *work)
 	sin->sin_family = AF_INET;
 
 	sin->sin_addr.s_addr = context->ip_addr;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	saved_fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
+
 	err = sock->ops->ioctl(sock, SIOCSIFADDR, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFADDR\n", __func__);
@@ -514,9 +517,12 @@ static void usbnet_if_config(struct work_struct *work)
 	err = sock->ops->ioctl(sock, SIOCSIFFLAGS, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFFLAGS\n", __func__);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	set_fs(saved_fs);
 #endif
+	if (context->iff_flag)
+		usbnet_add_files(context);
+	else
+		usbnet_remove_files(context);
 }
 
 static const struct net_device_ops usbnet_eth_netdev_ops = {
@@ -548,7 +554,6 @@ static void usbnet_cleanup(struct usbnet_device *dev)
 {
 	struct usbnet_context *context = dev->net_ctxt;
 	if (context) {
-		device_remove_file(&(context->dev->dev), &dev_attr_description);
 		unregister_netdev(context->dev);
 		free_netdev(context->dev);
 		dev->net_ctxt = NULL;
@@ -752,9 +757,6 @@ autoconf_fail:
 	return rc;
 }
 
-
-
-
 static void do_set_config(struct usb_function *f, u16 new_config)
 {
 	struct usbnet_device  *dev = usbnet_func_to_dev(f);
@@ -762,9 +764,10 @@ static void do_set_config(struct usb_function *f, u16 new_config)
 	struct usb_composite_dev *cdev = f->config->cdev;
 	int result = 0;
 	struct usb_request *req;
-		USBNETDBG(context,
-				"do_set_config ep %s\n",
+
+	USBNETDBG(context, "do_set_config ep %s\n",
 				context->bulk_in->name);
+
 	if (context->config == new_config) /* Config did not change */
 		return;
 
@@ -1030,7 +1033,6 @@ static void usbnet_free_inst(struct usb_function_instance *f)
 	if (!IS_ERR(dev)) {
 		context = (struct usbnet_context *)dev->net_ctxt;
 		if (context) {
-			usbnet_remove_files(context);
 			sk = context->socket;
 			if (sk) {
 				sk->ops->shutdown(sk, SHUT_RDWR);
@@ -1088,21 +1090,10 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 	}
 
 	context = netdev_priv(net_dev);
-	ret = usbnet_add_files(context);
-	if (ret < 0) {
-		pr_err("%s: sys file creation  error\n", __func__);
-		unregister_netdev(net_dev);
-		free_netdev(net_dev);
-		kfree(opts);
-		kfree(dev);
-		return ERR_PTR(ret);
-	}
-
 	ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM,
 					0, &context->socket);
 	if (ret < 0) {
 		pr_err("%s: socket creation error, ret=%d\n", __func__, ret);
-		usbnet_remove_files(context);
 		unregister_netdev(net_dev);
 		free_netdev(net_dev);
 		kfree(opts);
