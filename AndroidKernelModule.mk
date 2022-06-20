@@ -1,4 +1,4 @@
-ifeq ($(call is-board-platform-in-list,taro kalama), true)
+ifeq ($(call is-board-platform-in-list,taro kalama parrot), true)
 ifneq (,$(findstring $(LOCAL_MODULE),$(BOARD_VENDOR_KERNEL_MODULES)))
 #Taro and beyond are using a new mechanisim to build kernel modules
 include device/qcom/common/dlkm/Build_external_kernelmodule.mk
