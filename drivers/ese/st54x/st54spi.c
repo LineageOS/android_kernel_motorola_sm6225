@@ -403,7 +403,7 @@ static void st54spi_power_off(struct st54spi_data *st54spi)
 
 	// Set SE_PWR_REQ / SE_nRESET to low
 	if (st54spi->power_or_nreset_gpio)
-		gpio_set_value(st54spi->power_or_nreset_gpio, 0);
+		gpio_set_value(st54spi->power_or_nreset_gpio, 1);
 
 	// if ST54H block access to SPI in case this is done during a CLF reset
 	if (st54spi->power_or_nreset_gpio_mode == POWER_MODE_ST54H) {
