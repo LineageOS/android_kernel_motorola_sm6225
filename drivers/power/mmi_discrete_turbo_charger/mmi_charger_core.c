@@ -815,17 +815,32 @@ bool mmi_is_cable_plugout(struct mmi_charger_manager *chip)
 	return false;
 }
 
-static bool mmi_factory_check(void)
+static bool mmi_factory_check(struct mmi_charger_manager *chip)
 {
 	struct device_node *np = of_find_node_by_path("/chosen");
-	bool factory = false;
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
 
-	if (np)
-		factory = of_property_read_bool(np, "mmi,factory-cable");
+	if (!np)
+		return factory_mode;
 
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "mot-factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
 	of_node_put(np);
 
-	return factory;
+	return factory_mode;
 }
 
 
@@ -872,12 +887,12 @@ static void cancel_sm(struct mmi_charger_manager *chip)
 	chip->pd_volt_max = pd_volt_max_init;
 	chip->pd_curr_max = pd_curr_max_init;
 
-	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_DISABLE_ADC);
+	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, chip->factory_mode? MMI_ENABLE_ADC : MMI_DISABLE_ADC);
 	if (ret)
 		mmi_chrg_err(chip, "Unable to write master CP adc disable status: %d\n", ret);
 
 	if (chrg_list->cp_slave) {
-		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_DISABLE_ADC);
+		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, chip->factory_mode? MMI_ENABLE_ADC : MMI_DISABLE_ADC);
 		if (ret)
 			mmi_chrg_err(chip, "Unable to write slave CP adc disable status: %d\n", ret);
 	}
@@ -975,12 +990,12 @@ static void cancel_qc3p_sm(struct mmi_charger_manager *chip)
 		mmi_chrg_err(chip, "Unable to write CP disable status: %d\n", ret);
 	chip->qc3p_volt_max = qc3p_volt_max_init;
 
-	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, MMI_DISABLE_ADC);
+	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, chip->factory_mode? MMI_ENABLE_ADC : MMI_DISABLE_ADC);
 	if (ret)
 		mmi_chrg_err(chip, "Unable to write master CP adc disable status: %d\n", ret);
 
 	if (chrg_list->cp_slave) {
-		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, MMI_DISABLE_ADC);
+		ret = mmi_charger_write_iio_chan(chip, CP_SLAVE_STATUS1, chip->factory_mode? MMI_ENABLE_ADC : MMI_DISABLE_ADC);
 		if (ret)
 			mmi_chrg_err(chip, "Unable to write slave CP adc disable status: %d\n", ret);
 	}
@@ -1699,7 +1714,7 @@ static int mmi_chrg_manager_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
-	chip->factory_mode = mmi_factory_check();
+	chip->factory_mode = mmi_factory_check(chip);
 
 
 
