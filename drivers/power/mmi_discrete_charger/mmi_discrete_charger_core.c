@@ -1077,6 +1077,7 @@ static void mmi_discrete_config_qc_charger(struct mmi_discrete_charger *chg)
 }
 
 #define WLS_ICL_INCREASE_STEP 100000
+#define WLS_ICL_MIN 500000
 static void mmi_discrete_wireless_icl_work(struct work_struct *work)
 {
 	struct mmi_discrete_charger *chip = container_of(work,
@@ -1089,6 +1090,10 @@ static void mmi_discrete_wireless_icl_work(struct work_struct *work)
 		if(!is_wls_online(chip))
 			break;
 		wls_icl += WLS_ICL_INCREASE_STEP;
+
+		if (wls_icl < WLS_ICL_MIN)
+			wls_icl = WLS_ICL_MIN;
+
 		vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, wls_icl);
 		msleep(200);
 		wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
