@@ -12,7 +12,7 @@
 &mdss_mdp {
 	mot_csot_vtdr6130_655_1080x2400_dsc_cmd_v0: qcom,mdss_dsi_mot_csot_vtdr6130_655_1080x2400_dsc_cmd_v0 {
 		compatible = "qcom,mdss-dsi-panel";
-		qcom,mdss-dsi-panel-name = "mipi_mot_cmd_csot_1080p_dsc_655";
+		qcom,mdss-dsi-panel-name = "mipi_mot_cmd_csot_vt_1080p_dsc_655";
 		qcom,mdss-dsi-panel-supplier = "csot";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
