@@ -554,6 +554,7 @@ static void usbnet_cleanup(struct usbnet_device *dev)
 {
 	struct usbnet_context *context = dev->net_ctxt;
 	if (context) {
+		device_remove_file(&(context->dev->dev), &dev_attr_description);
 		unregister_netdev(context->dev);
 		free_netdev(context->dev);
 		dev->net_ctxt = NULL;
@@ -981,28 +982,20 @@ static int usbnet_add_files(struct usbnet_context *context)
 	int ret;
 	struct net_device *net_dev = context->dev;
 
-	ret = device_create_file(&net_dev->dev, &dev_attr_description);
-	if (ret < 0) {
-		pr_err("%s: description creation error=%d\n", __func__, ret);
-		return ret;
-	}
 	ret = device_create_file(&net_dev->dev, &dev_attr_ip_addr);
 	if (ret < 0) {
 		pr_err("%s: ip_addr creation error=%d\n", __func__, ret);
-		device_remove_file(&net_dev->dev, &dev_attr_description);
 		return ret;
 	}
 	ret = device_create_file(&net_dev->dev, &dev_attr_subnet_mask);
 	if (ret < 0) {
 		pr_err("%s: subnet_mask creation error=%d\n", __func__, ret);
-		device_remove_file(&net_dev->dev, &dev_attr_description);
 		device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
 		return ret;
 	}
 	ret = device_create_file(&net_dev->dev, &dev_attr_iff_flag);
 	if (ret < 0) {
 		pr_err("%s: iff_flag creation error=%d\n", __func__, ret);
-		device_remove_file(&net_dev->dev, &dev_attr_description);
 		device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
 		device_remove_file(&net_dev->dev, &dev_attr_subnet_mask);
 		return ret;
@@ -1015,7 +1008,6 @@ static void usbnet_remove_files(struct usbnet_context *context)
 {
 	struct net_device *net_dev = context->dev;
 
-	device_remove_file(&net_dev->dev, &dev_attr_description);
 	device_remove_file(&net_dev->dev, &dev_attr_ip_addr);
 	device_remove_file(&net_dev->dev, &dev_attr_subnet_mask);
 	device_remove_file(&net_dev->dev, &dev_attr_iff_flag);
@@ -1089,11 +1081,22 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 		return ERR_PTR(-EINVAL);
 	}
 
+	ret = device_create_file(&net_dev->dev, &dev_attr_description);
+	if (ret < 0) {
+		pr_err("%s: sys file creation  error\n", __func__);
+		unregister_netdev(net_dev);
+		free_netdev(net_dev);
+		kfree(opts);
+		kfree(dev);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	context = netdev_priv(net_dev);
 	ret = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM,
 					0, &context->socket);
 	if (ret < 0) {
 		pr_err("%s: socket creation error, ret=%d\n", __func__, ret);
+		device_remove_file(&net_dev->dev, &dev_attr_description);
 		unregister_netdev(net_dev);
 		free_netdev(net_dev);
 		kfree(opts);
