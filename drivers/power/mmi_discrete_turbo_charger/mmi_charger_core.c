@@ -1088,13 +1088,9 @@ int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip)
 			chip->mmi_pd_pdo_idx,
 			chip->mmi_pdo_info.max_mv[chip->mmi_pd_pdo_idx],
 			chip->mmi_pdo_info.ma[chip->mmi_pd_pdo_idx]);
-		if ((max_mv * 1000) <= pd_volt_max_init) {
-			chip->pd_volt_max = max_mv * 1000;
-		}
 
-		if ((max_ma * 1000) <= pd_curr_max_init) {
-			chip->pd_curr_max = max_ma * 1000;
-		}
+		chip->pd_volt_max = min((max_mv * 1000), pd_volt_max_init);
+		chip->pd_curr_max = min((max_ma * 1000), pd_curr_max_init);
 
 	}
 
