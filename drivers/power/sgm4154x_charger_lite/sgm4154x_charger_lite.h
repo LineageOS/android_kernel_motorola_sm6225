@@ -338,6 +338,11 @@ struct sgm4154x_device {
 
 	struct dentry *debug_root;
 
+	u32 *thermal_levels;
+	u32 thermal_fcc_ua;
+	int curr_thermal_level;
+	int num_thermal_levels;
+
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
 	u32 vreg;	/* regulation voltage		*/

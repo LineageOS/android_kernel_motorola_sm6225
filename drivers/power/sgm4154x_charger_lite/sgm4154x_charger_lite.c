@@ -220,12 +220,52 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	else if ( chrg_curr > sgm->init_data.max_ichg)
 		chrg_curr = sgm->init_data.max_ichg;
 
+	reg_val = sgm->thermal_fcc_ua;
+	chrg_curr = min(chrg_curr, reg_val);
+	if (sgm->mmi_charger) {
+		reg_val = sgm->mmi_charger->paired_ichg;
+		chrg_curr = min(chrg_curr, reg_val);
+	}
+
 	sgm->ichg = chrg_curr;
 	pr_info("set ichg = %duA\n", chrg_curr);
 	reg_val = chrg_curr / SGM4154x_ICHRG_CURRENT_STEP_uA;
 
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_2,
 				  SGM4154x_ICHRG_CUR_MASK, reg_val);
+
+	return ret;
+}
+
+
+static int sgm4154x_set_thermal_mitigation(struct sgm4154x_device *sgm, int val)
+{
+	int ret;
+	u32 prev_fcc_ua;
+
+	if (!sgm->num_thermal_levels)
+		return 0;
+
+	if (sgm->num_thermal_levels < 0) {
+		pr_err("Incorrect num_thermal_levels\n");
+		return -EINVAL;
+	}
+
+	if (val < 0 || val > sgm->num_thermal_levels) {
+		pr_err("Invalid thermal level: %d\n", val);
+		return -EINVAL;
+	}
+
+	prev_fcc_ua = sgm->thermal_fcc_ua;
+	sgm->thermal_fcc_ua = sgm->thermal_levels[val];
+	ret = sgm4154x_set_ichrg_curr(sgm, sgm->thermal_levels[val]);
+	if (ret) {
+		pr_err("Failed to set thermal mitigation val=%d, ret=%d\n",
+				sgm->thermal_levels[val], ret);
+		sgm->thermal_fcc_ua = prev_fcc_ua;
+	} else {
+		sgm->curr_thermal_level = val;
+	}
 
 	return ret;
 }
@@ -991,6 +1031,7 @@ static int sgm4154x_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 	case POWER_SUPPLY_PROP_PRECHARGE_CURRENT:
 	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
 		return true;
@@ -1014,6 +1055,9 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		ret = sgm4154x_set_ichrg_curr(sgm, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		ret = sgm4154x_set_thermal_mitigation(sgm, val->intval);
 		break;
 	default:
 		return -EINVAL;
@@ -1139,6 +1183,14 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 
 		val->intval = ret;
 		ret = 0;
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = sgm->curr_thermal_level;
+		break;
+
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = sgm->num_thermal_levels;
 		break;
 
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
@@ -1380,6 +1432,8 @@ static enum power_supply_property sgm4154x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
@@ -1529,6 +1583,9 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	int irq_gpio = 0, irqn = 0;
 	enum of_gpio_flags flags;
 	const char *usb_psy_name = NULL;
+	int i, len;
+	u32 prev, val;
+	struct device_node *node = sgm->dev->of_node;
 
 	#if 0
 	ret = device_property_read_u32(sgm->dev, "watchdog-timer",
@@ -1872,6 +1929,47 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 			sgm->data.temp_t2_thres,sgm->data.temp_t1_thres,
 			sgm->data.temp_t0_thres);
 #endif
+	ret = of_property_count_elems_of_size(node, "mmi,thermal-mitigation",
+							sizeof(u32));
+	if (ret <= 0) {
+		return 0;
+	}
+
+	len = ret;
+	prev = sgm->init_data.max_ichg;
+	for (i = 0; i < len; i++) {
+		ret = of_property_read_u32_index(node,
+					"mmi,thermal-mitigation",
+					i, &val);
+		if (ret < 0) {
+			pr_err("failed to get thermal-mitigation[%d], ret=%d\n", i, ret);
+			return ret;
+		}
+		pr_info("thermal-mitigation[%d], val=%d, prev=%d\n", i, val, prev);
+		if (val > prev) {
+			pr_err("Thermal levels should be in descending order\n");
+			sgm->num_thermal_levels = -EINVAL;
+			return 0;
+		}
+		prev = val;
+	}
+
+	sgm->thermal_levels = devm_kcalloc(sgm->dev, len + 1,
+					sizeof(*sgm->thermal_levels),
+					GFP_KERNEL);
+	if (!sgm->thermal_levels)
+		return -ENOMEM;
+
+	sgm->thermal_levels[0] = sgm->init_data.max_ichg;
+	ret = of_property_read_u32_array(node, "mmi,thermal-mitigation",
+						&sgm->thermal_levels[1], len);
+	if (ret < 0) {
+		pr_err("Error in reading mmi,thermal-mitigation, rc=%d\n", ret);
+		return ret;
+	}
+	sgm->num_thermal_levels = len;
+	sgm->thermal_fcc_ua = sgm->init_data.max_ichg;
+
 	return 0;
 }
 
@@ -2138,7 +2236,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		}
 	}
 	if (config->target_fcc != chg->chg_cfg.target_fcc) {
-		value = min(config->target_fcc * 1000, chg->paired_ichg);
+		value = config->target_fcc * 1000;
 		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
 		if (!rc) {
 			cfg_changed = true;
