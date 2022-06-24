@@ -1095,7 +1095,7 @@ static void mmi_discrete_wireless_icl_work(struct work_struct *work)
 			wls_icl = WLS_ICL_MIN;
 
 		vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, wls_icl);
-		msleep(200);
+		msleep(500);
 		wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
 		mmi_info(chip, "vote wireless charging icl %d ua\n", wls_icl);
 	}
