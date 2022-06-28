@@ -15,6 +15,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
+#include <linux/time64.h>
 
 #include <linux/acpi.h>
 #include <linux/gpio.h>
@@ -2267,6 +2268,9 @@ static void sgm4154x_charger_set_constraint(void *data,
 /* Battery presence detection threshold on battery temperature */
 #define BPD_TEMP_THRE (-30)
 #define PANIC_DEB_CNT_MAX (3)
+#define VBAT_OVP_MV (4600)
+#define IBAT_OCP_MA (1500)
+#define PROTECT_DELAY_MS (60000)
 static void sgm4154x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
@@ -2287,6 +2291,10 @@ static void sgm4154x_paired_battery_notify(void *data,
 	static int panic_deb_cnt = 0;
 	static bool prev_high_load_en = false;
 	static bool prev_low_load_en = false;
+	struct timespec64 now;
+	static struct timespec64 start = {0};
+	uint32_t elapsed_ms;
+	static bool batt_protected = false;
 
 	if (!batt_info || batt_info->batt_mv <= 0) {
 		pr_warn("Invalid paired battery info\n");
@@ -2384,6 +2392,36 @@ static void sgm4154x_paired_battery_notify(void *data,
 	     batt_info->batt_ma >= 0)) {
 		high_load_en = false;
 		low_load_en = false;
+	}
+
+	/* Monitor vbat and ibat for OVP and OCP */
+	if (chg->batt_info.batt_mv >= VBAT_OVP_MV) {
+		high_load_en = true;
+		low_load_en = true;
+		batt_protected = true;
+		ktime_get_real_ts64(&start);
+		pr_err("ERROR: vbat OVP is triggered, batt_mv=%dmV\n",
+				chg->batt_info.batt_mv);
+	} else if (chg->batt_info.batt_ma >= IBAT_OCP_MA) {
+		high_load_en = true;
+		low_load_en = true;
+		batt_protected = true;
+		ktime_get_real_ts64(&start);
+		pr_err("ERROR: ibat OCP is triggered, batt_ma=%dmA\n",
+				chg->batt_info.batt_ma);
+	} else if (batt_protected) {
+		ktime_get_real_ts64(&now);
+		elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+		elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+		if (elapsed_ms < PROTECT_DELAY_MS &&
+		    chg->chg_info.chrg_present) {
+			high_load_en = true;
+			low_load_en = true;
+			pr_warn("keep batt protected, elapsed=%dms\n", elapsed_ms);
+		} else {
+			batt_protected = false;
+			pr_warn("recover batt from ovp/ocp protection\n");
+		}
 	}
 
 	if (high_load_en != prev_high_load_en) {
