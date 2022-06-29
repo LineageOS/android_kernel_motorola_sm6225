@@ -2564,6 +2564,12 @@ static int mmi_get_prop(struct power_supply *psy,
 	struct mmi_charger_chip *chip = power_supply_get_drvdata(psy);
 	int rc = 0;
 
+	if (psp == POWER_SUPPLY_PROP_CURRENT_NOW) {
+		cancel_delayed_work(&chip->heartbeat_work);
+		schedule_delayed_work(&chip->heartbeat_work,
+				msecs_to_jiffies(0));
+	}
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = chip->combo_status;
