@@ -276,8 +276,6 @@ enum cmds {
 	CMD_STATUS,
 	CMD_POSITION,
 	CMD_POLL,
-	CMD_INTEGRITY_CHK,
-	CMD_PWR_OFF,
 };
 
 #define MAX_GPIOS MOTOR_UNKNOWN
@@ -334,6 +332,7 @@ typedef struct motor_device {
 	bool     support_torque;
 	bool     sensors_off;
 	bool     irq_enabled;
+	bool     do_not_arm_irq;
 	int      level:1;
 	unsigned power_en:1;
 	unsigned nsleep:1;
@@ -501,6 +500,32 @@ err_pin_state:
 	pinctrl_put(mc->pins);
 err:
 	return ret;
+}
+
+static void set_irq_state(motor_device *md, bool state)
+{
+	if (md->do_not_arm_irq) {
+		LOGD("setting irq %d ignored\n", state);
+		return;
+	}
+	if (state) {
+		if (md->irq_enabled == true)
+			return;
+		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+			enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+			enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+		md->irq_enabled = true;
+	} else {
+		if (md->irq_enabled == false)
+			return;
+		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
+			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
+		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
+			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
+		md->irq_enabled = false;
+
+	}
 }
 
 static void moto_drv8424_set_motor_torque(motor_device* md)
@@ -875,6 +900,7 @@ static void inline motor_stop(motor_device* md, bool clean)
 		atomic_set(&md->stepping, 0);
 		//LOGD("step_count & stepping reset\n");
 	}
+	set_irq_state(md, false);
 	//LOGD("waking up kthread\n");
 	md->user_sync_complete = true;
 	wake_up(&md->sync_complete);
@@ -973,6 +999,7 @@ static int motor_set_enable(struct device* dev, bool enable)
 	}
 	if (enable) {
 		moto_drv8424_drive_sequencer(md);
+		set_irq_state(md, true);
 	}
 
 	return 0;
@@ -1156,13 +1183,6 @@ static void motor_fault_handler(motor_device *md)
 	}
 
 	motor_reset(md);
-	if (md->irq_enabled == false) {
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
-			enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
-			enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
-		md->irq_enabled = true;
-	}
 
 	position = atomic_read(&md->position);
 	status = atomic_read(&md->status);
@@ -1182,23 +1202,10 @@ static void motor_cmd_work(struct work_struct *work)
 	struct delayed_work *dw = container_of(work, struct delayed_work, work);
 	motor_device* md = container_of(dw, motor_device, motor_work);
 	bool polling = false;
-	int ret;
-	int next_cmd_delay = 0;
-	int next_cmd = 0;
-	int cmd = 0;
+	int ret, cmd = 0;
 
 	while (kfifo_get(&md->cmd_pipe, &cmd)) {
 		switch (cmd) {
-		case CMD_INTEGRITY_CHK:
-			/* set operational mode directly to provoke */
-			/* rasing nFAULT signal if motor isn't ready */
-			moto_drv8424_set_power(md, 1);
-			next_cmd = CMD_PWR_OFF;
-			next_cmd_delay = RESET_TIME;
-					break;
-		case CMD_PWR_OFF:
-			moto_drv8424_set_power(md, 0);
-					break;
 		case CMD_FAULT:
 			motor_fault_handler(md);
 					break;
@@ -1239,10 +1246,6 @@ static void motor_cmd_work(struct work_struct *work)
 	if (polling) {
 		moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(POLL_NEXT_INT));
 	}
-
-	if (next_cmd && next_cmd_delay) {
-		moto_drv8424_cmd_push(md, next_cmd, msecs_to_jiffies(next_cmd_delay));
-	}
 }
 
 static irqreturn_t motor_fault_irq(int irq, void *pdata)
@@ -1255,14 +1258,8 @@ static irqreturn_t motor_fault_irq(int irq, void *pdata)
 		wake_up(&md->sync_complete);
 	}
 	md->faulting = true;
-	if (md->irq_enabled) {
-		/* disable both IRQ here and enable them both in fault handler */
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
-			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
-			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
-		md->irq_enabled = false;
-	}
+	set_irq_state(md, false);
+
 	return IRQ_HANDLED;
 }
 
@@ -1693,23 +1690,11 @@ static ssize_t motor_irq_store(struct device *dev, struct device_attribute *attr
 		return -EINVAL;
 	}
 	if (!!value) {
-		if (md->irq_enabled == false) {
-			if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
-				enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
-			if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
-				enable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
-			md->irq_enabled = true;
-			dev_info(dev, "Enabled fault IRQ\n");
-		}
+		md->do_not_arm_irq = false;
+		dev_info(dev, "Enabled fault IRQ\n");
 	} else {
-		if (md->irq_enabled == true) {
-			if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
-				disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
-			if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
-				disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
-			md->irq_enabled = false;
-			dev_info(dev, "Disabled fault IRQ\n");
-		}
+		md->do_not_arm_irq = true;
+		dev_info(dev, "Disabled fault IRQ\n");
 	}
 
 	return len;
@@ -1913,21 +1898,27 @@ static int moto_drv8424_irq_setup(motor_device *md, unsigned gidx)
 {
 	static int id;
 	int ret, irq_gpio = md->mc.ptable[gidx];
-	char irq_name[32];
+	static char *irq_name[2];
 
 	if (!gpio_is_valid(irq_gpio))
 		return ENOTCONN;
-	snprintf(irq_name, sizeof(irq_name)-1, "fault_motor%d", ++id);
+	irq_name[id] = devm_kzalloc(md->dev, 32, GFP_KERNEL);
+	if (!irq_name[id])
+		return -ENOMEM;
+	snprintf(irq_name[id], 31, "fault_motor%d", id+1);
 	ret = devm_request_threaded_irq(md->dev,
 			gpio_to_irq(irq_gpio), motor_fault_irq, NULL,
-			IRQF_TRIGGER_LOW | IRQF_ONESHOT, irq_name, md);
+			IRQF_TRIGGER_LOW | IRQF_ONESHOT, irq_name[id], md);
 	if (ret) {
 		dev_err(md->dev, "Failed to register \'%s\': %d\n",
-			irq_name, ret);
+			irq_name[id], ret);
 	} else {
 		dev_info(md->dev, "Registered IRQ %d as '%s'\n",
-			gpio_to_irq(irq_gpio), irq_name);
+			gpio_to_irq(irq_gpio), irq_name[id]);
+		/* disable immediately */
+		disable_irq(gpio_to_irq(irq_gpio));
 	}
+	id++;
 
 	return ret;
 }
@@ -2046,9 +2037,6 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 		ret = moto_drv8424_irq_setup(md, MOTOR_FAULT2_INT);
 			if (ret < 0)
 				goto failed_gpio;
-		md->irq_enabled = true;
-		/* enforce integrity check to handle fault state */
-		moto_drv8424_cmd_push(md, CMD_INTEGRITY_CHK, 0);
 	} else {
 		/* motor can work, but have no fault irq */
 		dev_info(dev, "Device has no fault irq\n");
@@ -2086,12 +2074,8 @@ failed_mem:
 static int moto_drv8424_remove(struct platform_device *pdev)
 {
 	motor_device* md = (motor_device*)platform_get_drvdata(pdev);
-	if (md->irq_enabled) {
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT1_INT]))
-			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT1_INT]));
-		if (gpio_is_valid(md->mc.ptable[MOTOR_FAULT2_INT]))
-			disable_irq(gpio_to_irq(md->mc.ptable[MOTOR_FAULT2_INT]));
-	}
+
+	set_irq_state(md, false);
 	moto_drv8424_set_power(md, 0);
 	moto_drv8424_set_regulator_power(md, false);
 	devm_regulator_put(md->mc.vdd);
