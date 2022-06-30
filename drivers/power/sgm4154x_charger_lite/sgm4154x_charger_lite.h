@@ -338,6 +338,7 @@ struct sgm4154x_device {
 
 	struct dentry *debug_root;
 
+	bool irq_enabled;
 	int high_load_en_gpio;
 	int low_load_en_gpio;
 	bool high_load_active_low;
