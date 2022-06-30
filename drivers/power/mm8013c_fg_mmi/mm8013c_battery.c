@@ -1203,7 +1203,7 @@ static int mm8xxx_battery_chargeType_to_FG(struct mm8xxx_device_info *di, int ty
 
 	ret =mm8xxx_write(di, MM8XXX_CMD_CHARGETYPE, (u16)type);
 	if (ret < 0) {
-		dev_err(di->dev, "error writing temperature to fg\n");
+		dev_err(di->dev, "error writing chargeType to fg\n");
 	}
 
 	return ret;
@@ -2093,19 +2093,16 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 			else if (fg_battery_id == di->second_battery_id) {
 				parameter_version = di->second_battery_param_ver;
 			}
-
-			if (fg_fw_ver < di->latest_fw_version && \
-				fg_param_ver < parameter_version) {
-				update_index = UPDATE_ALL;
+			if (fg_fw_ver < di->latest_fw_version) {
+				if (fg_param_ver < parameter_version)
+					update_index = UPDATE_ALL;
+				else if (fg_param_ver == parameter_version)
+					update_index = UPDATE_PROGRAM;
+				else if (fg_param_ver == 0xa200)
+					update_index = UPDATE_ALL;
 			}
-			else if (fg_fw_ver < di->latest_fw_version && \
-				fg_param_ver == parameter_version) {
-				update_index = UPDATE_PROGRAM;
-			}
-			else if (fg_fw_ver == di->latest_fw_version && \
-				fg_param_ver < parameter_version) {
-				update_index = UPDATE_PARAMETER;
-			}
+			else if (fg_param_ver < parameter_version || fg_param_ver == 0xa200)
+					update_index = UPDATE_PARAMETER;
 
 			update_begin:
 			if (update_index != UPDATE_NONE)
