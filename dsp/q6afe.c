@@ -51,6 +51,8 @@ static struct afe_avcs_payload_port_mapping *pm[MAX_ALLOWED_USE_CASES];
 #define AFE_PARAM_ID_AWDSP_RX_PARAMS            (0x10013D12)
 //#define AFE_PORT_ID_AWDSP_RX			(AFE_PORT_ID_PRIMARY_MI2S_RX)
 //#define AFE_PORT_ID_AWDSP_TX			(AFE_PORT_ID_PRIMARY_MI2S_TX)
+
+void aw_cal_unmap_memory(void);
 #endif
 
 enum {
@@ -943,6 +945,9 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		return -EINVAL;
 	}
 	if (data->opcode == RESET_EVENTS) {
+		#ifdef CONFIG_AW882XX_DSP
+			aw_cal_unmap_memory();
+		#endif /*CONFIG_AW882XX_DSP*/
 		pr_debug("%s: reset event = %d %d apr[%pK]\n",
 			__func__,
 			data->reset_event, data->reset_proc, this_afe.apr);
