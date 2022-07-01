@@ -338,6 +338,12 @@ struct sgm4154x_device {
 
 	struct dentry *debug_root;
 
+	u32 ichg;	/* charge current		*/
+	u32 ilim;	/* input current		*/
+	u32 vreg;	/* regulation voltage		*/
+
+	bool batt_present;
+	bool otg_enabled;
 	bool irq_enabled;
 	int high_load_en_gpio;
 	int low_load_en_gpio;

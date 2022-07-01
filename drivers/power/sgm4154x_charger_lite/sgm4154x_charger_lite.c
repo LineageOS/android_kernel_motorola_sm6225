@@ -220,6 +220,7 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 	else if ( chrg_curr > sgm->init_data.max_ichg)
 		chrg_curr = sgm->init_data.max_ichg;
 
+	sgm->ichg = chrg_curr;
 	pr_info("set ichg = %duA\n", chrg_curr);
 	reg_val = chrg_curr / SGM4154x_ICHRG_CURRENT_STEP_uA;
 
@@ -241,6 +242,7 @@ static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 	else if (chrg_volt > sgm->init_data.max_vreg)
 		chrg_volt = sgm->init_data.max_vreg;
 
+	sgm->vreg = chrg_volt;
 
 	reg_val = (chrg_volt-SGM4154x_VREG_V_MIN_uV) / SGM4154x_VREG_V_STEP_uV;
 
@@ -575,6 +577,8 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 	if (iindpm > sgm->init_data.ilim)
 		iindpm = sgm->init_data.ilim;
 
+	sgm->ilim = iindpm;
+
 	if (iindpm < SGM4154x_IINDPM_I_MIN_uA)
 		reg_val = 0;
 	else if (iindpm >= SGM4154x_IINDPM_I_MAX_uA)
@@ -692,6 +696,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
 		if (!ret)
 			state->ibus_limit = val.intval;
+		state->chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
 	} else if (sgm->use_ext_usb_psy) {
 		state->chrg_type = 0;
 		state->chrg_stat = 0;
@@ -1328,7 +1333,10 @@ static void charger_detect_work_func(struct work_struct *work)
 	}
 
 	if (sgm->use_ext_usb_psy && sgm->usb) {
-		curr_in_limit = sgm->state.ibus_limit;
+		if (curr_in_limit < sgm->state.ibus_limit)
+			curr_in_limit = sgm->state.ibus_limit;
+		if (curr_in_limit > sgm->init_data.ilim)
+			curr_in_limit = sgm->init_data.ilim;
 		if (prev_in_limit != curr_in_limit) {
 			dev_info(sgm->dev, "Update: curr_in_limit = %d\n",
 						curr_in_limit);
@@ -2062,6 +2070,8 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
 	struct sgm_mmi_charger *chg = data;
 	struct sgm4154x_state state = chg->sgm->state;
 
+	sgm4154x_get_state(chg->sgm, &state);
+
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
 	chg->chg_info.chrg_type = get_charger_type(chg->sgm);
@@ -2089,8 +2099,32 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 {
 	int rc;
 	u32 value;
+	bool chg_en;
 	bool cfg_changed = false;
 	struct sgm_mmi_charger *chg = data;
+	struct sgm4154x_state state = chg->sgm->state;
+
+	if (!chg->sgm->batt_present || chg->sgm->otg_enabled) {
+		if (chg->sgm->client->irq && chg->sgm->irq_enabled) {
+			disable_irq_wake(chg->sgm->client->irq);
+			disable_irq(chg->sgm->client->irq);
+			chg->sgm->irq_enabled = false;
+			pr_warn("irq is disabled, bpd=%d, otg=%d\n",
+				chg->sgm->batt_present, chg->sgm->otg_enabled);
+		}
+		sgm4154x_set_hiz_en(chg->sgm, true);
+		goto check_st;
+	} else {
+		if (!chg->sgm->irq_enabled && chg->sgm->client->irq) {
+			sgm4154x_set_hiz_en(chg->sgm, false);
+			enable_irq_wake(chg->sgm->client->irq);
+			enable_irq(chg->sgm->client->irq);
+			chg->sgm->irq_enabled = true;
+			chg->chg_cfg.charger_suspend = false;
+			pr_warn("irq is enabled, bpd=%d, otg=%d\n",
+				chg->sgm->batt_present, chg->sgm->otg_enabled);
+		}
+	}
 
 	/* configure the charger if changed */
 	if (config->target_fv != chg->chg_cfg.target_fv) {
@@ -2177,6 +2211,25 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		schedule_delayed_work(&chg->sgm->charge_monitor_work,
 						msecs_to_jiffies(200));
 	}
+
+check_st:
+	sgm4154x_get_state(chg->sgm, &state);
+	chg_en = sgm4154x_is_enabled_charging(chg->sgm);
+	if (chg->chg_info.chrg_present && !state.hiz_en &&
+	    chg_en && chg->sgm->ichg > 0 &&
+	    ((chg->batt_info.batt_mv + 50) * 1000) <= chg->sgm->vreg &&
+	    state.chrg_stat != SGM4154x_FAST_CHRG &&
+	    state.chrg_stat != SGM4154x_PRECHRG) {
+		sgm4154x_disable_charger(chg->sgm);
+		chg->chg_cfg.target_fv = -EINVAL;
+		chg->chg_cfg.target_fcc = -EINVAL;
+		chg->chg_cfg.charging_disable = true;
+		pr_info("Battery charging reconfigure triggered\n");
+	}
+
+	pr_info("chg_en:%d, ichg:%d, vchg:%d, ilim:%d, chg_st:0x%x, therm:%d, suspend:%d\n",
+			chg_en, chg->sgm->ichg, chg->sgm->vreg, chg->sgm->ilim,
+			state.chrg_stat, state.therm_stat, state.hiz_en);
 
 	return 0;
 }
@@ -2272,6 +2325,7 @@ static void sgm4154x_charger_set_constraint(void *data,
 #define IBAT_OCP_MA (1500)
 #define PROTECT_DELAY_MS (60000)
 #define OTG_VBUS_MIN_MV (4600)
+#define OTG_VBUS_MAX_MV (5600)
 static void sgm4154x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
@@ -2296,48 +2350,33 @@ static void sgm4154x_paired_battery_notify(void *data,
 	static struct timespec64 start = {0};
 	uint32_t elapsed_ms;
 	static bool batt_protected = false;
-	bool otg_enabled = false;
 
 	if (!batt_info || batt_info->batt_mv <= 0) {
 		pr_warn("Invalid paired battery info\n");
 		return;
 	}
 
-	memcpy(&chg->paired_batt_info, batt_info, sizeof(struct mmi_battery_info));
-	batt_present = (chg->batt_info.batt_temp >= BPD_TEMP_THRE)? true : false;
-
 	if (!chg->chg_info.chrg_present &&
 	    chg->chg_info.chrg_ma == 0 &&
-	    chg->chg_info.chrg_mv > OTG_VBUS_MIN_MV) {
-		otg_enabled = true;
+	    chg->chg_info.chrg_mv > OTG_VBUS_MIN_MV &&
+	    chg->chg_info.chrg_mv < OTG_VBUS_MAX_MV &&
+	    (chg->batt_info.batt_ma < 0 || batt_info->batt_ma < 0)) {
+		chg->sgm->otg_enabled = true;
+	} else {
+		chg->sgm->otg_enabled = false;
 	}
 
+	memcpy(&chg->paired_batt_info, batt_info, sizeof(struct mmi_battery_info));
+	batt_present = (chg->batt_info.batt_temp >= BPD_TEMP_THRE)? true : false;
 	if (batt_present) {
 		rc = power_supply_get_property(chg->fg_psy,
 				POWER_SUPPLY_PROP_PRESENT, &val);
 		if (!rc && !val.intval)
 			batt_present = false;
 	}
-	if (!batt_present || otg_enabled) {
-		sgm4154x_set_hiz_en(chg->sgm, true);
-		if (chg->sgm->client->irq && chg->sgm->irq_enabled) {
-			disable_irq_wake(chg->sgm->client->irq);
-			disable_irq(chg->sgm->client->irq);
-			chg->sgm->irq_enabled = false;
-			pr_warn("irq is disabled, bpd=%d, otg=%d\n",
-				batt_present, otg_enabled);
-		}
-		if (!batt_present)
-			return;
-	} else {
-		if (!chg->sgm->irq_enabled && chg->sgm->client->irq) {
-			enable_irq_wake(chg->sgm->client->irq);
-			enable_irq(chg->sgm->client->irq);
-			chg->sgm->irq_enabled = true;
-			pr_warn("irq is enabled, bpd=%d, otg=%d\n",
-				batt_present, otg_enabled);
-		}
-	}
+	chg->sgm->batt_present = batt_present;
+	if (!chg->sgm->batt_present)
+		return;
 
 	batt_ocv = chg->batt_info.batt_mv;
 	batt_ocv -= (chg->batt_info.batt_ma * chg->batt_esr) / 1000;
@@ -2462,9 +2501,8 @@ static void sgm4154x_paired_battery_notify(void *data,
 		prev_low_load_en = low_load_en;
 	}
 
-	pr_info("charger_present:%d, charger_suspend:%d, paired_ocv:%dmV, batt_ocv:%dmV\n",
-				chg->chg_info.chrg_present, chg->sgm->state.hiz_en,
-				paired_ocv, batt_ocv);
+	pr_info("charger_present:%d, paired_ocv:%dmV, batt_ocv:%dmV\n",
+				chg->chg_info.chrg_present, paired_ocv, batt_ocv);
 	pr_info("delta_ocv:%dmV, delta_soc:%d, high_load:%d, low_load:%d, ichg:%duA\n",
 				delta_ocv, delta_soc, high_load_en, low_load_en, paired_ichg);
 }
