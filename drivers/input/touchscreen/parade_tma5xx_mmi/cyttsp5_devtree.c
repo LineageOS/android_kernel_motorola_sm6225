@@ -629,6 +629,12 @@ static struct cyttsp5_core_platform_data *create_and_get_core_pdata(
 	if (!rc)
 		pdata->easy_wakeup_gesture = (u8)value;
 
+#ifdef CYTTSP5_SENSOR_EN
+	rc = of_property_read_u32(core_node, "cy,supported_gesture_type", &value);
+	if (!rc)
+		pdata->cli_gesture_type = value;
+#endif
+
 	rc = of_property_read_string(core_node, "cy,class-entry-name",
 	    &pdata->class_entry_name);
 	if (!rc)

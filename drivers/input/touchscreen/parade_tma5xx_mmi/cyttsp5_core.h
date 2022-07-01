@@ -142,6 +142,9 @@ struct cyttsp5_core_platform_data {
 	struct touch_settings *sett[CY_TOUCH_SETTINGS_MAX];
 	u32 flags;
 	u8 easy_wakeup_gesture;
+#ifdef CYTTSP5_SENSOR_EN
+	int cli_gesture_type;
+ #endif
 };
 
 struct touch_framework {

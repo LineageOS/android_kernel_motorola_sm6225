@@ -6727,20 +6727,6 @@ static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 static int cyttsp5_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
-	struct cyttsp5_sensor_platform_data *sensor_pdata = container_of(
-			sensors_cdev, struct cyttsp5_sensor_platform_data, ps_cdev);
-	struct cyttsp5_core_data *cd = sensor_pdata->data;
-
-	pr_info("%s: Gesture set enable %d!", __func__, enable);
-	mutex_lock(&cd->state_mutex);
-	if (enable == 1) {
-		cd->should_enable_gesture = true;
-	} else if (enable == 0) {
-		cd->should_enable_gesture = false;
-	} else {
-		pr_info("%s: unknown enable symbol\n", __func__);
-	}
-	mutex_unlock(&cd->state_mutex);
 	return 0;
 }
 
