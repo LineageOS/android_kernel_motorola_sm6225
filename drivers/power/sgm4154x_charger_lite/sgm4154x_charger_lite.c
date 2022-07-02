@@ -2112,10 +2112,12 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 			pr_warn("irq is disabled, bpd=%d, otg=%d\n",
 				chg->sgm->batt_present, chg->sgm->otg_enabled);
 		}
+		cfg_changed = true;
 		sgm4154x_set_hiz_en(chg->sgm, true);
 		goto check_st;
 	} else {
 		if (!chg->sgm->irq_enabled && chg->sgm->client->irq) {
+			cfg_changed = true;
 			sgm4154x_set_hiz_en(chg->sgm, false);
 			enable_irq_wake(chg->sgm->client->irq);
 			enable_irq(chg->sgm->client->irq);
@@ -2215,7 +2217,8 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 check_st:
 	sgm4154x_get_state(chg->sgm, &state);
 	chg_en = sgm4154x_is_enabled_charging(chg->sgm);
-	if (chg->chg_info.chrg_present && !state.hiz_en &&
+	if (!cfg_changed &&
+	    chg->chg_info.chrg_present && !state.hiz_en &&
 	    chg_en && chg->sgm->ichg > 0 &&
 	    ((chg->batt_info.batt_mv + 50) * 1000) <= chg->sgm->vreg &&
 	    state.chrg_stat != SGM4154x_FAST_CHRG &&
