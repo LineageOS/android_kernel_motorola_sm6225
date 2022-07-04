@@ -296,6 +296,7 @@ struct sgm_mmi_charger {
 	int *paired_load_thres;
 	int paired_esr;
 	int batt_esr;
+	int batt_protect_type;
 	struct mmi_battery_info		paired_batt_info;
 };
 
@@ -350,6 +351,10 @@ struct sgm4154x_device {
 	bool batt_present;
 	bool otg_enabled;
 	bool irq_enabled;
+	u32 batt_protect_duration;
+	int vbat_ovp_threshold;
+	int ibat_ocp_threshold;
+	int ibat_occp_threshold;
 	int high_load_en_gpio;
 	int low_load_en_gpio;
 	bool high_load_active_low;

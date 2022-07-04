@@ -15,12 +15,18 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
+#include <linux/time64.h>
 
 #include <linux/acpi.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 
 #include "sgm4154x_charger_lite.h"
+
+#define DEF_VBAT_OVP_MV (4600)
+#define DEF_IBAT_OCP_MA (1500)
+#define DEF_IBAT_OCCP_MA (1500)
+#define DEF_PROTECT_DURATION_MS (60000)
 
 static bool paired_vbat_panic_enabled = false;
 module_param(paired_vbat_panic_enabled, bool, 0644);
@@ -82,6 +88,13 @@ enum {
 	PAIRED_LOAD_OFF,
 	PAIRED_LOAD_LOW,
 	PAIRED_LOAD_HIGH,
+};
+
+enum {
+	BATT_PROTECT_TYPE_NONE,
+	BATT_PROTECT_TYPE_OVP,
+	BATT_PROTECT_TYPE_OCP,
+	BATT_PROTECT_TYPE_OCCP,
 };
 
 static enum power_supply_usb_type sgm4154x_usb_type[] = {
@@ -1596,6 +1609,30 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	    sgm->watchdog_timer < SGM4154x_WATCHDOG_DIS)
 		return -EINVAL;
 	#endif
+	ret = device_property_read_u32(sgm->dev,
+				       "mmi,batt-protect-duration",
+				       &sgm->batt_protect_duration);
+	if (ret)
+		sgm->batt_protect_duration = DEF_PROTECT_DURATION_MS;
+
+	ret = device_property_read_u32(sgm->dev,
+				       "mmi,vbat-ovp-threshold",
+				       &sgm->vbat_ovp_threshold);
+	if (ret)
+		sgm->vbat_ovp_threshold = DEF_VBAT_OVP_MV;
+
+	ret = device_property_read_u32(sgm->dev,
+				       "mmi,ibat-ocp-threshold",
+				       &sgm->ibat_ocp_threshold);
+	if (ret)
+		sgm->ibat_ocp_threshold = DEF_IBAT_OCP_MA;
+
+	ret = device_property_read_u32(sgm->dev,
+				       "mmi,ibat-occp-threshold",
+				       &sgm->ibat_occp_threshold);
+	if (ret)
+		sgm->ibat_occp_threshold = DEF_IBAT_OCCP_MA;
+
 	sgm->high_load_en_gpio = of_get_named_gpio_flags(sgm->dev->of_node,
 					"mmi,high-load-en-gpio", 0, &flags);
 	if (gpio_is_valid(sgm->high_load_en_gpio)) {
@@ -2200,33 +2237,119 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	bool cfg_changed = false;
 	struct sgm_mmi_charger *chg = data;
 	struct sgm4154x_state state = chg->sgm->state;
+	struct timespec64 now;
+	static struct timespec64 start = {0};
+	uint32_t elapsed_ms;
+	bool high_load_en;
+	bool low_load_en;
+	static int prev_paired_load = PAIRED_LOAD_OFF;
 
-	if (!chg->sgm->batt_present || chg->sgm->otg_enabled) {
+	/* Monitor vbat and ibat for OVP and OCP */
+	if (chg->batt_info.batt_mv >= chg->sgm->vbat_ovp_threshold) {
+		chg->paired_load = PAIRED_LOAD_HIGH;
+		chg->batt_protect_type = BATT_PROTECT_TYPE_OVP;
+		ktime_get_real_ts64(&start);
+		pr_err("ERROR: vbat OVP is triggered, batt_mv=%dmV, thre=%d\n",
+				chg->batt_info.batt_mv,
+				chg->sgm->vbat_ovp_threshold);
+	} else if (chg->batt_info.batt_ma >= chg->sgm->ibat_occp_threshold) {
+		chg->paired_load = PAIRED_LOAD_HIGH;
+		chg->batt_protect_type = BATT_PROTECT_TYPE_OCCP;
+		ktime_get_real_ts64(&start);
+		pr_err("ERROR: ibat OCCP is triggered, batt_ma=%dmA, thre=%d\n",
+				chg->batt_info.batt_ma,
+				chg->sgm->ibat_occp_threshold);
+	} else if (chg->batt_info.batt_ma <= -chg->sgm->ibat_ocp_threshold) {
+		chg->paired_load = PAIRED_LOAD_LOW;
+		chg->batt_protect_type = BATT_PROTECT_TYPE_OCP;
+		ktime_get_real_ts64(&start);
+		pr_err("ERROR: ibat OCP is triggered, batt_ma=%dmA, thre=%d\n",
+				chg->batt_info.batt_ma,
+				chg->sgm->ibat_ocp_threshold);
+	} else if (chg->batt_protect_type != BATT_PROTECT_TYPE_NONE) {
+		ktime_get_real_ts64(&now);
+		elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+		elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+		if (elapsed_ms < chg->sgm->batt_protect_duration) {
+			if (!chg->chg_info.chrg_present &&
+			    chg->batt_protect_type == BATT_PROTECT_TYPE_OCP) {
+				chg->paired_load = PAIRED_LOAD_OFF;
+			} else if (chg->chg_info.chrg_present &&
+			  (chg->batt_protect_type == BATT_PROTECT_TYPE_OVP ||
+			   chg->batt_protect_type == BATT_PROTECT_TYPE_OCCP)) {
+				chg->paired_load = PAIRED_LOAD_HIGH;
+				sgm4154x_set_hiz_en(chg->sgm, true);
+			} else {
+				chg->batt_protect_type = BATT_PROTECT_TYPE_NONE;
+			}
+		} else {
+			chg->batt_protect_type = BATT_PROTECT_TYPE_NONE;
+		}
+		if (chg->batt_protect_type != BATT_PROTECT_TYPE_NONE) {
+			pr_warn("keep batt protection:%d, elapsed=%dms\n",
+					chg->batt_protect_type, elapsed_ms);
+		} else {
+			pr_warn("recover battery from protection\n");
+		}
+	}
+
+	switch (chg->paired_load) {
+	case PAIRED_LOAD_LOW:
+		high_load_en = false;
+		low_load_en = true;
+		break;
+	case PAIRED_LOAD_HIGH:
+		high_load_en = true;
+		low_load_en = true;
+		break;
+	case PAIRED_LOAD_OFF:
+	default:
+		high_load_en = false;
+		low_load_en = false;
+	}
+	if (chg->paired_load != prev_paired_load) {
+		if (gpio_is_valid(chg->sgm->high_load_en_gpio)) {
+			gpio_set_value(chg->sgm->high_load_en_gpio,
+				high_load_en ^ chg->sgm->high_load_active_low);
+		}
+		if (gpio_is_valid(chg->sgm->low_load_en_gpio)) {
+			gpio_set_value(chg->sgm->low_load_en_gpio,
+				low_load_en ^ chg->sgm->low_load_active_low);
+		}
+		prev_paired_load = chg->paired_load;
+	}
+
+	if (!chg->sgm->batt_present || chg->sgm->otg_enabled ||
+	    chg->batt_protect_type == BATT_PROTECT_TYPE_OVP ||
+	    chg->batt_protect_type == BATT_PROTECT_TYPE_OCCP) {
 		if (chg->sgm->client->irq && chg->sgm->irq_enabled) {
+			cfg_changed = true;
 			disable_irq_wake(chg->sgm->client->irq);
 			disable_irq(chg->sgm->client->irq);
 			chg->sgm->irq_enabled = false;
-			pr_warn("irq is disabled, bpd=%d, otg=%d\n",
-				chg->sgm->batt_present, chg->sgm->otg_enabled);
+			pr_warn("irq is disabled, bpd=%d, otg=%d, protect_type=%d\n",
+				chg->sgm->batt_present, chg->sgm->otg_enabled,
+				chg->batt_protect_type);
 		}
-		cfg_changed = true;
-		sgm4154x_set_hiz_en(chg->sgm, true);
-		goto check_st;
+		config->charging_disable = true;
+		config->charger_suspend = true;
+		chg->chg_cfg.charger_suspend = false;
 	} else {
 		if (!chg->sgm->irq_enabled && chg->sgm->client->irq) {
 			cfg_changed = true;
-			sgm4154x_set_hiz_en(chg->sgm, false);
 			enable_irq_wake(chg->sgm->client->irq);
 			enable_irq(chg->sgm->client->irq);
 			chg->sgm->irq_enabled = true;
-			chg->chg_cfg.charger_suspend = false;
-			pr_warn("irq is enabled, bpd=%d, otg=%d\n",
-				chg->sgm->batt_present, chg->sgm->otg_enabled);
+			pr_warn("irq is enabled, bpd=%d, otg=%d, protect_type=%d\n",
+				chg->sgm->batt_present, chg->sgm->otg_enabled,
+				chg->batt_protect_type);
 		}
 	}
 
 	/* configure the charger if changed */
-	if (config->target_fv != chg->chg_cfg.target_fv) {
+	if (!config->charging_disable &&
+	    !config->charger_suspend &&
+	    config->target_fv != chg->chg_cfg.target_fv) {
 		value = config->target_fv * 1000;
 		rc = sgm4154x_set_chrg_volt(chg->sgm, value);
 		if (!rc) {
@@ -2234,7 +2357,9 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 			chg->chg_cfg.target_fv = config->target_fv;
 		}
 	}
-	if (config->target_fcc != chg->chg_cfg.target_fcc) {
+	if (!config->charging_disable &&
+	    !config->charger_suspend &&
+	    config->target_fcc != chg->chg_cfg.target_fcc) {
 		value = config->target_fcc * 1000;
 		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
 		if (!rc) {
@@ -2270,7 +2395,9 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		chg->chg_cfg.full_charged = config->full_charged;
 	}
 
-	if (config->chrg_iterm != chg->chg_cfg.chrg_iterm) {
+	if (!config->charging_disable &&
+	    !config->charger_suspend &&
+	    config->chrg_iterm != chg->chg_cfg.chrg_iterm) {
 		value = config->chrg_iterm * 1000;
 		rc = sgm4154x_set_term_curr(chg->sgm, value);
 		if (!rc) {
@@ -2279,7 +2406,9 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		}
 	}
 
-	if (config->fg_iterm != chg->chg_cfg.fg_iterm) {
+	if (!config->charging_disable &&
+	    !config->charger_suspend &&
+	    config->fg_iterm != chg->chg_cfg.fg_iterm) {
 		if (chg->fg_psy) {
 			union power_supply_propval val = {0};
 			val.intval = config->fg_iterm * 1000;
@@ -2295,23 +2424,20 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		}
 	}
 
-	if (config->charging_reset != chg->chg_cfg.charging_reset) {
+	if (!config->charging_disable &&
+	    !config->charger_suspend &&
+	    config->charging_reset != chg->chg_cfg.charging_reset) {
 		if (config->charging_reset) {
-			rc = sgm4154x_disable_charger(chg->sgm);
-			msleep(200);
-			rc = sgm4154x_enable_charger(chg->sgm);
+			sgm4154x_disable_charger(chg->sgm);
+			chg->chg_cfg.target_fv = -EINVAL;
+			chg->chg_cfg.target_fcc = -EINVAL;
+			chg->chg_cfg.charging_disable = true;
+			pr_info("Battery charging reset triggered\n");
 		}
 		cfg_changed = true;
 		chg->chg_cfg.charging_reset = config->charging_reset;
 	}
 
-	if (cfg_changed) {
-		cancel_delayed_work(&chg->sgm->charge_monitor_work);
-		schedule_delayed_work(&chg->sgm->charge_monitor_work,
-						msecs_to_jiffies(200));
-	}
-
-check_st:
 	sgm4154x_get_state(chg->sgm, &state);
 	chg_en = sgm4154x_is_enabled_charging(chg->sgm);
 	if (!cfg_changed &&
@@ -2327,6 +2453,16 @@ check_st:
 		pr_info("Battery charging reconfigure triggered\n");
 	}
 
+	if (cfg_changed) {
+		cancel_delayed_work(&chg->sgm->charge_monitor_work);
+		schedule_delayed_work(&chg->sgm->charge_monitor_work,
+						msecs_to_jiffies(200));
+	}
+
+	pr_info("cpd:%d, bpd:%d, otg:%d, protect:%d, load:%d, paired_ichg:%duA\n",
+			chg->chg_info.chrg_present, chg->sgm->batt_present,
+			chg->sgm->otg_enabled, chg->batt_protect_type,
+			chg->paired_load, chg->paired_ichg);
 	pr_info("chg_en:%d, ichg:%d, vchg:%d, ilim:%d, chg_st:0x%x, therm:%d, suspend:%d\n",
 			chg_en, chg->sgm->ichg, chg->sgm->vreg, chg->sgm->ilim,
 			state.chrg_stat, state.therm_stat, state.hiz_en);
@@ -2420,7 +2556,7 @@ static void sgm4154x_charger_set_constraint(void *data,
 
 /* Battery presence detection threshold on battery temperature */
 #define BPD_TEMP_THRE (-30)
-#define PANIC_DEB_CNT_MAX (3)
+#define PANIC_DEB_TIME_MAX (60000)
 #define OTG_VBUS_MIN_MV (4600)
 #define OTG_VBUS_MAX_MV (5600)
 static void sgm4154x_paired_battery_notify(void *data,
@@ -2428,21 +2564,18 @@ static void sgm4154x_paired_battery_notify(void *data,
 {
 	int i;
 	int rc;
-	u32 value;
 	int batt_ocv;
 	int paired_ocv;
 	int delta_ocv;
 	int delta_soc;
-	bool high_load_en;
-	bool low_load_en;
 	bool batt_present;
 	union power_supply_propval val = {0};
 	struct sgm_mmi_charger *chg = data;
 	int paired_ichg = chg->paired_ichg;
 	int paired_load = chg->paired_load;
-	static int panic_deb_cnt = 0;
-	static bool prev_high_load_en = false;
-	static bool prev_low_load_en = false;
+	struct timespec64 now = {0};
+	static struct timespec64 start = {0};
+	uint32_t elapsed_ms;
 
 	if (!batt_info || batt_info->batt_mv <= 0) {
 		pr_warn("Invalid paired battery info\n");
@@ -2468,8 +2601,11 @@ static void sgm4154x_paired_battery_notify(void *data,
 			batt_present = false;
 	}
 	chg->sgm->batt_present = batt_present;
-	if (!chg->sgm->batt_present)
+	if (!chg->sgm->batt_present) {
+		chg->paired_ichg = 0;
+		chg->paired_load = PAIRED_LOAD_OFF;
 		return;
+	}
 
 	batt_ocv = chg->batt_info.batt_mv;
 	batt_ocv -= (chg->batt_info.batt_ma * chg->batt_esr) / 1000;
@@ -2488,13 +2624,11 @@ static void sgm4154x_paired_battery_notify(void *data,
 			}
 		}
 		paired_ichg *= 1000;
-	}
-	if (!chg->constraint.factory_mode &&
-	    paired_ichg != chg->paired_ichg) {
-		value = min(chg->chg_cfg.target_fcc * 1000, paired_ichg);
-		rc = sgm4154x_set_ichrg_curr(chg->sgm, value);
-		if (!rc)
+		if (!chg->constraint.factory_mode &&
+		    chg->paired_ichg != paired_ichg) {
 			chg->paired_ichg = paired_ichg;
+			chg->chg_cfg.target_fcc = -EINVAL;
+		}
 	}
 
 	if (chg->paired_load_thres && chg->paired_load_thres_len) {
@@ -2506,38 +2640,29 @@ static void sgm4154x_paired_battery_notify(void *data,
 			}
 		}
 		if (paired_load == PAIRED_LOAD_OFF) {
-			panic_deb_cnt++;
+			if (start.tv_sec == 0 && start.tv_nsec == 0) {
+				ktime_get_real_ts64(&start);
+				elapsed_ms = 0;
+			} else {
+				ktime_get_real_ts64(&now);
+				if (now.tv_sec <= start.tv_sec)
+					start = now;
+				elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+				elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+			}
 			if (paired_vbat_panic_enabled &&
-			    panic_deb_cnt >= PANIC_DEB_CNT_MAX) {
+			    elapsed_ms >= PANIC_DEB_TIME_MAX) {
 				panic("ERROR: delta_ocv=%dmV, delta_soc=%d",
 						delta_ocv, delta_soc);
-				panic_deb_cnt = 0;
-			} else {
+			} else if (elapsed_ms >= PANIC_DEB_TIME_MAX) {
 				pr_err("ERROR: delta_ocv=%dmV, delta_soc=%d",
 						delta_ocv, delta_soc);
 			}
 		} else {
-			panic_deb_cnt = 0;
+			start.tv_sec = 0;
+			start.tv_nsec = 0;
 		}
 		chg->paired_load = paired_load;
-	}
-
-	switch (chg->paired_load) {
-	case PAIRED_LOAD_OFF:
-		high_load_en = false;
-		low_load_en = false;
-		break;
-	case PAIRED_LOAD_LOW:
-		high_load_en = false;
-		low_load_en = true;
-		break;
-	case PAIRED_LOAD_HIGH:
-		high_load_en = true;
-		low_load_en = false;
-		break;
-	default:
-		high_load_en = prev_high_load_en;
-		low_load_en = prev_low_load_en;
 	}
 
 	 /* Turn off load switch to stop charging by paired battery */
@@ -2545,29 +2670,11 @@ static void sgm4154x_paired_battery_notify(void *data,
 	    (chg->chg_info.chrg_present &&
 	     chg->chg_info.chrg_ma > 0 &&
 	     batt_info->batt_ma >= 0)) {
-		high_load_en = false;
-		low_load_en = false;
+		chg->paired_load = PAIRED_LOAD_OFF;
 	}
 
-	if (high_load_en != prev_high_load_en) {
-		if (gpio_is_valid(chg->sgm->high_load_en_gpio)) {
-			gpio_set_value(chg->sgm->high_load_en_gpio,
-				high_load_en ^ chg->sgm->high_load_active_low);
-		}
-		prev_high_load_en = high_load_en;
-	}
-	if (low_load_en != prev_low_load_en) {
-		if (gpio_is_valid(chg->sgm->low_load_en_gpio)) {
-			gpio_set_value(chg->sgm->low_load_en_gpio,
-				low_load_en ^ chg->sgm->low_load_active_low);
-		}
-		prev_low_load_en = low_load_en;
-	}
-
-	pr_info("charger_present:%d, paired_ocv:%dmV, batt_ocv:%dmV\n",
-				chg->chg_info.chrg_present, paired_ocv, batt_ocv);
-	pr_info("delta_ocv:%dmV, delta_soc:%d, high_load:%d, low_load:%d, ichg:%duA\n",
-				delta_ocv, delta_soc, high_load_en, low_load_en, paired_ichg);
+	pr_info("paired_ocv:%dmV, batt_ocv:%dmV, delta_ocv:%dmV, delta_soc:%d\n",
+				paired_ocv, batt_ocv, delta_ocv, delta_soc);
 }
 
 static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
