@@ -1013,6 +1013,7 @@ struct cyttsp5_core_data {
 	struct notifier_block pm_notifier;
 #endif
 	struct work_struct startup_work;
+	struct work_struct ez_recovery_work;
 	struct cyttsp5_sysinfo sysinfo;
 	void *exclusive_dev;
 	int exclusive_waits;

@@ -3729,6 +3729,23 @@ static void cyttsp5_queue_startup(struct cyttsp5_core_data *cd)
 	mutex_unlock(&cd->system_lock);
 }
 
+static void cyttsp5_queue_ez_recovery_(struct cyttsp5_core_data *cd)
+{
+	if (!work_pending(&cd->ez_recovery_work)) {
+		schedule_work(&cd->ez_recovery_work);
+		dev_info(cd->dev, "%s: ez_recovery_work queued\n", __func__);
+	} else {
+		dev_info(cd->dev, "%s: ez_recovery_work pending\n", __func__);
+	}
+}
+
+static void cyttsp5_queue_ez_recovery(struct cyttsp5_core_data *cd)
+{
+	mutex_lock(&cd->system_lock);
+	cyttsp5_queue_ez_recovery_(cd);
+	mutex_unlock(&cd->system_lock);
+}
+
 static void call_atten_cb(struct cyttsp5_core_data *cd,
 		enum cyttsp5_atten_type type, int mode)
 {
@@ -3791,7 +3808,7 @@ static void cyttsp5_watchdog_work(struct work_struct *work)
 	*if found the current sleep_state is SS_SLEEPING
 	*then no need to request_exclusive, directly return
 	*/
-	if (cd->sleep_state == SS_SLEEPING)
+	if (cd->sleep_state == SS_SLEEPING || cd->sleep_state == SS_SLEEP_ON)
 		return;
 
 	rc = request_exclusive(cd, cd->dev, CY_REQUEST_EXCLUSIVE_TIMEOUT);
@@ -3946,6 +3963,7 @@ static int cyttsp5_core_sleep_(struct cyttsp5_core_data *cd)
 	/* Ensure watchdog and startup works stopped */
 	cyttsp5_stop_wd_timer(cd);
 	cancel_work_sync(&cd->startup_work);
+	cancel_work_sync(&cd->ez_recovery_work);
 	cyttsp5_stop_wd_timer(cd);
 
 	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture) &&
@@ -4277,10 +4295,10 @@ static int cyttsp5_read_input(struct cyttsp5_core_data *cd)
 				goto read;
 			t = wait_event_timeout(cd->wait_q,
 					(cd->wait_until_wake == 1),
-					msecs_to_jiffies(2000));
+					msecs_to_jiffies(4000));
 			if (IS_TMO(t)) {
 				dev_info(dev, "%s: wait event timeout", __func__);
-				cyttsp5_queue_startup(cd);
+				cyttsp5_queue_ez_recovery(cd);
 			}
 			goto read;
 		}
@@ -5072,6 +5090,39 @@ static void cyttsp5_startup_work_function(struct work_struct *work)
 	if (rc < 0)
 		dev_err(cd->dev, "%s: Fail queued startup r=%d\n",
 			__func__, rc);
+}
+
+static void cyttsp5_ez_work_function(struct work_struct *work)
+{
+	struct cyttsp5_core_data *cd =
+	    container_of(work, struct cyttsp5_core_data, ez_recovery_work);
+	int rc, t;
+
+	rc = request_exclusive(cd, cd->dev, CY_REQUEST_EXCLUSIVE_TIMEOUT);
+	if (rc < 0) {
+		dev_err(cd->dev, "%s: fail get exclusive ex=%p own=%p\n",
+			__func__, cd->exclusive_dev, cd->dev);
+		return;
+	}
+
+	t = wait_event_timeout(cd->wait_q, (cd->wait_until_wake == 1),
+			       msecs_to_jiffies(2000));
+	if (IS_TMO(t)) {
+		dev_err(cd->dev, "%s: tmo waiting I2C master resume\n",
+			__func__);
+	} else {
+		rc = cyttsp5_check_and_deassert_int(cd);
+		if (rc < 0)
+			dev_err(cd->dev, "%s: Error on deassert INT r=%d\n",
+				__func__, rc);
+	}
+
+	if (release_exclusive(cd, cd->dev) < 0)
+		/* Don't return fail code, mode is already changed. */
+		dev_err(cd->dev, "%s: fail to release exclusive\n", __func__);
+	else
+		parade_debug(cd->dev, DEBUG_LEVEL_2,
+			     "%s: pass release exclusive\n", __func__);
 }
 
 /*
@@ -6837,6 +6888,7 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 
 	/* Initialize works */
 	INIT_WORK(&cd->startup_work, cyttsp5_startup_work_function);
+	INIT_WORK(&cd->ez_recovery_work, cyttsp5_ez_work_function);
 	INIT_WORK(&cd->watchdog_work, cyttsp5_watchdog_work);
 
 	/* Initialize HID specific data */
@@ -7014,6 +7066,7 @@ error_startup:
 #endif
 	device_init_wakeup(dev, 0);
 	cancel_work_sync(&cd->startup_work);
+	cancel_work_sync(&cd->ez_recovery_work);
 	cyttsp5_stop_wd_timer(cd);
 	cyttsp5_free_si_ptrs(cd);
 	remove_sysfs_interfaces(dev);
@@ -7064,6 +7117,7 @@ int cyttsp5_release(struct cyttsp5_core_data *cd)
 	pm_runtime_disable(dev);
 
 	cancel_work_sync(&cd->startup_work);
+	cancel_work_sync(&cd->ez_recovery_work);
 
 	cyttsp5_stop_wd_timer(cd);
 
