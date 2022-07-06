@@ -1899,6 +1899,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 			msleep(30);//need tunning
 
 			bq2589x_rerun_apsd_if_required(bq);
+			return -1;
 		}
 
 		return 0;
@@ -1971,6 +1972,7 @@ static int bq2589x_detected_qc3p_hvdcp(struct bq2589x *bq, int *charger_type)
 			msleep(30);//need tunning
 
 			bq2589x_rerun_apsd_if_required(bq);
+			return -1;
 		}
 
 	}
