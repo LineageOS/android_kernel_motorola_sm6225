@@ -205,10 +205,8 @@ static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 
 	ts_data->force_reflash = true;
 
-	mutex_lock(&input_dev->mutex);
 	fts_fw_update_vendor_name(fwname);
 	fts_fwupg_bin();
-	mutex_unlock(&input_dev->mutex);
 
 	return 0;
 }
