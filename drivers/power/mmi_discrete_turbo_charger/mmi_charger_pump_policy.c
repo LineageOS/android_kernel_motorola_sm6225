@@ -87,6 +87,7 @@ static int chrg_cv_delta_volt = 0;
 static int quit_slave_chrg_cnt = 0;
 static int batt_curr_roof = 0;
 static int pd_constant_power_cnt = 0;
+static int batt_ovp_cnt = 0;
 
 static void mmi_chrg_sm_move_state(struct mmi_charger_manager *chip, pm_sm_state_t state)
 {
@@ -242,6 +243,7 @@ void mmi_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 #define DISABLE_CHRG_LIMIT -1
 #define CP_CHRG_SOC_LIMIT 90
 #define PD_CONT_PWR_CNT 5
+#define BATT_OVP_COUNT 5
 
 static void clear_chg_manager(struct mmi_charger_manager *chip)
 {
@@ -396,16 +398,25 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 
 	if (chip->pres_temp_zone == ZONE_COLD
 		|| chip->pres_temp_zone == ZONE_HOT
-		|| !chrg_list->chrg_dev[PMIC_SW]->charger_enabled
-		|| vbatt_volt > chip->batt_ovp_lmt) {
+		|| !chrg_list->chrg_dev[PMIC_SW]->charger_enabled) {
 
 		mmi_chrg_info(chip, "Force stop charging, "
 						"pres_temp_zone %d, "
-						"pmic charger enabled %d, "
+						"pmic charger enabled %d\n",
+						chip->pres_temp_zone,
+						chrg_list->chrg_dev[PMIC_SW]->charger_enabled);
+		mmi_chrg_sm_move_state(chip, PM_STATE_STOP_CHARGE);
+	}
+
+	if (vbatt_volt > chip->batt_ovp_lmt)
+		batt_ovp_cnt ++;
+	else
+		batt_ovp_cnt = 0;
+
+	if (batt_ovp_cnt >= BATT_OVP_COUNT) {
+		mmi_chrg_info(chip, "Force stop charging, "
 						"vbatt_volt %dmv, "
 						"batt ovp limit %dmv\n",
-						chip->pres_temp_zone,
-						chrg_list->chrg_dev[PMIC_SW]->charger_enabled,
 						vbatt_volt, chip->batt_ovp_lmt);
 		mmi_chrg_sm_move_state(chip, PM_STATE_STOP_CHARGE);
 	}
