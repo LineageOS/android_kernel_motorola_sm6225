@@ -473,7 +473,6 @@ static int syna_ts_mmi_charger_mode(struct device *dev, int mode)
 		LOGI("Interrupt is closed, so cannot access CHARGER_CONNECTED\n");
 		return -EINVAL;
 	}
-	mutex_lock(&tcm->tp_event_mutex);
 
 	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev,DC_ENABLE_CHARGER_CONNECTED,&cval,RESP_IN_ATTN);
 	if(retval < 0) {
@@ -483,7 +482,7 @@ static int syna_ts_mmi_charger_mode(struct device *dev, int mode)
 	if(cval != mode){
 		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,DC_ENABLE_CHARGER_CONNECTED,mode,RESP_IN_ATTN);
 		if (retval < 0) {
-			LOGE("Failed to get charger_connected mode\n");
+			LOGE("Failed to set charger_connected mode\n");
 			goto exit;
 		}
 		LOGI("%s: charger mode success %d\n",__func__,cval);
@@ -492,7 +491,6 @@ static int syna_ts_mmi_charger_mode(struct device *dev, int mode)
 	}
 exit:
 
-	mutex_unlock(&tcm->tp_event_mutex);
 	return 0;
 };
 
