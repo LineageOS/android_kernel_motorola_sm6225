@@ -43,7 +43,7 @@
 #define POLL_NEXT_INT 1000
 #endif
 
-#define MOTOR_DETECT_EXPIRE 500 //500ms timeout
+#define MOTOR_DETECT_EXPIRE 20000 //20s timeout
 #define POLL_INIT_INT 100 //start polling sensor data in Xms
 #define POLL_NEXT_INT 50
 
@@ -89,8 +89,8 @@ typedef struct {
  */
 static sensor_scan_t scanner[POS_MAX] = {
 	{-1, -1},
-	{0, 0},	/* compact position: magnet[0], value 0 degrees */
-	{1, 0},	/* expanded position: magnet[1], value 0 degrees */
+	{1, 0},	/* compact position: magnet[1], value 0 degrees */
+	{0, 0},	/* expanded position: magnet[0], value 0 degrees */
 	{2, 0},	/* peek position: magnet[2], value 0 degrees */
 };
 
@@ -373,6 +373,9 @@ typedef struct motor_device {
 			dev_info(md->dev, "Assume %s position\n", position_labels[_Pos]); \
 		} \
 	} while(0)
+
+#define POSITION_RANGE_CHK(n) \
+	((n >= POS_UNKNOWN) && (n < POS_MAX))
 
 static int set_pinctrl_state(motor_device* md, unsigned state_index);
 static void moto_drv8424_set_step_freq(motor_device* md, unsigned freq);
@@ -706,7 +709,7 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 	if (en) {
 		/* signal sensor hub to start/stop sampling hall effect */
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 1);
-		hrtimer_start(&md->timeout_timer, adapt_time_helper(md->time_out), HRTIMER_MODE_REL);
+		//FIXME hrtimer_start(&md->timeout_timer, adapt_time_helper(md->time_out), HRTIMER_MODE_REL);
 		moto_drv8424_cmd_push(md, CMD_POLL, msecs_to_jiffies(POLL_INIT_INT));
 		if (!md->power_en) {
 			/* declare sensor querying stage when powered off */
@@ -715,10 +718,10 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 			moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(POLL_INIT_INT));
 		}
 	} else {
-		hrtimer_try_to_cancel(&md->timeout_timer);
+		//FIXME hrtimer_try_to_cancel(&md->timeout_timer);
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 0);
 	}
-	LOGD("gpio ACTIVE set: %u\n", en ? 1 : 0);
+	LOGD("gpio ACTIVE set: %u; timeout timer is not set!!!\n", en ? 1 : 0);
 }
 
 //Set VDD
@@ -1094,7 +1097,13 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 	int destination = atomic_read(&md->destination);
 	enum hrtimer_restart ret = HRTIMER_NORESTART;
 
-	LOGD("Timeout: position=%d, detection=%d\n", original, destination);
+	if (POSITION_RANGE_CHK(original) &&
+	    POSITION_RANGE_CHK(destination)) {
+		LOGD("Timeout: position=%s, detection=%s\n",
+			position_labels[original], position_labels[destination]);
+	} else {
+		LOGD("Timeout: position=%d, detection=%d\n", original, destination);
+	}
 #if 0
 	/* Timed out arriving to destination from known starting position.
 	 * Solution would be to go back to starting position
@@ -1121,7 +1130,7 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 }
 
 #define OUT_OF_RANGE 10000
-#define PROXIMITY 10
+#define PROXIMITY 1000 /* 10 degrees multiplied by 100 to get rid of float */
 static inline bool IN_RANGE(int valMeas, int valSet)
 {
 	return (valMeas >= (valSet - PROXIMITY) &&
@@ -1131,6 +1140,7 @@ static inline bool IN_RANGE(int valMeas, int valSet)
 static int moto_drv8424_detect_position(motor_device *md)
 {
 	int i, start, end, ret = POS_UNKNOWN;
+	static int data_sample[3];
 
 	if (atomic_read(&md->destination) > 0) {
 		/* check only destination position */
@@ -1141,9 +1151,17 @@ static int moto_drv8424_detect_position(motor_device *md)
 		start = POS_COMPACT;
 		end = POS_MAX;
 	}
-	LOGD("MOTOR_ACTIVE gpio=%d; scan sensor(s): %d - %d\n",
-		gpio_get_value(md->mc.ptable[MOTOR_ACTIVE]), start, end);
+
 	mutex_lock(&md->mx_lock);
+	if (data_sample[0] != md->sensor_data[0] ||
+	    data_sample[1] != md->sensor_data[1] ||
+	    data_sample[2] != md->sensor_data[2]) {
+		memcpy(data_sample, md->sensor_data, sizeof(data_sample));
+		LOGD("MOTOR_ACTIVE gpio=%d; scan sensor(s): %d - %d\n",
+			gpio_get_value(md->mc.ptable[MOTOR_ACTIVE]), start, end);
+		LOGD("sensor data: %d, %d, %d\n", md->sensor_data[0], md->sensor_data[1], md->sensor_data[2]);
+	}
+
 	for (i = start; i < end; i++) {
 		if (IN_RANGE(md->sensor_data[scanner[i].index], scanner[i].value)) {
 			ret = i;
@@ -1157,7 +1175,7 @@ static int moto_drv8424_detect_position(motor_device *md)
 	}
 	mutex_unlock(&md->mx_lock);
 	if (ret)
-		LOGD("detected position: %d\n", ret);
+		LOGD("detected position: %s\n", position_labels[ret]);
 
 	return ret;
 }
@@ -1228,6 +1246,7 @@ static void motor_cmd_work(struct work_struct *work)
 				if (atomic_read(&md->stepping) != 0) {
 					atomic_set(&md->stepping, 0);
 				} else {
+					moto_drv8424_set_sensing(md, false);
 					/* polling might occur without driving motor
 					 * we need to release kthread that will trigger position change
 					 * and set destination to properly complete detection
