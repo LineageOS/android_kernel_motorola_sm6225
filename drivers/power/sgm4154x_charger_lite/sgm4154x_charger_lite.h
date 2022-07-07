@@ -285,6 +285,7 @@ struct sgm_mmi_charger {
 	struct mmi_charger_constraint	constraint;
 	struct mmi_charger_driver	*driver;
 	u32				chrg_taper_cnt;
+	const char			*fg_psy_name;
 	struct power_supply		*fg_psy;
 	int ichg_polority;
 

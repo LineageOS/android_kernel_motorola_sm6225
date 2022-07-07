@@ -2685,17 +2685,20 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 	const char *df_sn = NULL;
 	struct mmi_charger_driver *driver;
 
-	if (!chg->fg_psy) {
-		const char *fg_psy_name = "fg_battery";
-		rc = device_property_read_string(chg->sgm->dev,
+	if (!chg->fg_psy && !chg->fg_psy_name) {
+		chg->fg_psy_name = "fg_battery";
+		device_property_read_string(chg->sgm->dev,
 					"mmi,fg-psy-name",
-					&fg_psy_name);
-		chg->fg_psy = power_supply_get_by_name(fg_psy_name);
+					&chg->fg_psy_name);
+	}
+
+	if (!chg->fg_psy) {
+		chg->fg_psy = power_supply_get_by_name(chg->fg_psy_name);
 		if (!chg->fg_psy) {
-			pr_err("No %s power supply found\n", fg_psy_name);
+			pr_err("No %s power supply found\n", chg->fg_psy_name);
 			return -ENODEV;
 		}
-		pr_info("%s power supply is found\n", fg_psy_name);
+		pr_info("%s power supply is found\n", chg->fg_psy_name);
 	}
 
 	if (chg->driver) {
@@ -2854,6 +2857,7 @@ static int sgm4154x_psy_notifier_call(struct notifier_block *nb,
 	struct sgm4154x_device *sgm = container_of(nb,
 				struct sgm4154x_device, psy_nb);
 	struct power_supply *psy = v;
+	struct sgm_mmi_charger *chg = NULL;
 
 	if (!sgm) {
 		pr_err("called before sgm valid!\n");
@@ -2863,9 +2867,9 @@ static int sgm4154x_psy_notifier_call(struct notifier_block *nb,
 	if (!psy || val != PSY_EVENT_PROP_CHANGED)
 		return NOTIFY_OK;
 
+	chg = sgm->mmi_charger;
 	if ((sgm->usb && !strcmp(psy->desc->name, sgm->usb->desc->name)) ||
-	    (sgm->mmi_charger && sgm->mmi_charger->fg_psy &&
-	     !strcmp(psy->desc->name, sgm->mmi_charger->fg_psy->desc->name))) {
+	    (chg && chg->fg_psy_name && !strcmp(psy->desc->name, chg->fg_psy_name))) {
 		cancel_delayed_work(&sgm->charge_detect_delayed_work);
 		schedule_delayed_work(&sgm->charge_detect_delayed_work,
 						msecs_to_jiffies(0));
