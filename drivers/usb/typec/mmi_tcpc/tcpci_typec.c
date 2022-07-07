@@ -2544,7 +2544,20 @@ static inline int typec_handle_vbus_absent(struct tcpc_device *tcpc)
 
 int tcpc_typec_handle_ps_change(struct tcpc_device *tcpc, int vbus_level)
 {
+	uint32_t chip_id;
+	int rv = 0;
+
 	tcpc->typec_reach_vsafe0v = false;
+
+	rv = tcpci_get_chip_id(tcpc, &chip_id);
+	if (!rv && chip_id == SC2150A_DID) {
+		// open vsafe0.8v irq
+		if (vbus_level >= TCPC_VBUS_VALID) {
+			typec_disable_low_power_mode(tcpc);
+		} else {
+			typec_enter_low_power_mode(tcpc);
+		}
+	}
 
 #ifdef CONFIG_TYPEC_CHECK_LEGACY_CABLE
 	if (tcpc->typec_legacy_cable) {

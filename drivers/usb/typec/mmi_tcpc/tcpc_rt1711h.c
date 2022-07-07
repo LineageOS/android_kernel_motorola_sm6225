@@ -959,11 +959,6 @@ static int rt1711_enable_vsafe0v_detect(
 	struct tcpc_device *tcpc, bool enable)
 {
 	int ret = 0;
-	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
-
-	if (chip->chip_id == SC2150A_DID) {
-		enable = true;
-	}
 
 	ret = rt1711_i2c_read8(tcpc, RT1711H_REG_RT_MASK);
 
