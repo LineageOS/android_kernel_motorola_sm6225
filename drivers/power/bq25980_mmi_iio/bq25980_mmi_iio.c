@@ -2471,7 +2471,7 @@ static int bq25980_probe(struct i2c_client *client,
 
 	bq25980_create_device_node(bq->dev);
 
-	dump_reg(bq,0x00,0x37);
+	//dump_reg(bq,0x00,0x37);
 
 	printk("-------[%s] driver probe success--------\n",bq->model_name);
 	return 0;
