@@ -4291,6 +4291,7 @@ static int cyttsp5_read_input(struct cyttsp5_core_data *cd)
 			dev_info(dev, "%s: is_suspended = %d, wait_until_wake = %d", __func__,
 				dev->power.is_suspended, cd->wait_until_wake);
 
+			PM_WAKEUP_EVENT(cd->gesture_wakelock, 500);
 			if (!dev->power.is_suspended)
 				goto read;
 			t = wait_event_timeout(cd->wait_q,
@@ -7030,6 +7031,14 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	}
 #endif
 
+	PM_WAKEUP_REGISTER(dev, cd->gesture_wakelock,
+			"cyttsp5_gesture_wakelock");
+	if (!cd->gesture_wakelock) {
+		dev_info(dev, "%s: allocate gesture wakeup source err!\n", __func__);
+		rc = -ENOMEM;
+		goto err_register_gesture_wakelock;
+	}
+
 	/* Probe registered modules */
 	cyttsp5_probe_modules(cd);
 
@@ -7055,6 +7064,8 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	is_cyttsp5_probe_success = true;
 	return 0;
 
+err_register_gesture_wakelock:
+	PM_WAKEUP_UNREGISTER(cd->gesture_wakelock);
 error_startup_btn:
 	cyttsp5_btn_release(dev);
 error_startup_mt:

@@ -14,6 +14,7 @@
 #define __CYTTSP5_TS_MMI_H__
 
 #include <linux/touchscreen_mmi.h>
+#include <linux/mmi_wake_lock.h>
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 int cyttsp5_ts_mmi_dev_register(struct device *dev);
