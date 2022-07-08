@@ -608,14 +608,16 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.rx_neg_power);
 
 	mmi_info(chg, "Wireless dump info -2: TX_IIN: %dmA, TX_VIN: %dmV, TX_VRECT: %dmV, "
-		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, ",
+		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, "
+		"RX_CONNECTED: %d",
 		wls_info.tx_iin_ma,
 		wls_info.tx_vin_mv,
 		wls_info.tx_vrect_mv,
 		wls_info.tx_det_rx_power,
 		wls_info.tx_power,
 		wls_info.power_loss,
-		(wls_info.irq_status & (0x01<<12)) ? 1 : 0);
+		(wls_info.irq_status & (0x01<<12)) ? 1 : 0,
+		chg->rx_connected);
 
 	mmi_info(chg, "Wireless dump info -3: rx_ept: %d, rx_ce: %d, "
 		"rx_rp: %d, rx_dietemp: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
@@ -627,6 +629,16 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.wls_boost,
 		wls_info.wls_icl_ma,
 		wls_info.wls_icl_therm_ma);
+
+
+	mmi_info(chg, "Wireless dump info -4: WLC Stand: tx_type %d, tx_power: %d, "
+		"fan: %d, light: %d, status: %d",
+		chg->wlc_tx_type,
+		chg->wlc_tx_power,
+		chg->wlc_fan_speed,
+		chg->wlc_light_ctl,
+		chg->wlc_status);
+	
 }
 #else
 void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_info)
@@ -1647,6 +1659,7 @@ static ssize_t wlc_tx_type_show(struct device *dev,
 				&type,
 				sizeof(type));
 
+	chg->wlc_tx_type = type;
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", type);
 }
 
@@ -1670,6 +1683,7 @@ static ssize_t wlc_tx_power_show(struct device *dev,
 				&power,
 				sizeof(power));
 
+	chg->wlc_tx_power = power;
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", power);
 }
 
@@ -1980,7 +1994,7 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
 	/* RX connected update */
 		if (notify_data->data[0] != chg->rx_connected) {
 			if (chg->wls_psy) {
-				pr_info("report rx_connected\n");
+				pr_info("report rx_connected %d\n", notify_data->data[0]);
 				sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "rx_connected");
 			}
 		}
@@ -1995,7 +2009,7 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
 		if (notify_data->data[0] != chg->wlc_status) {
 			chg->wlc_status = notify_data->data[0];
 			if (chg->wls_psy) {
-				pr_info("report wlc_st_changed\n");
+				pr_info("report wlc_st_changed %d\n", notify_data->data[0]);
 				sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "wlc_st_changed");
 			}
 		}
