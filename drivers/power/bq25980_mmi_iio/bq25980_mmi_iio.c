@@ -543,7 +543,7 @@ static int bq25980_reg_init(struct bq25980_device *bq);
 //static int bq25980_watchdog_time[BQ25980_NUM_WD_VAL] = {5000, 10000, 50000,
 //							300000};
 
-static void dump_reg(struct bq25980_device *bq, int start, int end)
+/*static void dump_reg(struct bq25980_device *bq, int start, int end)
 {
 	int ret;
 	unsigned int val;
@@ -554,7 +554,7 @@ static void dump_reg(struct bq25980_device *bq, int start, int end)
 		if (!ret)
 			dev_err(bq->dev, "[%s] Reg[%02X] = 0x%02X\n", bq->model_name, addr, val);
 	}
-}
+}*/
 
 static void dump_all_reg(struct bq25980_device *bq)
 {
