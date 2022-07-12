@@ -1404,7 +1404,7 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 			val->intval = cps_wls_get_vout();
 			break;
 		case POWER_SUPPLY_PROP_CURRENT_NOW:
-			ret = cps_get_power_supply_prop("battery", psp, val);
+			val->intval = cps_wls_get_iout();//cps_get_power_supply_prop("battery", psp, val);
 			break;
 		default:
 			return -EINVAL;
