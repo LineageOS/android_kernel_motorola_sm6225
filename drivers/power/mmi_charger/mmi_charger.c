@@ -147,6 +147,8 @@ struct mmi_charger_profile {
 	int noffc_chrg_iterm;
 	int noffc_max_fv_mv;
 
+	int shutdown_empty_vbat_mv;
+
 	int fg_iterm;
         int chrg_iterm;
         int max_fv_mv;
@@ -250,6 +252,8 @@ struct mmi_charger_chip {
 	struct mmi_vote		suspend_charger_vote;
 	struct mmi_vote		disable_charging_vote;
 	uint32_t		factory_kill_debounce_ms;
+
+	bool			empty_vbat_shutdown_triggered;
 };
 
 static int mmi_vote(struct mmi_vote *vote, const char *voter,
@@ -942,6 +946,11 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 	}
 
 	node = charger->driver->dev->of_node;
+	rc = of_property_read_u32(node, "mmi,shutdown-empty-vbat-mv",
+				  &charger->profile.shutdown_empty_vbat_mv);
+	if (rc)
+		charger->profile.shutdown_empty_vbat_mv = -EINVAL;
+
 	rc = of_property_read_u32(node, "mmi,chrg-iterm-ma",
 				  &charger->profile.chrg_iterm);
 	if (rc)
@@ -1415,6 +1424,15 @@ static void mmi_update_charger_status(struct mmi_charger_chip *chip,
 	struct mmi_battery_info *batt_info = &charger->batt_info;
 	struct mmi_charger_info *chg_info = &charger->chg_info;
 	struct mmi_charger_cfg *cfg = &charger->cfg;
+
+	if (profile->shutdown_empty_vbat_mv > 0 &&
+	    profile->shutdown_empty_vbat_mv >= batt_info->batt_mv) {
+		mmi_err(chip, "[C:%s]: trigger shutdown, vbat=%d, empty_vbat=%d\n",
+				charger->driver->name,
+				batt_info->batt_mv,
+				profile->shutdown_empty_vbat_mv);
+		chip->empty_vbat_shutdown_triggered = true;
+	}
 
 	if (chip->enable_charging_limit && chip->factory_version) {
 		charging_limit_modes = status->charging_limit_modes;
@@ -2155,6 +2173,15 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 		} else {
 			chip->factory_kill_armed = false;
 		}
+	}
+
+	if (chip->empty_vbat_shutdown_triggered) {
+		mmi_err(chip, "shutdown for empty battery voltage\n");
+#if (KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE) || defined(MMI_GKI_API_ALLOWANCE)
+		orderly_poweroff(true);
+#else
+		kernel_power_off();
+#endif
 	}
 
 	chip->suspended = 0;
