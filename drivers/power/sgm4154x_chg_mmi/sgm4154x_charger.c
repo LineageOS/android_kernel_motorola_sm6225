@@ -86,14 +86,16 @@ int mmi_regmap_update_bits(struct sgm4154x_device *sgm, unsigned int reg,
 {
 	int retry_count = 0;
 
-	while (sgm->sgm4154x_suspend_flag && retry_count < WAIT_I2C_COUNT) {
-		retry_count ++;
-		dev_err(sgm->dev, "wait system resume when I2C write, count %d\n", retry_count);
-		msleep(WAIT_I2C_TIME);
-	}
+	if (!sgm->i2c_err_wa_dis) {
+		while (sgm->sgm4154x_suspend_flag && retry_count < WAIT_I2C_COUNT) {
+			retry_count ++;
+			dev_err(sgm->dev, "wait system resume when I2C write, count %d\n", retry_count);
+			msleep(WAIT_I2C_TIME);
+		}
 
-	if (retry_count >= WAIT_I2C_COUNT)
-		return -EBUSY;
+		if (retry_count >= WAIT_I2C_COUNT)
+			return -EBUSY;
+	}
 
 	return regmap_update_bits(sgm->regmap, reg, mask, val);
 }
@@ -102,14 +104,16 @@ int mmi_regmap_read(struct sgm4154x_device *sgm, unsigned int reg, unsigned int 
 {
 	int retry_count = 0;
 
-	while (sgm->sgm4154x_suspend_flag && retry_count < WAIT_I2C_COUNT) {
-		retry_count ++;
-		dev_err(sgm->dev, "wait system resume when I2C read, count %d\n", retry_count);
-		msleep(WAIT_I2C_TIME);
-	}
+	if (!sgm->i2c_err_wa_dis) {
+		while (sgm->sgm4154x_suspend_flag && retry_count < WAIT_I2C_COUNT) {
+			retry_count ++;
+			dev_err(sgm->dev, "wait system resume when I2C read, count %d\n", retry_count);
+			msleep(WAIT_I2C_TIME);
+		}
 
-	if (retry_count >= WAIT_I2C_COUNT)
-		return -EBUSY;
+		if (retry_count >= WAIT_I2C_COUNT)
+			return -EBUSY;
+	}
 
 	return regmap_read(sgm->regmap, reg, val);
 }
@@ -2514,6 +2518,8 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		sgm->wls_max_icl = 0;
 
 	dev_info(sgm->dev, "mmi,wls-max-icl = %d\n",sgm->wls_max_icl);
+
+	sgm->i2c_err_wa_dis = of_property_read_bool(sgm->dev->of_node, "mmi,i2c-err-wa-dis");
 
 	#if 0
 	ret = device_property_read_u32(sgm->dev, "watchdog-timer",

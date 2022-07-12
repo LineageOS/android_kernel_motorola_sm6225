@@ -384,6 +384,8 @@ struct sgm4154x_device {
 	/*wls output en/dis control*/
 	int			wls_en_gpio;
 	int			wls_max_icl;
+
+	bool			i2c_err_wa_dis;
 };
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
