@@ -27,6 +27,7 @@
 #define DEF_IBAT_OCP_MA (1500)
 #define DEF_IBAT_OCCP_MA (1500)
 #define DEF_PROTECT_DURATION_MS (60000)
+#define DEF_USB_CURRENT_MA (500000)
 
 static bool paired_vbat_panic_enabled = false;
 module_param(paired_vbat_panic_enabled, bool, 0644);
@@ -1396,17 +1397,12 @@ static void charger_detect_work_func(struct work_struct *work)
 			return;
 	}
 
-	if (sgm->use_ext_usb_psy && sgm->usb) {
-		if (curr_in_limit < sgm->state.ibus_limit)
-			curr_in_limit = sgm->state.ibus_limit;
-		if (curr_in_limit > sgm->init_data.ilim)
-			curr_in_limit = sgm->init_data.ilim;
-		if (prev_in_limit != curr_in_limit) {
-			dev_info(sgm->dev, "Update: curr_in_limit = %d\n",
-						curr_in_limit);
-			sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
-			prev_in_limit = curr_in_limit;
-		}
+	if ((!sgm->use_ext_usb_psy || !sgm->usb) &&
+	    prev_in_limit != curr_in_limit) {
+		dev_info(sgm->dev, "Update: curr_in_limit = %d\n",
+					curr_in_limit);
+		sgm4154x_set_input_curr_lim(sgm, curr_in_limit);
+		prev_in_limit = curr_in_limit;
 	}
 #endif
 	if (state_changed) {
@@ -2243,6 +2239,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	bool high_load_en;
 	bool low_load_en;
 	static int prev_paired_load = PAIRED_LOAD_OFF;
+	int curr_in_limit = chg->sgm->ilim;
 
 	/* Monitor vbat and ibat for OVP and OCP */
 	if (chg->batt_info.batt_mv >= chg->sgm->vbat_ovp_threshold) {
@@ -2451,6 +2448,28 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		chg->chg_cfg.target_fcc = -EINVAL;
 		chg->chg_cfg.charging_disable = true;
 		pr_info("Battery charging reconfigure triggered\n");
+	}
+
+	if (chg->chg_info.chrg_present && !state.hiz_en &&
+	    chg->sgm->use_ext_usb_psy && chg->sgm->usb) {
+		if (state.ibus_limit < DEF_USB_CURRENT_MA &&
+		    state.ibus_adc < DEF_USB_CURRENT_MA) {
+			curr_in_limit = DEF_USB_CURRENT_MA - state.ibus_adc;
+		} else if (state.ibus_limit > state.ibus_adc) {
+			curr_in_limit = state.ibus_limit - state.ibus_adc;
+		} else {
+			curr_in_limit = 0;
+		}
+		if (curr_in_limit > chg->sgm->init_data.ilim)
+			curr_in_limit = chg->sgm->init_data.ilim;
+	} else if (!chg->chg_info.chrg_present) {
+		curr_in_limit = 0;
+	}
+
+	if (chg->sgm->ilim != curr_in_limit) {
+		sgm4154x_set_input_curr_lim(chg->sgm, curr_in_limit);
+		pr_info("ibus_limit=%d, ibus_adc=%d, curr=%d\n",
+				state.ibus_limit, state.ibus_adc, curr_in_limit);
 	}
 
 	if (cfg_changed) {
