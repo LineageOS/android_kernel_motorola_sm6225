@@ -1084,11 +1084,17 @@ static void mmi_discrete_wireless_icl_work(struct work_struct *work)
 				struct mmi_discrete_charger,
 				wireless_icl_work.work);
 	int wls_icl = 0;
+	union power_supply_propval wls_output = {0, };
+	int ret = 0;
 
 	wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
+
+	if (wls_icl >= chip->wls_max_icl_ua)//wls icl have been setted
+		return;
+
 	while((wls_icl + WLS_ICL_INCREASE_STEP) <= chip->wls_max_icl_ua) {
 		if(!is_wls_online(chip))
-			break;
+			return;
 		wls_icl += WLS_ICL_INCREASE_STEP;
 
 		if (wls_icl < WLS_ICL_MIN)
@@ -1099,6 +1105,32 @@ static void mmi_discrete_wireless_icl_work(struct work_struct *work)
 		wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
 		mmi_info(chip, "vote wireless charging icl %d ua\n", wls_icl);
 	}
+
+	if (!chip->wls_psy)
+		return;
+
+	ret = power_supply_get_property(chip->wls_psy,
+				       POWER_SUPPLY_PROP_CURRENT_NOW, &wls_output);
+	if (ret)
+		mmi_err(chip, "Couldn't get wls current now prop rc=%d\n", ret);
+
+	mmi_info(chip, "get wls current now =%d\n", wls_output.intval);
+	if (wls_output.intval >= 500)
+		return;
+
+	wls_icl = 0;
+	while((wls_icl + WLS_ICL_INCREASE_STEP) <= chip->wls_max_icl_ua) {
+		if(!is_wls_online(chip))
+			return;
+		wls_icl += WLS_ICL_INCREASE_STEP;
+
+		vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER, true, wls_icl);
+		msleep(500);
+		wls_icl = get_client_vote(chip->usb_icl_votable, SW_ICL_MAX_VOTER);
+		mmi_info(chip, "vote wireless charging icl %d ua\n", wls_icl);
+	}
+	charger_dev_rerun_aicl(chip->master_chg_dev);
+
 }
 
 /*MIN is 2.5W -> default icl 500mA * input vol 5V*/

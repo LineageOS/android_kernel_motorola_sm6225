@@ -2850,6 +2850,18 @@ static int bq2589x_is_charging_halted(struct charger_device *chg_dev, bool *en)
 	return ret;
 }
 
+static int mmi_rerun_aicl(struct charger_device *chg_dev)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	int ret = 0;
+
+	ret = bq2589x_force_ico(bq);
+
+	dev_info(bq->dev,"%s force ico %s\n", __func__, ret ? "failed" : "success");
+
+	return ret;
+}
+
 static int bq2589x_dump_registers(struct charger_device *chg_dev, struct seq_file *m)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -2891,6 +2903,7 @@ static struct charger_ops bq2589x_chg_ops = {
 	.enable_termination = bq2589x_enable_termination,
 	.get_qc3p_power = mmi_get_qc3p_power,
 	.config_pd_active = mmi_config_pd_active,
+	.rerun_aicl = mmi_rerun_aicl,
 };
 
 static int bq2589x_charger_probe(struct i2c_client *client,
