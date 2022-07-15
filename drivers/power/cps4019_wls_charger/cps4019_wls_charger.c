@@ -640,8 +640,6 @@ static int cps_check_power(bool *en)
 
 	power_supply_get_property(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &data);
 	if (data.intval > CPS4019_WORK_VOL) {
-		cps_wls_log(CPS_LOG_ERR,"%s chg vol %d. Do not need to set power\n",
-				__func__, data.intval);
 		*en = false;
 	} else {
 		*en = true;
@@ -1255,6 +1253,7 @@ static int cps_wls_charger_notify_full(void)
 {
 	mmi_cmd_s* mmi_cmd_p;
 	union power_supply_propval data;
+	bool low_power_flag;
 
 	if (cps_get_power_supply_prop("battery", POWER_SUPPLY_PROP_CAPACITY, &data)) {
 		return CPS_WLS_FAIL;
@@ -1263,6 +1262,12 @@ static int cps_wls_charger_notify_full(void)
 	cps_wls_log(CPS_LOG_DEBG, "[%s] soc = %d.\n", __func__, data.intval);
 	if (data.intval != 100)
 		return CPS_WLS_FAIL;
+
+	/*get vbus status first*/
+	cps_check_power(&low_power_flag);
+	if (low_power_flag) {
+		return CPS_WLS_FAIL;
+	}
 
 	if (!cps_wls_get_vout_state()) {
 		return CPS_WLS_FAIL;
@@ -1377,7 +1382,16 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 			enum power_supply_property psp,
 			union power_supply_propval *val)
 {
+	bool low_power_flag;
 	int ret = 0;
+
+	/*get vbus status first*/
+	cps_check_power(&low_power_flag);
+	if (low_power_flag) {
+		val->intval = -1;
+		return ret;
+	}
+
 	switch(psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
 		case POWER_SUPPLY_PROP_PRESENT:
