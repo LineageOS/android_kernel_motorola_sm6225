@@ -375,6 +375,8 @@ static int syna_ts_mmi_post_suspend(struct device *dev)
 	struct syna_tcm *tcm;
 	struct platform_device *pdev = dev_get_drvdata(dev);
 
+	LOGI("post_suspend enter\n");
+
 	if (!pdev) {
 		LOGE("Failed to get platform device");
 		return -ENODEV;
@@ -389,9 +391,8 @@ static int syna_ts_mmi_post_suspend(struct device *dev)
 		return 0;
 	}
 
-	tcm->dev_suspend(&tcm->pdev->dev);
+	LOGI("post_suspend exit\n");
 
-	//tcm->pwr_state = false;
 	return 0;
 }
 
@@ -399,7 +400,8 @@ static int syna_ts_mmi_pre_suspend(struct device *dev)
 {
 	struct syna_tcm *tcm;
 	struct platform_device *pdev = dev_get_drvdata(dev);
-//	int retval = 0;
+
+	LOGI("pre_suspend enter\n");
 
 	if (!pdev) {
 		LOGE("Failed to get platform device");
@@ -413,9 +415,8 @@ static int syna_ts_mmi_pre_suspend(struct device *dev)
 	if (!tcm->pwr_state)
 		return 0;
 
-//	retval = syna_dev_early_suspend(&tcm->pdev->dev);
-//	if (retval < 0)
-//		LOGE("early suspend fail");
+	LOGI("pre_suspend exit\n");
+
 	return 0;
 }
 
@@ -424,6 +425,7 @@ static int syna_ts_mmi_panel_state(struct device *dev,
 {
 	struct syna_tcm *tcm;
 	struct platform_device *pdev = dev_get_drvdata(dev);
+	int retval = 0;
 	if (!pdev) {
 		LOGE("Failed to get platform device");
 		return -ENODEV;
@@ -436,6 +438,10 @@ static int syna_ts_mmi_panel_state(struct device *dev,
 	switch (to) {
 		case TS_MMI_PM_DEEPSLEEP:
 			tcm->lpwg_enabled = false;
+			retval = syna_dev_early_suspend(&tcm->pdev->dev);
+			if (retval < 0) {
+				LOGE("early suspend fail");
+			}
 			tcm->dev_suspend(&tcm->pdev->dev);
 			break;
 		case TS_MMI_PM_GESTURE:

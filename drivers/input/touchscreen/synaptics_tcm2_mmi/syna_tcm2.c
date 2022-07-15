@@ -1296,7 +1296,7 @@ static int syna_dev_suspend(struct device *dev)
 	return 0;
 }
 
-#if defined(ENABLE_DISP_NOTIFIER)
+//#if defined(ENABLE_DISP_NOTIFIER)
 /**
  * syna_dev_early_suspend()
  *
@@ -1309,10 +1309,12 @@ static int syna_dev_suspend(struct device *dev)
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-static int syna_dev_early_suspend(struct device *dev)
+int syna_dev_early_suspend(struct device *dev)
 {
 	int retval;
 	struct syna_tcm *tcm = dev_get_drvdata(dev);
+
+	LOGI("early_suspend enter\n");
 
 	/* exit directly if device is already in suspend state */
 	if (tcm->pwr_state != PWR_ON)
@@ -1327,9 +1329,12 @@ static int syna_dev_early_suspend(struct device *dev)
 	}
 
 	tcm->slept_in_early_suspend = true;
-
+	LOGI("early_suspend exit\n");
+	
 	return 0;
 }
+
+#if defined(ENABLE_DISP_NOTIFIER) && !defined (CONFIG_INPUT_TOUCHSCREEN_MMI)
 /**
  * syna_dev_fb_notifier_cb()
  *
@@ -1856,7 +1861,7 @@ static void syna_dev_shutdown(struct platform_device *pdev)
  */
 #ifdef CONFIG_PM
 static const struct dev_pm_ops syna_dev_pm_ops = {
-#if !defined(ENABLE_DISP_NOTIFIER)
+#if !defined(ENABLE_DISP_NOTIFIER)  && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	.suspend = syna_dev_suspend,
 	.resume = syna_dev_resume,
 #endif

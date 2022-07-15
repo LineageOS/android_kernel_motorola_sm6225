@@ -49,6 +49,10 @@
 #define TOUCH_INPUT_NAME "synaptics_tcm_touch"
 #define TOUCH_INPUT_PHYS_PATH "synaptics_tcm/touch_input"
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
+
 #define CHAR_DEVICE_NAME "tcm"
 #define CHAR_DEVICE_MODE (0x0600)
 
@@ -474,6 +478,6 @@ void syna_dev_reflash_startup_work(struct work_struct *work);
 
 int syna_set_fw_name(struct syna_tcm *tcm, char *name);
 int syna_reflash_do_reflash(struct syna_tcm *tcm, char *fwname);
-//int syna_dev_early_suspend(struct device *dev);
+int syna_dev_early_suspend(struct device *dev);
 bool syna_check_panel(struct device_node *np);
 extern bool limit_panel;
