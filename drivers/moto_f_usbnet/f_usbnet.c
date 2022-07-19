@@ -298,11 +298,31 @@ static ssize_t usbnet_iff_flag_show(struct device *dev,
 };
 static DEVICE_ATTR(iff_flag, S_IRUGO, usbnet_iff_flag_show, NULL);
 
+static void usbnet_if_config_notify(struct usbnet_context *context)
+{
+	struct kobj_uevent_env *env;
+	struct net_device *net_dev = context->dev;
+
+	env = kzalloc(sizeof(*env), GFP_KERNEL);
+	if (!env) {
+		USBNETDBG(context, "%s: alloc uevent error\n", __func__);
+		return;
+	}
+
+	add_uevent_var(env, "USBNET_IF_CFG_IP_ADDR=0x%08x",
+				context->ip_addr);
+	add_uevent_var(env, "USBNET_IP_CFG_ROUTER_ADDR=0x%08x",
+				context->router_ip);
+	add_uevent_var(env, "USBNET_IP_CFG_SUBNET_MASK=0x%08x",
+				context->subnet_mask);
+	kobject_uevent_env(&net_dev->dev.kobj, KOBJ_CHANGE, env->envp);
+	kfree(env);
+}
+
 static inline struct usbnet_device *usbnet_func_to_dev(struct usb_function *f)
 {
 	return container_of(f, struct usbnet_device, function);
 }
-
 
 static int ether_queue_out(struct usb_request *req ,
 				struct usbnet_context *context)
@@ -523,6 +543,7 @@ static void usbnet_if_config(struct work_struct *work)
 		usbnet_add_files(context);
 	else
 		usbnet_remove_files(context);
+	usbnet_if_config_notify(context);
 }
 
 static const struct net_device_ops usbnet_eth_netdev_ops = {
@@ -589,6 +610,7 @@ static void usbnet_unbind(struct usb_configuration *c, struct usb_function *f)
 		}
 	}
 
+	context->gadget = NULL;
 	context->bulk_in = NULL;
 	context->bulk_out = NULL;
 	context->config = 0;
