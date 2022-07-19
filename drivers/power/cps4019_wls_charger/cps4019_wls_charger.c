@@ -1388,7 +1388,7 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 	/*get vbus status first*/
 	cps_check_power(&low_power_flag);
 	if (low_power_flag) {
-		val->intval = -1;
+		val->intval = 0;
 		return ret;
 	}
 
