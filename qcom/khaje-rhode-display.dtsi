@@ -404,7 +404,7 @@
 		timing@1 {
 			qcom,display-topology = <1 1 1>;
 			qcom,default-topology-index = <0>;
-			qcom,mdss-dsi-panel-phy-timings = [00 16 05 05 14 1F 06
+			qcom,mdss-dsi-panel-phy-timings = [00 16 02 00 14 1F 03
 							06 06 02 04 00 13 0B];
 		};
 		timing@2 {
