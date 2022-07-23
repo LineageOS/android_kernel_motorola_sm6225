@@ -83,6 +83,8 @@ else ifneq ($(filter eqs, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_EQS
 else ifneq ($(filter tundra%, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_TUNDRA
+else ifneq ($(filter miami%, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_MIAMI
 endif
 $(warning "william EXTRA_CFLAGS = $(EXTRA_CFLAGS)")
 
