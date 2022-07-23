@@ -92,10 +92,6 @@
 		};
 	};
 
-        xo-therm-usr {
-		status = "disabled";
-	};
-
 	xo_therm {
                 polling-delay-passive = <0>;
                 polling-delay = <0>;

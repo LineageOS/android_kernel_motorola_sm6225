@@ -190,9 +190,6 @@
 	pa-therm1-usr {
 		status = "disabled";
 	};
-	xo-therm-usr {
-		status = "disabled";
-	};
 
 	pa_therm0 {
 		polling-delay-passive = <0>;
