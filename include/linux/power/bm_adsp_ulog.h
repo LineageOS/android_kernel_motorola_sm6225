@@ -49,12 +49,17 @@ enum bm_ulog_category_bitmap {
 	BM_USBC_TCPC			= 1ULL << 29,
 	BM_USBC_TCPCPLATFORM		= 1ULL << 30,
 	BM_USBC_SUMMARY			= 1ULL << 31,
+	BM_INIT				= 1ULL << 32,
+	BM_ULOG				= 1ULL << 33,
+	BM_ICMLOG			= 1ULL << 34,
+	BM_SSDEVLOG			= 1ULL << 35,
+	BM_USBC_ULOG			= 1ULL << 36,
 	BM_LOGCATEGORYMAX		= 1ULL << 63,
 };
 
 #define BM_USBC_ALL (                                                   \
             BM_USBC_COMMON | BM_USBC_DPM | BM_USBC_LPM | BM_USBC_PRL | BM_USBC_PE |    \
-            BM_USBC_TCPC | BM_USBC_TCPCPLATFORM | BM_USBC_SUMMARY)
+            BM_USBC_TCPC | BM_USBC_TCPCPLATFORM | BM_USBC_SUMMARY | BM_USBC_ULOG)
 
 #define BM_BM_ALL (                                                       \
             BM_WPP_SELF_HOST | BM_WPP_DEVICE | BM_WPP_IOIMPL |    \
@@ -65,7 +70,8 @@ enum bm_ulog_category_bitmap {
             BM_WPP_PARALLELCHARGING | BM_WPP_SMCHG |                  \
             BM_WPP_SWJEITA | BM_WPP_QBG | BM_QBG |              \
             BM_ADC | BM_CAD | BM_PMICPLATFORM |               \
-            BM_PMICHAL | BM_SUMMARY)
+            BM_PMICHAL | BM_SUMMARY | BM_INIT |               \
+            BM_ULOG | BM_ICMLOG | BM_SSDEVLOG)
 
 #define BM_ALL  (BM_USBC_ALL | BM_BM_ALL)
 
