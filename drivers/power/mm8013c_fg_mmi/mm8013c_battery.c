@@ -70,6 +70,8 @@ struct mm8xxx_device_info {
 	struct delayed_work work;
 	struct power_supply *psy;
 	struct power_supply *batt_psy;
+	struct power_supply *usb_psy;
+	struct power_supply *dc_psy;
 	struct list_head list;
 	struct mutex lock;
 	u8 *cmds;
@@ -1445,9 +1447,46 @@ static int mm8xxx_battery_read_elapsedhours(struct mm8xxx_device_info *di)
 	return elapsed;
 }
 
+static bool is_input_present(struct mm8xxx_device_info *di)
+{
+	int rc = 0, input_present = 0;
+	union power_supply_propval pval = {0, };
+
+	if (!di->usb_psy)
+		di->usb_psy = power_supply_get_by_name("usb");
+	if (di->usb_psy) {
+		rc = power_supply_get_property(di->usb_psy,
+				POWER_SUPPLY_PROP_PRESENT, &pval);
+		if (rc < 0)
+			pr_err("Couldn't read USB Present status, rc=%d\n", rc);
+		else
+			input_present |= pval.intval;
+	}
+
+	if (!di->dc_psy)
+		di->dc_psy = power_supply_get_by_name("dc");
+	if (di->dc_psy) {
+		rc = power_supply_get_property(di->dc_psy,
+				POWER_SUPPLY_PROP_PRESENT, &pval);
+		if (rc < 0)
+			pr_err("Couldn't read DC Present status, rc=%d\n", rc);
+		else
+			input_present |= pval.intval;
+	}
+	pr_info("input present = %d\n", input_present);
+	if (input_present)
+		return true;
+
+	return false;
+}
+
+#define CAP(min, max, value)			\
+		((min > value) ? min : ((value > max) ? max : value))
+
 static void mm8xxx_battery_update(struct mm8xxx_device_info *di)
 {
 	struct mm8xxx_state_cache cache = {0, };
+	bool input_present = is_input_present(di);
 #ifdef CONFIG_BATTERY_MM8XXX_DYNAMIC_CHARGE_VOLTAGE
 	int cv;
 	int req = 0;
@@ -1474,6 +1513,23 @@ static void mm8xxx_battery_update(struct mm8xxx_device_info *di)
 	cache.health = mm8xxx_battery_read_health(di);
 	cache.cycle_count = mm8xxx_battery_read_cyclecount(di);
 	mm8xxx_battery_temp_to_FG(di);
+
+	mm_info("soc = %d, ui_soc = %d\n", cache.soc, di->cache.soc);
+	if (di->cache.soc == 0)
+		di->cache.soc = cache.soc;
+
+	if (cache.soc > di->cache.soc) {
+		/* SOC increased */
+		if (input_present) {/* Increment if input is present */
+			cache.soc = di->cache.soc + 1;
+		} else
+			cache.soc = di->cache.soc;
+
+	} else if (cache.soc < di->cache.soc) {
+		/* SOC dropped */
+		cache.soc = di->cache.soc - 1;
+	}
+	cache.soc = CAP(0, 100, cache.soc);
 
 	if (di->charge_design_full <= 0)
 		di->charge_design_full = mm8xxx_battery_read_designcapacity(di);
