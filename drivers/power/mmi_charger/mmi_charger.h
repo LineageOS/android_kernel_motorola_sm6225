@@ -67,6 +67,8 @@ struct mmi_battery_info {
 	int batt_full_uah;
 	int batt_design_uah;
 	int batt_chg_counter;
+	int batt_fv_mv;
+	int batt_fcc_ma;
 	char batt_sn[MMI_BATT_SN_LEN];
 };
 
@@ -76,6 +78,7 @@ struct mmi_charger_info {
 	int chrg_type;
 	int chrg_pmax_mw;
 	int chrg_present;
+	bool chrg_otg_enabled;
 	int lpd_present;
 	int vbus_present;
 };

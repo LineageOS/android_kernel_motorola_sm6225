@@ -66,6 +66,8 @@ struct battery_info {
 	int batt_full_uah;
 	int batt_design_uah;
 	int batt_chg_counter;
+	int batt_fv_uv;
+	int batt_fcc_ua;
 };
 
 struct charger_info {
@@ -74,6 +76,7 @@ struct charger_info {
 	int chrg_type;
 	int chrg_pmax_mw;
 	int chrg_present;
+	bool chrg_otg_enabled;
 };
 
 struct charger_profile_info {
@@ -568,9 +571,10 @@ static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_i
 	int rc;
 	struct qti_charger *chg = data;
 	int batt_status = chg->batt_info.batt_status;
+	struct battery_info info;
 
 	rc = qti_charger_read(chg, OEM_PROP_BATT_INFO,
-				&chg->batt_info,
+				&info,
 				sizeof(struct battery_info));
 	if (rc)
 		return rc;
@@ -578,10 +582,16 @@ static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_i
 	if (chg->chg_cfg.full_charged)
 		chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
 
-	chg->batt_info.batt_ma /= 1000;
-	chg->batt_info.batt_mv /= 1000;
-        chg->batt_info.batt_soc /= 100;
-	chg->batt_info.batt_temp /= 100;
+	chg->batt_info.batt_ma = info.batt_ua / 1000;
+	chg->batt_info.batt_mv = info.batt_uv / 1000;
+	chg->batt_info.batt_soc = info.batt_soc / 100;
+	chg->batt_info.batt_temp = info.batt_temp / 100;
+	chg->batt_info.batt_status = info.batt_status;
+	chg->batt_info.batt_full_uah = info.batt_full_uah;
+	chg->batt_info.batt_design_uah = info.batt_design_uah;
+	chg->batt_info.batt_chg_counter = info.batt_chg_counter;
+	chg->batt_info.batt_fv_mv = info.batt_fv_uv / 1000;
+	chg->batt_info.batt_fcc_ma = info.batt_fcc_ua / 1000;
 	memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
 
 	if (batt_status != chg->batt_info.batt_status) {
@@ -684,10 +694,11 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 {
 	int rc;
 	struct qti_charger *chg = data;
+	struct charger_info info;
 	struct wls_dump wls_info;
 
 	rc = qti_charger_read(chg, OEM_PROP_CHG_INFO,
-				&chg->chg_info,
+				&info,
 				sizeof(struct charger_info));
 	if (rc)
 		return rc;
@@ -704,12 +715,15 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 			chg->lpd_info.lpd_rsbu1,
 			chg->lpd_info.lpd_rsbu2);
 
-	chg->chg_info.chrg_mv /= 1000;
-	chg->chg_info.chrg_ma /= 1000;
-	if (!chg->chg_info.chrg_present &&
-	    chg->chg_info.chrg_type != 0)
+	chg->chg_info.chrg_mv = info.chrg_uv / 1000;
+	chg->chg_info.chrg_ma = info.chrg_ua / 1000;
+	chg->chg_info.chrg_type = info.chrg_type;
+	chg->chg_info.chrg_pmax_mw = info.chrg_pmax_mw;
+	chg->chg_info.chrg_present = info.chrg_present;
+	if (!info.chrg_present && info.chrg_type != 0)
 		chg->chg_info.chrg_present = 1;
 
+	chg->chg_info.chrg_otg_enabled = info.chrg_otg_enabled;
 	chg->chg_info.vbus_present = chg->chg_info.chrg_mv > VBUS_MIN_MV;
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));

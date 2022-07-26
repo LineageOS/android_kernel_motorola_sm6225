@@ -1387,18 +1387,36 @@ static void mmi_notify_paired_battery(struct mmi_charger *charger)
 			charger->battery->paired_batt->info);
 }
 
+static int mmi_get_cur_thermal_level(struct mmi_charger_chip *chip, int *val)
+{
+	union power_supply_propval prop;
+	int ret;
+	if (!chip->batt_psy) {
+		mmi_err(chip, "No battery supply found\n");
+		return -ENODEV;
+	}
+
+	ret = power_supply_get_property(chip->batt_psy,
+		POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT, &prop);
+	if (!ret)
+		*val = prop.intval;
+
+	return ret;
+}
+
 static void mmi_get_charger_info(struct mmi_charger_chip *chip,
 				struct mmi_charger *charger)
 {
 	struct mmi_battery_info *batt_info = &charger->batt_info;
 	struct mmi_charger_info *chg_info = &charger->chg_info;
+	int thermal_level = 0;
 
+	mmi_get_cur_thermal_level(chip, &thermal_level);
 	charger->driver->get_batt_info(charger->driver->data, batt_info);
 	charger->driver->get_chg_info(charger->driver->data, chg_info);
 	mmi_info(chip, "[C:%s]: batt_mv %d, batt_ma %d, batt_soc %d,"
-		" batt_temp %d, batt_status %d, batt_sn %s,"
-		" chrg_present %d, chrg_type %d, chrg_pmax_mw %d,"
-		" chrg_mv %d, chrg_ma %d\n",
+		" batt_temp %d, batt_status %d, batt_sn %s, batt_fv_mv %d,"
+		" batt_fcc_ma %d\n",
 		charger->driver->name,
 		batt_info->batt_mv,
 		batt_info->batt_ma,
@@ -1406,11 +1424,19 @@ static void mmi_get_charger_info(struct mmi_charger_chip *chip,
 		batt_info->batt_temp,
 		batt_info->batt_status,
 		batt_info->batt_sn,
+		batt_info->batt_fv_mv,
+		batt_info->batt_fcc_ma);
+	mmi_info(chip, "[C:%s]: chrg_present %d, chrg_type %d, chrg_pmax_mw %d,"
+		" chrg_mv %d, chrg_ma %d, chrg_otg_enabled %d, thermal_level %d\n",
+		charger->driver->name,
 		chg_info->chrg_present,
 		chg_info->chrg_type,
 		chg_info->chrg_pmax_mw,
 		chg_info->chrg_mv,
-		chg_info->chrg_ma);
+		chg_info->chrg_ma,
+		chg_info->chrg_otg_enabled,
+		thermal_level);
+
 }
 
 static void mmi_update_charger_status(struct mmi_charger_chip *chip,
