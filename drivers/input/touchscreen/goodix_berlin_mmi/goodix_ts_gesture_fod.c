@@ -365,7 +365,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 {
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 	struct goodix_ts_event gs_event = {0};
-	int fodx, fody, overlay_area;
+	__maybe_unused int fodx, fody, overlay_area;
 	int ret;
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct gesture_event_data mmi_event;
