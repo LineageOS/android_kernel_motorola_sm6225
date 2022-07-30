@@ -1,8 +1,8 @@
 # add -Wall to try to catch everything we can.
 EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi/include
 
 obj-m := focaltech_0flash_v2_mmi.o
 focaltech_0flash_v2_mmi-objs += focaltech_core.o
@@ -16,6 +16,11 @@ focaltech_0flash_v2_mmi-objs += focaltech_spi.o
 
 ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
 	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_NOTIFY_TOUCH_STATE)),)
+        EXTRA_CFLAGS += -DFTS_SET_TOUCH_STATE
 endif
 
 ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_ESD_EN)),)
@@ -28,5 +33,9 @@ endif
 
 ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_DEBUG_EN)),)
 EXTRA_CFLAGS += -DFOCALTECH_DEBUG_EN
+endif
+
+ifneq ($(filter ft8057,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME)),)
+EXTRA_CFLAGS += -DCONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8057
 endif
 

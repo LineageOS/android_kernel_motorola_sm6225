@@ -70,6 +70,8 @@
 #define _FT7250AB           0x7250B824
 #define _FT7130             0x71300825
 #define _FT8205             0x82050826
+#define _FT8057             0x80570828
+
 
 
 
@@ -185,6 +187,9 @@
 #if defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8726)
 #define FTS_CHIP_TYPE   _FT8726
 #define FTS_CHIP_NAME   "ft8726"
+#elif defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8057)
+#define FTS_CHIP_TYPE   _FT8057
+#define FTS_CHIP_NAME   "ft8057"
 #else
 #define FTS_CHIP_TYPE   _FT8726
 #define FTS_CHIP_NAME   "ft8726"

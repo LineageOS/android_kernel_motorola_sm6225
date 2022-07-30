@@ -85,6 +85,7 @@ struct upgrade_setting_nf upgrade_setting_list[] = {
     {0xF0, 0xC6, 0, (84 * 1024),  (128 * 1024), 0xA5, 0x01, 8,  0, 2, 0, 1, 0},
     {0x56, 0x62, 0, (128 * 1024), (128 * 1024), 0xA5, 0x01, 8,  0, 4, 0, 0, 5},
     {0x82, 0x05, 0, (120 * 1024), (128 * 1024), 0xA5, 0x01, 8,  0, 2, 0, 0, 0},
+    {0x80, 0x57, 0, (84 * 1024),  (128 * 1024), 0xA5, 0x01, 8,  0, 2, 0, 1, 0},
 };
 
 struct fts_upgrade *fwupgrade;
@@ -767,7 +768,11 @@ static int fts_read_file_default(char *file_name, u8 **file_buf)
     old_fs = get_fs();
     set_fs(KERNEL_DS);
     pos = 0;
-    ret = vfs_read(filp, *file_buf, file_len , &pos);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
+    ret = vfs_read(filp, *file_buf, file_len, &pos);
+#else
+    ret = kernel_read(filp, *file_buf, file_len , &pos);
+#endif
     if (ret < 0)
         FTS_ERROR("read file fail");
     FTS_INFO("file len:%d read len:%d pos:%d", (u32)file_len, ret, (u32)pos);
