@@ -249,19 +249,41 @@ typedef struct {
 	unsigned freq, ceiling;
 } motor_stage;
 
-/* Default sequences for 2.8pitch */
-static motor_stage initial_data[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
+/* Default sequences for 2.3pitch */
+static motor_stage initial_data_2p3[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
 	{ /* FULL 39mm */
-		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,3915}, {2000,12}
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,60}, {1600,60}, {1800,4520},
 	},
 	{ /* PROLONGED 44mm */
-		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,4430}, {2000,12}
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,60}, {1600,60}, {1800,5140},
 	},
 	{ /* SHORT 5mm */
-		{400,12}, {800,16}, {1200,24}, {1600,32}, {2000,418}, {2000,12}
+		{400,60}, {600,60}, {800,60}, {1000,420},
 	},
 	{ /* TINY 1mm */
-		{400,16}, {800,20}, {1200,24}, {1600,32}, {2000,12}
+		{600,60}, {1000,68},
+	},
+	{ /* dummy to continue beyond SQ_MAX */
+		{0, 0},
+	},
+	{ /* SLOWMO */
+		{400,100}, {400,200}, {400,400}, {400,800}, {400,1600},
+	},
+};
+
+/* Sequences for 2.8pitch */
+static motor_stage initial_data_2p8[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
+	{ /* FULL 39mm */
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,3780},
+	},
+	{ /* PROLONGED 44mm */
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,4292},
+	},
+	{ /* SHORT 5mm */
+		{400,60}, {600,60}, {800,360},
+	},
+	{ /* TINY 1mm */
+		{600,108},
 	},
 	{ /* dummy to continue beyond SQ_MAX */
 		{0, 0},
@@ -310,6 +332,7 @@ typedef struct motor_device {
 	struct mutex mx_lock;
 	atomic_t fault_irq;
 	bool faulting;
+	bool use_2p8_pitch;
 	unsigned step_freq;
 	unsigned long step_period;
 	unsigned long step_ceiling;
@@ -1952,6 +1975,9 @@ static int moto_drv8424_init_from_dt(motor_device* md)
 		dev_info(pdev, "Ignore sensors data\n");
 	md->power_default_off = of_property_read_bool(np, "power-default-off");
 	dev_info(pdev, "power is default off: %d\n", md->power_default_off);
+	md->use_2p8_pitch = of_property_read_bool(np, "use-2p8-pitch");
+	if (md->use_2p8_pitch)
+		dev_info(pdev, "use 2.8 pitch\n");
 
 	return rc;
 }
@@ -1985,6 +2011,23 @@ static int moto_drv8424_irq_setup(motor_device *md, unsigned gidx)
 	return ret;
 }
 
+static void moto_drv8424_sequence(motor_stage dest[], motor_stage src[], bool extend)
+{
+	int i;
+
+	for (i = 0; i < MAX_STAGE_LEGS; i++) {
+		if (!(src[i].freq | src[i].ceiling))
+			break;
+		dest[i].freq = src[i].freq;
+		dest[i].ceiling = src[i].ceiling;
+	}
+	if (extend && i && (++i < MAX_STAGE_LEGS)) {
+		dest[i].freq = 800;
+		dest[i].ceiling = 60;
+		LOGD("added slow down stage %d\n", i);
+	}
+}
+
 static int moto_drv8424_probe(struct platform_device *pdev)
 {
 	struct device* dev = &pdev->dev;
@@ -2004,15 +2047,20 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 	sema_init(&md->data_ready, 0);
 	platform_set_drvdata(pdev, md);
 	moto_drv8424_set_step_freq(md, DEFAULT_STEP_FREQ);
-
-	/* populate sequencer with initial values */
-	for (i = SQ_FULL; i < SQ_MAX; i++)
-		memcpy(md->sequencer[i], initial_data[i], sizeof(initial_data[i]));
-
 	/* assign default values for optional parameters */
 	md->mode = FULL_STEP;
 	md->torque = TORQUE_FULL;
 	moto_drv8424_init_from_dt(md);
+	/* populate sequencer with initial values */
+	for (i = SQ_FULL; i < SQ_MAX; i++) {
+		if (md->use_2p8_pitch)
+			moto_drv8424_sequence(md->sequencer[i],
+				initial_data_2p8[i], !md->sensors_off);
+		else
+			moto_drv8424_sequence(md->sequencer[i],
+				initial_data_2p3[i], !md->sensors_off);
+	}
+
 	md->mc.vdd = devm_regulator_get(md->dev, "vdd");
 	if (IS_ERR(md->mc.vdd)) {
 		ret = PTR_ERR(md->mc.vdd);
