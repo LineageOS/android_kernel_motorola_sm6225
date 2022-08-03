@@ -2336,10 +2336,12 @@ static int goodix_later_init_thread(void *data)
 		goto uninit_fw;
 	}
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	/* the recomend way to update ic config is throuth ISP,
 	 * if not we will send config with interactive mode
 	 */
 	goodix_send_ic_config(cd, CONFIG_TYPE_NORMAL);
+#endif
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 stage2_init:
