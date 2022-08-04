@@ -268,7 +268,7 @@ static int ts_mmi_check_dt(struct ts_mmi_dev *touch_cdev, struct device_node *np
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
 	if (count <= 0) {
-		dev_err(DEV_TS, "%s: find drm_panel count(%d) fail", __func__, count);
+		dev_dbg(DEV_TS, "%s: find drm_panel count(%d) fail", __func__, count);
 		return -ENODEV;
 	}
 
@@ -282,7 +282,7 @@ static int ts_mmi_check_dt(struct ts_mmi_dev *touch_cdev, struct device_node *np
 			return 0;
 		}
 	}
-	dev_err(DEV_TS, "%s: No find drm_panel", __func__);
+	dev_dbg(DEV_TS, "%s: No find drm_panel", __func__);
 	return -ENODEV;
 }
 
@@ -337,7 +337,7 @@ int ts_mmi_check_drm_panel(struct ts_mmi_dev* touch_cdev, struct device_node *of
 
 	ret = ts_mmi_check_dt(touch_cdev, of_node);
 	if (ret) {
-		dev_err(DEV_TS, "%s: parse drm-panel fail\n", __func__);
+		dev_dbg(DEV_TS, "%s: parse drm-panel fail\n", __func__);
 		if (!ts_mmi_check_default_tp(of_node, "qcom,mmi-touch-active"))
 			ret = -EPROBE_DEFER;
 		else

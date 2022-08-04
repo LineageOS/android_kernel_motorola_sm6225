@@ -342,6 +342,9 @@ static void ts_mmi_worker_func(struct work_struct *w)
 	struct ts_mmi_dev *touch_cdev =
 		container_of(dw, struct ts_mmi_dev, work);
 	int ret, cmd = 0;
+#if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+	static DEFINE_RATELIMIT_STATE(register_panel, HZ, 1);
+#endif
 
 	while (kfifo_get(&touch_cdev->cmd_pipe, &cmd)) {
 		switch (cmd) {
@@ -383,7 +386,9 @@ static void ts_mmi_worker_func(struct work_struct *w)
 #if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
 			ret = ts_mmi_check_drm_panel(touch_cdev, DEV_TS->of_node);
 			if (ret < 0) {
-				dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
+				/* 1 error message for every 1 sec */
+				if (__ratelimit(&register_panel))
+					dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
 				touch_cdev->panel_status = -1;
 			} else
 				touch_cdev->panel_status = 0;
