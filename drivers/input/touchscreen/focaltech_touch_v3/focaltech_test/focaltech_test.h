@@ -515,7 +515,11 @@ struct fts_test {
     int testresult_len;
     int result;
 #if defined(TEST_SAVE_FAIL_RESULT) && TEST_SAVE_FAIL_RESULT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+    struct timespec64 tv;
+#else
     struct timeval tv;
+#endif
 #endif
     struct ini_data ini;
 };

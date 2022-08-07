@@ -1211,7 +1211,9 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
     struct file *pfile = NULL;
     char filepath[FILE_NAME_LENGTH] = { 0 };
     loff_t pos;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     mm_segment_t old_fs;
+#endif
 
     FTS_TEST_FUNC_ENTER();
     memset(filepath, 0, sizeof(filepath));
@@ -1225,12 +1227,20 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
         return -EIO;
     }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     old_fs = get_fs();
     set_fs(KERNEL_DS);
+#endif
     pos = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     vfs_write(pfile, data_buf, len, &pos);
+#else
+    kernel_write(pfile, data_buf, len, &pos);
+#endif
     filp_close(pfile, NULL);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     set_fs(old_fs);
+#endif
 
     FTS_TEST_FUNC_EXIT();
     return 0;
@@ -1243,8 +1253,13 @@ void fts_test_save_fail_result(
     char file_name[128];
 
     if (false == tdata->result) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+        snprintf(file_name, 128, "%s_%ld_%ld%s", prefix,
+                 (long)tdata->tv.tv_sec, ((long)tdata->tv.tv_nsec)/1000, suffix);
+#else
         snprintf(file_name, 128, "%s_%ld_%ld%s", prefix,
                  (long)tdata->tv.tv_sec, (long)tdata->tv.tv_usec, suffix);
+#endif
         fts_test_save_test_data(file_name, buf, len);
     }
 }
@@ -2144,7 +2159,11 @@ static int fts_test_entry(char *ini_file_name)
         FTS_TEST_SAVE_INFO("\n\n=======Tp test failure.\n");
         fts_ftest->result = false;
 #if defined(TEST_SAVE_FAIL_RESULT) && TEST_SAVE_FAIL_RESULT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	ktime_get_real_ts64(&(fts_ftest->tv));
+#else
         do_gettimeofday(&(fts_ftest->tv));
+#endif
 #endif
     }
 

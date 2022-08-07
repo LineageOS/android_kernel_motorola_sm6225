@@ -266,7 +266,9 @@ static int fts_test_read_ini_data(char *config_name, char *config_buf)
     off_t fsize = 0;
     char filepath[FILE_NAME_LENGTH] = { 0 };
     loff_t pos = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     mm_segment_t old_fs;
+#endif
 
     FTS_TEST_FUNC_ENTER();
 
@@ -288,12 +290,20 @@ static int fts_test_read_ini_data(char *config_name, char *config_buf)
     inode = pfile->f_dentry->d_inode;
 #endif
     fsize = inode->i_size;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     old_fs = get_fs();
     set_fs(KERNEL_DS);
+#endif
     pos = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     vfs_read(pfile, config_buf, fsize, &pos);
+#else
+    kernel_read(pfile, config_buf, fsize, &pos);
+#endif
     filp_close(pfile, NULL);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
     set_fs(old_fs);
+#endif
 
     FTS_TEST_FUNC_EXIT();
     return 0;
