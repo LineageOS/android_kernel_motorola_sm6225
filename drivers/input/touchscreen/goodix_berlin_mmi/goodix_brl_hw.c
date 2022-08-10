@@ -395,6 +395,37 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 	return -EINVAL;
 }
 
+#ifdef CONFIG_GTP_DISP_MODE
+#define DISP_MODE_CMD_LEN 5
+#define DISP_MODE_CMD 0xbb
+#define DISP_MODE_MAX 4
+
+static int brl_set_display_mode(struct goodix_ts_core *cd, int mode)
+{
+	struct goodix_ts_cmd temp_cmd;
+	int ret;
+
+	if (mode < 0 || mode > DISP_MODE_MAX) {
+		ts_err("invalid mode: %d", mode);
+		return -EINVAL;
+	}
+	temp_cmd.len = DISP_MODE_CMD_LEN;
+	temp_cmd.cmd = DISP_MODE_CMD;
+	temp_cmd.data[0] = mode;
+
+	ret = brl_send_cmd(cd, &temp_cmd);
+	if (ret < 0) {
+		ts_err("failed to set display mode");
+		return -EIO;
+	}
+	ts_info("set display mode: %d", temp_cmd.data[0]);
+
+	return 0;
+}
+#else
+static int inline brl_set_display_mode(struct goodix_ts_core *cd, int mode) { return -EINVAL; }
+#endif
+
 #pragma  pack(1)
 struct goodix_config_head {
 	union {
@@ -1465,6 +1496,7 @@ static struct goodix_ts_hw_ops brl_hw_ops = {
 	.event_handler = brl_event_handler,
 	.after_event_handler = brl_after_event_handler,
 	.get_capacitance_data = brl_get_capacitance_data,
+	.display_mode = brl_set_display_mode,
 };
 
 struct goodix_ts_hw_ops *goodix_get_hw_ops(void)

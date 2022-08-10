@@ -451,6 +451,7 @@ struct goodix_ts_hw_ops {
 	int (*event_handler)(struct goodix_ts_core *cd, struct goodix_ts_event *ts_event);
 	int (*after_event_handler)(struct goodix_ts_core *cd); /* clean sync flag */
 	int (*get_capacitance_data)(struct goodix_ts_core *cd, struct ts_rawdata_info *info);
+	int (*display_mode)(struct goodix_ts_core *cd, int mode);
 };
 
 /*

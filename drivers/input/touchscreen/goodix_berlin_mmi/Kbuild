@@ -63,6 +63,9 @@ endif
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o
+ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
+	EXTRA_CFLAGS += -CONFIG_GTP_DISP_MODE
+endif
 endif
 
 ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)

@@ -1136,17 +1136,50 @@ static int goodix_ts_mmi_update_fps_mode(struct device *dev, int mode) {
 }
 #endif
 
+#define Y_MIN_ID 2
+#define Y_MAX_ID 3
+#define SCREEN_X_MAX 1080
+#define SCREEN_Y_MAX 2992
+#define SCREEN_EXTENDED 2600
+#define SCREEN_PRIM_COMPACT 1980
+#define DISP_MODE_REAR 3
+#define DISP_MODE_FULL 4
+#define DISP_MODE_EXTENDED 0
+#define DISP_MODE_PRIM_COMPACT 1
+#define DISP_MODE_PRIM_PEEK 2
+
 static int rdArray[4];
 
 static int goodix_ts_mmi_active_region(struct device *dev, int *reg_data)
 {
 	struct goodix_ts_core *core_data;
 	struct platform_device *pdev;
+	int ret, dmode = -1;
 
 	GET_GOODIX_DATA(dev);
 
 	memcpy(rdArray, reg_data, sizeof(rdArray));
-	ts_info("set active region: %d %d %d %d\n", rdArray[0], rdArray[1], rdArray[2], rdArray[3]);
+	if (rdArray[Y_MIN_ID] > 0) { /* REAR */
+		dmode = DISP_MODE_REAR; /* Mode4 */
+	} else { /* FULL or PRIMARY */
+		if (rdArray[Y_MAX_ID] == SCREEN_Y_MAX)
+			dmode = DISP_MODE_FULL; /* Mode5 */
+		else if (rdArray[Y_MAX_ID] > SCREEN_EXTENDED)
+			dmode = DISP_MODE_EXTENDED; /* Mode1 */
+		else if (rdArray[Y_MAX_ID] > SCREEN_PRIM_COMPACT)
+			dmode = DISP_MODE_PRIM_COMPACT; /* Mode2 */
+		else
+			dmode = DISP_MODE_PRIM_PEEK; /* Mode3 */
+	}
+	if (dmode >= 0 ) {
+		ret = core_data->hw_ops->display_mode(core_data, dmode);
+		if (!ret)
+			ts_info("set active region: %d %d %d %d; dmode=%d\n",
+				rdArray[0], rdArray[1], rdArray[Y_MIN_ID], rdArray[Y_MAX_ID], dmode);
+	} else
+		dev_err(&pdev->dev, "Invalid display mode; reqion %d %d %d %d\n",
+			rdArray[0], rdArray[1], rdArray[Y_MIN_ID], rdArray[Y_MAX_ID]);
+
 	return 0;
 }
 
@@ -1158,7 +1191,7 @@ static int goodix_ts_mmi_methods_get_active_region(struct device *dev, void *uid
 	GET_GOODIX_DATA(dev);
 
 	memcpy((int *)uidata, rdArray, sizeof(rdArray));
-        return 0;
+	return 0;
 }
 
 static struct ts_mmi_methods goodix_ts_mmi_methods = {
