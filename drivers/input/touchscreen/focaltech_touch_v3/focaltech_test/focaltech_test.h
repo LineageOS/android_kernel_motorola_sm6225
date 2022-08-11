@@ -382,6 +382,10 @@ struct mc_sc_threshold {
     int *scap_rawdata_hov_max;
     int *panel_differ_min;
     int *panel_differ_max;
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    int *noise_min;
+    int *noise_max;
+#endif
 
     int *scap_cb_on_cf_min;
     int *scap_cb_on_cf_max;

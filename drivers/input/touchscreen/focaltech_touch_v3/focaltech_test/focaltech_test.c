@@ -1692,6 +1692,10 @@ static int fts_test_malloc_free_mc_sc(struct fts_test *tdata, bool allocate)
 
         fts_malloc_r(thr->panel_differ_min, buflen);
         fts_malloc_r(thr->panel_differ_max, buflen);
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+        fts_malloc_r(thr->noise_min, buflen);
+        fts_malloc_r(thr->noise_max, buflen);
+#endif
     } else {
         fts_free(thr->rawdata_h_min);
         fts_free(thr->rawdata_h_max);
@@ -1733,6 +1737,10 @@ static int fts_test_malloc_free_mc_sc(struct fts_test *tdata, bool allocate)
 
         fts_free(thr->panel_differ_min);
         fts_free(thr->panel_differ_max);
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+        fts_free(thr->noise_min);
+        fts_free(thr->noise_max);
+#endif
     }
 
     return 0;

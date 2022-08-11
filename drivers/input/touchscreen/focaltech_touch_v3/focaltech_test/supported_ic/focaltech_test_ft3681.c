@@ -1884,7 +1884,9 @@ static int ft5662_noise_test(struct fts_test *tdata, bool *test_result)
     u8 data_sel = 0;
     u8 frame_h_byte = 0;
     u8 frame_l_byte = 0;
+#ifndef CONFIG_FTS_NOISE_TEST_P2P
     int nose_test_max = 0;
+#endif
     int *noise = NULL;
     struct mc_sc_threshold *thr = &tdata->ic.mc_sc.thr;
 
@@ -1893,8 +1895,13 @@ static int ft5662_noise_test(struct fts_test *tdata, bool *test_result)
     noise = tdata->item6_data;
     tdata->csv_item_cnt++;
 
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    if (!noise || !thr->noise_min || !thr->noise_max) {
+        FTS_TEST_SAVE_ERR("noise/noise_min/noise_max is null\n");
+#else
     if (!noise) {
         FTS_TEST_SAVE_ERR("noise is null\n");
+#endif
         ret = -EINVAL;
         goto test_err;
     }
@@ -1918,8 +1925,15 @@ static int ft5662_noise_test(struct fts_test *tdata, bool *test_result)
         FTS_TEST_SAVE_ERR("read touch_value fail,ret=%d\n", ret);
         goto test_err;
     }
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    FTS_TEST_INFO("noise(touch) value:%d", touch_value);
+    for (i = 0; i < tdata->node.node_num; i++) {
+        thr->noise_max[i] = touch_value * 4 * thr->noise_max[i] / 100;
+    }
+#else
     nose_test_max = touch_value * 4 * thr->basic.noise_max / 100;
     FTS_TEST_INFO("noise max::%d,%d", nose_test_max, touch_value);
+#endif
 
     ret = fts_test_read_reg(FACTORY_REG_FRE_LIST, &fre);
     if (ret) {
@@ -2009,7 +2023,11 @@ static int ft5662_noise_test(struct fts_test *tdata, bool *test_result)
     show_data(noise, false);
 
     /* compare */
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    tmp_result = compare_array(noise, thr->noise_min, thr->noise_max, false);
+#else
     tmp_result = compare_data(noise, 0, nose_test_max, 0, 0, false);
+#endif
 
     get_null_noise(tdata);
 

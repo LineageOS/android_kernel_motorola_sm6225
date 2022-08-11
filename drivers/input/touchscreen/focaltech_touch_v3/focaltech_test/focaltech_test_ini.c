@@ -1048,7 +1048,10 @@ static int get_test_threshold_mc_sc(void)
     fts_init_buffer(thr->scap_rawdata_hov_max, thr->basic.scap_rawdata_hov_max, sc_num, false, 0, 0);
     fts_init_buffer(thr->panel_differ_min, thr->basic.panel_differ_min, node_num, false, 0, 0);
     fts_init_buffer(thr->panel_differ_max, thr->basic.panel_differ_max, node_num, false, 0, 0);
-
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    fts_init_buffer(thr->noise_min, 0, node_num, false, 0, 0);
+    fts_init_buffer(thr->noise_max, thr->basic.noise_max, node_num, false, 0, 0);
+#endif
     /* detail threshold */
     get_detail_threshold("RawData_Min_High_Tx", true, thr->rawdata_h_min, node_num);
     get_detail_threshold("RawData_Max_High_Tx", true, thr->rawdata_h_max, node_num);
@@ -1078,6 +1081,9 @@ static int get_test_threshold_mc_sc(void)
     get_detail_threshold("ScapRawData_Hov_Max_", true, thr->scap_rawdata_hov_max, sc_num);
     get_detail_threshold("Panel_Differ_Min_Tx", true, thr->panel_differ_min, node_num);
     get_detail_threshold("Panel_Differ_Max_Tx", true, thr->panel_differ_max, node_num);
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    get_detail_threshold("NoistTestCoefficient_Tx", true, thr->noise_max, node_num);
+#endif
 
     return 0;
 }
@@ -1152,6 +1158,9 @@ static void print_thr_mc_sc(void)
     print_buffer(thr->scap_rawdata_hov_max, tdata->sc_node.node_num, tdata->sc_node.rx_num);
     print_buffer(thr->panel_differ_min, tdata->node.node_num, tdata->node.rx_num);
     print_buffer(thr->panel_differ_max, tdata->node.node_num, tdata->node.rx_num);
+#if defined(CONFIG_FTS_NOISE_TEST_P2P)
+    print_buffer(thr->noise_max, tdata->node.node_num, tdata->node.rx_num);
+#endif
 }
 
 static int ini_init_test_mc_sc(void)
