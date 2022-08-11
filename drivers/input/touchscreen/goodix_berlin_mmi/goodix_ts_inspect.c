@@ -1653,7 +1653,9 @@ static int goodix_cache_noisedata(struct goodix_ts_test *ts_test)
 			frame_head = (struct frame_head *)frame_buf;
 			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
 				ts_err("frame body checksum error");
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 				return -EINVAL;
+#endif
 			}
 			cur_ptr = frame_buf;
 			cur_ptr += cd->ic_info.misc.frame_data_head_len;
