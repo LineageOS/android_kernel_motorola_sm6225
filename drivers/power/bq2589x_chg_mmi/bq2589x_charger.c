@@ -50,7 +50,7 @@ bool qc3p_update_policy(struct bq2589x *chip);
 #define MMI_HVDCP2_VOLTAGE_STANDARD		8000000
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500
-
+#define BQ2589X_ENABLE_ICO_THRESHOLD            250
 struct bq2589x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -2708,7 +2708,13 @@ static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
 		dev_info(bq->dev, "hvdcp detecting now\n");
 		return 0;
 	}
-
+	if (bq->part_no == SC89890H) {
+		if (mA < BQ2589X_ENABLE_ICO_THRESHOLD) {
+			bq2589x_enable_ico(bq, false);
+		} else {
+			bq2589x_enable_ico(bq, true);
+		}
+	}
 	return bq2589x_set_input_current_limit(bq, mA);
 }
 
