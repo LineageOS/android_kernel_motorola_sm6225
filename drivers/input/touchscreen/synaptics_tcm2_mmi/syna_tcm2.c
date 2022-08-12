@@ -43,6 +43,7 @@
 #include "synaptics_touchcom_func_base.h"
 #include "synaptics_touchcom_func_touch.h"
 #include "synaptics_touchcom_func_reflash.h"
+#include <linux/mmi_wake_lock.h>
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 extern int syna_ts_mmi_dev_register(struct syna_tcm *tcm);
@@ -106,6 +107,13 @@ static unsigned char custom_touch_format[] = {
 	struct drm_panel *active_panel;
 #endif
 
+#ifdef ENABLE_WAKEUP_GESTURE
+#ifdef CONFIG_HAS_WAKELOCK
+static struct wake_lock gesture_wakelock;
+#else
+static struct wakeup_source *gesture_wakelock;
+#endif
+#endif
 
 #if defined(ENABLE_HELPER)
 /**
@@ -361,6 +369,7 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 	unsigned int max_objects = tcm->tcm_dev->max_objects;
 	struct tcm_touch_data_blob *touch_data;
 	struct tcm_objects_data_blob *object_data;
+	int retval = 0;
 
 	if (input_dev == NULL)
 		return;
@@ -373,13 +382,27 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 #ifdef ENABLE_WAKEUP_GESTURE
 	if ((tcm->pwr_state == LOW_PWR) && tcm->irq_wake) {
 		if (touch_data->gesture_id) {
-			LOGD("Gesture detected, id:%d\n",
+			LOGI("Gesture detected, id:%d\n",
 				touch_data->gesture_id);
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+			if (tcm->imports && tcm->imports->report_gesture) {
+				struct gesture_event_data event;
+				event.evcode = 1;
+				retval = tcm->imports->report_gesture(&event);
+				if (!retval)
+#ifdef CONFIG_HAS_WAKELOCK
+					wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(5000));
+#else
+					PM_WAKEUP_EVENT(gesture_wakelock, 5000);
+#endif
+			}
+#else
 			input_report_key(input_dev, KEY_WAKEUP, 1);
 			input_sync(input_dev);
 			input_report_key(input_dev, KEY_WAKEUP, 0);
 			input_sync(input_dev);
+#endif
 		}
 	}
 #endif
@@ -1644,6 +1667,10 @@ static int syna_dev_probe(struct platform_device *pdev)
 	struct device *dev;
 #endif
 
+#ifdef ENABLE_WAKEUP_GESTURE
+	static bool initialized_sensor;
+#endif
+
 	hw_if = pdev->dev.platform_data;
 	if (!hw_if) {
 		LOGE("Fail to find hardware configuration\n");
@@ -1679,6 +1706,20 @@ static int syna_dev_probe(struct platform_device *pdev)
 	tcm->lpwg_enabled = false;
 #endif
 	tcm->irq_wake = false;
+
+#ifdef ENABLE_WAKEUP_GESTURE
+	if (!initialized_sensor) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock_init(&gesture_wakelock, WAKE_LOCK_SUSPEND, "syna_gesture_wakelock");
+#else
+		PM_WAKEUP_REGISTER(&pdev->dev, gesture_wakelock, "syna_gesture_wakelock");
+		if (!gesture_wakelock) {
+			LOGE("failed to allocate wakeup source\n");
+		}
+#endif
+		initialized_sensor = true;
+	}
+#endif
 
 	tcm->is_connected = false;
 	tcm->pwr_state = PWR_OFF;

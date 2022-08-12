@@ -532,6 +532,8 @@ int syna_ts_mmi_dev_register(struct syna_tcm *tcm) {
 		LOGE("Failed to register ts mmi ret = %d\n", ret);
 		return ret;
 	}
+	/* initialize class imported methods */
+	tcm->imports = &syna_ts_mmi_methods.exports;
 	return 0;
 }
 

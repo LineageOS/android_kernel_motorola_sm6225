@@ -374,6 +374,10 @@ struct syna_tcm {
 	struct syna_tcm_helper helper;
 #endif
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	struct ts_mmi_class_methods *imports;
+#endif
+
 	/* testing */
 	char *testing_log_data;
 	unsigned int testing_log_size;
