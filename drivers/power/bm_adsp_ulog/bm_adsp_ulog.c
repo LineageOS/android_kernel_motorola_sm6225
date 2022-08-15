@@ -215,6 +215,11 @@ int bm_ulog_get_log(char *buf, u32 size)
 		return -ENODEV;
 	}
 
+	if (*bmdev->debug_enabled == false) {
+		pr_debug("BM ulog has not enabled yet\n");
+		return -ENOTSUPP;
+	}
+
 	if (!buf) {
 		pr_err("BM ulog invalid buf=%p\n", buf);
 		return -EINVAL;
@@ -247,6 +252,11 @@ int bm_ulog_get_mask_log(enum bm_ulog_category_bitmap categories,
 	if (!bmdev) {
 		pr_err("BM ulog has not initialized yet\n");
 		return -ENODEV;
+	}
+
+	if (*bmdev->debug_enabled == false) {
+		pr_debug("BM ulog has not enabled yet\n");
+		return -ENOTSUPP;
 	}
 
 	if (!buf) {
@@ -332,6 +342,11 @@ int bm_ulog_print_log(u32 size)
 		return -ENODEV;
 	}
 
+	if (*bmdev->debug_enabled == false) {
+		pr_debug("BM ulog has not enabled yet\n");
+		return -ENOTSUPP;
+	}
+
 	if (!size || size > MAX_ULOG_READ_BUFFER_SIZE) {
 		pr_err("BM ulog invalid size=%d\n", size);
 		return -EINVAL;
@@ -358,6 +373,11 @@ int bm_ulog_print_mask_log(enum bm_ulog_category_bitmap categories,
 	if (!bmdev) {
 		pr_err("BM ulog has not initialized yet\n");
 		return -ENODEV;
+	}
+
+	if (*bmdev->debug_enabled == false) {
+		pr_debug("BM ulog has not enabled yet\n");
+		return -ENOTSUPP;
 	}
 
 	if (!size || size > MAX_ULOG_READ_BUFFER_SIZE) {
