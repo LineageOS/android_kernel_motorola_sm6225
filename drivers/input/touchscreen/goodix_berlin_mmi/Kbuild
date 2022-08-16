@@ -63,9 +63,6 @@ endif
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o
-ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
-	EXTRA_CFLAGS += -CONFIG_GTP_DISP_MODE
-endif
 endif
 
 ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
@@ -90,6 +87,8 @@ else ifneq ($(filter miami%, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_MIAMI
 else ifneq ($(filter rtwo%, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_RTWO
+else ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DCONFIG_GTP_DISP_MODE
 endif
 $(warning "william EXTRA_CFLAGS = $(EXTRA_CFLAGS)")
 
