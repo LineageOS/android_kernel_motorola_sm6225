@@ -77,6 +77,10 @@ static DEVICE_ATTR(timestamp, S_IRUGO, goodix_ts_timestamp_show, NULL);
 #define DEFAULT_MODE   0
 #define MAX_ATTRS_ENTRIES 10
 
+#define NORMAL_DEFAULT_MODE 10
+#define NORMAL_SMALL_MODE 11
+#define NORMAL_BIG_MODE 12
+
 #define ADD_ATTR(name) { \
 	if (idx < MAX_ATTRS_ENTRIES)  { \
 		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
@@ -592,13 +596,26 @@ static ssize_t goodix_ts_edge_store(struct device *dev,
 	if (ret < 2)
 		return -EINVAL;
 
-	if (DEFAULT_MODE == args[0]) {
+	switch (args[0]) {
+	case DEFAULT_MODE:
 		edge_cmd[1] = DEFAULT_EDGE;
-	} else if (SMALL_MODE == args[0]) {
+		break;
+	case SMALL_MODE:
 		edge_cmd[1] = SMALL_EDGE;
-	} else if (BIG_MODE == args[0]) {
+		break;
+	case BIG_MODE:
 		edge_cmd[1] = BIG_EDGE;
-	} else {
+		break;
+	case NORMAL_DEFAULT_MODE:
+		edge_cmd[1] = NORMAL_DEFAULT_EDGE;
+		break;
+	case NORMAL_SMALL_MODE:
+		edge_cmd[1] = NORMAL_SMALL_EDGE;
+		break;
+	case NORMAL_BIG_MODE:
+		edge_cmd[1] = NORMAL_BIG_EDGE;
+		break;
+	default:
 		ts_err("Invalid edge mode: %d!\n", args[0]);
 		return -EINVAL;
 	}

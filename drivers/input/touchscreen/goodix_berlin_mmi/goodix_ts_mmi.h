@@ -45,6 +45,10 @@ static int inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device
 #define SMALL_EDGE                 0x40
 #define BIG_EDGE                   0x80
 
+#define NORMAL_DEFAULT_EDGE               0x08
+#define NORMAL_SMALL_EDGE                 0x48
+#define NORMAL_BIG_EDGE                   0x88
+
 #define STYLUS_MODE_SWITCH_CMD     0xA4
 
 #define EXIT_HIGH_REPORT_RATE_CMD 0xC100
