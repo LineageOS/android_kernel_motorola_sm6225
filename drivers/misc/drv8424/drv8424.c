@@ -36,8 +36,8 @@
 #define MOTOR_HW_CLK         9600 //9.6KHz clock
 #define MOTOR_HW_CLK_NAME "gcc_gp3"
 
-#define MOTOR_DEFAULT_EXPIRE 3000000 //3s timeout
-#define MOTOR_DETECT_EXPIRE 12000000 //12s timeout
+#define MOTOR_DEFAULT_EXPIRE 5000000 //5s timeout
+#define MOTOR_DETECT_EXPIRE 10000000 //10s timeout
 #define INT_50MS 50
 
 #define MOTOR_MODE_SPEED 0
@@ -293,6 +293,9 @@ enum cmds {
 	CMD_POSITION,
 	CMD_POLL,
 	CMD_TIMEOUT,
+	CMD_RECOVERY,
+	CMD_TIMER_START,
+	CMD_TIMER_STOP,
 };
 
 #define MAX_GPIOS MOTOR_UNKNOWN
@@ -367,11 +370,12 @@ typedef struct motor_device {
 	unsigned data_update_ready:1;
 	struct task_struct *detection_task;
 	bool     cancel_thread;
+	bool     detect_incomplete;
 } motor_device;
 
-#define RESET_SENSOR_DATA do { \
+#define RESET_SENSOR_DATA(data) do { \
 		md->sensor_data[0] = md->sensor_data[1] = \
-		md->sensor_data[2] = OUT_OF_RANGE; \
+		md->sensor_data[2] = data; \
 	} while(0)
 
 #define GPIO_OUTPUT_DIR(g, p) do { \
@@ -381,7 +385,6 @@ typedef struct motor_device {
 
 #define POSITION_DETECT_INIT(_Pos, _Sta) do { \
 		if (!md->sensors_off) { \
-			md->time_out = MOTOR_DETECT_EXPIRE; \
 			atomic_set(&md->position, POS_UNKNOWN); \
 			atomic_set(&md->status, STATUS_UNKNOWN); \
 			atomic_set(&md->destination, POS_UNKNOWN); \
@@ -389,7 +392,6 @@ typedef struct motor_device {
 			moto_drv8424_set_sensing(md, true); \
 			dev_info(md->dev, "Start position detection\n"); \
 		} else { \
-			md->time_out = MOTOR_DEFAULT_EXPIRE; \
 			atomic_set(&md->position, _Pos); \
 			moto_drv8424_cmd_push(md, CMD_POSITION, 0); \
 			atomic_set(&md->status, _Sta); \
@@ -732,11 +734,9 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 	if (md->sensors_off)
 		return;
 	if (en) {
-		ktime_t to = adapt_time_helper(md->time_out);
-
+		md->detect_incomplete = true;
 		/* signal sensor hub to start/stop sampling hall effect */
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 1);
-		hrtimer_start(&md->timeout_timer, to, HRTIMER_MODE_REL);
 		moto_drv8424_cmd_push(md, CMD_POLL, 0);
 		if (!md->power_en && !md->sensors_off) {
 			/* declare sensor querying stage when powered off */
@@ -744,12 +744,11 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 			atomic_set(&md->status, STATUS_QUERYING_POS);
 			moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(INT_50MS));
 		}
-		LOGD("timeout interval %lldms\n", (to / NSEC_PER_MSEC));
 	} else {
-		hrtimer_try_to_cancel(&md->timeout_timer);
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 0);
+		if (md->time_out)
+			moto_drv8424_cmd_push(md, CMD_TIMER_STOP, 0);
 	}
-	//PARANOIC("gpio ACTIVE set: %u; timeout timer is not set!!!\n", en ? 1 : 0);
 	PARANOIC("gpio ACTIVE set: %u\n", en ? 1 : 0);
 }
 
@@ -806,7 +805,6 @@ static void moto_drv8424_set_regime(motor_device *md, unsigned regime)
 	md->regime = regime;
 	md->stage = 0;
 	md->max_stages = msn; /* msn value is 0-based */
-	md->time_out = timeoutMicroS[regime];
 	spin_unlock_irqrestore(&md->mlock, flags);
 	dev_info(md->dev, "Set active regime: %s, stages # %u\n",
 			regime_names[md->regime], msn+1);
@@ -930,9 +928,11 @@ static void inline motor_stop(motor_device* md, bool clean)
 		PARANOIC("step_count & stepping reset\n");
 	}
 	set_irq_state(md, false);
-	LOGD("waking up motor thread\n");
-	md->user_sync_complete = true;
-	wake_up(&md->sync_complete);
+	if (!md->user_sync_complete) {
+		LOGD("waking up motor thread\n");
+		md->user_sync_complete = true;
+		wake_up(&md->sync_complete);
+	}
 }
 
 static __ref int motor_kthread(void *arg)
@@ -943,6 +943,7 @@ static __ref int motor_kthread(void *arg)
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	while (!kthread_should_stop()) {
+		md->user_sync_complete = false;
 		LOGD("wait for motor event\n");
 		do {
 			ret = wait_event_interruptible(md->sync_complete,
@@ -950,7 +951,6 @@ static __ref int motor_kthread(void *arg)
 		} while (ret != 0);
 		if (kthread_should_stop())
 			break;
-		md->user_sync_complete = false;
 		if (md->faulting) {
 			moto_drv8424_cmd_push(md, CMD_FAULT, 0);
 			atomic_set(&md->status, STATUS_FAULTING);
@@ -966,10 +966,14 @@ static __ref int motor_kthread(void *arg)
 			dev_info(md->dev, "vdd power off\n");
 			moto_drv8424_set_regulator_power(md, false);
 		}
-
-		if (md->cancel_thread) {
-			/* next step will be started by CMD_HOME */
-			md->cancel_thread = false;
+		/*
+		 * In sensor driven position detection we need to handle
+		 * motor slippage. When this happens, position will still
+		 * be unknown even though stepper sequence completed.
+		 */
+		if (md->detect_incomplete) {
+			moto_drv8424_cmd_push(md, CMD_RECOVERY, 0);
+			dev_warn(md->dev, "position recovery!!!\n");
 			goto show_stats;
 		}
 
@@ -994,6 +998,8 @@ static __ref int motor_kthread(void *arg)
 			value = STATUS_STOPPED_PEEK;
 				break;
 		default: value = STATUS_UNKNOWN;
+			 /* this should never happen */
+			 dev_err(md->dev, "Undetermined position!!!");
 		}
 
 		atomic_set(&md->status, value);
@@ -1111,7 +1117,7 @@ next_stage:
 		if (!moto_drv8424_next_stage(md)) {
 			/* wake up motor thread at the end of sequence */
 			/* when sensors unavailable */
-			if (md->sensors_off)
+			if (md->sensors_off || md->detect_incomplete)
 				motor_stop(md, true);
 			GPIO_OUTPUT_DIR(md->mc.ptable[MOTOR_STEP], 0);
 			spin_unlock_irqrestore(&md->mlock, flags);
@@ -1178,9 +1184,11 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 	return ret;
 }
 
+#define UNINITIALIZED -10000
 #define OUT_OF_RANGE 10000
-#define PROXIMITY 750 /* 10 degrees multiplied by 100 to get rid of float */
-static int sensProximity = PROXIMITY;
+#define PROXIMITY_HD 350 /* 3.5 degrees multiplied by 100 to get rid of float */
+#define PROXIMITY_SD 750 /* 7.5 degrees multiplied by 100 to get rid of float */
+static int sensProximity = PROXIMITY_SD;
 
 static inline bool IN_RANGE(int valMeas, int valSet)
 {
@@ -1216,10 +1224,15 @@ static int moto_drv8424_detect_position(motor_device *md)
 		if (IN_RANGE(md->sensor_data[scanner[i].index], scanner[i].value)) {
 			ret = i;
 			atomic_set(&md->stepping, 0);
+			md->detect_incomplete = false;
 			PARANOIC("sensor within range: (%d) < %d < (%d)\n",
-				scanner[i].value - PROXIMITY,
+				scanner[i].value - sensProximity,
 				md->sensor_data[scanner[i].index],
-				scanner[i].value + PROXIMITY);
+				scanner[i].value + sensProximity);
+			if (sensProximity == PROXIMITY_SD) {
+				sensProximity = PROXIMITY_HD;
+				LOGD("set tighter proximity threshold\n");
+			}
 			break;
 		}
 	}
@@ -1278,7 +1291,7 @@ static __ref int detection_kthread(void *arg)
 			dev_info(md->dev, "detected position: %s\n", position_labels[position]);
 		LOGD("samples %d; last data: %d %d %d\n", samples,
 			md->sensor_data[0], md->sensor_data[1], md->sensor_data[2]);
-		RESET_SENSOR_DATA;
+		RESET_SENSOR_DATA(OUT_OF_RANGE);
 	}
 
 	return 0;
@@ -1340,6 +1353,17 @@ static void motor_cmd_work(struct work_struct *work)
 			md->data_update_ready = true;
 			wake_up(&md->data_wait);
 					break;
+		case CMD_TIMER_START:
+			hrtimer_start(&md->timeout_timer,
+				adapt_time_helper(md->time_out), HRTIMER_MODE_REL);
+			LOGD("timer armed\n");
+					break;
+		case CMD_TIMER_STOP:
+			md->time_out = 0;
+			hrtimer_try_to_cancel(&md->timeout_timer);
+			LOGD("timer stopped\n");
+					break;
+		case CMD_RECOVERY:
 		case CMD_TIMEOUT:
 			/* pos & dest depends on timed out operation */
 			md->power_en = 0;
@@ -2051,11 +2075,23 @@ static ssize_t motor_sensor_data_store(struct device *dev, struct device_attribu
 	motor_device* md = (motor_device*)dev_get_drvdata(dev);
 	int argnum = 0;
 	int args[3] = {OUT_OF_RANGE};
+	static bool inited;
 
 	argnum = sscanf(buf, "%d %d %d", &args[0], &args[1], &args[2]);
 	PARANOIC("sensor_data (%d): %d %d %d\n", argnum, args[0], args[1], args[2]);
 	if (argnum > 0 && argnum >= ARGS_NUM_MIN) {
 		mutex_lock(&md->mx_lock);
+		if (!inited) {
+			/* First sample arrives when sensors HAL gets loaded
+			 * This will be a good point to synchronize intial
+			 * position detection with sensors data avilability
+			 */
+			if (md->sensor_data[0] == UNINITIALIZED) {
+				inited = true;
+				md->time_out = MOTOR_DETECT_EXPIRE;
+				moto_drv8424_cmd_push(md, CMD_TIMER_START, 0);
+			}
+		}
 		/* store necessary sensor info */
 		memcpy(md->sensor_data, args, sizeof(md->sensor_data));
 		atomic_inc(&md->samples);
@@ -2310,7 +2346,7 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 		dev_info(dev, "Device has no fault irq\n");
 	}
 	/* get ready for initial position detection */
-	RESET_SENSOR_DATA;
+	RESET_SENSOR_DATA(UNINITIALIZED);
 	POSITION_DETECT_INIT(POS_COMPACT, STATUS_STOPPED_COMPACT);
 	dev_info(dev, "Success init device\n");
 	if (!md->sensors_off)
