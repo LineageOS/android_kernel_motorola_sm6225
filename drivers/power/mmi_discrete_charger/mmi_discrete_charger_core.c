@@ -2472,7 +2472,6 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
        int rc;
 	int usb_type;
 	int usb_icl;
-	int vbus;
 	union power_supply_propval val;
 	struct mmi_discrete_chg_client *chg = data;
 	struct mmi_discrete_charger *chip = chg->chip;
@@ -2521,13 +2520,8 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 			chip->chg_info.chrg_pmax_mw = 2500;
 
 		usb_icl = get_effective_result(chip->usb_icl_votable);
-		val.intval = 0;
-		rc = get_prop_usb_voltage_now(chip, &val);
-		if (rc < 0)
-			mmi_err(chip, "Couldn't read usb voltage rc=%d\n", rc);
-		vbus = (val.intval /1000 + 500) /1000;
-		if (chip->chg_info.chrg_pmax_mw < (usb_icl * vbus / 1000))
-			chip->chg_info.chrg_pmax_mw = usb_icl * vbus / 1000;
+		if (chip->chg_info.chrg_pmax_mw < (usb_icl * 5 / 1000))
+			chip->chg_info.chrg_pmax_mw = usb_icl * 5 / 1000;
 
 		rc = 0;
 		goto completed;
