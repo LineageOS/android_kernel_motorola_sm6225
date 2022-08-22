@@ -2526,10 +2526,8 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 		if (rc < 0)
 			mmi_err(chip, "Couldn't read usb voltage rc=%d\n", rc);
 		vbus = (val.intval /1000 + 500) /1000;
-		if ((usb_type != POWER_SUPPLY_TYPE_USB) && (usb_type != POWER_SUPPLY_TYPE_USB_CDP)) {
-			if (chip->chg_info.chrg_pmax_mw < (usb_icl * vbus / 1000))
-				chip->chg_info.chrg_pmax_mw = usb_icl * vbus / 1000;
-		}
+		if (chip->chg_info.chrg_pmax_mw < (usb_icl * vbus / 1000))
+			chip->chg_info.chrg_pmax_mw = usb_icl * vbus / 1000;
 
 		rc = 0;
 		goto completed;
