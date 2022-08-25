@@ -1154,6 +1154,11 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 	int destination = atomic_read(&md->destination);
 	enum hrtimer_restart ret = HRTIMER_NORESTART;
 
+	if (md->sensors_off) {
+		dev_warn(md->dev, "time out in no sensors mode!\n");
+		goto exit;
+	}
+
 	if (POSITION_RANGE_CHK(original) &&
 	    POSITION_RANGE_CHK(destination)) {
 		LOGD("Timeout: position=%s, detection=%s\n",
@@ -1180,7 +1185,7 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 		LOGD("Timeout position detection\n");
 	}
 	moto_drv8424_cmd_push(md, CMD_TIMEOUT, INT_50MS);
-
+exit:
 	return ret;
 }
 
@@ -2088,8 +2093,10 @@ static ssize_t motor_sensor_data_store(struct device *dev, struct device_attribu
 			 */
 			if (md->sensor_data[0] == UNINITIALIZED) {
 				inited = true;
-				md->time_out = MOTOR_DETECT_EXPIRE;
-				moto_drv8424_cmd_push(md, CMD_TIMER_START, 0);
+				if (!md->sensors_off) {
+					md->time_out = MOTOR_DETECT_EXPIRE;
+					moto_drv8424_cmd_push(md, CMD_TIMER_START, 0);
+				}
 			}
 		}
 		/* store necessary sensor info */
