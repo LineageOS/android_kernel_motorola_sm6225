@@ -2841,33 +2841,6 @@ static int sgm4154x_vbus_regulator_register(struct sgm4154x_device *sgm)
 	return ret;
 }
 
-static int sgm4154x_suspend_notifier(struct notifier_block *nb,
-                unsigned long event,
-                void *dummy)
-{
-    struct sgm4154x_device *sgm = container_of(nb, struct sgm4154x_device, pm_nb);
-
-    switch (event) {
-
-    case PM_SUSPEND_PREPARE:
-        pr_err("sgm4154x PM_SUSPEND \n");
-
-        sgm->sgm4154x_suspend_flag = 1;
-
-        return NOTIFY_OK;
-
-    case PM_POST_SUSPEND:
-        pr_err("sgm4154x PM_RESUME \n");
-
-        sgm->sgm4154x_suspend_flag = 0;
-
-        return NOTIFY_OK;
-
-    default:
-        return NOTIFY_DONE;
-    }
-}
-
 static int sgm4154x_hw_chipid_detect(struct sgm4154x_device *sgm)
 {
 	int ret = 0;
@@ -3275,9 +3248,6 @@ static int sgm4154x_probe(struct i2c_client *client,
 	//rerun apsd and trigger charger detect when boot with charger
 	schedule_work(&sgm->rerun_apsd_work);
 
-	sgm->pm_nb.notifier_call = sgm4154x_suspend_notifier;
-	register_pm_notifier(&sgm->pm_nb);
-
 	ret = sgm4154x_power_supply_init(sgm, dev);
 	if (ret) {
 		dev_err(dev, "Failed to register power supply\n");
@@ -3356,6 +3326,33 @@ static void sgm4154x_charger_shutdown(struct i2c_client *client)
     pr_info("sgm4154x_charger_shutdown\n");
 }
 
+static int sgm4154x_suspend(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct sgm4154x_device *sgm = i2c_get_clientdata(client);
+
+	sgm->sgm4154x_suspend_flag = 1;
+	pr_info("sgm4154x PM_SUSPEND \n");
+
+	return 0;
+}
+
+static int sgm4154x_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct sgm4154x_device *sgm = i2c_get_clientdata(client);
+
+	sgm->sgm4154x_suspend_flag = 0;
+	pr_info("sgm4154x PM_RESUME \n");
+
+	return 0;
+}
+
+static const struct dev_pm_ops sgm4154x_pm_ops = {
+	.resume		= sgm4154x_resume,
+	.suspend		= sgm4154x_suspend,
+};
+
 static const struct i2c_device_id sgm4154x_i2c_ids[] = {
 	{ "sgm41541", 0 },
 	{ "sgm41542", 0 },
@@ -3382,6 +3379,7 @@ static struct i2c_driver sgm4154x_driver = {
 	.driver = {
 		.name = "sgm4154x-charger",
 		.of_match_table = sgm4154x_of_match,
+		.pm	= &sgm4154x_pm_ops,
 	},
 	.probe = sgm4154x_probe,
 	.remove = sgm4154x_charger_remove,
