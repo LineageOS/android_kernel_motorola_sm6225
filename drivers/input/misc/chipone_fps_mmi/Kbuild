@@ -2,7 +2,7 @@
 EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 
-prod_list := hawao penang
+prod_list := hawao penang pnangn
 find_target := $(foreach find, $(prod_list), $(findstring $(find), $(TARGET_PRODUCT)))
 find_target := $(strip $(find_target))
 $(warning find_target=$(find_target))
