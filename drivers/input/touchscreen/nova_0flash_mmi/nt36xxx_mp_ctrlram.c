@@ -1363,6 +1363,14 @@ static int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 	return seq_open(file, &nvt_selftest_seq_ops);
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_selftest_fops = {
+	.proc_open = nvt_selftest_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations nvt_selftest_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_selftest_open,
@@ -1370,6 +1378,7 @@ static const struct file_operations nvt_selftest_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 #ifdef CONFIG_OF
 /*******************************************************

@@ -346,7 +346,14 @@ static int32_t nvt_fw_version_open(struct inode *inode, struct file *file)
 
 	return seq_open(file, &nvt_fw_version_seq_ops);
 }
-
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_fw_version_fops = {
+	.proc_open = nvt_fw_version_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations nvt_fw_version_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_fw_version_open,
@@ -354,6 +361,7 @@ static const struct file_operations nvt_fw_version_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 /*******************************************************
 Description:
@@ -402,6 +410,14 @@ static int32_t nvt_baseline_open(struct inode *inode, struct file *file)
 	return seq_open(file, &nvt_seq_ops);
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_baseline_fops = {
+	.proc_open = nvt_baseline_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations nvt_baseline_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_baseline_open,
@@ -409,6 +425,7 @@ static const struct file_operations nvt_baseline_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 /*******************************************************
 Description:
@@ -460,6 +477,14 @@ static int32_t nvt_raw_open(struct inode *inode, struct file *file)
 	return seq_open(file, &nvt_seq_ops);
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_raw_fops = {
+	.proc_open = nvt_raw_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations nvt_raw_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_raw_open,
@@ -467,6 +492,7 @@ static const struct file_operations nvt_raw_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 /*******************************************************
 Description:
@@ -518,6 +544,14 @@ static int32_t nvt_diff_open(struct inode *inode, struct file *file)
 	return seq_open(file, &nvt_seq_ops);
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_diff_fops = {
+	.proc_open = nvt_diff_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#else
 static const struct file_operations nvt_diff_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_diff_open,
@@ -525,6 +559,7 @@ static const struct file_operations nvt_diff_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 
 /*******************************************************
@@ -602,10 +637,17 @@ kzalloc_failed:
 	return ret;
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_fwupdate_fops = {
+	.proc_read = nvt_fwupdate_read,
+	.proc_write = NULL,
+};
+#else
 static const struct file_operations nvt_fwupdate_fops = {
 	.owner = THIS_MODULE,
 	.read = nvt_fwupdate_read,
 };
+#endif
 
 #ifdef EDGE_SUPPRESSION
 typedef enum{
@@ -784,6 +826,15 @@ static int32_t nvt_monitor_control_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, nvt_monitor_control_show, NULL);
 }
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops monitor_control_fops = {
+	.proc_open = nvt_monitor_control_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+	.proc_write = nvt_monitor_control_store,
+};
+#else
 static const struct file_operations monitor_control_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_monitor_control_open,
@@ -792,6 +843,7 @@ static const struct file_operations monitor_control_fops = {
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
+#endif
 
 
 /*******************************************************

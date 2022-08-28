@@ -199,7 +199,7 @@ int nvt_mcu_pen_detect_set(uint8_t pen_detect);
 #endif
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #ifdef LCM_FAST_LIGHTUP
@@ -982,12 +982,21 @@ static int32_t nvt_flash_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
+#if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+static const struct proc_ops nvt_flash_fops = {
+	.proc_open = nvt_flash_open,
+	.proc_read = nvt_flash_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = nvt_flash_close,
+};
+#else
 static const struct file_operations nvt_flash_fops = {
 	.owner = THIS_MODULE,
 	.open = nvt_flash_open,
 	.release = nvt_flash_close,
 	.read = nvt_flash_read,
 };
+#endif
 
 /*******************************************************
 Description:
@@ -2952,7 +2961,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	ts->drm_notif.notifier_call = nvt_drm_notifier_callback;
 	if (active_panel &&
@@ -3024,7 +3033,7 @@ err_create_touchscreen_class_failed:
 	nvt_mmi_init(ts, false);
 #endif
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		if (drm_panel_notifier_unregister(active_panel, &ts->drm_notif))
@@ -3153,7 +3162,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 #endif
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
@@ -3256,7 +3265,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	nvt_irq_enable(false);
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
@@ -3529,7 +3538,7 @@ int32_t nvt_ts_resume(struct device *dev)
 }
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
+#if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 #ifdef LCM_FAST_LIGHTUP
 static void nova_resume_work_func(struct work_struct *work)
