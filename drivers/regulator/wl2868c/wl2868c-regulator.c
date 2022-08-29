@@ -418,6 +418,20 @@ static int wl2868c_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	return ret;
 }
 
+static void wl2868c_i2c_shutdown(struct i2c_client *client)
+{
+	struct wl2868c *chip = i2c_get_clientdata(client);
+
+	if (chip) {
+		/* Since some platforms doesn't have BOB power supply, if no BOB power source, the BOB on schematic is stands for
+		    connecting directly to battery. Most of WL286xC chip selects BOB as input power supply for LDO2~LDO7, when
+		    software doesn't have shutdown handler, LD02~7's input power supply is always there, there will be high risk of
+		    current leak after phone power off, so force disable all ldos before phone power off.*/
+		regmap_write(chip->regmap, WL2868C_LDO_EN, 0x00);
+		dev_err(chip->dev, "wl2868c_i2c_shutdown");
+	}
+}
+
 static int wl2868c_i2c_remove(struct i2c_client *client)
 {
 	struct wl2868c *chip = i2c_get_clientdata(client);
@@ -444,6 +458,7 @@ static struct i2c_driver wl2868c_regulator_driver = {
 	},
 	.probe = wl2868c_i2c_probe,
 	.remove = wl2868c_i2c_remove,
+	.shutdown = wl2868c_i2c_shutdown,
 	.id_table = wl2868c_i2c_id,
 };
 
