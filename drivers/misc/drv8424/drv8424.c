@@ -37,8 +37,8 @@
 #define MOTOR_HW_CLK_NAME "gcc_gp3"
 
 #define MOTOR_DEFAULT_EXPIRE 5000000 //5s timeout
-#define MOTOR_DETECT_EXPIRE 10000000 //10s timeout
-#define INT_50MS 50
+#define MOTOR_DETECT_EXPIRE 3000000 //3s timeout
+#define INT_20MS 20
 
 #define MOTOR_MODE_SPEED 0
 #define MOTOR_MODE_STEP 1
@@ -217,8 +217,9 @@ enum regime_idx {
 	SQ_PROLONGED,
 	SQ_SHORT,
 	SQ_TINY,
-	SQ_MAX,
+	SQ_SHOW_MAX,
 	SQ_SLOWMO,
+	SQ_MAX,
 };
 
 static const char *regime_names[] = {
@@ -242,7 +243,7 @@ typedef struct {
 } motor_stage;
 
 /* Default sequences for 2.3pitch */
-static motor_stage initial_data_2p3[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
+static motor_stage initial_data_2p3[SQ_MAX][MAX_STAGE_LEGS] = {
 	{ /* FULL 39mm */
 		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,60}, {1600,60}, {1700,4400},
 	},
@@ -255,16 +256,16 @@ static motor_stage initial_data_2p3[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
 	{ /* TINY 1mm */
 		{600,60}, {1000,68},
 	},
-	{ /* dummy to continue beyond SQ_MAX */
+	{ /* dummy to continue beyond SQ_SHOW_MAX */
 		{0, 0},
 	},
 	{ /* SLOWMO */
-		{400,100}, {400,200}, {400,400}, {400,800}, {400,1600},
+		{500,200}, {500,400}, {500,800}, {500,1200}, {500,1600},
 	},
 };
 
 /* Sequences for 2.8pitch */
-static motor_stage initial_data_2p8[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
+static motor_stage initial_data_2p8[SQ_MAX][MAX_STAGE_LEGS] = {
 	{ /* FULL 39mm */
 		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,3780},
 	},
@@ -277,11 +278,11 @@ static motor_stage initial_data_2p8[SQ_SLOWMO + 1][MAX_STAGE_LEGS] = {
 	{ /* TINY 1mm */
 		{600,108},
 	},
-	{ /* dummy to continue beyond SQ_MAX */
+	{ /* dummy to continue beyond SQ_SHOW_MAX */
 		{0, 0},
 	},
 	{ /* SLOWMO */
-		{400,100}, {400,200}, {400,400}, {400,800}, {400,1600},
+		{400,200}, {400,400}, {400,800}, {400,1200}, {400,1600},
 	},
 };
 /*                                10,000,000 10,000,000 4,000,000 2,000,000   15,000,000 */
@@ -742,7 +743,7 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 			/* declare sensor querying stage when powered off */
 			/* when motor powered status will indicate direction */
 			atomic_set(&md->status, STATUS_QUERYING_POS);
-			moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(INT_50MS));
+			moto_drv8424_cmd_push(md, CMD_STATUS, msecs_to_jiffies(INT_20MS));
 		}
 	} else {
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 0);
@@ -972,6 +973,15 @@ static __ref int motor_kthread(void *arg)
 		 * be unknown even though stepper sequence completed.
 		 */
 		if (md->detect_incomplete) {
+			if (md->regime == SQ_SLOWMO) {
+				/* Unrecoverable motor fault.
+				* Force kernel panic to get a ramdump
+				*/
+				dev_warn(md->dev, "forced panic due to motor fault\n");
+				BUG_ON(1);
+				mdelay(20000);
+			}
+			/* Recovery from incomplete transition */
 			moto_drv8424_cmd_push(md, CMD_RECOVERY, 0);
 			dev_warn(md->dev, "position recovery!!!\n");
 			goto show_stats;
@@ -1005,12 +1015,12 @@ static __ref int motor_kthread(void *arg)
 		atomic_set(&md->status, value);
 		moto_drv8424_cmd_push(md, CMD_STATUS, 0);
 
-		LOGD("update: status %d, position %d\n",
+		PARANOIC("update: status %d, position %d\n",
 		atomic_read(&md->status), atomic_read(&md->position));
 		logtime_show();
 
 show_stats:
-		LOGD("semaphore=%u samples=%d\n", md->data_ready.count, atomic_read(&md->samples));
+		PARANOIC("semaphore=%u samples=%d\n", md->data_ready.count, atomic_read(&md->samples));
 		atomic_set(&md->samples, 0);
 	}
 
@@ -1067,6 +1077,10 @@ static void motor_set_motion_params(motor_device *md, int start, int end)
 {
 	int regime = SQ_FULL;
 
+	if (start == POS_UNKNOWN || end == POS_UNKNOWN) {
+		dev_err(md->dev, "unknown src | dest!!!\n");
+	}
+
 	if (start == POS_EXPANDED) {
 		md->dir = DIR_WITHDRAW;
 		if (end == POS_COMPACT)
@@ -1087,6 +1101,11 @@ static void motor_set_motion_params(motor_device *md, int start, int end)
 			regime = SQ_PROLONGED;
 		else // end == COMPACT
 			regime = SQ_SHORT;
+	}
+
+	if (!md->sensors_off && md->detect_incomplete) {
+		regime = SQ_SLOWMO;
+		PARANOIC("engage SLOWMO in recovery\n");
 	}
 
 	moto_drv8424_set_motor_dir(md);
@@ -1117,8 +1136,13 @@ next_stage:
 		if (!moto_drv8424_next_stage(md)) {
 			/* wake up motor thread at the end of sequence */
 			/* when sensors unavailable */
-			if (md->sensors_off || md->detect_incomplete)
+			if (md->sensors_off || md->detect_incomplete) {
+				PARANOIC("sequence ended!!! last data: %d %d %d\n",
+					md->sensor_data[0],
+					md->sensor_data[1],
+					md->sensor_data[2]);
 				motor_stop(md, true);
+			}
 			GPIO_OUTPUT_DIR(md->mc.ptable[MOTOR_STEP], 0);
 			spin_unlock_irqrestore(&md->mlock, flags);
 			return HRTIMER_NORESTART;
@@ -1184,7 +1208,7 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 		atomic_set(&md->destination, POS_COMPACT);
 		LOGD("Timeout position detection\n");
 	}
-	moto_drv8424_cmd_push(md, CMD_TIMEOUT, INT_50MS);
+	moto_drv8424_cmd_push(md, CMD_TIMEOUT, msecs_to_jiffies(INT_20MS));
 exit:
 	return ret;
 }
@@ -1283,14 +1307,20 @@ static __ref int detection_kthread(void *arg)
 			}
 		} while (position == POS_UNKNOWN);
 
-		moto_drv8424_set_sensing(md, false);
-		/* polling might occur without driving motor
-		 * we need to release kthread that will trigger position change
-		 * and set destination to properly complete detection
-		 */
-		atomic_set(&md->destination, position);
-		atomic_set(&md->stepping, 1);
-		motor_stop(md, true);
+		if (!md->cancel_thread) {
+			/* in case of successful initial position detection */
+			/* timeout timer still running, thus need to cancel */
+			/* assuming it does not hurt to attempt cancelling  */
+			/* the timer that has not been armed */
+			moto_drv8424_cmd_push(md, CMD_TIMER_STOP, 0);
+			/* polling might occur without driving motor
+			 * we need to release kthread that will trigger position change
+			 * and set destination to properly complete detection
+			 */
+			atomic_set(&md->destination, position);
+			atomic_set(&md->stepping, 1);
+			motor_stop(md, true);
+		}
 
 		if (position != POS_UNKNOWN)
 			dev_info(md->dev, "detected position: %s\n", position_labels[position]);
@@ -1370,7 +1400,7 @@ static void motor_cmd_work(struct work_struct *work)
 					break;
 		case CMD_RECOVERY:
 		case CMD_TIMEOUT:
-			/* pos & dest depends on timed out operation */
+			/* pos & dest depends on recovery cause */
 			md->power_en = 0;
 			motor_set_motion_params(md, atomic_read(&md->position),
 				atomic_read(&md->destination));
@@ -1457,7 +1487,7 @@ exit:
 static void moto_drv8424_set_step_freq(motor_device* md, unsigned freq)
 {
 	if (md->step_freq == freq) {
-		dev_err(md->dev, "Unchanged the freq, ignore\n");
+		dev_dbg(md->dev, "Unchanged the freq, ignore\n");
 		return;
 	} else if(freq == 0) {
 		dev_err(md->dev, "Invalid frequency, ignore\n");
@@ -1476,7 +1506,7 @@ static int moto_drv8424_set_ceiling(motor_device* md, unsigned ceiling)
 
 	spin_lock_irqsave(&md->mlock, flags);
 	if (md->step_ceiling == ceiling) {
-		dev_info(md->dev, "Unchanged the ceiling, ignore\n");
+		dev_dbg(md->dev, "Unchanged the ceiling, ignore\n");
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -1826,7 +1856,7 @@ static ssize_t motor_sequencer_store(struct device *dev, struct device_attribute
 	}
 	*next++ = '\0';
 	if (kstrtouint(buffer, 10, &value) ||
-		(value < 0 || value >= SQ_MAX)) {
+		(value < 0 || value >= SQ_SHOW_MAX)) {
 		dev_err(dev, "Invalid index: %s\n", buffer);
 		goto exit;
 	}
@@ -1878,7 +1908,7 @@ static ssize_t motor_sequencer_show(struct device *dev, struct device_attribute 
 	ssize_t blen = 0;
 	unsigned idx, msn;
 
-	for (idx = 0; idx < SQ_MAX; idx++) {
+	for (idx = 0; idx < SQ_SHOW_MAX; idx++) {
 		blen += snprintf(buf + blen, PAGE_SIZE - blen, "regime %s: ",
 					regime_names[idx]);
 		for (msn = 0; msn < MAX_STAGE_LEGS; msn++) {
@@ -1902,7 +1932,7 @@ static ssize_t motor_regime_store(struct device *dev, struct device_attribute *a
 	unsigned value;
 
 	if (kstrtouint(buf, 10, &value) ||
-		(value < SQ_FULL || value >= SQ_MAX)) {
+		(value < SQ_FULL || value >= SQ_SHOW_MAX)) {
 		dev_err(dev, "Error value: %s\n", buf);
 		return -EINVAL;
 	}
@@ -2208,6 +2238,10 @@ static void motor_set_sequencer(motor_device* md)
 	int s, i;
 
 	for (s = SQ_FULL; s < SQ_MAX; s++) {
+		PARANOIC("regime %s\n", regime_names[s]);
+		/* skip dummy */
+		if (s == SQ_SHOW_MAX)
+			continue;
 		if (md->use_2p8_pitch)
 			stages = initial_data_2p8[s];
 		else
@@ -2218,9 +2252,12 @@ static void motor_set_sequencer(motor_device* md)
 	                md->sequencer[s][i].freq = (stages+i)->freq;
 	                md->sequencer[s][i].ceiling = (stages+i)->ceiling;
 	        }
-		if (md->sensors_off)
+		PARANOIC("has %d pairs\n", i);
+		/* skip adding slow down stage if running in no */
+		/* sensors mode and for TINY & SLOWMO regimes */
+		if (md->sensors_off || s == SQ_TINY || s == SQ_SLOWMO)
 			continue;
-		if ((s != SQ_TINY) && (++i < MAX_STAGE_LEGS)) {
+		if (++i < MAX_STAGE_LEGS) {
 			md->sequencer[s][i].freq = 800;
 			md->sequencer[s][i].ceiling = 60;
 			LOGD("added slow down stage to %s\n", regime_names[s]);
