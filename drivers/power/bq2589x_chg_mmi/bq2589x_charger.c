@@ -186,6 +186,7 @@ struct bq2589x {
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;
 #endif
+	bool			factory_mode;
 };
 
 struct pe_ctrl {
@@ -2694,6 +2695,34 @@ static int bq2589x_get_real_charger_type(struct charger_device *chg_dev, int *ch
 	return 0;
 }
 
+static bool bq2589x_is_factory_mode(void)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool factory_mode = false;
+	const char *bootargs = NULL;
+	char *bootmode = NULL;
+	char *end = NULL;
+
+	if (!np)
+		return factory_mode;
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bootmode = strstr(bootargs, "androidboot.mode=");
+		if (bootmode) {
+			end = strpbrk(bootmode, " ");
+			bootmode = strpbrk(bootmode, "=");
+		}
+		if (bootmode &&
+		    end > bootmode &&
+		    strnstr(bootmode, "mot-factory", end - bootmode)) {
+				factory_mode = true;
+		}
+	}
+	of_node_put(np);
+
+	return factory_mode;
+}
+
 static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -2708,7 +2737,7 @@ static int bq2589x_set_icl(struct charger_device *chg_dev, u32 uA)
 		dev_info(bq->dev, "hvdcp detecting now\n");
 		return 0;
 	}
-	if (bq->part_no == SC89890H) {
+	if (bq->part_no == SC89890H && bq->factory_mode) {
 		if (mA < BQ2589X_ENABLE_ICO_THRESHOLD) {
 			bq2589x_enable_ico(bq, false);
 		} else {
@@ -3039,6 +3068,8 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 
 	bq2589x_rerun_apsd_if_required(bq);
 
+	if (bq2589x_is_factory_mode())
+		bq->factory_mode = true;
 	return 0;
 
 err_irq:
