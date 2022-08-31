@@ -199,6 +199,7 @@ struct fts_ts_data {
     wait_queue_head_t ts_waitqueue;
     struct ftxxxx_proc proc;
     struct ftxxxx_proc proc_ta;
+    struct ftxxxx_proc proc_raw;
     spinlock_t irq_lock;
     struct mutex report_mutex;
     struct mutex bus_lock;

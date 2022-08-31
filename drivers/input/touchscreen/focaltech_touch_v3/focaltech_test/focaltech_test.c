@@ -1206,6 +1206,7 @@ void show_data_mc_sc(int *data)
 /* mc_sc end*/
 
 #if CSV_SUPPORT || TXT_SUPPORT
+#ifndef CONFIG_FTS_COMPATIBLE_WITH_GKI
 static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
 {
     struct file *pfile = NULL;
@@ -1245,6 +1246,12 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
     FTS_TEST_FUNC_EXIT();
     return 0;
 }
+#else
+static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
+{
+    return 0;
+}
+#endif
 
 #if defined(TEST_SAVE_FAIL_RESULT) && TEST_SAVE_FAIL_RESULT
 void fts_test_save_fail_result(
@@ -1507,16 +1514,27 @@ static void fts_test_save_data_csv_private(struct fts_test *tdata)
     int csv_length = 0;
 
     FTS_TEST_INFO("save data in csv format");
+
+#ifndef CONFIG_FTS_COMPATIBLE_WITH_GKI
     csv_buffer = vmalloc(CSV_BUFFER_LEN);
     if (!csv_buffer) {
         FTS_TEST_ERROR("csv_buffer malloc fail\n");
         return ;
     }
+#else
+    if(!fts_ftest->csv_buffer)
+        return;
+
+    csv_buffer = fts_ftest->csv_buffer;
+#endif
 
     if (tdata->func && tdata->func->save_data_private)
         tdata->func->save_data_private(csv_buffer, &csv_length);
 
     FTS_TEST_INFO("csv length:%d", csv_length);
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    fts_ftest->csv_result_len = csv_length;
+#endif
     fts_test_save_test_data(FTS_CSV_FILE_NAME, csv_buffer, csv_length);
 
 #if defined(TEST_SAVE_FAIL_RESULT) && TEST_SAVE_FAIL_RESULT
@@ -1524,10 +1542,12 @@ static void fts_test_save_data_csv_private(struct fts_test *tdata)
                               csv_buffer, csv_length);
 #endif
 
+#ifndef CONFIG_FTS_COMPATIBLE_WITH_GKI
     if (csv_buffer) {
         vfree(csv_buffer);
         csv_buffer = NULL;
     }
+#endif
 #endif
 }
 
@@ -1538,6 +1558,14 @@ static void fts_test_save_result_txt(struct fts_test *tdata)
         FTS_TEST_ERROR("test result is null");
         return;
     }
+
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    if(!fts_ftest->txt_buffer)
+        return;
+
+     memcpy(fts_ftest->txt_buffer, tdata->testresult, tdata->testresult_len);
+     fts_ftest->txt_result_len = tdata->testresult_len;
+#endif
 
     FTS_TEST_INFO("test result length in txt:%d", tdata->testresult_len);
     fts_test_save_test_data(FTS_TXT_FILE_NAME, tdata->testresult,
@@ -2247,6 +2275,97 @@ static struct attribute_group fts_test_attribute_group = {
     .attrs = fts_test_attributes
 };
 
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+static int fts_test_proc_show(struct seq_file *file, void *v)
+{
+    struct ftxxxx_proc *proc = NULL;
+    struct fts_ts_data * fts_data = (struct fts_ts_data *)file->private;
+    if (!fts_data) {
+        FTS_ERROR("no fts_ts_data set");
+        return -EIO;
+    }
+    proc = &fts_data->proc_raw;
+
+    switch (proc->opmode) {
+    case PROC_READ_CSV_DATA:
+        FTS_INFO("fts test read csv");
+        seq_printf(file, "%s", fts_ftest->csv_buffer);
+        break;
+
+    case PROC_READ_TXT_DATA:
+        FTS_INFO("fts test read txt");
+        seq_printf(file, "%s", fts_ftest->txt_buffer);
+        break;
+
+    default:
+        break;
+    }
+
+    return 0;
+}
+
+static int fts_test_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open_size(file, fts_test_proc_show, PDE_DATA(inode), PAGE_SIZE * 10);
+}
+
+static ssize_t fts_test_proc_write(
+    struct file *filp, const char __user *buff, size_t count, loff_t *ppos)
+{
+    u8 *writebuf = NULL;
+    u8 tmpbuf[PROC_BUF_SIZE] = { 0 };
+    int buflen = count;
+    int ret = 0;
+    struct fts_ts_data *ts_data = fts_data;
+    struct ftxxxx_proc *proc = &ts_data->proc_raw;
+
+    if (buflen < 1) {
+        FTS_ERROR("fts test proc wirte count(%d) fail", buflen);
+        return -EINVAL;
+    }
+
+    if (buflen > PROC_BUF_SIZE) {
+        writebuf = (u8 *)kzalloc(buflen * sizeof(u8), GFP_KERNEL);
+        if (NULL == writebuf) {
+            FTS_ERROR("fts test proc wirte buf zalloc fail");
+            return -ENOMEM;
+        }
+    } else {
+        writebuf = tmpbuf;
+    }
+
+    if (copy_from_user(writebuf, buff, buflen)) {
+        FTS_ERROR("fts test copy from user error!!");
+        ret = -EFAULT;
+        goto proc_write_err;
+    }
+
+    proc->opmode = writebuf[0];
+    FTS_INFO("proc->opmode = %d", proc->opmode);
+    if (buflen == 1) {
+        ret = buflen;
+        goto proc_write_err;
+    }
+
+proc_write_err:
+    if ((buflen > PROC_BUF_SIZE) && writebuf) {
+        kfree(writebuf);
+        writebuf = NULL;
+    }
+
+    return ret;
+}
+
+static const struct proc_ops tp_test_proc_fops =
+{
+    .proc_open = fts_test_proc_open,
+    .proc_read = seq_read,
+    .proc_write = fts_test_proc_write,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#endif
+
 static int fts_test_func_init(struct fts_ts_data *ts_data)
 {
     int i = 0;
@@ -2254,12 +2373,25 @@ static int fts_test_func_init(struct fts_ts_data *ts_data)
     u16 ic_stype = ts_data->ic_info.ids.type;
     struct test_funcs *func = test_func_list[0];
     int func_count = sizeof(test_func_list) / sizeof(test_func_list[0]);
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    struct ftxxxx_proc *proc = NULL;
+#endif
 
     FTS_TEST_INFO("init test function");
     if (0 == func_count) {
         FTS_TEST_SAVE_ERR("test functions list is NULL, fail\n");
         return -ENODATA;
     }
+
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    proc = &ts_data->proc_raw;
+    proc->proc_entry = proc_create_data(FTS_PROC_TP_DIFFER, 0444, NULL, &tp_test_proc_fops,
+        ts_data);
+    if (proc->proc_entry == NULL) {
+        FTS_TEST_ERROR("[focal] %s() - ERROR: create fts_tp_differ proc()  failed.",  __func__);
+        return -ENOMEM;
+    }
+#endif
 
     fts_ftest = (struct fts_test *)kzalloc(sizeof(*fts_ftest), GFP_KERNEL);
     if (NULL == fts_ftest) {
@@ -2306,6 +2438,19 @@ int fts_test_init(struct fts_ts_data *ts_data)
     } else {
         FTS_TEST_DBG("sysfs(test) create successfully");
     }
+
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    fts_ftest->csv_buffer = vmalloc(CSV_BUFFER_LEN);
+    if (!fts_ftest->csv_buffer) {
+        FTS_TEST_ERROR("csv_buffer malloc fail\n");
+    }
+
+    fts_ftest->txt_buffer = vmalloc(TXT_BUFFER_LEN);
+    if (!fts_ftest->txt_buffer) {
+        FTS_TEST_ERROR("txt_buffer malloc fail\n");
+    }
+#endif
+
     FTS_TEST_FUNC_EXIT();
 
     return ret;
@@ -2316,6 +2461,10 @@ int fts_test_exit(struct fts_ts_data *ts_data)
     FTS_TEST_FUNC_ENTER();
 
     sysfs_remove_group(&ts_data->dev->kobj, &fts_test_attribute_group);
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    fts_free(fts_ftest->csv_buffer);
+    fts_free(fts_ftest->txt_buffer);
+#endif
     fts_free(fts_ftest);
     FTS_TEST_FUNC_EXIT();
     return 0;

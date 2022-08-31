@@ -1133,7 +1133,7 @@ read_flash_err:
     return ret;
 }
 
-static int fts_read_file_default(char *file_name, u8 **file_buf)
+static int __maybe_unused fts_read_file_default(char *file_name, u8 **file_buf)
 {
     int ret = 0;
     char file_path[FILE_NAME_LENGTH] = { 0 };
@@ -1234,7 +1234,11 @@ static int fts_read_file(char *file_name, u8 **file_buf)
 
     ret = fts_read_file_request_firmware(file_name, file_buf);
     if (ret < 0) {
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+        ret = fts_read_file_request_firmware(file_name, file_buf);
+#else
         ret = fts_read_file_default(file_name, file_buf);
+#endif
         if (ret < 0) {
             FTS_ERROR("get fw file(default) fail");
             return ret;

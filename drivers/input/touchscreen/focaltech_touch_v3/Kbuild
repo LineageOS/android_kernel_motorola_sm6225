@@ -51,5 +51,9 @@ ifneq ($(filter m y, $(CONFIG_FTS_NOISE_TEST_P2P)),)
 	EXTRA_CFLAGS += -DCONFIG_FTS_NOISE_TEST_P2P
 endif
 
+ifneq ($(filter m y, $(CONFIG_FTS_NOISE_TEST_P2P)),)
+	EXTRA_CFLAGS += -DCONFIG_FTS_COMPATIBLE_WITH_GKI
+endif
+
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers

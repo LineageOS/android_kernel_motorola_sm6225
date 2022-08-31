@@ -194,6 +194,13 @@ Test Status
 #define FTS_MAX_SORT_SC                         32768
 #define FTS_MIN_SORT_SC                         0
 
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+#define FTS_PROC_TP_DIFFER "fts_tp_test"
+#define PROC_READ_CSV_DATA                          1
+#define PROC_READ_TXT_DATA                          2
+#define PROC_BUF_SIZE                           256
+#endif
+
 /*****************************************************************************
 * enumerations, structures and unions
 *****************************************************************************/
@@ -489,6 +496,12 @@ struct fts_test {
     u8 normalize;
     u8 fre_num;
     int test_num;
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+    char *csv_buffer;
+    int csv_result_len;
+    char *txt_buffer;
+    int txt_result_len;
+#endif
     int *item1_data;
     int *item2_data;
     int *item3_data;

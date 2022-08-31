@@ -15,7 +15,7 @@
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
-#define FTS_INI_REQUEST_SUPPORT              0
+#define FTS_INI_REQUEST_SUPPORT              1
 
 struct ini_ic_type ic_types[] = {
     {"FT5X46",  0x54000002},
@@ -309,7 +309,7 @@ static int fts_test_read_ini_data(char *config_name, char *config_buf)
     return 0;
 }
 
-static int fts_test_get_ini_default(struct ini_data *ini, char *fwname)
+static int __maybe_unused fts_test_get_ini_default(struct ini_data *ini, char *fwname)
 {
     int ret = 0;
     int inisize = 0;
@@ -1395,7 +1395,11 @@ int fts_test_get_testparam_from_ini(char *config_name)
 
     ret = fts_test_get_ini_via_request_firmware(ini, config_name);
     if (ret != 0) {
+#ifdef CONFIG_FTS_COMPATIBLE_WITH_GKI
+        ret = fts_test_get_ini_via_request_firmware(ini, config_name);
+#else
         ret = fts_test_get_ini_default(ini, config_name);
+#endif
         if (ret < 0) {
             FTS_TEST_ERROR("get ini(default) fail");
             goto get_ini_err;
