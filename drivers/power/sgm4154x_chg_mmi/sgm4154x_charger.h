@@ -386,6 +386,7 @@ struct sgm4154x_device {
 	int			wls_max_icl;
 
 	bool			i2c_err_wa_dis;
+	bool			sgm_18W_iindpm_comp;
 };
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED

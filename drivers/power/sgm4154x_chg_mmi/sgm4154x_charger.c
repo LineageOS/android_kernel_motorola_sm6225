@@ -761,6 +761,8 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 		reg_val = (iindpm-SGM4154x_IINDPM_I_MIN_uA) / SGM4154x_IINDPM_STEP_uA;
 	else if (iindpm > 3100000 && iindpm < SGM4154x_IINDPM_I_MAX_uA)
 		reg_val = 0x1E;
+	if(sgm->sgm_18W_iindpm_comp && iindpm == 3000000)
+		reg_val = 0x1E;
 
 #endif
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_0,
@@ -2604,6 +2606,8 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		gpio_direction_output(sgm->wls_en_gpio, 0);//default enable wls charge
 	}
 
+	/* 18W iindpm comp */
+	sgm->sgm_18W_iindpm_comp = of_property_read_bool(sgm->dev->of_node, "sgm,18w_iindpm_comp");
 	/* sw jeita */
 	sgm->enable_sw_jeita = of_property_read_bool(sgm->dev->of_node, "enable_sw_jeita");
 	/* enable dynamic adjust battery voltage */
