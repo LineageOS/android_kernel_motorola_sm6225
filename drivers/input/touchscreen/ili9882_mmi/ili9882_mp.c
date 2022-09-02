@@ -1040,9 +1040,11 @@ static void run_tx_rx_delta_test(int index)
 
 static char *get_date_time_str(void)
 {
+	static char time_data_buf[128] = { 0 };
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 14, 0)
 	struct timespec now_time;
 	struct rtc_time rtc_now_time;
-	static char time_data_buf[128] = { 0 };
 
 	getnstimeofday(&now_time);
 	rtc_time_to_tm(now_time.tv_sec, &rtc_now_time);
@@ -1050,6 +1052,15 @@ static char *get_date_time_str(void)
 		(rtc_now_time.tm_year + 1900), rtc_now_time.tm_mon + 1,
 		rtc_now_time.tm_mday, rtc_now_time.tm_hour, rtc_now_time.tm_min,
 		rtc_now_time.tm_sec);
+#else
+	struct tm tm;
+	time64_to_tm(ktime_get_real_seconds(), 0, &tm);
+
+	snprintf(time_data_buf, sizeof(time_data_buf), "%04d%02d%02d-%02d%02d%02d",
+		(int)(tm.tm_year + 1900), tm.tm_mon + 1,
+		tm.tm_mday, tm.tm_hour, tm.tm_min,
+		tm.tm_sec);
+#endif
 
 	return time_data_buf;
 }

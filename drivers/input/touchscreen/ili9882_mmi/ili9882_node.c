@@ -2329,37 +2329,90 @@ out:
 
 static struct proc_dir_entry *proc_dir_ilitek;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+typedef struct {
+	char *name;
+	struct proc_dir_entry *node;
+	struct proc_ops *fops;
+	bool isCreated;
+} proc_node;
+#else
 typedef struct {
 	char *name;
 	struct proc_dir_entry *node;
 	struct file_operations *fops;
 	bool isCreated;
 } proc_node;
-
+#endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_mp_lcm_on_test_fops = {
+	.proc_read = ilitek_node_mp_lcm_on_test_read,
+};
+#else
 static struct file_operations proc_mp_lcm_on_test_fops = {
 	.read = ilitek_node_mp_lcm_on_test_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_mp_lcm_off_test_fops = {
+	.proc_read = ilitek_node_mp_lcm_off_test_read,
+};
+#else
 static struct file_operations proc_mp_lcm_off_test_fops = {
 	.read = ilitek_node_mp_lcm_off_test_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_ver_info_fops = {
+	.proc_read = ilitek_node_ver_info_read,
+};
+#else
 static struct file_operations proc_ver_info_fops = {
 	.read = ilitek_node_ver_info_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_change_list_fops = {
+	.proc_read = ilitek_node_change_list_read,
+};
+#else
 static struct file_operations proc_change_list_fops = {
 	.read = ilitek_node_change_list_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_debug_message_fops = {
+	.proc_read = ilitek_proc_debug_message_read,
+};
+#else
 static struct file_operations proc_debug_message_fops = {
 	.read = ilitek_proc_debug_message_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_debug_message_switch_fops = {
+	.proc_read = ilitek_proc_debug_switch_read,
+};
+#else
 static struct file_operations proc_debug_message_switch_fops = {
 	.read = ilitek_proc_debug_switch_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_ioctl_fops = {
+		.proc_ioctl = ilitek_node_ioctl,
+#ifdef CONFIG_COMPAT
+		.proc_compat_ioctl = ilitek_node_compat_ioctl,
+#endif
+		.proc_write = ilitek_node_ioctl_write,
+};
+#else
 static struct file_operations proc_ioctl_fops = {
 	.unlocked_ioctl = ilitek_node_ioctl,
 #ifdef CONFIG_COMPAT
@@ -2367,40 +2420,91 @@ static struct file_operations proc_ioctl_fops = {
 #endif
 	.write = ilitek_node_ioctl_write,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_fw_upgrade_fops = {
+	.proc_read = ilitek_node_fw_upgrade_read,
+};
+#else
 static struct file_operations proc_fw_upgrade_fops = {
 	.read = ilitek_node_fw_upgrade_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_fw_process_fops = {
+	.proc_read = ilitek_proc_fw_process_read,
+};
+#else
 static struct file_operations proc_fw_process_fops = {
 	.read = ilitek_proc_fw_process_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_get_delta_data_fops = {
+	.proc_read = ilitek_proc_get_delta_data_read,
+};
+#else
 static struct file_operations proc_get_delta_data_fops = {
 	.read = ilitek_proc_get_delta_data_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_get_raw_data_fops = {
+	.proc_read = ilitek_proc_fw_get_raw_data_read,
+};
+#else
 static struct file_operations proc_get_raw_data_fops = {
 	.read = ilitek_proc_fw_get_raw_data_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_rw_tp_reg_fops = {
+	.proc_read = ilitek_proc_rw_tp_reg_read,
+	.proc_write = ilitek_proc_rw_tp_reg_write,
+};
+#else
 static struct file_operations proc_rw_tp_reg_fops = {
 	.read = ilitek_proc_rw_tp_reg_read,
 	.write = ilitek_proc_rw_tp_reg_write,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_fw_pc_counter_fops = {
+	.proc_read = ilitek_proc_fw_pc_counter_read,
+};
+#else
 static struct file_operations proc_fw_pc_counter_fops = {
 	.read = ilitek_proc_fw_pc_counter_read,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_get_debug_mode_data_fops = {
+	.proc_read = ilitek_proc_get_debug_mode_data_read,
+	.proc_write = ilitek_proc_get_debug_mode_data_write,
+};
+#else
 static struct file_operations proc_get_debug_mode_data_fops = {
 	.read = ilitek_proc_get_debug_mode_data_read,
 	.write = ilitek_proc_get_debug_mode_data_write,
 };
+#endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_debug_level_fops = {
+	.proc_read = ilitek_proc_debug_level_read,
+};
+#else
 static struct file_operations proc_debug_level_fops = {
 	.read = ilitek_proc_debug_level_read,
 };
+#endif
 
 proc_node iliproc[] = {
 	{"ioctl", NULL, &proc_ioctl_fops, false},

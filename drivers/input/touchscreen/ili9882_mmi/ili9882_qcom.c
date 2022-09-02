@@ -441,7 +441,7 @@ int ili_sysfs_remove_device(struct device *dev) {
 }
 #else
 
-#ifdef CONFIG_DRM
+#if (defined(CONFIG_DRM) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)))
 static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long event, void *data)
 {
 	int *blank;
@@ -718,8 +718,8 @@ int ili_sensor_remove(struct ilitek_ts_data *data)
 static void ilitek_plat_sleep_init(void)
 {
 	ILI_INFO("Init notifier_fb struct\n");
+#if (defined(CONFIG_DRM) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)))
 	ilits->notifier_fb.notifier_call = ilitek_plat_notifier_fb;
-#if defined(CONFIG_DRM)
 {
     int ret = 0;
     extern struct drm_panel *ili_active_panel;
