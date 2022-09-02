@@ -267,10 +267,10 @@ static motor_stage initial_data_2p3[SQ_MAX][MAX_STAGE_LEGS] = {
 /* Sequences for 2.8pitch */
 static motor_stage initial_data_2p8[SQ_MAX][MAX_STAGE_LEGS] = {
 	{ /* FULL 39mm */
-		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,3780},
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1800,3780},
 	},
 	{ /* PROLONGED 44mm */
-		{400,60}, {600,60}, {800,60}, {1000,60}, {1200,4400},
+		{400,60}, {600,60}, {800,60}, {1000,60}, {1800,4400},
 	},
 	{ /* SHORT 5mm */
 		{400,60}, {600,60}, {800,440},
@@ -1781,6 +1781,61 @@ exit:
 	return len;
 }
 
+static unsigned motor_get_max_pps(motor_stage *stage)
+{
+	unsigned mpps = 0;
+	int i;
+
+	for (i = 0; i < MAX_STAGE_LEGS; i++, stage++) {
+		if (!(stage->freq | stage->ceiling))
+			break;
+		if (stage->freq > mpps)
+			mpps = stage->freq;
+	}
+
+	return mpps;
+}
+
+static int motor_set_max_pps(motor_stage *stage, unsigned value)
+{
+	int i;
+
+	for (i = 0; i < MAX_STAGE_LEGS; i++, stage++) {
+		if (!(stage->freq | stage->ceiling))
+			break;
+		if (stage->freq > (stage + 1)->freq) {
+			stage->freq = value;
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static ssize_t motor_maxpps_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	return snprintf(buf, 20, "%u\n", motor_get_max_pps(md->sequencer[SQ_FULL]));
+}
+
+static ssize_t motor_maxpps_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t len)
+{
+	motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	unsigned value = 0;
+
+	if (kstrtouint(buf, 10, &value)) {
+		dev_err(dev, "Error value: %s\n", buf);
+		goto exit;
+	}
+	motor_set_max_pps(md->sequencer[SQ_FULL], value);
+	motor_set_max_pps(md->sequencer[SQ_PROLONGED], value);
+	dev_info(dev, "Set max PPS: %u\n", value);
+exit:
+	return len;
+}
+
 static ssize_t motor_time_out_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
@@ -1980,6 +2035,7 @@ static DEVICE_ATTR(enable, S_IRUGO|S_IWUSR|S_IWGRP, motor_enable_show, motor_ena
 static DEVICE_ATTR(dir, S_IRUGO|S_IWUSR|S_IWGRP, motor_dir_show, motor_dir_store);
 static DEVICE_ATTR(step, S_IRUGO|S_IWUSR|S_IWGRP, motor_step_show, motor_step_store);
 static DEVICE_ATTR(ceiling, S_IRUGO|S_IWUSR|S_IWGRP, motor_ceiling_show, motor_ceiling_store);
+static DEVICE_ATTR(maxpps, S_IRUGO|S_IWUSR|S_IWGRP, motor_maxpps_show, motor_maxpps_store);
 static DEVICE_ATTR(mode, S_IRUGO|S_IWUSR|S_IWGRP, motor_mode_show, motor_mode_store);
 static DEVICE_ATTR(sequencer, S_IRUGO|S_IWUSR|S_IWGRP, motor_sequencer_show, motor_sequencer_store);
 static DEVICE_ATTR(torque, S_IRUGO|S_IWUSR|S_IWGRP, motor_torque_show, motor_torque_store);
@@ -1993,7 +2049,7 @@ static DEVICE_ATTR(regime, S_IRUGO|S_IWUSR|S_IWGRP, motor_regime_show, motor_reg
 static DEVICE_ATTR(irq, S_IRUGO|S_IWUSR|S_IWGRP, motor_irq_show, motor_irq_store);
 
 #define ATTRS_STATIC 8
-#define ATTRS_MAX 13
+#define ATTRS_MAX 14
 
 static int last_idx = ATTRS_STATIC;
 
@@ -2002,6 +2058,7 @@ static struct attribute *motor_attributes[ATTRS_MAX + 1] = {
 	&dev_attr_enable.attr,
 	&dev_attr_step.attr,
 	&dev_attr_ceiling.attr,
+	&dev_attr_maxpps.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_prox.attr,
 	&dev_attr_pitch.attr,
