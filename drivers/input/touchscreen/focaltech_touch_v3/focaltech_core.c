@@ -1346,24 +1346,34 @@ static int fts_pinctrl_init(struct fts_ts_data *ts)
 
     ts->pins_active = pinctrl_lookup_state(ts->pinctrl, "pmx_ts_active");
     if (IS_ERR_OR_NULL(ts->pins_active)) {
-        FTS_ERROR("Pin state[active] not found");
-        ret = PTR_ERR(ts->pins_active);
-        goto err_pinctrl_lookup;
+        ts->pins_active = pinctrl_lookup_state(ts->pinctrl, "cli_pmx_ts_active");
+        if (IS_ERR_OR_NULL(ts->pins_active)) {
+            FTS_ERROR("Pin state[active] not found");
+            ret = PTR_ERR(ts->pins_active);
+            goto err_pinctrl_lookup;
+        }
     }
 
     ts->pins_suspend = pinctrl_lookup_state(ts->pinctrl, "pmx_ts_suspend");
     if (IS_ERR_OR_NULL(ts->pins_suspend)) {
-        FTS_ERROR("Pin state[suspend] not found");
-        ret = PTR_ERR(ts->pins_suspend);
-        goto err_pinctrl_lookup;
+        ts->pins_suspend = pinctrl_lookup_state(ts->pinctrl, "cli_pmx_ts_suspend");
+        if (IS_ERR_OR_NULL(ts->pins_suspend)) {
+            FTS_ERROR("Pin state[suspend] not found");
+            ret = PTR_ERR(ts->pins_suspend);
+            goto err_pinctrl_lookup;
+        }
     }
 
     ts->pins_release = pinctrl_lookup_state(ts->pinctrl, "pmx_ts_release");
     if (IS_ERR_OR_NULL(ts->pins_release)) {
-        FTS_ERROR("Pin state[release] not found");
-        ret = PTR_ERR(ts->pins_release);
+        ts->pins_release = pinctrl_lookup_state(ts->pinctrl, "cli_pmx_ts_release");
+        if (IS_ERR_OR_NULL(ts->pins_release)) {
+            FTS_ERROR("Pin state[release] not found");
+            ret = PTR_ERR(ts->pins_release);
+        }
     }
 
+    FTS_INFO("Pinctrl init success");
     return 0;
 err_pinctrl_lookup:
     if (ts->pinctrl) {
