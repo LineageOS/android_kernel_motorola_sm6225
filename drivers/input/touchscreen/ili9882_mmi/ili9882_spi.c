@@ -21,12 +21,21 @@
  */
 
 #include "ili9882.h"
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+#include <linux/mmi_device.h>
+#endif
 #ifdef CONFIG_DRM
 struct drm_panel *ili_active_panel;
 #ifdef ILI_FW_PANEL
 static const char *active_panel_name = NULL;
 #endif
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static int check_dt(struct device_node *np);
+#endif
+#endif
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+extern int ili_mmi_init(struct ilitek_ts_data *ts_data, bool enable);
 #endif
 
 struct touch_bus_info {
@@ -485,6 +494,7 @@ static int ili_parse_tp_module()
 }
 #endif //ILI_FW_PANEL
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef CONFIG_DRM
 static int check_dt(struct device_node *np)
 {
@@ -554,7 +564,10 @@ static int check_dt(struct device_node *np)
 		pr_err("%s: %s not actived\n", __func__, node->name);
 	return ret;
 }
+#endif
+#endif
 
+#ifdef CONFIG_DRM
 static int parse_dt(struct device_node *np)
 {
 	int32_t ret = 0;
@@ -601,8 +614,10 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	container_of(to_spi_driver(spi->dev.driver),
 		struct touch_bus_info, bus_driver);
 	int tp_module = 0;
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef ILI_FW_PANEL
 	int ret;
+#endif
 #endif
 	ILI_INFO("ilitek spi probe\n");
 
@@ -611,6 +626,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 		return -ENODEV;
 	}
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #ifdef CONFIG_DRM
 {
 	struct device_node *dp = spi->dev.of_node;
@@ -628,6 +644,13 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	}
 #endif
 }
+#endif
+#endif
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	if (spi->dev.of_node && !mmi_device_is_available(spi->dev.of_node)) {
+		ILI_ERR("mmi: device not supported\n");
+		return -ENODEV;
+	}
 #endif
 	ilits = devm_kzalloc(&spi->dev, sizeof(struct ilitek_ts_data), GFP_KERNEL);
 	if (ERR_ALLOC_MEM(ilits)) {
@@ -758,6 +781,10 @@ static int ilitek_spi_probe(struct spi_device *spi)
 
 	if (ili_core_spi_setup(SPI_CLK) < 0)
 		return -EINVAL;
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ili_mmi_init(ilits, true);
+#endif
 
 	return info->hwif->plat_probe();
 }

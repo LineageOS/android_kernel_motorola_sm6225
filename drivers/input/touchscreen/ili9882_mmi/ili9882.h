@@ -115,6 +115,10 @@
 #include <linux/mmi_wake_lock.h>
 #include <linux/panel_notifier.h>
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/touchscreen_mmi.h>
+#endif
+
 #define DRIVER_VERSION			"3.0.3.0.200610"
 
 /* Options */
@@ -1002,6 +1006,10 @@ struct ilitek_ts_data {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_active;
 	struct pinctrl_state *pins_suspend;
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	struct ts_mmi_class_methods *imports;
+#endif
 };
 extern struct ilitek_ts_data *ilits;
 

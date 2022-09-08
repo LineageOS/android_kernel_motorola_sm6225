@@ -43,6 +43,10 @@ ifneq ($(filter m y,$(CONFIG_ILITEK_PANEL_GESTURE)),)
 EXTRA_CFLAGS += -DILI_CONFIG_PANEL_GESTURE
 endif
 
+ifneq ($(filter m y,$(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
+    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+endif
+
 ili9882_mmi-objs += ili9882.o
 ili9882_mmi-objs += ili9882_spi.o
 ili9882_mmi-objs += ili9882_qcom.o
@@ -51,3 +55,9 @@ ili9882_mmi-objs += ili9882_touch.o
 ili9882_mmi-objs += ili9882_mp.o
 ili9882_mmi-objs += ili9882_hostdl.o
 ili9882_mmi-objs += ili9882_node.o
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+    KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+    ili9882_mmi-objs += ili_mmi_class.o
+endif
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
