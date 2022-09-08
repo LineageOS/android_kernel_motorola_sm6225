@@ -1164,10 +1164,6 @@ static int fts_buffer_init(struct fts_ts_data *ts_data)
     return 0;
 }
 
-#if FTS_POWER_SOURCE_CUST_EN
-/*****************************************************************************
-* Power Control
-*****************************************************************************/
 #if FTS_PINCTRL_EN
 static int fts_pinctrl_init(struct fts_ts_data *ts)
 {
@@ -1260,6 +1256,10 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 }
 #endif /* FTS_PINCTRL_EN */
 
+/*****************************************************************************
+* Power Control
+*****************************************************************************/
+#if FTS_POWER_SOURCE_CUST_EN
 static int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 {
     int ret = 0;
@@ -1960,6 +1960,11 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     }
 #endif
 
+#if FTS_PINCTRL_EN && (!FTS_POWER_SOURCE_CUST_EN)
+    fts_pinctrl_init(ts_data);
+    fts_pinctrl_select_normal(ts_data);
+#endif
+
 #if (!FTS_CHIP_IDC)
     fts_reset_proc(200);
 #endif
@@ -2084,6 +2089,11 @@ err_irq_req:
 err_power_init:
     fts_power_source_exit(ts_data);
 #endif
+
+#if FTS_PINCTRL_EN && (!FTS_POWER_SOURCE_CUST_EN)
+    fts_pinctrl_select_release(ts_data);
+#endif
+
     if (gpio_is_valid(ts_data->pdata->reset_gpio))
         gpio_free(ts_data->pdata->reset_gpio);
     if (gpio_is_valid(ts_data->pdata->irq_gpio))
@@ -2173,6 +2183,10 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     fts_power_source_exit(ts_data);
 #endif
 
+#if FTS_PINCTRL_EN && (!FTS_POWER_SOURCE_CUST_EN)
+    fts_pinctrl_select_release(ts_data);
+#endif
+
     kfree_safe(ts_data->touch_buf);
     kfree_safe(ts_data->pdata);
     kfree_safe(ts_data);
@@ -2247,6 +2261,9 @@ static int fts_ts_suspend(struct device *dev)
 #endif
     }
 
+#if FTS_PINCTRL_EN && (!FTS_POWER_SOURCE_CUST_EN)
+    fts_pinctrl_select_suspend(ts_data);
+#endif
     fts_release_all_finger();
     ts_data->suspended = true;
     FTS_FUNC_EXIT();
@@ -2283,6 +2300,11 @@ static int fts_ts_resume(struct device *dev)
 #endif
         fts_reset_proc(200);
     }
+
+
+#if FTS_PINCTRL_EN && (!FTS_POWER_SOURCE_CUST_EN)
+    fts_pinctrl_select_normal(ts_data);
+#endif
 
     fts_wait_tp_to_valid();
     fts_ex_mode_recovery(ts_data);

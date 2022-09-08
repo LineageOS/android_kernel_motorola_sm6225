@@ -251,8 +251,11 @@
  * Pinctrl enable
  * default: disable
  */
+#ifdef FOCALTECH_PINCTRL_EN
+#define FTS_PINCTRL_EN                          1
+#else
 #define FTS_PINCTRL_EN                          0
-
+#endif
 /*
  * Customer power enable
  * enable it when customer need control TP power
