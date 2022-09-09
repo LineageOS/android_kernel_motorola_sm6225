@@ -90,6 +90,11 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 		ppdata->gestures_enabled = true;
 	}
 
+	if (of_property_read_bool(of_node, "mmi,cli-enable-gestures")) {
+		dev_info(DEV_TS, "%s: using enable cli gestures\n", __func__);
+		ppdata->cli_gestures_enabled = true;
+	}
+
 	if (of_property_read_bool(of_node, "mmi,enable-palm")) {
 		dev_info(DEV_TS, "%s: using enable palm\n", __func__);
 		ppdata->palm_enabled = true;
@@ -160,6 +165,10 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 	if (!of_property_read_u32(of_node, "mmi,supported_gesture_type", &ppdata->supported_gesture_type))
 		dev_info(DEV_TS, "%s: supported_gesture_type property %02x\n",
 				__func__, ppdata->supported_gesture_type);
+
+	if (!of_property_read_u32(of_node, "mmi,cli_supported_gesture_type", &ppdata->cli_supported_gesture_type))
+		dev_info(DEV_TS, "%s: cli_supported_gesture_type property %02x\n",
+				__func__, ppdata->cli_supported_gesture_type);
 #endif
 
 	chosen = of_find_node_by_name(NULL, "chosen");

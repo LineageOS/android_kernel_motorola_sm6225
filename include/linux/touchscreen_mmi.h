@@ -291,6 +291,9 @@ enum ts_mmi_pm_mode {
 	TS_MMI_PM_GESTURE_DOUBLE,
 	TS_MMI_PM_GESTURE_ZERO,
 	TS_MMI_PM_GESTURE_SWITCH,
+	TS_MMI_PM_GESTURE_CLI_SINGLE,
+	TS_MMI_PM_GESTURE_CLI_DOUBLE,
+	TS_MMI_PM_GESTURE_CLI_ZERO
 };
 
 enum ts_mmi_panel_event {
@@ -409,6 +412,7 @@ struct ts_mmi_dev_pdata {
 	bool		usb_detection;
 	bool		update_refresh_rate;
 	bool		gestures_enabled;
+	bool		cli_gestures_enabled;
 	bool		palm_enabled;
 	bool		fw_load_resume;
 	bool		suppression_ctrl;
@@ -428,6 +432,7 @@ struct ts_mmi_dev_pdata {
 	const char 	*bound_display;
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	int supported_gesture_type;
+	int cli_supported_gesture_type;
 #endif
 };
 
@@ -455,6 +460,7 @@ struct ts_mmi_dev {
 	int			forcereflash;
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	unsigned char gesture_mode_type;
+	unsigned char cli_gesture_mode_type;
 #endif
 	int			panel_status;
 	struct ts_mmi_dev_pdata	pdata;
@@ -566,6 +572,8 @@ extern void ts_mmi_dev_unregister(struct device *parent);
 extern int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev, struct device_node *of_node);
 extern int ts_mmi_gesture_init(struct ts_mmi_dev *data);
 extern int ts_mmi_gesture_remove(struct ts_mmi_dev *data);
+extern int ts_mmi_cli_gesture_init(struct ts_mmi_dev *data);
+extern int ts_mmi_cli_gesture_remove(struct ts_mmi_dev *data);
 extern int ts_mmi_palm_init(struct ts_mmi_dev *data);
 extern int ts_mmi_palm_remove(struct ts_mmi_dev *data);
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
