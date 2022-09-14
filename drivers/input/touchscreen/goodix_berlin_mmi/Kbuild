@@ -87,6 +87,8 @@ else ifneq ($(filter miami%, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_MIAMI
 else ifneq ($(filter rtwo%, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DPRODUCT_RTWO
+else ifneq ($(filter bronco, $(USE_TARGET_PRODUCT)), )
+        EXTRA_CFLAGS += -DPRODUCT_BRONCO
 else ifneq ($(filter felix, $(USE_TARGET_PRODUCT)), )
         EXTRA_CFLAGS += -DCONFIG_GTP_DISP_MODE
 endif
