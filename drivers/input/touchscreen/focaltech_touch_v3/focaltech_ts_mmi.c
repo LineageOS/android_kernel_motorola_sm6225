@@ -235,6 +235,7 @@ static int fts_mmi_panel_state(struct device *dev,
 	struct fts_ts_platform_data *pdata;
 	struct fts_ts_data *ts_data;
 	int ret = 0;
+	static u8 gesture_command = 0;
 
 	GET_TS_DATA(dev);
 	pdata = ts_data->pdata;
@@ -257,6 +258,26 @@ static int fts_mmi_panel_state(struct device *dev,
 #endif
 			}
 #endif
+			break;
+
+		case TS_MMI_PM_GESTURE_CLI_SINGLE:
+			gesture_command |= (1 << 7);
+			FTS_INFO("Enable GESTURE_CLI_SINGLE command: %02x", gesture_command);
+			break;
+
+		case TS_MMI_PM_GESTURE_CLI_DOUBLE:
+			gesture_command |= (1 << 4);
+			FTS_INFO("Enable GESTURE_CLI_DOUBLE command: %02x", gesture_command);
+			break;
+
+		case TS_MMI_PM_GESTURE_SWITCH:
+			FTS_INFO("CLI GESTURE SWITCH command: %02x", gesture_command);
+			ts_data->gsx_cmd = gesture_command;
+			if (fts_gesture_suspend(ts_data) == 0) {
+				ts_data->wakeable = true;
+				ts_data->gesture_support = true;
+			}
+			gesture_command  = 0;
 			break;
 
 		case TS_MMI_PM_ACTIVE:

@@ -51,8 +51,12 @@ ifneq ($(filter m y, $(CONFIG_FTS_NOISE_TEST_P2P)),)
 	EXTRA_CFLAGS += -DCONFIG_FTS_NOISE_TEST_P2P
 endif
 
-ifneq ($(filter m y, $(CONFIG_FTS_NOISE_TEST_P2P)),)
+ifneq ($(filter m y, $(CONFIG_FTS_COMPATIBLE_WITH_GKI)),)
 	EXTRA_CFLAGS += -DCONFIG_FTS_COMPATIBLE_WITH_GKI
+endif
+
+ifneq ($(filter m y, $(CONFIG_FTS_DOUBLE_TAP_CONTROL)),)
+	EXTRA_CFLAGS += -DCONFIG_FTS_DOUBLE_TAP_CONTROL
 endif
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers

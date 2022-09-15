@@ -51,12 +51,14 @@
 #define KEY_GESTURE_V                           KEY_V
 #define KEY_GESTURE_C                           KEY_C
 #define KEY_GESTURE_Z                           KEY_Z
+#define KEY_GESTURE_F1                         KEY_F1
 
 #define GESTURE_LEFT                            0x20
 #define GESTURE_RIGHT                           0x21
 #define GESTURE_UP                              0x22
 #define GESTURE_DOWN                            0x23
 #define GESTURE_DOUBLECLICK                     0x24
+#define GESTURE_SINGLECLICK                     0x27
 #define GESTURE_O                               0x30
 #define GESTURE_W                               0x31
 #define GESTURE_M                               0x32
@@ -280,6 +282,9 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
     case GESTURE_DOUBLECLICK:
         gesture = KEY_GESTURE_U;
         break;
+    case GESTURE_SINGLECLICK:
+        gesture = KEY_GESTURE_F1;
+        break;
     case GESTURE_O:
         gesture = KEY_GESTURE_O;
         break;
@@ -319,6 +324,31 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
             FTS_INFO("Gesture got but wakeable not set. Skip this gesture.");
             return;
         }
+#ifdef CONFIG_FTS_DOUBLE_TAP_CONTROL
+        /* report double tap */
+        if (gesture == KEY_GESTURE_U) {
+            if (fts_data->imports && fts_data->imports->report_gesture) {
+                struct gesture_event_data event;
+
+                FTS_INFO("invoke imported report double tap gesture function\n");
+                event.evcode = 4;
+                /* call class method */
+                ret = fts_data->imports->report_gesture(&event);
+                ++report_cnt;
+            }
+	/* report single tap */
+        } else if (gesture == KEY_GESTURE_F1) {
+            if (fts_data->imports && fts_data->imports->report_gesture) {
+                struct gesture_event_data event;
+
+                FTS_INFO("invoke imported report single tap gesture function\n");
+                event.evcode = 1;
+                /* call class method */
+                ret = fts_data->imports->report_gesture(&event);
+                ++report_cnt;
+            }
+        }
+#else
         /* report single tap */
         if (gesture == KEY_GESTURE_U) {
             if (fts_data->imports && fts_data->imports->report_gesture) {
@@ -331,6 +361,7 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
                 ++report_cnt;
             }
         }
+#endif
 
         FTS_INFO("input report: %d", report_cnt);
         if (report_cnt >= REPORT_MAX_COUNT)
@@ -438,7 +469,11 @@ int fts_gesture_suspend(struct fts_ts_data *ts_data)
     }
 
     for (i = 0; i < 5; i++) {
+#ifdef CONFIG_FTS_DOUBLE_TAP_CONTROL
+        fts_write_reg(0xD1, ts_data->gsx_cmd);
+#else
         fts_write_reg(0xD1, 0xFF);
+#endif
         fts_write_reg(0xD2, 0xFF);
         fts_write_reg(0xD5, 0xFF);
         fts_write_reg(0xD6, 0xFF);

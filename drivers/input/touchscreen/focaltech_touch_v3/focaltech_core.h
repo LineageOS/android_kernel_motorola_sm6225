@@ -266,6 +266,7 @@ struct fts_ts_data {
 #ifdef FOCALTECH_SENSOR_EN
     bool wakeable;
 #endif
+    u8 gsx_cmd;
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
     bool palm_detection_enabled;
