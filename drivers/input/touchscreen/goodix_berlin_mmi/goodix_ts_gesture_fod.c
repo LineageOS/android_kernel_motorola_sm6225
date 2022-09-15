@@ -523,7 +523,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 #endif
 
 re_send_ges_cmd:
-#if defined(PRODUCT_TUNDRA) || defined(PRODUCT_MIAMI)
+#if defined(PRODUCT_MIAMI)
 	if (hw_ops->gesture(cd, 0x80))
 #else
 	if (hw_ops->gesture(cd, 0))
