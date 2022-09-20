@@ -93,8 +93,15 @@ void ili_input_register(void)
 
 	input_set_abs_params(ilits->input, ABS_MT_POSITION_X, TOUCH_SCREEN_X_MIN, ilits->panel_wid - 1, 0, 0);
 	input_set_abs_params(ilits->input, ABS_MT_POSITION_Y, TOUCH_SCREEN_Y_MIN, ilits->panel_hei - 1, 0, 0);
-	input_set_abs_params(ilits->input, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
-	input_set_abs_params(ilits->input, ABS_MT_WIDTH_MAJOR, 0, 255, 0, 0);
+	if (!TOUCH_WIDTH) {
+		input_set_abs_params(ilits->input, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
+		input_set_abs_params(ilits->input, ABS_MT_WIDTH_MAJOR, 0, 255, 0, 0);
+	} else {
+		input_set_abs_params(ilits->input, ABS_MT_TOUCH_MAJOR, 0, ilits->panel_hei - 1, 0, 0);
+		input_set_abs_params(ilits->input, ABS_MT_WIDTH_MAJOR, 0, 255, 0, 0);
+		input_set_abs_params(ilits->input, ABS_MT_TOUCH_MINOR, 0, ilits->panel_wid - 1, 0, 0);
+		input_set_abs_params(ilits->input, ABS_MT_ORIENTATION, -90, 90, 0, 0);
+	}
 
 	if (MT_PRESSURE)
 		input_set_abs_params(ilits->input, ABS_MT_PRESSURE, 0, 255, 0, 0);

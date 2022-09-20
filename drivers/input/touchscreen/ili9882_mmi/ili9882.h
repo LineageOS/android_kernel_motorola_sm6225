@@ -138,7 +138,13 @@
 #define MP_INT_TIMEOUT			5000 /*5s*/
 #define MT_B_TYPE			ENABLE
 #define TDDI_RST_BIND			DISABLE
+#ifdef ILI_PASSIVE_PEN
+#define MT_PRESSURE			ENABLE
+#define TOUCH_WIDTH		ENABLE
+#else
 #define MT_PRESSURE			DISABLE
+#define TOUCH_WIDTH		DISABLE
+#endif
 #ifdef ILI_CONFIG_ESD
 #define ENABLE_WQ_ESD			ENABLE
 #else
@@ -483,7 +489,7 @@ struct report_info_block {
 #define CORE_VER_1430				0x01040300
 #define CORE_VER_1460				0x01040600
 #define CORE_VER_1470				0x01040700
-#define MAX_HEX_FILE_SIZE			(160*K)
+#define MAX_HEX_FILE_SIZE			(256*K)
 #define ILI_FILE_HEADER				256
 #define DLM_START_ADDRESS			0x20610
 #define DLM_HEX_ADDRESS				0x10000
@@ -728,6 +734,7 @@ struct report_info_block {
 #define DATA_FORMAT_DEBUG_LITE_ROI_CMD			0x01
 #define DATA_FORMAT_DEBUG_LITE_WINDOW_CMD		0x02
 #define DATA_FORMAT_DEBUG_LITE_AREA_CMD			0x03
+#define P5_X_DEMO_MODE_PACKET_INFO_LEN			3
 #define P5_X_DEMO_MODE_PACKET_LEN			43
 #define P5_X_INFO_HEADER_LENGTH				3
 #define P5_X_INFO_CHECKSUM_LENGTH			1
@@ -739,6 +746,8 @@ struct report_info_block {
 #define P5_X_DEBUG_LITE_LENGTH				300
 #define P5_X_CORE_VER_THREE_LENGTH			5
 #define P5_X_CORE_VER_FOUR_LENGTH			6
+#define P5_X_5B_LOW_RESOLUTION_LENGTH			62
+#define P5_X_CUSTOMER_LENGTH				50
 
 
 /* Protocol */
@@ -774,6 +783,11 @@ struct report_info_block {
 #define P5_X_FW_RAW_DATA_MODE				0x08
 #define P5_X_DEMO_PACKET_ID				0x5A
 #define P5_X_DEBUG_PACKET_ID				0xA7
+#define P5_X_DEMO_HIGH_RESOLUTION_PACKET_ID		0x5B
+#define P5_X_DEBUG_HIGH_RESOLUTION_PACKET_ID		0xA8
+#define P5_X_DEMO_MODE_AXIS_LEN				50
+#define P5_X_DEMO_MODE_STATE_INFO			16
+
 #define P5_X_TEST_PACKET_ID				0xF2
 #define P5_X_GESTURE_PACKET_ID				0xAA
 #define P5_X_GESTURE_FAIL_ID				0xAE
@@ -1023,6 +1037,9 @@ struct ilitek_touch_info {
 	u16 x;
 	u16 y;
 	u16 pressure;
+	s8 degree;
+	u16 width_major;
+	u16 width_minor;
 };
 
 struct gesture_coordinate {
@@ -1118,6 +1135,7 @@ extern int ili_move_gesture_code_iram(int mode);
 extern int ili_move_mp_code_flash(void);
 extern int ili_move_mp_code_iram(void);
 extern void ili_touch_press(u16 x, u16 y, u16 pressure, u16 id);
+extern void ili_touch_press_width(u16 x, u16 y, u16 pressure, u16 id, u16 width_major, u16 width_minor, s8 degree);
 extern void ili_touch_release(u16 x, u16 y, u16 id);
 extern void ili_touch_release_all_point(void);
 extern void ili_report_ap_mode(u8 *buf, int len);

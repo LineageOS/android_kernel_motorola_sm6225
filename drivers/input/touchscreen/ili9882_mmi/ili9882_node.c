@@ -706,7 +706,75 @@ out:
 	mutex_unlock(&ilits->touch_mutex);
 	return size;
 }
+static ssize_t ilitek_proc_passive_pen_write(struct file *filp, const char *buff, size_t size, loff_t *pos)
+{
+	char cmd[256] = { 0 };
+	int  glove_value =0;
 
+	if ((size - 1) > sizeof(cmd)) {
+		ILI_ERR("ERROR! input length is larger than local buffer\n");
+		return -1;
+	}
+
+	mutex_lock(&ilits->touch_mutex);
+
+	if (buff != NULL) {
+		if (copy_from_user(cmd, buff, size - 1)) {
+			ILI_INFO("Failed to copy data from user space\n");
+			size = -1;
+			goto out;
+		}
+	}
+	sscanf(cmd, "%x", &glove_value);
+	ILI_INFO("glove status:%x\n",glove_value);
+	if (!glove_value) {
+		if (ili_ic_func_ctrl("passive_pen", DISABLE) < 0)
+			ILI_ERR("Write glove disable fail\n");
+	}
+	else {
+		if (ili_ic_func_ctrl("passive_pen", ENABLE) < 0)
+			ILI_ERR("Write glove enable fail\n");
+	}
+	
+out:
+	mutex_unlock(&ilits->touch_mutex);
+	return size;
+}
+
+static ssize_t ilitek_proc_canvas_write(struct file *filp, const char *buff, size_t size, loff_t *pos)
+{
+	char cmd[256] = { 0 };
+	int  stylus_value =0;
+
+	if ((size - 1) > sizeof(cmd)) {
+		ILI_ERR("ERROR! input length is larger than local buffer\n");
+		return -1;
+	}
+
+	mutex_lock(&ilits->touch_mutex);
+
+	if (buff != NULL) {
+		if (copy_from_user(cmd, buff, size - 1)) {
+			ILI_INFO("Failed to copy data from user space\n");
+			size = -1;
+			goto out;
+		}
+	}
+	sscanf(cmd, "%x", &stylus_value);
+	ILI_INFO("stylus status:%x\n",stylus_value);
+	if (!stylus_value) {
+		if (ili_ic_func_ctrl("canvas", DISABLE) < 0)
+			ILI_ERR("Write stylus disable fail\n");
+	}
+	else {
+		if (ili_ic_func_ctrl("canvas", ENABLE) < 0)
+			ILI_ERR("Write stylus enable fail\n");
+	}
+	
+out:
+	mutex_unlock(&ilits->touch_mutex);
+	return size;
+}
 static ssize_t ilitek_proc_debug_switch_read(struct file *pFile, char __user *buff, size_t size, loff_t *pos)
 {
 	bool open;
@@ -716,7 +784,7 @@ static ssize_t ilitek_proc_debug_switch_read(struct file *pFile, char __user *bu
 
 	memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
 
-	mutex_lock(&ilits->debug_mutex);
+	mutex_lock(&ilits->debug_read_mutex);
 
 	open = !ilits->dnp;
 
@@ -728,7 +796,7 @@ static ssize_t ilitek_proc_debug_switch_read(struct file *pFile, char __user *bu
 	if (copy_to_user(buff, g_user_buf, size))
 		ILI_ERR("Failed to copy data to user space\n");
 
-	mutex_unlock(&ilits->debug_mutex);
+	mutex_unlock(&ilits->debug_read_mutex);
 	return size;
 }
 
@@ -775,6 +843,9 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
 	if (ilits->dbl[ilits->odi].mark) {
 		if (ilits->dbl[ilits->odi].data[0] == P5_X_DEMO_PACKET_ID) {
 			need_read_data_len = 43;
+		} else if (ilits->dbl[ilits->odi].data[0] == P5_X_DEMO_HIGH_RESOLUTION_PACKET_ID) {
+			need_read_data_len = P5_X_5B_LOW_RESOLUTION_LENGTH;
+			need_read_data_len += P5_X_CUSTOMER_LENGTH;
 		} else if (ilits->dbl[ilits->odi].data[0] == P5_X_I2CUART_PACKET_ID) {
 			type = ilits->dbl[ilits->odi].data[3] & 0x0F;
 
@@ -789,6 +860,11 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
 			}
 			need_read_data_len = data_count * one_data_bytes + 1 + 5;
 		} else if (ilits->dbl[ilits->odi].data[0] == P5_X_DEBUG_PACKET_ID || ilits->dbl[ilits->odi].data[0] == P5_X_DEBUG_LITE_PACKET_ID) {
+			send_data_len = 0;	/* ilits->dbl[0][1] - 2; */
+			need_read_data_len = TR_BUF_SIZE - 8;
+		} else if (ilits->dbl[ilits->odi].data[0] == P5_X_I2CUART_PACKET_ID) {
+			need_read_data_len = P5_X_DEMO_MODE_PACKET_LEN+P5_X_DEMO_MODE_AXIS_LEN+P5_X_DEMO_MODE_STATE_INFO;
+		}  else if (ilits->dbl[ilits->odi].data[0] == P5_X_DEBUG_HIGH_RESOLUTION_PACKET_ID) {
 			send_data_len = 0;	/* ilits->dbl[0][1] - 2; */
 			need_read_data_len = TR_BUF_SIZE - 8;
 		}
@@ -1885,23 +1961,23 @@ static long ilitek_node_compat_ioctl(struct file *filp, unsigned int cmd, unsign
 		return ret;
 	case ILITEK_COMPAT_IOCTL_TP_PANEL_INFO:
 		ILI_DBG("compat_ioctl: convert resolution\n");
-		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_COMPAT_IOCTL_TP_PANEL_INFO, (unsigned long)compat_ptr(arg));
+		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_IOCTL_TP_PANEL_INFO, (unsigned long)compat_ptr(arg));
 		return ret;
 	case ILITEK_COMPAT_IOCTL_TP_INFO:
 		ILI_DBG("compat_ioctl: convert tp info\n");
-		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_COMPAT_IOCTL_TP_INFO, (unsigned long)compat_ptr(arg));
+		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_IOCTL_TP_INFO, (unsigned long)compat_ptr(arg));
 		return ret;
 	case ILITEK_COMPAT_IOCTL_WRAPPER_RW:
 		ILI_DBG("compat_ioctl: convert wrapper\n");
-		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_COMPAT_IOCTL_WRAPPER_RW, (unsigned long)compat_ptr(arg));
+		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_IOCTL_WRAPPER_RW, (unsigned long)compat_ptr(arg));
 		return ret;
 	case ILITEK_COMPAT_IOCTL_DDI_WRITE:
 		ILI_DBG("compat_ioctl: convert ddi write\n");
-		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_COMPAT_IOCTL_DDI_WRITE, (unsigned long)compat_ptr(arg));
+		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_IOCTL_DDI_WRITE, (unsigned long)compat_ptr(arg));
 		return ret;
 	case ILITEK_COMPAT_IOCTL_DDI_READ:
 		ILI_DBG("compat_ioctl: convert ddi read\n");
-		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_COMPAT_IOCTL_DDI_READ, (unsigned long)compat_ptr(arg));
+		ret = filp->f_op->unlocked_ioctl(filp, ILITEK_IOCTL_DDI_READ, (unsigned long)compat_ptr(arg));
 		return ret;
 	default:
 		ILI_ERR("no ioctl cmd, return ilitek_node_ioctl\n");
@@ -2204,8 +2280,9 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 		ILI_DBG("ioctl: get panel resolution\n");
 		id_to_user[0] = ilits->panel_wid;
 		id_to_user[1] = ilits->panel_hei;
+		id_to_user[2] = (ilits->trans_xy) ? 0x1 : 0x0;
 
-		if (copy_to_user((u32 *) arg, id_to_user, sizeof(u32) * 2)) {
+		if (copy_to_user((u32 *) arg, id_to_user, sizeof(u32) * 3)) {
 			ILI_ERR("Failed to copy driver ver to user space\n");
 			ret = -ENOTTY;
 		}
@@ -2475,6 +2552,22 @@ static struct file_operations proc_rw_tp_reg_fops = {
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+static struct proc_ops proc_passive_pen_ctrl_fops = {
+	.proc_write = ilitek_proc_passive_pen_write,
+};
+static struct proc_ops proc_canvas_ctrl_fops = {
+	.proc_write = ilitek_proc_canvas_write,
+};
+#else
+static struct file_operations proc_passive_pen_ctrl_fops = {
+	.write = ilitek_proc_passive_pen_write,
+};
+static struct file_operations proc_canvas_ctrl_fops = {
+	.write = ilitek_proc_canvas_write,
+};
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
 static struct proc_ops proc_fw_pc_counter_fops = {
 	.proc_read = ilitek_proc_fw_pc_counter_read,
 };
@@ -2522,6 +2615,9 @@ proc_node iliproc[] = {
 	{"rw_tp_reg", NULL, &proc_rw_tp_reg_fops, false},
 	{"ver_info", NULL, &proc_ver_info_fops, false},
 	{"change_list", NULL, &proc_change_list_fops, false},
+	{"passive_pen_ctrl", NULL, &proc_passive_pen_ctrl_fops, false},
+	{"canvas_ctrl", NULL, &proc_canvas_ctrl_fops, false},
+
 };
 
 #define NETLINK_USER 21

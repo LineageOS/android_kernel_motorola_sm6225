@@ -658,11 +658,26 @@ int ili_set_tp_data_len(int format, bool send, u8* data)
 
 	switch (format) {
 	case DATA_FORMAT_DEMO:
+		if (TOUCH_WIDTH)
+			len = P5_X_5B_LOW_RESOLUTION_LENGTH + P5_X_CUSTOMER_LENGTH;
+		else
+			len = P5_X_DEMO_MODE_PACKET_LEN;
+
+		ctrl = DATA_FORMAT_DEMO_CMD;
+		break;
 	case DATA_FORMAT_GESTURE_DEMO:
 		len = P5_X_DEMO_MODE_PACKET_LEN;
 		ctrl = DATA_FORMAT_DEMO_CMD;
 		break;
 	case DATA_FORMAT_DEBUG:
+		len = (2 * ilits->xch_num * ilits->ych_num) + (ilits->stx * 2) + (ilits->srx * 2);
+		len += 2 * self_key + (8 * 2) + 1 + 35;
+		if (TOUCH_WIDTH)
+			len += P5_X_CUSTOMER_LENGTH;
+
+		ctrl = DATA_FORMAT_DEBUG_CMD;
+		break;
+
 	case DATA_FORMAT_GESTURE_DEBUG:
 		len = (2 * ilits->xch_num * ilits->ych_num) + (ilits->stx * 2) + (ilits->srx * 2);
 		len += 2 * self_key + (8 * 2) + 1 + 35;
@@ -862,6 +877,12 @@ int ili_report_handler(void)
 	case P5_X_DEBUG_PACKET_ID:
 		ili_report_debug_mode(trdata, rlen);
 		break;
+	case P5_X_DEMO_HIGH_RESOLUTION_PACKET_ID:
+		ili_report_ap_mode(trdata, rlen);
+		break;
+	case P5_X_DEBUG_HIGH_RESOLUTION_PACKET_ID:
+		ili_report_debug_mode(trdata, rlen);
+		break;
 	case P5_X_DEBUG_LITE_PACKET_ID:
 		ili_report_debug_lite_mode(trdata, rlen);
 		break;
@@ -943,7 +964,11 @@ int ili_reset_ctrl(int mode)
 		atomic_set(&ilits->ice_stat, DISABLE);
 
 	ilits->tp_data_format = DATA_FORMAT_DEMO;
-	ilits->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
+	if (TOUCH_WIDTH)
+		ilits->tp_data_len = P5_X_5B_LOW_RESOLUTION_LENGTH + P5_X_CUSTOMER_LENGTH;
+	else
+		ilits->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
+
 	ilits->pll_clk_wakeup = true;
 	atomic_set(&ilits->tp_reset, END);
 	return ret;

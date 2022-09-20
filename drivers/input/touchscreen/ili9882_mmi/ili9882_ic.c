@@ -35,7 +35,7 @@ static struct ilitek_protocol_info protocol_info[PROTOCL_VER_NUM] = {
 	[7] = {PROTOCOL_VER_570, 9, 4, 14, 30, 5, 5, 3, 8, 15, 14},
 };
 
-#define FUNC_CTRL_NUM	16
+#define FUNC_CTRL_NUM	18
 static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	/* cmd[3] = cmd, func, ctrl */
 	// rec_state 0:disable, 1: enable, 2: ignore record
@@ -55,6 +55,8 @@ static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	[13] = {"knock_en", {0x1, 0xA, 0x8, 0x03, 0x0, 0x0}, 6, 0xFF, 0, 0xFF},
 	[14] = {"int_trigger", {0x1, 0x1B, 0x0}, 3, 0x0, 2, 0xFF},
 	[15] = {"ear_phone", {0x1, 0x17, 0x0}, 3, 0x0, 0, 0xFF},
+	[16] = {"passive_pen", {0x1, 0x27, 0x0}, 3, 0x0, 0, 0xFF},
+	[17] = {"canvas", {0x1, 0x28, 0x0}, 3, 0x0, 0, 0xFF},
 };
 
 #define CHIP_SUP_NUM	5

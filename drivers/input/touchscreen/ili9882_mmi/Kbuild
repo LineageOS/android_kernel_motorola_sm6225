@@ -47,6 +47,10 @@ ifneq ($(filter m y,$(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
     EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
 endif
 
+ifneq ($(filter m y,$(CONFIG_ILITEK_PASSIVE_PEN)),)
+EXTRA_CFLAGS += -DILI_PASSIVE_PEN
+endif
+
 ili9882_mmi-objs += ili9882.o
 ili9882_mmi-objs += ili9882_spi.o
 ili9882_mmi-objs += ili9882_qcom.o
