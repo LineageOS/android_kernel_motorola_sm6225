@@ -1968,7 +1968,27 @@ static void aw8695_vibrate(struct aw8695 *aw8695, int value)
 			if (aw8695->seq[0] == 0)
 				aw8695->seq[0] = 0x01;
 			aw8695->index = 0x01;
+#ifdef CONFIG_AW8965_VIBRATOR_SHORT_WAV_ENABLE
+			/*If duration < 100ms, use four waveforms corresponding to weakest, weak, medium, strong*/
+			if(value < 12){
+				aw8695_haptic_set_bst_vol(aw8695, 0x2);
+				aw8695_haptic_set_wav_seq(aw8695, 0x00, 4);
+			}
+			else if(value < 25) {
+				aw8695_haptic_set_bst_vol(aw8695, 0x1e);
+				aw8695_haptic_set_wav_seq(aw8695, 0x00, 4);
+			}
+			else if(value < 38) {
+				aw8695_haptic_set_bst_vol(aw8695, 0x1);
+				aw8695_haptic_set_wav_seq(aw8695, 0x00, 3);
+			}
+			else if(value < 100) {
+				aw8695_haptic_set_bst_vol(aw8695, 0x1f);
+				aw8695_haptic_set_wav_seq(aw8695, 0x00, 1);
+			}
+#else
 			aw8695_haptic_set_wav_seq(aw8695, 0x00, aw8695->seq[0]);
+#endif
 			aw8695_haptic_set_wav_loop(aw8695, 0x00, 0x00);
 			aw8695_haptic_ram_vbat_comp(aw8695, false);
 			aw8695_haptic_play_wav_seq(aw8695, 0x01);
