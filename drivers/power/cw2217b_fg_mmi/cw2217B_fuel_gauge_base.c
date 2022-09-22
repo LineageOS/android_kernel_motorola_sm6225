@@ -947,6 +947,10 @@ static int cw_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+		/* voltage_ocv invalid, use voltage_now instead*/
+		val->intval = cw_bat->voltage * CW_VOL_UNIT;
+		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		cw_get_current(cw_bat);
 		val->intval = cw_bat->cw_current * CW_CUR_UNIT * (-1);
@@ -981,6 +985,7 @@ static enum power_supply_property cw_battery_properties[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
