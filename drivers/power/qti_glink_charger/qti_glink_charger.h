@@ -63,6 +63,8 @@ enum oem_property_type {
 	OEM_PROP_WLS_WLC_FAN_SPEED,
 	OEM_PROP_WLS_WLC_TX_TYPE,
 	OEM_PROP_WLS_WLC_TX_POWER,
+	OEM_PROP_SKU_TYPE,
+	OEM_PROP_HW_REVISION,
 	OEM_PROP_MAX,
 };
 
@@ -72,6 +74,14 @@ enum wls_notify_event {
   NOTIFY_EVENT_WLS_CHANGE,
   NOTIFY_EVENT_WLS_ERROR,
   NOTIFY_EVENT_WLS_WLC_CHANGE,
+};
+
+enum mmi_charger_sku_type
+{
+	MMI_CHARGER_SKU_PRC = 0x01,
+	MMI_CHARGER_SKU_ROW,
+	MMI_CHARGER_SKU_NA,
+	MMI_CHARGER_SKU_VZW,
 };
 
 struct qti_charger_notify_data {

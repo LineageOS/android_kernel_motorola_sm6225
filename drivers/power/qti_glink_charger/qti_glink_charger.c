@@ -53,6 +53,8 @@
 #define FOD_GAIN_MAX_LEN 16
 #define FOD_CURR_MAX_LEN 7
 
+#define RADIO_MAX_LEN 33
+
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
 MODULE_PARM_DESC(debug_enabled, "Enable debug for qti glink charger driver");
@@ -2240,11 +2242,123 @@ static const struct power_supply_desc batt_psy_desc = {
 	.set_property		= battery_psy_set_prop,
 };
 
+static int mmi_get_bootarg_dt(char *key, char **value, char *prop, char *spl_flag)
+{
+	const char *bootargs_tmp = NULL;
+	char *idx = NULL;
+	char *kvpair = NULL;
+	int err = 1;
+	struct device_node *n = of_find_node_by_path("/chosen");
+	size_t bootargs_tmp_len = 0;
+	char *bootargs_str = NULL;
+
+	if (n == NULL)
+		goto err;
+
+	if (of_property_read_string(n, prop, &bootargs_tmp) != 0)
+		goto putnode;
+
+	bootargs_tmp_len = strlen(bootargs_tmp);
+	if (!bootargs_str) {
+		/* The following operations need a non-const
+		 * version of bootargs
+		 */
+		bootargs_str = kzalloc(bootargs_tmp_len + 1, GFP_KERNEL);
+		if (!bootargs_str)
+			goto putnode;
+	}
+	strlcpy(bootargs_str, bootargs_tmp, bootargs_tmp_len + 1);
+
+	idx = strnstr(bootargs_str, key, strlen(bootargs_str));
+	if (idx) {
+		kvpair = strsep(&idx, " ");
+		if (kvpair)
+			if (strsep(&kvpair, "=")) {
+				*value = strsep(&kvpair, spl_flag);
+				if (*value)
+					err = 0;
+			}
+	}
+
+putnode:
+	of_node_put(n);
+err:
+	return err;
+}
+
+static int mmi_get_bootarg(char *key, char **value)
+{
+#ifdef CONFIG_BOOT_CONFIG
+	return mmi_get_bootarg_dt(key, value, "mmi,bootconfig", "\n");
+#else
+	return mmi_get_bootarg_dt(key, value, "bootargs", " ");
+#endif
+}
+
+static int mmi_get_sku_type(struct qti_charger *chg, u8 *sku_type)
+{
+	char *s = NULL;
+	char androidboot_radio_str[RADIO_MAX_LEN];
+
+	if (mmi_get_bootarg("androidboot.radio=", &s) == 0) {
+		if (s != NULL) {
+			strlcpy(androidboot_radio_str, s, RADIO_MAX_LEN);
+			if (!strncmp("PRC", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_PRC;
+			} else if (!strncmp("ROW", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_ROW;
+			} else if (!strncmp("NA", androidboot_radio_str, 2)) {
+				*sku_type = MMI_CHARGER_SKU_NA;
+			} else if (!strncmp("VZW", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_VZW;
+			} else {
+				*sku_type = 0;
+			}
+			mmi_info(chg, "SKU type: %s, 0x%02x\n", androidboot_radio_str, *sku_type);
+			return 0;
+		} else {
+			mmi_err(chg, "Could not get SKU type\n");
+			return -1;
+		}
+	} else {
+		mmi_err(chg, "Could not get radio bootarg\n");
+		return -1;
+	}
+}
+
+static int mmi_get_hw_revision(struct qti_charger *chg, u16 *hw_rev)
+{
+	char *s = NULL;
+	char androidboot_hwrev_str[RADIO_MAX_LEN];
+	int ret;
+
+	if (mmi_get_bootarg("androidboot.hwrev=", &s) == 0) {
+		if (s != NULL) {
+			strlcpy(androidboot_hwrev_str, s, RADIO_MAX_LEN);
+			ret = kstrtou16(androidboot_hwrev_str, 16, hw_rev);
+			if (ret < 0) {
+				mmi_info(chg, "kstrtou16 error: %d \n", ret);
+				return -1;
+			}
+			mmi_info(chg, "HW revision: 0x%x\n", *hw_rev);
+			return 0;
+		} else {
+			mmi_err(chg, "Could not get HW  revision\n");
+			return -1;
+		}
+	} else {
+		mmi_err(chg, "Could not get hwrev bootarg\n");
+		return -1;
+	}
+}
+
 static int qti_charger_init(struct qti_charger *chg)
 {
 	int rc;
 	u32 value;
 	struct mmi_charger_driver *driver;
+	u8 sku_type = 0;
+	u16 hw_rev = 0;
 
 	if (chg->driver) {
 		mmi_warn(chg, "qti charger has already inited\n");
@@ -2270,6 +2384,33 @@ static int qti_charger_init(struct qti_charger *chg)
 		return rc;
 	}
 	chg->constraint.factory_version = value;
+
+	//set SKU type
+	if ((rc = mmi_get_sku_type(chg, &sku_type)) == 0) {
+		rc = qti_charger_write(chg, OEM_PROP_SKU_TYPE,
+						&sku_type,
+						sizeof(sku_type));
+		if (rc) {
+			mmi_err(chg, "qti charger set SKU type failed, rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		mmi_err(chg, "Fail to get sku type\n");
+		return rc;
+	}
+	//set HW revision
+	if ((rc = mmi_get_hw_revision(chg, &hw_rev)) == 0) {
+		rc = qti_charger_write(chg, OEM_PROP_HW_REVISION,
+						&hw_rev,
+						sizeof(hw_rev));
+		if (rc) {
+			mmi_err(chg, "qti charger set HW revision failed, rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		mmi_err(chg, "Fail to get HW revision\n");
+		return rc;
+	}
 
 	rc = qti_charger_write_profile(chg);
 	if (rc) {
