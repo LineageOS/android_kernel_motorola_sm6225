@@ -382,7 +382,8 @@ bool ts_mmi_is_sensor_enable(void)
 static int ts_mmi_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
-#ifndef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+#if !defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL) && \
+	!defined(CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL)
 	struct ts_mmi_sensor_platform_data *sensor_pdata = container_of(
 			sensors_cdev, struct ts_mmi_sensor_platform_data, ps_cdev);
 	struct ts_mmi_dev *touch_cdev = sensor_pdata->touch_cdev;

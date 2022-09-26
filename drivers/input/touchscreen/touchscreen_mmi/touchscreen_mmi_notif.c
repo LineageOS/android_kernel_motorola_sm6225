@@ -60,7 +60,8 @@ static int ts_mmi_panel_off(struct ts_mmi_dev *touch_cdev) {
 
 	TRY_TO_CALL(pre_suspend);
 	if (touch_cdev->pdata.gestures_enabled || touch_cdev->pdata.cli_gestures_enabled) {
-#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL) || \
+	defined(CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL)
 		if(touch_cdev->gesture_mode_type != 0) {
 			if(touch_cdev->gesture_mode_type & 0x01) {
 				dev_info(DEV_MMI, "%s: try to enter zero Gesture mode\n", __func__);

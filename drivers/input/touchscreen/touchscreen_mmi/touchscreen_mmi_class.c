@@ -386,7 +386,9 @@ static ssize_t gesture_store(struct device *dev,
 	return size;
 }
 static DEVICE_ATTR(gesture, (S_IWUSR | S_IWGRP | S_IRUGO), gesture_show, gesture_store);
+#endif
 
+#ifdef CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL
 /*
  * cli_gesture value used to indicate which gesture mode type is enabled
  */
@@ -482,6 +484,8 @@ static struct attribute *sysfs_class_attrs[] = {
 #endif
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	&dev_attr_gesture.attr,
+#endif
+#ifdef CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL
 	&dev_attr_cli_gesture.attr,
 #endif
 	NULL,
