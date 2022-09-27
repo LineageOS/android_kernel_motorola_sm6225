@@ -235,6 +235,7 @@ struct qti_charger {
 	u32				wlc_status;
 	u32				wlc_tx_type;
 	u32				wlc_tx_power;
+	u32				wlc_tx_capability;
 	bool				*debug_enabled;
 	u32				wls_curr_max;
 	u32				rx_connected;
@@ -1711,6 +1712,30 @@ static DEVICE_ATTR(wlc_tx_power, S_IRUGO,
 		wlc_tx_power_show,
 		NULL);
 
+static ssize_t wlc_tx_capability_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	u32 capability = 0;
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	qti_charger_read(chg, OEM_PROP_WLS_WLC_TX_CAPABILITY,
+				&capability,
+				sizeof(capability));
+
+	chg->wlc_tx_capability = capability;
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", capability);
+}
+
+static DEVICE_ATTR(wlc_tx_capability, S_IRUGO,
+		wlc_tx_capability_show,
+		NULL);
+
 static ssize_t rx_connected_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -2107,6 +2132,11 @@ static void wireless_psy_init(struct qti_charger *chg)
 		pr_err("couldn't create wireless wlc tx power capacity error\n");
 
 	rc = device_create_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_capability);
+        if (rc)
+		pr_err("couldn't create wireless wlc tx capability error\n");
+
+	rc = device_create_file(chg->wls_psy->dev.parent,
 				&dev_attr_wlc_st_changed);
         if (rc)
 		pr_err("couldn't create wireless wlc status changed error\n");
@@ -2148,6 +2178,9 @@ static void wireless_psy_deinit(struct qti_charger *chg)
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_wlc_tx_power);
+
+	device_remove_file(chg->wls_psy->dev.parent,
+				&dev_attr_wlc_tx_capability);
 
 	device_remove_file(chg->wls_psy->dev.parent,
 				&dev_attr_wlc_st_changed);
