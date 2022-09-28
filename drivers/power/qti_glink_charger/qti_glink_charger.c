@@ -2392,7 +2392,6 @@ static int qti_charger_init(struct qti_charger *chg)
 						sizeof(sku_type));
 		if (rc) {
 			mmi_err(chg, "qti charger set SKU type failed, rc=%d\n", rc);
-			return rc;
 		}
 	} else {
 		mmi_err(chg, "Fail to get sku type\n");
@@ -2405,7 +2404,6 @@ static int qti_charger_init(struct qti_charger *chg)
 						sizeof(hw_rev));
 		if (rc) {
 			mmi_err(chg, "qti charger set HW revision failed, rc=%d\n", rc);
-			return rc;
 		}
 	} else {
 		mmi_err(chg, "Fail to get HW revision\n");
