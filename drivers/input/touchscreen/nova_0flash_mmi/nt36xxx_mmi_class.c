@@ -84,6 +84,50 @@ static struct attribute_group ext_attr_group = {
 	.attrs = ext_attributes,
 };
 
+#ifdef PALM_GESTURE
+static ssize_t nvt_palm_settings_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d", ts->palm_enabled);
+}
+
+static ssize_t nvt_palm_settings_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+
+{
+	int value;
+	int err = 0;
+
+	if (count > 2)
+		return -EINVAL;
+
+	if (sscanf(buf, "%d", &value) != 1)
+		return -EINVAL;
+
+	err = count;
+
+	switch (value) {
+		case 0:
+			ts->palm_enabled = false;
+			break;
+		case 1:
+			ts->palm_enabled = true;
+			break;
+		default:
+			err = -EINVAL;
+			ts->palm_enabled = false;
+			NVT_ERR("Invalid Value! %d\n", value);
+			break;
+	}
+
+	nvt_palm_set(ts->palm_enabled);
+
+	return err;
+}
+
+static DEVICE_ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, nvt_palm_settings_show, nvt_palm_settings_store);
+#endif
+
 static int nvt_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
 {
 	int idx = 0;
@@ -99,6 +143,10 @@ static int nvt_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if (ts->edge_ctrl)
 		ADD_ATTR(edge);
+
+#ifdef PALM_GESTURE
+	ADD_ATTR(palm_settings);
+#endif
 
 	if (idx) {
 		ext_attributes[idx] = NULL;
