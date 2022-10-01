@@ -111,8 +111,10 @@ static unsigned char g_user_buf[USER_STR_BUFF] = {0};
 #define ILI_SPI_NAME_TM "ilitek_tm"
 #define ILI_SPI_NAME_CSOT "ilitek_csot"
 #define ILI_SPI_NAME_TXD "ilitek_txd"
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static struct class *touchscreen_class;
 static struct device *touchscreen_class_dev;
+#endif
 
 int ili_str2hex(char *str)
 {
@@ -2705,6 +2707,7 @@ static int netlink_init(void)
 	return ret;
 }
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 static ssize_t path_show(struct device *pDevice, struct device_attribute *pAttr, char *pBuf)
 {
 	ssize_t blen;
@@ -2802,6 +2805,7 @@ device_destroy:
 
 	return -ENODEV;
 }
+#endif
 
 void ili_node_init(void)
 {
@@ -2822,5 +2826,7 @@ void ili_node_init(void)
 		}
 	}
 	netlink_init();
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	ilitek_sys_init();
+#endif
 }

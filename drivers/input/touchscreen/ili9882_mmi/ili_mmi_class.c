@@ -71,8 +71,83 @@ static int ili_mmi_methods_drv_irq(struct device *dev, int state)
 
 static int ili_mmi_charger_mode(struct device *dev, int mode)
 {
+	int ret = 0;
+	mutex_lock(&ilits->touch_mutex);
+	ret = ili_ic_func_ctrl("plug", mode);
+	if(ret<0) {
+		ILI_ERR("Write plug in failed\n");
+	}
+	ILI_INFO("%s: %d\n", __func__, mode);
+	mutex_unlock(&ilits->touch_mutex);
+
 	return 0;
 }
+
+#define MAX_ATTRS_ENTRIES 10
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
+static ssize_t ili_palm_settings_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d", ilits->canvas_value);
+}
+
+static ssize_t ili_palm_settings_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+
+{
+	int value;
+	int err = 0;
+
+	mutex_lock(&ilits->touch_mutex);
+	if (count > 2)
+		return -EINVAL;
+
+	if (sscanf(buf, "%d", &value) != 1)
+		return -EINVAL;
+
+	err = count;
+
+	if (ili_ic_func_ctrl("canvas", value) < 0)
+		ILI_ERR("Write canvas enable fail\n");
+	else
+		ilits->canvas_value = value;
+	ILI_INFO("%s: %d\n", __func__, ilits->canvas_value);
+	mutex_unlock(&ilits->touch_mutex);
+
+	return err;
+}
+
+static DEVICE_ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, ili_palm_settings_show, ili_palm_settings_store);
+
+static int ili_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+
+	ADD_ATTR(palm_settings);
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
 
 static int ili_mmi_methods_reset(struct device *dev, int type)
 {
@@ -122,6 +197,7 @@ static struct ts_mmi_methods ili_mmi_methods = {
 	.charger_mode = ili_mmi_charger_mode,
 	/* Firmware */
 	.firmware_update = ili_mmi_firmware_update,
+	.extend_attribute_group = ili_mmi_extend_attribute_group,
 	/* PM callback */
 	.pre_resume = ili_mmi_pre_resume,
 	.post_resume = ili_mmi_post_resume,
