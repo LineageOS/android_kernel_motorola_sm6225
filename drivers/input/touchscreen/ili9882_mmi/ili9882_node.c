@@ -224,13 +224,13 @@ static int file_write(struct file_buffer *file, bool new_open)
 		return -1;
 	}
 	pos = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	kernel_write(f, file->ptr, file->wlen, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	vfs_write(f, file->ptr, file->flen, &pos);
 	set_fs(fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+	kernel_write(f, file->ptr, file->wlen, &pos);
 #endif
 	filp_close(f, NULL);
 	return 0;

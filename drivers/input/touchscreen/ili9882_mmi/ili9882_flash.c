@@ -179,14 +179,14 @@ int ili_fw_dump_iram_data(u32 start, u32 end, bool save)
 	}
 
 	pos = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	kernel_write(f, fw_buf, len, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	old_fs = get_fs();
 	set_fs(get_ds());
 	set_fs(KERNEL_DS);
 	vfs_write(f, fw_buf, len, &pos);
 	set_fs(old_fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+	kernel_write(f, fw_buf, len, &pos);
 #endif
 	filp_close(f, NULL);
 	ILI_INFO("Save iram data to %s\n", DUMP_IRAM_PATH);
@@ -540,14 +540,14 @@ int ili_fw_dump_flash_data(u32 start, u32 end, bool user)
 		goto out;
 
 	pos = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	kernel_write(f, buf, length, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	old_fs = get_fs();
 	set_fs(get_ds());
 	set_fs(KERNEL_DS);
 	vfs_write(f, buf, length, &pos);
 	set_fs(old_fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+	kernel_write(f, buf, length, &pos);
 #endif
 	filp_close(f, NULL);
 	ipio_vfree((void **)&buf);

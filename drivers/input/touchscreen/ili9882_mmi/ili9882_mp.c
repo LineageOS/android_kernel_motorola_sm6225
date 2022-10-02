@@ -3324,13 +3324,13 @@ static int mp_show_result(bool lcm_on)
 	}
 
 	pos = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	kernel_write(f, csv, csv_len, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	vfs_write(f, csv, csv_len, &pos);
 	set_fs(fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+	kernel_write(f, csv, csv_len, &pos);
 #endif
 	filp_close(f, NULL);
 
