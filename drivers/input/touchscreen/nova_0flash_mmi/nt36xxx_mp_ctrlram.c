@@ -414,10 +414,10 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	output_len = y_ch * x_ch * 7 + y_ch * 2;
 #endif /* #if TOUCH_KEY_NUM > 0 */
 	pos = offset;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	write_ret = vfs_write(fp, (char __user *)fbufp, output_len, &pos);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
 #endif
 	if (write_ret <= 0) {
 		NVT_ERR("write %s failed\n", file_path);
