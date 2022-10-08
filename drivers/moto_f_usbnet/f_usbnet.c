@@ -50,13 +50,10 @@
 
 /* Linux Network Interface */
 #define USB_MTU                 15360
-#define CURRENT_MTU             15000
 #define MAX_BULK_TX_REQ_NUM	80
 #define MAX_BULK_RX_REQ_NUM	80
 #define MAX_INTR_RX_REQ_NUM	80
 #define INTERFACE_STRING_INDEX  0
-
-#define	WORK_RX_MEMORY		0
 
 struct usbnet_context {
 	spinlock_t lock;  /* For RX/TX list */
@@ -79,8 +76,6 @@ struct usbnet_context {
 	u32 router_ip;
 	u32 iff_flag;
 	struct socket *socket;
-	struct work_struct	work;
-	unsigned long		todo;
 };
 
 
@@ -257,46 +252,6 @@ static struct usb_descriptor_header *ss_function[] = {
 
 static const char *usb_description = "Motorola BLAN Interface";
 
-static int ether_queue_out(struct usb_request *req ,
-				struct usbnet_context *context);
-struct usb_request *usb_get_recv_request(struct usbnet_context *context);
-static void defer_kevent(struct usbnet_context *context, int flag);
-static void eth_work(struct work_struct *work);
-static void rx_fill(struct usbnet_context *context)
-{
-	struct usb_request	*req;
-
-	/* fill unused rxq slots with some skb */
-	while ((req = usb_get_recv_request(context))) {
-		if (ether_queue_out(req,context) < 0) {
-			defer_kevent(context, WORK_RX_MEMORY);
-			USBNETDBG(context,"rx_fill failed, defer_kevent\n");
-			break;
-		}
-	}
-}
-
-static void eth_work(struct work_struct *work)
-{
-	struct usbnet_context *context;
-
-	context= container_of(work, struct usbnet_context, work);
-	if (test_and_clear_bit(WORK_RX_MEMORY, &context->todo)) {
-		if (netif_running(context->dev))
-			rx_fill(context);
-	}
-	if (context->todo)
-		USBNETDBG(context,"work done, flags = 0x%lx\n", context->todo);
-}
-
-static void defer_kevent(struct usbnet_context *context, int flag)
-{
-	if (test_and_set_bit(flag, &context->todo))
-		return;
-	if (!schedule_work(&context->work))
-		USBNETDBG(context, "kevent %d may have been dropped\n", flag);
-	USBNETDBG(context, "kevent %d schedule done\n", flag);
-}
 static ssize_t usbnet_desc_show(struct device *dev,
 				 struct device_attribute *attr, char *buff)
 {
@@ -394,16 +349,9 @@ static int ether_queue_out(struct usb_request *req ,
 	ret = usb_ep_queue(context->bulk_out, req, GFP_KERNEL);
 	if (ret == 0)
 		return 0;
-	if (ret == -ENOMEM){
-		USBNETDBG(context, "%s: failed to enqueue nomem\n", __func__);
+	else
+		kfree_skb(skb);
 fail:
-		defer_kevent(context, WORK_RX_MEMORY);
-	}
-	if (ret) {
-		USBNETDBG(context, "ether_queue_out --> %d\n", ret);
-		if (skb)
-			dev_kfree_skb_any(skb);
-	}
 	spin_lock_irqsave(&context->lock, flags);
 	list_add_tail(&req->list, &context->rx_reqs);
 	spin_unlock_irqrestore(&context->lock, flags);
@@ -629,7 +577,6 @@ static void usbnet_cleanup(struct usbnet_device *dev)
 	if (context) {
 		device_remove_file(&(context->dev->dev), &dev_attr_description);
 		unregister_netdev(context->dev);
-		flush_work(&context->work);
 		free_netdev(context->dev);
 		dev->net_ctxt = NULL;
 	}
@@ -673,28 +620,13 @@ static void ether_out_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct sk_buff *skb = req->context;
 	struct usbnet_context *context = ep->driver_data;
-	struct net_device *net_dev = context->dev;
-	int		status;
 
 	if (req->status == 0) {
 		skb_put(skb, req->actual);
 		skb->protocol = eth_type_trans(skb, context->dev);
 		context->stats.rx_packets++;
 		context->stats.rx_bytes += req->actual;
-		if( ETH_HLEN > skb->len
-					|| skb->len > CURRENT_MTU) {
-				USBNETDBG(context, "rx length not right %d\n", skb->len);
-				context->stats.rx_errors++;
-				dev_kfree_skb_any(skb);
-		} else {
-			status = netif_rx(skb);
-			if (status < 0) {
-				USBNETDBG(context, "netif_rx failed  %d\n", status);
-				context->stats.rx_errors++;
-				dev_kfree_skb_any(skb);
-			}
-		}
-
+		netif_rx(skb);
 	} else {
 		dev_kfree_skb_any(skb);
 		context->stats.rx_errors++;
@@ -703,15 +635,10 @@ static void ether_out_complete(struct usb_ep *ep, struct usb_request *req)
 	/* don't bother requeuing if we just went offline */
 	if ((req->status == -ENODEV) || (req->status == -ESHUTDOWN)) {
 		unsigned long flags;
-		if(!netif_running(net_dev)){
-			spin_lock_irqsave(&context->lock, flags);
-			list_add_tail(&req->list, &context->rx_reqs);
-			spin_unlock_irqrestore(&context->lock, flags);
-		}
-	} else if (req->status == -ECONNABORTED){ /* endpoint reset */
-		USBNETDBG(context,"rx %s reset\n", ep->name);
-		defer_kevent(context, WORK_RX_MEMORY);
-	}else {
+		spin_lock_irqsave(&context->lock, flags);
+		list_add_tail(&req->list, &context->rx_reqs);
+		spin_unlock_irqrestore(&context->lock, flags);
+	} else {
 		if (ether_queue_out(req, context))
 			USBNETDBG(context, "ether_out: cannot requeue\n");
 	}
@@ -859,6 +786,7 @@ static void do_set_config(struct usb_function *f, u16 new_config)
 	struct usbnet_context *context = dev->net_ctxt;
 	struct usb_composite_dev *cdev = f->config->cdev;
 	int result = 0;
+	struct usb_request *req;
 
 	USBNETDBG(context, "do_set_config ep %s\n",
 				context->bulk_in->name);
@@ -922,7 +850,17 @@ static void do_set_config(struct usb_function *f, u16 new_config)
 		}
 
 		context->intr_out->driver_data = context;
-		rx_fill(context);
+
+		/* we're online -- get all rx requests queued */
+		while ((req = usb_get_recv_request(context))) {
+			if (ether_queue_out(req, context)) {
+				USBNETDBG(context,
+					  "%s: ether_queue_out failed\n",
+					  __func__);
+				break;
+			}
+		}
+
 	} else {/* Disable Endpoints */
 		if (context->bulk_in)
 			usb_ep_disable(context->bulk_in);
@@ -1155,7 +1093,7 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 		return ERR_PTR(-ENOMEM);
 	}
 
-	net_dev->mtu = CURRENT_MTU;
+	net_dev->mtu = 15000;
 	ret = register_netdev(net_dev);
 	if (ret) {
 		pr_err("%s: register_netdev error\n", __func__);
@@ -1190,7 +1128,6 @@ static struct usb_function_instance *usbnet_alloc_inst(void)
 	context->socket->sk->sk_user_data = context;
 
 	INIT_WORK(&context->usbnet_config_wq, usbnet_if_config);
-	INIT_WORK(&context->work, eth_work);
 	context->config = 0;
 	dev->net_ctxt = context;
 	spin_lock_init(&context->lock);
