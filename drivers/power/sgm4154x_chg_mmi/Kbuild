@@ -19,6 +19,10 @@ ifneq ($(filter m y,$(CONFIG_MMI_QC3P_Z350_DETECTED)),)
         EXTRA_CFLAGS += -DCONFIG_MMI_QC3P_Z350_DETECTED
 endif
 
+ifneq ($(filter m y,$(CONFIG_MMI_SGM4154X_CHG_LED)),)
+        EXTRA_CFLAGS += -DCONFIG_MMI_SGM4154X_CHG_LED
+endif
+
 obj-m += sgm4154x_charger.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_discrete_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers

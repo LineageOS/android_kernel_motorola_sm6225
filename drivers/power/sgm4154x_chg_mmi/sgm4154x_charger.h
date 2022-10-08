@@ -8,6 +8,14 @@
 #include <linux/i2c.h>
 #include <linux/iio/consumer.h>
 #include <linux/mmi_discrete_power_supply.h>
+#ifdef CONFIG_MMI_SGM4154X_CHG_LED
+#define __indicator_led_en__
+#endif
+
+#ifdef __indicator_led_en__
+#include <linux/leds.h>
+#include <linux/pwm.h>
+#endif
 
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
 #define SGM4154X_STATUS_PLUGIN			0x0001
@@ -173,6 +181,13 @@
 #define SGM4154x_VREG_V_MIN_uV	    3856000
 #define SGM4154x_VREG_V_DEF_uV	    4208000
 #define SGM4154x_VREG_V_STEP_uV	    32000
+
+#ifdef __indicator_led_en__
+/* REG00 */
+#define SGM4154x_VREG_ICHG_MON_MASK	     GENMASK(6, 5)
+/* REG0F */
+#define SGM4154x_VREG_STAT_SET_MASK	     GENMASK(3, 2)
+#endif
 
 /* VREG Fine Tuning  */
 #define SGM4154x_VREG_FT_MASK	     GENMASK(7, 6)

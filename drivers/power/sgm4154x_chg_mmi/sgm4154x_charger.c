@@ -24,6 +24,51 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/kthread.h>
 
+#ifdef __indicator_led_en__
+static struct sgm4154x_device *sgm_g;
+#define TRILED_NUM_MAX			3
+
+struct pwm_setting {
+	u64	pre_period_ns;
+	u64	period_ns;
+	u64	duty_ns;
+};
+
+struct led_setting {
+	u64			on_ms;
+	u64			off_ms;
+	enum led_brightness	brightness;
+	bool			blink;
+	bool			breath;
+};
+
+struct qpnp_led_dev {
+	struct led_classdev	cdev;
+	struct pwm_device	*pwm_dev;
+	struct pwm_setting	pwm_setting;
+	struct led_setting	led_setting;
+	struct indicator_led_chip	*chip;
+	struct mutex		lock;
+	const char		*label;
+	const char		*default_trigger;
+	u8			id;
+	bool			blinking;
+	bool			breathing;
+};
+
+struct indicator_led_chip {
+	struct device		*dev;
+	struct qpnp_led_dev	*leds;
+	struct nvmem_device	*pbs_nvmem;
+	struct mutex		bus_lock;
+	int			num_leds;
+	u16			reg_base;
+	u8			subtype;
+	u8			bitmap;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pin_sta_default;
+};
+#endif
 static struct power_supply_desc sgm4154x_power_supply_desc;
 
 /* SGM4154x REG06 BOOST_LIM[5:4], uV */
@@ -930,6 +975,17 @@ int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 
     return ret;
 }
+
+#ifdef __indicator_led_en__
+int sgm4154x_disable_indicator_led(struct sgm4154x_device *sgm)
+{
+    int ret;
+    printk("sgm4154x_disable_indicator_led\n");
+	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_0, SGM4154x_VREG_ICHG_MON_MASK, 0x1<<5);//follow stat_set
+	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_f, SGM4154x_VREG_STAT_SET_MASK, 0x0<<2);//led off
+    return ret;
+}
+#endif
 
 int sgm4154x_disable_charger(struct sgm4154x_device *sgm)
 {
@@ -2484,6 +2540,11 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
+#ifdef __indicator_led_en__
+	ret = sgm4154x_disable_indicator_led(sgm);
+	if (ret)
+		goto err_out;
+#endif
 	dev_notice(sgm->dev, "ichrg_curr:%d prechrg_curr:%d chrg_vol:%d"
 		" term_curr:%d input_curr_lim:%d",
 		bat_info.constant_charge_current_max_ua,
@@ -3141,6 +3202,165 @@ static struct charger_ops sgm4154x_chg_ops = {
 	.get_qc3p_power = sgm4154x_get_qc3p_power,
 	.config_pd_active = sgm4154x_config_pd_active,
 };
+#ifdef __indicator_led_en__
+static int indicator_led_set_brightness(struct led_classdev *led_cdev,
+		enum led_brightness brightness)
+{
+	struct qpnp_led_dev *led =
+		container_of(led_cdev, struct qpnp_led_dev, cdev);
+	int rc = 0;
+
+	mutex_lock(&led->lock);
+	if (brightness > LED_FULL)
+		brightness = LED_FULL;
+
+	if (brightness == led->led_setting.brightness &&
+			!led->blinking && !led->breathing) {
+		mutex_unlock(&led->lock);
+		return 0;
+	}
+
+	led->led_setting.brightness = brightness;
+	if (!!brightness)
+		mmi_regmap_update_bits(sgm_g, SGM4154x_CHRG_CTRL_f, SGM4154x_VREG_STAT_SET_MASK, 0x1<<2);
+	else
+		mmi_regmap_update_bits(sgm_g, SGM4154x_CHRG_CTRL_f, SGM4154x_VREG_STAT_SET_MASK, 0x0<<2);
+	led->led_setting.blink = false;
+	led->led_setting.breath = false;
+
+	mutex_unlock(&led->lock);
+
+	return rc;
+}
+
+static enum led_brightness indicator_led_get_brightness(
+			struct led_classdev *led_cdev)
+{
+	return led_cdev->brightness;
+}
+
+static int indicator_led_set_blink(struct led_classdev *led_cdev,
+		unsigned long *on_ms, unsigned long *off_ms)
+{
+	int rc = 0;
+	return rc;
+}
+
+static int indicator_led_register(struct indicator_led_chip *chip)
+{
+	struct qpnp_led_dev *led;
+	int rc, i, j;
+
+
+	for (i = 0; i < chip->num_leds; i++) {
+		led = &chip->leds[i];
+		mutex_init(&led->lock);
+		led->cdev.name = led->label;
+		led->cdev.max_brightness = LED_FULL;
+		led->cdev.brightness_set_blocking = indicator_led_set_brightness;
+		led->cdev.brightness_get = indicator_led_get_brightness;
+		led->cdev.blink_set = indicator_led_set_blink;
+		led->cdev.default_trigger = led->default_trigger;
+		led->cdev.brightness = LED_OFF;
+
+		rc = devm_led_classdev_register(chip->dev, &led->cdev);
+		if (rc < 0) {
+			dev_err(chip->dev, "%s led class device registering failed, rc=%d\n",
+							led->label, rc);
+			goto err_out;
+		}
+	}
+
+	return 0;
+
+err_out:
+	for (j = 0; j <= i; j++) {
+		mutex_destroy(&chip->leds[j].lock);
+	}
+	return rc;
+}
+
+static int indicator_led_parse_dt(struct indicator_led_chip *chip)
+{
+	struct device_node *node = chip->dev->of_node, *child_node;
+	struct qpnp_led_dev *led;
+	int rc = 0, id, i = 0;
+
+	chip->num_leds = of_get_available_child_count(node);
+	if (chip->num_leds == 0) {
+		dev_err(chip->dev, "No led child node defined\n");
+		return -ENODEV;
+	}
+
+	if (chip->num_leds > TRILED_NUM_MAX) {
+		dev_err(chip->dev, "can't support %d leds(max %d)\n",
+				chip->num_leds, TRILED_NUM_MAX);
+		return -EINVAL;
+	}
+
+	chip->leds = devm_kcalloc(chip->dev, chip->num_leds,
+			sizeof(struct qpnp_led_dev), GFP_KERNEL);
+	if (!chip->leds)
+		return -ENOMEM;
+
+	for_each_available_child_of_node(node, child_node) {
+		rc = of_property_read_u32(child_node, "led-sources", &id);
+		if (rc) {
+			dev_err(chip->dev, "Get led-sources failed, rc=%d\n",
+							rc);
+			return rc;
+		}
+
+		if (id >= TRILED_NUM_MAX) {
+			dev_err(chip->dev, "only support 0~%d current source\n",
+					TRILED_NUM_MAX - 1);
+			return -EINVAL;
+		}
+
+		led = &chip->leds[i++];
+		led->chip = chip;
+		led->id = id;
+		led->label =
+			of_get_property(child_node, "label", NULL) ? :
+							child_node->name;
+		led->default_trigger = of_get_property(child_node,
+				"linux,default-trigger", NULL);
+	}
+
+	return rc;
+}
+
+static int indicator_led_probe(struct i2c_client *client)//(struct platform_device *pdev)
+{
+	struct indicator_led_chip *chip;
+	int rc = 0;
+
+	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
+	if (!chip)
+		return -ENOMEM;
+
+	chip->dev = &client->dev;
+
+	rc = indicator_led_parse_dt(chip);
+	if (rc < 0) {
+		if (rc != -EPROBE_DEFER)
+			dev_err(chip->dev, "Devicetree properties parsing failed, rc=%d\n",
+								rc);
+		return rc;
+	}
+	rc = indicator_led_register(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "Registering LED class devices failed, rc=%d\n",
+								rc);
+		goto destroy;
+	}
+
+	dev_err(chip->dev, "%s has been finished\n", __func__);
+	return 0;
+destroy:
+	return rc;
+}
+#endif
 
 static int sgm4154x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -3154,7 +3374,9 @@ static int sgm4154x_probe(struct i2c_client *client,
 	sgm = devm_kzalloc(dev, sizeof(*sgm), GFP_KERNEL);
 	if (!sgm)
 		return -ENOMEM;
-
+#ifdef __indicator_led_en__
+	sgm_g = sgm;
+#endif
 	sgm->client = client;
 	sgm->dev = dev;
 
@@ -3280,7 +3502,9 @@ static int sgm4154x_probe(struct i2c_client *client,
 #endif
 
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
-
+#ifdef __indicator_led_en__
+	indicator_led_probe(client);
+#endif
 	dev_info(dev, "SGM4154x prob successfully.\n");
 	return ret;
 error_out:
