@@ -515,6 +515,8 @@ static int usb_ether_open(struct net_device *dev)
 {
 	struct usbnet_context *context = netdev_priv(dev);
 	USBNETDBG(context, "%s\n", __func__);
+	defer_kevent(context, WORK_RX_MEMORY);
+	USBNETDBG(context, "restart rx work\n");
 	return 0;
 }
 
@@ -673,7 +675,6 @@ static void ether_out_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct sk_buff *skb = req->context;
 	struct usbnet_context *context = ep->driver_data;
-	struct net_device *net_dev = context->dev;
 	int		status;
 
 	if (req->status == 0) {
@@ -703,14 +704,9 @@ static void ether_out_complete(struct usb_ep *ep, struct usb_request *req)
 	/* don't bother requeuing if we just went offline */
 	if ((req->status == -ENODEV) || (req->status == -ESHUTDOWN)) {
 		unsigned long flags;
-		if(!netif_running(net_dev)){
-			spin_lock_irqsave(&context->lock, flags);
-			list_add_tail(&req->list, &context->rx_reqs);
-			spin_unlock_irqrestore(&context->lock, flags);
-		}
-	} else if (req->status == -ECONNABORTED){ /* endpoint reset */
-		USBNETDBG(context,"rx %s reset\n", ep->name);
-		defer_kevent(context, WORK_RX_MEMORY);
+		spin_lock_irqsave(&context->lock, flags);
+		list_add_tail(&req->list, &context->rx_reqs);
+		spin_unlock_irqrestore(&context->lock, flags);
 	}else {
 		if (ether_queue_out(req, context))
 			USBNETDBG(context, "ether_out: cannot requeue\n");
