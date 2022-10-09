@@ -730,11 +730,13 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
-	qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
-				&wls_info,
-				sizeof(struct wls_dump));
+	if (chg->wls_psy){
+		qti_charger_read(chg, OEM_PROP_WLS_DUMP_INFO,
+					&wls_info,
+					sizeof(struct wls_dump));
 
-	qti_wireless_charge_dump_info(chg, wls_info);
+		qti_wireless_charge_dump_info(chg, wls_info);
+	}
 
 	bm_ulog_print_log(OEM_BM_ULOG_SIZE);
 
@@ -915,13 +917,15 @@ static void qti_charger_set_constraint(void *data,
 			chg->constraint.pd_pmax = constraint->pd_pmax;
 	}
 
-	if (constraint->wls_pmax != chg->constraint.wls_pmax) {
-		value = constraint->wls_pmax;
-		rc = qti_charger_write(chg, OEM_PROP_CHG_WLS_PMAX,
-					&value,
-					sizeof(value));
-		if (!rc)
-			chg->constraint.wls_pmax = constraint->wls_pmax;
+	if (chg->wls_psy){
+		if (constraint->wls_pmax != chg->constraint.wls_pmax) {
+			value = constraint->wls_pmax;
+			rc = qti_charger_write(chg, OEM_PROP_CHG_WLS_PMAX,
+						&value,
+						sizeof(value));
+			if (!rc)
+				chg->constraint.wls_pmax = constraint->wls_pmax;
+		}
 	}
 }
 
