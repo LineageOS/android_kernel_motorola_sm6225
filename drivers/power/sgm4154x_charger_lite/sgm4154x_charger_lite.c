@@ -2230,6 +2230,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	int rc;
 	u32 value;
 	bool chg_en;
+	static bool prev_chg_en = false;
 	bool cfg_changed = false;
 	struct sgm_mmi_charger *chg = data;
 	struct sgm4154x_state state = chg->sgm->state;
@@ -2439,7 +2440,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	chg_en = sgm4154x_is_enabled_charging(chg->sgm);
 	if (!cfg_changed &&
 	    chg->chg_info.chrg_present && !state.hiz_en &&
-	    chg_en && chg->sgm->ichg > 0 &&
+	    chg_en && prev_chg_en && chg->sgm->ichg > 0 &&
 	    ((chg->batt_info.batt_mv + 50) * 1000) <= chg->sgm->vreg &&
 	    state.chrg_stat != SGM4154x_FAST_CHRG &&
 	    state.chrg_stat != SGM4154x_PRECHRG) {
@@ -2449,6 +2450,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		chg->chg_cfg.charging_disable = true;
 		pr_info("Battery charging reconfigure triggered\n");
 	}
+	prev_chg_en = chg_en;
 
 	if (chg->chg_info.chrg_present && !state.hiz_en &&
 	    chg->sgm->use_ext_usb_psy && chg->sgm->usb) {
@@ -2619,11 +2621,14 @@ static void sgm4154x_paired_battery_notify(void *data,
 		if (!rc && !val.intval)
 			batt_present = false;
 	}
-	chg->sgm->batt_present = batt_present;
-	if (!chg->sgm->batt_present) {
+	if (!batt_present) {
 		chg->paired_ichg = 0;
 		chg->paired_load = PAIRED_LOAD_OFF;
 		return;
+	} else if (!chg->sgm->batt_present) {
+		chg->paired_ichg = chg->sgm->init_data.max_ichg;
+		chg->sgm->batt_present = batt_present;
+		pr_info("Battery present!\n");
 	}
 
 	batt_ocv = chg->batt_info.batt_mv;
