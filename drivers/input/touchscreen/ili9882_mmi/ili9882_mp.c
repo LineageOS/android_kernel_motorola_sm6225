@@ -802,7 +802,9 @@ static int ilitek_tddi_mp_ini_parser(const char *path)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	mm_segment_t old_fs;
 #endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	loff_t pos = 0;
+#endif
 
 	ILI_INFO("ini file path = %s\n", path);
 
@@ -849,13 +851,13 @@ static int ilitek_tddi_mp_ini_parser(const char *path)
 	}
 
 	if (f != NULL) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-		kernel_read(f, tmp, fsize, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		old_fs = get_fs();
 		set_fs(get_ds());
 		vfs_read(f, tmp, fsize, &pos);
 		set_fs(old_fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+		kernel_read(f, tmp, fsize, &pos);
 #endif
 		tmp[fsize] = 0x0;
 	} else {

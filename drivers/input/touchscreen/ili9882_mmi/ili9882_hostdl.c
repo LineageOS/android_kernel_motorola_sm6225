@@ -795,14 +795,14 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
 
 		/* ready to map user's memory to obtain data by reading files */
 		pos = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-		kernel_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
-#else
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		old_fs = get_fs();
 		set_fs(get_ds());
 		set_fs(KERNEL_DS);
 		vfs_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
 		set_fs(old_fs);
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+		kernel_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
 #endif
 		filp_close(f, NULL);
 		ilits->tp_fw.size = fsize;
