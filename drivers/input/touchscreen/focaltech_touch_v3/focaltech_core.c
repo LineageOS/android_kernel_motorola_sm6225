@@ -876,6 +876,42 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
             return -EIO;
         }
 
+#ifdef CONFIG_FTS_SUPPORT_HIGH_RESOLUTION
+        for (i = 0; i < max_touch_num; i++) {
+            base = FTS_ONE_TCH_LEN * i + 2;
+            pointid = (touch_buf[FTS_TOUCH_OFF_ID_YH + base]) >> 4;
+            if (pointid >= FTS_MAX_ID)
+                break;
+            else if (pointid >= max_touch_num) {
+                FTS_ERROR("ID(%d) beyond max_touch_number", pointid);
+                return -EINVAL;
+            }
+
+            events[i].id = pointid;
+            events[i].flag = touch_buf[FTS_TOUCH_OFF_E_XH + base] >> 6;
+
+            //bit[15:12] | bit[11:4] | bit[3:0]
+            events[i].x = ((touch_buf[FTS_TOUCH_OFF_E_XH + base] & 0x0F) << 12) \
+                | ((touch_buf[FTS_TOUCH_OFF_XL + base] & 0xFF) << 4) \
+                | ((touch_buf[FTS_TOUCH_OFF_PRE + base] >> 4) & 0x0F);
+
+            //bit[15:12] | bit[11:4] | bit[3:0]
+            events[i].y = ((touch_buf[FTS_TOUCH_OFF_ID_YH + base] & 0x0F) << 12) \
+                | ((touch_buf[FTS_TOUCH_OFF_YL + base] & 0xFF) << 4) \
+                | (touch_buf[FTS_TOUCH_OFF_PRE + base] & 0x0F);
+
+            events[i].p =  touch_buf[FTS_TOUCH_OFF_PRE + base] & 0x0F;
+            events[i].area = touch_buf[FTS_TOUCH_OFF_AREA + base];
+            if (events[i].p <= 0) events[i].p = 0x3F;
+            if (events[i].area <= 0) events[i].area = 0x09;
+
+            event_num++;
+            if (EVENT_DOWN(events[i].flag) && (finger_num == 0)) {
+                FTS_INFO("abnormal touch data from fw");
+                return -EIO;
+            }
+        }
+#else
         for (i = 0; i < max_touch_num; i++) {
             base = FTS_ONE_TCH_LEN * i + 2;
             pointid = (touch_buf[FTS_TOUCH_OFF_ID_YH + base]) >> 4;
@@ -903,6 +939,7 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
                 return -EIO;
             }
         }
+#endif
 
         if (event_num == 0) {
             FTS_INFO("no touch point information(%02x)", touch_buf[2]);
