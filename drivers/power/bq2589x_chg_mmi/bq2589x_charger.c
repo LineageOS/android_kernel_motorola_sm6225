@@ -722,13 +722,20 @@ int bq2589x_pumpx_enable(struct bq2589x *bq, int enable)
 {
 	u8 val;
 	int ret;
+	int retry_cnt;
 
 	if (enable)
 		val = BQ2589X_PUMPX_ENABLE << BQ2589X_EN_PUMPX_SHIFT;
 	else
 		val = BQ2589X_PUMPX_DISABLE << BQ2589X_EN_PUMPX_SHIFT;
 
-	ret = bq2589x_update_bits(bq, BQ2589X_REG_04, BQ2589X_EN_PUMPX_MASK, val);
+	for (retry_cnt = 3; retry_cnt > 0; retry_cnt--) {
+		ret = bq2589x_update_bits(bq, BQ2589X_REG_04, BQ2589X_EN_PUMPX_MASK, val);
+		if(!ret)
+			break;
+		msleep(10);
+		dev_info(bq->dev,"%s:enable pumpx:%d retry_cnt=%d\n", __func__, enable,retry_cnt);
+	}
 
 	return ret;
 }
