@@ -2137,6 +2137,7 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 						heartbeat_work.work);
 	struct timespec64 now;
 	static struct timespec64 start;
+	static bool shutdown_triggered = false;
 	uint32_t elapsed_ms;
 
 	/* Have not been resumed so wait another 100 ms */
@@ -2188,8 +2189,9 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 			if (elapsed_ms < chip->factory_kill_debounce_ms) {
 				mmi_err(chip, "Factory kill debounce elapsed_ms:%d\n",
 					elapsed_ms);
-			} else {
+			} else if(!shutdown_triggered) {
 				mmi_err(chip, "Factory kill power off\n");
+				shutdown_triggered = true;
 #if (KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE) || defined(MMI_GKI_API_ALLOWANCE)
 				orderly_poweroff(true);
 #else
@@ -2201,8 +2203,9 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 		}
 	}
 
-	if (chip->empty_vbat_shutdown_triggered) {
+	if (chip->empty_vbat_shutdown_triggered && !shutdown_triggered) {
 		mmi_err(chip, "shutdown for empty battery voltage\n");
+		shutdown_triggered = true;
 #if (KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE) || defined(MMI_GKI_API_ALLOWANCE)
 		orderly_poweroff(true);
 #else
