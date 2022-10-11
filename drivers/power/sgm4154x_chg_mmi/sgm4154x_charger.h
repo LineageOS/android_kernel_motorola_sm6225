@@ -8,7 +8,7 @@
 #include <linux/i2c.h>
 #include <linux/iio/consumer.h>
 #include <linux/mmi_discrete_power_supply.h>
-#ifdef CONFIG_MMI_SGM4154X_CHG_LED
+#ifdef CONFIG_MMI_EXT_CHG_LED
 #define __indicator_led_en__
 #endif
 

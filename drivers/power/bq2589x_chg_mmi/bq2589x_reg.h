@@ -1,6 +1,14 @@
 
 #ifndef __BQ2589X_HEADER__
 #define __BQ2589X_HEADER__
+#ifdef CONFIG_MMI_EXT_CHG_LED
+#define __indicator_led_en__
+#endif
+
+#ifdef __indicator_led_en__
+#include <linux/leds.h>
+#include <linux/pwm.h>
+#endif
 
 /* Register 00h */
 #define BQ2589X_REG_00      		0x00
@@ -145,6 +153,11 @@
 #define BQ2589X_EN_TERM_SHIFT       7
 #define BQ2589X_TERM_ENABLE         1
 #define BQ2589X_TERM_DISABLE        0
+
+#define BQ2589X_EN_LED_MASK        0x40
+#define BQ2589X_EN_LED_SHIFT       6
+#define BQ2589X_LED_ENABLE         0
+#define BQ2589X_LED_DISABLE        1
 
 #define BQ2589X_WDT_MASK            0x30
 #define BQ2589X_WDT_SHIFT           4
