@@ -788,7 +788,8 @@ static const struct i2c_device_id aw99703_id[] = {
 	{}
 };
 static struct of_device_id match_table[] = {
-		{.compatible = "awinic,aw99703-bl",}
+		{.compatible = "awinic,aw99703-bl",},
+		{}
 };
 
 MODULE_DEVICE_TABLE(i2c, aw99703_id);
