@@ -609,13 +609,18 @@ static int parse_dt(struct device_node *np)
 #endif
 
 #ifdef ILITEK_PEN_NOTIFIER
+#define ENABLE_PASSIVE_PEN_MODE_CMD 0x01
+#define DISABLE_PASSIVE_PEN_MODE_CMD 0x00
 static int pen_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
 	ILI_INFO("Received event(%lu) for pen detection\n", event);
 
 	mutex_lock(&ilits->touch_mutex);
-	ili_ic_func_ctrl("passive_pen", event);
+	if (event == PEN_DETECTION_PULL)
+		ili_ic_func_ctrl("passive_pen", ENABLE_PASSIVE_PEN_MODE_CMD);
+	else if (event == PEN_DETECTION_INSERT)
+		ili_ic_func_ctrl("passive_pen", DISABLE_PASSIVE_PEN_MODE_CMD);
 	mutex_unlock(&ilits->touch_mutex);
 
     	return 0;

@@ -73,11 +73,11 @@ static int ili_mmi_charger_mode(struct device *dev, int mode)
 {
 	int ret = 0;
 	mutex_lock(&ilits->touch_mutex);
-	ret = ili_ic_func_ctrl("plug", mode);
+	ret = ili_ic_func_ctrl("plug", !mode);
 	if(ret<0) {
 		ILI_ERR("Write plug in failed\n");
 	}
-	ILI_INFO("%s: %d\n", __func__, mode);
+	ILI_INFO("%s: %d\n", __func__, !mode);
 	mutex_unlock(&ilits->touch_mutex);
 
 	return 0;
