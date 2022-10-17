@@ -89,19 +89,19 @@ static int wl2864c_get_current_limit(struct regulator_dev *rdev)
 	uint8_t reg_idx;
 	unsigned int val = 0;
 
-	dev_err(chip->dev, "************ start dump wl2864c register ************\n");
-	dev_err(chip->dev, "regulator name = %s \n", rdev->desc->name);
-	dev_err(chip->dev, "register 0x00:      chip version\n");
-	dev_err(chip->dev, "register 0x01:      LDO CL\n");
-	dev_err(chip->dev, "register 0x03~0x09: LDO1~LDO7 OUT Voltage\n");
-	dev_err(chip->dev, "register 0x0e:      Bit[6:0] LDO7~LDO1 EN\n");
+	dev_dbg(chip->dev, "************ start dump wl2864c register ************\n");
+	dev_dbg(chip->dev, "regulator name = %s \n", rdev->desc->name);
+	dev_dbg(chip->dev, "register 0x00:      chip version\n");
+	dev_dbg(chip->dev, "register 0x01:      LDO CL\n");
+	dev_dbg(chip->dev, "register 0x03~0x09: LDO1~LDO7 OUT Voltage\n");
+	dev_dbg(chip->dev, "register 0x0e:      Bit[6:0] LDO7~LDO1 EN\n");
 
 	for (reg_idx = 0; reg_idx < WL2864C_REG_NUM; reg_idx++) {
 		regmap_read(chip->regmap, reg_idx, &val);
 		reg_dump[reg_idx] = val;
-		dev_err(chip->dev, "Reg[0x%02x] = 0x%x", reg_idx, reg_dump[reg_idx]);
+		dev_dbg(chip->dev, "Reg[0x%02x] = 0x%x", reg_idx, reg_dump[reg_idx]);
 	}
-	dev_err(chip->dev, "************ end dump wl2864c register ************\n");
+	dev_dbg(chip->dev, "************ end dump wl2864c register ************\n");
 
 	return 0;
 }
@@ -237,7 +237,7 @@ static int wl2864c_regulator_init(struct wl2864c *chip)
 
 		ret = regmap_bulk_read(chip->regmap, ldo_regs[id],
 				       vsel_range, 1);
-		pr_err("wl2864c_regulator_init: LDO%d, default value:0x%x", (id+1), vsel_range[0]);
+		pr_debug("wl2864c_regulator_init: LDO%d, default value:0x%x", (id+1), vsel_range[0]);
 		if (ret < 0) {
 			dev_err(chip->dev,
 				"Failed to read the ldo register\n");
@@ -250,7 +250,7 @@ static int wl2864c_regulator_init(struct wl2864c *chip)
 				"Failed to write inital voltage register\n");
 			return ret;
 		}
-		pr_err("wl2864c_regulator_init: LDO%d, initial value:0x%x", (id+1), initial_voltage[id]);
+		pr_debug("wl2864c_regulator_init: LDO%d, initial value:0x%x", (id+1), initial_voltage[id]);
 
 		chip->rdev[id] = devm_regulator_register(chip->dev, rdesc,
 							 &config);
@@ -332,7 +332,7 @@ static int wl2864c_i2c_probe(struct i2c_client *client,
 				initial_register[i][0], initial_register[i][1]);
 		}
 
-		dev_err(chip->dev,"Success to write register: 0x%x, value: 0x%x \n",
+		dev_dbg(chip->dev,"Success to write register: 0x%x, value: 0x%x \n",
 			initial_register[i][0], initial_register[i][1]);
 	}
 
