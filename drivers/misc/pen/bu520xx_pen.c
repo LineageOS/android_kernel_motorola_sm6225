@@ -297,6 +297,10 @@ static void pen_report_function(struct work_struct *dat)
 	int counter, status = 0, initial_status;
 
 	pen_dbg_func_in();
+	if (!hall_sensor_dev->enable) {
+		pen_info("[%s] pen isn't enable,don't report.\n", DRIVER_NAME);
+		return;
+	}
 	initial_status = hall_sensor_dev->status;
 	for (counter = 0;counter < 3;counter++){
 		msleep(50);
@@ -422,7 +426,7 @@ static int bu520xx_pen_probe(struct platform_device *pdev)
 	}
 
 	spin_lock_init(&hall_sensor_dev->mHallSensorLock);
-	hall_sensor_dev->enable = 1;
+	hall_sensor_dev->enable = 0;
 
 	//set gpio
 	hall_sensor_dev->gpio = of_get_named_gpio_flags(np,
