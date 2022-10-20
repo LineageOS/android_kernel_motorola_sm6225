@@ -25,6 +25,9 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/mmi_kernel_common.h>
+#ifdef NVT_TOUCH_LAST_TIME
+#include <linux/ktime.h>
+#endif
 
 #ifdef NVT_SENSOR_EN
 #include <linux/sensors.h>
@@ -222,6 +225,9 @@ struct nvt_ts_data {
 #ifdef WAKEUP_GESTURE
 	bool gesture_enabled;
 	bool wakeable;
+#endif
+#ifdef NVT_TOUCH_LAST_TIME
+	ktime_t last_event_time;
 #endif
 #ifdef NOVATECH_PEN_NOTIFIER
 	bool fw_ready_flag;

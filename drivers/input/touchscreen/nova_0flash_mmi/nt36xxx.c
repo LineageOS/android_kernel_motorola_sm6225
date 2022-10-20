@@ -292,6 +292,10 @@ const struct mtk_chip_config spi_ctrdata = {
 };
 #endif
 
+#ifdef NVT_TOUCH_LAST_TIME
+static bool time_flag = 1;
+#endif
+
 /*******************************************************
 Description:
 	Novatek touchscreen irq enable/disable function.
@@ -1890,6 +1894,24 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 
 	input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
+
+#ifdef NVT_TOUCH_LAST_TIME
+	if (finger_cnt > 0) {
+		//touch down/moving
+		if(time_flag) {
+			//check time_flag to get boot time only once in one touch session,
+			//to avoid impact touch performance for multi touch & moving cases
+			ts->last_event_time = ktime_get_boottime();
+			time_flag = 0;
+			NVT_DBG("set last_event_time\n");
+		}
+	} else {
+		//touch UP, enable time flag for next touch
+		time_flag = 1;
+		NVT_DBG("finger_cnt 0, reset time_flag\n");
+	}
+#endif
+
 #else /* MT_PROTOCOL_B */
 	if (finger_cnt == 0) {
 		input_report_key(ts->input_dev, BTN_TOUCH, 0);
@@ -2444,10 +2466,28 @@ static int nvt_extend_attribute_group(struct device *dev, struct attribute_group
 	return 0;
 }
 
+#ifdef NVT_TOUCH_LAST_TIME
+static ssize_t timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ktime_t last_ktime;
+	struct timespec64 last_ts;
+
+	last_ktime = ts->last_event_time;
+	ts->last_event_time = 0;
+
+	last_ts = ktime_to_timespec64(last_ktime);
+	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+#endif
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
 	__ATTR_RO(ic_ver),
+#ifdef NVT_TOUCH_LAST_TIME
+	__ATTR_RO(timestamp),
+#endif
 #ifdef PALM_GESTURE
 	__ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, nvt_palm_settings_show, nvt_palm_settings_store),
 #endif
@@ -2480,7 +2520,7 @@ int32_t nvt_fw_class_init(bool create)
 	static int minor;
 
 	if (create) {
-#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION) || defined(NVT_TOUCH_LAST_TIME)
 		ret = alloc_chrdev_region(&devno, 0, 1, NVT_PRIMARY_NAME);
 #else
 		ret = alloc_chrdev_region(&devno, 0, 1, NVT_SPI_NAME);
@@ -2500,7 +2540,7 @@ int32_t nvt_fw_class_init(bool create)
 
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				devno,
-#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION) || defined(NVT_TOUCH_LAST_TIME)
 				ts, NVT_PRIMARY_NAME);
 #else
 				ts, NVT_SPI_NAME);
@@ -2520,7 +2560,7 @@ int32_t nvt_fw_class_init(bool create)
 		if (error)
 			goto device_destroy;
 		else
-#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION)
+#if defined (PALM_GESTURE) || defined (EDGE_SUPPRESSION) || defined(NVT_TOUCH_LAST_TIME)
 			NVT_LOG("create /sys/class/touchscreen/%s Succeeded!\n", NVT_PRIMARY_NAME);
 #else
 			NVT_LOG("create /sys/class/touchscreen/%s Succeeded!\n", NVT_SPI_NAME);
