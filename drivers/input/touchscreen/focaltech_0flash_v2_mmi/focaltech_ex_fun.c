@@ -1698,11 +1698,34 @@ static ssize_t ic_ver_show(struct device *dev,
 	return fts_ic_ver_show(dev, attr, buf);
 }
 
+#ifdef FTS_LAST_TIME_EN
+static ssize_t timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *ts_data = dev_get_drvdata(dev);
+	struct input_dev *input_dev = ts_data->input_dev;
+
+	ktime_t last_ktime;
+	struct timespec64 last_ts;
+
+	mutex_lock(&input_dev->mutex);
+	last_ktime = ts_data->last_event_time;
+	ts_data->last_event_time = 0;
+	mutex_unlock(&input_dev->mutex);
+
+	last_ts = ktime_to_timespec64(last_ktime);
+	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+#endif
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
 	__ATTR_RO(ic_ver),
 	__ATTR_RO(panel_supplier),
+#ifdef FTS_LAST_TIME_EN
+	__ATTR_RO(timestamp),
+#endif
 	__ATTR_NULL
 };
 
@@ -1733,9 +1756,16 @@ static int fts_sysfs_class(void *_data, bool create)
 			return error;
 		}
 
+#ifdef FTS_LAST_TIME_EN
+		ts_class_dev = device_create(touchscreen_class, NULL,
+				MKDEV(INPUT_MAJOR, minor),
+				data, FTS_PRIMARY_NAME);
+#else
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				MKDEV(INPUT_MAJOR, minor),
 				data, FTS_CHIP_NAME);
+#endif
+
 		if (IS_ERR(ts_class_dev)) {
 			error = PTR_ERR(ts_class_dev);
 			ts_class_dev = NULL;

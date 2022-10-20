@@ -195,6 +195,8 @@
 #define FTS_CHIP_NAME   "ft8726"
 #endif
 
+#define FTS_PRIMARY_NAME   "primary"
+
 /******************* Enables *********************/
 /*********** 1 to enable, 0 to disable ***********/
 

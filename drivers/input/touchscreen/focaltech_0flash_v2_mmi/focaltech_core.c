@@ -80,6 +80,10 @@ enum touch_state {
 *****************************************************************************/
 struct fts_ts_data *fts_data;
 
+#ifdef FTS_LAST_TIME_EN
+static bool time_flag = 1;
+#endif
+
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
@@ -502,6 +506,9 @@ static int fts_input_report_b(struct fts_ts_data *ts_data, struct ts_event *even
     u32 max_touch_num = ts_data->pdata->max_touch_number;
     bool touch_event_coordinate = false;
     struct input_dev *input_dev = ts_data->input_dev;
+#ifdef FTS_LAST_TIME_EN
+    bool b_touch_down = 0;
+#endif
 
     for (i = 0; i < ts_data->touch_event_num; i++) {
         if (fts_input_report_key(ts_data, &events[i]) == 0) {
@@ -521,6 +528,12 @@ static int fts_input_report_b(struct fts_ts_data *ts_data, struct ts_event *even
 
             touch_down_point_cur |= (1 << events[i].id);
             touch_point_pre |= (1 << events[i].id);
+
+#ifdef FTS_LAST_TIME_EN
+            if (FTS_TOUCH_DOWN == events[i].flag) {
+                b_touch_down = 1;
+            }
+#endif
 
             if ((ts_data->log_level >= 2) ||
                 ((1 == ts_data->log_level) && (FTS_TOUCH_DOWN == events[i].flag))) {
@@ -552,7 +565,21 @@ static int fts_input_report_b(struct fts_ts_data *ts_data, struct ts_event *even
         if (ts_data->touch_points && (ts_data->log_level >= 1))
             FTS_DEBUG("[B]Points All Up!");
         input_report_key(input_dev, BTN_TOUCH, 0);
+#ifdef FTS_LAST_TIME_EN
+        //enable time_flag when touch All Up for next touch session
+        time_flag = 1;
+#endif
     }
+
+#ifdef FTS_LAST_TIME_EN
+    //check b_touch_down && time_flag to get boot time only once in one touch session,
+    //to avoid impact touch performance for multi touch & moving cases
+    if (b_touch_down && time_flag) {
+        ts_data->last_event_time = ktime_get_boottime();
+        time_flag = 0;
+        //FTS_DEBUG("time_flag, save last_event_time when touch Down");
+    }
+#endif
 
     ts_data->touch_points = touch_down_point_cur;
     input_sync(input_dev);
