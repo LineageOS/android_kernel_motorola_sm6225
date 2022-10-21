@@ -148,6 +148,8 @@ extern const uint16_t gesture_key_array[];
 #define NVT_TOUCH_ESD_CHECK_PERIOD 1500	/* ms */
 #define NVT_TOUCH_WDT_RECOVERY 1
 
+#define DOUBLE_TAP_GESTURE_MODE_CMD 0x7B
+
 #if NVT_TOUCH_ESD_PROTECT
 extern struct delayed_work nvt_esd_check_work;
 #endif
@@ -363,6 +365,7 @@ int32_t nvt_write_addr(uint32_t addr, uint8_t data);
 int32_t nvt_ts_suspend(struct device *dev);
 int32_t nvt_ts_resume(struct device *dev);
 int nvt_set_charger(uint8_t charger_on_off);
+int32_t nvt_cmd_ext_store(uint8_t cmd, uint8_t subcmd);
 #ifdef NVT_SET_TOUCH_STATE
 int touch_set_state(int state, int panel_idx);
 int check_touch_state(int *state, int panel_idx);

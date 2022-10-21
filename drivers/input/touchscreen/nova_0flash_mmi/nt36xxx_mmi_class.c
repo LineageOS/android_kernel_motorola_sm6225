@@ -549,10 +549,12 @@ static int nvt_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
 	struct nvt_ts_data *ts_data;
+	static uint8_t gesture_cmd = 0x00;
 
 	GET_TS_DATA(dev);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
 	NVT_LOG("panel state change: %d->%d\n", from, to);
+	mutex_lock(&ts->lock);
 	switch (to) {
 		case TS_MMI_PM_GESTURE:
 #ifdef NVT_SET_TOUCH_STATE
@@ -563,6 +565,23 @@ static int nvt_mmi_panel_state(struct device *dev,
 #endif
 			break;
 
+		case TS_MMI_PM_GESTURE_SINGLE:
+			gesture_cmd |= 0x02;
+			NVT_LOG("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
+			break;
+		case TS_MMI_PM_GESTURE_DOUBLE:
+			gesture_cmd |= 0x04;
+			NVT_LOG("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
+			break;
+		case TS_MMI_PM_GESTURE_SWITCH:
+#ifdef NVT_SET_TOUCH_STATE
+			ts->gesture_enabled = true;
+			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			//---write command to enter "wakeup gesture mode"---
+			nvt_cmd_ext_store(DOUBLE_TAP_GESTURE_MODE_CMD, gesture_cmd);
+			gesture_cmd = 0x00;
+			break;
 		case TS_MMI_PM_DEEPSLEEP:
 			ts->gesture_enabled = false;
 #ifdef NVT_SET_TOUCH_STATE
@@ -573,9 +592,11 @@ static int nvt_mmi_panel_state(struct device *dev,
 		case TS_MMI_PM_ACTIVE:
 			break;
 		default:
+			mutex_unlock(&ts->lock);
 			dev_warn(dev, "panel mode %d is invalid.\n", to);
 			return -EINVAL;
 	}
+	mutex_unlock(&ts->lock);
 	NVT_LOG("IRQ is %s\n", ts_data->irq_enabled ? "EN" : "DIS");
 	return 0;
 }

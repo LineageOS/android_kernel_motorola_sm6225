@@ -248,7 +248,7 @@ const uint16_t gesture_key_array[] = {
 	KEY_POWER,  //GESTURE_WORD_C
 	KEY_POWER,  //GESTURE_WORD_W
 	KEY_POWER,  //GESTURE_WORD_V
-	KEY_POWER,  //GESTURE_DOUBLE_CLICK
+	KEY_POWER,  //GESTURE_DOUBLE_CLICK, , GESTURE_SINGLE_CLICK
 	KEY_POWER,  //GESTURE_WORD_Z
 	KEY_POWER,  //GESTURE_WORD_M
 	KEY_POWER,  //GESTURE_WORD_O
@@ -830,6 +830,43 @@ info_retry:
 	return ret;
 }
 
+int32_t nvt_cmd_ext_store(uint8_t cmd, uint8_t subcmd)
+{
+    int32_t i, retry = 5;
+    uint8_t buf[4] = {0};
+
+    //---set xdata index to EVENT BUF ADDR---
+    nvt_set_page(ts->mmap->EVENT_BUF_ADDR);
+
+    for (i = 0; i < retry; i++) {
+		if (buf[1] != cmd) {
+			//---set cmd status---
+			buf[0] = EVENT_MAP_HOST_CMD;
+			buf[1] = cmd;
+			buf[2] = subcmd;
+			CTP_SPI_WRITE(ts->client, buf, 3);
+		}
+
+		msleep(20);
+
+		//---read cmd status---
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0xFF;
+		CTP_SPI_READ(ts->client, buf, 2);
+		if (buf[1] == 0x00)
+			break;
+	}
+
+	if (i == retry) {
+		NVT_ERR("send Cmd 0x%02X 0x%02X failed, buf[1]=0x%02X\n", cmd, subcmd, buf[1]);
+		return -1;
+	} else {
+		NVT_LOG("send Cmd 0x%02X 0x%02X success, tried %d times\n", cmd, subcmd, i);
+	}
+
+	return 0;
+}
+
 /*******************************************************
   Create Device Node (Proc Entry)
 *******************************************************/
@@ -1047,6 +1084,7 @@ static void nvt_flash_proc_deinit(void)
 #define GESTURE_WORD_C          12
 #define GESTURE_WORD_W          13
 #define GESTURE_WORD_V          14
+#define GESTURE_SINGLE_CLICK    25
 #define GESTURE_DOUBLE_CLICK    15
 #define GESTURE_WORD_Z          16
 #define GESTURE_WORD_M          17
@@ -1102,6 +1140,7 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			NVT_DBG("Gesture : Word-V.\n");
 			keycode = gesture_key_array[2];
 			break;
+		case GESTURE_SINGLE_CLICK:
 		case GESTURE_DOUBLE_CLICK:
 			NVT_DBG("Gesture : Double Click.\n");
 			keycode = gesture_key_array[3];
@@ -1155,7 +1194,15 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			dev_dbg(&ts->client->dev,
 				"%s: invoke imported report gesture function\n", __func__);
 			/* extract X and Y coordinates */
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+			if(gesture_id == GESTURE_SINGLE_CLICK) {
+				event.evcode = 1;
+			} else if(gesture_id == GESTURE_DOUBLE_CLICK) {
+				event.evcode =4;
+			}
+#else
 			event.evcode = 1;
+#endif
 			/* call class method */
 			ret = ts->imports->report_gesture(&event);
 			if (!ret)

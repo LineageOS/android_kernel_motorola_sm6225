@@ -56,6 +56,10 @@ ifneq ($(filter m y,$(CONFIG_INPUT_NOVA_EDGE_SUPPRESSION)),)
 	EXTRA_CFLAGS += -DEDGE_SUPPRESSION
 endif
 
+ifneq ($(filter m y, $(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)),)
+	EXTRA_CFLAGS += -DCONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+endif
+
 nova_0flash_mmi-objs += nt36xxx.o
 nova_0flash_mmi-objs += nt36xxx_ext_proc.o
 nova_0flash_mmi-objs += nt36xxx_fw_update.o
