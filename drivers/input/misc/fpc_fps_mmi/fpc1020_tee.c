@@ -150,7 +150,9 @@ static int fpc1020_power_on(struct fpc1020_data *fpc1020)
 		}
 		fpc1020->power_enabled = 1;
 		if(fpc1020->rgltr_ctrl_support ||gpio_is_valid(fpc1020->pwr_gpio)){
-			usleep_range(11000,12000);
+			if (!of_property_read_bool(fpc1020->dev->of_node, "delay-ctrl-support")) {
+				usleep_range(11000,12000);
+			}
 		}
 	}
 	return rc;
@@ -501,7 +503,9 @@ static int fpc1020_probe(struct platform_device *pdev)
 		fpc1020->rst_gpio = -EINVAL;
 
 	if (gpio_is_valid(fpc1020->rst_gpio)) {
-		usleep_range(RESET_LOW_SLEEP_MIN_US, RESET_LOW_SLEEP_MAX_US);
+		if (!of_property_read_bool(np, "delay-ctrl-support")) {
+			usleep_range(RESET_LOW_SLEEP_MIN_US, RESET_LOW_SLEEP_MAX_US);
+		}
 		rc = gpio_direction_output(fpc1020->rst_gpio, 1);
 		if (rc) {
 			dev_err(dev, "cannot set reset pin direction\n");
