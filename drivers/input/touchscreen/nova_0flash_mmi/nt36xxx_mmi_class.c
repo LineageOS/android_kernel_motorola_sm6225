@@ -659,6 +659,12 @@ static int nvt_mmi_pre_resume(struct device *dev)
 
 	mutex_unlock(&ts->lock);
 
+#ifdef NOVATECH_PEN_NOTIFIER
+	if(!ts->fw_ready_flag)
+		ts->fw_ready_flag = true;
+	nvt_mcu_pen_detect_set(ts->nvt_pen_detect_flag);
+#endif
+
 	return 0;
 }
 
