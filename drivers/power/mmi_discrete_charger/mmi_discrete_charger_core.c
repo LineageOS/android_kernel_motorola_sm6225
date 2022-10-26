@@ -26,6 +26,9 @@
 #include <linux/string.h>
 #include <linux/version.h>
 #include <linux/mmi_wake_lock.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/thermal.h>
 
 #include "mmi_discrete_charger_core.h"
 #include "mmi_discrete_voter.h"
@@ -118,6 +121,7 @@ static int mmi_discrete_parse_dts(struct mmi_discrete_charger *chip)
 		}
 	}
 
+	chip->mosfet_supported = of_property_read_bool(node, "mmi,usb-mosfet-supported");
 	chip->pd_supported = of_property_read_bool(node, "mmi,usb-pd-supported");
 
 	/*mm8013 fg need charging mode info*/
@@ -1817,6 +1821,111 @@ static int mmi_discrete_init_dc_psy(struct mmi_discrete_charger *chip)
 	return 0;
 }
 
+/*************************
+ * USB   COOLER   START  *
+ *************************/
+static int usb_therm_set_mosfet(struct mmi_discrete_charger *chip,bool enable)
+{
+	int ret = 0;
+
+	/*set typec mosfet output*/
+	if (gpio_is_valid(chip->mos_en_gpio)) {
+		mmi_err(chip, "%s,set mos en.",__func__);
+		gpio_direction_output(chip->mos_en_gpio, enable);
+	}
+
+	return ret;
+}
+
+static int usb_therm_get_mosfet(struct mmi_discrete_charger *chip)
+{
+	int ret = 0;
+
+	/*get typec mosfet output*/
+	if (gpio_is_valid(chip->mos_en_gpio)) {
+		mmi_err(chip, "%s,get mos en.",__func__);
+		return gpio_get_value(chip->mos_en_gpio);
+	}
+
+	return ret;
+}
+
+
+static int usb_therm_get_max_state(struct thermal_cooling_device *cdev,
+	unsigned long *state)
+{
+	*state = 1;
+
+	return 0;
+}
+
+static int usb_therm_get_cur_state(struct thermal_cooling_device *cdev,
+	unsigned long *state)
+{
+	struct mmi_discrete_charger *chip = cdev->devdata;
+
+	*state = usb_therm_get_mosfet(chip);
+
+	return 0;
+}
+
+static int usb_therm_set_cur_state(struct thermal_cooling_device *cdev,
+	unsigned long state)
+{
+	struct mmi_discrete_charger *chip = cdev->devdata;
+
+	if (state) {
+		if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP |
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_PD |
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP |
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 |
+		    chip->real_charger_type== POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+			mmi_info(chip, "Enable typec mosfet for DCP/PD/HVDCP.");
+			usb_therm_set_mosfet(chip, true);
+		}
+	} else {
+		mmi_info(chip, "Disable typec mosfet.");
+		usb_therm_set_mosfet(chip, false);
+	}
+
+	return 0;
+}
+
+static const struct thermal_cooling_device_ops usb_therm_ops = {
+	.get_max_state = usb_therm_get_max_state,
+	.get_cur_state = usb_therm_get_cur_state,
+	.set_cur_state = usb_therm_set_cur_state,
+};
+
+static int mmi_discrete_init_usb_therm_cooler(struct mmi_discrete_charger *chip)
+{
+	int ret;
+	/* Register thermal zone cooling device */
+	chip->cdev = thermal_of_cooling_device_register(dev_of_node(chip->dev),
+		"usb_therm_cooler", chip, &usb_therm_ops);
+
+	if (IS_ERR(chip->cdev)) {
+		mmi_err(chip, "Cooling register failed for usb_therm, ret:%ld\n",
+			PTR_ERR(chip->cdev));
+		return PTR_ERR(chip->cdev);
+	}
+	mmi_info(chip, "Cooling register success for usb_therm.");
+
+	/*typec mosfet outout en control*/
+	chip->mos_en_gpio = of_get_named_gpio(chip->dev->of_node, "mmi,mos-en-gpio", 0);
+	if (gpio_is_valid(chip->mos_en_gpio))
+	{
+		ret = gpio_request(chip->mos_en_gpio, "mmi mos en pin");
+		if (ret) {
+			mmi_err(chip, "%s: %d gpio(mos en) request failed.", __func__, chip->mos_en_gpio);
+			return ret;
+		}
+
+		gpio_direction_output(chip->mos_en_gpio, 0);//default enable mos charge
+	}
+	return 0;
+}
+
 #if defined(CONFIG_DEBUG_FS)
 static int register_dump_read(struct seq_file *m, void *data)
 {
@@ -3149,6 +3258,14 @@ static int mmi_discrete_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		mmi_err(chip, "Couldn't initialize dc psy rc=%d\n", rc);
 		goto cleanup;
+	}
+
+	if(chip->mosfet_supported) {
+		rc = mmi_discrete_init_usb_therm_cooler(chip);
+		if (rc < 0) {
+			mmi_err(chip, "Couldn't initialize usb therm cooler rc=%d.", rc);
+			//goto cleanup;
+		}
 	}
 
 	mmi_discrete_charger_init(chip);

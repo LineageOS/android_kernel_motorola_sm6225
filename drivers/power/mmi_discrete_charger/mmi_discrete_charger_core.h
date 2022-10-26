@@ -103,6 +103,13 @@ struct mmi_discrete_charger {
 	struct iio_chan_spec	*iio_chan;
 	struct iio_channel	*int_iio_chans;
 
+	/*cooling device*/
+	struct thermal_cooling_device *cdev;
+
+	/*mos output en/dis control*/
+	int			mos_en_gpio;
+	bool			mosfet_supported;
+
 	/*CP*/
 	bool			cp_active;
 
