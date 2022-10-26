@@ -80,3 +80,8 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     endif
 endif
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
+
+ifneq ($(filter m y,$(CONFIG_GTP_DDA_STYLUS)),)
+    EXTRA_CFLAGS += -DCONFIG_MOTO_DDA_PASSIVESTYLUS
+    nova_0flash_mmi-objs += moto_ts_dda.o
+endif

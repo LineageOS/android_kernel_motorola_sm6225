@@ -65,6 +65,10 @@ enum touch_state {
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+#include "moto_ts_dda.h"
+#endif
+
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 extern int nvt_mmi_init(struct nvt_ts_data *ts_data, bool enable);
 #endif
@@ -1907,6 +1911,17 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				input_report_abs(ts->input_dev, ABS_MT_ORIENTATION, input_orient);
 #endif
 				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+                                {
+					struct dda_finger_coords finger_data;
+                                        finger_data.x = input_x;
+                                        finger_data.y = input_y;
+                                        finger_data.p = input_p;
+                                        finger_data.minor = input_major;
+                                        finger_data.major = input_major;
+                                        moto_dda_process_finger_press(input_id - 1, &finger_data);
+				}
+#endif
 			} else
 #endif
 			{
@@ -1916,6 +1931,32 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
 				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_major);
 				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+                                {
+					struct dda_finger_coords finger_data;
+					finger_data.x = input_x;
+                                        finger_data.y = input_y;
+                                        finger_data.p = input_p;
+                                        finger_data.minor = input_major;
+                                        finger_data.major = input_major;
+                                        moto_dda_process_finger_press(input_id - 1, &finger_data);
+
+#ifdef MOTO_DDA_ACTIVE_STYLUS //ACTIVE_PEN_FEATURE TEST
+                                	if(0 == (input_id - 1)){
+                                        	struct dda_pen_coords pen_data;
+	                                        pen_data.status = 1;
+        	                                pen_data.tool_type = 0;
+                	                        pen_data.tilt_x  = input_p / 10;
+                        	                pen_data.tilt_y  = input_p / 20;
+                                	        pen_data.x = input_x;
+                                        	pen_data.y = input_y;
+	                                        pen_data.p = input_p;
+        	                                moto_dda_process_pen_report(&pen_data);
+                	                }
+#endif //#ifdef MOTO_DDA_ACTIVE_STYLUS
+				}
+#endif
+
 			}
 #if MT_PROTOCOL_B
 #else /* MT_PROTOCOL_B */
@@ -1937,6 +1978,24 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
 			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+			moto_dda_process_finger_release(i);
+#ifdef MOTO_DDA_ACTIVE_STYLUS //ACTIVE_PEN_FEATURE TEST
+                        if(0 == i){
+                                struct dda_pen_coords pen_data;
+                                pen_data.status = 0;
+                                pen_data.tool_type = 0;
+                                pen_data.tilt_x  = 0;
+                                pen_data.tilt_y  = 0;
+                                pen_data.x = 0;
+                                pen_data.y = 0;
+                                pen_data.p = 0;
+                                moto_dda_process_pen_report(&pen_data);
+                        }
+#endif //#ifdef MOTO_DDA_ACTIVE_STYLUS
+#endif
+
+
 		}
 	}
 
@@ -2878,6 +2937,13 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	ts->edge_reject_state = VERTICAL;
 #endif
 
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+        moto_dda_init("novatek-ts for Geneva5G");
+        ret = moto_dda_register_cdevice();
+        if (ret)
+                NVT_ERR("Failed register stylus dda device, %d", ret);
+#endif
+
 	sprintf(ts->phys, "input/ts");
 	ts->input_dev->name = NVT_TS_NAME;
 	ts->input_dev->phys = ts->phys;
@@ -3201,6 +3267,9 @@ err_int_request_failed:
 	input_unregister_device(ts->input_dev);
 	ts->input_dev = NULL;
 err_input_register_device_failed:
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+        moto_dda_exit();
+#endif
 	if (ts->input_dev) {
 		input_free_device(ts->input_dev);
 		ts->input_dev = NULL;
@@ -3330,6 +3399,10 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 	nvt_gpio_deconfig(ts);
 
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+        moto_dda_exit();
+#endif
+
 	if (ts->input_dev) {
 		input_unregister_device(ts->input_dev);
 		ts->input_dev = NULL;
@@ -3429,6 +3502,23 @@ void release_all_touches(void)
 		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
 		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+		moto_dda_process_finger_release(i);
+#ifdef MOTO_DDA_ACTIVE_STYLUS //ACTIVE_PEN_FEATURE TEST
+                        if(0 == i){
+                                struct dda_pen_coords pen_data;
+                                pen_data.status = 0;
+                                pen_data.tool_type = 0;
+                                pen_data.tilt_x  = 0;
+                                pen_data.tilt_y  = 0;
+                                pen_data.x = 0;
+                                pen_data.y = 0;
+                                pen_data.p = 0;
+                                moto_dda_process_pen_report(&pen_data);
+                        }
+#endif //#ifdef MOTO_DDA_ACTIVE_STYLUS
+#endif
+
 	}
 #endif
 	input_report_key(ts->input_dev, BTN_TOUCH, 0);
