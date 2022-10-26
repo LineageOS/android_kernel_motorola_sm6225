@@ -401,6 +401,7 @@ typedef struct motor_device {
 			moto_drv8424_cmd_push(md, CMD_POSITION, 0); \
 			atomic_set(&md->status, _Sta); \
 			moto_drv8424_cmd_push(md, CMD_STATUS, 0); \
+			md->ready = true; \
 			dev_info(md->dev, "Assume %s position\n", position_labels[_Pos]); \
 		} \
 	} while(0)
@@ -976,14 +977,19 @@ static __ref int motor_kthread(void *arg)
 		 * motor slippage. When this happens, position will still
 		 * be unknown even though stepper sequence completed.
 		 */
-		if (md->detect_incomplete) {
+		if (!md->sensors_off && md->detect_incomplete) {
 			if (md->regime == SQ_SLOWMO) {
-				/* Unrecoverable motor fault.
-				* Force kernel panic to get a ramdump
-				*/
-				dev_warn(md->dev, "forced panic due to motor fault\n");
-				BUG_ON(1);
-				mdelay(20000);
+				/* Unrecoverable motor fault */
+				motor_stop(md, true);
+				/* make sure position is not unknown */
+				atomic_set(&md->position, POS_COMPACT);
+				atomic_set(&md->status, STATUS_FAULTING);
+				moto_drv8424_cmd_push(md, CMD_STATUS, 0);
+				md->faulting = true;
+				/* make sure timeout is not stuck */
+				md->time_out = 0;
+				dev_warn(md->dev, "Motor faulting state set!!!\n");
+				goto show_stats;
 			}
 			/* Recovery from incomplete transition */
 			moto_drv8424_cmd_push(md, CMD_RECOVERY, 0);
@@ -1713,6 +1719,7 @@ static ssize_t motor_sensing_show(struct device *dev, struct device_attribute *a
 		char *buf)
 {
 	motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	dev_info(md->dev, "Motor faulting state support\n");
 	return snprintf(buf, 20, "%d\n", md->sensors_off ? 0 : 1);
 }
 
@@ -1728,6 +1735,14 @@ static ssize_t motor_sensing_store(struct device *dev, struct device_attribute *
 	}
 	md->sensors_off = !!value ? false : true;
 	dev_info(md->dev, "sensing %d\n", md->sensors_off ? 0 : 1);
+	/* backdoor to recover from bad sensors calibration */
+	if (md->sensors_off &&
+		(md->faulting || md->ready == false)) {
+		md->faulting = false;
+		md->ready = true;
+		dev_info(md->dev, "Motor faulting state dropped!!!\n");
+	}
+
 	return len;
 }
 
