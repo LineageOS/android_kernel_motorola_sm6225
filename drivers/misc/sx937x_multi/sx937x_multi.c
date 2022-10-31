@@ -708,7 +708,7 @@ static ssize_t sx937x_fac_raw_show(struct device *dev,
 
 	LOG_INFO("%s sx937x_fac_raw_show\n", this->hw->dbg_name);
 	for ( i = 0; i < MAX_CHANNEL_NUMBER; i++) {
-		read_ret=sx937x_i2c_read_16bit(this->bus,reg_addr+0xc*i,&temp_val);
+		read_ret=sx937x_i2c_read_16bit(this->bus,reg_addr+0x4*i,&temp_val);
 		if(read_ret<0){
 			LOG_INFO("failed to read reg data 0x%x", reg_addr);
 		}
