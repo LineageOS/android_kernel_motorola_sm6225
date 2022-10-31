@@ -43,6 +43,7 @@ struct mmi_storage_info {
 #define MSMHW_MAX_LEN 32
 #define DEVICE_MAX_LEN 33
 #define RADIO_MAX_LEN 33
+#define CHIPID_MAX_LEN 32
 struct mmi_unit_info {
 	uint32_t version;
 	uint32_t system_rev;
@@ -69,6 +70,7 @@ struct mmi_chosen_info {
 	unsigned int boot_seq;
 	char baseband[BASEBAND_MAX_LEN];
 	char msm_hw[MSMHW_MAX_LEN];
+	char chipid[CHIPID_MAX_LEN];
 };
 
 extern struct mmi_chosen_info mmi_chosen_data;

@@ -240,6 +240,15 @@ static u64 bi_serial(void)
 #define EMIT_SERIAL() \
 		EMIT_BOOTINFO("SERIAL", "0x%llx", serial)
 
+const char *bi_chipid(void)
+{
+	return mmi_chosen_data.chipid;
+}
+EXPORT_SYMBOL(bi_chipid);
+
+#define EMIT_CHIPID() \
+		EMIT_BOOTINFO("CHIPID", "%s", chipid)
+
 const char *bi_bootreason(void)
 {
 	return bootreason;
@@ -266,6 +275,7 @@ static int get_bootinfo(struct seq_file *m, void *v)
 	EMIT_MBM_VERSION();
 	EMIT_BL_BUILD_SIG();
 	EMIT_BOOT_SEQ();
+	EMIT_CHIPID();
 	EMIT_BOOTINFO("Last boot reason", "%s", bootreason);
 
 	return 0;
@@ -318,6 +328,7 @@ int mmi_boot_info_init(void)
 	mmi_annotate_persist("SERIAL: 0x%llx\n", bi_serial());
 	mmi_annotate_persist("HW_REV: 0x%04x\n", bi_hwrev());
 	mmi_annotate_persist("BOOT_SEQ: %d\n", bi_boot_seq());
+	mmi_annotate_persist("CHIPID: %s\n", bi_chipid());
 	mmi_annotate("POWERUPREASON: 0x%08x\n", bi_powerup_reason());
 	mmi_annotate("Last boot reason: %s\n\n", bi_bootreason());
 
