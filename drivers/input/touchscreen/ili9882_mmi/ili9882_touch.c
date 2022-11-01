@@ -946,6 +946,9 @@ void ili_touch_release_all_point(void)
 }
 
 static struct ilitek_touch_info touch_info[MAX_TOUCH_NUM];
+#ifdef ILI_TOUCH_LAST_TIME
+static bool time_flag = 1;
+#endif
 
 void ili_report_ap_mode(u8 *buf, int len)
 {
@@ -1021,6 +1024,13 @@ void ili_report_ap_mode(u8 *buf, int len)
 	ILI_DBG("figner number = %d, LastTouch = %d\n", ilits->finger, ilits->last_touch);
 
 	if (ilits->finger) {
+#ifdef ILI_TOUCH_LAST_TIME
+		if (time_flag) {
+			ilits->last_event_time = ktime_get_boottime();
+			time_flag = 0;
+			ILI_DBG("set last_event_time\n");
+		}
+#endif
 		if (MT_B_TYPE) {
 			for (i = 0; i < ilits->finger; i++) {
 				input_report_key(ilits->input, BTN_TOUCH, 1);
@@ -1045,6 +1055,10 @@ void ili_report_ap_mode(u8 *buf, int len)
 		ilits->last_touch = ilits->finger;
 	} else {
 		if (ilits->last_touch) {
+#ifdef ILI_TOUCH_LAST_TIME
+			time_flag = 1;
+			ILI_DBG("last touch, reset time_flag\n");
+#endif
 			if (MT_B_TYPE) {
 				for (i = 0; i < MAX_TOUCH_NUM; i++) {
 					if (ilits->curt_touch[i] == 0 && ilits->prev_touch[i] == 1)

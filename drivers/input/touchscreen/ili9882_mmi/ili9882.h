@@ -1037,6 +1037,9 @@ struct ilitek_ts_data {
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct ts_mmi_class_methods *imports;
 #endif
+#ifdef ILI_TOUCH_LAST_TIME
+	ktime_t last_event_time;
+#endif
 };
 extern struct ilitek_ts_data *ilits;
 

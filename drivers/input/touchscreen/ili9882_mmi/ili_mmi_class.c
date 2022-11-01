@@ -131,6 +131,25 @@ static ssize_t ili_palm_settings_store(struct device *dev,
 	return err;
 }
 
+#ifdef ILI_TOUCH_LAST_TIME
+static ssize_t ili_mmi_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ktime_t last_ktime;
+	struct timespec64 last_ts;
+
+	mutex_lock(&ilits->touch_mutex);
+	last_ktime = ilits->last_event_time;
+	ilits->last_event_time = 0;
+	mutex_unlock(&ilits->touch_mutex);
+
+	last_ts = ktime_to_timespec64(last_ktime);
+
+	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+static DEVICE_ATTR(timestamp, S_IRUGO, ili_mmi_timestamp_show, NULL);
+#endif
+
 static DEVICE_ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, ili_palm_settings_show, ili_palm_settings_store);
 
 static int ili_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
@@ -138,6 +157,9 @@ static int ili_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 	int idx = 0;
 
 	ADD_ATTR(palm_settings);
+#ifdef ILI_TOUCH_LAST_TIME
+	ADD_ATTR(timestamp);
+#endif
 
 	if (idx) {
 		ext_attributes[idx] = NULL;
