@@ -1698,6 +1698,12 @@ static ssize_t ic_ver_show(struct device *dev,
 	return fts_ic_ver_show(dev, attr, buf);
 }
 
+static ssize_t productinfo_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+    return fts_productinfo_show(dev, attr, buf);
+}
+
 #ifdef FTS_LAST_TIME_EN
 static ssize_t timestamp_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1723,6 +1729,7 @@ static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(vendor),
 	__ATTR_RO(ic_ver),
 	__ATTR_RO(panel_supplier),
+	__ATTR_RO(productinfo),
 #ifdef FTS_LAST_TIME_EN
 	__ATTR_RO(timestamp),
 #endif
