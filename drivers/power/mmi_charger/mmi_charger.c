@@ -254,6 +254,8 @@ struct mmi_charger_chip {
 	uint32_t		factory_kill_debounce_ms;
 
 	bool			empty_vbat_shutdown_triggered;
+
+	int			heartbeat_dischg_ms;
 };
 
 static int mmi_vote(struct mmi_vote *vote, const char *voter,
@@ -2220,7 +2222,7 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 	else if (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE)
 		hb_resch_time = chip->heartbeat_interval;
 	else
-		hb_resch_time = HEARTBEAT_DISCHARGE_MS;
+		hb_resch_time = chip->heartbeat_dischg_ms;
 	schedule_delayed_work(&chip->heartbeat_work,
 			      msecs_to_jiffies(hb_resch_time));
 	if (suspend_wakeups ||
@@ -2759,6 +2761,13 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 				  &chip->wls_pmax);
 	if (rc)
 		chip->wls_pmax = CHARGER_POWER_10W;
+
+	rc = of_property_read_u32(node, "mmi,heartbeat-discharger-ms",
+				  &chip->heartbeat_dischg_ms);
+	if (rc)
+		chip->heartbeat_dischg_ms = HEARTBEAT_DISCHARGE_MS;
+
+	mmi_warn(chip, "mmi,heartbeat dischg ms %d\n", chip->heartbeat_dischg_ms);
 
 	node = of_find_node_by_path("/chosen");
 
