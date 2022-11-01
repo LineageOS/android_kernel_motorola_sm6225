@@ -1187,7 +1187,7 @@ void ili_report_gesture_mode(u8 *buf, int len)
 	int lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
 	u8 ges[P5_X_GESTURE_INFO_LENGTH] = {0};
 	struct gesture_coordinate *gc = ilits->gcoord;
-#ifndef ILI_SENSOR_EN
+#if !defined(ILI_SENSOR_EN) && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct input_dev *input = ilits->input;
 #endif
 	bool transfer = ilits->trans_xy;
@@ -1217,8 +1217,9 @@ void ili_report_gesture_mode(u8 *buf, int len)
 	gc->pos_4th.y   = ((ges[25] & 0x0F) << 8) | ges[27];
 
 	switch (gc->code) {
+	case GESTURE_SINGLECLICK:
 	case GESTURE_DOUBLECLICK:
-		ILI_INFO("Double Click key event\n");
+		ILI_INFO("Click key event 0x%x\n", gc->code);
 #ifdef ILI_SENSOR_EN
 		if (!(ilits->wakeable && ilits->should_enable_gesture)) {
 			ILI_INFO("Gesture got but wakeable not set. Skip this gesture.");
@@ -1245,6 +1246,24 @@ void ili_report_gesture_mode(u8 *buf, int len)
 #else
 		PM_WAKEUP_EVENT(ilits->gesture_wakelock, 5000);
 #endif
+#elif CONFIG_INPUT_TOUCHSCREEN_MMI
+		if (ilits->imports && ilits->imports->report_gesture) {
+			struct gesture_event_data event;
+			int ret = 0;
+
+			if(gc->code == GESTURE_SINGLECLICK) {
+				event.evcode = 1;
+			} else if(gc->code == GESTURE_DOUBLECLICK) {
+				event.evcode =4;
+			}
+			/* call class method */
+			ret = ilits->imports->report_gesture(&event);
+#ifdef CONFIG_HAS_WAKELOCK
+			wake_lock_timeout(&(ilits->gesture_wakelock), msecs_to_jiffies(5000));
+#else
+			PM_WAKEUP_EVENT(ilits->gesture_wakelock, 5000);
+#endif
+		}
 #else
 		input_report_key(input, KEY_GESTURE_POWER, 1);
 		input_sync(input);

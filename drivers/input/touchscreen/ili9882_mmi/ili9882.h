@@ -458,7 +458,8 @@ struct gesture_symbol {
 	u8 alphabet_two_line_2_bottom :1;
 	u8 alphabet_F                 :1;
 	u8 alphabet_AT                :1;
-	u8 reserve0 		      :5;
+	u8 single_tap                 :1;
+	u8 reserve0 		      :4;
 };
 
 struct report_info_block {
@@ -664,6 +665,7 @@ struct report_info_block {
 
 /* The example for the gesture virtual keys */
 #define GESTURE_DOUBLECLICK				0x58
+#define GESTURE_SINGLECLICK				0x57
 #define GESTURE_UP					0x60
 #define GESTURE_DOWN					0x61
 #define GESTURE_LEFT					0x62
@@ -727,6 +729,7 @@ struct report_info_block {
 #define ALPHABET_TWO_LINE_2_BOTTOM			( ON )//BIT16
 #define ALPHABET_F					( ON )//BIT17
 #define ALPHABET_AT					( ON )//BIT18
+#define SINGLE_TAP                                   	( ON )//BIT0
 
 /* FW data format */
 #define DATA_FORMAT_DEMO_CMD				0x00
@@ -998,19 +1001,21 @@ struct ilitek_ts_data {
 	atomic_t cmd_int_check;
 	atomic_t esd_stat;
 
-#ifdef ILI_SENSOR_EN
+#if defined(ILI_SENSOR_EN) || defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	bool wakeable;
 	bool should_enable_gesture;
-	bool gesture_enabled;
-	uint32_t report_gesture_key;
-	enum display_state screen_state;
-	struct mutex state_mutex;
-	struct ili_sensor_platform_data *sensor_pdata;
 #ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock gesture_wakelock;
 #else
 	struct wakeup_source *gesture_wakelock;
 #endif
+#endif
+#ifdef ILI_SENSOR_EN
+	bool gesture_enabled;
+	uint32_t report_gesture_key;
+	enum display_state screen_state;
+	struct mutex state_mutex;
+	struct ili_sensor_platform_data *sensor_pdata;
 #endif
 
 	/* Event for driver test */

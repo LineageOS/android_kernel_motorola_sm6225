@@ -159,6 +159,54 @@ static int ili_mmi_firmware_update(struct device *dev, char *fwname)
 	return 0;
 }
 
+static int ili_mmi_panel_state(struct device *dev,
+	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
+{
+	ILI_INFO("%s: panel state change: %d->%d\n", __func__, from, to);
+	ILI_INFO("panel state change: %d->%d\n", from, to);
+	switch (to) {
+		case TS_MMI_PM_GESTURE:
+#ifdef ILI_SET_TOUCH_STATE
+			ilits->should_enable_gesture = true;
+			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			break;
+
+		case TS_MMI_PM_GESTURE_SINGLE:
+			ilits->ges_sym.single_tap = SINGLE_TAP;
+			ILI_INFO("enable single gesture mode\n");
+			break;
+		case TS_MMI_PM_GESTURE_DOUBLE:
+			ilits->ges_sym.double_tap = DOUBLE_TAP;
+			ILI_INFO("enable double gesture mode\n");
+			break;
+		case TS_MMI_PM_GESTURE_SWITCH:
+#ifdef ILI_SET_TOUCH_STATE
+			ilits->should_enable_gesture = true;
+			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			/*---write command to enter "wakeup gesture mode"---*/
+			ili_sleep_handler(TP_SUSPEND);
+			ilits->ges_sym.single_tap = OFF;
+			ilits->ges_sym.double_tap = OFF;
+			break;
+		case TS_MMI_PM_DEEPSLEEP:
+			ilits->should_enable_gesture = false;
+#ifdef ILI_SET_TOUCH_STATE
+			touch_set_state(TS_MMI_PM_DEEPSLEEP, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			ili_sleep_handler(TP_DEEP_SLEEP);
+			break;
+
+		case TS_MMI_PM_ACTIVE:
+			break;
+		default:
+			ILI_INFO("panel mode %d is invalid.\n", to);
+			return -EINVAL;
+	}
+	return 0;
+}
+
 int32_t ili_mmi_post_suspend(struct device *dev)
 {
 	return 0;
@@ -178,6 +226,7 @@ static int ili_mmi_pre_resume(struct device *dev)
 
 static int ili_mmi_post_resume(struct device *dev)
 {
+	ili_sleep_handler(TP_RESUME);
 	return 0;
 }
 
@@ -199,6 +248,7 @@ static struct ts_mmi_methods ili_mmi_methods = {
 	.firmware_update = ili_mmi_firmware_update,
 	.extend_attribute_group = ili_mmi_extend_attribute_group,
 	/* PM callback */
+	.panel_state = ili_mmi_panel_state,
 	.pre_resume = ili_mmi_pre_resume,
 	.post_resume = ili_mmi_post_resume,
 	.post_suspend = ili_mmi_post_suspend,

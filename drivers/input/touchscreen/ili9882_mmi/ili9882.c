@@ -507,7 +507,7 @@ int ili_sleep_handler(int mode)
 				ILI_ERR("Check busy timeout during suspend\n");
 		}
 
-#ifdef  ILI_SENSOR_EN
+#if defined(ILI_SENSOR_EN) || defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		if (ilits->should_enable_gesture) {
 			ili_switch_tp_mode(P5_X_FW_GESTURE_MODE);
 			enable_irq_wake(ilits->irq_num);
