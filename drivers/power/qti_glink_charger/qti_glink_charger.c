@@ -162,6 +162,7 @@ struct wls_dump
     u16  tx_vrect_mv;
     u16  tx_det_rx_power;
     u16  tx_power;
+    u16  tx_ept;
     s16  power_loss;
     u16  usb_otg;
     u16  wls_boost;
@@ -240,7 +241,7 @@ struct qti_charger {
 	u32				wlc_tx_sn;
 	bool				*debug_enabled;
 	u32				wls_curr_max;
-	u32				rx_connected;
+	int				rx_connected;
 	struct notifier_block		wls_nb;
 	struct dentry		*debug_root;
 	struct power_supply		*batt_psy;
@@ -673,14 +674,15 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.rx_neg_power);
 
 	mmi_info(chg, "Wireless dump info -2: TX_IIN: %dmA, TX_VIN: %dmV, TX_VRECT: %dmV, "
-		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, ",
+		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, TX_EPT_RSN: 0x%04x, ",
 		wls_info.tx_iin_ma,
 		wls_info.tx_vin_mv,
 		wls_info.tx_vrect_mv,
 		wls_info.tx_det_rx_power,
 		wls_info.tx_power,
 		wls_info.power_loss,
-		(wls_info.irq_status & (0x01<<12)) ? 1 : 0);
+		(wls_info.irq_status & (0x01<<12)) ? 1 : 0),
+		wls_info.tx_ept;
 
 	mmi_info(chg, "Wireless dump info -3: FOLIO_MODE: %d, PEN_STATUS: %d, "
 		"PEN_SOC: %d, PEN_ERROR: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
@@ -1542,15 +1544,22 @@ static ssize_t tx_mode_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
+	u32 tx_mode = 0;
 	struct qti_charger *chg = this_chip;
 
 	if (!chg) {
-		pr_err("PEN: chip not valid\n");
+		pr_err("QTI: chip not valid\n");
 		return -ENODEV;
 	}
 
-	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->tx_mode);
+	qti_charger_read(chg, OEM_PROP_WLS_TX_MODE,
+				&tx_mode,
+				sizeof(tx_mode));
+
+	chg->tx_mode = tx_mode;
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", tx_mode);
 }
+
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);
 
 static ssize_t tx_mode_vout_show(struct device *dev,
@@ -1934,7 +1943,7 @@ static int show_wls_dump_info(struct seq_file *m, void *data)
 
 	seq_printf(m, "RX_VRECT: %dmV\n",  wls_info.rx_vrect_mv);
 
-	seq_printf(m, "RX_IRECT: %dmV\n",  wls_info.rx_irect_ma);
+	seq_printf(m, "RX_IRECT: %dmA\n",  wls_info.rx_irect_ma);
 
 	seq_printf(m, "RX_EPT: 0x%04x\n",  wls_info.rx_ept);
 
@@ -1955,6 +1964,8 @@ static int show_wls_dump_info(struct seq_file *m, void *data)
 	seq_printf(m, "TX_DET_RX_POWER: %dmW\n",  wls_info.tx_det_rx_power);
 
 	seq_printf(m, "TX_POWER: %dmW\n",  wls_info.tx_power);
+
+	seq_printf(m, "TX_EPT_RSN: 0x%04x\n",  wls_info.tx_ept);
 
 	seq_printf(m, "POWER_LOSS: %dmW\n",  wls_info.power_loss);
 
@@ -2098,6 +2109,12 @@ static int wireless_charger_notify_callback(struct notifier_block *nb,
         case NOTIFY_EVENT_WLS_RX_OVERTEMP:
 		break;
         case NOTIFY_EVENT_WLS_CHANGE:
+		if (notify_data->data[0] != chg->tx_mode) {
+			if (chg->wls_psy) {
+				pr_info("report tx_mode %d\n", notify_data->data[0]);
+				sysfs_notify(&chg->wls_psy->dev.parent->kobj, NULL, "tx_mode");
+			}
+		}
 		break;
         case NOTIFY_EVENT_WLS_WLC_CHANGE:
 	/* WLC status update */
