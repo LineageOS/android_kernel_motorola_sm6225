@@ -210,6 +210,13 @@ struct bq2589x {
 	struct	power_supply_config usb_cfg;
 	struct	power_supply_config wall_cfg;
 
+	/* enable dynamic adjust battery voltage */
+	struct	power_supply *battery;
+	bool	enable_dynamic_adjust_batvol;
+	int	final_cc;
+	int	final_cv;
+	int	cv_tune;
+
 	/*mmi qc3*/
 	bool mmi_qc3_support;
 	struct	semaphore sem_dpdm;
@@ -546,6 +553,9 @@ int bq2589x_set_chargecurrent(struct bq2589x *bq, int curr)
 
 	if (bq->part_no == SC89890H) {
 		ichg = (curr - SC89890H_ICHG_BASE)/SC89890H_ICHG_LSB;
+		/* enable dynamic adjust battery voltage */
+		if(bq->enable_dynamic_adjust_batvol)
+	    		bq->final_cc = curr * 1000;
 	} else {
 		ichg = (curr - BQ2589X_ICHG_BASE)/BQ2589X_ICHG_LSB;
 	}
@@ -1504,6 +1514,10 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 	bq->cfg.enable_ico = of_property_read_bool(np, "ti,bq2589x,enable-ico");
 	bq->cfg.disable_ilim = of_property_read_bool(np, "ti,bq2589x,disable-ilim");
 	bq->cfg.use_absolute_vindpm = of_property_read_bool(np, "ti,bq2589x,use-absolute-vindpm");
+
+	/* enable dynamic adjust battery voltage */
+	bq->enable_dynamic_adjust_batvol = of_property_read_bool(np, "enable_dynamic_adjust_batvol");
+	dev_err(bq->dev, "%s: enable_dynamic_adjust_batvol = %d \n", __func__, bq->enable_dynamic_adjust_batvol);
 
 	ret = of_property_read_u32(np, "ti,bq2589x,charge-voltage",&bq->cfg.charge_voltage);
 	if (ret)
@@ -2522,6 +2536,45 @@ static void bq2589x_tune_volt_workfunc(struct work_struct *work)
 	}
 }
 
+/* enable dynamic adjust battery voltage */
+static void bq2589x_adjust_constant_voltage(struct bq2589x *bq, int vbat)
+{
+	int ret;
+	int cv_adjust;
+	u8 status = 0;
+
+	dev_err(bq->dev, "bq2589x_adjust_constant_voltage 111\n");
+
+	if (bq->final_cv > vbat && (bq->final_cv - vbat) < 16000)
+		return;
+
+	ret = bq2589x_read_byte(bq, &status, BQ2589X_REG_13);
+	dev_err(bq->dev, "ret = %d,status=%02x\n", ret,status);
+	if ((ret == 0) && ((status & BQ2589X_VDPM_STAT_MASK) ||
+		 (status & BQ2589X_IDPM_STAT_MASK)) 
+		&& (bq->final_cv > vbat))
+		return;
+
+	if (bq->final_cv > vbat) {
+		bq->cv_tune++;
+	} else if (bq->cv_tune > 0) {
+		bq->cv_tune--;
+	}
+	bq->cv_tune = min(bq->cv_tune, 6); //limit to max 6 - 96mV
+	dev_err(bq->dev, "cv_tune = %duV\n", bq->cv_tune*16000);
+
+	cv_adjust = bq->cv_tune * BQ2589X_VREG_LSB * 1000;
+	cv_adjust += bq->final_cv;
+	cv_adjust /= 1000;
+	ret |= bq2589x_set_chargevoltage(bq, cv_adjust);
+	if (!ret)
+		return;
+	dev_err(bq->dev, "failed to tune cv, reset the tuning\n");
+	bq->cv_tune = 0;
+	bq->final_cv /= 1000;
+	bq2589x_set_chargevoltage(bq, bq->final_cv);
+	return;
+}
 
 static void bq2589x_monitor_workfunc(struct work_struct *work)
 {
@@ -2531,6 +2584,11 @@ static void bq2589x_monitor_workfunc(struct work_struct *work)
 	int chg_current;
 	u8 addr;
 	u8 val;
+
+	/* enable dynamic adjust battery voltage */
+	union power_supply_propval val_battery = {0};
+	u8 chrg_status = 0;
+	int vbat_uv, ibat_ua;
 
 	bq2589x_reset_watchdog_timer(bq);
 
@@ -2547,6 +2605,28 @@ static void bq2589x_monitor_workfunc(struct work_struct *work)
 		dev_info(bq->dev, "%s:VINDPM occurred\n", __func__);
 	if (ret == 0 && (status & BQ2589X_IDPM_STAT_MASK))
 		dev_info(bq->dev, "%s:IINDPM occurred\n", __func__);
+
+	/* enable dynamic adjust battery voltage */
+	if(bq->enable_dynamic_adjust_batvol){
+		if (!bq->battery)
+			bq->battery = power_supply_get_by_name ("battery");
+		if (bq->battery) {
+			power_supply_get_property(bq->battery, POWER_SUPPLY_PROP_CURRENT_NOW, &val_battery);
+			chrg_status = bq2589x_get_charging_status(bq);
+			if(val_battery.intval < 10000 && chrg_status != STATUS_TERMINATION_DONE) {
+				pr_err("VBUS present but no charging current \n");
+			}
+
+			ibat_ua = val_battery.intval;
+			power_supply_get_property(bq->battery, POWER_SUPPLY_PROP_VOLTAGE_NOW, &val_battery);
+			vbat_uv = val_battery.intval;
+			dev_err(bq->dev, "vbat=%duV, cv=%duV\n", vbat_uv, bq->final_cv);
+			dev_err(bq->dev, "ibat=%duA, cc=%duA,tune=%d\n", ibat_ua, bq->final_cc,bq->cv_tune);
+			if ((ibat_ua > 10000 && ibat_ua < (bq->final_cc - 100000)) || vbat_uv > bq->final_cv) {
+				bq2589x_adjust_constant_voltage(bq, vbat_uv);
+			}
+		}
+	}
 
 	for (addr = 0x0; addr <= 0x14; addr++) {
 		ret = bq2589x_read_byte(bq, &val, addr);
@@ -2907,6 +2987,11 @@ static int bq2589x_set_charging_voltage(struct charger_device *chg_dev, u32 uV)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
 	int ret = 0;
+
+	/* enable dynamic adjust battery voltage */
+	if(bq->enable_dynamic_adjust_batvol)
+		bq->final_cv = uV;
+
 	uV /= 1000;
 	ret = bq2589x_set_chargevoltage(bq, uV);
 
@@ -3317,6 +3402,12 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 	struct bq2589x *bq = i2c_get_clientdata(client);
 
 	dev_info(bq->dev, "%s: shutdown\n", __func__);
+
+	/* enable dynamic adjust battery voltage */
+	if(bq->enable_dynamic_adjust_batvol){
+		bq->final_cv /= 1000;
+		bq2589x_set_chargevoltage(bq, bq->final_cv);
+	}
 
 	/*set CONV_RATE 0 to exits continuous conversion mode*/
 	bq2589x_adc_stop(bq);
