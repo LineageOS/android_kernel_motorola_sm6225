@@ -17,6 +17,10 @@
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/power/bm_adsp_ulog.h>
 
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/string.h>
+
 /* owner/type/opcodes for battery charger */
 #define MSG_OWNER_BC                    32778
 #define MSG_TYPE_REQ_RESP		1
@@ -75,6 +79,7 @@ struct bm_ulog_dev {
 	struct dentry			*debugfs_dir;
 	bool				*debug_enabled;
 	void				*ipc_log;
+	struct task_struct		*bm_ulog_task;
 	char				ulog_buffer[MAX_ULOG_READ_BUFFER_SIZE];
 };
 
@@ -297,7 +302,7 @@ int bm_ulog_get_mask_log(enum bm_ulog_category_bitmap categories,
 }
 EXPORT_SYMBOL(bm_ulog_get_mask_log);
 
-static void bm_ulog_print_buffer(struct bm_ulog_dev *bmdev, u32 size)
+static int bm_ulog_print_buffer(struct bm_ulog_dev *bmdev, u32 size)
 {
 	int i;
 	int header = 0;
@@ -314,6 +319,9 @@ static void bm_ulog_print_buffer(struct bm_ulog_dev *bmdev, u32 size)
 			break;
 		}
 	}
+	if (i > 0)
+		pr_info("recv len=%d\n", i);
+	return i;
 }
 
 static int bm_ulog_print_init_log(u32 size)
@@ -493,6 +501,65 @@ static void bm_ulog_add_debugfs(struct bm_ulog_dev *bmdev)
 static void bm_ulog_add_debugfs(struct bm_ulog_dev *bmdev) { }
 #endif
 
+static int bm_ulog_kthread(void *param)
+{
+	struct bm_ulog_dev * bmdev = param;
+	int read_count = 0;
+	int sleep_ms = 0;
+
+	bm_info(bmdev, "bm ulog kthread start\n");
+	do {
+		bm_ulog_request_log(bmdev, MAX_ULOG_READ_BUFFER_SIZE);
+		read_count = bm_ulog_print_buffer(bmdev, MAX_ULOG_READ_BUFFER_SIZE);
+
+		if (read_count > 1024) {
+			sleep_ms = 1;
+		} else if (read_count > 128) {
+			sleep_ms = 50;
+		} else if (read_count == 0) {
+			sleep_ms = sleep_ms + 50;
+		}
+		if (sleep_ms > 200)
+			sleep_ms = 200;
+
+		msleep(sleep_ms);
+	} while(!kthread_should_stop());
+
+	bm_info(bmdev, "bm ulog kthread exit\n");
+	return 0;
+}
+
+bool bm_ulog_is_bm_ulog_enabled(struct bm_ulog_dev *bmdev)
+{
+	struct device_node *np = of_find_node_by_path("/chosen");
+	bool rt = false;
+	const char *bootargs = NULL;
+	char *bm_ulog_enabled = NULL;
+
+	if (bmdev && bmdev->debug_enabled && *bmdev->debug_enabled) {
+		bm_info(bmdev, "bmdev->bm_ulog_enabled is true\n");
+		return true;
+	}
+
+	if (!np) {
+		bm_info(bmdev, "np is null\n");
+		return false;
+	}
+
+	if (!of_property_read_string(np, "bootargs", &bootargs)) {
+		bm_ulog_enabled = strstr(bootargs, "bm_ulog_enabled=1 ");
+		bm_info(bmdev, "of_property_read_string bm_ulog_enabled=%s\n", bm_ulog_enabled);
+		if (bm_ulog_enabled) {
+			rt = true;
+		}
+	}
+
+	of_node_put(np);
+
+	bm_info(bmdev,"bm ulog rt = %d\n", rt);
+	return rt;
+}
+
 static int bm_ulog_probe(struct platform_device *pdev)
 {
 	int rc;
@@ -547,6 +614,19 @@ static int bm_ulog_probe(struct platform_device *pdev)
 					MAX_ULOG_READ_BUFFER_SIZE);
 		debug_enabled = init_debug_enabled;
 	}
+
+	debug_enabled = bm_ulog_is_bm_ulog_enabled(bmdev);
+	bm_info(bmdev, "bm_ulog_check_debug_enabled debug_enabled=%d\n", debug_enabled);
+	if (bmdev->debug_enabled && *bmdev->debug_enabled) {
+		bmdev->bm_ulog_task = kthread_create(bm_ulog_kthread, bmdev, "bm_ulog_kthread");
+		if (IS_ERR(bmdev->bm_ulog_task)) {
+			bm_info(bmdev, "Failed to create bm_ulog_task ret = %ld\n", PTR_ERR(bmdev->bm_ulog_task));
+		}else {
+			wake_up_process(bmdev->bm_ulog_task);
+			bm_info(bmdev, "Successed to create bm_ulog_task\n");
+		}
+	}
+
 	bm_ulog_add_debugfs(bmdev);
 
 	bm_info(bmdev, "BM adsp ulog driver initialized successfully\n");
