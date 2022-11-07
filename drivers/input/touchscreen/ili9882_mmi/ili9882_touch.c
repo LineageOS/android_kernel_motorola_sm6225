@@ -22,6 +22,11 @@
 
 #include "ili9882.h"
 
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+#include "moto_ts_dda.h"
+#endif
+
+
 /*gesture info mode*/
 struct ili_demo_debug_info_id0 {
 	u32 id			: 8;
@@ -889,6 +894,17 @@ void ili_touch_press_width(u16 x, u16 y, u16 pressure, u16 id, u16 width_major, 
 
 		input_mt_sync(ilits->input);
 	}
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+	{
+		struct dda_finger_coords finger_data;
+		finger_data.x = x;
+		finger_data.y = y;
+		finger_data.p = pressure;
+		finger_data.minor = width_minor;
+		finger_data.major = width_major;
+		moto_dda_process_finger_press(id, &finger_data);
+	}
+#endif
 }
 
 void ili_touch_press(u16 x, u16 y, u16 pressure, u16 id)
@@ -914,6 +930,17 @@ void ili_touch_press(u16 x, u16 y, u16 pressure, u16 id)
 
 		input_mt_sync(ilits->input);
 	}
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+	{
+		struct dda_finger_coords finger_data;
+		finger_data.x = x;
+		finger_data.y = y;
+		finger_data.p = pressure;
+		finger_data.minor = 1;
+		finger_data.major = 1;
+		moto_dda_process_finger_press(id, &finger_data);
+	}
+#endif
 }
 
 void ili_touch_release(u16 x, u16 y, u16 id)
@@ -927,6 +954,9 @@ void ili_touch_release(u16 x, u16 y, u16 id)
 		input_report_key(ilits->input, BTN_TOUCH, 0);
 		input_mt_sync(ilits->input);
 	}
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+	moto_dda_process_finger_release(id);
+#endif
 }
 
 void ili_touch_release_all_point(void)
@@ -943,6 +973,11 @@ void ili_touch_release_all_point(void)
 		ili_touch_release(0, 0, 0);
 	}
 	input_sync(ilits->input);
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+	for (i = 0 ; i < MAX_TOUCH_NUM; i++){
+		moto_dda_process_finger_release(i);
+	}
+#endif
 }
 
 static struct ilitek_touch_info touch_info[MAX_TOUCH_NUM];

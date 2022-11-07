@@ -21,6 +21,10 @@
  */
 #include "firmware/ili9882_fw.h"
 #include "ili9882.h"
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+#include "moto_ts_dda.h"
+#endif
+
 
 /* Debug level */
 bool debug_en = DEBUG_OUTPUT;
@@ -1260,6 +1264,15 @@ int ili_tddi_init(void)
 	ili_wq_ctrl(WQ_BAT, ENABLE);
 	ilits->boot = true;
 #endif
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+	{
+		int err;
+		moto_dda_init("ilitek-ts for Geneva5G");
+		err = moto_dda_register_cdevice();
+        	if (err)
+                	ILI_ERR("Failed register stylus dda device, %d", err);
+	}
+#endif
 
 	PM_WAKEUP_REGISTER(NULL, ilits->ws, "ili_wakelock");
 	if (!ilits->ws) {
@@ -1297,6 +1310,11 @@ void ili_dev_remove(void)
 	kfree(ilits->tr_buf);
 	kfree(ilits->gcoord);
 	ili_interface_dev_exit(ilits);
+
+#ifdef CONFIG_MOTO_DDA_PASSIVESTYLUS
+        moto_dda_exit();
+#endif
+
 }
 
 int ili_dev_init(struct ilitek_hwif_info *hwif)

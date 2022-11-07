@@ -74,3 +74,8 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     ili9882_mmi-objs += ili_mmi_class.o
 endif
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
+
+ifneq ($(filter m y,$(CONFIG_GTP_DDA_STYLUS)),)
+    EXTRA_CFLAGS += -DCONFIG_MOTO_DDA_PASSIVESTYLUS
+    ili9882_mmi-objs += moto_ts_dda.o
+endif
