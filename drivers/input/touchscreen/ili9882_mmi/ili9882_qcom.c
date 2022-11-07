@@ -30,6 +30,10 @@ enum touch_state {
 	TOUCH_LOW_POWER_STATE,
 };
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+extern int ili_mmi_init(struct ilitek_ts_data *ts_data, bool enable);
+#endif
+
 #ifdef ILI_SENSOR_EN
 static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
 
@@ -848,6 +852,26 @@ void ilitek_plat_charger_init(void)
 /* add_for_charger_end */
 #endif
 #endif
+
+#ifdef ILITEK_PEN_NOTIFIER
+#define ENABLE_PASSIVE_PEN_MODE_CMD 0x01
+#define DISABLE_PASSIVE_PEN_MODE_CMD 0x00
+static int pen_notifier_callback(struct notifier_block *self,
+				unsigned long event, void *data)
+{
+	ILI_INFO("Received event(%lu) for pen detection\n", event);
+
+	mutex_lock(&ilits->touch_mutex);
+	if (event == PEN_DETECTION_PULL)
+		ili_ic_func_ctrl("passive_pen", ENABLE_PASSIVE_PEN_MODE_CMD);
+	else if (event == PEN_DETECTION_INSERT)
+		ili_ic_func_ctrl("passive_pen", DISABLE_PASSIVE_PEN_MODE_CMD);
+	mutex_unlock(&ilits->touch_mutex);
+
+    	return 0;
+}
+#endif
+
 static int ilitek_plat_probe(void)
 {
 #ifdef ILI_SENSOR_EN
@@ -903,6 +927,15 @@ static int ilitek_plat_probe(void)
 		if (!ili_sensor_init(ilits))
 			initialized_sensor = true;
 	}
+#endif
+
+#ifdef ILITEK_PEN_NOTIFIER
+	ilits->pen_notif.notifier_call = pen_notifier_callback;
+	pen_detection_register_client(&ilits->pen_notif);
+#endif
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	ili_mmi_init(ilits, true);
 #endif
 
 	ILI_INFO("ILITEK Driver loaded successfully!");

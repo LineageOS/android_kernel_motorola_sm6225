@@ -34,10 +34,6 @@ static int check_dt(struct device_node *np);
 #endif
 #endif
 
-#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
-extern int ili_mmi_init(struct ilitek_ts_data *ts_data, bool enable);
-#endif
-
 struct touch_bus_info {
 	struct spi_driver bus_driver;
 	struct ilitek_hwif_info *hwif;
@@ -608,25 +604,6 @@ static int parse_dt(struct device_node *np)
 }
 #endif
 
-#ifdef ILITEK_PEN_NOTIFIER
-#define ENABLE_PASSIVE_PEN_MODE_CMD 0x01
-#define DISABLE_PASSIVE_PEN_MODE_CMD 0x00
-static int pen_notifier_callback(struct notifier_block *self,
-				unsigned long event, void *data)
-{
-	ILI_INFO("Received event(%lu) for pen detection\n", event);
-
-	mutex_lock(&ilits->touch_mutex);
-	if (event == PEN_DETECTION_PULL)
-		ili_ic_func_ctrl("passive_pen", ENABLE_PASSIVE_PEN_MODE_CMD);
-	else if (event == PEN_DETECTION_INSERT)
-		ili_ic_func_ctrl("passive_pen", DISABLE_PASSIVE_PEN_MODE_CMD);
-	mutex_unlock(&ilits->touch_mutex);
-
-    	return 0;
-}
-#endif
-
 static int ilitek_spi_probe(struct spi_device *spi)
 {
 	struct touch_bus_info *info =
@@ -800,15 +777,6 @@ static int ilitek_spi_probe(struct spi_device *spi)
 
 	if (ili_core_spi_setup(SPI_CLK) < 0)
 		return -EINVAL;
-
-#ifdef ILITEK_PEN_NOTIFIER
-	ilits->pen_notif.notifier_call = pen_notifier_callback;
-	pen_detection_register_client(&ilits->pen_notif);
-#endif
-
-#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
-	ili_mmi_init(ilits, true);
-#endif
 
 	return info->hwif->plat_probe();
 }
