@@ -70,6 +70,7 @@ enum touch_state {
 #endif
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+#include <linux/mmi_device.h>
 extern int nvt_mmi_init(struct nvt_ts_data *ts_data, bool enable);
 #endif
 
@@ -2767,6 +2768,11 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		return ret;
 	}
 #endif
+#else
+	if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+		NVT_ERR("mmi: device not supported\n");
+		return -ENODEV;
+	}
 #endif
 
 	NVT_LOG("start\n");
