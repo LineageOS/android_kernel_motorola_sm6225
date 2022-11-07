@@ -257,6 +257,7 @@ static int get_finger_report(int id, unsigned long arg){
 		finger_buffer_rp = (unsigned char)((wp + (DDA_MAX_BUFFER -
 		MAX_IO_CONTROL_REPORT)) % DDA_MAX_BUFFER);
 	} else {
+		num = MAX_IO_CONTROL_REPORT;	//for safety implementation
 		finger_buffer_rp = 0;
 	}
 	memset(&finger_reports, 0, sizeof(finger_reports));
@@ -339,6 +340,7 @@ static struct file_operations penraw_fops = {
 void moto_dda_process_finger_press(uint8_t touch_id, struct dda_finger_coords *finger_data) {
 	struct dda_finger_info *pfinger_info;
 	int i;
+	unsigned char id_is_found;
 
 	if(touch_id >= DDA_TOUCH_ID_MAX){
 		return;
@@ -358,10 +360,20 @@ void moto_dda_process_finger_press(uint8_t touch_id, struct dda_finger_coords *f
 	dda_finger_report_buf[touch_id].frame_no++;
 	if(DDA_FINGER_RELEASE == dda_finger_report_buf[touch_id].last_status){
 		pfinger_info->coords.status =  DDA_FINGER_ENTER;
+		//check registerd iDs  to avoid duplicated registration.
+		id_is_found = 0;
 		for(i=0;i<DDA_TOUCH_ID_MAX;i++){
-			if(-1 == dda_finger_id_assign_table[i]){
-				dda_finger_id_assign_table[i] = touch_id;
+			if(touch_id == dda_finger_id_assign_table[i]){
+				id_is_found = 1;
 				break;
+			}
+		}
+		if(0 == id_is_found){
+			for(i=0;i<DDA_TOUCH_ID_MAX;i++){
+				if(-1 == dda_finger_id_assign_table[i]){
+					dda_finger_id_assign_table[i] = touch_id;
+					break;
+				}
 			}
 		}
 	}else{
@@ -548,7 +560,7 @@ int moto_dda_register_cdevice(void) {
 void moto_dda_exit(void) {
 	dev_t dev = MKDEV(dda_cdev_ctrl.major_number, MINOR_NUMBER_START);
 
-	/* remove "/dev/novatech_penraw" */
+	/* remove "/dev/moto_penraw" */
 	if (NULL != dda_cdev_ctrl.penraw_char_dev_class) {
 		device_destroy(dda_cdev_ctrl.penraw_char_dev_class,
 			MKDEV(dda_cdev_ctrl.major_number, 0));
