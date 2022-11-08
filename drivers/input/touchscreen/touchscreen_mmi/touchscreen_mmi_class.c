@@ -388,71 +388,6 @@ static ssize_t gesture_store(struct device *dev,
 static DEVICE_ATTR(gesture, (S_IWUSR | S_IWGRP | S_IRUGO), gesture_show, gesture_store);
 #endif
 
-#ifdef CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL
-/*
- * cli_gesture value used to indicate which gesture mode type is enabled
- */
-static ssize_t cli_gesture_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
-
-	return scnprintf(buf, PAGE_SIZE, "%02x\n", touch_cdev->pdata.cli_supported_gesture_type);
-}
-
-static ssize_t cli_gesture_store(struct device *dev,
-			struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
-	unsigned int value = 0;
-	int err = 0;
-
-	mutex_lock(&touch_cdev->extif_mutex);
-	err = sscanf(buf, "%d", &value);
-	if (err < 0) {
-		dev_err(dev, "CLI Failed to convert value\n");
-		return -EINVAL;
-	}
-	switch (value) {
-		case 0x10:
-			dev_info(dev, "%s: CLI zero tap disable\n", __func__);
-			touch_cdev->cli_gesture_mode_type &= 0xFE;
-			break;
-		case 0x11:
-			dev_info(dev, "%s: CLI zero tap enable\n", __func__);
-			touch_cdev->cli_gesture_mode_type |= 0x01;
-			break;
-		case 0x20:
-			dev_info(dev, "%s: CLI single tap disable\n", __func__);
-			touch_cdev->cli_gesture_mode_type &= 0xFD;
-			break;
-		case 0x21:
-			dev_info(dev, "%s: CLI single tap enable\n", __func__);
-			touch_cdev->cli_gesture_mode_type |= 0x02;
-			break;
-		case 0x30:
-			dev_info(dev, "%s: CLI double tap disable\n", __func__);
-			touch_cdev->cli_gesture_mode_type &= 0xFB;
-			break;
-		case 0x31:
-			dev_info(dev, "%s: CLI double tap enable\n", __func__);
-			touch_cdev->cli_gesture_mode_type |= 0x04;
-			break;
-		default:
-			dev_info(dev, "%s: CLI unsupport gesture mode type\n", __func__);
-			;
-	}
-	mutex_unlock(&touch_cdev->extif_mutex);
-	dev_info(dev, "%s: cli_gesture_mode_type = 0x%02x \n", __func__,
-		touch_cdev->cli_gesture_mode_type);
-
-	return size;
-}
-
-static DEVICE_ATTR(cli_gesture, (S_IRUGO | S_IWUSR | S_IWGRP),
-	cli_gesture_show, cli_gesture_store);
-#endif
-
 static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_path.attr,
 	&dev_attr_vendor.attr,
@@ -484,9 +419,6 @@ static struct attribute *sysfs_class_attrs[] = {
 #endif
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	&dev_attr_gesture.attr,
-#endif
-#ifdef CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL
-	&dev_attr_cli_gesture.attr,
 #endif
 	NULL,
 };
@@ -776,6 +708,15 @@ static int get_supplier_handler(struct device *parent, const char **psname)
 	return 0;
 }
 
+static int get_gesture_type_handler(struct device *parent, unsigned char *gesture_type)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+	if (!touch_cdev)
+		return -ENODEV;
+	*gesture_type = touch_cdev->gesture_mode_type;
+	return 0;
+}
+
 static int ts_mmi_default_pinctrl(struct device *parent, int on)
 {
 	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
@@ -873,6 +814,7 @@ int ts_mmi_dev_register(struct device *parent,
 	}
 	touch_cdev->mdata->exports.get_class_fname = get_class_fname_handler;
 	touch_cdev->mdata->exports.get_supplier = get_supplier_handler;
+	touch_cdev->mdata->exports.get_gesture_type = get_gesture_type_handler;
 	touch_cdev->mdata->exports.kobj_notify = &DEV_MMI->kobj;
 
 	down_write(&touchscreens_list_lock);

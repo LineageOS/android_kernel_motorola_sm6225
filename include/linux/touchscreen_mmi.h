@@ -276,6 +276,7 @@ struct gesture_event_data {
  */
 struct ts_mmi_class_methods {
 	int     (*report_gesture)(struct gesture_event_data *gev);
+	int     (*get_gesture_type)(struct device *dev, unsigned char *gesture_type);
 	int     (*report_palm)(bool value);
 	int     (*get_class_fname)(struct device *dev , const char **fname);
 	int     (*get_supplier)(struct device *dev , const char **sname);
@@ -286,15 +287,8 @@ struct ts_mmi_class_methods {
 enum ts_mmi_pm_mode {
 	TS_MMI_PM_DEEPSLEEP = 0,
 	TS_MMI_PM_GESTURE,
-	TS_MMI_PM_ACTIVE,
-	TS_MMI_PM_GESTURE_SINGLE,
-	TS_MMI_PM_GESTURE_DOUBLE,
-	TS_MMI_PM_GESTURE_ZERO,
-	TS_MMI_PM_GESTURE_SWITCH,
-	TS_MMI_PM_GESTURE_CLI_SINGLE,
-	TS_MMI_PM_GESTURE_CLI_DOUBLE,
-	TS_MMI_PM_GESTURE_CLI_ZERO
-};
+	TS_MMI_PM_ACTIVE
+	};
 
 enum ts_mmi_panel_event {
 	TS_MMI_EVENT_PRE_DISPLAY_OFF,
@@ -324,6 +318,10 @@ enum ts_mmi_panel_event {
 #define TOUCHSCREEN_MMI_DEFAULT_POISON_TIMEOUT_MS	800
 #define TOUCHSCREEN_MMI_DEFAULT_POISON_TRIGGER_DISTANCE	120
 #define TOUCHSCREEN_MMI_DEFAULT_POISON_DISTANCE	25
+
+#define TS_MMI_GESTURE_ZERO 0x01
+#define TS_MMI_GESTURE_SINGLE 0x02
+#define TS_MMI_GESTURE_DOUBLE 0x04
 
 /**
  * struct touchscreen_mmi_methods - hold vendor provided functions
@@ -432,7 +430,6 @@ struct ts_mmi_dev_pdata {
 	const char 	*bound_display;
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	int supported_gesture_type;
-	int cli_supported_gesture_type;
 #endif
 };
 
@@ -458,10 +455,7 @@ struct ts_mmi_dev {
 	struct device		*class_dev;
 	dev_t			class_dev_no;
 	int			forcereflash;
-#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	unsigned char gesture_mode_type;
-	unsigned char cli_gesture_mode_type;
-#endif
 	int			panel_status;
 	struct ts_mmi_dev_pdata	pdata;
 #if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)

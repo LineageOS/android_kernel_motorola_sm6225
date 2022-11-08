@@ -167,12 +167,6 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 				__func__, ppdata->supported_gesture_type);
 #endif
 
-#ifdef CONFIG_BOARD_USES_CLI_DOUBLE_TAP_CTRL
-	if (!of_property_read_u32(of_node, "mmi,cli_supported_gesture_type", &ppdata->cli_supported_gesture_type))
-		dev_info(DEV_TS, "%s: cli_supported_gesture_type property %02x\n",
-				__func__, ppdata->cli_supported_gesture_type);
-#endif
-
 	chosen = of_find_node_by_name(NULL, "chosen");
 	if (chosen) {
 		struct device_node *child;
