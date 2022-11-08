@@ -259,7 +259,7 @@ static int sgm4154x_set_thermal_mitigation(struct sgm4154x_device *sgm, int val)
 	if (!sgm->num_thermal_levels)
 		return 0;
 
-	if (sgm->num_thermal_levels < 0) {
+	if (sgm->num_thermal_levels < 0 || sgm->user_ichg) {
 		pr_err("Incorrect num_thermal_levels\n");
 		return -EINVAL;
 	}
@@ -279,6 +279,7 @@ static int sgm4154x_set_thermal_mitigation(struct sgm4154x_device *sgm, int val)
 	} else {
 		sgm->curr_thermal_level = val;
 	}
+	pr_info("thermal level: %d, thermal fcc: %d\n", sgm->curr_thermal_level, sgm->thermal_fcc_ua);
 
 	return ret;
 }
@@ -1061,13 +1062,25 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = sgm4154x_set_input_curr_lim(sgm, val->intval);
+		if (val->intval == -1) {
+			sgm->user_ilim = false;
+			ret = 0;
+		} else {
+			sgm->user_ilim = true;
+			ret = sgm4154x_set_input_curr_lim(sgm, val->intval);
+		}
 		break;
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = sgm4154x_set_input_volt_lim(sgm, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
-		ret = sgm4154x_set_ichrg_curr(sgm, val->intval);
+		if (val->intval == -1) {
+			sgm->user_ichg = false;
+			ret = 0;
+		} else {
+			sgm->user_ichg = true;
+			ret = sgm4154x_set_ichrg_curr(sgm, val->intval);
+		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		ret = sgm4154x_set_thermal_mitigation(sgm, val->intval);
@@ -1076,6 +1089,7 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 		return -EINVAL;
 	}
 
+	pr_info("user_ilim %d, user_ichg %d", sgm->user_ilim, sgm->user_ichg);
 	return ret;
 }
 
@@ -2355,7 +2369,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 			chg->chg_cfg.target_fv = config->target_fv;
 		}
 	}
-	if (!config->charging_disable &&
+	if (!chg->sgm->user_ichg && !config->charging_disable &&
 	    !config->charger_suspend &&
 	    config->target_fcc != chg->chg_cfg.target_fcc) {
 		value = config->target_fcc * 1000;
@@ -2452,7 +2466,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	}
 	prev_chg_en = chg_en;
 
-	if (chg->chg_info.chrg_present && !state.hiz_en &&
+	if (!chg->sgm->user_ilim && chg->chg_info.chrg_present && !state.hiz_en &&
 	    chg->sgm->use_ext_usb_psy && chg->sgm->usb) {
 		if (state.ibus_limit < DEF_USB_CURRENT_MA &&
 		    state.ibus_adc < DEF_USB_CURRENT_MA) {

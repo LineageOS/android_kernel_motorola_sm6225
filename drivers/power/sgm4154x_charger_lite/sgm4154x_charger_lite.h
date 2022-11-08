@@ -348,6 +348,8 @@ struct sgm4154x_device {
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
 	u32 vreg;	/* regulation voltage		*/
+	bool user_ichg; /* user charge current		*/
+	bool user_ilim; /* user input current		*/
 
 	bool batt_present;
 	bool otg_enabled;
