@@ -1703,6 +1703,51 @@ static ssize_t activate_show(struct device *dev, struct device_attribute *attr,
 	return snprintf(buf, PAGE_SIZE, "activate = %d\n", aw_haptic->state);
 }
 
+#ifdef HAPTIC_HV_HAL_COMPAT
+/* Moto-HAL-compatible. If "duration" has been set to less than or equal to
+   100ms, perform a single short vibration using seq[0]. If "duration" has been
+   set to higher than 100ms, perform a long vibration for "duration" ms using
+   waveform index 2. */
+static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
+                              const char *buf, size_t count)
+{
+	cdev_t *cdev = dev_get_drvdata(dev);
+	struct aw_haptic *aw_haptic = container_of(cdev, struct aw_haptic, vib_dev);
+
+	uint32_t val = 0;
+	int rc = 0;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	if (val != 0 && val != 1)
+		return -EINVAL;
+
+	aw_info("value=%d", val);
+
+	if (!aw_haptic->ram_init) {
+		aw_err("ram init failed, not allow to play!");
+		return -EIO;
+	}
+
+	mutex_lock(&aw_haptic->lock);
+	aw_haptic->state = val;
+	if (aw_haptic->duration <= 100) { /* Short vibration */
+		aw_haptic->activate_mode = AW_RAM_MODE;
+		aw_haptic->loop[0] = 0x00;
+		aw_haptic->func->set_wav_loop(aw_haptic, 0x00, 0x00);
+	} else { /* Long vibration */
+		aw_haptic->activate_mode = AW_RAM_LOOP_MODE;
+		aw_haptic->index = 0x02;
+		aw_haptic->func->set_repeat_seq(aw_haptic, aw_haptic->index);
+	}
+	mutex_unlock(&aw_haptic->lock);
+	schedule_work(&aw_haptic->vibrator_work);
+
+	return count;
+}
+#else /* #ifdef HAPTIC_HV_HAL_COMPAT */
 static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
@@ -1728,6 +1773,7 @@ static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
+#endif /* #ifdef HAPTIC_HV_HAL_COMPAT */
 
 static ssize_t activate_mode_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
@@ -1875,6 +1921,38 @@ static ssize_t seq_show(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+#ifdef HAPTIC_HV_HAL_COMPAT
+/* Moto-HAL-compatible. Takes a 32-bit value, with the most significant byte
+   assigned to seq[0], the next most significant byte being assigned to seq[1],
+   next to seq[2], and the least significant byte being assigned to seq[3]. */
+static ssize_t seq_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	cdev_t *cdev = dev_get_drvdata(dev);
+	struct aw_haptic *aw_haptic = container_of(cdev, struct aw_haptic, vib_dev);
+	unsigned int i, val = 0, seq_val;
+	int rc;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	aw_info("seq=0x%08X", val);
+	for (i = 0; i < 4; i++) {
+		seq_val = (val >> ((4-i-1) * 8)) & 0xFF;
+		if (seq_val > aw_haptic->ram.ram_num) {
+			aw_err("seq[%d]: Input value out of range! (0x%02X)", i, seq_val);
+			seq_val = 0;
+		}
+		aw_haptic->seq[i] = seq_val;
+		mutex_lock(&aw_haptic->lock);
+		aw_haptic->func->set_wav_seq(aw_haptic, i, aw_haptic->seq[i]);
+		mutex_unlock(&aw_haptic->lock);
+	}
+
+	return count;
+}
+#else /* #ifdef HAPTIC_HV_HAL_COMPAT */
 static ssize_t seq_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count)
 {
@@ -1898,6 +1976,7 @@ static ssize_t seq_store(struct device *dev, struct device_attribute *attr,
 	}
 	return count;
 }
+#endif /* #ifdef HAPTIC_HV_HAL_COMPAT */
 
 static ssize_t loop_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
