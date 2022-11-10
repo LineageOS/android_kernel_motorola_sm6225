@@ -625,7 +625,7 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 
 	mmi_info(chg, "Wireless dump info -2: TX_IIN: %dmA, TX_VIN: %dmV, TX_VRECT: %dmV, "
 		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, "
-		"RX_CONNECTED: %d",
+		"RX_CONNECTED: %d, TX_EPT_RSN: 0x%04x, ",
 		wls_info.tx_iin_ma,
 		wls_info.tx_vin_mv,
 		wls_info.tx_vrect_mv,
@@ -633,7 +633,8 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.tx_power,
 		wls_info.power_loss,
 		(wls_info.irq_status & (0x01<<12)) ? 1 : 0,
-		chg->rx_connected);
+		chg->rx_connected,
+		wls_info.tx_ept);
 
 	mmi_info(chg, "Wireless dump info -3: rx_ept: %d, rx_ce: %d, "
 		"rx_rp: %d, rx_dietemp: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
@@ -674,15 +675,14 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.rx_neg_power);
 
 	mmi_info(chg, "Wireless dump info -2: TX_IIN: %dmA, TX_VIN: %dmV, TX_VRECT: %dmV, "
-		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, TX_EPT_RSN: 0x%04x, ",
+		"TX_DET_RX_POWER: %dmW, TX_POWER: %dmW, POWER_LOSS: %dmW, TX_FOD: %d, ",
 		wls_info.tx_iin_ma,
 		wls_info.tx_vin_mv,
 		wls_info.tx_vrect_mv,
 		wls_info.tx_det_rx_power,
 		wls_info.tx_power,
 		wls_info.power_loss,
-		(wls_info.irq_status & (0x01<<12)) ? 1 : 0,
-		wls_info.tx_ept);
+		(wls_info.irq_status & (0x01<<12)) ? 1 : 0);
 
 	mmi_info(chg, "Wireless dump info -3: FOLIO_MODE: %d, PEN_STATUS: %d, "
 		"PEN_SOC: %d, PEN_ERROR: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
