@@ -919,7 +919,10 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
 	int ret = 0;
-	static unsigned short gesture_cmd = 0xFFFF;
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	unsigned short gesture_cmd = 0xFFFF;
+	unsigned char gesture_type = 0;
+#endif
 
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
@@ -928,30 +931,23 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	case TS_MMI_PM_GESTURE:
 		hw_ops->irq_enable(core_data, false);
 		if (hw_ops->gesture)
-#if defined(PRODUCT_MIAMI)
-			hw_ops->gesture(core_data, 0x80);
-#else
-			hw_ops->gesture(core_data, 0);
-#endif
-		msleep(16);
-		hw_ops->irq_enable(core_data, true);
-		enable_irq_wake(core_data->irq);
-		core_data->gesture_enabled = true;
-		break;
-	case TS_MMI_PM_GESTURE_ZERO:
-		gesture_cmd &= ~(1 << 5);
-		ts_info("enable zero gesture mode cmd 0x%04x\n", gesture_cmd);
-		break;
-	case TS_MMI_PM_GESTURE_SINGLE:
-		gesture_cmd &= ~(1 << 4);
-		ts_info("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
-		break;
-	case TS_MMI_PM_GESTURE_DOUBLE:
-		gesture_cmd &= ~(1 << 15);
-		ts_info("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
-		break;
-	case TS_MMI_PM_GESTURE_SWITCH:
-		hw_ops->irq_enable(core_data, false);
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+		if (core_data->imports && core_data->imports->get_gesture_type) {
+			ret = core_data->imports->get_gesture_type(core_data->bus->dev, &gesture_type);
+		}
+		if (gesture_type & TS_MMI_GESTURE_ZERO) {
+			gesture_cmd &= ~(1 << 5);
+			ts_info("enable zero gesture mode cmd 0x%04x\n", gesture_cmd);
+		}
+		if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+			gesture_cmd &= ~(1 << 4);
+			ts_info("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
+		}
+		if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+			gesture_cmd &= ~(1 << 15);
+			ts_info("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
+		}
+
 		ret = goodix_ts_send_cmd(core_data, ENTER_GESTURE_MODE_CMD, 6, 0xFF, 0xFF);
 		if (ret < 0) {
 			ts_err("Failed to send enter gesture mode\n");
@@ -961,8 +957,14 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 		if (ret < 0) {
 			ts_err("Failed to send enable gesture mode\n");
 		}
-		ts_info("Send enable gesture mode 0x%04x\n", gesture_cmd);
-		gesture_cmd = 0xFFFF;
+		ts_info("Send enable gesture mode 0x%04x, 0x%02x\n", gesture_cmd, gesture_type);
+#else
+#if defined(PRODUCT_MIAMI)
+			hw_ops->gesture(core_data, 0x80);
+#else
+			hw_ops->gesture(core_data, 0);
+#endif
+#endif
 		msleep(16);
 		hw_ops->irq_enable(core_data, true);
 		enable_irq_wake(core_data->irq);
