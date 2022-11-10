@@ -235,7 +235,10 @@ static int fts_mmi_panel_state(struct device *dev,
 	struct fts_ts_platform_data *pdata;
 	struct fts_ts_data *ts_data;
 	int ret = 0;
-	static u8 gesture_command = 0;
+#if defined(CONFIG_FTS_DOUBLE_TAP_CONTROL)
+	u8 gesture_command = 0;
+	unsigned char gesture_type = 0;
+#endif
 
 	GET_TS_DATA(dev);
 	pdata = ts_data->pdata;
@@ -249,6 +252,24 @@ static int fts_mmi_panel_state(struct device *dev,
 			break;
 
 		case TS_MMI_PM_GESTURE:
+#if defined(CONFIG_FTS_DOUBLE_TAP_CONTROL)
+			if (ts_data->imports && ts_data->imports->get_gesture_type) {
+				ret = ts_data->imports->get_gesture_type(ts_data->dev, &gesture_type);
+			}
+
+			if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+				gesture_command |= (1 << 7);
+				FTS_INFO("Enable GESTURE_CLI_SINGLE command: %02x", gesture_command);
+			}
+			if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+				gesture_command |= (1 << 4);
+				FTS_INFO("Enable GESTURE_CLI_DOUBLE command: %02x", gesture_command);
+			}
+
+			FTS_INFO("CLI GESTURE SWITCH command: %02x", gesture_command);
+			ts_data->gsx_cmd = gesture_command;
+#endif
+
 #if FTS_GESTURE_EN
 			if (fts_gesture_suspend(ts_data) == 0) {
 			/* Enter into gesture mode(suspend) */
@@ -258,26 +279,6 @@ static int fts_mmi_panel_state(struct device *dev,
 #endif
 			}
 #endif
-			break;
-
-		case TS_MMI_PM_GESTURE_CLI_SINGLE:
-			gesture_command |= (1 << 7);
-			FTS_INFO("Enable GESTURE_CLI_SINGLE command: %02x", gesture_command);
-			break;
-
-		case TS_MMI_PM_GESTURE_CLI_DOUBLE:
-			gesture_command |= (1 << 4);
-			FTS_INFO("Enable GESTURE_CLI_DOUBLE command: %02x", gesture_command);
-			break;
-
-		case TS_MMI_PM_GESTURE_SWITCH:
-			FTS_INFO("CLI GESTURE SWITCH command: %02x", gesture_command);
-			ts_data->gsx_cmd = gesture_command;
-			if (fts_gesture_suspend(ts_data) == 0) {
-				ts_data->wakeable = true;
-				ts_data->gesture_support = true;
-			}
-			gesture_command  = 0;
 			break;
 
 		case TS_MMI_PM_ACTIVE:
