@@ -681,8 +681,8 @@ void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_
 		wls_info.tx_det_rx_power,
 		wls_info.tx_power,
 		wls_info.power_loss,
-		(wls_info.irq_status & (0x01<<12)) ? 1 : 0),
-		wls_info.tx_ept;
+		(wls_info.irq_status & (0x01<<12)) ? 1 : 0,
+		wls_info.tx_ept);
 
 	mmi_info(chg, "Wireless dump info -3: FOLIO_MODE: %d, PEN_STATUS: %d, "
 		"PEN_SOC: %d, PEN_ERROR: %d, USB_OTG: %d, WLS_BOOST: %d, WLS_ICL_MA: %dmA, WLS_ICL_THERM_MA: %dmA",
