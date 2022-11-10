@@ -184,6 +184,12 @@ static int ili_mmi_firmware_update(struct device *dev, char *fwname)
 static int ili_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
+        struct ilitek_ts_data __maybe_unused *ts_data;
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+        unsigned char gesture_type = 0;
+#endif
+        GET_TS_DATA(dev);
+
 	ILI_INFO("%s: panel state change: %d->%d\n", __func__, from, to);
 	ILI_INFO("panel state change: %d->%d\n", from, to);
 	switch (to) {
@@ -191,27 +197,32 @@ static int ili_mmi_panel_state(struct device *dev,
 #ifdef ILI_SET_TOUCH_STATE
 			ilits->should_enable_gesture = true;
 			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#else
+			ilits->should_enable_gesture = false;
 #endif
-			break;
 
-		case TS_MMI_PM_GESTURE_SINGLE:
-			ilits->ges_sym.single_tap = SINGLE_TAP;
-			ILI_INFO("enable single gesture mode\n");
-			break;
-		case TS_MMI_PM_GESTURE_DOUBLE:
-			ilits->ges_sym.double_tap = DOUBLE_TAP;
-			ILI_INFO("enable double gesture mode\n");
-			break;
-		case TS_MMI_PM_GESTURE_SWITCH:
-#ifdef ILI_SET_TOUCH_STATE
-			ilits->should_enable_gesture = true;
-			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
-#endif
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+                        if (ts_data->imports && ts_data->imports->get_gesture_type) {
+                                ts_data->imports->get_gesture_type(ts_data->dev, &gesture_type);
+		        }
+
+		        if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+			        ilits->ges_sym.single_tap = SINGLE_TAP;
+			        ILI_INFO("enable single gesture mode\n");
+		        }
+
+		        if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+			        ilits->ges_sym.double_tap = DOUBLE_TAP;
+			        ILI_INFO("enable double gesture mode\n");
+		        }
+
 			/*---write command to enter "wakeup gesture mode"---*/
 			ili_sleep_handler(TP_SUSPEND);
 			ilits->ges_sym.single_tap = OFF;
 			ilits->ges_sym.double_tap = OFF;
+#endif
 			break;
+
 		case TS_MMI_PM_DEEPSLEEP:
 			ilits->should_enable_gesture = false;
 #ifdef ILI_SET_TOUCH_STATE

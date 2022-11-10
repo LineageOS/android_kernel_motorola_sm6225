@@ -220,6 +220,14 @@ do {									\
 	pr_info("ILITEK: (%s, %d): " fmt, __func__, __LINE__, ##arg);	\
 } while (0)
 
+#define GET_TS_DATA(dev) { \
+	ts_data = dev_get_drvdata(dev); \
+	if (!ts_data) { \
+		ILI_ERR("Failed to get driver data"); \
+		return -ENODEV; \
+	} \
+}
+
 #define ERR_ALLOC_MEM(X)	((IS_ERR(X) || X == NULL) ? 1 : 0)
 #define K			(1024)
 #define M			(K * K)
