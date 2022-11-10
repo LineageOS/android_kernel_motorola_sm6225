@@ -578,7 +578,10 @@ static int nvt_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
 	struct nvt_ts_data *ts_data;
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
 	static uint8_t gesture_cmd = 0x00;
+	unsigned char gesture_type = 0;
+#endif
 
 	GET_TS_DATA(dev);
 	dev_dbg(dev, "%s: panel state change: %d->%d\n", __func__, from, to);
@@ -587,32 +590,35 @@ static int nvt_mmi_panel_state(struct device *dev,
 	switch (to) {
 		case TS_MMI_PM_GESTURE:
 #ifdef NVT_SET_TOUCH_STATE
-			ts->gesture_enabled = true;
-			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+		        ts->gesture_enabled = true;
+		        touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
 #else
-			ts->gesture_enabled = false;
+		        ts->gesture_enabled = false;
 #endif
-			break;
 
-		case TS_MMI_PM_GESTURE_SINGLE:
-			gesture_cmd |= 0x02;
-			NVT_LOG("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
-			break;
-		case TS_MMI_PM_GESTURE_DOUBLE:
-			gesture_cmd |= 0x04;
-			NVT_LOG("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
-			break;
-		case TS_MMI_PM_GESTURE_SWITCH:
-#ifdef NVT_SET_TOUCH_STATE
-			ts->gesture_enabled = true;
-			touch_set_state(TS_MMI_PM_GESTURE, TOUCH_PANEL_IDX_PRIMARY);
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+                        if (ts_data->imports && ts_data->imports->get_gesture_type) {
+                                ts_data->imports->get_gesture_type(dev, &gesture_type);
+		        }
+
+		        if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+                                gesture_cmd |= 0x02;
+                                NVT_LOG("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
+		        }
+
+		        if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+			        gesture_cmd |= 0x04;
+			        NVT_LOG("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
+		        }
+
+                        //---write command to enter "wakeup gesture mode"---
+                        if (gesture_cmd == 0x06)
+                                gesture_cmd = 0x03;
+                        nvt_cmd_ext_store(DOUBLE_TAP_GESTURE_MODE_CMD, gesture_cmd);
+                        gesture_cmd = 0x00;
 #endif
-			//---write command to enter "wakeup gesture mode"---
-			if (gesture_cmd == 0x06)
-				gesture_cmd = 0x03;
-			nvt_cmd_ext_store(DOUBLE_TAP_GESTURE_MODE_CMD, gesture_cmd);
-			gesture_cmd = 0x00;
-			break;
+                        break;
+
 		case TS_MMI_PM_DEEPSLEEP:
 			ts->gesture_enabled = false;
 #ifdef NVT_SET_TOUCH_STATE
