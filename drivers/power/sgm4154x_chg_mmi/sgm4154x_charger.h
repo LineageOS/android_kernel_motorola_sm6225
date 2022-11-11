@@ -364,6 +364,10 @@ struct sgm4154x_device {
 	int			final_cv;
 	int			cv_tune;
 
+	/* enable dynamic adjust vindpm */
+	bool enable_dynamic_adjust_vindpm;
+	bool			vindpm_flag;
+
 	struct regulator	*dpdm_reg;
 	struct regulator	*otg_vbus_reg;
 	struct mutex		regulator_lock;

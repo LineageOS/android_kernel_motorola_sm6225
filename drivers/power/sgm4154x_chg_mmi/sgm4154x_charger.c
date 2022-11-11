@@ -1635,6 +1635,8 @@ static void charger_monitor_work_func(struct work_struct *work)
 	/* enable dynamic adjust battery voltage */
 	union power_supply_propval val_battery = {0};
 	int vbat_uv, ibat_ua;
+	/* enable dynamic adjust battery voltage */
+	int soc;
 
 	charge_monitor_work = container_of(work, struct delayed_work, work);
 	if(charge_monitor_work == NULL) {
@@ -1675,6 +1677,25 @@ static void charger_monitor_work_func(struct work_struct *work)
 			dev_err(sgm->dev, "ibat=%duA, cc=%duA,tune=%d\n", ibat_ua, sgm->final_cc,sgm->cv_tune);
 			if ((ibat_ua > 10000 && ibat_ua < (sgm->final_cc - 100000)) || vbat_uv > sgm->final_cv) {
 				sgm4154x_adjust_constant_voltage(sgm, vbat_uv);
+			}
+		}
+	}
+
+	/* enable dynamic adjust vindpm */
+	if(sgm->enable_dynamic_adjust_vindpm){
+		if (!sgm->battery)
+			sgm->battery = power_supply_get_by_name ("battery");
+		if (sgm->battery) {
+			power_supply_get_property(sgm->battery, POWER_SUPPLY_PROP_CAPACITY, &val_battery);
+			soc = val_battery.intval;
+			dev_err(sgm->dev, "soc = %d\n", soc);
+			if(soc > 80 && sgm->vindpm_flag == false){
+				ret = sgm4154x_set_input_volt_lim(sgm, 4700000);
+				sgm->vindpm_flag = true;
+			}
+			if(soc <= 80 && sgm->vindpm_flag){
+				ret = sgm4154x_set_input_volt_lim(sgm, sgm->init_data.vlim);
+				sgm->vindpm_flag = false;
 			}
 		}
 	}
@@ -2216,6 +2237,8 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 
 static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 {
+	/* enable dynamic adjust vindpm */
+	int ret = 0;
 	dev_err(sgm->dev, "Vbus removed, disable charge\n");
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
@@ -2231,6 +2254,13 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 		sgm4154x_set_chrg_adjust_volt(sgm, sgm->final_cv, 0);
 		mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_f, SGM4154x_VREG_FT_MASK, 0);
 	}
+
+	/* enable dynamic adjust vindpm */
+	if(sgm->enable_dynamic_adjust_vindpm){
+		ret = sgm4154x_set_input_volt_lim(sgm, sgm->init_data.vlim);
+		sgm->vindpm_flag = false;
+	}
+
 	sgm->pulse_cnt = 0;
 	sgm->mmi_qc3p_rerun_done = false;
 	sgm->mmi_qc3p_wa = false;
@@ -2674,6 +2704,13 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	/* enable dynamic adjust battery voltage */
 	sgm->enable_dynamic_adjust_batvol = of_property_read_bool(sgm->dev->of_node, "enable_dynamic_adjust_batvol");
 	dev_err(sgm->dev, "%s: enable_dynamic_adjust_batvol = %d \n", __func__, sgm->enable_dynamic_adjust_batvol);
+
+	/* enable dynamic adjust vindpm */
+	sgm->enable_dynamic_adjust_vindpm = of_property_read_bool(sgm->dev->of_node, "enable_dynamic_adjust_vindpm");
+	dev_err(sgm->dev, "%s: enable_dynamic_adjust_vindpm = %d \n", __func__, sgm->enable_dynamic_adjust_vindpm);
+	if(sgm->enable_dynamic_adjust_vindpm){
+		sgm->vindpm_flag = false;
+	}
 
 	if (of_property_read_u32(sgm->dev->of_node, "jeita_temp_above_t4_cv", &val) >= 0)
 		sgm->data.jeita_temp_above_t4_cv = val;
