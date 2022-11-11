@@ -217,6 +217,10 @@ struct bq2589x {
 	int	final_cv;
 	int	cv_tune;
 
+	/* enable dynamic adjust vindpm */
+	bool enable_dynamic_adjust_vindpm;
+	int			vindpm_flag;
+
 	/*mmi qc3*/
 	bool mmi_qc3_support;
 	struct	semaphore sem_dpdm;
@@ -1519,6 +1523,13 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 	bq->enable_dynamic_adjust_batvol = of_property_read_bool(np, "enable_dynamic_adjust_batvol");
 	dev_err(bq->dev, "%s: enable_dynamic_adjust_batvol = %d \n", __func__, bq->enable_dynamic_adjust_batvol);
 
+	/* enable dynamic adjust vindpm */
+	bq->enable_dynamic_adjust_vindpm = of_property_read_bool(np, "enable_dynamic_adjust_vindpm");
+	dev_err(bq->dev, "%s: enable_dynamic_adjust_vindpm = %d \n", __func__, bq->enable_dynamic_adjust_vindpm);
+	if(bq->enable_dynamic_adjust_vindpm){
+		bq->vindpm_flag = false;
+	}
+
 	ret = of_property_read_u32(np, "ti,bq2589x,charge-voltage",&bq->cfg.charge_voltage);
 	if (ret)
 		return ret;
@@ -2628,6 +2639,22 @@ static void bq2589x_monitor_workfunc(struct work_struct *work)
 		}
 	}
 
+	/* enable dynamic adjust vindpm */
+	if(bq->enable_dynamic_adjust_vindpm){
+		if (!bq->battery)
+			bq->battery = power_supply_get_by_name ("battery");
+		if (bq->battery) {
+			if(bq->rsoc > 80 && bq->vindpm_flag == false){
+				ret = bq2589x_set_input_volt_limit(bq, 4700);
+				bq->vindpm_flag = true;
+			}
+			if(bq->rsoc <= 80 && bq->vindpm_flag){
+				ret = bq2589x_set_input_volt_limit(bq, bq->cfg.vindpm);
+				bq->vindpm_flag = false;
+			}
+		}
+	}
+
 	for (addr = 0x0; addr <= 0x14; addr++) {
 		ret = bq2589x_read_byte(bq, &val, addr);
 		if (ret == 0) {
@@ -2694,6 +2721,11 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 		dev_info(bq->dev, "%s:adapter removed\n", __func__);
 		bq->status &= ~BQ2589X_STATUS_PLUGIN;
 		bq2589x_adapter_out_func(bq);
+		/* enable dynamic adjust vindpm */
+		if(bq->enable_dynamic_adjust_vindpm){
+			ret = bq2589x_set_input_volt_limit(bq, bq->cfg.vindpm);
+			bq->vindpm_flag = false;
+		}
 	} else if ((bq->vbus_type != BQ2589X_VBUS_NONE) && (bq->vbus_type != BQ2589X_VBUS_OTG)
 			&& (!(bq->status & BQ2589X_STATUS_PLUGIN) || (reapsd_complete == true))
 			&& state.online) {
