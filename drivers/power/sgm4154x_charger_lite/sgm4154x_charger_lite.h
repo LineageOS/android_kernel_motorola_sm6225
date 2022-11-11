@@ -221,6 +221,7 @@
 struct sgm4154x_init_data {
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
+	u32 wlim;	/* wireless input current	*/
 	u32 vreg;	/* regulation voltage		*/
 	u32 iterm;	/* termination current		*/
 	u32 iprechg;	/* precharge current		*/
@@ -287,6 +288,7 @@ struct sgm_mmi_charger {
 	u32				chrg_taper_cnt;
 	const char			*fg_psy_name;
 	struct power_supply		*fg_psy;
+	struct power_supply		*wls_psy;
 	int ichg_polority;
 
 	int paired_ichg;

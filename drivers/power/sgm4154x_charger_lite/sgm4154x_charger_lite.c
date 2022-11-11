@@ -1816,6 +1816,14 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	    sgm->init_data.ilim < SGM4154x_IINDPM_I_MIN_uA)
 		return -EINVAL;
 
+	ret = device_property_read_u32(sgm->dev,
+				       "wls-current-limit-microamp",
+				       &sgm->init_data.wlim);
+	if (ret)
+		sgm->init_data.wlim = SGM4154x_IINDPM_I_MIN_uA;
+
+	pr_info("wireless input current limit: %duA\n", sgm->init_data.wlim);
+
 	irq_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio))
 	{
@@ -2271,6 +2279,25 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
         return 0;
 }
 
+static int is_wls_online(struct sgm_mmi_charger *chg)
+{
+	int rc;
+	union power_supply_propval val;
+
+	if (!chg->wls_psy)
+		return 0;
+
+	rc = power_supply_get_property(chg->wls_psy,
+			POWER_SUPPLY_PROP_ONLINE, &val);
+	if (rc < 0) {
+		pr_err("Error wls online rc = %d\n", rc);
+		return 0;
+	}
+
+	pr_debug("wireless online is %d", val.intval);
+	return val.intval;
+}
+
 static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 {
 	int rc;
@@ -2522,7 +2549,12 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		if (curr_in_limit > chg->sgm->init_data.ilim)
 			curr_in_limit = chg->sgm->init_data.ilim;
 	} else if (!chg->chg_info.chrg_present) {
-		curr_in_limit = 0;
+		if (is_wls_online(chg) && chg->sgm->init_data.wlim) {
+			curr_in_limit = chg->sgm->init_data.wlim;
+			pr_info("wireless is on, set current limit to %d", curr_in_limit);
+		} else {
+			curr_in_limit = 0;
+		}
 	}
 
 	if (chg->sgm->ilim != curr_in_limit) {
@@ -2780,6 +2812,15 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 			return -ENODEV;
 		}
 		pr_info("%s power supply is found\n", chg->fg_psy_name);
+	}
+
+	if (!chg->wls_psy) {
+		chg->wls_psy = power_supply_get_by_name("wireless");
+		if (!chg->wls_psy) {
+			pr_err("wireless power supply found\n");
+			return -ENODEV;
+		}
+		pr_info("wireless power supply is found\n");
 	}
 
 	if (chg->driver) {
