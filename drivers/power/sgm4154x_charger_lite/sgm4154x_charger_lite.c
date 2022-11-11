@@ -706,6 +706,25 @@ static int sgm4154x_set_wdt_rst(struct sgm4154x_device *sgm, bool is_rst)
 }
 #endif
 
+static int is_wls_online(struct sgm4154x_device *sgm)
+{
+	int rc;
+	union power_supply_propval val;
+
+	if (!sgm->use_ext_wls_psy || !sgm->wls_psy)
+		return 0;
+
+	rc = power_supply_get_property(sgm->wls_psy,
+			POWER_SUPPLY_PROP_ONLINE, &val);
+	if (rc < 0) {
+		pr_err("Error wls online rc = %d\n", rc);
+		return 0;
+	}
+
+	pr_debug("wireless online is %d", val.intval);
+	return val.intval;
+}
+
 static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 			     struct sgm4154x_state *state)
 {
@@ -771,6 +790,13 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 		state->chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
 		state->online = !!(chrg_stat & SGM4154x_PG_STAT);
 	};
+
+	if (!state->online && is_wls_online(sgm)) {
+		state->online = 1;
+		state->chrg_type = SGM4154x_WLS_TYPE;
+	} else {
+		state->online = 0;
+	}
 
 	state->therm_stat = !!(chrg_stat & SGM4154x_THERM_STAT);
 	state->vsys_stat = !!(chrg_stat & SGM4154x_VSYS_STAT);
@@ -1379,6 +1405,26 @@ static void charger_detect_work_func(struct work_struct *work)
 		}
 	}
 
+	if (sgm->use_ext_wls_psy) {
+		if (!sgm->wls_psy) {
+			const char *wls_psy_name = NULL;
+			ret = device_property_read_string(sgm->dev,
+						"mmi,ext-wls-psy-name",
+						&wls_psy_name);
+			if (!ret && wls_psy_name)
+				sgm->wls_psy = power_supply_get_by_name(wls_psy_name);
+			if (!sgm->wls_psy) {
+				pr_info("No Wireless power supply found, redetecting...\n");
+				cancel_delayed_work(&sgm->charge_detect_delayed_work);
+				schedule_delayed_work(&sgm->charge_detect_delayed_work,
+							msecs_to_jiffies(1000));
+				return;
+			} else {
+				pr_info("WLS power supply is found\n");
+			}
+		}
+	}
+
 	if (sgm->mmi_charger &&
 	    (!sgm->mmi_charger->fg_psy || !sgm->mmi_charger->driver)) {
 		sgm4154x_mmi_charger_init(sgm->mmi_charger);
@@ -1637,6 +1683,7 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	int irq_gpio = 0, irqn = 0;
 	enum of_gpio_flags flags;
 	const char *usb_psy_name = NULL;
+	const char *wls_psy_name = NULL;
 	int i, len;
 	u32 prev, val;
 	struct device_node *node = sgm->dev->of_node;
@@ -1716,6 +1763,14 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		sgm->use_ext_usb_psy = true;
 	else
 		sgm->use_ext_usb_psy = false;
+
+	ret = device_property_read_string(sgm->dev,
+					"mmi,ext-wls-psy-name",
+					&wls_psy_name);
+	if (!ret && wls_psy_name)
+		sgm->use_ext_wls_psy = true;
+	else
+		sgm->use_ext_wls_psy = false;
 
 	sgm->vdd_i2c_vreg = devm_regulator_get_optional(sgm->dev, "vdd-i2c");
 
@@ -2230,13 +2285,14 @@ static int sgm4154x_charger_get_batt_info(void *data, struct mmi_battery_info *b
 	if (!rc)
 		chg->batt_info.batt_chg_counter = val.intval;
 
-        if (chg->chg_cfg.full_charged)
-                chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
+	if (chg->chg_cfg.full_charged)
+		chg->batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
 
-	if (!chg->sgm->state.online)
+	if (!chg->sgm->state.online) {
 		chg->batt_info.batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+	}
 
-        memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
+	memcpy(batt_info, &chg->batt_info, sizeof(struct mmi_battery_info));
 	if (chg->paired_batt_info.batt_soc == 0 &&
 	    chg->paired_batt_info.batt_mv < EMPTY_BATTERY_VBAT) {
 		batt_info->batt_soc = 0;
@@ -2259,6 +2315,11 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
 	chg->chg_info.chrg_type = get_charger_type(chg->sgm);
+	if (chg->chg_info.chrg_type == POWER_SUPPLY_USB_TYPE_UNKNOWN &&
+			is_wls_online(chg->sgm)) {
+		chg->chg_info.chrg_type = SGM4154x_WLS_TYPE;
+	}
+
 	chg->chg_info.chrg_present = state.online;
 	chg->chg_info.vbus_present = state.vbus_gd;
 
@@ -2277,25 +2338,6 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
         memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
         return 0;
-}
-
-static int is_wls_online(struct sgm_mmi_charger *chg)
-{
-	int rc;
-	union power_supply_propval val;
-
-	if (!chg->wls_psy)
-		return 0;
-
-	rc = power_supply_get_property(chg->wls_psy,
-			POWER_SUPPLY_PROP_ONLINE, &val);
-	if (rc < 0) {
-		pr_err("Error wls online rc = %d\n", rc);
-		return 0;
-	}
-
-	pr_debug("wireless online is %d", val.intval);
-	return val.intval;
 }
 
 static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *config)
@@ -2549,7 +2591,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		if (curr_in_limit > chg->sgm->init_data.ilim)
 			curr_in_limit = chg->sgm->init_data.ilim;
 	} else if (!chg->chg_info.chrg_present) {
-		if (is_wls_online(chg) && chg->sgm->init_data.wlim) {
+		if (is_wls_online(chg->sgm) && chg->sgm->init_data.wlim) {
 			curr_in_limit = chg->sgm->init_data.wlim;
 			pr_info("wireless is on, set current limit to %d", curr_in_limit);
 		} else {
@@ -2812,15 +2854,6 @@ static int sgm4154x_mmi_charger_init(struct sgm_mmi_charger *chg)
 			return -ENODEV;
 		}
 		pr_info("%s power supply is found\n", chg->fg_psy_name);
-	}
-
-	if (!chg->wls_psy) {
-		chg->wls_psy = power_supply_get_by_name("wireless");
-		if (!chg->wls_psy) {
-			pr_err("wireless power supply found\n");
-			return -ENODEV;
-		}
-		pr_info("wireless power supply is found\n");
 	}
 
 	if (chg->driver) {

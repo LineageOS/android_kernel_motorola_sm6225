@@ -122,6 +122,8 @@
 #define SGM4154x_NON_STANDARD	(BIT(7) | BIT(6))
 #define SGM4154x_OTG_MODE	    (BIT(7) | BIT(6) | BIT(5))
 
+#define SGM4154x_WLS_TYPE	    0xFF
+
 /* TEMP Status  */
 #define SGM4154x_TEMP_MASK	    GENMASK(2, 0)
 #define SGM4154x_TEMP_NORMAL	BIT(0)
@@ -288,7 +290,6 @@ struct sgm_mmi_charger {
 	u32				chrg_taper_cnt;
 	const char			*fg_psy_name;
 	struct power_supply		*fg_psy;
-	struct power_supply		*wls_psy;
 	int ichg_polority;
 
 	int paired_ichg;
@@ -307,6 +308,7 @@ struct sgm4154x_device {
 	struct i2c_client *client;
 	struct device *dev;
 	struct power_supply *charger;
+	struct power_supply *wls_psy;
 	struct power_supply *usb;
 	struct power_supply *ac;
 	struct mutex lock;
@@ -370,6 +372,7 @@ struct sgm4154x_device {
 
 	int chg_en_gpio;
 	bool use_ext_usb_psy;
+	bool use_ext_wls_psy;
 	struct regulator *vdd_i2c_vreg;
 	struct notifier_block psy_nb;
 	struct sgm_mmi_charger *mmi_charger;

@@ -137,6 +137,8 @@ struct cw_battery {
 	int  fcc;
 	int  ui_full;
 	int  ntc_exist;
+	int  batt_status;
+	bool present;
 	bool factory_mode;
 	int  sense_r_mohm;
 #if 0
@@ -342,6 +344,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	int soc_h;
 	int soc_l;
 	int ui_soc;
+	long batt_curr;
 	int remainder;
 
 	ret = cw_read_word(cw_bat->client, REG_SOC_INT, reg_val);
@@ -902,6 +905,29 @@ static int cw_battery_set_property(struct power_supply *psy,
 	return ret;
 }
 
+static void cw_get_batt_status(struct cw_battery *cw_bat)
+{
+	long batt_curr = 0;
+	batt_curr = cw_bat->cw_current * CW_CUR_UNIT * (-1);
+	batt_curr *= cw_bat->ibat_polority;
+
+	if (cw_bat->voltage <= 0 || cw_bat->temp <= CW_BPD_TEMP)
+		cw_bat->present = 0;
+	else
+		cw_bat->present = 1;
+
+	if (!cw_bat->present) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_UNKNOWN;
+	} else if (cw_bat->ui_soc == CW_UI_FULL) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
+	} else if (batt_curr > 0)
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
+	else if (batt_curr < 0)
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+	else
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+}
+
 static unsigned int cw_get_charge_counter(struct cw_battery *cw_bat)
 {
 	int charge_counter;
@@ -927,6 +953,10 @@ static int cw_battery_get_property(struct power_supply *psy,
 #endif
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		cw_get_batt_status(cw_bat);
+		val->intval = cw_bat->batt_status;
+		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		val->intval = cw_bat->cycle;
 		break;
@@ -980,6 +1010,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 }
 
 static enum power_supply_property cw_battery_properties[] = {
+	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_HEALTH,
