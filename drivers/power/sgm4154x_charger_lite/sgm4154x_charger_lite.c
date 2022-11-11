@@ -240,6 +240,11 @@ static int sgm4154x_set_ichrg_curr(struct sgm4154x_device *sgm, int chrg_curr)
 		chrg_curr = min(chrg_curr, reg_val);
 	}
 
+	if (sgm->user_ichg >= 0 && sgm->user_ichg != chrg_curr) {
+		chrg_curr = sgm->user_ichg;
+		pr_info("User request override ichg = %duA\n", chrg_curr);
+	}
+
 	sgm->ichg = chrg_curr;
 	pr_info("set ichg = %duA\n", chrg_curr);
 	reg_val = chrg_curr / SGM4154x_ICHRG_CURRENT_STEP_uA;
@@ -259,7 +264,7 @@ static int sgm4154x_set_thermal_mitigation(struct sgm4154x_device *sgm, int val)
 	if (!sgm->num_thermal_levels)
 		return 0;
 
-	if (sgm->num_thermal_levels < 0 || sgm->user_ichg) {
+	if (sgm->num_thermal_levels < 0) {
 		pr_err("Incorrect num_thermal_levels\n");
 		return -EINVAL;
 	}
@@ -631,6 +636,11 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 	if (iindpm > sgm->init_data.ilim)
 		iindpm = sgm->init_data.ilim;
 
+	if (sgm->user_ilim >= 0 && sgm->user_ilim != iindpm) {
+		iindpm = sgm->user_ilim;
+		pr_info("User request override ilim = %duA\n", iindpm);
+	}
+
 	sgm->ilim = iindpm;
 
 	if (iindpm < SGM4154x_IINDPM_I_MIN_uA)
@@ -804,6 +814,11 @@ static int sgm4154x_set_hiz_en(struct sgm4154x_device *sgm, bool hiz_en)
 {
 	int reg_val;
 
+	if (sgm->user_chg_susp >= 0 && sgm->user_chg_susp != hiz_en) {
+		hiz_en = !!sgm->user_chg_susp;
+		pr_info("User request override hiz_en = %d\n", hiz_en);
+	}
+
 	dev_notice(sgm->dev, "%s:%d", __func__, hiz_en);
 	reg_val = hiz_en ? SGM4154x_HIZ_EN : 0;
 
@@ -834,6 +849,11 @@ int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 {
 	int ret;
 
+	if (sgm->user_chg_en == 0) {
+		pr_info("Skip enable charging for user request override");
+		return 0;
+	}
+
 	pr_info("sgm4154x_enable_charger\n");
 	if (gpio_is_valid(sgm->chg_en_gpio)) {
 		gpio_set_value(sgm->chg_en_gpio, 0);
@@ -848,6 +868,11 @@ int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 int sgm4154x_disable_charger(struct sgm4154x_device *sgm)
 {
 	int ret;
+
+	if (sgm->user_chg_en > 0) {
+		pr_info("Skip disable charging for user request override");
+		return 0;
+	}
 
 	pr_info("sgm4154x_disable_charger\n");
 	ret = regmap_update_bits(sgm->regmap, SGM4154x_CHRG_CTRL_1,
@@ -1062,24 +1087,30 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		if (val->intval == -1) {
-			sgm->user_ilim = false;
+		if (val->intval < 0) {
+			sgm->update_pending = true;
+			sgm->user_ilim = -EINVAL;
 			ret = 0;
+			pr_info("Clear user input limit\n");
 		} else {
-			sgm->user_ilim = true;
+			sgm->user_ilim = val->intval;
 			ret = sgm4154x_set_input_curr_lim(sgm, val->intval);
+			pr_info("Set user input limit: %duA\n", sgm->user_ilim);
 		}
 		break;
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = sgm4154x_set_input_volt_lim(sgm, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
-		if (val->intval == -1) {
-			sgm->user_ichg = false;
+		if (val->intval < 0) {
+			sgm->update_pending = true;
+			sgm->user_ichg = -EINVAL;
 			ret = 0;
+			pr_info("Clear user charging current limit\n");
 		} else {
-			sgm->user_ichg = true;
+			sgm->user_ichg = val->intval;
 			ret = sgm4154x_set_ichrg_curr(sgm, val->intval);
+			pr_info("Set user charging current limit: %duA\n", sgm->user_ichg);
 		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
@@ -1089,7 +1120,6 @@ static int sgm4154x_charger_set_property(struct power_supply *psy,
 		return -EINVAL;
 	}
 
-	pr_info("user_ilim %d, user_ichg %d", sgm->user_ilim, sgm->user_ichg);
 	return ret;
 }
 
@@ -1438,7 +1468,9 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 	struct sgm4154x_device *sgm = private;
 
 	//lock wakelock
-	pr_info("entry\n");
+	pr_info("entry irq handler\n");
+	sgm->update_pending = true;
+
 	#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	schedule_delayed_work(&sgm->charge_detect_delayed_work, 100);
 	//power_supply_changed(sgm->charger);
@@ -2358,6 +2390,17 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		}
 	}
 
+	/* force to update charger configuration for user input or chip reset */
+	if (chg->sgm->update_pending) {
+		chg->sgm->update_pending = false;
+		chg->sgm->ilim = UINT_MAX;
+		chg->chg_cfg.target_fv = -EINVAL;
+		chg->chg_cfg.target_fcc = -EINVAL;
+		chg->chg_cfg.chrg_iterm = -EINVAL;
+		chg->chg_cfg.charging_disable = !config->charging_disable;
+		chg->chg_cfg.charger_suspend = !config->charger_suspend;
+	}
+
 	/* configure the charger if changed */
 	if (!config->charging_disable &&
 	    !config->charger_suspend &&
@@ -2369,7 +2412,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 			chg->chg_cfg.target_fv = config->target_fv;
 		}
 	}
-	if (!chg->sgm->user_ichg && !config->charging_disable &&
+	if (!config->charging_disable &&
 	    !config->charger_suspend &&
 	    config->target_fcc != chg->chg_cfg.target_fcc) {
 		value = config->target_fcc * 1000;
@@ -2466,7 +2509,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	}
 	prev_chg_en = chg_en;
 
-	if (!chg->sgm->user_ilim && chg->chg_info.chrg_present && !state.hiz_en &&
+	if (chg->chg_info.chrg_present && !state.hiz_en &&
 	    chg->sgm->use_ext_usb_psy && chg->sgm->usb) {
 		if (state.ibus_limit < DEF_USB_CURRENT_MA &&
 		    state.ibus_adc < DEF_USB_CURRENT_MA) {
@@ -2965,7 +3008,7 @@ static ssize_t chg_en_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	int ret;
-	bool enable;
+	int enable;
 	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
 
 	if (!sgm) {
@@ -2973,16 +3016,24 @@ static ssize_t chg_en_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	ret = kstrtobool(buf, &enable);
+	ret = kstrtoint(buf, 0, &enable);
 	if (ret) {
 		pr_err("Invalid chg_en value, ret = %d\n", ret);
 		return ret;
 	}
 
-	if (enable)
-		sgm4154x_enable_charger(sgm);
-	else
-		sgm4154x_disable_charger(sgm);
+	if (enable < 0) {
+		sgm->update_pending = true;
+		sgm->user_chg_en = -EINVAL;
+		pr_info("Clear user enable charging setting\n");
+	} else {
+		sgm->user_chg_en = !!enable;
+		pr_info("Set user enable charging: %d\n", sgm->user_chg_en);
+		if (sgm->user_chg_en)
+			sgm4154x_enable_charger(sgm);
+		else
+			sgm4154x_disable_charger(sgm);
+	}
 	cancel_delayed_work(&sgm->charge_monitor_work);
 	schedule_delayed_work(&sgm->charge_monitor_work,
 					msecs_to_jiffies(200));
@@ -3117,7 +3168,7 @@ static ssize_t charger_suspend_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	int ret;
-	bool chg_suspend;
+	int chg_suspend;
 	struct sgm4154x_device *sgm = dev_get_drvdata(dev);
 
 	if (!sgm) {
@@ -3125,18 +3176,24 @@ static ssize_t charger_suspend_store(struct device *dev,
 		return -ENODEV;
 	}
 
-	ret = kstrtobool(buf, &chg_suspend);
+	ret = kstrtoint(buf, 0, &chg_suspend);
 	if (ret) {
 		pr_err("Invalid chg_suspend value, ret = %d\n", ret);
 		return ret;
 	}
 
-	ret = sgm4154x_set_hiz_en(sgm, chg_suspend);
-	if (!ret) {
-		cancel_delayed_work(&sgm->charge_monitor_work);
-		schedule_delayed_work(&sgm->charge_monitor_work,
-						msecs_to_jiffies(200));
+	if (chg_suspend < 0) {
+		sgm->update_pending = true;
+		sgm->user_chg_susp = -EINVAL;
+		pr_info("Clear user suspend charger setting\n");
+	} else {
+		sgm->user_chg_susp = !!chg_suspend;
+		pr_info("Set user suspend charger: %d\n", sgm->user_chg_susp);
+		sgm4154x_set_hiz_en(sgm, sgm->user_chg_susp);
 	}
+	cancel_delayed_work(&sgm->charge_monitor_work);
+	schedule_delayed_work(&sgm->charge_monitor_work,
+					msecs_to_jiffies(200));
 
 	return count;
 }
@@ -3171,6 +3228,10 @@ static int sgm4154x_probe(struct i2c_client *client,
 
 	sgm->client = client;
 	sgm->dev = dev;
+	sgm->user_ilim = -EINVAL;
+	sgm->user_ichg = -EINVAL;
+	sgm->user_chg_en = -EINVAL;
+	sgm->user_chg_susp = -EINVAL;
 
 	mutex_init(&sgm->lock);
 

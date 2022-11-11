@@ -348,8 +348,10 @@ struct sgm4154x_device {
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
 	u32 vreg;	/* regulation voltage		*/
-	bool user_ichg; /* user charge current		*/
-	bool user_ilim; /* user input current		*/
+	int user_ichg; /* user charge current		*/
+	int user_ilim; /* user input current		*/
+	int user_chg_en; /* user charging enable	*/
+	int user_chg_susp; /* user charger suspend	*/
 
 	bool batt_present;
 	bool otg_enabled;
@@ -362,6 +364,7 @@ struct sgm4154x_device {
 	int low_load_en_gpio;
 	bool high_load_active_low;
 	bool low_load_active_low;
+	bool update_pending;
 
 	int chg_en_gpio;
 	bool use_ext_usb_psy;
