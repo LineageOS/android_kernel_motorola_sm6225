@@ -918,8 +918,8 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
-	int ret = 0;
 #if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	int ret = 0;
 	unsigned short gesture_cmd = 0xFFFF;
 	unsigned char gesture_type = 0;
 #endif
