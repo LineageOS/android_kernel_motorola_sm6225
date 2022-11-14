@@ -612,8 +612,6 @@ static int nvt_mmi_panel_state(struct device *dev,
 		        }
 
                         //---write command to enter "wakeup gesture mode"---
-                        if (gesture_cmd == 0x06)
-                                gesture_cmd = 0x03;
                         nvt_cmd_ext_store(DOUBLE_TAP_GESTURE_MODE_CMD, gesture_cmd);
                         gesture_cmd = 0x00;
 #endif
