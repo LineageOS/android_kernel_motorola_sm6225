@@ -690,6 +690,9 @@ static int ilitek_spi_probe(struct spi_device *spi)
 		return -ENOMEM;
 	}
 
+	ilits->spi = spi;
+	spi_set_drvdata(spi, ilits);
+
 //---parse tp module---
 #ifdef ILI_FW_PANEL
 	tp_module = ili_parse_tp_module();
