@@ -344,7 +344,6 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	int soc_h;
 	int soc_l;
 	int ui_soc;
-	long batt_curr;
 	int remainder;
 
 	ret = cw_read_word(cw_bat->client, REG_SOC_INT, reg_val);
