@@ -140,7 +140,7 @@ struct fod_gain {
 	u32	fod_array_gain[FOD_GAIN_MAX_LEN];
 };
 
-#ifdef WIRELESS_CPS4035B
+#if defined(WIRELESS_CPS4035B) || defined(WIRELESS_CPS4019)
 struct wls_dump
 {
     u32  chip_id;
@@ -606,7 +606,7 @@ static int qti_charger_get_batt_info(void *data, struct mmi_battery_info *batt_i
 
 	return rc;
 }
-#ifdef WIRELESS_CPS4035B
+#if defined(WIRELESS_CPS4035B) || defined(WIRELESS_CPS4019)
 void qti_wireless_charge_dump_info(struct qti_charger *chg, struct wls_dump wls_info)
 {
 	mmi_info(chg, "Wireless dump info -1: CHIP_ID: 0x%04x, MTP_FW_VER: 0x%04x, IRQ STATUS: 0x%04x, "
@@ -1917,7 +1917,7 @@ static DEVICE_ATTR(folio_mode, S_IRUGO|S_IWUSR, folio_mode_show, folio_mode_stor
 
 //ATTRIBUTE_GROUPS(qti_charger);
 #define TX_INT_FOD      (0x01<<12)
-#ifdef WIRELESS_CPS4035B
+#if defined(WIRELESS_CPS4035B) || defined(WIRELESS_CPS4019)
 static int show_wls_dump_info(struct seq_file *m, void *data)
 {
 	struct qti_charger *chip = m->private;
