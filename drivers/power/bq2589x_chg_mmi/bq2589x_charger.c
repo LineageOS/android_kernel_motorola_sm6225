@@ -2558,7 +2558,7 @@ static void bq2589x_adjust_constant_voltage(struct bq2589x *bq, int vbat)
 	int cv_adjust;
 	u8 status = 0;
 
-	dev_err(bq->dev, "bq2589x_adjust_constant_voltage 111\n");
+	dev_err(bq->dev, "bq2589x_adjust_constant_voltage\n");
 
 	if (bq->final_cv > vbat && (bq->final_cv - vbat) < 16000)
 		return;
@@ -2729,6 +2729,12 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 		if(bq->enable_dynamic_adjust_vindpm){
 			ret = bq2589x_set_input_volt_limit(bq, bq->cfg.vindpm);
 			bq->vindpm_flag = false;
+		}
+		/* enable dynamic adjust battery voltage */
+		if(bq->enable_dynamic_adjust_batvol){
+			bq->cv_tune = 0;
+			bq->final_cv /= 1000;
+			bq2589x_set_chargevoltage(bq, bq->final_cv);
 		}
 	} else if ((bq->vbus_type != BQ2589X_VBUS_NONE) && (bq->vbus_type != BQ2589X_VBUS_OTG)
 			&& (!(bq->status & BQ2589X_STATUS_PLUGIN) || (reapsd_complete == true))
