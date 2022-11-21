@@ -349,6 +349,7 @@ static ssize_t gesture_store(struct device *dev,
 	err = sscanf(buf, "%d", &value);
 	if (err < 0) {
 		dev_err(dev, "forcereflash: Failed to convert value\n");
+		mutex_unlock(&touch_cdev->extif_mutex);
 		return -EINVAL;
 	}
 	switch (value) {
@@ -388,6 +389,48 @@ static ssize_t gesture_store(struct device *dev,
 static DEVICE_ATTR(gesture, (S_IWUSR | S_IWGRP | S_IRUGO), gesture_show, gesture_store);
 #endif
 
+/*
+ * Show liquid detection function status and detection result
+ */
+static ssize_t liquid_detection_ctl_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "function status: %02x, detection result: %02x\n",
+		touch_cdev->lpd_state, touch_cdev->liquid_status);
+}
+
+/*
+ * Enable/disable liquid detection function for debug
+ */
+static ssize_t liquid_detection_ctl_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ts_mmi_dev *touch_cdev = dev_get_drvdata(dev);
+	unsigned int value = 0;
+	int err = 0;
+
+	err = sscanf(buf, "%d", &value);
+	if (err < 0) {
+		dev_err(dev, "liquid_detection_ctl: Failed to convert value\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&touch_cdev->extif_mutex);
+	if (value != touch_cdev->lpd_state) {
+		touch_cdev->lpd_state = !!value;
+		kfifo_put(&touch_cdev->cmd_pipe, TS_MMI_DO_LIQUID_DETECTION);
+		schedule_delayed_work(&touch_cdev->work, 0);
+		dev_info(DEV_MMI, "%s: LPD state is %d\n", __func__, touch_cdev->lpd_state);
+	}
+	mutex_unlock(&touch_cdev->extif_mutex);
+
+	return size;
+}
+static DEVICE_ATTR(liquid_detection_ctl, (S_IWUSR | S_IWGRP | S_IRUGO),
+	liquid_detection_ctl_show, liquid_detection_ctl_store);
+
 static struct attribute *sysfs_class_attrs[] = {
 	&dev_attr_path.attr,
 	&dev_attr_vendor.attr,
@@ -420,6 +463,7 @@ static struct attribute *sysfs_class_attrs[] = {
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 	&dev_attr_gesture.attr,
 #endif
+	&dev_attr_liquid_detection_ctl.attr,
 	NULL,
 };
 
@@ -717,6 +761,22 @@ static int get_gesture_type_handler(struct device *parent, unsigned char *gestur
 	return 0;
 }
 
+static int report_liquid_detection_status_handler(struct device *parent, int status)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+	if (!touch_cdev)
+		return -ENODEV;
+
+	dev_info(DEV_TS, "%s: notify liquid detection status: %d\n", __func__, status);
+	touch_cdev->liquid_status = status;
+	if (touch_cdev->is_lpd_registered)
+		relay_notifier_fire(BLOCKING, LPD, NOTIFY_EVENT_TUD_STATUS,
+			(void *)&status);
+	else
+		dev_err(DEV_TS, "%s: lpd_notifier does not register\n", __func__);
+	return 0;
+}
+
 static int ts_mmi_default_pinctrl(struct device *parent, int on)
 {
 	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
@@ -815,6 +875,7 @@ int ts_mmi_dev_register(struct device *parent,
 	touch_cdev->mdata->exports.get_class_fname = get_class_fname_handler;
 	touch_cdev->mdata->exports.get_supplier = get_supplier_handler;
 	touch_cdev->mdata->exports.get_gesture_type = get_gesture_type_handler;
+	touch_cdev->mdata->exports.report_liquid_detection_status = report_liquid_detection_status_handler;
 	touch_cdev->mdata->exports.kobj_notify = &DEV_MMI->kobj;
 
 	down_write(&touchscreens_list_lock);

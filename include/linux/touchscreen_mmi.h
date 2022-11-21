@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/input.h>
 #include <linux/mmi_kernel_common.h>
+#include <linux/mmi_relay.h>
 
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 
@@ -281,6 +282,7 @@ struct ts_mmi_class_methods {
 	int     (*get_class_fname)(struct device *dev , const char **fname);
 	int     (*get_supplier)(struct device *dev , const char **sname);
 	int     (*report_touch_event)(struct touch_event_data *tev, struct input_dev *input_dev);
+	int     (*report_liquid_detection_status)(struct device *parent, int status);
 	struct kobject *kobj_notify;
 };
 
@@ -297,6 +299,15 @@ enum ts_mmi_panel_event {
 	TS_MMI_EVENT_DISPLAY_ON,
 	TS_MMI_EVENT_DISPLAY_ON_PREPARE,
 	TS_MMI_EVENT_UNKNOWN
+};
+
+enum ts_mmi_work {
+	TS_MMI_DO_RESUME,
+	TS_MMI_DO_PS,
+	TS_MMI_DO_REFRESH_RATE,
+	TS_MMI_DO_FPS,
+	TS_MMI_TASK_INIT,
+	TS_MMI_DO_LIQUID_DETECTION,
 };
 
 #define TS_MMI_RESET_SOFT	0
@@ -379,6 +390,7 @@ enum ts_mmi_panel_event {
 	int	(*update_baseline)(struct device *dev, int enable);
 	int	(*update_fod_mode)(struct device *dev, int enable);
 	int	(*active_region)(struct device *dev, int *region_array);
+	int	(*update_liquid_detect_mode)(struct device *dev, int enable);
 	/* Firmware */
 	int	(*firmware_update)(struct device *dev, char *fwname);
 	int	(*firmware_erase)(struct device *dev);
@@ -420,6 +432,7 @@ struct ts_mmi_dev_pdata {
 	bool		hold_grip_ctrl;
 	bool		poison_slot_ctrl;
 	bool		active_region_ctrl;
+	bool		support_liquid_detection;
 	int		max_x;
 	int		max_y;
 	int		fod_x;
@@ -490,6 +503,11 @@ struct ts_mmi_dev {
 	bool is_fps_registered;	/* FPS notif registration might be delayed */
 	bool fps_state;
 	bool delay_baseline_update;
+
+	struct notifier_block	lpd_notif;
+	bool is_lpd_registered;	/* LPD notif registration might be delayed */
+	bool lpd_state;
+	int liquid_status;
 
 	/*
 	 * sys entey variable
