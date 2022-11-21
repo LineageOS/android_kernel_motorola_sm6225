@@ -1655,6 +1655,9 @@ static int mm8xxx_battery_voltage(struct mm8xxx_device_info *di,
 				  union power_supply_propval *val)
 {
 	int voltage;
+	u32 fg_fw_ver;
+	u32 fg_param_ver;
+	static bool reset_fg_flag = false;
 
 	voltage = mm8xxx_read(di, MM8XXX_CMD_VOLTAGE);
 	if (voltage < 0) {
@@ -1663,6 +1666,23 @@ static int mm8xxx_battery_voltage(struct mm8xxx_device_info *di,
 	}
 
 	val->intval = voltage * 1000;
+
+	if (voltage == 0) {
+		fg_fw_ver = mmi_get_battery_info(di, FW_VER_CMD);
+		fg_param_ver = mmi_get_battery_info(di, PARAM_VER_CMD);
+		mm_info("voltage 0mv, fg_fw_ver=0x%04x, fg_param_ver=0x%04x, reset_fg_flag %d\n",
+				fg_fw_ver, fg_param_ver, reset_fg_flag);
+		if ((fg_fw_ver == 0x0024) && (fg_param_ver == 0x0006) && (reset_fg_flag == false)) {
+			/* System Reset Request */
+			mm_info("The FG is in boot mode, Requesting system resetting ... \n");
+			if (mm8xxx_battery_write_Nbyte(di, COMMAND_MODECONTROL, 0x80, 1) < 0) {
+				mm_info("Reset fg system failed\n");
+			}
+			reset_fg_flag = true;
+		}
+	} else {
+		reset_fg_flag = false;
+	}
 
 	return 0;
 }
@@ -2136,6 +2156,14 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 		fg_battery_id = mmi_get_battery_info(di, BATTERY_ID_CMD);
 		mm_info("From fg ic,fg_fw_ver=0x%04x, battery_id=0x%04x,fg_param_ver=0x%04x\n", \
 					fg_fw_ver, fg_battery_id, fg_param_ver);
+
+		if ((fg_fw_ver == 0x0024) && (fg_param_ver == 0x0006)) {
+			/* System Reset Request */
+			mm_info("The FG is in boot mode, Requesting system resetting ... ");
+			if (mm8xxx_battery_write_Nbyte(di, COMMAND_MODECONTROL, 0x80, 1) < 0) {
+				mm_info("Reset fg system failed\n");
+			}
+		}
 
 		if (is_factory_mode())
 		{
