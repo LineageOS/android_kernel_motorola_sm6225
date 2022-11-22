@@ -26,6 +26,7 @@
 #include <linux/of_irq.h>
 #include <linux/power_supply.h>
 #include <linux/version.h>
+#include <linux/spi/spi-msm-geni.h>
 
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
@@ -2752,6 +2753,7 @@ return:
 static int32_t nvt_ts_probe(struct spi_device *client)
 {
 	int32_t ret = 0;
+	struct spi_geni_qcom_ctrl_data *spi_param = NULL;
 #if ((TOUCH_KEY_NUM > 0) || WAKEUP_GESTURE)
 	int32_t retry = 0;
 #endif
@@ -2797,6 +2799,13 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_malloc_rbuf;
 	}
 
+	spi_param = devm_kzalloc(&client->dev, sizeof(spi_param), GFP_KERNEL);
+	if(spi_param == NULL) {
+		NVT_ERR("devm_kzalloc for spi_param failed!\n");
+		ret = -ENOMEM;
+		goto err_malloc_spi_param;
+	}
+
 	ts->client = client;
 	spi_set_drvdata(client, ts);
 
@@ -2826,6 +2835,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
     /* new usage of MTK spi API */
     memcpy(&ts->spi_ctrl, &spi_ctrdata, sizeof(struct mtk_chip_config));
     ts->client->controller_data = (void *)&ts->spi_ctrl;
+#endif
+
+#ifdef CONFIG_SPI_SM8450
+	/* Initialize the driver data */
+	spi_param->spi_cs_clk_delay = 2;
+	client->controller_data = spi_param;
 #endif
 
 	NVT_LOG("mode=%d, max_speed_hz=%d\n", ts->client->mode, ts->client->max_speed_hz);
@@ -3289,6 +3304,11 @@ err_gpio_config_failed:
 err_spi_setup:
 err_ckeck_full_duplex:
 	spi_set_drvdata(client, NULL);
+	if (spi_param) {
+		devm_kfree(&client->dev ,spi_param);
+		spi_param = NULL;
+	}
+err_malloc_spi_param:
 	if (ts->rbuf) {
 		kfree(ts->rbuf);
 		ts->rbuf = NULL;
