@@ -2586,8 +2586,7 @@ static void bq2589x_adjust_constant_voltage(struct bq2589x *bq, int vbat)
 		return;
 	dev_err(bq->dev, "failed to tune cv, reset the tuning\n");
 	bq->cv_tune = 0;
-	bq->final_cv /= 1000;
-	bq2589x_set_chargevoltage(bq, bq->final_cv);
+	bq2589x_set_chargevoltage(bq, bq->final_cv/1000);
 	return;
 }
 
@@ -2733,8 +2732,7 @@ static void bq2589x_charger_irq_workfunc(struct work_struct *work)
 		/* enable dynamic adjust battery voltage */
 		if(bq->enable_dynamic_adjust_batvol){
 			bq->cv_tune = 0;
-			bq->final_cv /= 1000;
-			bq2589x_set_chargevoltage(bq, bq->final_cv);
+			bq2589x_set_chargevoltage(bq, bq->final_cv/1000);
 		}
 	} else if ((bq->vbus_type != BQ2589X_VBUS_NONE) && (bq->vbus_type != BQ2589X_VBUS_OTG)
 			&& (!(bq->status & BQ2589X_STATUS_PLUGIN) || (reapsd_complete == true))
@@ -3447,8 +3445,7 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 
 	/* enable dynamic adjust battery voltage */
 	if(bq->enable_dynamic_adjust_batvol){
-		bq->final_cv /= 1000;
-		bq2589x_set_chargevoltage(bq, bq->final_cv);
+		bq2589x_set_chargevoltage(bq, bq->final_cv/1000);
 	}
 
 	/*set CONV_RATE 0 to exits continuous conversion mode*/
