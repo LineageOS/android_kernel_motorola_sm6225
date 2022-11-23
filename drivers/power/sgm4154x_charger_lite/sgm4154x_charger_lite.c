@@ -1362,6 +1362,7 @@ static void charger_monitor_work_func(struct work_struct *work)
 		if (!sgm->state.chrg_type)
 			pr_info("No charger is present\n");
 		sgm4154x_dump_register(sgm);
+		cancel_delayed_work(&sgm->charge_detect_delayed_work);
 		schedule_delayed_work(&sgm->charge_detect_delayed_work, 0);
 		power_supply_changed(sgm->charger);
 	}
@@ -1398,7 +1399,7 @@ static void charger_detect_work_func(struct work_struct *work)
 				cancel_delayed_work(&sgm->charge_detect_delayed_work);
 				schedule_delayed_work(&sgm->charge_detect_delayed_work,
 							msecs_to_jiffies(1000));
-				return;
+				goto err;
 			} else {
 				pr_info("USB power supply is found\n");
 			}
@@ -1418,7 +1419,7 @@ static void charger_detect_work_func(struct work_struct *work)
 				cancel_delayed_work(&sgm->charge_detect_delayed_work);
 				schedule_delayed_work(&sgm->charge_detect_delayed_work,
 							msecs_to_jiffies(1000));
-				return;
+				goto err;
 			} else {
 				pr_info("WLS power supply is found\n");
 			}
@@ -1518,6 +1519,7 @@ static irqreturn_t sgm4154x_irq_handler_thread(int irq, void *private)
 	sgm->update_pending = true;
 
 	#if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
+	cancel_delayed_work(&sgm->charge_detect_delayed_work);
 	schedule_delayed_work(&sgm->charge_detect_delayed_work, 100);
 	//power_supply_changed(sgm->charger);
 	#endif
