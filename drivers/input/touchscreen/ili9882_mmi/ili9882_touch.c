@@ -832,6 +832,7 @@ static void ilitek_tddi_touch_send_debug_data(u8 *buf, int len)
 
 	mutex_lock(&ilits->debug_mutex);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	if (!ilits->netlink && !ilits->dnp)
 		goto out;
 
@@ -840,6 +841,10 @@ static void ilitek_tddi_touch_send_debug_data(u8 *buf, int len)
 		ili_netlink_reply_msg(buf, len);
 		goto out;
 	}
+#else
+	if (!ilits->dnp)
+		goto out;
+#endif
 
 	/* Sending data to apk via the node of debug_message node */
 	if (ilits->dnp) {
