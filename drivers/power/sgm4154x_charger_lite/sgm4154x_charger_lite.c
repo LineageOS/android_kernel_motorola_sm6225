@@ -794,8 +794,6 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	if (!state->online && is_wls_online(sgm)) {
 		state->online = 1;
 		state->chrg_type = SGM4154x_WLS_TYPE;
-	} else {
-		state->online = 0;
 	}
 
 	state->therm_stat = !!(chrg_stat & SGM4154x_THERM_STAT);
