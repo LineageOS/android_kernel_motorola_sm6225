@@ -2120,7 +2120,7 @@ static void clear_utags_directory(struct ctrl *ctrl)
 }
 
 
-#define UTAGS_QNAME_SIZE 10
+#define UTAGS_QNAME_SIZE 16
 static int utags_probe(struct platform_device *pdev)
 {
 	int rc;
