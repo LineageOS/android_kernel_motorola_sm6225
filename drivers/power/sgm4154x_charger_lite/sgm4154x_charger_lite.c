@@ -730,7 +730,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 {
 	int chrg_stat;
 	int fault;
-	int chrg_param_0,chrg_param_1,chrg_param_2;
+	int chrg_param_0,chrg_param_1,chrg_param_2,chrg_param_3;
 	int ret;
 	union power_supply_propval val = {0};
 
@@ -801,7 +801,6 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 
 	pr_debug("chrg_stat =%d chrg_type =%d online = %d\n", state->chrg_stat, state->chrg_type, state->online);
 
-
 	ret = regmap_read(sgm->regmap, SGM4154x_CHRG_FAULT, &fault);
 	if (ret){
 		pr_err("read SGM4154x_CHRG_FAULT fail\n");
@@ -831,6 +830,14 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	}
 	state->vbus_gd = !!(chrg_param_2 & SGM4154x_VBUS_GOOD);
 
+	ret = regmap_read(sgm->regmap, SGM4154x_INPUT_DET, &chrg_param_3);
+	if (ret){
+		pr_err("read SGM4154x_INPT_DET fail\n");
+		return ret;
+	}
+	state->detect_done = !!(chrg_param_3 & SGM4154x_DPDM_ONGOING);
+
+	state->input_ready = state->online && state->vbus_gd && state->detect_done;
 	return 0;
 }
 
@@ -874,7 +881,12 @@ int sgm4154x_enable_charger(struct sgm4154x_device *sgm)
 	int ret;
 
 	if (sgm->user_chg_en == 0) {
-		pr_info("Skip enable charging for user request override");
+		pr_info("Skip enable charging for user request override\n");
+		return 0;
+	}
+
+	if (sgm->state.input_ready == 0) {
+		pr_info("Skip enable charging before input ready\n");
 		return 0;
 	}
 
@@ -894,7 +906,7 @@ int sgm4154x_disable_charger(struct sgm4154x_device *sgm)
 	int ret;
 
 	if (sgm->user_chg_en > 0) {
-		pr_info("Skip disable charging for user request override");
+		pr_info("Skip disable charging for user request override\n");
 		return 0;
 	}
 
@@ -1312,7 +1324,8 @@ static bool sgm4154x_state_changed(struct sgm4154x_device *sgm,
 		old_state.health != new_state->health ||
 		old_state.chrg_type != new_state->chrg_type ||
 		old_state.vbus_gd != new_state->vbus_gd ||
-		old_state.ibus_limit != new_state->ibus_limit
+		old_state.ibus_limit != new_state->ibus_limit ||
+		old_state.detect_done != new_state->detect_done
 		);
 }
 
@@ -1327,6 +1340,7 @@ static void sgm4154x_dump_register(struct sgm4154x_device * sgm)
 	}
 }
 
+#if 0
 static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 {
 	int chrg_stat;
@@ -1339,6 +1353,7 @@ static bool sgm4154x_dpdm_detect_is_done(struct sgm4154x_device * sgm)
 
 	return (chrg_stat&SGM4154x_DPDM_ONGOING)?true:false;
 }
+#endif
 
 static void charger_monitor_work_func(struct work_struct *work)
 {
@@ -1436,6 +1451,8 @@ static void charger_detect_work_func(struct work_struct *work)
 	mutex_unlock(&sgm->lock);
 
 	if(!sgm->state.vbus_gd) {
+		if (sgm4154x_is_enabled_charging(sgm))
+			sgm4154x_disable_charger(sgm);
 		dev_err(sgm->dev, "Vbus not present, disable charge\n");
 		goto err;
 	}
@@ -1444,9 +1461,8 @@ static void charger_detect_work_func(struct work_struct *work)
 		dev_err(sgm->dev, "Vbus not online\n");
 		goto err;
 	}
-
-	if(!sgm4154x_dpdm_detect_is_done(sgm)) {
-		dev_err(sgm->dev, "DPDM detecte not done, disable charge\n");
+	if(!state.detect_done) {
+		dev_err(sgm->dev, "DPDM detecte not done\n");
 		goto err;
 	}
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
@@ -1480,10 +1496,22 @@ static void charger_detect_work_func(struct work_struct *work)
 			goto err;
 
 		default:
-			pr_err("SGM4154x charger type: default\n");
-			//curr_in_limit = 500000;
-			//break;
-			return;
+			if (is_wls_online(sgm)) {
+				pr_err("SGM4154x charger type: Wireless\n");
+				sgm->state.chrg_type = SGM4154x_WLS_TYPE;
+				curr_in_limit = sgm->init_data.wlim;
+				break;
+			} else {
+				pr_err("SGM4154x charger type: default\n");
+				//curr_in_limit = 500000;
+				//break;
+				return;
+			}
+	}
+
+	//Enable charge IC
+	if (!sgm->mmi_charger) {
+		sgm4154x_enable_charger(sgm);
 	}
 
 	if ((!sgm->use_ext_usb_psy || !sgm->usb) &&
@@ -2460,7 +2488,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	}
 
 	/* force to update charger configuration for user input or chip reset */
-	if (chg->sgm->update_pending) {
+	if (chg->sgm->update_pending && state.input_ready) {
 		chg->sgm->update_pending = false;
 		chg->sgm->ilim = UINT_MAX;
 		chg->chg_cfg.target_fv = -EINVAL;
@@ -2498,6 +2526,35 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 			chg->chg_cfg.charger_suspend = config->charger_suspend;
 		}
 	}
+
+	sgm4154x_get_state(chg->sgm, &state);
+
+	if (chg->chg_info.chrg_present && !state.hiz_en &&
+	    chg->sgm->use_ext_usb_psy && chg->sgm->usb &&
+		chg->chg_info.chrg_type != SGM4154x_WLS_TYPE) {
+		if (state.ibus_limit < DEF_USB_CURRENT_MA &&
+		    state.ibus_adc < DEF_USB_CURRENT_MA) {
+			curr_in_limit = DEF_USB_CURRENT_MA - state.ibus_adc;
+		} else if (state.ibus_limit > state.ibus_adc) {
+			curr_in_limit = state.ibus_limit - state.ibus_adc;
+		} else {
+			curr_in_limit = 0;
+		}
+		if (curr_in_limit > chg->sgm->init_data.ilim)
+			curr_in_limit = chg->sgm->init_data.ilim;
+	} else if (chg->chg_info.chrg_present && chg->chg_info.chrg_type == SGM4154x_WLS_TYPE) {
+			curr_in_limit = chg->sgm->init_data.wlim;
+			pr_debug("wireless is on, set current limit to %d", curr_in_limit);
+	} else {
+			curr_in_limit = 0;
+	}
+
+	if (chg->sgm->ilim != curr_in_limit) {
+		sgm4154x_set_input_curr_lim(chg->sgm, curr_in_limit);
+		pr_info("ibus_limit=%d, ibus_adc=%d, curr=%d\n",
+				state.ibus_limit, state.ibus_adc, curr_in_limit);
+	}
+
 	if (config->charging_disable != chg->chg_cfg.charging_disable) {
 		value = config->charging_disable;
 		if (!value)
@@ -2562,7 +2619,6 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		chg->chg_cfg.charging_reset = config->charging_reset;
 	}
 
-	sgm4154x_get_state(chg->sgm, &state);
 	chg_en = sgm4154x_is_enabled_charging(chg->sgm);
 	if (!cfg_changed &&
 	    chg->chg_info.chrg_present && !state.hiz_en &&
@@ -2577,33 +2633,6 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		pr_info("Battery charging reconfigure triggered\n");
 	}
 	prev_chg_en = chg_en;
-
-	if (chg->chg_info.chrg_present && !state.hiz_en &&
-	    chg->sgm->use_ext_usb_psy && chg->sgm->usb) {
-		if (state.ibus_limit < DEF_USB_CURRENT_MA &&
-		    state.ibus_adc < DEF_USB_CURRENT_MA) {
-			curr_in_limit = DEF_USB_CURRENT_MA - state.ibus_adc;
-		} else if (state.ibus_limit > state.ibus_adc) {
-			curr_in_limit = state.ibus_limit - state.ibus_adc;
-		} else {
-			curr_in_limit = 0;
-		}
-		if (curr_in_limit > chg->sgm->init_data.ilim)
-			curr_in_limit = chg->sgm->init_data.ilim;
-	} else if (!chg->chg_info.chrg_present) {
-		if (is_wls_online(chg->sgm) && chg->sgm->init_data.wlim) {
-			curr_in_limit = chg->sgm->init_data.wlim;
-			pr_info("wireless is on, set current limit to %d", curr_in_limit);
-		} else {
-			curr_in_limit = 0;
-		}
-	}
-
-	if (chg->sgm->ilim != curr_in_limit) {
-		sgm4154x_set_input_curr_lim(chg->sgm, curr_in_limit);
-		pr_info("ibus_limit=%d, ibus_adc=%d, curr=%d\n",
-				state.ibus_limit, state.ibus_adc, curr_in_limit);
-	}
 
 	if (cfg_changed) {
 		cancel_delayed_work(&chg->sgm->charge_monitor_work);
@@ -3024,7 +3053,8 @@ static int sgm4154x_psy_notifier_call(struct notifier_block *nb,
 
 	chg = sgm->mmi_charger;
 	if ((sgm->usb && !strcmp(psy->desc->name, sgm->usb->desc->name)) ||
-	    (chg && chg->fg_psy_name && !strcmp(psy->desc->name, chg->fg_psy_name))) {
+	    (chg && chg->fg_psy_name && !strcmp(psy->desc->name, chg->fg_psy_name)) ||
+		(sgm->wls_psy && !strcmp(psy->desc->name, sgm->wls_psy->desc->name))) {
 		cancel_delayed_work(&sgm->charge_detect_delayed_work);
 		schedule_delayed_work(&sgm->charge_detect_delayed_work,
 						msecs_to_jiffies(0));

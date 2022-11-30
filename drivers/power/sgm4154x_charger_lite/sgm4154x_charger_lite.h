@@ -235,6 +235,7 @@ struct sgm4154x_init_data {
 };
 
 struct sgm4154x_state {
+	bool input_ready;
 	bool vsys_stat;
 	bool therm_stat;
 	bool online;
@@ -245,6 +246,7 @@ struct sgm4154x_state {
 	bool hiz_en;
 	bool term_en;
 	bool vbus_gd;
+	bool detect_done;
 	u8 chrg_type;
 	u8 health;
 	u8 chrg_fault;
