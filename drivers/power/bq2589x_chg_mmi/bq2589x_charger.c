@@ -2986,6 +2986,21 @@ static int bq2589x_set_boost_current_limit(struct charger_device *chg_dev, u32 u
 	return ret;
 }
 
+static int bq2589x_enable_hz(struct charger_device *chg_dev, bool enable)
+{
+	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
+	int ret;
+
+	if (enable)
+		ret = bq2589x_enter_hiz_mode(bq);
+	else
+		ret = bq2589x_exit_hiz_mode(bq);
+
+	dev_info(bq->dev,"%s, %s input hz %s\n", __func__, enable ? "enable" : "disable", ret == 0 ? "success":"failed");
+
+	return ret;
+}
+
 static int bq2589x_enable_charging(struct charger_device *chg_dev, bool enable)
 {
 	struct bq2589x *bq = dev_get_drvdata(&chg_dev->dev);
@@ -3107,6 +3122,7 @@ static struct charger_ops bq2589x_chg_ops = {
 	.enable_otg = bq2589x_set_otg_enable,
 	.set_boost_current_limit = bq2589x_set_boost_current_limit,
 	.enable_charging = bq2589x_enable_charging,
+	.enable_hz = bq2589x_enable_hz,
 	.set_charging_current = bq2589x_set_charging_current,
 	.set_constant_voltage = bq2589x_set_charging_voltage,
 	.is_charge_halted = bq2589x_is_charging_halted,

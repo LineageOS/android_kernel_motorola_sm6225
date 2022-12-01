@@ -3050,6 +3050,21 @@ static int sgm4154x_enable_charging(struct charger_device *chg_dev, bool enable)
 	return rc;
 }
 
+static int sgm4154x_enable_hz(struct charger_device *chg_dev, bool enable)
+{
+	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
+	int rc = 0;
+
+	rc = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_0, SGM4154x_HIZ_EN,
+                 enable ? SGM4154x_HIZ_EN : 0);
+
+	pr_info("%s, %s hz %s\n", __func__,
+		enable ? "enable" : "disable",
+		rc ? "failed" : "success");
+
+	return rc;
+}
+
 static int sgm4154x_set_charging_current(struct charger_device *chg_dev, u32 uA)
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
@@ -3229,6 +3244,7 @@ static struct charger_ops sgm4154x_chg_ops = {
 	.enable_otg = sgm4154x_enable_otg,
 	.set_boost_current_limit = sgm4154x_set_boost_current_limit,
 	.enable_charging = sgm4154x_enable_charging,
+	.enable_hz = sgm4154x_enable_hz,
 	.set_charging_current = sgm4154x_set_charging_current,
 	.set_constant_voltage = sgm4154x_set_charging_voltage,
 	.is_charge_halted = sgm4154x_is_charging_halted,

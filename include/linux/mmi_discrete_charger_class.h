@@ -50,6 +50,9 @@ struct charger_ops {
 	int (*get_qc3p_power)(struct charger_device *dev, int *qc3p_power);
 	int (*config_pd_active)(struct charger_device *dev, int val);
 
+	/* enable/disable hz */
+	int (*enable_hz)(struct charger_device *dev, bool en);
+
 	/* enable/disable charger */
 	int (*enable_charging)(struct charger_device *dev, bool en);
 	int (*is_enabled_charging)(struct charger_device *dev, bool *en);
@@ -106,6 +109,8 @@ extern int charger_dev_set_constant_voltage(struct charger_device *chg_dev, u32 
 extern int charger_dev_set_charging_current(struct charger_device *chg_dev, u32 uA);
 
 extern int charger_dev_get_charging_current(struct charger_device *chg_dev, u32 *uA);
+
+extern int charger_dev_enable_hz(struct charger_device *chg_dev, bool en);
 
 extern int charger_dev_enable_charging(struct charger_device *chg_dev, bool en);
 

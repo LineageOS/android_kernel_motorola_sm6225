@@ -1830,8 +1830,21 @@ static int usb_therm_set_mosfet(struct mmi_discrete_charger *chip,bool enable)
 
 	/*set typec mosfet output*/
 	if (gpio_is_valid(chip->mos_en_gpio)) {
-		mmi_err(chip, "%s,set mos en.",__func__);
-		gpio_direction_output(chip->mos_en_gpio, enable);
+		mmi_err(chip, "%s,set mos en: %d.",__func__,enable);
+		if(enable){
+			ret = charger_dev_enable_charging(chip->master_chg_dev,false);
+			ret = charger_dev_enable_hz(chip->master_chg_dev,true);
+			udelay(300);
+			gpio_direction_output(chip->mos_en_gpio, enable);
+			mmi_err(chip, "%s,open mos en: %d %d",__func__,enable,ret);
+		}
+		else{
+			gpio_direction_output(chip->mos_en_gpio, enable);
+			udelay(300);
+			ret = charger_dev_enable_charging(chip->master_chg_dev,true);
+			ret = charger_dev_enable_hz(chip->master_chg_dev,false);
+			mmi_err(chip, "%s,close mos en: %d %d",__func__,enable,ret);
+		}
 	}
 
 	return ret;
@@ -1843,7 +1856,7 @@ static int usb_therm_get_mosfet(struct mmi_discrete_charger *chip)
 
 	/*get typec mosfet output*/
 	if (gpio_is_valid(chip->mos_en_gpio)) {
-		mmi_err(chip, "%s,get mos en.",__func__);
+//		mmi_err(chip, "%s,get mos en.",__func__);
 		return gpio_get_value(chip->mos_en_gpio);
 	}
 
@@ -3290,6 +3303,10 @@ static int mmi_discrete_remove(struct platform_device *pdev)
 
 	cancel_delayed_work(&chip->charger_work);
 	mmi_discrete_charger_deinit(chip);
+
+	/*for usb thermal*/
+	if(chip->mosfet_supported)
+		gpio_free(chip->mos_en_gpio);
 
 	if (chip->mmi_psy)
 		power_supply_put(chip->mmi_psy);
