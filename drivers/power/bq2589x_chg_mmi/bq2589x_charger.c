@@ -244,6 +244,7 @@ struct bq2589x {
 	struct iio_channel	**ext_iio_chans;
 #endif
 	bool			factory_mode;
+	bool 	sc8989_adc_stop;
 };
 
 struct pe_ctrl {
@@ -1135,7 +1136,10 @@ static int bq2589x_init_device(struct bq2589x *bq)
 		return ret;
 	}
 
-	bq2589x_adc_start(bq, false);
+	if(bq->sc8989_adc_stop)
+		bq2589x_adc_stop(bq);
+	else
+		bq2589x_adc_start(bq, false);
 
 	ret = bq2589x_pumpx_enable(bq, 0);
 	if (ret) {
@@ -1551,6 +1555,8 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 		bq->cfg.vindpm = 4600;
 
 	bq->mmi_qc3_support = of_property_read_bool(np, "mmi,qc3-support");
+
+	bq->sc8989_adc_stop = of_property_read_bool(np, "sc,sc8989_adc_stop");
 
 	ret = mmi_parse_dt_adc_channels(bq);
 	if (ret) {
@@ -2385,6 +2391,10 @@ static void bq2589x_adapter_in_func(struct bq2589x *bq)
 			dev_info(bq->dev,"%s:reset vindpm threshold to %d successfully\n",__func__,bq->cfg.vindpm);
 	}
 
+	if(bq->sc8989_adc_stop){
+		bq2589x_adc_start(bq, false);
+	}
+
 	schedule_delayed_work(&bq->monitor_work, 0);
 
 	bq->chg_dev->noti.apsd_done = true;
@@ -2428,6 +2438,9 @@ static void bq2589x_adapter_out_func(struct bq2589x *bq)
 	bq->real_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	bq->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 	bq2589x_reuqest_dpdm(bq, false);
+	if(bq->sc8989_adc_stop){
+		bq2589x_adc_stop(bq);
+	}
 	charger_dev_notify(bq->chg_dev);
 }
 
