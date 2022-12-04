@@ -3,6 +3,14 @@
 
 #include <linux/notifier.h>
 
+/*
+ * Notify device event type definitions
+ */
+enum {
+	NOTIFY_EVENT_LPD_STATUS = 1,
+	NOTIFY_EVENT_TUD_STATUS = 2,
+};
+
 typedef enum notifier_type {
     ATOMIC,
     BLOCKING,
@@ -13,6 +21,7 @@ typedef enum notifier_dev {
     LCD,
     FPS,
     MMI_RELAY,
+    LPD,
     NUM_DEVS,
 }notifier_d;
 
