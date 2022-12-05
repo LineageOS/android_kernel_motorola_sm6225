@@ -1240,7 +1240,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				input_report_key(dev, BTN_TRIGGER_HAPPY1, 0);
 				input_sync(dev);
 				ts_info("report BTN_TRIGGER_HAPPY1");
-			}else if(ts_event->gesture_type == GOODIX_GESTURE_FOD_UP && touch_num <=0) {
+			}else if(ts_event->gesture_type == GOODIX_GESTURE_FOD_UP) {
 				input_report_key(dev, BTN_TRIGGER_HAPPY2, 1);
 				input_sync(dev);
 				input_report_key(dev, BTN_TRIGGER_HAPPY2, 0);
