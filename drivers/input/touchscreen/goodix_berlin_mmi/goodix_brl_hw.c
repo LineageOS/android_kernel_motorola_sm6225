@@ -15,6 +15,7 @@
   *
   */
 #include "goodix_ts_core.h"
+#include "goodix_ts_mmi.h"
 
 /* berlin_A SPI mode setting */
 #define GOODIX_SPI_MODE_REG			0xC900
@@ -1101,10 +1102,21 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 	int  fp_flags = 0;
 	static int pre_flags = 0;
 #endif
+	int underwater_flag = 0;
 	/* clean event buffer */
 	memset(ts_event, 0, sizeof(*ts_event));
 	/* copy pre-data to buffer */
 	memcpy(buffer, pre_buf, pre_buf_len);
+
+	if (cd->set_mode.liquid_detection) {
+		underwater_flag = buffer[2] & GOODIX_GESTURE_UNDER_WATER;
+		if (cd->liquid_status != underwater_flag) {
+			cd->liquid_status = underwater_flag;
+			/* call class method */
+			cd->imports->report_liquid_detection_status(cd->bus->dev, cd->liquid_status? 1:0);
+			ts_info("under water flag changed to 0x%x\n", cd->liquid_status);
+		}
+	}
 
 	touch_num = buffer[2] & 0x0F;
 
@@ -1244,6 +1256,7 @@ static int brl_event_handler(struct goodix_ts_core *cd,
 			ts_debug("unsupported request code 0x%x", pre_buf[2]);
 	} else if (event_status & GOODIX_GESTURE_EVENT) {
 		ts_event->event_type = EVENT_GESTURE;
+		ts_event->gesture_report_info = pre_buf[2];
 		ts_event->gesture_type = pre_buf[4];
 #ifdef CONFIG_GTP_FOD
 		memcpy(ts_event->gesture_data, &pre_buf[8],

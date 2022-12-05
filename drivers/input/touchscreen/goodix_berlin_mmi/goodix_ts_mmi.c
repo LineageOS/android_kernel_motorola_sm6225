@@ -12,7 +12,6 @@
  */
 
 #include "goodix_ts_mmi.h"
-#include "goodix_ts_core.h"
 #include <linux/delay.h>
 #include <linux/input/mt.h>
 #include "goodix_ts_config.h"
@@ -132,7 +131,7 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 	return 0;
 }
 
-static int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
+int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
 		u8 cmd, u8 len, u8 subCmd, u8 subCmd2)
 {
 	int ret = 0;
@@ -957,6 +956,7 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 		if (ret < 0) {
 			ts_err("Failed to send enable gesture mode\n");
 		}
+		core_data->gesture_cmd = gesture_cmd;
 		ts_info("Send enable gesture mode 0x%04x, 0x%02x\n", gesture_cmd, gesture_type);
 #else
 #if defined(PRODUCT_MIAMI)
@@ -1091,6 +1091,15 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 				core_data->get_mode.edge_mode[1], core_data->get_mode.edge_mode[0]);
 		}
 	}
+	if (core_data->get_mode.liquid_detection) {
+		ret = goodix_ts_send_cmd(core_data, LIQUID_DETECTION_SWITCH_CMD, 5,
+						core_data->get_mode.liquid_detection, 0x00);
+		if (!ret) {
+			core_data->set_mode.liquid_detection = core_data->get_mode.liquid_detection;
+			msleep(20);
+			ts_info("Success to %d liquid detection mode\n", core_data->get_mode.liquid_detection);
+		}
+	}
 	mutex_unlock(&core_data->mode_lock);
 #ifdef CONFIG_GTP_FOD
 	if(core_data->zerotap_data[0]) {
@@ -1154,6 +1163,45 @@ static int goodix_ts_mmi_update_fps_mode(struct device *dev, int mode) {
 	return 0;
 }
 #endif
+
+static int goodix_ts_mmi_update_liquid_detect_mode(struct device *dev, int mode) {
+	int ret = 0;
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	GET_GOODIX_DATA(dev);
+
+	mutex_lock(&core_data->mode_lock);
+	core_data->get_mode.liquid_detection= mode;
+	if (core_data->set_mode.liquid_detection == mode) {
+		ts_debug("The value = %d is same, so not to write", mode);
+		goto exit;
+	}
+
+	if (core_data->power_on == 0) {
+		ts_debug("The touch is in sleep state, restore the value when resume\n");
+		goto exit;
+	}
+
+	//clear liquid status before enable detection
+	if (mode)
+		core_data->liquid_status = 0;
+
+	ret = goodix_ts_send_cmd(core_data, LIQUID_DETECTION_SWITCH_CMD, 5,
+						core_data->get_mode.liquid_detection, 0x00);
+	if (ret < 0) {
+		ts_err("failed to set liquid detection, mode = %d", mode);
+		goto exit;
+	}
+
+	core_data->set_mode.liquid_detection = mode;
+	msleep(20);
+	ts_info("Success to set %d\n", mode);
+
+exit:
+	mutex_unlock(&core_data->mode_lock);
+	return ret;
+}
 
 #define Y_MIN_ID 2
 #define Y_MAX_ID 3
@@ -1231,6 +1279,7 @@ static struct ts_mmi_methods goodix_ts_mmi_methods = {
 	.charger_mode = goodix_ts_mmi_charger_mode,
 	.refresh_rate = goodix_ts_mmi_refresh_rate,
 	.active_region = goodix_ts_mmi_active_region,
+	.update_liquid_detect_mode = goodix_ts_mmi_update_liquid_detect_mode,
 	/* Firmware */
 	.firmware_update = goodix_ts_firmware_update,
 	/* vendor specific attribute group */

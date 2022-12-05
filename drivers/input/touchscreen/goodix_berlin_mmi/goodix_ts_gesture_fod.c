@@ -372,6 +372,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	static  unsigned  long  start = 0;
 	int fod_down_interval = 0;
 	int fod_down = cd->zerotap_data[0];
+	int underwater_flag = 0;
 #endif
 	if (atomic_read(&cd->suspended) == 0 || cd->gesture_type == 0)
 		return EVT_CONTINUE;
@@ -397,8 +398,19 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			gs_event.event_type);
 		goto re_send_ges_cmd;
 	}
-	ts_info("got  gesture type 0x%x", gs_event.gesture_type);
+	ts_debug("got  gesture type 0x%x", gs_event.gesture_type);
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	if (cd->set_mode.liquid_detection) {
+		underwater_flag = gs_event.gesture_report_info & GOODIX_GESTURE_UNDER_WATER;
+		if ( cd->liquid_status != underwater_flag) {
+			cd->liquid_status = underwater_flag;
+			/* call class method */
+			cd->imports->report_liquid_detection_status(cd->bus->dev, cd->liquid_status? 1:0);
+			ts_info("under water flag changed to: 0x%x\n", cd->liquid_status);
+			goto gesture_ist_exit;
+		}
+	}
+
 	mmi_event.evcode =0;
 	if ( cd->imports && cd->imports->report_gesture) {
 		if(cd->gesture_type & GESTURE_SINGLE_TAP && gs_event.gesture_type == GOODIX_GESTURE_SINGLE_TAP) {
@@ -525,6 +537,9 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 re_send_ges_cmd:
 #if defined(PRODUCT_MIAMI)
 	if (hw_ops->gesture(cd, 0x80))
+#elif defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	if (goodix_ts_send_cmd(cd, ENTER_GESTURE_MODE_CMD, 6, (cd->gesture_cmd) >> 8,
+			cd->gesture_cmd & 0xFF) < 0)
 #else
 	if (hw_ops->gesture(cd, 0))
 #endif

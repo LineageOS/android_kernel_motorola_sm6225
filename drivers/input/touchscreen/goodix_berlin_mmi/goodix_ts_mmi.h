@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/touchscreen_mmi.h>
 #include <linux/mmi_wake_lock.h>
+#include "goodix_ts_core.h"
 
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 int goodix_ts_mmi_dev_register(struct platform_device *ts_device);
@@ -28,6 +29,8 @@ static int inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device
 	return -ENOSYS;
 }
 #endif
+int goodix_ts_send_cmd(struct goodix_ts_core *core_data,
+		u8 cmd, u8 len, u8 subCmd, u8 subCmd2);
 
 #define LEATHER_MODE_SWITCH_CMD    0x26
 #define ENTER_LEATHER_MODE         0x01
@@ -54,4 +57,5 @@ static int inline goodix_ts_mmi_dev_unregister(struct platform_device *ts_device
 #define EXIT_HIGH_REPORT_RATE_CMD 0xC100
 #define SAMPLE_SWITCH_CMD   0xC2
 #define ENTER_GESTURE_MODE_CMD   0xA6
+#define LIQUID_DETECTION_SWITCH_CMD   0x33
 #endif

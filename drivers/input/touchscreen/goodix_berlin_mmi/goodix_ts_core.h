@@ -63,6 +63,7 @@
 #define GOODIX_GESTURE_SINGLE_TAP		0x4C
 #define GOODIX_GESTURE_FOD_DOWN			0x46
 #define GOODIX_GESTURE_FOD_UP			0x55
+#define GOODIX_GESTURE_UNDER_WATER		0x20
 
 enum GOODIX_GESTURE_TYP {
 	GESTURE_SINGLE_TAP = (1 << 0),
@@ -407,6 +408,7 @@ struct goodix_ts_event {
 	enum ts_event_type event_type;
 	u8 request_code; /* represent the request type */
 	u8 gesture_type;
+	u8 gesture_report_info;
 	struct goodix_touch_data touch_data;
 	struct goodix_pen_data pen_data;
 #ifdef CONFIG_GTP_FOD
@@ -488,6 +490,7 @@ struct goodix_mode_info {
 	int sample;
 	int report_rate_mode;
 	int edge_mode[2];
+	int liquid_detection;
 };
 
 struct goodix_ts_core {
@@ -516,6 +519,7 @@ struct goodix_ts_core {
 	int power_on;
 	int irq;
 	size_t irq_trig_cnt;
+	int liquid_status;
 
 	atomic_t irq_enabled;
 	atomic_t suspended;
@@ -554,6 +558,7 @@ struct goodix_ts_core {
 #ifdef CONFIG_GTP_LAST_TIME
 	ktime_t last_event_time;
 #endif
+	unsigned short gesture_cmd;
 	atomic_t pm_resume;
 	wait_queue_head_t pm_wq;
 };
