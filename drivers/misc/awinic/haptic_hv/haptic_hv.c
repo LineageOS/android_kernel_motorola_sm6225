@@ -1733,7 +1733,8 @@ static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&aw_haptic->lock);
 	aw_haptic->state = val;
-	if (aw_haptic->duration <= 100) { /* Short vibration */
+	aw_haptic->func->set_wav_seq(aw_haptic, 0, aw_haptic->seq[0]);
+	if (aw_haptic->duration <= 100 || aw_haptic->seq[0] > 2) { /* Short vibration */
 		aw_haptic->activate_mode = AW_RAM_MODE;
 		aw_haptic->loop[0] = 0x00;
 		aw_haptic->func->set_wav_loop(aw_haptic, 0x00, 0x00);
@@ -1742,6 +1743,8 @@ static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 		aw_haptic->index = 0x02;
 		aw_haptic->func->set_repeat_seq(aw_haptic, aw_haptic->index);
 	}
+
+	aw_haptic->seq[0] = 1;  /* Restore default waveform */
 	mutex_unlock(&aw_haptic->lock);
 	schedule_work(&aw_haptic->vibrator_work);
 
