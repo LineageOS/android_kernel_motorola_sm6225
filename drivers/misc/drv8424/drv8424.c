@@ -958,12 +958,14 @@ static __ref int motor_kthread(void *arg)
 		if (kthread_should_stop())
 			break;
 		if (md->faulting) {
-			moto_drv8424_cmd_push(md, CMD_FAULT, 0);
-			atomic_set(&md->status, STATUS_FAULTING);
-			moto_drv8424_cmd_push(md, CMD_STATUS, 0);
-			dev_warn(md->dev, "Motor #%d failure reported!!!\n",
-				irq_to_gpio(atomic_read(&md->fault_irq)) ==
-				md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);
+			value = atomic_read(&md->fault_irq);
+			if (value != 0) {
+				moto_drv8424_cmd_push(md, CMD_FAULT, 0);
+				atomic_set(&md->status, STATUS_FAULTING);
+				moto_drv8424_cmd_push(md, CMD_STATUS, 0);
+				dev_warn(md->dev, "Motor #%d failure reported!!!\n",
+					irq_to_gpio(value) == md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);
+			}
 			goto show_stats;
 		}
 		/* it's safe to call the following functions even if motor was not running */
@@ -1325,8 +1327,17 @@ static __ref int detection_kthread(void *arg)
 			motor_stop(md, true);
 		}
 
-		if (position != POS_UNKNOWN)
+		if (position != POS_UNKNOWN) {
+			/*
+			 * In case position was detected while permanent faulty
+			 * state has been set already, we need to drop it as mishap
+			 */
+			if (md->faulting) {
+				md->faulting = false;
+				dev_warn(md->dev, "Motor faulting state dropped!!!");
+			}
 			dev_info(md->dev, "detected position: %s\n", position_labels[position]);
+		}
 		LOGD("samples %d; last data: %d %d %d\n", samples,
 			md->sensor_data[0], md->sensor_data[1], md->sensor_data[2]);
 	}
@@ -1412,11 +1423,28 @@ static void motor_cmd_work(struct work_struct *work)
 					break;
 		case CMD_RECOVERY:
 			/* pos & dest depends on recovery cause */
+			dest = atomic_read(&md->destination);
 			md->power_en = 0;
 			motor_set_motion_params(md,
-				atomic_read(&md->position),
-				atomic_read(&md->destination));
+				atomic_read(&md->position), dest);
+			if (dest == POS_COMPACT) {
+			/* Recovery invoked when motor failed to arrive to
+			 * destination. If the destination is COMPACT, there
+			 * is a chance motor will "overshoot" and go beyond
+			 * COMPACT position w/o properly detecting it.
+			 * In this case slider will go all the way up/down
+			 * to its physical limit. So we need to allow
+			 * detecting those.
+			 * Thus setting destination to UNKNOWN to allow
+			 * moto_drv8424_detect_position() scanning for all
+			 * detectable positions
+			 */
+				dest = POS_UNKNOWN;
+				atomic_set(&md->destination, dest);
+			}
 			moto_drv8424_set_enable_with_power(md, true);
+			if (dest == POS_UNKNOWN)
+				LOGD("Enabled limits in recovery!!!\n");
 					break;
 		case CMD_TIMEOUT:
 			/* We want to be able detecting ANY valid position, so */
