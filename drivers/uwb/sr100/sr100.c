@@ -653,7 +653,6 @@ static ssize_t sr100_dev_read(struct file* filp, char* buf, size_t count,
                               loff_t* offset) {
   struct sr100_dev* sr100_dev = filp->private_data;
   int ret = -EIO;
-  int retry_count = 0;
   memset(sr100_dev->rx_buffer, 0x00, SR100_RXBUF_SIZE);
   if (!gpio_get_value(sr100_dev->irq_gpio)) {
     if (filp->f_flags & O_NONBLOCK) {
@@ -699,7 +698,6 @@ first_irq_wait:
     ret = -1;
   }
 read_end:
-  retry_count = 0;
   return ret;
 }
 
