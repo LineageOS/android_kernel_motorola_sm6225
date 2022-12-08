@@ -48,6 +48,7 @@
 #include <linux/string.h>
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
+#include <linux/version.h>
 
 #ifdef CONFIG_MACH_PXA_SAMSUNG
 #include <linux/sec-common.h>
@@ -71,7 +72,9 @@ u8 m_FirmwareIdx = 0;
 #define TSP_HW_ID_INDEX_0 1
 #define TSP_HW_ID_INDEX_1 2
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 extern char *saved_command_line;
+#endif
 
 int easy_wake = 1;
 int big_object = 1;
@@ -1522,7 +1525,7 @@ retry_upgrade:
 //jesse add
 
 if (write_cmd(client, 0x01f8) != I2C_SUCCESS) {
-	zinitix_printk("Failed to send 01f8 command\ \n");
+	zinitix_printk("Failed to send 01f8 command \n");
 	goto fail_upgrade;
 }
 mdelay(10);
@@ -1698,12 +1701,16 @@ static bool init_touch(struct bt541_ts_info *info)
 	u8 checksum_err;
 #endif
 	int retry_cnt = 0;
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	char* productionMode = "androidboot.bsp=2";
+#endif
 	char* checkMode = NULL;
 
 	dev_info(&client->dev, "init_touch: B\n");
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	checkMode = strstr(saved_command_line, productionMode);
+#endif
 retry_init:
 	for (i = 0; i < INIT_RETRY_CNT; i++) {
 		if (read_data(client, BT541_EEPROM_INFO_REG,
@@ -1933,9 +1940,7 @@ retry_init:
 		(u8 *)&reg_val, 2) < 0)
 		goto fail_init;
 
-
-		cap->i2s_checksum = 0;
-
+	cap->i2s_checksum = 0;
 
 	if (write_reg(client, BT541_INT_ENABLE_FLAG,
 		cap->ic_int_mask) != I2C_SUCCESS)
@@ -2913,7 +2918,9 @@ static void fw_update(void *device_data)
 	struct i2c_client *client = info->client;
 	int ret = 0;
 	const u8 *buff = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	mm_segment_t old_fs = {0};
+#endif
 	struct file *fp = NULL;
 	long fsize = 0, nread = 0;
 	char fw_path[MAX_FW_PATH + 1];
@@ -2932,10 +2939,12 @@ static void fw_update(void *device_data)
 		break;
 
 	case UMS:
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		old_fs = get_fs();
 		//set_fs(get_ds());
 		set_fs(KERNEL_DS);
-		snprintf(fw_path, MAX_FW_PATH, "/sdcard/%s", TSP_FW_FILENAME);
+#endif
+		snprintf(fw_path, MAX_FW_PATH, "/vendor/firmware/%s", TSP_FW_FILENAME);
 		fp = filp_open(fw_path, O_RDONLY, 0);
 		if (IS_ERR(fp)) {
 			dev_err(&client->dev,
@@ -2959,14 +2968,20 @@ static void fw_update(void *device_data)
 			goto err_alloc;
 		}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		nread = vfs_read(fp, (char __user *)buff, fsize, &fp->f_pos);
+#else
+		nread = kernel_read(fp, (char __user *)buff, fsize, &fp->f_pos);
+#endif
 		if (nread != fsize) {
 			info->factory_info->cmd_state = 3;
 			goto err_fw_size;
 		}
 
 		filp_close(fp, current->files);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		set_fs(old_fs);
+#endif
 		dev_info(&client->dev, "ums fw is loaded!!\n");
 		info->checkUMSmode = true;
 		ret = ts_upgrade_sequence((u8 *)buff);
@@ -2994,7 +3009,11 @@ err_fw_size:
 err_alloc:
 	filp_close(fp, NULL);
 err_open:
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	set_fs(old_fs);
+#else
+	;
+#endif
 }
 not_support:
 	snprintf(result, sizeof(result) , "%s", "NG");
@@ -5286,7 +5305,9 @@ err_misc_register:
 	free_irq(info->irq, info);
 err_irq_of_parse:
 err_request_irq:
+#if ESD_TIMER_INTERVAL
 err_input_register_device2:
+#endif
 
 	input_unregister_device(info->input_dev);
 err_touch_init:
@@ -5411,7 +5432,8 @@ static struct i2c_device_id bt541_idtable[] = {
 	{BT541_TS_DEVICE, 0},
 	{ }
 };
-#if (!defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND))
+#if (!defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND) \
+	&& !defined(CONFIG_INPUT_TOUCHSCREEN_MMI))
 static const struct dev_pm_ops zinitix_ts_dev_pm_ops = {
 	.suspend = bt541_ts_suspend,
 	.resume = bt541_ts_resume,
@@ -5456,6 +5478,9 @@ module_init(bt541_ts_init);
 //late_initcall(bt541_ts_init);
 module_exit(bt541_ts_exit);
 
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("touch-screen device driver using i2c interface");
 MODULE_AUTHOR("<mika.kim@samsung.com>");
 MODULE_LICENSE("GPL");

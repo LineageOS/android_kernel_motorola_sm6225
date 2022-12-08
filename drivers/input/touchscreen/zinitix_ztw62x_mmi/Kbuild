@@ -1,0 +1,15 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/zinitix_ztw62x_mmi
+
+obj-m := zinitix_ztw62x_mmi.o
+
+zinitix_ztw62x_mmi-objs := zinitix.o
+
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
