@@ -7,7 +7,7 @@ ifneq ($(filter m y,$(CONFIG_INPUT_AWINIC_HAPTIC)),)
 endif
 
 ifneq (,$(filter felix%,$(TARGET_PRODUCT)))
-	EXTRA_CFLAGS += -DHAPTIC_HV_HAL_COMPAT
+	EXTRA_CFLAGS += -DHAPTIC_HV_HAL_COMPAT -DAW_DURATION_DECIDE_WAVEFORM -DAW_DURATION_WAVESEQ_2=5
 endif
 
 obj-m += aw_haptic_hv.o

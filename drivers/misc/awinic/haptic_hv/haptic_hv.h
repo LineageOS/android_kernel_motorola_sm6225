@@ -79,6 +79,22 @@
 #define AW_BIT_RESET				(0xAA)
 #define CPU_LATENCY_QOC_VALUE			(0)
 
+#ifndef AW_DURATION_WAVESEQ_1
+#define AW_DURATION_WAVESEQ_1			(3)
+#endif
+
+#ifndef AW_DURATION_WAVESEQ_2
+#define AW_DURATION_WAVESEQ_2			(2)
+#endif
+
+#ifndef AW_DURATION_WAVESEQ_3
+#define AW_DURATION_WAVESEQ_3			(1)
+#endif
+
+#ifndef AW_DURATION_WAVESEQ_4
+#define AW_DURATION_WAVESEQ_4			(4)
+#endif
+
 #define AW_CHECK_RAM_DATA
 #define AW_READ_BIN_FLEXBALLY
 #define AW_LRA_F0_DEFAULT

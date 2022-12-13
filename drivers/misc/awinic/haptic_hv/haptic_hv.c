@@ -975,15 +975,15 @@ static int ram_select_waveform(struct aw_haptic *aw_haptic)
 	aw_haptic->activate_mode = AW_RAM_MODE;
 	if ((aw_haptic->duration > 0) &&
 	    (aw_haptic->duration < aw_haptic->info.duration_time[0])) {
-		wavseq = 3;
+		wavseq = AW_DURATION_WAVESEQ_1;
 	} else if ((aw_haptic->duration >= aw_haptic->info.duration_time[0]) &&
 		   (aw_haptic->duration < aw_haptic->info.duration_time[1])) {
-		wavseq = 2;
+		wavseq = AW_DURATION_WAVESEQ_2;
 	} else if ((aw_haptic->duration >= aw_haptic->info.duration_time[1]) &&
-		   (aw_haptic->duration < aw_haptic->info.duration_time[2])) {
-		wavseq = 1;
-	} else if (aw_haptic->duration >= aw_haptic->info.duration_time[2]) {
-		wavseq = 4;
+		   (aw_haptic->duration <= aw_haptic->info.duration_time[2])) {
+		wavseq = AW_DURATION_WAVESEQ_3;
+	} else if (aw_haptic->duration > aw_haptic->info.duration_time[2]) {
+		wavseq = AW_DURATION_WAVESEQ_4;
 		wavloop = 15;
 		aw_haptic->activate_mode = AW_RAM_LOOP_MODE;
 	}
@@ -1006,7 +1006,7 @@ static void vibrator_work_routine(struct work_struct *work)
 	hrtimer_cancel(&aw_haptic->timer);
 	aw_haptic->func->play_stop(aw_haptic);
 	if (aw_haptic->state) {
-#ifdef AW_DURATION_DECIDE_WAVEFORM
+#if defined(AW_DURATION_DECIDE_WAVEFORM) && !defined(HAPTIC_HV_HAL_COMPAT)
 		ram_select_waveform(aw_haptic);
 #endif
 		aw_haptic->func->upload_lra(aw_haptic, AW_F0_CALI_LRA);
@@ -1735,6 +1735,10 @@ static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 	aw_haptic->state = val;
 	aw_haptic->func->set_wav_seq(aw_haptic, 0, aw_haptic->seq[0]);
 	if (aw_haptic->duration <= 100 || aw_haptic->seq[0] > 2) { /* Short vibration */
+#ifdef AW_DURATION_DECIDE_WAVEFORM
+		if (aw_haptic->seq[0] <= 2)
+			ram_select_waveform(aw_haptic);
+#endif
 		aw_haptic->activate_mode = AW_RAM_MODE;
 		aw_haptic->loop[0] = 0x00;
 		aw_haptic->func->set_wav_loop(aw_haptic, 0x00, 0x00);
