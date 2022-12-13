@@ -59,6 +59,10 @@
 #include <linux/pm_wakeup.h>
 #include "etxxx_fp.h"
 #include <linux/input.h>
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+#define SET_QCOM_PANEL_EVENT_NOTIFIER
+#endif
+
 #if defined(CONFIG_PANEL_NOTIFICATIONS)
 #include <linux/panel_notifier.h>
 #define FP_NOTIFY_ON                                  PANEL_EVENT_DISPLAY_ON
@@ -68,13 +72,22 @@
 #define ets_fb_unregister_client(client)            panel_unregister_notifier(client);
 #elif defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 #include <drm/drm_panel.h>
-#else
+#elif defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
+#include <linux/soc/qcom/panel_event_notifier.h>
+#elif defined(CONFIG_FB)
 #include <linux/fb.h>
 #define FP_NOTIFY_ON                            FB_BLANK_UNBLANK
 #define FP_NOTIFY_OFF                           FB_BLANK_POWERDOWN
 #define FP_NOTIFY_EVENT_BLANK                   FB_EVENT_BLANK
 #define ets_fb_register_client(client)     fb_register_client(client);
 #define ets_fb_unregister_client(client)   fb_unregister_client(client)
+#else
+#include <linux/msm_drm_notify.h>
+#define FP_NOTIFY_ON                            MSM_DRM_BLANK_UNBLANK
+#define FP_NOTIFY_OFF                           MSM_DRM_BLANK_POWERDOWN
+#define FP_NOTIFY_EVENT_BLANK                   MSM_DRM_EARLY_EVENT_BLANK
+#define ets_fb_register_client(client)     msm_drm_register_client(client);
+#define ets_fb_unregister_client(client)   msm_drm_unregister_client(client)
 #endif
 
 
@@ -1032,7 +1045,7 @@ int egisfp_check_ioctl_permission(struct egisfp_dev_t *egis_dev, unsigned int cm
 		return -EACCES;
 	}
 }
-#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 static int drm_check_dt(struct egisfp_dev_t *egis_dev)
 {
 	int i = 0;
@@ -1060,6 +1073,49 @@ static int drm_check_dt(struct egisfp_dev_t *egis_dev)
 }
 #endif
 
+#if defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
+static void fps_panel_notifier_callback(enum panel_event_notifier_tag tag,
+		struct panel_event_notification *notification,
+		void *client_data)
+{
+	char *envp[2];
+	int ret;
+	struct egisfp_dev_t *egis_dev = client_data;
+
+	if (!notification) {
+		pr_err(" %s : Invalid notification \n", __func__);
+		return;
+	}
+
+	if (!egis_dev) {
+		pr_err(" %s : Invalid egisfp_dev_t \n", __func__);
+		return;
+	}
+
+	if ((notification->notif_type == DRM_PANEL_EVENT_UNBLANK) || (notification->notif_type == DRM_PANEL_EVENT_BLANK))
+	{
+		DEBUG_PRINT(" %s : Notification type: %d, early_trigger: %d \n", __func__, notification->notif_type, notification->notif_data.early_trigger);
+
+		switch (notification->notif_type) {
+		case DRM_PANEL_EVENT_UNBLANK:
+			if (!notification->notif_data.early_trigger) {
+				egis_dev->screen_onoff = 1;
+				envp[0] = "PANEL=1";
+			}
+			break;
+		case DRM_PANEL_EVENT_BLANK:
+			egis_dev->screen_onoff = 0;
+			envp[0] = "PANEL=0";
+			break;
+		default:
+			break;
+		}
+		DEBUG_PRINT(" %s : screen_onoff = %d \n", __func__, egis_dev->screen_onoff);
+		envp[1] = NULL;
+		ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
+	}
+}
+#else
 // Register FB notifier +++
 static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void *data)
 {
@@ -1120,7 +1176,7 @@ static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void
 	INFO_PRINT(" %s : screen_onoff = %d \n", __func__, egis_dev->screen_onoff);
 	envp[1] = NULL;
 	ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
-#else
+#elif defined(CONFIG_FB)
 	struct fb_event *evdata = data;
 	unsigned int blank;
 
@@ -1148,6 +1204,40 @@ static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void
 		envp[1] = NULL;
 		ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
 	}
+#else
+	struct msm_drm_notifier *evdata = data;
+	unsigned int blank;
+
+	INFO_PRINT(" %s : got notify value = %d \n", __func__, (int)val);
+	if (val != FP_NOTIFY_EVENT_BLANK)
+	{
+		return 0;
+	}
+	egis_dev = container_of(nb, struct egisfp_dev_t, notifier);
+	if (!evdata || !evdata->data || !egis_dev)
+	{
+		ERROR_PRINT(" %s : some parameters is null \n", __func__);
+		return 0;
+	}
+
+	blank = *(int *)(evdata->data);
+	switch (blank)
+	{
+	case FP_NOTIFY_ON:
+		egis_dev->screen_onoff = 1;
+		envp[0] = "PANEL=1";
+		break;
+	case FP_NOTIFY_OFF:
+		egis_dev->screen_onoff = 0;
+		envp[0] = "PANEL=0";
+		break;
+	default:
+		break;
+	}
+
+	INFO_PRINT(" %s : screen_onoff = %d \n", __func__, egis_dev->screen_onoff);
+	envp[1] = NULL;
+	ret = kobject_uevent_env(&egis_dev->dd->dev.kobj, KOBJ_CHANGE, envp);
 #endif
 	return NOTIFY_OK;
 }
@@ -1155,6 +1245,7 @@ static int egisfp_fb_callback(struct notifier_block *nb, unsigned long val, void
 static struct notifier_block egisfp_noti_block = {
 	.notifier_call = egisfp_fb_callback,
 };
+#endif
 int egisfp_parse_dt(struct egisfp_dev_t *egis_dev)
 {
 	int ret;
@@ -1258,6 +1349,9 @@ int egisfp_remove(struct platform_device *pdev)
 			drm_panel_notifier_unregister(egis_dev->active_panel, &egis_dev->notifier);
 			egis_dev->active_panel = NULL;
 		}
+#elif defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
+	if (egis_dev->notifier_cookie)
+		panel_event_notifier_unregister(egis_dev->notifier_cookie);
 #else
 	ets_fb_unregister_client(&egis_dev->notifier);
 #endif
@@ -1336,7 +1430,10 @@ int egisfp_probe(struct platform_device *pdev)
 	egis_dev->screen_onoff = 1;	// dafault set screen on
 	egis_dev->call_back_registered = 0;
 	egis_dev->fps_ints.irq_mode = -1;
-#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+#if defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
+	egis_dev->notifier_cookie = NULL;
+#endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 	egis_dev->active_panel = NULL;
 	drm_check_dt(egis_dev);
 #endif
@@ -1395,8 +1492,23 @@ int egisfp_probe(struct platform_device *pdev)
 	setup_timer(&egis_dev->fps_ints.timer, egisfp_interrupt_timer_call, (unsigned long)&egis_dev->fps_ints);
 #endif
 
+#if defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
+	DEBUG_PRINT(" %s : CONFIG_QCOM_PANEL_EVENT_NOTIFIER is enable \n", __func__);
+	if (egis_dev->active_panel) {
+		DEBUG_PRINT(" %s : register panel event notifier \n", __func__);
+		egis_dev->notifier_cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY, PANEL_EVENT_NOTIFIER_CLIENT_FPS,
+		egis_dev->active_panel, &fps_panel_notifier_callback, egis_dev);
+		if (!egis_dev->notifier_cookie) {
+			ERROR_PRINT("  %s : register panel events fail: %d ", __func__, status);
+		} else {
+			egis_dev->call_back_registered = 1;
+			ERROR_PRINT(" %s : registered for panel notifications on panel\n", __func__);
+		}
+
+	}
+
+#elif defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 	egis_dev->notifier = egisfp_noti_block;
-#if defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 	if (egis_dev->active_panel) {
 		DEBUG_PRINT(" %s : register drm_panel_notifier \n", __func__);
 		status = drm_panel_notifier_register(egis_dev->active_panel, &egis_dev->notifier);
@@ -1406,6 +1518,7 @@ int egisfp_probe(struct platform_device *pdev)
 			egis_dev->call_back_registered = 1;
 	}
 #else
+	egis_dev->notifier = egisfp_noti_block;
 	status = ets_fb_register_client(&egis_dev->notifier);
 	if (status)
 		ERROR_PRINT("  %s : ets_fb_register_client fail: %d ", __func__, status);

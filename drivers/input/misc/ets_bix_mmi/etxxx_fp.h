@@ -196,6 +196,9 @@ struct egisfp_dev_t
 	struct pinctrl_state *vcc_low;
 	struct pinctrl_state *irq_active;
 	struct notifier_block notifier;
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+	void *notifier_cookie;
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 	struct drm_panel *active_panel;
 #endif
