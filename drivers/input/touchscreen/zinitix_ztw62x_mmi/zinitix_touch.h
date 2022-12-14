@@ -88,6 +88,7 @@
 #endif
 #endif
 
+#define ZINITIX_MAX_STR_LABLE_LEN	64
 
 #define ZINITIX_DEBUG			0
 #define TSP_VERBOSE_DEBUG
@@ -137,6 +138,10 @@ struct bt541_ts_platform_data {
 	void (*register_cb) (struct tsp_callbacks *);
 	struct tsp_callbacks callbacks;
 #endif
+	char avdd_name[ZINITIX_MAX_STR_LABLE_LEN];
+	char iovdd_name[ZINITIX_MAX_STR_LABLE_LEN];
+	int avdd_gpio;
+	int iovdd_gpio;
 };
 
  struct class *sec_class;

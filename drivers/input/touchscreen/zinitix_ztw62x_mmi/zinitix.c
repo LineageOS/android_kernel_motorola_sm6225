@@ -108,9 +108,9 @@ enum key_event {
 #define FT_I2C_VTG_MAX_UV	1800000
 
 
-#define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
-#define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
-#define PINCTRL_STATE_RELEASE	"pmx_ts_release"
+#define PINCTRL_STATE_ACTIVE	"cli_pmx_ts_active"
+#define PINCTRL_STATE_SUSPEND	"cli_pmx_ts_suspend"
+#define PINCTRL_STATE_RELEASE	"cli_pmx_ts_release"
 
 
 #define MAX_RAW_DATA_SZ			576 /* 32x18 */
@@ -1217,46 +1217,60 @@ fail_zinitix_resume_sequence:
 static int zinitix_power_control(struct bt541_ts_info *data, int on)
 {
 	int rc;
+	int avdd_gpio = data->pdata->avdd_gpio;
+	int iovdd_gpio = data->pdata->iovdd_gpio;
 
 	if (!on)
 		goto power_off;
 
-	rc = regulator_enable(data->vdd);
-	if (rc) {
-		dev_err(&data->client->dev,
-			"Regulator vdd enable failed rc=%d\n", rc);
-		return rc;
-	}
-
-	rc = regulator_enable(data->vcc_i2c);
-	if (rc) {
-		dev_err(&data->client->dev,
-			"Regulator vcc_i2c enable failed rc=%d\n", rc);
-		regulator_disable(data->vdd);
-	}
-
-	return rc;
-
-power_off:
-	rc = regulator_disable(data->vdd);
-	if (rc) {
-		dev_err(&data->client->dev,
-			"Regulator vdd disable failed rc=%d\n", rc);
-		return rc;
-	}
-
-	rc = regulator_disable(data->vcc_i2c);
-	if (rc) {
-		dev_err(&data->client->dev,
-			"Regulator vcc_i2c disable failed rc=%d\n", rc);
+	if (avdd_gpio > 0) {
+		gpio_direction_output(avdd_gpio, 1);
+	} else if (data->vdd) {
 		rc = regulator_enable(data->vdd);
 		if (rc) {
 			dev_err(&data->client->dev,
 				"Regulator vdd enable failed rc=%d\n", rc);
+			goto power_off;
 		}
 	}
 
-	return rc;
+	if (iovdd_gpio > 0) {
+		gpio_direction_output(iovdd_gpio, 1);
+	} else if (data->vcc_i2c) {
+		rc = regulator_enable(data->vcc_i2c);
+		if (rc) {
+			dev_err(&data->client->dev,
+				"Regulator vcc_i2c enable failed rc=%d\n", rc);
+			goto power_off;
+		}
+	}
+
+	return 0;
+
+power_off:
+	if (avdd_gpio > 0)
+		gpio_direction_output(avdd_gpio, 0);
+	else if (data->vdd) {
+		rc = regulator_disable(data->vdd);
+		if (rc) {
+			dev_err(&data->client->dev,
+				"Regulator vdd disable failed rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	if (iovdd_gpio > 0)
+		gpio_direction_output(iovdd_gpio, 0);
+	else if (data->vcc_i2c) {
+		rc = regulator_disable(data->vcc_i2c);
+		if (rc) {
+			dev_err(&data->client->dev,
+				"Regulator vcc_i2c disable failed rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return 0;
 }
 
 
@@ -2526,7 +2540,7 @@ static int bt541_pinctrl_configure(struct bt541_ts_info *info, bool active)
 }
 #endif
 
-#if defined(CONFIG_HAS_EARLYSUSPEND) || defined(CONFIG_FB)
+#if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 static int bt541_ts_resume(struct device *dev)
 {
 	int i = 0;
@@ -2757,7 +2771,7 @@ static void zinitix_early_suspend(struct early_suspend *h)
 
 
 #endif	/* CONFIG_FB */
-#endif
+#endif  /* TOUCHSCREEN_MMI */
 
 static bool ts_set_touchmode(u16 value)
 {
@@ -4647,45 +4661,56 @@ fail_hw_cal:
 
 static int zinitix_power_init(struct bt541_ts_info *data, bool on)
 {
+	struct bt541_ts_platform_data *pdata = data->pdata;
 	int rc;
 
 	if (!on)
 		goto pwr_deinit;
 
-	data->vdd = regulator_get(&data->client->dev, "vdd");
-	if (IS_ERR(data->vdd)) {
-		rc = PTR_ERR(data->vdd);
-		dev_err(&data->client->dev,
-			"Regulator get failed vdd rc=%d\n", rc);
-		return rc;
-	}
-
-	if (regulator_count_voltages(data->vdd) > 0) {
-		rc = regulator_set_voltage(data->vdd, FT_VTG_MIN_UV,
-					   FT_VTG_MAX_UV);
-		if (rc) {
+	if (strlen(pdata->avdd_name)) {
+		data->vdd = regulator_get(&data->client->dev, pdata->avdd_name);
+		if (IS_ERR_OR_NULL(data->vdd)) {
+			rc = PTR_ERR(data->vdd);
 			dev_err(&data->client->dev,
-				"Regulator set_vtg failed vdd rc=%d\n", rc);
-			goto reg_vdd_put;
+				"Regulator get failed vdd rc=%d\n", rc);
+			data->vdd = NULL;
+			return rc;
 		}
+
+		if (regulator_count_voltages(data->vdd) > 0) {
+			rc = regulator_set_voltage(data->vdd, FT_VTG_MIN_UV,
+						   FT_VTG_MAX_UV);
+			if (rc) {
+				dev_err(&data->client->dev,
+					"Regulator set_vtg failed vdd rc=%d\n", rc);
+				goto reg_vdd_put;
+			}
+		}
+	} else {
+		pr_info("%s: Avdd name is NULL", __func__);
 	}
 
-	data->vcc_i2c = regulator_get(&data->client->dev, "vcc_i2c");
-	if (IS_ERR(data->vcc_i2c)) {
-		rc = PTR_ERR(data->vcc_i2c);
-		dev_err(&data->client->dev,
-			"Regulator get failed vcc_i2c rc=%d\n", rc);
-		goto reg_vdd_set_vtg;
-	}
-
-	if (regulator_count_voltages(data->vcc_i2c) > 0) {
-		rc = regulator_set_voltage(data->vcc_i2c, FT_I2C_VTG_MIN_UV,
-					   FT_I2C_VTG_MAX_UV);
-		if (rc) {
+	if (strlen(pdata->iovdd_name)) {
+		data->vcc_i2c = regulator_get(&data->client->dev, pdata->iovdd_name);
+		if (IS_ERR_OR_NULL(data->vcc_i2c)) {
+			rc = PTR_ERR(data->vcc_i2c);
 			dev_err(&data->client->dev,
-			"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
-			goto reg_vcc_i2c_put;
+				"Regulator get failed vcc_i2c rc=%d\n", rc);
+			data->vcc_i2c = NULL;
+			goto reg_vdd_set_vtg;
 		}
+
+		if (regulator_count_voltages(data->vcc_i2c) > 0) {
+			rc = regulator_set_voltage(data->vcc_i2c, FT_I2C_VTG_MIN_UV,
+						   FT_I2C_VTG_MAX_UV);
+			if (rc) {
+				dev_err(&data->client->dev,
+				"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+				goto reg_vcc_i2c_put;
+			}
+		}
+	} else {
+		pr_info("%s: iovdd name is NULL", __func__);
 	}
 
 	return 0;
@@ -4700,15 +4725,19 @@ reg_vdd_put:
 	return rc;
 
 pwr_deinit:
-	if (regulator_count_voltages(data->vdd) > 0)
-		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vdd)) {
+		if (regulator_count_voltages(data->vdd) > 0)
+			regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
 
-	regulator_put(data->vdd);
+		regulator_put(data->vdd);
+	}
 
-	if (regulator_count_voltages(data->vcc_i2c) > 0)
-		regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vcc_i2c)) {
+		if (regulator_count_voltages(data->vcc_i2c) > 0)
+			regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
 
-	regulator_put(data->vcc_i2c);
+		regulator_put(data->vcc_i2c);
+	}
 	return 0;
 }
 
@@ -4806,7 +4835,6 @@ static int zinitix_hw_reset( struct bt541_ts_info* data,bool on )
 }
 
 static int zinitix_init_gpio(struct bt541_ts_info* data,bool on )
-
 {
 	int err = 0;
 
@@ -4829,25 +4857,74 @@ static int zinitix_init_gpio(struct bt541_ts_info* data,bool on )
 			}
 		}
 
-		return 0;
+		//init power gpio
+		if (data->pdata->avdd_gpio > 0) {
+			if (gpio_is_valid(data->pdata->avdd_gpio)) {
+				err = gpio_request(data->pdata->avdd_gpio,
+							"bt541_avdd_gpio");
+				if (err) {
+					dev_err(&data->client->dev,
+						"avdd gpio request failed");
+					zinitix_printk("avdd gpio request failed is %d\n",err);
+					goto err_avdd_gpio_req;
+				}
 
+				err = gpio_direction_output(data->pdata->avdd_gpio, 0);
+				if (err) {
+					dev_err(&data->client->dev,
+						"set_direction for avdd gpio failed\n");
+					goto err_avdd_gpio_req;
+				}
+			}
+		}
+
+		if (data->pdata->iovdd_gpio > 0) {
+			if (gpio_is_valid(data->pdata->iovdd_gpio)) {
+				err = gpio_request(data->pdata->iovdd_gpio,
+							"bt541_iovdd_gpio");
+				if (err) {
+					dev_err(&data->client->dev,
+						"iovdd gpio request failed");
+					zinitix_printk("iovdd gpio request failed is %d\n",err);
+					goto err_iovdd_gpio_req;
+				}
+
+				err = gpio_direction_output(data->pdata->iovdd_gpio, 0);
+				if (err) {
+					dev_err(&data->client->dev,
+						"set_direction for avdd gpio failed\n");
+					goto err_iovdd_gpio_req;
+				}
+			}
+		}
+
+		return 0;
 	}
 	else {
 		if (gpio_is_valid(data->pdata->gpio_int))
 			gpio_free(data->pdata->gpio_int);
+		if (gpio_is_valid(data->pdata->avdd_gpio))
+			gpio_free(data->pdata->avdd_gpio);
+		if (gpio_is_valid(data->pdata->iovdd_gpio))
+			gpio_free(data->pdata->iovdd_gpio);
 
 		return 0;
 	}
+
+err_iovdd_gpio_req:
+	if (gpio_is_valid(data->pdata->iovdd_gpio))
+		gpio_free(data->pdata->iovdd_gpio);
+err_avdd_gpio_req:
+	if (gpio_is_valid(data->pdata->avdd_gpio))
+		gpio_free(data->pdata->avdd_gpio);
 err_irq_gpio_req:
 	if (gpio_is_valid(data->pdata->gpio_reset))
 		gpio_free(data->pdata->gpio_reset);
 
 	return err;
 }
-
-
-
 #endif
+
 static int bt541_ts_probe_dt(struct device_node *np,
 			 struct device *dev,
 			 struct bt541_ts_platform_data *pdata)
@@ -4858,7 +4935,7 @@ static int bt541_ts_probe_dt(struct device_node *np,
 #endif
 	int ret = 0;
 	u32 temp;
-
+	const char *name_tmp;
 
 	ret = of_property_read_u32(np, "zinitix,x_resolution", &temp);
 	if (ret) {
@@ -4911,6 +4988,45 @@ static int bt541_ts_probe_dt(struct device_node *np,
 		pr_err("%s: of_get_named_gpio failed: tsp_gpio %d\n", __func__,
 			pdata->gpio_int);
 		return -EINVAL;
+	}
+
+	//Get power resource
+	pdata->avdd_gpio = of_get_named_gpio(np, "zinitix,avdd-gpio", 0);
+	if (pdata->avdd_gpio  < 0) {
+		pr_err("%s: can't find avdd-gpio, use other power supply", __func__);
+		pdata->avdd_gpio = 0;
+	} else {
+		pr_info("get avdd-gpio[%d] from dt", pdata->avdd_gpio);
+	}
+
+	pdata->iovdd_gpio = of_get_named_gpio(np, "zinitix,iovdd-gpio", 0);
+	if (pdata->iovdd_gpio  < 0) {
+		pr_err("%s: can't find iovdd-gpio, use other power supply", __func__);
+		pdata->iovdd_gpio = 0;
+	} else {
+		pr_info("%s: get iovdd-gpio[%d] from dt", __func__, pdata->iovdd_gpio);
+	}
+
+	memset(pdata->avdd_name, 0, sizeof(pdata->avdd_name));
+	ret = of_property_read_string(np, "zinitix,avdd-name", &name_tmp);
+	if (!ret) {
+		pr_info("%s: avdd name from dt: %s", __func__, name_tmp);
+		if (strlen(name_tmp) < sizeof(pdata->avdd_name))
+			strncpy(pdata->avdd_name, name_tmp, sizeof(pdata->avdd_name));
+		else
+			pr_info("%s, invalied avdd name length: %ld > %ld", __func__,
+				strlen(name_tmp), sizeof(pdata->avdd_name));
+	}
+
+	memset(pdata->iovdd_name, 0, sizeof(pdata->iovdd_name));
+	ret = of_property_read_string(np, "zinitix,iovdd-name", &name_tmp);
+	if (!ret) {
+		pr_info("%s: iovdd name from dt: %s", __func__, name_tmp);
+		if (strlen(name_tmp) < sizeof(pdata->iovdd_name))
+			strncpy(pdata->iovdd_name, name_tmp, sizeof(pdata->iovdd_name));
+		else
+			pr_info("%s, invalied iovdd name length: %ld > %ld", __func__,
+				strlen(name_tmp), sizeof(pdata->iovdd_name));
 	}
 
 	ret = of_property_read_u32(np, "zinitix,tsp_vdd_supply_type",
