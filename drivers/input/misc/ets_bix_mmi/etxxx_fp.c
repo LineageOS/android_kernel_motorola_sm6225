@@ -1045,7 +1045,7 @@ int egisfp_check_ioctl_permission(struct egisfp_dev_t *egis_dev, unsigned int cm
 		return -EACCES;
 	}
 }
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if ((defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))) || defined(SET_QCOM_PANEL_EVENT_NOTIFIER))
 static int drm_check_dt(struct egisfp_dev_t *egis_dev)
 {
 	int i = 0;
@@ -1433,7 +1433,7 @@ int egisfp_probe(struct platform_device *pdev)
 #if defined(SET_QCOM_PANEL_EVENT_NOTIFIER)
 	egis_dev->notifier_cookie = NULL;
 #endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+#if ((defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))) || defined(SET_QCOM_PANEL_EVENT_NOTIFIER))
 	egis_dev->active_panel = NULL;
 	drm_check_dt(egis_dev);
 #endif
