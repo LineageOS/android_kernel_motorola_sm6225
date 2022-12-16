@@ -1896,6 +1896,17 @@ static int fts_charger_notifier_callback(struct notifier_block *nb,
 			} else {
 				ts->usb_detect_flag = prop.intval;
 				//FTS_ERROR("usb prop.intval =%d\n", prop.intval);
+				if(ts->usb_detect_flag != ts->usb_connected){
+					if (ts->usb_detect_flag) {
+						ts->usb_connected = 0x01;
+					} else {
+						ts->usb_connected = 0x00;
+					}
+					if(!ts->suspended){
+						fts_mcu_usb_detect_set(ts->usb_connected);
+						FTS_INFO("%s: Cable status change: 0x%2.2X\n", __func__, ts->usb_connected);
+					}
+				}
 			}
 		}
 	}
