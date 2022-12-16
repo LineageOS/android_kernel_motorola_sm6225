@@ -29,7 +29,7 @@
 
 
 /* Upgrade Method*/
-#define TOUCH_ONESHOT_UPGRADE		1
+#define TOUCH_ONESHOT_UPGRADE		0
 #define TOUCH_FORCE_UPGRADE		1
 #define USE_CHECKSUM			0
 
@@ -113,6 +113,8 @@
 	do { \
 		pr_err("bt541_ts : %s " fmt, __func__); \
 	} while (0);
+
+#define FILE_NAME_LENGTH 128
 
 struct bt541_ts_platform_data {
 	int 	gpio_reset;

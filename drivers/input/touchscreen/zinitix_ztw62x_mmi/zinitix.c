@@ -49,6 +49,7 @@
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/version.h>
+#include <linux/firmware.h>
 
 #ifdef CONFIG_MACH_PXA_SAMSUNG
 #include <linux/sec-common.h>
@@ -1882,6 +1883,9 @@ retry_init:
 		(u8 *)&cap->reg_data_version, 2) < 0)
 		goto fail_init;
 
+	zinitix_printk("fw_version = 0x%x, fw_minor_version = 0x%x, reg_data_version = 0x%x\n",
+			cap->fw_version, cap->fw_minor_version, cap->reg_data_version);
+
 #if TOUCH_ONESHOT_UPGRADE
 	if ((checkMode == NULL) &&(ts_check_need_upgrade(info, cap->fw_version,
 			cap->fw_minor_version, cap->reg_data_version) == true) && (info->checkUMSmode == false)) {
@@ -2923,9 +2927,121 @@ static inline void set_default_result(struct bt541_ts_info *info)
 	strncat(info->factory_info->cmd_result, &delim, 1);
 }
 
+static int zinitix_read_file_request_firmware(char *file_name, u8 **file_buf)
+{
+	int ret = 0;
+	const struct firmware *fw = NULL;
+	char fwname[FILE_NAME_LENGTH] = { 0 };
+
+	snprintf(fwname, FILE_NAME_LENGTH, "%s", file_name);
+	ret = request_firmware(&fw, fwname, &misc_touch_dev->client->dev);
+	if (0 == ret) {
+		zinitix_printk("firmware(%s) request successfully\n", fwname);
+		*file_buf = vmalloc(fw->size);
+		if (NULL == *file_buf) {
+			zinitix_printk("fw buffer vmalloc fail\n");
+			ret = -ENOMEM;
+		} else {
+			memcpy(*file_buf, fw->data, fw->size);
+			ret = fw->size;
+		}
+	} else {
+		zinitix_printk("firmware(%s) request fail,ret=%d\n", fwname, ret);
+		ret = -EIO;
+	}
+
+	if (fw != NULL) {
+		release_firmware(fw);
+		fw = NULL;
+	}
+
+	return ret;
+}
+
+static int zinitix_read_file(char *file_name, u8 **file_buf)
+{
+	int ret = 0;
+	int count = 0;
+
+retry:
+	ret = zinitix_read_file_request_firmware(file_name, file_buf);
+	if (ret < 0) {
+		zinitix_printk("get fw file(default) fail: count = %d\n", count);
+		if (++count < 3)
+			goto retry;
+	}
+
+	return ret;
+}
+
 #define MAX_FW_PATH 255
 #define TSP_FW_FILENAME "zinitix_fw.bin"
 
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+static void fw_update(void *device_data)
+{
+	struct bt541_ts_info *info = (struct bt541_ts_info *)device_data;
+	struct i2c_client *client = info->client;
+	int ret = 0;
+	char result[16] = {0};
+	u8 *fw_file_buf = NULL;
+
+	set_default_result(info);
+
+	switch (info->factory_info->cmd_param[0]) {
+	case BUILT_IN:
+		ts_select_type_hw(info);
+		ret = ts_upgrade_sequence((u8*)m_pFirmware[m_FirmwareIdx]);
+		if(ret<0) {
+			info->factory_info->cmd_state = 3;
+			return;
+		}
+		break;
+
+	case UMS:
+		ret= zinitix_read_file(TSP_FW_FILENAME, &fw_file_buf);
+		if (ret != info->cap_info.ic_fw_size) {
+			dev_err(&client->dev, "invalid fw size!!\n");
+			goto error_upgrade;
+		}
+
+		dev_info(&client->dev, "ums fw is loaded!!\n");
+		info->checkUMSmode = true;
+		ret = ts_upgrade_sequence((u8 *)fw_file_buf);
+		info->checkUMSmode = false;
+		if(ret<0) {
+			dev_err(&client->dev, "fw upgrade fail!!\n");
+			goto error_upgrade;
+		}
+		break;
+
+	default:
+		dev_err(&client->dev, "invalid fw file type!!\n");
+		goto error_upgrade;
+	}
+
+	if (fw_file_buf) {
+		vfree(fw_file_buf);
+		fw_file_buf = NULL;
+	}
+	info->factory_info->cmd_state = 2;
+	snprintf(result, sizeof(result) , "%s", "OK");
+	set_cmd_result(info, result,
+			strnlen(result, sizeof(result)));
+	return;
+
+error_upgrade:
+	if (fw_file_buf) {
+		vfree(fw_file_buf);
+		fw_file_buf = NULL;
+	}
+	info->factory_info->cmd_state = 3;
+	snprintf(result, sizeof(result) , "%s", "NG");
+	set_cmd_result(info, result, strnlen(result, sizeof(result)));
+
+	return;
+}
+#else
 static void fw_update(void *device_data)
 {
 	struct bt541_ts_info *info = (struct bt541_ts_info *)device_data;
@@ -3016,6 +3132,11 @@ static void fw_update(void *device_data)
 	snprintf(result, sizeof(result) , "%s", "OK");
 	set_cmd_result(info, result,
 			strnlen(result, sizeof(result)));
+	if (buff) {
+		kfree(buff);
+		buff = NULL;
+	}
+	return;
 
 if (fp != NULL) {
 err_fw_size:
@@ -3034,6 +3155,7 @@ not_support:
 	set_cmd_result(info, result, strnlen(result, sizeof(result)));
 	return;
 }
+#endif
 
 static void get_fw_ver_bin(void *device_data)
 {
