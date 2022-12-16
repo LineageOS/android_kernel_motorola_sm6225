@@ -55,9 +55,14 @@
 #define SX937x_CONN_ERROR	0x4
 #define SX937x_I2C_ERROR	0x8
 
+#define SX937X_I2C_WATCHDOG_TIME 10000
+#define SX937X_I2C_WATCHDOG_TIME_ERR 2000
+
 #define MAX_CHANNEL_NUMBER 8
 static struct class *capsense_class;
 
+static void sx937x_reinitialize(psx93XX_t this);
+static void sx937x_i2c_watchdog_work(struct work_struct *work);
 
 //irq use
 static int sx937x_get_nirq_low(psx93XX_t this)
@@ -482,8 +487,13 @@ static ssize_t capsense_reset_store(struct device *dev,
 	if (!strncmp(buf, "cal", 3) ) {
 		LOG_INFO("%s sx937x capsense_reset_store msg: cal\n", this->hw->dbg_name);
 		if (temp & 0x000000FF) {
-			LOG_DBG("Going to refresh baseline %s\n",buf);
-			manual_offset_calibration(this->hw);
+			if (this->hw->reinit_on_cali) {
+				LOG_DBG("Going to reinit chipset %s\n",buf);
+				sx937x_reinitialize(this);
+			} else {
+				LOG_DBG("Going to refresh baseline %s\n",buf);
+				manual_offset_calibration(this->hw);
+			}
 		}
 	}
 
@@ -731,6 +741,17 @@ static ssize_t sx937x_fac_raw_show(struct device *dev,
 	return sizeof(data);
 }
 
+static ssize_t sx937x_reinitialize_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	psx93XX_t this = dev_get_drvdata(dev);
+
+	sx937x_reinitialize(this);
+
+	return count;
+}
+
 static DEVICE_ATTR(name, 0444, capsense_name_show, NULL);
 static DEVICE_ATTR(reset, 0220, NULL, capsense_reset_store);
 static DEVICE_ATTR(raw_data, 0444, capsense_raw_data_show, NULL);
@@ -742,6 +763,7 @@ static DEVICE_ATTR(fac_enable, 0220, NULL, sx937x_fac_enable_store);
 static DEVICE_ATTR(fac_cal, 0220, NULL, sx937x_fac_cal_store);
 static DEVICE_ATTR(fac_compensation, 0444, sx937x_fac_comp_show, NULL);
 static DEVICE_ATTR(fac_raw, 0444, sx937x_fac_raw_show, NULL);
+static DEVICE_ATTR(reinitialize, 0220, NULL, sx937x_reinitialize_store);
 
 static struct device_attribute *capsense_class_attrs[] = {
 	&dev_attr_name,
@@ -754,7 +776,8 @@ static struct device_attribute *capsense_class_attrs[] = {
 	&dev_attr_fac_enable,
 	&dev_attr_fac_cal,
 	&dev_attr_fac_compensation,
-	&dev_attr_fac_raw
+	&dev_attr_fac_raw,
+	&dev_attr_reinitialize
 };
 
 /**************************************/
@@ -1090,6 +1113,10 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 				pdata->flip_far_reg[i].reg,pdata->flip_far_reg[i].val);
 	}
 
+	pdata->reinit_on_cali = of_property_read_bool(dNode, "reinit-on-cali");
+	pdata->reinit_on_i2c_failure = of_property_read_bool(dNode, "reinit-on-i2c-failure");
+	LOG_INFO("reinit_on_cali %d,reinit_on_i2c_failure %d \n", pdata->reinit_on_cali,pdata->reinit_on_i2c_failure);
+
 	LOG_DBG("-[%d] parse_dt complete\n", pdata->irq_gpio);
 	return 0;
 }
@@ -1418,6 +1445,12 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 		}
 	}
 
+	if (pplatData->reinit_on_i2c_failure) {
+		INIT_DELAYED_WORK(&this->i2c_watchdog_work, sx937x_i2c_watchdog_work);
+		schedule_delayed_work(&this->i2c_watchdog_work,
+			msecs_to_jiffies(SX937X_I2C_WATCHDOG_TIME));
+	}
+
 	LOG_INFO("sx937x_probe() Done\n");
 	return 0;
 
@@ -1493,12 +1526,19 @@ static int sx937x_remove(struct i2c_client *client)
 static int sx937x_suspend(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
+	psx937x_platform_data_t pdata = 0;
 
 	if (this) {
+		/* If we happen to reinitialize during suspend we might fail so wait for it to end */
+		if ((pdata = this->hw)) {
+			if (pdata->reinit_on_i2c_failure)
+				cancel_delayed_work_sync(&this->i2c_watchdog_work);
+		}
 
 		sx937x_i2c_write_16bit(this->bus,SX937X_COMMAND,0xD);//make sx937x in Sleep mode
 		LOG_DBG(LOG_TAG "sx937x suspend:disable irq!\n");
 		disable_irq(this->irq);
+		this->suspended = 1;
 	}
 	return 0;
 }
@@ -1506,13 +1546,21 @@ static int sx937x_suspend(struct device *dev)
 static int sx937x_resume(struct device *dev)
 {
 	psx93XX_t this = dev_get_drvdata(dev);
-	//psx937x_platform_data_t pdata = 0;
+	psx937x_platform_data_t pdata = 0;
 
 	if (this) {
-
 		sx93XX_schedule_work(this,0);
 		enable_irq(this->irq);
 		sx937x_i2c_write_16bit(this->bus,SX937X_COMMAND,0xC);//Exit from Sleep mode
+		this->suspended = 0;
+
+		/* Restart the watchdog in 2 seconds */
+		if ((pdata = this->hw)) {
+			if (pdata->reinit_on_i2c_failure)
+				schedule_delayed_work(&this->i2c_watchdog_work,
+					msecs_to_jiffies(SX937X_I2C_WATCHDOG_TIME_ERR));
+		}
+
 	}
 	return 0;
 }
@@ -1573,3 +1621,86 @@ MODULE_AUTHOR("Semtech Corp. (http://www.semtech.com/)");
 MODULE_DESCRIPTION("SX937x Capacitive Proximity Controller Driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1");
+
+/* Read i2c every 10 seconds, if there is an error, schedule again in 2 seconds
+ * and if it fails a few more times we can assume there is a device error and reset
+ */
+static void sx937x_i2c_watchdog_work(struct work_struct *work)
+{
+	static int err_cnt = 0;
+	psx93XX_t this = container_of(work, sx93XX_t, i2c_watchdog_work.work);
+	int ret;
+	u32 temp;
+	int delay = SX937X_I2C_WATCHDOG_TIME;
+
+	LOG_DBG("sx937x_i2c_watchdog_work");
+
+	if(!this->suspended) {
+		ret = sx937x_i2c_read_16bit(this->bus, SX937X_DEVICE_INFO, &temp);
+		if (ret < 0) {
+			err_cnt++;
+			LOG_ERR("sx937x_i2c_watchdog_work err_cnt: %d", err_cnt);
+			delay = SX937X_I2C_WATCHDOG_TIME_ERR;
+		} else
+			err_cnt = 0;
+
+		if (err_cnt >= 3) {
+			err_cnt = 0;
+			sx937x_reinitialize(this);
+			delay = SX937X_I2C_WATCHDOG_TIME;
+		}
+	} else
+		LOG_DBG("sx937x_i2c_watchdog_work before resume.");
+
+	schedule_delayed_work(&this->i2c_watchdog_work,
+		msecs_to_jiffies(delay));
+}
+
+static void sx937x_reinitialize(psx93XX_t this)
+{
+	psx937x_platform_data_t pdata = 0;
+	struct _buttonInfo *pCurrentbutton;
+	u32 temp;
+	int i=0;
+	int retry;
+
+	if (this && (pdata = this->hw)) {
+		if (!pdata->reinit_on_i2c_failure && !pdata->reinit_on_cali)
+			return;
+		if (!atomic_add_unless(&this->init_busy, 1, 1))
+			return;
+		disable_irq(this->irq);
+		/* perform a reset */
+		for ( retry = 10; retry > 0; retry-- ) {
+			if (sx937x_i2c_write_16bit(this->bus, SX937X_DEVICE_RESET, 0xDE) >= 0)
+				break;
+			LOG_INFO("SX937x write SX937X_DEVICE_RESET retry:%d\n", 11 - retry);
+			msleep(10);
+		}
+		/* wait until the reset has finished by monitoring NIRQ */
+		LOG_INFO("Sent Software Reset. Waiting until device is back from reset to continue.\n");
+		/* just sleep for awhile instead of using a loop with reading irq status */
+		msleep(100);
+		sx937x_reg_init(this);
+		/* re-enable interrupt handling */
+		enable_irq(this->irq);
+
+		/* make sure no interrupts are pending since enabling irq will only
+		 * work on next falling edge */
+		read_regStat(this);
+
+		/* If one of the sensors is on, re-enable it */
+		sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+		for (i=0; i < pdata->buttonSize; i++) {
+			pCurrentbutton = &(pdata->buttons[i]);
+			if (pCurrentbutton->enabled) {
+				sx937x_i2c_write_16bit(this->bus, SX937X_GENERAL_SETUP, temp | 0x0000007F);
+				break;
+			}
+		}
+
+		manual_offset_calibration(this->hw);
+		atomic_set(&this->init_busy, 0);
+		LOG_ERR("reinitialized sx937x, count %d\n", this->reset_count++);
+	}
+}

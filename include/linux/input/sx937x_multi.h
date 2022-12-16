@@ -439,6 +439,8 @@ typedef struct sx937x_platform_data
 	struct _buttonInfo buttons[8];
 	int buttonSize;
 	pbuttonInformation_t pbuttonInformation;
+	bool reinit_on_cali;
+	bool reinit_on_i2c_failure;
 
 	int (*get_is_nirq_low)(void);
 
