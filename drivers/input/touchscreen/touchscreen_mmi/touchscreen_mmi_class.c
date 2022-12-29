@@ -417,6 +417,16 @@ static ssize_t liquid_detection_ctl_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (value == 2) {
+		dev_info(dev, "liquid_detection_ctl: Not support liquid detecion\n");
+		touch_cdev->pdata.support_liquid_detection = 0;
+		return size;
+	} else if (value == 3) {
+		dev_info(dev, "liquid_detection_ctl: Support liquid detecion\n");
+		touch_cdev->pdata.support_liquid_detection = 1;
+		return size;
+	}
+
 	mutex_lock(&touch_cdev->extif_mutex);
 	if (value != touch_cdev->lpd_state) {
 		touch_cdev->lpd_state = !!value;
