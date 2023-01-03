@@ -31,9 +31,7 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
-#include <linux/gpio.h>
 #include <linux/uaccess.h>
-#include <linux/regulator/consumer.h>
 #include <linux/input/mt.h>
 #include <linux/regulator/machine.h>
 #include <linux/of_device.h>
@@ -62,6 +60,8 @@
 #endif
 
 #include "zinitix_touch.h"
+#include "zinitix_ts_mmi.h"
+#include "zinitix_touch_zxt_firmware.h"
 
 #if (TSP_TYPE_COUNT == 1)
 u8 *m_pFirmware [TSP_TYPE_COUNT] = {(u8*)m_firmware_data,};
@@ -90,12 +90,6 @@ name = "zinitix_isp" , addr 0x50*/
 /* gpio controlled LDO based supply to TSP */
 #define TSP_LDO_SUPPLY			0
 
-enum power_control {
-	POWER_OFF,
-	POWER_ON,
-	POWER_ON_SEQUENCE,
-};
-
 /* Key Enum */
 enum key_event {
 	ICON_BUTTON_UNCHANGE,
@@ -114,9 +108,6 @@ enum key_event {
 #define PINCTRL_STATE_RELEASE	"cli_pmx_ts_release"
 
 
-#define MAX_RAW_DATA_SZ			576 /* 32x18 */
-#define MAX_TRAW_DATA_SZ	\
-	(MAX_RAW_DATA_SZ + 4*MAX_SUPPORTED_FINGER_NUM + 2)
 /* preriod raw data interval */
 
 #define RAWDATA_DELAY_FOR_HOST		100
@@ -293,9 +284,9 @@ struct reg_ioctl {
 
 extern int get_lcd_attached(void);
 extern unsigned int system_rev;
-static volatile int tpd_halt = 0;
+static volatile int __maybe_unused tpd_halt = 0;
 
-
+struct class *sec_class;
 /* end header file */
 
 #ifdef SEC_FACTORY_TEST
@@ -421,74 +412,9 @@ static u16 m_optional_mode = 0;
 static struct workqueue_struct *esd_tmr_workqueue;
 #endif
 
-struct coord {
-	u16	x;
-	u16	y;
-	u8	width;
-	u8	sub_status;
-#if (TOUCH_POINT_MODE == 2)
-	u8	minor_width;
-	u8	angle;
-#endif
-};
-
-struct point_info {
-	u16	status;
-#if (TOUCH_POINT_MODE == 1)
-	u16	event_flag;
-#else
-	u8	finger_cnt;
-	u8	time_stamp;
-#endif
-	struct coord coord[MAX_SUPPORTED_FINGER_NUM];
-};
-
 #define TOUCH_V_FLIP	0x01
 #define TOUCH_H_FLIP	0x02
 #define TOUCH_XY_SWAP	0x04
-
-struct capa_info {
-	u16	vendor_id;
-	u16	ic_revision;
-	u16	fw_version;
-	u16	fw_minor_version;
-	u16	reg_data_version;
-	u16	threshold;
-	u16	key_threshold;
-	u16	dummy_threshold;
-	u32	ic_fw_size;
-	u32	MaxX;
-	u32	MaxY;
-	u32	MinX;
-	u32	MinY;
-	u8	gesture_support;
-	u16	multi_fingers;
-	u16	button_num;
-	u16	ic_int_mask;
-	u16	x_node_num;
-	u16	y_node_num;
-	u16	total_node_num;
-	u16	hw_id;
-	u16	afe_frequency;
-	u16	i2s_checksum;
-	u16	shift_value;
-	u16	N_cnt;
-	u16	u_cnt;
-};
-
-enum work_state {
-	NOTHING = 0,
-	NORMAL,
-	ESD_TIMER,
-	SUSPEND,
-	RESUME,
-	UPGRADE,
-	REMOVE,
-	SET_MODE,
-	HW_CALIBRAION,
-	RAW_DATA,
-	PROBE,
-};
 
 enum {
 	BUILT_IN = 0,
@@ -496,62 +422,6 @@ enum {
 	REQ_FW,
 };
 
-struct bt541_ts_info {
-	struct i2c_client		*client;
-	struct input_dev		*input_dev;
-	struct bt541_ts_platform_data	*pdata;
-	struct pinctrl *ts_pinctrl;
-	struct pinctrl_state *pinctrl_state_active;
-	struct pinctrl_state *pinctrl_state_suspend;
-	struct pinctrl_state *pinctrl_state_release;
-
-	char				phys[32];
-
-	struct capa_info		cap_info;
-	struct point_info		touch_info;
-	struct point_info		reported_touch_info;
-	u16				icon_event_reg;
-	u16				prev_icon_event;
-
-	int				irq;
-#ifdef SUPPORTED_TOUCH_KEY
-	u8				button[MAX_SUPPORTED_BUTTON_NUM];
-#endif
-	u8				work_state;
-	struct semaphore		work_lock;
-
-	u8 finger_cnt1;
-
-#ifdef USE_TSP_TA_CALLBACKS
-	void (*register_cb) (struct tsp_callbacks *tsp_cb);
-	struct tsp_callbacks callbacks;
-#endif
-
-#if ESD_TIMER_INTERVAL
-	struct work_struct		tmr_work;
-	struct timer_list		esd_timeout_tmr;
-	struct timer_list		*p_esd_timeout_tmr;
-	spinlock_t			lock;
-#endif
-#if defined(CONFIG_FB)
-	struct notifier_block fb_notif;
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	struct early_suspend early_suspend;
-#endif
-
-	struct semaphore		raw_data_lock;
-	u16				touch_mode;
-	s16				cur_data[MAX_TRAW_DATA_SZ];
-	u8				update;
-#ifdef SEC_FACTORY_TEST
-	struct tsp_factory_info		*factory_info;
-	struct tsp_raw_data		*raw_data;
-#endif
-	struct regulator *vdd;
-	struct regulator *vcc_i2c;
-	bool device_enabled;
-	bool checkUMSmode;
-};
 struct bt541_ts_info *misc_touch_dev = NULL;
 
 /* Dummy touchkey code */
@@ -707,15 +577,12 @@ static inline s32 read_firmware_data(struct i2c_client *client,
 	return length;
 }
 
-static bool bt541_power_control(struct bt541_ts_info *info, u8 ctl);
 static bool bt541_power_sequence(struct bt541_ts_info *info);
 //static bool zinitix_resume_sequence(struct bt541_ts_info *info);
 static int zinitix_power_control(struct bt541_ts_info *data, int on);
 
 
 static bool init_touch(struct bt541_ts_info *info);
-static bool mini_init_touch(struct bt541_ts_info *info);
-static void clear_report_data(struct bt541_ts_info *info);
 #if ESD_TIMER_INTERVAL
 static void esd_timer_start(u16 sec, struct bt541_ts_info *info);
 static void esd_timer_stop(struct bt541_ts_info *info);
@@ -766,7 +633,6 @@ static struct miscdevice touch_misc_device = {
 struct bt541_ts_info *misc_info;
 #ifdef CONFIG_OF
 static int zinitix_init_gpio(struct bt541_ts_info* data,bool on );
-static int zinitix_hw_reset( struct bt541_ts_info* data,bool on );
 //static int resume_hw_reset( struct bt541_ts_info* data,bool on );
 
 #endif
@@ -785,12 +651,14 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 	u32 temp_sz;
 
 	disable_irq(info->irq);
+	info->irq_enabled = false;
 
 	down(&info->work_lock);
 	if (info->work_state != NOTHING) {
 		dev_err(&client->dev, "%s: Other process occupied (%d)\n",
 				__func__, info->work_state);
 		enable_irq(info->irq);
+		info->irq_enabled = true;
 		up(&info->work_lock);
 
 		return false;
@@ -821,9 +689,10 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 			dev_err(&client->dev, "%s: Failed to read raw data\n", __func__);
 			info->work_state = NOTHING;
 	 		enable_irq(info->irq);
-            up(&info->work_lock);
+			info->irq_enabled = true;
+			up(&info->work_lock);
 
-            return false;
+			return false;
 		}
 		sz -= I2C_BUFFER_SIZE;
 	}
@@ -831,6 +700,7 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 	write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 	info->work_state = NOTHING;
 	enable_irq(info->irq);
+	info->irq_enabled = true;
 	up(&info->work_lock);
 
 	return true;
@@ -845,12 +715,14 @@ static bool get_short_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
     int i;
 
 	disable_irq(info->irq);
+	info->irq_enabled = false;
 
 	down(&info->work_lock);
 	if (info->work_state != NOTHING) {
 		dev_err(&client->dev, "%s: Other process occupied (%d)\n",
 				__func__, info->work_state);
 		enable_irq(info->irq);
+		info->irq_enabled = true;
 		up(&info->work_lock);
 
 		return false;
@@ -870,19 +742,21 @@ static bool get_short_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 		msleep(1);
 
 	if (read_raw_data(client, BT541_RAWDATA_REG, (char *)(buff), CHECK_SHORT_DATA_NUM) < 0) {
-			dev_err(&client->dev, "%s: Failed to read short data\n", __func__);
-			info->work_state = NOTHING;
-	 		enable_irq(info->irq);
-            up(&info->work_lock);
+		dev_err(&client->dev, "%s: Failed to read short data\n", __func__);
+		info->work_state = NOTHING;
+		enable_irq(info->irq);
+		info->irq_enabled = true;
+		up(&info->work_lock);
 
-            return false;
-		}
+		return false;
+	}
 
 
 
 	write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 	info->work_state = NOTHING;
 	enable_irq(info->irq);
+	info->irq_enabled = true;
 	up(&info->work_lock);
 
 	return true;
@@ -978,21 +852,18 @@ static bool ts_read_coord(struct bt541_ts_info *info)
 	}
 
 #else
-
 		if (read_data(info->client, BT541_POINT_STATUS_REG,
 				(u8 *)(&info->touch_info), sizeof(struct point_info)) < 0) {
 			dev_err(&client->dev, "Failed to read point info\n");
 
 			return false;
 		}
-
 #endif
 
 out:
-
-
 	/* error */
-	if (zinitix_bit_test(info->touch_info.status, BIT_MUST_ZERO)) {
+	if (zinitix_bit_test(info->touch_info.status, BIT_MUST_ZERO) &&
+		info->touch_info.status != 0xffff) {
 		dev_err(&client->dev, "Invalid must zero bit(%04x)\n",
 			info->touch_info.status);
 		/*write_cmd(info->client, BT541_CLEAR_INT_STATUS_CMD);
@@ -1085,6 +956,7 @@ static void ts_tmr_work(struct work_struct *work)
 	info->work_state = ESD_TIMER;
 
 	disable_irq(info->irq);
+	info->irq_enabled = false;
 	//bt541_power_control(info, POWER_OFF);
 	bt541_power_control(info, POWER_ON_SEQUENCE);
 
@@ -1094,6 +966,7 @@ static void ts_tmr_work(struct work_struct *work)
 
 	info->work_state = NOTHING;
 	enable_irq(info->irq);
+	info->irq_enabled = true;
 	up(&info->work_lock);
 #if defined(TSP_VERBOSE_DEBUG)
 	dev_info(&client->dev, "tmr queue work--\n");
@@ -1105,6 +978,7 @@ fail_time_out_init:
 	esd_timer_start(CHECK_ESD_TIMER, info);
 	info->work_state = NOTHING;
 	enable_irq(info->irq);
+	info->irq_enabled = true;
 	up(&info->work_lock);
 
 	return;
@@ -1226,49 +1100,59 @@ static int zinitix_power_control(struct bt541_ts_info *data, int on)
 
 	if (avdd_gpio > 0) {
 		gpio_direction_output(avdd_gpio, 1);
-	} else if (data->vdd) {
+		dev_info(&data->client->dev, "Set avdd_gpio to 1\n");
+	} else if (data->vdd && !regulator_is_enabled(data->vdd)) {
 		rc = regulator_enable(data->vdd);
 		if (rc) {
 			dev_err(&data->client->dev,
 				"Regulator vdd enable failed rc=%d\n", rc);
 			goto power_off;
 		}
+		dev_info(&data->client->dev, "Enable data->vdd regualtor\n");
 	}
 
 	if (iovdd_gpio > 0) {
 		gpio_direction_output(iovdd_gpio, 1);
-	} else if (data->vcc_i2c) {
+		dev_info(&data->client->dev, "Set iovdd_gpio to 1\n");
+	} else if (data->vcc_i2c && !regulator_is_enabled(data->vcc_i2c)) {
 		rc = regulator_enable(data->vcc_i2c);
 		if (rc) {
 			dev_err(&data->client->dev,
 				"Regulator vcc_i2c enable failed rc=%d\n", rc);
 			goto power_off;
 		}
+		dev_info(&data->client->dev, "Enable data->vcc_i2c regualtor\n");
 	}
 
 	return 0;
 
 power_off:
-	if (avdd_gpio > 0)
+	if (avdd_gpio > 0) {
 		gpio_direction_output(avdd_gpio, 0);
+		dev_info(&data->client->dev, "Set avdd_gpio to 0\n");
+	}
 	else if (data->vdd) {
 		rc = regulator_disable(data->vdd);
 		if (rc) {
 			dev_err(&data->client->dev,
-				"Regulator vdd disable failed rc=%d\n", rc);
+				"%s: Regulator vdd disable failed rc=%d\n", __func__, rc);
 			return rc;
 		}
+		dev_info(&data->client->dev, "Disable data->vdd regualtor\n");
 	}
 
-	if (iovdd_gpio > 0)
+	if (iovdd_gpio > 0) {
 		gpio_direction_output(iovdd_gpio, 0);
+		dev_info(&data->client->dev, "Set iovdd_gpio to 0\n");
+	}
 	else if (data->vcc_i2c) {
 		rc = regulator_disable(data->vcc_i2c);
 		if (rc) {
 			dev_err(&data->client->dev,
-				"Regulator vcc_i2c disable failed rc=%d\n", rc);
+				"%s: Regulator vcc_i2c disable failed rc=%d\n", __func__, rc);
 			return rc;
 		}
+		dev_info(&data->client->dev, "Disable data->vcc_i2c regualtor\n");
 	}
 
 	return 0;
@@ -1276,7 +1160,7 @@ power_off:
 
 
 
-static bool bt541_power_control(struct bt541_ts_info *info, u8 ctl)
+bool bt541_power_control(struct bt541_ts_info *info, u8 ctl)
 {
 	pr_info("[TSP] %s, %d\n", __func__, ctl);
 
@@ -1553,14 +1437,14 @@ if (write_reg(client, 0xc011, 0x0080) != I2C_SUCCESS) {
 mdelay(10);
 printk("==========c011 end===============\n");
 
-if (write_cc02(client, 0x001f0028, 0x0002561A) < 0) {	
-	zinitix_printk("Failed to send 0028 command\nn");	
+if (write_cc02(client, 0x001f0028, 0x0002561A) < 0) {
+	zinitix_printk("Failed to send 0028 command\nn");
 	}
 mdelay(5);
 printk("==========0028 end===============\n");
 
-if (write_cc02(client, 0x001f002c, 0x00003bd0) < 0) {	
-	zinitix_printk("Failed to send 002c command\nn");	
+if (write_cc02(client, 0x001f002c, 0x00003bd0) < 0) {
+	zinitix_printk("Failed to send 002c command\nn");
 	}
 mdelay(5);
 printk("==========002c end===============\n");
@@ -1607,7 +1491,7 @@ printk("==========002c end===============\n");
 
 	mdelay(5);
 
-	zinitix_printk(KERN_INFO "init flash\n");
+	zinitix_printk("init flash\n");
 
 	if (write_reg(client, 0xc003, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("failed to write nvm vpp on\n");
@@ -1618,7 +1502,7 @@ printk("==========002c end===============\n");
 		zinitix_printk("failed to write nvm wp disable\n");
 		goto fail_upgrade;
 	}
-	
+
 	if (write_cmd(client, 0x01DF) != I2C_SUCCESS) {
 		zinitix_printk("Mass erase fail\n");
 		goto fail_upgrade;
@@ -1626,7 +1510,7 @@ printk("==========002c end===============\n");
 	mdelay(100);
 		//#define BT541_INIT_FLASH		0x01d0
 	if (write_cmd(client, BT541_INIT_FLASH) != I2C_SUCCESS) {
-			zinitix_printk(KERN_INFO "failed to init flash\n");
+			zinitix_printk("failed to init flash\n");
 		goto fail_upgrade;
 	}
 
@@ -1654,14 +1538,14 @@ printk("==========002c end===============\n");
 		goto fail_upgrade;
 	}
 
-	zinitix_printk(KERN_INFO "init flash\n");
+	zinitix_printk("init flash\n");
 
 	if (write_cmd(client, BT541_INIT_FLASH) != I2C_SUCCESS) {
-		zinitix_printk(KERN_INFO "failed to init flash\n");
+		zinitix_printk("failed to init flash\n");
 		goto fail_upgrade;
 	}
 
-	zinitix_printk(KERN_INFO "read firmware data\n");
+	zinitix_printk("read firmware data\n");
 
 	for (flash_addr = 0; flash_addr < size; ) {
 		for (i = 0; i < page_sz/TC_SECTOR_SZ; i++) {
@@ -2034,7 +1918,7 @@ fail_init:
 	return false;
 }
 
-static bool mini_init_touch(struct bt541_ts_info *info)
+bool mini_init_touch(struct bt541_ts_info *info)
 {
 	struct bt541_ts_platform_data *pdata = info->pdata;
 	struct i2c_client *client = info->client;
@@ -2133,7 +2017,7 @@ fail_mini_init:
 }
 
 
-static void clear_report_data(struct bt541_ts_info *info)
+void clear_report_data(struct bt541_ts_info *info)
 {
 	int i;
 	u8 reported = 0;
@@ -2273,16 +2157,15 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 		bt541_power_control(info, POWER_ON_SEQUENCE);
 		mini_init_touch(info);
 		goto out;
-
 	}
 
 	if(write_cmd(client, BT541_CLEAR_INT_STATUS_CMD)!=0)
 		dev_err(&client->dev, "BT541_CLEAR_INT_STATUS_CMD error 11\n");
 
 	/* invalid : maybe periodical repeated int. */
-	if (info->touch_info.status == 0x0)
+	if (info->touch_info.status == 0x0 || info->touch_info.status == 0xffff)
 	{
-		//dev_err(&client->dev, "periodical interrupt\r\n");
+		dev_err(&client->dev, "periodical interrupt\r\n");
 
 		goto out;
 	}
@@ -2544,6 +2427,84 @@ static int bt541_pinctrl_configure(struct bt541_ts_info *info, bool active)
 }
 #endif
 
+int zinitix_ts_mmi_gesture_suspend(struct device *dev)
+{
+	int i = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct bt541_ts_info *info = i2c_get_clientdata(client);
+
+	down(&info->work_lock);
+	//reset gesture register
+	if (write_reg(client, 0x126, 0) != I2C_SUCCESS) {
+		dev_err(dev, "%s: Reset gesture register error.\n", __func__);
+		up(&info->work_lock);
+		return -1;
+	}
+	//enable irq wake
+	enable_irq_wake(info->irq);
+	info->irq_enabled = true;
+	//send enable easy wake gesture cmd
+	if (write_reg(client, 0x011D, 0x0089) != I2C_SUCCESS) {
+		zinitix_printk("easy_wakeup_gesture write_reg[0x0089] failed!!!-------------\n");
+		up(&info->work_lock);
+		return -1;
+	}
+	//clear INT status
+	for(i = 0; i < 3; i++) {
+		if (write_cmd(client, BT541_CLEAR_INT_STATUS_CMD) < 0) {
+			dev_err(&client->dev,"tpd_suspend fail to clear int(%d)\r\n", i);
+			mdelay(10);
+			continue;
+		} else
+		break;
+	}
+	if (i == 3) {
+		up(&info->work_lock);
+		return -1;
+	}
+	//send idle cmd
+	for(i = 0; i < 3; i++) {
+		if (write_cmd(client, BT541_IDLE_CMD) < 0) {
+			dev_err(&client->dev,"tpd_suspend fail to send sleep cmd(%d)\r\n", i);
+			mdelay(10);
+			continue;
+			} else
+			break;
+	}
+	if (i == 3) {
+		up(&info->work_lock);
+		return -1;
+	}
+	up(&info->work_lock);
+
+	return 0;
+}
+
+int zinitix_ts_mmi_gesture_resume(struct device *dev)
+{
+	int err = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct bt541_ts_info *info = i2c_get_clientdata(client);
+
+	down(&info->work_lock);
+	//disable irq wake
+	disable_irq_wake(info->irq);
+
+	//reset touch IC when resume
+	zinitix_hw_reset(info,true);
+	mdelay(CHIP_ON_DELAY);
+	bt541_power_sequence(info);
+	err = mini_init_touch(info);
+	if(err < 0){
+		zinitix_printk("resume_reset :  zinitix_resume_proc error\n");
+		up(&info->work_lock);
+		return -1;
+	}
+	up(&info->work_lock);
+
+	return 0;
+}
+
 #if !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 static int bt541_ts_resume(struct device *dev)
 {
@@ -2621,6 +2582,7 @@ reset_exit:
 
 #if !USE_WAKEUP_GESTURE/*eric add 20170208*/
 	enable_irq(info->irq);
+	info->irq_enabled = true;
 #endif
 
 	if (easy_wake) {
@@ -2661,12 +2623,12 @@ static int bt541_ts_suspend(struct device *dev)
 	dev_err(&client->dev, "bt541_ts_suspend 11\n");
 
 #if !USE_WAKEUP_GESTURE/*eric add 20170208*/
-
 	disable_irq(info->irq);
+	info->irq_enabled = false;
 #else
 	disable_irq_wake(info->irq);
 	enable_irq_wake(info->irq);
-
+	info->irq_enabled = true;
 #endif
 
 	if(!info->device_enabled) {
@@ -2687,6 +2649,7 @@ static int bt541_ts_suspend(struct device *dev)
 		up(&info->work_lock);
 	#if !USE_WAKEUP_GESTURE/*eric add 20170208*/
 		enable_irq(info->irq);
+		info->irq_enabled = true;
 	#endif
 		return 0;
 	}
@@ -2782,12 +2745,14 @@ static bool ts_set_touchmode(u16 value)
 	int i;
 
 	disable_irq(misc_info->irq);
+	misc_info->irq_enabled = false;
 
 	down(&misc_info->work_lock);
 	if (misc_info->work_state != NOTHING) {
 		printk(KERN_INFO "other process occupied.. (%d)\n",
 			misc_info->work_state);
 		enable_irq(misc_info->irq);
+		misc_info->irq_enabled = true;
 		up(&misc_info->work_lock);
 		return -1;
 	}
@@ -2867,13 +2832,15 @@ static bool ts_set_touchmode(u16 value)
 
 	misc_info->work_state = NOTHING;
 	enable_irq(misc_info->irq);
+	misc_info->irq_enabled = true;
 	up(&misc_info->work_lock);
 	return 1;
 }
 
-static int ts_upgrade_sequence(const u8 *firmware_data)
+int ts_upgrade_sequence(const u8 *firmware_data)
 {
 	disable_irq(misc_info->irq);
+	misc_info->irq_enabled = false;
 	down(&misc_info->work_lock);
 	misc_info->work_state = UPGRADE;
 
@@ -2888,6 +2855,7 @@ static int ts_upgrade_sequence(const u8 *firmware_data)
 		firmware_data,
 		misc_info->cap_info.ic_fw_size) == false) {
 		enable_irq(misc_info->irq);
+		misc_info->irq_enabled = true;
 		misc_info->work_state = NOTHING;
 		up(&misc_info->work_lock);
 		return -1;
@@ -2895,6 +2863,7 @@ static int ts_upgrade_sequence(const u8 *firmware_data)
 
 	if (init_touch(misc_info) == false) {
 		enable_irq(misc_info->irq);
+		misc_info->irq_enabled = true;
 		misc_info->work_state = NOTHING;
 		up(&misc_info->work_lock);
 		return -1;
@@ -2908,6 +2877,7 @@ static int ts_upgrade_sequence(const u8 *firmware_data)
 #endif
 
 	enable_irq(misc_info->irq);
+	misc_info->irq_enabled = true;
 	misc_info->work_state = NOTHING;
 	up(&misc_info->work_lock);
 	return 0;
@@ -2958,7 +2928,7 @@ static int zinitix_read_file_request_firmware(char *file_name, u8 **file_buf)
 	return ret;
 }
 
-static int zinitix_read_file(char *file_name, u8 **file_buf)
+int zinitix_read_file(char *file_name, u8 **file_buf)
 {
 	int ret = 0;
 	int count = 0;
@@ -4560,6 +4530,7 @@ static long ts_misc_fops_ioctl(struct file *filp,
 	case TOUCH_IOCTL_HW_CALIBRAION:
 		ret = -1;
 		disable_irq(misc_info->irq);
+		misc_info->irq_enabled = false;
 		down(&misc_info->work_lock);
 		if (misc_info->work_state != NOTHING) {
 			pr_info("[zinitix_touch]: other process occupied.. (%d)\r\n",
@@ -4583,11 +4554,13 @@ static long ts_misc_fops_ioctl(struct file *filp,
 			goto fail_hw_cal;
 
 		enable_irq(misc_info->irq);
+		misc_info->irq_enabled = true;
 		misc_info->work_state = NOTHING;
 		up(&misc_info->work_lock);
 		return ret;
 fail_hw_cal:
 		enable_irq(misc_info->irq);
+		misc_info->irq_enabled = true;
 		misc_info->work_state = NOTHING;
 		up(&misc_info->work_lock);
 		return -1;
@@ -4922,7 +4895,7 @@ static const struct of_device_id zinitix_match_table[] = {
 	{ .compatible = "zinitix,bt541_ts_device",},
 	{},
 };
-static int zinitix_hw_reset( struct bt541_ts_info* data,bool on )
+int zinitix_hw_reset( struct bt541_ts_info* data,bool on )
 {
 	int err = 0;
 	printk("zinitix_hw_reset: on = %d, gpio_reset = %d\n", on, data->pdata->gpio_reset);
@@ -5110,6 +5083,16 @@ static int bt541_ts_probe_dt(struct device_node *np,
 		pr_err("%s: of_get_named_gpio failed: tsp_gpio %d\n", __func__,
 			pdata->gpio_int);
 		return -EINVAL;
+	}
+
+	/* get ic name */
+	ret = of_property_read_string(np, "ic_name", &name_tmp);
+	if (ret) {
+		pr_err("%s, get ic_name failed", __func__);
+		return -EINVAL;
+	} else {
+		pr_info("%s, ic_name from dt: %s", __func__, name_tmp);
+		strncpy(pdata->ic_name, name_tmp, sizeof(pdata->ic_name));
 	}
 
 	//Get power resource
@@ -5479,6 +5462,7 @@ static int bt541_ts_probe(struct i2c_client *client,
 		ret = -ENODEV;
 		goto err_irq_of_parse;
 	}
+	info->irq_enabled = true;
 
 	pdata->tsp_irq = info->irq;
 	ret = request_threaded_irq(info->irq, NULL, bt541_touch_work,
@@ -5530,10 +5514,21 @@ static int bt541_ts_probe(struct i2c_client *client,
 
 	enable_irq_wake(misc_info->irq);
 #endif
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	dev_info(&client->dev, "%s:zinitix_ts_mmi_dev_register", __func__);
+	ret = zinitix_ts_mmi_dev_register(&client->dev);
+	if (ret) {
+		dev_info(&client->dev, "%s: Failed register touchscreen mmi.", __func__);
+		goto err_ts_mmi_register;
+	}
+#endif
+
 	dev_info(&client->dev, "bt541_ts_probe: SUCCESS\n");
 
 	return ret;
 
+err_ts_mmi_register:
 #ifdef SEC_FACTORY_TEST
 err_kthread_create_failed:
 	kfree(info->factory_info);
@@ -5593,6 +5588,7 @@ static int bt541_ts_remove(struct i2c_client *client)
 	struct bt541_ts_platform_data *pdata = info->pdata;
 
 	disable_irq(info->irq);
+	info->irq_enabled = false;
 	down(&info->work_lock);
 
 	info->work_state = REMOVE;
@@ -5609,6 +5605,11 @@ static int bt541_ts_remove(struct i2c_client *client)
 	dev_info(&client->dev, "Stopped esd timer\n");
 #endif
 	destroy_workqueue(esd_tmr_workqueue);
+#endif
+
+#ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
+	dev_info(&client->dev, "%s:zinitix_ts_mmi_dev_unregister", __func__);
+	zinitix_ts_mmi_dev_unregister(&client->dev);
 #endif
 
 	if (info->irq)
