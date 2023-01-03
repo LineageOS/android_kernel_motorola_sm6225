@@ -1233,7 +1233,10 @@ static void mmi_get_temp_zone(struct mmi_charger_chip *chip,
 	if (!charger->profile.temp_zones) {
 		zones = NULL;
 		num_zones = 0;
-		max_temp = MAX_TEMP_C;
+		if (chip->max_chrg_temp >= MIN_MAX_TEMP_C)
+			max_temp = chip->max_chrg_temp;
+		else
+			max_temp = MAX_TEMP_C;
 	} else {
 		zones = charger->profile.temp_zones;
 		if (chip->max_chrg_temp >= MIN_MAX_TEMP_C)
