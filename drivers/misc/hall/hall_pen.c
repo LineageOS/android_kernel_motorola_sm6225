@@ -243,7 +243,7 @@ static int hall_sensor_probe(struct platform_device *pdev)
 	hall_sensor_dev->sensors_pen_cdev.type = SENSOR_TYPE_MOTO_HALL;
 	hall_sensor_dev->sensors_pen_cdev.max_range = "5";
 	hall_sensor_dev->sensors_pen_cdev.resolution = "5.0";
-	hall_sensor_dev->sensors_pen_cdev.sensor_power = "3";
+	hall_sensor_dev->sensors_pen_cdev.sensor_power = "0.005";
 	hall_sensor_dev->sensors_pen_cdev.min_delay = 0;
 	hall_sensor_dev->sensors_pen_cdev.fifo_reserved_event_count = 0;
 	hall_sensor_dev->sensors_pen_cdev.fifo_max_event_count = 0;
