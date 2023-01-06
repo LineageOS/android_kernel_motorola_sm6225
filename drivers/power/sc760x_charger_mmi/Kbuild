@@ -1,0 +1,10 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/sc760x_charger_mmi \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger
+
+
+obj-m += sc760x_charger_mmi.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
