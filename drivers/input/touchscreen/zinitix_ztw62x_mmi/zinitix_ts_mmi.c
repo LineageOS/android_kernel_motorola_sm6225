@@ -353,6 +353,8 @@ static struct ts_mmi_methods zinitix_ts_mmi_methods = {
 
 int zinitix_ts_mmi_dev_register(struct device *dev) {
 	int ret;
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+	ASSERT_PTR(info);
 
 	ret = ts_mmi_dev_register(dev, &zinitix_ts_mmi_methods);
 	if (ret) {
@@ -360,6 +362,14 @@ int zinitix_ts_mmi_dev_register(struct device *dev) {
 		return ret;
 	}
 	dev_info(dev, "%s, Register ts mmi success\n", __func__);
+
+	info->imports = &zinitix_ts_mmi_methods.exports;
+
+#if defined(CONFIG_GTP_LIMIT_USE_SUPPLIER)
+	if (info->imports && info->imports->get_supplier) {
+		ret = info->imports->get_supplier(dev, &info->supplier);
+	}
+#endif
 
 	return 0;
 }

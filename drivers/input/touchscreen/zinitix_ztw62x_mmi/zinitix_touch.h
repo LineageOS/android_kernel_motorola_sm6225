@@ -90,6 +90,7 @@
 #endif
 
 #define ZINITIX_MAX_STR_LABLE_LEN	64
+#define RAW_DATA_BUFFER_SIZE		1024
 
 #define ZINITIX_DEBUG			0
 #define TSP_VERBOSE_DEBUG
@@ -222,6 +223,14 @@ struct capa_info {
 	u16	u_cnt;
 };
 
+struct ts_test_params {
+	s32 max_raw_limits[RAW_DATA_BUFFER_SIZE];
+	s32 min_raw_limits[RAW_DATA_BUFFER_SIZE];
+	s32 short_threshold;
+	u8 raw_data_pass;
+	u8 short_data_pass;
+};
+
 struct bt541_ts_info {
 	struct i2c_client		*client;
 	struct input_dev		*input_dev;
@@ -279,6 +288,15 @@ struct bt541_ts_info {
 	bool checkUMSmode;
 	bool irq_enabled;
 	bool gesture_enabled;
+
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+	struct ts_mmi_class_methods *imports;
+#endif
+	struct work_struct cmcp_threshold_update;
+	struct completion builtin_cmcp_threshold_complete;
+	struct ts_test_params test_params;
+	int builtin_cmcp_threshold_status;
+	const char *supplier;
 };
 
 extern int zinitix_hw_reset( struct bt541_ts_info* data,bool on );

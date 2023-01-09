@@ -109,8 +109,15 @@ enum key_event {
 
 
 /* preriod raw data interval */
-
 #define RAWDATA_DELAY_FOR_HOST		100
+
+#define ZINITIX_MAX_PRBUF_SIZE				PIPE_BUF
+#define ZINITIX_THRESHOLD_FILE_NAME			"zinitix_cmcp_thresholdfile.csv"
+#define MAX_LINE_LEN					(1024 * 3 * 7)
+#define CSV_TP_RAW_DATA_MIN				"raw_data_min"
+#define CSV_TP_RAW_DATA_MAX				"raw_data_max"
+#define CSV_TP_SHORT_DATA_THRESHOLD			"short_data_threshold"
+#define CSV_BUFFER_LEN					(1024*80*5)
 
 struct raw_ioctl {
 	int sz;
@@ -650,8 +657,11 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 	int i;
 	u32 temp_sz;
 
-	disable_irq(info->irq);
-	info->irq_enabled = false;
+	if (info->irq_enabled == true) {
+		disable_irq(info->irq);
+		info->irq_enabled = false;
+		zinitix_printk("Disable irq.\n");
+	}
 
 	down(&info->work_lock);
 	if (info->work_state != NOTHING) {
@@ -679,6 +689,7 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 	while (gpio_get_value(pdata->gpio_int))
 		mdelay(1);
 
+	zinitix_printk("sz = %d\n", sz);
 	for(i = 0; sz > 0; i++){
 		temp_sz = I2C_BUFFER_SIZE;
 
@@ -699,8 +710,6 @@ static bool get_raw_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 
 	write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 	info->work_state = NOTHING;
-	enable_irq(info->irq);
-	info->irq_enabled = true;
 	up(&info->work_lock);
 
 	return true;
@@ -712,10 +721,14 @@ static bool get_short_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 {
 	struct i2c_client *client = info->client;
 	struct bt541_ts_platform_data *pdata = info->pdata;
-    int i;
+	int i;
+	int sz;
 
-	disable_irq(info->irq);
-	info->irq_enabled = false;
+	if (info->irq_enabled == true) {
+		disable_irq(info->irq);
+		info->irq_enabled = false;
+		zinitix_printk("Disable irq.\n");
+	}
 
 	down(&info->work_lock);
 	if (info->work_state != NOTHING) {
@@ -741,7 +754,11 @@ static bool get_short_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 	while (gpio_get_value(pdata->gpio_int))
 		msleep(1);
 
-	if (read_raw_data(client, BT541_RAWDATA_REG, (char *)(buff), CHECK_SHORT_DATA_NUM) < 0) {
+	sz = (info->cap_info.x_node_num + info->cap_info.y_node_num) * 2;
+	zinitix_printk("sz = %d, x_node_num = %d, y_node_num = %d\n", sz,
+		info->cap_info.x_node_num, info->cap_info.y_node_num);
+
+	if (read_raw_data(client, BT541_RAWDATA_REG, (char *)(buff), sz) < 0) {
 		dev_err(&client->dev, "%s: Failed to read short data\n", __func__);
 		info->work_state = NOTHING;
 		enable_irq(info->irq);
@@ -751,12 +768,8 @@ static bool get_short_data(struct bt541_ts_info *info, u8 *buff, int skip_cnt)
 		return false;
 	}
 
-
-
 	write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 	info->work_state = NOTHING;
-	enable_irq(info->irq);
-	info->irq_enabled = true;
 	up(&info->work_lock);
 
 	return true;
@@ -785,6 +798,7 @@ static bool ts_get_raw_data(struct bt541_ts_info *info)
 		if(sz < I2C_BUFFER_SIZE)
 			temp_sz = sz;
 
+		dev_info(&client->dev, "%s: sz = %d\n", __func__, sz);
 		if (read_raw_data(client, BT541_RAWDATA_REG + i, (char *)((u8*)(info->cur_data)+ (i*I2C_BUFFER_SIZE)), temp_sz) < 0) {
 			dev_err(&client->dev, "%s: Failed to read raw data\n", __func__);
 			up(&info->raw_data_lock);
@@ -2744,8 +2758,11 @@ static bool ts_set_touchmode(u16 value)
 {
 	int i;
 
-	disable_irq(misc_info->irq);
-	misc_info->irq_enabled = false;
+	if (misc_info->irq_enabled == true) {
+		disable_irq(misc_info->irq);
+		misc_info->irq_enabled = false;
+		zinitix_printk("Disable irq.\n");
+	}
 
 	down(&misc_info->work_lock);
 	if (misc_info->work_state != NOTHING) {
@@ -2824,16 +2841,28 @@ static bool ts_set_touchmode(u16 value)
 		printk(KERN_INFO "[zinitix_touch] TEST Mode : "
 				"Fail to set ZINITX_TOUCH_MODE %d.\r\n", misc_info->touch_mode);
 
+	if (write_cmd(misc_info->client, BT541_SWRESET_CMD) != I2C_SUCCESS) {
+		zinitix_printk("Failed to write reset command\n");
+	}
+	mdelay(400);
+
+	zinitix_printk("clear garbage data\n");
 	/* clear garbage data */
 	for (i = 0; i < 10; i++) {
 		mdelay(20);
 		write_cmd(misc_info->client, BT541_CLEAR_INT_STATUS_CMD);
 	}
 
+	if (misc_info->touch_mode == TOUCH_POINT_MODE) {
+		if (misc_info->irq_enabled == false) {
+			enable_irq(misc_info->irq);
+			misc_info->irq_enabled = true;
+			zinitix_printk("Enable irq.\n");
+		}
+	}
 	misc_info->work_state = NOTHING;
-	enable_irq(misc_info->irq);
-	misc_info->irq_enabled = true;
 	up(&misc_info->work_lock);
+	zinitix_printk("Set touch mode to %d success.\n", misc_info->touch_mode);
 	return 1;
 }
 
@@ -3261,7 +3290,7 @@ static void get_module_vendor(void *device_data)
 }
 
 
-#define BT541_VENDOR_NAME "ZINITIX"
+#define BT541_VENDOR_NAME "zinitix"
 
 static void get_chip_vendor(void *device_data)
 {
@@ -3424,6 +3453,274 @@ static void get_reference(void *device_data)
 	return;
 }
 
+static int getrid_space(s8* data, s32 len)
+{
+	u8* buf = NULL;
+	s32 i;
+	u32 count = 0;
+
+	buf = (char*)kzalloc(len + 5, GFP_KERNEL);
+	if (buf == NULL){
+		zinitix_printk("get space kzalloc error\n");
+		return -ESRCH;
+	}
+
+	for (i = 0; i < len; i++)
+	{
+		if (data[i] == ' ' || data[i] == '\r' || data[i] == '\n')
+		{
+			continue;
+		}
+		buf[count++] = data[i];
+	}
+
+	buf[count++] = '\0';
+
+	memcpy(data, buf, count);
+	kfree(buf);
+
+	return count;
+}
+
+static void copy_this_line(char *dest, char *src)
+{
+	char *copy_from;
+	char *copy_to;
+
+	copy_from = src;
+	copy_to = dest;
+	do {
+		*copy_to = *copy_from;
+		copy_from++;
+		copy_to++;
+	} while((*copy_from != '\n') && (*copy_from != '\r') && (*copy_from != '\0'));
+	*copy_to = '\0';
+}
+
+static void goto_next_line(char **ptr)
+{
+	do {
+		*ptr = *ptr + 1;
+	} while (**ptr != '\n' && **ptr != '\0');
+	if (**ptr == '\0') {
+		return;
+	}
+	*ptr = *ptr + 1;
+}
+
+static int parse_valid_data(char *buf_start, loff_t buf_size,
+	char *ptr, s32 *data, s32 rows)
+{
+	int i = 0;
+	int j = 0;
+	char *token = NULL;
+	char *tok_ptr = NULL;
+	char *row_data = NULL;
+	long temp_val;
+
+	if (!ptr) {
+		zinitix_printk("ptr is NULL\n");
+		return -EINVAL;
+	}
+	if (!data) {
+		zinitix_printk("data is NULL\n");
+		return -EINVAL;
+	}
+
+	row_data = (char *)kzalloc(MAX_LINE_LEN, GFP_KERNEL);
+	if (!row_data) {
+		zinitix_printk("alloc bytes %d failed.\n", MAX_LINE_LEN);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < rows; i++) {
+		memset(row_data, 0, MAX_LINE_LEN);
+		copy_this_line(row_data, ptr);
+		getrid_space(row_data, strlen(row_data));
+		tok_ptr = row_data;
+		while ((token = strsep(&tok_ptr,","))) {
+			if (strlen(token) == 0)
+				continue;
+			if (kstrtol(token, 0, &temp_val)) {
+				kfree(row_data);
+				return -EINVAL;
+			}
+			data[j++] = (s32)temp_val;
+		}
+		if (i == rows - 1)
+			break;
+		goto_next_line(&ptr);//next row
+		if(!ptr || (0 == strlen(ptr)) || (ptr >= (buf_start + buf_size))) {
+			zinitix_printk("invalid ptr, return\n");
+			kfree(row_data);
+			row_data = NULL;
+			return -EPERM;
+		}
+	}
+	kfree(row_data);
+	return j;
+}
+
+static int parse_csvfile(char *buf, size_t size, char *target_name,
+	s32 *data, s32 rows, s32 col)
+{
+	int ret = 0;
+	char *ptr = NULL;
+	int read_ret;
+
+	read_ret = size;
+	if (read_ret > 0) {
+		ptr = buf;
+		ptr = strstr(ptr, target_name);
+		if (!ptr) {
+			zinitix_printk("load %s failed 1, maybe not this item\n", target_name);
+			return -EINTR;
+		}
+
+		goto_next_line(&ptr);
+		if (!ptr || (0 == strlen(ptr))) {
+			zinitix_printk("load %s failed 2!\n", target_name);
+			return -EIO;
+		}
+
+		if (data) {
+			ret = parse_valid_data(buf, size, ptr, data, rows);
+		} else {
+			zinitix_printk("load %s failed 3!\n", target_name);
+			return -EINTR;
+		}
+	} else {
+		zinitix_printk("ret=%d, read_ret=%d\n", ret, read_ret);
+		ret = -ENXIO;
+	}
+
+	return ret;
+}
+
+static void zinitix_cmcp_parse_threshold_file(const struct firmware *fw,
+		void *context)
+{
+	struct device *dev = context;
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+	struct ts_test_params *test_params = &info->test_params;
+	char *temp_buf = NULL;
+	int ret;
+	u32 tx = 0;
+	u32 rx = 1;
+	int i;
+
+	if (!fw) {
+		dev_err(dev, "%s: No builtin cmcp threshold file\n", __func__);
+		goto exit_free;
+	}
+
+	if (!fw->data || !fw->size) {
+		dev_err(dev, "%s: Invalid builtin cmcp threshold file\n",
+		__func__);
+		goto exit_free;
+	}
+	zinitix_printk("Found cmcp threshold file.\n");
+
+	temp_buf = kzalloc(fw->size + 1, GFP_KERNEL);
+	if (!temp_buf) {
+		dev_err(dev, "%s: kzalloc bytes failed.", __func__);
+		goto exit_free;
+	}
+	memcpy(temp_buf, fw->data, fw->size);
+
+	/* obtain raw data min */
+	ret = parse_csvfile(temp_buf, fw->size, CSV_TP_RAW_DATA_MIN,
+		test_params->min_raw_limits, rx, tx);
+	if (ret < 0) {
+		zinitix_printk("Failed get min_raw_limits\n");
+		goto exit_free;
+	} else {
+		for (i = 0; i < ret; i++) {
+			dev_info(dev, "zinitix raw_data_min[%d] = %d\n", i,  test_params->min_raw_limits[i]);
+		}
+		zinitix_printk("parse_csvfile %s OK, ret = %d\n", CSV_TP_RAW_DATA_MIN, ret);
+	}
+
+	/* obtain raw data max */
+	ret = parse_csvfile(temp_buf, fw->size, CSV_TP_RAW_DATA_MAX,
+		test_params->max_raw_limits, rx, tx);
+	if (ret < 0) {
+		zinitix_printk("Failed get max_raw_limits\n");
+		goto exit_free;
+	} else {
+		for (i = 0; i < ret; i++) {
+			dev_info(dev, "zinitix raw_data_max[%d] = %d\n", i, test_params->max_raw_limits[i]);
+		}
+		zinitix_printk("parse_csvfile %s OK, ret = %d\n", CSV_TP_RAW_DATA_MAX, ret);
+	}
+
+	/* obtain short data threshold */
+	ret = parse_csvfile(temp_buf, fw->size, CSV_TP_SHORT_DATA_THRESHOLD,
+		&test_params->short_threshold, rx, tx);
+	if (ret < 0) {
+		zinitix_printk("Failed get short data threshold\n");
+		goto exit_free;
+	} else {
+		for (i = 0; i < ret; i++) {
+			dev_info(dev, "zinitix short_data_threshold = %d\n", test_params->short_threshold);
+		}
+		zinitix_printk("parse_csvfile %s OK, ret = %d\n", CSV_TP_SHORT_DATA_THRESHOLD, ret);
+	}
+
+	info->builtin_cmcp_threshold_status = 0;
+	complete(&info->builtin_cmcp_threshold_complete);
+	return;
+
+exit_free:
+	if (!temp_buf)
+		kfree(temp_buf);
+	if (fw)
+		release_firmware(fw);
+
+	info->builtin_cmcp_threshold_status = -EINVAL;
+	complete(&info->builtin_cmcp_threshold_complete);
+
+	return;
+}
+
+static void zinitix_parse_cmcp_threshold_builtin(
+	struct work_struct *cmcp_threshold_update)
+{
+	int retval;
+	char limit_file[100] = {0};
+	struct bt541_ts_info *info =
+		container_of(cmcp_threshold_update,
+		struct bt541_ts_info,
+		cmcp_threshold_update);
+	struct device *dev = &info->client->dev;
+
+	if (info->supplier)
+		snprintf(limit_file, sizeof(limit_file), "%s_%s_test_limits.csv",
+		info->supplier, BT541_VENDOR_NAME);
+	else
+		snprintf(limit_file, sizeof(limit_file), "%s",
+		ZINITIX_THRESHOLD_FILE_NAME);
+	dev_info(dev, "limit_file_name:%s", limit_file);
+
+	/* Open threshold file */
+	retval = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+			limit_file, dev, GFP_KERNEL, dev,
+			zinitix_cmcp_parse_threshold_file);
+	if (retval < 0) {
+		dev_err(dev, "%s: Failed loading cmcp threshold file\n",
+			__func__);
+			goto exit;
+	}
+
+	/* wait until cmcp threshold upgrade finishes */
+	wait_for_completion(&info->builtin_cmcp_threshold_complete);
+
+	retval = info->builtin_cmcp_threshold_status;
+
+exit:
+	return;
+}
+
 static void run_preference_read(void *device_data)
 {
 	struct bt541_ts_info *info = (struct bt541_ts_info *)device_data;
@@ -3433,6 +3730,9 @@ static void run_preference_read(void *device_data)
 	//u16 min, max;
 	s32 i;
 
+	set_default_result(info);
+
+#ifndef  CONFIG_INPUT_TOUCHSCREEN_MMI
    s16 min[64] = {163,905,2592,2982,3037,2707,1498,397,
 911,2772,3006,2830,2733,2960,3189,1243,
 2531,2750,3009,2824,2692,2911,3387,2790,
@@ -3451,29 +3751,43 @@ static void run_preference_read(void *device_data)
 1104,5786,5953,5676,4980,5486,6226,1724,
 225,1479,5873,6452,5278,4494,1624,221,
 	  };
-
-	set_default_result(info);
+#else
+	if (info->builtin_cmcp_threshold_status < 0) {
+		zinitix_printk("No cmcp threshold file.\n");
+		snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "NG");
+		set_cmd_result(info, finfo->cmd_buff,
+			strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
+		finfo->cmd_state = FAIL;
+		return;
+	}
+#endif
 
 	ts_set_touchmode(TOUCH_PDND_MODE);
 	get_raw_data(info, (u8 *)raw_data->pref_data, 10);
 	ts_set_touchmode(TOUCH_POINT_MODE);
 
-	printk("==========raw_data start===============\n");
+	zinitix_printk("==========raw_data start===============\n");
 	for(i = 0; i < (info->cap_info.x_node_num * info->cap_info.y_node_num); i++)
 	{
-		printk("raw_data[%d] = %d\n",i,raw_data->pref_data[i]);
+		printk("zinitix raw_data[%d] = %d\n",i,raw_data->pref_data[i]);
 	}
-	printk("==========raw_data end===============\n");
+	zinitix_printk("==========raw_data end===============\n");
 
 	for(i = 0; i < (info->cap_info.x_node_num * info->cap_info.y_node_num); i++)
 	{
+#ifdef  CONFIG_INPUT_TOUCHSCREEN_MMI
+		if(((raw_data->pref_data[i]) < info->test_params.min_raw_limits[i]) ||
+			((raw_data->pref_data[i]) > info->test_params.max_raw_limits[i]))
+#else
 		if(((raw_data->pref_data[i]) < min[i]) || ((raw_data->pref_data[i]) > max[i]))
+#endif
 		{
-			printk("fail raw_data[%d] = %d\n",i,raw_data->pref_data[i]);
+			printk("zinitix fail raw_data[%d] = %d\n",i,raw_data->pref_data[i]);
 			snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "NG");
 			set_cmd_result(info, finfo->cmd_buff,
 					strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
 			finfo->cmd_state = FAIL;
+			info->test_params.raw_data_pass = 0;
 				return;
 		}else
 		{
@@ -3482,11 +3796,12 @@ static void run_preference_read(void *device_data)
 		}
 
 	}
-	printk("Pass raw_data\n");
+	printk("zinitix Pass raw_data\n");
 	snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "Pass");
 	set_cmd_result(info, finfo->cmd_buff,
 		strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
 	finfo->cmd_state = OK;
+	info->test_params.raw_data_pass = 1;
 
 	return;
 
@@ -3530,26 +3845,58 @@ static void run_short_data_read(void *device_data)
 
 	struct tsp_factory_info *finfo = info->factory_info;
 	struct tsp_raw_data *raw_data = info->raw_data;
+#ifndef  CONFIG_INPUT_TOUCHSCREEN_MMI
 	const u16 NORMAL_SHORT_VALUE=1000;
+#endif
 	u16 i;
+	int sz = info->cap_info.x_node_num + info->cap_info.y_node_num;
 
 	set_default_result(info);
 
+#ifdef  CONFIG_INPUT_TOUCHSCREEN_MMI
+	if (info->builtin_cmcp_threshold_status < 0) {
+		zinitix_printk("No cmcp threshold file.\n");
+		snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "NG");
+		set_cmd_result(info, finfo->cmd_buff,
+			strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
+		finfo->cmd_state = FAIL;
+		return;
+	}
+#endif
+
 	ts_set_touchmode(TOUCH_CHECK_SHORT_MODE);
-	get_short_data(info, (u8 *)raw_data->pref_data, 10);
+	get_short_data(info, (u8 *)raw_data->ref_data, 10);
 	ts_set_touchmode(TOUCH_POINT_MODE);
 
-	for(i = 0; i < (CHECK_SHORT_DATA_NUM>>1); i++)
+	zinitix_printk("==========short_data start===============\n");
+	for(i = 0; i < sz; i++)
 	{
-		if (raw_data->pref_data[i]!=NORMAL_SHORT_VALUE){
-			pr_info("Invalid Check Short Value,Test Short!\n");
+		printk("zinitix short_data[%d] = %d\n",i,raw_data->ref_data[i]);
+	}
+	zinitix_printk("==========short_data end===============\n");
+
+	for(i = 0; i < sz; i++)
+	{
+#ifdef  CONFIG_INPUT_TOUCHSCREEN_MMI
+		if (raw_data->ref_data[i] != info->test_params.short_threshold) {
+#else
+		if (raw_data->ref_data[i] != NORMAL_SHORT_VALUE) {
+#endif
+			zinitix_printk("Invalid Check Short Value,Test Short!\n");
+			snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "NG");
+			set_cmd_result(info, finfo->cmd_buff,
+					strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
 			finfo->cmd_state = FAIL;
+			info->test_params.short_data_pass = 0;
 			return;
 		}
-
 	}
 
+	snprintf(finfo->cmd_buff, sizeof(finfo->cmd_buff), "%s", "Pass");
+	set_cmd_result(info, finfo->cmd_buff,
+		strnlen(finfo->cmd_buff, sizeof(finfo->cmd_buff)));
 	finfo->cmd_state = OK;
+	info->test_params.short_data_pass = 1;
 	return;
 }
 
@@ -4107,11 +4454,158 @@ static ssize_t store_bigobject_off(struct device *dev, struct device_attribute
 	return count;
 }
 
+static ssize_t raw_data_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+	struct tsp_raw_data *raw_data = info->raw_data;
+	u32 total_node = info->cap_info.total_node_num;
+	int sz;
+	int i = 0;
+	char csv_buffer[RAW_DATA_BUFFER_SIZE] = { 0 };
+	int csv_length = 0;
+
+	sz = total_node * 2;
+	zinitix_printk("sz = %d\n", sz);
+
+	/* line 1 */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"raw data\n");
+
+	/* line 2 */
+	for (i = 0; i < total_node; i++)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"%d, ", raw_data->pref_data[i]);
+	}
+	csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"\n");
+
+	/* line 3 */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"raw data min diff\n");
+
+	/* line 4 */
+	for (i = 0; i < total_node; i++)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"%d, ", raw_data->pref_data[i] - info->test_params.min_raw_limits[i]);
+	}
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"\n");
+
+	/* line 5 */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"raw data max diff\n");
+
+	/* line 6 */
+	for (i = 0; i < total_node; i++)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"%d, ", info->test_params.max_raw_limits[i] - raw_data->pref_data[i]);
+	}
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"\n");
+
+	/* line 7 */
+	if (info->test_params.raw_data_pass)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"raw data test pass\n");
+	}
+	else
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"raw data test fail\n");
+	}
+
+	/* line 8 ~ 10  "\n" */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"\n\n\n");
+
+	return snprintf(buf, ZINITIX_MAX_PRBUF_SIZE, "%s", csv_buffer);
+}
+
+static ssize_t short_data_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+	struct tsp_raw_data *raw_data = info->raw_data;
+	int sz = info->cap_info.x_node_num + info->cap_info.y_node_num;
+	int i = 0;
+	char csv_buffer[RAW_DATA_BUFFER_SIZE] = { 0 };
+	int csv_length = 0;
+
+	zinitix_printk("sz = %d\n", sz);
+
+	/* line 11 */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"short data\n");
+
+	/* line 12 */
+	for (i = 0; i < sz; i++)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"%d, ", raw_data->ref_data[i]);
+	}
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"\n");
+
+	/* line 13 */
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"short data diff\n");
+
+	/* line 14 */
+	for (i = 0; i < sz; i++)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"%d, ", raw_data->ref_data[i] - info->test_params.short_threshold);
+	}
+	csv_length += snprintf(csv_buffer + csv_length, \
+		CSV_BUFFER_LEN - csv_length, \
+		"\n");
+
+	/* line 15 */
+	if (info->test_params.short_data_pass)
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"short data test pass\n");
+	}
+	else
+	{
+		csv_length += snprintf(csv_buffer + csv_length, \
+			CSV_BUFFER_LEN - csv_length, \
+			"short data test fail\n");
+	}
+
+	return snprintf(buf, ZINITIX_MAX_PRBUF_SIZE, "%s", csv_buffer);
+}
+
 static DEVICE_ATTR(cmd, S_IWUSR | S_IWGRP, NULL, store_cmd);
 static DEVICE_ATTR(cmd_status, S_IRUGO, show_cmd_status, NULL);
-static DEVICE_ATTR(cmd_result, S_IRUGO, show_cmd_result, NULL);
+static DEVICE_ATTR(cmd_result, S_IRUSR | S_IRGRP, show_cmd_result, NULL);
 static DEVICE_ATTR(easy_wakeup_gesture, 0664, show_easy_wakeup_gesture, store_easy_wakeup_gesture);
 static DEVICE_ATTR(bigobject_off, 0664, show_bigobject_off, store_bigobject_off);
+static DEVICE_ATTR(raw_data, S_IRUSR | S_IRGRP, raw_data_show, NULL);
+static DEVICE_ATTR(short_data, S_IRUSR | S_IRGRP, short_data_show, NULL);
 
 static struct attribute *touchscreen_attributes[] = {
 	&dev_attr_cmd.attr,
@@ -4119,6 +4613,8 @@ static struct attribute *touchscreen_attributes[] = {
 	&dev_attr_cmd_result.attr,
 	&dev_attr_easy_wakeup_gesture.attr,
 	&dev_attr_bigobject_off.attr,
+	&dev_attr_raw_data.attr,
+	&dev_attr_short_data.attr,
 	NULL,
 };
 
@@ -5522,6 +6018,13 @@ static int bt541_ts_probe(struct i2c_client *client,
 		dev_info(&client->dev, "%s: Failed register touchscreen mmi.", __func__);
 		goto err_ts_mmi_register;
 	}
+#endif
+
+#ifdef SEC_FACTORY_TEST
+	init_completion(&info->builtin_cmcp_threshold_complete);
+	INIT_WORK(&info->cmcp_threshold_update,
+	zinitix_parse_cmcp_threshold_builtin);
+	schedule_work(&info->cmcp_threshold_update);
 #endif
 
 	dev_info(&client->dev, "bt541_ts_probe: SUCCESS\n");
