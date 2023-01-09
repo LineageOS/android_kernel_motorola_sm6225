@@ -220,9 +220,10 @@ static int sc760x_enable_chip(struct sc760x_chip *sc, bool en)
 	}
 
 	if (en)
-		mdelay(10);
+	    msleep(2000);
 	sc->sc760x_enable = en;
-	dev_err(sc->dev, "success to set %s state\n", pinctrl_name);
+	dev_err(sc->dev, "success to set %s state, sleep 2s\n", pinctrl_name);
+
 	ret = 0;
 put_pinctrl:
 	pinctrl_put(pinctrl);
@@ -1189,12 +1190,12 @@ static int sc760x_get_state(struct sc760x_chip *sc,
 	sc760x_get_adc(sc, ADC_IBAT, &state->ibat_adc);
 	sc760x_get_work_mode(sc, &chrg_status);
 
-	if (!state->online)
-		state->chrg_stat = DISCHARGING;
-	else if (!chrg_status && state->ibat_adc != 0)
+	if (state->ibat_adc > 10 && chrg_status)
 		state->chrg_stat = CHARGING;
-	else
+	else if (state->online)
 		state->chrg_stat = NOT_CHARGING;
+	else
+		state->chrg_stat = DISCHARGING;
 
 	sc760x_get_adc(sc, ADC_IBAT, &state->ibat_adc);
 	sc760x_get_adc(sc, ADC_VBAT, &state->vbat_adc);
@@ -1204,8 +1205,8 @@ static int sc760x_get_state(struct sc760x_chip *sc,
 	state->ibat_adc = state->ibat_adc * 1000;
 	state->vbat_adc = state->vbat_adc * 1000;
 	state->vchg_adc = state->vchg_adc * 1000;
-	pr_info("sc760x : chrg_stat =%d, usb_online = %d, wls_online %d, vbus = %d, ibus = %d, ibus_limit = %d, ibat = %d, vbat = %d, vchg = %d, tbat = %d\n",
-		state->chrg_stat, state->usb_online, state->wls_online, state->vbus_adc, state->ibus_adc, state->ibus_limit, state->ibat_adc, state->vbat_adc, state->vchg_adc,
+	pr_info("sc760x : workmode %d, chrg_stat =%d, usb_online = %d, wls_online %d, vbus = %d, ibus = %d, ibus_limit = %d, ibat = %d, vbat = %d, vchg = %d, tbat = %d\n",
+		chrg_status, state->chrg_stat, state->usb_online, state->wls_online, state->vbus_adc, state->ibus_adc, state->ibus_limit, state->ibat_adc, state->vbat_adc, state->vchg_adc,
 		state->tbat_adc);
 
 	return 0;
@@ -1749,6 +1750,7 @@ static int sc760x_charger_probe(struct i2c_client *client,
     sc->dev = dev;
     sc->client = client;
     mutex_init(&sc->lock);
+    sc760x_enable_chip(sc, true);
 
     sc->regmap = devm_regmap_init_i2c(client,
                             &sc760x_regmap_config);
@@ -1790,8 +1792,6 @@ static int sc760x_charger_probe(struct i2c_client *client,
         dev_err(sc->dev, "%s parse dt failed(%d)\n", __func__, ret);
         goto err_parse_dt;
     }
-
-    sc760x_enable_chip(sc, true);
 
     ret = sc760x_init_device(sc);
     if (ret < 0) {
