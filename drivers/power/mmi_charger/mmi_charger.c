@@ -256,6 +256,7 @@ struct mmi_charger_chip {
 	bool			empty_vbat_shutdown_triggered;
 
 	int			heartbeat_dischg_ms;
+	uint32_t		ibat_calc_alignment_time;
 };
 
 static int mmi_vote(struct mmi_vote *vote, const char *voter,
@@ -2086,7 +2087,7 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 			vbus_present? "present" : "absent");
 	}
 
-	if (chip->power_watt != power_watt) {
+	if ((chip->power_watt / 1000) != (power_watt / 1000)) {
 		mmi_changed = true;
 		chip->power_watt = power_watt;
 		mmi_notify_charger_event(chip, NOTIFY_EVENT_TYPE_POWER_WATT);
@@ -2624,11 +2625,26 @@ static int mmi_get_prop(struct power_supply *psy,
 {
 	struct mmi_charger_chip *chip = power_supply_get_drvdata(psy);
 	int rc = 0;
+	uint32_t elapsed_ms;
+	struct timespec64 now;
+	static struct timespec64 start = {0};
 
-	if (psp == POWER_SUPPLY_PROP_CURRENT_NOW) {
-		cancel_delayed_work(&chip->heartbeat_work);
-		schedule_delayed_work(&chip->heartbeat_work,
-				msecs_to_jiffies(0));
+	if (psp == POWER_SUPPLY_PROP_CURRENT_NOW &&
+	    chip->ibat_calc_alignment_time != UINT_MAX) {
+		ktime_get_real_ts64(&now);
+		if (now.tv_sec >= start.tv_sec) {
+			elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+			elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+		} else {
+			elapsed_ms = 0;
+			start = now;
+		}
+		if (elapsed_ms >= chip->ibat_calc_alignment_time) {
+			cancel_delayed_work(&chip->heartbeat_work);
+			schedule_delayed_work(&chip->heartbeat_work,
+					msecs_to_jiffies(0));
+			start = now;
+		}
 	}
 
 	switch (psp) {
@@ -2771,6 +2787,11 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 		chip->heartbeat_dischg_ms = HEARTBEAT_DISCHARGE_MS;
 
 	mmi_warn(chip, "mmi,heartbeat dischg ms %d\n", chip->heartbeat_dischg_ms);
+
+	rc = of_property_read_u32(node, "mmi,ibat-calc-alignment-time",
+				  &chip->ibat_calc_alignment_time);
+	if (rc)
+		chip->ibat_calc_alignment_time = UINT_MAX;
 
 	node = of_find_node_by_path("/chosen");
 
