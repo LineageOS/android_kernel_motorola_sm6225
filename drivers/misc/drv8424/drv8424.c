@@ -263,7 +263,7 @@ static motor_stage initial_data_2p3[SQ_MAX][MAX_STAGE_LEGS] = {
 		{0, 0},
 	},
 	{ /* SLOWMO */
-		{500,200}, {500,400}, {500,800}, {500,1200}, {500,1600},
+		{600,4900},
 	},
 };
 
@@ -285,7 +285,7 @@ static motor_stage initial_data_2p8[SQ_MAX][MAX_STAGE_LEGS] = {
 		{0, 0},
 	},
 	{ /* SLOWMO */
-		{400,200}, {400,400}, {400,800}, {400,1200}, {400,1600},
+		{600,4100},
 	},
 };
 /*                                10,000,000 10,000,000 4,000,000 2,000,000   15,000,000 */
@@ -1394,7 +1394,7 @@ exit:
 
 #define PROXIMITY_HD 350 /* 3.5 degrees multiplied by 100 to get rid of float */
 #define PROXIMITY_SD 750 /* 7.5 degrees multiplied by 100 to get rid of float */
-static int sensProximity = PROXIMITY_SD;
+static int sensProximity = PROXIMITY_HD;
 
 static inline bool IN_RANGE(int valMeas, int valSet)
 {
