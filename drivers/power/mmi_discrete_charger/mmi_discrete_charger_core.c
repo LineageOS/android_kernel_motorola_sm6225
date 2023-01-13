@@ -1835,8 +1835,11 @@ static int usb_therm_set_mosfet(struct mmi_discrete_charger *chip,bool enable)
 			ret = charger_dev_enable_charging(chip->master_chg_dev,false);
 			ret = charger_dev_enable_hz(chip->master_chg_dev,true);
 			udelay(300);
-			gpio_direction_output(chip->mos_en_gpio, enable);
-			mmi_err(chip, "%s,open mos en: %d %d",__func__,enable,ret);
+			if ((chip->bc1p2_charger_type != POWER_SUPPLY_TYPE_USB)&&
+			    (chip->bc1p2_charger_type !=POWER_SUPPLY_TYPE_USB_CDP)) {
+				gpio_direction_output(chip->mos_en_gpio, enable);
+				mmi_err(chip, "%s,open mos en: %d %d",__func__,enable,ret);
+			}
 		}
 		else{
 			gpio_direction_output(chip->mos_en_gpio, enable);
@@ -1892,8 +1895,10 @@ static int usb_therm_set_cur_state(struct thermal_cooling_device *cdev,
 		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_PD |
 		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP |
 		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 |
-		    chip->real_charger_type== POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
-			mmi_info(chip, "Enable typec mosfet for DCP/PD/HVDCP.");
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5 |
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB |
+		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_CDP) {
+			mmi_info(chip, "Enable typec mosfet for DCP/PD/HVDCP/USB/CDP.");
 			usb_therm_set_mosfet(chip, true);
 		}
 	} else {
