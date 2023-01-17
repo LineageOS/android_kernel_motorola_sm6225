@@ -1889,18 +1889,9 @@ static int usb_therm_set_cur_state(struct thermal_cooling_device *cdev,
 	unsigned long state)
 {
 	struct mmi_discrete_charger *chip = cdev->devdata;
-
 	if (state) {
-		if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_PD |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5 |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB |
-		    chip->real_charger_type == POWER_SUPPLY_TYPE_USB_CDP) {
-			mmi_info(chip, "Enable typec mosfet for DCP/PD/HVDCP/USB/CDP.");
-			usb_therm_set_mosfet(chip, true);
-		}
+		mmi_info(chip, "Enable typec mosfet.");
+		usb_therm_set_mosfet(chip, true);
 	} else {
 		mmi_info(chip, "Disable typec mosfet.");
 		usb_therm_set_mosfet(chip, false);
