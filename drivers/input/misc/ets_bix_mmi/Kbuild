@@ -7,9 +7,6 @@ ifneq ($(filter m y,$(CONFIG_EGIS_PANEL_NOTIFICATIONS)),)
     EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
 endif
 
-ifneq ($(filter m y,$(CONFIG_EGIS_DRM_PANEL_NOTIFICATIONS)),)
-    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
-endif
 #ifneq ($(filter m y,$(CONFIG_ET721_FOD)),)
 #    EXTRA_CFLAGS += -DET721_FOD
 #endif

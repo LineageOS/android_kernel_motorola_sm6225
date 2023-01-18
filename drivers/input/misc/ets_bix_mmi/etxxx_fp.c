@@ -1509,7 +1509,6 @@ int egisfp_probe(struct platform_device *pdev)
 
 #elif defined(CONFIG_DRM_PANEL_NOTIFICATIONS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 	egis_dev->notifier = egisfp_noti_block;
-	DEBUG_PRINT(" %s : register drm_panel_notifier_register\n", __func__);
 	if (egis_dev->active_panel) {
 		DEBUG_PRINT(" %s : register drm_panel_notifier \n", __func__);
 		status = drm_panel_notifier_register(egis_dev->active_panel, &egis_dev->notifier);
@@ -1519,7 +1518,6 @@ int egisfp_probe(struct platform_device *pdev)
 			egis_dev->call_back_registered = 1;
 	}
 #else
-	DEBUG_PRINT(" %s : register ets_fb_register_client\n", __func__);
 	egis_dev->notifier = egisfp_noti_block;
 	status = ets_fb_register_client(&egis_dev->notifier);
 	if (status)
