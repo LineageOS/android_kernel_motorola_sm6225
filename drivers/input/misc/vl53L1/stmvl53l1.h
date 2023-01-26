@@ -39,6 +39,7 @@
 #include <linux/workqueue.h>
 #include <linux/miscdevice.h>
 #include <linux/wait.h>
+#include <linux/version.h>
 
 #include "vl53l1_api.h"
 
@@ -159,6 +160,13 @@ extern int stmvl53l1_enable_debug;
  * @ingroup vl53l1_mod_dbg
  */
 #define IPP_LOG_TIMING	1
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 5, 0)
+struct timeval {
+	time64_t tv_sec; /* seconds */
+	long tv_usec; /* microseconds */
+};
+#endif
 
 struct ipp_data_t {
 	struct ipp_work_t work;

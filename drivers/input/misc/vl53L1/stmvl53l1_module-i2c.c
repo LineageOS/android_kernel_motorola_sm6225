@@ -180,7 +180,11 @@ static int insert_device(void)
 		ret = -EINVAL;
 		goto done;
 	}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
 	stm_test_i2c_client = i2c_new_device(adapter, &info);
+#else
+	stm_test_i2c_client = i2c_new_client_device(adapter, &info);
+#endif
 	if (!stm_test_i2c_client)
 		ret = -EINVAL;
 

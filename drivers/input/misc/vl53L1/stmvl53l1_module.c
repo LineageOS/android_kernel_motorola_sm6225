@@ -53,6 +53,7 @@
 #include <linux/kthread.h>
 #include <linux/jhash.h>
 #include <linux/ctype.h>
+#include <linux/version.h>
 
 /*
  * API includes
@@ -4182,7 +4183,11 @@ static void stmvl53l1_input_push_data_multiobject(struct stmvl53l1_data *data)
 	//ABS_HAT0X  -	Time in Sec(32)
 
 	input_report_abs(input, ABS_HAT0X, tv.tv_sec);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 5, 0)
+	vl53l1_dbgmsg("ABS_HAT0X : %lld, %zu\n", tv.tv_sec, sizeof(tv.tv_sec));
+#else
 	vl53l1_dbgmsg("ABS_HAT0X : %ld, %zu\n", tv.tv_sec, sizeof(tv.tv_sec));
+#endif
 	//ABS_HAT0Y   - Time in uSec(32)
 	//REVISIT : The following code may cause loss of data due to
 	//8 bytes to 32 bits conversion
