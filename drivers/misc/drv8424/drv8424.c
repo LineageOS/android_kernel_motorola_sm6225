@@ -295,11 +295,20 @@ enum cmds {
 	CMD_FAULT,
 	CMD_STATUS,
 	CMD_POSITION,
-	CMD_POLL,
 	CMD_TIMEOUT,
 	CMD_RECOVERY,
 	CMD_TIMER_START,
 	CMD_TIMER_STOP,
+};
+
+static const char *cmd_labels[] = {
+	"CMD_FAULT",
+	"CMD_STATUS",
+	"CMD_POSITION",
+	"CMD_TIMEOUT",
+	"CMD_RECOVERY",
+	"CMD_TIMER_START",
+	"CMD_TIMER_STOP"
 };
 
 #define MAX_GPIOS MOTOR_UNKNOWN
@@ -369,11 +378,6 @@ typedef struct motor_device {
 	struct kfifo cmd_pipe;
 	int volatile sensor_data[3];
 	atomic_t samples;
-	struct semaphore data_ready;
-	wait_queue_head_t data_wait;
-	unsigned data_update_ready:1;
-	struct task_struct *detection_task;
-	bool     cancel_thread;
 	bool     detect_incomplete;
 	bool     ready;
 } motor_device;
@@ -912,7 +916,11 @@ exit:
 static void inline moto_drv8424_cmd_push(motor_device* md,
 	int cmd, unsigned long delay)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&md->mlock, flags);
 	kfifo_put(&md->cmd_pipe, cmd);
+	spin_unlock_irqrestore(&md->mlock, flags);
 	queue_delayed_work(md->motor_wq, &md->motor_work, delay);
 }
 
@@ -927,7 +935,6 @@ static void moto_drv8424_set_sensing(motor_device* md, bool en)
 		/* signal sensor hub to start/stop sampling hall effect */
 		GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 1);
 		RECORD_TIME(kSensorUp);
-		moto_drv8424_cmd_push(md, CMD_POLL, 0);
 		if (!md->power_en && !md->sensors_off) {
 			/* declare sensor querying stage when powered off */
 			/* when motor powered status will indicate direction */
@@ -1089,7 +1096,6 @@ static char *motor_stop(const char *f, bool lock, motor_device* md, bool clean)
 		RECORD_TIME(kClean);
 		PARANOIC("step_count & stepping reset\n");
 	}
-	set_irq_state(md, false);
 
 	if (lock)
 		spin_lock_irqsave(&md->mlock, flags);
@@ -1120,6 +1126,12 @@ static __ref int motor_kthread(void *arg)
 		} while (ret != 0);
 		if (kthread_should_stop())
 			break;
+		/* it's safe to call the following functions even if motor was not running */
+		moto_drv8424_set_power(md, 0);
+		if (md->power_default_off) {
+			dev_info(md->dev, "vdd power off\n");
+			moto_drv8424_set_regulator_power(md, false);
+		}
 		if (md->faulting) {
 			value = atomic_read(&md->fault_irq);
 			if (value != 0) {
@@ -1130,12 +1142,6 @@ static __ref int motor_kthread(void *arg)
 					irq_to_gpio(value) == md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);
 			}
 			goto show_stats;
-		}
-		/* it's safe to call the following functions even if motor was not running */
-		moto_drv8424_set_power(md, 0);
-		if (md->power_default_off) {
-			dev_info(md->dev, "vdd power off\n");
-			moto_drv8424_set_regulator_power(md, false);
 		}
 		/*
 		 * In sensor driven position detection we need to handle
@@ -1205,7 +1211,7 @@ static __ref int motor_kthread(void *arg)
 		/* need to show statistics on completion */
 		logtime_show(__func__);
 show_stats:
-		PARANOIC("semaphore=%u samples=%d\n", md->data_ready.count, atomic_read(&md->samples));
+		set_irq_state(md, false);
 		atomic_set(&md->samples, 0);
 	}
 
@@ -1338,18 +1344,6 @@ next_stage:
 	return ret;
 }
 
-static void inline motor_cancel_detection(motor_device *md)
-{
-	md->cancel_thread = true;
-	up(&md->data_ready);
-}
-
-static void inline motor_cancel_motion(motor_device *md)
-{
-	md->cancel_thread = true;
-	SIMPLE_MOTOR_STOP;
-}
-
 /*
  * Timeout can happen either if destination position never reached or
  * driver cannot detect current position. In either way timeout handler
@@ -1381,10 +1375,9 @@ static enum hrtimer_restart motor_timeout_timer_action(struct hrtimer *h)
 	if (original != POS_UNKNOWN &&
 	    original != destination) {
 		/* repeat the same motion */
-		motor_cancel_motion(md);
+		SIMPLE_MOTOR_STOP;
 		LOGD("Timeout driving motor\n");
 	} else { /* original & destination ==  POS_UNKNOWN */
-		motor_cancel_detection(md);
 		LOGD("Timeout position detection\n");
 	}
 	moto_drv8424_cmd_push(md, CMD_TIMEOUT, msecs_to_jiffies(INT_20MS));
@@ -1403,9 +1396,6 @@ static inline bool IN_RANGE(int valMeas, int valSet)
 
 static void motor_reset(motor_device *md)
 {
-	if (atomic_read(&md->stepping))
-		disable_motor(md->dev);
-
 	moto_drv8424_set_power(md, 1);
 	msleep(RESET_TIME);
 	moto_drv8424_set_power(md, 0);
@@ -1451,105 +1441,34 @@ static int moto_drv8424_detect_position(motor_device *md)
 	return ret;
 }
 
-static __ref int detection_kthread(void *arg)
-{
-	motor_device* md = (motor_device*)arg;
-	struct sched_param param = {.sched_priority = MAX_USER_RT_PRIO - 1};
-	int position, pending, samples, ret = 0;
-
-	sched_setscheduler(current, SCHED_FIFO, &param);
-	while (!kthread_should_stop()) {
-		mutex_lock(&md->mx_lock);
-		pending = md->data_ready.count;
-		if (pending != 0) {
-			dev_warn(md->dev, "Unprocessed data detected (%u)!!!\n", pending);
-			while (pending-- > 0) {
-				down(&md->data_ready);
-			}
-			logtime_show(__func__);
-		}
-		mutex_unlock(&md->mx_lock);
-		LOGD("wait for data update\n");
-		do {
-			ret = wait_event_interruptible(md->data_wait,
-			            md->data_update_ready || kthread_should_stop());
-		} while (ret != 0);
-		if (kthread_should_stop())
-			break;
-		md->data_update_ready = false;
-		md->cancel_thread = false;
-		samples = 0;
-		do {
-			down(&md->data_ready);
-			position = moto_drv8424_detect_position(md);
-			samples++;
-			if (md->cancel_thread) {
-				dev_warn(md->dev, "Sensors scan terminated\n");
-				break;
-			}
-		} while (position == POS_UNKNOWN);
-
-		if (!md->cancel_thread) {
-			/* polling might occur without driving motor
-			 * we need to release kthread that will trigger position change
-			 * and set destination to properly complete detection
-			 */
-			atomic_set(&md->destination, position);
-			SIMPLE_MOTOR_STOP;
-			/* in case of successful initial position detection */
-			/* timeout timer still running, thus need to cancel */
-			/* assuming it does not hurt to attempt cancelling  */
-			/* the timer that has not been armed */
-			moto_drv8424_cmd_push(md, CMD_TIMER_STOP, 0);
-		}
-
-		if (position != POS_UNKNOWN) {
-			/*
-			 * In case position was detected while permanent faulty
-			 * state has been set already, we need to drop it as mishap
-			 */
-			if (md->faulting) {
-				md->faulting = false;
-				dev_warn(md->dev, "Motor faulting state dropped!!!");
-			}
-			dev_info(md->dev, "detected position: %s\n", position_labels[position]);
-		}
-		LOGD("samples %d; last data: %d %d %d\n", samples,
-			md->sensor_data[0], md->sensor_data[1], md->sensor_data[2]);
-	}
-
-	return 0;
-}
-
 static void motor_fault_handler(motor_device *md)
 {
 	int fault_irq = atomic_read(&md->fault_irq);
-	int position, destination, status;
 
 	if (!fault_irq) {
 		dev_warn(md->dev, "Called w/o IRQ!!!\n");
 		return;
 	}
 
-	motor_cancel_detection(md);
+	STOP_STEPPING_SIGNAL;
+	/* perform reset */
 	motor_reset(md);
-
-	position = atomic_read(&md->position);
-	status = atomic_read(&md->status);
-	destination = atomic_read(&md->destination);
-	POSITION_DETECT_INIT(destination, status);
-	/* TODO need to reinstate sequence, since */
-	/* motor has stopped already!!! */
-
+	/* clear flags preventing the next run */
 	md->faulting = false;
 	atomic_set(&md->fault_irq, 0);
+	md->detect_incomplete = false;
+	md->ready = true;
+	/* set transition parameters */
+	motor_set_motion_params(md, atomic_read(&md->position),
+		atomic_read(&md->destination));
+	moto_drv8424_set_enable_with_power(md, true);
 
 	dev_warn(md->dev, "Device reset due to motor #%d fault\n",
 		irq_to_gpio(fault_irq) == md->mc.ptable[MOTOR_FAULT1_INT] ? 1 : 2);
-	LOGD("Pos/dest: %s/%s, status: %s\n",
-		position_labels[position],
-		position_labels[destination],
-		status_labels[status]);
+	PARANOIC("Pos/dest: %s/%s, status: %s\n",
+		position_labels[atomic_read(&md->position)],
+		position_labels[atomic_read(&md->destination)],
+		status_labels[atomic_read(&md->status)]);
 }
 
 #define PEEK_ID 2
@@ -1562,9 +1481,15 @@ static void motor_cmd_work(struct work_struct *work)
 {
 	struct delayed_work *dw = container_of(work, struct delayed_work, work);
 	motor_device* md = container_of(dw, motor_device, motor_work);
-	int cpos, dest, cmd = 0;
+	int gotten, cpos, dest, cmd = 0;
+	unsigned long flags;
 
-	while (kfifo_get(&md->cmd_pipe, &cmd)) {
+	for (;;) {
+		spin_lock_irqsave(&md->mlock, flags);
+	 	gotten = kfifo_get(&md->cmd_pipe, &cmd);
+		spin_unlock_irqrestore(&md->mlock, flags);
+		if (!gotten)
+			break;
 		switch (cmd) {
 		case CMD_FAULT:
 			motor_fault_handler(md);
@@ -1578,10 +1503,6 @@ static void motor_cmd_work(struct work_struct *work)
 			sysfs_notify(&md->dev->kobj, NULL, "position");
 			md->position_update_ready = true;
 			wake_up(&md->position_wait);
-					break;
-		case CMD_POLL:
-			md->data_update_ready = true;
-			wake_up(&md->data_wait);
 					break;
 		case CMD_TIMER_START:
 			hrtimer_start(&md->timeout_timer,
@@ -1641,8 +1562,9 @@ static void motor_cmd_work(struct work_struct *work)
 					break;
 		default:
 			dev_err(md->dev, "Unsupported command %d\n", cmd);
-					break;
+					continue;
 		}
+		PARANOIC("processed %s\n", cmd_labels[cmd]);
 	}
 }
 
@@ -1650,7 +1572,6 @@ static irqreturn_t motor_fault_irq(int irq, void *pdata)
 {
 	motor_device * md = (motor_device*) pdata;
 
-	set_irq_state(md, false);
 	atomic_set(&md->fault_irq, irq);
 	/* no need to wake up twice if device is faulting */
 	if (!md->faulting) {
@@ -1776,9 +1697,6 @@ static ssize_t motor_flags_show(struct device *dev, struct device_attribute *att
 	blen += snprintf(buf+blen, PAGE_SIZE-blen, "===> Sensor params:\n");
 	blen += snprintf(buf+blen, PAGE_SIZE-blen, "Sensors: %s\n", md->sensors_off ? "Off" : "On");
 	blen += snprintf(buf+blen, PAGE_SIZE-blen, "Samples: %d\n", atomic_read(&md->samples));
-	mutex_lock(&md->mx_lock);
-	blen += snprintf(buf+blen, PAGE_SIZE-blen, "Semaphore: %d\n", md->data_ready.count);
-	mutex_unlock(&md->mx_lock);
 
 	return blen;
 }
@@ -2128,6 +2046,9 @@ static ssize_t motor_reset_store(struct device *dev, struct device_attribute *at
 	if (kstrtouint(buf, 10, &value)) {
 		dev_err(dev, "Error value: %s\n", buf);
 	} else {
+		if (atomic_read(&md->stepping))
+			disable_motor(md->dev);
+
 		mutex_lock(&md->mx_lock);
 		motor_reset(md);
 		mutex_unlock(&md->mx_lock);
@@ -2388,9 +2309,12 @@ static ssize_t motor_position_show(struct device *dev, struct device_attribute *
 	motor_device* md = (motor_device*)dev_get_drvdata(dev);
 	int ret;
 
+	LOGD("enter\n");
 	ret = wait_event_interruptible(md->position_wait, md->position_update_ready);
-	if (ret)
+	if (ret) {
+		dev_err(md->dev, "wait failed rc %d", ret);
 		return -EFAULT;
+	}
 	md->position_update_ready = false;
 	LOGD("Position update: %s\n", position_labels[atomic_read(&md->position)]);
 
@@ -2403,9 +2327,12 @@ static ssize_t motor_status_show(struct device *dev, struct device_attribute *at
 	motor_device* md = (motor_device*)dev_get_drvdata(dev);
 	int ret;
 
+	LOGD("enter\n");
 	ret = wait_event_interruptible(md->status_wait, md->status_update_ready);
-	if (ret)
+	if (ret) {
+		dev_err(md->dev, "wait failed rc %d", ret);
 		return -EFAULT;
+	}
 	md->status_update_ready = false;
 	LOGD("Status update: %s\n", status_labels[atomic_read(&md->status)]);
 
@@ -2420,7 +2347,9 @@ static ssize_t motor_sensor_data_store(struct device *dev, struct device_attribu
 		const char *buf, size_t len)
 {
 	motor_device* md = (motor_device*)dev_get_drvdata(dev);
+	motor_control* mc = &md->mc;
 	int argnum = 0;
+	int position = POS_UNKNOWN;
 	int volatile args[3] = {OUT_OF_RANGE};
 	static bool inited;
 
@@ -2443,10 +2372,31 @@ static ssize_t motor_sensor_data_store(struct device *dev, struct device_attribu
 		}
 		/* store necessary sensor info */
 		memcpy((void *)md->sensor_data, (void *)args, sizeof(md->sensor_data));
-		logtime_store((void *)args, sizeof(args), 0);
 		atomic_inc(&md->samples);
 		mutex_unlock(&md->mx_lock);
-		up(&md->data_ready);
+		logtime_store((void *)args, sizeof(args), 0);
+		position = moto_drv8424_detect_position(md);
+		if (position != POS_UNKNOWN && md->ready == false) {
+			atomic_set(&md->destination, position);
+			motor_stop(__func__, true, md, true);
+			GPIO_OUTPUT_DIR(mc->ptable[MOTOR_ACTIVE], 0);
+			RECORD_TIME(kSensorDown);
+			moto_drv8424_cmd_push(md, CMD_TIMER_STOP, msecs_to_jiffies(INT_20MS));
+			if (md->faulting) {
+				md->faulting = false;
+				dev_warn(md->dev, "Motor faulting state dropped!!!");
+			}
+			dev_info(md->dev, "detected position: %s\n",
+				position_labels[position]);
+			LOGD("samples %d; last data: %d %d %d\n",
+				atomic_read(&md->samples),
+				md->sensor_data[0],
+				md->sensor_data[1],
+				md->sensor_data[2]);
+		}
+		if (md->ready) {
+			LOGD("extra data: %d %d %d\n", args[0], args[1], args[2]);
+		}
 	}
 
 	return len;
@@ -2596,7 +2546,6 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 	md->mc.plabels = gpios_labels;
 	spin_lock_init(&md->mlock);
 	mutex_init(&md->mx_lock);
-	sema_init(&md->data_ready, 0);
 	platform_set_drvdata(pdev, md);
 	moto_drv8424_set_step_freq(md, DEFAULT_STEP_FREQ);
 	/* assign default values for optional parameters */
@@ -2642,14 +2591,6 @@ static int moto_drv8424_probe(struct platform_device *pdev)
 		ret = PTR_ERR(md->motor_task);
 		dev_err(dev, "Failed create motor kthread\n");
 		goto failed_kfifo;
-	}
-	md->data_update_ready = false;
-	init_waitqueue_head(&md->data_wait);
-	md->detection_task = kthread_run(detection_kthread, md, "detection_task");
-	if (IS_ERR(md->detection_task)) {
-		ret = PTR_ERR(md->detection_task);
-		dev_err(dev, "Failed create position detection kthread\n");
-		goto failed_kthread;
 	}
 	hrtimer_init(&md->stepping_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	md->stepping_timer.function = motor_stepping_timer_action;
@@ -2727,8 +2668,6 @@ failed_device:
 failed_sys_dev:
 	class_destroy(md->drv8424_class);
 failed_sys:
-	kthread_stop(md->detection_task);
-failed_kthread:
 	kthread_stop(md->motor_task);
 failed_work:
 	destroy_workqueue(md->motor_wq);
@@ -2753,7 +2692,6 @@ static int moto_drv8424_remove(struct platform_device *pdev)
 	sysfs_remove_group(&md->dev->kobj, &status_attribute_group);
 	disable_motor(md->dev);
 	kthread_stop(md->motor_task);
-	kthread_stop(md->detection_task);
 	destroy_workqueue(md->motor_wq);
 	kfifo_free(&md->cmd_pipe);
 	kfree(md);
