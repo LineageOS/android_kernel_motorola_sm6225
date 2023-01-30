@@ -3390,6 +3390,9 @@ static int sgm4154x_probe(struct i2c_client *client,
 		otg_notify = usb_register_notifier(sgm->usb3_phy, &sgm->usb_nb);
 	}
 
+	INIT_DELAYED_WORK(&sgm->charge_detect_delayed_work, charger_detect_work_func);
+	INIT_DELAYED_WORK(&sgm->charge_monitor_work, charger_monitor_work_func);
+
 	if (client->irq) {
 		ret = devm_request_threaded_irq(dev, client->irq, NULL,
 						sgm4154x_irq_handler_thread,
@@ -3402,8 +3405,6 @@ static int sgm4154x_probe(struct i2c_client *client,
 		sgm->irq_enabled = true;
 	}
 
-	INIT_DELAYED_WORK(&sgm->charge_detect_delayed_work, charger_detect_work_func);
-	INIT_DELAYED_WORK(&sgm->charge_monitor_work, charger_monitor_work_func);
 	sgm->pm_nb.notifier_call = sgm4154x_suspend_notifier;
 	register_pm_notifier(&sgm->pm_nb);
 	sgm->psy_nb.notifier_call = sgm4154x_psy_notifier_call;
