@@ -1544,20 +1544,25 @@ static ssize_t tx_mode_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
+#ifndef SKIP_QTI_CHARGER_CONFIRMAION
 	u32 tx_mode = 0;
+#endif
 	struct qti_charger *chg = this_chip;
 
 	if (!chg) {
 		pr_err("QTI: chip not valid\n");
 		return -ENODEV;
 	}
-
+#ifdef SKIP_QTI_CHARGER_CONFIRMAION
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->tx_mode);
+#else
 	qti_charger_read(chg, OEM_PROP_WLS_TX_MODE,
 				&tx_mode,
 				sizeof(tx_mode));
 
 	chg->tx_mode = tx_mode;
 	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", tx_mode);
+#endif
 }
 
 static DEVICE_ATTR(tx_mode, S_IRUGO|S_IWUSR, tx_mode_show, tx_mode_store);

@@ -11,6 +11,10 @@ ifneq ($(filter m y,$(CONFIG_WIRELESS_CPS4019)),)
 	EXTRA_CFLAGS += -DWIRELESS_CPS4019
 endif
 
+ifneq ($(filter m y,$(CONFIG_SKIP_QTI_CHARGER_CONFIRMAION)),)
+	EXTRA_CFLAGS += -DSKIP_QTI_CHARGER_CONFIRMAION
+endif
+
 obj-m += qti_glink_charger.o
 
 KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../bm_adsp_ulog/$(GKI_OBJ_MODULE_DIR)/Module.symvers
