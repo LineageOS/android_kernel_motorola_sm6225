@@ -1040,7 +1040,7 @@ void ili_report_ap_mode(u8 *buf, int len)
 
 		if (MT_PRESSURE) {
 			if (TOUCH_WIDTH) {
-				touch_info[ilits->finger].pressure = buf[(4 * i) + 4 + P5_X_DEMO_MODE_PACKET_INFO_LEN];
+				touch_info[ilits->finger].pressure =(buf[(4 * i) + 4 + P5_X_DEMO_MODE_PACKET_INFO_LEN])<<2;
 			} else {
 				touch_info[ilits->finger].pressure = buf[(4 * i) + 4];
 			}

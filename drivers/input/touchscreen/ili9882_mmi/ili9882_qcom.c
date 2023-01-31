@@ -108,7 +108,7 @@ void ili_input_register(void)
 	}
 
 	if (MT_PRESSURE)
-		input_set_abs_params(ilits->input, ABS_MT_PRESSURE, 0, 255, 0, 0);
+		input_set_abs_params(ilits->input, ABS_MT_PRESSURE, 0, 1000, 0, 0);
 
 	if (MT_B_TYPE) {
 #if KERNEL_VERSION(3, 7, 0) <= LINUX_VERSION_CODE
