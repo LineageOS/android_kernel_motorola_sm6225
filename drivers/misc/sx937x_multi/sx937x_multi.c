@@ -502,9 +502,15 @@ static ssize_t capsense_reset_store(struct device *dev,
 		for (i = 0; i < this->hw->flip_reg_num; i++)
 		{
 			sx937x_i2c_write_16bit(this->bus, this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
-			LOG_DBG("flip near download params set Reg 0x%x Value: 0x%x\n",
-					this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
+			LOG_DBG("flip near download %s params set Reg 0x%x Value: 0x%x\n",
+					this->hw->dbg_name,this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
 		}
+             //calibration when flip id close
+               if(this->hw->flip_change_cal ==1)
+               {
+                    sx937x_i2c_write_16bit(this->bus, SX937X_COMMAND, 0xE);
+                    LOG_DBG("flip near download %s cal set 0xe\n",this->hw->dbg_name);
+               }
 	}
 
 	if (!strncmp(buf, "flip_far", 8)) {
@@ -512,10 +518,11 @@ static ssize_t capsense_reset_store(struct device *dev,
 		for (i = 0; i < this->hw->flip_reg_num; i++)
 		{
 			sx937x_i2c_write_16bit(this->bus, this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
-			LOG_DBG("flip far download params set Reg 0x%x Value: 0x%x\n",
-					this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+			LOG_DBG("flip far download %s params set Reg 0x%x Value: 0x%x\n",
+					this->hw->dbg_name,this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
 		}
 	}
+
 
 	return count;
 }
@@ -1112,7 +1119,13 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 		LOG_DBG("flip_far_reg params set Reg 0x%x Value: 0x%x\n",
 				pdata->flip_far_reg[i].reg,pdata->flip_far_reg[i].val);
 	}
-
+        /*flip_change_cal meaning of value
+          1:flip close need to calbration
+          2:flip far need to calbration
+          3:flip close and far need to calbration
+          */
+        of_property_read_u32(dNode,"Semtech,flip-state-change-cal",&pdata->flip_change_cal);
+        LOG_INFO("size of flip state cal %d \n", pdata->flip_change_cal);
 	pdata->reinit_on_cali = of_property_read_bool(dNode, "reinit-on-cali");
 	pdata->reinit_on_i2c_failure = of_property_read_bool(dNode, "reinit-on-i2c-failure");
 	LOG_INFO("reinit_on_cali %d,reinit_on_i2c_failure %d \n", pdata->reinit_on_cali,pdata->reinit_on_i2c_failure);
