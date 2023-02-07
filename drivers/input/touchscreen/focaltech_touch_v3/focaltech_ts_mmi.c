@@ -28,6 +28,24 @@
 		return -ENODEV; \
 	} \
 }
+
+#define MAX_ATTRS_ENTRIES 10
+
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
 static int fts_mmi_methods_get_vendor(struct device *dev, void *cdata)
 {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "focaltech");
@@ -397,6 +415,51 @@ int fts_mmi_palm_set_enable(struct device *dev, unsigned int enable)
 }
 #endif
 
+#ifdef CONFIG_FTS_LAST_TIME
+static ssize_t fts_ts_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *ts_data;
+	ktime_t last_ktime;
+	struct timespec64 last_ts;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	mutex_lock(&ts_data->mode_lock);
+	last_ktime = ts_data->last_event_time;
+	ts_data->last_event_time = 0;
+	mutex_unlock(&ts_data->mode_lock);
+
+	last_ts = ktime_to_timespec64(last_ktime);
+
+	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+static DEVICE_ATTR(timestamp, S_IRUGO, fts_ts_timestamp_show, NULL);
+#endif
+
+static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
+{
+	int idx = 0;
+	struct fts_ts_platform_data *pdata = NULL;
+	struct fts_ts_data *ts_data;
+
+	GET_TS_DATA(dev);
+	pdata = ts_data->pdata;
+
+#ifdef CONFIG_FTS_LAST_TIME
+	ADD_ATTR(timestamp);
+#endif
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
+	return 0;
+}
+
 static struct ts_mmi_methods fts_mmi_methods = {
 	.get_vendor = fts_mmi_methods_get_vendor,
 	.get_productinfo = fts_mmi_methods_get_productinfo,
@@ -422,6 +485,8 @@ static struct ts_mmi_methods fts_mmi_methods = {
 #endif
 	/* Firmware */
 	.firmware_update = fts_mmi_firmware_update,
+	/* vendor specific attribute group */
+	.extend_attribute_group = fts_mmi_extend_attribute_group,
 	/* PM callback */
 	.panel_state = fts_mmi_panel_state,
 	.pre_resume = fts_mmi_pre_resume,
@@ -434,9 +499,11 @@ static struct ts_mmi_methods fts_mmi_methods = {
 int fts_mmi_dev_register(struct fts_ts_data *ts_data) {
 	int ret;
 
+	mutex_init(&ts_data->mode_lock);
 	ret = ts_mmi_dev_register(ts_data->dev, &fts_mmi_methods);
 	if (ret) {
 		dev_err(ts_data->dev, "Failed to register ts mmi\n");
+		mutex_destroy(&ts_data->mode_lock);
 		return ret;
 	}
 
@@ -447,6 +514,7 @@ int fts_mmi_dev_register(struct fts_ts_data *ts_data) {
 }
 
 void fts_mmi_dev_unregister(struct fts_ts_data *ts_data) {
+	mutex_destroy(&ts_data->mode_lock);
 	ts_mmi_dev_unregister(ts_data->dev);
 }
 

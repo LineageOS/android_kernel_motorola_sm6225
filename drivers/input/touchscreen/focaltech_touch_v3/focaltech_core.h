@@ -69,6 +69,9 @@
 #ifdef FTS_USB_DETECT_EN
 #include <linux/power_supply.h>
 #endif
+#ifdef CONFIG_FTS_LAST_TIME
+#include <linux/ktime.h>
+#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -288,6 +291,10 @@ struct fts_ts_data {
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
     struct ts_mmi_class_methods *imports;
 #endif
+#ifdef CONFIG_FTS_LAST_TIME
+    ktime_t last_event_time;
+#endif
+    struct mutex mode_lock;
 };
 
 enum _FTS_BUS_TYPE {

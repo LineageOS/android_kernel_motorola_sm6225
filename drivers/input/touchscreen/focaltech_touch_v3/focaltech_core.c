@@ -539,6 +539,12 @@ static int fts_input_report_b(struct fts_ts_data *ts_data, struct ts_event *even
                           events[i].id, events[i].x, events[i].y,
                           events[i].p, events[i].area);
             }
+#ifdef CONFIG_FTS_LAST_TIME
+            if (FTS_TOUCH_DOWN == events[i].flag) {
+                ts_data->last_event_time = ktime_get_boottime();
+                FTS_DEBUG("TOUCH: [%d] logged timestamp\n", i);
+            }
+#endif
         } else {
             input_mt_slot(input_dev, events[i].id);
             input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
