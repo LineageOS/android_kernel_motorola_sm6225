@@ -23,12 +23,14 @@
  */
 
 #include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/notifier.h>
 #include <linux/leds.h>
 #include <linux/power_supply.h>
 #include <linux/device/class.h>
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 
 #define CHARGING_DELAY_ON_DEFAULT  (700)
 #define CHARGING_DELAY_OFF_DEFAULT (700)
@@ -51,6 +53,9 @@ struct sol_trig_data {
 	bool mmi_battery_psy_present;
 	bool battery_psy_present;
 };
+
+static int multi_led_enable = 0;
+module_param(multi_led_enable, int, 0644);
 
 static ssize_t charging_delay_on_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
@@ -212,9 +217,8 @@ static struct led_trigger sol_led_trigger = {
 };
 
 static int is_multi_led_enabled () {
-	return 0x01;
+	return multi_led_enable;
 }
-
 
 /* API to set sol led colour, brightness etc based on battery status */
 static int sol_led_update_status(const char *led_name, bool blink, unsigned int brightness, struct sol_trig_data *sol_data)
@@ -424,6 +428,7 @@ static void sol_trig_deactivate(struct led_classdev *led_cdev)
 
 static int __init sol_trig_init(void)
 {
+	pr_err("multiled: multi_led_enable =  %d\n",multi_led_enable);
 	return led_trigger_register(&sol_led_trigger);
 }
 
