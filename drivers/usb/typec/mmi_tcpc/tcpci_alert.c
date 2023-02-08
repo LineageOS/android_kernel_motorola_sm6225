@@ -210,9 +210,11 @@ static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 	struct pd_msg *pd_msg = NULL;
 	enum tcpm_transmit_type type = TCPC_TX_SOP;
 	uint32_t chip_id = 0;
+	int retval = 0;
 
-	rv = tcpci_get_chip_id(tcpc, &chip_id);
-	if (!rv && (SC2150A_DID == chip_id)) {
+	retval = tcpci_get_chip_id(tcpc, &chip_id);
+	if (!retval && (SC2150A_DID == chip_id) &&
+		tcpc->pd_bist_mode == PD_BIST_MODE_DISABLE) {
 		tcpci_set_rx_enable(tcpc, PD_RX_CAP_PE_STARTUP);
 	}
 
@@ -229,13 +231,14 @@ static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 		goto out;
 	}
 
-	if (!rv && (SC2150A_DID == chip_id)) {
-		tcpci_set_rx_enable(tcpc, tcpc->pd_port.rx_cap);
-	}
 	pd_msg->frame_type = type;
 	pd_put_pd_msg_event(tcpc, pd_msg);
 out:
 	tcpci_alert_status_clear(tcpc, TCPC_REG_ALERT_RX_MASK);
+	if (!retval && (SC2150A_DID == chip_id) &&
+		tcpc->pd_bist_mode == PD_BIST_MODE_DISABLE) {
+		tcpci_set_rx_enable(tcpc, tcpc->pd_port.rx_cap);
+	}
 
 	return rv;
 }
