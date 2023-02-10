@@ -698,9 +698,29 @@ static void cw_bat_work(struct work_struct *work)
 	struct delayed_work *delay_work;
 	struct cw_battery *cw_bat;
 	int ret;
+	int ui_soc;
+	uint32_t elapsed_ms;
+	struct timespec64 now;
+	static struct timespec64 start = {0};
 
 	delay_work = container_of(work, struct delayed_work, work);
 	cw_bat = container_of(delay_work, struct cw_battery, battery_delay_work);
+
+	ktime_get_real_ts64(&now);
+	if (now.tv_sec >= start.tv_sec) {
+		elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+		elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+	} else {
+		elapsed_ms = 0;
+		start = now;
+	}
+
+	ui_soc = cw_bat->ui_soc;
+	if (elapsed_ms >= queue_delayed_work_time) {
+		ret = cw_update_data(cw_bat);
+		if (ret < 0)
+			printk(KERN_ERR "iic read error when update data");
+	}
 
 	/* get battery power supply */
 	if (!cw_bat->batt_psy) {
@@ -709,15 +729,9 @@ static void cw_bat_work(struct work_struct *work)
 			cw_printk("%s: get batt_psy fail\n", __func__);
 	}
 
-	ret = cw_update_data(cw_bat);
-	if (ret < 0)
-		printk(KERN_ERR "iic read error when update data");
-
-	if (cw_bat->batt_psy) {
+	if (cw_bat->batt_psy && ui_soc != cw_bat->ui_soc) {
 		power_supply_changed(cw_bat->batt_psy);
 	}
-
-	queue_delayed_work(cw_bat->cwfg_workqueue, &cw_bat->battery_delay_work, msecs_to_jiffies(queue_delayed_work_time));
 }
 
 static void cw_hw_init_work(struct work_struct *work)
@@ -953,13 +967,16 @@ static int cw_battery_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
+		cw_get_current(cw_bat);
 		cw_get_batt_status(cw_bat);
 		val->intval = cw_bat->batt_status;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		cw_get_cycle_count(cw_bat);
 		val->intval = cw_bat->cycle;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		cw_get_capacity(cw_bat);
 		val->intval = cw_bat->ui_soc;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
@@ -974,6 +991,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		cw_get_voltage(cw_bat);
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
@@ -995,9 +1013,11 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = (cw_bat->fcc_design * cw_bat->soh * 1000)/100;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
+		cw_get_temp(cw_bat);
 		val->intval = cw_bat->temp;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		cw_get_soh(cw_bat);
 		val->intval = cw_get_charge_counter(cw_bat);
 		break;
 	default:
