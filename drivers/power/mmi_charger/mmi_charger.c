@@ -2223,7 +2223,8 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 
 	if (chip->factory_mode)
 		hb_resch_time = HEARTBEAT_FACTORY_MS;
-	else if (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE)
+	else if (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE
+		 && chip->combo_status != POWER_SUPPLY_STATUS_FULL)
 		hb_resch_time = chip->heartbeat_interval;
 	else
 		hb_resch_time = chip->heartbeat_dischg_ms;
