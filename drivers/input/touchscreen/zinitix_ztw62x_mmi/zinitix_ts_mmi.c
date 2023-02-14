@@ -183,17 +183,8 @@ static int zinitix_ts_mmi_methods_power(struct device *dev, int on)
 	struct bt541_ts_info *info = dev_get_drvdata(dev);
 	ASSERT_PTR(info);
 
-	if (on == TS_MMI_POWER_ON)
-	{
-		dev_info(dev, "%s: Power on touch IC \n", __func__);
-		bt541_power_control(info, POWER_ON_SEQUENCE);
-		mini_init_touch(info);
-	}
-	else if(on == TS_MMI_POWER_OFF)
-	{
-		dev_info(dev, "%s: Power off touch IC \n", __func__);
-		bt541_power_control(info, POWER_OFF);
-	}
+	info->ts_mmi_power_state = on;
+	schedule_delayed_work(&info->work, 0);
 
 	return 0;
 }
@@ -304,8 +295,8 @@ static int zinitix_ts_mmi_pre_resume(struct device *dev)
 	struct bt541_ts_info *info = dev_get_drvdata(dev);
 	ASSERT_PTR(info);
 
-	dev_info(dev, "%s: Resume start\n", __func__);
 	down(&info->work_lock);
+	dev_info(dev, "%s: Resume start\n", __func__);
 	info->work_state = RESUME;
 	up(&info->work_lock);
 
@@ -351,10 +342,37 @@ static struct ts_mmi_methods zinitix_ts_mmi_methods = {
 	.post_resume = zinitix_ts_mmi_post_resume,
 };
 
+static void ts_mmi_worker_func(struct work_struct *w)
+{
+	struct delayed_work *dw =
+		container_of(w, struct delayed_work, work);
+	struct bt541_ts_info *info =
+		container_of(dw, struct bt541_ts_info, work);
+	struct i2c_client *client = info->client;
+
+	down(&info->work_lock);
+
+	if (info->ts_mmi_power_state == TS_MMI_POWER_ON)
+	{
+		dev_info(&client->dev, "%s: Power on touch IC \n", __func__);
+		bt541_power_control(info, POWER_ON_SEQUENCE);
+		mini_init_touch(info);
+	}
+	else if(info->ts_mmi_power_state == TS_MMI_POWER_OFF)
+	{
+		dev_info(&client->dev, "%s: Power off touch IC \n", __func__);
+		bt541_power_control(info, POWER_OFF);
+	}
+
+	up(&info->work_lock);
+}
+
 int zinitix_ts_mmi_dev_register(struct device *dev) {
 	int ret;
 	struct bt541_ts_info *info = dev_get_drvdata(dev);
 	ASSERT_PTR(info);
+
+	INIT_DELAYED_WORK(&info->work, ts_mmi_worker_func);
 
 	ret = ts_mmi_dev_register(dev, &zinitix_ts_mmi_methods);
 	if (ret) {

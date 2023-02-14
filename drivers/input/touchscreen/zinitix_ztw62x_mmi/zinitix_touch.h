@@ -21,6 +21,7 @@
 
 #include <linux/regulator/consumer.h>
 #include <linux/gpio.h>
+#include <linux/i2c.h>
 
 #define TS_DRVIER_VERSION	"1.0.18_1"
 
@@ -297,6 +298,8 @@ struct bt541_ts_info {
 	struct ts_test_params test_params;
 	int builtin_cmcp_threshold_status;
 	const char *supplier;
+	struct delayed_work work;
+	int ts_mmi_power_state;
 };
 
 extern int zinitix_hw_reset( struct bt541_ts_info* data,bool on );
