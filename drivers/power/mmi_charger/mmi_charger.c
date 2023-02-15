@@ -53,6 +53,8 @@ module_param(factory_kill_disable, int, 0644);
 static int suspend_wakeups;
 module_param(suspend_wakeups, int, 0644);
 
+static bool shutdown_triggered = false;
+
 static struct mmi_charger_chip *this_chip = NULL;
 
 enum {
@@ -2143,7 +2145,6 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 						heartbeat_work.work);
 	struct timespec64 now;
 	static struct timespec64 start;
-	static bool shutdown_triggered = false;
 	uint32_t elapsed_ms;
 
 	/* Have not been resumed so wait another 100 ms */
@@ -2595,7 +2596,8 @@ static int mmi_charger_reboot(struct notifier_block *nb,
 		factory_kill_disable = true;
 		chip->force_charger_disabled = true;
 		schedule_delayed_work(&chip->heartbeat_work, msecs_to_jiffies(0));
-		while (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE) {
+		while (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE &&
+			shutdown_triggered && !chip->empty_vbat_shutdown_triggered) {
 			mmi_info(chip, "Wait for charger removal\n");
 			msleep(100);
 		}
