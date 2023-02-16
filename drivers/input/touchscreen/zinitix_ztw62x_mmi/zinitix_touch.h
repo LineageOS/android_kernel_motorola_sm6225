@@ -40,7 +40,7 @@
 
 #define SUPPORTED_PALM_TOUCH  0
 
-#define MAX_SUPPORTED_FINGER_NUM	2 /* max 10 */
+#define MAX_SUPPORTED_FINGER_NUM	3 /* max 10 */
 
 //#define TOUCH_POINT_FLAG
 #ifdef TOUCH_POINT_FLAG
