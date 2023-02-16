@@ -200,6 +200,7 @@ struct capa_info {
 	u16	ic_revision;
 	u16	fw_version;
 	u16	fw_minor_version;
+	u16     fw_third_version;
 	u16	reg_data_version;
 	u16	threshold;
 	u16	key_threshold;

@@ -175,16 +175,18 @@ struct reg_ioctl {
 
 #define BT541_TOUCH_MODE		0x0010
 #define BT541_CHIP_REVISION		0x0011
-#define BT541_FIRMWARE_VERSION		0x0012
+#define BT541_FIRMWARE_VERSION		0x0034
 
 #define ZINITIX_USB_DETECT	0x116
 
-#define BT541_MINOR_FW_VERSION		0x0121
+#define BT541_MINOR_FW_VERSION		0x0035
 
 #define BT541_VENDOR_ID			0x001C
 #define BT541_HW_ID			0x0014
 
 #define BT541_DATA_VERSION_REG		0x0013
+#define BT541_THIRD_FW_VERSION		0x0036
+
 #define BT541_SUPPORTED_FINGER_NUM	0x0015
 #define BT541_EEPROM_INFO		0x0018
 #define BT541_INITIAL_TOUCH_MODE	0x0019
@@ -1776,12 +1778,16 @@ retry_init:
 		(u8 *)&cap->fw_minor_version, 2) < 0)
 		goto fail_init;
 
-	if (read_data(client, BT541_DATA_VERSION_REG,
+	if (read_data(client, BT541_THIRD_FW_VERSION,
+		(u8 *)&cap->fw_third_version, 2) < 0)
+		goto fail_init;
+
+    if (read_data(client, BT541_DATA_VERSION_REG,
 		(u8 *)&cap->reg_data_version, 2) < 0)
 		goto fail_init;
 
-	zinitix_printk("fw_version = 0x%x, fw_minor_version = 0x%x, reg_data_version = 0x%x\n",
-			cap->fw_version, cap->fw_minor_version, cap->reg_data_version);
+	zinitix_printk("fw_version = 0x%x, fw_minor_version = 0x%x, fw_third_version = 0x%x, reg_data_version = 0x%x\n",
+			cap->fw_version, cap->fw_minor_version, cap->fw_third_version, cap->reg_data_version);
 
 #if TOUCH_ONESHOT_UPGRADE
 	if ((checkMode == NULL) &&(ts_check_need_upgrade(info, cap->fw_version,
@@ -2364,8 +2370,8 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 			input_report_key(info->input_dev, BTN_TOUCH, 1);
-		} else if (zinitix_bit_test(sub_status, SUB_BIT_UP) ||
-			zinitix_bit_test(prev_sub_status, SUB_BIT_EXIST)) {
+		} else if ((zinitix_bit_test(sub_status, SUB_BIT_UP) ||
+			zinitix_bit_test(prev_sub_status, SUB_BIT_EXIST)) && info->finger_cnt1) {
 			dev_info(&client->dev, "Finger [%02d] up ver0x%02x hw0x%02x mode0x%02x\n",
 				i, info->cap_info.reg_data_version,
 				info->cap_info.hw_id, m_optional_mode);

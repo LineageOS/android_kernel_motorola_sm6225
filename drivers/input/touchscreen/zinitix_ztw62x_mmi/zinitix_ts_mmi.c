@@ -53,10 +53,11 @@ static int zinitix_ts_mmi_methods_get_config_id(struct device *dev, void *cdata)
 	zinitix_printk("firmware_version = 0x%x, minor_fw_version = 0x%x, data_version_reg = 0x%x\n",
 		cap->fw_version, cap->fw_minor_version, cap->reg_data_version);
 
-	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%02d%02d%02d",
+	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%02d%02d%02d%02x",
 		cap->fw_version,
 		cap->fw_minor_version,
-		cap->reg_data_version);
+		cap->fw_third_version,
+		le32_to_cpu(cap->reg_data_version));
 }
 
 static int zinitix_ts_mmi_methods_get_bus_type(struct device *dev, void *idata)
