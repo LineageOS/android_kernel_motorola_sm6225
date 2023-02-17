@@ -1479,7 +1479,20 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 
 	sc760x_get_state(chg->sc, &state);
 
-	if (config->charging_disable != chg->chg_cfg.charging_disable) {
+	chg_en = sc760x_is_enabled_charging(chg->sc);
+	if (chg->sc->user_chg_en >= 0 && chg_en != !!chg->sc->user_chg_en) {
+		if (!!chg->sc->user_chg_en)
+			rc = sc760x_enable_charger(chg->sc);
+		else
+			rc = sc760x_disable_charger(chg->sc);
+		if (!rc) {
+			cfg_changed = true;
+			chg_en = !!chg->sc->user_chg_en;
+		}
+	}
+
+	if (config->charging_disable != chg->chg_cfg.charging_disable ||
+	    (chg_en == config->charging_disable && chg->sc->user_chg_en < 0)) {
 		value = config->charging_disable;
 		if (!value)
 			rc = sc760x_enable_charger(chg->sc);
@@ -1488,6 +1501,7 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 		if (!rc) {
 			cfg_changed = true;
 			chg->chg_cfg.charging_disable = config->charging_disable;
+			chg_en = !value;
 		}
 	}
 
@@ -1540,8 +1554,6 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 		cfg_changed = true;
 		chg->chg_cfg.charging_reset = config->charging_reset;
 	}
-
-	chg_en = sc760x_is_enabled_charging(chg->sc);
 
 	if (cfg_changed) {
 		cancel_delayed_work(&chg->sc->charge_monitor_work);
