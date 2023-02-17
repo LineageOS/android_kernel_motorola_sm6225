@@ -797,7 +797,7 @@ int ili_report_handler(void)
 	int tmp = debug_en;
 
 	/* Just in case these stats couldn't be blocked in top half context */
-	if (!ilits->report || atomic_read(&ilits->tp_reset) ||
+	if (!ilits->boot || !ilits->report || atomic_read(&ilits->tp_reset) ||
 		atomic_read(&ilits->fw_stat) || atomic_read(&ilits->tp_sw_mode) ||
 		atomic_read(&ilits->mp_stat) || atomic_read(&ilits->tp_sleep)) {
 		ILI_INFO("ignore report request\n");
