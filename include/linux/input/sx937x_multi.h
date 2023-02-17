@@ -419,11 +419,11 @@ typedef struct sx937x_platform_data
 	void *bus;
 	int i2c_reg_num;
         int flip_reg_num;
+        int flip_far_reg_num;
         int dev_id;
-        int flip_change_cal;
 	struct smtc_reg_data *pi2c_reg;
         struct smtc_reg_data *flip_near_reg;
-        struct smtc_reg_data *flip_far_reg;
+	struct smtc_reg_data *flip_far_reg;
 	int irq_gpio;
 	int ref_phase_a;
 	int ref_phase_b;

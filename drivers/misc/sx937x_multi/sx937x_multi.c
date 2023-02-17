@@ -499,30 +499,54 @@ static ssize_t capsense_reset_store(struct device *dev,
 
 	if (!strncmp(buf, "flip_near", 9)) {
 		LOG_INFO("%s sx937x capsense_reset_store msg: flip_near\n", this->hw->dbg_name);
+		sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+		temp = temp & 0x000000FF;
 		for (i = 0; i < this->hw->flip_reg_num; i++)
 		{
+			if (this->hw->flip_near_reg[i].reg == SX937X_GENERAL_SETUP)
+			{
+				this->hw->flip_near_reg[i].val = this->hw->flip_near_reg[i].val & 0xFFFFFF00;
+				this->hw->flip_near_reg[i].val = this->hw->flip_near_reg[i].val | temp;
+			}
 			sx937x_i2c_write_16bit(this->bus, this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
-			LOG_DBG("flip near download %s params set Reg 0x%x Value: 0x%x\n",
+			LOG_INFO("sx937 flip near download %s params set Reg 0x%x Value: 0x%x\n",
 					this->hw->dbg_name,this->hw->flip_near_reg[i].reg,this->hw->flip_near_reg[i].val);
 		}
-             //calibration when flip id close
-               if(this->hw->flip_change_cal ==1)
-               {
-                    sx937x_i2c_write_16bit(this->bus, SX937X_COMMAND, 0xE);
-                    LOG_DBG("flip near download %s cal set 0xe\n",this->hw->dbg_name);
-               }
 	}
 
 	if (!strncmp(buf, "flip_far", 8)) {
 		LOG_INFO("%s sx937x capsense_reset_store msg: flip_far\n", this->hw->dbg_name);
-		for (i = 0; i < this->hw->flip_reg_num; i++)
+		sx937x_i2c_read_16bit(this->bus, SX937X_GENERAL_SETUP, &temp);
+		temp = temp & 0x000000FF;
+		if (this->hw->flip_far_reg_num > 0)
 		{
-			sx937x_i2c_write_16bit(this->bus, this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
-			LOG_DBG("flip far download %s params set Reg 0x%x Value: 0x%x\n",
-					this->hw->dbg_name,this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+			for (i = 0; i < this->hw->flip_far_reg_num; i++)
+			{
+				if (this->hw->flip_far_reg[i].reg == SX937X_GENERAL_SETUP)
+				{
+					this->hw->flip_far_reg[i].val = this->hw->flip_far_reg[i].val & 0xFFFFFF00;
+					this->hw->flip_far_reg[i].val = this->hw->flip_far_reg[i].val | temp;
+				}
+				sx937x_i2c_write_16bit(this->bus, this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+				LOG_INFO("sx937 flip near download %s params set Reg 0x%x Value: 0x%x\n",
+						this->hw->dbg_name,this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+			}
+		}
+		else
+		{
+			for (i = 0; i < this->hw->flip_reg_num; i++)
+			{
+				if (this->hw->flip_far_reg[i].reg == SX937X_GENERAL_SETUP)
+				{
+					this->hw->flip_far_reg[i].val = this->hw->flip_far_reg[i].val & 0xFFFFFF00;
+					this->hw->flip_far_reg[i].val = this->hw->flip_far_reg[i].val | temp;
+				}
+				sx937x_i2c_write_16bit(this->bus, this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+				LOG_INFO("sx937 flip near download %s params set Reg 0x%x Value: 0x%x\n",
+						this->hw->dbg_name,this->hw->flip_far_reg[i].reg,this->hw->flip_far_reg[i].val);
+			}
 		}
 	}
-
 
 	return count;
 }
@@ -984,7 +1008,6 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 	const char *reg_group_name = "Semtech,reg-init";
 	int name_index,name_count;
 
-
 	if (dNode == NULL)
 		return -ENODEV;
 
@@ -1092,40 +1115,48 @@ static int sx937x_parse_dts(struct sx937x_platform_data *pdata, struct device *d
 			LOG_ERR("size of elements %d alloc error\n", pdata->flip_reg_num);
 			return -ENOMEM;
 		}
+		// initialize the array
+		if (of_property_read_u32_array(dNode,"Semtech,flip_near_init",(u32*)&(pdata->flip_near_reg[0]),sizeof(struct smtc_reg_data)*pdata->flip_reg_num/sizeof(u32)))
+			return -ENOMEM;
+	}
 
+	//load param when flip far
+	of_property_read_u32(dNode,"Semtech,flip_operation_far_num",&pdata->flip_far_reg_num);
+	LOG_INFO("size of flip far state elements %d \n", pdata->flip_far_reg_num);
+	if(pdata->flip_far_reg_num >0)
+	{
+		pdata->flip_far_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->flip_far_reg_num, GFP_KERNEL);
+		if (unlikely(pdata->flip_far_reg == NULL))
+		{
+			LOG_ERR("size of elements %d alloc error\n", pdata->flip_reg_num);
+			return -ENOMEM;
+		}
+		if (of_property_read_u32_array(dNode,"Semtech,flip_far_init",(u32*)&(pdata->flip_far_reg[0]),sizeof(struct smtc_reg_data)*pdata->flip_far_reg_num/sizeof(u32)))
+			return -ENOMEM;
+	}
+	else if(pdata->flip_reg_num >0) // use same lenght with flip_near_reg
+	{
 		pdata->flip_far_reg = devm_kzalloc(dev,sizeof(struct smtc_reg_data)*pdata->flip_reg_num, GFP_KERNEL);
 		if (unlikely(pdata->flip_far_reg == NULL))
 		{
 			LOG_ERR("size of elements %d alloc error\n", pdata->flip_reg_num);
 			return -ENOMEM;
 		}
-
-		// initialize the array
-		if (of_property_read_u32_array(dNode,"Semtech,flip_near_init",(u32*)&(pdata->flip_near_reg[0]),sizeof(struct smtc_reg_data)*pdata->flip_reg_num/sizeof(u32)))
-			return -ENOMEM;
-	}
-	//extract register and value when flip far
-	for(i = 0;i<pdata->flip_reg_num;i++)
-	{
-		for(j =0;j<pdata->i2c_reg_num;j++)
+		for(i = 0;i<pdata->flip_reg_num;i++)
 		{
-			if(pdata->flip_near_reg[i].reg == pdata->pi2c_reg[j].reg)
+			for(j =0;j<pdata->i2c_reg_num;j++)
 			{
-				pdata->flip_far_reg[i].reg =pdata->pi2c_reg[j].reg;
-				pdata->flip_far_reg[i].val =pdata->pi2c_reg[j].val;
+			if(pdata->flip_near_reg[i].reg == pdata->pi2c_reg[j].reg)
+				{
+					pdata->flip_far_reg[i].reg =pdata->pi2c_reg[j].reg;
+					pdata->flip_far_reg[i].val =pdata->pi2c_reg[j].val;
+				}
 			}
-		}
 
-		LOG_DBG("flip_far_reg params set Reg 0x%x Value: 0x%x\n",
-				pdata->flip_far_reg[i].reg,pdata->flip_far_reg[i].val);
+		LOG_INFO("flip_far_reg params set Reg 0x%x Value: 0x%x\n",pdata->flip_far_reg[i].reg,pdata->flip_far_reg[i].val);
+		}
 	}
-        /*flip_change_cal meaning of value
-          1:flip close need to calbration
-          2:flip far need to calbration
-          3:flip close and far need to calbration
-          */
-        of_property_read_u32(dNode,"Semtech,flip-state-change-cal",&pdata->flip_change_cal);
-        LOG_INFO("size of flip state cal %d \n", pdata->flip_change_cal);
+
 	pdata->reinit_on_cali = of_property_read_bool(dNode, "reinit-on-cali");
 	pdata->reinit_on_i2c_failure = of_property_read_bool(dNode, "reinit-on-i2c-failure");
 	LOG_INFO("reinit_on_cali %d,reinit_on_i2c_failure %d \n", pdata->reinit_on_cali,pdata->reinit_on_i2c_failure);
