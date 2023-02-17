@@ -196,23 +196,6 @@ static int fts_mmi_methods_reset(struct device *dev, int type)
 	return 0;
 }
 
-static int fts_mmi_methods_pinctrl(struct device *dev, int on)
-{
-	struct fts_ts_data *ts_data;
-	struct input_dev *input_dev;
-
-	GET_TS_DATA(dev);
-	input_dev = ts_data->input_dev;
-
-	if (on == TS_MMI_PINCTL_ON) {
-		mutex_lock(&input_dev->mutex);
-		fts_reset_proc(150);
-		mutex_unlock(&input_dev->mutex);
-	}
-
-	return 0;
-}
-
 static int fts_mmi_firmware_update(struct device *dev, char *fwname)
 {
 	struct fts_ts_data *ts_data;
@@ -314,12 +297,21 @@ static int fts_mmi_panel_state(struct device *dev,
 static int fts_mmi_pre_resume(struct device *dev)
 {
 	struct fts_ts_data *ts_data;
+	struct input_dev *input_dev;
 
 	GET_TS_DATA(dev);
-
+	input_dev = ts_data->input_dev;
 	FTS_FUNC_ENTER();
 
 	fts_release_all_finger();
+
+	if (ts_data->gesture_support == false) {
+		mutex_lock(&input_dev->mutex);
+		fts_reset_proc(150);
+		FTS_INFO("Reset IC in %s for deep sleep", __func__);
+		mutex_unlock(&input_dev->mutex);
+	}
+
 
 	FTS_FUNC_EXIT();
 	return 0;
@@ -472,7 +464,6 @@ static struct ts_mmi_methods fts_mmi_methods = {
 	.get_poweron = fts_mmi_methods_get_poweron,
 	/* SET methods */
 	.reset =  fts_mmi_methods_reset,
-	.pinctrl =  fts_mmi_methods_pinctrl,
 	.drv_irq = fts_mmi_methods_drv_irq,
 #if FTS_POWER_SOURCE_CUST_EN
 	.power = fts_mmi_methods_power,
