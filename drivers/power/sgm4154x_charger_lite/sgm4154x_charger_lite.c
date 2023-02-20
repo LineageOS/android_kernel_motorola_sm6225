@@ -583,6 +583,8 @@ static int sgm4154x_set_input_volt_lim(struct sgm4154x_device *sgm, int vindpm)
 	    vindpm > SGM4154x_VINDPM_V_MAX_uV)
 		return -EINVAL;
 
+	sgm->vlim = vindpm;
+
 	temp = sgm4154x_get_vindpm_offset_os(sgm);
 	if (0 == temp)
 		offset = 3900000; //uv
@@ -1389,6 +1391,7 @@ static void charger_detect_work_func(struct work_struct *work)
 	int ret;
 	//static int charge_type_old = 0;
 	int curr_in_limit = 0;
+	u32 volt_in_limit = 0;
 	static int prev_in_limit = 0;
 	bool state_changed = false;
 	struct sgm4154x_state state;
@@ -1465,6 +1468,8 @@ static void charger_detect_work_func(struct work_struct *work)
 		dev_err(sgm->dev, "DPDM detecte not done\n");
 		goto err;
 	}
+
+	volt_in_limit = sgm->init_data.vlim;
 #if defined(__SGM41542_CHIP_ID__)|| defined(__SGM41516D_CHIP_ID__)
 	switch(sgm->state.chrg_type) {
 		case SGM4154x_USB_SDP:
@@ -1499,7 +1504,8 @@ static void charger_detect_work_func(struct work_struct *work)
 			if (is_wls_online(sgm)) {
 				pr_err("SGM4154x charger type: Wireless\n");
 				sgm->state.chrg_type = SGM4154x_WLS_TYPE;
-				curr_in_limit = sgm->init_data.wlim;
+				curr_in_limit = sgm->init_data.wls_ilim;
+				volt_in_limit = sgm->init_data.wls_vlim;
 				break;
 			} else {
 				pr_err("SGM4154x charger type: default\n");
@@ -1512,6 +1518,12 @@ static void charger_detect_work_func(struct work_struct *work)
 	//Enable charge IC
 	if (!sgm->mmi_charger) {
 		sgm4154x_enable_charger(sgm);
+	}
+
+	if (volt_in_limit != sgm->vlim) {
+		dev_info(sgm->dev, "Update: volt_in_limit = %d\n",
+					volt_in_limit);
+		sgm4154x_set_input_volt_lim(sgm, volt_in_limit);
 	}
 
 	if ((!sgm->use_ext_usb_psy || !sgm->usb) &&
@@ -1890,6 +1902,16 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		return -EINVAL;
 
 	ret = device_property_read_u32(sgm->dev,
+				       "wls-input-voltage-limit-microvolt",
+				       &sgm->init_data.wls_vlim);
+	if (ret)
+		sgm->init_data.wls_vlim = SGM4154x_VINDPM_DEF_uV;
+
+	if (sgm->init_data.wls_vlim > SGM4154x_VINDPM_V_MAX_uV ||
+	    sgm->init_data.wls_vlim < SGM4154x_VINDPM_V_MIN_uV)
+		return -EINVAL;
+
+	ret = device_property_read_u32(sgm->dev,
 				       "input-current-limit-microamp",
 				       &sgm->init_data.ilim);
 	if (ret)
@@ -1900,12 +1922,12 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		return -EINVAL;
 
 	ret = device_property_read_u32(sgm->dev,
-				       "wls-current-limit-microamp",
-				       &sgm->init_data.wlim);
+				       "wls-input-current-limit-microamp",
+				       &sgm->init_data.wls_ilim);
 	if (ret)
-		sgm->init_data.wlim = SGM4154x_IINDPM_I_MIN_uA;
+		sgm->init_data.wls_ilim = SGM4154x_IINDPM_I_MIN_uA;
 
-	pr_info("wireless input current limit: %duA\n", sgm->init_data.wlim);
+	pr_info("wireless input current limit: %duA\n", sgm->init_data.wls_ilim);
 
 	irq_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio))
@@ -2384,6 +2406,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	bool low_load_en;
 	static int prev_paired_load = PAIRED_LOAD_OFF;
 	int curr_in_limit = chg->sgm->ilim;
+	int volt_in_limit = chg->sgm->init_data.vlim;
 
 	/* Monitor vbat and ibat for OVP and OCP */
 	if (chg->batt_info.batt_mv >= chg->sgm->vbat_ovp_threshold) {
@@ -2543,10 +2566,17 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		if (curr_in_limit > chg->sgm->init_data.ilim)
 			curr_in_limit = chg->sgm->init_data.ilim;
 	} else if (chg->chg_info.chrg_present && chg->chg_info.chrg_type == SGM4154x_WLS_TYPE) {
-			curr_in_limit = chg->sgm->init_data.wlim;
-			pr_debug("wireless is on, set current limit to %d", curr_in_limit);
+			curr_in_limit = chg->sgm->init_data.wls_ilim;
+			volt_in_limit = chg->sgm->init_data.wls_vlim;
+			pr_debug("wireless is on, curr_in_limit=%d, volt_in_limit=%d\n",
+					curr_in_limit, volt_in_limit);
 	} else {
 			curr_in_limit = 0;
+	}
+
+	if (chg->sgm->vlim != volt_in_limit) {
+		pr_info("volt_in_limit=%d\n", volt_in_limit);
+		sgm4154x_set_input_volt_lim(chg->sgm, volt_in_limit);
 	}
 
 	if (chg->sgm->ilim != curr_in_limit) {

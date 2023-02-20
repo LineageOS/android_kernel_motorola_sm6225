@@ -223,11 +223,12 @@
 struct sgm4154x_init_data {
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
-	u32 wlim;	/* wireless input current	*/
+	u32 wls_ilim;	/* wireless input current	*/
 	u32 vreg;	/* regulation voltage		*/
 	u32 iterm;	/* termination current		*/
 	u32 iprechg;	/* precharge current		*/
-	u32 vlim;	/* minimum system voltage limit */
+	u32 vlim;	/* minimum input voltage limit for wired charger*/
+	u32 wls_vlim;   /* minimum input voltage limit for wireless charger*/
 	u32 max_ichg;
 	u32 max_vreg;
 	u32 vrechg;
@@ -353,6 +354,7 @@ struct sgm4154x_device {
 
 	u32 ichg;	/* charge current		*/
 	u32 ilim;	/* input current		*/
+	u32 vlim;	/* input voltage		*/
 	u32 vreg;	/* regulation voltage		*/
 	int user_ichg; /* user charge current		*/
 	int user_ilim; /* user input current		*/
