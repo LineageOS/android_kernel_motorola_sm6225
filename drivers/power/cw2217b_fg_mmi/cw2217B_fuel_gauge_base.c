@@ -76,6 +76,7 @@
 #define CW_VOL_UNIT             1000
 #define CW_CUR_UNIT             1000
 
+#define CW_CUR_ACCURACY		10000
 
 #define CW2217_NOT_ACTIVE          1
 #define CW2217_PROFILE_NOT_READY   2
@@ -933,12 +934,13 @@ static void cw_get_batt_status(struct cw_battery *cw_bat)
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	} else if (cw_bat->ui_soc == CW_UI_FULL) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
-	} else if (batt_curr > 0)
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
-	else if (batt_curr < 0)
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
-	else
+	} else if (abs(batt_curr) < CW_CUR_ACCURACY) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+	} else if (batt_curr * cw_bat->ibat_polority < 0) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
+	} else {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+	}
 }
 
 static unsigned int cw_get_charge_counter(struct cw_battery *cw_bat)
