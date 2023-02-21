@@ -147,7 +147,9 @@ static int stmvl53l1_open(struct inode *inode, struct file *file);
 static int stmvl53l1_release(struct inode *inode, struct file *file);
 static int ctrl_start(struct stmvl53l1_data *data);
 static int ctrl_stop(struct stmvl53l1_data *data);
-
+#ifdef CONFIG_COMPAT
+static long stmvl53l1_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+#endif
 
 static bool force_device_on_en_default = true;
 
@@ -307,6 +309,9 @@ struct stmvl53l1_data *stmvl53l1_dev_table[STMVL53L1_CFG_MAX_DEV];
 static const struct file_operations stmvl53l1_ranging_fops = {
 	.owner =		THIS_MODULE,
 	.unlocked_ioctl =	stmvl53l1_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   =	stmvl53l1_compat_ioctl,
+#endif
 	.open =			stmvl53l1_open,
 	.release =		stmvl53l1_release,
 };
@@ -4391,6 +4396,19 @@ void stmvl53l1_pm_suspend_stop(struct stmvl53l1_data *data)
 		vl53l1_errmsg("stop failed %d aborting anyway\n", rc);
 
 	vl53l1_dbgmsg("done\n");
+}
+#endif
+
+#ifdef CONFIG_COMPAT
+static long stmvl53l1_compat_ioctl(struct file *file,
+		unsigned int cmd, unsigned long arg)
+{
+	int ret;
+	struct stmvl53l1_data *data =
+			container_of(file->private_data,
+			struct stmvl53l1_data, miscdev);
+	ret = stmvl53l1_ioctl_handler(data, cmd, arg, compat_ptr(arg));
+	return ret;
 }
 #endif
 
