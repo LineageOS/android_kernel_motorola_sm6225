@@ -192,8 +192,10 @@
                 novatek,usb_charger;
                 novatek,def-build-id = <0x0501>;
                 novatek,def-config-id = <0x6026>;
+		novatek,panel-supplier = "tm";
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
+		panel = <&dsi_tm_nt36525b_video>;
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
