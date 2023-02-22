@@ -217,15 +217,30 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 {
 	struct fts_ts_data *ts_data;
 	int ret = 0;
+	uint8_t read_data = 0;
 
 	GET_TS_DATA(dev);
-	ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, mode);
-	if(ret < 0){
-		FTS_ERROR("Failed to set charger mode\n");
+	mutex_lock(&ts_data->mode_lock);
+
+	ret = fts_read_reg(FTS_REG_CHARGER_MODE_EN, &read_data);
+	if (ret < 0) {
+		FTS_ERROR("read 8b register fail, ret=%d", ret);
+		mutex_unlock(&ts_data->mode_lock);
+		return -EINVAL;
 	}
 
-	FTS_INFO("Success to %s charger mode\n", mode ? "Enable" : "Disable");
+	read_data |= (!!mode);
+	ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, read_data);
+	if(ret < 0){
+		FTS_ERROR("Failed to set charger mode\n");
+		mutex_unlock(&ts_data->mode_lock);
+		return -EINVAL;
+	}
 
+	FTS_INFO("Success to %s charger mode, 0x8B = 0x%02x\n", mode ? "Enable" : "Disable",
+		read_data);
+
+	mutex_unlock(&ts_data->mode_lock);
 	return 0;
 }
 #endif
@@ -320,6 +335,8 @@ static int fts_mmi_pre_resume(struct device *dev)
 static int fts_mmi_post_resume(struct device *dev)
 {
 	struct fts_ts_data *ts_data;
+	int ret = 0;
+	uint8_t read_data = 0;
 
 	GET_TS_DATA(dev);
 
@@ -353,6 +370,28 @@ static int fts_mmi_post_resume(struct device *dev)
 #if FTS_GESTURE_EN
 exit:
 #endif
+
+	mutex_lock(&ts_data->mode_lock);
+	/* All IC status are cleared after reset */
+	memset(&ts_data->set_mode, 0 , sizeof(ts_data->set_mode));
+	/* restore data */
+	if (ts_data->pdata->pocket_mode_ctrl && ts_data->get_mode.pocket_mode) {
+		if(fts_read_reg(FTS_REG_POCKET_MODE_EN, &read_data) >= 0) {
+			read_data |= (1 << 7);
+			ret = fts_write_reg(FTS_REG_POCKET_MODE_EN, read_data);
+			if(ret < 0){
+				FTS_ERROR("Failed to set pocket mode\n");
+			} else {
+				ts_data->set_mode.pocket_mode = ts_data->get_mode.pocket_mode;
+				FTS_INFO("Success enable pocket mode, 0x8B = 0x%02x\n", read_data);
+			}
+		} else {
+			FTS_ERROR("read 8b register fail, ret=%d", ret);
+		}
+	}
+
+	mutex_unlock(&ts_data->mode_lock);
+
 	FTS_FUNC_EXIT();
 	ts_data->suspended = false;
 
@@ -430,6 +469,97 @@ static ssize_t fts_ts_timestamp_show(struct device *dev,
 static DEVICE_ATTR(timestamp, S_IRUGO, fts_ts_timestamp_show, NULL);
 #endif
 
+static ssize_t fts_mmi_pocket_mode_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *ts_data;
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ts_data->set_mode.pocket_mode);
+}
+
+static ssize_t fts_mmi_pocket_mode_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	unsigned long value = 0;
+	int ret = 0;
+	struct fts_ts_data *ts_data;
+	uint8_t read_data = 0;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	FTS_FUNC_ENTER();
+
+	mutex_lock(&ts_data->mode_lock);
+	ret = kstrtoul(buf, 0, &value);
+	if (ret < 0) {
+		dev_err(dev, "pocket_mode: Failed to convert value\n");
+		mutex_unlock(&ts_data->mode_lock);
+		FTS_FUNC_EXIT();
+		return -EINVAL;
+	}
+	switch (value) {
+		case 0x10:
+		case 0x20:
+			dev_info(dev, "%s: touch pocket mode disable\n", __func__);
+			ts_data->get_mode.pocket_mode = 0;
+			break;
+		case 0x11:
+		case 0x21:
+			dev_info(dev, "%s: touch pocket mode enable\n", __func__);
+			ts_data->get_mode.pocket_mode = 1;
+			break;
+		default:
+			dev_info(dev, "%s: unsupport pocket mode type, value = %lu\n", __func__, value);
+			mutex_unlock(&ts_data->mode_lock);
+			FTS_FUNC_EXIT();
+			return -EINVAL;
+	}
+
+	if (ts_data->set_mode.pocket_mode == ts_data->get_mode.pocket_mode) {
+		FTS_INFO("The value = %d is same, so not to write", ts_data->get_mode.pocket_mode);
+		goto exit;
+	}
+
+	if (ts_data->power_disabled == 1) {
+		FTS_INFO("The touch is in sleep state, restore the value when resume\n");
+		goto exit;
+	}
+
+	ret = fts_read_reg(FTS_REG_POCKET_MODE_EN, &read_data);
+	if (ret < 0) {
+		FTS_ERROR("read 8b register fail, ret=%d", ret);
+		goto exit;
+	}
+
+	if(ts_data->get_mode.pocket_mode) {
+		read_data |= (1 << 7);
+	} else {
+		read_data &= ~(1 << 7);
+	}
+
+	ret = fts_write_reg(FTS_REG_POCKET_MODE_EN, read_data);
+	if(ret < 0){
+		FTS_ERROR("Failed to set pocket mode\n");
+		goto exit;
+	}
+
+	ts_data->set_mode.pocket_mode = ts_data->get_mode.pocket_mode;
+	msleep(20);
+
+	FTS_INFO("Success set %d to pocket mode, 0x8B = 0x%02x\n", ts_data->set_mode.pocket_mode,
+		read_data);
+exit:
+	mutex_unlock(&ts_data->mode_lock);
+	FTS_FUNC_EXIT();
+	return size;
+}
+
+static DEVICE_ATTR(pocket_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_mmi_pocket_mode_show, fts_mmi_pocket_mode_store);
+
 static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
 {
 	int idx = 0;
@@ -442,6 +572,9 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 #ifdef CONFIG_FTS_LAST_TIME
 	ADD_ATTR(timestamp);
 #endif
+
+	if(pdata->pocket_mode_ctrl)
+		ADD_ATTR(pocket_mode);
 
 	if (idx) {
 		ext_attributes[idx] = NULL;

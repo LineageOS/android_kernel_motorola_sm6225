@@ -152,6 +152,7 @@ struct fts_ts_platform_data {
     u32 x_min;
     u32 y_min;
     u32 max_touch_number;
+    bool pocket_mode_ctrl;
 };
 
 struct ts_event {
@@ -161,6 +162,10 @@ struct ts_event {
     int flag;   /* touch event flag: 0 -- down; 1-- up; 2 -- contact */
     int id;     /*touch ID */
     int area;
+};
+
+struct fts_mode_info {
+    int pocket_mode;
 };
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
@@ -295,6 +300,8 @@ struct fts_ts_data {
     ktime_t last_event_time;
 #endif
     struct mutex mode_lock;
+    struct fts_mode_info set_mode;
+    struct fts_mode_info get_mode;
 };
 
 enum _FTS_BUS_TYPE {

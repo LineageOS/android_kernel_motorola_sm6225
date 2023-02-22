@@ -1815,6 +1815,10 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
             pdata->max_touch_number = temp_val;
     }
 
+    pdata->pocket_mode_ctrl = of_property_read_bool(np, "fts,pocket-mode-ctrl");
+    if (pdata->pocket_mode_ctrl)
+        FTS_INFO("Support fts touch pocket mode");
+
     FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
              pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
 
