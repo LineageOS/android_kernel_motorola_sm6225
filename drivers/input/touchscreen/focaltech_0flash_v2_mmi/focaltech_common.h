@@ -154,6 +154,8 @@ struct ts_ic_info {
     struct ft_chip_id_t cid;
 };
 
+extern bool dbg_level_en;
+
 /*****************************************************************************
 * DEBUG function define here
 *****************************************************************************/
@@ -182,6 +184,11 @@ struct ts_ic_info {
     pr_debug("[FTS_TS]%s: Exit(%d)\n", __func__, __LINE__); \
 } while (0)
 #endif
+
+#define FTS_DBG_LEVEL(fmt, args...) do { \
+    if (dbg_level_en) \
+       printk("[FTS_TS/D]%s:"fmt"\n", __func__, ##args); \
+} while (0)
 
 #define FTS_INFO(fmt, args...) do { \
     printk(KERN_INFO "[FTS_TS/I]%s:"fmt"\n", __func__, ##args); \
