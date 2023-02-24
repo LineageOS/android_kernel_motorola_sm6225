@@ -1184,6 +1184,7 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 	struct sgm4154x_device *sgm = power_supply_get_drvdata(psy);
 	struct sgm4154x_state state;
 	int chrg_status = 0;
+	int ibus_ua = 0;
 	int ret = 0;
 
 	mutex_lock(&sgm->lock);
@@ -1289,11 +1290,12 @@ static int sgm4154x_charger_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = sgm4154x_get_input_curr_lim(sgm);
-		if (ret < 0)
-			return ret;
-
-		val->intval = ret;
+		val->intval = sgm->ilim;
+		if (sgm->init_data.vlim > 0 && state.vbus_adc >= sgm->init_data.vlim) {
+			ibus_ua = (sgm->ichg / 1000) * (sgm->vreg / 1000) / (state.vbus_adc / 1000) * 1000;
+			if (ibus_ua < sgm->ilim)
+				val->intval = ibus_ua;
+		}
 		ret = 0;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:

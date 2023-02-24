@@ -223,6 +223,8 @@ struct qti_charger {
 	struct mmi_charger_constraint	constraint;
 	struct mmi_charger_driver	*driver;
 	struct power_supply		*wls_psy;
+	struct power_supply		*partner_charger;
+	u32				partner_charger_icl;
 	u32				*profile_data;
 	struct charger_profile_info	profile_info;
 	struct lpd_info			lpd_info;
@@ -748,6 +750,36 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	return rc;
 }
 
+static int qti_charger_get_partner_icl(struct qti_charger *chg, u32 *icl)
+{
+	int rc;
+	union power_supply_propval propval;
+	static const char *partner_psy_name = NULL;
+
+	if (NULL == partner_psy_name) {
+		rc = of_property_read_string(chg->dev->of_node,
+					"mmi,partner_psy_name", &partner_psy_name);
+		if (rc) {
+			mmi_err(chg, "Failed get the partner psy name");
+			return rc;
+		}
+	}
+
+	if (!chg->partner_charger) {
+		chg->partner_charger = power_supply_get_by_name(partner_psy_name);
+		if (!chg->partner_charger)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chg->partner_charger, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &propval);
+	if (rc < 0) {
+		mmi_err(chg, "get property failed, rc=%d\n", rc);
+		return rc;
+	}
+	*icl = propval.intval;
+	return rc;
+}
+
 static int qti_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 {
 	int rc;
@@ -827,6 +859,15 @@ static int qti_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 						sizeof(value));
 		}
 		chg->chg_cfg.charging_reset = config->charging_reset;
+	}
+
+	rc = qti_charger_get_partner_icl(chg, &value);
+	if (!rc && chg->partner_charger_icl != value) {
+		rc = qti_charger_write(chg, OEM_PROP_CHG_PARTNER_ICL,
+					&value,
+					sizeof(value));
+		if (!rc)
+			chg->partner_charger_icl = value;
 	}
 
 	return 0;
@@ -2663,6 +2704,7 @@ static int qti_charger_init(struct qti_charger *chg)
 	bm_ulog_print_mask_log(BM_ALL, BM_LOG_LEVEL_INFO, OEM_BM_ULOG_SIZE);
 
 	wireless_psy_init(chg);
+
 	create_debugfs_entries(chg);
 	return 0;
 }
