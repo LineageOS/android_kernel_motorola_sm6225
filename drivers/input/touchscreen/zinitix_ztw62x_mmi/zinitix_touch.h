@@ -122,6 +122,8 @@
 #define MAX_TRAW_DATA_SZ	\
 	(MAX_RAW_DATA_SZ + 4*MAX_SUPPORTED_FINGER_NUM + 2)
 
+extern volatile int tpd_halt;
+
 enum power_control {
 	POWER_OFF,
 	POWER_ON,
@@ -290,6 +292,12 @@ struct bt541_ts_info {
 	bool checkUMSmode;
 	bool irq_enabled;
 	bool gesture_enabled;
+	u16 gesture_command;
+#ifdef CONFIG_HAS_WAKELOCK
+	struct wake_lock gesture_wakelock;
+#else
+	struct wakeup_source *gesture_wakelock;
+#endif
 
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct ts_mmi_class_methods *imports;

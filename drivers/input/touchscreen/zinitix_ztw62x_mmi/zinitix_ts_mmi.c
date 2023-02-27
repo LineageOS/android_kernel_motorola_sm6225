@@ -21,6 +21,8 @@
 		return -ENODEV; \
 	}
 
+volatile int tpd_halt = 0;
+
 static int zinitix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata)
 {
 	return scnprintf(TO_CHARP(cdata), TS_MMI_MAX_VENDOR_LEN, "%s", "zinitix");
@@ -219,11 +221,31 @@ static int zinitix_ts_mmi_methods_drv_irq(struct device *dev, int state)
 static int zinitix_ts_mmi_panel_state(struct device *dev,
     enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
+	unsigned char gesture_type = 0;
 	struct bt541_ts_info *info = dev_get_drvdata(dev);
 	ASSERT_PTR(info);
 
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
+		if (info->imports && info->imports->get_gesture_type) {
+			if (info->imports->get_gesture_type(dev, &gesture_type) < 0) {
+				dev_err(dev, "%s: get gesture type error.\n", __func__);
+				return -EINVAL;
+			}
+		}
+
+		info->gesture_command = 0;
+
+		if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+		    info->gesture_command |= 0x0089;
+		    dev_info(dev, "Enable GESTURE_CLI_SINGLE command: 0x%04x", info->gesture_command);
+		}
+		if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+		    info->gesture_command |= 0x0091;
+		    dev_info(dev, "Enable GESTURE_CLI_DOUBLE command: 0x%04x", info->gesture_command);
+		}
+		dev_info(dev, "CLI GESTURE SWITCH command: 0x%04x", info->gesture_command);
+
 		if (zinitix_ts_mmi_gesture_suspend(dev) < 0) {
 			dev_err(dev, "%s: Gesture suspend error.\n", __func__);
 			return -EINVAL;
@@ -264,6 +286,7 @@ static int zinitix_ts_mmi_pre_suspend(struct device *dev)
 	dev_info(dev, "%s: Suspend start \n", __func__);
 
 	down(&info->work_lock);
+	tpd_halt = 1;
 	//stop ESD
 	#if ESD_TIMER_INTERVAL
 		flush_work(&info->tmr_work);
@@ -313,6 +336,7 @@ static int zinitix_ts_mmi_post_resume(struct device *dev)
 	#if ESD_TIMER_INTERVAL
 		esd_timer_start(CHECK_ESD_TIMER, info);
 	#endif
+	tpd_halt = 0;
 	info->work_state = NOTHING;
 	up(&info->work_lock);
 	dev_info(dev, "%s: Resume end\n", __func__);

@@ -292,7 +292,6 @@ struct reg_ioctl {
 
 extern int get_lcd_attached(void);
 extern unsigned int system_rev;
-static volatile int __maybe_unused tpd_halt = 0;
 
 struct class *sec_class;
 /* end header file */
@@ -2096,7 +2095,7 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 	u32 tmp;
 	//u8 read_result = 1;
 	u8 palm = 0;
-#if USE_WAKEUP_GESTURE
+#if defined(USE_WAKEUP_GESTURE) || defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	u16 gesture_flag=0;
 	int ret =0;
 #endif
@@ -2108,14 +2107,12 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-
 #if ESD_TIMER_INTERVAL
 	esd_timer_stop(info);
 #endif
 #if USE_WAKEUP_GESTURE
 		if((tpd_halt)&&(info->work_state == SUSPEND)) //suspend state support gesture
 		{
-
 			dev_err(&client->dev," gesture wakeup ");
 			if (read_data(client, 0x126,(u8 *)&gesture_flag, 2) < 0) //0x126
 			{
@@ -2149,15 +2146,69 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 
 						ret=0;
 					}
-
 				}
-
 			}
 			goto out;
 		}
+#elif defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+		if((tpd_halt)&&(info->work_state == SUSPEND)) //suspend state support gesture
+		{
+			dev_info(&client->dev," gesture wakeup ");
+			if (read_data(client, 0x126,(u8 *)&gesture_flag, 2) < 0) //0x126
+			{
+				dev_err(&client->dev," gesture read reg error!!!\r\n");
+				ret=0;
+				/*eric add 20160920*/
+				write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
+			}
+			else
+			{
+				/*wake up*/
+				/*eric add 20160920*/
+				write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 
+				/*1 single click*/
+				if(gesture_flag==1)
+				{
+					dev_info(&client->dev,"%s: got single tap event\n", __func__);
+					if (info->imports && info->imports->report_gesture) {
+						struct gesture_event_data event;
+
+						dev_info(&client->dev,"%s: report single tap gesture event\n", __func__);
+						event.evcode = 1;
+						/* call class method */
+						ret = info->imports->report_gesture(&event);
+					}
+				}
+				/*1 double click*/
+				else if (gesture_flag==2) {
+					dev_info(&client->dev,"%s: got double tap event\n", __func__);
+					if (info->imports && info->imports->report_gesture) {
+						struct gesture_event_data event;
+
+						dev_info(&client->dev,"%s: report double tap gesture event\n", __func__);
+						event.evcode = 4;
+						/* call class method */
+						ret = info->imports->report_gesture(&event);
+					}
+				}
+			        if (!ret) {
+#ifdef CONFIG_HAS_WAKELOCK
+					wake_lock_timeout(&info->gesture_wakelock, msecs_to_jiffies(3000));
+#else
+					PM_WAKEUP_EVENT(info->gesture_wakelock, 3000);
 #endif
+				}
 
+				if (write_reg(client, 0x126, 0) != 0)
+				{
+					dev_err(&client->dev," gesture write reg error!!!\r\n");
+					ret=0;
+				}
+			}
+			goto out;
+		}
+#endif
 
 	if (info->work_state != NOTHING) {
 		dev_err(&client->dev, "%s: Other process occupied\n", __func__);
@@ -2167,7 +2218,6 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 	}
 
 	info->work_state = NORMAL;
-
 
 	if (ts_read_coord(info) == false )
 	{
@@ -2453,31 +2503,26 @@ int zinitix_ts_mmi_gesture_suspend(struct device *dev)
 	struct bt541_ts_info *info = i2c_get_clientdata(client);
 
 	down(&info->work_lock);
-	//reset gesture register
-	if (write_reg(client, 0x126, 0) != I2C_SUCCESS) {
-		dev_err(dev, "%s: Reset gesture register error.\n", __func__);
-		up(&info->work_lock);
-		return -1;
-	}
-	//enable irq wake
-	enable_irq_wake(info->irq);
-	info->irq_enabled = true;
-	//send enable easy wake gesture cmd
-	if (write_reg(client, 0x011D, 0x0089) != I2C_SUCCESS) {
-		zinitix_printk("easy_wakeup_gesture write_reg[0x0089] failed!!!-------------\n");
-		up(&info->work_lock);
-		return -1;
-	}
-	//clear INT status
+	//software reset
 	for(i = 0; i < 3; i++) {
-		if (write_cmd(client, BT541_CLEAR_INT_STATUS_CMD) < 0) {
-			dev_err(&client->dev,"tpd_suspend fail to clear int(%d)\r\n", i);
+		if (write_cmd(client, BT541_SWRESET_CMD) < 0) {
+			dev_err(&client->dev,"tpd_suspend fail to sft  reset(%d)\r\n", i);
 			mdelay(10);
 			continue;
 		} else
 		break;
 	}
 	if (i == 3) {
+		up(&info->work_lock);
+		return -1;
+	}
+	msleep(20);
+	//enable irq wake
+	enable_irq_wake(info->irq);
+	info->irq_enabled = true;
+	//send enable easy wake gesture cmd
+	if (write_reg(client, 0x011D, info->gesture_command) != I2C_SUCCESS) {
+		zinitix_printk("easy_wakeup_gesture write_reg[0x0089] failed!!!-------------\n");
 		up(&info->work_lock);
 		return -1;
 	}
@@ -6025,6 +6070,14 @@ static int bt541_ts_probe(struct i2c_client *client,
 	}
 #endif
 
+	PM_WAKEUP_REGISTER(&client->dev, info->gesture_wakelock,
+		"zinitix_gesture_wakelock");
+	if (!info->gesture_wakelock) {
+		dev_info(&client->dev, "%s: allocate gesture wakeup source err!\n", __func__);
+		ret = -ENOMEM;
+		goto err_register_gesture_wakelock;
+	}
+
 #ifdef SEC_FACTORY_TEST
 	init_completion(&info->builtin_cmcp_threshold_complete);
 	INIT_WORK(&info->cmcp_threshold_update,
@@ -6036,6 +6089,8 @@ static int bt541_ts_probe(struct i2c_client *client,
 
 	return ret;
 
+err_register_gesture_wakelock:
+	PM_WAKEUP_UNREGISTER(info->gesture_wakelock);
 err_ts_mmi_register:
 #ifdef SEC_FACTORY_TEST
 err_kthread_create_failed:
