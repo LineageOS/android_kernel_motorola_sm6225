@@ -182,6 +182,7 @@ __attribute__((unused)) static int sc760x_set_power_limit_dis(struct sc760x_chip
 static int sc760x_mmi_charger_init(struct sc760x_mmi_charger *chg);
 static int sc760x_get_state(struct sc760x_chip *sc,
 			     struct sc760x_state *state);
+static int sc760x_init_device(struct sc760x_chip *sc);
 static struct power_supply_desc sc760x_power_supply_desc;
 
 /*********************************************************/
@@ -222,6 +223,13 @@ static int sc760x_enable_chip(struct sc760x_chip *sc, bool en)
 	if (en)
 	    msleep(2000);
 	sc->sc760x_enable = en;
+
+	if (sc->sc760x_enable) {
+		ret = sc760x_init_device(sc);
+		if (ret < 0) {
+		    pr_info("init device failed(%d)\n", ret);
+		}
+	}
 	dev_err(sc->dev, "success to set %s state, sleep 2s\n", pinctrl_name);
 
 	ret = 0;
@@ -274,6 +282,12 @@ static int sc760x_read_block(struct sc760x_chip *sc,
 static int sc760x_reg_reset(struct sc760x_chip *sc)
 {
     return sc760x_field_write(sc, REG_RST, 1);
+}
+
+static int sc760x_set_auto_bsm_dis(struct sc760x_chip *sc, bool en)
+{
+    dev_info(sc->dev, "%s : set auto bsm %d\n", __func__, en);
+    return sc760x_field_write(sc, AUTO_BSM_DIS, !!en);
 }
 
 static int sc760x_set_ibat_limit(struct sc760x_chip *sc, int curr)
@@ -1090,6 +1104,11 @@ static int sc760x_init_device(struct sc760x_chip *sc)
         dev_err(sc->dev, "%s Failed to reset registers(%d)\n", __func__, ret);
     }
 
+    ret = sc760x_set_auto_bsm_dis(sc, true);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to disable audo bsm(%d)\n", __func__, ret);
+    }
+
     for (i = 0; i < ARRAY_SIZE(props); i++) {
         ret = sc760x_field_write(sc, props[i].field_id, props[i].conv_data);
     }
@@ -1137,6 +1156,25 @@ static int is_wls_online(struct sc760x_chip *sc)
 	}
 
 	pr_debug("wireless online is %d", val.intval);
+	return val.intval;
+}
+
+static int is_usb_online(struct sc760x_chip *sc)
+{
+	int rc;
+	union power_supply_propval val;
+
+	if (!sc->use_ext_usb_psy || !sc->usb_psy)
+		return 0;
+
+	rc = power_supply_get_property(sc->usb_psy,
+			POWER_SUPPLY_PROP_ONLINE, &val);
+	if (rc < 0) {
+		pr_err("Error usb online rc = %d\n", rc);
+		return 0;
+	}
+
+	pr_debug("usb online is %d", val.intval);
 	return val.intval;
 }
 
@@ -1632,9 +1670,54 @@ static void sc760x_charger_set_constraint(void *data,
 	}
 }
 
+#define DUAL_VBATT_DELTA_MV 200
 static void sc760x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
+	int ret = 0, partner_fg_vbatt = 0, fg_vbatt = 0;
+	struct sc760x_mmi_charger *chg = data;
+
+	if (!chg) {
+		pr_err("sc mmi_charger not valid\n");
+		return;
+	}
+
+	if (!chg->sc) {
+		pr_err("sc chip not valid\n");
+		return;
+	}
+
+	if (chg->sc->sc760x_enable) {
+		pr_info("sc760x has been power on\n");
+		return;
+	}
+
+	pr_info("parnter battery : batt_mv %d, batt_ma %d, batt_soc %d,"
+		" batt_temp %d, batt_status %d, batt_sn %s, batt_fv_mv %d,"
+		" batt_fcc_ma %d\n",
+		batt_info->batt_mv,
+		batt_info->batt_ma,
+		batt_info->batt_soc,
+		batt_info->batt_temp,
+		batt_info->batt_status,
+		batt_info->batt_sn,
+		batt_info->batt_fv_mv,
+		batt_info->batt_fcc_ma);
+
+	partner_fg_vbatt = batt_info->batt_mv;
+	fg_vbatt = chg->batt_info.batt_mv;
+
+	pr_info("sc760x checking, partner_fg_vbatt %d, fg_vbatt %d\n", partner_fg_vbatt, fg_vbatt);
+	if (!is_usb_online(chg->sc) &&
+		!is_wls_online(chg->sc) &&
+		(DUAL_VBATT_DELTA_MV < (partner_fg_vbatt - fg_vbatt))) {
+		pr_err("partner_fg_vbatt > fg_vbatt, and delta value > %d, Does not turn on sc760x\n", DUAL_VBATT_DELTA_MV);
+		return;
+	} else {
+		sc760x_enable_chip(chg->sc, true);
+		return;
+	}
+
     return;
 }
 
@@ -1762,7 +1845,11 @@ static int sc760x_charger_probe(struct i2c_client *client,
     sc->dev = dev;
     sc->client = client;
     mutex_init(&sc->lock);
-    sc760x_enable_chip(sc, true);
+
+    sc->user_ilim = -EINVAL;
+    sc->user_ichg = -EINVAL;
+    sc->user_chg_en = -EINVAL;
+    sc->user_chg_susp = -EINVAL;
 
     sc->regmap = devm_regmap_init_i2c(client,
                             &sc760x_regmap_config);
@@ -1805,12 +1892,6 @@ static int sc760x_charger_probe(struct i2c_client *client,
         goto err_parse_dt;
     }
 
-    ret = sc760x_init_device(sc);
-    if (ret < 0) {
-        dev_err(sc->dev, "%s init device failed(%d)\n", __func__, ret);
-        goto err_init_device;
-    }
-
     ret = sc760x_register_interrupt(sc, client);
     if (ret < 0) {
         dev_err(sc->dev, "%s register irq fail(%d)\n",
@@ -1843,7 +1924,8 @@ static int sc760x_charger_probe(struct i2c_client *client,
 
     schedule_delayed_work(&sc->charge_detect_delayed_work,
 						msecs_to_jiffies(0));
-}
+    }
+
     dev_err(sc->dev, "sc760x[%s] probe successfully!!!\n",
             sc->role == SC760X_MASTER ? "master" : "slave");
     return 0;
@@ -1879,22 +1961,30 @@ static int sc760x_charger_remove(struct i2c_client *client)
 static int sc760x_suspend(struct device *dev)
 {
     struct sc760x_chip *sc = dev_get_drvdata(dev);
-
+    int ret = 0;
     dev_info(sc->dev, "Suspend successfully!");
     if (device_may_wakeup(dev))
         enable_irq_wake(sc->irq);
     disable_irq(sc->irq);
+    ret = sc760x_set_adc_enable(sc, false);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
+    }
 
     return 0;
 }
 static int sc760x_resume(struct device *dev)
 {
     struct sc760x_chip *sc = dev_get_drvdata(dev);
-
+    int ret = 0;
     dev_info(sc->dev, "Resume successfully!");
     if (device_may_wakeup(dev))
         disable_irq_wake(sc->irq);
     enable_irq(sc->irq);
+    ret = sc760x_set_adc_enable(sc, true);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
+    }
 
     return 0;
 }
@@ -1907,7 +1997,12 @@ static const struct dev_pm_ops sc760x_pm = {
 static void sc760x_charger_shutdown(struct i2c_client *client)
 {
 	int ret = 0;
-	//struct sc760x_chip *sc = i2c_get_clientdata(client);
+	struct sc760x_chip *sc = i2c_get_clientdata(client);
+	ret = sc760x_set_adc_enable(sc, false);
+	if (ret < 0) {
+		dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
+	}
+
 	if (ret) {
 		pr_err("Failed to disable charger, ret = %d\n", ret);
 	}
