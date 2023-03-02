@@ -230,8 +230,8 @@ static int sol_led_update_status(const char *led_name, bool blink, unsigned int 
 	if(!strcmp(led_name, "charging_full") && !strcmp(led_cdev->name, "charging_full")) {
 		dev_dbg(led_cdev->dev, "POWER_STATUS_FULL\n");
 		led_trigger_event(&sol_led_trigger, LED_OFF);
-		msleep(10); /* MMI_TODO <kernel>: set delay to sync led-trigger with core-led calls */
-		led_set_brightness(led_cdev, brightness);
+		flush_work(&led_cdev->set_brightness_work);
+		led_set_brightness_sync(led_cdev, brightness);
 		if(blink){
 			led_blink_set(led_cdev, &sol_data->charging_delay_on, &sol_data->charging_delay_off);
 			dev_dbg(led_cdev->dev, "SETTING DONE FOR charging full blink delay_on=%lu,delay_off=%lu\n",sol_data->charging_delay_on, sol_data->charging_delay_off);
@@ -241,8 +241,8 @@ static int sol_led_update_status(const char *led_name, bool blink, unsigned int 
 	if(!strcmp(led_name, "charging") && !strcmp(led_cdev->name, "charging")) {
 		dev_dbg(led_cdev->dev, "POWER_STATUS_CHARGING\n");
 		led_trigger_event(&sol_led_trigger, LED_OFF);
-		msleep(10); /* set delay to sync led-trigger with core-led calls */
-		led_set_brightness(led_cdev, brightness);
+		flush_work(&led_cdev->set_brightness_work);
+		led_set_brightness_sync(led_cdev, brightness);
 		if(blink){
 			led_blink_set(led_cdev, &sol_data->charging_delay_on, &sol_data->charging_delay_off);
 			dev_dbg(led_cdev->dev, "SETTING DONE FOR charging blink delay_on=%lu,delay_off=%lu\n",sol_data->charging_delay_on, sol_data->charging_delay_off);
@@ -252,8 +252,8 @@ static int sol_led_update_status(const char *led_name, bool blink, unsigned int 
 	if(!strcmp(led_name, "charging_low") && !strcmp(led_cdev->name, "charging_low")) {
 		dev_dbg(led_cdev->dev, "POWER_STATUS_LOW\n");
 		led_trigger_event(&sol_led_trigger, LED_OFF);
-		msleep(10); /* set delay to sync led-trigger with core-led calls */
-		led_set_brightness(led_cdev, brightness);
+		flush_work(&led_cdev->set_brightness_work);
+		led_set_brightness_sync(led_cdev, brightness);
 		if(blink){
 			led_blink_set(led_cdev, &sol_data->low_cap_delay_on, &sol_data->low_cap_delay_off);
 			dev_dbg(led_cdev->dev, "SETTING DONE FOR low cap blink delay_on= %lu,delay_off=%lu\n",sol_data->low_cap_delay_on,sol_data->low_cap_delay_off);
