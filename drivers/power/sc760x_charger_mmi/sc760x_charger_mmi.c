@@ -1674,7 +1674,7 @@ static void sc760x_charger_set_constraint(void *data,
 static void sc760x_paired_battery_notify(void *data,
 			struct mmi_battery_info *batt_info)
 {
-	int ret = 0, partner_fg_vbatt = 0, fg_vbatt = 0;
+	int partner_fg_vbatt = 0, fg_vbatt = 0;
 	struct sc760x_mmi_charger *chg = data;
 
 	if (!chg) {
