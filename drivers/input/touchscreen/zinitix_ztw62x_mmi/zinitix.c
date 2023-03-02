@@ -2420,8 +2420,8 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 			input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
 			input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 			input_report_key(info->input_dev, BTN_TOUCH, 1);
-		} else if ((zinitix_bit_test(sub_status, SUB_BIT_UP) ||
-			zinitix_bit_test(prev_sub_status, SUB_BIT_EXIST)) && info->finger_cnt1) {
+		} else if (zinitix_bit_test(sub_status, SUB_BIT_UP) ||
+			zinitix_bit_test(prev_sub_status, SUB_BIT_EXIST)) {
 			dev_info(&client->dev, "Finger [%02d] up ver0x%02x hw0x%02x mode0x%02x\n",
 				i, info->cap_info.reg_data_version,
 				info->cap_info.hw_id, m_optional_mode);
