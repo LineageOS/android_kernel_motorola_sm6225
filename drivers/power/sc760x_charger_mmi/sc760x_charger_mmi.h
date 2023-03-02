@@ -105,7 +105,7 @@ enum sc760x_fields {
     CHG_OVP_DEG, BAT_OVP_DEG, CHG_OCP_DEG, DSG_OCP_DEG,
     AUTO_BSM_DEG,
     WORK_MODE, BAT_ABSENT_STAT, VDUFF_STAT,
-    ADC_EN, ADC_RATE, ADC_FREEZE,
+    ADC_EN, ADC_RATE, ADC_FREEZE, ADC_DONE_MASK,
     F_MAX_FIELDS,
 };
 
@@ -196,6 +196,7 @@ struct sc760x_chip {
     int user_ilim; /* user input current		*/
     int user_chg_en; /* user charging enable	*/
     int user_chg_susp; /* user charger suspend	*/
+    int user_gpio_en; /* user gpio en	*/
 
     int irq;
     int role;

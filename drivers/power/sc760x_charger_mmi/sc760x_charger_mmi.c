@@ -161,12 +161,17 @@ static const struct reg_field sc760x_reg_fields[] = {
     [ADC_EN] = REG_FIELD(0x15, 7, 7),
     [ADC_RATE] = REG_FIELD(0x15, 6, 6),
     [ADC_FREEZE] = REG_FIELD(0x15, 5, 5),
+    [ADC_DONE_MASK] = REG_FIELD(0x15, 0, 0),
 };
 
 static const struct regmap_config sc760x_regmap_config = {
     .reg_bits = 8,
     .val_bits = 8,
 };
+
+#ifndef MIN_VAL
+   #define  MIN_VAL( x, y ) ( ((x) < (y)) ? (x) : (y) )
+#endif
 
 __attribute__((unused)) static int sc760x_set_ibat_dis(struct sc760x_chip *sc, bool en);
 __attribute__((unused)) static int sc760x_set_load_switch(struct sc760x_chip *sc, bool en);
@@ -378,6 +383,12 @@ static int sc760x_set_adc_enable(struct sc760x_chip *sc, bool en)
     return sc760x_field_write(sc, ADC_EN, !!en);
 }
 
+static int sc760x_set_adc_done_mask(struct sc760x_chip *sc, bool en)
+{
+    dev_info(sc->dev, "%s : set adc done mask %d\n", __func__, en);
+    return sc760x_field_write(sc, ADC_DONE_MASK, !!en);
+}
+
 static int sc760x_get_adc(struct sc760x_chip *sc,
             ADC_CH channel, int *result)
 {
@@ -398,16 +409,18 @@ static int sc760x_get_adc(struct sc760x_chip *sc,
 
 static int sc760x_dump_reg(struct sc760x_chip *sc)
 {
-    int ret;
-    int i;
-    int val;
+    int ret = 0, i = 0, val = 0, desc = 0;
+    char buf[1024];
 
     for (i = 0; i <= 0x15; i++) {
         ret = regmap_read(sc->regmap, i, &val);
-        dev_err(sc->dev, "%s reg[0x%02x] = 0x%02x\n",
-                __func__, i, val);
+        if (!ret) {
+            desc +=
+                sprintf(buf + desc, "[0x%02x]:0x%02x, ", i, val);
+        }
     }
 
+    dev_err(sc->dev, "Reg %s\n ", buf);
     return ret;
 }
 
@@ -416,7 +429,7 @@ static irqreturn_t sc760x_irq_handler(int irq, void *data)
     struct sc760x_chip *sc = data;
 
     dev_info(sc->dev, "%s\n", __func__);
-
+    sc760x_dump_reg(sc);
     return IRQ_HANDLED;
 }
 
@@ -477,8 +490,16 @@ static ssize_t sc760x_enable_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	sc760x_enable_chip(sc, enable);
-	sc->sc760x_enable = enable;
+	if (enable < 0) {
+		sc->user_gpio_en = -EINVAL;
+		pr_info("Clear user gpio en setting\n");
+	} else {
+		sc->user_gpio_en = !!enable;
+		pr_info("Set user gpio en: %d\n", sc->user_gpio_en);
+		sc760x_enable_chip(sc, enable);
+		sc->sc760x_enable = enable;
+	}
+
 	return r ? r : count;
 }
 
@@ -662,8 +683,6 @@ static void sc760x_remove_device_node(struct device *dev)
 
 static int sc760x_set_thermal_mitigation(struct sc760x_chip *sc, int val)
 {
-	int ret;
-	u32 prev_fcc_ua;
 
 	if (!sc->num_thermal_levels)
 		return 0;
@@ -678,19 +697,12 @@ static int sc760x_set_thermal_mitigation(struct sc760x_chip *sc, int val)
 		return -EINVAL;
 	}
 
-	prev_fcc_ua = sc->thermal_fcc_ua;
 	sc->thermal_fcc_ua = sc->thermal_levels[val];
-	ret = sc760x_set_ibat_limit(sc, sc->thermal_levels[val] / 1000);
-	if (ret) {
-		pr_err("Failed to set thermal mitigation val=%d, ret=%d\n",
-				sc->thermal_levels[val], ret);
-		sc->thermal_fcc_ua = prev_fcc_ua;
-	} else {
-		sc->curr_thermal_level = val;
-	}
+	sc->curr_thermal_level = val;
+
 	pr_info("thermal level: %d, thermal fcc: %d\n", sc->curr_thermal_level, sc->thermal_fcc_ua);
 
-	return ret;
+	return 0;
 }
 
 
@@ -1104,11 +1116,6 @@ static int sc760x_init_device(struct sc760x_chip *sc)
         dev_err(sc->dev, "%s Failed to reset registers(%d)\n", __func__, ret);
     }
 
-    ret = sc760x_set_auto_bsm_dis(sc, true);
-    if (ret < 0) {
-        dev_err(sc->dev, "%s Failed to disable audo bsm(%d)\n", __func__, ret);
-    }
-
     for (i = 0; i < ARRAY_SIZE(props); i++) {
         ret = sc760x_field_write(sc, props[i].field_id, props[i].conv_data);
     }
@@ -1116,6 +1123,11 @@ static int sc760x_init_device(struct sc760x_chip *sc)
     ret = sc760x_set_adc_enable(sc, true);
     if (ret < 0) {
         dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
+    }
+
+    ret = sc760x_set_adc_done_mask(sc, true);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to set adc mask (%d)\n", __func__, ret);
     }
 
     return sc760x_dump_reg(sc);
@@ -1246,7 +1258,6 @@ static int sc760x_get_state(struct sc760x_chip *sc,
 	pr_info("sc760x : workmode %d, chrg_stat =%d, usb_online = %d, wls_online %d, vbus = %d, ibus = %d, ibus_limit = %d, ibat = %d, vbat = %d, vchg = %d, tbat = %d\n",
 		chrg_status, state->chrg_stat, state->usb_online, state->wls_online, state->vbus_adc, state->ibus_adc, state->ibus_limit, state->ibat_adc, state->vbat_adc, state->vchg_adc,
 		state->tbat_adc);
-
 	return 0;
 }
 
@@ -1476,19 +1487,21 @@ static int sc760x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_
 	chg->chg_info.chrg_pmax_mw = 0;
 
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
-
+	sc760x_dump_reg(chg->sc);
 	return 0;
 }
 
 static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *config)
 {
-	int rc;
+	int rc = 0, sc760x_ibat_limit_set = 0, ibat_limit_vote = 0;
 	u32 value;
 	bool chg_en;
 	bool cfg_changed = false;
+	
 	struct sc760x_mmi_charger *chg = data;
 	struct sc760x_state state = chg->sc->state;
 
+	sc760x_get_state(chg->sc, &state);
 	/* Monitor vbat and ibat for OVP and OCP */
 /*
 	if (chg->batt_info.batt_mv >= chg->sc->vbat_ovp_threshold) {
@@ -1497,16 +1510,46 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 				chg->sc->vbat_ovp_threshold);
 	}
 */
+
+	rc = sc760x_get_ibat_limit(chg->sc, &sc760x_ibat_limit_set);
+	if (rc < 0)
+		sc760x_ibat_limit_set = ibat_limit_vote;
+
 	if (!config->charging_disable &&
 	    !config->charger_suspend &&
 	    config->target_fcc != chg->chg_cfg.target_fcc) {
-		value = config->target_fcc;
-		rc = sc760x_set_ibat_limit(chg->sc, value);
-		if (!rc) {
-			cfg_changed = true;
-			chg->chg_cfg.target_fcc = config->target_fcc;
+		cfg_changed = true;
+		chg->chg_cfg.target_fcc = config->target_fcc;
+	}
+
+	/* configure the charger if changed */
+	if (config->target_fv != chg->chg_cfg.target_fv) {
+		cfg_changed = true;
+		chg->chg_cfg.target_fv = config->target_fv;
+	}
+
+	if (chg->chg_cfg.target_fv > 0 && (state.vbat_adc > chg->chg_cfg.target_fv * 1000)) {
+		sc760x_ibat_limit_set -= IBAT_CHG_LIM_BASE;
+		sc760x_set_ibat_limit(chg->sc, sc760x_ibat_limit_set);
+		pr_info("update new sc760x_ibat_limit_set %d, state.vbat_adc %d > chg->chg_cfg.target_fv %d\n",
+			sc760x_ibat_limit_set, state.vbat_adc, chg->chg_cfg.target_fv * 1000);
+	} else {
+
+		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua);
+
+		if (sc760x_ibat_limit_set > (ibat_limit_vote + IBAT_CHG_LIM_BASE)) {
+			sc760x_ibat_limit_set -= IBAT_CHG_LIM_BASE;
+			sc760x_set_ibat_limit(chg->sc, sc760x_ibat_limit_set);
+			pr_info("Devide to decrease ichg, update new sc760x_ibat_limit_set %d\n",
+				sc760x_ibat_limit_set);
+		} else if (sc760x_ibat_limit_set < (ibat_limit_vote - IBAT_CHG_LIM_BASE)) {
+			sc760x_ibat_limit_set += IBAT_CHG_LIM_BASE;
+			sc760x_set_ibat_limit(chg->sc, sc760x_ibat_limit_set);
+			pr_info("Devide to increase ichg, update new sc760x_ibat_limit_set %d\n",
+				sc760x_ibat_limit_set);
 		}
 	}
+
 	if (config->charger_suspend != chg->chg_cfg.charger_suspend) {
 		rc = sc760x_set_load_switch(chg->sc, config->charger_suspend);
 		if (!rc) {
@@ -1514,8 +1557,6 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 			chg->chg_cfg.charger_suspend = config->charger_suspend;
 		}
 	}
-
-	sc760x_get_state(chg->sc, &state);
 
 	chg_en = sc760x_is_enabled_charging(chg->sc);
 	if (chg->sc->user_chg_en >= 0 && chg_en != !!chg->sc->user_chg_en) {
@@ -1599,8 +1640,26 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 						msecs_to_jiffies(200));
 	}
 
+	if (!is_usb_online(chg->sc) &&
+		!is_wls_online(chg->sc)) {
+
+	    rc = sc760x_set_auto_bsm_dis(chg->sc, false);
+	    if (rc < 0) {
+	        pr_err("Failed to enable audo bsm(%d)\n", rc);
+	    }
+	} else {
+
+	    rc = sc760x_set_auto_bsm_dis(chg->sc, true);
+	    if (rc < 0) {
+	        pr_err("Failed to disable audo bsm(%d)\n", rc);
+	    }
+	}
+
 	pr_info("chg_en:%d, online %d, chg_st:%d\n",
 			chg_en, state.online, state.chrg_stat);
+	sc760x_get_ibat_limit(chg->sc, &sc760x_ibat_limit_set);
+	pr_info("sc760x_ibat_limit_set %d, ibat_limit_vote %d, target_fcc %d, target_fv %d, thermal_fcc_ua %d\n",
+			sc760x_ibat_limit_set, ibat_limit_vote, chg->chg_cfg.target_fcc, chg->chg_cfg.target_fv, chg->sc->thermal_fcc_ua);
 	return 0;
 }
 
@@ -1714,7 +1773,8 @@ static void sc760x_paired_battery_notify(void *data,
 		pr_err("partner_fg_vbatt > fg_vbatt, and delta value > %d, Does not turn on sc760x\n", DUAL_VBATT_DELTA_MV);
 		return;
 	} else {
-		sc760x_enable_chip(chg->sc, true);
+		if (chg->sc->user_gpio_en < 0)
+			sc760x_enable_chip(chg->sc, true);
 		return;
 	}
 
@@ -1850,6 +1910,7 @@ static int sc760x_charger_probe(struct i2c_client *client,
     sc->user_ichg = -EINVAL;
     sc->user_chg_en = -EINVAL;
     sc->user_chg_susp = -EINVAL;
+    sc->user_gpio_en = -EINVAL;
 
     sc->regmap = devm_regmap_init_i2c(client,
                             &sc760x_regmap_config);
