@@ -74,7 +74,7 @@
 #define SEC_DND_N_COUNT			10
 #define SEC_DND_U_COUNT			2
 #define SEC_DND_FREQUENCY		99 /* 200khz */
-#define SEC_PDND_N_COUNT		31  //>12
+#define SEC_PDND_N_COUNT		41  //>12
 #define SEC_PDND_U_COUNT		9  //6~12
 #define SEC_PDND_FREQUENCY		240 //79
 
