@@ -297,6 +297,11 @@ static int sc760x_set_auto_bsm_dis(struct sc760x_chip *sc, bool en)
 
 static int sc760x_set_ibat_limit(struct sc760x_chip *sc, int curr)
 {
+    if (sc->user_ichg >= 0 && sc->user_ichg != curr) {
+        curr = sc->user_ichg;
+        dev_info(sc->dev, "%s : User request override ibat = %duA\n", __func__, curr);
+    }
+
     dev_info(sc->dev, "%s : %dmA\n", __func__, curr);
 
     return sc760x_field_write(sc, IBAT_CHG_LIM,
@@ -687,7 +692,7 @@ static int sc760x_set_thermal_mitigation(struct sc760x_chip *sc, int val)
 	if (!sc->num_thermal_levels)
 		return 0;
 
-	if (sc->num_thermal_levels < 0 || sc->user_ichg) {
+	if (sc->num_thermal_levels < 0) {
 		pr_err("Incorrect num_thermal_levels\n");
 		return -EINVAL;
 	}
