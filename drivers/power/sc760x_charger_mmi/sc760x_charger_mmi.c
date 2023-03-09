@@ -297,9 +297,19 @@ static int sc760x_set_auto_bsm_dis(struct sc760x_chip *sc, bool en)
 
 static int sc760x_set_ibat_limit(struct sc760x_chip *sc, int curr)
 {
-    if (sc->user_ichg >= 0 && sc->user_ichg != curr) {
-        curr = sc->user_ichg;
-        dev_info(sc->dev, "%s : User request override ibat = %duA\n", __func__, curr);
+    int user_val = INT_MAX;
+
+    if (sc->user_ichg >= 0) {
+        user_val = sc->user_ichg;
+    }
+
+    if (sc->user_ilim >= 0) {
+        user_val = MIN_VAL(user_val, sc->user_ilim);
+    }
+
+    if (user_val != INT_MAX) {
+        curr = user_val/1000;
+        dev_info(sc->dev, "%s : User request overide ibat = %dmA\n", __func__, curr);
     }
 
     dev_info(sc->dev, "%s : %dmA\n", __func__, curr);
@@ -590,7 +600,7 @@ int sc760x_enable_charger(struct sc760x_chip *sc)
 		return 0;
 	}
 
-	if (sc->user_chg_susp) {
+	if (sc->user_chg_susp > 0) {
 		pr_info("Skip enable charging for user chg suspend\n");
 		return 0;
 	}
