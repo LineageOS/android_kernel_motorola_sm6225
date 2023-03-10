@@ -13,6 +13,7 @@
 #include <linux/version.h>
 #include <linux/sizes.h>
 #include <linux/regulator/consumer.h>
+#include <linux/jiffies.h>
 
 #define CWFG_ENABLE_LOG 1 /* CHANGE Customer need to change this for enable/disable log */
 
@@ -337,15 +338,53 @@ static int cw_get_voltage(struct cw_battery *cw_bat)
  * enough for the application. The low byte(0x05) provides more accurate fractional part of the SOC and its
  * LSB is (1/256) %.
  */
+ #ifndef MAX_VAL
+   #define  MAX_VAL( x, y ) ( ((x) > (y)) ? (x) : (y) )
+#endif
+#define TIMER_INTERVALS                          1000 * 60    /* unit:ms */
+static bool jiffies_timer_expire(void) {
+	unsigned long cur_jiffies = jiffies;
+	static unsigned long last_jiffies = 0;
+	unsigned long intr_timeout = msecs_to_jiffies(TIMER_INTERVALS);
+	bool ret = false;
+
+	if (!last_jiffies)
+		last_jiffies = cur_jiffies;
+
+	if (time_after(cur_jiffies, intr_timeout + last_jiffies))
+		ret = true;
+	else
+		ret = false;
+
+	if (ret) {
+              cw_printk("exire 10s, curr_jiffies:%dms, last jiffies %d",
+                              jiffies_to_msecs(cur_jiffies), jiffies_to_msecs(last_jiffies));
+		last_jiffies = cur_jiffies;
+
+	}
+	return ret;
+}
+
 static int cw_get_capacity(struct cw_battery *cw_bat)
 {
 	int ret;
 	unsigned char reg_val[2] = { 0, 0 };
-	int ui_100 = cw_bat->ui_full;
 	int soc_h;
 	int soc_l;
 	int ui_soc;
 	int remainder;
+	int chr_st_now = 0;// 0 discharge, 1 charging;
+
+	static int ui_full_pre = 0;
+	int ui_full_temp = 0;
+
+	if (ui_full_pre == 0)
+		ui_full_pre = cw_bat->ui_full;
+
+	if (cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)
+		chr_st_now = 1;
+	else
+		chr_st_now = 0;
 
 	ret = cw_read_word(cw_bat->client, REG_SOC_INT, reg_val);
 	if (ret < 0)
@@ -353,8 +392,28 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	soc_h = reg_val[0];
 	soc_l = reg_val[1];
 	cw_bat->raw_soc = soc_h;
-	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_100 * 256);
-	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_100 * 256)) % 100;
+
+	ui_full_temp = ui_full_pre;
+
+	if (chr_st_now) {
+		if (ui_full_temp > cw_bat->ui_full) {
+			if (jiffies_timer_expire()) {
+				ui_full_temp -= 1;
+				cw_printk("CW2015[%d]: UI_FULL-- %d!!!!\n", __LINE__, ui_full_temp);
+			}
+		}
+	}
+
+      if (!chr_st_now) {
+		if ((soc_h * 256 + soc_l) > ui_full_temp * 256) {
+			cw_printk("CW2015[%d]: update UI_FULL to %d from %d !!!!\n", __LINE__, (soc_h * 256 + soc_l) / 256, ui_full_temp);
+			ui_full_temp = (soc_h * 256 + soc_l) / 256;
+		}
+      }
+
+	ui_full_pre = ui_full_temp;
+	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_full_pre * 256);
+	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_full_pre * 256)) % 100;
 	if (ui_soc >= 100){
 		cw_printk("CW2015[%d]: UI_SOC = %d larger 100!!!!\n", __LINE__, ui_soc);
 		ui_soc = 100;
