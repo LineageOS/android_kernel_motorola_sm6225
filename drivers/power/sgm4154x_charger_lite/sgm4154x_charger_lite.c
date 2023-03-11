@@ -745,7 +745,23 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 		}
 	}
 
-	if (sgm->use_ext_usb_psy && sgm->usb) {
+	if (is_wls_online(sgm)) {
+		state->online = 1;
+		state->chrg_type = SGM4154x_WLS_TYPE;
+		ret = power_supply_get_property(sgm->wls_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &val);
+		if (!ret)
+			state->vbus_adc = val.intval;
+		ret = power_supply_get_property(sgm->wls_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &val);
+		if (!ret)
+			state->ibus_adc = val.intval;
+		ret = power_supply_get_property(sgm->wls_psy,
+				POWER_SUPPLY_PROP_CURRENT_MAX, &val);
+		if (!ret)
+			state->ibus_limit = val.intval;
+		state->chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
+	} else if (sgm->use_ext_usb_psy && sgm->usb) {
 		ret = power_supply_get_property(sgm->usb,
 				POWER_SUPPLY_PROP_USB_TYPE, &val);
 		switch (val.intval) {
@@ -778,7 +794,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 		if (!ret)
 			state->online = val.intval;
 		ret = power_supply_get_property(sgm->usb,
-				POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
+				POWER_SUPPLY_PROP_CURRENT_MAX, &val);
 		if (!ret)
 			state->ibus_limit = val.intval;
 		state->chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
@@ -792,11 +808,6 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 		state->chrg_stat = chrg_stat & SGM4154x_CHG_STAT_MASK;
 		state->online = !!(chrg_stat & SGM4154x_PG_STAT);
 	};
-
-	if (!state->online && is_wls_online(sgm)) {
-		state->online = 1;
-		state->chrg_type = SGM4154x_WLS_TYPE;
-	}
 
 	state->therm_stat = !!(chrg_stat & SGM4154x_THERM_STAT);
 	state->vsys_stat = !!(chrg_stat & SGM4154x_VSYS_STAT);
@@ -1456,7 +1467,7 @@ static void charger_detect_work_func(struct work_struct *work)
 	mutex_unlock(&sgm->lock);
 
 	if(!sgm->state.vbus_gd) {
-		if (sgm4154x_is_enabled_charging(sgm))
+		if (sgm4154x_is_enabled_charging(sgm) && !state.online)
 			sgm4154x_disable_charger(sgm);
 		dev_err(sgm->dev, "Vbus not present, disable charge\n");
 		goto err;
