@@ -1,5 +1,6 @@
 config INPUT_TOUCHSCREEN_MMI
 	tristate "Moto touchscreen gestures"
+	depends on SENSORS_CLASS && MMI_RELAY
 	default n
 	help
 	 Say Y here if you wish to include support for Moto touchscreen gestures.

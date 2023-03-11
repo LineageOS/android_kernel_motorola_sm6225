@@ -1,0 +1,20 @@
+config INPUT_CHIPONE_FPS_MMI
+    tristate "Fingerprint chip TEE driver"
+    default n
+    help
+        Say Y here if you wish to include support for MMI Chipone finger print sensor.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called fpsensor_spi_tee.
+
+config INPUT_CHIPONE_FPS_SUPPORT_POWER_GPIO
+    bool "Enable Chipone fingerprint sensor power GPIO"
+    depends on INPUT_CHIPONE_FPS_MMI
+    default n
+    help
+        Say Y here if you wish to include support for MMI Chipone finger print sensor
+        power GPIO.
+
+        If unsure, say N.

@@ -1,0 +1,24 @@
+config MMI_DISCRETE_CHARGER
+    tristate "MMI Discrete Charger Driver"
+    depends on ADAPTER_CLASS && MMI_CHARGER
+    default n
+    help
+        Say Y here if you have mmi discrete charger support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called mmi_discrete_charger.
+
+config MMI_DISCRETE_CHARGER_CLASS
+    tristate "MMI Discrete Charger Class Device"
+    default n
+    help
+        Say Y here if you have mmi discrete charger class support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called mmi_discrete_charger_class.

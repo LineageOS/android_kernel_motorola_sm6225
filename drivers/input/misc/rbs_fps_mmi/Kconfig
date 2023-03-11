@@ -1,0 +1,10 @@
+config INPUT_EGIS_FPS
+    tristate "egis fingerprint driver"
+    default n
+    help
+        Say Y here if you wish to include support for MMI EGIS finger print sensor.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called rbs_fps_mmi.

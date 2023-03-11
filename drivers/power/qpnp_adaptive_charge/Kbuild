@@ -1,3 +1,7 @@
-ccflags-$(CONFIG_USE_MMI_CHARGER) += -DUSE_MMI_CHARGER
+ifneq ($(filter m y,$(CONFIG_MMI_CHARGER)),)
+ccflags-y += -DUSE_MMI_CHARGER
+ccflags-y += -I$(srctree)/drivers/power/mmi_charger
+endif
+
 obj-$(CONFIG_QPNP_ADAPTIVE_CHARGE) += qpnp_adaptive_charge.o
 ccflags-$(CONFIG_ADAPTIVE_TOLERANCE_OPTIMIZATION) += -DADAPTIVE_TOLERANCE_OPTIMIZATION

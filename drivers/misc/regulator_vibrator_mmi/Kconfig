@@ -1,0 +1,16 @@
+config REGULATOR_VIBRATOR_MMI
+    tristate "EXT Vibrator-LDO driver"
+    help
+        Say Y here if you have EXT Vibrator-LDO Device in
+        your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called regulator_vibrator_mmi.
+
+config VIBRATOR_NOISE_CAMERA
+    bool "Enable Vibrator Noise Camera"
+    depends on REGULATOR_VIBRATOR_MMI
+    help
+        Enable Vibrator Noise Camera.

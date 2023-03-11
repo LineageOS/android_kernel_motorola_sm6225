@@ -1,0 +1,21 @@
+config MMI_CHARGER
+    tristate "MMI Charger Driver"
+    depends on MMI_INFO
+    default n
+    help
+        Say Y here if you have mmi charger support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called mmi_charger.
+
+config MMI_RECHARGER_HAWAO_MODE
+    bool "Enable MMI Recharger Hawao Mode"
+    depends on MMI_CHARGER
+    default n
+    help
+        Say Y here if you have a mmi recharger hawao mode compatible device connected.
+
+        If unsure, say N.

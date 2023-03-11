@@ -1,0 +1,11 @@
+config SM5602_FQ_MMI
+    tristate "SM SM5602 Fuel Gauge Driver"
+    default n
+    help
+        Say Y here if you have SM SM5602 Fuel Gauge support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called sm5602_fg_mmi.

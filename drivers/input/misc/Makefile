@@ -90,3 +90,5 @@ obj-$(CONFIG_INPUT_EGISTEC_FPS)		+= ets_fps_mmi/
 obj-$(CONFIG_INPUT_MISC_FPC1020)	+= fpc_fps_mmi/
 obj-$(CONFIG_INPUT_QPNP_POWER_ON_MMI)	+= qpnp_power_on_mmi/
 obj-$(CONFIG_INPUT_STMVL53L1)		+= vl53L1/
+obj-$(CONFIG_INPUT_EGIS_FPS) += rbs_fps_mmi/
+obj-$(CONFIG_INPUT_CHIPONE_FPS_MMI) += chipone_fps_mmi/

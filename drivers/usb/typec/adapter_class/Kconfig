@@ -1,0 +1,11 @@
+config ADAPTER_CLASS
+    tristate "Adapter Class Device Driver"
+    default n
+    help
+        Say Y here if you have Adapter Class Device support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called adapter_class.
