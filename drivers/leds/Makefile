@@ -94,3 +94,6 @@ obj-$(CONFIG_LEDS_USER)			+= uleds.o
 
 # LED Triggers
 obj-$(CONFIG_LEDS_TRIGGERS)		+= trigger/
+
+# PWM LED driver
+obj-$(CONFIG_LEDS_INDICATOR_PWM) += leds-indicator-pwm.o

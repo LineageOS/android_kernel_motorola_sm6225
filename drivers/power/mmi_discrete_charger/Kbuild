@@ -1,17 +1,9 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
-		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger \
-		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_discrete_charger
+ccflags-y += -I$(srctree)/drivers/power/mmi_charger
 
-obj-m += mmi_discrete_charger.o
+obj-$(CONFIG_MMI_DISCRETE_CHARGER) += mmi_discrete_charger.o
 mmi_discrete_charger-objs += mmi_discrete_charger_core.o
 mmi_discrete_charger-objs += mmi_discrete_charger_iio.o
 mmi_discrete_charger-objs += mmi_discrete_voter.o
 mmi_discrete_charger-objs += mmi_discrete_factory_tcmd.o
 
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../usb/typec/adapter_class/$(GKI_OBJ_MODULE_DIR)/Module.symvers
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers
-
-
-obj-m += mmi_discrete_charger_class.o
+obj-$(CONFIG_MMI_DISCRETE_CHARGER_CLASS) += mmi_discrete_charger_class.o

@@ -1,0 +1,41 @@
+#
+# SGM4154X Charger driver
+#
+
+config SGM4154X_CHARGER
+    tristate "sgm4154x charger driver"
+    depends on MMI_DISCRETE_CHARGER_CLASS
+    default n
+    help
+        Say Y here if you have a sgm415x charging device in
+        your system.
+
+        To compile this driver as a module, choose M here: the
+        module will be called sgm415x_charger.
+
+config SGM4154X_MMI_QC3P_TURBO_CHARGER
+    bool "Enable SGM4154X Moto QC3P Turbo Charger"
+    depends on SGM4154X_CHARGER
+    default n
+    help
+        Say Y here if you have a SGM4154X Moto QC3P turbo charger compatible device connected.
+
+        If unsure, say N.
+
+config SGM4154X_MMI_QC3P_WT6670_DETECTED
+    bool "Enable SGM4154X Moto QC3P WT6670"
+    depends on SGM4154X_CHARGER
+    default n
+    help
+        Say Y here if you have a SGM4154X Moto QC3P WT6670 compatible device connected.
+
+        If unsure, say N.
+
+config SGM4154X_MMI_SGM41513_CHARGER
+    bool "Enable SGM4154X Moto SGM41513 Charger"
+    depends on SGM4154X_CHARGER
+    default n
+    help
+        Say Y here if you have a SGM4154X Moto SGM41513 Charger compatible device connected.
+
+        If unsure, say N.

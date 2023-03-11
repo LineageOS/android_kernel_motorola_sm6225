@@ -652,6 +652,8 @@ source "drivers/misc/mmi_sys_temp/Kconfig"
 source "drivers/misc/sx933x/Kconfig"
 source "drivers/misc/sx937x/Kconfig"
 source "drivers/misc/utag/Kconfig"
+source "drivers/misc/aw9610x/Kconfig"
+source "drivers/misc/regulator_vibrator_mmi/Kconfig"
 endmenu
 
 config OKL4_USER_VIPC

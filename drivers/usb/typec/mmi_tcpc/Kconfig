@@ -1,0 +1,56 @@
+config TCPC_CLASS
+    tristate "TypeC Port Control Class"
+    default n
+    help
+        Say Y here if you have TCPC class support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called tcpc_class.
+
+config USB_POWER_DELIVERY
+    bool "Enable USB Power Delivery"
+    depends on TCPC_CLASS && ADAPTER_CLASS
+    default n
+    help
+        Say Y here if you have a usb power delivery compatible device connected.
+
+        If unsure, say N.
+
+config TCPC_RT1711H
+    tristate "RT1711 TCPC Driver"
+    default n
+    help
+        Say Y here if you have RT1711 TypeC Port Control support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called tcpc_rt1711h.
+
+config TCPC_SGM7220
+    tristate "SGM7220 TCPC Driver"
+    default n
+    help
+        Say Y here if you have SGM7220 TypeC Port Control support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called tcpc_sgm7220.
+
+config RT_PD_MANAGER
+    tristate "Richtek pd manager driver"
+    default n
+    help
+        Say Y here if you have Richtek pd manager driver support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called rt_pd_manager.

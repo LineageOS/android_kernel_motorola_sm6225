@@ -15,3 +15,54 @@ config TOUCHSCREEN_FTS_DIRECTORY
     default "focaltech_touch"
     depends on TOUCHSCREEN_FTS
 
+config INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+    tristate "FocalTech Touchscreen Driver V2 MMI"
+    depends on INPUT_TOUCHSCREEN_MMI
+    default n
+    help
+      Say Y here if you wish to include support for FocalTech Touchscreen V2 MMI.
+
+      If unsure, say N.
+
+      To compile this driver as a module, choose M here: the
+      module will be called focaltech_v2_mmi.
+
+
+if INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+
+config INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI_IC_NAME
+    string "FocalTech V2 MMI IC Name"
+    depends on INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+    default "ft3518u"
+    help
+      Provide the IC name of the FocalTech V2 MMI device.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI_ENABLE_DOUBLE_TAP
+    bool "FocalTech V2 MMI Double tap"
+    depends on INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+    default n
+    help
+      Say Y here if you want to have Double tap support on Moto FocalTech V2.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI_ENABLE_PALM
+    bool "FocalTech V2 MMI Palm Sensor"
+    depends on INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+    default n
+    help
+      Say Y here if you want to have palm sensor support on Moto FocalTech V2.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI_PEN_NOTIFIER
+    bool "FocalTech V2 MMI Pen notifier"
+    depends on INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI
+    default n
+    help
+      Say Y here if you want to have pen notifier support on Moto FocalTech V2.
+
+      If unsure, say N.
+
+
+endif

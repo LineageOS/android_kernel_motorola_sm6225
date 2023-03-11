@@ -1,0 +1,10 @@
+config CAMERA_CCI_DEBUG_INTF
+    tristate "Camera CCI DEBUG INTF"
+    default n
+    help
+        Say Y here if you wish to include Camera CCI DEBUG INTF.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called cci_intf.

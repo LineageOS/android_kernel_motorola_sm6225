@@ -1,27 +1,16 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
-		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/usb/typec/mmi_tcpc
-
 subdir-ccflags-y += -Wall -Werror -DCONFIG_RT_REGMAP
 
-EXTRA_CFLAGS += -DCONFIG_PD_DBG_INFO
+ccflags-y += -DCONFIG_PD_DBG_INFO
 
 ifneq ($(filter m y,$(CONFIG_TCPC_CLASS)),)
-	EXTRA_CFLAGS += -DCONFIG_TCPC_CLASS
+ccflags-y += -DCONFIG_TCPC_CLASS
 endif
 
-ifneq ($(filter m y,$(CONFIG_USB_POWER_DELIVERY)),)
-	EXTRA_CFLAGS += -DCONFIG_USB_POWER_DELIVERY
-endif
+ccflags-$(CONFIG_USB_POWER_DELIVERY) += -DCONFIG_USB_POWER_DELIVERY
 
-ifneq ($(filter m y,$(CONFIG_TCPC_RT1711H)),)
-	obj-m	+= tcpc_rt1711h.o
-endif
+obj-$(CONFIG_TCPC_RT1711H)	+= tcpc_rt1711h.o
 
-ifneq ($(filter m y,$(CONFIG_TCPC_SGM7220)),)
-	obj-m	+= tcpc_sgm7220.o
-endif
+obj-$(CONFIG_TCPC_SGM7220)	+= tcpc_sgm7220.o
 
 tcpc_class-objs			+= tcpci_core.o tcpci_typec.o tcpci_timer.o \
 		tcpm.o tcpci.o pd_dbg_info.o tcpci_alert.o rt-regmap.o tcpci_dual_role.o
@@ -39,7 +28,5 @@ tcpc_class-objs			+= tcpci_event.o \
 		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o pd_adapter.o
 endif
 
-obj-m	+= tcpc_class.o
-obj-m	+= rt_pd_manager.o
-
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../adapter_class/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+obj-$(CONFIG_TCPC_CLASS)	+= tcpc_class.o
+obj-$(CONFIG_RT_PD_MANAGER)	+= rt_pd_manager.o

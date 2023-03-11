@@ -1,29 +1,7 @@
-KERNEL_DIR_PATH = $(shell find $(ANDROID_BUILD_TOP)/kernel/ -name "msm-*" -type d | head -1 | grep -i "kernel/msm-*")
+ccflags-y += -I$(srctree)/drivers/base
 
-KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
+ccflags-$(CONFIG_AW9610X_POWER_SUPPLY_ONLINE) += -DCONFIG_USE_POWER_SUPPLY_ONLINE
 
-KERNEL_PLATFORM_PATH = $(shell find $(ANDROID_BUILD_TOP) -maxdepth 1 -name "kernel_platform" -type d)
-
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
-
-ifneq ($(filter m y,$(CONFIG_AW9610X_POWER_SUPPLY_ONLINE)),)
-	EXTRA_CFLAGS += -DCONFIG_USE_POWER_SUPPLY_ONLINE
-endif
-
-ifneq (,$(KERNEL_DIR_PATH))
-        EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/kernel/$(KERNEL_VERSION_NAME)/drivers/base
-else ifneq (,$(KERNEL_PLATFORM_PATH))
-        EXTRA_CFLAGS += -I$(KERNEL_PLATFORM_PATH)/common/drivers/base
-else
-        EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/kernel/drivers/base
-endif
-
-KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
-
-obj-m := aw9610x.o
+obj-$(CONFIG_AW9610X_SAR) := aw9610x.o
 aw9610x-objs += aw9610x_sar.o
 aw9610x-objs += aw_bin_parse.o
-
-

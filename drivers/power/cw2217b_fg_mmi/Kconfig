@@ -1,0 +1,11 @@
+config CW2217B_FG_MMI
+    tristate "CW2217 FGADC Device Driver V1.2"
+    default n
+    help
+        Say Y here if you have CW2217 FGADC Device support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called cw2217b_fg_mmi.

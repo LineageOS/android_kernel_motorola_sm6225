@@ -1,0 +1,17 @@
+config AW9610X_SAR
+    tristate "AW9610X SAR Driver"
+    depends on SENSORS_CLASS
+    help
+        Say Y here if you have Aw9610x Sar Sensor Device in
+        your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called aw9610x.
+
+config AW9610X_POWER_SUPPLY_ONLINE
+    bool "Enable Aw9610x power supply online usage"
+    depends on AW9610X_SAR
+    help
+        Enable online power supply usage.

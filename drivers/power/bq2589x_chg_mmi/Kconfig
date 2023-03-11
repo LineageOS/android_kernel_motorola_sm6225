@@ -1,0 +1,32 @@
+#
+# BQ2589X Charger Driver
+#
+
+config BQ2589X_CHARGER
+    tristate "TI BQ2589x Charger Driver"
+    depends on MMI_DISCRETE_CHARGER_CLASS
+    default n
+    help
+        Say Y here if you have a bq2589x charging device in
+        your system.
+
+        To compile this driver as a module, choose M here: the
+        module will be called bq2589x_charger.
+
+config BQ2589X_MMI_QC3P_TURBO_CHARGER
+    bool "Enable BQ2589X Moto QC3P Turbo Charger"
+    depends on BQ2589X_CHARGER
+    default n
+    help
+        Say Y here if you have a BQ2589X Moto QC3P turbo charger compatible device connected.
+
+        If unsure, say N.
+
+config BQ2589X_MMI_QC3P_WT6670_DETECTED
+    bool "Enable BQ2589X Moto QC3P WT6670"
+    depends on BQ2589X_CHARGER
+    default n
+    help
+        Say Y here if you have a BQ2589X Moto QC3P WT6670 compatible device connected.
+
+        If unsure, say N.
