@@ -185,7 +185,7 @@ struct reg_ioctl {
 #define BT541_HW_ID			0x0014
 
 #define BT541_DATA_VERSION_REG		0x0013
-#define BT541_THIRD_FW_VERSION		0x0036
+#define BT541_FW_DAY_VERSION		0x0036
 
 #define BT541_SUPPORTED_FINGER_NUM	0x0015
 #define BT541_EEPROM_INFO		0x0018
@@ -486,7 +486,7 @@ static inline s32 write_data(struct i2c_client *client,
 {
 	s32 ret;
 	//int count = 0;
-	u8 pkt[10]; /* max packet */
+	u8 pkt[66]; // addr: 2bytes, data: 64bytes /* max packet */
 	pkt[0] = (reg) & 0xff; /* reg addr */
 	pkt[1] = (reg >> 8)&0xff;
 	memcpy((u8 *)&pkt[2], values, length);
@@ -1419,56 +1419,71 @@ static bool ts_upgrade_firmware(struct bt541_ts_info *info,
 {
 	struct i2c_client *client = info->client;
 	u16 flash_addr;
-	u8 *verify_data;
 	int retry_cnt = 0;
+#ifndef BURST_UPGRADE
 	int i;
+#else
+	struct bt541_ts_platform_data *pdata = info->pdata;
+#endif
 	int page_sz = 64;
 	u16 chip_code;
 
+#ifndef BURST_UPGRADE
+	u8 *verify_data;
+#else
+	u16 year, chip_fw_year;
+	u16 month, chip_fw_month;
+	u16 day, chip_fw_day;
+	u16 total_version, chip_fw_total_version;
+	u16 chip_check_sum;
+#endif
+
+#ifndef BURST_UPGRADE
 	verify_data = kzalloc(size, GFP_KERNEL);
 	if (verify_data == NULL) {
 		zinitix_printk(KERN_ERR "cannot alloc verify buffer\n");
 		return false;
 	}
+#endif
 
 retry_upgrade:
 	bt541_power_control(info, POWER_OFF);
 	bt541_power_control(info, POWER_ON);
-	mdelay(10);
-//jesse add
+	msleep(10);
+	//jesse add
 
-if (write_cmd(client, 0x01f8) != I2C_SUCCESS) {
-	zinitix_printk("Failed to send 01f8 command \n");
-	goto fail_upgrade;
-}
-mdelay(10);
-printk("==========01f8 end===============\n");
-
-if (write_reg(client, 0xc011, 0x0080) != I2C_SUCCESS) {
-	zinitix_printk("Failed to send c011 command\\n");
-	goto fail_upgrade;
-}
-mdelay(10);
-printk("==========c011 end===============\n");
-
-if (write_cc02(client, 0x001f0028, 0x0002561A) < 0) {
-	zinitix_printk("Failed to send 0028 command\nn");
-	}
-mdelay(5);
-printk("==========0028 end===============\n");
-
-if (write_cc02(client, 0x001f002c, 0x00003bd0) < 0) {
-	zinitix_printk("Failed to send 002c command\nn");
-	}
-mdelay(5);
-printk("==========002c end===============\n");
-
- if (write_cmd(client, 0x01d5) != I2C_SUCCESS) {
-		zinitix_printk("0x01d5 error\n");
+	if (write_cmd(client, 0x01f8) != I2C_SUCCESS) {
+		zinitix_printk("Failed to send 01f8 command \n");
 		goto fail_upgrade;
 	}
-	mdelay(5);
-//jesse end
+	msleep(10);
+	printk("==========01f8 end===============\n");
+
+	if (write_reg(client, 0xc011, 0x0080) != I2C_SUCCESS) {
+		zinitix_printk("Failed to send c011 command\\n");
+		goto fail_upgrade;
+	}
+	msleep(10);
+	printk("==========c011 end===============\n");
+
+	if (write_cc02(client, 0x001f0028, 0x0002561A) < 0) {
+		zinitix_printk("Failed to send 0028 command\nn");
+	}
+	msleep(5);
+	printk("==========0028 end===============\n");
+
+	if (write_cc02(client, 0x001f002c, 0x00003bd0) < 0) {
+		zinitix_printk("Failed to send 002c command\nn");
+	}
+	msleep(5);
+	printk("==========002c end===============\n");
+
+	 if (write_cmd(client, 0x01d5) != I2C_SUCCESS) {
+			zinitix_printk("0x01d5 error\n");
+			goto fail_upgrade;
+	}
+	msleep(5);
+	//jesse end
 
 	if (write_reg(client, 0xc000, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("power sequence error (vendor cmd enable)\n");
@@ -1486,11 +1501,6 @@ printk("==========002c end===============\n");
 
 	udelay(10);
 
-	//Link modify the page size
-//	if((chip_code == ZT7554_CHIP_CODE)||((chip_code == ZTW622_CHIP_CODE))||(chip_code == ZTW623_CHIP_CODE))
-//		page_sz = 128;
-
-
 	if (write_cmd(client, 0xc004) != I2C_SUCCESS) {
 		zinitix_printk("power sequence error (intn clear)\n");
 		goto fail_upgrade;
@@ -1503,7 +1513,7 @@ printk("==========002c end===============\n");
 		goto fail_upgrade;
 	}
 
-	mdelay(5);
+	msleep(5);
 
 	zinitix_printk("init flash\n");
 
@@ -1512,6 +1522,74 @@ printk("==========002c end===============\n");
 		goto fail_upgrade;
 	}
 
+#ifdef BURST_UPGRADE //burst  upgrade
+	// Mass Erase start
+	if (write_cmd(client, 0x01DF) != I2C_SUCCESS) {
+		zinitix_printk("failed to mass erase\n");
+		goto fail_upgrade;
+	}else{
+		zinitix_printk("bt541 erase ok\n");
+	}
+	msleep(100);
+	// Mass Erase End
+
+	if (write_reg(client, 0x01D0, 0x0002) != I2C_SUCCESS) {
+		zinitix_printk("failed to init upgrade mode\n");
+		goto fail_upgrade;
+	}
+
+	if (write_reg(client, 0x01D3, 0x0040) != I2C_SUCCESS) {
+		zinitix_printk("failed to set package size\n");
+		goto fail_upgrade;
+	}
+
+	if (write_reg(client, 0x01D4, 0x0001) != I2C_SUCCESS) {
+		zinitix_printk("failed to init repeat size\n");
+		goto fail_upgrade;
+	}
+
+	if (write_reg(client, 0x01DE, 0x0001) != I2C_SUCCESS) {
+		zinitix_printk("failed to enter upgrade mode\n");
+		goto fail_upgrade;
+	}else{
+		zinitix_printk("bt541 enter upgrade mode ok\n");
+	}
+	msleep(1);
+
+	zinitix_printk("writing firmware data\n");
+	for (flash_addr = 0; flash_addr < size; ) {
+		//zinitix_printk(KERN_INFO "flash_addr = 0x%04x\n", flash_addr); // (brian,181204) add
+		if (write_data(client,
+			BT541_WRITE_FLASH,
+			(u8 *)&firmware_data[flash_addr], page_sz) < 0) {
+			zinitix_printk("error : write zinitix tc firmare\n");
+			goto fail_upgrade;
+		}
+		while (!gpio_get_value(pdata->gpio_int));
+		flash_addr += page_sz;
+	}
+
+	if (write_cmd(client, 0x01DD) != I2C_SUCCESS) {
+		zinitix_printk("failed to flush\n");
+		goto fail_upgrade;
+	}else{
+		zinitix_printk("bt541 flush ok\n");
+	}
+	while (!gpio_get_value(pdata->gpio_int));
+
+	zinitix_printk("burst upgrade finished\n");
+
+	if (write_reg(client, 0xc003, 0x0000) != I2C_SUCCESS) {
+		zinitix_printk("nvm write disable\n");
+		goto fail_upgrade;
+	}
+
+	zinitix_printk("init flash\n");
+	if (write_cmd(client, BT541_INIT_FLASH) != I2C_SUCCESS) {
+		zinitix_printk("failed to init flash\n");
+		goto fail_upgrade;
+	}
+#else  //normal upgrade
 	if (write_reg(client, 0xc104, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("failed to write nvm wp disable\n");
 		goto fail_upgrade;
@@ -1539,7 +1617,7 @@ printk("==========002c end===============\n");
 			udelay(100);
 		}
 
-		mdelay(30);	/*for fuzing delay*/
+		mdelay(10);	/*for fuzing delay*/
 	}
 
 	if (write_reg(client, 0xc003, 0x0000) != I2C_SUCCESS) {
@@ -1558,7 +1636,8 @@ printk("==========002c end===============\n");
 		zinitix_printk("failed to init flash\n");
 		goto fail_upgrade;
 	}
-
+#endif
+#ifndef BURST_UPGRADE
 	zinitix_printk("read firmware data\n");
 
 	for (flash_addr = 0; flash_addr < size; ) {
@@ -1583,6 +1662,72 @@ printk("==========002c end===============\n");
 
 		return true;
 	}
+#else
+	zinitix_printk("verify firmware enter\n");
+	bt541_power_control(info, POWER_OFF);
+	bt541_power_control(info, POWER_ON_SEQUENCE);
+	msleep(10);
+
+	/* get chip firmware version */
+	if (read_data(client, BT541_FIRMWARE_VERSION,
+		(u8 *)&chip_fw_year, 2) < 0) {
+		zinitix_printk("read chip_fw_year fail\n");
+		goto fail_upgrade;
+	}
+
+	if (read_data(client, BT541_MINOR_FW_VERSION,
+		(u8 *)&chip_fw_month, 2) < 0) {
+		zinitix_printk("read chip_fw_month fail\n");
+		goto fail_upgrade;
+	}
+
+	if (read_data(client, BT541_FW_DAY_VERSION,
+		(u8 *)&chip_fw_day, 2) < 0) {
+		zinitix_printk("read chip_fw_day fail\n");
+		goto fail_upgrade;
+	}
+
+	if (read_data(client, BT541_DATA_VERSION_REG,
+		(u8 *)&chip_fw_total_version, 2) < 0) {
+		zinitix_printk("read chip_fw_total_version fail\n");
+		goto fail_upgrade;
+	}
+
+	zinitix_printk("chip_fw_year = %d, \
+		chip_fw_month = %d, \
+		chip_fw_day = %d, \
+		chip_fw_total_version = %d\n",
+		chip_fw_year, chip_fw_month, chip_fw_day, chip_fw_total_version);
+
+	year = (u16) ((firmware_data[FW_OFFSET_YEAR_MSB] << 8)
+		| firmware_data[FW_OFFSET_YEAR_LSB]);
+	month = (u16) ((firmware_data[FW_OFFSET_MONTH_MSB] << 8)
+		| firmware_data[FW_OFFSET_MONTH_LSB]);
+	day = (u16) ((firmware_data[FW_OFFSET_DAY_MSB] << 8)
+		| firmware_data[FW_OFFSET_DAY_LSB]);
+	total_version = (u16) ((firmware_data[FW_OFFSET_TOTAL_VERSION_MSB] << 8)
+		| firmware_data[FW_OFFSET_TOTAL_VERSION_LSB]);
+	zinitix_printk("Year = %d, Month = %d, Day = %d, total_version = %d\n",
+		year, month, day, total_version);
+	if ((year == chip_fw_year) && (month == chip_fw_month) &&
+		(day == chip_fw_day) && (total_version == chip_fw_total_version)) {
+		zinitix_printk("verify firmware version pass!\n");
+	} else {
+		zinitix_printk("verify firmware version fail!\n");
+		goto fail_upgrade;
+	}
+
+	//get chip check sum
+	if (read_data(client, BT541_CHECKSUM_RESULT,
+		(u8 *)&chip_check_sum, 2) < 0) {
+		zinitix_printk("read chip_check_sum fail\n");
+		goto fail_upgrade;
+	}
+	if (chip_check_sum == 0x55aa) {
+		zinitix_printk("verify firmware check_sum pass!\n");
+		return true;
+	}
+#endif
 
 fail_upgrade:
 	bt541_power_control(info, POWER_OFF);
@@ -1592,8 +1737,10 @@ fail_upgrade:
 		goto retry_upgrade;
 	}
 
+#ifndef BURST_UPGRADE
 	if (verify_data != NULL)
 		kfree(verify_data);
+#endif
 
 	dev_info(&client->dev, "Failed to upgrade\n");
 
@@ -1777,16 +1924,16 @@ retry_init:
 		(u8 *)&cap->fw_minor_version, 2) < 0)
 		goto fail_init;
 
-	if (read_data(client, BT541_THIRD_FW_VERSION,
-		(u8 *)&cap->fw_third_version, 2) < 0)
+	if (read_data(client, BT541_FW_DAY_VERSION,
+		(u8 *)&cap->fw_day_version, 2) < 0)
 		goto fail_init;
 
-    if (read_data(client, BT541_DATA_VERSION_REG,
+	if (read_data(client, BT541_DATA_VERSION_REG,
 		(u8 *)&cap->reg_data_version, 2) < 0)
 		goto fail_init;
 
-	zinitix_printk("fw_version = 0x%x, fw_minor_version = 0x%x, fw_third_version = 0x%x, reg_data_version = 0x%x\n",
-			cap->fw_version, cap->fw_minor_version, cap->fw_third_version, cap->reg_data_version);
+	zinitix_printk("fw_version = 0x%x, fw_minor_version = 0x%x, fw_day_version = 0x%x, reg_data_version = 0x%x\n",
+			cap->fw_version, cap->fw_minor_version, cap->fw_day_version, cap->reg_data_version);
 
 #if TOUCH_ONESHOT_UPGRADE
 	if ((checkMode == NULL) &&(ts_check_need_upgrade(info, cap->fw_version,
@@ -3686,7 +3833,7 @@ static void zinitix_cmcp_parse_threshold_file(const struct firmware *fw,
 		goto exit_free;
 	} else {
 		for (i = 0; i < ret; i++) {
-			dev_info(dev, "zinitix raw_data_min[%d] = %d\n", i,  test_params->min_raw_limits[i]);
+			dev_dbg(dev, "zinitix raw_data_min[%d] = %d\n", i,  test_params->min_raw_limits[i]);
 		}
 		zinitix_printk("parse_csvfile %s OK, ret = %d\n", CSV_TP_RAW_DATA_MIN, ret);
 	}
@@ -3699,7 +3846,7 @@ static void zinitix_cmcp_parse_threshold_file(const struct firmware *fw,
 		goto exit_free;
 	} else {
 		for (i = 0; i < ret; i++) {
-			dev_info(dev, "zinitix raw_data_max[%d] = %d\n", i, test_params->max_raw_limits[i]);
+			dev_dbg(dev, "zinitix raw_data_max[%d] = %d\n", i, test_params->max_raw_limits[i]);
 		}
 		zinitix_printk("parse_csvfile %s OK, ret = %d\n", CSV_TP_RAW_DATA_MAX, ret);
 	}

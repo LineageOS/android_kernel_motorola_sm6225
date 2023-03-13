@@ -58,7 +58,7 @@ static int zinitix_ts_mmi_methods_get_config_id(struct device *dev, void *cdata)
 	return snprintf(TO_CHARP(cdata), TS_MMI_MAX_ID_LEN, "%02d%02d%02d%02x",
 		cap->fw_version,
 		cap->fw_minor_version,
-		cap->fw_third_version,
+		cap->fw_day_version,
 		le32_to_cpu(cap->reg_data_version));
 }
 

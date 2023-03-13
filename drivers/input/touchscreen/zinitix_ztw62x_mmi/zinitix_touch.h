@@ -97,7 +97,17 @@
 #define TSP_VERBOSE_DEBUG
 
 #define SEC_FACTORY_TEST
+#define BURST_UPGRADE
 
+/*version offset on firmware*/
+#define FW_OFFSET_YEAR_MSB 44905
+#define FW_OFFSET_YEAR_LSB 44904
+#define FW_OFFSET_MONTH_MSB 44907
+#define FW_OFFSET_MONTH_LSB 44906
+#define FW_OFFSET_DAY_MSB 44909
+#define FW_OFFSET_DAY_LSB 44908
+#define FW_OFFSET_TOTAL_VERSION_MSB 61
+#define FW_OFFSET_TOTAL_VERSION_LSB 60
 
 #define zinitix_debug_msg(fmt, args...) \
 	do { \
@@ -202,7 +212,7 @@ struct capa_info {
 	u16	ic_revision;
 	u16	fw_version;
 	u16	fw_minor_version;
-	u16     fw_third_version;
+	u16	fw_day_version;
 	u16	reg_data_version;
 	u16	threshold;
 	u16	key_threshold;
