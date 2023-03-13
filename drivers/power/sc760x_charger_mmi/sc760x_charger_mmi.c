@@ -1550,7 +1550,7 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 			sc760x_ibat_limit_set, state.vbat_adc, chg->chg_cfg.target_fv * 1000);
 	} else {
 
-		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua);
+		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua / 1000);
 
 		if (sc760x_ibat_limit_set > (ibat_limit_vote + IBAT_CHG_LIM_BASE)) {
 			sc760x_ibat_limit_set -= IBAT_CHG_LIM_BASE;
