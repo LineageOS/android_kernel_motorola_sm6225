@@ -248,6 +248,8 @@ static int sc760x_field_read(struct sc760x_chip *sc,
                 enum sc760x_fields field_id, int *val)
 {
     int ret;
+    if (!sc->sc760x_enable)
+        return -1;
 
     ret = regmap_field_read(sc->rmap_fields[field_id], val);
     if (ret < 0) {
@@ -261,6 +263,8 @@ static int sc760x_field_write(struct sc760x_chip *sc,
                 enum sc760x_fields field_id, int val)
 {
     int ret;
+    if (!sc->sc760x_enable)
+        return -1;
 
     ret = regmap_field_write(sc->rmap_fields[field_id], val);
     if (ret < 0) {
@@ -274,6 +278,8 @@ static int sc760x_read_block(struct sc760x_chip *sc,
                 int reg, uint8_t *val, int len)
 {
     int ret;
+    if (!sc->sc760x_enable)
+        return -1;
 
     ret = regmap_bulk_read(sc->regmap, reg, val, len);
     if (ret < 0) {
@@ -291,7 +297,6 @@ static int sc760x_reg_reset(struct sc760x_chip *sc)
 
 static int sc760x_set_auto_bsm_dis(struct sc760x_chip *sc, bool en)
 {
-    dev_info(sc->dev, "%s : set auto bsm %d\n", __func__, en);
     return sc760x_field_write(sc, AUTO_BSM_DIS, !!en);
 }
 
@@ -329,7 +334,6 @@ static int sc760x_get_ibat_limit(struct sc760x_chip *sc, int *curr)
     int data = 0, ret = 0;
     ret = sc760x_field_read(sc, IBAT_CHG_LIM, &data);
     *curr = data *50 + 50;
-    dev_info(sc->dev, "%s : %dmA\n", __func__, *curr);
     return ret;
 }
 
@@ -426,6 +430,8 @@ static int sc760x_dump_reg(struct sc760x_chip *sc)
 {
     int ret = 0, i = 0, val = 0, desc = 0;
     char buf[1024];
+    if (!sc->sc760x_enable)
+        return -1;
 
     for (i = 0; i <= 0x15; i++) {
         ret = regmap_read(sc->regmap, i, &val);
@@ -855,7 +861,6 @@ static int sc760x_charger_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		sc760x_get_work_mode(sc, &chrg_status);
-              dev_info(sc->dev, "%s : get work mode %d\n", __func__, chrg_status);	
 		switch (chrg_status) {
 		case WORK_TRICKLE_CHARGE:
 		case WORK_PRE_CHARGE:
@@ -1236,9 +1241,6 @@ static int sc760x_get_state(struct sc760x_chip *sc,
 				POWER_SUPPLY_PROP_USB_TYPE, &val);
 		if (!ret)
 			state->chrg_type = val.intval;
-
-		pr_info("sc760x : use_ext_usb_psy, usb_online %d, chrg_type %d, vbus_adc %d", state->usb_online, state->chrg_type, state->vbus_adc);
-
 	} else if (sc->use_ext_usb_psy) {
 		state->chrg_stat = DISCHARGING;
 		state->online = 0;
@@ -1270,9 +1272,6 @@ static int sc760x_get_state(struct sc760x_chip *sc,
 	state->ibat_adc = state->ibat_adc * 1000;
 	state->vbat_adc = state->vbat_adc * 1000;
 	state->vchg_adc = state->vchg_adc * 1000;
-	pr_info("sc760x : workmode %d, chrg_stat =%d, usb_online = %d, wls_online %d, vbus = %d, ibus = %d, ibus_limit = %d, ibat = %d, vbat = %d, vchg = %d, tbat = %d\n",
-		chrg_status, state->chrg_stat, state->usb_online, state->wls_online, state->vbus_adc, state->ibus_adc, state->ibus_limit, state->ibat_adc, state->vbat_adc, state->vchg_adc,
-		state->tbat_adc);
 	return 0;
 }
 
@@ -1483,12 +1482,12 @@ static int sc760x_charger_get_batt_info(void *data, struct mmi_battery_info *bat
 
 static int sc760x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_info)
 {
-	int ret;
+	int ret = 0, work_mode = 0;
 	struct sc760x_mmi_charger *chg = data;
 	struct sc760x_state state = chg->sc->state;
 
 	ret = sc760x_get_state(chg->sc, &state);
-
+	sc760x_get_work_mode(chg->sc, &work_mode);
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
 	chg->chg_info.chrg_type = get_charger_type(chg->sc);
@@ -1502,6 +1501,10 @@ static int sc760x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_
 	chg->chg_info.chrg_pmax_mw = 0;
 
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
+
+	pr_info("sc760x_chg_info : gpio_en %d, workmode %d, chrg_stat =%d, usb_online = %d, wls_online %d, vbus = %d, ibus = %d, ibus_limit = %d, ibat = %d, vbat = %d, vchg = %d, tbat = %d\n",
+		chg->sc->sc760x_enable, work_mode, state.chrg_stat, state.usb_online, state.wls_online, state.vbus_adc, state.ibus_adc, state.ibus_limit, state.ibat_adc, state.vbat_adc, state.vchg_adc,
+		state.tbat_adc);
 	sc760x_dump_reg(chg->sc);
 	return 0;
 }
@@ -1926,6 +1929,8 @@ static int sc760x_charger_probe(struct i2c_client *client,
     sc->user_chg_en = -EINVAL;
     sc->user_chg_susp = -EINVAL;
     sc->user_gpio_en = -EINVAL;
+    sc->sc760x_enable = 0;
+
 
     sc->regmap = devm_regmap_init_i2c(client,
                             &sc760x_regmap_config);
