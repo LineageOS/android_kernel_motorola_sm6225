@@ -449,8 +449,8 @@ static irqreturn_t sc760x_irq_handler(int irq, void *data)
 {
     struct sc760x_chip *sc = data;
 
-    dev_info(sc->dev, "%s\n", __func__);
-    sc760x_dump_reg(sc);
+    dev_dbg(sc->dev, "%s\n", __func__);
+    //sc760x_dump_reg(sc);
     return IRQ_HANDLED;
 }
 
