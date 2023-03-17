@@ -214,6 +214,11 @@ const unsigned char aw99703_reg_access[AW99703_REG_MAX] = {
 #define AW_READ_CHIPID_RETRIES 5
 #define AW_READ_CHIPID_RETRY_DELAY 2
 
+enum backlight_exp_current_align {
+	ALIGN_NONE,
+	ALIGN_OLED
+};
+
 struct aw99703_data {
 	struct led_classdev led_dev;
 	struct i2c_client *client;
@@ -245,6 +250,7 @@ struct aw99703_data {
 	unsigned int ovp_level;
 	unsigned int ocp_level;
 	unsigned int frequency;
+	unsigned int led_current_align;
 	unsigned int default_brightness;
 	unsigned int max_brightness;
 	unsigned int induct_current;

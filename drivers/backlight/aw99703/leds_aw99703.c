@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/backlight.h>
 #include "leds_aw99703.h"
+#include "align_convert.h"
 
 #define AW99703_LED_DEV "aw99703-bl"
 #define AW99703_NAME "aw99703-bl"
@@ -345,6 +346,11 @@ int  aw99703_set_brightness(struct aw99703_data *drvdata, int brt_val)
 
 	brt_val = aw99703_brightness_map(brt_val);
 
+	if((0 == drvdata->map_type) && (ALIGN_OLED == drvdata->led_current_align)) {
+		brt_val = align_convert[brt_val];
+		pr_info("%s align convert brt_val is %d\n", __func__, brt_val);
+	}
+
 	if (brt_val > 0) {
 		/*enalbe bl mode*/
 		/* set backlight brt_val */
@@ -516,6 +522,14 @@ aw99703_get_dt_data(struct device *dev, struct aw99703_data *drvdata)
 	}
 	else
 		pr_info("%s map-type=%d\n", __func__, drvdata->map_type);
+
+	rc = of_property_read_u32(np, "current-align-type", &drvdata->led_current_align);
+	if (rc != 0) {
+		drvdata->led_current_align = ALIGN_NONE;
+		pr_err("%s current-align-type not found\n", __func__);
+	}
+	else
+		pr_info("%s current-align-type=%d\n", __func__, drvdata->led_current_align);
 
 	drvdata->using_lsb = of_property_read_bool(np, "aw99703,using-lsb");
 	pr_info("%s using_lsb --<%d>\n", __func__, drvdata->using_lsb);
