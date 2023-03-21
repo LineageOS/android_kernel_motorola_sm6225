@@ -199,6 +199,7 @@ struct sc760x_chip {
     int user_gpio_en; /* user gpio en	*/
 
     int irq;
+    bool irq_enabled;
     int role;
     int sc760x_enable;
     u32 *thermal_levels;

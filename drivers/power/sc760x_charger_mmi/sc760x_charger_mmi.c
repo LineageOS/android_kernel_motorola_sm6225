@@ -230,9 +230,21 @@ static int sc760x_enable_chip(struct sc760x_chip *sc, bool en)
 	sc->sc760x_enable = en;
 
 	if (sc->sc760x_enable) {
+
+		if (!sc->irq_enabled) {
+			enable_irq_wake(sc->irq);
+			enable_irq(sc->irq);
+			sc->irq_enable = true;
+		}
 		ret = sc760x_init_device(sc);
 		if (ret < 0) {
 		    pr_info("init device failed(%d)\n", ret);
+		}
+	} else {
+		if (sc->irq_enabled) {
+			disable_irq_wake(sc->irq);
+			disable_irq(sc->irq);
+			sc->irq_enable = false;
 		}
 	}
 	dev_err(sc->dev, "success to set %s state, sleep 2s\n", pinctrl_name);
@@ -1166,7 +1178,9 @@ static int sc760x_register_interrupt(struct sc760x_chip *sc, struct i2c_client *
         return ret;
     }
 
-    enable_irq_wake(client->irq);
+    disable_irq_wake(client->irq);
+    disable_irq(client->irq);
+    sc->irq_enabled = false;
     sc->irq = client->irq;
     dev_err(sc->dev, "request thread irq success\n");
     return 0;
