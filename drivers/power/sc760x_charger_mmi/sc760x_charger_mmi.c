@@ -234,7 +234,7 @@ static int sc760x_enable_chip(struct sc760x_chip *sc, bool en)
 		if (!sc->irq_enabled) {
 			enable_irq_wake(sc->irq);
 			enable_irq(sc->irq);
-			sc->irq_enable = true;
+			sc->irq_enabled = true;
 		}
 		ret = sc760x_init_device(sc);
 		if (ret < 0) {
@@ -244,7 +244,7 @@ static int sc760x_enable_chip(struct sc760x_chip *sc, bool en)
 		if (sc->irq_enabled) {
 			disable_irq_wake(sc->irq);
 			disable_irq(sc->irq);
-			sc->irq_enable = false;
+			sc->irq_enabled = false;
 		}
 	}
 	dev_err(sc->dev, "success to set %s state, sleep 2s\n", pinctrl_name);
