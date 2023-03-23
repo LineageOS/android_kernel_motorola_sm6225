@@ -1477,6 +1477,41 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 }
 #endif /* FTS_PINCTRL_EN */
 
+
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+static int fts_vdd_gpio_configure(struct fts_ts_data *data)
+{
+    int ret = 0;
+
+    FTS_FUNC_ENTER();
+
+    if (gpio_is_valid(data->pdata->vdd_gpio)) {
+	printk("FTS feiyu enable 3.3v\n");
+        ret = gpio_request(data->pdata->vdd_gpio, "fts_vdd_gpio");
+        if (ret) {
+            FTS_ERROR("[GPIO]vdd_gpio request failed");
+            //goto err_3v3_gpio_dir;
+        }
+
+        ret = gpio_direction_output(data->pdata->vdd_gpio, 1);
+        if (ret) {
+            FTS_ERROR("[GPIO]set_direction for reset gpio failed");
+            //goto err_3v3_gpio_dir;
+        }
+    }
+
+    FTS_FUNC_EXIT();
+    return 0;
+
+/*err_3v3_gpio_dir:
+    if (gpio_is_valid(data->pdata->reset_gpio))
+        gpio_free(data->pdata->reset_gpio);
+
+    return ret;*/
+}
+#endif
+
+
 int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 {
     int ret = 0;
@@ -1503,6 +1538,14 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
                     FTS_ERROR("enable vcc_i2c regulator failed,ret=%d", ret);
                 }
             }
+
+
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+            msleep(5);
+            fts_vdd_gpio_configure(ts_data);
+            msleep(3);
+#endif
+
 #if FTS_PINCTRL_EN
             fts_pinctrl_select_normal(ts_data);
 #endif
@@ -1791,6 +1834,14 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
                  pdata->key_x_coords[2], pdata->key_y_coords[2]);
     }
 
+
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+    pdata->vdd_gpio = of_get_named_gpio_flags(np, "focaltech,vdd-gpio",
+                        0, &pdata->vdd_gpio_flags);
+    if (pdata->vdd_gpio < 0)
+        FTS_ERROR("Unable to get vdd_gpio");
+#endif
+
     /* reset, irq gpio info */
     pdata->reset_gpio = of_get_named_gpio_flags(np, "focaltech,reset-gpio",
                         0, &pdata->reset_gpio_flags);
@@ -1819,8 +1870,13 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
     if (pdata->pocket_mode_ctrl)
         FTS_INFO("Support fts touch pocket mode");
 
-    FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+    FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d, vdd_gpio:%d",
+             pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio, pdata->vdd_gpio);
+#else
+    FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d,",
              pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
+#endif
 
     FTS_FUNC_EXIT();
     return 0;
