@@ -253,7 +253,7 @@
 
 
 /*      Chip ID 	*/
-#define SX937X_WHOAMI_VALUE                   0x9370
+#define SX937X_WHOAMI_VALUE                   0x9375
 /*command*/
 #define SX937X_PHASE_CONTROL                  0x0000000F
 #define SX937X_COMPENSATION_CONTROL           0x0000000E
