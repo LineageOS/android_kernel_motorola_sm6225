@@ -88,6 +88,7 @@ struct bq25980_state {
 	bool ce;
 	bool hiz;
 	bool bypass;
+	bool cp_switch;//add cp_switch state
 
 	u32 vbat_adc;
 	u32 vsys_adc;
@@ -282,7 +283,7 @@ static struct reg_default sc8541_reg_init_val[] = {
 	{BQ25980_MASK4,		0x00},
 	{BQ25980_MASK5,		0x00},
 
-	{BQ25980_ADC_CONTROL1,	0x00},
+	{BQ25980_ADC_CONTROL1,	0x80},//enable ADC_EN
 	{BQ25980_ADC_CONTROL2,	0x06}, //0x26: enable vac1 vac2 adc and vout adc
 
 };
@@ -906,6 +907,7 @@ static int bq25980_get_state(struct bq25980_device *bq,
 	unsigned int stat2;
 	unsigned int stat3;
 	unsigned int stat4;
+	unsigned int stat5;
 	unsigned int ibat_adc_msb;
 	int ret;
 
@@ -922,6 +924,10 @@ static int bq25980_get_state(struct bq25980_device *bq,
 		return ret;
 
 	ret = regmap_read(bq->regmap, BQ25980_STAT4, &stat4);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(bq->regmap, BQ25980_STAT5, &stat5);
 	if (ret)
 		return ret;
 
@@ -944,6 +950,7 @@ static int bq25980_get_state(struct bq25980_device *bq,
 	state->ce = chg_ctrl_2 & BQ25980_CHG_EN;
 	state->hiz = chg_ctrl_2 & BQ25980_EN_HIZ;
 	state->bypass = chg_ctrl_2 & BQ25980_EN_BYPASS;
+	state->cp_switch = stat5 & BQ25980_STAT5_CP_SWITCH_MASK;
 
 	bq->alarm_status.bits.bat_ovp_alarm = stat1 & BQ25980_STAT1_BAT_OVP_ALM_MASK;
 	bq->alarm_status.bits.bat_ocp_alarm = stat1 & BQ25980_STAT1_BAT_OCP_ALM_MASK;
@@ -1296,7 +1303,8 @@ static bool bq25980_state_changed(struct bq25980_device *bq,
 		old_state.tflt != new_state->tflt ||
 		old_state.ce != new_state->ce ||
 		old_state.hiz != new_state->hiz ||
-		old_state.bypass != new_state->bypass);
+		old_state.bypass != new_state->bypass ||
+		old_state.cp_switch != new_state->cp_switch);
 }
 
 static irqreturn_t bq25980_irq_handler_thread(int irq, void *private)
@@ -2197,11 +2205,12 @@ static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
 				mutex_unlock(&bq->lock);
 				power_supply_changed(bq->charger);
 			}
-			*val1 = bq->alarm_status.status | (bq->fault_status.status << 8);
-			pr_err("[%s] get_state fault:0x%02X , alarm:0x%02X\n",
+			*val1 = bq->alarm_status.status | (bq->fault_status.status << 8) | (state.cp_switch << 18);
+			pr_err("[%s] get_state fault:0x%02X , alarm:0x%02X , cp_switch:%d\n",
 					bq->model_name,
 					bq->fault_status.status,
-					bq->alarm_status.status);
+					bq->alarm_status.status,
+					state.cp_switch);
 		}
 		break;
 	case PSY_IIO_CURRENT_NOW:
