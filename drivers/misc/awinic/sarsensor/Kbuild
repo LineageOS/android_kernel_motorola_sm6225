@@ -1,0 +1,30 @@
+# add -Wall to try to catch everything we can.
+#MTK have kernel-4.14 and kernel-4.19 and kernel-5.10 in the same dir,so we can't use below method
+#KERNEL_DIR_PATH = $(shell find $(TOP)/kernel* -type d -name  "kernel-*" | head -1)
+KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include/linux/input/awinic
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/$(KERNEL_VERSION_NAME)/drivers/base
+
+ifneq ($(filter m y,$(CONFIG_AW96XX_POWER_SUPPLY_ONLINE)),)
+	EXTRA_CFLAGS += -DCONFIG_USE_POWER_SUPPLY_ONLINE
+endif
+
+ifneq ($(filter m y,$(CONFIG_AW96XX_MTK_CHARGER)),)
+	EXTRA_CFLAGS += -DCONFIG_AW96XX_MTK_CHARGER
+endif
+
+ifneq ($(filter m y,$(CONFIG_AW96XX_MTK_KERNEL419_CHARGER_TYPE)),)
+	EXTRA_CFLAGS += -DCONFIG_AW96XX_MTK_KERNEL419_CHARGER_TYPE
+endif
+
+ifneq ($(filter m y,$(CONFIG_AW96XX_MTK_KERNEL5XX_CHARGER_TYPE)),)
+	EXTRA_CFLAGS += -DCONFIG_AW96XX_MTK_KERNEL5XX_CHARGER_TYPE
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+
+obj-m := awinic_sar.o
+awinic_sar-objs := ./comm/aw_sar_comm_interface.o aw_sar.o ./aw9610x/aw9610x.o ./aw9620x/aw9620x.o ./aw9620x/aw_update_fw.o ./aw963xx/aw963xx.o
+
