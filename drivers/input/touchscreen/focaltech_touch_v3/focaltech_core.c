@@ -1532,19 +1532,16 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
                 FTS_ERROR("enable vdd regulator failed,ret=%d", ret);
             }
 
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+            fts_vdd_gpio_configure(ts_data);
+#endif
+
             if (!IS_ERR_OR_NULL(ts_data->vcc_i2c)) {
                 ret = regulator_enable(ts_data->vcc_i2c);
                 if (ret) {
                     FTS_ERROR("enable vcc_i2c regulator failed,ret=%d", ret);
                 }
             }
-
-
-#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
-            msleep(5);
-            fts_vdd_gpio_configure(ts_data);
-            msleep(3);
-#endif
 
 #if FTS_PINCTRL_EN
             fts_pinctrl_select_normal(ts_data);
