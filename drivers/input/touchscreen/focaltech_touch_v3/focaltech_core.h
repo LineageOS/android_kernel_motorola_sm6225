@@ -277,6 +277,11 @@ struct fts_ts_data {
 
 #ifdef FOCALTECH_SENSOR_EN
     bool wakeable;
+    bool fod_suspended;
+    unsigned char gesture_type;
+    int zerotap_data[1];
+    int zero_enable;
+    unsigned long fod_jiffies;
 #endif
     u8 gsx_cmd;
 
@@ -358,6 +363,9 @@ void fts_gesture_recovery(struct fts_ts_data *ts_data);
 int fts_gesture_readdata(struct fts_ts_data *ts_data, u8 *data);
 int fts_gesture_suspend(struct fts_ts_data *ts_data);
 int fts_gesture_resume(struct fts_ts_data *ts_data);
+#ifdef FOCALTECH_SENSOR_EN
+void fts_read_report_fod_event(struct fts_ts_data *ts_data);
+#endif
 
 /* Apk and functions */
 int fts_create_apk_debug_channel(struct fts_ts_data *);
@@ -407,4 +415,7 @@ int fts_ex_mode_recovery(struct fts_ts_data *ts_data);
 void fts_irq_disable(void);
 void fts_irq_enable(void);
 int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable);
+#ifdef FOCALTECH_SENSOR_EN
+bool fts_is_fod_resume(struct fts_ts_data *ts_data);
+#endif
 #endif /* __LINUX_FOCALTECH_CORE_H__ */

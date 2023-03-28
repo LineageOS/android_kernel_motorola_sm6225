@@ -257,6 +257,122 @@ static int fts_create_gesture_sysfs(struct device *dev)
     return 0;
 }
 
+#ifdef FOCALTECH_SENSOR_EN
+void fts_read_report_fod_event(struct fts_ts_data *ts_data)
+{
+    u8 cmd = 0xE1;
+    u8 fod_data[9] = {0};
+    u16 fod_x = 0;
+    u16 fod_y = 0;
+    u8 fod_id = 0;
+    u8 fod_down = 0;
+    int ret = 0;
+    static bool last_fod_down = false;
+    struct gesture_event_data event;
+    int fod_down_interval = 0;
+    static unsigned long start = 0;
+
+    ret = fts_read(&cmd, 1, fod_data, 9);
+    if (ret < 0)
+    {
+        FTS_ERROR("read fod data fail");
+        return;
+    }
+    fod_id = fod_data[1];
+    fod_x = (fod_data[4] << 8) + fod_data[5];
+    fod_y = (fod_data[6] << 8) + fod_data[7];
+    fod_down = fod_data[8]; //1 up, 0 down
+
+    FTS_INFO("fod_id =  %02x, fod_down = %d", fod_id, fod_down);
+    if (fod_id != 0x26)
+    {
+        return;
+    }
+
+    if (ts_data->fod_suspended)
+    {
+        if (fod_down == 0)
+        {
+            fod_down_interval = (int)jiffies_to_msecs(jiffies - start);
+            event.evcode = 2;
+            event.evdata.x = fod_x;
+            event.evdata.y = fod_y;
+            FTS_INFO("Get FOD-DOWN gesture:%d interval:%d", ts_data->zerotap_data[0], fod_down_interval);
+            if (fod_down_interval > 2000)
+                ts_data->zerotap_data[0] = 0;
+
+            if (fod_down_interval > 0 && fod_down_interval < 250 && ts_data->zerotap_data[0])
+            {
+                return;
+            }
+            start = jiffies;
+            ts_data->fod_jiffies = jiffies;
+            if (ts_data->zerotap_data[0] > 6)
+            {
+                FTS_INFO("FOD-DOWN too many times %d", ts_data->zerotap_data[0]);
+            }
+            else
+            {
+                ret = fts_data->imports->report_gesture(&event);
+                FTS_INFO("report fod down event %d", ts_data->zerotap_data[0]);
+                if (!ret)
+                {
+#ifdef CONFIG_HAS_WAKELOCK
+                    wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(3000));
+#else
+                    PM_WAKEUP_EVENT(gesture_wakelock, 3000);
+#endif
+                }
+                ts_data->zerotap_data[0]++;
+            }
+        }
+        else if (fod_down == 1)
+        {
+            FTS_INFO("Get FOD-UP gesture");
+            event.evcode = 3;
+            event.evdata.x = 0;
+            event.evdata.y = 0;
+            ret = fts_data->imports->report_gesture(&event);
+            if (!ret)
+            {
+#ifdef CONFIG_HAS_WAKELOCK
+                wake_lock_timeout(&gesture_wakelock, msecs_to_jiffies(3000));
+#else
+                PM_WAKEUP_EVENT(gesture_wakelock, 3000);
+#endif
+            }
+            ts_data->zerotap_data[0] = 0;
+        }
+    }
+    else
+    {
+        if (fod_down == 1)
+        {
+            FTS_INFO("Get FOD-UP normal");
+            input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY2, 1);
+            input_sync(ts_data->input_dev);
+            input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY2, 0);
+            input_sync(ts_data->input_dev);
+            FTS_INFO("report BTN_TRIGGER_HAPPY2");
+            last_fod_down = false;
+        }
+        else if (fod_down == 0)
+        {
+            FTS_INFO("Get FOD-DOWN normal");
+            if (last_fod_down == false)
+            {
+                input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY1, 1);
+                input_sync(ts_data->input_dev);
+                input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY1, 0);
+                input_sync(ts_data->input_dev);
+                last_fod_down = true;
+                FTS_INFO("report BTN_TRIGGER_HAPPY1");
+            }
+        }
+    }
+}
+#endif
+
 static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 {
     int gesture;
@@ -473,6 +589,12 @@ int fts_gesture_suspend(struct fts_ts_data *ts_data)
         fts_write_reg(0xD1, ts_data->gsx_cmd);
 #else
         fts_write_reg(0xD1, 0xFF);
+#endif
+
+#ifdef FOCALTECH_SENSOR_EN
+        if(fts_data->zero_enable) {
+            fts_write_reg(0xCF, 0x02);
+        }
 #endif
         fts_write_reg(0xD2, 0xFF);
         fts_write_reg(0xD5, 0xFF);
