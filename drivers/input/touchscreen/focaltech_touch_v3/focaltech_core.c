@@ -1490,8 +1490,29 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 }
 #endif /* FTS_PINCTRL_EN */
 
-
 #ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+static int fts_vdd_gpio_low(struct fts_ts_data *data)
+{
+    int ret = 0;
+
+    FTS_FUNC_ENTER();
+
+    ret = gpio_direction_output(data->pdata->vdd_gpio, 0);
+    if (ret) {
+       FTS_ERROR("[GPIO]set_direction for reset gpio failed");
+       goto err_vdd_gpio_dir;
+    }
+
+    FTS_FUNC_EXIT();
+    return 0;
+
+err_vdd_gpio_dir:
+    if (gpio_is_valid(data->pdata->vdd_gpio))
+        gpio_free(data->pdata->vdd_gpio);
+
+    return ret;
+}
+
 static int fts_vdd_gpio_configure(struct fts_ts_data *data)
 {
     int ret = 0;
@@ -1499,31 +1520,29 @@ static int fts_vdd_gpio_configure(struct fts_ts_data *data)
     FTS_FUNC_ENTER();
 
     if (gpio_is_valid(data->pdata->vdd_gpio)) {
-	printk("FTS feiyu enable 3.3v\n");
         ret = gpio_request(data->pdata->vdd_gpio, "fts_vdd_gpio");
         if (ret) {
             FTS_ERROR("[GPIO]vdd_gpio request failed");
-            //goto err_3v3_gpio_dir;
+            goto err_vdd_gpio_dir;
         }
 
         ret = gpio_direction_output(data->pdata->vdd_gpio, 1);
         if (ret) {
             FTS_ERROR("[GPIO]set_direction for reset gpio failed");
-            //goto err_3v3_gpio_dir;
+            goto err_vdd_gpio_dir;
         }
     }
 
     FTS_FUNC_EXIT();
     return 0;
 
-/*err_3v3_gpio_dir:
-    if (gpio_is_valid(data->pdata->reset_gpio))
-        gpio_free(data->pdata->reset_gpio);
+err_vdd_gpio_dir:
+    if (gpio_is_valid(data->pdata->vdd_gpio))
+        gpio_free(data->pdata->vdd_gpio);
 
-    return ret;*/
+    return ret;
 }
 #endif
-
 
 int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 {
@@ -1570,6 +1589,11 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
             if (ret) {
                 FTS_ERROR("disable vdd regulator failed,ret=%d", ret);
             }
+
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+            fts_vdd_gpio_low(ts_data);
+#endif
+
             if (!IS_ERR_OR_NULL(ts_data->vcc_i2c)) {
                 ret = regulator_disable(ts_data->vcc_i2c);
                 if (ret) {
