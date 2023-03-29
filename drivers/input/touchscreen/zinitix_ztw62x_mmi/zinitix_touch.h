@@ -132,6 +132,9 @@
 #define MAX_TRAW_DATA_SZ	\
 	(MAX_RAW_DATA_SZ + 4*MAX_SUPPORTED_FINGER_NUM + 2)
 
+/* For commnication error in PM(deep sleep) state */
+#define ZINITIX_TIMEOUT_COMERR_PM 700
+
 extern volatile int tpd_halt;
 
 enum power_control {
@@ -319,6 +322,8 @@ struct bt541_ts_info {
 	const char *supplier;
 	struct delayed_work work;
 	int ts_mmi_power_state;
+	struct completion pm_completion;
+	bool pm_suspend;
 };
 
 extern int zinitix_hw_reset( struct bt541_ts_info* data,bool on );

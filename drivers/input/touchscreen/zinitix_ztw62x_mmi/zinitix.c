@@ -2300,6 +2300,16 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 #elif defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		if((tpd_halt)&&(info->work_state == SUSPEND)) //suspend state support gesture
 		{
+			if (info->pm_suspend) {
+				ret = wait_for_completion_timeout(
+					&info->pm_completion,
+					msecs_to_jiffies(ZINITIX_TIMEOUT_COMERR_PM));
+				if (!ret) {
+					dev_err(&client->dev, "Bus don't resume from pm(deep),timeout,skip irq");
+					goto out;
+				}
+			}
+
 			dev_info(&client->dev," gesture wakeup ");
 			if (read_data(client, 0x126,(u8 *)&gesture_flag, 2) < 0) //0x126
 			{
@@ -2949,6 +2959,26 @@ static void zinitix_early_suspend(struct early_suspend *h)
 
 
 #endif	/* CONFIG_FB */
+#else
+static int bt541_ts_resume(struct device *dev)
+{
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+
+	zinitix_printk("system resumes from pm_suspend");
+	info->pm_suspend = false;
+	complete(&info->pm_completion);
+	return 0;
+}
+
+static int bt541_ts_suspend(struct device *dev)
+{
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+
+	zinitix_printk("system enters into pm_suspend");
+	info->pm_suspend = true;
+	reinit_completion(&info->pm_completion);
+	return 0;
+}
 #endif  /* TOUCHSCREEN_MMI */
 
 static bool ts_set_touchmode(u16 value)
@@ -6208,6 +6238,9 @@ static int bt541_ts_probe(struct i2c_client *client,
 	enable_irq_wake(misc_info->irq);
 #endif
 
+	init_completion(&info->pm_completion);
+	info->pm_suspend = false;
+
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 	dev_info(&client->dev, "%s:zinitix_ts_mmi_dev_register", __func__);
 	ret = zinitix_ts_mmi_dev_register(&client->dev);
@@ -6389,6 +6422,8 @@ static const struct dev_pm_ops zinitix_ts_dev_pm_ops = {
 };
 #else
 static const struct dev_pm_ops zinitix_ts_dev_pm_ops = {
+	.suspend = bt541_ts_suspend,
+	.resume = bt541_ts_resume,
 };
 #endif
 static struct i2c_driver bt541_ts_driver = {
