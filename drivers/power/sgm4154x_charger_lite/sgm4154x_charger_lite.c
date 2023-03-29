@@ -29,6 +29,10 @@
 #define DEF_PROTECT_DURATION_MS (60000)
 #define DEF_USB_CURRENT_MA (500000)
 
+#ifndef MIN_VAL
+   #define  MIN_VAL( x, y ) ( ((x) < (y)) ? (x) : (y) )
+#endif
+
 static bool paired_vbat_panic_enabled = false;
 module_param(paired_vbat_panic_enabled, bool, 0644);
 MODULE_PARM_DESC(paired_vbat_panic_enabled,
@@ -1942,6 +1946,14 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 
 	pr_info("wireless input current limit: %duA\n", sgm->init_data.wls_ilim);
 
+	ret = device_property_read_u32(sgm->dev,
+				       "wls-ichg-limit-microamp",
+				       &sgm->init_data.wls_ichg_ilim);
+	if (ret)
+		sgm->init_data.wls_ichg_ilim = SGM4154x_ICHRG_I_MIN_uA;
+
+	pr_info("wireless ichg current limit: %duA\n", sgm->init_data.wls_ichg_ilim);
+
 	irq_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio))
 	{
@@ -2420,6 +2432,7 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 	static int prev_paired_load = PAIRED_LOAD_OFF;
 	int curr_in_limit = chg->sgm->ilim;
 	int volt_in_limit = chg->sgm->init_data.vlim;
+	int ichg_in_limit = chg->sgm->init_data.ichg;
 
 	/* Monitor vbat and ibat for OVP and OCP */
 	if (chg->batt_info.batt_mv >= chg->sgm->vbat_ovp_threshold) {
@@ -2579,10 +2592,14 @@ static int sgm4154x_charger_config_charge(void *data, struct mmi_charger_cfg *co
 		if (curr_in_limit > chg->sgm->init_data.ilim)
 			curr_in_limit = chg->sgm->init_data.ilim;
 	} else if (chg->chg_info.chrg_present && chg->chg_info.chrg_type == SGM4154x_WLS_TYPE) {
+			ichg_in_limit = MIN_VAL(chg->sgm->init_data.wls_ichg_ilim, chg->chg_cfg.target_fcc * 1000);
+			if (chg->sgm->ichg != ichg_in_limit) {
+				rc = sgm4154x_set_ichrg_curr(chg->sgm, ichg_in_limit);
+			}
 			curr_in_limit = chg->sgm->init_data.wls_ilim;
 			volt_in_limit = chg->sgm->init_data.wls_vlim;
-			pr_debug("wireless is on, curr_in_limit=%d, volt_in_limit=%d\n",
-					curr_in_limit, volt_in_limit);
+			pr_debug("wireless is on, curr_in_limit=%d, volt_in_limit=%d, ichg_in_limit=%d\n",
+					curr_in_limit, volt_in_limit, ichg_in_limit);
 	} else {
 			curr_in_limit = 0;
 	}
