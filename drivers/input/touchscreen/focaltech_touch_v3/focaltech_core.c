@@ -1195,9 +1195,11 @@ static int fts_input_init(struct fts_ts_data *ts_data)
         input_dev->id.bustype = BUS_SPI;
     input_dev->dev.parent = ts_data->dev;
 
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
     input_dev->id.product = 0xDEAD;
     input_dev->id.vendor = 0xBEEF;
     input_dev->id.version = 10427;
+#endif
 
     input_set_drvdata(input_dev, ts_data);
 
