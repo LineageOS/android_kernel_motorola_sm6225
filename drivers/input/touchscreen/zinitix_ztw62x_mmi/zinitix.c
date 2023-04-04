@@ -57,6 +57,7 @@
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 #endif
+#include <linux/mmi_device.h>
 
 #include "zinitix_touch.h"
 #include "zinitix_ts_mmi.h"
@@ -5534,12 +5535,16 @@ static int zinitix_power_init(struct bt541_ts_info *data, bool on)
 	return 0;
 
 reg_vcc_i2c_put:
-	regulator_put(data->vcc_i2c);
+	if (!IS_ERR_OR_NULL(data->vcc_i2c))
+		regulator_put(data->vcc_i2c);
 reg_vdd_set_vtg:
-	if (regulator_count_voltages(data->vdd) > 0)
-		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vdd)) {
+		if (regulator_count_voltages(data->vdd) > 0)
+			regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
+	}
 reg_vdd_put:
-	regulator_put(data->vdd);
+	if (!IS_ERR_OR_NULL(data->vdd))
+		regulator_put(data->vdd);
 	return rc;
 
 pwr_deinit:
@@ -6448,8 +6453,9 @@ static struct i2c_driver bt541_ts_driver = {
 static int __init bt541_ts_init(void)
 {
 	zinitix_printk("[TSP]: %s\n", __func__);
-
-	return i2c_add_driver(&bt541_ts_driver);
+	if (mmi_check_dynamic_device_node("bt541_ts_device"))
+		return i2c_add_driver(&bt541_ts_driver);
+	return -ENODEV;
 }
 
 static void __exit bt541_ts_exit(void)
