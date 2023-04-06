@@ -206,6 +206,7 @@ struct sc760x_chip {
     u32 thermal_fcc_ua;
     int curr_thermal_level;
     int num_thermal_levels;
+    int thermal_ratio;
 
     bool use_ext_usb_psy;
     bool use_ext_wls_psy;

@@ -4,6 +4,9 @@ EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/sc760x_charger_mmi \
 		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger
 
+ifneq ($(filter m y,$(CONFIG_THERMAL_RATIO_CONTROL)),)
+	EXTRA_CFLAGS += -DTHERMAL_RATIO_CONTROL
+endif
 
 obj-m += sc760x_charger_mmi.o
 

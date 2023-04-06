@@ -1110,6 +1110,12 @@ static int sc760x_parse_dt(struct sc760x_chip *sc, struct device *dev)
 	sc->num_thermal_levels = len;
 	sc->thermal_fcc_ua = sc->init_data.max_ichg;
 
+	ret = device_property_read_u32(sc->dev,
+				       "mmi,thermal-ratio",
+				       &sc->thermal_ratio);
+	if (ret)
+		sc->thermal_ratio = 1;
+
     return ret;
 }
 
@@ -1569,6 +1575,11 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 
 		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua / 1000);
 
+#ifdef THERMAL_RATIO_CONTROL
+		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->paired_batt_info.batt_fcc_ma / chg->sc->thermal_ratio);
+		chg->sc->thermal_fcc_ua = (chg->paired_batt_info.batt_fcc_ma / chg->sc->thermal_ratio) * 1000;
+#endif
+
 		if (sc760x_ibat_limit_set > (ibat_limit_vote + IBAT_CHG_LIM_BASE)) {
 			sc760x_ibat_limit_set -= IBAT_CHG_LIM_BASE;
 			sc760x_set_ibat_limit(chg->sc, sc760x_ibat_limit_set);
@@ -1778,6 +1789,7 @@ static void sc760x_paired_battery_notify(void *data,
 		return;
 	}
 
+	memcpy(&chg->paired_batt_info, batt_info, sizeof(struct mmi_battery_info));
 	if (chg->sc->sc760x_enable) {
 		pr_info("sc760x has been power on\n");
 		return;
