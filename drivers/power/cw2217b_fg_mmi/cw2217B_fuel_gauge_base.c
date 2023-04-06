@@ -707,6 +707,8 @@ static int cw2217_get_state(struct cw_battery *cw_bat)
 	ret = cw_read(cw_bat->client, REG_MODE_CONFIG, &reg_val);
 	if (ret < 0)
 		return ret;
+
+	cw_printk("REG_MODE_CONFIG 0x%2x = 0x%2x\n", REG_MODE_CONFIG, reg_val);
 	if (reg_val != CONFIG_MODE_ACTIVE)
 		return CW2217_NOT_ACTIVE;
 
@@ -801,6 +803,11 @@ static void cw_hw_init_work(struct work_struct *work)
 	int loop = 0;
 
 	cw_bat = container_of(work, struct cw_battery, hw_init_work);
+
+	ret = cw_init_data(cw_bat);
+	if (ret) {
+		printk("%s : cw2217 init data fail!\n", __func__);
+	}
 
 	ret = cw_init(cw_bat);
 	while ((loop++ < CW_RETRY_COUNT) && (ret != 0)) {
