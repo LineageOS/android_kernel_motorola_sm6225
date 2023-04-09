@@ -97,6 +97,7 @@ struct lpd_info {
 	int lpd_present;
 	int lpd_rsbu1;
 	int lpd_rsbu2;
+	int lpd_cid;
 };
 
 struct oem_notify_ind_msg {
@@ -712,17 +713,20 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	if (rc)
 		return rc;
 
+	chg->lpd_info.lpd_cid = -1;
 	rc = qti_charger_read(chg, OEM_PROP_LPD_INFO,
 				&chg->lpd_info,
 				sizeof(struct lpd_info));
 	if (rc) {
 		rc = 0;
 		memset(&chg->lpd_info, 0, sizeof(struct lpd_info));
+		chg->lpd_info.lpd_cid = -1;
 	}
-	mmi_info(chg, "LPD: present=%d, rsbu1=%d, rsbu2=%d\n",
+	mmi_info(chg, "LPD: present=%d, rsbu1=%d, rsbu2=%d, cid=%d\n",
 			chg->lpd_info.lpd_present,
 			chg->lpd_info.lpd_rsbu1,
-			chg->lpd_info.lpd_rsbu2);
+			chg->lpd_info.lpd_rsbu2,
+			chg->lpd_info.lpd_cid);
 
 	chg->chg_info.chrg_mv = info.chrg_uv / 1000;
 	chg->chg_info.chrg_ma = info.chrg_ua / 1000;
@@ -2477,6 +2481,14 @@ static int mmi_get_sku_type(struct qti_charger *chg, u8 *sku_type)
 				*sku_type = MMI_CHARGER_SKU_NA;
 			} else if (!strncmp("VZW", androidboot_radio_str, 3)) {
 				*sku_type = MMI_CHARGER_SKU_VZW;
+			} else if (!strncmp("JPN", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_JPN;
+			} else if (!strncmp("ITA", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_ITA;
+			} else if (!strncmp("NAE", androidboot_radio_str, 3)) {
+				*sku_type = MMI_CHARGER_SKU_NAE;
+			} else if (!strncmp("SUPERSET", androidboot_radio_str, 8)) {
+				*sku_type = MMI_CHARGER_SKU_SUPERSET;
 			} else {
 				*sku_type = 0;
 			}

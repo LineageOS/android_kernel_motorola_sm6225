@@ -87,6 +87,10 @@ enum mmi_charger_sku_type
 	MMI_CHARGER_SKU_ROW,
 	MMI_CHARGER_SKU_NA,
 	MMI_CHARGER_SKU_VZW,
+	MMI_CHARGER_SKU_JPN,
+	MMI_CHARGER_SKU_ITA,
+	MMI_CHARGER_SKU_NAE,
+	MMI_CHARGER_SKU_SUPERSET,
 };
 
 struct qti_charger_notify_data {
