@@ -230,6 +230,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 #ifdef GOODIX_PALM_SENSOR_EN
 	int palm_flag = 0;
 #endif
+	unsigned int gesture_cmd = 0;
 
 	if (atomic_read(&cd->suspended) == 0)
 		return EVT_CONTINUE;
@@ -310,12 +311,12 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	}
 
 re_send_ges_cmd:
-#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
-	if (goodix_ts_send_cmd(cd, ENTER_GESTURE_MODE_CMD, 6, (cd->gesture_cmd) >> 8,
-			cd->gesture_cmd & 0xFF) < 0)
-#else
-	if (hw_ops->gesture(cd, 0))
+#if defined(PRODUCT_MIAMI)
+	gesture_cmd = 0x80;
+#elif defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	gesture_cmd = cd->gesture_cmd;
 #endif
+	if (hw_ops->gesture(cd, gesture_cmd))
 		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)

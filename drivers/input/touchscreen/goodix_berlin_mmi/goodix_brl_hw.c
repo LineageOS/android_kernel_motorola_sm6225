@@ -253,17 +253,22 @@ int brl_resume(struct goodix_ts_core *cd)
 }
 
 #define GOODIX_GESTURE_CMD	0xA6
-int brl_gesture(struct goodix_ts_core *cd, int gesture_type)
+int brl_gesture(struct goodix_ts_core *cd, unsigned int gesture_type)
 {
 	struct goodix_ts_cmd cmd;
 
 	cmd.cmd = GOODIX_GESTURE_CMD;
-#ifdef CONFIG_GTP_FOD
-	cmd.len = 6;
-#else
-	cmd.len = 5;
-#endif
-	cmd.data[0] = gesture_type;
+	cmd.data[0] = gesture_type & 0xFF;
+	if (cd->bus->ic_type == IC_TYPE_BERLIN_D) {
+		cmd.len = 6;
+		cmd.data[1] = (gesture_type >> 8) & 0xFF;
+	} else if (cd->bus->ic_type == IC_TYPE_BERLIN_B) {
+		cmd.len = 8;
+		cmd.data[2] = (gesture_type >> 16) & 0xFF;
+		cmd.data[3] = (gesture_type >> 24) & 0xFF;
+	} else
+		cmd.len = 5;
+
 	if (cd->hw_ops->send_cmd(cd, &cmd))
 		ts_err("failed send gesture cmd");
 

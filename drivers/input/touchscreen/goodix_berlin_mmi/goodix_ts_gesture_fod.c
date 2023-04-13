@@ -367,6 +367,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	struct goodix_ts_event gs_event = {0};
 	__maybe_unused int fodx, fody, overlay_area;
 	int ret;
+	unsigned int gesture_cmd = 0;
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	struct gesture_event_data mmi_event;
 	static  unsigned  long  start = 0;
@@ -536,13 +537,11 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 
 re_send_ges_cmd:
 #if defined(PRODUCT_MIAMI)
-	if (hw_ops->gesture(cd, 0x80))
+	gesture_cmd = 0x80;
 #elif defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
-	if (goodix_ts_send_cmd(cd, ENTER_GESTURE_MODE_CMD, 6, (cd->gesture_cmd) >> 8,
-			cd->gesture_cmd & 0xFF) < 0)
-#else
-	if (hw_ops->gesture(cd, 0))
+	gesture_cmd = cd->gesture_cmd;
 #endif
+	if (hw_ops->gesture(cd, gesture_cmd))
 		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)

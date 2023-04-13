@@ -959,17 +959,90 @@ static int goodix_ts_mmi_charger_mode(struct device *dev, int mode)
 	return 0;
 }
 
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+static unsigned int set_bit_in_pos(unsigned int val, int bit_pos)
+{
+	return val |= (1 << bit_pos);
+}
+
+static unsigned int clear_bit_in_pos(unsigned int val, int bit_pos)
+{
+	return val &= ~(1 << bit_pos);
+}
+#endif
+
+static int goodix_berlin_gesture_setup(struct goodix_ts_core *core_data)
+{
+	const struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
+	unsigned int gesture_cmd = 0;
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	int ret = 0;
+	unsigned char gesture_type = 0;
+	unsigned int (*mod_func)(unsigned int, int) = set_bit_in_pos;
+
+	/* Goodix provided definitive description of gesture mode setting
+		for 9916 and 9966 touch ICs. It's safer to fail for any others
+		until it's confirmed!!!
+	*/
+	if (core_data->bus->ic_type != IC_TYPE_BERLIN_B &&
+		core_data->bus->ic_type != IC_TYPE_BERLIN_D) {
+		ts_err("GT%s gestures not set\n", core_data->fw_version.patch_pid);
+		return -EINVAL;
+	}
+
+	if (core_data->imports && core_data->imports->get_gesture_type) {
+		ret = core_data->imports->get_gesture_type(core_data->bus->dev, &gesture_type);
+		ts_info("Provisioned gestures 0x%02x; rc = %d\n", gesture_type, ret);
+	}
+	if (core_data->bus->ic_type == IC_TYPE_BERLIN_D) {
+		gesture_cmd = 0xFFFF;
+		mod_func = clear_bit_in_pos;
+	}
+	if (gesture_type & TS_MMI_GESTURE_ZERO) {
+		gesture_cmd = mod_func(gesture_cmd, 5);
+		ts_info("enable zero gesture mode cmd 0x%04x\n", gesture_cmd);
+	}
+	if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+		gesture_cmd = mod_func(gesture_cmd, 12);
+		ts_info("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
+	}
+	if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
+		gesture_cmd = mod_func(gesture_cmd, 7);
+		ts_info("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
+	}
+#ifdef GOODIX_PALM_SENSOR_EN
+	if (gesture_type & TS_MMI_GESTURE_PALM) {
+		/* override previous setting */
+		gesture_cmd = 0xFFFF;
+		ts_info("enable palm gesture mode cmd 0x%04x\n", gesture_cmd);
+	}
+#endif
+	core_data->gesture_cmd = gesture_cmd;
+	if (core_data->bus->ic_type == IC_TYPE_BERLIN_D) {
+		/* TODO Is this really necessary??? */
+		ret = goodix_ts_send_cmd(core_data, ENTER_GESTURE_MODE_CMD, 6, 0xFF, 0xFF);
+		if (ret < 0) {
+			ts_err("Failed to send enter gesture mode\n");
+		}
+	}
+#else
+#if defined(PRODUCT_MIAMI)
+	/* TODO Check if Miami 9916??? */
+	gesture_cmd = 0x80;
+#endif
+#endif
+	hw_ops->gesture(core_data, gesture_cmd);
+	ts_info("Send enable gesture mode 0x%x\n", gesture_cmd);
+
+	return 0;
+}
+
 static int goodix_ts_mmi_panel_state(struct device *dev,
 	enum ts_mmi_pm_mode from, enum ts_mmi_pm_mode to)
 {
 	struct platform_device *pdev;
 	struct goodix_ts_core *core_data;
 	const struct goodix_ts_hw_ops *hw_ops;
-#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
-	int ret = 0;
-	unsigned short gesture_cmd = 0xFFFF;
-	unsigned char gesture_type = 0;
-#endif
 
 	GET_GOODIX_DATA(dev);
 	hw_ops = core_data->hw_ops;
@@ -977,57 +1050,13 @@ static int goodix_ts_mmi_panel_state(struct device *dev,
 	switch (to) {
 	case TS_MMI_PM_GESTURE:
 		hw_ops->irq_enable(core_data, false);
-		if (hw_ops->gesture)
-#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
-		if (core_data->imports && core_data->imports->get_gesture_type) {
-			ret = core_data->imports->get_gesture_type(core_data->bus->dev, &gesture_type);
+		if (hw_ops->gesture) {
+			goodix_berlin_gesture_setup(core_data);
+			msleep(16);
+			hw_ops->irq_enable(core_data, true);
+			enable_irq_wake(core_data->irq);
+			core_data->gesture_enabled = true;
 		}
-#ifdef GOODIX_PALM_SENSOR_EN
-		if (gesture_type & TS_MMI_GESTURE_PALM) {
-			//override previous setting
-			gesture_cmd = 0xFFFF;
-			ts_info("enable palm gesture mode cmd 0x%04x\n", gesture_cmd);
-			goto palm_detection;
-		}
-#endif
-		if (gesture_type & TS_MMI_GESTURE_ZERO) {
-			gesture_cmd &= ~(1 << 5);
-			ts_info("enable zero gesture mode cmd 0x%04x\n", gesture_cmd);
-		}
-		if (gesture_type & TS_MMI_GESTURE_SINGLE) {
-			gesture_cmd &= ~(1 << 4);
-			ts_info("enable single gesture mode cmd 0x%04x\n", gesture_cmd);
-		}
-		if (gesture_type & TS_MMI_GESTURE_DOUBLE) {
-			gesture_cmd &= ~(1 << 15);
-			ts_info("enable double gesture mode cmd 0x%04x\n", gesture_cmd);
-		}
-
-#ifdef GOODIX_PALM_SENSOR_EN
-palm_detection:
-#endif
-		ret = goodix_ts_send_cmd(core_data, ENTER_GESTURE_MODE_CMD, 6, 0xFF, 0xFF);
-		if (ret < 0) {
-			ts_err("Failed to send enter gesture mode\n");
-		}
-		ret = goodix_ts_send_cmd(core_data, ENTER_GESTURE_MODE_CMD, 6, gesture_cmd >> 8,
-			gesture_cmd & 0xFF);
-		if (ret < 0) {
-			ts_err("Failed to send enable gesture mode\n");
-		}
-		core_data->gesture_cmd = gesture_cmd;
-		ts_info("Send enable gesture mode 0x%04x, 0x%02x\n", gesture_cmd, gesture_type);
-#else
-#if defined(PRODUCT_MIAMI)
-			hw_ops->gesture(core_data, 0x80);
-#else
-			hw_ops->gesture(core_data, 0);
-#endif
-#endif
-		msleep(16);
-		hw_ops->irq_enable(core_data, true);
-		enable_irq_wake(core_data->irq);
-		core_data->gesture_enabled = true;
 		break;
 	case TS_MMI_PM_DEEPSLEEP:
 		/* enter sleep mode or power off */

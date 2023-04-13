@@ -440,7 +440,7 @@ struct goodix_ts_hw_ops {
 	int (*dev_confirm)(struct goodix_ts_core *cd);
 	int (*resume)(struct goodix_ts_core *cd);
 	int (*suspend)(struct goodix_ts_core *cd);
-	int (*gesture)(struct goodix_ts_core *cd, int gesture_type);
+	int (*gesture)(struct goodix_ts_core *cd, unsigned int gesture_type);
 	int (*reset)(struct goodix_ts_core *cd, int delay_ms);
 	int (*irq_enable)(struct goodix_ts_core *cd, bool enable);
 	int (*read)(struct goodix_ts_core *cd, unsigned int addr,
