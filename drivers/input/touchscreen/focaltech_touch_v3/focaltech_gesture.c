@@ -283,7 +283,7 @@ void fts_read_report_fod_event(struct fts_ts_data *ts_data)
     fod_y = (fod_data[6] << 8) + fod_data[7];
     fod_down = fod_data[8]; //1 up, 0 down
 
-    FTS_INFO("fod_id =  %02x, fod_down = %d", fod_id, fod_down);
+    //FTS_INFO("fod_id =  %02x, fod_down = %d", fod_id, fod_down);
     if (fod_id != 0x26)
     {
         return;
