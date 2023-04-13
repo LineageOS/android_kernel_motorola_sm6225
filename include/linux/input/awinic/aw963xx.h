@@ -57,13 +57,6 @@ enum aw963xx_operation_mode {
 	AW963XX_DEEPSLEEP_MODE = 0x03,
 };
 
-enum aw963xx_operation_ap_mode {
-	AW963XX_SLEEP_AP_MODE = 0,
-	AW963XX_ACTIVE_AP_MODE,
-	AW963XX_DEEPSLEEP_AP_MODE,
-};
-
-
 enum aw963xx_chip_id {
 	AW96303_CHIP_ID = 0xA9630340,
 	AW96305_CHIP_ID = 0xA9630520,
@@ -538,6 +531,9 @@ struct aw963xx {
 #define REG_AFECFG1_M_CH8				((0x1558) + HIDDEN_BASE_ADDR)
 
 #define	REG_CMD							((0xf008) + SFR_BASE_ADDR)
+
+#define REG_AFECFG2_CH0					((0x011c) + AFE_BASE_ADDR)
+#define REG_AFECFG2_CH1					((0x0234) + AFE_BASE_ADDR)
 
 struct reg_data {
 	unsigned char rw;

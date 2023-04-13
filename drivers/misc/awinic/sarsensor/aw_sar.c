@@ -3,18 +3,8 @@
 
 #define AW_SAR_I2C_NAME		"awinic_sar"
 #define AW_SAR_DRIVER_VERSION	"v0.1.5.2"
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
-#ifdef CONFIG_AW96XX_MTK_KERNEL419_CHARGER_TYPE
-#define USB_POWER_SUPPLY_NAME   "mtk_charger_type"
-#elif defined(CONFIG_AW96XX_MTK_KERNEL5XX_CHARGER_TYPE)
-#define USB_POWER_SUPPLY_NAME   "mtk-master-charger"
-#else
-#define USB_POWER_SUPPLY_NAME   "charger"
-#endif
-#else
 #define USB_POWER_SUPPLY_NAME   "usb"
-#endif
+
 
 
 #define AW_I2C_RW_RETRY_TIME_MIN		(2000)
@@ -1686,9 +1676,7 @@ static void aw_sar_init_lock(struct aw_sar *p_sar)
 static void aw_sar_ps_notify_callback_work(struct work_struct *work)
 {
 	struct aw_sar *p_sar = container_of(work, struct aw_sar, ps_notify_work);
-
-	AWLOGD(p_sar->dev, "enter");
-
+	AWLOGD(p_sar->dev, "aw_sar_ps_notify_callback_work enter");
 	aw_sar_aot(p_sar);
 }
 
@@ -1724,17 +1712,14 @@ static int aw_sar_ps_notify_callback(struct notifier_block *self,
 	struct power_supply *psy = p;
 	bool present;
 	int retval;
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)
 	if (event == PSY_EVENT_PROP_CHANGED
 #else
-	//注意4.4无法找到PSY_EVENT_PROP_ADDED
-//	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
-	if (event == PSY_EVENT_PROP_CHANGED
+	if ((event == PSY_EVENT_PROP_ADDED || event == PSY_EVENT_PROP_CHANGED)
 #endif
 				&& psy && psy->desc->get_property && psy->desc->name &&
 				!strncmp(psy->desc->name, USB_POWER_SUPPLY_NAME, sizeof(USB_POWER_SUPPLY_NAME))) {
-		AWLOGI(p_sar->dev, "ps notification: event = %lu", event);
+		AWLOGE(p_sar->dev, "ps notification: event = %lu", event);
 		retval = aw_sar_ps_get_state(p_sar, psy, &present);
 		if (retval) {
 			AWLOGE(p_sar->dev, "psy get property failed");
@@ -1775,6 +1760,7 @@ static int aw_sar_ps_notify_init(struct aw_sar *p_sar)
 	}
 	return AW_OK;
 free_ps_notifier:
+	AWLOGE(p_sar->dev,"free_ps_notifier enter");
 	power_supply_unreg_notifier(&p_sar->ps_notif);
 	return -AW_ERR;
 }

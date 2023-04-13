@@ -2,7 +2,7 @@
 #include "aw_sar.h"
 
 #define AW963XX_I2C_NAME "aw963xx_sar"
-#define AW963XX_DRIVER_VERSION "v0.1.1.2"
+#define AW963XX_DRIVER_VERSION "v0.1.1.4"
 
 static void aw963xx_set_cs_as_irq(struct aw_sar *p_sar, int flag);
 static void aw963xx_get_ref_ch_enable(struct aw_sar *p_sar);
@@ -463,7 +463,43 @@ static void aw963xx_get_ref_ch_enable(struct aw_sar *p_sar)
 	}
 }
 
-static ssize_t aw963xx_get_cap_offset(void *data, char *buf)
+//Note: Because the kernel cannot handle floating-point types, it expands mul by 10 times
+static uint8_t aw963xx_get_offset_multiple(struct aw_sar *p_sar, uint8_t ch)
+{
+	uint8_t mul = 1;
+	uint32_t reg_data = 0;
+
+	aw_sar_i2c_read(p_sar->i2c,
+					REG_AFECFG2_CH0 +
+					ch * (REG_AFECFG2_CH1 - REG_AFECFG2_CH0),
+					&reg_data);
+	if ((reg_data >> 27) & 0x1) {
+		if (((reg_data >> 29) & 0x3) == 0) {
+			mul = 16;
+		} else if (((reg_data >> 29) & 0x3) == 1) {
+			mul = 20;
+		} else if (((reg_data >> 29) & 0x3) == 2) {
+			mul = 26;
+		} else if (((reg_data >> 29) & 0x3) == 3) {
+			mul = 40;
+		}
+		return mul;
+	}
+
+	aw_sar_i2c_read(p_sar->i2c,
+					REG_AFECFG3_CH0 +
+					ch * (REG_AFECFG3_CH1 - REG_AFECFG3_CH0),
+					&reg_data);
+	if ((reg_data >> 11) & 0x1) {
+		mul = 20;
+	} else {
+		mul = 10;
+	}
+
+	return mul;
+}
+
+static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_buf)
 {
 	ssize_t len = 0;
 	uint32_t reg_data = 0;
@@ -474,6 +510,8 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *buf)
 	uint32_t tmp = 0;
 	struct aw_sar *p_sar = (struct aw_sar *)data;
 	struct aw963xx *aw963xx = (struct aw963xx *)p_sar->priv_data;
+	uint8_t mul = 10;
+	uint32_t send_tcmd_offset = 0;
 
 	aw963xx_get_ref_ch_enable(p_sar);
 
@@ -482,71 +520,91 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *buf)
 						REG_AFESOFTCFG0_CH0 +
 						i * (REG_AFESOFTCFG0_CH1 - REG_AFESOFTCFG0_CH0),
 						&reg_data);
+		mul = aw963xx_get_offset_multiple(p_sar, i);
 		mode = reg_data & 0x0ff;
 		switch (mode) {
 		case AW963XX_UNSIGNED_CAP:	//self-capacitance mode unsigned cail
 			cap_ofst = aw963xx_get_unsigned_cap(p_sar,
 							REG_AFECFG1_CH0 + i * (REG_AFECFG1_CH1 - REG_AFECFG1_CH0));
-			AWLOGI(p_sar->dev, "cap_ofst = 0x%08x", cap_ofst);
-			AWLOGI(p_sar->dev, "unsigned cap ofst ch%d: %d.%dpf",
-								i,
-								cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
-								cap_ofst % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+		//Because it has been expanded by 10000 times before,
+		//the accuracy of removing mul's expansion loss can be ignored
+			cap_ofst = cap_ofst * mul / 10;
+			send_tcmd_offset = cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
+			AWLOGI(p_sar->dev, "cap_ofst = %d", cap_ofst);
+			if (debug_buf != NULL) {
+				len += snprintf(debug_buf + len, PAGE_SIZE - len,
+							"unsigned cap ofst ch%d: %d.%dpf\r\n",
+							i,
+							cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
+							cap_ofst % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+			}
 			break;
 		case AW963XX_SIGNED_CAP:	//self-capacitance mode signed cail
-			cap_ofst = aw963xx_get_signed_cap(p_sar,
+			signed_cap_ofst = aw963xx_get_signed_cap(p_sar,
 							REG_AFECFG1_CH0 + i * (REG_AFECFG1_CH1 - REG_AFECFG1_CH0));
-			signed_cap_ofst = (int)cap_ofst;
-			AWLOGI(p_sar->dev, "cap_ofst1 =0x%08x", signed_cap_ofst);
+			signed_cap_ofst = signed_cap_ofst * mul / 10;
+			send_tcmd_offset = signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
+			AWLOGI(p_sar->dev, "cap_ofst1 = 0x%x", signed_cap_ofst);
 			if (signed_cap_ofst < 0) {
-
 				tmp = -signed_cap_ofst;
-				//AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
-				AWLOGI(p_sar->dev, 
-							"signed cap ofst ch%d: -%d.%dpf",
+						AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
+				if (debug_buf != NULL) {
+					len += snprintf(debug_buf + len, PAGE_SIZE - len,
+						"signed cap ofst ch%d: -%d.%dpf\r\n",
 							i,
 							tmp / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
 							tmp % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+				}
 			} else {
-				//AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
-				AWLOGI(p_sar->dev, 
-							"signed cap ofst ch%d: %d.%dpf",
+				AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
+				if (debug_buf != NULL) {
+					len += snprintf(debug_buf + len, PAGE_SIZE - len,
+							"signed cap ofst ch%d: %d.%dpf\r\n",
 							i,
 							signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
 							signed_cap_ofst % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+				}
 			}
 			break;
 		case AW963XX_MUTUAL_CAP:	//mutual-capacitance mode
 			if (aw963xx->ref_ch_en[i] == AW963XX_REF_EN) {
 				cap_ofst = aw963xx_get_unsigned_cap(p_sar,
 							REG_AFECFG1_M_CH0 + i * (REG_AFECFG1_M_CH1 - REG_AFECFG1_M_CH0));
-				AWLOGI(p_sar->dev, "cap_ofst = 0x%08x", cap_ofst);
-				AWLOGI(p_sar->dev, 
-							"ref cap ofst ch%d: %d.%dpf",
+				cap_ofst = cap_ofst * mul / 10;
+				send_tcmd_offset = cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
+				AWLOGI(p_sar->dev, "ref cap_ofst = %d", cap_ofst);
+				if (debug_buf != NULL) {
+					len += snprintf(debug_buf + len, PAGE_SIZE - len,
+							"ref unsigned cap ofst ch%d: %d.%dpf\r\n",
 							i,
 							cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
 							cap_ofst % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+				}
 			} else {
-				cap_ofst = aw963xx_get_signed_cap(p_sar,
+				signed_cap_ofst = aw963xx_get_signed_cap(p_sar,
 							REG_AFECFG1_CH0 + i * (REG_AFECFG1_CH1 - REG_AFECFG1_CH0));
-				signed_cap_ofst = (int)cap_ofst;
-				AWLOGI(p_sar->dev, "cap_ofst1 = 0x%08x", signed_cap_ofst);
+				signed_cap_ofst = signed_cap_ofst * mul / 10;
+				send_tcmd_offset = signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
+				AWLOGI(p_sar->dev, "cap_ofst1 = 0x%x", signed_cap_ofst);
 				if (signed_cap_ofst < 0) {
-
 					tmp = -signed_cap_ofst;
-							AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
-					AWLOGI(p_sar->dev, 
-								"mutual cap ofst ch%d: -%d.%dpf",
-								i,
-								tmp / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
-								tmp % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+						AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
+					if (debug_buf != NULL) {
+						len += snprintf(debug_buf + len, PAGE_SIZE - len,
+							"mutual cap ofst ch%d: -%d.%dpf\r\n",
+							i,
+							tmp / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
+							tmp % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+					}
 				} else {
 					AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
-					AWLOGI(p_sar->dev, 
-								"mutual cap ofst ch%d: %d.%dpf",
+					if (debug_buf != NULL) {
+						len += snprintf(debug_buf + len, PAGE_SIZE - len,
+								"mutual cap ofst ch%d: %d.%dpf\r\n",
 								i,
 								signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
 								signed_cap_ofst % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
+					}
 				}
 			}
 			break;
@@ -554,15 +612,35 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *buf)
 			AWLOGI(p_sar->dev, "aw963xx ofst error 0x%x", reg_data & 0x0f);
 			break;
 		}
-		cap_ofst /= 10000;
-		buf[i * 4 + 0] = (uint8_t)((cap_ofst >> 0) & 0xff);
-		buf[i * 4 + 1] = (uint8_t)((cap_ofst >> 8) & 0xff);
-		buf[i * 4 + 2] = (uint8_t)((cap_ofst >> 16) & 0xff);
-		buf[i * 4 + 3] = (uint8_t)((cap_ofst >> 24) & 0xff);
-		len +=4;
+		if (tcmd_buf != NULL) {
+			tcmd_buf[i * 4 + 0] = (uint8_t)((send_tcmd_offset >> 0) & 0xff);
+			tcmd_buf[i * 4 + 1] = (uint8_t)((send_tcmd_offset >> 8) & 0xff);
+			tcmd_buf[i * 4 + 2] = (uint8_t)((send_tcmd_offset >> 16) & 0xff);
+			tcmd_buf[i * 4 + 3] = (uint8_t)((send_tcmd_offset >> 24) & 0xff);
+		}
 	}
 
 	return len;
+}
+
+static ssize_t aw963xx_get_cap_offset_send_to_tcmd(void *data, char *tcmd_buf)
+{
+	//Note: The format needs to be the same as that of tcmd
+	if (tcmd_buf != NULL) {
+		return aw963xx_get_cap_offset(data, NULL, tcmd_buf);
+	}
+
+	return 0;
+}
+
+static ssize_t aw963xx_get_cap_offset_send_to_debug(void *data, char *debug_buf)
+{
+	//Note: That debugging uses string output
+	if (debug_buf != NULL) {
+		return aw963xx_get_cap_offset(data, debug_buf, NULL);
+	}
+
+	return 0;
 }
 
 static void aw963xx_set_cs_as_irq(struct aw_sar *p_sar, int flag)
@@ -787,7 +865,7 @@ static const struct aw_sar_diff_t g_aw963xx_diff = {
 };
 
 static const struct aw_sar_offset_t g_aw963xx_offset = {
-	.p_get_offset_node_fn = aw963xx_get_cap_offset,
+	.p_get_offset_node_fn = aw963xx_get_cap_offset_send_to_debug,
 };
 
 static const struct aw_sar_aot_t g_aw963xx_aot = {
@@ -1050,7 +1128,6 @@ static ssize_t offset_show(struct class *class,
 {
 	struct aw963xx *aw963xx = container_of(class, struct aw963xx, capsense_class);
 	struct aw_sar *p_sar = NULL;
-	
 	if (aw963xx == NULL) {
 		return 0;
 	}
@@ -1059,7 +1136,7 @@ static ssize_t offset_show(struct class *class,
 		return 0;
 	}
 
-	return aw963xx_get_cap_offset(p_sar, buf);
+	return aw963xx_get_cap_offset_send_to_tcmd(p_sar, buf);
 }
 static CLASS_ATTR_RO(offset);
 
