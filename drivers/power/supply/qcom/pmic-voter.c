@@ -340,6 +340,7 @@ int get_effective_result(struct votable *votable)
 	unlock_votable(votable);
 	return value;
 }
+EXPORT_SYMBOL(get_effective_result);
 
 /**
  * get_effective_client() -
@@ -425,6 +426,7 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	client_id = get_client_id(votable, client_str);
 	if (client_id < 0) {
 		rc = client_id;
+		pr_err("%s client id not found for %s\n", __func__, client_str);
 		goto out;
 	}
 
@@ -493,11 +495,16 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 					get_client_str(votable, effective_id));
 	}
 
+#ifdef QCOM_BASE
 	votable->voted_on = true;
+#else
+	votable->voted_on = (rc >= 0);
+#endif
 out:
 	unlock_votable(votable);
 	return rc;
 }
+EXPORT_SYMBOL(vote);
 
 /**
  * vote_override() -
@@ -571,6 +578,7 @@ int rerun_election(struct votable *votable)
 	unlock_votable(votable);
 	return rc;
 }
+EXPORT_SYMBOL(rerun_election);
 
 struct votable *find_votable(const char *name)
 {
@@ -599,6 +607,7 @@ out:
 	else
 		return NULL;
 }
+EXPORT_SYMBOL(find_votable);
 
 static int force_active_get(void *data, u64 *val)
 {
@@ -644,6 +653,32 @@ out:
 }
 DEFINE_DEBUGFS_ATTRIBUTE(votable_force_ops, force_active_get, force_active_set,
 		"%lld\n");
+
+int pmic_vote_force_val_set(struct votable *votable, u32 val) {
+	if(votable) {
+		votable->force_val = val;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(pmic_vote_force_val_set);
+
+int pmic_vote_force_active_get(struct votable *votable, u64 *val) {
+	if(votable)
+		return force_active_get(votable, val);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(pmic_vote_force_active_get);
+
+int pmic_vote_force_active_set(struct votable *votable, u64 val) {
+	if(votable)
+		return force_active_set(votable, val);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(pmic_vote_force_active_set);
 
 static int show_votable_clients(struct seq_file *m, void *data)
 {

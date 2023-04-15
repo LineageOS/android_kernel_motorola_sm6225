@@ -1098,6 +1098,29 @@ int mipi_dsi_dcs_get_display_brightness(struct mipi_dsi_device *dsi,
 EXPORT_SYMBOL(mipi_dsi_dcs_get_display_brightness);
 
 /**
+ * mipi_dsi_dcs_set_display_brightness_2bytes() - sets the brightness value of
+ *    the display with 2bytes value
+ * @dsi: DSI peripheral device
+ * @brightness: brightness value
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int mipi_dsi_dcs_set_display_brightness_2bytes(struct mipi_dsi_device *dsi,
+					u16 brightness)
+{
+	u8 payload[2] = { (brightness & 0xff00) >> 8, brightness & 0xff};
+	ssize_t err;
+
+	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
+				payload, sizeof(payload));
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_display_brightness_2bytes);
+
+/**
  * mipi_dsi_dcs_set_display_brightness_large() - sets the 16-bit brightness value
  *    of the display
  * @dsi: DSI peripheral device
@@ -1196,6 +1219,59 @@ int mipi_dsi_driver_register_full(struct mipi_dsi_driver *drv,
 	return driver_register(&drv->driver);
 }
 EXPORT_SYMBOL(mipi_dsi_driver_register_full);
+
+int mipi_dsi_dcs_get_elvss_data(struct mipi_dsi_device *dsi)
+{
+            u8 payload_f0[2] = { 0x5A, 0x5A };
+            u8 payload_b0 = 0x07;
+            ssize_t err;
+
+            err = mipi_dsi_dcs_write(dsi, 0xF0, payload_f0, sizeof(payload_f0));
+            err = mipi_dsi_dcs_write(dsi, 0xB0, &payload_b0, sizeof(payload_b0));
+
+            if (err < 0)
+                        return err;
+
+            return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_get_elvss_data);
+
+int mipi_dsi_dcs_get_elvss_data_1(struct mipi_dsi_device *dsi)
+{
+            u8 payload_f0_1[2] = { 0xA5, 0xA5 };
+            ssize_t err;
+            err = mipi_dsi_dcs_write(dsi, 0xF0, payload_f0_1, sizeof(payload_f0_1));
+
+            if (err < 0)
+                        return err;
+
+            return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_get_elvss_data_1);
+
+int mipi_dsi_dcs_set_elvss_dim_off(struct mipi_dsi_device *dsi,
+                                                            u8 val)
+{
+            u8 payload_f0[2] = { 0x5A, 0x5A };
+            u8 payload_f0_1[2] = { 0xA5, 0xA5 };
+            u8 payload_b7[2] = { 0x01, 0x5B };
+            u8 payload_b0 = 0x07;
+            ssize_t err;
+
+            pr_info("set elvss data:%d\n", val);
+
+            err = mipi_dsi_dcs_write(dsi, 0xF0, payload_f0, sizeof(payload_f0));
+            err = mipi_dsi_dcs_write(dsi, 0xB7, payload_b7, sizeof(payload_b7));
+            err = mipi_dsi_dcs_write(dsi, 0xB0, &payload_b0, sizeof(payload_b0));
+            err = mipi_dsi_dcs_write(dsi, 0xB7, &val, sizeof(val));
+            err = mipi_dsi_dcs_write(dsi, 0xF0, payload_f0_1, sizeof(payload_f0_1));
+
+            if (err < 0)
+                      return err;
+
+            return 0;
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_set_elvss_dim_off);
 
 /**
  * mipi_dsi_driver_unregister() - unregister a driver for DSI devices

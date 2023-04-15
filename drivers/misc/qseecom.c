@@ -3087,6 +3087,11 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 		goto unload_exit;
 	}
 
+	if (!memcmp(data->client.app_name, "prov", strlen("prov"))) {
+		pr_debug("Do not unload prov app from tz\n");
+		goto unload_exit;
+	}
+
 	__qseecom_cleanup_app(data);
 	__qseecom_reentrancy_check_if_no_app_blocked(TZ_OS_APP_SHUTDOWN_ID);
 
@@ -9672,6 +9677,9 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 
 	mutex_lock(&qsee_bw_mutex);
 	mutex_lock(&clk_access_lock);
+
+	INIT_WORK(&qseecom.bw_inactive_req_ws,
+	qseecom_bw_inactive_req_work);
 
 	if (qseecom.current_mode != INACTIVE) {
 		ret = msm_bus_scale_client_update_request(

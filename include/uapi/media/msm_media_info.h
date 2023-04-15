@@ -2,6 +2,7 @@
 #ifndef __MSM_MEDIA_INFO_H__
 #define __MSM_MEDIA_INFO_H__
 
+
 #include <asm/bitsperlong.h>
 
 #if __BITS_PER_LONG == 64

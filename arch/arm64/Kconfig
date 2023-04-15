@@ -1696,3 +1696,21 @@ source "arch/arm64/kvm/Kconfig"
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
 endif
+
+config AF_NOISE_ELIMINATION
+	bool "For elimnating AF resonance noise"
+	default n
+	help
+	Enable it only for produts that suffering AF resonance noise.
+
+config CAMERA_FLASH_PWM
+        bool "control flash"
+        default n
+        help
+        Enable it only for produts that control flash.
+
+config CAMERA_FLASH_IIC_COMPATIBLE
+        bool "auto select iic flash suppliers"
+        default n
+        help
+        Enable it, this is automatically selected flash supplers.
