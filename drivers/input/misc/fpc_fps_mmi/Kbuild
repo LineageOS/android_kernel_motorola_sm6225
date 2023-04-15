@@ -1,3 +1,5 @@
+ccflags-$(CONFIG_DEVON_DTB) += -DSUPPORT_PIN_CTRL
+
 fpc1020_mmi-y += fpc1020_tee.o
 
 obj-$(CONFIG_INPUT_MISC_FPC1020) += fpc1020_mmi.o

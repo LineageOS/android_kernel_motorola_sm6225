@@ -1,5 +1,3 @@
-ccflags-$(CONFIG_VIBRATOR_NOISE_CAMERA) += -DCONFIG_VIBRATOR_NOISE_CAMERA
-
 regulator_vibrator_mmi-y += moto_regulator_vibrator.o
 
 obj-$(CONFIG_REGULATOR_VIBRATOR_MMI) += regulator_vibrator_mmi.o

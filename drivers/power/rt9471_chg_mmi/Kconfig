@@ -1,0 +1,12 @@
+config RT9471_CHG_MMI
+    tristate "MMI RT9471 Charger Driver"
+    depends on ADAPTER_CLASS && MMI_CHARGER
+    default n
+    help
+        Say Y here if you have mmi rt9471 support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called rt9471_charger.

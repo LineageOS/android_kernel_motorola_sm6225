@@ -1,7 +1,7 @@
 config REGULATOR_VIBRATOR_MMI
-    tristate "EXT Vibrator-LDO driver"
+    tristate "EXT Vibrator-Regulator driver"
     help
-        Say Y here if you have EXT Vibrator-LDO Device in
+        Say Y here if you have EXT Vibrator-Regulator Device in
         your system.
 
         If unsure, say N.
@@ -11,6 +11,6 @@ config REGULATOR_VIBRATOR_MMI
 
 config VIBRATOR_NOISE_CAMERA
     bool "Enable Vibrator Noise Camera"
-    depends on REGULATOR_VIBRATOR_MMI
+    depends on REGULATOR_VIBRATOR_MMI || REGULATOR_LDO_MMI
     help
         Enable Vibrator Noise Camera.

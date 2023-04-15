@@ -1,0 +1,11 @@
+config LEDS_LM3697
+	tristate "LM3697 LED driver"
+	default n
+	help
+	  Say Y here if you have LM3697 LED in
+	  your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called leds_lm3697.

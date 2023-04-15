@@ -1,6 +1,7 @@
 ccflags-y += -I$(srctree)/drivers/base
 
 ccflags-$(CONFIG_AW9610X_POWER_SUPPLY_ONLINE) += -DCONFIG_USE_POWER_SUPPLY_ONLINE
+ccflags-$(CONFIG_AW9610X_HARDWARE_VERSION) += -DCONFIG_USE_HARDWARE_VERSION
 
 obj-$(CONFIG_AW9610X_SAR) := aw9610x.o
 aw9610x-objs += aw9610x_sar.o

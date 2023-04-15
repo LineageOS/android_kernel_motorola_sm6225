@@ -86,6 +86,7 @@ obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
 
+obj-$(CONFIG_INPUT_EGISTEC_BIX)		+= ets_bix_mmi/
 obj-$(CONFIG_INPUT_EGISTEC_FPS)		+= ets_fps_mmi/
 obj-$(CONFIG_INPUT_MISC_FPC1020)	+= fpc_fps_mmi/
 obj-$(CONFIG_INPUT_QPNP_POWER_ON_MMI)	+= qpnp_power_on_mmi/

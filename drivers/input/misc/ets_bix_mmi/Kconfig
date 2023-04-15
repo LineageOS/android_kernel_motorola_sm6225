@@ -1,0 +1,6 @@
+config INPUT_EGISTEC_BIX
+	tristate "Egistec fingerprint sensor BIX MMI"
+	default n
+	help
+	 Say Y here if you wish to include support for BIX MMI EGIS finger print sensor.
+	 If unsure, say N.

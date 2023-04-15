@@ -1376,6 +1376,10 @@ source "drivers/input/touchscreen/touchscreen_mmi/Kconfig"
 
 source "drivers/input/touchscreen/stmicro_mmi/Kconfig"
 
+source "drivers/input/touchscreen/focaltech_0flash_v2_mmi/Kconfig"
+
 source "drivers/input/touchscreen/focaltech_v2_mmi/Kconfig"
+
+source "drivers/input/touchscreen/ili9882_mmi/Kconfig"
 
 endif

@@ -1,10 +1,6 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/focaltech_0flash_v2_mmi/include
+ccflags-y += -I$(srctree)/drivers/input/touchscreen/focaltech_0flash_v2_mmi/include
 
-obj-m := focaltech_0flash_v2_mmi.o
+obj-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI) := focaltech_0flash_v2_mmi.o
 focaltech_0flash_v2_mmi-objs += focaltech_core.o
 focaltech_0flash_v2_mmi-objs += focaltech_esdcheck.o
 focaltech_0flash_v2_mmi-objs += focaltech_ex_fun.o
@@ -14,19 +10,7 @@ focaltech_0flash_v2_mmi-objs += focaltech_gesture.o
 focaltech_0flash_v2_mmi-objs += focaltech_point_report_check.o
 focaltech_0flash_v2_mmi-objs += focaltech_spi.o
 
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
-	EXTRA_CFLAGS += -DFOCALTECH_SENSOR_EN
-endif
-
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_ESD_EN)),)
-EXTRA_CFLAGS += -DFOCALTECH_ESD_EN
-endif
-
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_PANEL_NOTIFICATIONS)),)
-EXTRA_CFLAGS += -DFOCALTECH_CONFIG_PANEL_NOTIFICATIONS
-endif
-
-ifneq ($(filter m y,$(CONFIG_INPUT_FOCALTECH_DEBUG_EN)),)
-EXTRA_CFLAGS += -DFOCALTECH_DEBUG_EN
-endif
-
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_ENABLE_DOUBLE_TAP) += -DFOCALTECH_SENSOR_EN
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_ESD_EN) += -DFOCALTECH_ESD_EN
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_PANEL_NOTIFICATIONS) += -DFOCALTECH_CONFIG_PANEL_NOTIFICATIONS
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_DEBUG_EN) += -DFOCALTECH_DEBUG_EN

@@ -2,15 +2,50 @@
 # Focaltech Touchscreen driver configuration
 #
 
-config TOUCHSCREEN_FTS
-    bool "Focaltech Touchscreen"
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI
+    tristate "FocalTech Touchscreen Driver 0flash V2 MMI"
     default n
     help
-      Say Y here if you have Focaltech touch panel.
+      Say Y here if you wish to include support for FocalTech Touchscreen 0flash V2 MMI.
+
       If unsure, say N.
 
-config TOUCHSCREEN_FTS_DIRECTORY
-    string "Focaltech ts directory name"
-    default "focaltech_touch"
-    depends on TOUCHSCREEN_FTS
+      To compile this driver as a module, choose M here: the
+      module will be called focaltech_0flash_v2_mmi.
 
+if INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI
+
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_ENABLE_DOUBLE_TAP
+    bool "FocalTech 0flash V2 MMI Double tap"
+    depends on SENSORS_CLASS
+    default n
+    help
+      Say Y here if you want to have Double tap support on Moto FocalTech 0flash V2.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_ESD_EN
+    bool "FocalTech 0flash V2 MMI ESD"
+    default n
+    help
+      Say Y here if you want to have ESD support on Moto FocalTech 0flash V2.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_PANEL_NOTIFICATIONS
+    bool "FocalTech 0flash V2 MMI Panel notifications"
+    default n
+    help
+      Say Y here if you want to have panel notifications support on Moto FocalTech 0flash V2.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI_DEBUG_EN
+    bool "FocalTech 0flash V2 MMI Debug"
+    default n
+    help
+      Say Y here if you want to have debug support on Moto FocalTech 0flash V2.
+
+      If unsure, say N.
+
+endif

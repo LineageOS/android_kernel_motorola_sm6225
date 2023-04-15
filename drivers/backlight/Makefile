@@ -1,0 +1,2 @@
+obj-$(CONFIG_LEDS_AW99703)	+= aw99703/
+obj-$(CONFIG_LEDS_LM3697)	+= lm3697/
