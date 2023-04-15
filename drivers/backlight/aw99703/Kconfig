@@ -1,0 +1,11 @@
+config LEDS_AW99703
+	tristate "AW99703 LED driver"
+	default n
+	help
+	  Say Y here if you have AW99703 LED in
+	  your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called leds_aw99703.

@@ -653,6 +653,7 @@ source "drivers/misc/sx933x/Kconfig"
 source "drivers/misc/sx937x/Kconfig"
 source "drivers/misc/utag/Kconfig"
 source "drivers/misc/aw9610x/Kconfig"
+source "drivers/misc/ldo_vibrator_mmi/Kconfig"
 source "drivers/misc/regulator_vibrator_mmi/Kconfig"
 endmenu
 

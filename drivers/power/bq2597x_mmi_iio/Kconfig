@@ -1,0 +1,9 @@
+config BQ2597X_MMI_IIO
+	tristate "BQ2597X MMI IIO"
+	default n
+	help
+	  Say Y here if you have a bq2597x iio compatible
+	  device connected.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called bq2597x_mmi_iio.

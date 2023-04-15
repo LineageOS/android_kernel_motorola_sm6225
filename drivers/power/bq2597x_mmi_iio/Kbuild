@@ -1,7 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
-		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/bq2597x_mmi_iio
-
-obj-m += bq2597x_mmi_iio.o
-
+obj-$(CONFIG_BQ2597X_MMI_IIO) += bq2597x_mmi_iio.o

@@ -1,0 +1,119 @@
+config INPUT_TOUCHSCREEN_ILI_9882_MMI
+    tristate "Ilitek Touchscreen Driver 9882 MMI"
+    default n
+    help
+      Say Y here if you wish to include support for Ilitek Touchscreen Driver 9882 MMI.
+
+      If unsure, say N.
+
+      To compile this driver as a module, choose M here: the
+      module will be called ili9882_mmi.
+
+if INPUT_TOUCHSCREEN_ILI_9882_MMI
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_ENABLE_DOUBLE_TAP
+    bool "Ilitek Touchscreen Driver 9882 MMI Double tap"
+    depends on SENSORS_CLASS
+    default n
+    help
+      Say Y here if you want to have double tap support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_NOTIFY_TOUCH_STATE
+    bool "Ilitek Touchscreen Driver 9882 MMI Touch state"
+    default n
+    help
+      Say Y here if you want to have touch state support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_PANEL_NOTIFICATIONS
+    bool "Ilitek Touchscreen Driver 9882 MMI Panel notifications"
+    default n
+    help
+      Say Y here if you want to have panel notifications support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_RESUME_BY_DDI
+    bool "Ilitek Touchscreen Driver 9882 MMI Resume by DDI"
+    default n
+    help
+      Say Y here if you want to have resume by DDI support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_FW_PANEL
+    bool "Ilitek Touchscreen Driver 9882 MMI FW panel"
+    default n
+    help
+      Say Y here if you want to have FW panel support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_SUSPEND_PWROFF
+    bool "Ilitek Touchscreen Driver 9882 MMI Suspend power-off"
+    default n
+    help
+      Say Y here if you want to have suspend power-off support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_CHARGER
+    bool "Ilitek Touchscreen Driver 9882 MMI Charger"
+    default n
+    help
+      Say Y here if you want to have charger support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_ESD
+    bool "Ilitek Touchscreen Driver 9882 MMI ESD"
+    default n
+    help
+      Say Y here if you want to have ESD support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_PEN_NOTIFIER
+    bool "Ilitek Touchscreen Driver 9882 MMI Pen notifier"
+    default n
+    help
+      Say Y here if you want to have pen notifier support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_GESTURE
+    bool "Ilitek Touchscreen Driver 9882 MMI Gesture"
+    default n
+    help
+      Say Y here if you want to have gesture support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_PANEL_GESTURE
+    bool "Ilitek Touchscreen Driver 9882 MMI Panel gesture"
+    default n
+    help
+      Say Y here if you want to have panel gesture support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_PASSIVE_PEN
+    bool "Ilitek Touchscreen Driver 9882 MMI Passive pen"
+    default n
+    help
+      Say Y here if you want to have passive pen support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_9882_MMI_LAST_TIME
+    bool "Ilitek Touchscreen Driver 9882 MMI Timestamp"
+    default n
+    help
+      Say Y here if you want to have timestamp support on Ilitek 9882 MMI.
+
+      If unsure, say N.
+
+endif

@@ -1,0 +1,46 @@
+config MMI_QC3P_WT6670F
+    tristate "MMI QC3P WT6670F Driver"
+    depends on ADAPTER_CLASS && MMI_CHARGER
+    default n
+    help
+        Say Y here if you have mmi qc3p wt6670f support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called mmi_qc3p_wt6670f.
+
+config MMI_QC3P_WT6670_DETECTED
+    bool "Enable MMI QC3P WT6670 detection"
+    depends on MMI_QC3P_WT6670F
+    default n
+    help
+        Say Y here to enable mmi QC3P WT6670 detection.
+
+        If unsure, say N.
+
+config MMI_QC3P_Z350_DETECTED
+    bool "Enable MMI QC3P Z350 detection"
+    depends on MMI_QC3P_WT6670F
+    default n
+    help
+        Say Y here to enable mmi QC3P Z350 detection.
+
+        If unsure, say N.
+
+config MMI_QC3P_TURBO_CHARGER
+    bool "Enable MMI QC3P Turbo Charger"
+    default n
+    help
+        Say Y here to enable mmi QC3P Turbo Charger.
+
+        If unsure, say N.
+
+config MMI_QC3P_TURBO_CHARGER_ISP_5G
+    bool "Enable MMI QC3P Turbo Charger ISP 5G"
+    default n
+    help
+        Say Y here to enable mmi QC3P Turbo Charger ISP 5G.
+
+        If unsure, say N.

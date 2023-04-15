@@ -1,0 +1,12 @@
+config MMI_DISCRETE_TURBO_CHARGER
+    tristate "MMI Discrete Turbo Charger Driver"
+    depends on ADAPTER_CLASS && MMI_CHARGER
+    default n
+    help
+        Say Y here if you have mmi discrete turbo charger support
+        in your system.
+
+        If unsure, say N.
+
+        To compile this driver as a module, choose M here: the
+        module will be called mmi_discrete_turbo_charger.
