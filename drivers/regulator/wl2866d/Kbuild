@@ -1,0 +1,5 @@
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+wl2866d-objs += wl2866d-regulator.o
+obj-m	+= wl2866d.o

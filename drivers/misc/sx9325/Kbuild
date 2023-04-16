@@ -1,0 +1,19 @@
+KERNEL_DIR_PATH = $(shell find $(TOP)/kernel/ -name "msm-*" | head -1 | grep -i "kernel/msm-*")
+
+KERNEL_VERSION_NAME = $(shell basename $(KERNEL_DIR_PATH))
+
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+ifneq (,$(KERNEL_DIR_PATH))
+        EXTRA_CFLAGS += -I$(TOP)/kernel/$(KERNEL_VERSION_NAME)/drivers/base
+else
+        EXTRA_CFLAGS += -I$(TOP)/kernel/drivers/base
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../sensors/Module.symvers
+
+sx932x_sar-y := sx9325_sar.o
+
+obj-m += sx932x_sar.o

@@ -46,6 +46,7 @@ struct syna_tcm_board_data {
 	int power_on_state;
 	int reset_gpio;
 	int reset_on_state;
+	int tpio_reset_gpio;
 	unsigned int spi_mode;
 	unsigned int power_delay_ms;
 	unsigned int reset_delay_ms;

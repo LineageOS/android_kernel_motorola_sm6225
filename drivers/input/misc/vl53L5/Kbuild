@@ -1,0 +1,10 @@
+#
+# Kbuild for the vl53L1 drivers.
+#
+
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+obj-m += stmvl53l5.o
+stmvl53l5-objs := stmvl53l5_module.o stmvl53l5_i2c.o stmvl53l5_spi.o stmvl53l5_load_fw.o
+

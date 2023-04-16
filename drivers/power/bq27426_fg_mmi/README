@@ -1,0 +1,189 @@
+Motorola Mobility. BQ27426 Fuel Gauge Specific Bindings
+
+This is a brief introduction on bq27426_fg_mmi, based on previous developments,
+but edited and improved by Motorola. It is a DLKM, and messages on kernel logs
+may be tagged as:
+- "bq27426"
+- "bq27426_bms"
+- or no tag, if it's happening during probe
+
+This driver has the following components:
+- README - this file :)
+- build files (Makefile, Kbuild, Android.mk)
+- command files (bqfs_cmd_type.h), which is the basic structure to interpret
+the Battery Profile Header file.
+- driver implementation (bq27426_fg_mmi.c)
+
+One of the main architectural differences in between Texas Instruments and
+Qualcomm Fuel Gauge drivers is:
+- battery profile format (QCOM provides as a .dtsi file, while TI shares it
+as a .gm.fs)
+- battery profile addition (as a DT file, QCOM requires it to be included on
+OEM DT, while TI statically adds a battery profile to the driver itself).
+
+The following sections better detail the DT and how to add a battery profile to
+a product.
+
+==================================
+ Mandatory Device Tree properties
+==================================
+
+- design-capacity
+ Usage:      mandatory
+ Value Type: <u32>
+ Definition: Defines maximum battery capacity, in mAh.
+
+- chem_id
+ Usage:      mandatory
+ Value Type: <u32>
+ Definition: Each battery model has a unique identifier, called by Texas
+Instruments as "Chemical ID" (or chem-id). This value is hard-stored to the
+battery, and can be queried, similar to battery ID resistance in Qualcomm
+architecture. This values comes from Texas Instruments Battery
+Characterization Data.
+
+- serialnum
+ Usage:      mandatory
+ Value Type: <string>
+ Definition: Each battery model also has Serial Number, defining that battery
+model. This is a reference value, not stored inside battery, but necessary to
+control and differentiate battery models. This is a requirement per Texas
+Instruments original Device Drive.
+
+=================================
+ Optional Device Tree properties
+=================================
+
+- mmi,fg-batt-main
+ Usage:      optional
+ Value Type: <empty>
+ Definition: Determines that component is measuring main battery. This is
+helpful when using a dual battery architecture, to differentiate main and
+flip batteries.
+
+- mmi,fg-batt-flip
+ Usage:      optional
+ Value Type: <empty>
+ Definition: Determines that component is measuring flip battery. This is
+helpful when using a dual battery architecture, to differentiate main and
+flip batteries.
+
+=======================================
+ Performing a Battery Characterization
+=======================================
+
+EE (Electronics Engineering), or Hardware Team starts this process. First, a
+battery sample is requested from supplier. Then Texas Instruments is contacted
+to verify how many samples they need to perform this characterization.
+
+At this point, it is important to emphasize to Texas Instruments that Fuel
+Gauge data is stored on device runtime, and not on a test jig or factory,
+because on the latter case, they will send a set of files to be used with a
+specific software and hardware solution to hotplug the FG chip and store FG
+characterization data.
+
+What Motorola needs is a file having .gm.fs extension containing command and
+data sequence. This is also part of Texas Instruments process, so doesn't take
+any extra effort/service on then to provide such data.
+
+Having that file, it is necessary to execute "battery_profil/convbqfs.pl" Perl
+script. Parameters are:
+
+convbqfs.pl --input <input file> [--output {output file}] [--line] [--name {array name}]
+                 if output file is not specified, default name is same with input file name with .h extension
+Example:
+         convbqfs.pl --input bq27320.df.fs
+         convbqfs.pl --input bq27320.df.fs --output bq27320-bqfs-image.h
+         convbqfs.pl --input bq27320.df.fs --output bq27320-bqfs-image.h --line
+         convbqfs.pl --input bq27320.df.fs --output bq27320-bqfs-image.h --name bqfs_image
+
+=====================================
+ Adding a Battery Profile to Product
+=====================================
+
+After file conversion is done by the Perl script, a .h file is generated. As a
+recommended standard, files having this extension go to
+"battery_profile/imported" folder, while .gm.fs files go to
+"battery_profile/raw" folder.
+
+Once there, first step is to modify the Device Tree with the abovementioned DT
+properties. Here's an example:
+
+bq27426_main: bq27426-battery-main@55 {
+	compatible = "ti,bq27426";
+	reg = <0x55>;
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&bq27426_irq_main>;
+	interrupt-parent = <&tlmm>;
+	interrupts = <119 0>;
+	interrupt-names = "bq27426_irq";
+	mmi,fg-batt-main;
+	design-capacity = <1400>;
+	battery_profile_0 {
+		chem_id = <2542>;
+		serialnum = "SB18C54570";
+	};
+	battery_profile_1 {
+		chem_id = <5>;
+		serialnum = "SB18C54580";
+	};
+};
+
+
+It is also recommended to add multiple profiles as "battery_profile_X", being X
+an incremental number starting from 0, based on which profile came first to
+the product.
+
+Once there, next step is to change /device/moto/<product>/device.mk file,
+adding a makefile variable to the battery. Example:
+
+ATL_4000MAH_8A_BATTERY_PROFILE := true
+ATL_LS30_1255MAH_BATTERY_PROFILE := true
+
+
+Later, with this variable, a CFlag can be created on
+"bq27426_fg_mmi/Android.mk". Example:
+
+ifneq ($(filter m y,$(CONFIG_ATL_LS40_1545MAH_BATTERY_PROFILE)),)
+	EXTRA_CFLAGS += -DATL_LS40_1545MAH_BATTERY_PROFILE
+endif
+
+
+Next step is to add a Kernel CFlag using previous flag on
+"bq27426_fg_mmi/Kbuild". Example:
+
+ifeq ($(SCUD_4000MAH_8A_BATTERY_PROFILE),true)
+	KERNEL_CFLAGS += CONFIG_SCUD_4000MAH_8A_BATTERY_PROFILE=y
+endif
+
+
+Finally, to include battery profile to the driver implementation, on
+"bq27426_fg_mmi/bq27426_fg_mmi.c". Example:
+
+#ifdef ATL_4000MAH_8A_BATTERY_PROFILE
+#include "battery_profile/imported/lenovo_atl_df1_gmfs.h"
+#endif
+
+===========================
+ Dual Battery Architecture
+===========================
+
+Although each battery has its own Fuel Gauge chip, main system is unaware of
+anything different than the FG chip from the original architecture. In other
+words, great are the chances you are implementing this dual battery solution
+based on Qualcomm architecture, which uses either QG or FG-Gen4 Fuel Gauge
+algorithms.
+
+So, QCOM FG system will still wait for battery data, which should exist as a
+single battery. That means original system needs to receive some "fake" data,
+although reliable enough to not break anything else.
+
+For such, first step is to prepare a single package sample (for that, ask EE
+Team to join both batteries in parallel, into a single package, having a small
+internal resistance, separating each one. Few units (probably 03) of those
+packages will be requested by Qualcomm to be characterized.
+
+From here on, this package is handled as a single battery, and as a result, a
+Device Tree file (dtsi) will be shared via proper QCOM SR, which needs to be
+properly integrated, as most MOT products.

@@ -1,0 +1,12 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/power/bq2597x_mmi
+
+obj-m += bq2597x_mmi.o
+
+ifneq ($(filter m y,$(CONFIG_BQ2597X_DUAL)),)
+	bq2597x_mmi-objs += bq25980_charger.o
+else
+	bq2597x_mmi-objs += bq2597x_single_mmi.o
+endif

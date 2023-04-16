@@ -1,0 +1,49 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/focal_fps_mmi
+
+
+
+
+
+
+
+# Early-logging level for ff_hal, ff_ta and driver as well. Note that this
+# logging level only takes effect before ff_config module is loaded.
+#
+# Options:
+# 0 - FF_LOG_LEVEL_ALL, All
+# 1 - FF_LOG_LEVEL_VBS, Verbose
+# 2 - FF_LOG_LEVEL_DBG, Debug
+# 3 - FF_LOG_LEVEL_INF, Info
+# 4 - FF_LOG_LEVEL_WRN, Warning
+# 5 - FF_LOG_LEVEL_ERR, Error
+EXTRA_CFLAGS  += -D__FF_BUILD_DATE=\"$(shell date +%Y%m%d)\"
+EXTRA_CFLAGS += -D__FF_EARLY_LOG_LEVEL=2
+
+
+focal_fps_mmi-y +=  ff_ctl.o plat-msm.o
+
+ifneq ($(filter m y,$(CONFIG_INPUT_EGISTEC_FPS_NAVI)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_NAVI
+	ets_fps_mmi-y += ets_navi_input.o
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_EGISTEC_FPS_NAVI_VERTICAL)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_EGISTEC_FPS_NAVI_VERTICAL
+endif
+ifeq ($(TARGET_BUILD_VARIANT),userdebug)
+	EXTRA_CFLAGS += -DFP_SPI_DEBUG
+endif
+
+ifneq ($(filter m y,$(CONFIG_FOCAL_SUPPORT_DRM_SCREEN)),)
+	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+
+ifneq ($(filter m y, $(CONFIG_FOCAL_PANEL_NOTIFICATIONS)),)
+	EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
+endif
+
+obj-m += focal_fps_mmi.o
+
+

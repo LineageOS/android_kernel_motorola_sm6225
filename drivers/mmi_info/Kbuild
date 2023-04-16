@@ -1,0 +1,12 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+mmi_info-objs += mmi_storage_info.o
+mmi_info-objs += mmi_ram_info.o
+mmi_info-objs += mmi_unit_info.o
+mmi_info-objs += mmi_boot_info.o
+mmi_info-objs += mmi_info_main.o
+obj-m += mmi_info.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_annotate/$(GKI_OBJ_MODULE_DIR)/Module.symvers

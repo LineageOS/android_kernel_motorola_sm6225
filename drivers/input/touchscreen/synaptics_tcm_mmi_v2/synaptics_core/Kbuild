@@ -1,0 +1,18 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_tcm_mmi_v2
+
+obj-m += synaptics_core_module.o
+
+synaptics_core_module-objs := synaptics_core.o synaptics_touch.o
+ifneq ($(filter m y, $(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+	synaptics_core_module-objs += synaptics_ts_mmi.o
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../synaptics_bus/$(GKI_OBJ_MODULE_DIR)/Module.symvers

@@ -1,0 +1,71 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+HAVE_AUDIO_KERNEL = $(shell test -d $(TOP)/vendor/qcom/opensource/audio-kernel && echo 1)
+
+ifeq ($(HAVE_AUDIO_KERNEL),1)
+$(info audio kernel path exist)
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include/uapi
+else
+$(info audio kernel path not exist, include techpack audio header)
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
+endif
+
+
+ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
+endif
+
+ifneq (,$(filter sofiar%, $(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_TAS2562_REGMAP -DCONFIG_TAS2562_CODEC -DCONFIG_SND_SOC_TAS2562 -DTAS2558_CODEC -DCONFIG_TAS25XX_ALGO -DCONFIG_TAS25XX_ALGO_STEREO -DCONFIG_TAS25XX_CALIB
+endif
+
+ifneq (,$(filter rav%, $(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_TAS2562_REGMAP -DCONFIG_TAS2562_CODEC -DCONFIG_SND_SOC_TAS2562 -DTAS2558_CODEC -DCONFIG_TAS25XX_ALGO -DCONFIG_TAS25XX_CALIB
+endif
+
+ifneq (,$(filter astro%, $(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_AW882XX_CODEC -DCONFIG_AW882XX_DSP
+endif
+
+ifneq (,$(filter surf% ocean%, $(TARGET_PRODUCT)))
+ifeq ($(KDIR),)
+PLMA_HOSTSW_DIR=$(realpath -f $(srctree)/$(src))
+else
+PLMA_HOSTSW_DIR=$(realpath -f $(src))
+endif
+GIT_VERSION=$(shell cd $(PLMA_HOSTSW_DIR); git describe --tags --dirty --match "v[0-9]*.[0-9]*.[0-9]*")
+EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
+# debugging support (also enables trace_printk)
+EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/sound/soc/codecs/inc
+EXTRA_CFLAGS += -Werror
+
+snd_soc_tfa9874-objs += tfa98xx.o
+snd_soc_tfa9874-objs += tfa_container.o
+snd_soc_tfa9874-objs += tfa_dsp.o
+snd_soc_tfa9874-objs += tfa_init.o
+ifdef TFA_DEBUG
+EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
+snd_soc_tfa9874-objs += tfa_debug.o
+endif
+obj-m += snd_soc_tfa9874.o
+endif
+
+tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
+obj-m += tas2560.o
+
+tas2560_algo-objs = tas2560-algo.o
+obj-m += tas2560_algo.o
+
+tas2560_calib-objs = tas2560-calib.o
+obj-m += tas2560_calib.o
+
+tas2562-objs = tas2562-codec.o tas2562-regmap.o tas25xx-algo.o tas25xx-calib.o
+obj-m += tas2562.o
+
+snd_smartpa_aw882xx-objs = aw882xx.o
+obj-m += snd_smartpa_aw882xx.o

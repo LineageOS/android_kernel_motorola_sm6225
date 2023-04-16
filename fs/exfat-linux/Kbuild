@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/../../kernel/msm-$(MODULE_KERNEL_VERSION)/Module.symvers
+exfat-y := dir.o misc.o balloc.o inode.o cache.o super.o \
+         nls.o fatent.o file.o namei.o xattr.o
+obj-m += exfat.o

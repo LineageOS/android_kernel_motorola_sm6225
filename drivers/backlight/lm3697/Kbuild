@@ -1,0 +1,8 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+obj-m := leds_lm3697.o
+leds_lm3697-objs += ti_lm3697.o
+leds_lm3697-objs += ti_lm3697_backlight.o
+leds_lm3697-objs += ti_lm3697_backlight_data.o

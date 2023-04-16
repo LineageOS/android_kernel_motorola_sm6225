@@ -1,0 +1,14 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/bos0614_mmi \
+	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/bos0614_mmi/libs/dk-core/src \
+	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/bos0614_mmi/libs/dk-core
+
+EXTRA_CFLAGS += -DMOTOROLA
+EXTRA_CFLAGS += -DLITTLE_ENDIAN=1234 -DBYTE_ORDER=LITTLE_ENDIAN
+
+obj-m := bos0614_mmi.o
+bos0614_mmi-objs := i2cLinux.o bosDriver.o
+bos0614_mmi-objs += libs/dk-core/src/bsp/drivers/haptic/bos0614Driver.o
+bos0614_mmi-objs += libs/dk-core/contribs/comm-stack-dk/data.o

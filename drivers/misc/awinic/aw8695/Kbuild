@@ -1,0 +1,9 @@
+# add -Wall to try to catch everything we can.
+ifneq ($(filter m y,$(CONFIG_AF_NOISE_ELIMINATION)),)
+	EXTRA_CFLAGS += -DCONFIG_AF_NOISE_ELIMINATION
+endif
+
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+obj-m += aw8695.o

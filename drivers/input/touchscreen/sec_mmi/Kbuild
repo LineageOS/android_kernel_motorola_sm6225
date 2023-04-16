@@ -1,0 +1,29 @@
+# add -Wall to try to catch everything we can.
+# EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/sec_mmi
+
+ifneq (,$(filter racer% burton%,$(TARGET_PRODUCT)))
+    EXTRA_CFLAGS += -DCONFIG_DRM_DYNAMIC_REFRESH_RATE
+endif
+
+obj-m := sec_mmi.o
+sec_mmi-objs = sec_ts.o sec_ts_fn.o sec_ts_fw.o sec_cmd.o sec_ts_only_vendor.o
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+    EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI -DCONFIG_PM
+
+    ifneq ($(filter m y, $(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+        EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+    endif
+    ifneq ($(filter m y, $(CONFIG_PANEL_NOTIFICATIONS)),)
+        EXTRA_CFLAGS += -DCONFIG_PANEL_NOTIFICATIONS
+    endif
+
+    sec_mmi-objs += sec_ts_mmi_class.o
+    KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+else
+    sec_mmi-objs += sec_ts_mmi.o
+endif
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers

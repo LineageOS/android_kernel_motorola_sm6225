@@ -1,0 +1,13 @@
+#
+# PixArt TOUCH driver configuration
+#
+
+config TOUCHSCREEN_PIXART_TS
+        tristate "PixArt Touchscreen"
+        depends on I2C
+        help
+          Say Y here if you want support for PCT1812 touchscreen controller.
+          If unsure, say N.
+
+          To compile this driver as a module, choose M here: the
+          module will be called pct1812_mmi.

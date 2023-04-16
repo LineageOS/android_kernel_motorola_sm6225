@@ -1,0 +1,14 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+ifneq ($(filter m y,$(CONFIG_SEC_NFC_PRODUCT_N5)),)
+	EXTRA_CFLAGS += -DCONFIG_SEC_NFC_PRODUCT_N5
+endif
+ifneq ($(filter m y,$(CONFIG_SEC_NFC_IF_I2C)),)
+	EXTRA_CFLAGS += -DCONFIG_SEC_NFC_IF_I2C
+endif
+
+obj-m        += sec_nfc.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_info/Module.symvers
