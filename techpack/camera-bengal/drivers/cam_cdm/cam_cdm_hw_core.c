@@ -1361,8 +1361,6 @@ static void cam_hw_cdm_work(struct work_struct *work)
 				CAM_CDM_IRQ_STATUS_ERROR_INV_CMD_MASK))
 			clear_bit(CAM_CDM_ERROR_HW_STATUS,
 				&core->cdm_status);
-	} else {
-		CAM_ERR(CAM_CDM, "NULL payload");
 	}
 	kfree(payload);
 	payload = NULL;

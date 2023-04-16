@@ -34,6 +34,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	struct cam_eeprom_memory_map_t    *emap = block->map;
 	struct cam_eeprom_soc_private     *eb_info = NULL;
 	uint8_t                           *memptr = block->mapdata;
+	uint32_t                           sz, sz_read;
 
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
@@ -109,12 +110,28 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 				emap[j].mem.addr_type,
 				emap[j].mem.data_type,
 				emap[j].mem.valid_size);
-			if (rc < 0) {
+			if (rc) {
 				CAM_ERR(CAM_EEPROM, "read failed rc %d",
 					rc);
 				return rc;
 			}
 			memptr += emap[j].mem.valid_size;
+		}
+
+		if (emap[j].mem_rl.valid_size) {
+			for (sz = 0; sz < emap[j].mem_rl.valid_size; sz++) {
+				rc = camera_io_dev_read(&e_ctrl->io_master_info,
+					emap[j].mem_rl.addr, &sz_read,
+					emap[j].mem_rl.addr_type,
+					emap[j].mem_rl.data_type);
+				if (rc) {
+					CAM_ERR(CAM_EEPROM, "read failed rc %d",
+						rc);
+					return rc;
+				}
+				*memptr = (uint8_t)sz_read;
+				memptr++;
+			}
 		}
 
 		if (emap[j].pageen.valid_size) {
@@ -426,6 +443,7 @@ static int32_t cam_eeprom_parse_memory_map(
 	uint16_t                           cmd_length_in_bytes = 0;
 	struct cam_cmd_i2c_random_wr      *i2c_random_wr = NULL;
 	struct cam_cmd_i2c_continuous_rd  *i2c_cont_rd = NULL;
+	struct cam_cmd_i2c_random_rd      *i2c_random_rd = NULL;
 	struct cam_cmd_conditional_wait   *i2c_poll = NULL;
 	struct cam_cmd_unconditional_wait *i2c_uncond_wait = NULL;
 	size_t                             validate_size = 0;
@@ -436,6 +454,8 @@ static int32_t cam_eeprom_parse_memory_map(
 		validate_size = sizeof(struct cam_cmd_i2c_random_wr);
 	else if (cmm_hdr->cmd_type == CAMERA_SENSOR_CMD_TYPE_I2C_CONT_RD)
 		validate_size = sizeof(struct cam_cmd_i2c_continuous_rd);
+	else if (cmm_hdr->cmd_type == CAMERA_SENSOR_CMD_TYPE_I2C_RNDM_RD)
+		validate_size = sizeof(struct cam_cmd_i2c_random_rd);
 	else if (cmm_hdr->cmd_type == CAMERA_SENSOR_CMD_TYPE_WAIT)
 		validate_size = sizeof(struct cam_cmd_unconditional_wait);
 
@@ -501,6 +521,25 @@ static int32_t cam_eeprom_parse_memory_map(
 		processed_size +=
 			cmd_length_in_bytes;
 		data->num_data += map[*num_map].mem.valid_size;
+		break;
+	case CAMERA_SENSOR_CMD_TYPE_I2C_RNDM_RD:
+		i2c_random_rd = (struct cam_cmd_i2c_random_rd *)cmd_buf;
+		cmd_length_in_bytes = sizeof(struct cam_cmd_i2c_random_rd) - sizeof(int32_t);
+
+		if (i2c_random_rd->header.count >= U32_MAX - data->num_data) {
+			CAM_ERR(CAM_EEPROM,
+				"int overflow on eeprom memory block");
+			return -EINVAL;
+		}
+		map[*num_map].mem_rl.addr = i2c_random_rd->data_read[0].reg_data;
+		map[*num_map].mem_rl.addr_type = i2c_random_rd->header.addr_type;
+		map[*num_map].mem_rl.data_type = i2c_random_rd->header.data_type;
+		map[*num_map].mem_rl.valid_size =
+			i2c_random_rd->header.count;
+		cmd_buf += cmd_length_in_bytes / sizeof(int32_t);
+		processed_size +=
+			cmd_length_in_bytes;
+		data->num_data += map[*num_map].mem_rl.valid_size;
 		break;
 	case CAMERA_SENSOR_CMD_TYPE_WAIT:
 		if (generic_op_code ==
@@ -1031,6 +1070,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 				break;
 			case CAMERA_SENSOR_CMD_TYPE_I2C_RNDM_WR:
 			case CAMERA_SENSOR_CMD_TYPE_I2C_CONT_RD:
+			case CAMERA_SENSOR_CMD_TYPE_I2C_RNDM_RD:
 			case CAMERA_SENSOR_CMD_TYPE_WAIT:
 				num_map++;
 				rc = cam_eeprom_parse_memory_map(

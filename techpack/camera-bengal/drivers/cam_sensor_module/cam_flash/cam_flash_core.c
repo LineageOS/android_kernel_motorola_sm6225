@@ -10,6 +10,10 @@
 #include "cam_res_mgr_api.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
+#ifdef CONFIG_CAMERA_FLASH_PWM
+#include "cam_sensor_util.h"
+#include "../cam_flash_pm6125_gpio/pm6125_flash_gpio.h"
+#endif
 
 static int cam_flash_prepare(struct cam_flash_ctrl *flash_ctrl,
 	bool regulator_enable)
@@ -506,6 +510,10 @@ static int cam_flash_ops(struct cam_flash_ctrl *flash_ctrl,
 int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 {
 	int rc = 0;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = (struct cam_flash_private_soc *)soc_info.soc_private;
+#endif
 
 	if (!flash_ctrl) {
 		CAM_ERR(CAM_FLASH, "Flash control Null");
@@ -529,6 +537,13 @@ int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 		flash_ctrl->flash_state = CAM_FLASH_STATE_CONFIG;
 	}
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+	cam_res_mgr_gpio_free(soc_info.dev, soc_private->flash_gpio_enable);
+	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_SUSPEND, CAMERA_SENSOR_FLASH_OP_OFF, 0);
+#endif
+
 	return 0;
 }
 
@@ -537,6 +552,10 @@ static int cam_flash_low(
 	struct cam_flash_frame_setting *flash_data)
 {
 	int i = 0, rc = 0;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = (struct cam_flash_private_soc *)soc_info.soc_private;
+#endif
 
 	if (!flash_data) {
 		CAM_ERR(CAM_FLASH, "Flash Data Null");
@@ -554,6 +573,20 @@ static int cam_flash_low(
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Torch failed: %d", rc);
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	CAM_DBG(CAM_FLASH, "Flash low Triggered flash_data->led_current_ma[0] = %u", flash_data->led_current_ma[0]);
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable, 0, "CUSTOM_GPIO1");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 0);
+	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_ACTIVE, CAMERA_SENSOR_FLASH_OP_FIRELOW, FLASH_FIRE_LOW_MAXCURRENT);
+	usleep_range(5000,6000);
+	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_ACTIVE, CAMERA_SENSOR_FLASH_OP_FIRELOW, flash_data->led_current_ma[0]);
+#endif
+
 	return rc;
 }
 
@@ -562,6 +595,10 @@ static int cam_flash_high(
 	struct cam_flash_frame_setting *flash_data)
 {
 	int i = 0, rc = 0;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	struct cam_hw_soc_info  soc_info = flash_ctrl->soc_info;
+	struct cam_flash_private_soc *soc_private = (struct cam_flash_private_soc *)soc_info.soc_private;
+#endif
 
 	if (!flash_data) {
 		CAM_ERR(CAM_FLASH, "Flash Data Null");
@@ -578,6 +615,18 @@ static int cam_flash_high(
 		CAMERA_SENSOR_FLASH_OP_FIREHIGH);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Flash Failed: %d", rc);
+
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	CAM_DBG(CAM_FLASH, "Flash high Triggered flash_data->led_current_ma[0] = %u", flash_data->led_current_ma[0]);
+	rc = cam_res_mgr_gpio_request(soc_info.dev, soc_private->flash_gpio_enable, 0, "CUSTOM_GPIO1");
+	if(rc) {
+		CAM_ERR(CAM_FLASH, "gpio %d request fails", soc_private->flash_gpio_enable);
+		return rc;
+	}
+
+	cam_res_mgr_gpio_set_value(soc_private->flash_gpio_enable, 1);
+	pm6125_flash_gpio_select_state(PM6125_FLASH_GPIO_STATE_ACTIVE, CAMERA_SENSOR_FLASH_OP_FIREHIGH, flash_data->led_current_ma[0]);
+#endif
 
 	return rc;
 }
@@ -1217,12 +1266,23 @@ int cam_flash_i2c_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 			return rc;
 		}
 
+#ifdef CONFIG_CAMERA_FLASH_PWM
+		if (fctrl->func_tbl.power_ops) {
+			rc = fctrl->func_tbl.power_ops(fctrl, true);
+			if (rc) {
+				CAM_ERR(CAM_FLASH,
+					"Enable Regulator Failed rc = %d", rc);
+				return rc;
+			}
+		}
+#else
 		rc = fctrl->func_tbl.power_ops(fctrl, true);
 		if (rc) {
 			CAM_ERR(CAM_FLASH,
 				"Enable Regulator Failed rc = %d", rc);
 			return rc;
 		}
+#endif
 
 		rc = fctrl->func_tbl.apply_setting(fctrl, 0);
 		if (rc) {
@@ -1498,13 +1558,23 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 			fctrl->is_regulator_enabled = false;
 			fctrl->nrt_info.cmn_attr.cmd_type =
 				CAMERA_SENSOR_FLASH_CMD_TYPE_INIT_INFO;
-
+#ifdef CONFIG_CAMERA_FLASH_PWM
+			if (fctrl->func_tbl.power_ops) {
+				rc = fctrl->func_tbl.power_ops(fctrl, true);
+				if (rc) {
+					CAM_ERR(CAM_FLASH,
+						"Enable Regulator Failed rc = %d", rc);
+					return rc;
+				}
+			}
+#else
 			rc = fctrl->func_tbl.power_ops(fctrl, true);
 			if (rc) {
 				CAM_ERR(CAM_FLASH,
 					"Enable Regulator Failed rc = %d", rc);
 				return rc;
 			}
+#endif
 
 			fctrl->flash_state =
 				CAM_FLASH_STATE_CONFIG;
@@ -1934,10 +2004,19 @@ void cam_flash_shutdown(struct cam_flash_ctrl *fctrl)
 					"LED OFF FAILED: %d",
 					rc);
 		}
+#ifdef CONFIG_CAMERA_FLASH_PWM
+		if (fctrl->func_tbl.power_ops) {
+			rc = fctrl->func_tbl.power_ops(fctrl, false);
+			if (rc)
+				CAM_ERR(CAM_FLASH, "Power Down Failed rc: %d",
+					rc);
+		}
+#else
 		rc = fctrl->func_tbl.power_ops(fctrl, false);
 		if (rc)
 			CAM_ERR(CAM_FLASH, "Power Down Failed rc: %d",
 				rc);
+#endif
 	}
 
 	rc = cam_flash_release_dev(fctrl);
@@ -1970,3 +2049,104 @@ int cam_flash_apply_request(struct cam_req_mgr_apply_request *apply)
 
 	return rc;
 }
+
+#ifdef CONFIG_CAMERA_FLASH_IIC_COMPATIBLE
+static int cam_flash_construct_power_vio_setting(
+	struct cam_sensor_power_ctrl_t *power_info)
+{
+	int rc = 0;
+
+	power_info->power_setting_size = 3;
+	power_info->power_setting =
+		kzalloc(sizeof(struct cam_sensor_power_setting)*3,
+			GFP_KERNEL);
+	if (!power_info->power_setting)
+		return -ENOMEM;
+
+	power_info->power_setting[0].seq_type = SENSOR_VIO;
+	power_info->power_setting[0].seq_val = CAM_VIO;
+	power_info->power_setting[0].config_val = 1;
+	power_info->power_setting[0].delay = 2;
+	power_info->power_setting[1].seq_type = SENSOR_CUSTOM_GPIO1;
+	power_info->power_setting[1].seq_val = 0;
+	power_info->power_setting[1].config_val = 1;
+	power_info->power_setting[1].delay = 0;
+	power_info->power_setting[2].seq_type = SENSOR_CUSTOM_GPIO2;
+	power_info->power_setting[2].seq_val = 0;
+	power_info->power_setting[2].config_val = 1;
+	power_info->power_setting[2].delay = 0;
+
+	power_info->power_down_setting_size = 3;
+	power_info->power_down_setting =
+		kzalloc(sizeof(struct cam_sensor_power_setting)*3,
+			GFP_KERNEL);
+	if (!power_info->power_down_setting) {
+		rc = -ENOMEM;
+		goto free_power_settings;
+	}
+
+	power_info->power_down_setting[0].seq_type = SENSOR_CUSTOM_GPIO2;
+	power_info->power_down_setting[0].seq_val = 0;
+	power_info->power_down_setting[0].config_val = 0;
+	power_info->power_down_setting[1].seq_type = SENSOR_CUSTOM_GPIO1;
+	power_info->power_down_setting[1].seq_val = 0;
+	power_info->power_down_setting[1].config_val = 0;
+	power_info->power_down_setting[2].seq_type = SENSOR_VIO;
+	power_info->power_down_setting[2].seq_val = CAM_VIO;
+	power_info->power_down_setting[2].config_val = 0;
+	return rc;
+
+free_power_settings:
+	kfree(power_info->power_setting);
+	power_info->power_setting = NULL;
+	power_info->power_setting_size = 0;
+	return rc;
+}
+
+int cam_flash_fill_vreg_setting(struct cam_flash_ctrl *fctrl)
+{
+	int rc = 0;
+
+	rc = cam_flash_construct_power_vio_setting(
+					&fctrl->power_info);
+	if (rc) {
+		CAM_ERR(CAM_FLASH, "Failed Flash Power VIO Setting: rc=%d\n", rc);
+		return rc;
+	}
+	rc = msm_camera_fill_vreg_params(&fctrl->soc_info,
+					fctrl->power_info.power_setting,
+					fctrl->power_info.power_setting_size);
+	if(rc)
+	{
+		CAM_ERR(CAM_FLASH, "Failed Flash Fill Power Up Params: rc=%d\n", rc);
+		return rc;
+	}
+	rc = msm_camera_fill_vreg_params(&fctrl->soc_info,
+				fctrl->power_info.power_down_setting,
+				fctrl->power_info.power_down_setting_size);
+	if(rc)
+	{
+		CAM_ERR(CAM_FLASH, "Failed Flash Fill Power Down Params: rc=%d\n", rc);
+		return rc;
+	}
+	return rc;
+}
+
+int cam_flash_fill_i2c_default_setting(struct cam_flash_ctrl *fctrl, uint32_t slave_addr)
+{
+	int rc = 0;
+
+	struct cam_cmd_i2c_info  i2c_info={0};
+	i2c_info.slave_addr = slave_addr;
+	i2c_info.i2c_freq_mode = I2C_STANDARD_MODE;
+
+	rc = cam_flash_slaveInfo_pkt_parser(
+					fctrl, (uint32_t *)&i2c_info, sizeof(struct cam_cmd_i2c_info));
+	if (rc < 0) {
+		CAM_ERR(CAM_FLASH,
+		"Failed parsing slave info: rc: %d",
+		rc);
+	}
+	return rc;
+}
+#endif
