@@ -19,6 +19,9 @@
 #include "dsi_ctrl.h"
 #include "dsi_phy.h"
 #include "dsi_panel.h"
+#include "sde_connector.h"
+#include "sde_motUtil.h"
+#include "dsi_display_mot_ext.h"
 
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
@@ -141,6 +144,7 @@ struct dsi_display_ext_bridge {
  * @ext_conn:         Pointer to external connector attached to DSI connector
  * @name:             Name of the display.
  * @display_type:     Display type as defined in device tree.
+ * @display_idx:      Display index (0-primary, 1-secondary)
  * @list:             List pointer.
  * @is_active:        Is display active.
  * @is_cont_splash_enabled:  Is continuous splash enabled
@@ -197,6 +201,7 @@ struct dsi_display {
 
 	const char *name;
 	const char *display_type;
+	int display_idx;
 	struct list_head list;
 	bool is_cont_splash_enabled;
 	bool sw_te_using_wd;
@@ -263,6 +268,12 @@ struct dsi_display {
 	struct work_struct fifo_underflow_work;
 	struct work_struct fifo_overflow_work;
 	struct work_struct lp_rx_timeout_work;
+	/* used for moto feature early-pane- power to speed up the power on sequence */
+	bool is_dsi_mot_ext_enabled;
+	bool is_dsi_mot_early_power_enabled;
+	bool is_dsi_display_prepared;
+	bool is_dsi_mot_primary;
+	struct dsi_mot_ext_feature dsi_mot_ext;
 
 	/* firmware panel data */
 	const struct firmware *fw;
@@ -561,6 +572,8 @@ int dsi_post_clkoff_cb(void *priv, enum dsi_clk_type clk_type,
 		enum dsi_lclk_type l_type,
 		enum dsi_clk_state curr_state);
 
+int dsi_display_set_param(void *display, struct msm_param_info *param_info);
+
 /**
  * dsi_post_clkon_cb() - Callback after clock is turned on
  * @priv: private data pointer.
@@ -657,6 +670,25 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
 		u32 cmd_buf_len);
 
 /**
+ * dsi_display_motUtil_transfer() - Convert motUtil data and transfer command
+ *						to the panel
+ * @display:            Handle to display.
+ * @cmd_buf:            Command buffer
+ * @cmd_buf_len:        Command buffer length in bytes
+ * @motUtil_data:	motUtil data information
+ */
+int dsi_display_motUtil_transfer(void *display, const char *cmd_buf,
+		u32 cmd_buf_len, struct motUtil *motUtil_data);
+
+
+/**
+ * dsi_display_force_esd_disable() - check if ESD UTAG is forced to disable ESD
+ * @display:            Handle to display.
+ */
+bool dsi_display_force_esd_disable(void *display);
+
+
+/**
  * dsi_display_soft_reset() - perform a soft reset on DSI controller
  * @display:         Handle to display
  *
@@ -717,6 +749,20 @@ int dsi_display_pre_commit(void *display,
 enum dsi_pixel_format dsi_display_get_dst_format(
 		struct drm_connector *connector,
 		void *display);
+
+/*
+ * dsi_display_cmd_mipi_transfer() - Sending the MIPI DSI command
+ * @display:         Handle to display
+ * @msg:             MIPI DSI command information
+ * @flags:           Modifier flags
+ * Return: if this is a MIPI DSI read then it will return number read byte
+ *                                in success case. Otherwise will be "<=0"
+ *         if this is a MIPI DSI write then it will return "0" for success
+ *
+ */
+int dsi_display_cmd_mipi_transfer(struct dsi_display *display,
+		struct mipi_dsi_msg *msg,
+		u32 flags);
 
 /**
  * dsi_display_cont_splash_config() - initialize splash resources

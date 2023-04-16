@@ -45,6 +45,10 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{}
 };
 
+static int dsi_display_enable_status (struct dsi_display *display, bool enable);
+static void dsi_display_is_probed(struct dsi_display *display,
+					int probe_status);
+
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -243,6 +247,28 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 
 error:
 	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_display_set_param(void *display, struct msm_param_info *param_info)
+{
+	struct dsi_display *dsi_display = display;
+	struct dsi_panel *panel;
+	int rc = 0;
+
+	if (dsi_display == NULL || dsi_display->panel == NULL)
+		return -EINVAL;
+
+	panel = dsi_display->panel;
+
+	DSI_DEBUG("%s+\n", __func__);
+	if (!dsi_panel_initialized(panel))
+		return -EINVAL;
+
+	rc = dsi_panel_set_param(panel, param_info);
+	if (rc)
+		DSI_ERR("[%s] failed to panel to set param. rc=%d\n",
+				dsi_display->name, rc);
 	return rc;
 }
 
@@ -697,6 +723,40 @@ exit:
 	return rc;
 }
 
+int dsi_display_cmd_mipi_transfer(struct dsi_display *display,
+				struct mipi_dsi_msg *msg,
+				u32 flags)
+{
+	int rc = 0;
+	struct dsi_display_ctrl *m_ctrl;
+
+	m_ctrl = &display->ctrl[display->cmd_master_idx];
+
+	if (display->tx_cmd_buf == NULL) {
+		rc = dsi_host_alloc_cmd_tx_buffer(display);
+		if (rc) {
+			DSI_ERR("failed to allocate cmd tx buffer memory\n");
+			goto done;
+		}
+	}
+
+	rc = dsi_display_cmd_engine_enable(display);
+	if (rc) {
+		DSI_ERR("cmd engine enable failed\n");
+		return -EPERM;
+	}
+
+	flags |= DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
+	rc = dsi_ctrl_cmd_transfer(m_ctrl->ctrl, msg, &flags);
+	if (((flags & DSI_CTRL_CMD_READ) && rc <= 0) ||
+		(!(flags & DSI_CTRL_CMD_READ) && rc))
+		DSI_ERR("failed to transfer cmd. rc = %d\n", rc);
+
+	dsi_display_cmd_engine_disable(display);
+done:
+	return rc;
+}
+
 static int dsi_display_status_reg_read(struct dsi_display *display)
 {
 	int rc = 0, i;
@@ -777,6 +837,21 @@ static int dsi_display_status_check_te(struct dsi_display *display)
 	return rc;
 }
 
+static int dsi_display_status_check_te_video(struct dsi_display *display)
+{
+	int rc = 1;
+	struct dsi_panel *panel = display->panel;
+
+	if((panel->video_te_count - panel->video_te_count_priv) > 1) {
+		panel->video_te_count_priv = panel->video_te_count;
+	} else {
+		DSI_ERR("%s: video TE check ERROR te_count %d, priv =%d\n", __func__, panel->video_te_count, panel->video_te_count_priv);
+		rc = 0;
+	}
+
+	return rc;
+}
+
 int dsi_display_check_status(struct drm_connector *connector, void *display,
 					bool te_check_override)
 {
@@ -835,6 +910,8 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 		rc = dsi_display_status_reg_read(dsi_display);
 	} else if (status_mode == ESD_MODE_SW_BTA) {
 		rc = dsi_display_status_bta_request(dsi_display);
+	} else if (status_mode == ESD_MODE_PANEL_TE_VIDEO) {
+		rc = dsi_display_status_check_te_video(dsi_display);
 	} else if (status_mode == ESD_MODE_PANEL_TE) {
 		rc = dsi_display_status_check_te(dsi_display);
 	} else {
@@ -862,6 +939,19 @@ release_panel_lock:
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT, rc);
 
 	return rc;
+}
+
+bool dsi_display_force_esd_disable(void *display)
+{
+	struct dsi_display *dsi_display = display;
+	struct dsi_panel *panel;
+
+	if (dsi_display == NULL)
+		return false;
+
+	panel = dsi_display->panel;
+
+	return (panel->esd_utag_enable? false: true);
 }
 
 static int dsi_display_cmd_prepare(const char *cmd_buf, u32 cmd_buf_len,
@@ -893,6 +983,166 @@ static int dsi_display_cmd_prepare(const char *cmd_buf, u32 cmd_buf_len,
 	cmd->msg.tx_buf = payload;
 	return 0;
 }
+
+
+static int dsi_display_dispUtil_get_datatype (char dsi_cmd, u8 cmd_type,
+				size_t tx_len, u8 *tx_data_type)
+{
+	int rc = 0;
+
+	*tx_data_type = 0;
+
+	/* cmd_type = 0 : DSI DCS cmd;
+	 * cmd_type = 1 : DSI Generic cmd */
+	if (cmd_type > DISPUTIL_DSI_GENERIC) {
+		DSI_ERR("%s: Invalid DSI package type[%d] = 0x%x\n",
+					__func__, DISPUTIL_MIPI_CMD_TYPE,
+					cmd_type);
+		return -EINVAL;
+	}
+
+	DSI_DEBUG("dsi_cmd =0x%x cmd_type=0x%x tx_len=0x%x\n",
+				dsi_cmd, cmd_type, (u32)tx_len);
+
+	if (dsi_cmd == DISPUTIL_DSI_WRITE) {
+		/* This is a DSI write command */
+		switch(tx_len) {
+		case 1:
+			if (cmd_type == DISPUTIL_DSI_GENERIC)
+				/* write, generic, no param */
+				*tx_data_type = 0x3;
+			else if (cmd_type == DISPUTIL_DSI_DCS)
+				/* write, DCS, no param */
+				*tx_data_type = 0x5;
+			break;
+		case 2:
+			if (cmd_type == DISPUTIL_DSI_GENERIC)
+				/* Write, generic, 1 param */
+				*tx_data_type = 0x13;
+			else if (cmd_type == DISPUTIL_DSI_DCS)
+				/* write, DCS, 1 param */
+				*tx_data_type = 0x15;
+			break;
+		default:
+			if (cmd_type == DISPUTIL_DSI_GENERIC)
+				/* Write, generic, long*/
+				*tx_data_type = 0x29;
+			else if (cmd_type == DISPUTIL_DSI_DCS)
+				/* write, DCS, long*/
+				*tx_data_type = 0x39;
+			break;
+		}
+	} else if (dsi_cmd == DISPUTIL_DSI_READ) {
+		if ((cmd_type == DISPUTIL_DSI_DCS) && (tx_len > 1)) {
+			/* Note: tx_len will include read command and payload */
+			/* DCS read */
+			DSI_ERR("DCS read supports no parameter. tx_len=%d\n",
+					(u32)tx_len);
+			rc = -EINVAL;
+		} else {
+			switch(tx_len) {
+			case 1:
+				if (cmd_type == DISPUTIL_DSI_GENERIC)
+					/* Read, generic, no param */
+					*tx_data_type = 0x4;
+				else if (cmd_type == DISPUTIL_DSI_DCS)
+					/* Read, DCS, no param */
+					*tx_data_type = 0x6;
+				break;
+			case 2:
+				if (cmd_type == DISPUTIL_DSI_GENERIC)
+					/* Read, Generic, 1 param */
+					*tx_data_type = 0x14;
+
+				break;
+			case 3:
+				if (cmd_type == DISPUTIL_DSI_GENERIC)
+					/* read, generic, 2 params */
+					*tx_data_type = 0x24;
+				break;
+			default:
+				DSI_ERR("Invalid for tx_len= %d\n", (u32)tx_len);
+				break;
+			}
+		}
+	} else
+		rc = -EINVAL;
+
+	if (rc)
+		DSI_ERR("Invalid input data: dsi_cmd=0x%x tx_data_type =0x%x for tx_len=0x%x\n",
+			dsi_cmd, *tx_data_type, (u32)tx_len);
+
+	return rc;
+}
+
+static int dsi_display_dispUtil_prepare(const char *cmd_buf, u32 cmd_buf_len,
+	struct dsi_cmd_desc *cmd, u8 *payload, u32 payload_len_max,
+	struct motUtil *motUtil_data)
+{
+	int rc, i;
+	u8 tx_data_type;
+
+	memset(cmd, 0x00, sizeof(*cmd));
+
+	/*
+	 * DISPUTIL_PAYLOAD_LEN_U and SDE_MOT_UTIL_PAYLOAD_LEN_L to
+	 * indicate number of payload in bytes
+	 */
+	cmd->msg.tx_len = ((cmd_buf[DISPUTIL_PAYLOAD_LEN_U] << 8) |
+				(cmd_buf[DISPUTIL_PAYLOAD_LEN_L]));
+	rc = dsi_display_dispUtil_get_datatype(cmd_buf[DISPUTIL_CMD_TYPE],
+				cmd_buf[DISPUTIL_MIPI_CMD_TYPE],
+				cmd->msg.tx_len, &tx_data_type);
+	if (rc)
+		return rc;
+
+	cmd->msg.type = tx_data_type;
+	cmd->msg.channel =  0;
+	cmd->last_command = 1;
+	cmd->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+
+	/* DISPUTIL_CMD_TYPE = 1 for DSI write cmd
+	 * DISPUTIL_CMD_TYPE = 0 for DSI read cmd */
+	if (cmd_buf[DISPUTIL_CMD_TYPE] == DISPUTIL_DSI_READ) {
+		cmd->msg.flags |= MIPI_DSI_MSG_READ; /* This is a read DSI */
+		cmd->msg.rx_buf = motUtil_data->rd_buf;
+		/* cmd_buf[3] = number bytes host wants to read */
+		cmd->msg.rx_len = cmd_buf[DISPUTIL_NUM_BYTE_RD];
+
+		motUtil_data->read_cmd = true;
+	} else
+		motUtil_data->read_cmd = false;
+
+	/*
+	 * DISPUTIL_CMD_XFER_MODE = 0: DSI cmd transfers at HS mode
+	 * DISPUTIL_CMD_XFER_MODE = 1: DSI cmd transfers at LP mode
+	 */
+	if (cmd_buf[DISPUTIL_CMD_XFER_MODE] == DISPUTIL_DSI_LP_MODE)
+		cmd->msg.flags |= MIPI_DSI_MSG_USE_LPM;
+
+	cmd->msg.ctrl = 0;
+	cmd->post_wait_ms = 0;
+
+	/*
+	 * msg.tx_len is number of bytes of the payload.
+	 * Checking msg.tx_len with the payload, DISPUTIL_PAYLOAD,
+	 * to make sure they are matched
+	 */
+	if ((cmd->msg.tx_len > (cmd_buf_len - DISPUTIL_PAYLOAD)) ||
+			(cmd->msg.tx_len > payload_len_max)) {
+		DSI_ERR("Incorrect payload length tx_len:%ld, payload_len_max=%d cmd_buf_len=%d\n",
+			cmd->msg.tx_len, payload_len_max, cmd_buf_len);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < cmd->msg.tx_len; i++)
+		payload[i] = cmd_buf[DISPUTIL_PAYLOAD + i];
+
+	cmd->msg.tx_buf = payload;
+
+	return 0;
+}
+
 
 static int dsi_display_ctrl_get_host_init_state(struct dsi_display *dsi_display,
 		bool *state)
@@ -985,6 +1235,51 @@ static void _dsi_display_continuous_clk_ctrl(struct dsi_display *display,
 			dsi_ctrl_set_continuous_clk(ctrl->ctrl, enable);
 		}
 	}
+}
+
+int dsi_display_motUtil_transfer(void *display, const char *cmd_buf,
+                u32 cmd_buf_len, struct motUtil *motUtil_data)
+{
+	struct dsi_display *dsi_display = display;
+	struct dsi_cmd_desc cmd;
+	u8 cmd_payload[MAX_CMD_PAYLOAD_SIZE];
+	int rc = 0;
+	bool state = false;
+
+	if (!dsi_display || !cmd_buf) {
+		DSI_ERR("[DSI] invalid params\n");
+		return -EINVAL;
+	}
+
+	DSI_INFO("[DSI] Display dispUtil transfer\n");
+
+	rc = dsi_display_dispUtil_prepare(cmd_buf, cmd_buf_len,
+				&cmd, cmd_payload, MAX_CMD_PAYLOAD_SIZE,
+				motUtil_data);
+	if (rc) {
+		DSI_ERR("[DSI] command prepare failed. rc %d\n", rc);
+		return rc;
+	}
+
+	mutex_lock(&dsi_display->display_lock);
+	rc = dsi_display_ctrl_get_host_init_state(dsi_display, &state);
+	if (rc || !state) {
+		DSI_ERR("[DSI] Invalid host state %d rc %d\n",
+						state, rc);
+		rc = -EPERM;
+		goto end;
+	}
+
+	/*
+	 * rc will be returned from ops->transfer, which will be 0 or 1 for
+	 * DSI write command. rc will be returned for number of read bytes
+	 * for DSI read commad
+	 */
+	rc = dsi_display->host.ops->transfer(&dsi_display->host,
+						&cmd.msg);
+end:
+	mutex_unlock(&dsi_display->display_lock);
+	return rc;
 }
 
 int dsi_display_soft_reset(void *display)
@@ -2940,9 +3235,12 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 				msg->flags & MIPI_DSI_MSG_ASYNC_OVERRIDE)
 			cmd_flags |= DSI_CTRL_CMD_ASYNC_WAIT;
 
+		if (msg->rx_buf)
+			cmd_flags |= DSI_CTRL_CMD_READ;
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
 				&cmd_flags);
-		if (rc) {
+		if (((cmd_flags & DSI_CTRL_CMD_READ) && rc <= 0) ||
+				(!(cmd_flags & DSI_CTRL_CMD_READ) && rc)) {
 			DSI_ERR("[%s] cmd transfer failed, rc=%d\n",
 			       display->name, rc);
 			goto error_disable_cmd_engine;
@@ -3762,9 +4060,86 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 			break;
 	}
 
+	/* Parse mot extend feature supporting */
+	display->is_dsi_mot_ext_enabled = of_property_read_bool(of_node,
+				"qcom,platform-mot-ext-feature-enable");
+	if ( display->is_dsi_mot_ext_enabled )
+		display->is_dsi_mot_early_power_enabled = of_property_read_bool(of_node, "qcom,platform-mot-early-power-enable");
+	pr_info("is_dsi_mot_ext_enabled %d, is_dsi_mot_early_power_enabled %d\n", display->is_dsi_mot_ext_enabled, display->is_dsi_mot_early_power_enabled);
+
 	DSI_DEBUG("success\n");
 error:
 	return rc;
+}
+
+static void dsi_video_te_irq_work(struct work_struct *work)
+{
+	struct dsi_panel *panel = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+
+	panel = container_of(dw, struct dsi_panel, te_event_work);
+	if (!panel) {
+		DSI_ERR("%s: invalid panel data\n", __func__);
+		return;
+	}
+
+	if(panel->video_te_count%60 == 0)
+		DSI_INFO("%s video te count = %d\n", __func__, panel->video_te_count);
+
+	enable_irq(panel->video_te_irq);
+}
+
+extern u32 interval_video_te;
+static irqreturn_t dsi_video_te_interrupt(int irq, void *data)
+{
+	struct dsi_panel *panel = data;
+
+	disable_irq_nosync(irq);
+
+	if(panel->video_te_count++ < 3000) {
+		enable_irq(irq);
+	} else {
+		queue_delayed_work(panel->workq, &panel->te_event_work, msecs_to_jiffies(interval_video_te/3));
+		//DSI_DEBUG("%s video_te_count=%d\n", __func__, panel->video_te_count);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int dsi_init_video_te_irq(struct dsi_panel *panel)
+{
+	int rc = -1;
+
+	if (gpio_is_valid(panel->video_te_gpio)) {
+		rc = gpio_request(panel->video_te_gpio, "video-te-gpio");
+		if (rc < 0) {
+			DSI_ERR("%s: video te gpio_request fail rc=%d\n", __func__,rc);
+			return rc ;
+		}
+
+		rc = gpio_direction_input(panel->video_te_gpio);
+		if (rc < 0) {
+			DSI_ERR("%s: video te gpio_direction_input fail rc=%d\n", __func__ ,rc);
+			return rc ;
+		}
+
+		panel->video_te_count_priv = 0;
+		panel->video_te_count = 3;
+		panel->video_te_irq = gpio_to_irq(panel->video_te_gpio);
+		DSI_INFO("%s:	irq = %d, gpio=%d\n", __func__, panel->video_te_irq, panel->video_te_gpio);
+
+		rc = request_threaded_irq(panel->video_te_irq, dsi_video_te_interrupt, NULL,
+									 IRQF_TRIGGER_RISING|IRQF_ONESHOT, "video-te-irq", panel);
+		if (rc < 0) {
+			DSI_ERR("%s: video te request_irq fail rc=%d\n",__func__, rc);
+			return rc ;
+		}
+	} else {
+		DSI_ERR("%s: video te irq gpio not provided\n", __func__);
+		return rc ;
+	}
+
+	return 0;
 }
 
 static int dsi_display_res_init(struct dsi_display *display)
@@ -3814,6 +4189,9 @@ static int dsi_display_res_init(struct dsi_display *display)
 			display->panel->host_config.phy_type;
 	}
 
+	dsi_panel_parse_panel_cfg(display->panel,
+				!strcmp(display->display_type, "primary"));
+
 	rc = dsi_display_parse_lane_map(display);
 	if (rc) {
 		DSI_ERR("Lane map not found, rc=%d\n", rc);
@@ -3824,6 +4202,17 @@ static int dsi_display_res_init(struct dsi_display *display)
 	if (rc) {
 		DSI_ERR("Failed to parse clock data, rc=%d\n", rc);
 		goto error_ctrl_put;
+	}
+
+	if(display->panel->esd_config.status_mode == ESD_MODE_PANEL_TE_VIDEO) {
+		display->panel->workq = create_workqueue("mdss_dsi_video_te");
+		if (!(display->panel->workq)) {
+			DSI_ERR("%s: Error creating video te workqueue\n", __func__);
+			goto error_ctrl_put;
+		}
+
+		INIT_DELAYED_WORK(&(display->panel->te_event_work), dsi_video_te_irq_work);
+		dsi_init_video_te_irq(display->panel);
 	}
 
 	return 0;
@@ -4642,6 +5031,19 @@ static void dsi_display_validate_dms_fps(struct dsi_display_mode *cur_mode,
 	}
 }
 
+static int dsi_phy_update_mipi_driver_strength(struct dsi_panel *panel, struct msm_dsi_phy *phy)
+{
+	if((panel == NULL) || (phy == NULL))
+	{
+		return 1;
+	}
+
+	phy->cfg.dsi_phy_rescode_top = panel->glbl_rescode_top_ctrl;
+	phy->cfg.dsi_phy_rescode_bot = panel->glbl_rescode_bot_ctrl;
+	return 0;
+
+}
+
 
 static int dsi_display_set_mode_sub(struct dsi_display *display,
 				    struct dsi_display_mode *mode,
@@ -4768,6 +5170,7 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 				DSI_ERR("failed to add DSI PHY timing params\n");
 		}
 	}
+	dsi_phy_update_mipi_driver_strength(display->panel, ctrl->phy);
 error:
 	return rc;
 }
@@ -5188,6 +5591,7 @@ static int dsi_display_bind(struct device *dev,
 	}
 
 	DSI_INFO("Successfully bind display panel '%s'\n", display->name);
+	dsi_display_is_probed(display, 0);
 	display->drm_dev = drm;
 
 	display_for_each_ctrl(i, display) {
@@ -5289,6 +5693,20 @@ static void dsi_display_unbind(struct device *dev,
 	mutex_unlock(&display->display_lock);
 }
 
+static void dsi_display_dev_shutdown(struct platform_device *pdev)
+{
+	struct dsi_display *display = NULL;
+
+	if (!pdev) {
+		DSI_ERR("Invalid device\n");
+	} else {
+		display = platform_get_drvdata(pdev);
+		display->panel->reset_config.reset_force_pull_low =
+			display->panel->utils.read_bool(display->panel->utils.data,
+			"qcom,mdss-dsi-reset-force-pull-low");
+	}
+}
+
 static const struct component_ops dsi_display_comp_ops = {
 	.bind = dsi_display_bind,
 	.unbind = dsi_display_unbind,
@@ -5297,6 +5715,7 @@ static const struct component_ops dsi_display_comp_ops = {
 static struct platform_driver dsi_display_driver = {
 	.probe = dsi_display_dev_probe,
 	.remove = dsi_display_dev_remove,
+	.shutdown = dsi_display_dev_shutdown,
 	.driver = {
 		.name = "msm-dsi-display",
 		.of_match_table = dsi_display_dt_match,
@@ -5383,11 +5802,15 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	display->display_type = of_get_property(pdev->dev.of_node,
 				"label", NULL);
-	if (!display->display_type)
+	if (!display->display_type) {
 		display->display_type = "primary";
+		display->display_idx = 0;
+	}
 
-	if (!strcmp(display->display_type, "secondary"))
+	if (!strcmp(display->display_type, "secondary")) {
 		index = DSI_SECONDARY;
+		display->display_idx = 1;
+	}
 
 	boot_disp = &boot_displays[index];
 	node = pdev->dev.of_node;
@@ -5441,6 +5864,13 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		if (rc)
 			goto end;
 	}
+
+	// Initialize mot extend code for early powern and debug tool feature
+	if ( display->is_dsi_mot_ext_enabled && index == DSI_PRIMARY ) {
+		dsi_display_ext_init(display);
+	}
+	pr_info("dsi_display_dev_probe: display(%p), name: %s, is_dsi_mot_early_power_enabled=%d, is_dsi_mot_ext_enabled=%d\n",
+		display, (display->name==NULL)?"Null":display->name, display->is_dsi_mot_early_power_enabled, display->is_dsi_mot_ext_enabled);
 
 	return 0;
 end:
@@ -6054,8 +6484,12 @@ int dsi_display_get_info(struct drm_connector *connector,
 
 	info->is_connected = true;
 
-	if (!strcmp(display->display_type, "primary"))
+	if (!strcmp(display->display_type, "primary")) {
 		info->display_type = SDE_CONNECTOR_PRIMARY;
+		//Update panel info for Mot early power
+		if ( display->is_dsi_mot_early_power_enabled )
+			display->is_dsi_mot_primary = true;
+	}
 	else if (!strcmp(display->display_type, "secondary"))
 		info->display_type = SDE_CONNECTOR_SECONDARY;
 
@@ -6068,6 +6502,14 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->has_qsync_min_fps_list =
 		(display->panel->qsync_caps.qsync_min_fps_list_len > 0) ?
 		true : false;
+
+	info->panel_id = display->panel->panel_id;
+	info->panel_ver = display->panel->panel_ver;
+	info->panel_regDA = display->panel->panel_regDA;
+	strncpy(info->panel_name, display->panel->panel_name,
+				sizeof(display->panel->panel_name));
+	strncpy(info->panel_supplier, display->panel->panel_supplier,
+				sizeof(display->panel->panel_supplier));
 
 	switch (display->panel->panel_mode) {
 	case DSI_OP_VIDEO_MODE:
@@ -6783,6 +7225,14 @@ int dsi_display_set_mode(struct dsi_display *display,
 			timing.refresh_rate);
 
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));
+
+	//Update early power state
+	//This interface is called from dsi bridge, not moto early-power.
+	//It means it is system who want powr on display
+	//From now on early power on is forbidden
+	if ( display->is_dsi_mot_early_power_enabled )
+		display->dsi_mot_ext.early_power_state = DSI_EARLY_POWER_FORBIDDEN;
+
 error:
 	mutex_unlock(&display->display_lock);
 	return rc;
@@ -7144,6 +7594,7 @@ int dsi_display_prepare(struct dsi_display *display)
 {
 	int rc = 0;
 	struct dsi_display_mode *mode;
+	struct dsi_display_ctrl *ctrl = &display->ctrl[0];
 
 	if (!display) {
 		DSI_ERR("Invalid params\n");
@@ -7155,8 +7606,17 @@ int dsi_display_prepare(struct dsi_display *display)
 		return -EINVAL;
 	}
 
+	DSI_INFO("panel_name=%s ctrl-index=%d\n",
+		display->panel->name, ctrl->ctrl->cell_index);
+
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
+
+	//Check if Mot early power is on going...
+	if ( display->is_dsi_mot_early_power_enabled && display->is_dsi_display_prepared ) {
+		pr_info("already prepared\n");
+		goto error;
+	}
 
 	mode = display->panel->cur_mode;
 
@@ -7282,6 +7742,11 @@ int dsi_display_prepare(struct dsi_display *display)
 			}
 		}
 	}
+
+	//Update prepare statue for Mot early power
+	if ( display->is_dsi_mot_early_power_enabled )
+		display->is_dsi_display_prepared = true;
+
 	goto error;
 
 error_ctrl_link_off:
@@ -7297,7 +7762,8 @@ error_ctrl_clk_off:
 	(void)dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
 error_panel_post_unprep:
-	(void)dsi_panel_post_unprepare(display->panel);
+	if (!display->is_cont_splash_enabled)
+		(void)dsi_panel_post_unprepare(display->panel);
 error:
 	mutex_unlock(&display->display_lock);
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
@@ -7566,6 +8032,94 @@ int dsi_display_pre_commit(void *display,
 	return rc;
 }
 
+struct dsi_enable_status {
+	struct dsi_display *display;
+	int probed;
+	bool enable;
+	char pname[DSI_PANEL_MAX_PANEL_LEN];
+};
+
+static struct dsi_enable_status enable_status[2] = {
+	{
+		.probed = -ENODEV,
+	},
+	{
+		.probed = -ENODEV,
+	},
+};
+
+static void dsi_display_is_probed (struct dsi_display *display,
+					int probe_status)
+
+{
+	int enable_idx;
+
+	if (!display->display_type)
+		enable_idx = 0;
+
+	if (!strcmp(display->display_type, "secondary"))
+		enable_idx = 1;
+
+	enable_status[enable_idx].probed = probe_status;
+	strncpy(enable_status[enable_idx].pname, display->name,
+			sizeof(enable_status[enable_idx].pname));
+	DSI_DEBUG("display->drm_conn[%d] set: probe =%d, name =%s\n",
+			enable_idx, probe_status, display->name);
+}
+
+static int dsi_display_enable_status (struct dsi_display *display, bool enable)
+{
+	int ret = 0;
+
+	if (!strncmp("DSI-1", display->drm_conn->name, 5)) {
+		DSI_DEBUG("display->drm_conn->name=%s enable = %d MAIN_DISPLAY\n",
+			display->drm_conn->name, enable);
+		enable_status[0].display = display;
+		enable_status[0].enable = enable;
+	} else if (!strncmp("DSI-2", display->drm_conn->name, 5)) {
+		DSI_DEBUG("display->drm_conn->name=%s enable = %d CLI_DISPLAY\n",
+			display->drm_conn->name, enable);
+		enable_status[1].display = display;
+		enable_status[1].enable = enable;
+	} else {
+		DSI_ERR("display->drm_conn: invalid name =%s\n",
+					display->drm_conn->name);
+		ret =  -EINVAL;
+	}
+
+	return ret;
+}
+
+bool dsi_display_is_panel_enable (int panel_index, int *probe_status,
+							char **pname)
+{
+	struct dsi_display *display;
+	bool enable = false;
+
+	if (panel_index > 1) {
+		pr_err("display->drm_conn: invalid panel index =%d\n",
+								panel_index);
+		if (probe_status)
+			*probe_status = -ENODEV;
+		return false;
+	}
+
+	if (probe_status)
+		*probe_status = enable_status[panel_index].probed;
+	if (pname)
+		*pname = &enable_status[panel_index].pname[0];
+
+	display = enable_status[panel_index].display;
+	if (display) {
+		mutex_lock(&display->display_lock);
+		enable = enable_status[panel_index].enable;
+		mutex_unlock(&display->display_lock);
+	}
+
+	return enable;
+}
+EXPORT_SYMBOL(dsi_display_is_panel_enable);
+
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
@@ -7596,12 +8150,19 @@ int dsi_display_enable(struct dsi_display *display)
 			return -EINVAL;
 		}
 
+		dsi_display_enable_status(display, 1);
 		display->panel->panel_initialized = true;
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
 		return 0;
 	}
 
 	mutex_lock(&display->display_lock);
+
+	//Check if Mot early power is on going
+	if ( display->is_dsi_mot_early_power_enabled && dsi_panel_initialized(display->panel)) {
+		pr_info("panel already enabled\n");
+		goto error;
+	}
 
 	mode = display->panel->cur_mode;
 
@@ -7620,6 +8181,8 @@ int dsi_display_enable(struct dsi_display *display)
 			       display->name, rc);
 			goto error;
 		}
+
+		dsi_display_enable_status(display, true);
 	}
 
 	/* Block sending pps command if modeset is due to fps difference */
@@ -7632,6 +8195,7 @@ int dsi_display_enable(struct dsi_display *display)
 				display->name, rc);
 			goto error;
 		}
+		dsi_panel_reset_param(display->panel);
 	}
 
 	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) {
@@ -7755,6 +8319,14 @@ int dsi_display_pre_disable(struct dsi_display *display)
 			DSI_ERR("[%s] panel pre-disable failed, rc=%d\n",
 				display->name, rc);
 	}
+
+        //Update early power state
+        //Here is called from dsi bridge, not moto early-power.
+        //It means it is system who want powr off display
+        //From now on early power on is permitted
+        if ( display->is_dsi_mot_ext_enabled )
+                display->dsi_mot_ext.early_power_state = DSI_EARLY_POWER_IDLE;
+
 	goto exit;
 
 error_disable_clks:
@@ -7778,13 +8350,24 @@ int dsi_display_disable(struct dsi_display *display)
 		return -EINVAL;
 	}
 
+	DSI_INFO("%s(%s)+\n", __func__, display->drm_conn->name);
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
+
+	//Check is Mot early power is on going
+	pr_info("display %p, name %s is_dsi_mot_primary(%d)\n", display, display->name, display->is_dsi_mot_primary);
+	if ( display->is_dsi_mot_early_power_enabled && !dsi_panel_initialized(display->panel)) {
+		mutex_unlock(&display->display_lock);
+		pr_info("panel already unprepared\n");
+		return rc;
+	}
 
 	rc = dsi_display_wake_up(display);
 	if (rc)
 		DSI_ERR("[%s] display wake up failed, rc=%d\n",
 		       display->name, rc);
+	else
+		dsi_display_enable_status(display, false);
 
 	if (display->config.panel_mode == DSI_OP_VIDEO_MODE) {
 		rc = dsi_display_vid_engine_disable(display);
@@ -7841,6 +8424,13 @@ int dsi_display_unprepare(struct dsi_display *display)
 
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
+
+	//Check if Mot early power is on going
+	if ( display->is_dsi_mot_early_power_enabled && !display->is_dsi_display_prepared) {
+		mutex_unlock(&display->display_lock);
+		pr_info("panel already disabled\n");
+		return rc;
+	}
 
 	rc = dsi_display_wake_up(display);
 	if (rc)
@@ -7908,6 +8498,10 @@ int dsi_display_unprepare(struct dsi_display *display)
 			DSI_ERR("[%s] panel post-unprepare failed, rc=%d\n",
 			       display->name, rc);
 	}
+
+	//Update prepare state for Mot early power
+	if ( display->is_dsi_mot_early_power_enabled )
+		display->is_dsi_display_prepared = false;
 
 	mutex_unlock(&display->display_lock);
 
