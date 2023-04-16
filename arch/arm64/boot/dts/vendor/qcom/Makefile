@@ -1,3 +1,102 @@
+# Only include Motorola DTBs
+ifeq ($(CONFIG_MMI_DEVICE_DTBS),y)
+ifneq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+$(error Moto DT w/o overlay is undefined!!!)
+endif
+
+# Motorola Device Trees
+dtbo-$(CONFIG_GUAM_DTB) += \
+        bengal-guam-evt-overlay.dtbo \
+        bengal-guam-dvt-overlay.dtbo \
+        bengal-guam-dvt2-overlay.dtbo
+
+bengal-guam-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guam-dvt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guam-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_GUAMP_DTB) += \
+        bengal-guamp-evt-overlay.dtbo \
+        bengal-guamp-dvt-overlay.dtbo \
+        bengal-guamp-dvt2-sku3-overlay.dtbo \
+        bengal-guamp-dvt2-sku4-overlay.dtbo \
+	bengal-guamp-pvt-overlay.dtbo
+
+bengal-guamp-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamp-dvt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamp-dvt2-sku3-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamp-dvt2-sku4-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-guamp-pvt-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_GUAMNA_DTB) += \
+        bengal-guamna-gwlc-evt-overlay.dtbo \
+        bengal-guamna-evt-overlay.dtbo \
+	bengal-guamna-gwlc-dvt2-overlay.dtbo \
+	bengal-guamna-dvt2-overlay.dtbo
+
+ifeq ($(CONFIG_HIGHMEM),y)
+bengal-guamna-evt-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-gwlc-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+else
+bengal-guamna-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
+bengal-guamna-gwlc-evt-overlay.dtbo-base := bengal-moto-base-guamna.dtb
+bengal-guamna-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+bengal-guamna-gwlc-dvt2-overlay.dtbo-base := bengal-moto-low-ram-base-guamna.dtb
+endif
+
+dtbo-$(CONFIG_BORNEO_DTB) += \
+        bengal-borneo-evb-overlay.dtbo \
+        bengal-borneo-evt-overlay.dtbo \
+        bengal-borneo-dvt1-overlay.dtbo \
+        bengal-borneo-dvt2-overlay.dtbo
+
+bengal-borneo-evb-overlay.dtbo-base := bengal-moto-base-borneo.dtb
+bengal-borneo-evt-overlay.dtbo-base := bengal-moto-base-borneo.dtb
+bengal-borneo-dvt1-overlay.dtbo-base := bengal-moto-base-borneo.dtb
+bengal-borneo-dvt2-overlay.dtbo-base := bengal-moto-base-borneo.dtb
+
+dtbo-$(CONFIG_CEBU_DTB) += \
+        bengal-cebu-evt-overlay.dtbo
+
+bengal-cebu-evt-overlay.dtbo-base := bengal-moto-base-cebu.dtb
+
+dtbo-$(CONFIG_CAPRI_DTB) += \
+        bengal-capri-evt-overlay.dtbo \
+        bengal-capri-evt-sku5-overlay.dtbo \
+        bengal-capri-dvt2-overlay.dtbo \
+	bengal-capri-dvt2-sku5-overlay.dtbo
+
+bengal-capri-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-evt-sku5-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-capri-dvt2-sku5-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_CAPRIP_DTB) += \
+        bengal-caprip-evt-overlay.dtbo \
+	bengal-caprip-dvt2-overlay.dtbo
+
+bengal-caprip-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-caprip-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
+
+dtbo-$(CONFIG_RHODE_DTB) += \
+        khaje-rhode-evt-overlay.dtbo \
+        khaje-rhode-dvt-overlay.dtbo
+
+khaje-rhode-evt-overlay.dtbo-base := khaje-moto-base.dtb
+khaje-rhode-dvt-overlay.dtbo-base := khaje-moto-base.dtb
+
+dtbo-$(CONFIG_HAWAO_DTB) += \
+        khaje-hawao-evt-overlay.dtbo
+
+khaje-hawao-evt-overlay.dtbo-base := khaje-moto-base.dtb
+
+dtbo-$(CONFIG_DEVON_DTB) += \
+        khaje-devon-evt-overlay.dtbo
+
+khaje-devon-evt-overlay.dtbo-base := khaje-moto-base.dtb
+
+else
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
         dtbo-$(CONFIG_ARCH_KONA) += \
                 kona-cdp-overlay.dtbo \
@@ -466,6 +565,7 @@ dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 	sda429-mtp.dtb \
 	sda429-cdp.dtb
 endif
+endif  # CONFIG_MMI_DEVICE_DTBS
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)

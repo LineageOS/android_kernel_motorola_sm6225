@@ -1,0 +1,182 @@
+#include "dsi-panel-mot-tianma-nt36672c-649-1080x2400-vid.dtsi"
+#include "dsi-panel-mot-txd-ili7807s-649-1080x2400-vid.dtsi"
+//#include "bengal-leds-aw99703.dtsi"
+//#include "bengal-leds-lm3697.dtsi"
+#include "dsi-panel-mot-dummy-qhd-video.dtsi"
+
+&soc {
+
+	sde_dsi {
+		qcom,dsi-default-panel = <&dsi_tm_nt36672c_fhd_plus_90_video>;
+	};
+};
+
+&dsi_tm_nt36672c_fhd_plus_90_video {
+        qcom,platform-te-gpio = <&tlmm 81 0>;
+        qcom,platform-reset-gpio = <&tlmm 82 0>;
+
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
+	qcom,mdss-dsi-bl-min-level = <8>;
+	qcom,mdss-dsi-bl-max-level = <2047>;
+	qcom,mdss-dsi-bl-default-level = <1024>;
+	qcom,mdss-brightness-max-level = <2047>;
+	qcom,bklt-dcs-2bytes-enabled;
+	qcom,mdss-dsi-no-panel-on-read-support;
+
+	qcom,esd-check-enabled;
+	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+	qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
+	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+	qcom,mdss-dsi-panel-status-value = <0x9c>;
+	qcom,mdss-dsi-panel-on-check-value = <0x9c>;
+	qcom,mdss-dsi-panel-status-read-length = <1>;
+
+        qcom,dsi-supported-dfps-list = <90 60>;
+        qcom,mdss-dsi-pan-enable-dynamic-fps;
+        qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+
+	qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
+	qcom,mdss-dsi-hbm-on-command-state =  "dsi_lp_mode";
+	qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
+	qcom,mdss-dsi-hbm-off-command-state =  "dsi_lp_mode";
+	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
+
+        qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+	qcom,mdss-dsi-t-clk-post = <0x0B>;
+	qcom,mdss-dsi-t-clk-pre = <0x14>;
+	qcom,mdss-dsi-display-timings {
+	timing@0 {
+		qcom,mdss-dsi-panel-phy-timings = [00 17 05 05 14 1F 06
+	                                       06 06 02 04 00 14 0B];
+	                qcom,display-topology = <1 1 1>;
+	                qcom,default-topology-index = <0>;
+	        };
+	};
+};
+
+&dsi_txd_ili7807s_fhd_plus_90_video {
+        qcom,platform-te-gpio = <&tlmm 81 0>;
+        qcom,platform-reset-gpio = <&tlmm 82 0>;
+
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+        qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_i2c";
+        qcom,mdss-dsi-bl-min-level = <8>;
+        qcom,mdss-dsi-bl-max-level = <2047>;
+        qcom,mdss-dsi-bl-default-level = <1024>;
+        qcom,mdss-brightness-max-level = <2047>;
+	qcom,bklt-dcs-2bytes-enabled;
+        qcom,mdss-dsi-no-panel-on-read-support;
+
+        qcom,esd-check-enabled;
+        qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+        qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
+        qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+        qcom,mdss-dsi-panel-status-value = <0x9c>;
+        qcom,mdss-dsi-panel-on-check-value = <0x9c>;
+        qcom,mdss-dsi-panel-status-read-length = <1>;
+
+	qcom,mdss-dsi-hbm-on-command = [15 01 00 00 00 00 02 51 FF];
+	qcom,mdss-dsi-hbm-on-command-state =  "dsi_lp_mode";
+	qcom,mdss-dsi-hbm-off-command = [15 01 00 00 00 00 02 51 CC];
+	qcom,mdss-dsi-hbm-off-command-state =  "dsi_lp_mode";
+	qcom,mdss-dsi-hbm-type = "lcd-dcs-wled";
+
+        qcom,dsi-supported-dfps-list = <90 60>;
+        qcom,mdss-dsi-pan-enable-dynamic-fps;
+        qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+
+        qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+        qcom,mdss-dsi-t-clk-post = <0x0A>;
+        qcom,mdss-dsi-t-clk-pre = <0x12>;
+        qcom,mdss-dsi-display-timings {
+        timing@0 {
+                qcom,mdss-dsi-panel-phy-timings = [00 14 05 05 13 1F 05
+                                               05 06 02 04 00 12 0A];
+                        qcom,display-topology = <1 1 1>;
+                        qcom,default-topology-index = <0>;
+                };
+        };
+};
+
+&mot_dummy_vid_qhd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+        qcom,platform-te-gpio = <&tlmm 81 0>;
+        qcom,platform-reset-gpio = <&tlmm 82 0>;
+
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [01 09 01 01 1B 1B 01
+					01 02 02 04 00 0A 11];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&qupv3_se2_i2c {
+	status = "ok";
+
+	aw99703-bl@36 {
+		compatible = "awinic,aw99703-bl";
+		reg = <0x36>;
+		aw99703,hwen-gpio = <&tlmm 36 0>;
+		aw99703,bl-map = <3>; /* brightness map level 1:256,2:1024,3:2048 */
+		aw99703,using-lsb;
+		aw99703,bl-fscal-led = <0x19>; /* 24.8mA */
+		aw99703,bl-channel = <3>;
+		aw99703,turn-on-ramp = <0x00>; /* 512us */
+		aw99703,turn-off-ramp = <0x04>; /* 8ms */
+		aw99703,pwm-trans-dim = <0>; /* 2ms */
+		aw99703,i2c-trans-dim = <0x00>;
+		aw99703,pwm-mode = <1>; /* 0 pwm disble,1 PWM enable */
+		aw99703,map-type = <4>; /* 0 exponential, 4 linear */
+		aw99703,work-mode = <1>; /* backlight */
+		aw99703,default-brightness = <1023>;
+	};
+
+        lm3697@37 {
+                compatible = "ti,lm3697";
+                reg = <0x37>;
+
+		/* TI, lm3697*/
+		enable-gpios = <&tlmm 36 0>;
+		backlight {
+			compatible = "ti,lm3697-backlight";
+			lcd {
+				led-sources = <0 1 2>;
+				led-chip-id = <0>;
+				ramp-up-msec = <200>;
+				ramp-down-msec = <200>;
+				pwm-period = <0>;
+				current-mode = <2>;	/*2: 25mA*/
+				boost-ovp = <2>;	/*0:16v 1:24v 2:32v 3:40v*/
+				boost-freq = <1>;	/*0:500Khz 1:1Mhz*/
+				map-type = <1>; 	/* 0 exponential, 1 linear */
+				current-align-type = <1>;/* 0 none, 1 aw99703, for exp mode current align*/
+				default-brightness-level = <1023>;
+			};
+		};
+	};
+
+};
+
+&qupv3_se2_i2c_active {
+	/delete-node/ config;
+	config {
+		pins = "gpio6", "gpio7";
+		drive-strength = <2>;
+		output-high;
+	};
+};
+
+&qupv3_se2_spi {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "disabled";
+
+};
+

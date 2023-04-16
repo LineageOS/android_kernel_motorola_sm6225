@@ -1,0 +1,323 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "bengal-moto-common-overlay.dtsi"
+#include "bengal-borneo-display.dtsi"
+#include "bengal-audio-overlay.dtsi"
+#include "bengal-borneo-audio-overlay.dtsi"
+#include "bengal-borneo-touchscreen-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-borneo-overlay.dtsi"
+#include "bengal-borneo-fps.dtsi"
+#include "bengal-borneo-moto-thermal.dtsi"
+
+&qupv3_se4_2uart {
+	status = "ok";
+};
+
+
+&pm6125_gpios {
+
+	key_vol_up {
+		key_vol_up_default: key_vol_up_default {
+			pins = "gpio5";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+};
+
+&tlmm{
+	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
+		mux {
+			pins = "gpio34";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio34";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	tps61280_en_default: tps61280_en_default {
+		mux {
+			pins = "gpio47";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio47";
+			drive-strength = <8>;
+			output-high;
+		};
+	};
+};
+
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		label = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm6125_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			linux,can-disable;
+			debounce-interval = <15>;
+			gpio-key,wakeup;
+		};
+	};
+};
+
+
+
+&sdhc_1 {
+	vdd-supply = <&L24A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 570000>;
+
+	vdd-io-supply = <&L11A>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <0 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on
+					&sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off
+					&sdc1_rclk_off>;
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	vdd-supply = <&L22A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L5A>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+
+	status = "ok";
+};
+
+&ufsphy_mem {
+	compatible = "qcom,ufs-phy-qmp-v3-660";
+
+	vdda-phy-supply = <&L4A>; /* 0.9v */
+	vdda-pll-supply = <&L12A>; /* 1.8v */
+	vdda-phy-max-microamp = <51400>;
+	vdda-pll-max-microamp = <14200>;
+
+	status = "ok";
+};
+
+&ufshc_mem {
+	vdd-hba-supply = <&gcc_ufs_phy_gdsc>;
+	vdd-hba-fixed-regulator;
+	vcc-supply = <&L24A>;
+	vcc-voltage-level = <2950000 2960000>;
+	vccq2-supply = <&L11A>;
+	vcc-max-microamp = <600000>;
+	vccq2-max-microamp = <600000>;
+
+	qcom,vddp-ref-clk-supply = <&L18A>;
+	qcom,vddp-ref-clk-max-microamp = <100>;
+	qcom,vddp-ref-clk-min-uV = <1232000>;
+	qcom,vddp-ref-clk-max-uV = <1232000>;
+
+	status = "ok";
+};
+
+&soc {
+	qcom,tz_gpio {
+	compatible = "qcom,tz_gpio";
+		tlmm-tz = <14>,
+		<15>,
+		<16>,
+		<17>;
+	};
+};
+
+&L21A {
+	regulator-min-microvolt = <2700000>;
+	regulator-max-microvolt = <3600000>;
+	qcom,init-voltage = <2800000>;
+};
+
+&qupv3_se0_i2c {
+	status = "ok";
+	abov_sar@20 {
+		status = "ok";
+		compatible = "abov,abov_sar_mmi_overlay";
+		reg = <0x20>;
+		cap_vdd-supply = <&L21A>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <34 0x2>;
+		gpios = <&tlmm 34 0x2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&capsense_sar_gpio_pins>;
+		reg_array_len = <0x03>;
+		reg_array_val = <0x07 0x00 0x08 0x1F 0xFB 0x01>;
+		cap,use_channel_ch0 = <0x00>;
+		cap,use_channel_ch1 = <0x01>;
+		cap,use_channel_ch2 = <0x02>;
+		cap,use_channel_ch3 = <0x03>;
+		ch0_name = "capsense_bottom_right";
+		ch1_name = "capsense_bottom_left";
+		ch2_name = "capsense_top_left";
+		ch3_name = "capsense_top_right";
+		label = "AbovCapSense_4";
+		cap,channel_number = <0x04>;
+		cap,fw_mode_ret = <0x39>;
+		button_mask = <0x55>;
+	};
+};
+
+&qupv3_se1_i2c {
+	status = "ok";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	tps61280@75 {
+		compatible = "ti,tps61280";
+		reg = <0x75>;
+		ti,config = <0x0D>;
+		ti,vout-floor = <0x0D>;
+		ti,vout-roof = <0x1F>;/*0x1F*/
+		ti,ilim = <0x0F>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&tps61280_en_default>;
+	};
+};
+
+&soc{
+        mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C77591";
+              #include "qg-batterydata-jk50-atl-5000mah.dtsi"
+	      #include "qg-batterydata-jk50-scud-5000mah.dtsi"
+        };
+};
+
+&pmi632_qg {
+        qcom,qg-iterm-ma = <500>;
+        qcom,vbatt-cutoff-mv = <3200>;
+        qcom,vbatt-empty-mv = <3000>;
+        qcom,vbatt-low-mv = <3300>;
+        qcom,vbatt-low-cold-mv = <3500>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,rbat-conn-mohm = <10>;
+        qcom,cl-feedback-on;
+        qcom,cl-min-start-soc = <0>;
+        qcom,cl-max-start-soc = <5>;
+        qcom,cl-min-temp = <150>;
+        qcom,cl-max-temp = <450>;
+        qcom,cl-max-increment = <5>;
+        qcom,cl-max-decrement = <10>;
+        qcom,cl-min-limit = <200>;
+        qcom,cl-max-limit = <30>;
+        qcom,s3-entry-ibat-ua = <15000>;
+        qcom,s3-exit-ibat-ua = <35000>;
+        qcom,vbatt-empty-cold-mv = <3000>;
+        qcom,ignore-shutdown-soc-secs = <1800>;
+	qcom.hold-soc-while-full;
+	qcom,linearize-soc;
+};
+
+&pmi632_charger {
+        qcom,iterm-ma = <150>;
+        qcom,fcc-max-ua = <3000000>;
+        qcom,fv-max-uv = <4400000>;
+        qcom,usb-icl-ua = <3000000>;
+        qcom,thermal-mitigation = <3000>,
+                                   <2500>,
+                                   <2000>,
+                                   <1500>,
+                                   <1000>,
+				   <700>,
+                                   <500>;
+        qcom,battery-data = <&mtp_batterydata>;
+	qcom,mmi-temp-zones = <0 4200 1000 0>,
+				<15 0 1000 1000>,
+				<45 0 3000 3000>,
+				<60 4200 2500 0>;
+        qcom,enable-charging-limit;
+        qcom,upper-limit-capacity = <65>;
+        qcom,lower-limit-capacity = <60>;
+        qcom,otg-cl-ua = <1000000>;
+	qcom,dc-unsupported;
+        qcom,wireless-unsupported;
+        qcom,usbeb-unsupported;
+        qcom,disable-suspend-on-collapse;
+        dpdm-supply = <&qusb_phy0>;
+	qcom,auto-recharge-soc = <99>;
+	qcom,support-2a-dcp;
+	mmi,ext-ovp-greater-12v;
+};
+
+&pmi632_rgb {
+       red {
+           label = "charging";
+       };
+};
+
+&pm8008_8 {
+	status = "disabled";
+};
+
+&pm8008_9 {
+	status = "disabled";
+};
+
+&usb_qmp_phy {
+	status = "disabled";
+};
+
+&usb0 {
+	dwc3@4e00000 {
+		usb-phy = <&qusb_phy0>, <&usb_nop_phy>;
+		maximum-speed = "high-speed";
+		xhci-hw-lpm-disable;
+	};
+};
+
+&qusb_phy0 {
+	qcom,qusb-phy-init-seq = <0xf8 0x80
+				0xb3 0x84
+				0x81 0x88
+				0xc7 0x8c
+				0x30 0x08
+				0x79 0x0c
+				0x21 0x10
+				0x14 0x9c
+				0x80 0x04
+				0x9f 0x1c
+				0x00 0x18>;
+	qcom,tune2-efuse-correction = <(-8)>;
+};

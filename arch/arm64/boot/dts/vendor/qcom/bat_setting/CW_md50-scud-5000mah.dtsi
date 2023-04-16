@@ -1,0 +1,26 @@
+/*
+ * Copyright (C) 2021 Motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+md50-scud-5000mah {
+	serialnum = "SB18D01192";
+	fcc_design = <4700>;
+	config_profile_info = [5A 00 00 00 00 00 00 00
+				 A1 AE AA CB C1 C4 92 4F
+				 2D FF FF FF C6 9C 83 6C
+				 5B 56 4E 9B E5 DE 59 CC
+				 C6 C9 D1 D5 D5 D4 D0 CE
+				 CB C9 CC BB A0 92 8A 82
+				 76 71 81 95 AB 7B 7B 75
+				 20 00 57 10 02 B0 5B 00
+				 00 00 64 26 D3 4F 00 00
+				 00 00 00 00 00 00 00 54 ];
+};

@@ -1,0 +1,160 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc{
+	mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C96996";
+              #include "qg-batterydata-atl4864356_5640mAh.dtsi"
+	};
+};
+
+&pmi632_qg {
+        qcom,qg-iterm-ma = <400>;
+};
+
+&pmi632_charger {
+        qcom,iterm-ma = <290>;
+        qcom,fcc-max-ua = <3000000>;
+        qcom,fv-max-uv = <4450000>;
+        qcom,usb-icl-ua = <3000000>;
+        qcom,thermal-mitigation = <3000>,
+                                   <2600>,
+                                   <2300>,
+                                   <1800>,
+                                   <1500>,
+                                   <1000>,
+                                   <600>,
+                                   <400>;
+        qcom,mmi-temp-zones = <0 4200 1164 0>,
+                                <10 4200 3000 1164>,
+                                <15 0 3000 3000>,
+                                <45 0 3000 3000>,
+                                <60 4200 3000 0>;
+        mmi,ext-ovp-greater-12v;
+};
+
+&qupv3_se0_i2c {
+	status = "ok";
+
+	sx933x@28 { /* SAR sensor */
+		compatible = "Semtech,sx933x";
+		reg = <0x28>;
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&sar_int_default>;
+		pinctrl-1 = <&sar_int_sleep>;
+		Semtech,power-supply-type = <1>;
+		cap_vdd-supply = <&L21A>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <36 0x02>;
+		interrupt-names = "sx933x_irq";
+		Semtech,nirq-gpio= <&tlmm 36 0x02>;
+		Semtech,button-flag = <0x03>;
+		Semtech,headset-reg-num = <4>;
+		Semtech,headset-reg = <
+		0x8074 0x08203515
+		0x802c 0x20000A9D
+		0x803c 0x20000A9D
+		0x801c 0x20000014>;
+		Semtech,reg-num = <85>;
+		Semtech,reg-init =<
+			0x8020 0x001F0000
+			0x4004 0x74
+			0x4008 0x00
+			0x4054 0x400
+			0x42C0 0x8000000
+			0x42C4 0x3F
+			0x800C 0x00
+			0x8010 0x00
+			0x8014 0x00
+			0x8018 0x00
+			0x801C 0x32
+			0x8024 0x10000A4E
+			0x8028 0x3DFF8358
+			0x802C 0x20000A56
+			0x8030 0x3FF78268
+			0x8034 0x20000A66
+			0x8038 0x3FBF82D5
+			0x803C 0x10000A56
+			0x8040 0x3FFE834B
+			0x8044 0x10000A76
+			0x8048 0x2FFF83CC
+			0x804C 0x300004D4
+			0x8050 0x00
+			0x8054 0x202B01
+			0x8058 0x2060001C
+			0x805C 0x48D75000
+			0x8060 0x00
+			0x8064 0x530000
+			0x8068 0x00
+			0x806C 0x1E001E00
+			0x8070 0x10000
+			0x8074 0x204F00
+			0x8078 0x20600018
+			0x807C 0x3CDC7000
+			0x8080 0x00
+			0x8084 0x850000
+			0x8088 0x00
+			0x808C 0x1F001F
+			0x8090 0x20000
+			0x8094 0x102D00
+			0x8098 0x20600018
+			0x809C 0x2AD67000
+			0x80A0 0x00
+			0x80A4 0x00
+			0x80A8 0x00
+			0x80AC 0x00
+			0x80B0 0x00
+			0x80B4 0x50FF00
+			0x80B8 0x20600018
+			0x80BC 0x2AD67000
+			0x80C0 0x00
+			0x80C4 0x00
+			0x80C8 0x00
+			0x80CC 0x00
+			0x80D0 0x00
+			0x80D4 0x50FF00
+			0x80D8 0x20600018
+			0x80DC 0x2AD67000
+			0x80E0 0x00
+			0x80E4 0x00
+			0x80E8 0x00
+			0x80EC 0x00
+			0x80F0 0x00
+			0x80F4 0x100000
+			0x80F8 0x20600C00
+			0x80FC 0x00
+			0x8100 0x00
+			0x8104 0x00
+			0x8108 0x00
+			0x810C 0x00
+			0x8110 0x00
+			0x8124 0x4000004
+			0x8128 0x4000003
+			0x812C 0x00
+			0x8130 0x00
+			0x8134 0x00
+			0x8138 0x00
+			0x813C 0x00
+			0x8140 0x00
+			0x8144 0x00
+			0x8148 0x00
+			0x814C 0x00
+			0x81A4 0x1D00000
+			0x8020 0x001F001F
+			0x4280 0x000F
+			>;
+		Semtech,ref-phases-a = <3>;
+		Semtech,ref-phases-b = <4>;
+		status = "ok";
+	};
+};

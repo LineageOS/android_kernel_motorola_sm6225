@@ -1,0 +1,65 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&qupv3_se1_i2c {
+        status = "ok";
+        fs16xx@34 {
+                compatible = "foursemi,fs16xx";
+                reg = <0x34>;
+                fs,fs-dev = "left";
+                /* 1V8 supplied by LDO */
+                vddcore-supply = <&L9A>;
+                status = "okay";
+        };
+};
+
+/* Add pinctrl for MI2S0 */
+&soc {
+        cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
+                compatible = "qcom,msm-cdc-pinctrl";
+                pinctrl-names = "aud_active", "aud_sleep";
+                pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
+                        &lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
+                pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
+                        &lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
+        };
+};
+
+/* Configure MI2S0 SD0&SD1 */
+&dai_mi2s0 {
+        /* SD0 line for playback */
+        qcom,msm-mi2s-rx-lines = <1>;
+        /* SD1 line for recording(SmartPA EC) */
+        qcom,msm-mi2s-tx-lines = <2>;
+};
+
+/* Modify btfmslim_codec's compatible */
+&btfmslim_codec {
+        compatible = "btfmslim_slave";
+        status = "ok";
+};
+
+
+&bengal_snd {
+        qcom,model = "bengal-fs-snd-card";
+	fs,have-16xx = <1>;
+
+	qcom,mi2s-audio-intf = <1>;
+	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
+        /delete-property/ qcom,cdc-dmic01-gpios;
+        /delete-property/ qcom,cdc-dmic23-gpios;
+
+        qcom,wsa-max-devs = <0>;
+        qcom,wsa-devs = <0>;
+};

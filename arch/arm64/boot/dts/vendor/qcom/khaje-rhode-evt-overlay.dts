@@ -1,0 +1,74 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "khaje-rhode-common-overlay.dtsi"
+#include "khaje-rhode-audio-overlay.dtsi"
+/ {
+	model = "rhode";
+	compatible = "qcom,khaje-rhode", "qcom,khaje-moto", "qcom,khaje";
+	qcom,msm-id = <518 0x10000>;
+	qcom,board-id = <0 0xA000>;
+};
+
+
+#include "camera/khaje-camera-sensor-mot-rhode-overlay_evt.dtsi"
+
+&qupv3_se1_i2c {
+        status = "okay";
+	bq2597x: bq2597x-charger@65 {
+                compatible = "ti,bq25970-charger";
+                reg = <0x65>;
+                #io-channel-cells = <1>;
+                //ti,bq2597x,interrupt_gpios = <&pio 30 0>;
+                //interrupt-parent = <&pio>;
+                //interrupts = <2 IRQ_TYPE_EDGE_FALLING 2 0>;
+                //interrupt-names = "bq2597x_irq";
+
+                //pinctrl-names = "default_slave";
+                //pinctrl-0 = <&bq2597x_int_default_slave>;
+                interrupt-parent = <&tlmm>;
+                interrupts = <3 0>;            //irq num base on hardware design
+                bq2597x,irq-gpio = <&tlmm 3 0>;     //irq num base on hardware design
+
+                ti,bq2597x,bat-ovp-disable = <0>;
+                ti,bq2597x,bat-ocp_disable = <0>;
+                ti,bq2597x,bat-ovp-alarm-disable = <0>;
+                ti,bq2597x,bus-ocp-disable = <0>;
+                ti,bq2597x,bus-ovp-alarm-disable = <0>;
+                ti,bq2597x,bus-ocp-alarm-disable = <0>;
+                ti,bq2597x,bat-ucp-alarm-disable = <0>;
+                ti,bq2597x,bat-therm-disable = <0>;
+                ti,bq2597x,bus-therm-disable = <0>;
+
+                ti,bq2597x,bat-ovp-threshold = <4500>;
+                ti,bq2597x,bat-ovp-alarm-threshold = <4450>;
+                ti,bq2597x,bat-ocp-threshold = <8000>;
+                ti,bq2597x,bat-ocp-alarm-threshold = <7500>;
+
+                ti,bq2597x,bus-ovp-threshold = <12000>;
+                ti,bq2597x,bus-ovp-alarm-threshold = <11000>;
+                ti,bq2597x,bus-ocp-threshold = <3750>;
+                ti,bq2597x,bus-ocp-alarm-threshold = <3500>;
+
+                ti,bq2597x,bat-ucp-alarm-threshold = <2000>;
+
+                ti,bq2597x,bat-therm-threshold = <0x15>;
+                ti,bq2597x,bus-therm-threshold = <0x15>;
+                ti,bq2597x,die-therm-threshold = <125>;
+
+                ti,bq2597x,ac-ovp-threshold = <17>;
+                ti,bq2597x,sense-resistor-mohm = <5>;
+        };
+};

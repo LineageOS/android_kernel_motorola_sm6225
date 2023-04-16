@@ -1,0 +1,265 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/iio/qti_power_supply_iio.h>
+#include <dt-bindings/iio/qcom,spmi-vadc.h>
+#include "khaje-moto-common-overlay.dtsi"
+#include "khaje-devon-display.dtsi"
+#include "khaje-devon-fps-overlay_evb.dtsi"
+#include "khaje-devon-touchscreen-overlay.dtsi"
+#include "khaje-devon-nfc-overlay.dtsi"
+#include "sgm7220_devon.dtsi"
+#include "discrete-rt-pd-manger.dtsi"
+#include "camera/khaje-camera-sensor-mot-devon-overlay.dtsi"
+#include "discrete_charging_devon.dtsi"
+
+&firmware {
+	android {
+		vbmeta {
+			compatible = "android,vbmeta";
+			parts = "vbmeta,boot,system,vendor,dtbo";
+		};
+	};
+};
+&soc {
+    qcom,tz_gpio {
+        compatible = "qcom,tz_gpio";
+        tlmm-tz = <14>,
+                        <15>,
+                        <16>,
+                        <17>;
+    };
+
+	ldo_vib {
+		compatible = "moto,vibrator-ldo";
+		moto,vib-ldo-gpio = <&tlmm 25 0x0>;
+		status = "ok";
+        };
+};
+
+
+&tlmm{
+	capsense_sar_gpio_pins: capsense_sar_gpio_pins {
+		mux {
+			pins = "gpio106";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio106";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+};
+
+
+&sdhc_2 {
+	vdd-supply = <&L22A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L5A>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	vdd-io-bias-supply = <&L7A>;
+	qcom,vdd-io-bias-voltage-level = <1256000 1256000>;
+	qcom,vdd-io-bias-current-level = <0 6000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+
+	status = "ok";
+};
+
+&qupv3_se2_i2c {
+        status = "ok";
+        aw9610x_sar@12 {
+            compatible = "awinic,aw9610x_sar_0";
+            reg = <0x12>;
+            sar-gpio-vcc-enable;
+            sar-gpio_3v0_en = <&tlmm 67 0x00>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&capsense_sar_gpio_pins>;
+            interrupt-parent = <&tlmm>;
+            interrupts = <106 0x02>;
+            irq-gpio = <&tlmm 106 0x02>;
+            chip_name = "AW96105";
+            sar-num = <0>;
+            cap_vcc-supply = <&pm6125_l21>;
+            aw9610x,channel_number = <0x5>;
+            ch0_name = "Ch0capsense_reference";
+            ch1_name = "Ch1capsense_top_left";
+            ch2_name = "Ch2capsense_top_right";
+            ch3_name = "Ch3capsense_reference";
+            ch4_name = "Ch4capsense_bottom";
+            ref_channel = <0x9>;
+            aw9610x,using-firmware;
+            aw9610x,firmware_name = "aw9610x_0";
+        };
+};
+
+&usb0 {
+	dwc3@4e00000 {
+		dr_mode = "otg";
+	};
+};
+
+&usb2_phy0 {
+	qcom,param-override-seq =
+			<0xa6 0x6c>,  /* override_x0 */
+			<0x81 0x70>,  /* override_x1 */
+			<0x16 0x74>;  /* override_x2 */
+};
+
+&pm6125_vadc {
+	pinctrl-0 = <&camera_therm_default &emmc_therm_default>;
+/*
+	chg_therm {
+		reg = <ADC_GPIO4_PU2>;
+		label = "chg_therm";
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+*/
+};
+
+&pm6125_adc_tm {
+	io-channels = <&pm6125_vadc ADC_AMUX_THM1_PU2>,
+			<&pm6125_vadc ADC_AMUX_THM2_PU2>,
+			<&pm6125_vadc ADC_XO_THERM_PU2>;
+			//<&pm6125_vadc ADC_GPIO4_PU2>;
+
+/*
+	chg_therm {
+		reg = <ADC_GPIO4_PU2>;
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
+	};
+*/
+};
+
+&pm6125_gpios {
+	chg_therm {
+		chg_therm_default: chg_therm_default {
+			pins = "gpio3";
+			 bias-high-impedance;
+		};
+	};
+};
+
+&thermal_zones {
+	sdm-skin-therm-usr {
+		status = "disabled";
+	};
+	rear-cam-therm-usr {
+		status = "disabled";
+	};
+	camera-therm-usr {
+		status = "disabled";
+	};
+	quiet-therm-usr {
+		status = "disabled";
+	};
+	pa-therm0-usr {
+		status = "disabled";
+	};
+	pa-therm1-usr {
+		status = "disabled";
+	};
+	xo-therm-usr {
+		status = "disabled";
+	};
+
+	pa_therm0 {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "user_space";
+		thermal-sensors = <&pm6125_adc_tm ADC_AMUX_THM1_PU2>;
+		wake-capable-sensor;
+		trips {
+			active-config0 {
+				temperature = <125000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+
+	quiet_therm {
+                polling-delay-passive = <0>;
+                polling-delay = <0>;
+                thermal-governor = "user_space";
+                thermal-sensors = <&pm6125_adc_tm ADC_AMUX_THM2_PU2>;
+                wake-capable-sensor;
+                trips {
+                        active-config0 {
+                                temperature = <125000>;
+                                hysteresis = <1000>;
+                                type = "passive";
+                        };
+                };
+        };
+
+	chg_therm {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "user_space";
+		thermal-sensors = <&pm6125_adc_tm_iio ADC_GPIO1_PU2>;
+		wake-capable-sensor;
+		trips {
+			active-config0 {
+				temperature = <125000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+
+	msm_therm {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "user_space";
+		thermal-sensors = <&pm6125_adc_tm_iio ADC_GPIO2_PU2>;
+		wake-capable-sensor;
+		trips {
+			active-config0 {
+				temperature = <125000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+/*
+	camera_flash_therm {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "user_space";
+		thermal-sensors = <&pm6125_adc_tm_iio ADC_GPIO1_PU2>;
+		wake-capable-sensor;
+		trips {
+			active-config0 {
+				temperature = <125000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+*/
+};

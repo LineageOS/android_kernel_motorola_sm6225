@@ -1,0 +1,192 @@
+&qupv3_se2_i2c {
+    status = "disabled";
+};
+
+&tlmm{
+	pmx_ts_int_active {
+		ts_int_active: ts_int_active {
+			   mux {
+				   pins = "gpio67";
+				   function = "gpio";
+			   };
+
+			   config {
+				   pins = "gpio67";
+				   drive-strength = <8>;
+				   bias-pull-up;
+			   };
+		   };
+	};
+
+	pmx_ts_int_suspend {
+		ts_int_suspend: ts_int_suspend {
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio67";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+	pmx_ts_reset_active {
+		ts_reset_active: ts_reset_active {
+				 mux {
+					 pins = "gpio66";
+					 function = "gpio";
+				 };
+
+				 config {
+					 pins = "gpio66";
+					 drive-strength = <8>;
+					 bias-pull-up;
+				 };
+			 };
+	};
+
+	pmx_ts_reset_suspend {
+		ts_reset_suspend: ts_reset_suspend {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	pmx_ts_release {
+		ts_release: ts_release {
+			mux {
+				pins = "gpio67", "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio67", "gpio66";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	ts_int_pull_up: ts_int_pull_up {
+		mux {
+			pins = "gpio67";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio67";
+			drive-strength = <6>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+};
+
+&qupv3_se2_spi_pins {
+       qupv3_se2_spi_sleep: qupv3_se2_spi_sleep {
+               mux {
+                       pins = "gpio6", "gpio7";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio6", "gpio7";
+                       drive-strength = <6>;
+                       bias-disable;
+               };
+       };
+       qupv3_se2_cs_sleep: qupv3_se2_cs_sleep {
+               mux {
+                       pins = "gpio80";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio80";
+                       drive-strength = <6>;
+                       bias-pull-up;
+               };
+       };
+       qupv3_se2_clk_sleep: qupv3_se2_clk_sleep {
+               mux {
+                       pins = "gpio71";
+                       function = "gpio";
+               };
+
+               config {
+                       pins = "gpio71";
+                       drive-strength = <6>;
+                       output-low;
+               };
+       };
+};
+
+&qupv3_se2_spi {
+	status = "ok";
+	qcom,spi-touch-active="tchip,ilitek";
+	pinctrl-1 = <&qupv3_se2_spi_sleep &qupv3_se2_cs_sleep &qupv3_se2_clk_sleep>;
+	ilitek@0{
+		compatible = "tchip,ilitek";
+		reg = <0x0>;
+		poll_mode = <0>;
+		spi-max-frequency = <12000000>;
+		touch,reset-gpio = <&tlmm 66 0x00>;
+		touch,irq-gpio = <&tlmm 67 0x2002>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_pull_up>;
+		ilitek,report_gesture_key;
+		status = "/chosen", "mmi,panel_name", "tm_ili9881x_video_display";
+	};
+	nova_0flash_ts@1 {
+		compatible = "novatek,NVT-ts-spi";
+		reg = <1>;
+		spi-max-frequency = <9600000>;
+		novatek,swrst-n8-addr = <0x03F0FE>;
+		novatek,spi-rd-fast-addr = <0x03F310>;
+		spi-cpha;
+		novatek,irq-gpio = <&tlmm 67 0x2008>;
+		novatek,reset-gpio = <&tlmm 66  0x00>;
+		report_type = <1>;
+		novatek,def-build-id = <0x0401>;
+		novatek,def-config-id = <0x601e>;
+		novatek,report_gesture_key;
+		novatek,def-max-resolution = <720 1600>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x02>;
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		status = "/chosen", "mmi,panel_name", "djn_nt36672a_video_display";
+	};
+	focaltech@2 {
+		compatible = "focaltech,fts";
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x02>;
+		spi-max-frequency = <6000000>;
+		focaltech,always_on_vio;
+		focaltech,share_reset_gpio;
+		focaltech,reset-gpio = <&tlmm 66 0x01>;
+		focaltech,irq-gpio = <&tlmm 67 0x02>;
+		focaltech,max-touch-number = <10>;
+		focaltech,display-coords = <0 0 720 1600>;
+
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		focaltech,name = "ft8009";
+		focaltech,family-id = <0xf0>;
+		focaltech,panel-supplier = "djnboe";
+		focaltech,report_gesture_key;
+		focaltech,dlfw_in_resume;
+		status = "/chosen", "mmi,panel_name", "djnboe_ft8009_video_display";
+	};
+};

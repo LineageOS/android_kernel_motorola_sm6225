@@ -1,0 +1,128 @@
+&tlmm{
+		pmx_ts_active {
+			ts_active: ts_active {
+				mux {
+					pins = "gpio97", "gpio86", "gpio2";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio97", "gpio86", "gpio2";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_ts_reset_suspend {
+			ts_reset_suspend: ts_reset_suspend {
+				mux {
+					pins = "gpio86", "gpio2";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio86", "gpio2";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		pmx_ts_int_suspend {
+			ts_int_suspend: ts_int_suspend {
+				mux {
+					pins = "gpio97", "gpio2";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio97", "gpio2";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		pmx_ts_release {
+			ts_release: ts_release {
+				mux {
+					pins = "gpio97", "gpio86", "gpio2";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio97", "gpio86", "gpio2";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+};
+
+&qupv3_se2_i2c {
+	status = "disabled";
+};
+
+&qupv3_se2_spi {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "ok";
+
+	goodix-berlin@0 {
+		status = "ok";
+		compatible = "goodix,gt9916S";
+		reg = <0>;
+		spi-max-frequency = <9600000>;
+		mmi,status = "/chosen","mmi,panel_name","contains","v0","v1","v2";
+
+		goodix,avdd-gpio = <&tlmm 2 0x0>;
+		goodix,reset-gpio = <&tlmm 86 0x0>;
+		goodix,irq-gpio = <&tlmm 97 0x2002>;
+		goodix,irq-flags = <0x2002>; /* 1:trigger rising, 2:trigger falling;*/
+		goodix,panel-max-id = <10>;
+		goodix,panel-max-x = <1080>;
+		goodix,panel-max-y = <2400>;
+		goodix,panel-max-w = <255>;
+		goodix,panel-max-p = <4096>;
+		panel = <&mot_csot_nt37701_655_1080x2400_dsc_cmd_v0
+			 &mot_csot_nt37701_655_1080x2400_dsc_cmd_v1
+                         &mot_tm_nt37701_655_1080x2400_dsc_cmd_v0
+			 &mot_tm_nt37701_655_1080x2400_dsc_cmd_v1
+			 &mot_tm_nt37701_655_1080x2400_dsc_cmd_v2>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend", "pmx_ts_release";
+		pinctrl-0 = <&ts_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		mmi,power-off-suspend;
+		mmi,enable-gestures;
+		mmi,usb-charger-detection;
+	};
+
+	focaltech@1 {
+                compatible = "focaltech,fts";
+                reg = <1>;
+                spi-max-frequency = <9600000>;
+                mmi,status = "/chosen","mmi,panel_name","contains","v9";
+
+                interrupt-parent = <&tlmm>;
+                interrupts = <97 0x2>;
+                focaltech,reset-gpio = <&tlmm 86 0x0>;
+                focaltech,irq-gpio = <&tlmm 97 0x2800>;
+                focaltech,max-touch-number = <10>;
+                focaltech,display-coords =  <0 0 1080 2400>;
+
+                pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+                pinctrl-0 = <&ts_active>;
+                pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+                pinctrl-2 = <&ts_release>;
+
+                mmi,power-off-suspend;
+                mmi,enable-gestures;
+                mmi,usb-charger-detection;
+
+                panel = <&mot_csot_nt37701_655_1080x2400_dsc_cmd_v9>;
+        };
+};
+

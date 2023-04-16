@@ -1,0 +1,218 @@
+&qupv3_se2_i2c {
+    status = "disabled";
+};
+
+&tlmm{
+	pmx_ts_int_active {
+		ts_int_active: ts_int_active {
+			   mux {
+				   pins = "gpio67";
+				   function = "gpio";
+			   };
+
+			   config {
+				   pins = "gpio67";
+				   drive-strength = <8>;
+				   bias-pull-up;
+			   };
+		   };
+	};
+
+	pmx_ts_int_suspend {
+		ts_int_suspend: ts_int_suspend {
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio67";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+	pmx_ts_reset_active {
+		ts_reset_active: ts_reset_active {
+				 mux {
+					 pins = "gpio66";
+					 function = "gpio";
+				 };
+
+				 config {
+					 pins = "gpio66";
+					 drive-strength = <8>;
+					 bias-pull-up;
+				 };
+			 };
+	};
+
+	pmx_ts_reset_suspend {
+		ts_reset_suspend: ts_reset_suspend {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	pmx_ts_release {
+		ts_release: ts_release {
+			mux {
+				pins = "gpio67", "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio67", "gpio66";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
+&qupv3_se0_spi_pins {
+	qupv3_se0_spi_active: qupv3_se0_spi_active {
+		mux {
+			pins =  "gpio1", "gpio2", "gpio3";
+			function = "qup0";
+		};
+
+		config {
+			pins =  "gpio1", "gpio2", "gpio3";
+			drive-strength = <6>;
+			bias-disable;
+		};
+	};
+
+	qupv3_se0_spi_miso_active: qupv3_se0_spi_miso_active {
+		mux {
+			pins = "gpio0";
+			function = "qup0";
+		};
+
+		config {
+			pins = "gpio0";
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+	};
+
+	qupv3_se0_spi_sleep: qupv3_se0_spi_sleep {
+		mux {
+			pins = "gpio1", "gpio2";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio1", "gpio2";
+			drive-strength = <6>;
+			bias-disable;
+		};
+	};
+
+	qupv3_se0_spi_miso_sleep: qupv3_se0_spi_miso_sleep {
+		mux {
+			pins = "gpio0";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio0";
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+	};
+
+	qupv3_se0_spi_cs_sleep: qupv3_se0_spi_cs_sleep {
+		mux {
+			pins = "gpio3";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio3";
+			drive-strength = <6>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+
+&qupv3_se0_spi {
+	status = "ok";
+	pinctrl-0 = <&qupv3_se0_spi_active &qupv3_se0_spi_miso_active>;
+	pinctrl-1 = <&qupv3_se0_spi_sleep &qupv3_se0_spi_cs_sleep &qupv3_se0_spi_miso_sleep>;
+	focaltech@0 {
+		compatible = "focaltech,fts";
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x02>;
+		spi-max-frequency=<8000000>;
+		focaltech,always_on_vio;
+		focaltech,share_reset_gpio;
+		focaltech,reset-gpio = <&tlmm 66 0x01>;
+		focaltech,irq-gpio = <&tlmm 67 0x02>;
+		focaltech,max-touch-number = <10>;
+		focaltech,display-coords =  <0 0 720 1640>;
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		focaltech,name = "ft8006ss_aa";
+		focaltech,panel-supplier = "dsbj";
+		focaltech,dlfw_in_resume;
+                panel = <&dsi_dsbj_ft8006s_video>;
+		/*
+		focaltech,have-key;
+		focaltech,key-number = <3>;
+		focaltech,keys = <139 102 158>;
+		focaltech,key-x-coords = <200 600 800>;
+		focaltech,key-y-coords = <2000 2000 2000>;
+		*/
+	};
+
+	nova_0flash_ts@1 {
+		compatible = "novatek,NVT-ts-spi";
+		reg = <1>;
+		spi-max-frequency = <9600000>;
+		novatek,swrst-n8-addr = <0x03F0FE>;
+		novatek,spi-rd-fast-addr = <0x03F310>;
+		spi-cpha;
+		novatek,irq-gpio = <&tlmm 67 0x2001>;
+		novatek,reset-gpio = <&tlmm 66 0x00>;
+		report_type = <1>;
+		novatek,def-max-resolution = <720 1640>;
+                novatek,usb_charger;
+                novatek,def-build-id = <0x0501>;
+                novatek,def-config-id = <0x6026>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x02>;
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+	};
+	chipone_tddi@2 {
+		compatible = "chipone-tddi";
+		reg = <2>;
+		spi-max-frequency = <4800000>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x2008>;
+		spi-cpha;
+		spi-cpol;
+		chipone,rst-gpio = <&tlmm 66 0x00>;
+		chipone,irq-gpio = <&tlmm 67 0x00>;
+		chipone,x-res = <720>;
+		chipone,y-res = <1640>;
+		chipone,def-build-id = <0x020b>;
+		chipone,def-config-id = <0x0001>;
+		panel = <&dsi_dsbj_icnl9911c_video>;
+	};
+
+};

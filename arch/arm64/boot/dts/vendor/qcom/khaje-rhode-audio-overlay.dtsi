@@ -1,0 +1,155 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_reset_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk {
+	status = "disabled";
+};
+
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
+
+&qupv3_se1_i2c {
+	status = "ok";
+
+        aw882xx: aw882xx_smartpa@34 {
+                status = "okay";
+                compatible = "awinic,aw882xxacf_smartpa";
+                reg = <0x34>;
+                /* reset-gpio = <&tlmm 107 0>; */
+                irq-gpio = <&tlmm 102 0x2008>;
+                dc-flag = <0>;
+                sync-flag = <0>;
+                sound-channel = <0>;
+                aw-tx-topo-id = <0x1000ff00>;
+                aw-rx-topo-id = <0x1000ff01>;
+                aw-tx-port-id = <0x1001>;
+                aw-rx-port-id = <0x1000>;
+                aw-re-min = <4000>;
+                aw-re-max= <30000>;
+                aw-cali-mode = "aw_attr";
+        };
+
+        aw882xx_recv: aw882xx_recv_smartpa@37 {
+                status = "okay";
+                compatible = "awinic,aw882xxacf_smartpa";
+                reg = <0x37>;
+                /* reset-gpio = <&tlmm 107 0>; */
+                irq-gpio = <&tlmm 107 0x2008>;
+                dc-flag = <0>;
+                sync-flag = <0>;
+                sound-channel = <1>;
+                aw-tx-topo-id = <0x1000ff00>;
+                aw-rx-topo-id = <0x1000ff01>;
+                aw-tx-port-id = <0x1001>;
+                aw-rx-port-id = <0x1000>;
+                aw-re-min = <4000>;
+                aw-re-max= <30000>;
+                aw-cali-mode = "aw_attr";
+        };
+};
+
+&q6core {
+	cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
+				&lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
+		pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
+				&lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
+		qcom,lpi-gpios;
+	};
+};
+
+&dai_mi2s0 {
+	status = "ok";
+	qcom,msm-mi2s-rx-lines = <1>;
+	qcom,msm-mi2s-tx-lines = <2>;
+};
+
+/* Modify btfmslim_codec's compatible */
+&btfmslim_codec {
+        compatible = "btfmslim_slave";
+        status = "ok";
+};
+
+
+&bengal_snd {
+        qcom,model = "bengal-awinic-snd-card";
+	aw,have-882xx = <2>;
+
+	qcom,audio-routing =
+		"AMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Analog Mic1",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Analog Mic2",
+		"AMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic3",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"IN3_AUX", "AUX_OUT",
+		"TX SWR_MIC0", "ADC1_OUTPUT",
+		"TX SWR_MIC4", "ADC2_OUTPUT",
+		"TX SWR_MIC0", "VA_TX_SWR_CLK",
+		"TX SWR_MIC1", "VA_TX_SWR_CLK",
+		"TX SWR_MIC2", "VA_TX_SWR_CLK",
+		"TX SWR_MIC3", "VA_TX_SWR_CLK",
+		"TX SWR_MIC4", "VA_TX_SWR_CLK",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"TX_AIF1 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF2 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF3 CAP", "VA_TX_SWR_CLK",
+		"VA SWR_MIC0", "ADC1_OUTPUT",
+		"VA SWR_MIC4", "ADC2_OUTPUT";
+
+	qcom,mi2s-audio-intf = <1>;
+	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
+        /delete-property/ qcom,cdc-dmic01-gpios;
+        /delete-property/ qcom,cdc-dmic23-gpios;
+	/delete-property/ qcom,wsa-devs;
+	/delete-property/ qcom,wsa-aux-dev-prefix;
+
+        qcom,wsa-max-devs = <0>;
+        qcom,wsa-devs = <0>;
+};
+
+
+/* Modify headset's BIAS voltage to 2.6V */
+&wcd937x_codec {
+	qcom,cdc-micbias2-mv = <2600>;
+};

@@ -41,6 +41,7 @@
 		swr0 = &swr0;
 		swr1 = &swr1;
 		ufshc1 = &ufshc_mem; /* Embedded UFS slot */
+		i2c1 = &qupv3_se1_i2c;
 	};
 
 	cpus {
@@ -835,6 +836,21 @@
 			<&rpmcc QSEECOM_CE1_CLK>;
 		qcom,ce-opp-freq = <192000000>;
 		qcom,qsee-reentrancy-support = <2>;
+	};
+
+	mcd {
+		compatible = "qcom,mcd";
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		interrupts = <0 248 0>;
+		interrupt-names = "mcd_irq";
+		clocks = <&rpmcc QSEECOM_CE1_CLK>,
+			<&rpmcc QSEECOM_CE1_CLK>,
+			<&rpmcc QSEECOM_CE1_CLK>,
+			<&rpmcc QSEECOM_CE1_CLK>;
+		clock-names = "core_clk_src", "core_clk",
+				"iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <192000000>;
 	};
 
 	qcom_smcinvoke: smcinvoke@61800000 {
@@ -1752,6 +1768,7 @@
 		qcom,adsp-remoteheap-vmid = <22 37>;
 		qcom,fastrpc-adsp-audio-pdr;
 		qcom,fastrpc-adsp-sensors-pdr;
+		qcom,secure-domains = <0x0F>;
 
 		qcom,msm_fastrpc_compute_cb1 {
 			compatible = "qcom,msm-fastrpc-compute-cb";

@@ -1,0 +1,27 @@
+/*
+ * Copyright (C) 2021 Motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+ng50-SWD-5000mah-rhode {
+	serialnum = "SB18D38323";
+	fcc_design = <5000>;
+	ui_full = <97>;
+	config_profile_info = [49 00 00 00 00 00 00 00
+				AD C7 C2 C1 B1 AE B3 7D
+				55 D4 C1 9B 82 6C 5D 55
+				51 51 51 7F D8 E0 31 DC
+				C8 C6 CE D5 D7 D6 D3 CF
+				CB CD D4 C3 A5 97 8E 86
+				80 7F 86 98 AA 82 7E B8
+				20 00 57 10 02 A0 5C 00
+				00 00 64 21 C3 50 00 00
+				00 00 00 00 00 00 00 3E];
+};
