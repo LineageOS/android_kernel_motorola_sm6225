@@ -980,6 +980,8 @@
  */
 #define WE_SET_CHANNEL                        88
 #define WE_SET_CONC_SYSTEM_PREF               89
+#define MAX_SUB_CMD                           91  // Motorola, IKDREL3KK-10418
+
 
 /*
  * <ioctl>
@@ -2578,6 +2580,9 @@
  */
 #define WE_SET_TXRX_STATS    24
 
+
+/* for moto SAR features, support tx pwr limit settings on mimo device */
+#define WE_SET_MIMO_TX_POWER 32
 
 #ifdef FEATURE_WLAN_TDLS
 #undef  MAX_VAR_ARGS
@@ -6639,9 +6644,13 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
 				       union iwreq_data *wrqu, char *extra)
 {
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
-	int *value = (int *)extra;
-	int sub_cmd = value[0];
-	int ret;
+	//BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+	int *value;
+	int sub_cmd, cmd_len;
+	int *tmp_value;
+	int *get_value = NULL;
+	int ret = 0;
+	//END IKSWL-15774
 	uint8_t dual_mac_feature = DISABLE_DBS_CXN_AND_SCAN;
 	struct hdd_context *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	QDF_STATUS status;
@@ -6656,6 +6665,29 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
 		return ret;
+	//BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+	tmp_value = (int *)extra;
+
+	// Copy from wrqu structure if it was a ioctl from Motorola code
+	if(tmp_value[0] < 0 || (tmp_value[0] >= MAX_SUB_CMD)) {
+		cmd_len = wrqu->data.length;
+		get_value = (int *) kmalloc(cmd_len+1, GFP_KERNEL);  // Motorola, IKHSS7-39028
+
+		if(get_value == NULL)
+			return -ENOMEM;
+
+		if(copy_from_user((char *) get_value, (char*)(wrqu->data.pointer), cmd_len)) {
+			hdd_alert("copy_from_user --data pointer failed! bailing");
+			kfree(get_value);
+			return -EFAULT;
+		}
+
+		value = (int *)get_value;
+	} else {
+		value = (int *)extra;
+	}
+	sub_cmd = value[0];
+	//END IKSWL-15774
 
 	ret = hdd_check_private_wext_control(hdd_ctx, info);
 	if (0 != ret)
@@ -6700,6 +6732,11 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
 		break;
 
 	}
+
+	//BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+	if(get_value != NULL)
+		kfree(get_value);
+	//END IKSWL-15774
 	hdd_exit();
 	return ret;
 }
@@ -8160,6 +8197,81 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 		break;
 	}
 #endif /* FW_THERMAL_THROTTLE_SUPPORT */
+
+	/* for moto SAR features, support tx pwr limit settings on mimo device */
+	case WE_SET_MIMO_TX_POWER:
+	{
+		struct sar_limit_cmd_params *sar_limit_cmd;
+		mac_handle_t mac_handle = hdd_ctx->mac_handle;
+		int ret = -EINVAL;
+		uint32_t num_limit_rows = 4;
+		struct sar_limit_cmd_row *row;
+
+		if (!mac_handle)
+			return -EINVAL;
+
+		sar_limit_cmd = qdf_mem_malloc(sizeof(struct sar_limit_cmd_params));
+		if (!sar_limit_cmd)
+			return -ENOMEM;
+
+		sar_limit_cmd->commit_limits = 1;
+		sar_limit_cmd->sar_enable = WMI_SAR_FEATURE_ON_USER_DEFINED;
+
+		row = qdf_mem_malloc(sizeof(*row) * num_limit_rows);
+		if (!row) {
+			qdf_mem_free(sar_limit_cmd);
+			hdd_err("Failed to allocate memory for sar_limit_row_list");
+			return -EINVAL;
+		}
+
+		//Below band/chain/limit_value number will get from Modem
+		//either CCK or OFDM, set the validity_bitmap as WMI_SAR_BAND_ID_VALID_MASK |WMI_SAR_CHAIN_ID_VALID_MASK
+		row[0].band_id = WMI_SAR_2G_ID; //WMI_SAR_2G_ID - 0; WMI_SAR_5G_ID - 1
+		row[0].chain_id = 0;
+		row[0].mod_id = WMI_SAR_MOD_OFDM;
+		row[0].limit_value = apps_args[0];
+		row[0].validity_bitmap = WMI_SAR_BAND_ID_VALID_MASK |WMI_SAR_CHAIN_ID_VALID_MASK;
+
+		row[1].band_id = WMI_SAR_2G_ID; //WMI_SAR_2G_ID - 0; WMI_SAR_5G_ID - 1
+		row[1].chain_id = 1;
+		row[1].mod_id = WMI_SAR_MOD_OFDM;
+		row[1].limit_value = apps_args[1];
+		row[1].validity_bitmap = WMI_SAR_BAND_ID_VALID_MASK |WMI_SAR_CHAIN_ID_VALID_MASK;
+
+		row[2].band_id = WMI_SAR_5G_ID; //WMI_SAR_2G_ID - 0; WMI_SAR_5G_ID - 1
+		row[2].chain_id = 0;
+		row[2].mod_id = WMI_SAR_MOD_OFDM;
+		row[2].limit_value = apps_args[2];
+		row[2].validity_bitmap = WMI_SAR_BAND_ID_VALID_MASK |WMI_SAR_CHAIN_ID_VALID_MASK |WMI_SAR_MOD_ID_VALID_MASK;
+
+		row[3].band_id = WMI_SAR_5G_ID; //WMI_SAR_2G_ID - 0; WMI_SAR_5G_ID - 1
+		row[3].chain_id = 1;
+		row[3].mod_id = WMI_SAR_MOD_OFDM;
+		row[3].limit_value = apps_args[3];
+		row[3].validity_bitmap = WMI_SAR_BAND_ID_VALID_MASK |WMI_SAR_CHAIN_ID_VALID_MASK |WMI_SAR_MOD_ID_VALID_MASK;
+
+		sar_limit_cmd->num_limit_rows = num_limit_rows;
+		sar_limit_cmd->sar_limit_row_list = row;
+		hdd_info("change pwr limit to [%d, %d, %d, %d].",
+					 row[0].limit_value, row[1].limit_value, row[2].limit_value, row[3].limit_value);
+		if (sme_set_sar_power_limits(mac_handle,sar_limit_cmd)
+		    != QDF_STATUS_SUCCESS) {
+			hdd_err("Setting maximum tx power failed");
+			if(sar_limit_cmd) {
+				qdf_mem_free(sar_limit_cmd->sar_limit_row_list);
+				qdf_mem_free(sar_limit_cmd);
+			}
+			ret = -EIO;
+			break;
+		}
+		else{
+			/* save settings in hdd_ctx, so can restore configs after SSR */
+			hdd_store_sar_config(hdd_ctx, sar_limit_cmd);
+			hdd_info("Setting maximum tx power successful");
+		}
+	}
+	break;
+
 	default:
 	{
 		hdd_err("Invalid IOCTL command %d", sub_cmd);
@@ -10835,6 +10947,11 @@ static const struct iw_priv_args we_private_args[] = {
 	 0,
 	 "ch_avoid"},
 #endif
+	/* for moto SAR features, support tx pwr limit settings on mimo device */
+	{WE_SET_MIMO_TX_POWER,
+	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
+	 0,
+	 "setTxPowerM"},
 	/* handlers for main ioctl */
 	{WLAN_PRIV_FIPS_TEST,
 	 IW_PRIV_TYPE_BYTE | WE_MAX_STR_LEN,
