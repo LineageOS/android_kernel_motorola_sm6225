@@ -90,6 +90,17 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
 	endif
+	ifneq (,$(filter rhode%, $(TARGET_PRODUCT)))
+                INCS    +=  -include $(AUDIO_ROOT)/config/rhodeautoconf.h
+        endif
+
+        ifneq (,$(filter hawao%, $(TARGET_PRODUCT)))
+                INCS    +=  -include $(AUDIO_ROOT)/config/hawaoautoconf.h
+        endif
+
+        ifneq (,$(filter devon%, $(TARGET_PRODUCT)))
+                INCS    +=  -include $(AUDIO_ROOT)/config/devonautoconf.h
+        endif
 endif
 
 # As per target team, build is done as follows:
@@ -251,6 +262,8 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= rouleur/
 	obj-y	+= wsa883x/
 	obj-y	+= sdm660_cdc/
+	obj-y	+= awinic/
+	obj-y	+= foursemi/
 endif
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
@@ -283,6 +296,34 @@ mbhc_dlkm-y := $(MBHC_OBJS)
 
 obj-$(CONFIG_SND_SOC_MSM_HDMI_CODEC_RX) += hdmi_dlkm.o
 hdmi_dlkm-y := $(HDMICODEC_OBJS)
+
+#Add awinic driver begain
+ifdef CONFIG_SND_SMARTPA_AW882XX
+ifneq (,$(filter rhode% hawao% devon%, $(TARGET_PRODUCT)))
+	SND_SOC_AW882XX_OBJS += aw88261/aw882xx.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_init.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_bin_parse.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_calib.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_device.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_dsp.o
+	SND_SOC_AW882XX_OBJS += aw88261/aw_monitor.o
+else
+	SND_SOC_AW882XX_OBJS += awinic/aw882xx.o
+endif
+endif
+obj-$(CONFIG_SND_SMARTPA_AW882XX) += aw882xx_dlkm.o
+aw882xx_dlkm-y := $(SND_SOC_AW882XX_OBJS)
+#Add awinic driver end
+
+#Add fs1818 driver begain
+ifdef CONFIG_SND_SOC_FS16XX
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx.o
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx_preset.o
+	SND_SOC_FS16XX_OBJS += foursemi/fs16xx_calibration.o
+endif
+obj-$(CONFIG_SND_SOC_FS16XX) += fs16xx_dlkm.o
+fs16xx_dlkm-y := $(SND_SOC_FS16XX_OBJS)
+#Add fs1818 driver end
 
 # inject some build related information
 DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
