@@ -17,4 +17,9 @@ config TOUCHSCREEN_GOODIX_BRL_SPI
 	help
 		Say Y here if the touchscreen is connected via SPI bus.
 
+config GTP_FOD
+	bool "supports FOD"
+	help
+		Say Y here to support FOD.
+
 endif

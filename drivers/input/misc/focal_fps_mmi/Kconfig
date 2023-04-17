@@ -1,0 +1,6 @@
+config INPUT_FOCAL_FPS
+	tristate "FocalTech fingerprint sensor"
+	default n
+	help
+	 Say Y here if you wish to include support for FocalTech finger print sensor.
+	 If unsure, say N.
