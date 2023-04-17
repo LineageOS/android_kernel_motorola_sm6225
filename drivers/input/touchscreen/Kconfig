@@ -1370,13 +1370,19 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
 source "drivers/input/touchscreen/hxchipset/Kconfig"
 
+source "drivers/input/touchscreen/goodix_berlin_mmi/Kconfig"
+
 source "drivers/input/touchscreen/nova_0flash_mmi/Kconfig"
 
 source "drivers/input/touchscreen/touchscreen_mmi/Kconfig"
 
 source "drivers/input/touchscreen/stmicro_mmi/Kconfig"
 
+source "drivers/input/touchscreen/synaptics_tcm2_mmi/Kconfig"
+
 source "drivers/input/touchscreen/focaltech_0flash_v2_mmi/Kconfig"
+
+source "drivers/input/touchscreen/focaltech_touch_v3/Kconfig"
 
 source "drivers/input/touchscreen/focaltech_v2_mmi/Kconfig"
 

@@ -13,8 +13,53 @@ menuconfig TOUCHSCREEN_GOODIX_BRL
 if TOUCHSCREEN_GOODIX_BRL
 
 config TOUCHSCREEN_GOODIX_BRL_SPI
-	bool "support SPI bus connection"
+	bool "Goodix berlin SPI bus connection"
 	help
-		Say Y here if the touchscreen is connected via SPI bus.
+	  Say Y here if the touchscreen is connected via SPI bus.
+
+config GTP_FOD
+	bool "Goodix berlin FOD"
+	help
+	  Say Y here to support FOD.
+
+config GTP_LIMIT_USE_SUPPLIER
+	bool "Goodix berlin limit use supplier"
+	default n
+	help
+	  Say Y here if you want to limit use supplier on Goodix berlin.
+
+	  If unsure, say N.
+
+config GTP_ENABLE_PM_QOS
+	bool "Goodix berlin PM QoS"
+	default n
+	help
+	  Say Y here if you want to enable PM QoS on Goodix berlin.
+
+	  If unsure, say N.
+
+config GOODIX_ESD_ENABLE
+	bool "Goodix berlin ESD"
+	default n
+	help
+	  Say Y here if you want to enable ESD on Goodix berlin.
+
+	  If unsure, say N.
+
+config GTP_LAST_TIME
+	bool "Goodix berlin timestamp"
+	default n
+	help
+	  Say Y here if you want to enable timestamp on Goodix berlin.
+
+	  If unsure, say N.
+
+config ENABLE_GTP_PALM_CANCEL
+	bool "Goodix berlin palm cancel"
+	default n
+	help
+	  Say Y here if you want to enable palm cancel on Goodix berlin.
+
+	  If unsure, say N.
 
 endif

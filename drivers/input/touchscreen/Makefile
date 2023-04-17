@@ -117,9 +117,12 @@ obj-$(CONFIG_TOUCHSCREEN_FT3519)   += ft3519/
 obj-$(CONFIG_TOUCHSCREEN_NT36XXX)	+= nt36xxx/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
 
+obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL)	+= goodix_berlin_mmi/
 obj-$(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI_MMI)	+= nova_0flash_mmi/
 obj-$(CONFIG_INPUT_TOUCHSCREEN_MMI)	+= touchscreen_mmi/
 obj-$(CONFIG_TOUCHSCREEN_FTS_TS) += stmicro_mmi/
+obj-$(CONFIG_TOUCHSCREEN_SYNA_TCM2) += synaptics_tcm2_mmi/
 obj-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_V2_MMI) += focaltech_0flash_v2_mmi/
+obj-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_V3) += focaltech_touch_v3/
 obj-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_V2_MMI) += focaltech_v2_mmi/
 obj-$(CONFIG_INPUT_TOUCHSCREEN_ILI_9882_MMI) += ili9882_mmi/
