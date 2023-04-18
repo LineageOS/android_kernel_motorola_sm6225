@@ -227,6 +227,9 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
 	struct goodix_ts_event gs_event = {0};
 	int ret;
+#ifdef GOODIX_PALM_SENSOR_EN
+	int palm_flag = 0;
+#endif
 
 	if (atomic_read(&cd->suspended) == 0)
 		return EVT_CONTINUE;
@@ -257,6 +260,24 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		     gs_event.gesture_type)) {
 		gsx_gesture->gesture_data = gs_event.gesture_type;
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#ifdef GOODIX_PALM_SENSOR_EN
+		if (cd->set_mode.palm_detection) {
+			palm_flag = gs_event.gesture_report_info & GOODIX_GESTURE_PALM_DETECTION;
+			if (palm_flag) {
+				mod_timer(&cd->palm_release_timer,
+					jiffies + msecs_to_jiffies(cd->palm_release_delay_ms));
+			}
+			if (atomic_read(&cd->palm_status) != palm_flag) {
+				atomic_set(&cd->palm_status, palm_flag);
+				/* call class method */
+				if (cd->imports && cd->imports->report_palm)
+					cd->imports->report_palm(palm_flag);
+				ts_info("palm detection flag changed to: 0x%x\n", palm_flag);
+			}
+			goto gesture_ist_exit;
+		}
+#endif
+
 		if (cd->imports && cd->imports->report_gesture) {
 			struct gesture_event_data mmi_event;
 
@@ -274,7 +295,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 				PM_WAKEUP_EVENT(cd->gesture_wakelock, 3000);
 			goto gesture_ist_exit;
 		}
-#endif
+#else
 		/* do resume routine */
 		ts_info("got valid gesture type 0x%x",
 			gs_event.gesture_type);
@@ -283,12 +304,18 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		input_report_key(cd->input_dev, KEY_POWER, 0);
 		input_sync(cd->input_dev);
 		goto gesture_ist_exit;
+#endif
 	} else {
 		ts_info("unsupported gesture:%x", gs_event.gesture_type);
 	}
 
 re_send_ges_cmd:
+#if defined(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)
+	if (goodix_ts_send_cmd(cd, ENTER_GESTURE_MODE_CMD, 6, (cd->gesture_cmd) >> 8,
+			cd->gesture_cmd & 0xFF) < 0)
+#else
 	if (hw_ops->gesture(cd, 0))
+#endif
 		ts_info("warning: failed re_send gesture cmd");
 gesture_ist_exit:
 	if (!cd->tools_ctrl_sync)

@@ -333,6 +333,7 @@ enum ts_mmi_work {
 #define TS_MMI_GESTURE_ZERO 0x01
 #define TS_MMI_GESTURE_SINGLE 0x02
 #define TS_MMI_GESTURE_DOUBLE 0x04
+#define TS_MMI_GESTURE_PALM 0x08
 
 /**
  * struct touchscreen_mmi_methods - hold vendor provided functions

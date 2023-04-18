@@ -2385,6 +2385,19 @@ static int goodix_start_later_init(struct goodix_ts_core *ts_core)
 	return 0;
 }
 
+#ifdef GOODIX_PALM_SENSOR_EN
+static void goodix_palm_sensor_release_timer_handler(struct timer_list *t)
+{
+	struct goodix_ts_core *cd = from_timer(cd, t, palm_release_timer);
+
+	if (cd->imports && cd->imports->report_palm && atomic_read(&cd->palm_status)) {
+		cd->imports->report_palm(false);
+		ts_info("palm report far");
+		atomic_set(&cd->palm_status, 0);
+	}
+}
+#endif
+
 /**
  * goodix_ts_probe - called by kernel when Goodix touch
  *  platform driver is added.
@@ -2526,6 +2539,11 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		ts_err("Failed start cfg_bin_proc, %d", ret);
 		goto err_register_gesture_wakelock;
 	}
+
+#ifdef GOODIX_PALM_SENSOR_EN
+	timer_setup(&core_data->palm_release_timer, goodix_palm_sensor_release_timer_handler, 0);
+	core_data->palm_release_delay_ms = GOODIX_PALM_RELEASE_DELAY_MS;
+#endif
 
 	ts_info("goodix_ts_core probe success");
 	return 0;

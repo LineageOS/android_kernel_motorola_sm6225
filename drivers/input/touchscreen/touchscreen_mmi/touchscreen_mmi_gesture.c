@@ -452,14 +452,19 @@ static int ts_mmi_palm_set_enable(struct sensors_classdev *sensors_cdev,
 	struct ts_mmi_dev *touch_cdev = sensor_pdata->touch_cdev;
 	int ret = 0;
 
+	mutex_lock(&touch_cdev->extif_mutex);
 	TRY_TO_CALL(palm_set_enable, enable);
 	if (enable == 1) {
+		touch_cdev->gesture_mode_type |= 0x08;
 		dev_info(DEV_TS, "%s: sensor ENABLE\n", __func__);
 	} else if (enable == 0) {
+		touch_cdev->gesture_mode_type &= 0xF7;
 		dev_info(DEV_TS, "%s: sensor DISABLE\n", __func__);
 	} else {
 		dev_err(DEV_TS, "%s: unknown enable symbol\n", __func__);
 	}
+	mutex_unlock(&touch_cdev->extif_mutex);
+
 	return 0;
 }
 

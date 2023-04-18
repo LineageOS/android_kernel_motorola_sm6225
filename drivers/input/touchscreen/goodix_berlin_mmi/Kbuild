@@ -69,6 +69,10 @@ ifneq ($(filter m y, $(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)),)
 	EXTRA_CFLAGS += -DCONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 endif
 
+ifneq ($(filter m y,$(CONFIG_INPUT_GOODIX_MMI_ENABLE_PALM)),)
+    EXTRA_CFLAGS += -DGOODIX_PALM_SENSOR_EN
+endif
+
 ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
 USE_TARGET_PRODUCT := $(strip $(subst _factory,, $(TARGET_PRODUCT)))
 else

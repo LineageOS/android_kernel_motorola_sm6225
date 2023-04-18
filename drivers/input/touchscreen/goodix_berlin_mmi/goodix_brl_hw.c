@@ -1103,6 +1103,9 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 	static int pre_flags = 0;
 #endif
 	int underwater_flag = 0;
+#ifdef GOODIX_PALM_SENSOR_EN
+	int palm_flag = 0;
+#endif
 	/* clean event buffer */
 	memset(ts_event, 0, sizeof(*ts_event));
 	/* copy pre-data to buffer */
@@ -1117,6 +1120,23 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 			ts_info("under water flag changed to 0x%x\n", cd->liquid_status);
 		}
 	}
+
+#ifdef GOODIX_PALM_SENSOR_EN
+	if (cd->set_mode.palm_detection) {
+		palm_flag = buffer[2] & GOODIX_GESTURE_PALM_DETECTION;
+		if (palm_flag) {
+			mod_timer(&cd->palm_release_timer,
+				jiffies + msecs_to_jiffies(cd->palm_release_delay_ms));
+		}
+		if (atomic_read(&cd->palm_status) != palm_flag) {
+			atomic_set(&cd->palm_status, palm_flag);
+			/* call class method */
+			if (cd->imports && cd->imports->report_palm)
+				cd->imports->report_palm(palm_flag);
+			ts_info("palm detection flag changed to: 0x%x\n", palm_flag);
+		}
+	}
+#endif
 
 	touch_num = buffer[2] & 0x0F;
 
