@@ -763,6 +763,7 @@ static enum power_supply_property sc760x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
@@ -770,6 +771,7 @@ static enum power_supply_property sc760x_power_supply_props[] = {
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_USB_TYPE,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_PRESENT
 };
 
@@ -899,26 +901,40 @@ static int sc760x_charger_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = sc760x_is_enabled_charging(sc);
+
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = state.usb_online;
+		val->intval = sc->sc760x_enable;
 		break;
+
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = sc760x_power_supply_desc.type;
 		break;
+
 	case POWER_SUPPLY_PROP_USB_TYPE:
 		val->intval = get_charger_type(sc);
 		break;
 
 	case POWER_SUPPLY_PROP_HEALTH:
-
 		val->intval = POWER_SUPPLY_HEALTH_GOOD;
+		break;
+
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = state.vbat_adc;
+		break;
+
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = state.vchg_adc;
+		break;
+
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = state.tdie_adc;
 		break;
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = state.ibat_adc;
 		break;
+
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		val->intval = sc->curr_thermal_level;
 		break;
@@ -1184,8 +1200,6 @@ static int sc760x_register_interrupt(struct sc760x_chip *sc, struct i2c_client *
         return ret;
     }
 
-    disable_irq_wake(client->irq);
-    disable_irq(client->irq);
     sc->irq_enabled = false;
     sc->irq = client->irq;
     dev_err(sc->dev, "request thread irq success\n");
