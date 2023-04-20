@@ -2545,6 +2545,12 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	core_data->palm_release_delay_ms = GOODIX_PALM_RELEASE_DELAY_MS;
 #endif
 
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	goodix_log_capture_register_misc();
+	if (ret)
+		ts_err("Failed register log device, %d", ret);
+#endif
+
 	ts_info("goodix_ts_core probe success");
 	return 0;
 
@@ -2576,6 +2582,10 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	goodix_stylus_dda_exit();
 #endif
 	goodix_tools_exit();
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	goodix_log_capture_unregister_misc();
+#endif
 
 	if (core_data->init_stage >= CORE_INIT_STAGE2) {
 		gesture_module_exit();

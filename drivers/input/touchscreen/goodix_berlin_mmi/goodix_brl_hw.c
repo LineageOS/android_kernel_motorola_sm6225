@@ -42,6 +42,7 @@
 #define GOODIX_IC_INFO_ADDR_BRA		0x10068
 #define GOODIX_IC_INFO_ADDR			0x10070
 
+#define TRIGGER_FRAME_CNT 50
 
 enum brl_request_code {
 	BRL_REQUEST_CODE_CONFIG = 0x01,
@@ -49,6 +50,20 @@ enum brl_request_code {
 	BRL_REQUEST_CODE_RESET = 0x03,
 	BRL_REQUEST_CODE_CLOCK = 0x04,
 };
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+enum {
+	PROCESS_REF = 0,
+	PROCESS_RAW,
+	PROCESS_DIFF,
+	PROCESS_B_ARRAY
+};
+
+static struct frame_log_t {
+	u8 *buf;
+	int used;
+} frame_log;
+#endif
 
 static int brl_select_spi_mode(struct goodix_ts_core *cd)
 {
@@ -885,6 +900,8 @@ static void print_ic_info(struct goodix_ic_info *ic_info)
 		misc->fw_state_addr, misc->fw_state_len);
 	ts_info("FW-Buffer:                     0x%04X, %d",
 		misc->fw_buffer_addr, misc->fw_buffer_max_len);
+	ts_info("frame_data_addr:               0x%04x",
+		misc->frame_data_addr);
 	ts_info("Touch-Data:                    0x%04X, %d",
 		misc->touch_data_addr, misc->touch_data_head_len);
 	ts_info("point_struct_len:              %d",
@@ -1235,6 +1252,121 @@ static int goodix_touch_handler(struct goodix_ts_core *cd,
 	return 0;
 }
 
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+int frame_log_capture_start(struct goodix_ts_core *cd)
+{
+	struct goodix_ts_cmd tmp_cmd;
+
+	if (atomic_read(&cd->trigger_enable) != 0)
+		return 0;
+
+	frame_log.buf = vmalloc(4 * 1024);
+	if (!frame_log.buf)
+		return -ENOMEM;
+	frame_log.used = 0;
+
+	tmp_cmd.len = 5;
+	tmp_cmd.cmd = 0x90;
+	tmp_cmd.data[0] = 0x83;
+	cd->hw_ops->send_cmd(cd, &tmp_cmd);
+	atomic_set(&cd->trigger_enable, 1);
+	return 0;
+}
+
+static void goodix_cache_debug_log(struct goodix_ts_core *cd)
+{
+	u8 sync = 0;
+	u8 diff_cmd[] = {0x00, 0x00, 0x05, 0x90, 0x82, 0x17, 0x01};
+	u8 raw_cmd[] = {0x00, 0x00, 0x05, 0x90, 0x81, 0x16, 0x01};
+	u8 b_cmd[] = {0x00, 0x00, 0x05, 0x90, 0x87, 0x1C, 0x01};
+	u8 freq_cmd[] = {0x00, 0x00, 0x05, 0x9C, 0x00, 0xA1, 0x00};
+	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+	struct goodix_ic_info_misc *misc = &cd->ic_info.misc;
+	static int discard_frames = 3;
+	static int frame_cnt;
+	static int freq_index;
+	static int process;
+	u32 cmd_addr = misc->cmd_addr;
+	int freq_num = cd->ic_info.parm.mutual_freq_num;
+	u8 frame_type = 0;
+	u8 *frame_ptr = misc->frame_data_addr - misc->touch_data_addr + cd->trigger_buf;
+	int frame_len = le16_to_cpup((__le16 *)(frame_ptr + 3));
+	static size_t total_cnt;
+
+	hw_ops->write(cd, misc->frame_data_addr, &sync, 1);
+	if (discard_frames > 0) {
+		discard_frames--;
+		return;
+	}
+
+	if (process == PROCESS_REF)
+		frame_type = 0x01;
+	else if (process == PROCESS_DIFF)
+		frame_type = 0x03;
+	else if (process == PROCESS_RAW)
+		frame_type = 0x02;
+	else if (process == PROCESS_B_ARRAY)
+		frame_type = 0x04;
+
+	memset(frame_log.buf + frame_log.used, 0xAA, 4);
+	frame_log.used += 4;
+	frame_log.buf[frame_log.used++] = frame_len & 0xFF;
+	frame_log.buf[frame_log.used++] = (frame_len >> 8) & 0xFF;
+	frame_log.buf[frame_log.used++] = frame_type;
+	memcpy(frame_log.buf + frame_log.used, frame_ptr, frame_len);
+	frame_log.used += frame_len;
+
+	total_cnt += frame_log.used;
+	ts_info("frame log used:%d, total cnt:%zu", frame_log.used, total_cnt);
+	put_fifo_with_discard(frame_log.buf, frame_log.used);
+	memset(frame_log.buf, 0x0, sizeof(frame_log.used));
+	frame_log.used = 0;
+
+	if (process == PROCESS_REF) {
+		hw_ops->write(cd, cmd_addr, diff_cmd, (int)sizeof(diff_cmd));
+		discard_frames = 3;
+		process = PROCESS_DIFF;
+	} else if (process == PROCESS_DIFF) {
+		frame_cnt++;
+		if (frame_cnt >= TRIGGER_FRAME_CNT) {
+			hw_ops->write(cd, cmd_addr, raw_cmd, (int)sizeof(raw_cmd));
+			discard_frames = 3;
+			frame_cnt = 0;
+			process = PROCESS_RAW;
+		}
+	} else if (process == PROCESS_RAW) {
+		frame_cnt++;
+		if (frame_cnt >= TRIGGER_FRAME_CNT) {
+			discard_frames = 3;
+			frame_cnt = 0;
+			freq_cmd[4] = freq_index;
+			freq_cmd[5] += freq_index;
+			freq_index++;
+			if (freq_index > freq_num) {
+				process = 0;
+				freq_index = 0;
+				hw_ops->reset(cd, 100);
+				atomic_set(&cd->trigger_enable, 0);
+				total_cnt = 0;
+				vfree(frame_log.buf);
+				ts_info("Notify raw data capture down");
+				sysfs_notify(cd->imports->kobj_notify, NULL, "log_trigger");
+			} else {
+				hw_ops->write(cd, cmd_addr, freq_cmd, (int)sizeof(freq_cmd));
+				usleep_range(5000, 5100);
+				hw_ops->write(cd, cmd_addr, b_cmd, (int)sizeof(b_cmd));
+				process = PROCESS_B_ARRAY;
+			}
+		}
+	} else if (process == PROCESS_B_ARRAY) {
+		discard_frames = 3;
+		frame_cnt = 0;
+		process = PROCESS_DIFF;
+		hw_ops->write(cd, cmd_addr, diff_cmd, (int)sizeof(diff_cmd));
+	}
+}
+#endif
+
 static int brl_event_handler(struct goodix_ts_core *cd,
 			 struct goodix_ts_event *ts_event)
 {
@@ -1247,8 +1379,19 @@ static int brl_event_handler(struct goodix_ts_core *cd,
 
 	pre_read_len = IRQ_EVENT_HEAD_LEN +
 		BYTES_PER_POINT * 2 + COOR_DATA_CHECKSUM_SIZE;
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	if (atomic_read(&cd->trigger_enable) == 1) {
+		ret = hw_ops->read(cd, misc->touch_data_addr, cd->trigger_buf, sizeof(cd->trigger_buf));
+		memcpy(pre_buf, cd->trigger_buf, pre_read_len);
+		goodix_cache_debug_log(cd);
+	} else {
+		ret = hw_ops->read(cd, misc->touch_data_addr,
+				pre_buf, pre_read_len);
+	}
+#else
 	ret = hw_ops->read(cd, misc->touch_data_addr,
-			   pre_buf, pre_read_len);
+			pre_buf, pre_read_len);
+#endif
 	if (ret) {
 		ts_debug("failed get event head data");
 		return ret;

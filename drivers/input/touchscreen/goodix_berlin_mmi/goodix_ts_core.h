@@ -572,6 +572,11 @@ struct goodix_ts_core {
 	unsigned short gesture_cmd;
 	atomic_t pm_resume;
 	wait_queue_head_t pm_wq;
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	atomic_t trigger_enable;
+	u8 trigger_buf[2000];
+#endif
 };
 
 /* external module structures */
@@ -737,6 +742,14 @@ void goodix_stylus_dda_init(void);
 void goodix_stylus_dda_exit(void);
 int goodix_stylus_dda_register_cdevice(void);
 void goodix_dda_process_pen_report(struct goodix_pen_data *pen_data);
+#endif
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+int frame_log_capture_start(struct goodix_ts_core *cd);
+void put_fifo_with_discard(char *log_buf, int len);
+void clear_kfifo(void);
+int goodix_log_capture_register_misc(void);
+int goodix_log_capture_unregister_misc(void);
 #endif
 
 #endif

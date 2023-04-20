@@ -73,6 +73,13 @@ ifneq ($(filter m y,$(CONFIG_INPUT_GOODIX_MMI_ENABLE_PALM)),)
     EXTRA_CFLAGS += -DGOODIX_PALM_SENSOR_EN
 endif
 
+ifeq ($(TARGET_BUILD_VARIANT), userdebug)
+ifneq ($(filter m y, $(CONFIG_GTP_GHOST_LOG_CAPTURE)),)
+	EXTRA_CFLAGS += -DCONFIG_GTP_GHOST_LOG_CAPTURE
+	goodix_brl_mmi-objs += goodix_ts_log_capture.o
+endif
+endif
+
 ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
 USE_TARGET_PRODUCT := $(strip $(subst _factory,, $(TARGET_PRODUCT)))
 else

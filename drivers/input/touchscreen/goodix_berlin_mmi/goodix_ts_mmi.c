@@ -51,6 +51,13 @@ static ssize_t goodix_ts_sensitivity_store(struct device *dev,
 static ssize_t goodix_ts_timestamp_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 #endif
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+static ssize_t goodix_ts_log_trigger_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count);
+static ssize_t goodix_ts_log_trigger_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+#endif
 
 static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	goodix_ts_edge_show, goodix_ts_edge_store);
@@ -64,6 +71,10 @@ static DEVICE_ATTR(sensitivity, (S_IRUGO | S_IWUSR | S_IWGRP),
 	NULL, goodix_ts_sensitivity_store);
 #ifdef CONFIG_GTP_LAST_TIME
 static DEVICE_ATTR(timestamp, S_IRUGO, goodix_ts_timestamp_show, NULL);
+#endif
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+static DEVICE_ATTR(log_trigger, (S_IRUGO | S_IWUSR | S_IWGRP),
+	goodix_ts_log_trigger_show, goodix_ts_log_trigger_store);
 #endif
 
 /* hal settings */
@@ -120,6 +131,10 @@ static int goodix_ts_mmi_extend_attribute_group(struct device *dev, struct attri
 
 #ifdef CONFIG_GTP_LAST_TIME
 	ADD_ATTR(timestamp);
+#endif
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	ADD_ATTR(log_trigger);
 #endif
 
 	if (idx) {
@@ -695,6 +710,39 @@ static ssize_t goodix_ts_timestamp_show(struct device *dev,
 	last_ts = ktime_to_timespec64(last_ktime);
 
 	return scnprintf(buf, PAGE_SIZE, "%lld.%ld\n", last_ts.tv_sec, last_ts.tv_nsec);
+}
+#endif
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+static ssize_t goodix_ts_log_trigger_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	if (!buf || count <= 0)
+		return 0;
+
+	clear_kfifo();
+	frame_log_capture_start(core_data);
+
+	return count;
+}
+
+static ssize_t goodix_ts_log_trigger_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev;
+	struct goodix_ts_core *core_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_GOODIX_DATA(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", 0x01);
 }
 #endif
 
