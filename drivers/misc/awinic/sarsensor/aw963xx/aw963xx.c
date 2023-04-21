@@ -312,57 +312,37 @@ static void aw963xx_irq_handle_func(uint32_t irq_status, void *data)
 	int32_t ret = 0;
 	uint32_t curr_status_val = 0;
 	struct aw_sar *p_sar = (struct aw_sar *)data;
-
+	uint32_t ch_th[AW963XX_CHANNEL_NUM_MAX] = { 0 };
 	AWLOGD(p_sar->dev, "IRQSRC = 0x%x", irq_status);
-
-	if (((irq_status >> 1) & 0x01)  == 1) {
-		for (i = (AW963XX_VALID_TH - 1); i >= 0; i--) {
-			ret = aw_sar_i2c_read(p_sar->i2c,
-									REG_STAT0 + i * (REG_STAT1 - REG_STAT0),
-									&curr_status_val);
-			if (ret < 0) {
-				AWLOGE(p_sar->dev, "i2c IO error");
-				return;
-			}
-
-			for (j = 0; j < AW963XX_CHANNEL_NUM_MAX; j++) {
-				if ((((curr_status_val >> j) & 0x01) == AW963XX_APPROACH) &&
-						(p_sar->channels_arr[j].last_channel_info == AW963XX_FAR_AWAY)) {
-					if (p_sar->channels_arr[j].input == NULL) {
-						continue;
-					}
-					p_sar->channels_arr[j].last_channel_info = AW963XX_APPROACH;
-					input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, i + 1);
-					input_sync(p_sar->channels_arr[j].input);
-					AWLOGD(p_sar->dev, "approach ch = %d th = %d", j, i);
-					break;
-				}
-			}
-		}
+	for (j = 0; j < AW963XX_CHANNEL_NUM_MAX; j++) {
+		if (p_sar->channels_arr[j].input == NULL) {
+		continue;
 	}
-
-	if (((irq_status >> 2) & 0x01)  == 1) {
-		ret = aw_sar_i2c_read(p_sar->i2c, REG_STAT0, &curr_status_val);
-		if (ret < 0) {
-			AWLOGE(p_sar->dev, "i2c IO error");
-			return;
+	for (i = (AW963XX_VALID_TH - 1); i >= 0; i--) {
+	ret = aw_sar_i2c_read(p_sar->i2c,
+		REG_STAT0 + i * (REG_STAT1 - REG_STAT0),
+		&curr_status_val);
+	ch_th[j] |= ((curr_status_val >> j) & 0x01) << i;
+	AWLOGE(p_sar->dev, "ch= %d, th = %d ch_th = 0x%x", j, i, ch_th[j]);
+	}
+	AWLOGE(p_sar->dev, "ch = %d last_th=0x%x th = 0x%x", j, p_sar->channels_arr[j].last_channel_info, ch_th[j]);
+	if (p_sar->channels_arr[j].last_channel_info != ch_th[j]) {
+		if ((ch_th[j] >> 3 & 0x01) == 1) { //th3
+			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 4);
+		} else if ((ch_th[j] >> 2 & 0x01) == 1) { //th2
+			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 3);
+		} else if ((ch_th[j] >> 1 & 0x01) == 1) { //th1
+			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 2);
+		} else if ((ch_th[j] >> 0 & 0x01) == 1) { //th0
+			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 1);
+		} else { //far
+			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 0);
 		}
-
-		for (j = 0; j < AW963XX_CHANNEL_NUM_MAX; j++) {
-			if ((((curr_status_val >> j) & 0x01) == AW963XX_FAR_AWAY) &&
-					(p_sar->channels_arr[j].last_channel_info == AW963XX_APPROACH)) {
-				p_sar->channels_arr[j].last_channel_info = AW963XX_FAR_AWAY;
-				if (p_sar->channels_arr[i].used == AW_FALSE) {
-					continue;
-				}
-				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 0);
-				input_sync(p_sar->channels_arr[j].input);
-				AWLOGD(p_sar->dev, "far away ch = %d", j);
-			}
+		input_sync(p_sar->channels_arr[j].input);
+		p_sar->channels_arr[j].last_channel_info = ch_th[j];
 		}
 	}
 }
-
 static ssize_t aw963xx_operation_mode_get(void *data, char *buf)
 {
 	ssize_t len = 0;
