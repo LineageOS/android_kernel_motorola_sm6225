@@ -1813,6 +1813,27 @@ static int mmi_get_battery_health(struct mmi_charger *charger)
 	return batt_health;
 }
 
+static int mmi_combine_battery_soc(struct mmi_charger_chip *chip)
+{
+	int soc = 0;
+	int remain = 0, full = 0;
+	struct mmi_battery_pack *battery = NULL;
+
+	list_for_each_entry(battery, &chip->battery_list, list) {
+		remain += battery->info->batt_soc * battery->info->batt_full_uah;
+		full += battery->info->batt_full_uah;
+	}
+
+	if (full > 0 && remain >= 0) {
+		soc = remain / full;
+		if (soc > 100)
+			soc = 100;
+	} else
+		soc = -1;
+
+	return soc;
+}
+
 static int mmi_combine_battery_status(struct mmi_charger_chip *chip)
 {
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
@@ -1837,36 +1858,6 @@ static int mmi_combine_battery_status(struct mmi_charger_chip *chip)
 	}
 
 	return status;
-}
-
-static int mmi_combine_battery_soc(struct mmi_charger_chip *chip)
-{
-	int status;
-	static int soc = 0;
-	int soc_curr = 0;
-	int remain = 0, full = 0;
-	struct mmi_battery_pack *battery = NULL;
-
-	list_for_each_entry(battery, &chip->battery_list, list) {
-		remain += battery->info->batt_soc * battery->info->batt_full_uah;
-		full += battery->info->batt_full_uah;
-	}
-
-	if (full > 0 && remain >= 0) {
-		soc_curr = remain / full;
-		status = mmi_combine_battery_status(chip);
-		if ((soc <= 0) ||
-			((status == POWER_SUPPLY_STATUS_CHARGING) && (soc_curr > soc)) ||
-			((status != POWER_SUPPLY_STATUS_CHARGING) && (soc_curr < soc))) {
-			soc = soc_curr;
-		}
-
-		if (soc > 100)
-			soc = 100;
-	} else
-		soc = -1;
-
-	return soc;
 }
 
 static int mmi_combine_battery_cycles(struct mmi_charger_chip *chip)
