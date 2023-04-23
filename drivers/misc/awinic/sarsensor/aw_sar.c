@@ -18,6 +18,8 @@
 #define AW_SAR_CH_MAX					(20)
 #define AW_POWER_ON_SYSFS_DELAY_MS		(5000)
 #define AW_SAR_OFFSET_LEN				(15)
+#define AW_SAR_VCC_MIN_UV				(1700000)
+#define AW_SAR_VCC_MAX_UV				(3600000)
 
 static struct mutex aw_sar_lock;
 
@@ -1569,12 +1571,10 @@ static int32_t aw_sar_regulator_power_init(struct aw_sar *p_sar)
 
 	AWLOGD(p_sar->dev, "aw_sar power init enter");
 
-	if (p_sar->p_sar_para->p_platform_config->p_regulator_config == NULL) {
-		return AW_INVALID_PARA;
-	}
+//	if (p_sar->p_sar_para->p_platform_config->p_regulator_config == NULL)
+//		return AW_INVALID_PARA;
 
-	snprintf(vcc_name, sizeof(vcc_name), "%s%d",
-						p_sar->p_sar_para->p_platform_config->p_regulator_config->vcc_name,
+	snprintf(vcc_name, sizeof(vcc_name), "vcc%d",
 						p_sar->dts_info.sar_num);
 	AWLOGD(p_sar->dev, "vcc_name = %s", vcc_name);
 
@@ -1582,13 +1582,13 @@ static int32_t aw_sar_regulator_power_init(struct aw_sar *p_sar)
 	if (IS_ERR(p_sar->vcc)) {
 		rc = PTR_ERR(p_sar->vcc);
 		AWLOGE(p_sar->dev, "regulator get failed vcc rc = %d", rc);
-		return rc;
+		return AW_ERR;
 	}
 
 	if (regulator_count_voltages(p_sar->vcc) > 0) {
 		rc = regulator_set_voltage(p_sar->vcc,
-					p_sar->p_sar_para->p_platform_config->p_regulator_config->min_uV,
-					p_sar->p_sar_para->p_platform_config->p_regulator_config->max_uV);
+					AW_SAR_VCC_MIN_UV,
+					AW_SAR_VCC_MAX_UV);
 		if (rc) {
 			AWLOGE(p_sar->dev,
 				"regulator set vol failed rc = %d", rc);
@@ -1596,11 +1596,11 @@ static int32_t aw_sar_regulator_power_init(struct aw_sar *p_sar)
 		}
 	}
 
-	return rc;
+	return AW_OK;
 
 reg_vcc_put:
 	regulator_put(p_sar->vcc);
-	return rc;
+	return AW_ERR;
 }
 
 static void aw_sar_power_deinit(struct aw_sar *p_sar)
@@ -1650,7 +1650,7 @@ static int32_t regulator_is_get_voltage(struct aw_sar *p_sar)
 	while(cnt--) {
 		voltage_val = regulator_get_voltage(p_sar->vcc);
 		AWLOGD(p_sar->dev, "aw_sar voltage is : %d uv", voltage_val);
-		if (voltage_val >= p_sar->p_sar_para->p_platform_config->p_regulator_config->min_uV) {
+		if (voltage_val >= AW_SAR_VCC_MIN_UV){
 			return AW_OK;
 		}
 		mdelay(1);
@@ -1936,11 +1936,10 @@ static int32_t aw_sar_regulator_power(struct aw_sar *p_sar)
 	//Configure the use of regulator power supply in DTS
 	if (p_sar->dts_info.use_regulator_flag == true) {
 		ret = aw_sar_regulator_power_init(p_sar);
-		if (ret) {
+		if (ret != AW_OK)
 			AWLOGE(p_sar->dev, "power init failed");
-		} else {
+		else
 			aw_sar_power_enable(p_sar, AW_TRUE);
-		}
 		ret = regulator_is_get_voltage(p_sar);
 		if (ret != AW_OK) {
 			AWLOGE(p_sar->dev, "get_voltage failed");
