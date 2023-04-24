@@ -418,9 +418,19 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 		cw_printk("CW2015[%d]: UI_SOC = %d larger 100!!!!\n", __LINE__, ui_soc);
 		ui_soc = 100;
 	}
+
+	if ((cw_bat->ui_soc == 0) ||
+		(chr_st_now && ui_soc > cw_bat->ui_soc) ||
+		(!chr_st_now && ui_soc < cw_bat->ui_soc)) {
+		cw_bat->ui_soc = ui_soc;
+	}
+
+	if (cw_bat->ui_soc != ui_soc) {
+		cw_printk("CW2015[%d]: not update, cw_bat->ui_soc %d, ui_soc %d", __LINE__, cw_bat->ui_soc, ui_soc);
+	}
+
 	cw_bat->ic_soc_h = soc_h;
 	cw_bat->ic_soc_l = soc_l;
-	cw_bat->ui_soc = ui_soc;
 
 	return 0;
 }
