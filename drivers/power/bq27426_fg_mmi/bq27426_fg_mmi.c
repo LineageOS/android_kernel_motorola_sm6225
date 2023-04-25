@@ -107,11 +107,12 @@ enum print_reason {
 	PR_MOTO         = BIT(7),
 };
 
-static int __debug_mask = 0xFF;
+static int __debug_mask = 0;
 module_param_named(
 	debug_mask, __debug_mask, int, S_IRUSR | S_IWUSR
 );
 
+#define FG_HEARTBEAT_RATE 60000
 #define	MONITOR_ALARM_CHECK_NS	5000000000
 #define	INVALID_REG_ADDR	0xFF
 #define BQFS_UPDATE_KEY		0x8F91
@@ -226,7 +227,7 @@ static const struct fg_batt_profile bqfs_image[] = {
 #endif
 
 #ifdef ATL_NM40_712MAH_BATTERY_PROFILE
-	{.batt_type_str = "NM40_ATL_712MAH", .bqfs_image = li_alt_flip_bqfs_image, .array_size = ARRAY_SIZE(li_alt_flip_bqfs_image), .chem_id = 0x2766, .dm_ver = 5},
+	{.batt_type_str = "NM40_ATL_712MAH", .bqfs_image = li_alt_flip_bqfs_image, .array_size = ARRAY_SIZE(li_alt_flip_bqfs_image), .chem_id = 0x5725, .dm_ver = 0},
 #endif
 
 };
@@ -1025,19 +1026,25 @@ static int fg_read_fw_version(struct bq_fg_chip *bq)
 	return version;
 }
 
-
+#define BPD_TEMP_THRE (-300)
+static int fg_read_temperature(struct bq_fg_chip *bq);
 static int fg_read_status(struct bq_fg_chip *bq)
 {
 	int ret;
 	u16 flags;
+	int batt_temp;
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_FLAGS], &flags);
 	if (ret < 0) {
 		return ret;
 	}
 
+	batt_temp = fg_read_temperature(bq) - 2730;
 	mutex_lock(&bq->data_lock);
-	bq->batt_present	= !!(flags & FG_FLAGS_BAT_DET);
+	if (batt_temp > BPD_TEMP_THRE)
+		bq->batt_present	= !!(flags & FG_FLAGS_BAT_DET);
+	else
+		bq->batt_present	= false;
 	bq->batt_ot			= !!(flags & FG_FLAGS_OT);
 	bq->batt_ut			= !!(flags & FG_FLAGS_UT);
 	bq->batt_fc			= !!(flags & FG_FLAGS_FC);
@@ -2418,7 +2425,7 @@ static void bq_heartbeat_work(struct work_struct *work)
 	debug_fg_dump_registers(chip);
 	queue_delayed_work(chip->heartbeat_wq,
 			&chip->heartbeat_work,
-			msecs_to_jiffies(1000));
+			msecs_to_jiffies(FG_HEARTBEAT_RATE));
 }
 
 static int bq_fg_probe(struct i2c_client *client,

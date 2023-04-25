@@ -800,10 +800,14 @@ int cts_tcs_read_reg(const struct cts_device *cts_dev, uint16_t cmd,
 		     u8 *rbuf, size_t rlen)
 {
 	static u8 tx[2048];
+	static u8 rx[2048];
+
 	int txlen = cts_tcs_reg_read_pack(tx, cmd, rlen);
 
-	cts_tcs_spi_xtrans(cts_dev, tx, txlen, rbuf,
+	cts_tcs_spi_xtrans(cts_dev, tx, txlen, rx,
 			   rlen + sizeof(tcs_rx_tail));
+
+	memcpy(rbuf, rx, rlen);
 
 	return 0;
 }

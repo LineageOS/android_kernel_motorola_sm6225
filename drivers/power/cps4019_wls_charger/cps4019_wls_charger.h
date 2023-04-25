@@ -13,23 +13,27 @@
 #define CPS_WLS_FAIL    -1
 #define CPS_WLS_SUCCESS 0
 
+/*regester operation*/
+#define REG_CMD_SEND_RX_SHIFT	0
+#define REG_CMD_SEND_RX_MASK		(1 << REG_CMD_SEND_RX_SHIFT)
+
 /*interupt define*/
 #define INT_TX_DATA_RECEIVED            (0x01 << 0)
 #define INT_UV                          (0x01 << 1)
 #define INT_OT                          (0x01 << 2)
-#define INT_OC                          (0x01 << 3)
-#define INT_OV                          (0x01 << 4)
-#define INT_OPERATION_MODE              (0x01 << 5)
-#define INT_STAT_VRECT                  (0x01 << 6)
-#define INT_STAT_VOUT                   (0x01 << 7)
+#define INT_OV                          (0x01 << 3)
+#define INT_OC                          (0x01 << 4)
+#define INT_ID_CFG_FINISH              (0x01 << 5)
+#define INT_VOUT_STATE                  (0x01 << 6)
+#define INT_RSV_BIT_7                   (0x01 << 7)
 #define INT_RSV_BIT_8                   (0x01 << 8)
 #define INT_RSV_BIT_9                   (0x01 << 9)
 #define INT_RSV_BIT_A                   (0x01 << 10)
 #define INT_RSV_BIT_B                   (0x01 << 11)
 #define INT_RSV_BIT_C                   (0x01 << 12)
 #define INT_RSV_BIT_D                   (0x01 << 13)
-#define INT_DATA_STORE                  (0x01 << 14)
-#define INT_AC_MIS_DET                  (0x01 << 15)
+#define INT_RSV_BIT_E                                     (0x01 << 14)
+#define INT_RSV_BIT_F                                     (0x01 << 15)
 
 /*command define*/
 #define CMD_SEND_RX_DATA                (0x01 << 0)
@@ -38,7 +42,7 @@
 #define CMD_SEND_EPT_PKT                (0x01 << 3)
 #define CMD_SEND_CS_PKT                 (0x01 << 4)
 #define CMD_CLEAR_INT                   (0x01 << 5)
-#define CMD_WATCHDOG_RESET              (0x01 << 6)
+//#define CMD_WATCHDOG_RESET              (0x01 << 6)
 #define CMD_WATCHDOG_EN                 (0x01 << 7)
 
 /*firmware download define*/

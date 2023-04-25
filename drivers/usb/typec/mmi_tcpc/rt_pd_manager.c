@@ -23,14 +23,18 @@
 #include <linux/version.h>
 #include <linux/iio/consumer.h>
 #include "inc/tcpci_typec.h"
-#include <linux/usb/mmi_discrete_typec.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
 
 #define PROBE_CNT_MAX			3
 /* 10ms * 100 = 1000ms = 1s */
 #define USB_TYPE_POLLING_INTERVAL	10
+#ifdef CONFIG_TCPC_DEVON_POLLING_TIME
+#define USB_TYPE_POLLING_CNT_MAX	130
+#else
 #define USB_TYPE_POLLING_CNT_MAX	100
+#endif
 
 enum dr {
 	DR_IDLE,
@@ -77,11 +81,13 @@ enum iio_psy_property {
        POWER_SUPPLY_IIO_OTG_ENABLE,
        POWER_SUPPLY_IIO_TYPEC_MODE,
        POWER_SUPPLY_IIO_PD_ACTIVE,
+       POWER_SUPPLY_IIO_MMI_PD_VDM_VERIFY,
        POWER_SUPPLY_IIO_PROP_MAX,
 };
 
 static const char * const iio_channel_map[] = {
 	"usb_real_type", "otg_enable", "typec_mode", "pd_active",
+	"mmi_pd_vdm_verify",
 };
 
 static int mmi_get_psy_iio_property(struct rt_pd_manager_data *rpmd,
@@ -630,6 +636,13 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		default:
 			break;
 		}
+		break;
+	case TCP_NOTIFY_PD_VDM_VERIFY:
+		dev_info(rpmd->dev, "%s mmi pd vdm verify state = %d\n",
+					__func__, noti->pd_state.vdm_verify);
+		val.intval = noti->pd_state.vdm_verify;
+		mmi_set_psy_iio_property(rpmd,
+				POWER_SUPPLY_IIO_MMI_PD_VDM_VERIFY, &val);
 		break;
 	default:
 		break;

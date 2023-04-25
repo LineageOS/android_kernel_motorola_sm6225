@@ -45,6 +45,12 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 			rc = mmi_discrete_set_dp_dm(chip, val1);
 		}
 		break;
+	case PSY_IIO_CP_ENABLE:
+		chip->cp_active = !!val1;
+		break;
+	case PSY_IIO_MMI_PD_VDM_VERIFY:
+		rc = mmi_charger_pd_vdm_verify(chip, val1);
+		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);
 		rc = -EINVAL;
@@ -69,7 +75,7 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 
 	switch (chan->channel) {
 	case PSY_IIO_USB_REAL_TYPE:
-		*val1 = chip->real_charger_type;
+		*val1 = chip->bc1p2_charger_type;
 		break;
 	case PSY_IIO_HW_CURRENT_MAX:
 		rc = mmi_discrete_get_hw_current_max(chip, val1);
@@ -87,6 +93,18 @@ static int mmi_discrete_iio_read_raw(struct iio_dev *indio_dev,
 		break;
 	case PSY_IIO_DP_DM:
 		rc = mmi_discrete_get_pulse_cnt(chip, val1);
+		break;
+	case PSY_IIO_TYPEC_ACCESSORY_MODE:
+		rc = mmi_discrete_get_typec_accessory_mode(chip, val1);
+		break;
+	case PSY_IIO_PD_ACTIVE:
+		*val1 = chip->pd_active;
+		break;
+	case PSY_IIO_CP_ENABLE:
+		*val1 = chip->cp_active;
+		break;
+	case PSY_IIO_MMI_PD_VDM_VERIFY:
+		*val1 = chip->pd_vdm_verify;
 		break;
 	default:
 		pr_err("Unsupported mmi_discrete IIO chan %d\n", chan->channel);

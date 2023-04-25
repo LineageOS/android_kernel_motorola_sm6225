@@ -50,6 +50,10 @@ ifneq ($(filter m y,$(CONFIG_TARGET_BUILD_FACROTY)),)
     EXTRA_CFLAGS += -DGTP_SAVE_IN_CSV
 endif
 
+ifneq ($(filter m y,$(CONFIG_GTP_LAST_TIME)),)
+    EXTRA_CFLAGS += -DCONFIG_GTP_LAST_TIME
+endif
+
 ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     goodix_brl_mmi-objs += goodix_ts_mmi.o

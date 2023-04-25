@@ -702,9 +702,15 @@ static int32_t aw9610x_cfg_update(struct aw9610x *aw9610x)
 	LOG_DBG("enter");
 
 	if (aw9610x->firmware_flag == true) {
+#ifdef  CONFIG_USE_HARDWARE_VERSION
+                snprintf(aw9610x->cfg_name, sizeof(aw9610x->cfg_name),
+					"aw9610x_%d.bin", aw9610x->hw_version);
+#else
 		snprintf(aw9610x->cfg_name, sizeof(aw9610x->cfg_name),
 					"aw9610x_%d.bin", aw9610x->sar_num);
+#endif
 
+                LOG_INFO("aw9610x_cfg_update cfg_name = %s", aw9610x->cfg_name);
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 							aw9610x->cfg_name,
 							aw9610x->dev,
@@ -1774,6 +1780,17 @@ static int32_t aw9610x_parse_dt(struct device *dev, struct aw9610x *aw9610x,
 	} else {
 		LOG_INFO("sar num = %d", aw9610x->sar_num);
 	}
+
+#ifdef  CONFIG_USE_HARDWARE_VERSION
+	val = of_property_read_u32(np, "hardware_version", &aw9610x->hw_version);
+	if (val != 0) {
+		LOG_ERR("hardware_version failed!");
+		return -AW_MULTIPLE_SAR_FAILED;
+	} else {
+		LOG_INFO("hardware version = %d", aw9610x->hw_version);
+	}
+#endif
+
 	val = of_property_read_u32(np, "aw9610x,channel_number", &aw9610x->aw_channel_number);
 	if (val != 0) {
 		LOG_ERR("aw_channel_number failed!");

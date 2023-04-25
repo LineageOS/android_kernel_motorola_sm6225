@@ -426,7 +426,9 @@ static struct net_device_stats *usb_ether_get_stats(struct net_device *dev)
 static void usbnet_if_config(struct work_struct *work)
 {
 	struct ifreq ifr;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	mm_segment_t saved_fs;
+#endif
 	unsigned err;
 	struct sockaddr_in *sin;
 	struct usbnet_context *context = container_of(work,
@@ -450,8 +452,10 @@ static void usbnet_if_config(struct work_struct *work)
 	sin->sin_family = AF_INET;
 
 	sin->sin_addr.s_addr = context->ip_addr;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	saved_fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 	err = sock->ops->ioctl(sock, SIOCSIFADDR, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFADDR\n", __func__);
@@ -474,7 +478,9 @@ static void usbnet_if_config(struct work_struct *work)
 	err = sock->ops->ioctl(sock, SIOCSIFFLAGS, (unsigned long)&ifr);
 	if (err)
 		USBNETDBG(context, "%s: Error in SIOCSIFFLAGS\n", __func__);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 	set_fs(saved_fs);
+#endif
 }
 
 static const struct net_device_ops usbnet_eth_netdev_ops = {

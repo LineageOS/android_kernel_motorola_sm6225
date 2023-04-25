@@ -1355,6 +1355,9 @@ static int bq2597x_detect_device(struct bq2597x *bq)
 	u8 data;
 
 	ret = bq2597x_read_byte(bq, BQ2597X_REG_13, &data);
+	if (ret < 0) {
+		ret = bq2597x_read_byte(bq, BQ2597X_REG_13, &data); //Try again for NU2105 in poweroff charging
+	}
 	if (ret == 0) {
 		bq->part_no = data;
 		bq->device_id = (data & BQ2597X_DEV_ID_MASK);

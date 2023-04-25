@@ -39,6 +39,8 @@
 #include <linux/types.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/firmware.h>
+#include <linux/iio/consumer.h>
 
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
@@ -47,7 +49,11 @@
 #include <linux/mmi_wake_lock.h>
 #endif
 
+#include <linux/mmi_discrete_charger_class.h>
+#include <linux/mmi_discrete_power_supply.h>
+
 #include "cps4019_wls_charger.h"
+#include "cps4019_bl.h"
 
 //namespace VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver;
 
@@ -67,6 +73,11 @@
 #define CPS_LOG_FULL	3
 
 #define ENABLE_CPS_LOG CPS_LOG_FULL
+
+#define CPS4019_CHIP_ID 	0x4019
+#define CPS4019_WORK_VOL 	2700000 //mV
+
+#define CPS4019_PPP_DATA_SIZE 	7
 
 #define cps_wls_log(num, fmt, args...) \
 	do { \
@@ -93,6 +104,7 @@ struct cps_wls_chrg_chip {
 	struct pinctrl *cps_pinctrl;
 	struct pinctrl_state *cps_gpio_active;
 	struct pinctrl_state *cps_gpio_suspend;
+	struct iio_channel *otg_channel;
 
 	#ifdef CONFIG_HAS_WAKELOCK
 	struct wake_lock cps_wls_wake_lock;
@@ -103,6 +115,7 @@ struct cps_wls_chrg_chip {
 	struct mutex irq_lock;
 	struct mutex i2c_lock;
 	int state;
+	int gpio_force_wls;
 	int wls_charge_int;
 	int cps_wls_irq;
 	int reg_addr;
@@ -121,9 +134,19 @@ struct cps_wls_chrg_chip {
 	int rx_neg_power;
 	int rx_neg_protocol;
 	int command_flag;
+
+	/*main charger*/
+	const char *main_charger_name;
+	struct charger_device *main_chg_dev;
+
+	/*fw relative*/
+	const char *wls_fw_name;
+	int fw_ver_major;
+	int fw_ver_minor;
+	bool use_bl_in_h;
 };
 
-struct cps_wls_chrg_chip *chip = NULL;
+static struct cps_wls_chrg_chip *chip = NULL;
 
 /*define cps rx reg enum*/
 typedef enum
@@ -131,15 +154,20 @@ typedef enum
 	CPS_REG_CHIP_ID,
 	CPS_REG_FW_MAJOR_REV,
 	CPS_REG_FW_MINOR_REV,
+	CPS_REG_STATUS,
 	CPS_REG_INT,
 	CPS_REG_INT_ENABLE,
 	CPS_REG_INT_CLEAR,
+	CPS_REG_CMD,
 	CPS_REG_VOUT_SET,
 	CPS_REG_ILIM_SET,
 	CPS_REG_ADC_VOUT,
 	CPS_REG_ADC_VRECT,
 	CPS_REG_ADC_IOUT,
 	CPS_REG_ADC_DIE_TEMP,
+	CPS_REG_PPP_HEADER,
+	CPS_REG_PPP_CMD,
+	CPS_REG_PPP_DATA,
 	CPS_REG_MAX
 }cps_reg_e;
 
@@ -153,17 +181,42 @@ typedef struct
 cps_reg_s cps_reg_cfg[CPS_REG_MAX] = {
 	/* reg name			bytes number		reg address	*/
 	{CPS_REG_CHIP_ID,		2,			0x0000},
-	{CPS_REG_FW_MAJOR_REV,		2,			0x0004},
-	{CPS_REG_FW_MINOR_REV,		2,			0x0006},
-	{CPS_REG_INT,			2,			0x0022},
-	{CPS_REG_INT_ENABLE,		2,			0x0024},
-	{CPS_REG_INT_CLEAR,		2,			0x0026},
-	{CPS_REG_VOUT_SET,		2,			0x0030},
-	{CPS_REG_ILIM_SET,		1,			0x0033},
-	{CPS_REG_ADC_VOUT,		2,			0x0034},
-	{CPS_REG_ADC_VRECT,		2,			0x0036},
-	{CPS_REG_ADC_IOUT,		2,			0x0038},
-	{CPS_REG_ADC_DIE_TEMP,		2,			0x003C}
+	{CPS_REG_FW_MAJOR_REV,		2,			0x0002},
+	{CPS_REG_FW_MINOR_REV,		2,			0x0004},
+	{CPS_REG_STATUS,		2,			0x0007},
+	{CPS_REG_INT,			2,			0x0009},
+	{CPS_REG_INT_ENABLE,		2,			0x000B},
+	{CPS_REG_INT_CLEAR,		2,			0x000D},
+	{CPS_REG_CMD,			2,			0x000F},
+	{CPS_REG_VOUT_SET,		2,			0x0013},
+	{CPS_REG_ILIM_SET,		1,			0x0016},
+	{CPS_REG_ADC_VOUT,		2,			0x0017},
+	{CPS_REG_ADC_VRECT,		2,			0x0019},
+	{CPS_REG_ADC_IOUT,		2,			0x001B},
+	{CPS_REG_ADC_DIE_TEMP,		2,			0x001D},
+	{CPS_REG_PPP_HEADER,		2,			0x0025},
+	{CPS_REG_PPP_CMD,		2,			0x0026},
+	{CPS_REG_PPP_DATA,		2,			0x0028}
+};
+
+/*define MMI CMD enum*/
+typedef enum
+{
+	MMI_CMD_CHARGE_FULL,
+	MMI_CMD_MAX
+}mmi_cmd_e;
+
+typedef struct
+{
+	uint32_t	 header;
+	uint32_t	 cmd;
+	uint32_t	 data[CPS4019_PPP_DATA_SIZE];
+	uint32_t	 len;
+}mmi_cmd_s;
+
+mmi_cmd_s mmi_cmd_cfg[MMI_CMD_MAX] = {
+	/* cmd_header	cmd_cmd		cmd_data	cmd_len	*/
+	{0x5,			0x64, 		{0},			0},//MMI_CMD_CHARGE_FULL
 };
 
 //-------------------I2C APT start--------------------
@@ -177,6 +230,19 @@ static const struct regmap_config cps4019_regmap_32bit_config = {
 	.val_bits = 8,
 };
 
+extern bool mmi_is_factory_mode(void);
+
+static int cps_wls_get_int_flag(void);
+static int cps_wls_set_int_clr(int value);
+static int cps_wls_get_chip_id(void);
+static int cps_wls_get_sys_fw_major_version(void);
+static int cps_wls_get_sys_fw_minor_version(void);
+static int cps_wls_get_vrect(void);
+static int cps_wls_get_iout(void);
+static int cps_wls_get_vout(void);
+static int cps_wls_get_die_tmp(void);
+static int cps_wls_set_rx_vout_target(int value);
+static int cps_wls_set_rx_ocp_threshold(int value);
 
 static int cps_wls_read_word_addr32(int reg)
 {
@@ -190,7 +256,7 @@ static int cps_wls_read_word_addr32(int reg)
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] i2c read error!\n", __func__);
+		cps_wls_log(CPS_LOG_ERR, "[%s] i2c read 0x%x error!\n", __func__, reg);
 		return CPS_WLS_FAIL;
 	}
 	//pr_err("cps read32[%08X] %02X %02X %02X %02X\n", reg,data[0], data[1], data[2], data[3]);
@@ -215,7 +281,7 @@ static int cps_wls_write_word_addr32(int reg, int value)
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] i2c write error!\n", __func__);
+		cps_wls_log(CPS_LOG_ERR, "[%s] i2c write 0x%x error!\n", __func__, reg);
 		return CPS_WLS_FAIL;
 	}
 
@@ -232,7 +298,7 @@ static int cps_wls_write(int reg, int value)
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] i2c write error!\n", __func__);
+		cps_wls_log(CPS_LOG_ERR, "[%s] i2c write 0x%x error!\n", __func__, reg);
 		return CPS_WLS_FAIL;
 	}
 
@@ -252,7 +318,7 @@ static int cps_wls_read(int reg)
 	mutex_unlock(&chip->i2c_lock);
 
 	if (ret < 0) {
-		cps_wls_log(CPS_LOG_ERR, "[%s] i2c read error!\n", __func__);
+		cps_wls_log(CPS_LOG_ERR, "[%s] Chip not exist(rd %x!)\n", __func__, reg);
 		return CPS_WLS_FAIL;
 	}
 	return value;
@@ -293,6 +359,66 @@ read_fail:
 	return CPS_WLS_FAIL;
 }
 
+static int cps_wls_write_reg_bits(int reg, int value, int mask, int shift)
+{
+	int tmp=0;
+
+	tmp = cps_wls_read(reg & 0xffff);
+	if(tmp == CPS_WLS_FAIL)
+		goto write_fail;
+
+	tmp &= ~mask;
+	tmp |= (value << shift);
+	if(cps_wls_write(reg & 0xffff, tmp) == CPS_WLS_FAIL)
+		goto write_fail;
+
+	return CPS_WLS_SUCCESS;
+
+write_fail:
+	return CPS_WLS_FAIL;
+}
+static int cps_wls_send_ppp_cmd(int header, int cmd, int *data, int len)
+{
+	int i=0, ret=0;
+	cps_reg_s *cps_reg;
+
+	/*cmd header*/
+	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_PPP_HEADER]);
+	ret = cps_wls_write_reg(cps_reg->reg_addr, header, cps_reg->reg_bytes_len);
+	if(ret == CPS_WLS_FAIL)
+		goto send_fail;
+
+	/*cmd*/
+	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_PPP_CMD]);
+	ret = cps_wls_write_reg(cps_reg->reg_addr, cmd, cps_reg->reg_bytes_len);
+	if(ret == CPS_WLS_FAIL)
+		goto send_fail;
+
+	/*cmd data*/
+	if (len > 0) {
+		cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_PPP_DATA]);
+		for(i = 0; i < len; i++) {
+			ret = cps_wls_write_reg(cps_reg->reg_addr, data[i], cps_reg->reg_bytes_len);
+			if(ret == CPS_WLS_FAIL)
+				goto send_fail;
+		}
+	}
+
+	/*send cmd*/
+	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_CMD]);
+	ret = cps_wls_write_reg_bits(cps_reg->reg_addr,
+			1,
+			REG_CMD_SEND_RX_MASK,
+			REG_CMD_SEND_RX_SHIFT);
+	if(ret == CPS_WLS_FAIL)
+		goto send_fail;
+
+	return CPS_WLS_SUCCESS;
+
+send_fail:
+	return CPS_WLS_FAIL;
+}
+
 /*
  * @brief big and little endian convertion
  * @param null
@@ -310,6 +436,7 @@ int big_little_endian_convert(int dat)
 	tmp[3] = p[0];
 	return *(int *)(tmp);
 }
+
 //*****************************for program************************
 
 static int cps_wls_program_sram_addr32(int addr, u8 *data, int len)
@@ -385,6 +512,155 @@ static int cps_wls_program_wait_cmd_done(void)
 		}
 		if(wait_time_out < 0)
 			return CPS_WLS_FAIL;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+static bool cps_check_fw_ver(void)
+{
+	int fw_major, fw_minor;
+	int ret;
+
+	fw_major = cps_wls_get_sys_fw_major_version();
+	fw_minor = cps_wls_get_sys_fw_minor_version();
+
+	cps_wls_log(CPS_LOG_ERR, "[%s] chip id %d.%d\n", __func__, fw_major, fw_minor);
+
+	if ((chip->fw_ver_major > fw_major)
+			|| (chip->fw_ver_minor > fw_minor))
+		ret = true;
+	else
+		ret = false;
+
+	return ret;
+}
+
+static void cps_wls_pm_set_awake(int awake)
+{
+
+	cps_wls_log(CPS_LOG_DEBG,"%s lock %d wak %d\n", __func__, chip->cps_wls_wake_lock->active, awake);
+
+	if(!chip->cps_wls_wake_lock->active && awake) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_lock(chip->cps_wls_wake_lock);
+#else
+		__pm_stay_awake(chip->cps_wls_wake_lock);
+#endif
+	} else if(chip->cps_wls_wake_lock->active && !awake) {
+#ifdef CONFIG_HAS_WAKELOCK
+		wake_unlock(chip->cps_wls_wake_lock);
+#else
+		__pm_relax(chip->cps_wls_wake_lock);
+#endif
+	}
+}
+
+static int cps_get_power_supply_prop(char* name,
+			enum power_supply_property psp,
+			union power_supply_propval* val) {
+	struct psy_in_chip_s {
+		char* name;
+		struct power_supply **ppsy;
+	};
+	struct psy_in_chip_s psy_in_chip[] = {
+		{"battery", 	&chip->batt_psy},
+		{"wireless", 	&chip->wl_psy},
+		{"usb", 		&chip->usb_psy},
+		{"dc", 		&chip->dc_psy}
+	};
+	struct power_supply **ppsy = NULL;
+	struct power_supply *tmp_psy = NULL;
+	int i;
+
+	/*Use a tmp psy as default for the psy that not in chip list*/
+	ppsy = &tmp_psy;
+	for (i = 0; i < ARRAY_SIZE(psy_in_chip); i++) {
+		if (!strcmp(name, psy_in_chip[i].name)) {
+			ppsy = psy_in_chip[i].ppsy;
+			break;
+		}
+	}
+
+	if ((!*ppsy) || IS_ERR(*ppsy)) {
+		*ppsy = power_supply_get_by_name(name);
+		if (!*ppsy || IS_ERR(*ppsy)) {
+			cps_wls_log(CPS_LOG_ERR,"%s Couldn't get psy %s\n",__func__, name);
+			val->intval = -1;
+			return CPS_WLS_FAIL;
+		}
+	}
+
+	if (power_supply_get_property(*ppsy, psp, val)) {
+		val->intval = -1;
+		return CPS_WLS_FAIL;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+static int cps_mux_switch(bool on)
+{
+	cps_wls_log(CPS_LOG_DEBG,"%s set mux = %d\n", __func__, on);
+
+	if (!chip->otg_channel) {
+		cps_wls_log(CPS_LOG_ERR,"%s otg iio dev exist\n", __func__);
+		return CPS_WLS_FAIL;
+	}
+
+	iio_write_channel_raw(chip->otg_channel, !!on);
+
+	return CPS_WLS_SUCCESS;
+}
+
+static int cps_check_power(bool *en)
+{
+	static struct power_supply *chg_psy = NULL;
+	union power_supply_propval data;
+
+	if (!chg_psy) {
+		chg_psy = power_supply_get_by_name("charger");
+		if (!chg_psy || IS_ERR(chg_psy)) {
+			cps_wls_log(CPS_LOG_ERR,"%s Couldn't get chg_psy\n",__func__);
+			*en = true;
+			return CPS_WLS_FAIL;
+		}
+	}
+
+	power_supply_get_property(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW, &data);
+	if (data.intval > CPS4019_WORK_VOL) {
+		cps_wls_log(CPS_LOG_ERR,"%s chg vol %d. Do not need to set power\n",
+				__func__, data.intval);
+		*en = false;
+	} else {
+		*en = true;
+	}
+
+	return CPS_WLS_SUCCESS;
+}
+
+static int cps_set_power(bool en)
+{
+	static bool flag = false;
+
+	/*only work in enable*/
+	if (en)
+		cps_check_power(&flag);
+
+	cps_wls_pm_set_awake(!!en);
+
+	/*only work when check power result is true*/
+	if (flag) {
+		if (cps_mux_switch(!!en)) {
+			cps_wls_pm_set_awake(false);
+			return CPS_WLS_FAIL;
+		}
+
+		/*wait 50ms for vbus boost stable*/
+		msleep(50);
+
+		if (!en)
+			flag = false;
 	}
 
 	return CPS_WLS_SUCCESS;
@@ -493,22 +769,30 @@ static int bootloader_load(unsigned char *bootloader, int *bootloader_length)
 	char *buf = NULL;
 	int size = 0;
 
-	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
-	size = cps_file_read(BOOTLOADER_FILE_NAME, &buf);
-	if (size > 0) {
-		if (bootloader == NULL) {
-			kfree(buf);
-			pr_err("cps4019 file alloc error.\n");
-			return -EINVAL;
-		}
+	cps_wls_log(CPS_LOG_DEBG,"%s use h file %d\n",__func__, chip->use_bl_in_h);
 
-		if(file_parse(buf, size, bootloader, bootloader_length) == NULL) {
+	if (chip->use_bl_in_h) {
+		memcpy(bootloader, CPS4019_BL, CPS4019_BL_SIZE);
+		*bootloader_length = CPS4019_BL_SIZE;
+	} else {
+		size = cps_file_read(BOOTLOADER_FILE_NAME, &buf);
+		if (size > 0) {
+			if (bootloader == NULL) {
+				pr_err("cps4019 file alloc error.\n");
+				kfree(buf);
+				return -EINVAL;
+			}
+
+			if(file_parse(buf, size, bootloader, bootloader_length) == NULL) {
+				pr_err("cps4019 file parse error\n");
+				kfree(buf);
+				return -EINVAL;
+			}
+
 			kfree(buf);
-			pr_err("cps4019 file parse error\n");
-			return -EINVAL;
 		}
-		kfree(buf);
 	}
+
 	cps_wls_log(CPS_LOG_DEBG,"cps_[%s] bootloader_length=%d\n", __func__, *bootloader_length);
 
 	return 0;
@@ -518,9 +802,24 @@ static int firmware_load(unsigned char *firmeware, int *firmeware_length)
 {
 	char *buf = NULL;
 	int size = 0;
+	int ret;
+	const struct firmware *fw;
 
-	cps_wls_log(CPS_LOG_DEBG,"%s\n",__func__);
-	size = cps_file_read(FIRMWARE_FILE_NAME, &buf);
+	if (chip->wls_fw_name) {
+		ret = request_firmware(&fw, chip->wls_fw_name, chip->dev);
+		if (ret || fw->size <=0 ) {
+			cps_wls_log(CPS_LOG_ERR,"Couldn't get firmware  rc=%d\n", ret);
+			return -EINVAL;
+		}
+
+		size =  fw->size;
+		buf = kzalloc(size+1, GFP_KERNEL);  // 18K buffer
+		memset(buf, 0, size+1);
+		memcpy(buf, fw->data, size);
+	} else {
+		size = cps_file_read(FIRMWARE_FILE_NAME, &buf);
+	}
+
 	if (size > 0) {
 		if (firmeware == NULL) {
 			kfree(buf);
@@ -550,7 +849,17 @@ static int update_firmware(void)
 	int result;
 	int *p_convert;
 
-	bootloader_buf = kzalloc(0x800, GFP_KERNEL);// 2K buffer
+	if (cps_set_power(true)) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] en power fail!!\n", __func__);
+		goto update_fail;
+	}
+
+	if (!cps_check_fw_ver()) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] fw already exist OR chip do not exist. Skip!!\n", __func__);
+		goto update_fail;
+	}
+
+	bootloader_buf = kzalloc(CPS4019_BL_SIZE, GFP_KERNEL);// 2K buffer
 	firmware_buf = kzalloc(0x4000, GFP_KERNEL);// 16K buffer
 
 /***************************************************************************************
@@ -731,14 +1040,19 @@ start_write_app_code:
 		goto update_fail;
 	}
 
+	cps_set_power(false);
+
 	cps_wls_log(CPS_LOG_DEBG, "[%s] ---- Program successful CHIP ID=0x%04x\n", __func__, chip_id);
 
 	return CPS_WLS_SUCCESS;
 
 update_fail:
+	cps_set_power(false);
 	cps_wls_log(CPS_LOG_ERR, "[%s] ---- update fail\n", __func__);
+
 	return CPS_WLS_FAIL;
 }
+
 //-------------------CPS4019 system interface-------------------
 static int cps_wls_get_int_flag(void)
 {
@@ -796,6 +1110,24 @@ static int cps_wls_get_vout(void)
 	return cps_wls_read_reg((int)cps_reg->reg_addr, (int)cps_reg->reg_bytes_len);
 }
 
+static int cps_wls_get_state(void)
+{
+	cps_reg_s *cps_reg;
+
+	cps_reg = (cps_reg_s*)(&cps_reg_cfg[CPS_REG_STATUS]);
+	return cps_wls_read_reg(cps_reg->reg_addr, (int)cps_reg->reg_bytes_len);
+}
+
+static bool cps_wls_get_vout_state(void)
+{
+	int ret = cps_wls_get_state();
+
+	if (ret == CPS_WLS_FAIL)
+		ret = 0;
+
+	return !!(ret & (1<<6));
+}
+
 static int cps_wls_get_die_tmp(void)
 {
 	cps_reg_s *cps_reg;
@@ -824,6 +1156,32 @@ static int cps_wls_set_rx_ocp_threshold(int value)
 	return cps_wls_write_reg(cps_reg->reg_addr, value_temp, (int)cps_reg->reg_bytes_len);
 }
 
+static int cps_wls_charger_notify_full(void)
+{
+	mmi_cmd_s* mmi_cmd_p;
+	union power_supply_propval data;
+
+	if (cps_get_power_supply_prop("battery", POWER_SUPPLY_PROP_CAPACITY, &data)) {
+		return CPS_WLS_FAIL;
+	}
+
+	cps_wls_log(CPS_LOG_DEBG, "[%s] soc = %d.\n", __func__, data.intval);
+	if (data.intval != 100)
+		return CPS_WLS_FAIL;
+
+	if (!cps_wls_get_vout_state()) {
+		return CPS_WLS_FAIL;
+	}
+
+	mmi_cmd_p = &mmi_cmd_cfg[MMI_CMD_CHARGE_FULL];
+	cps_wls_send_ppp_cmd(mmi_cmd_p->header,
+			mmi_cmd_p->cmd,
+			mmi_cmd_p->data,
+			mmi_cmd_p->len);
+
+	return CPS_WLS_SUCCESS;
+}
+
 //------------------------------IRQ Handler-----------------------------------
 static int cps_wls_set_int_enable(void)
 {
@@ -845,38 +1203,28 @@ static int cps_wls_irq_process(int int_flag)
 {
 	int rc = 0;
 
-	if ( int_flag & INT_TX_DATA_RECEIVED ) {
+	if (int_flag & INT_TX_DATA_RECEIVED) {
 		//todo
 	}
 
-	if( int_flag & INT_UV ) {
+	if(int_flag & INT_UV) {
 		//todo
 	}
 
 	if(int_flag & INT_OT) {
-		}
-
+	}
 	if(int_flag & INT_OC) {
-		}
-
+	}
 	if(int_flag & INT_OV) {
-		}
-
-	if(int_flag & INT_OPERATION_MODE) {
-		}
-
-	if(int_flag & INT_STAT_VRECT) {
+	}
+	if(int_flag & INT_ID_CFG_FINISH) {
 		cps_wls_set_int_enable();
 	}
-
-	if(int_flag & INT_STAT_VOUT) {
+	if(int_flag & INT_VOUT_STATE) {
+		cps_wls_charger_notify_full();
 	}
-
-	if(int_flag & INT_DATA_STORE) {
-	}
-
-	if(int_flag & INT_AC_MIS_DET) {
-	}
+	//if(int_flag & INT_DATA_STORE){}
+	//if(int_flag & INT_AC_MIS_DET){}
 
 	return rc;
 }
@@ -910,9 +1258,9 @@ static enum power_supply_property cps_wls_chrg_props[] = {
 	//POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
-	//POWER_SUPPLY_PROP_VOUT_NOW,
-	//POWER_SUPPLY_PROP_VRECT,
-	//POWER_SUPPLY_PROP_IOUT,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 static int cps_wls_chrg_property_is_writeable(struct power_supply *psy,
@@ -937,25 +1285,18 @@ static int cps_wls_chrg_get_property(struct power_supply *psy,
 	int ret = 0;
 	switch(psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
-			val->intval = 0;
+		case POWER_SUPPLY_PROP_PRESENT:
+			val->intval = cps_wls_get_vout_state();
 			break;
-/*
-		case POWER_SUPPLY_PROP_VRECT:
-			ret = cps_wls_get_vrect();
-			if(ret != CPS_WLS_FAIL) {
-				chip->rx_vrect = ret;
-			}
-			val->intval = chip->rx_vrect;
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+			val->intval = 5000000;//Have no usage, just for voltage max propety.
 			break;
-
-		case POWER_SUPPLY_PROP_IOUT:
-			ret = cps_wls_get_iout();
-			if(ret != CPS_WLS_FAIL) {
-				chip->rx_iout = ret;
-			}
-			val->intval = chip->rx_iout;
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+			ret = cps_get_power_supply_prop("usb", psp, val);
 			break;
-*/
+		case POWER_SUPPLY_PROP_CURRENT_NOW:
+			ret = cps_get_power_supply_prop("battery", psp, val);
+			break;
 		default:
 			return -EINVAL;
 			break;
@@ -977,7 +1318,7 @@ static int cps_wls_chrg_set_property(struct power_supply *psy,
 
 static void cps_wls_charger_external_power_changed(struct power_supply *psy)
 {
-	;
+	cps_wls_charger_notify_full();
 }
 
 //-----------------------------reg addr----------------------------------
@@ -1059,9 +1400,9 @@ static DEVICE_ATTR(get_vout, 0444, show_vout, NULL);
 
 static ssize_t show_chip_id(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "chip id = %x\n", cps_wls_get_chip_id());
+	return sprintf(buf, "0x%x\n", cps_wls_get_chip_id());
 }
-static DEVICE_ATTR(get_chip_id, 0444, show_chip_id, NULL);
+static DEVICE_ATTR(chip_id, 0444, show_chip_id, NULL);
 
 static ssize_t show_fw_major_ver(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1111,6 +1452,50 @@ static ssize_t store_ocp_thres(struct device *dev,
 }
 static DEVICE_ATTR(set_ocp_thres, 0220, NULL, store_ocp_thres);
 
+static ssize_t store_usb_keep_on(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	bool force_wls;
+
+	force_wls = !!simple_strtoul(buf, NULL, 0);
+
+	if (chip->main_chg_dev)
+		charger_dev_set_dp_dm(chip->main_chg_dev, force_wls ?
+				MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM :
+				MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM);
+
+	if(gpio_is_valid(chip->gpio_force_wls))
+		gpio_direction_output(chip->gpio_force_wls, force_wls);
+
+	return count;
+}
+static DEVICE_ATTR(usb_keep_on, 0220, NULL, store_usb_keep_on);
+
+static ssize_t store_ppp_cmd(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	int cmd, ret;
+	mmi_cmd_s* mmi_cmd_p;
+
+	cmd = simple_strtoul(buf, NULL, 0);
+
+	mmi_cmd_p = &mmi_cmd_cfg[cmd];
+	ret = cps_wls_send_ppp_cmd(mmi_cmd_p->header,
+			mmi_cmd_p->cmd,
+			mmi_cmd_p->data,
+			mmi_cmd_p->len);
+
+	cps_wls_log(CPS_LOG_ERR, "ppp cmd-%d 0x%x ret %d\n",
+			cmd, mmi_cmd_p->cmd, ret);
+
+	return count;
+}
+static DEVICE_ATTR(ppp_cmd, 0220, NULL, store_ppp_cmd);
+
 static void cps_wls_create_device_node(struct device *dev)
 {
 	device_create_file(dev, &dev_attr_reg_addr);
@@ -1122,7 +1507,7 @@ static void cps_wls_create_device_node(struct device *dev)
 	device_create_file(dev, &dev_attr_get_iout);
 	device_create_file(dev, &dev_attr_get_vrect);
 	device_create_file(dev, &dev_attr_get_vout);
-	device_create_file(dev, &dev_attr_get_chip_id);
+	device_create_file(dev, &dev_attr_chip_id);
 
 	device_create_file(dev, &dev_attr_get_fw_major_ver);
 	device_create_file(dev, &dev_attr_get_fw_minor_ver);
@@ -1130,6 +1515,9 @@ static void cps_wls_create_device_node(struct device *dev)
 
 	device_create_file(dev, &dev_attr_set_vout_target);
 	device_create_file(dev, &dev_attr_set_ocp_thres);
+
+	device_create_file(dev, &dev_attr_usb_keep_on);
+	device_create_file(dev, &dev_attr_ppp_cmd);
 }
 
 static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
@@ -1142,8 +1530,43 @@ static int cps_wls_parse_dt(struct cps_wls_chrg_chip *chip)
 	}
 
 	chip->wls_charge_int = of_get_named_gpio(node, "cps_wls_int", 0);
-	if(!gpio_is_valid(chip->wls_charge_int))
+	if(!gpio_is_valid(chip->wls_charge_int)) {
+		cps_wls_log(CPS_LOG_ERR, "wls_charge_int is not valid %d\n",chip->wls_charge_int );
 		return -EINVAL;
+	}
+
+	chip->gpio_force_wls = of_get_named_gpio(node, "force_wls_pin", 0);
+	if(gpio_is_valid(chip->gpio_force_wls)) {
+		if (!gpio_request(chip->gpio_force_wls, "mmi force wls pin"))
+			gpio_direction_output(chip->gpio_force_wls, 0);
+		else
+			dev_err(chip->dev, "%s: %d gpio(wls en) request failed\n",
+					__func__, chip->gpio_force_wls);
+	}
+
+	chip->main_charger_name = NULL;
+	of_property_read_string(node, "main-charger-name", &chip->main_charger_name);
+
+	chip->fw_ver_major = 0;
+	chip->fw_ver_minor = 0;
+	of_property_read_u32(node, "fw_ver_major", &chip->fw_ver_major);
+	of_property_read_u32(node, "fw_ver_minor", &chip->fw_ver_minor);
+
+	chip->wls_fw_name = NULL;
+	of_property_read_string(node, "wireless-fw-name", &chip->wls_fw_name);
+
+
+	chip->use_bl_in_h = of_property_read_bool(node, "use_bl_in_h");
+
+	cps_wls_log(CPS_LOG_ERR,
+		"[%s]  wls_charge_int %d gpio_force_wls %d \
+		main_charger_name %s wls_fw_name: %s ver %d.%d use_bl_h %s\n",
+		__func__,
+		chip->wls_charge_int, chip->gpio_force_wls,
+		chip->main_charger_name ? chip->main_charger_name : "null",
+		chip->wls_fw_name ? chip->wls_fw_name : "null",
+		chip->fw_ver_major, chip->fw_ver_minor,
+		chip->use_bl_in_h ? "true" : "false");
 	return 0;
 }
 
@@ -1217,12 +1640,55 @@ static void cps_wls_free_gpio(struct cps_wls_chrg_chip *chip)
 		gpio_free(chip->wls_charge_int);
 }
 
+static int cps_wls_set_suppliers(struct cps_wls_chrg_chip *chip)
+{
+	int count, i;
+	int ret = 0;
+
+	if (chip->wl_psy->num_supplies && chip->batt_psy->supplied_from) {
+		cps_wls_log(CPS_LOG_ERR, "already set\n");
+		return 0;
+	}
+
+	count = of_property_count_strings(chip->dev->of_node, "supplied-from");
+	if (count <= 0) {
+		cps_wls_log(CPS_LOG_ERR, "No supplier found, rc=%d\n", count);
+		return -EINVAL;
+	}
+
+	chip->wl_psy->supplied_from = devm_kmalloc_array(&chip->wl_psy->dev,
+						count,
+						sizeof(char *),
+						GFP_KERNEL);
+	if (!chip->wl_psy->supplied_from) {
+		cps_wls_log(CPS_LOG_ERR, "Failed to get supplied-from, %d\n", ret);
+		return -ENOMEM;
+	}
+
+	ret = of_property_read_string_array(chip->dev->of_node, "supplied-from",
+				(const char **)chip->wl_psy->supplied_from,
+				count);
+	if (ret < 0) {
+		cps_wls_log(CPS_LOG_ERR, "Failed to get supplied-from, %d\n", ret);
+		return ret;
+	}
+
+	chip->wl_psy->num_supplies = count;
+
+	for (i = 0; i < chip->wl_psy->num_supplies; i++) {
+		cps_wls_log(CPS_LOG_ERR, "Supplier-%d=%s\n", i,
+					chip->wl_psy->supplied_from[i]);
+	}
+
+	return 0;
+}
+
 static int cps_wls_register_psy(struct cps_wls_chrg_chip *chip)
 {
 	struct power_supply_config cps_wls_psy_cfg = {};
 
 	chip->wl_psd.name = CPS_WLS_CHRG_PSY_NAME;
-	chip->wl_psd.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	chip->wl_psd.type = POWER_SUPPLY_TYPE_WIRELESS;
 	chip->wl_psd.properties = cps_wls_chrg_props;
 	chip->wl_psd.num_properties = ARRAY_SIZE(cps_wls_chrg_props);
 	chip->wl_psd.get_property = cps_wls_chrg_get_property;
@@ -1237,15 +1703,16 @@ static int cps_wls_register_psy(struct cps_wls_chrg_chip *chip)
 		return PTR_ERR(chip->wl_psy);
 	}
 
+	cps_wls_set_suppliers(chip);
+
 	return CPS_WLS_SUCCESS;
 }
-
 
 static int cps_wls_chrg_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	int ret=0;
-	cps_wls_log(CPS_LOG_ERR, "[%s] ---->start\n", __func__);
+
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip) {
 		cps_wls_log(CPS_LOG_ERR,"[%s] cps_debug: Unable to allocate memory\n", __func__);
@@ -1292,7 +1759,21 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 	}
 	cps_wls_lock_work_init(chip);
 
+	if (chip->main_charger_name) {
+		chip->main_chg_dev = get_charger_by_name(chip->main_charger_name);
+		if (!chip->main_chg_dev) {
+			cps_wls_log(chip, "*** Error : can't find main charger %s***\n", chip->main_charger_name);
+		}
+	}
+
 	cps_wls_create_device_node(&(client->dev));
+
+	chip->otg_channel = devm_iio_channel_get(chip->dev, "otg_enable");
+	if (IS_ERR(chip->otg_channel)) {
+		cps_wls_log(CPS_LOG_ERR, "[%s] get otg iio dev failed. Waiting for retry\n", __func__);
+		ret = -1;//EPROBE_DEFER;
+		goto free_source;
+	}
 
 	ret = cps_wls_register_psy(chip);
 	if(IS_ERR(chip->wl_psy)) {
@@ -1300,16 +1781,18 @@ static int cps_wls_chrg_probe(struct i2c_client *client,
 		goto free_source;
 	}
 
-	cps_wls_log(CPS_LOG_DEBG,"cps_wls_get_chip_id 0x%04X\n",cps_wls_get_chip_id() );
-
-	//wake_lock(&chip->cps_wls_wake_lock);
-
 	cps_wls_log(CPS_LOG_DEBG, "[%s] wireless charger addr low probe successful!\n", __func__);
+
+	/*check firmwware, only work in factory mode*/
+	if (mmi_is_factory_mode())
+		update_firmware();
+
 	return ret;
 
 free_source:
 	cps_wls_free_gpio(chip);
 	cps_wls_lock_destroy(chip);
+	kfree(chip);
 	cps_wls_log(CPS_LOG_ERR, "[%s] error: free resource.\n", __func__);
 
 	return ret;

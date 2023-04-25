@@ -7,6 +7,7 @@
 
 #include <linux/i2c.h>
 #include <linux/iio/consumer.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define SGM4154x_MANUFACTURER	"Texas Instruments"
 #define SGM4154X_STATUS_PLUGIN			0x0001
@@ -88,6 +89,7 @@
 #define SGM4154x_PN_41516_ID    (BIT(6)| BIT(5))
 #define SGM4154x_PN_41542_ID    (BIT(6)| BIT(5)| BIT(3))
 #define SGM4154x_PN_41516D_ID   (BIT(6)| BIT(5)| BIT(3))
+#define SGM4154x_PN_41543D_ID   (BIT(6)| BIT(3))
 #define SGM4154x_PN_41513_ID    0
 
 /* WDT TIMER SET  */
@@ -197,6 +199,9 @@
 #define SGM4154x_VINDPM_DEF_uV	    4600000
 #define SGM4154x_VINDPM_OS_MASK     GENMASK(1, 0)
 
+/* dynamic vindpm track  */
+#define SGM4154x_DYNAMIC_VINDPM_TRACK_MASK	GENMASK(1, 0)
+
 /* DP DM SEL  */
 #define SGM4154x_DP_VSEL_MASK       GENMASK(4, 3)
 #define SGM4154x_DM_VSEL_MASK       GENMASK(2, 1)
@@ -240,19 +245,6 @@
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500000
 
-enum {
-	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
-	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
-	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
-};
-
-enum mmi_qc3p_power {
-	MMI_POWER_SUPPLY_QC3P_NONE,
-	MMI_POWER_SUPPLY_QC3P_18W,
-	MMI_POWER_SUPPLY_QC3P_27W,
-	MMI_POWER_SUPPLY_QC3P_45W,
-};
-
 struct sgm4154x_iio {
 	struct iio_channel	*usbin_v_chan;
 };
@@ -266,6 +258,7 @@ struct sgm4154x_init_data {
 	u32 vlim;	/* minimum system voltage limit */
 	u32 max_ichg;
 	u32 max_vreg;
+	u32 vdpm_bat_track;
 };
 
 struct sgm4154x_state {
@@ -334,6 +327,7 @@ struct sgm4154x_device {
 	struct sgm4154x_state state;
 
 	unsigned int	status;
+	bool	ignore_request_dpdm;
 
 	u32 watchdog_timer;
 	const char *chg_dev_name;
@@ -383,10 +377,26 @@ struct sgm4154x_device {
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 	struct iio_channel	**ext_iio_chans;
 #endif
+
+	/*wls output en/dis control*/
+	int			wls_en_gpio;
 };
 
 #ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
 enum WT_charger_type{
+#ifdef CONFIG_MMI_QC3P_Z350_DETECTED
+	WT_CHG_TYPE_OCP = 0,
+	WT_CHG_TYPE_FC = 0x1,
+	WT_CHG_TYPE_SDP = 0x2,
+	WT_CHG_TYPE_CDP = 0x3,
+	WT_CHG_TYPE_DCP = 0x4,
+	WT_CHG_TYPE_QC2 = 0x5,
+	WT_CHG_TYPE_QC3 = 0x6,
+	WT_CHG_TYPE_QC3P_18W = 0x8,//0x8
+	WT_CHG_TYPE_QC3P_27W = 0x9,
+        WT_CHG_TYPE_HVDCP = 0x10,
+	WT6670_CHG_TYPE_UNKNOWN = 0x11,
+#else
 	WT_CHG_TYPE_BEGIN = 0,
 	WT_CHG_TYPE_FC,
 	WT_CHG_TYPE_SDP,
@@ -398,6 +408,7 @@ enum WT_charger_type{
 	WT_CHG_TYPE_QC3P_18W,//0x8
 	WT_CHG_TYPE_QC3P_27W,
 	WT6670_CHG_TYPE_UNKNOWN,
+#endif
 };
 
 enum mmi_qc3p_ext_iio_channels {
@@ -410,6 +421,7 @@ enum mmi_qc3p_ext_iio_channels {
 	SMB5_BC12_START_DETECT,
 	SMB5_BC12_DETECTION_READY,
 	SMB5_READ_USBIN_VOLTAGE,
+        SMB5_READ_BC12_CHG_TYPE,
 };
 
 static const char * const mmi_qc3p_ext_iio_chan_name[] = {
@@ -422,6 +434,7 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_BC12_START_DETECT] = "wt6670_start_bc12_detection",
 	[SMB5_BC12_DETECTION_READY] = "wt6670_detection_bc12_ready",
 	[SMB5_READ_USBIN_VOLTAGE] = "read_usbin_voltage",
+        [SMB5_READ_BC12_CHG_TYPE] = "wt6670_bc12_chg_type",
 };
 bool qc3p_update_policy(struct sgm4154x_device *chip);
 #endif

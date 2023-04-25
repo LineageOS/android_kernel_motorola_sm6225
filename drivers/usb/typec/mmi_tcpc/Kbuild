@@ -12,6 +12,10 @@ obj-$(CONFIG_TCPC_RT1711H)	+= tcpc_rt1711h.o
 
 obj-$(CONFIG_TCPC_SGM7220)	+= tcpc_sgm7220.o
 
+ifneq ($(filter m y,$(CONFIG_TCPC_DEVON_POLLING_TIME)),)
+        EXTRA_CFLAGS += -DCONFIG_TCPC_DEVON_POLLING_TIME
+endif
+
 tcpc_class-objs			+= tcpci_core.o tcpci_typec.o tcpci_timer.o \
 		tcpm.o tcpci.o pd_dbg_info.o tcpci_alert.o rt-regmap.o tcpci_dual_role.o
 
@@ -25,7 +29,8 @@ tcpc_class-objs			+= tcpci_event.o \
 		pd_process_evt_dbg.o pd_process_evt_tcp.o pd_process_evt_com.o \
 		pd_policy_engine_src.o pd_policy_engine_snk.o pd_policy_engine_ufp.o pd_policy_engine_vcs.o \
 		pd_policy_engine_dfp.o pd_policy_engine_dr.o pd_policy_engine_drs.o pd_policy_engine_prs.o \
-		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o pd_adapter.o
+		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o pd_adapter.o \
+		pd_dpm_mmi_adapter.o
 endif
 
 obj-$(CONFIG_TCPC_CLASS)	+= tcpc_class.o

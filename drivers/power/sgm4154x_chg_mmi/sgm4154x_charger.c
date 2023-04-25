@@ -52,6 +52,10 @@ static const unsigned int ITERM_CURRENT_STABLE[] = {
 	5000, 10000, 15000, 20000, 30000, 40000, 50000, 60000,
 	80000, 100000, 120000, 140000, 160000, 180000, 200000, 240000
 };
+
+static const unsigned int DYNAMIC_VINDPM_TRACK[] = {
+	0, 200000, 250000, 300000
+};
 #endif
 
 enum SGM4154x_VREG_FT {
@@ -74,6 +78,8 @@ static enum power_supply_usb_type sgm4154x_usb_type[] = {
 	POWER_SUPPLY_USB_TYPE_DCP,
 	POWER_SUPPLY_USB_TYPE_CDP,
 };
+
+extern bool mmi_is_factory_mode(void);
 
 #define WAIT_I2C_COUNT 50
 #define WAIT_I2C_TIME 10
@@ -341,6 +347,7 @@ static int sgm4154x_set_chrg_volt(struct sgm4154x_device *sgm, int chrg_volt)
 	reg_val = (chrg_volt-SGM4154x_VREG_V_MIN_uV) / SGM4154x_VREG_V_STEP_uV;
 
 	switch(chrg_volt) {
+	case 4512000:
 	case 4480000:
 	case 4450000:
 		reg_val++;
@@ -711,6 +718,24 @@ static int sgm4154x_get_input_volt_lim(struct sgm4154x_device *sgm)
 	vlim = offset + (vlim & 0x0F) * SGM4154x_VINDPM_STEP_uV;
 	return vlim;
 }
+
+#ifdef __SGM41513_CHIP_ID__
+static int sgm4154x_set_dynamic_vindpm_track(struct sgm4154x_device *sgm, int track_uv)
+{
+	int reg_val = 0;
+	int ret = 0;
+
+	for(reg_val = 1; reg_val < 4 && track_uv >= DYNAMIC_VINDPM_TRACK[reg_val]; reg_val++);
+	reg_val--;
+
+	pr_info("%s track_uv: %d, reg_val: %d\n", __func__, track_uv, reg_val);
+
+	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_7,
+				  SGM4154x_DYNAMIC_VINDPM_TRACK_MASK, reg_val);
+
+	return ret;
+}
+#endif
 
 static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 {
@@ -1362,6 +1387,10 @@ static int sgm4154x_request_dpdm(struct sgm4154x_device *sgm, bool enable)
 {
 	int rc = 0;
 
+	if(mmi_is_factory_mode() && sgm->ignore_request_dpdm) {
+		dev_err(sgm->dev, "%s ignore_request_dpdm\n", __func__);
+		return rc;
+	}
 	mutex_lock(&sgm->regulator_lock);
 		/* fetch the DPDM regulator */
 	if (!sgm->dpdm_reg && of_get_property(sgm->dev->of_node,
@@ -1843,6 +1872,13 @@ bool qc3p_detection_done(struct sgm4154x_device *chip)
 	int val = 0;
 	int delay_count =0;
 
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+        if(chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP) {
+              dev_info(chip->dev, "qc3p hvdcp detection already done, do not wait\n");
+	      return true;
+        }
+#endif
+
 	do {
 		ret = mmi_charger_read_iio_chan(chip, SMB5_QC3P_DETECTION_READY, &val);
 		if(ret )
@@ -1924,11 +1960,11 @@ int bc12_read_charger_type(struct sgm4154x_device *chip)
 	int ret = 0;
 	int val = 0;
 
-	ret = mmi_charger_read_iio_chan(chip, SMB5_USB_REAL_TYPE, &val);
+	ret = mmi_charger_read_iio_chan(chip, SMB5_READ_BC12_CHG_TYPE, &val);
 	if(ret )
-		dev_err(chip->dev, "Cann't read SMB5_USB_REAL_TYPE IIO\n");
+		dev_err(chip->dev, "Cann't read SMB5_READ_BC12_CHG_TYPE IIO\n");
 
-	dev_info(chip->dev, "read SMB5_USB_REAL_TYPE IIO :%d\n",val);
+	dev_info(chip->dev, "read SMB5_READ_BC12_CHG_TYPE IIO :%d\n",val);
 	return val;
 }
 #endif
@@ -2034,7 +2070,11 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 {
 
 	if (sgm->mmi_qc3_support
-		&& sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
+		&& (sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
+#ifdef CONFIG_MMI_SGM41513_CHARGER
+                || sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
+#endif
+        )) {
 		dev_info(sgm->dev, "start hvdcp detect\n");
 		sgm->mmi_qc3_trig_flag = true;
 		wake_up_interruptible(&sgm->mmi_qc3_wait_que);
@@ -2075,11 +2115,31 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 			mmi_start_hvdcp_detect(sgm);
 			result = true;
 			break;
+                case WT_CHG_TYPE_HVDCP:
+                        dev_err(sgm->dev, "quick plug out/in, HVDCP have been detected already !\n");
+			*real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+			mmi_start_hvdcp_detect(sgm);
+			result = true;
+                        break;
 		default:
 			pr_err("bc12 charger type: default\n");
 			result = false;
 			break;
 	}
+
+#ifdef __SGM41513_CHIP_ID__
+	if (*real_charger_type == POWER_SUPPLY_TYPE_USB_CDP) {
+		ret = sgm4154x_set_dynamic_vindpm_track(sgm, sgm->init_data.vdpm_bat_track);
+		if (ret) {
+			dev_err(sgm->dev, "%s set dynamic vindpm track:%d failed\n", __func__, sgm->init_data.vdpm_bat_track);
+		}
+	} else {
+		ret = sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+		if (ret) {
+			dev_err(sgm->dev, "%s disable dynamic vindpm track failed\n", __func__);
+		}
+	}
+#endif
 
 	return result;
 }
@@ -2112,6 +2172,10 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 	sgm->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 	sgm4154x_request_dpdm(sgm, false);
 	charger_dev_notify(sgm->chg_dev);
+
+#ifdef __SGM41513_CHIP_ID__
+	sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+#endif
 }
 
 static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
@@ -2372,6 +2436,12 @@ static int sgm4154x_hw_init(struct sgm4154x_device *sgm)
 	if (ret)
 		goto err_out;
 
+#ifdef __SGM41513_CHIP_ID__
+	ret = sgm4154x_set_dynamic_vindpm_track(sgm, 0);
+	if (ret)
+		goto err_out;
+#endif
+
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
        ret = sgm4154x_set_recharge_volt(sgm, 100);//100~200mv
        if (ret)
@@ -2460,6 +2530,16 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	    sgm->init_data.ilim < SGM4154x_IINDPM_I_MIN_uA)
 		return -EINVAL;
 
+#ifdef __SGM41513_CHIP_ID__
+	if (of_property_read_u32(sgm->dev->of_node, "dynamic-vindpm-tracking-uv", &val) >= 0) {
+		sgm->init_data.vdpm_bat_track = val;
+		dev_err(sgm->dev, "dynamic-vindpm-tracking-uv: %d\n", sgm->init_data.vdpm_bat_track);
+	} else {
+		dev_err(sgm->dev, "no dynamic-vindpm-tracking-uv\n");
+		sgm->init_data.vdpm_bat_track = 0;
+	}
+#endif
+
 	irq_gpio = of_get_named_gpio(sgm->dev->of_node, "sgm,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio))
 	{
@@ -2489,6 +2569,20 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 		}
 		gpio_direction_output(chg_en_gpio,0);//default enable charge
 	}
+
+	/*wls outout en control*/
+	sgm->wls_en_gpio = of_get_named_gpio(sgm->dev->of_node, "mmi,wls-en-gpio", 0);
+	if (gpio_is_valid(sgm->wls_en_gpio))
+	{
+		ret = gpio_request(sgm->wls_en_gpio, "mmi wls en pin");
+		if (ret) {
+			dev_err(sgm->dev, "%s: %d gpio(wls en) request failed\n", __func__, sgm->wls_en_gpio);
+			return ret;
+		}
+
+		gpio_direction_output(sgm->wls_en_gpio, 0);//default enable wls charge
+	}
+
 	/* sw jeita */
 	sgm->enable_sw_jeita = of_property_read_bool(sgm->dev->of_node, "enable_sw_jeita");
 	/* enable dynamic adjust battery voltage */
@@ -2656,6 +2750,12 @@ static int sgm4154x_enable_vbus(struct regulator_dev *rdev)
 	struct sgm4154x_device *sgm = rdev_get_drvdata(rdev);
 	int ret = 0;
 
+	/*disable wls output*/
+	if (gpio_is_valid(sgm->wls_en_gpio)) {
+		pr_err("%s,set wls en\n",__func__);
+		gpio_direction_output(sgm->wls_en_gpio, 1);
+	}
+
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_1, SGM4154x_OTG_EN,
                      SGM4154x_OTG_EN);
 	return ret;
@@ -2668,6 +2768,12 @@ static int sgm4154x_disable_vbus(struct regulator_dev *rdev)
 
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_1, SGM4154x_OTG_EN,
                      0);
+
+	/*resume wls output*/
+	if (gpio_is_valid(sgm->wls_en_gpio)) {
+		pr_err("%s,set wls dis\n",__func__);
+		gpio_direction_output(sgm->wls_en_gpio, 0);
+	}
 
 	return ret;
 }
@@ -2961,6 +3067,14 @@ static int sgm4154x_set_dp_dm(struct charger_device *chg_dev, int val)
 		dev_dbg(sgm->dev, "DP_DM_DM_PULSE rc=%d cnt=%d\n",
 				rc, sgm->pulse_cnt);
 		break;
+	case MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM:
+		sgm->ignore_request_dpdm = true;
+		dev_dbg(sgm->dev, "MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM\n");
+		break;
+	case MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM:
+		sgm->ignore_request_dpdm = false;
+		dev_dbg(sgm->dev, "MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM\n");
+		break;
 	default:
 		break;
 	}
@@ -3036,6 +3150,8 @@ static int sgm4154x_probe(struct i2c_client *client,
 	sgm->client = client;
 	sgm->dev = dev;
 
+	sgm->ignore_request_dpdm = false;
+
 	mutex_init(&sgm->lock);
 	mutex_init(&sgm->regulator_lock);
 
@@ -3050,13 +3166,12 @@ static int sgm4154x_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, sgm);
 
 	ret = sgm4154x_hw_chipid_detect(sgm);
-	if ((ret & SGM4154x_PN_MASK) !=
 #ifdef __SGM41513_CHIP_ID__
-            SGM4154x_PN_41513_ID
+	if ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41513_ID){
+
 #else
-            SGM4154x_PN_41542_ID
+	if (((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41542_ID) && ((ret & SGM4154x_PN_MASK) != SGM4154x_PN_41543D_ID)){
 #endif
-        ){
 		pr_info("[%s] device not found !!!\n", __func__);
 		return ret;
 	}
@@ -3216,6 +3331,7 @@ static const struct i2c_device_id sgm4154x_i2c_ids[] = {
 	{ "sgm41516", 0 },
 	{ "sgm41516D", 0 },
 	{ "sgm41513", 0 },
+	{ "sgm41543D", 0},
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, sgm4154x_i2c_ids);
@@ -3226,6 +3342,7 @@ static const struct of_device_id sgm4154x_of_match[] = {
 	{ .compatible = "sgm,sgm41516" },
 	{ .compatible = "sgm,sgm41516D" },
 	{ .compatible = "sgm,sgm41513" },
+	{ .compatible = "sgm,sgm41543D"},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sgm4154x_of_match);

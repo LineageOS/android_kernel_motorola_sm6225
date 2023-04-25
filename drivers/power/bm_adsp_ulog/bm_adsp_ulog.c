@@ -23,6 +23,7 @@
 
 #define BM_ULOG_GET			0x18
 #define BM_ULOG_PROP_SET		0x19
+#define BM_INIT_ULOG_GET		0x23
 
 /* Generic definitions */
 #define BM_ULOG_WAIT_TIME_MS		5000
@@ -114,6 +115,7 @@ static int bm_ulog_callback(void *priv, void *data, size_t len)
 		complete(&bmdev->ack);
 		break;
 	case BM_ULOG_GET:
+	case BM_INIT_ULOG_GET:
 		if (len != sizeof(struct bm_ulog_resp)) {
 			pr_err("Incorrect len %zu for bm ulog resp\n", len);
 			break;
@@ -175,6 +177,27 @@ static int bm_ulog_request_log(struct bm_ulog_dev *bmdev, u32 size)
 	ulog_req.hdr.owner = MSG_OWNER_BC;
 	ulog_req.hdr.type = MSG_TYPE_REQ_RESP;
 	ulog_req.hdr.opcode = BM_ULOG_GET;
+	ulog_req.max_logsize = max_logsize;
+
+	rc = bm_ulog_write(bmdev, &ulog_req, sizeof(ulog_req));
+
+	return rc;
+}
+
+static int bm_ulog_request_init_log(struct bm_ulog_dev *bmdev, u32 size)
+{
+	int rc;
+	u32 max_logsize;
+	struct bm_ulog_req ulog_req = { { 0 } };
+
+	if (size > 0 && size < MAX_ULOG_READ_BUFFER_SIZE)
+		max_logsize = size;
+	else
+		max_logsize = MAX_ULOG_READ_BUFFER_SIZE;
+
+	ulog_req.hdr.owner = MSG_OWNER_BC;
+	ulog_req.hdr.type = MSG_TYPE_REQ_RESP;
+	ulog_req.hdr.opcode = BM_INIT_ULOG_GET;
 	ulog_req.max_logsize = max_logsize;
 
 	rc = bm_ulog_write(bmdev, &ulog_req, sizeof(ulog_req));
@@ -271,6 +294,32 @@ static void bm_ulog_print_buffer(struct bm_ulog_dev *bmdev, u32 size)
 			break;
 		}
 	}
+}
+
+static int bm_ulog_print_init_log(u32 size)
+{
+	int rc;
+	struct bm_ulog_dev *bmdev = g_bmdev;
+
+	if (!bmdev) {
+		pr_err("BM ulog has not initialized yet\n");
+		return -ENODEV;
+	}
+
+	if (!size || size > MAX_ULOG_READ_BUFFER_SIZE) {
+		pr_err("BM ulog invalid size=%d\n", size);
+		return -EINVAL;
+	}
+
+	rc = bm_ulog_request_init_log(bmdev, size);
+	if (rc) {
+		pr_err("BM ulog failed to request log, rc=%d\n", rc);
+		return rc;
+	}
+
+	bm_ulog_print_buffer(bmdev, size);
+
+	return 0;
 }
 
 int bm_ulog_print_log(u32 size)
@@ -405,6 +454,7 @@ static int bm_ulog_probe(struct platform_device *pdev)
 	struct bm_ulog_dev *bmdev;
 	struct pmic_glink_client_data client_data = { };
 	struct device_node *node = pdev->dev.of_node;
+	bool init_log_enabled, init_debug_enabled;
 
 	bmdev = devm_kzalloc(&pdev->dev, sizeof(*bmdev), GFP_KERNEL);
 	if (!bmdev)
@@ -416,6 +466,8 @@ static int bm_ulog_probe(struct platform_device *pdev)
 	rc = of_property_read_u32(node, "level", &bmdev->level);
 	if (rc)
 		bmdev->level = BM_LOG_LEVEL_INFO;
+
+	init_log_enabled = of_property_read_bool(node, "init-log-enabled");
 
 	bmdev->dev = &pdev->dev;
 	client_data.id = MSG_OWNER_BC;
@@ -441,7 +493,15 @@ static int bm_ulog_probe(struct platform_device *pdev)
 	if (!bmdev->ipc_log)
 		dev_err(bmdev->dev, "Failed to create ipc log\n");
 
-	bm_ulog_print_log(MAX_ULOG_READ_BUFFER_SIZE);
+	if (init_log_enabled) {
+		init_debug_enabled = debug_enabled;
+		debug_enabled = init_log_enabled;
+		bm_ulog_print_log(MAX_ULOG_READ_BUFFER_SIZE);
+		bm_ulog_print_init_log(MAX_ULOG_READ_BUFFER_SIZE);
+		bm_ulog_print_mask_log(bmdev->categories, bmdev->level,
+					MAX_ULOG_READ_BUFFER_SIZE);
+		debug_enabled = init_debug_enabled;
+	}
 	bm_ulog_add_debugfs(bmdev);
 
 	bm_info(bmdev, "BM adsp ulog driver initialized successfully\n");

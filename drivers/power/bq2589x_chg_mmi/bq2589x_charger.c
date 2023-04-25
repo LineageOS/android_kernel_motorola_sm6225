@@ -27,6 +27,7 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
 #include <linux/mmi_discrete_charger_class.h>
+#include <linux/mmi_discrete_power_supply.h>
 #include <linux/seq_file.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/kthread.h>
@@ -49,19 +50,6 @@ bool qc3p_update_policy(struct bq2589x *chip);
 #define MMI_HVDCP2_VOLTAGE_STANDARD		8000000
 #define MMI_HVDCP3_VOLTAGE_STANDARD		7500000
 #define MMI_HVDCP_DETECT_ICL_LIMIT		500
-
-enum {
-	MMI_POWER_SUPPLY_DP_DM_UNKNOWN = 0,
-	MMI_POWER_SUPPLY_DP_DM_DP_PULSE = 1,
-	MMI_POWER_SUPPLY_DP_DM_DM_PULSE = 2,
-};
-
-enum mmi_qc3p_power {
-	MMI_POWER_SUPPLY_QC3P_NONE,
-	MMI_POWER_SUPPLY_QC3P_18W,
-	MMI_POWER_SUPPLY_QC3P_27W,
-	MMI_POWER_SUPPLY_QC3P_45W,
-};
 
 struct bq2589x_iio {
 	struct iio_channel	*usbin_v_chan;
@@ -147,6 +135,8 @@ struct bq2589x {
 	int		vbat_volt;
 	int		rsoc;
 	int		chg_en_gpio;
+	int		wls_en_gpio;
+	bool	ignore_request_dpdm;
 
 	const char *chg_dev_name;
 
@@ -207,6 +197,8 @@ struct pe_ctrl {
 	int vbat_min_volt;  /* to tune up voltage only when vbat > this threshold */
 };
 static struct pe_ctrl pe;
+
+extern bool mmi_is_factory_mode(void);
 
 static int bq2589x_read_byte(struct bq2589x *bq, u8 *data, u8 reg)
 {
@@ -590,6 +582,11 @@ void bq2589x_set_otg(struct bq2589x *bq, int enable)
 	int ret;
 
 	if (enable) {
+		/*disable wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 1);
+		}
+
 		ret = bq2589x_enable_otg(bq);
 		if (ret < 0) {
 			dev_err(bq->dev, "%s:Failed to enable otg-%d\n", __func__, ret);
@@ -599,6 +596,11 @@ void bq2589x_set_otg(struct bq2589x *bq, int enable)
 		ret = bq2589x_disable_otg(bq);
 		if (ret < 0)
 			dev_err(bq->dev, "%s:Failed to disable otg-%d\n", __func__, ret);
+
+		/*resume wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 0);
+		}
 	}
 }
 
@@ -624,8 +626,25 @@ int bq2589x_reset_watchdog_timer(struct bq2589x *bq)
 int bq2589x_force_dpdm(struct bq2589x *bq)
 {
 	int ret;
-	u8 val = BQ2589X_FORCE_DPDM << BQ2589X_FORCE_DPDM_SHIFT;
+	u8 val = 0;
 
+	if (bq->part_no == SC89890H) {
+		val = 0x2 << BQ2589X_DP_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DP_VSEL_MASK, val);
+		val = 0x1 << BQ2589X_DM_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DM_VSEL_MASK, val);
+
+		msleep(30);
+
+		val = 0x1 << BQ2589X_DP_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DP_VSEL_MASK, val);
+		val = 0x1 << BQ2589X_DM_VSEL_SHIFT;
+		bq2589x_update_bits(bq, BQ2589X_REG_01, BQ2589X_DM_VSEL_MASK, val);
+
+		msleep(30);
+	}
+
+	val = BQ2589X_FORCE_DPDM << BQ2589X_FORCE_DPDM_SHIFT;
 	ret = bq2589x_update_bits(bq, BQ2589X_REG_02, BQ2589X_FORCE_DPDM_MASK, val);
 	if (ret)
 		return ret;
@@ -1400,6 +1419,18 @@ static int bq2589x_parse_dt(struct device *dev, struct bq2589x *bq)
 		gpio_direction_output(bq->chg_en_gpio,0);//default enable charge
 	}
 
+	/*wls outout en control*/
+	bq->wls_en_gpio = of_get_named_gpio(bq->dev->of_node, "mmi,wls-en-gpio", 0);
+	if (gpio_is_valid(bq->wls_en_gpio)) {
+		ret = gpio_request(bq->wls_en_gpio, "mmi wls en pin");
+		if (ret) {
+			dev_err(bq->dev, "%s: %d gpio(wls en) request failed\n", __func__, bq->wls_en_gpio);
+			return ret;
+		}
+
+		gpio_direction_output(bq->wls_en_gpio, 0);//default enable wls charge
+	}
+
 	ret = of_property_read_u32(np, "ti,bq2589x,vbus-volt-high-level", &pe.high_volt_level);
 	if (ret)
 		return ret;
@@ -1488,6 +1519,10 @@ static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 {
 	int ret = 0;
 
+	if(mmi_is_factory_mode() && bq->ignore_request_dpdm) {
+		dev_err(bq->dev, "%s ignore_request_dpdm\n", __func__);
+		return ret;
+	}
 	mutex_lock(&bq->regulator_lock);
 	/* fetch the DPDM regulator */
 	if (!bq->dpdm_reg && of_get_property(bq->dev->of_node, "dpdm-supply", NULL)) {
@@ -2588,6 +2623,14 @@ static int mmi_set_dp_dm(struct charger_device *chg_dev, int val)
 		dev_dbg(bq->dev, "DP_DM_DM_PULSE rc=%d cnt=%d\n",
 				rc, bq->pulse_cnt);
 		break;
+	case MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM:
+		bq->ignore_request_dpdm = true;
+		dev_err(bq->dev, "MMI_POWER_SUPPLY_IGNORE_REQUEST_DPDM\n");
+		break;
+	case MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM:
+		bq->ignore_request_dpdm = false;
+		dev_err(bq->dev, "MMI_POWER_SUPPLY_DONOT_IGNORE_REQUEST_DPDM\n");
+		break;
 	default:
 		break;
 	}
@@ -2650,20 +2693,32 @@ static int bq2589x_set_otg_enable(struct charger_device *chg_dev, bool enable)
 	int ret = 0;
 
 	if (enable) {
+		/*disable wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 1);
+		}
+
 	        if (bq->part_no == SC89890H) {
                         ret = bq2589x_disable_charger(bq);
                 }
 		val = BQ2589X_OTG_ENABLE << BQ2589X_OTG_CONFIG_SHIFT;
+		ret = bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
 	}
 	else {
 		val = BQ2589X_OTG_DISABLE << BQ2589X_OTG_CONFIG_SHIFT;
 		if (bq->part_no == SC89890H) {
                         ret = bq2589x_enable_charger(bq);
                 }
+		ret = bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
+
+		/*resume wls output*/
+		if (gpio_is_valid(bq->wls_en_gpio)) {
+			gpio_direction_output(bq->wls_en_gpio, 0);
+		}
 	}
 	dev_info(bq->dev, "%s: %s otg\n", __func__, enable ? "enable" : "disable");
 
-	return bq2589x_update_bits(bq, BQ2589X_REG_03, BQ2589X_OTG_CONFIG_MASK, val);
+	return ret;
 }
 
 static int bq2589x_set_boost_current_limit(struct charger_device *chg_dev, u32 uA)
@@ -2808,6 +2863,8 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	bq->dev = dev;
 	bq->client = client;
 	i2c_set_clientdata(client, bq);
+
+	bq->ignore_request_dpdm = false;
 
 	ret = bq2589x_detect_device(bq);
 	if (!ret && bq->part_no == BQ25890) {

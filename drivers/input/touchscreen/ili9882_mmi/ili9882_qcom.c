@@ -446,7 +446,7 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 {
 	int *blank;
 	struct drm_panel_notifier *evdata = data;
-#if defined(ILI_SENSOR_EN) && defined(ILI_SET_TOUCH_STATE)
+#if defined(ILI_SENSOR_EN) && (defined(ILI_SET_TOUCH_STATE) || defined(ILI_CONFIG_PANEL_NOTIFICATIONS))
 	struct ilitek_ts_data *ts =
 		container_of(self, struct ilitek_ts_data, notifier_fb);
 #endif
@@ -485,7 +485,7 @@ static int ilitek_plat_notifier_fb(struct notifier_block *self, unsigned long ev
 				else
 					ILI_INFO("TP in deep sleep!\n");
 			}
-#elif defined(ILI_SENSOR_EN) && defined(ILI_SET_TOUCH_STATE)
+#elif defined(ILI_SENSOR_EN) && (defined(ILI_SET_TOUCH_STATE) || defined(ILI_CONFIG_PANEL_NOTIFICATIONS))
 			if (ts->should_enable_gesture) {
 				ILI_INFO("double tap gesture suspend\n");
 				if (ili_sleep_handler(TP_SUSPEND) < 0)

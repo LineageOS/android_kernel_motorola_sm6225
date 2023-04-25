@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <asm/unaligned.h>
+#include <linux/iio/consumer.h>
 
 #define MM8XXX_MANUFACTURER	"MITSUMI ELECTRIC"
 
@@ -65,7 +66,7 @@ struct mm8xxx_device_info {
 	struct list_head list;
 	struct mutex lock;
 	u8 *cmds;
-
+	struct iio_channel *Batt_NTC_channel;
 	bool fake_battery;
 };
 
@@ -697,6 +698,10 @@ static int mm8xxx_battery_current(struct mm8xxx_device_info *di,
 	return 0;
 }
 
+ static int mm8xxx_battery_temp(struct mm8xxx_device_info *di, union power_supply_propval *val)
+{
+	return iio_read_channel_processed(di->Batt_NTC_channel, &val->intval);
+}
 static int mm8xxx_battery_status(struct mm8xxx_device_info *di,
 				 union power_supply_propval *val)
 {
@@ -801,9 +806,8 @@ static int mm8xxx_battery_get_property(struct power_supply *psy,
 		ret = mm8xxx_battery_capacity_level(di, val);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		ret = mm8xxx_simple_value(di->cache.temperature, val);
-		if (ret == 0)
-			val->intval += -2731;
+		mm8xxx_battery_temp(di, val);
+		val->intval = val->intval / 100;
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW:
 		ret = mm8xxx_simple_value(di->cache.avg_time_to_empty, val);
@@ -877,7 +881,7 @@ static int mm8xxx_battery_setup(struct mm8xxx_device_info *di)
 	ps_desc->get_property = mm8xxx_battery_get_property;
 	ps_desc->external_power_changed = mm8xxx_external_power_changed;
 
-	di->psy = power_supply_register_no_ws(di->dev, ps_desc, &ps_cfg);
+	di->psy = power_supply_register(di->dev, ps_desc, &ps_cfg);
 	if (IS_ERR(di->psy)) {
 		dev_err(di->dev, "failed to register battery\n");
 		return PTR_ERR(di->psy);
@@ -1042,7 +1046,7 @@ static int mm8xxx_fake_battery_setup(struct mm8xxx_device_info *di)
 	ps_desc->get_property = mm8xxx_fake_battery_get_property;
 	ps_desc->external_power_changed = mm8xxx_fake_external_power_changed;
 
-	di->psy = power_supply_register_no_ws(di->dev, ps_desc, &ps_cfg);
+	di->psy = power_supply_register(di->dev, ps_desc, &ps_cfg);
 	if (IS_ERR(di->psy)) {
 		dev_err(di->dev, "failed to register battery\n");
 		return PTR_ERR(di->psy);
@@ -1117,6 +1121,13 @@ static int mm8xxx_battery_probe(struct i2c_client *client,
 	if (ret != MM8013_HW_VERSION) {
 		di->fake_battery = true;
 		mm_info("don't have real battery,use fake battery\n");
+	}
+
+	di->Batt_NTC_channel = devm_iio_channel_get(&client->dev, "batt_therm");
+	if (IS_ERR(di->Batt_NTC_channel)) {
+		dev_err(&client->dev, "failed to get batt_therm IIO channel\n");
+		ret = PTR_ERR(di->Batt_NTC_channel);
+		goto failed;
 	}
 
 	if (di->fake_battery)

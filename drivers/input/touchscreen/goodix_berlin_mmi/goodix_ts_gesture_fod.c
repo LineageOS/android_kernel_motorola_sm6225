@@ -422,10 +422,6 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			fodx = le16_to_cpup((__le16 *)gs_event.gesture_data);
 			fody = le16_to_cpup((__le16 *)(gs_event.gesture_data + 2));
 			overlay_area = gs_event.gesture_data[4];
-			if(!cd->fod_enable) {
-				ts_info("Get FOD-DOWN gesture when fod is not enabled, ignore");
-				goto gesture_ist_exit;
-			}
 			//goodix firmware do not send coordinate, need mmi touch to define a vaild coordinate thru dts
 			mmi_event.evcode = 2;
 			mmi_event.evdata.x= 0;
@@ -446,11 +442,6 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 			}
 			fod_down++;
 		}else if(cd->gesture_type & GESTURE_FOD_PRESS && gs_event.gesture_type == GOODIX_GESTURE_FOD_UP) {
-			if(!cd->fod_enable) {
-				ts_info("Get FOD-UP gesture when fod is not enabled, ignore");
-				fod_down = 0;
-				goto gesture_ist_exit;
-			}
 			ts_info("Get FOD-UP gesture");
 			mmi_event.evcode = 3;
 			mmi_event.evdata.x= 0;

@@ -1182,17 +1182,26 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 {
 	unsigned int touch_num = touch_data->touch_num;
 	int i;
-#ifdef CONFIG_GTP_FOD
+	static uint8_t touchdown[GOODIX_MAX_TOUCH];
+#if defined (CONFIG_GTP_FOD) || defined (CONFIG_GTP_LAST_TIME)
 	struct goodix_ts_core *core_data = goodix_modules.core_data;
-	struct goodix_ts_event *ts_event = &goodix_modules.core_data ->ts_event;
+#endif
+#ifdef CONFIG_GTP_FOD
+	struct goodix_ts_event *ts_event = &goodix_modules.core_data->ts_event;
 #endif
 	mutex_lock(&dev->mutex);
-
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
 		if (touch_data->coords[i].status == TS_TOUCH) {
 			ts_debug("report: id %d, x %d, y %d, w %d", i,
 				touch_data->coords[i].x, touch_data->coords[i].y,
 				touch_data->coords[i].w);
+			if (touchdown[i] == 0) {
+#ifdef CONFIG_GTP_LAST_TIME
+				core_data->last_event_time = ktime_get();
+				ts_debug("TOUCH: [%d] logged timestamp\n", i);
+#endif
+				touchdown[i] = 1;
+			}
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
 			input_report_abs(dev, ABS_MT_POSITION_X,
@@ -1202,8 +1211,12 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			input_report_abs(dev, ABS_MT_TOUCH_MAJOR,
 					touch_data->coords[i].w);
 		} else {
-			input_mt_slot(dev, i);
-			input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+			if (touchdown[i] == 1) {
+				ts_debug("TOUCH: [%d] release\n", i);
+				touchdown[i] = 0;
+				input_mt_slot(dev, i);
+				input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+			}
 		}
 	}
 
@@ -1866,6 +1879,7 @@ int goodix_ts_esd_init(struct goodix_ts_core *cd)
 void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 {
 	struct input_dev *input_dev = core_data->input_dev;
+	struct goodix_ts_event *ts_event;
 	int i;
 
 	if (!input_dev) {
@@ -1883,6 +1897,10 @@ void goodix_ts_release_connects(struct goodix_ts_core *core_data)
 	input_report_key(input_dev, BTN_TOUCH, 0);
 	input_mt_sync_frame(input_dev);
 	input_sync(input_dev);
+
+	/* clean event buffer */
+	ts_event = &core_data->ts_event;
+	memset(ts_event, 0, sizeof(*ts_event));
 
 	mutex_unlock(&input_dev->mutex);
 }
@@ -2462,13 +2480,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	cpu_latency_qos_add_request(&core_data->goodix_pm_qos, PM_QOS_DEFAULT_VALUE);
 #endif
 
-	/* Try start a thread to get config-bin info */
-	ret = goodix_start_later_init(core_data);
-	if (ret) {
-		ts_err("Failed start cfg_bin_proc, %d", ret);
-		goto err_out;
-	}
-
 	PM_WAKEUP_REGISTER(bus_interface->dev, core_data->gesture_wakelock,
 			"goodix_gesture_wakelock");
 	if (!core_data->gesture_wakelock) {
@@ -2487,6 +2498,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	core_data->init_stage = CORE_INIT_STAGE1;
 	goodix_modules.core_data = core_data;
 	core_module_prob_sate = CORE_MODULE_PROB_SUCCESS;
+
+	/* Try start a thread to get config-bin info */
+	ret = goodix_start_later_init(core_data);
+	if (ret) {
+		ts_err("Failed start cfg_bin_proc, %d", ret);
+		goto err_register_gesture_wakelock;
+	}
 
 	ts_info("goodix_ts_core probe success");
 	return 0;
@@ -2510,7 +2528,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	cpu_latency_qos_remove_request(&core_data->goodix_pm_qos);
 #endif
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
-	ts_info("%s:goodix_ts_mmi_dev_register",__func__);
+	ts_info("%s:goodix_ts_mmi_dev_unregister",__func__);
 	goodix_ts_mmi_dev_unregister(pdev);
 #endif
 

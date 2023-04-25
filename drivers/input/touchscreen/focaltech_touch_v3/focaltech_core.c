@@ -1458,7 +1458,7 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
     } else {
         if (!ts_data->power_disabled) {
             FTS_DEBUG("regulator disable !");
-            gpio_direction_output(ts_data->pdata->reset_gpio, 0);
+            gpio_direction_output(ts_data->pdata->reset_gpio, 1);
             msleep(1);
             ret = regulator_disable(ts_data->vdd);
             if (ret) {
@@ -1471,7 +1471,9 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
                 }
             }
 #if FTS_PINCTRL_EN
+			if (ts_data->gesture_support == true) {
             fts_pinctrl_select_suspend(ts_data);
+			}
 #endif
             ts_data->power_disabled = true;
         }

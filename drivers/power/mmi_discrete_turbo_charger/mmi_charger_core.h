@@ -52,6 +52,8 @@
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/mmi_discrete_charger_class.h>
+#include <linux/usb/adapter_class.h>
+#include <linux/mmi_discrete_power_supply.h>
 
 #define mmi_chrg_err(chip, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chip->name,	\
@@ -75,17 +77,6 @@ enum print_reason {
 	PR_INTERRUPT    = BIT(0),
 	PR_MISC         = BIT(2),
 	PR_MOTO         = BIT(7),
-};
-
-enum mmi_qc3p_power {
-	QTI_POWER_SUPPLY_QC3P_NONE,
-#ifdef CONFIG_MMI_QC3P_WT6670_DETECTED
-	QTI_POWER_SUPPLY_QC3P_18W = 0x8,
-#else
-	QTI_POWER_SUPPLY_QC3P_18W,
-#endif
-	QTI_POWER_SUPPLY_QC3P_27W,
-	QTI_POWER_SUPPLY_QC3P_45W,
 };
 
 static inline void wakeup_source_init_internal(struct wakeup_source *ws,
@@ -178,6 +169,7 @@ struct mmi_cp_policy_dev {
 #define PD_ALLOW_MIN_CURRENT_UA		1500000
 #define SWITCH_CHARGER_PPS_VOLT		5000000
 #define PUMP_CHARGER_PPS_MIN_VOLT	8000000
+#define PUMP_CHARGER_PPS_MAX_VOLT	11000000
 #define COOLING_HYSTERISIS_DEGC 2
 struct mmi_charger_manager {
 	const char	*name;
@@ -185,8 +177,8 @@ struct mmi_charger_manager {
 	struct power_supply	*batt_psy;
 	struct power_supply	*usb_psy;
 	struct power_supply	*mmi_chrg_mgr_psy;
-	struct usbpd	*pd_handle;
-	struct usbpd_pdo_info	mmi_pdo_info[PD_MAX_PDO_NUM];
+	struct adapter_device	*pd_adapter_dev;
+	struct adapter_power_cap	mmi_pdo_info;
 	struct notifier_block	psy_nb;
 
 	struct iio_channel	**ext_iio_chans;
@@ -229,6 +221,7 @@ struct mmi_charger_manager {
 	int pd_target_curr;
 	/*the final commited request PD power*/
 
+	bool pps_start;
 	int pps_result;
 	int pps_result_history[PPS_RET_HISTORY_SIZE];
 	int pps_result_history_idx;
@@ -315,6 +308,7 @@ extern void mmi_update_all_charger_error(struct mmi_charger_manager *chip);
 extern void mmi_dump_charger_error(struct mmi_charger_manager *chip,
 									struct mmi_charger_device *chrg_dev);
 extern bool mmi_is_cable_plugout(struct mmi_charger_manager *chip);
+extern int mmi_charger_update_pd_capacity(struct mmi_charger_manager *chip);
 extern ssize_t mmi_get_factory_image_mode(void);
 extern ssize_t mmi_set_factory_image_mode(int mode);
 extern ssize_t mmi_get_factory_charge_upper(void);

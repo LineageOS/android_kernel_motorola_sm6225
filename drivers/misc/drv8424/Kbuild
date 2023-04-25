@@ -1,0 +1,10 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+#ifeq ($(CONFIG_LIBER_DTB), y)
+#EXTRA_CFLAGS += -DCONFIG_USE_HW_CLK
+#endif
+
+obj-m := drv8424_mmi.o
+drv8424_mmi-objs := drv8424.o

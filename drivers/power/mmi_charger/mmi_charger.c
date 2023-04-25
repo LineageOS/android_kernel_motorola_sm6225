@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/mmi_wake_lock.h>
 #include <soc/qcom/mmi_boot_info.h>
+#include <linux/time64.h>
 
 #include "mmi_charger.h"
 
@@ -140,6 +141,11 @@ struct mmi_battery_pack {
 };
 
 struct mmi_charger_profile {
+	//for not FFC battery profile
+	int noffc_fg_iterm;
+	int noffc_chrg_iterm;
+	int noffc_max_fv_mv;
+
 	int fg_iterm;
         int chrg_iterm;
         int max_fv_mv;
@@ -240,6 +246,7 @@ struct mmi_charger_chip {
 
 	struct mmi_vote		suspend_charger_vote;
 	struct mmi_vote		disable_charging_vote;
+	uint32_t		factory_kill_debounce_ms;
 };
 
 static int mmi_vote(struct mmi_vote *vote, const char *voter,
@@ -935,10 +942,14 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 	if (rc)
 		charger->profile.chrg_iterm = 300;
 
+	charger->profile.noffc_chrg_iterm = charger->profile.chrg_iterm;
+
 	rc = of_property_read_u32(node, "mmi,fg-iterm-ma",
 				  &charger->profile.fg_iterm);
 	if (rc)
 		charger->profile.fg_iterm = charger->profile.chrg_iterm + 50;
+
+	charger->profile.noffc_fg_iterm = charger->profile.fg_iterm;
 
 	rc = of_property_read_u32(node, "mmi,vfloat-comp-uv",
 				  &charger->profile.vfloat_comp_mv);
@@ -950,6 +961,8 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 				  &charger->profile.max_fv_mv);
 	if (rc)
 		charger->profile.max_fv_mv = 4400;
+
+	charger->profile.noffc_max_fv_mv = charger->profile.max_fv_mv;
 
 	rc = of_property_read_u32(node, "mmi,max-fcc-ma",
 				  &charger->profile.max_fcc_ma);
@@ -1048,6 +1061,7 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 	return 0;
 }
 
+#define TURBO_CHRG_FFC_THRSH_MW 25000
 static void mmi_update_charger_profile(struct mmi_charger_chip *chip,
 			       struct mmi_charger *charger)
 {
@@ -1055,9 +1069,17 @@ static void mmi_update_charger_profile(struct mmi_charger_chip *chip,
 	int temp;
 	int num_zones;
 	struct mmi_ffc_zone *zones;
+	struct mmi_charger_info *chg_info = &charger->chg_info;
 
 	if (!chip) {
 		pr_err("called before chg valid!\n");
+		return;
+	}
+
+	if (!(chg_info->chrg_pmax_mw > TURBO_CHRG_FFC_THRSH_MW)) {
+		charger->profile.max_fv_mv = charger->profile.noffc_max_fv_mv;
+		charger->profile.fg_iterm = charger->profile.noffc_fg_iterm;
+		charger->profile.chrg_iterm = charger->profile.noffc_chrg_iterm;
 		return;
 	}
 
@@ -1964,7 +1986,7 @@ static void mmi_update_battery_status(struct mmi_charger_chip *chip)
 		mmi_changed = true;
 		chip->max_charger_rate = max_charger_rate;
 		mmi_notify_charger_event(chip, NOTIFY_EVENT_TYPE_CHG_RATE);
-		mmi_info(chip, "%s charger is detected\n",
+		mmi_err(chip, "%s charger is detected\n",
 			charge_rate[chip->max_charger_rate]);
 	}
 
@@ -2030,6 +2052,9 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 	struct mmi_charger_chip *chip = container_of(work,
 						struct mmi_charger_chip,
 						heartbeat_work.work);
+	struct timespec64 now;
+	static struct timespec64 start;
+	uint32_t elapsed_ms;
 
 	/* Have not been resumed so wait another 100 ms */
 	if (chip->suspended & IS_SUSPENDED) {
@@ -2072,13 +2097,22 @@ static void mmi_charger_heartbeat_work(struct work_struct *work)
 		if (chip->max_charger_rate > MMI_POWER_SUPPLY_CHARGE_RATE_NONE) {
 			mmi_dbg(chip, "Factory Kill Armed\n");
 			chip->factory_kill_armed = true;
+			ktime_get_real_ts64(&start);
 		} else if (chip->factory_kill_armed && !factory_kill_disable) {
-			mmi_warn(chip, "Factory kill power off\n");
+			ktime_get_real_ts64(&now);
+			elapsed_ms = (now.tv_sec - start.tv_sec) * 1000;
+			elapsed_ms += (now.tv_nsec - start.tv_nsec) / 1000000;
+			if (elapsed_ms < chip->factory_kill_debounce_ms) {
+				mmi_err(chip, "Factory kill debounce elapsed_ms:%d\n",
+					elapsed_ms);
+			} else {
+				mmi_err(chip, "Factory kill power off\n");
 #if (KERNEL_VERSION(5, 10, 0) > LINUX_VERSION_CODE) || defined(MMI_GKI_API_ALLOWANCE)
-			orderly_poweroff(true);
+				orderly_poweroff(true);
 #else
-			kernel_power_off();
+				kernel_power_off();
 #endif
+			}
 		} else {
 			chip->factory_kill_armed = false;
 		}
@@ -2580,6 +2614,11 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 
 	chip->start_factory_kill_disabled =
 			of_property_read_bool(node, "mmi,start-factory-kill-disabled");
+
+	rc = of_property_read_u32(node, "mmi,factory-kill-debounce-ms",
+				  &chip->factory_kill_debounce_ms);
+	if (rc)
+		chip->factory_kill_debounce_ms = 0;
 
 	rc = of_property_read_u32(node, "mmi,upper-limit-capacity",
 				  &chip->upper_limit_capacity);

@@ -742,6 +742,11 @@ static int cts_driver_remove(struct spi_device *client)
 
 		cts_plat_free_resource(cts_data->pdata);
 
+		if (cts_data->cts_dev.tx)
+			kfree(cts_data->cts_dev.tx);
+		if (cts_data->cts_dev.rx)
+			kfree(cts_data->cts_dev.rx);
+
 #ifdef CONFIG_CTS_ESD_PROTECTION
 		if (cts_data->esd_workqueue)
 			destroy_workqueue(cts_data->esd_workqueue);
