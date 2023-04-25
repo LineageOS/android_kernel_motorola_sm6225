@@ -94,9 +94,9 @@
 
 		sense_r_mohm = <5>;
 		factory_mode_ntc_exist = <0>;
-		df-serialnum = "SB18D38323";
+		df-serialnum = "SB18D20540";
 		#include "bat_setting/CW2217_NC50_ATL_Devon.dtsi"
-		#include "bat_setting/CW2217_NC50_SWD_Devon.dtsi"
+		#include "bat_setting/CW2217_NC50_SCUD_Devon.dtsi"
 	};
 
 	sm5602@71 {
@@ -126,14 +126,77 @@
 		sm,t_h_alarm_in = <1>;
 		sm,t_l_alarm_ex = <0xD3D8>;
 		sm,t_h_alarm_ex = <0x9245>;
-		df-serialnum = "SB18D38324";
+		df-serialnum = "SB18D20540";
 		#include "bat_setting/SM5602_NC50_ATL_Devon.dtsi"
-		#include "bat_setting/SM5602_NC50_SWD_Devon.dtsi"
+		#include "bat_setting/SM5602_NC50_SCUD_Devon.dtsi"
 	};
 };
 
 &qupv3_se1_i2c {
 	status = "okay";
+
+	rt-swchg@53 {
+		compatible = "richtek,swchg";
+		reg = <0x53>;
+		status = "okay";
+
+		rt,intr_gpio = <&tlmm 96 0x0>; /* GPIO */
+		rt,intr_gpio_num = <96>; /* direct defined GPIO num */
+
+		#io-channel-cells = <1>;
+                io-channels = <&pm6125_vadc ADC_GPIO3_DIV3>,
+				<&wt6670 PSY_IIO_QC3P_REAL_TYPE>,
+                                <&wt6670 PSY_IIO_QC3P_POWER>,
+                                <&wt6670 PSY_IIO_START_DETECTION>,
+                                <&wt6670 PSY_IIO_DETECTION_READY>,
+                                <&mmi_chrg PSY_IIO_QC3P_START_POLICY>,
+				<&wt6670 PSY_IIO_START_BC12_DETECTION>,
+				<&wt6670 PSY_IIO_DETECTION_BC12_READY>,
+				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>,
+				<&wt6670 PSY_IIO_BC12_CHG_TYPE>;
+
+                io-channel-names = "gpio3_div3",
+				   "wt6670_usb_real_type",
+                                   "wt6670_usb_qc3p_power",
+                                   "wt6670_start_detection",
+				   "wt6670_detection_ready",
+				   "qc3p_start_policy",
+				   "wt6670_start_bc12_detection",
+				   "wt6670_detection_bc12_ready",
+				   "read_usbin_voltage",
+				   "wt6670_bc12_chg_type";
+
+		dpdm-supply = <&usb2_phy0>;
+		mmi,qc3-support;
+
+		rt9471 {
+			chg_name = "primary_chg";
+			chg_alias_name = "rt9471_chg";
+			rm-dev-addr = /bits/ 8 <0x53>;
+			rm-name = "rt9471";
+			interrupt-names = "wdt", "chg_mivr", "vbus_gd",
+					  "bc12_done", "detach", "vac_ov",
+					  "otg_fault", "chg_rdy", "chg_done",
+					  "aicc_done", "pe_done", "chg_tout",
+					  "rechg", "chg_batov";
+			vac_ovp = <14000000>;		/* uV */
+			mivr = <4500000>;		/* uV */
+			aicr = <500000>;		/* uA */
+			cv = <4450000>;			/* uV */
+			ichg = <1000000>;		/* uA */
+			ieoc = <120000>;		/* uA */
+			safe_tmr = <10>;		/* hour */
+			wdt = <0>;			/* sec */
+			mivr_track = <0>;
+			/* en_safe_tmr; */
+			en_te;
+			/* en_jeita; */
+			/* ceb_invert; */
+			/* dis_i2c_tout; */
+			en_qon_rst;
+			/* auto_aicr; */
+		};
+	};
 
 	sgm4154x: sgm4154x@1A {
 		status = "okay";
@@ -150,7 +213,8 @@
                                 <&mmi_chrg PSY_IIO_QC3P_START_POLICY>,
 				<&wt6670 PSY_IIO_START_BC12_DETECTION>,
 				<&wt6670 PSY_IIO_DETECTION_BC12_READY>,
-				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>;
+				<&wt6670 PSY_IIO_READ_USBIN_VOLTAGE>,
+				<&wt6670 PSY_IIO_BC12_CHG_TYPE>;
 
                 io-channel-names = "gpio3_div3",
 				   "wt6670_usb_real_type",
@@ -160,13 +224,15 @@
 				   "qc3p_start_policy",
 				   "wt6670_start_bc12_detection",
 				   "wt6670_detection_bc12_ready",
-				   "read_usbin_voltage";
+				   "read_usbin_voltage",
+				   "wt6670_bc12_chg_type";
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <96 0>;            //irq num base on hardware design
 		sgm,irq-gpio = <&tlmm 96 0>;     //irq num base on hardware design
 		//sgm,chg-en-gpio = <&tlmm 0 0>;   //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
 
+		dynamic-vindpm-tracking-uv = <250000>;
 		dpdm-supply = <&usb2_phy0>;
 		mmi,qc3-support;
 		/* sw jeita  parameter customer defined*/
@@ -393,16 +459,24 @@
 
 		mmi,chrg-iterm-ma = <243>;
 		mmi,fg-iterm-ma = <500>;
+                mmi,batt-profile-fv-mv = <4480>;
 		mmi,max-fv-mv = <4450>;
 		mmi,max-fcc-ma = <4000>;
 		mmi,demo-fv-mv = <4000>;
 		mmi,otg-cl-ua = <1200000>;
-		mmi,df-serialnum = "SB18D33989";
+		mmi,df-serialnum = "SB18D20540";
 		mmi,mmi-temp-zones = <0 4200 1000 0>,
-				<10 4250 3000 1000>,
-				<15 0 3000 3000>,
+				<10 4250 2500 1000>,
+				<15 0 2500 2500>,
 				<45 0 4000 4000>,
-				<60 4200 3000 0>;
+				<60 4200 4000 0>;
+		mmi,mmi-ffc-zones = <0 4200 243 500>,
+				<10 4450 243 500>,
+				<15 4450 243 500>,
+				<25 4480 550 790>,
+				<35 4480 588 850>,
+				<45 4480 631 920>,
+				<60 4200 243 500>;
 		mmi,thermal-mitigation = <4000000 3500000
 				3000000 2500000
 				2000000 1500000
@@ -465,9 +539,9 @@
 		mmi,chrg-temp-zones-num = <5>;
 		mmi,mmi-chrg-temp-zones =
 					<0 4200 1000  0 0>,
-					<10 4250 3000 4450 1000>,
-					<15 4450 3000 0 0>,
-					<45 4350 6000 4480 4000>,
+					<10 4250 2500 4450 1000>,
+					<15 4450 2500 0 0>,
+					<45 4300 5800 4480 4000>,
 					<60 4200 4000 0 0>;
 		mmi,thermal-mitigation =
 					<5800000>,

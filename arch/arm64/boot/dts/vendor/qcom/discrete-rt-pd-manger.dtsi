@@ -17,11 +17,13 @@
 		io-channels = <&mmi_discrete_charger PSY_IIO_USB_REAL_TYPE>,
 			      <&mmi_discrete_charger PSY_IIO_MMI_OTG_ENABLE>,
 			      <&mmi_discrete_charger PSY_IIO_TYPEC_MODE>,
-			      <&mmi_discrete_charger PSY_IIO_PD_ACTIVE>;
+			      <&mmi_discrete_charger PSY_IIO_PD_ACTIVE>,
+			      <&mmi_discrete_charger PSY_IIO_MMI_PD_VDM_VERIFY>;
 		io-channel-names = "usb_real_type",
 				   "otg_enable",
 				   "typec_mode",
-				   "pd_active";
+				   "pd_active",
+				   "mmi_pd_vdm_verify";
 	};
 };
 

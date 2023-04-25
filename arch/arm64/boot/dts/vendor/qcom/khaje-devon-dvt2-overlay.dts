@@ -15,13 +15,13 @@
 
 #include "khaje-devon-common-overlay.dtsi"
 #include "khaje-devon-audio-overlay.dtsi"
-#include "khaje-devon-display-evt-overlay.dtsi"
+#include "khaje-devon-display-dvt2-overlay.dtsi"
 
 / {
 	model = "devon";
 	compatible = "qcom,khaje-devon", "qcom,khaje-moto", "qcom,khaje";
 	qcom,msm-id = <518 0x10000>;
-	qcom,board-id = <0 0xA000>;
+	qcom,board-id = <0 0xB200>;
 };
 
 &qupv3_se2_i2c {
@@ -46,7 +46,7 @@
             ch3_name = "Ch3capsense_reference";
             ch4_name = "Ch4capsense_bottom";
             ref_channel = <0x9>;
-            hardware_version = <0>;
+            hardware_version = <1>;
             aw9610x,using-firmware;
             aw9610x,firmware_name = "aw9610x_0";
         };
