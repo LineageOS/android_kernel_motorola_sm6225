@@ -357,7 +357,7 @@ static bool jiffies_timer_expire(void) {
 		ret = false;
 
 	if (ret) {
-              cw_printk("exire 10s, curr_jiffies:%dms, last jiffies %d",
+              cw_printk("expire 60s, curr_jiffies:%dms, last jiffies %d",
                               jiffies_to_msecs(cur_jiffies), jiffies_to_msecs(last_jiffies));
 		last_jiffies = cur_jiffies;
 
@@ -378,9 +378,6 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	static int ui_full_pre = 0;
 	int ui_full_temp = 0;
 
-	if (ui_full_pre == 0)
-		ui_full_pre = cw_bat->ui_full;
-
 	if (cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)
 		chr_st_now = 1;
 	else
@@ -393,11 +390,18 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	soc_l = reg_val[1];
 	cw_bat->raw_soc = soc_h;
 
+	if (ui_full_pre == 0) {
+		ui_full_pre = (soc_h * 256 + soc_l) / 256;
+		if (ui_full_pre < cw_bat->ui_full)
+			ui_full_pre = cw_bat->ui_full;
+		cw_printk("CW2015[%d]: UI_FULL INIT is %d", __LINE__, ui_full_pre);
+	}
 	ui_full_temp = ui_full_pre;
 
 	if (chr_st_now) {
 		if (ui_full_temp > cw_bat->ui_full) {
-			if (jiffies_timer_expire()) {
+			if (jiffies_timer_expire() &&
+				(cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)) {
 				ui_full_temp -= 1;
 				cw_printk("CW2015[%d]: UI_FULL-- %d!!!!\n", __LINE__, ui_full_temp);
 			}
@@ -405,7 +409,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	}
 
       if (!chr_st_now) {
-		if ((soc_h * 256 + soc_l) > ui_full_temp * 256) {
+		if ((soc_h * 256 + soc_l) / 256 > ui_full_temp) {
 			cw_printk("CW2015[%d]: update UI_FULL to %d from %d !!!!\n", __LINE__, (soc_h * 256 + soc_l) / 256, ui_full_temp);
 			ui_full_temp = (soc_h * 256 + soc_l) / 256;
 		}
