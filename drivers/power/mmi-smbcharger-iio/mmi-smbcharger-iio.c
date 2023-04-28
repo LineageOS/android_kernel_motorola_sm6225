@@ -285,6 +285,7 @@ struct mmi_temp_zone {
 	int		fcc_norm_ma;
 };
 
+#define ZONE_35C_TO_45C 5
 #define MAX_NUM_STEPS 10
 enum mmi_temp_zones {
 	ZONE_FIRST = 0,
@@ -472,6 +473,14 @@ struct smb_mmi_charger {
 	int			inc_hvdcp_cnt;
 	int			hb_startup_cnt;
 	bool		ocp_flag;
+
+	/* none ffc paramter */
+	int			noffc_chg_iterm;
+	int			noffc_chg_iterm_45c;
+	int			noffc_qg_iterm;
+	int			noffc_max_fv;
+	int			pd_pps_active;
+	int			real_charger_type;
 };
 
 #define CHGR_FAST_CHARGE_CURRENT_CFG_REG	(CHGR_BASE + 0x61)
@@ -2480,6 +2489,9 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 	if (!chg->usb_psy || !chg->qcom_psy)
 		return;
 
+	chg->pd_pps_active = 0;
+	chg->real_charger_type = 0;
+
 	if (cur_mv < HVDCP_VOLTAGE_MIN)
 		return;
 
@@ -2488,6 +2500,7 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 		mmi_err(chg, "Couldn't read PD active rc=%d\n", rc);
 	} else if (val) {
 		mmi_dbg(chg, "Skip usb vbus voltage config for PD charger\n");
+		chg->pd_pps_active = val;
 		return;
 	}
 
@@ -2496,6 +2509,7 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 		mmi_err(chg, "Couldn't read charger type rc=%d\n", rc);
 		return;
 	}
+	chg->real_charger_type = val;
 	if (val != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		return;
 
@@ -3234,6 +3248,29 @@ static int mmi_get_ffc_fv(struct smb_mmi_charger *chip, int zone)
 
        if (prm->ffc_zones == NULL || zone >= prm->num_temp_zones)
                return 0;
+
+	mmi_info(chip,"real_charger_type=%d, pd_pps_active=%d\n",chip->real_charger_type,
+		chip->pd_pps_active);
+	if ((chip->real_charger_type != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5) &&
+		(chip->pd_pps_active != QTI_POWER_SUPPLY_PD_PPS_ACTIVE) &&
+		(chip->noffc_chg_iterm != -EINVAL) &&
+		(chip->noffc_qg_iterm != -EINVAL) &&
+		(chip->noffc_max_fv != -EINVAL)) {
+		rc = smb_mmi_write_iio_chan(chip,
+			SMB5_QG_BATT_FULL_CURRENT, chip->noffc_qg_iterm);
+		if (rc < 0) {
+			mmi_err(chip, "Couldn't set batt full current, rc=%d\n", rc);
+		}
+		if ((zone == ZONE_35C_TO_45C) && (chip->noffc_chg_iterm_45c != -EINVAL)) {
+			prm->chrg_iterm = chip->noffc_chg_iterm_45c;
+		} else {
+			prm->chrg_iterm = chip->noffc_chg_iterm;
+		}
+		ffc_max_fv = chip->noffc_max_fv;
+		mmi_info(chip,"NONEFFC temp zone %d, fv %d mV, chg iterm %d mA, qg iterm %d mA\n",
+			zone, ffc_max_fv, prm->chrg_iterm, chip->noffc_qg_iterm);
+		return ffc_max_fv;
+	}
 
 	rc = smb_mmi_write_iio_chan(chip,
 			SMB5_QG_BATT_FULL_CURRENT, prm->ffc_zones[zone].ffc_qg_iterm);
@@ -4285,6 +4322,27 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->vfloat_comp_mv = 0;
 	chg->vfloat_comp_mv /= 1000;
+
+	// none ffc parameter
+	rc = of_property_read_u32(node, "qcom,noffc-chg-iterm",
+				  &chg->noffc_chg_iterm);
+	if (rc)
+		chg->noffc_chg_iterm = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,noffc-chg-iterm-45c",
+				  &chg->noffc_chg_iterm_45c);
+	if (rc)
+		chg->noffc_chg_iterm_45c = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,noffc-qg-iterm",
+				  &chg->noffc_qg_iterm);
+	if (rc)
+		chg->noffc_qg_iterm = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,noffc-max-fv",
+				  &chg->noffc_max_fv);
+	if (rc)
+		chg->noffc_max_fv = -EINVAL;
 
 	chg->enable_charging_limit =
 		of_property_read_bool(node, "qcom,enable-charging-limit");
