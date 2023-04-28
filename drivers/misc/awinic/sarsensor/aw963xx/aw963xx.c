@@ -481,7 +481,6 @@ static uint8_t aw963xx_get_offset_multiple(struct aw_sar *p_sar, uint8_t ch)
 
 static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_buf)
 {
-	ssize_t len = 0;
 	uint32_t reg_data = 0;
 	uint32_t mode = 0xff;
 	uint32_t i = 0;
@@ -492,6 +491,8 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 	struct aw963xx *aw963xx = (struct aw963xx *)p_sar->priv_data;
 	uint8_t mul = 10;
 	uint32_t send_tcmd_offset = 0;
+	ssize_t tcmd_buf_len = 0;
+	ssize_t debug_buf_len = 0;
 
 	aw963xx_get_ref_ch_enable(p_sar);
 
@@ -512,7 +513,7 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 			send_tcmd_offset = cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
 			AWLOGI(p_sar->dev, "cap_ofst = %d", cap_ofst);
 			if (debug_buf != NULL) {
-				len += snprintf(debug_buf + len, PAGE_SIZE - len,
+				debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
 							"unsigned cap ofst ch%d: %d.%dpf\r\n",
 							i,
 							cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
@@ -529,8 +530,8 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 				tmp = -signed_cap_ofst;
 						AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
 				if (debug_buf != NULL) {
-					len += snprintf(debug_buf + len, PAGE_SIZE - len,
-						"signed cap ofst ch%d: -%d.%dpf\r\n",
+					debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
+							"signed cap ofst ch%d: -%d.%dpf\r\n",
 							i,
 							tmp / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
 							tmp % AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE);
@@ -538,7 +539,7 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 			} else {
 				AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
 				if (debug_buf != NULL) {
-					len += snprintf(debug_buf + len, PAGE_SIZE - len,
+					debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
 							"signed cap ofst ch%d: %d.%dpf\r\n",
 							i,
 							signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
@@ -554,7 +555,7 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 				send_tcmd_offset = cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE;
 				AWLOGI(p_sar->dev, "ref cap_ofst = %d", cap_ofst);
 				if (debug_buf != NULL) {
-					len += snprintf(debug_buf + len, PAGE_SIZE - len,
+					debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
 							"ref unsigned cap ofst ch%d: %d.%dpf\r\n",
 							i,
 							cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
@@ -570,7 +571,7 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 					tmp = -signed_cap_ofst;
 						AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
 					if (debug_buf != NULL) {
-						len += snprintf(debug_buf + len, PAGE_SIZE - len,
+						debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
 							"mutual cap ofst ch%d: -%d.%dpf\r\n",
 							i,
 							tmp / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
@@ -579,7 +580,7 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 				} else {
 					AWLOGI(p_sar->dev, "cap_ofst2 = 0x%x", signed_cap_ofst);
 					if (debug_buf != NULL) {
-						len += snprintf(debug_buf + len, PAGE_SIZE - len,
+						debug_buf_len += snprintf(debug_buf + debug_buf_len, PAGE_SIZE - debug_buf_len,
 								"mutual cap ofst ch%d: %d.%dpf\r\n",
 								i,
 								signed_cap_ofst / AW963XX_STEP_LEN_UNSIGNED_CAP_ENLARGE,
@@ -597,10 +598,15 @@ static ssize_t aw963xx_get_cap_offset(void *data, char *debug_buf, char *tcmd_bu
 			tcmd_buf[i * 4 + 1] = (uint8_t)((send_tcmd_offset >> 8) & 0xff);
 			tcmd_buf[i * 4 + 2] = (uint8_t)((send_tcmd_offset >> 16) & 0xff);
 			tcmd_buf[i * 4 + 3] = (uint8_t)((send_tcmd_offset >> 24) & 0xff);
+			tcmd_buf_len += 4;
 		}
 	}
 
-	return len;
+	if(tcmd_buf != NULL) {
+	return tcmd_buf_len;
+	} else {
+	return debug_buf_len;
+	}
 }
 
 static ssize_t aw963xx_get_cap_offset_send_to_tcmd(void *data, char *tcmd_buf)
