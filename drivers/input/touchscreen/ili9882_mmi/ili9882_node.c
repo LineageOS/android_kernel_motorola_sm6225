@@ -1683,7 +1683,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
 	} else if (strncmp(cmd, "gestureinfo", strlen(cmd)) == 0) {
 		ilits->gesture_mode = DATA_FORMAT_GESTURE_INFO;
 		ILI_INFO("gesture mode = %d\n", ilits->gesture_mode);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	} else if (strncmp(cmd, "netlink", strlen(cmd)) == 0) {
 		ilits->netlink = !ilits->netlink;
 		ILI_INFO("netlink flag= %d\n", ilits->netlink);
@@ -2195,7 +2195,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 			ret = -ENOTTY;
 		}
 		break;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	case ILITEK_IOCTL_TP_NETLINK_CTRL:
 		if (copy_from_user(szBuf, (u8 *) arg, 1)) {
 			ILI_ERR("Failed to copy data from user space\n");
@@ -2626,7 +2626,7 @@ proc_node iliproc[] = {
 
 };
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 #define NETLINK_USER 21
 static struct sock *netlink_skb;
 static struct nlmsghdr *netlink_head;
@@ -2831,7 +2831,7 @@ void ili_node_init(void)
 			ILI_INFO("Succeed to create %s under /proc\n", iliproc[i].name);
 		}
 	}
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	netlink_init();
 #endif
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI

@@ -942,7 +942,7 @@ struct ilitek_ts_data {
 	bool wq_bat_ctrl;
 
 	bool panel_gesture_enable;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	bool netlink;
 #endif
 	bool report;

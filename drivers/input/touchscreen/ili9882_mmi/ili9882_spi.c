@@ -735,7 +735,7 @@ static int ilitek_spi_probe(struct spi_device *spi)
 	ilits->gesture_demo_ctrl = DISABLE;
 	ilits->wtd_ctrl = OFF;
 	ilits->report = ENABLE;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	ilits->netlink = DISABLE;
 #endif
 	ilits->dnp = DISABLE;

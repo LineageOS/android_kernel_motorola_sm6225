@@ -832,7 +832,7 @@ static void ilitek_tddi_touch_send_debug_data(u8 *buf, int len)
 
 	mutex_lock(&ilits->debug_mutex);
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	if (!ilits->netlink && !ilits->dnp)
 		goto out;
 
