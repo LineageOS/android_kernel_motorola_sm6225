@@ -2479,6 +2479,11 @@ int mmi_register_charger_driver(struct mmi_charger_driver *driver)
 	charger->battery->info = &charger->batt_info;
 	mmi_get_charger_profile(chip, charger);
 	list_add_tail(&charger->list, &chip->charger_list);
+
+	if (chip->batt_psy) {
+		mmi_info(chip, "[C:%s] register charger succesfully, Throw out BATT_PSY change to update battery info\n", driver->name);
+		power_supply_changed(chip->batt_psy);
+	}
 exit:
 	mutex_unlock(&chip->charger_lock);
 
