@@ -1132,7 +1132,7 @@ static int sc760x_parse_dt(struct sc760x_chip *sc, struct device *dev)
 	if (ret)
 		sc->thermal_ratio = 1;
 
-    return ret;
+	return 0;
 }
 
 static int sc760x_init_device(struct sc760x_chip *sc)
