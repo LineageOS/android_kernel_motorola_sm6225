@@ -40,7 +40,7 @@
 *****************************************************************************/
 #define FTS_FW_REQUEST_SUPPORT                      1
 /* Example: focaltech_ts_fw_tianma.bin */
-#define FTS_FW_NAME_PREX_WITH_REQUEST               ""
+#define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
@@ -286,7 +286,7 @@ int fts_fw_resume(bool need_reset)
     }
 
     snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
-             FTS_FW_NAME_PREX_WITH_REQUEST, upg->module_info->vendor_name);
+             FTS_FW_NAME_PREX_WITH_REQUEST, upg->ts_data->panel_supplier);
 
     /* 1. request firmware */
     ret = request_firmware(&fw, fwname, upg->ts_data->dev);
@@ -458,7 +458,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 
     snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
              FTS_FW_NAME_PREX_WITH_REQUEST, \
-             upg->module_info->vendor_name);
+             upg->ts_data->panel_supplier);
 
     ret = request_firmware(&fw, fwname, upg->ts_data->dev);
     if (0 == ret) {
@@ -543,12 +543,6 @@ static int fts_fwupg_get_fw_file(struct fts_upgrade *upg)
     }
 
     FTS_INFO("upgrade fw file len:%d", upg->fw_length);
-    if ((upg->fw_length < FTS_MIN_LEN)
-        || (upg->fw_length > FTS_MAX_LEN_FILE)) {
-        FTS_ERROR("fw file len(%d) fail", upg->fw_length);
-        return -ENODATA;
-    }
-
     return ret;
 }
 
