@@ -73,3 +73,11 @@ config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_MMI_PEN_NOTIFIER
 	help
 	  Say Y here to enable support for Pen functionality on Focaltech touch panel.
 	  If unsure, say N.
+
+config INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_MMI_DRM_PANEL
+	bool "Moto Focaltech DRM Panel Detection"
+	depends on INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_MMI
+	default n
+	help
+	  Say Y here if you want to have DRM Panel Detection support on Focaltech touch panel.
+	  If unsure, say N.
