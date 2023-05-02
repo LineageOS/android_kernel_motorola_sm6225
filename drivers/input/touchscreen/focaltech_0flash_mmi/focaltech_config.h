@@ -203,7 +203,7 @@
  * FTS CONFIG_DRM_PANEL check & protection
  * default: disable
  */
-#if defined(CONFIG_DRM_PANEL) && defined(CONFIG_INPUT_FOCALTECH_0FLASH_MMI_IC_NAME_FT8006S_AA)
+#if defined(FOCALTECH_DRM_PANEL)
 #define FTS_CONFIG_DRM_PANEL                    1
 #else
 #define FTS_CONFIG_DRM_PANEL                    0
