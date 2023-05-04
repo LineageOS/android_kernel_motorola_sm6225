@@ -229,16 +229,28 @@ static int fts_mmi_charger_mode(struct device *dev, int mode)
 		return -EINVAL;
 	}
 
-	read_data |= (!!mode);
-	ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, read_data);
-	if(ret < 0){
-		FTS_ERROR("Failed to set charger mode\n");
-		mutex_unlock(&ts_data->mode_lock);
-		return -EINVAL;
-	}
+	if (ts_data->pdata->pocket_mode_ctrl) {
+		read_data |= (!!mode);
+		ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, read_data);
+		if(ret < 0){
+			FTS_ERROR("Failed to set charger mode\n");
+			mutex_unlock(&ts_data->mode_lock);
+			return -EINVAL;
+		}
 
-	FTS_INFO("Success to %s charger mode, 0x8B = 0x%02x\n", mode ? "Enable" : "Disable",
-		read_data);
+		FTS_INFO("Success to %s charger mode, 0x8B = 0x%02x\n", mode ? "Enable" : "Disable",
+			read_data);
+	} else {
+		ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, mode);
+		if(ret < 0){
+			FTS_ERROR("Failed to set charger mode\n");
+			mutex_unlock(&ts_data->mode_lock);
+			return -EINVAL;
+		}
+
+		FTS_INFO("Success to %s charger mode, 0x8B = 0x%02x\n", mode ? "Enable" : "Disable",
+			mode);
+	}
 
 	mutex_unlock(&ts_data->mode_lock);
 	return 0;
