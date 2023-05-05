@@ -1509,24 +1509,16 @@ err_vdd_gpio_dir:
     return ret;
 }
 
-static int fts_vdd_gpio_configure(struct fts_ts_data *data)
+static int fts_vdd_gpio_high(struct fts_ts_data *data)
 {
     int ret = 0;
 
     FTS_FUNC_ENTER();
 
-    if (gpio_is_valid(data->pdata->vdd_gpio)) {
-        ret = gpio_request(data->pdata->vdd_gpio, "fts_vdd_gpio");
-        if (ret) {
-            FTS_ERROR("[GPIO]vdd_gpio request failed");
-            goto err_vdd_gpio_dir;
-        }
-
-        ret = gpio_direction_output(data->pdata->vdd_gpio, 1);
-        if (ret) {
-            FTS_ERROR("[GPIO]set_direction for reset gpio failed");
-            goto err_vdd_gpio_dir;
-        }
+    ret = gpio_direction_output(data->pdata->vdd_gpio, 1);
+    if (ret) {
+       FTS_ERROR("[GPIO]set_direction for reset gpio failed");
+       goto err_vdd_gpio_dir;
     }
 
     FTS_FUNC_EXIT();
@@ -1561,7 +1553,7 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
             }
 
 #ifdef CONFIG_FTS_VDD_GPIO_CONTROL
-            fts_vdd_gpio_configure(ts_data);
+            fts_vdd_gpio_high(ts_data);
 #endif
 
             if (!IS_ERR_OR_NULL(ts_data->vcc_i2c)) {
@@ -1732,6 +1724,23 @@ static int fts_gpio_configure(struct fts_ts_data *data)
     int ret = 0;
 
     FTS_FUNC_ENTER();
+
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+    if (gpio_is_valid(data->pdata->vdd_gpio)) {
+        ret = gpio_request(data->pdata->vdd_gpio, "fts_vdd_gpio");
+        if (ret) {
+            FTS_ERROR("[GPIO]vdd_gpio request failed");
+            goto err_vdd_gpio_dir;
+        }
+
+        ret = gpio_direction_output(data->pdata->vdd_gpio, 0);
+        if (ret) {
+            FTS_ERROR("[GPIO]set_direction for reset gpio failed");
+            goto err_vdd_gpio_dir;
+        }
+    }
+#endif
+
     /* request irq gpio */
     if (gpio_is_valid(data->pdata->irq_gpio)) {
         ret = gpio_request(data->pdata->irq_gpio, "fts_irq_gpio");
@@ -1771,6 +1780,11 @@ err_reset_gpio_dir:
 err_irq_gpio_dir:
     if (gpio_is_valid(data->pdata->irq_gpio))
         gpio_free(data->pdata->irq_gpio);
+#ifdef CONFIG_FTS_VDD_GPIO_CONTROL
+err_vdd_gpio_dir:
+    if (gpio_is_valid(data->pdata->vdd_gpio))
+        gpio_free(data->pdata->vdd_gpio);
+#endif
 err_irq_gpio_req:
     FTS_FUNC_EXIT();
     return ret;
