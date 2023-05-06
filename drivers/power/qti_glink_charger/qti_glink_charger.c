@@ -1965,6 +1965,21 @@ static ssize_t folio_mode_show(struct device *dev,
 }
 static DEVICE_ATTR(folio_mode, S_IRUGO|S_IWUSR, folio_mode_show, folio_mode_store);
 
+static ssize_t cid_status_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct qti_charger *chg = this_chip;
+
+	if (!chg) {
+		pr_err("QTI: chip not valid\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", chg->lpd_info.lpd_cid);
+}
+static DEVICE_ATTR(cid_status, S_IRUGO, cid_status_show, NULL);
+
 //ATTRIBUTE_GROUPS(qti_charger);
 #define TX_INT_FOD      (0x01<<12)
 #if defined(WIRELESS_CPS4035B) || defined(WIRELESS_CPS4019)
@@ -2713,6 +2728,13 @@ static int qti_charger_init(struct qti_charger *chg)
 			   "Couldn't create wls_fod_gain\n");
 	}
 
+	rc = device_create_file(chg->dev,
+				&dev_attr_cid_status);
+	if (rc) {
+		mmi_err(chg,
+			   "Couldn't create cid_status\n");
+	}
+
 	bm_ulog_print_mask_log(BM_ALL, BM_LOG_LEVEL_INFO, OEM_BM_ULOG_SIZE);
 
 	wireless_psy_init(chg);
@@ -2730,6 +2752,7 @@ static void qti_charger_deinit(struct qti_charger *chg)
 		return;
 	}
 
+	device_remove_file(chg->dev, &dev_attr_cid_status);
 	device_remove_file(chg->dev, &dev_attr_tcmd);
 	device_remove_file(chg->dev, &dev_attr_force_pmic_icl);
 	device_remove_file(chg->dev, &dev_attr_force_wls_en);
