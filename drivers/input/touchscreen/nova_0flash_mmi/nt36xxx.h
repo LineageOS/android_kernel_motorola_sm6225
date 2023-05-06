@@ -245,7 +245,7 @@ struct nvt_ts_data {
 	atomic_t loading_fw;
 	uint32_t build_id;
 	uint32_t config_id;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	struct notifier_block drm_notif;
 #endif
