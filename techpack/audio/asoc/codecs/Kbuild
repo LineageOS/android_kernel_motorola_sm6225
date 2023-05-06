@@ -312,6 +312,3 @@ endif
 obj-$(CONFIG_SND_SOC_FS16XX) += fs16xx_dlkm.o
 fs16xx_dlkm-y := $(SND_SOC_FS16XX_OBJS)
 #Add fs1818 driver end
-
-# inject some build related information
-DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
