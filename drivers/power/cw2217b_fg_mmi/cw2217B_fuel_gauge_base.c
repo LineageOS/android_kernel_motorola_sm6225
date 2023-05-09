@@ -342,22 +342,23 @@ static int cw_get_voltage(struct cw_battery *cw_bat)
    #define  MAX_VAL( x, y ) ( ((x) > (y)) ? (x) : (y) )
 #endif
 #define TIMER_INTERVALS                          1000 * 60    /* unit:ms */
-static bool jiffies_timer_expire(void) {
+static bool jiffies_timer_expire(bool clear_flag) {
 	unsigned long cur_jiffies = jiffies;
 	static unsigned long last_jiffies = 0;
-	unsigned long intr_timeout = msecs_to_jiffies(TIMER_INTERVALS);
 	bool ret = false;
 
-	if (!last_jiffies)
+	if (!last_jiffies || clear_flag) {
 		last_jiffies = cur_jiffies;
+		return ret;
+	}
 
-	if (time_after(cur_jiffies, intr_timeout + last_jiffies))
+	if (time_after(cur_jiffies, msecs_to_jiffies(TIMER_INTERVALS) + last_jiffies))
 		ret = true;
 	else
 		ret = false;
 
 	if (ret) {
-              cw_printk("expire 60s, curr_jiffies:%dms, last jiffies %d",
+		cw_printk("expire 60s, curr_jiffies:%dms, last jiffies %d",
                               jiffies_to_msecs(cur_jiffies), jiffies_to_msecs(last_jiffies));
 		last_jiffies = cur_jiffies;
 
@@ -400,20 +401,20 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 
 	if (chr_st_now) {
 		if (ui_full_temp > cw_bat->ui_full) {
-			if (jiffies_timer_expire() &&
-				(cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)) {
+			if (jiffies_timer_expire(false)) {
 				ui_full_temp -= 1;
 				cw_printk("CW2015[%d]: UI_FULL-- %d!!!!\n", __LINE__, ui_full_temp);
 			}
 		}
 	}
 
-      if (!chr_st_now) {
+	if (!chr_st_now) {
 		if ((soc_h * 256 + soc_l) / 256 > ui_full_temp) {
 			cw_printk("CW2015[%d]: update UI_FULL to %d from %d !!!!\n", __LINE__, (soc_h * 256 + soc_l) / 256, ui_full_temp);
 			ui_full_temp = (soc_h * 256 + soc_l) / 256;
 		}
-      }
+		jiffies_timer_expire(true);
+	}
 
 	ui_full_pre = ui_full_temp;
 	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_full_pre * 256);
@@ -430,7 +431,8 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	}
 
 	if (cw_bat->ui_soc != ui_soc) {
-		cw_printk("CW2015[%d]: not update, cw_bat->ui_soc %d, ui_soc %d", __LINE__, cw_bat->ui_soc, ui_soc);
+		cw_printk("CW2015[%d]: not update, cw_bat->ui_soc %d, ui_soc %d, chrg_st_now %d",
+			__LINE__, cw_bat->ui_soc, ui_soc, chr_st_now);
 	}
 
 	cw_bat->ic_soc_h = soc_h;
