@@ -1127,10 +1127,10 @@ static int sc760x_parse_dt(struct sc760x_chip *sc, struct device *dev)
 	sc->thermal_fcc_ua = sc->init_data.max_ichg;
 
 	ret = device_property_read_u32(sc->dev,
-				       "mmi,thermal-ratio",
-				       &sc->thermal_ratio);
+				       "mmi,thermal-ratio-nums",
+				       &sc->thermal_ratio_nums);
 	if (ret)
-		sc->thermal_ratio = 1;
+		sc->thermal_ratio_nums = 1;
 
 	return 0;
 }
@@ -1590,8 +1590,9 @@ static int sc760x_charger_config_charge(void *data, struct mmi_charger_cfg *conf
 		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua / 1000);
 
 #ifdef THERMAL_RATIO_CONTROL
-		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->paired_batt_info.batt_fcc_ma / chg->sc->thermal_ratio);
-		chg->sc->thermal_fcc_ua = (chg->paired_batt_info.batt_fcc_ma / chg->sc->thermal_ratio) * 1000;
+		/* The thermal_radio step is 0.5, this is equivalent to (batt_fcc_ma / (0.5 * thermal_ratio_nums)) */
+		chg->sc->thermal_fcc_ua = (chg->paired_batt_info.batt_fcc_ma * 2 / chg->sc->thermal_ratio_nums) * 1000;
+		ibat_limit_vote = MIN_VAL(chg->chg_cfg.target_fcc, chg->sc->thermal_fcc_ua / 1000);
 #endif
 
 		if (sc760x_ibat_limit_set > (ibat_limit_vote + IBAT_CHG_LIM_BASE)) {
