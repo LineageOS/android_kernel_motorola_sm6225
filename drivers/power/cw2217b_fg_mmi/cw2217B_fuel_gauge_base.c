@@ -341,6 +341,8 @@ static int cw_get_voltage(struct cw_battery *cw_bat)
  #ifndef MAX_VAL
    #define  MAX_VAL( x, y ) ( ((x) > (y)) ? (x) : (y) )
 #endif
+
+#ifdef SUPPORT_DYNAMIC_UPDATE_UI_FULL
 #define TIMER_INTERVALS                          1000 * 60    /* unit:ms */
 static bool jiffies_timer_expire(bool clear_flag) {
 	unsigned long cur_jiffies = jiffies;
@@ -365,6 +367,7 @@ static bool jiffies_timer_expire(bool clear_flag) {
 	}
 	return ret;
 }
+#endif
 
 static int cw_get_capacity(struct cw_battery *cw_bat)
 {
@@ -375,9 +378,12 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	int ui_soc;
 	int remainder;
 	int chr_st_now = 0;// 0 discharge, 1 charging;
-
+#ifndef SUPPORT_DYNAMIC_UPDATE_UI_FULL
+	int ui_100 = cw_bat->ui_full;
+#else
 	static int ui_full_pre = 0;
 	int ui_full_temp = 0;
+#endif
 
 	if (cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)
 		chr_st_now = 1;
@@ -391,6 +397,10 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	soc_l = reg_val[1];
 	cw_bat->raw_soc = soc_h;
 
+#ifndef SUPPORT_DYNAMIC_UPDATE_UI_FULL
+	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_100 * 256);
+	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_100 * 256)) % 100;
+#else
 	if (ui_full_pre == 0) {
 		ui_full_pre = (soc_h * 256 + soc_l) / 256;
 		if (ui_full_pre < cw_bat->ui_full)
@@ -419,6 +429,8 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	ui_full_pre = ui_full_temp;
 	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_full_pre * 256);
 	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_full_pre * 256)) % 100;
+#endif
+
 	if (ui_soc >= 100){
 		cw_printk("CW2015[%d]: UI_SOC = %d larger 100!!!!\n", __LINE__, ui_soc);
 		ui_soc = 100;
