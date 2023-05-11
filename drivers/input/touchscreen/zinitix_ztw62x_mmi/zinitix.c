@@ -1421,25 +1421,21 @@ static bool ts_upgrade_firmware(struct bt541_ts_info *info,
 	struct i2c_client *client = info->client;
 	u16 flash_addr;
 	int retry_cnt = 0;
-#ifndef BURST_UPGRADE
-	int i;
-#else
+#ifdef BURST_UPGRADE
 	struct bt541_ts_platform_data *pdata = info->pdata;
 #endif
 	int page_sz = 64;
 	u16 chip_code;
-
-#ifndef BURST_UPGRADE
-	u8 *verify_data;
-#else
+#ifdef VERIFY_CHECKSUM
 	u16 year, chip_fw_year;
 	u16 month, chip_fw_month;
 	u16 day, chip_fw_day;
 	u16 total_version, chip_fw_total_version;
 	u16 chip_check_sum;
-#endif
+#else
+	int i;
+	u8 *verify_data;
 
-#ifndef BURST_UPGRADE
 	verify_data = kzalloc(size, GFP_KERNEL);
 	if (verify_data == NULL) {
 		zinitix_printk(KERN_ERR "cannot alloc verify buffer\n");
@@ -1638,7 +1634,7 @@ retry_upgrade:
 		goto fail_upgrade;
 	}
 #endif
-#ifndef BURST_UPGRADE
+#ifndef VERIFY_CHECKSUM
 	zinitix_printk("read firmware data\n");
 
 	for (flash_addr = 0; flash_addr < size; ) {
