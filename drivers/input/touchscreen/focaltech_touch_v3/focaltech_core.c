@@ -1922,6 +1922,21 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
              pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
 #endif
 
+	pdata->edge_ctrl = of_property_read_bool(np,
+					"focaltech,edge-ctrl");
+	if (pdata->edge_ctrl)
+		FTS_INFO("support focaltech edge mode");
+
+	pdata->interpolation_ctrl = of_property_read_bool(np,
+					"focaltech,interpolation-ctrl");
+	if (pdata->interpolation_ctrl)
+		FTS_INFO("support focaltech interpolation mode");
+
+	pdata->report_rate_ctrl = of_property_read_bool(np,
+					"focaltech,report_rate-ctrl");
+	if (pdata->report_rate_ctrl)
+		FTS_INFO("support focaltech report rate switch mode");
+
     FTS_FUNC_EXIT();
     return 0;
 }

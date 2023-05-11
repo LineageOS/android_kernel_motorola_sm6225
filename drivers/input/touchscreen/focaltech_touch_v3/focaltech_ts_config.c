@@ -10,12 +10,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include "goodix_ts_config.h"
+#include "focaltech_ts_config.h"
 
-struct goodix_ic_report_rate_config report_rate_config_info = {
-#if defined(PRODUCT_LI) || defined(PRODUCT_ONELI) || defined(PRODUCT_TUNDRA) \
-	||defined(PRODUCT_EQS) || defined(PRODUCT_RTWO) || defined(PRODUCT_BRONCO) \
-	|| defined(PRODUCT_ZEEKR) || defined(PRODUCT_LYNKCO) || defined(PRODUCT_BANGKK)
+struct focaltech_ic_report_rate_config report_rate_config_info = {
+#if defined(PRODUCT_BANGKK)
 	.rate_config_count = 2,
 	.refresh_rate_ctrl = 0,
 	.interpolation_ctrl = 1,
@@ -23,58 +21,18 @@ struct goodix_ic_report_rate_config report_rate_config_info = {
 		{
 			.interpolation_flag = 0,
 			.report_rate = 240,
-			.command = 0x9D01,
+			.command = 0,
 		},
 		{
 			.interpolation_flag = 1,
 			.report_rate = 360,
-			.command = 0x9D02,
-		},
-	}
-#elif defined(PRODUCT_HIPHIC)
-	.rate_config_count = 3,
-	.refresh_rate_ctrl = 1,
-	.interpolation_ctrl = 1,
-	{
-		{
-			.interpolation_flag = 0,
-			.refresh_rate = {48, 144},
-			.report_rate = 240,
-			.command = 0x9D01,
-		},
-		{
-			.interpolation_flag = 1,
-			.refresh_rate = {144, 144},
-			.report_rate = 576,
-			.command = 0xC103,
-		},
-		{
-			.interpolation_flag = 1,
-			.refresh_rate = {48, 120},
-			.report_rate = 480,
-			.command = 0xC102,
-		},
-	}
-#elif defined(PRODUCT_HIPHI)
-	.rate_config_count = 2,
-	.refresh_rate_ctrl = 0,
-	.interpolation_ctrl = 1,
-	{
-		{
-			.interpolation_flag = 0,
-			.report_rate = 360,
-			.command = 0x9D02,
-		},
-		{
-			.interpolation_flag = 1,
-			.report_rate = 720,
-			.command = 0xC101,
+			.command = 1,
 		},
 	}
 #endif
 };
 
-int goodix_ts_mmi_get_report_rate(struct goodix_ts_core *core_data)
+int fts_mmi_get_report_rate(struct fts_ts_data *ts_data)
 {
 	int refresh_rate_ctrl = 0;
 	int interpolation_ctrl = 0;
@@ -82,13 +40,13 @@ int goodix_ts_mmi_get_report_rate(struct goodix_ts_core *core_data)
 	int refresh_rate = 0;
 	int i = 0;
 
-	refresh_rate_ctrl = core_data->board_data.report_rate_ctrl;
-	interpolation_ctrl = core_data->board_data.interpolation_ctrl;
+	refresh_rate_ctrl = ts_data->pdata->report_rate_ctrl;
+	interpolation_ctrl = ts_data->pdata->interpolation_ctrl;
 
-	interpolation_flag = core_data->get_mode.interpolation;
-	refresh_rate = core_data->refresh_rate;
+	interpolation_flag = ts_data->get_mode.interpolation;
+	refresh_rate = ts_data->refresh_rate;
 
-	ts_debug("refresh_rate_ctrl: %d, interpolation_ctrl: %d, interpolation_flag: %d, refresh_rate: %d",
+	FTS_DEBUG("refresh_rate_ctrl: %d, interpolation_ctrl: %d, interpolation_flag: %d, refresh_rate: %d",
 		refresh_rate_ctrl, interpolation_ctrl, interpolation_flag, refresh_rate);
 
 	if (refresh_rate_ctrl == 0 && interpolation_ctrl == 1) {
@@ -118,10 +76,10 @@ int goodix_ts_mmi_get_report_rate(struct goodix_ts_core *core_data)
 	}
 
 	if (i == report_rate_config_info.rate_config_count) {
-		ts_err("Get config report rate fail");
+		FTS_ERROR("Get config report rate fail");
 		return -1;
 	} else {
-		ts_debug("Get config report rate %dHZ, command : 0x%02x ",
+		FTS_DEBUG("Get config report rate %dHZ, command : 0x%02x ",
 			report_rate_config_info.report_rate_info[i].report_rate,
 			report_rate_config_info.report_rate_info[i].command);
 		return report_rate_config_info.report_rate_info[i].command;
