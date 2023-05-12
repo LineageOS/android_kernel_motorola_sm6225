@@ -225,6 +225,7 @@ struct sgm4154x_init_data {
 	u32 ilim;	/* input current		*/
 	u32 wls_ilim;	/* wireless input current	*/
 	u32 wls_ichg_ilim;	/* wireless charge current(FCC)	*/
+	u32 wls_8w_ichg_ilim;	/* wireless 8W charge current(FCC)	*/
 	u32 vreg;	/* regulation voltage		*/
 	u32 iterm;	/* termination current		*/
 	u32 iprechg;	/* precharge current		*/
