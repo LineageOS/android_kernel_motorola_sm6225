@@ -1380,6 +1380,8 @@ source "drivers/input/touchscreen/stmicro_mmi/Kconfig"
 
 source "drivers/input/touchscreen/synaptics_tcm2_mmi/Kconfig"
 
+source "drivers/input/touchscreen/focaltech_0flash_mmi/Kconfig"
+
 source "drivers/input/touchscreen/focaltech_0flash_v2_mmi/Kconfig"
 
 source "drivers/input/touchscreen/focaltech_touch_v3/Kconfig"
@@ -1387,5 +1389,7 @@ source "drivers/input/touchscreen/focaltech_touch_v3/Kconfig"
 source "drivers/input/touchscreen/focaltech_v2_mmi/Kconfig"
 
 source "drivers/input/touchscreen/ili9882_mmi/Kconfig"
+
+source "drivers/input/touchscreen/ilitek_0flash_mmi/Kconfig"
 
 endif

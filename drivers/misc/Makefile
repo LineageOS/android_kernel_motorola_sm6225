@@ -79,6 +79,7 @@ obj-$(CONFIG_FPR_FPC)		+= fpr_FingerprintCard/
 obj-y                           += qrc/
 obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/
 
+obj-$(CONFIG_ABOV_SAR_MMI_OVERLAY) += abov_mmi_overlay/
 obj-$(CONFIG_INPUT_AWINIC_HAPTIC) += awinic/
 obj-$(CONFIG_MMI_SYS_TEMP) += mmi_sys_temp/
 obj-$(CONFIG_MOTO_UTAGS) += utag/
@@ -87,3 +88,4 @@ obj-$(CONFIG_SARSENSOR_SX937X) += sx937x/
 obj-$(CONFIG_AW9610X_SAR) += aw9610x/
 obj-$(CONFIG_LDO_VIBRATOR_MMI) += ldo_vibrator_mmi/
 obj-$(CONFIG_REGULATOR_VIBRATOR_MMI) += regulator_vibrator_mmi/
+obj-$(CONFIG_TPS61280) += tps61280/
