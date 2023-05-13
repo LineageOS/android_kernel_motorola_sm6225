@@ -1,0 +1,16 @@
+#
+# MobiCore configuration
+#
+
+config MOBICORE_SUPPORT
+	tristate "Linux MobiCore Support"
+	default n
+	help
+	  Enable Linux Kernel MobiCore Support
+
+config MOBICORE_RSU_INTERNAL_CLOCK
+	bool "MobiCore RSU internal clock"
+	depends on MOBICORE_SUPPORT
+	default n
+	help
+	  Enable RSU internal clock in the MobiCore Driver.
