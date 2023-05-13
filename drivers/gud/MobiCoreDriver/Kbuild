@@ -15,19 +15,13 @@
 # Makefile for the Kinibi core driver
 #
 
+ccflags-y += -DNDEBUG
+ccflags-y += -Wno-declaration-after-statement
+ccflags-y += -I$(srctree)/drivers/gud/MobiCoreDriver
 
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -DNDEBUG
-EXTRA_CFLAGS +=  -Wno-declaration-after-statement
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/drivers/gud/MobiCoreDriver
+ccflags-$(CONFIG_MOBICORE_RSU_INTERNAL_CLOCK) += -DRSU_INTERNAL_CLOCK
 
-ifneq ($(filter m y,$(RSU_INTERNAL_CLOCK)),)
- EXTRA_CFLAGS += -DRSU_INTERNAL_CLOCK
-endif
-
-obj-m += mcDrvModule.o
-
+obj-$(CONFIG_MOBICORE_SUPPORT) += mcDrvModule.o
 
 mcDrvModule-y := \
 	admin.o \

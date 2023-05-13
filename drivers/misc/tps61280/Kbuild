@@ -1,5 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-
-obj-m += tps61280.o
+obj-$(CONFIG_TPS61280) += tps61280.o
