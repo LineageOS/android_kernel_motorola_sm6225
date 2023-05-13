@@ -1,0 +1,39 @@
+config INPUT_TOUCHSCREEN_ILI_0FLASH_MMI
+    tristate "Ilitek Touchscreen Driver 0flash MMI"
+    default n
+    help
+      Say Y here if you wish to include support for Ilitek Touchscreen Driver 0flash MMI.
+
+      If unsure, say N.
+
+      To compile this driver as a module, choose M here: the
+      module will be called ilitek_0flash_mmi.
+
+if INPUT_TOUCHSCREEN_ILI_0FLASH_MMI
+
+config INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP
+    bool "Ilitek Touchscreen Driver 0flash MMI Double tap"
+    depends on SENSORS_CLASS
+    default n
+    help
+      Say Y here if you want to have double tap support on Ilitek 0flash MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_PANEL_NOTIFICATIONS
+    bool "Ilitek Touchscreen Driver 0flash MMI Panel notifications"
+    default n
+    help
+      Say Y here if you want to have panel notifications support on Ilitek 0flash MMI.
+
+      If unsure, say N.
+
+config INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_RESUME_BY_DDI
+    bool "Ilitek Touchscreen Driver 0flash MMI Resume by DDI"
+    default n
+    help
+      Say Y here if you want to have resume by DDI support on Ilitek 0flash MMI.
+
+      If unsure, say N.
+
+endif

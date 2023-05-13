@@ -1,21 +1,8 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/ilitek_0flash_mmi
+obj-$(CONFIG_INPUT_TOUCHSCREEN_ILI_0FLASH_MMI) += ilitek_0flash_mmi.o
 
-ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_ILITEK_CHIPSET)),)
-	obj-m += ilitek_0flash_mmi.o
-endif
-
-ifneq ($(filter m y,$(CONFIG_INPUT_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP)),)
-	EXTRA_CFLAGS += -DILI_SENSOR_EN
-endif
-ifneq ($(filter m y,$(CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS)),)
-EXTRA_CFLAGS += -DILI_CONFIG_PANEL_NOTIFICATIONS
-endif
-ifneq ($(filter m y,$(CONFIG_ILITEK_RESUME_BY_DDI)),)
-EXTRA_CFLAGS += -DILI_CONFIG_RESUME_BY_DDI
-endif
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP) += -DILI_SENSOR_EN
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_PANEL_NOTIFICATIONS) += -DILI_CONFIG_PANEL_NOTIFICATIONS
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_ILI_0FLASH_MMI_RESUME_BY_DDI) += -DILI_CONFIG_RESUME_BY_DDI
 
 ilitek_0flash_mmi-objs += ilitek.o
 ilitek_0flash_mmi-objs += ilitek_spi.o
