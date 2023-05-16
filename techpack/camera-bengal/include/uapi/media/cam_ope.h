@@ -74,7 +74,11 @@
 #define OPE_MAX_IO_BUFS                     (OPE_OUT_RES_MAX + OPE_IN_RES_MAX)
 #define OPE_MAX_PASS                        1
 #define OPE_MAX_PLANES                      2
+#ifdef CONFIG_SPECTRA_CAMERA_LEGACY
+#define OPE_MAX_STRIPES                     48
+#else
 #define OPE_MAX_STRIPES                     64
+#endif
 #define OPE_MAX_BATCH_SIZE                  16
 
 /**
