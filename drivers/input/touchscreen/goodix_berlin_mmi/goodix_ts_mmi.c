@@ -999,7 +999,7 @@ static int goodix_berlin_gesture_setup(struct goodix_ts_core *core_data)
 		mod_func = clear_bit_in_pos;
 	}
 	if (gesture_type & TS_MMI_GESTURE_ZERO) {
-		gesture_cmd = mod_func(gesture_cmd, 5);
+		gesture_cmd = mod_func(gesture_cmd, 13);
 		ts_info("enable zero gesture mode cmd 0x%04x\n", gesture_cmd);
 	}
 	if (gesture_type & TS_MMI_GESTURE_SINGLE) {
