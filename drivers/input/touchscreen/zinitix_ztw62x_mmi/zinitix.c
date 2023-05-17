@@ -118,6 +118,7 @@ enum key_event {
 #define CSV_TP_RAW_DATA_MAX				"raw_data_max"
 #define CSV_TP_SHORT_DATA_THRESHOLD			"short_data_threshold"
 #define CSV_BUFFER_LEN					(1024*80*5)
+#define CHECKSUM_VALUE					0xA5A5A5A5
 
 struct raw_ioctl {
 	int sz;
@@ -1414,6 +1415,51 @@ static inline s32 write_cc02(struct i2c_client *client,	u32 addrL, u32 addrH)
 }
 //jesse end
 
+static inline s32 write_cc01(struct i2c_client *client, u16 addrL, u16 addrH)
+{
+	s32 ret;
+	u8 pkt[10]; /* max packet */
+	u16 length;
+
+	pr_info("bt541 write_cc01 \n");
+	pkt[0] = 0x01; /* command */
+	pkt[1] = 0xcc;
+	pkt[2] = (addrL) & 0xff; /* addrL */
+	pkt[3] = (addrL >> 8)&0xff;
+	pkt[4] = (addrH) & 0xff; 	/* addrH */
+	pkt[5] = (addrH >> 8)&0xff;
+	length = 4;
+
+	ret = i2c_master_send(client , pkt , length + 2);
+	if (ret < 0) {
+		return ret;
+	}
+
+	udelay(DELAY_FOR_POST_TRANSCATION);
+	return length;
+}
+
+static inline s32 read_cc01(struct i2c_client *client, u16 addr, u8 *values)
+{
+	s32 ret;
+	u16 length;
+	/* select register*/
+	pr_info("bt541 read_cc01 \n");
+	ret = i2c_master_send(client , (u8 *)&addr , 2);
+	if (ret < 0)
+		return ret;
+
+	/* for setup tx transaction. */
+	mdelay(1);
+
+	length = 4;
+	ret = i2c_master_recv(client , values , length);
+	if (ret < 0)
+		return ret;
+
+	udelay(DELAY_FOR_POST_TRANSCATION);
+	return length;
+}
 
 static bool ts_upgrade_firmware(struct bt541_ts_info *info,
 	const u8 *firmware_data, u32 size)
@@ -1431,7 +1477,7 @@ static bool ts_upgrade_firmware(struct bt541_ts_info *info,
 	u16 month, chip_fw_month;
 	u16 day, chip_fw_day;
 	u16 total_version, chip_fw_total_version;
-	u16 chip_check_sum;
+	u32 cc01_data = 0;
 #else
 	int i;
 	u8 *verify_data;
@@ -1479,37 +1525,32 @@ retry_upgrade:
 			zinitix_printk("0x01d5 error\n");
 			goto fail_upgrade;
 	}
-	msleep(5);
+	msleep(10);
 	//jesse end
 
 	if (write_reg(client, 0xc000, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("power sequence error (vendor cmd enable)\n");
 		goto fail_upgrade;
 	}
-
-	udelay(10);
+	msleep(1);
 
 	if (read_data(client, 0xcc00, (u8 *)&chip_code, 2) < 0) {
 		zinitix_printk("failed to read chip code\n");
 		goto fail_upgrade;
 	}
-
 	zinitix_printk("chip code = 0x%x\n", chip_code);
-
 	udelay(10);
 
 	if (write_cmd(client, 0xc004) != I2C_SUCCESS) {
 		zinitix_printk("power sequence error (intn clear)\n");
 		goto fail_upgrade;
 	}
-
-	udelay(10);
+	msleep(10);
 
 	if (write_reg(client, 0xc002, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("power sequence error (nvm init)\n");
 		goto fail_upgrade;
 	}
-
 	msleep(5);
 
 	zinitix_printk("init flash\n");
@@ -1518,6 +1559,7 @@ retry_upgrade:
 		zinitix_printk("failed to write nvm vpp on\n");
 		goto fail_upgrade;
 	}
+	msleep(10);
 
 #ifdef BURST_UPGRADE //burst  upgrade
 	// Mass Erase start
@@ -1534,7 +1576,7 @@ retry_upgrade:
 		zinitix_printk("failed to init upgrade mode\n");
 		goto fail_upgrade;
 	}
-
+	msleep(5);
 	if (write_reg(client, 0x01D3, 0x0040) != I2C_SUCCESS) {
 		zinitix_printk("failed to set package size\n");
 		goto fail_upgrade;
@@ -1580,12 +1622,13 @@ retry_upgrade:
 		zinitix_printk("nvm write disable\n");
 		goto fail_upgrade;
 	}
-
+	msleep(10);
 	zinitix_printk("init flash\n");
 	if (write_cmd(client, BT541_INIT_FLASH) != I2C_SUCCESS) {
 		zinitix_printk("failed to init flash\n");
 		goto fail_upgrade;
 	}
+	msleep(1);
 #else  //normal upgrade
 	if (write_reg(client, 0xc104, 0x0001) != I2C_SUCCESS) {
 		zinitix_printk("failed to write nvm wp disable\n");
@@ -1633,6 +1676,7 @@ retry_upgrade:
 		zinitix_printk("failed to init flash\n");
 		goto fail_upgrade;
 	}
+	msleep(1);
 #endif
 #ifndef VERIFY_CHECKSUM
 	zinitix_printk("read firmware data\n");
@@ -1714,21 +1758,26 @@ retry_upgrade:
 		goto fail_upgrade;
 	}
 
-	//get chip check sum
-	if (read_data(client, BT541_CHECKSUM_RESULT,
-		(u8 *)&chip_check_sum, 2) < 0) {
-		zinitix_printk("read chip_check_sum fail\n");
+	if (write_cc01(client, 0xb6fc, 0x0018) < 0) {//0xa9fc 0xa45c
+		dev_err(&client->dev, "Failed to send cc01 command\n");
 		goto fail_upgrade;
 	}
-	if (chip_check_sum == 0x55aa) {
-		zinitix_printk("verify firmware check_sum pass!\n");
-		return true;
+	udelay(10);
+	if (read_cc01(client, 0xcc01, (u8 *)&cc01_data) < 0) {
+		dev_err(&client->dev, "Failed to read cc01_data\n");
+		goto fail_upgrade;
 	}
+	if (cc01_data != CHECKSUM_VALUE) {
+		zinitix_printk("Failed verify last 4 bytes cc01_data = 0x%x, retry !\n", cc01_data);
+		goto fail_upgrade;
+	}
+	udelay(10);
+	zinitix_printk("verify last 4 bytes success! cc01_data = 0x%x\n", cc01_data);
+
+	return true;
 #endif
 
 fail_upgrade:
-	bt541_power_control(info, POWER_OFF);
-
 	if (retry_cnt++ < INIT_RETRY_CNT) {
 		dev_err(&client->dev, "upgrade failed : so retry... (%d)\n", retry_cnt);
 		goto retry_upgrade;

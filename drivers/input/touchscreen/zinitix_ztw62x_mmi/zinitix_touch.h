@@ -98,6 +98,7 @@
 
 #define SEC_FACTORY_TEST
 #define BURST_UPGRADE
+#define VERIFY_CHECKSUM
 
 /*version offset on firmware*/
 #define FW_OFFSET_YEAR_MSB 44905
