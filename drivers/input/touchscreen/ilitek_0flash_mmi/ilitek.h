@@ -784,7 +784,7 @@ struct ilitek_ts_data {
 	struct work_struct	charger_notify_work;
 	int usb_plug_status;
 
-#ifdef CONFIG_FB
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block notifier_fb;
 #else
 	struct early_suspend early_suspend;
