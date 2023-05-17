@@ -19,7 +19,7 @@ LINUXINCLUDE    += \
 		-include $(srctree)/techpack/camera-bengal/config/khajecameraconf.h
 endif
 
-ifeq ($(CONFIG_CAPRIP_DTB), y)
+ifneq (,$(filter y, $(CONFIG_CAPRIP_DTB) $(CONFIG_RHODE_DTB)))
 LINUXINCLUDE    += \
 		-include $(srctree)/techpack/camera-bengal/config/legacycameraconf.h
 endif
