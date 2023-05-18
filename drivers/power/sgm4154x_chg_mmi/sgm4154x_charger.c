@@ -876,8 +876,7 @@ static int sgm4154x_get_state(struct sgm4154x_device *sgm,
 	state->therm_stat = !!(chrg_stat & SGM4154x_THERM_STAT);
 	state->vsys_stat = !!(chrg_stat & SGM4154x_VSYS_STAT);
 
-	pr_err("%s chrg_stat =%d,chrg_type =%d online = %d\n",__func__,state->chrg_stat,state->chrg_type,state->online);
-
+	pr_debug("%s chrg_stat =%d,chrg_type =%d online = %d\n",__func__,state->chrg_stat,state->chrg_type,state->online);
 
 	ret = mmi_regmap_read(sgm, SGM4154x_CHRG_FAULT, &fault);
 	if (ret){
@@ -1365,7 +1364,7 @@ static void sgm4154x_dump_register(struct sgm4154x_device * sgm)
 
 	for(i=0; i<=SGM4154x_CHRG_CTRL_f; i++) {
 		mmi_regmap_read(sgm, i, &reg);
-		pr_err("%s REG[0x%x]=0x%x\n", __func__, i, reg);
+		pr_debug("%s REG[0x%x]=0x%x\n", __func__, i, reg);
 	}
 }
 
@@ -1614,7 +1613,7 @@ static void charger_monitor_work_func(struct work_struct *work)
 	}
 
 	sgm4154x_dump_register(sgm);
-	pr_err("%s\n",__func__);
+	pr_debug("%s\n",__func__);
 OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
 }
