@@ -35,13 +35,6 @@
 #include <linux/kernel.h>
 #include "sm5602_fg.h"
 
-#undef pr_debug
-#define pr_debug pr_err
-#undef pr_info
-#define pr_info pr_err
-#undef dev_dbg
-#define dev_dbg dev_err
-
 #define	INVALID_REG_ADDR	0xFF
 #define   RET_ERR -1
 #define queue_delayed_work_time  8000//8000
