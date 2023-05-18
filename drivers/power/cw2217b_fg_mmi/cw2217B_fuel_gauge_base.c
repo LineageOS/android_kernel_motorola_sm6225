@@ -342,7 +342,7 @@ static int cw_get_voltage(struct cw_battery *cw_bat)
    #define  MAX_VAL( x, y ) ( ((x) > (y)) ? (x) : (y) )
 #endif
 
-#ifdef SUPPORT_DYNAMIC_UPDATE_UI_FULL
+#ifdef DYNAMIC_UPDATE_UI_FULL
 #define TIMER_INTERVALS                          1000 * 60    /* unit:ms */
 static bool jiffies_timer_expire(bool clear_flag) {
 	unsigned long cur_jiffies = jiffies;
@@ -367,6 +367,42 @@ static bool jiffies_timer_expire(bool clear_flag) {
 	}
 	return ret;
 }
+
+static int cw_set_ui_full(struct cw_battery *cw_bat, int ui_full)
+{
+	int i, ret = 0;
+	int retry = 3;
+	unsigned char reg_val = ui_full;
+
+	for (i = 0; i < retry; i++) {
+		ret = cw_write(cw_bat->client, REG_USER_CONF, &reg_val);
+		if (ret < 0) {
+			msleep(CW_SLEEP_10MS);
+			cw_printk("failed to write ui_full to reg, retry = %d", i);
+		} else {
+			cw_printk("success save ui_full %d to reg", ui_full);
+			break;
+		}
+	}
+	return ret;
+}
+
+static int cw_get_ui_full(struct cw_battery *cw_bat, int *ui_full) {
+	int i, ret = 0;
+	int retry = 3;
+	unsigned char reg_val;
+
+	for (i = 0; i < retry; i++) {
+		ret = cw_read(cw_bat->client, REG_USER_CONF, &reg_val);
+		if (ret >= 0 && reg_val <= CW_UI_FULL && reg_val >= cw_bat->ui_full) {
+			*ui_full = reg_val;
+			cw_printk("success read ui_full %d from reg", *ui_full);
+			break;
+		}
+		msleep(CW_SLEEP_10MS);
+	}
+	return ret;
+}
 #endif
 
 static int cw_get_capacity(struct cw_battery *cw_bat)
@@ -378,7 +414,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	int ui_soc;
 	int remainder;
 	int chr_st_now = 0;// 0 discharge, 1 charging;
-#ifndef SUPPORT_DYNAMIC_UPDATE_UI_FULL
+#ifndef DYNAMIC_UPDATE_UI_FULL
 	int ui_100 = cw_bat->ui_full;
 #else
 	static int ui_full_pre = 0;
@@ -397,14 +433,17 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	soc_l = reg_val[1];
 	cw_bat->raw_soc = soc_h;
 
-#ifndef SUPPORT_DYNAMIC_UPDATE_UI_FULL
+#ifndef DYNAMIC_UPDATE_UI_FULL
 	ui_soc = ((soc_h * 256 + soc_l) * 100)/ (ui_100 * 256);
 	remainder = (((soc_h * 256 + soc_l) * 100 * 100) / (ui_100 * 256)) % 100;
 #else
 	if (ui_full_pre == 0) {
-		ui_full_pre = (soc_h * 256 + soc_l) / 256;
-		if (ui_full_pre < cw_bat->ui_full)
+		ret = cw_get_ui_full(cw_bat, &ui_full_temp);
+		if (ret < 0 || ui_full_temp == 0) {
 			ui_full_pre = cw_bat->ui_full;
+		} else {
+			ui_full_pre = ui_full_temp;
+		}
 		cw_printk("CW2015[%d]: UI_FULL INIT is %d", __LINE__, ui_full_pre);
 	}
 	ui_full_temp = ui_full_pre;
@@ -413,6 +452,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 		if (ui_full_temp > cw_bat->ui_full) {
 			if (jiffies_timer_expire(false)) {
 				ui_full_temp -= 1;
+				cw_set_ui_full(cw_bat, ui_full_temp);
 				cw_printk("CW2015[%d]: UI_FULL-- %d!!!!\n", __LINE__, ui_full_temp);
 			}
 		}
@@ -422,6 +462,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 		if ((soc_h * 256 + soc_l) / 256 > ui_full_temp) {
 			cw_printk("CW2015[%d]: update UI_FULL to %d from %d !!!!\n", __LINE__, (soc_h * 256 + soc_l) / 256, ui_full_temp);
 			ui_full_temp = (soc_h * 256 + soc_l) / 256;
+			cw_set_ui_full(cw_bat, ui_full_temp);
 		}
 		jiffies_timer_expire(true);
 	}
