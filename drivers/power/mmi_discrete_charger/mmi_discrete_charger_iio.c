@@ -12,6 +12,10 @@
 
 #include <linux/power_supply.h>
 #include "mmi_discrete_charger_iio.h"
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#include <linux/qti_power_supply.h>
+#endif
 
 static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 		struct iio_chan_spec const *chan, int val1,
@@ -40,8 +44,13 @@ static int mmi_discrete_iio_write_raw(struct iio_dev *indio_dev,
 		rc = mmi_discrete_config_termination_enabled(chip, val1);
 		break;
 	case PSY_IIO_DP_DM:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		if (chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+#else
 		if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
 			|| chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+#endif
 			rc = mmi_discrete_set_dp_dm(chip, val1);
 		}
 		break;

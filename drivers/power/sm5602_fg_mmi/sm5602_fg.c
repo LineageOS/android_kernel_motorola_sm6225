@@ -1081,8 +1081,6 @@ static int fg_set_property(struct power_supply *psy,
 				       const union power_supply_propval *val)
 {
 	int ret = 0;
-	struct sm_fg_chip *sm;
-	sm = power_supply_get_drvdata(psy);
 
 	switch(prop) {
 	default:

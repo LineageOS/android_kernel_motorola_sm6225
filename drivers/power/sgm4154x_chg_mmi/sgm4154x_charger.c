@@ -13,7 +13,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
-
+#include <linux/version.h>
 #include <linux/acpi.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
@@ -23,6 +23,10 @@
 #include <linux/seq_file.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/kthread.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#include <linux/qti_power_supply.h>
+#endif
 
 #ifdef __indicator_led_en__
 static struct sgm4154x_device *sgm_g;
@@ -544,7 +548,11 @@ static int sgm4154x_detected_qc20_hvdcp(struct sgm4154x_device *sgm, int *charge
 
 	if (vbus_voltage > MMI_HVDCP2_VOLTAGE_STANDARD) {
 		dev_info(sgm->dev, "QC20 charger detected\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		*charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP;
+#else
 		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+#endif
 	} else {
 		dev_info(sgm->dev, "charger type is not HVDCP\n");
 	}
@@ -810,6 +818,7 @@ static int sgm4154x_set_input_curr_lim(struct sgm4154x_device *sgm, int iindpm)
 		reg_val = 0x1E;
 
 #endif
+
 	ret = mmi_regmap_update_bits(sgm, SGM4154x_CHRG_CTRL_0,
 				  SGM4154x_IINDPM_I_MASK, reg_val);
 	return ret;
@@ -1006,7 +1015,11 @@ int sgm4154x_disable_watchdog(struct sgm4154x_device *sgm)
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+int sgm4154x_enable_termination(struct charger_device *chg_dev, bool enable)
+#else
 static int sgm4154x_enable_termination(struct charger_device *chg_dev, bool enable)
+#endif
 {
 	struct sgm4154x_device *sgm = dev_get_drvdata(&chg_dev->dev);
        int ret = 0;
@@ -1227,9 +1240,15 @@ static int get_charger_type(struct sgm4154x_device * sgm)
 			break;
 
 		case POWER_SUPPLY_TYPE_USB_DCP:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		case QTI_POWER_SUPPLY_TYPE_USB_HVDCP:
+		case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
+#else
 		case POWER_SUPPLY_TYPE_USB_HVDCP:
 		case POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		case POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
+#endif
 			usb_type = POWER_SUPPLY_USB_TYPE_DCP;
 			break;
 
@@ -1701,7 +1720,7 @@ static void charger_monitor_work_func(struct work_struct *work)
 	}
 
 	sgm4154x_dump_register(sgm);
-	pr_err("%s\n",__func__);
+	pr_err("%s ret:%d\n",__func__,ret);
 OUT:
 	schedule_delayed_work(&sgm->charge_monitor_work, 10*HZ);
 }
@@ -1746,7 +1765,11 @@ static int sgm4154x_detected_qc30_hvdcp(struct sgm4154x_device *sgm, int *charge
 	dev_info(sgm->dev, "%s vbus voltage now = %d in detected qc30\n", __func__,vbus_voltage);
 
 	if (vbus_voltage > MMI_HVDCP3_VOLTAGE_STANDARD) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		*charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3;
+#else
 		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+#endif
 		dev_info(sgm->dev, "%s QC3.0 charger detected\n", __func__);
 	}
 
@@ -1847,7 +1870,11 @@ static int sgm4154x_detected_qc3p_hvdcp(struct sgm4154x_device *sgm, int *charge
 		sgm->mmi_qc3p_power = MMI_POWER_SUPPLY_QC3P_NONE;
 
 	if (sgm->mmi_qc3p_power != MMI_POWER_SUPPLY_QC3P_NONE) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		*charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
+#else
 		*charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
+#endif
 		dev_info(sgm->dev, "%s detected qc3p, qc3p power = %d\n",
 					__func__,sgm->mmi_qc3p_power);
 	} else {
@@ -1962,7 +1989,11 @@ bool qc3p_detection_done(struct sgm4154x_device *chip)
 	int delay_count =0;
 
 #ifdef CONFIG_MMI_SGM41513_CHARGER
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        if(chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP) {
+#else
         if(chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP) {
+#endif
               dev_info(chip->dev, "qc3p hvdcp detection already done, do not wait\n");
 	      return true;
         }
@@ -2087,8 +2118,11 @@ static int mmi_hvdcp_detect_kthread(void *param)
 			dev_err(sgm->dev, "Cann't detected qc20 hvdcp\n");
 			goto out;
 		}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		if (charger_type != QTI_POWER_SUPPLY_TYPE_USB_HVDCP || sgm->pd_active)
+#else
 		if (charger_type != POWER_SUPPLY_TYPE_USB_HVDCP || sgm->pd_active)
+#endif
 			goto out;
 
 		//do qc3.0 detected
@@ -2100,7 +2134,11 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 #ifdef CONFIG_MMI_QC3P_TURBO_CHARGER
 		//do qc3p detected
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		if (charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3 && !sgm->pd_active) {
+#else
 		if (charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 && !sgm->pd_active) {
+#endif
 			ret = sgm4154x_detected_qc3p_hvdcp(sgm, &charger_type);
 			if (ret) {
 				dev_err(sgm->dev, "Cann't detected qc3p hvdcp\n");
@@ -2116,17 +2154,29 @@ static int mmi_hvdcp_detect_kthread(void *param)
 
 			switch(ret) {
 				case WT_CHG_TYPE_QC2:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+					charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP;
+#else
 					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+#endif
 					dev_info(sgm->dev, "HDVCP 2.0 detected\n");
 					break;
 				case WT_CHG_TYPE_QC3:
 				case WT_CHG_TYPE_QC3P_18W:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+					charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3;
+#else
 					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3;
+#endif
 					dev_info(sgm->dev, "HDVCP 3.0 or qc3p 18W detected\n");
 					break;
 				case WT_CHG_TYPE_QC3P_27W:
 					dev_err(sgm->dev, "QC3P 27W have been detected !\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+					charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
+#else
 					charger_type = POWER_SUPPLY_TYPE_USB_HVDCP_3P5;
+#endif
 					qc3p_update_policy(sgm);
 					break;
 				default:
@@ -2162,7 +2212,11 @@ static void mmi_start_hvdcp_detect(struct sgm4154x_device *sgm)
 		&& (!sgm->pd_active)
 		&& (sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_DCP
 #ifdef CONFIG_MMI_SGM41513_CHARGER
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+                || sgm->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP
+#else
                 || sgm->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
+#endif
 #endif
         )) {
 		dev_info(sgm->dev, "start hvdcp detect\n");
@@ -2186,7 +2240,11 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 		case WT_CHG_TYPE_FC:
 		case WT_CHG_TYPE_OCP:
 			dev_err(sgm->dev, "unkown type have been detected !\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+			*real_charger_type = QTI_POWER_SUPPLY_TYPE_USB_FLOAT;
+#else
 			*real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+#endif
 			result = true;
 			break;
 		case WT_CHG_TYPE_SDP:
@@ -2207,7 +2265,11 @@ static bool mmi_start_bc12_charger_type_detect(struct sgm4154x_device *sgm, int 
 			break;
                 case WT_CHG_TYPE_HVDCP:
                         dev_err(sgm->dev, "quick plug out/in, HVDCP have been detected already !\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+			*real_charger_type = QTI_POWER_SUPPLY_TYPE_USB_HVDCP;
+#else
 			*real_charger_type = POWER_SUPPLY_TYPE_USB_HVDCP;
+#endif
 			mmi_start_hvdcp_detect(sgm);
 			result = true;
                         break;
@@ -2275,6 +2337,7 @@ static void sgm4154x_vbus_remove(struct sgm4154x_device * sgm)
 #ifdef __SGM41513_CHIP_ID__
 	sgm4154x_set_dynamic_vindpm_track(sgm, 0);
 #endif
+	pr_info("%s ret:%d\n",__func__,ret);
 }
 
 static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
@@ -2326,7 +2389,11 @@ static void sgm4154x_vbus_plugin(struct sgm4154x_device * sgm)
 		case SGM4154x_UNKNOWN:
 		case SGM4154x_NON_STANDARD:
 			pr_err("SGM4154x charger type: UNKNOWN\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+			sgm->real_charger_type = QTI_POWER_SUPPLY_TYPE_USB_FLOAT;
+#else
 			sgm->real_charger_type = POWER_SUPPLY_TYPE_USB_FLOAT;
+#endif
 			break;
 
 		case SGM4154x_OTG_MODE:
@@ -2678,7 +2745,7 @@ static int sgm4154x_parse_dt(struct sgm4154x_device *sgm)
 	{
 		ret = gpio_request(chg_en_gpio, "sgm4154x chg en pin");
 		if (ret) {
-			dev_err(sgm->dev, "%s: %d gpio request failed\n", __func__, chg_en_gpio);
+			dev_err(sgm->dev, "%s: %d gpio request chg_en failed\n", __func__, chg_en_gpio);
 			return ret;
 		}
 		gpio_direction_output(chg_en_gpio,0);//default enable charge
@@ -2908,6 +2975,7 @@ static int sgm4154x_is_enabled_vbus(struct regulator_dev *rdev)
 	int ret = 0;
 
 	ret = mmi_regmap_read(sgm, SGM4154x_CHRG_CTRL_1, &temp);
+	pr_info("%s ret:%d\n",__func__,ret);
 	return (temp&SGM4154x_OTG_EN)? 1 : 0;
 }
 static struct regulator_ops sgm4154x_vbus_ops = {
@@ -3553,7 +3621,7 @@ static int sgm4154x_probe(struct i2c_client *client,
 			"mmi iio psy init failed\n");
 	}
 #endif
-
+	pr_info("%s otg_notify:%d\n",__func__, otg_notify);
 	schedule_delayed_work(&sgm->charge_monitor_work,100);
 #ifdef __indicator_led_en__
 	indicator_led_probe(client);

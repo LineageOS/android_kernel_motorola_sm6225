@@ -430,6 +430,7 @@ static ssize_t wt6670f_store_test(struct device *dev,
 
 	ret = wt6670f_set_voltage(val);
 
+	pr_info("%s ret:%d",__func__, ret);
 	return count;
 
 }
@@ -454,7 +455,7 @@ static ssize_t wt6670f_show_registers(struct device *dev,
 		idx = snprintf(buf, PAGE_SIZE, ">>> reg[0x11] = %04x\n", data);
 		pr_err(">>>>>>>>>>Z350 test southchip  0x11 = %04x\n", data);
 	}
-
+	pr_info("%s ret:%d",__func__, ret);
 	return idx;
 }
 
@@ -473,7 +474,7 @@ static ssize_t wt6670f_store_registers(struct device *dev,
 
 	if(QC3P_Z350 == g_qc3p_id)
 		ret = wt6670f_write_word(wt, 0x83, val);
-
+	pr_info("%s ret:%d",__func__, ret);
 	return count;
 
 }
@@ -588,6 +589,7 @@ static int wt6670f_parse_dt(struct device *dev)
 	ret = request_irq(gpio_to_irq(wt6670f_int_pin), wt6670f_intr_handler,
 		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "wt6670f int", dev);
 	enable_irq_wake(gpio_to_irq(wt6670f_int_pin));
+	pr_info("%s ret:%d",__func__, ret);
 	return 0;
 }
 
@@ -874,7 +876,7 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
 probe_out:
 	/* Create the procfs file at /proc/driver/wt6670f_firmware_num */
-	procfs_file = proc_create("driver/wt6670f_firmware_num",0777, NULL, &mmi_wt6670f_operations);
+	procfs_file = proc_create("driver/wt6670f_firmware_num",0777, NULL, (const struct proc_ops *)&mmi_wt6670f_operations);
 	return 0;
 }
 

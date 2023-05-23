@@ -29,12 +29,16 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/thermal.h>
-
+#include <linux/version.h>
 #include "mmi_discrete_charger_core.h"
 #include "mmi_discrete_voter.h"
 #include "mmi_discrete_charger_iio.h"
 #include "mmi_discrete_factory_tcmd.h"
 #include <linux/mmi_discrete_charger_class.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#include <linux/qti_power_supply.h>
+#endif
 
 static bool debug_enabled;
 module_param(debug_enabled, bool, 0600);
@@ -594,8 +598,11 @@ static int mmi_discrete_handle_usb_current(struct mmi_discrete_charger *chg,
 {
 	int rc = 0, rp_ua;
 	union power_supply_propval val = {0, };
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_FLOAT) {
+#else
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
+#endif
 		if (usb_current == -ETIMEDOUT) {
 				/*
 				 * Valid FLOAT charger, report the current
@@ -1054,8 +1061,11 @@ static void mmi_discrete_config_qc_charger(struct mmi_discrete_charger *chg)
 	}
 
 	do {
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		if (chg->real_charger_type != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+#else
 		if (chg->real_charger_type != POWER_SUPPLY_TYPE_USB_HVDCP_3) {
+#endif
 			mmi_warn(chg, "Exit for QC3.0 charger removal\n");
 			break;
 		}
@@ -1223,7 +1233,11 @@ static void mmi_discrete_config_charger_input(struct mmi_discrete_charger *chip)
 	if (chip->charger_psy && chip->usb_psy &&
 	    chip->constraint.hvdcp_pmax >= HVDCP_POWER_MIN &&
 	    chip->chg_info.chrg_mv > HVDCP_VOLTAGE_MIN &&
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	    chip->chg_info.chrg_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3 &&
+#else
 	    chip->chg_info.chrg_type == POWER_SUPPLY_TYPE_USB_HVDCP_3 &&
+#endif
 	    chip->pd_active == MMI_POWER_SUPPLY_PD_INACTIVE)
 		mmi_discrete_config_qc_charger(chip);
 
@@ -2094,7 +2108,11 @@ static void mmi_handle_hvdcp_check_timeout(struct mmi_discrete_charger *chg,
 
 	if (hvdcp_done) {
 		hvdcp_ua = (chg->real_charger_type ==
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+				QTI_POWER_SUPPLY_TYPE_USB_HVDCP) ?
+#else
 				POWER_SUPPLY_TYPE_USB_HVDCP) ?
+#endif
 				chg->hvdcp2_max_icl_ua :
 				HVDCP_CURRENT_UA;
 
@@ -2144,9 +2162,15 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 	/*
 	 * HVDCP 2/3, handled separately
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP
+			|| chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+#else
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP
 			|| chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
 			|| chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+#endif
 		return;
 
 	/* TypeC rp med or high, use rp value */
@@ -2177,7 +2201,11 @@ static void update_sw_icl_max(struct mmi_discrete_charger *chg)
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 		break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
+#else
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
+#endif
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
 					SDP_CURRENT_UA);
 		break;
@@ -2209,7 +2237,11 @@ static void mmi_handle_apsd_done(struct mmi_discrete_charger *chip, bool apsd_do
 		if (chip->use_extcon)
 			mmi_notify_device_mode(chip, true);
 		break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
+#else
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
+#endif
 	case POWER_SUPPLY_TYPE_USB_DCP:
 		break;
 	default:
@@ -2273,11 +2305,20 @@ int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *tota
 	}
 
 	/* QC 2.0/3.0 adapter */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP) {
+#else
 	if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP) {
+#endif
 		*total_current_ua = chip->hvdcp2_max_icl_ua;
 		return 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	} else if (chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3
+			|| chip->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+#else
 	} else if (chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3
 			|| chip->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5) {
+#endif
 		*total_current_ua = HVDCP_CURRENT_UA;
 		return 0;
 	}
@@ -2291,7 +2332,11 @@ int mmi_discrete_get_hw_current_max(struct mmi_discrete_charger *chip, int *tota
 		case POWER_SUPPLY_TYPE_USB_DCP:
 			current_ua = DCP_CURRENT_UA;
 			break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
+#else
 		case POWER_SUPPLY_TYPE_USB_FLOAT:
+#endif
 		case POWER_SUPPLY_TYPE_USB:
 			current_ua = SDP_CURRENT_UA;
 			break;
@@ -2645,11 +2690,23 @@ static int mmi_discrete_get_chg_info(void *data, struct mmi_charger_info *chg_in
 			chip->chg_info.chrg_pmax_mw = 7500;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_DCP)
 			chip->chg_info.chrg_pmax_mw = chip->constraint.dcp_pmax;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP)
+#else
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP)
+#endif
 			chip->chg_info.chrg_pmax_mw = 7500;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
+#else
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
+#endif
 			chip->chg_info.chrg_pmax_mw = chip->constraint.hvdcp_pmax;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+#else
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+#endif
 			chip->chg_info.chrg_pmax_mw = 30000;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_PD) {
 			if (chip->pd_active == MMI_POWER_SUPPLY_PD_PPS_ACTIVE)

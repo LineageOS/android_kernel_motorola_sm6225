@@ -25,10 +25,17 @@
 #include "inc/tcpci_typec.h"
 #include <linux/mmi_discrete_power_supply.h>
 #include <linux/mmi_discrete_charger_class.h>
-
+#include <linux/qti_power_supply.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#include <linux/qti_power_supply.h>
+#endif
 #define RT_PD_MANAGER_VERSION	"0.0.8_G"
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#define PROBE_CNT_MAX			15
+#else
 #define PROBE_CNT_MAX			3
+#endif
 /* 10ms * 100 = 1000ms = 1s */
 #define USB_TYPE_POLLING_INTERVAL	10
 
@@ -279,7 +286,11 @@ static void usb_dwork_handler(struct work_struct *work)
 			break;
 		} else if (val.intval != POWER_SUPPLY_TYPE_USB &&
 			   val.intval != POWER_SUPPLY_TYPE_USB_CDP &&
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+			   val.intval != QTI_POWER_SUPPLY_TYPE_USB_FLOAT)
+#else
 			   val.intval != POWER_SUPPLY_TYPE_USB_FLOAT)
+#endif
 			break;
 	case DR_HOST_TO_DEVICE:
 		stop_usb_host(rpmd);

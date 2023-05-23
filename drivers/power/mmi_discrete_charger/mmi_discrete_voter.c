@@ -10,6 +10,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/version.h>
 
 #include "mmi_discrete_voter.h"
 
@@ -804,8 +805,8 @@ struct votable *create_votable(const char *name,
 		kfree(votable);
 		return ERR_PTR(-EEXIST);
 	}
-
-	votable->force_val_ent = debugfs_create_u32("force_val",
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
+	votable->force_val_ent = (struct dentry *)debugfs_create_u32("force_val",
 					S_IFREG | 0644,
 					votable->root,
 					&(votable->force_val));
@@ -817,7 +818,7 @@ struct votable *create_votable(const char *name,
 		kfree(votable);
 		return ERR_PTR(-EEXIST);
 	}
-
+#endif
 	votable->force_active_ent = debugfs_create_file("force_active",
 					S_IFREG | 0444,
 					votable->root, votable,
