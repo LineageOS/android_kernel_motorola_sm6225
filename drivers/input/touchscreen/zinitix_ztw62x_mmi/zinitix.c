@@ -1171,6 +1171,11 @@ power_off:
 		dev_info(&data->client->dev, "Disable data->vcc_i2c regualtor\n");
 	}
 
+	if (gpio_is_valid(data->pdata->gpio_reset)) {
+		gpio_direction_output(data->pdata->gpio_reset, 0);
+		pr_info("%s: set gpio_reset to 0 success\n", __func__);
+	}
+
 	return 0;
 }
 
