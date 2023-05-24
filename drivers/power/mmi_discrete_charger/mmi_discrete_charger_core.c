@@ -1215,6 +1215,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -1254,6 +1255,9 @@ static int batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		rc = get_prop_batt_charge_type(chip, val);
+		break;
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		val->intval = !get_effective_result(chip->chg_disable_votable);
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = get_prop_input_suspend(chip, val);
@@ -1311,6 +1315,9 @@ static int batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		rc = set_prop_system_temp_level(chip, val);
 		break;
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		vote(chip->chg_disable_votable, USER_VOTER, !!!val->intval, 0);
+		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = set_prop_input_suspend(chip, val);
 		break;
@@ -1336,6 +1343,7 @@ static int batt_prop_is_writeable(struct power_supply *psy,
 				  enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
