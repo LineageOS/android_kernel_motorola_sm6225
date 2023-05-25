@@ -792,9 +792,11 @@ static int cw2217_get_state(struct cw_battery *cw_bat)
 		if (ret < 0)
 			return ret;
 		reg_profile = REG_BAT_PROFILE + i;
-		cw_printk("0x%2x = 0x%2x\n", reg_profile, reg_val);
-		if (config_profile_info[i] != reg_val)
+		if (config_profile_info[i] != reg_val) {
+			cw_printk("config profile mismatch, config_profile_info[%d]: 0x%2x, reg_val[0x%2x]: 0x%2x\n",
+				i, config_profile_info[i], reg_profile, reg_val);
 			break;
+		}
 	}
 	if ( i != SIZE_OF_PROFILE)
 		return CW2217_PROFILE_NEED_UPDATE;
