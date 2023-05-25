@@ -2,7 +2,7 @@
 #include "aw_sar.h"
 
 #define AW963XX_I2C_NAME "aw963xx_sar"
-#define AW963XX_DRIVER_VERSION "v0.1.1.4"
+#define AW963XX_DRIVER_VERSION "v0.1.1.14"
 
 static void aw963xx_set_cs_as_irq(struct aw_sar *p_sar, int flag);
 static void aw963xx_get_ref_ch_enable(struct aw_sar *p_sar);
@@ -233,6 +233,7 @@ static int32_t aw963xx_update_firmware(struct aw_bin *aw_bin, void *load_bin_par
 	struct i2c_client *i2c = p_sar->i2c;
 	int32_t ret = 0;
 
+	pr_info("%s enter\n",__func__);
 	if (aw963xx->start_mode == AW963XX_ROM_MODE) {
 		AWLOGI(p_sar->dev, "no need to update fw.");
 		return AW_OK;
@@ -310,36 +311,39 @@ static void aw963xx_irq_handle_func(uint32_t irq_status, void *data)
 	int8_t i = 0;
 	int8_t j = 0;
 	int32_t ret = 0;
-	uint32_t curr_status_val = 0;
+	uint32_t curr_status_val[4] = { 0 };
+
 	struct aw_sar *p_sar = (struct aw_sar *)data;
 	uint32_t ch_th[AW963XX_CHANNEL_NUM_MAX] = { 0 };
 	AWLOGD(p_sar->dev, "IRQSRC = 0x%x", irq_status);
+
+	for (i = 0; i < AW963XX_VALID_TH; i++)
+		ret = aw_sar_i2c_read(p_sar->i2c, REG_STAT0 + i * (REG_STAT1 - REG_STAT0), &curr_status_val[i]);
+
 	for (j = 0; j < AW963XX_CHANNEL_NUM_MAX; j++) {
 		if (p_sar->channels_arr[j].input == NULL) {
-		continue;
-	}
-	for (i = (AW963XX_VALID_TH - 1); i >= 0; i--) {
-	ret = aw_sar_i2c_read(p_sar->i2c,
-		REG_STAT0 + i * (REG_STAT1 - REG_STAT0),
-		&curr_status_val);
-	ch_th[j] |= ((curr_status_val >> j) & 0x01) << i;
-	AWLOGE(p_sar->dev, "ch= %d, th = %d ch_th = 0x%x", j, i, ch_th[j]);
-	}
-	AWLOGE(p_sar->dev, "ch = %d last_th=0x%x th = 0x%x", j, p_sar->channels_arr[j].last_channel_info, ch_th[j]);
-	if (p_sar->channels_arr[j].last_channel_info != ch_th[j]) {
-		if ((ch_th[j] >> 3 & 0x01) == 1) { //th3
-			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 4);
-		} else if ((ch_th[j] >> 2 & 0x01) == 1) { //th2
-			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 3);
-		} else if ((ch_th[j] >> 1 & 0x01) == 1) { //th1
-			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 2);
-		} else if ((ch_th[j] >> 0 & 0x01) == 1) { //th0
-			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 1);
-		} else { //far
-			input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 0);
+			continue;
 		}
-		input_sync(p_sar->channels_arr[j].input);
-		p_sar->channels_arr[j].last_channel_info = ch_th[j];
+		for (i = 0; i < AW963XX_VALID_TH; i++) {
+			ch_th[j] |= ((curr_status_val[i] >> j) & 0x01) << i;
+			AWLOGE(p_sar->dev, "ch= %d, th = %d ch_th = 0x%x", j, i, ch_th[j]);
+		}
+		AWLOGE(p_sar->dev, "ch = %d last_th=0x%x th = 0x%x", j, p_sar->channels_arr[j].last_channel_info, ch_th[j]);
+
+		if (p_sar->channels_arr[j].last_channel_info != ch_th[j]) {
+			if ((ch_th[j] >> 3 & 0x01) == 1) {	//th3
+				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 4);
+			} else if ((ch_th[j] >> 2 & 0x01) == 1) { //th2
+				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 3);
+			} else if ((ch_th[j] >> 1 & 0x01) == 1) { //th1
+				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 2);
+			} else if ((ch_th[j] >> 0 & 0x01) == 1) { //th0
+				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 1);
+			} else {	//far
+				input_report_abs(p_sar->channels_arr[j].input, ABS_DISTANCE, 0);
+			}
+			input_sync(p_sar->channels_arr[j].input);
+			p_sar->channels_arr[j].last_channel_info = ch_th[j];
 		}
 	}
 }
@@ -356,6 +360,12 @@ static ssize_t aw963xx_operation_mode_get(void *data, char *buf)
 		len += snprintf(buf + len, PAGE_SIZE - len, "operation mode: DeepSleep\n");
 	else
 		len += snprintf(buf + len, PAGE_SIZE - len, "operation mode: Unconfirmed\n");
+
+	//Note: This code is designed to temporarily place platform interrupts during debugging
+	if (p_sar->irq_init.host_irq_stat == IRQ_DISABLE) {
+		enable_irq(p_sar->irq_init.to_irq);
+		p_sar->irq_init.host_irq_stat = IRQ_ENABLE;
+	}
 
 	return len;
 }
@@ -961,6 +971,33 @@ static ssize_t cali_show(struct class *class,
 
 static CLASS_ATTR_RO(cali);
 
+static ssize_t
+reset_store(struct class *class, struct class_attribute *attr, const char *buf, size_t count)
+{
+	u32 temp = 0;
+	struct aw963xx *aw963xx = container_of(class, struct aw963xx, capsense_class);
+	struct aw_sar *p_sar = NULL;
+
+	if (aw963xx == NULL)
+		return 0;
+
+	p_sar = aw963xx->p_aw_sar;
+	if (p_sar == NULL)
+		return 0;
+
+	aw_sar_i2c_read(p_sar->i2c, REG_WST, &temp);
+	if (!strncmp(buf, "reset", 5) || !strncmp(buf, "1", 1)) {
+		if (((temp >> 24) & 0x00000003) == 1) {
+			AWLOGD(p_sar->dev, "temp:0X%x", temp);
+			aw_sar_i2c_write_bits(p_sar->i2c, REG_SCANCTRL1, ~0xfff, 0xfff);
+		}
+	}
+
+	return count;
+}
+
+static CLASS_ATTR_WO(reset);
+
 static ssize_t mode_show(struct class *class,
 		struct class_attribute *attr,
 		char *buf)
@@ -1127,51 +1164,6 @@ static ssize_t offset_show(struct class *class,
 static CLASS_ATTR_RO(offset);
 
 #ifdef USE_SENSORS_CLASS
-static struct aw963xx *g_aw963xx = NULL;
-static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned int enable)
-{
-	uint8_t i = 0;
-	struct aw963xx *aw963xx = g_aw963xx;
-	struct aw_sar *p_sar = NULL;
-	uint8_t set_mode = 0;
-
-	if (aw963xx == NULL) {
-		return 0;
-	}
-
-	p_sar = aw963xx->p_aw_sar;
-	if (p_sar == NULL) {
-		return 0;
-	}
-
-	for (i = 0; i < AW963XX_CHANNEL_NUM_MAX; i++) {
-		if ((p_sar->channels_arr[i].used == AW_FALSE) ||
-			(p_sar->channels_arr[i].input == NULL)) {
-			continue;
-		}
-		if (enable == 1) {
-			input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, 0);
-			input_sync(p_sar->channels_arr[i].input);
-			aw_sar_i2c_write_bits(p_sar->i2c, REG_SCANCTRL1, ~0xfff, 0xfff);
-		} else {
-			input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, -1);
-			input_sync(p_sar->channels_arr[i].input);
-		}
-		AWLOGD(p_sar->dev, "enable cap sensor: %s", sensors_cdev->name);
-	}
-
-	AWLOGD(p_sar->dev, "enable %d", enable);
-
-	if (enable == 0x01)
-		set_mode = AW963XX_ACTIVE_MODE;
-	else
-		set_mode = AW963XX_SLEEP_MODE;
-
-	aw_sar_mode_set(p_sar, set_mode);
-
-	return 0;
-}
-
 static const char *g_aw963xx_ch_name[] = {
 	"Moto CapSense Ch0", "Moto CapSense Ch1", "Moto CapSense Ch2",
 	"Moto CapSense Ch3", "Moto CapSense Ch4", "Moto CapSensor Ch5",
@@ -1180,6 +1172,58 @@ static const char *g_aw963xx_ch_name[] = {
 	"Moto CapSensor Ch12", "Moto CapSensor Ch13", "Moto CapSensor Ch14"
 };
 static int32_t g_aw963xx_counter = 0;
+static struct aw963xx *g_aw963xx = NULL;
+
+static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned int enable)
+{
+	uint8_t i = 0;
+	struct aw963xx *aw963xx = g_aw963xx;
+	struct aw_sar *p_sar = NULL;
+	uint8_t set_mode = 0;
+
+	pr_info("%s enter\n",__func__);
+
+	if (aw963xx == NULL)
+		return 0;
+
+	p_sar = aw963xx->p_aw_sar;
+	if (p_sar == NULL)
+		return 0;
+
+	AWLOGD(p_sar->dev, "enable %d", enable);
+
+	for (i = 0; i < AW963XX_CHANNEL_NUM_MAX; i++) {
+		if ((p_sar->channels_arr[i].used == AW_FALSE) ||
+			(p_sar->channels_arr[i].input == NULL))
+				continue;
+
+		if (strcmp(sensors_cdev->name, p_sar->channels_arr[i].name) == 0) {
+			if (enable == 0x01) {
+				AWLOGD(p_sar->dev, "enable cap sensor : %s", sensors_cdev->name);
+				aw_sar_i2c_write_bits(p_sar->i2c, REG_SCANCTRL1, ~0xfff, 0xfff);
+				set_mode = AW963XX_ACTIVE_MODE;
+				aw_sar_mode_set(p_sar, set_mode);
+
+				input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, 0);
+				input_sync(p_sar->channels_arr[i].input);
+			} else if (enable == 0) {
+				set_mode = AW963XX_SLEEP_MODE;
+				aw_sar_mode_set(p_sar, set_mode);
+
+				input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, -1);
+				input_sync(p_sar->channels_arr[i].input);
+				p_sar->channels_arr[i].last_channel_info = -1;
+			} else {
+				AWLOGD(p_sar->dev, "unknown enable symbol");
+			}
+			break;
+		}
+	}
+
+	AWLOGD(p_sar->dev, "enable over %d", enable);
+
+	return 0;
+}
 #endif
 
 //moto_customization
@@ -1211,6 +1255,12 @@ static int32_t aw_sar_custom_flie_node_create(void *data)
 	}
 
 	ret = class_create_file(&aw963xx->capsense_class, &class_attr_cali);
+	if (ret < 0) {
+		AWLOGE(p_sar->dev, "Create cali file failed (%d)\n", ret);
+		return ret;
+	}
+
+	ret = class_create_file(&aw963xx->capsense_class, &class_attr_reset);
 	if (ret < 0) {
 		AWLOGE(p_sar->dev, "Create cali file failed (%d)\n", ret);
 		return ret;
@@ -1284,6 +1334,8 @@ static void aw_sar_custom_flie_node_free(void *data)
 	int i = 0;
 #endif
 
+	pr_info("%s enter\n",__func__);
+
 	if (data == NULL) {
 		return;
 	}
@@ -1308,6 +1360,7 @@ static void aw_sar_custom_flie_node_free(void *data)
 	class_remove_file(&aw963xx->capsense_class, &class_attr_mode);
 	class_remove_file(&aw963xx->capsense_class, &class_attr_int_state);
 	class_remove_file(&aw963xx->capsense_class, &class_attr_cali);
+	class_remove_file(&aw963xx->capsense_class, &class_attr_reset);
 
 	class_unregister(&aw963xx->capsense_class);
 }
@@ -1356,6 +1409,8 @@ int32_t aw963xx_init(struct aw_sar *p_sar)
 {
 	struct aw963xx *aw963xx = NULL;
 
+	pr_info("%s enter\n",__func__);
+
 	if (p_sar == NULL) {
 		AWLOGE(p_sar->dev, "para is NULL, error!");
 		return -AW_ERR;
@@ -1381,6 +1436,7 @@ void aw963xx_deinit(struct aw_sar *p_sar)
 {
 	struct aw963xx *aw963xx = NULL;
 
+	pr_info("%s enter\n",__func__);
 	if ((p_sar == NULL) || (p_sar->priv_data == NULL)) {
 		return;
 	}

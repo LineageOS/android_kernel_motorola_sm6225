@@ -2,7 +2,7 @@
 #include "aw_sar.h"
 
 #define AW_SAR_I2C_NAME		"awinic_sar"
-#define AW_SAR_DRIVER_VERSION	"v0.1.5.2"
+#define AW_SAR_DRIVER_VERSION	"v0.1.5.14"
 #define USB_POWER_SUPPLY_NAME   "usb"
 
 
@@ -2110,7 +2110,8 @@ static const struct dev_pm_ops aw_sar_pm_ops = {
 };
 
 static const struct of_device_id aw_sar_dt_match[] = {
-	{ .compatible = "awinic,aw_sar" },
+	{ .compatible = "awinic,aw_sar", },
+	{},
 };
 
 static const struct i2c_device_id aw_sar_i2c_id[] = {
