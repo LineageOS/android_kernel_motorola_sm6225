@@ -1071,7 +1071,7 @@ static void cw_get_batt_status(struct cw_battery *cw_bat)
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
 	} else if (abs(batt_curr) < CW_CUR_ACCURACY) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-	} else if (batt_curr * cw_bat->ibat_polority < 0) {
+	} else if (batt_curr > 0) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
 	} else {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
