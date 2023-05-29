@@ -569,6 +569,26 @@ static int mmi_get_rp_based_dcp_current(struct mmi_discrete_charger *chg, int ty
 	return rp_ua;
 }
 
+static int mmi_discrete_get_batt_capacity_level(struct mmi_discrete_charger *chg)
+{
+	union power_supply_propval batt_soc;
+
+	power_supply_get_property(chg->mmi_psy, POWER_SUPPLY_PROP_CAPACITY, &batt_soc);
+
+	if (batt_soc.intval >= 100)
+		return POWER_SUPPLY_CAPACITY_LEVEL_FULL;
+	else if (batt_soc.intval >= 80 && batt_soc.intval < 100)
+		return POWER_SUPPLY_CAPACITY_LEVEL_HIGH;
+	else if (batt_soc.intval >= 20 && batt_soc.intval < 80)
+		return POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+	else if (batt_soc.intval > 0 && batt_soc.intval < 20)
+		return POWER_SUPPLY_CAPACITY_LEVEL_LOW;
+	else if (batt_soc.intval == 0)
+		return POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
+	else
+		return POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
+}
+
 static int mmi_discrete_handle_usb_current(struct mmi_discrete_charger *chg,
 					int usb_current)
 {
@@ -1328,6 +1348,7 @@ static enum power_supply_property batt_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -1398,6 +1419,9 @@ static int batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = power_supply_get_property(chip->bms_psy, psp, val);
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
+		val->intval = mmi_discrete_get_batt_capacity_level(chip);
 		break;
 	default:
 		mmi_err(chip, "Get not support prop %d rc = %d\n", psp, rc);
