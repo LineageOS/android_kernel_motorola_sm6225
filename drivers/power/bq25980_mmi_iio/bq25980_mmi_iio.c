@@ -283,7 +283,7 @@ static struct reg_default sc8541_reg_init_val[] = {
 	{BQ25980_MASK4,		0x00},
 	{BQ25980_MASK5,		0x00},
 
-	{BQ25980_ADC_CONTROL1,	0x80},//enable ADC_EN
+	{BQ25980_ADC_CONTROL1,	0x00},//disable ADC_EN as default
 	{BQ25980_ADC_CONTROL2,	0x06}, //0x26: enable vac1 vac2 adc and vout adc
 
 };
