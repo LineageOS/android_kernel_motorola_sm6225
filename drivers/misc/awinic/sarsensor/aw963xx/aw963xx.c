@@ -1180,6 +1180,7 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 	struct aw963xx *aw963xx = g_aw963xx;
 	struct aw_sar *p_sar = NULL;
 	uint8_t set_mode = 0;
+	static uint8_t sar_cali_flag = false;
 
 	pr_info("%s enter\n",__func__);
 
@@ -1199,17 +1200,22 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 
 		if (strcmp(sensors_cdev->name, p_sar->channels_arr[i].name) == 0) {
 			if (enable == 0x01) {
-				AWLOGD(p_sar->dev, "enable cap sensor : %s", sensors_cdev->name);
-				aw_sar_i2c_write_bits(p_sar->i2c, REG_SCANCTRL1, ~0xfff, 0xfff);
-				set_mode = AW963XX_ACTIVE_MODE;
-				aw_sar_mode_set(p_sar, set_mode);
-
+				pr_info("enable cap sensor[%d] : %s", i, sensors_cdev->name);
+				if (sar_cali_flag ==  false) {
+					aw_sar_i2c_write_bits(p_sar->i2c, REG_SCANCTRL1, ~0xfff, 0xfff);
+					set_mode = AW963XX_ACTIVE_MODE;
+					aw_sar_mode_set(p_sar, set_mode);
+					sar_cali_flag = true;
+				}
 				input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, 0);
 				input_sync(p_sar->channels_arr[i].input);
 			} else if (enable == 0) {
-				set_mode = AW963XX_SLEEP_MODE;
-				aw_sar_mode_set(p_sar, set_mode);
-
+				pr_info("disable cap sensor[%d] : %s", i, sensors_cdev->name);
+				if (sar_cali_flag == true) {
+					set_mode = AW963XX_SLEEP_MODE;
+					aw_sar_mode_set(p_sar, set_mode);
+					sar_cali_flag = false;
+				}
 				input_report_abs(p_sar->channels_arr[i].input, ABS_DISTANCE, -1);
 				input_sync(p_sar->channels_arr[i].input);
 				p_sar->channels_arr[i].last_channel_info = -1;
