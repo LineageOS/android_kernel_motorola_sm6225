@@ -675,8 +675,8 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 			}
 		}
 
-		if (batt_soc >= 80) {
-			//Read the vbat aggin after the soc above 80%
+		if (batt_soc >= 65) {
+			//Read the vbat aggin after the soc above 65%
 			msleep(20);
 			rc = power_supply_get_property(chrg_list->chrg_dev[CP_MASTER]->chrg_psy,
 							POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
