@@ -1130,6 +1130,10 @@ static void psy_changed_work_func(struct work_struct *work)
 	if (chip->vbus_present)
 		chip->qc3p_active = mmi_qc3p_power_active(chip);
 
+	ret = mmi_charger_write_iio_chan(chip, CP_STATUS1, chip->vbus_present);
+	if (ret)
+		mmi_chrg_err(chip, "Unable to enable CP ADC: %d\n", ret);
+
 	if (chip->vbus_present
 		&& chip->pd_pps_support
 		&& !chip->factory_mode) {
