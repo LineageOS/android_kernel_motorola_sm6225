@@ -123,6 +123,7 @@ struct cw_battery {
 #else
 	struct power_supply *cw_bat;
 	struct power_supply *batt_psy;
+	struct power_supply *usb_psy;
 #endif
 	int  chip_id;
 	int  voltage;
@@ -414,6 +415,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	int ui_soc;
 	int remainder;
 	int chr_st_now = 0;// 0 discharge, 1 charging;
+	union power_supply_propval usb_online = {0};
 #ifndef DYNAMIC_UPDATE_UI_FULL
 	int ui_100 = cw_bat->ui_full;
 #else
@@ -474,6 +476,16 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 
 	if (ui_soc >= 100){
 		cw_printk("CW2015[%d]: UI_SOC = %d larger 100!!!!\n", __LINE__, ui_soc);
+		ui_soc = 100;
+	}
+
+	if (cw_bat->usb_psy) {
+		power_supply_get_property(cw_bat->usb_psy, POWER_SUPPLY_PROP_ONLINE, &usb_online);
+	}
+
+	if (usb_online.intval && (cw_bat->ui_soc == 100) && (ui_soc < cw_bat->ui_soc) &&
+		(cw_bat->batt_status != POWER_SUPPLY_STATUS_DISCHARGING)) {
+		cw_printk("CW2015[%d]: usb online = %d, ui_soc_reg = %d", __LINE__, usb_online.intval, ui_soc);
 		ui_soc = 100;
 	}
 
@@ -859,6 +871,12 @@ static void cw_bat_work(struct work_struct *work)
 	if (!cw_bat->batt_psy) {
 		cw_bat->batt_psy = power_supply_get_by_name("battery");
 		if (!cw_bat->batt_psy)
+			cw_printk("%s: get batt_psy fail\n", __func__);
+	}
+
+	if (!cw_bat->usb_psy) {
+		cw_bat->usb_psy = power_supply_get_by_name("usb");
+		if (!cw_bat->usb_psy)
 			cw_printk("%s: get batt_psy fail\n", __func__);
 	}
 
