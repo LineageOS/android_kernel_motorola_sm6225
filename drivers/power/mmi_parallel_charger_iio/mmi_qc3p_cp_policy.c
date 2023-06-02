@@ -195,6 +195,7 @@ void mmi_qc3p_chrg_enable_all_cp(struct mmi_charger_manager *chip, int val)
 		cancel_delayed_work_sync(&chip->mmi_qc3p_chrg_sm_work);
 		mmi_chrg_qc3p_sm_move_state(chip, PM_QC3P_STATE_CHRG_PUMP_ENTRY);
 		chip->cp_disable = false;
+		chip->qc3p_recovery_pmic_chrg = false;
 		schedule_delayed_work(&chip->mmi_qc3p_chrg_sm_work,
 				msecs_to_jiffies(0));
 
