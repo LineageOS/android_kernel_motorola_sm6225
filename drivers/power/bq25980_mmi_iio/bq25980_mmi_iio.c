@@ -817,6 +817,89 @@ static int bq25980_is_chg_en(struct bq25980_device *bq, bool *en_chg)
 	return 0;
 }
 
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+static int bq25980_bulk_get_adc(struct bq25980_device *bq, int reg, uint8_t *val, int len)
+{
+	int ret;
+
+	ret = regmap_bulk_read(bq->regmap, reg, val, len);
+	if (ret < 0) {
+		dev_err(bq->dev, "bq25980 read %02x block failed %d\n", reg, ret);
+	}
+
+	return ret;
+}
+
+static int bq25980_bulk_get_vbus(struct bq25980_device *bq)
+{
+	u8 val[2] = {0};
+	int ret;
+	u16 vbus_adc;
+
+	ret = bq25980_bulk_get_adc(bq, BQ25980_VBUS_ADC_MSB, val, 2);
+	if (ret) {
+		return ret;
+	}
+
+	vbus_adc = (val[0] << 8) | val[1];
+	return (bq->chip_info->adc_vbus_volt_offset + vbus_adc * bq->chip_info->adc_vbus_volt_step /10) /1000;//mV
+}
+
+static int bq25980_bulk_get_ibus(struct bq25980_device *bq)
+{
+	u8 val[2] = {0};
+	u16 ibus_adc;
+	int ret;
+
+	ret = bq25980_bulk_get_adc(bq, BQ25980_IBUS_ADC_MSB, val, 2);
+	if (ret) {
+		return ret;
+	}
+
+	ibus_adc = (val[0] << 8) | val[1];
+
+	if (val[0] & BQ25980_ADC_POLARITY_BIT)
+		return (((ibus_adc ^ 0xffff) + 1) * bq->chip_info->adc_curr_step) /1000;//mA
+
+	return (ibus_adc * bq->chip_info->adc_curr_step) /1000; //mA
+}
+
+static int bq25980_bulk_get_vbat(struct bq25980_device *bq)
+{
+	u8 val[2] = {0};
+	u16 vsys_adc;
+	int ret;
+
+	ret = bq25980_bulk_get_adc(bq, BQ25980_VBAT_ADC_MSB, val, 2);
+	if (ret) {
+		return ret;
+	}
+
+	vsys_adc = (val[0]  << 8) | val[1];
+
+	return (vsys_adc * bq->chip_info->adc_vbat_volt_step / 10) /1000;//mV
+}
+
+static int bq25980_bulk_get_ibat(struct bq25980_device *bq)
+{
+	int ret;
+	u8 val[2] = {0};
+	int ibat_adc;
+
+	ret = bq25980_bulk_get_adc(bq, BQ25980_IBAT_ADC_MSB, val, 2);
+	if (ret) {
+		return ret;
+	}
+
+	ibat_adc = (val[0] << 8) | val[1];
+
+	if (val[0] & BQ25980_ADC_POLARITY_BIT)
+		return (((ibat_adc ^ 0xffff) + 1) * BQ25960_ADC_CURR_STEP_uA) /1000;//mA
+
+	return (ibat_adc * BQ25960_ADC_CURR_STEP_uA) /1000; //mA
+
+}
+#else
 static int bq25980_get_adc_ibus(struct bq25980_device *bq)
 {
 	int ibus_adc_lsb, ibus_adc_msb;
@@ -898,6 +981,7 @@ static int bq25980_get_adc_vbat(struct bq25980_device *bq)
 
 	return (vsys_adc * bq->chip_info->adc_vbat_volt_step / 10) /1000;//mV
 }
+#endif
 
 static int bq25980_get_state(struct bq25980_device *bq,
 				struct bq25980_state *state)
@@ -1196,7 +1280,11 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		ret = bq25980_bulk_get_ibat(bq);
+#else
 		ret = bq25980_get_ibat_adc(bq);
+#endif
 		if (ret < 0)
 			return ret;
 
@@ -1204,7 +1292,11 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		ret = bq25980_bulk_get_vbat(bq);
+#else
 		ret = bq25980_get_adc_vbat(bq);
+#endif
 		if (ret < 0)
 			return ret;
 
@@ -1226,6 +1318,7 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 
 		val->intval = ret;
 		break;
+#ifndef CONFIG_MMI_BQ25980_BULK_READ
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT:
 		ret = bq25980_get_adc_vbus(bq);
 		if (ret < 0)
@@ -1233,9 +1326,13 @@ static int bq25980_get_charger_property(struct power_supply *psy,
 
 		val->intval = ret;
 		break;
-
+#endif
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		ret = bq25980_bulk_get_ibus(bq);
+#else
 		ret = bq25980_get_adc_ibus(bq);
+#endif
 		if (ret < 0)
 			return ret;
 
@@ -1377,7 +1474,9 @@ static enum power_supply_property bq25980_power_supply_props[] = {
 //	POWER_SUPPLY_PROP_CHARGING_ENABLED,//undeclared identifier
 //	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 //	POWER_SUPPLY_PROP_CURRENT_NOW,
+#ifndef CONFIG_MMI_BQ25980_BULK_READ
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT,
+#endif
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	//POWER_SUPPLY_PROP_CP_IRQ_STATUS,//undeclared identifier
 	//POWER_SUPPLY_PROP_CHIP_VERSION,
@@ -2086,7 +2185,11 @@ static ssize_t show_vbus(struct device *dev, struct device_attribute *attr, char
 		pr_err("[%s] chip not valid\n", bq->model_name);
 		return -ENODEV;
 	}
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+	vbus = bq25980_bulk_get_vbus(bq);
+#else
 	vbus = bq25980_get_adc_vbus(bq);
+#endif
 
 	return sprintf(buf, "%d\n", vbus);
 }
@@ -2176,7 +2279,11 @@ static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
 			pr_err("[%s] read online err\n", bq->model_name);
 		break;
 	case PSY_IIO_MMI_CP_INPUT_VOLTAGE_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		rc = bq25980_bulk_get_vbus(bq);
+#else
 		rc = bq25980_get_adc_vbus(bq);
+#endif
 		if ( rc < 0 ) {
 			pr_err("[%s] get_adc_vbus err %d\n", bq->model_name, rc);
 		}else {
@@ -2185,7 +2292,11 @@ static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
 		}
 		break;
 	case PSY_IIO_MMI_CP_INPUT_CURRENT_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		rc = bq25980_bulk_get_ibus(bq);
+#else
 		rc = bq25980_get_adc_ibus(bq);
+#endif
 		if ( rc < 0 ) {
 			pr_err("[%s] get_adc_ibus err %d\n", bq->model_name, rc);
 		}else {
@@ -2214,7 +2325,11 @@ static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
 		}
 		break;
 	case PSY_IIO_CURRENT_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		rc = bq25980_bulk_get_ibat(bq);
+#else
 		rc = bq25980_get_ibat_adc(bq);
+#endif
 		if ( rc < 0) {
 			pr_err("[%s] get_ibat_adc err %d\n", bq->model_name, rc);
 		}else {
@@ -2223,7 +2338,11 @@ static int bq25980_iio_read_raw(struct iio_dev *indio_dev,
 		}
 		break;
 	case PSY_IIO_VOLTAGE_NOW:
+#ifdef CONFIG_MMI_BQ25980_BULK_READ
+		rc = bq25980_bulk_get_vbat(bq);
+#else
 		rc = bq25980_get_adc_vbat(bq);
+#endif
 		if ( rc < 0 ) {
 			pr_err("[%s] get_adc_vbat err %d\n", bq->model_name, rc);
 		}else {
