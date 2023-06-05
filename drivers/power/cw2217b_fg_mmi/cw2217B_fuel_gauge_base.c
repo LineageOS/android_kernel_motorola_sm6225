@@ -406,6 +406,30 @@ static int cw_get_ui_full(struct cw_battery *cw_bat, int *ui_full) {
 }
 #endif
 
+static void cw_get_batt_status(struct cw_battery *cw_bat)
+{
+	long batt_curr = 0;
+	batt_curr = cw_bat->cw_current * CW_CUR_UNIT * (-1);
+	batt_curr *= cw_bat->ibat_polority;
+
+	if (cw_bat->voltage <= 0 || cw_bat->temp <= CW_BPD_TEMP)
+		cw_bat->present = 0;
+	else
+		cw_bat->present = 1;
+
+	if (!cw_bat->present) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_UNKNOWN;
+	} else if (cw_bat->ui_soc == CW_UI_FULL) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
+	} else if (abs(batt_curr) < CW_CUR_ACCURACY) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+	} else if (batt_curr > 0) {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
+	} else {
+		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+	}
+}
+
 static int cw_get_capacity(struct cw_battery *cw_bat)
 {
 	int ret;
@@ -422,6 +446,8 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 	static int ui_full_pre = 0;
 	int ui_full_temp = 0;
 #endif
+
+	cw_get_batt_status(cw_bat);
 
 	if (cw_bat->batt_status == POWER_SUPPLY_STATUS_CHARGING)
 		chr_st_now = 1;
@@ -1072,30 +1098,6 @@ static int cw_battery_set_property(struct power_supply *psy,
 	}
 
 	return ret;
-}
-
-static void cw_get_batt_status(struct cw_battery *cw_bat)
-{
-	long batt_curr = 0;
-	batt_curr = cw_bat->cw_current * CW_CUR_UNIT * (-1);
-	batt_curr *= cw_bat->ibat_polority;
-
-	if (cw_bat->voltage <= 0 || cw_bat->temp <= CW_BPD_TEMP)
-		cw_bat->present = 0;
-	else
-		cw_bat->present = 1;
-
-	if (!cw_bat->present) {
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_UNKNOWN;
-	} else if (cw_bat->ui_soc == CW_UI_FULL) {
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
-	} else if (abs(batt_curr) < CW_CUR_ACCURACY) {
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-	} else if (batt_curr > 0) {
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
-	} else {
-		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
-	}
 }
 
 static unsigned int cw_get_charge_counter(struct cw_battery *cw_bat)
