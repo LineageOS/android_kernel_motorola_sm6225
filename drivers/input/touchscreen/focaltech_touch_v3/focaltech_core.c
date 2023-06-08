@@ -1593,6 +1593,11 @@ int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
             fts_pinctrl_select_suspend(ts_data);
 			}
 #endif
+            if (gpio_is_valid(ts_data->pdata->reset_gpio)) {
+                gpio_direction_output(ts_data->pdata->reset_gpio, 0);
+                FTS_INFO("Set gpio_reset to 0 success");
+            }
+
             ts_data->power_disabled = true;
         }
     }
