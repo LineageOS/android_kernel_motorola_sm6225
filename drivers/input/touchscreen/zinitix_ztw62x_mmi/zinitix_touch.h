@@ -51,8 +51,8 @@
 
 
 #define CHIP_OFF_DELAY			70 /*ms*/
-#define CHIP_ON_DELAY			200//100 /*ms*/
-#define FIRMWARE_ON_DELAY		150//40 /*ms*/
+#define CHIP_ON_DELAY			50 //100 /*ms*/
+#define FIRMWARE_ON_DELAY		50 //40 /*ms*/
 
 #define DELAY_FOR_SIGNAL_DELAY		30 /*us*/
 #define DELAY_FOR_TRANSCATION		50
