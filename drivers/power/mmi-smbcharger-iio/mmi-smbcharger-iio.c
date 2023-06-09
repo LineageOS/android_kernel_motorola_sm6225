@@ -2431,7 +2431,7 @@ static void mmi_chrg_usb_vin_pd_config(struct smb_mmi_charger *chg, int vbus_mv)
 				&& chg->mmi_pdo_info[i].uv_max >= MICRO_5V) {
 				req_pdo = chg->mmi_pdo_info[i].pdo_pos;
 				req_pd_volt = chg->mmi_pdo_info[i].uv_max;
-				req_pd_curr =  (chg->pd_power_max / (req_pd_volt / 1000)) * 1000;
+				req_pd_curr =  min((chg->pd_power_max / (req_pd_volt / 1000)) * 1000,chg->mmi_pdo_info[i].ua);
 				fixed_active = true;
 			}
 		}
