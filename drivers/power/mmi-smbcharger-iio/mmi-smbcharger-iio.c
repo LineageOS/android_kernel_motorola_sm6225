@@ -456,6 +456,8 @@ struct smb_mmi_charger {
 	bool			vbus_enabled;
 	int			prev_chg_rate;
 	int 			charger_rate;
+	int			power_watt;
+	int			pd_power;
 	int 			age;
 	int 			cycles;
 	int 			soc_cycles_start;
@@ -2384,6 +2386,7 @@ static void mmi_chrg_usb_vin_pd_config(struct smb_mmi_charger *chg, int vbus_mv)
 	if (!pd_active || !vbus_present) {
 		fsw_setted = false;
 		fixed_power_done = false;
+		chg->pd_power = 0;
 		return;
 	}
 
@@ -2412,6 +2415,7 @@ static void mmi_chrg_usb_vin_pd_config(struct smb_mmi_charger *chg, int vbus_mv)
 			req_pd_volt = (chg->pd_power_max * 1000 / (req_pd_curr / 1000)) * 1000 - req_pd_volt;
 			req_pd_volt = max(req_pd_volt, PPS_VOLT_MIN);
 			req_pd_volt = min(req_pd_volt, chg->mmi_pdo_info[i].uv_max);
+			chg->pd_power = chg->pd_power_max;
 			pps_active = true;
 			break;
 		}
@@ -2432,6 +2436,7 @@ static void mmi_chrg_usb_vin_pd_config(struct smb_mmi_charger *chg, int vbus_mv)
 				req_pdo = chg->mmi_pdo_info[i].pdo_pos;
 				req_pd_volt = chg->mmi_pdo_info[i].uv_max;
 				req_pd_curr =  min((chg->pd_power_max / (req_pd_volt / 1000)) * 1000,chg->mmi_pdo_info[i].ua);
+				chg->pd_power = ((req_pd_volt/1000) * req_pd_curr)/1000;
 				fixed_active = true;
 			}
 		}
@@ -3564,6 +3569,70 @@ static void smb_mmi_power_supply_changed(struct power_supply *psy,
 	power_supply_changed(psy);
 }
 
+static void smb_mmi_power_watt_report(struct smb_mmi_charger *chip)
+{
+	char *uevent_string = NULL;
+	char *envp[2];
+
+	uevent_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
+	if (!uevent_string) {
+		mmi_err(chip, "Failed to Get Uevent Mem\n");
+		envp[0] = NULL;
+	} else {
+		scnprintf(uevent_string, CHG_SHOW_MAX_SIZE,
+			  "POWER_SUPPLY_POWER_WATT=%d",
+			  chip->power_watt / 1000);
+		envp[0] = uevent_string;
+		envp[1] = NULL;
+	}
+
+	if (chip->batt_psy) {
+		smb_mmi_power_supply_changed(chip->batt_psy, envp);
+	} else if (chip->qcom_psy) {
+		smb_mmi_power_supply_changed(chip->qcom_psy, envp);
+	}
+
+	kfree(uevent_string);
+}
+
+static int smb_mmi_get_chg_info(struct smb_mmi_charger *chip, struct smb_mmi_chg_status *stat)
+{
+	int usb_type;
+	int usb_icl;
+	int power_watt = 0;
+
+	if (stat->charger_present) {
+		usb_type = chip->real_charger_type;
+		if (usb_type == POWER_SUPPLY_TYPE_USB)
+			power_watt = 2500;
+		else if (usb_type == POWER_SUPPLY_TYPE_USB_CDP)
+			power_watt = 7500;
+		else if (usb_type == POWER_SUPPLY_TYPE_USB_DCP)
+			power_watt = 1000;
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP)
+			power_watt = chip->hvdcp_power_max;
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
+			power_watt = chip->hvdcp_power_max;
+		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
+			power_watt = 30000;
+		else if (chip->pd_pps_active) {
+			if (chip->pd_pps_active == QTI_POWER_SUPPLY_PD_PPS_ACTIVE)
+				power_watt = 30000;
+			else
+				power_watt = (chip->pd_power != 0) ? chip->pd_power : 2500;
+		} else {
+			power_watt = 2500;
+		}
+
+		usb_icl = get_effective_result(chip->usb_icl_votable);
+		if (power_watt < (usb_icl * 5 / 1000))
+			power_watt = usb_icl * 5 / 1000;
+
+	}
+
+	return power_watt;
+}
+
 static int factory_kill_disable;
 module_param(factory_kill_disable, int, 0644);
 #define TWO_VOLT 2000000
@@ -3583,6 +3652,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 	int flip_cap = 0;
 	int flip_cap_full = 0;
 	int flip_age = 0;
+	int power_watt = 0;
 	int cap_err;
 	int report_cap;
 	int pc_online;
@@ -3702,6 +3772,7 @@ static void mmi_heartbeat_work(struct work_struct *work)
 		mmi_warn(chip, "Factory Mode/Image so Limiting Charging!!!\n");
 
 	mmi_chrg_input_config(chip, &chg_stat);
+	power_watt = smb_mmi_get_chg_info(chip,&chg_stat);
 
 	if (chip->max_main_psy && chip->max_flip_psy) {
 		cap_err = 0;
@@ -3944,6 +4015,12 @@ sch_hb:
 
 	if (!chg_stat.charger_present)
 		smb_mmi_awake_vote(chip, false);
+
+	if ((chip->power_watt / 1000) != (power_watt / 1000)) {
+		chip->power_watt = power_watt;
+		smb_mmi_power_watt_report(chip);
+		mmi_info(chip, "charger power is %d mW\n", chip->power_watt);
+	}
 
 	chrg_rate_string = kmalloc(CHG_SHOW_MAX_SIZE, GFP_KERNEL);
 	if (!chrg_rate_string) {
