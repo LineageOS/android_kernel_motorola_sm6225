@@ -47,7 +47,7 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 {
 	struct device_node *chosen;
 	struct ts_mmi_dev_pdata *ppdata = &touch_cdev->pdata;
-	u32 coords[2];
+	u32 coords[4];
 
 	dev_info(DEV_TS, "%s: Start parse touchscreen mmi device tree.\n", __func__);
 	if (!of_property_read_string(of_node, "mmi,class-entry-name", &ppdata->class_entry_name))
@@ -170,6 +170,20 @@ int ts_mmi_parse_dt(struct ts_mmi_dev *touch_cdev,
 	if (of_property_read_bool(of_node, "mmi,support-liquid-detection")) {
 		dev_info(DEV_TS, "%s: support liquid detection\n", __func__);
 		ppdata->support_liquid_detection = true;
+	}
+
+	if (!of_property_read_u32_array(of_node, "mmi,clip-area", coords, 4)) {
+		ppdata->clip_area_ctrl = true;
+		touch_cdev->clip.xUL = coords[0];
+		touch_cdev->clip.yUL = coords[1];
+		touch_cdev->clip.xBR = coords[2];
+		touch_cdev->clip.yBR = coords[3];
+		if (of_property_read_bool(of_node, "mmi,clip-inversion"))
+			touch_cdev->clip.inversion = true;
+		dev_info(DEV_TS, "%s: clip %sarea: (%u,%u) (%u,%u)\n", __func__,
+			touch_cdev->clip.inversion ? "IN " : "OUT ",
+			touch_cdev->clip.xUL, touch_cdev->clip.yUL,
+			touch_cdev->clip.xBR, touch_cdev->clip.yBR);
 	}
 
 	chosen = of_find_node_by_name(NULL, "chosen");

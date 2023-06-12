@@ -809,6 +809,29 @@ static int ts_mmi_default_pinctrl(struct device *parent, int on)
 	return 0;
 }
 
+static int ts_mmi_clip_event_handler(struct device *parent,
+			struct touch_event_data *tev, struct input_dev *input_dev)
+{
+	struct ts_mmi_dev *touch_cdev = ts_mmi_dev_to_cdev(parent);
+	bool inside;
+
+	inside = (tev->x >= touch_cdev->clip.xUL) && (tev->x <= touch_cdev->clip.xBR) &&
+		 (tev->y >= touch_cdev->clip.yUL) && (tev->y <= touch_cdev->clip.yBR);
+
+	if (inside == touch_cdev->clip.inversion) {
+		if (tev->type == TS_COORDINATE_ACTION_MOVE) {
+			/* cancel active touch when it falls off the clip area */
+			input_mt_slot(input_dev, tev->id);
+			input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
+			/* indicate cancelled touch to vendor driver */
+			tev->type = TS_COORDINATE_ACTION_FORCE_LIFT;
+		}
+		tev->skip_report = true;
+	}
+
+	return 0;
+}
+
 /**
  * ts_mmi_dev_register - register a new object of ts_mmi_dev class.
  * @parent: The device to register.
@@ -953,6 +976,11 @@ int ts_mmi_dev_register(struct device *parent,
 				__func__, ret);
 			goto GESTURE_INIT_FAILED;
 		}
+	}
+
+	if (touch_cdev->pdata.clip_area_ctrl) {
+		/* export report touch event function to vendor */
+		touch_cdev->mdata->exports.clip_touch_event = ts_mmi_clip_event_handler;
 	}
 
 	dev_info(DEV_TS, "Registered touchscreen device: %s.\n", class_fname);
