@@ -1199,6 +1199,8 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 #ifdef CONFIG_GTP_FOD
 	struct goodix_ts_event *ts_event = &goodix_modules.core_data->ts_event;
 #endif
+	enum touch_event_mode type;
+
 	mutex_lock(&dev->mutex);
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
 		if (touch_data->coords[i].status == TS_TOUCH) {
@@ -1211,7 +1213,32 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				ts_debug("TOUCH: [%d] logged timestamp\n", i);
 #endif
 				touchdown[i] = 1;
+				type = TS_COORDINATE_ACTION_PRESS;
+			} else
+				type = TS_COORDINATE_ACTION_MOVE;
+
+			/* clip area handling */
+			if (core_data->imports && core_data->imports->clip_touch_event) {
+				struct touch_event_data tev;
+				memset(&tev, 0, sizeof(tev));
+				tev.type = type; /* differentiate PRESS and MOVE */
+				tev.id = i;
+				tev.x = touch_data->coords[i].x;
+				tev.y = touch_data->coords[i].y;
+				core_data->imports->clip_touch_event(core_data->bus->dev, &tev, dev);
+				if (tev.skip_report) {
+					/* if active touch get clipped, */
+					/* need to cancel it properly */
+					if (tev.type == TS_COORDINATE_ACTION_FORCE_LIFT) {
+						/* prevent sending BTN_TOUCH event */
+						touch_num--;
+					}
+					/* input event should not be reported */
+					continue;
+				}
 			}
+			/* end of clip area handling */
+
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
 			input_report_abs(dev, ABS_MT_POSITION_X,
