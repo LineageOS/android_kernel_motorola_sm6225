@@ -2090,7 +2090,12 @@ static int sc760x_suspend(struct device *dev)
     disable_irq(sc->irq);
     ret = sc760x_set_adc_enable(sc, false);
     if (ret < 0) {
-        dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
+        dev_err(sc->dev, "%s Failed to disable adc(%d)\n", __func__, ret);
+    }
+
+    ret = sc760x_set_lowpower_mode(sc, true);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to enter lowpower(%d)\n", __func__, ret);
     }
 
     return 0;
@@ -2103,6 +2108,12 @@ static int sc760x_resume(struct device *dev)
     if (device_may_wakeup(dev))
         disable_irq_wake(sc->irq);
     enable_irq(sc->irq);
+
+    ret = sc760x_set_lowpower_mode(sc, false);
+    if (ret < 0) {
+        dev_err(sc->dev, "%s Failed to exit lowpower(%d)\n", __func__, ret);
+    }
+
     ret = sc760x_set_adc_enable(sc, true);
     if (ret < 0) {
         dev_err(sc->dev, "%s Failed to enable adc(%d)\n", __func__, ret);
