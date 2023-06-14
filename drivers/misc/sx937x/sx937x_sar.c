@@ -205,12 +205,15 @@ static int sx937x_Hardware_Check(psx93XX_t this)
 
 	//Check I2C Connection
 	ret = sx937x_i2c_read_16bit(this, SX937X_DEVICE_INFO, &idCode);
-	if(ret < 0)
+	if (ret < 0)
 	{
 		this->failStatusCode = SX937x_I2C_ERROR;
+		LOG_ERR("Failed to read device info:failcode = 0x%x\n",this->failStatusCode);
+
+		return ret;
 	}
 
-	if(idCode >> 12 != SX937X_WHOAMI_VALUE >> 4)
+	if (idCode >> 12 != SX937X_WHOAMI_VALUE >> 4)
 	{
 		this->failStatusCode = SX937x_ID_ERROR;
 	}
@@ -294,13 +297,13 @@ static void read_dbg_raw(psx93XX_t this)
 	sx937x_i2c_read_16bit(this, SX937X_USEFUL_PH0 + ph*4, &uData);
 	ant_use = (s32)uData>>10;
 
-		sx937x_i2c_read_16bit(this, SX937X_AVERAGE_PH0 + ph*4, &uData);
-		avg = (s32)uData>>10;
-		sx937x_i2c_read_16bit(this, SX937X_DIFF_PH0 + ph*4, &uData);
-		diff = (s32)uData>>10;
-		sx937x_i2c_read_16bit(this, SX937X_OFFSET_PH0 + ph*4*3, &uData);
-		off = (u16)(uData & 0x3FFF);
-		state = psmtcButtons[ph].state;
+	sx937x_i2c_read_16bit(this, SX937X_AVERAGE_PH0 + ph*4, &uData);
+	avg = (s32)uData>>10;
+	sx937x_i2c_read_16bit(this, SX937X_DIFF_PH0 + ph*4, &uData);
+	diff = (s32)uData>>10;
+	sx937x_i2c_read_16bit(this, SX937X_OFFSET_PH0 + ph*4*3, &uData);
+	off = (u16)(uData & 0x3FFF);
+	state = psmtcButtons[ph].state;
 
 	LOG_DBG("SMTC_DBG PH= %d USE= %d RAW= %d PH%d_USE= %d PH%d_USE= %d PH%d_USE= %d STATE= %d AVG= %d DIFF= %d OFF= %d ADC_MIN= %d ADC_MAX= %d DLT= %d SMTC_END\n",
 	ph,    ant_use, ant_raw, ref_ph_a, ref_a_use,  ref_ph_b, ref_b_use, ref_ph_c, ref_c_use,    state,    avg,    diff,    off,    adc_min,   adc_max,    use_flt_dlt_var);
@@ -638,13 +641,14 @@ static void sx937x_reg_init(psx93XX_t this)
 	psx937x_platform_data_t pdata = 0;
 	int i = 0;
 	//uint32_t tmpvalue;
+
 	/* configure device */
 	if (this && (pDevice = this->pDevice) && (pdata = pDevice->hw))
 	{
 		/*******************************************************************************/
 		// try to initialize from device tree!
 		/*******************************************************************************/
-	#if 0
+#if 0
 		while ( i < ARRAY_SIZE(sx937x_i2c_reg_setup))
 		{
 			/* Write all registers/values contained in i2c_reg */
@@ -661,7 +665,7 @@ static void sx937x_reg_init(psx93XX_t this)
 			sx937x_i2c_write_16bit(this, sx937x_i2c_reg_setup[i].reg, tmpvalue);
 			i++;
 		}
-	#endif
+#endif
 #ifdef USE_DTS_REG
 		if (this->reg_in_dts == true)
 		{
@@ -1359,8 +1363,8 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	this = devm_kzalloc(&client->dev,sizeof(sx93XX_t), GFP_KERNEL); /* create memory for main struct */
 	LOG_DBG("Initialized Main Memory: 0x%p\n",this);
 	if (!this){
-	LOG_ERR("Failed to create this \n");
-	return -ENOMEM;
+		LOG_ERR("Failed to create this \n");
+		return -ENOMEM;
 	}
 
 	/* setup i2c communication */
@@ -1369,8 +1373,6 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	/* record device struct */
 	this->pdev = &client->dev;
-
-
 
 	pButtonInformationData = devm_kzalloc(&client->dev , sizeof(struct totalButtonInformation), GFP_KERNEL);
 	if (!pButtonInformationData)
@@ -1402,51 +1404,51 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 	pplatData->init_platform_hw = sx937x_init_platform_hw;
 	LOG_INFO("SX937x init_platform_hw done!\n");
 
-	switch(pplatData->power_supply_type){
-			case SX937X_POWER_SUPPLY_TYPE_PMIC_LDO:
-				pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
-				if (IS_ERR(pplatData->cap_vdd)) {
-					if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
-						err = PTR_ERR(pplatData->cap_vdd);
-						return err;
-					}
-					LOG_INFO("Failed to get regulator\n");
-				} else {
-					LOG_INFO("with cap_vdd\n");
-					err = regulator_enable(pplatData->cap_vdd);
-					if (err) {
-						regulator_put(pplatData->cap_vdd);
-						LOG_ERR("Error %d enable regulator\n",
-								err);
-						return err;
-					}
-					pplatData->cap_vdd_en = true;
-					LOG_INFO("cap_vdd regulator is %s\n",
-					regulator_is_enabled(pplatData->cap_vdd) ?
-									"on" : "off");
-					msleep(10);
-				}
-				break;
-			case SX937X_POWER_SUPPLY_TYPE_ALWAYS_ON:
-				LOG_INFO("using always on power supply\n");
-				break;
-			case SX937X_POWER_SUPPLY_TYPE_EXTERNAL_LDO:
-				LOG_INFO("enable external LDO, en_gpio:%d\n",
-						 pplatData->eldo_gpio);
-				err = gpio_request(pplatData->eldo_gpio, "sx937x_eldo_gpio");
-				if (err < 0){
-					LOG_ERR("SX937x Request eLDO gpio. Fail![%d]\n", err);
+	switch(pplatData->power_supply_type) {
+		case SX937X_POWER_SUPPLY_TYPE_PMIC_LDO:
+			pplatData->cap_vdd = regulator_get(&client->dev, "cap_vdd");
+			if (IS_ERR(pplatData->cap_vdd)) {
+				if (PTR_ERR(pplatData->cap_vdd) == -EPROBE_DEFER) {
+					err = PTR_ERR(pplatData->cap_vdd);
 					return err;
 				}
-				err = gpio_direction_output(pplatData->eldo_gpio,1);
-				if(err < 0){
-					LOG_ERR("can not enable external LDO,%d", err);
+				LOG_INFO("Failed to get regulator\n");
+			} else {
+				LOG_INFO("with cap_vdd\n");
+				err = regulator_enable(pplatData->cap_vdd);
+				if (err) {
+					regulator_put(pplatData->cap_vdd);
+					LOG_ERR("Error %d enable regulator\n",
+							err);
 					return err;
 				}
-				pplatData->eldo_vdd_en = true;
-				msleep(20);
-				break;
-		}
+				pplatData->cap_vdd_en = true;
+				LOG_INFO("cap_vdd regulator is %s\n",
+				regulator_is_enabled(pplatData->cap_vdd) ?
+								"on" : "off");
+				msleep(10);
+			}
+			break;
+		case SX937X_POWER_SUPPLY_TYPE_ALWAYS_ON:
+			LOG_INFO("using always on power supply\n");
+			break;
+		case SX937X_POWER_SUPPLY_TYPE_EXTERNAL_LDO:
+			LOG_INFO("enable external LDO, en_gpio:%d\n",
+					 pplatData->eldo_gpio);
+			err = gpio_request(pplatData->eldo_gpio, "sx937x_eldo_gpio");
+			if (err < 0){
+				LOG_ERR("SX937x Request eLDO gpio. Fail![%d]\n", err);
+				return err;
+			}
+			err = gpio_direction_output(pplatData->eldo_gpio,1);
+			if(err < 0){
+				LOG_ERR("can not enable external LDO,%d", err);
+				return err;
+			}
+			pplatData->eldo_vdd_en = true;
+			msleep(20);
+			break;
+	}
 
 	if (sx937x_Hardware_Check(this) != 0) {
 		LOG_ERR("sx937x_Hardware_Check Fail!\n");
@@ -1481,8 +1483,6 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 			this->statusFunc[6] = touchProcess; /* TOUCH_STAT  */
 			this->statusFunc[7] = 0; /* RESET_STAT */
 		}
-
-
 
 		/* create memory for device specific struct */
 		this->pDevice = pDevice = devm_kzalloc(&client->dev,sizeof(sx937x_t), GFP_KERNEL);
@@ -1550,8 +1550,6 @@ static int sx937x_probe(struct i2c_client *client, const struct i2c_device_id *i
 				}
 			}
 		}
-
-
 
 #ifdef CONFIG_CAPSENSE_USB_CAL
 		/*notify usb state*/
@@ -1624,11 +1622,11 @@ FREE_PMIC:
 	if (pplatData->cap_vdd_en) {
 		regulator_disable(pplatData->cap_vdd);
 		regulator_put(pplatData->cap_vdd);
-		}
+	}
 
 	if(pplatData->eldo_vdd_en){
 		gpio_direction_output(pplatData->eldo_gpio,0);
-		}
+	}
 	return -ENXIO;
 }
 
