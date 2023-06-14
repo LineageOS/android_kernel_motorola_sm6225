@@ -3639,11 +3639,12 @@ static void inline fts_resume_work(struct work_struct *work)
 void fts_suspend_func(struct fts_ts_info *info)
 {
 	logError(1, "%s %s: enter\n", tag, __func__);
-	PM_WAKEUP_EVENT(info->wakesrc, jiffies_to_msecs(HZ));
+	PM_STAY_AWAKE(info->wakesrc);
 	info->resume_bit = 0;
 	fts_mode_handler(info, 0);
 	release_all_touches(info);
 	info->sensor_sleep = true;
+	PM_RELAX(info->wakesrc);
 }
 
 /**
