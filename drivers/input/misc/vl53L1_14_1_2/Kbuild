@@ -2,7 +2,7 @@
 # Kbuild for the vl53L1 drivers.
 #
 
-EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -Wall -Wno-unused-but-set-variable
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1_14_1_2/inc \
 				-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1_14_1_2/ipp \
