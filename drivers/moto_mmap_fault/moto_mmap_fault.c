@@ -33,11 +33,19 @@ static void __nocfi filemap_fault_get_page(void *p, struct vm_fault *vmf, struct
     struct file *file = vmf->vma->vm_file;
     pgoff_t offset = vmf->pgoff;
     struct page *page = NULL;
-    struct file_ra_state *ra = &file->f_ra;
-    struct address_space *mapping = file->f_mapping;
+    struct file_ra_state *ra = NULL;
+    struct address_space *mapping = NULL;
     unsigned int mmap_miss;
     unsigned int old_ra_pages = 0;
 
+    if (!file)
+        return;
+
+    ra = &file->f_ra;
+    if(!ra)
+        return;
+
+    mapping = file->f_mapping;
     if (page_cache_get_page_func)
         page = page_cache_get_page_func(mapping, offset, 0, 0);
 
@@ -69,7 +77,15 @@ static void __nocfi filemap_fault_get_page(void *p, struct vm_fault *vmf, struct
 static void __nocfi filemap_fault_cache_page(void *p, struct vm_fault *vmf, struct page *page)
 {
     struct file *file = vmf->vma->vm_file;
-    struct file_ra_state *ra = &file->f_ra;
+    struct file_ra_state *ra = NULL;
+
+    if (!file)
+        return;
+
+    ra = &file->f_ra;
+    if(!ra)
+        return;
+
     if ((ra->ra_pages == max_ra_pages) && (vmf->android_oem_data1[0] != 0) && (vmf->android_oem_data1[1] != 0)) {
         ra->ra_pages = (unsigned long)vmf->android_oem_data1[0]; //restore the old ra_pages
         vmf->android_oem_data1[0] = 0;
