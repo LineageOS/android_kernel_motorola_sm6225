@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2023 Motorola Mobility LLC
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 #ifdef    CONFIG_CTS_I2C_HOST
 #define LOG_TAG         "I2CDrv"
 #else
@@ -11,6 +24,9 @@
 #include "cts_charger_detect.h"
 #include "cts_earjack_detect.h"
 #include "cts_oem.h"
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+#include <linux/mmi_device.h>
+#endif
 
 static void cts_resume_work_func(struct work_struct *work);
 #ifdef CFG_CTS_DRM_NOTIFIER
@@ -356,6 +372,12 @@ static int cts_driver_probe(struct spi_device *client)
     {
         struct device_node *dp = client->dev.of_node;
 
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+        if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+            cts_err("%s : mmi: device not supported\n", __func__);
+            return -ENODEV;
+        }
+#endif
         if (check_dt(dp)) {
             if (!check_default_tp(dp, "qcom,i2c-touch-active"))
                 ret = -EPROBE_DEFER;

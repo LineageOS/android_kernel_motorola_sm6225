@@ -22,6 +22,10 @@ ifneq ($(MOTO_PANEL_CHECK_TOUCH_STATE),)
 	KERNEL_CFLAGS += CONFIG_INPUT_CHIPONE_0FLASH_MMI_NOTIFY_TOUCH_STATE=y
 endif
 
+ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+      KBUILD_OPTIONS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
+ endif
+
 include $(CLEAR_VARS)
 ifneq ($(BOARD_USES_DOUBLE_TAP),)
 LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/sensors_class.ko
@@ -29,4 +33,8 @@ endif
 LOCAL_MODULE := chipone_tddi_v2_mmi.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(CHIPONE_MMI_MODULE_PATH)
+LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/mmi_info.ko
+ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+	LOCAL_ADDITIONAL_DEPENDENCIES += $(KERNEL_MODULES_OUT)/touchscreen_mmi.ko
+endif
 include $(DLKM_DIR)/AndroidKernelModule.mk
