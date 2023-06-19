@@ -63,6 +63,8 @@
 #define CPS_WLS_CHRG_DRV_NAME "cps-wls-charger"
 
 #define CPS_WLS_CHRG_PSY_NAME "wireless"
+#define FAN_CAPABILITY		(1 << 2)
+#define LIGHT_CAPABILITY	(1 << 5)
 
 /*****************************************************************************
  *  Log
@@ -1805,6 +1807,16 @@ static ssize_t show_wlc_tx_type(struct device *dev, struct device_attribute *att
 
 static DEVICE_ATTR(wlc_tx_type, 0444, show_wlc_tx_type, NULL);
 
+static ssize_t show_wlc_tx_capability(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    if (chip->op_mode == MMI_WLC_MOTO)
+        return sprintf(buf, "%d\n", FAN_CAPABILITY | LIGHT_CAPABILITY);
+    else
+        return sprintf(buf, "%d\n", 0);
+}
+
+static DEVICE_ATTR(wlc_tx_capability, S_IRUGO, show_wlc_tx_capability, NULL);
+
 static ssize_t show_wlc_st_changed(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", chip->wlc_status);
@@ -1862,6 +1874,7 @@ static void cps_wls_create_device_node(struct device *dev)
 	device_create_file(dev, &dev_attr_wlc_light_ctl);
 	device_create_file(dev, &dev_attr_wlc_tx_power);
 	device_create_file(dev, &dev_attr_wlc_tx_type);
+	device_create_file(dev, &dev_attr_wlc_tx_capability);
 	device_create_file(dev, &dev_attr_wlc_st_changed);
 
 	device_create_file(dev, &dev_attr_ppp_cmd);
