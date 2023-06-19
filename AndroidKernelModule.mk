@@ -1,4 +1,18 @@
+USE_NEW_DLKM_MK := false
+
 ifeq ($(call is-board-platform-in-list,taro kalama parrot), true)
+#Taro and beyond are using a new mechanisim to build kernel modules
+USE_NEW_DLKM_MK := true
+endif
+
+ifeq ($(TARGET_BOARD_PLATFORM), bengal)
+ifeq ($(TARGET_KERNEL_VERSION), 5.15)
+#new bengal uses new mechanisim to build kernel modules
+USE_NEW_DLKM_MK := true
+endif
+endif
+
+ifeq ($(USE_NEW_DLKM_MK), true)
 ifneq (,$(findstring $(LOCAL_MODULE),$(BOARD_VENDOR_KERNEL_MODULES)))
 #Taro and beyond are using a new mechanisim to build kernel modules
 include device/qcom/common/dlkm/Build_external_kernelmodule.mk
