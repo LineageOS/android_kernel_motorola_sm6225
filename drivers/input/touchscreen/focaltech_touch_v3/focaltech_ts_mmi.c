@@ -33,6 +33,7 @@
 #define BIG_MODE   1
 #define SMALL_MODE    2
 #define DEFAULT_MODE   0
+#define MAX_ATTRS_ENTRIES 10
 
 #define NORMAL_DEFAULT_MODE 10
 #define NORMAL_SMALL_MODE 11
@@ -43,6 +44,8 @@
 #define NORMAL_BIG_EDGE                   0x88
 
 #define FTS_CMD_REPORT_RATE_ADDR          0x8E
+#define FTS_CMD_SAMPLE_SWITCH             0x8A
+#define FTS_ACTIVE_LAST_TIME              10
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 //extern int ts_mmi_dev_register(struct device *parent, struct ts_mmi_methods *mdata);
 //extern void ts_mmi_dev_unregister(struct device *parent);
@@ -56,7 +59,6 @@
 	} \
 }
 
-#define MAX_ATTRS_ENTRIES 10
 static ssize_t fts_edge_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fts_edge_show(struct device *dev,
@@ -65,11 +67,18 @@ static ssize_t fts_interpolation_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fts_interpolation_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t fts_sample_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fts_sample_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
 
 static DEVICE_ATTR(edge, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_edge_show, fts_edge_store);
 static DEVICE_ATTR(interpolation, (S_IRUGO | S_IWUSR | S_IWGRP),
 	fts_interpolation_show, fts_interpolation_store);
+static DEVICE_ATTR(sample, (S_IRUGO | S_IWUSR | S_IWGRP),
+	fts_sample_show, fts_sample_store);
 
 #define ADD_ATTR(name) { \
 	if (idx < MAX_ATTRS_ENTRIES)  { \
@@ -118,13 +127,13 @@ int fts_set_edge_mode(struct fts_mode_info mode)
 		reg_value_8d = 2;
 		break;
 	case NORMAL_DEFAULT_EDGE:
-		reg_value_8d = 3;
-		break;
-	case NORMAL_SMALL_EDGE:
 		reg_value_8d = 4;
 		break;
-	case NORMAL_BIG_EDGE:
+	case NORMAL_SMALL_EDGE:
 		reg_value_8d = 5;
+		break;
+	case NORMAL_BIG_EDGE:
+		reg_value_8d = 6;
 		break;
 	default:
 		FTS_ERROR("Invalid edge mode!");
@@ -323,6 +332,69 @@ static ssize_t fts_interpolation_show(struct device *dev,
 
 	FTS_INFO("interpolation = %d.", ts_data->set_mode.interpolation);
 	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts_data->set_mode.interpolation);
+}
+
+static ssize_t fts_sample_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+	struct fts_ts_data *ts_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		FTS_INFO("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&ts_data->mode_lock);
+
+	if (mode >= 1)
+		mode = FTS_ACTIVE_LAST_TIME;
+
+	ts_data->get_mode.sample = mode;
+	if (ts_data->set_mode.sample == mode) {
+		FTS_DEBUG("The value = %lu is same, so not to write", mode);
+		ret = size;
+		goto exit;
+	}
+
+	if (ts_data->power_disabled) {
+		FTS_DEBUG("The touch is in sleep state, restore the value when resume\n");
+		ret = size;
+		goto exit;
+	}
+
+	if (mode >= 1)
+		mode = FTS_ACTIVE_LAST_TIME;
+	ret = fts_write_reg(FTS_CMD_SAMPLE_SWITCH, mode);
+	if (ret < 0) {
+		FTS_ERROR("failed to set report rate, mode = %lu", mode);
+		goto exit;
+	}
+
+	ts_data->set_mode.sample = mode;
+	FTS_INFO("Success to set %lu\n", mode);
+
+	ret = size;
+exit:
+	mutex_unlock(&ts_data->mode_lock);
+	return ret;
+}
+
+static ssize_t fts_sample_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_data *ts_data;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	FTS_INFO("sample = %d.\n", ts_data->set_mode.sample);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts_data->set_mode.sample);
 }
 
 static int fts_mmi_methods_get_vendor(struct device *dev, void *cdata)
@@ -726,6 +798,15 @@ exit:
 		}
 	}
 
+	if (pdata->sample_ctrl && ts_data->get_mode.sample) {
+		ret = fts_write_reg(FTS_CMD_REPORT_RATE_ADDR, ts_data->get_mode.sample);
+		if (ret >= 0) {
+			ts_data->set_mode.sample = ts_data->get_mode.sample;
+			msleep(20);
+			FTS_INFO("Success to %d sample mode\n", ts_data->get_mode.sample);
+		}
+	}
+
 	mutex_unlock(&ts_data->mode_lock);
 
 	FTS_FUNC_EXIT();
@@ -918,6 +999,9 @@ static int fts_mmi_extend_attribute_group(struct device *dev, struct attribute_g
 
 	if(pdata->pocket_mode_ctrl)
 		ADD_ATTR(pocket_mode);
+
+	if (pdata->sample_ctrl)
+		ADD_ATTR(sample);
 
 	if (idx) {
 		ext_attributes[idx] = NULL;

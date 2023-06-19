@@ -348,7 +348,7 @@ void fts_read_report_fod_event(struct fts_ts_data *ts_data)
     {
         if (fod_down == 1)
         {
-            FTS_INFO("Get FOD-UP normal");
+            //FTS_INFO("Get FOD-UP normal");
             input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY2, 1);
             input_sync(ts_data->input_dev);
             input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY2, 0);
@@ -358,7 +358,7 @@ void fts_read_report_fod_event(struct fts_ts_data *ts_data)
         }
         else if (fod_down == 0)
         {
-            FTS_INFO("Get FOD-DOWN normal");
+            //FTS_INFO("Get FOD-DOWN normal");
             if (last_fod_down == false)
             {
                 input_report_key(ts_data->input_dev, BTN_TRIGGER_HAPPY1, 1);

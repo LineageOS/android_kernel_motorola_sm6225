@@ -160,6 +160,7 @@ struct fts_ts_platform_data {
     bool edge_ctrl;
     bool interpolation_ctrl;
     bool report_rate_ctrl;
+    bool sample_ctrl;
 };
 
 struct ts_event {
@@ -171,12 +172,6 @@ struct ts_event {
     int area;
 };
 
-struct fts_mode_info {
-    int pocket_mode;
-    int interpolation;
-    int report_rate_mode;
-    int edge_mode[2];
-};
 
 #ifdef FOCALTECH_PALM_SENSOR_EN
 enum palm_sensor_lazy_set {
@@ -200,7 +195,13 @@ struct pen_event {
     int azimuth;
     int tool_type;
 };
-
+struct fts_mode_info {
+    int pocket_mode;
+    int interpolation;
+    int sample;
+    int report_rate_mode;
+    int edge_mode[2];
+};
 struct fts_ts_data {
     struct i2c_client *client;
     struct spi_device *spi;
@@ -309,15 +310,16 @@ struct fts_ts_data {
 #endif
 #endif
 
+    struct mutex mode_lock;
+    struct fts_mode_info set_mode;
+    struct fts_mode_info get_mode;
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
     struct ts_mmi_class_methods *imports;
 #endif
 #ifdef CONFIG_FTS_LAST_TIME
     ktime_t last_event_time;
 #endif
-    struct mutex mode_lock;
-    struct fts_mode_info set_mode;
-    struct fts_mode_info get_mode;
+
 };
 
 enum _FTS_BUS_TYPE {
