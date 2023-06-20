@@ -1193,9 +1193,8 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 	unsigned int touch_num = touch_data->touch_num;
 	int i;
 	static uint8_t touchdown[GOODIX_MAX_TOUCH];
-#if defined (CONFIG_GTP_FOD) || defined (CONFIG_GTP_LAST_TIME)
 	struct goodix_ts_core *core_data = goodix_modules.core_data;
-#endif
+
 #ifdef CONFIG_GTP_FOD
 	struct goodix_ts_event *ts_event = &goodix_modules.core_data->ts_event;
 #endif
