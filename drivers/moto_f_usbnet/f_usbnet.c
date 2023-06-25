@@ -1001,6 +1001,9 @@ static void usbnet_disable(struct usb_function *f)
 	struct usbnet_device  *dev = usbnet_func_to_dev(f);
 	struct usbnet_context *context = dev->net_ctxt;
 	USBNETDBG(context, "%s\n", __func__);
+#ifdef CONFIG_MOT_USB_DEBUG_LOG
+	dump_stack();
+#endif
 	do_set_config(f, 0);
 }
 
