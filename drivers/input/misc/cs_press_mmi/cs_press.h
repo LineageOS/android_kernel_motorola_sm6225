@@ -95,6 +95,7 @@
 #define POWER_GPIO_HIGH                 1
 #define POWER_GPIO_LOW                  0
 #define IIC_KEY_EVENT                   0xD3
+#define IIC_KEY_EVENT_MMI               0xD4
 #define CS_FORCE_TRIG_LENGTH            6
 #define CS_SCANT_PERIOD_LENGTH          4
 #define CS_WORK_MODE_LENGTH             3
@@ -190,8 +191,9 @@
 #define SHELL_TEMP_DELAY_TIME           (2000)
 #define CHECK_DELAY_TIME                (20000)
 #define I2C_CHECK_SCHEDULE
-/*#define INT_SET_EN*/
-#define SIDE_KEY
+#define INT_SET_EN
+//#define SIDE_KEY
+#define SIDE_KEY_MMI
 #define CALIBRATION_SUCCESS_FALG        0xf0
 #define CALIBRATION_FAIL_FALG           0xf2
 #define CALIBRATION_OVERTIME_FALG       0xff

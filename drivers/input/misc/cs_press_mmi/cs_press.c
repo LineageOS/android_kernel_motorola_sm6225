@@ -608,6 +608,40 @@ unsigned char get_key_event(void)
 */
 void fml_key_report(void)
 {
+#ifdef SIDE_KEY_MMI
+    unsigned char rbuf[6];
+    unsigned char addr;
+    int len = 0;
+
+    cs_press_wakeup_iic();
+
+    addr = IIC_KEY_EVENT_MMI;
+    len = 6;
+    memset(rbuf, 0x0, len);
+    if (cs_press_iic_read(addr, rbuf, len) != 0) {
+        LOG_ERR("reg=%02x, buf[0]=%02x, buf[1]=%02x, force=%d len=%d,err\n",
+            addr, rbuf[0], rbuf[1], (int16_t)((rbuf[5] << 8) + rbuf[4]), len);
+        return;
+    } else {
+        LOG_ERR("reg=%02x, buf[0]=%02x, buf[1]=%02x, force=%d len=%d,success\n",
+            addr, rbuf[0], rbuf[1], (int16_t)((rbuf[5] << 8) + rbuf[4]), len);
+    }
+
+    if(rbuf[0] == 1) {
+        LOG_ERR("vol down key.\n");
+        input_report_key(cs_input_dev, KEY_VOLUMEUP, 1);
+        input_sync(cs_input_dev);
+        input_report_key(cs_input_dev, KEY_VOLUMEUP, 0);
+        input_sync(cs_input_dev);
+    } else if(rbuf[1] == 1) {
+        LOG_ERR("vol up key.\n");
+        input_report_key(cs_input_dev, KEY_VOLUMEDOWN, 1);
+        input_sync(cs_input_dev);
+        input_report_key(cs_input_dev, KEY_VOLUMEDOWN, 0);
+        input_sync(cs_input_dev);
+    }
+#endif
+
 #ifdef SIDE_KEY
     unsigned char event = 0;
     event = get_key_event();
@@ -679,6 +713,7 @@ void eint_init(void)
 
     kthread_run(cs_press_event_handler, 0, CS_PRESS_NAME);
     cs_irq_disable();
+    cs_irq_enable();
     LOG_ERR("init_irq ok");
     fml_input_dev_init();
 }
@@ -2386,7 +2421,7 @@ int cs_check_i2c(void)
   * @retval
 */
 
-static void update_work_func(struct work_struct *worker)
+static void __maybe_unused update_work_func(struct work_struct *worker)
 {
     /*
     int ret;
