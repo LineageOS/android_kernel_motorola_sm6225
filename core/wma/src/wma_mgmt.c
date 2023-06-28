@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -3479,7 +3478,7 @@ int wma_form_rx_packet(qdf_nbuf_t buf,
 			if (status)
 				return status;
 		} else if (wma_find_vdev_id_by_addr(wma_handle, wh->i_addr1,
-					      &vdev_id)) {
+					      &vdev_id) == QDF_STATUS_SUCCESS) {
 			status = wma_check_and_process_rmf_frame(wma_handle,
 								 vdev_id,
 								 &wh,
