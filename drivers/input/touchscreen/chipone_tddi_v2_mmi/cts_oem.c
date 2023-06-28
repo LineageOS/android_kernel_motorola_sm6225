@@ -428,7 +428,6 @@ static void do_selftest(struct cts_oem_data *oem_data)
             CTS_TEST_FLAG_VALIDATE_MIN |
             CTS_TEST_FLAG_VALIDATE_MAX |
             CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-            CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
             CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE;
         test_param.min = &oem_data->rawdata_min;
         test_param.max = &oem_data->rawdata_max;
@@ -458,7 +457,6 @@ static void do_selftest(struct cts_oem_data *oem_data)
             CTS_TEST_FLAG_VALIDATE_DATA |
             CTS_TEST_FLAG_VALIDATE_MAX |
             CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-            CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
             CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE;
         test_param.max = &oem_data->noise_max;
         test_param.test_data_buf = oem_data->noise_test_data;
@@ -485,7 +483,6 @@ static void do_selftest(struct cts_oem_data *oem_data)
             CTS_TEST_FLAG_VALIDATE_DATA |
             CTS_TEST_FLAG_VALIDATE_MIN |
             CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-            CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
             CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE;
         test_param.min = &oem_data->open_min;
         test_param.test_data_buf = oem_data->open_test_data;
@@ -508,7 +505,6 @@ static void do_selftest(struct cts_oem_data *oem_data)
             CTS_TEST_FLAG_VALIDATE_DATA |
             CTS_TEST_FLAG_VALIDATE_MIN |
             CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-            CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
             CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE;
         test_param.min = &oem_data->short_min;
         test_param.test_data_buf = oem_data->short_test_data;
@@ -532,7 +528,6 @@ static void do_selftest(struct cts_oem_data *oem_data)
             CTS_TEST_FLAG_VALIDATE_MIN |
             CTS_TEST_FLAG_VALIDATE_MAX |
             CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-            CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
             CTS_TEST_FLAG_DUMP_TEST_DATA_TO_USERSPACE;
         test_param.min = &oem_data->comp_cap_min;
         test_param.max = &oem_data->comp_cap_max;
@@ -1243,7 +1238,7 @@ static const struct proc_ops cts_limit_ops = {
 
 static int cts_factory_test_show(struct seq_file *m, void *v)
 {
-#define TOUCH_DATA_DIRECTORY_PREFIX           "/sdcard/chipone-tddi/test"
+#define TOUCH_DATA_DIRECTORY_PREFIX           "/sdcard"
 #define RAWDATA_TEST_DATA_FILENAME            "rawdata-test-data.txt"
 #define NOISE_TEST_DATA_FILENAME              "noise-test-data.txt"
 #define OPEN_TEST_DATA_FILENAME               "open-test-data.txt"
@@ -1275,7 +1270,6 @@ static int cts_factory_test_show(struct seq_file *m, void *v)
                  CTS_TEST_FLAG_VALIDATE_MIN |
                  CTS_TEST_FLAG_VALIDATE_MAX |
                  CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-                 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
                  CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
         .test_data_filepath = NULL,
         .num_invalid_node = 0,
@@ -1294,7 +1288,6 @@ static int cts_factory_test_show(struct seq_file *m, void *v)
         .flags = CTS_TEST_FLAG_VALIDATE_DATA |
                  CTS_TEST_FLAG_VALIDATE_MAX |
                  CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-                 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
                  CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
         .test_data_filepath = NULL,
         .num_invalid_node = 0,
@@ -1309,7 +1302,6 @@ static int cts_factory_test_show(struct seq_file *m, void *v)
         .flags = CTS_TEST_FLAG_VALIDATE_DATA |
                  CTS_TEST_FLAG_VALIDATE_MIN |
                  CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-                 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
                  CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
         .test_data_filepath = NULL,
         .num_invalid_node = 0,
@@ -1322,7 +1314,6 @@ static int cts_factory_test_show(struct seq_file *m, void *v)
         .flags = CTS_TEST_FLAG_VALIDATE_DATA |
                  CTS_TEST_FLAG_VALIDATE_MIN |
                  CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-                 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
                  CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
         .test_data_filepath = NULL,
         .num_invalid_node = 0,
@@ -1336,7 +1327,6 @@ static int cts_factory_test_show(struct seq_file *m, void *v)
                  CTS_TEST_FLAG_VALIDATE_MIN |
                  CTS_TEST_FLAG_VALIDATE_MAX |
                  CTS_TEST_FLAG_STOP_TEST_IF_VALIDATE_FAILED |
-                 CTS_TEST_FLAG_DUMP_TEST_DATA_TO_CONSOLE |
                  CTS_TEST_FLAG_DUMP_TEST_DATA_TO_FILE,
         .test_data_filepath = NULL,
         .num_invalid_node = 0,

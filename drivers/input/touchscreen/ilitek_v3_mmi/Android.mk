@@ -45,7 +45,7 @@ ifeq ($(TOUCHSCREEN_LAST_TIME),true)
 	KERNEL_CFLAGS += CONFIG_ILI_TOUCH_LAST_TIME=y
 endif
 
-ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+ifneq ($(findstring mmi_info.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
       KBUILD_OPTIONS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
  endif
 

@@ -637,6 +637,32 @@ static int wait_fw_to_normal_work(struct cts_device *cts_dev)
     return ret ? ret : -ETIMEDOUT;
 }
 
+static int wait_fw_to_curr_mode(struct cts_device *cts_dev)
+{
+    int i = 0;
+    int ret;
+
+    cts_info("Wait fw to curr work mode");
+
+    do {
+        u8 work_mode;
+
+        ret = cts_tcs_get_curr_mode(cts_dev, &work_mode);
+        if (ret) {
+            cts_err("Get fw curr work mode failed %d", work_mode);
+            continue;
+        } else {
+            if (work_mode == CTS_FIRMWARE_WORK_MODE_OPEN_SHORT)
+                return 0;
+        }
+
+        mdelay(10);
+    } while (++i < 100);
+
+    return ret ? ret : -ETIMEDOUT;
+}
+
+
 static int prepare_test(struct cts_device *cts_dev)
 {
     int ret;
@@ -1388,6 +1414,12 @@ int cts_test_open(struct cts_device *cts_dev, struct cts_test_param *param)
         goto err_recovery_display_state;
     }
 
+    ret = wait_fw_to_curr_mode(cts_dev);
+    if (ret) {
+	cts_err("wait_to_curr_mode failed %d", ret);
+	goto err_recovery_display_state;
+     }
+
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_RAWDATA);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_POLLING);
 
@@ -1584,7 +1616,7 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     cts_info("Test short to GND");
-    ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_GND);
+    ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_UNDEFINED);
     if (ret) {
         cts_err("Set short test type to SHORT_TO_GND failed %d", ret);
         goto recovery_display_state;
@@ -1600,8 +1632,21 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
         goto recovery_display_state;
     }
 
+	ret = wait_fw_to_curr_mode(cts_dev);
+	if (ret) {
+		cts_err("wait_to_curr_mode failed %d", ret);
+		goto recovery_display_state;
+	}
+
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_RAWDATA);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_POLLING);
+
+    ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_GND);
+    if (ret) {
+        cts_err("Set short test type to SHORT_TO_GND failed %d", ret);
+        goto recovery_display_state;
+    }
+
     ret = cts_tcs_polling_test_data(cts_dev, (u8 *)test_result,
         RAWDATA_BUFFER_SIZE(cts_dev));
     if (ret) {
@@ -1643,16 +1688,6 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
         cts_err("Set short test type to BETWEEN_COLS failed %d", ret);
         goto recovery_display_state;
     }
-    // ret = cts_tcs_set_openshort_mode(cts_dev, CTS_TEST_SHORT);
-    // if (ret) {
-    //     cts_err("Set test type to SHORT failed %d", ret);
-    //     goto recovery_display_state;
-    // }
-    // ret = cts_tcs_set_workmode(cts_dev, CTS_FIRMWARE_WORK_MODE_OPEN_SHORT);
-    // if (ret) {
-    //     cts_err("Set firmware work mode to WORK_MODE_TEST failed %d", ret);
-    //     goto recovery_display_state;
-    // }
 
     for (loopcnt = 0; loopcnt < SHORT_COLS_TEST_LOOP; loopcnt++) {
         ret = cts_tcs_polling_test_data(cts_dev, (u8 *)test_result,
@@ -1688,22 +1723,13 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
 
     /* Short between rows */
     cts_info("Test short between rows");
+    ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_ROWS);
+    if (ret) {
+        cts_err("Set short test type to BETWEEN_ROWS failed %d", ret);
+        goto recovery_display_state;
+    }
+
     for (loopcnt = 0; loopcnt < SHORT_ROWS_TEST_LOOP; loopcnt++) {
-        ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_ROWS);
-        if (ret) {
-            cts_err("Set short test type to BETWEEN_ROWS failed %d", ret);
-            goto recovery_display_state;
-        }
-        // ret = cts_tcs_set_openshort_mode(cts_dev, CTS_TEST_SHORT);
-        // if (ret) {
-        //     cts_err("Set test type to SHORT failed %d", ret);
-        //     goto recovery_display_state;
-        // }
-        // ret = cts_tcs_set_workmode(cts_dev, CTS_FIRMWARE_WORK_MODE_OPEN_SHORT);
-        // if (ret) {
-        //     cts_err("Set firmware work mode to WORK_MODE_TEST failed %d", ret);
-        //     goto recovery_display_state;
-        // }
         ret = cts_tcs_polling_test_data(cts_dev, (u8 *)test_result,
                 RAWDATA_BUFFER_SIZE(cts_dev));
         if (ret) {

@@ -40,6 +40,7 @@ enum cts_test_item {
     CTS_TEST_COMPENSATE_CAP,
 };
 
+#pragma pack(1)
 struct cts_test_param {
     int test_item;
 
@@ -67,6 +68,7 @@ struct cts_test_param {
     void *priv_param;
     int priv_param_size;
 };
+#pragma pack()
 
 struct cts_rawdata_test_priv_param {
     __u32 frames;

@@ -1195,7 +1195,7 @@ int cts_tool_init(struct chipone_ts_data *cts_data)
     cts_info("Init");
 
     cts_data->procfs_entry = proc_create_data(CFG_CTS_TOOL_PROC_FILENAME,
-            0660, NULL, &cts_tool_fops, cts_data);
+            0666, NULL, &cts_tool_fops, cts_data);
     if (cts_data->procfs_entry == NULL) {
         cts_err("Create proc entry failed");
         return -EFAULT;

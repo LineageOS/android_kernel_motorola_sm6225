@@ -22,7 +22,7 @@ ifneq ($(MOTO_PANEL_CHECK_TOUCH_STATE),)
 	KERNEL_CFLAGS += CONFIG_INPUT_CHIPONE_0FLASH_MMI_NOTIFY_TOUCH_STATE=y
 endif
 
-ifneq ($(findstring touchscreen_mmi.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
+ifneq ($(findstring mmi_info.ko,$(BOARD_VENDOR_KERNEL_MODULES)),)
       KBUILD_OPTIONS += CONFIG_INPUT_TOUCHSCREEN_MMI=y
  endif
 

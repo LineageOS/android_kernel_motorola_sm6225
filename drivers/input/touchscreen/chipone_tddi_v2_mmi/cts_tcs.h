@@ -49,6 +49,7 @@ int cts_tcs_get_fw_id(const struct cts_device *cts_dev, u16 *fwid);
 int cts_tcs_get_workmode(const struct cts_device *cts_dev, u8 *workmode);
 int cts_tcs_set_workmode(const struct cts_device *cts_dev, u8 workmode);
 int cts_tcs_set_openshort_mode(const struct cts_device *cts_dev, u8 mode);
+int cts_tcs_get_curr_mode(const struct cts_device *cts_dev, u8 *currmode);
 int cts_tcs_set_tx_vol(const struct cts_device *cts_dev, u8 txvol);
 
 int cts_tcs_set_short_test_type(const struct cts_device *cts_dev, u8 short_type);
