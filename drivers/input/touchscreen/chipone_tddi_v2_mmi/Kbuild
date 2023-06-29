@@ -25,6 +25,10 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
 endif
 
+ifeq ($(TARGET_BUILD_VARIANT),user)
+	EXTRA_CFLAGS += -DCFG_CTS_FOR_GKI
+endif
+
 #obj-$(CONFIG_TOUCHSCREEN_CHIPONE) += chipone-tddi.o
 obj-m += chipone_tddi_v2_mmi.o
 

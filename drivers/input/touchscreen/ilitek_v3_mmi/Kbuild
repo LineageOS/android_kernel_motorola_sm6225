@@ -51,6 +51,9 @@ ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
 	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
 endif
 
+ifeq ($(TARGET_BUILD_VARIANT),user)
+	EXTRA_CFLAGS += -DGKI_EN_FLAG
+endif
 ilitek_v3_mmi-objs += ilitek_v3.o
 ilitek_v3_mmi-objs += ilitek_v3_spi.o
 ilitek_v3_mmi-objs += ilitek_v3_qcom.o

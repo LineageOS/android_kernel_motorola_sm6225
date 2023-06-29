@@ -1168,6 +1168,11 @@ static int ilitek_proc_debug_all_message_show(struct seq_file *m, void *v)
 	int need_read_data_len = 0;
 	int type = 0;
 
+	if (m->size < 500 * K) {
+		m->count = m->size;
+		return 0;
+	}
+
 	if (!ilits->dlnp) {
 		ILI_ERR("Debug flag isn't enabled (%d)\n", ilits->dlnp);
 		seq_printf(m, "Debug flag isn't enabled (%d)\n", ilits->dlnp);
@@ -1238,6 +1243,11 @@ static int ilitek_proc_debug_message_show(struct seq_file *m, void *v)
 
 	/* '0' ~ 'F' mapping table */
 	char charmapping[16] = {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46 };
+
+	if (m->size < 16 * K) {
+		m->count = m->size;
+		return 0;
+	}
 
 	if (!ilits->dnp) {
 		ILI_ERR("Debug flag isn't enabled (%d)\n", ilits->dnp);
@@ -1557,9 +1567,16 @@ static int ilitek_proc_mp_result_show(struct seq_file *m, void *v)
 		return 0;
 	}
 
+	if (m->size < 500 * K) {
+		m->count = m->size;
+		return 0;
+	}
+
 	if (m->size < strlen(ilits->mp_result)) {
 		ILI_INFO("size = %d, mp_result = %d\n Unable to print all data\n",
 			(int) m->size, (int) strlen(ilits->mp_result));
+		m->count = m->size;
+		return 0;
 	}
 
 	seq_printf(m, "%s", ilits->mp_result);
@@ -3576,7 +3593,7 @@ static int proc_show_mp_test_result_read(struct inode *inode, struct file *file)
 		return -EINVAL;
 	}
 
-	return single_open_size(file, ilitek_proc_mp_result_show, NULL, 512 * K);
+	return single_open(file, ilitek_proc_mp_result_show, NULL);
 }
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
@@ -3652,7 +3669,7 @@ static int ilitek_proc_seq_debug_message_read(struct inode *inode, struct file *
 		return -EINVAL;
 	}
 
-	return single_open_size(file, ilitek_proc_debug_message_show, NULL, 16 * K);
+	return single_open(file, ilitek_proc_debug_message_show, NULL);
 }
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
@@ -3692,7 +3709,7 @@ static int ilitek_proc_seq_debug_all_message_read(struct inode *inode, struct fi
 		return -EINVAL;
 	}
 
-	return single_open_size(file, ilitek_proc_debug_all_message_show, NULL, 500 * K);
+	return single_open(file, ilitek_proc_debug_all_message_show, NULL);
 }
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
