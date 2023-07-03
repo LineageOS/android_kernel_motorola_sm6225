@@ -2,7 +2,7 @@
 # Kbuild for the vl53L1 drivers.
 #
 
-EXTRA_CFLAGS += -Wall -Wno-unused-but-set-variable
+EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1_14_1_2/inc \
 				-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/misc/vl53L1_14_1_2/ipp \
@@ -48,4 +48,8 @@ endif
 
 ifneq ($(filter m y,$(CONFIG_INPUT_MISC_PMIC_WL2864C)),)
 	EXTRA_CFLAGS += -DTOF_USE_PMIC_WL2864C
+endif
+
+ifneq ($(filter m y,$(CONFIG_TOF_COMPILE_FIX)),)
+	EXTRA_CFLAGS += -Wno-unused-but-set-variable
 endif
