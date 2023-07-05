@@ -25,7 +25,6 @@
 #include "inc/tcpci_typec.h"
 #include <linux/mmi_discrete_power_supply.h>
 #include <linux/mmi_discrete_charger_class.h>
-#include <linux/qti_power_supply.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
 #include <linux/qti_power_supply.h>
