@@ -1084,7 +1084,7 @@ const static struct cts_device_hwdata cts_device_hwdatas[] = {
         .enable_access_ddi_reg = icnl9916_set_access_ddi_reg,
     },
     {
-        .name = "ICNL9916C",
+        .name = "primary",
         .hwid = CTS_DEV_HWID_ICNL9916C,
         .fwid = CTS_DEV_FWID_ICNL9916C,
         .num_row = 32,
