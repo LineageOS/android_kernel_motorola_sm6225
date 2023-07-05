@@ -38,7 +38,7 @@
 
 #define USE_WAKEUP_GESTURE    0
 
-#define SUPPORTED_PALM_TOUCH  0
+#define SUPPORTED_PALM_TOUCH  1
 
 #define MAX_SUPPORTED_FINGER_NUM	3 /* max 10 */
 

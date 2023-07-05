@@ -2535,12 +2535,18 @@ static irqreturn_t bt541_touch_work(int irq, void *data)
 			input_report_key(info->input_dev, KEY_LARGE, 0);
 			input_sync(info->input_dev);
 */
+			write_cmd(client, BT541_SWRESET_CMD);
+			msleep(20);
+			write_cmd(client, BT541_CLEAR_INT_STATUS_CMD);
 			dev_err(&client->dev, "large touch palm enter\n");
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 			input_report_key(info->input_dev, KEY_POWER, 1);
 			input_sync(info->input_dev);
 			input_report_key(info->input_dev, KEY_POWER, 0);
 			input_sync(info->input_dev);
 			palm = 1;
+#endif
+			clear_report_data(info);
 			goto out;
 	}
 #if 0
@@ -6137,11 +6143,13 @@ static int bt541_ts_probe(struct i2c_client *client,
 	set_bit(EV_ABS, info->input_dev->evbit);
 	set_bit(BTN_TOUCH, info->input_dev->keybit);
 
+#ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if SUPPORTED_PALM_TOUCH
 	//set_bit(KEY_POWER, info->input_dev->evbit);
 	//input_set_capability(info->input_dev, EV_KEY, KEY_LARGE);
 	input_set_capability(info->input_dev, EV_KEY, KEY_POWER);
 	dev_err(&client->dev,"KEY_POWER register finish\n");
+#endif
 #endif
 
 	set_bit(EV_LED, info->input_dev->evbit);
