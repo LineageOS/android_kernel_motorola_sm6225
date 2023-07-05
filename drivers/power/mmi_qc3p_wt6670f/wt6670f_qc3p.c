@@ -876,7 +876,7 @@ static int wt6670f_i2c_probe(struct i2c_client *client,
 		pr_info("[%s] gpio_direction_input wt6670f_int_pin failed", __func__);
 probe_out:
 	/* Create the procfs file at /proc/driver/wt6670f_firmware_num */
-	procfs_file = proc_create("driver/wt6670f_firmware_num",0777, NULL, (const struct proc_ops *)&mmi_wt6670f_operations);
+	procfs_file = proc_create("driver/wt6670f_firmware_num",0777, NULL, &mmi_wt6670f_operations);
 	return 0;
 }
 
