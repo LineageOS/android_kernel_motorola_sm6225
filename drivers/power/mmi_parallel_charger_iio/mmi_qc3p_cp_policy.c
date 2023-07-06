@@ -44,6 +44,8 @@
 #include "mmi_qc3p.h"
 
 #define SWITCH_CHARGER_QC3P_VOLT		5000000
+#define MINIMUM_CHARGER_VOLT			4700000
+
 typedef enum  {
 	PM_QC3P_STATE_DISCONNECT,
 	PM_QC3P_STATE_ENTRY,
@@ -949,7 +951,7 @@ void mmi_qc3p_chrg_sm_work_func(struct work_struct *work)
 
 		mmi_chrg_info(chip,"ibatt : %dmA, step cc curr : %dmA\n",
 						ibatt_curr, chrg_step->chrg_step_cc_curr);
-		if (ibatt_curr > chrg_step->chrg_step_cc_curr) {
+		if ((ibatt_curr > chrg_step->chrg_step_cc_curr) && (chip->qc3p_request_volt > MINIMUM_CHARGER_VOLT)) {
 			chip->qc3p_request_volt -= QC3P_CV_DELTA_VOLT;
 
 			mmi_chrg_dbg(chip, PR_MOTO, "Reduce qc3p volt %dmV\n ",
