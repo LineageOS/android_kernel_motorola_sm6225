@@ -157,9 +157,11 @@
 		novatek,def-build-id = <0x0401>;
 		novatek,def-config-id = <0x601e>;
 		novatek,report_gesture_key;
+		novatek,panel-supplier = "djn";
 		novatek,def-max-resolution = <720 1600>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <67 0x02>;
+		panel = <&dsi_djn_nt36672a_video>;
 		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 		pinctrl-0 = <&ts_int_active &ts_reset_active>;
 		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
@@ -187,6 +189,7 @@
 		focaltech,panel-supplier = "djnboe";
 		focaltech,report_gesture_key;
 		focaltech,dlfw_in_resume;
+		panel = <&dsi_djnboe_ft8009_video>;
 		status = "/chosen", "mmi,panel_name", "djnboe_ft8009_video_display";
 	};
 };
