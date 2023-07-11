@@ -88,6 +88,7 @@ struct cts_platform_data {
     int int_gpio;
 #ifdef CFG_CTS_HAS_RESET_PIN
     int rst_gpio;
+    bool rst_pull_flag;
 #endif
 
 #ifdef CFG_CTS_MANUAL_CS
@@ -123,7 +124,7 @@ struct cts_platform_data {
 
 #ifdef CFG_CTS_GESTURE
     u8 gesture_num;
-    u8 gesture_keymap[CFG_CTS_NUM_GESTURE][2];
+    int gesture_keymap[CFG_CTS_NUM_GESTURE][2];
     bool irq_wake_enabled;
 #endif
 
@@ -149,6 +150,10 @@ struct cts_platform_data {
     u8 spi_rx_buf[ALIGN(CFG_CTS_MAX_SPI_XFER_SIZE + 10, 4)];
     u8 spi_tx_buf[ALIGN(CFG_CTS_MAX_SPI_XFER_SIZE + 10, 4)];
     u32 spi_speed;
+#endif
+
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+    int supported_gesture_type;
 #endif
 };
 

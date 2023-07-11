@@ -1557,6 +1557,23 @@ int cts_tcs_set_pocket_enable(struct cts_device *cts_dev, u8 enable)
     return ret;
 }
 
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+int cts_tcs_set_gesture_en_mask(const struct cts_device *cts_dev, bool d_tap, bool s_tap)
+{
+        int ret;
+        u8 buf[4] = {0};
+
+        buf[0] = d_tap ? 1 : 0;
+        buf[2] = s_tap ? 0x80 : 0;
+
+        cts_info("set gesture bit:0x%02x%02x%02x", buf[2], buf[1], buf[0]);
+
+        ret = cts_tcs_spi_write(cts_dev, CMD_GSTR_ENTER_MAP_RW,
+                        buf, sizeof(buf));
+        return ret;
+}
+#endif
+
 void cts_tcs_reinit_fw_status(struct cts_device *cts_dev)
 {
     struct cts_firmware_status *status = (struct cts_firmware_status *)

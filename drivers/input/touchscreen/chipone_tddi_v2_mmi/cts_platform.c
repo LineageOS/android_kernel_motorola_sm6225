@@ -6,6 +6,8 @@
 #include "cts_firmware.h"
 #include "cts_sysfs.h"
 #include "cts_tcs.h"
+extern struct chipone_ts_data *g_cts_data;
+static struct wakeup_source *gesture_wakelock;
 
 #ifdef CFG_CTS_FW_LOG_REDIRECT
 size_t cts_plat_get_max_fw_log_size(struct cts_platform_data *pdata)
@@ -562,6 +564,13 @@ static int cts_plat_parse_dt(struct cts_platform_data *pdata,
         pdata->rst_gpio = -1;
     }
     cts_info("  %-12s: %d", "rst gpio", pdata->rst_gpio);
+
+    pdata->rst_pull_flag = of_property_read_bool(dev_node, "chipone,rst-pull-flag");
+    if (!pdata->rst_pull_flag) {
+        cts_err("Parse RST PULL FLAG from dt failed %d", pdata->rst_pull_flag);
+        pdata->rst_pull_flag = false;
+    }
+    cts_info("  %-12s: %d", "rst pull flag", pdata->rst_pull_flag);
 #endif /* CFG_CTS_HAS_RESET_PIN */
 
 #ifdef CFG_CTS_MANUAL_CS
@@ -607,6 +616,11 @@ static int cts_plat_parse_dt(struct cts_platform_data *pdata,
         cts_warn("read panel supplier failed, ret=%d", ret);
     } else
         cts_info("panel supplier=%s", (char *)pdata->panel_supplier);
+#endif
+
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        if (!of_property_read_u32(dev_node, "chipone,supported_gesture_type", &pdata->supported_gesture_type))
+                cts_info("chipone,supported_gesture_type=%02x\n", pdata->supported_gesture_type);
 #endif
 
     return 0;
@@ -751,7 +765,7 @@ int cts_init_platform_data(struct cts_platform_data *pdata,
 
 #ifdef CFG_CTS_GESTURE
     {
-        u8 gesture_keymap[CFG_CTS_NUM_GESTURE][2] = CFG_CTS_GESTURE_KEYMAP;
+        int gesture_keymap[CFG_CTS_NUM_GESTURE][2] = CFG_CTS_GESTURE_KEYMAP;
 
         memcpy(pdata->gesture_keymap, gesture_keymap, sizeof(gesture_keymap));
         pdata->gesture_num = CFG_CTS_NUM_GESTURE;
@@ -1041,6 +1055,9 @@ int cts_plat_process_touch_msg(struct cts_platform_data *pdata,
         case CTS_DEVICE_TOUCH_EVENT_MOVE:
         case CTS_DEVICE_TOUCH_EVENT_STAY:
             contact++;
+	    #ifdef CONFIG_GTP_LAST_TIME
+	    cts_data->last_event_time = ktime_get_boottime();
+	    #endif
             input_mt_slot(input_dev, msgs[i].id);
             input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, true);
             input_report_abs(input_dev, ABS_MT_POSITION_X, x);
@@ -1294,12 +1311,19 @@ int cts_plat_process_gesture_info(struct cts_platform_data *pdata,
     for (i = 0; i < CFG_CTS_NUM_GESTURE; i++) {
         if (gesture_info->gesture_id == pdata->gesture_keymap[i][0]) {
             cts_info("Report key[%u]", pdata->gesture_keymap[i][1]);
-            input_report_key(pdata->ts_input_dev, pdata->gesture_keymap[i][1], 1);
+#ifdef CHIPONE_SENSOR_EN
+		PM_WAKEUP_EVENT(gesture_wakelock, 5000);
+		input_report_key(g_cts_data->sensor_pdata->input_sensor_dev, pdata->gesture_keymap[i][1], 1);
+		input_sync(g_cts_data->sensor_pdata->input_sensor_dev);
+		input_report_key(g_cts_data->sensor_pdata->input_sensor_dev, pdata->gesture_keymap[i][1], 0);
+		input_sync(g_cts_data->sensor_pdata->input_sensor_dev);
+#else
+	    input_report_key(pdata->ts_input_dev, pdata->gesture_keymap[i][1], 1);
             input_sync(pdata->ts_input_dev);
 
             input_report_key(pdata->ts_input_dev, pdata->gesture_keymap[i][1], 0);
             input_sync(pdata->ts_input_dev);
-
+#endif
             return 0;
         }
     }

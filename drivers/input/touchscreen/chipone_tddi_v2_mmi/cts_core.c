@@ -1543,7 +1543,10 @@ int cts_suspend_device(struct cts_device *cts_dev)
 {
     int ret;
     u8 buf;
-
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+    struct chipone_ts_data *cts_data = container_of(cts_dev,
+        struct chipone_ts_data, cts_dev);
+#endif
     cts_info("Suspend device");
 
 /* Disable this check for sleep/gesture switch */
@@ -1561,6 +1564,10 @@ int cts_suspend_device(struct cts_device *cts_dev)
             return ret;
         }
     }
+
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        cts_tcs_set_gesture_en_mask(cts_dev, cts_data->d_tap_flag, cts_data->s_tap_flag);
+#endif
 
     cts_info("Set suspend mode:%s",
         cts_dev->rtdata.gesture_wakeup_enabled ? "gesture" : "sleep");

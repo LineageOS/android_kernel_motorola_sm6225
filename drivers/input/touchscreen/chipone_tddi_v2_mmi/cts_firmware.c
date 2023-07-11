@@ -596,8 +596,17 @@ static int cts_wrap_request_firmware(struct cts_firmware *firmware,
     }
 
     /* Map firmware structure to cts_firmware */
-    firmware->data = (u8 *) firmware->fw->data;
+    cts_info("cts_wrap_request_firmware +++\n");
     firmware->size = firmware->fw->size;
+    firmware->data = vmalloc(firmware->size);
+    if (firmware->data == NULL) {
+        cts_err("vmalloc firmware data failed");
+	release_firmware(firmware->fw);
+        return -ENOMEM;
+    }
+
+    memcpy(firmware->data, firmware->fw->data, firmware->size);
+    release_firmware(firmware->fw);
 
     /* Check firmware */
     if (!is_firmware_valid(firmware)) {
@@ -734,10 +743,10 @@ void cts_release_firmware(const struct cts_firmware *firmware)
     cts_info("Release firmware %p", firmware);
 
     if (firmware) {
-        if (firmware->fw) {
+        if (firmware->data) {
             /* Use request_firmware() get struct firmware * */
             cts_info("Release firmware from request_firmware");
-            release_firmware(firmware->fw);
+            vfree(firmware->data);
             kfree(firmware);
         } else if (firmware->name == NULL) {
             /* Direct read from file */

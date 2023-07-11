@@ -44,6 +44,16 @@ MODULE_PARM_DESC(debug_log, "Show debug log control");
 
 struct chipone_ts_data *g_cts_data;
 
+#ifdef CHIPONE_SENSOR_EN
+extern int __attribute__ ((weak)) sensors_classdev_register(struct device *parent, struct sensors_classdev *sensors_cdev);
+extern void __attribute__ ((weak)) sensors_classdev_unregister(struct sensors_classdev *sensors_cdev);
+#endif
+
+enum touch_state {
+        TOUCH_DEEP_SLEEP_STATE = 0,
+        TOUCH_LOW_POWER_STATE,
+};
+
 int cts_suspend(struct chipone_ts_data *cts_data)
 {
     int ret;
@@ -75,6 +85,11 @@ int cts_suspend(struct chipone_ts_data *cts_data)
             cts_err("Enable IRQ failed %d", ret);
             return ret;
         }
+    } else {
+        ret = gpio_get_value(cts_data->pdata->rst_gpio);
+        cts_info("rst pull flag:%d, rst gpio val:%d", cts_data->pdata->rst_pull_flag, ret);
+        if (cts_data->pdata->rst_pull_flag && ret)
+            gpio_set_value(cts_data->pdata->rst_gpio, 0);
     }
 #endif /* CFG_CTS_GESTURE */
 
@@ -143,7 +158,22 @@ static int fb_notifier_callback(struct notifier_block *nb,
     cts_info("FB notifier callback");
     if (!evdata || !cts_data)
         return 0;
-
+#ifdef CHIPONE_SENSOR_EN
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+    if (cts_data->s_tap_flag || cts_data->d_tap_flag) {
+        cts_enable_gesture_wakeup(&cts_data->cts_dev);
+        g_cts_data->should_enable_gesture = true;
+    }
+    else {
+        cts_disable_gesture_wakeup(&cts_data->cts_dev);
+        g_cts_data->should_enable_gesture = false;
+    }
+#endif
+    if (g_cts_data->should_enable_gesture)
+        touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+    else
+       touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
     blank = *(int *)evdata->data;
     cts_info("action=%lu, blank=%d\n", action, blank);
 
@@ -350,6 +380,116 @@ static int cts_get_panel(void)
 #endif
 
 
+#ifdef CHIPONE_SENSOR_EN
+static struct sensors_classdev __maybe_unused sensors_touch_cdev = {
+
+        .name = "dt-gesture",
+        .vendor = "chipone",
+        .version = 1,
+        .type = SENSOR_TYPE_MOTO_DOUBLE_TAP,
+        .max_range = "5.0",
+        .resolution = "5.0",
+        .sensor_power = "1",
+        .min_delay = 0,
+        .max_delay = 0,
+        /* WAKE_UP & SPECIAL_REPORT */
+        .flags = 1 | 6,
+        .fifo_reserved_event_count = 0,
+        .fifo_max_event_count = 0,
+        .enabled = 0,
+        .delay_msec = 200,
+        .sensors_enable = NULL,
+        .sensors_poll_delay = NULL,
+};
+static int chipone_sensor_set_enable(struct sensors_classdev *sensors_cdev,
+                unsigned int enable)
+{
+        cts_info("Gesture set enable %d!", enable);
+        mutex_lock(&g_cts_data->state_mutex);
+        if (enable == 1) {
+                cts_enable_gesture_wakeup(&g_cts_data->cts_dev);
+                g_cts_data->should_enable_gesture = true;
+        } else if (enable == 0) {
+                cts_disable_gesture_wakeup(&g_cts_data->cts_dev);
+                g_cts_data->should_enable_gesture = false;
+        } else {
+                cts_info("unknown enable symbol\n");
+        }
+        mutex_unlock(&g_cts_data->state_mutex);
+        return 0;
+}
+static int chipone_sensor_init(struct chipone_ts_data *data)
+{
+        struct chipone_sensor_platform_data *sensor_pdata;
+        struct input_dev *sensor_input_dev;
+        int err;
+
+        sensor_input_dev = input_allocate_device();
+        if (!sensor_input_dev) {
+                cts_err("Failed to allocate device");
+                goto exit;
+        }
+
+        sensor_pdata = devm_kzalloc(&sensor_input_dev->dev,
+                        sizeof(struct chipone_sensor_platform_data),
+                        GFP_KERNEL);
+        if (!sensor_pdata) {
+                cts_err("Failed to allocate memory");
+                goto free_sensor_pdata;
+        }
+        data->sensor_pdata = sensor_pdata;
+
+        __set_bit(EV_KEY, sensor_input_dev->evbit);
+        __set_bit(BTN_TRIGGER_HAPPY3, sensor_input_dev->keybit);
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        __set_bit(BTN_TRIGGER_HAPPY6, sensor_input_dev->keybit);
+#endif
+        __set_bit(EV_SYN, sensor_input_dev->evbit);
+
+        sensor_input_dev->name = "double-tap";
+        data->sensor_pdata->input_sensor_dev = sensor_input_dev;
+
+        err = input_register_device(sensor_input_dev);
+        if (err) {
+                cts_err("Unable to register device, err=%d", err);
+                goto free_sensor_input_dev;
+        }
+
+        sensor_pdata->ps_cdev = sensors_touch_cdev;
+        sensor_pdata->ps_cdev.sensors_enable = chipone_sensor_set_enable;
+        sensor_pdata->data = data;
+
+        err = sensors_classdev_register(&sensor_input_dev->dev,
+                                &sensor_pdata->ps_cdev);
+        if (err)
+                goto unregister_sensor_input_device;
+
+        return 0;
+
+unregister_sensor_input_device:
+        input_unregister_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_input_dev:
+        input_free_device(data->sensor_pdata->input_sensor_dev);
+free_sensor_pdata:
+        devm_kfree(&sensor_input_dev->dev, sensor_pdata);
+        data->sensor_pdata = NULL;
+exit:
+        return 1;
+}
+
+int chipone_sensor_remove(struct chipone_ts_data *data)
+{
+        sensors_classdev_unregister(&data->sensor_pdata->ps_cdev);
+        input_unregister_device(data->sensor_pdata->input_sensor_dev);
+        devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
+                data->sensor_pdata);
+        data->sensor_pdata = NULL;
+        data->wakeable = false;
+        data->should_enable_gesture = false;
+        return 0;
+}
+#endif
+
 #ifdef CONFIG_CTS_I2C_HOST
 static int cts_driver_probe(struct i2c_client *client,
         const struct i2c_device_id *id)
@@ -359,6 +499,10 @@ static int cts_driver_probe(struct spi_device *client)
 {
     struct chipone_ts_data *cts_data = NULL;
     int ret = 0;
+
+#ifdef CHIPONE_SENSOR_EN
+        static bool initialized_sensor;
+#endif
 
 #ifdef CTS_MTK_GET_PANEL
     ret = cts_get_panel();
@@ -554,6 +698,25 @@ static int cts_driver_probe(struct spi_device *client)
         msecs_to_jiffies(15 * 1000));
 
     INIT_WORK(&cts_data->ts_resume_work, cts_resume_work_func);
+
+#ifdef CHIPONE_SENSOR_EN
+        mutex_init(&cts_data->state_mutex);
+        //unknown screen state
+        cts_data->screen_state = SCREEN_UNKNOWN;
+        if (!initialized_sensor) {
+#ifdef CONFIG_HAS_WAKELOCK
+                wake_lock_init(&(cts_data->gesture_wakelock), WAKE_LOCK_SUSPEND, "dt-wake-lock");
+#else
+                PM_WAKEUP_REGISTER(cts_data->device, cts_data->gesture_wakelock, "dt-wake-lock");
+                if (!cts_data->gesture_wakelock) {
+                        cts_err("ILITEK Driver failed to load. wakeup_source_init failed.");
+                        return -ENOMEM;
+                }
+#endif
+                if (!chipone_sensor_init(cts_data))
+                        initialized_sensor = true;
+        }
+#endif
 
     return 0;
 

@@ -117,7 +117,7 @@
     { GESTURE_C, KEY_C,},               \
     { GESTURE_W, KEY_W,},               \
     { GESTURE_V, KEY_V,},               \
-    { GESTURE_D_TAP, KEY_F1,},          \
+    { GESTURE_D_TAP, BTN_TRIGGER_HAPPY6,},          \
     { GESTURE_Z, KEY_Z,},               \
     { GESTURE_M, KEY_M,},               \
     { GESTURE_O, KEY_O,},               \
@@ -127,7 +127,7 @@
     { GESTURE_DOWN, KEY_DOWN,},         \
     { GESTURE_LEFT, KEY_LEFT,},         \
     { GESTURE_RIGHT, KEY_RIGHT,},       \
-    { GESTURE_TAP, KEY_F2,},            \
+    { GESTURE_TAP, BTN_TRIGGER_HAPPY3,},            \
 }
 #define CFG_CTS_GESTURE_REPORT_TRACE         0
 #endif /* CFG_CTS_GESTURE */

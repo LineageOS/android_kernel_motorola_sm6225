@@ -101,4 +101,8 @@ int cts_tcs_set_proximity_mode(struct cts_device *cts_dev, u8 enable);
 void cts_tcs_reinit_fw_status(struct cts_device *cts_dev);
 
 int cts_tcs_set_product_en(struct cts_device *cts_dev, u8 enable);
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+extern int cts_tcs_set_gesture_en_mask(const struct cts_device *cts_dev, bool d_tap, bool s_tap);
+#endif
+
 #endif /* _CTS_TCS_H_ */
