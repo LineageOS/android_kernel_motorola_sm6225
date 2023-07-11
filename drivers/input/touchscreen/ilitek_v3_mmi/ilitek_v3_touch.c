@@ -1223,9 +1223,6 @@ void ili_touch_release_all_point(void)
 }
 
 static struct ilitek_touch_info touch_info[MAX_TOUCH_NUM + MAX_PEN_NUM];
-#ifdef ILI_TOUCH_LAST_TIME
-static bool time_flag = 1;
-#endif
 
 void ili_report_ap_mode(u8 *buf, int len)
 {
@@ -1304,13 +1301,6 @@ void ili_report_ap_mode(u8 *buf, int len)
 	ILI_DBG("figner number = %d, LastTouch = %d\n", ilits->finger, ilits->last_touch);
 
 	if (ilits->finger) {
-#ifdef ILI_TOUCH_LAST_TIME
-		if (time_flag) {
-			ilits->last_event_time = ktime_get_boottime();
-			time_flag = 0;
-			ILI_DBG("set last_event_time\n");
-		}
-#endif
 		if (MT_B_TYPE) {
 			for (i = 0; i < ilits->finger; i++) {
 				input_report_key(ilits->input, BTN_TOUCH, 1);
@@ -1330,10 +1320,6 @@ void ili_report_ap_mode(u8 *buf, int len)
 		ilits->last_touch = ilits->finger;
 	} else {
 		if (ilits->last_touch) {
-#ifdef ILI_TOUCH_LAST_TIME
-			time_flag = 1;
-			ILI_DBG("last touch, reset time_flag\n");
-#endif
 			if (MT_B_TYPE) {
 				for (i = 0; i < MAX_TOUCH_NUM; i++) {
 					if (ilits->curt_touch[i] == 0 && ilits->prev_touch[i] == 1)
@@ -1347,6 +1333,11 @@ void ili_report_ap_mode(u8 *buf, int len)
 			}
 			input_sync(ilits->input);
 			ilits->last_touch = 0;
+#ifdef ILI_TOUCH_LAST_TIME
+			//save last timestamp after last touch reported to avoid impacting multi and swipe touch
+			ilits->last_event_time = ktime_get_boottime();
+			ILI_DBG("last touch, save last_event_time\n");
+#endif
 		}
 	}
 	ilitek_tddi_touch_customer_data_parsing(buf);
@@ -2111,10 +2102,10 @@ void ili_report_gesture_mode(u8 *buf, int len)
 			return;
 		}
 		if (ilits->report_gesture_key) {
-			int key_code = KEY_F1;
+			int key_code = BTN_TRIGGER_HAPPY3;
 #ifdef ILI_DOUBLE_TAP_CTRL
 			if (GESTURE_DOUBLECLICK == gc->code) {
-				key_code = KEY_F4;
+				key_code = BTN_TRIGGER_HAPPY6;
 			}
 #endif
 			input_report_key(ilits->sensor_pdata->input_sensor_dev, key_code, 1);

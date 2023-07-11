@@ -639,6 +639,13 @@ static int parse_dt(struct device_node *np)
 	}
 	else
 		ILI_INFO("warn: supported_gesture_type not set\n");
+
+	if (of_property_read_bool(np, "ilitek,rst-pull-flag")) {
+		ILI_INFO("ilitek,rst pull flag set");
+		ilits->rst_pull_flag = 1;
+	} else {
+		ilits->rst_pull_flag = 0;
+	}
 #endif //ILI_DOUBLE_TAP_CTRL
 
 #ifdef ILI_SENSOR_EN

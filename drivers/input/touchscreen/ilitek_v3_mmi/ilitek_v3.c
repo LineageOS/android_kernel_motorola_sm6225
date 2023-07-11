@@ -73,7 +73,7 @@ static int ilitek_charger_notifier_callback(struct notifier_block *nb, unsigned 
 		}
 	}
 	if (!ret) {
-		if((prop.intval == USB_DETECT_IN) || (prop.intval == USB_DETECT_OUT)) {
+		if((prop.intval == USB_DETECT_IN) || (prop.intval == USB_DETECT_OUT) || (prop.intval == USB_DETECT_OUT_QCOM)) {
 			if(ilits->usb_plug_status != prop.intval) {
 				ILI_INFO("usb prop.intval =%d\n", prop.intval);
 				ilits->usb_plug_status = prop.intval;
@@ -800,7 +800,7 @@ int ili_fw_upgrade_handler(void *data)
 			ILI_INFO("charge status is %d\n", ilits->usb_plug_status);
 			if (ilits->usb_plug_status == USB_DETECT_IN) {
 				ret = ili_ic_func_ctrl("plug", 0);/* plug in */
-			} else if (ilits->usb_plug_status == USB_DETECT_OUT) {
+			} else if ((ilits->usb_plug_status == USB_DETECT_OUT) || (ilits->usb_plug_status == USB_DETECT_OUT_QCOM)) {
 				ret = ili_ic_func_ctrl("plug", 1);/* plug out */
 			}
 			if (ret < 0) {

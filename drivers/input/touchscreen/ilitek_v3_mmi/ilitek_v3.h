@@ -167,7 +167,10 @@
 #define USB_DETECT_IN 			1
 #define USB_DETECT_OUT 			2
 #else
-#define CHARGER_NOTIFIER_CALLBACK	DISABLE
+#define USB_DETECT_IN                   1
+#define USB_DETECT_OUT                  2
+#define USB_DETECT_OUT_QCOM		0
+#define CHARGER_NOTIFIER_CALLBACK      ENABLE
 #endif
 #define ENABLE_EDGE_PALM_PARA		DISABLE
 #define MULTI_REPORT_RATE		DISABLE
@@ -1343,6 +1346,7 @@ struct ilitek_ts_data {
 #ifdef ILI_DOUBLE_TAP_CTRL
 	uint8_t supported_gesture_type;
 	uint8_t sys_gesture_type;
+	uint8_t rst_pull_flag;
 #endif
 	struct mutex state_mutex;
 	struct ili_sensor_platform_data *sensor_pdata;
