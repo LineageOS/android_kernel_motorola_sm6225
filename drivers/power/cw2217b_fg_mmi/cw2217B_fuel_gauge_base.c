@@ -14,6 +14,7 @@
 #include <linux/sizes.h>
 #include <linux/regulator/consumer.h>
 #include <linux/jiffies.h>
+#include <linux/version.h>
 
 #define CWFG_ENABLE_LOG 1 /* CHANGE Customer need to change this for enable/disable log */
 
@@ -511,7 +512,7 @@ static int cw_get_capacity(struct cw_battery *cw_bat)
 
 	if (usb_online.intval && (cw_bat->ui_soc == 100) && (ui_soc < cw_bat->ui_soc) &&
 		(cw_bat->batt_status != POWER_SUPPLY_STATUS_DISCHARGING)) {
-		cw_printk("CW2015[%d]: usb online = %d, ui_soc_reg = %d", __LINE__, usb_online.intval, ui_soc);
+		cw_printk("CW2015[%d]: usb online = %d, ui_soc_reg = %d, remainder:%d", __LINE__, usb_online.intval, ui_soc, remainder);
 		ui_soc = 100;
 	}
 
@@ -1096,6 +1097,10 @@ static int cw_battery_set_property(struct power_supply *psy,
 		ret = -EINVAL;
 		break;
 	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	cw_info("%s, cw ntc_exist:%d\n", __func__, cw_bat->ntc_exist);
+#endif
 
 	return ret;
 }
