@@ -43,6 +43,8 @@
 #include <linux/types.h>
 #include "mmi_charger_core.h"
 
+#define MINIMUM_CHARGER_VOLT			5100000
+
 typedef enum  {
 	PM_STATE_DISCONNECT,
 	PM_STATE_ENTRY,
@@ -1154,7 +1156,7 @@ void mmi_chrg_sm_work_func(struct work_struct *work)
 		chip->pd_request_curr = TYPEC_HIGH_CURRENT_UA;
 		mmi_chrg_info(chip,"ibatt : %dmA, step cc curr : %dmA\n",
 						ibatt_curr, chrg_step->chrg_step_cc_curr);
-		if (ibatt_curr > chrg_step->chrg_step_cc_curr) {
+		if ((ibatt_curr > chrg_step->chrg_step_cc_curr) && (chip->pd_request_volt > MINIMUM_CHARGER_VOLT)) {
 			chip->pd_request_volt -= CV_DELTA_VOLT;
 
 			mmi_chrg_dbg(chip, PR_MOTO, "Reduce pps volt %dmV, curr %dmA\n ",
