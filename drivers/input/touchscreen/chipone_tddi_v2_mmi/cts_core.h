@@ -432,6 +432,7 @@ struct chipone_ts_data {
     struct kobject *suspend_kobj;
 };
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static inline u32 get_unaligned_le24(const void *p)
 {
     const u8 *puc = (const u8 *)p;
@@ -452,6 +453,7 @@ static inline void put_unaligned_be24(u32 v, void *p)
     puc[1] = (v >> 8) & 0xFF;
     puc[2] = (v >> 0) & 0xFF;
 }
+#endif
 
 #define wrap(max, x)        ((max) - 1 - (x))
 

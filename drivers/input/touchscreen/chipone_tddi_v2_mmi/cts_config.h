@@ -1,6 +1,6 @@
 #ifndef CTS_CONFIG_H
 #define CTS_CONFIG_H
-
+#include <linux/version.h>
 /** Driver version */
 #define CFG_CTS_DRIVER_MAJOR_VERSION        3
 #define CFG_CTS_DRIVER_MINOR_VERSION        4
@@ -160,8 +160,9 @@
 /****************************************************************************
  * Platform configurations
  ****************************************************************************/
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 #define CONFIG_CTS_PM_FB_NOTIFIER
-
+#endif
 #ifdef CONFIG_CTS_PM_FB_NOTIFIER
 #ifdef CONFIG_DRM
 #define CFG_CTS_DRM_NOTIFIER

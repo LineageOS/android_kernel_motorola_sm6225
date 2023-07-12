@@ -133,7 +133,9 @@ int cts_spi_send_recv(struct cts_platform_data *pdata, size_t len,
     struct chipone_ts_data *cts_data;
     struct spi_message msg;
     struct spi_transfer cmd = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
         .delay_usecs = 0,
+#endif
         .speed_hz = pdata->spi_speed * 1000u,
         .tx_buf = tx_buffer,
         .rx_buf = rx_buffer,
@@ -458,6 +460,9 @@ int cts_plat_is_normal_mode(struct cts_platform_data *pdata)
 
     cts_set_normal_addr(pdata->cts_dev);
     cts_data = container_of(pdata->cts_dev, struct chipone_ts_data, cts_dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    (void)cts_data;
+#endif
     ret = cts_tcs_get_fw_id(pdata->cts_dev, &fwid);
 /*
         addr = CTS_DEVICE_FW_REG_CHIP_TYPE;
@@ -999,9 +1004,10 @@ int cts_plat_process_touch_msg(struct cts_platform_data *pdata,
 #endif
 
     cts_dbg("Process touch %d msgs", num);
-
     cts_data = container_of(pdata->cts_dev, struct chipone_ts_data, cts_dev);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    (void) cts_data;
+#endif
     if (num == 0 || num > CFG_CTS_MAX_TOUCH_NUM)
         return 0;
 

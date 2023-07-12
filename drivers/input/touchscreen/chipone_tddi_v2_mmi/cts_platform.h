@@ -5,7 +5,6 @@
 #include <asm/byteorder.h>
 #include <linux/bitops.h>
 #include <linux/ctype.h>
-#include <linux/unaligned/access_ok.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -44,6 +43,11 @@
 #include <linux/spi/spidev.h>
 
 #include "cts_config.h"
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#include <asm-generic/unaligned.h>
+#else
+#include <linux/unaligned/access_ok.h>
+#endif
 #include "cts_core.h"
 
 extern bool cts_show_debug_log;
