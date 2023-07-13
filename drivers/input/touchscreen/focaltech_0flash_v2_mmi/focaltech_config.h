@@ -286,7 +286,11 @@
 /*
  * Usb detect support
  */
+#if (FTS_CHIP_TYPE == _FT8726)
+#define FTS_USB_DETECT_EN                       0
+#else
 #define FTS_USB_DETECT_EN                       1
+#endif
 
 /*
  * module_id: mean vendor_id generally, also maybe gpio or lcm_id...
