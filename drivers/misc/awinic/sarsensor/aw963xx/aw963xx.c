@@ -326,9 +326,9 @@ static void aw963xx_irq_handle_func(uint32_t irq_status, void *data)
 		}
 		for (i = 0; i < AW963XX_VALID_TH; i++) {
 			ch_th[j] |= ((curr_status_val[i] >> j) & 0x01) << i;
-			AWLOGE(p_sar->dev, "ch= %d, th = %d ch_th = 0x%x", j, i, ch_th[j]);
+			AWLOGD(p_sar->dev, "ch= %d, th = %d ch_th = 0x%x", j, i, ch_th[j]);
 		}
-		AWLOGE(p_sar->dev, "ch = %d last_th=0x%x th = 0x%x", j, p_sar->channels_arr[j].last_channel_info, ch_th[j]);
+		AWLOGD(p_sar->dev, "ch = %d last_th=0x%x th = 0x%x", j, p_sar->channels_arr[j].last_channel_info, ch_th[j]);
 
 		if (p_sar->channels_arr[j].last_channel_info != ch_th[j]) {
 			if ((ch_th[j] >> 3 & 0x01) == 1) {	//th3
