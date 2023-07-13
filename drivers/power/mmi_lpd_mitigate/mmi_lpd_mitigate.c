@@ -35,6 +35,7 @@ struct lpd_info {
 	int lpd_present;
 	int lpd_rsbu1;
 	int lpd_rsbu2;
+	int lpd_cid;
 };
 
 /*
@@ -57,6 +58,7 @@ struct lpd_mitigate_device {
 	struct device *dev;
 	u32 lpd_status;
 	u32 tud_status;
+	int cid_status;
 	u32 lpd_mitigate_mode;
 	u32 mitigate_mode_cfg;
 	u32 def_mitigate_mode_cfg;
@@ -88,6 +90,13 @@ static void lpd_notify_uevent(struct lpd_mitigate_device *lpd_device, int event)
 		scnprintf(uevent_buf, LPD_SHOW_MAX_SIZE,
 			"POWER_SUPPLY_TUD_PRESENT=%s",
 			lpd_device->tud_status? "true" : "false");
+	} else if (event == NOTIFY_EVENT_CID_STATUS) {
+		scnprintf(uevent_buf, LPD_SHOW_MAX_SIZE,
+			"POWER_SUPPLY_CID_STATUS=%d",
+			lpd_device->cid_status);
+	} else {
+		pr_err("Invalid lpd notify event: %d\n", event);
+		return;
 	}
 	lpd_device->uenvp[0] = uevent_buf;
 	lpd_device->uenvp[1] = NULL;
@@ -165,6 +174,16 @@ static void lpd_mitigate_work(struct work_struct *work)
 				NOTIFY_EVENT_LPD_STATUS,
 				(void *)&lpd_status);
 		lpd_notify_uevent(lpd_device, NOTIFY_EVENT_LPD_STATUS);
+	}
+
+	if (lpd_info.lpd_cid != lpd_device->cid_status) {
+		pr_info("CID status transit: %d -> %d\n",
+				lpd_device->cid_status, lpd_info.lpd_cid);
+		lpd_device->cid_status = lpd_info.lpd_cid;
+		relay_notifier_fire(BLOCKING, LPD,
+				NOTIFY_EVENT_CID_STATUS,
+				(void *)&lpd_device->cid_status);
+		lpd_notify_uevent(lpd_device, NOTIFY_EVENT_CID_STATUS);
 	}
 
 	lpd_mitigate_mode = lpd_device->lpd_mitigate_mode;
@@ -318,6 +337,7 @@ static int lpd_mitigate_probe(struct platform_device *pdev)
 	INIT_WORK(&lpd_device->lpd_mitigate_work, lpd_mitigate_work);
 	platform_set_drvdata(pdev, lpd_device);
 	lpd_device->dev = dev;
+	lpd_device->cid_status = INT_MAX;
 	lpd_device->lpd_status = INT_MAX;
 	lpd_device->tud_status = INT_MAX;
 	lpd_device->lpd_mitigate_mode = INT_MAX;
