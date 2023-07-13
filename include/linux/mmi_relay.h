@@ -9,6 +9,7 @@
 enum {
 	NOTIFY_EVENT_LPD_STATUS = 1,
 	NOTIFY_EVENT_TUD_STATUS = 2,
+	NOTIFY_EVENT_CID_STATUS = 3,
 };
 
 typedef enum notifier_type {
