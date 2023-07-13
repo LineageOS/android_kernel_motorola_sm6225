@@ -14,10 +14,28 @@
 #include <linux/module.h>
 #include <trace/hooks/mm.h>
 #include <linux/pagemap.h>
+#include <linux/version.h>
 
 static int max_ra_pages = 8;
 module_param(max_ra_pages, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_ra_pages, "Max read ahead pages");
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 104) || (LINUX_VERSION_CODE > KERNEL_VERSION(5, 10, 177) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
+#ifndef TUNE_MMAP_READAROUND
+#define TUNE_MMAP_READAROUND
+#endif
+#endif
+
+#if defined(TUNE_MMAP_READAROUND)
+static void __nocfi tune_mmap_readaround(void *p, unsigned int ra_pages, pgoff_t pgoff,
+		pgoff_t *start, unsigned int *size, unsigned int *async_size)
+{
+	*start = max_t(long, 0, pgoff - max_ra_pages / 2);
+	*size = max_ra_pages;
+	*async_size = max_ra_pages / 4;
+	return;
+}
+#else
 static void __nocfi filemap_fault_get_page(void *p, struct vm_fault *vmf, struct page **page_out, bool *retry)
 {
 	struct file *file = vmf->vma->vm_file;
@@ -82,13 +100,17 @@ static void __nocfi filemap_fault_cache_page(void *p, struct vm_fault *vmf, stru
 			vmf->android_oem_data1[1] = 0;
 	}
 }
+#endif
 
 static int __nocfi __init moto_mmap_fault_init(void)
 {
 	int ret = 0;
+#if defined(TUNE_MMAP_READAROUND)
+	ret = register_trace_android_vh_tune_mmap_readaround(tune_mmap_readaround, NULL);
+#else
 	ret = register_trace_android_vh_filemap_fault_get_page(filemap_fault_get_page, NULL) ?:
 		register_trace_android_vh_filemap_fault_cache_page(filemap_fault_cache_page, NULL);
-
+#endif
 	if (ret != 0)
 		return -ENXIO;
 	else
@@ -96,8 +118,12 @@ static int __nocfi __init moto_mmap_fault_init(void)
 }
 static void __nocfi __exit moto_mmap_fault_exit(void)
 {
+#if defined(TUNE_MMAP_READAROUND)
+	unregister_trace_android_vh_tune_mmap_readaround(tune_mmap_readaround, NULL);
+#else
 	unregister_trace_android_vh_filemap_fault_get_page(filemap_fault_get_page, NULL);
 	unregister_trace_android_vh_filemap_fault_cache_page(filemap_fault_cache_page, NULL);
+#endif
 }
 
 module_init(moto_mmap_fault_init);
