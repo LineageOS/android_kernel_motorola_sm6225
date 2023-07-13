@@ -277,7 +277,7 @@ static int moto_vibrator_ldo_probe(struct platform_device *pdev)
 {
 	//struct device_node *of_node = pdev->dev.of_node;
 	struct vib_ldo_chip *chip;
-	int i, ret = 0;;
+	int i, ret = 0;
 	pr_info("Vibrator LDO successfully registered: ret = %d\n",ret);
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
@@ -318,6 +318,19 @@ static int moto_vibrator_ldo_probe(struct platform_device *pdev)
 			goto sysfs_fail;
 		}
 	}
+#ifdef CONFIG_LEDS_TRIGGER_TRANSIENT
+	/*
+	 * Android has a habit of trying to set the vibrator trigger to "transient",
+	 * which destroys our own "activate", "duration", and "state" attributes.
+	 * Remove the "trigger" attribute provided by leds_class so that no one can
+	 * change the trigger of the vibrator LED device.
+	 *
+	 * Luckily, `sysfs_remove_file` only uses the `name` field, so we can use a
+	 * compound literal instead of having to find the proper attribute struct
+	 */
+	sysfs_remove_file(&chip->cdev.dev->kobj,
+	                  &((struct attribute){.name = "trigger"}));
+#endif
 
 	pr_info("Vibrator LDO successfully registered: gpio = %d\n",chip->en_gpio);
 	return 0;
