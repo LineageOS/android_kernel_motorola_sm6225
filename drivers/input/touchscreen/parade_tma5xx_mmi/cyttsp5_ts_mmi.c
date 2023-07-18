@@ -287,7 +287,28 @@ static int cyttsp5_ts_mmi_methods_power(struct device *dev, int on) {
 }
 
 static int cyttsp5_ts_mmi_post_suspend(struct device *dev) {
+#ifdef CYTTSP5_SENSOR_EN
+	unsigned char gesture_type = 0;
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	ASSERT_PTR(cd);
+#endif
+
 	pr_info("%s: Post suspend end", __func__);
+
+#ifdef CYTTSP5_SENSOR_EN
+	if (cd->imports && cd->imports->get_gesture_type) {
+		cd->imports->get_gesture_type(cd->dev, &gesture_type);
+	}
+
+	if (gesture_type & TS_MMI_GESTURE_SINGLE) {
+		dev_info(dev, "%s: cli single tap enable\n", __func__);
+		cd->should_enable_gesture = 1;
+	} else {
+		dev_info(dev, "%s: cli single tap disable\n", __func__);
+		cd->should_enable_gesture = 0;
+	}
+#endif
+
 	cyttsp5_core_suspend(dev);
 	return 0;
 }
@@ -298,68 +319,9 @@ static int cyttsp5_ts_mmi_post_resume(struct device *dev) {
 	return 0;
 }
 
-#ifdef CYTTSP5_SENSOR_EN
-/*
- * cli_gesture value used to indicate which gesture mode type is enabled
- */
-static ssize_t cyttsp5_ts_cli_gesture_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct cyttsp5_core_data *cd = NULL;
-
-	dev = MMI_DEV_TO_TS_DEV(dev);
-	cd =  dev_get_drvdata(dev);
-	ASSERT_PTR(cd);
-	return scnprintf(buf, PAGE_SIZE, "%02x\n", cd->pdata->core_pdata->cli_gesture_type);
-}
-
-static ssize_t cyttsp5_ts_cli_gesture_store(struct device *dev,
-			struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct cyttsp5_core_data *cd = NULL;
-	unsigned int value = 0;
-	int err = 0;
-
-	dev = MMI_DEV_TO_TS_DEV(dev);
-	cd =  dev_get_drvdata(dev);
-	ASSERT_PTR(cd);
-
-	mutex_lock(&cd->state_mutex);
-	err = sscanf(buf, "%d", &value);
-	if (err < 0) {
-		dev_err(dev, "%s: Failed to convert value\n", __func__);
-		return -EINVAL;
-	}
-	switch (value) {
-		case 0x20:
-			dev_info(dev, "%s: cli single tap disable\n", __func__);
-			cd->should_enable_gesture = 0;
-			break;
-		case 0x21:
-			dev_info(dev, "%s: cli single tap enable\n", __func__);
-			cd->should_enable_gesture = 1;
-			break;
-		default:
-			dev_info(dev, "%s: unsupport gesture mode type\n", __func__);
-			;
-	}
-	mutex_unlock(&cd->state_mutex);
-	dev_info(dev, "%s: cli_gesture = 0x%02x \n", __func__, cd->should_enable_gesture);
-
-	return size;
-}
-
-static DEVICE_ATTR(cli_gesture, (S_IRUGO | S_IWUSR | S_IWGRP),
-	cyttsp5_ts_cli_gesture_show, cyttsp5_ts_cli_gesture_store);
-#endif
-
 static int cyttsp5_ts_mmi_extend_attribute_group(struct device *dev, struct attribute_group **group)
 {
 	int idx = 0;
-
-#ifdef CYTTSP5_SENSOR_EN
-	ADD_ATTR(cli_gesture);
-#endif
 
 	if (idx) {
 		ext_attributes[idx] = NULL;
