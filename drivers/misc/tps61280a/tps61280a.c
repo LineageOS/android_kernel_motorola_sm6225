@@ -351,7 +351,7 @@ static int tps61280a_pinctrl_init(struct i2c_client *client, struct tps61280a_pl
 static int tps61280a_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret = 0;
-	int vout_floor = 3500, vout_roof = 4200;
+	int vout_floor = 3500, vout_roof = 4400;
 	struct tps61280a_platform_data *pdata = NULL;
 
 	if (!client) {
