@@ -448,10 +448,10 @@ static int nvt_mmi_methods_get_config_id(struct device *dev, void *cdata)
 static int nvt_mmi_methods_get_bus_type(struct device *dev, void *idata)
 {
 	struct nvt_ts_data *ts_data;
-	struct input_dev *input_dev;
+
 
 	GET_TS_DATA(dev);
-	input_dev = ts_data->input_dev;
+
 	TO_INT(idata) = ts->input_dev->id.bustype == BUS_SPI ?
 			TOUCHSCREEN_MMI_BUS_TYPE_SPI : TOUCHSCREEN_MMI_BUS_TYPE_I2C;
 	return 0;

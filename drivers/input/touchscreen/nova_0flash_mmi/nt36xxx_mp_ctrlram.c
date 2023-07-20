@@ -359,9 +359,11 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	int32_t iArrayIndex = 0;
 	struct file *fp = NULL;
 	char *fbufp = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	mm_segment_t org_fs;
+#endif
 	int32_t write_ret = 0;
-	uint32_t output_len = 0;
+	uint32_t output_len= 0;
 	loff_t pos = 0;
 #if TOUCH_KEY_NUM > 0
 	int32_t k = 0;
@@ -394,13 +396,21 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	printk("\n");
 	sprintf(fbufp + y_ch * x_ch * 7 + y_ch * 2 + Key_Channel * 7, "\r\n");
 #endif /* #if TOUCH_KEY_NUM > 0 */
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (offset == 0)
+		fp = filp_open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
+	else
+		fp = filp_open(file_path, O_RDWR | O_CREAT, 0666);
+#else
 	org_fs = get_fs();
 	set_fs(KERNEL_DS);
 	fp = filp_open(file_path, O_RDWR | O_CREAT, 0644);
+#endif
 	if (fp == NULL || IS_ERR(fp)) {
 		NVT_ERR("open %s failed\n", file_path);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		set_fs(org_fs);
+#endif
 		if (fbufp) {
 			kfree(fbufp);
 			fbufp = NULL;
@@ -418,10 +428,15 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	write_ret = vfs_write(fp, (char __user *)fbufp, output_len, &pos);
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
 #endif
+
 	if (write_ret <= 0) {
 		NVT_ERR("write %s failed\n", file_path);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		set_fs(org_fs);
+#endif
 		if (fp) {
 			filp_close(fp, NULL);
 			fp = NULL;
@@ -432,8 +447,9 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 		}
 		return -1;
 	}
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	set_fs(org_fs);
+#endif
 	if (fp) {
 		filp_close(fp, NULL);
 		fp = NULL;
