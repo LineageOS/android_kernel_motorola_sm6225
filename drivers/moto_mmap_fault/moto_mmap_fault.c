@@ -77,7 +77,7 @@ static void __nocfi filemap_fault_cache_page(void *p, struct vm_fault *vmf, stru
 
 	if ((ra->ra_pages == max_ra_pages) && (vmf->android_oem_data1[0] != 0)
 			&& (vmf->android_oem_data1[1] == max_ra_pages)) {
-			ra->ra_pages = (unsigned long)vmf->android_oem_data1[0]; //restore the old ra_pages
+			ra->ra_pages = (unsigned int)vmf->android_oem_data1[0]; //restore the old ra_pages
 			vmf->android_oem_data1[0] = 0;
 			vmf->android_oem_data1[1] = 0;
 	}
