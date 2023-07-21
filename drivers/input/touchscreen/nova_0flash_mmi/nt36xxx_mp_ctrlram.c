@@ -428,7 +428,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	write_ret = vfs_write(fp, (char __user *)fbufp, output_len, &pos);
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
 	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
 #endif
 
