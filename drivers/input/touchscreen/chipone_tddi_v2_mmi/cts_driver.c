@@ -516,12 +516,6 @@ static int cts_driver_probe(struct spi_device *client)
     {
         struct device_node *dp = client->dev.of_node;
 
-#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
-        if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
-            cts_err("%s : mmi: device not supported\n", __func__);
-            return -ENODEV;
-        }
-#endif
         if (check_dt(dp)) {
             if (!check_default_tp(dp, "qcom,i2c-touch-active"))
                 ret = -EPROBE_DEFER;
@@ -532,6 +526,13 @@ static int cts_driver_probe(struct spi_device *client)
             return ret;
         }
     }
+#else
+#if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+        if (client->dev.of_node && !mmi_device_is_available(client->dev.of_node)) {
+            cts_err("%s : mmi: device not supported\n", __func__);
+            return -ENODEV;
+        }
+#endif
 #endif
 
 #ifdef CONFIG_CTS_I2C_HOST
