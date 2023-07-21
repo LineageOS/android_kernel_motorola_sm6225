@@ -65,11 +65,17 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/kfifo.h>
+#include <linux/version.h>
 
 #include <linux/types.h>
 
 #ifdef CONFIG_MTK_I2C_EXTENSION
 #include <linux/dma-mapping.h>
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38)
+#include <linux/input/mt.h>
 #endif
 
 #define FW_FILE_NAME            "cs_press.nfw"
@@ -193,7 +199,7 @@
 #define I2C_CHECK_SCHEDULE
 #define INT_SET_EN
 //#define SIDE_KEY
-#define SIDE_KEY_MMI
+//#define SIDE_KEY_MMI
 #define CALIBRATION_SUCCESS_FALG        0xf0
 #define CALIBRATION_FAIL_FALG           0xf2
 #define CALIBRATION_OVERTIME_FALG       0xff
@@ -216,6 +222,20 @@
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 
 #define DEFAULT_RUN_DELAY_TIME          50
+
+
+#define IRQ_TYPE_EDGE_FALLING 0
+#define IRQ_TYPE_EDGE_RISING 1
+
+#define CS_DATA_MAX_QUEUE 200
+
+#define DATA_MODE_REG 0xF1
+#define DATA_READY_REG 0xF2
+#define DATA_READ_REG 0xF3
+
+#define CS_MAX_TOUCH 10
+
+#define CS_INPUT_PHYS           "cs_press/input0"
 
 typedef struct{
     unsigned short manufacturer_id;
@@ -256,6 +276,44 @@ typedef struct{
     short press_adc_3rd;
 }CS_CALIBRATION_RESULT_Def;
 
+struct cs_press_coords {
+    int coord;
+    int pressure;
+};
+
+typedef enum {
+    CS_NAV_MODE_NONE = 0,
+    CS_NAV_MODE_VOLUME,
+    CS_NAV_MODE_ZOOM,
+    CS_NAV_MODE_SCROLL,
+    CS_NAV_MODE_ROLL,
+    CS_NAV_MODE_MAX,
+} cs_nav_mode_t;
+
+enum {
+    CS_NAV_MODE_SCROLL_UP = 0,
+    CS_NAV_MODE_SCROLL_DOWN,
+    CS_NAV_MODE_ZOOM_IN,
+    CS_NAV_MODE_ZOOM_OUT,
+};
+
+struct cs_vtp_scroll {
+    int x0;
+    int y0;
+    int range;
+    int step;
+    int interval;
+};
+
+struct cs_vtp_zoom{
+    int x0;
+    int p1_y0;
+    int p2_y0;
+    int range;
+    int step;
+    int interval;
+};
+
 struct cs_press_t {
     int major;
     struct class *class;
@@ -282,6 +340,13 @@ struct cs_press_t {
     struct delayed_work update_worker;
 
     struct delayed_work delay_run_worker;
+
+    struct kfifo data_queue;
+    struct delayed_work work;
+    unsigned int panel_max_x;
+    unsigned int panel_max_y;
+    unsigned int panel_max_w; /*major and minor*/
+    unsigned int nav_mode;
 
 };
 

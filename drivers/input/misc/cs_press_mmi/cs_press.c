@@ -23,7 +23,7 @@
 
 const char *cs_driver_ver = "1.1";
 
-#define PROC_FOPS_NUM  8
+#define PROC_FOPS_NUM  9
 #define PROC_NAME_LEN  50
 
 #ifndef KERNEL_4_1_5
@@ -50,11 +50,15 @@ static struct mutex    i2c_rw_lock;
 static DEFINE_MUTEX(i2c_rw_lock);
 
 static struct cs_press_t g_cs_press;
+static struct cs_vtp_scroll vtp_scroll;
+static struct cs_vtp_zoom vtp_zoom;
+
 
 
 #ifdef INT_SET_EN
 static DECLARE_WAIT_QUEUE_HEAD(cs_press_waiter);
 static int cs_press_int_flag;
+static int cs_press_stop_read;
 int cs_press_irq_gpio;
 int cs_press_irq_num;
 
@@ -512,14 +516,43 @@ void fml_input_dev_init(void){
     cs_input_dev = input_allocate_device();
     if (cs_input_dev != NULL) {
         cs_input_dev->name = CS_PRESS_NAME;
+        cs_input_dev->phys = CS_INPUT_PHYS;
+        cs_input_dev->id.product = 0x1357;
+        cs_input_dev->id.vendor = 0x2468;
+        cs_input_dev->id.version = 10428;
+
         __set_bit(EV_KEY, cs_input_dev->evbit);
         __set_bit(KEY_HOME, cs_input_dev->keybit);
         __set_bit(KEY_VOLUMEUP, cs_input_dev->keybit);
         __set_bit(KEY_VOLUMEDOWN, cs_input_dev->keybit);
         __set_bit(KEY_POWER, cs_input_dev->keybit);
+
+        __set_bit(EV_SYN, cs_input_dev->keybit);
+        __set_bit(EV_ABS, cs_input_dev->keybit);
+        __set_bit(BTN_TOUCH, cs_input_dev->keybit);
+        __set_bit(INPUT_PROP_DIRECT, cs_input_dev->propbit);
+        __set_bit(BTN_TOOL_FINGER, cs_input_dev->keybit);
+
+        /* set input parameters */
+        input_set_abs_params(cs_input_dev, ABS_MT_POSITION_X,
+                     0, g_cs_press.panel_max_x, 0, 0);
+        input_set_abs_params(cs_input_dev, ABS_MT_POSITION_Y,
+                     0, g_cs_press.panel_max_y, 0, 0);
+        input_set_abs_params(cs_input_dev, ABS_MT_TOUCH_MAJOR,
+                     0, g_cs_press.panel_max_w, 0, 0);
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 7, 0)
+        input_mt_init_slots(cs_input_dev, CS_MAX_TOUCH,
+                INPUT_MT_DIRECT);
+#else
+        input_mt_init_slots(cs_input_dev, CS_MAX_TOUCH);
+#endif
+
         ret = input_register_device(cs_input_dev);
-        if (ret != 0)
+        if (ret != 0) {
             LOG_ERR("input register device error = %d\n", ret);
+            input_free_device(cs_input_dev);
+        }
     }
 }
 
@@ -566,6 +599,217 @@ static void cs_irq_disable(void)
     LOG_ERR("Disable irq_flag=%d\n", cs_irq_flag);
 }
 
+int cs_irq_stat(void)
+{
+    return gpio_get_value(cs_press_irq_gpio);
+}
+
+static void* vtp_scroll_up_down(void *arg, int scroll_direction)
+{
+    struct cs_vtp_scroll *scroll = arg;
+    int i;
+    LOG_INFO("nav-gesture: start, p0=(%d,%d) L=%d s=%dpx t=%dms", scroll->x0, scroll->y0,
+            scroll->range, scroll->step, scroll->interval);
+
+    for(i = 0; i < scroll->range; i++) {
+        input_mt_slot(cs_input_dev, 0);
+        input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, true);
+
+        if(i == 0) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, scroll->x0 - 1);
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, scroll->x0);
+	}
+
+        if(scroll_direction == CS_NAV_MODE_SCROLL_UP) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, scroll->y0 - (i * scroll->step));
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, scroll->y0 + (i * scroll->step));
+        }
+        input_report_abs(cs_input_dev, ABS_MT_TOUCH_MAJOR, 45);
+        input_report_key(cs_input_dev, BTN_TOUCH, 1);
+        input_sync(cs_input_dev);
+        udelay(scroll->interval * 1000);
+    }
+    //input_mt_slot(cs_input_dev, 0);
+    //input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, false);
+    //input_report_key(cs_input_dev, BTN_TOUCH, 0);
+    //input_sync(cs_input_dev);
+    LOG_INFO("nav-gesture scroll %d done", scroll_direction);
+
+    return NULL;
+}
+
+static void* vtp_zoom_in_out(void* arg, int zoom_direction)
+{
+    struct cs_vtp_zoom *zoom = arg;
+    int i;
+    LOG_INFO("nav-gesture: start, p1=(%d,%d) p2=(%d,%d) L=%d s=%dpx t=%dms", zoom->x0,
+        zoom->p1_y0, zoom->x0, zoom->p2_y0, zoom->range, zoom->step, zoom->interval);
+
+    for(i = 0; i < zoom->range; i++) {
+        //finger 1
+        input_mt_slot(cs_input_dev, 0);
+        input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, true);
+
+        if(i == 0) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, zoom->x0 - 1);
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, zoom->x0);
+	}
+
+        if(zoom_direction == CS_NAV_MODE_ZOOM_IN) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, zoom->p1_y0 - (i * zoom->step));
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, zoom->p1_y0 + (i * zoom->step));
+        }
+        input_report_abs(cs_input_dev, ABS_MT_TOUCH_MAJOR, 45);
+        input_report_key(cs_input_dev, BTN_TOUCH, 1);
+        input_sync(cs_input_dev);
+
+        //finger 2
+        input_mt_slot(cs_input_dev, 1);
+        input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, true);
+
+        if(i == 0) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, zoom->x0 - 1);
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_X, zoom->x0);
+	}
+
+        if(zoom_direction == CS_NAV_MODE_ZOOM_IN) {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, zoom->p2_y0 + (i * zoom->step));
+        } else {
+            input_report_abs(cs_input_dev, ABS_MT_POSITION_Y, zoom->p2_y0 - (i * zoom->step));
+        }
+        input_report_abs(cs_input_dev, ABS_MT_TOUCH_MAJOR, 45);
+        input_report_key(cs_input_dev, BTN_TOUCH, 1);
+        input_sync(cs_input_dev);
+
+        udelay(zoom->interval * 1000);
+    }
+
+    LOG_INFO("nav-gesture zoom done");
+
+    return NULL;
+}
+
+static void cs_press_worker_func(struct work_struct *w)
+{
+    int ret, i;
+    struct cs_press_coords raw_data = {0};
+    int last_coord = -1;
+    int diff_coord;
+
+    switch(g_cs_press.nav_mode) {
+    case CS_NAV_MODE_SCROLL:
+        LOG_INFO("CS_NAV_MODE_SCROLL mode\n");
+        vtp_scroll.x0 = (g_cs_press.panel_max_x/2);
+        vtp_scroll.y0 = (g_cs_press.panel_max_y/2);
+        //vtp_scroll.range = g_nav_vtp_range_point;
+        vtp_scroll.step = 5;
+        vtp_scroll.interval = 4;
+        while(1) {
+            if(!kfifo_len(&g_cs_press.data_queue) && cs_irq_stat()) {
+                input_mt_slot(cs_input_dev, 0);
+                input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, false);
+                input_report_key(cs_input_dev, BTN_TOUCH, 0);
+                input_sync(cs_input_dev);
+                break;
+            }
+
+            if (kfifo_len(&g_cs_press.data_queue)) {
+                ret = kfifo_out(&g_cs_press.data_queue, &raw_data, sizeof(struct cs_press_coords));
+                if (!ret) {
+                    LOG_ERR(" kfifo_out failed, it seems empty, ret=%d\n", ret);
+                }
+                LOG_INFO("kfifo_out coord: %d, pressure: %d\n", raw_data.coord, raw_data.pressure);
+                //simulate scroll touch events
+
+                if (last_coord == -1) {
+                     last_coord = raw_data.coord;
+                     continue;
+                }
+                diff_coord = raw_data.coord - last_coord;
+                if(diff_coord > 0) {
+                    //slide up
+                    vtp_scroll.range = abs(diff_coord);
+                    vtp_scroll_up_down(&vtp_scroll, CS_NAV_MODE_SCROLL_UP);
+                    vtp_scroll.y0 -= vtp_scroll.range * vtp_scroll.step;
+                } else if(diff_coord < 0) {
+                    //slide down
+                    vtp_scroll.range = abs(diff_coord);
+                    vtp_scroll_up_down(&vtp_scroll, CS_NAV_MODE_SCROLL_DOWN);
+                    vtp_scroll.y0 += vtp_scroll.range * vtp_scroll.step;
+                }
+                last_coord = raw_data.coord;
+            } else {
+                    //LOG_INFO("left raw_data is nothing\n");
+            }
+        }
+    break;
+
+    case CS_NAV_MODE_ZOOM:
+        LOG_INFO("CS_NAV_MODE_ZOOM mode\n");
+        vtp_zoom.x0 = (g_cs_press.panel_max_x/2);
+        //vtp_zoom.p1_y0 = (g_cs_press.panel_max_y/2) - 100;
+        //vtp_zoom.p2_y0 = (g_cs_press.panel_max_y/2) + 100;
+        vtp_zoom.p1_y0 = (g_cs_press.panel_max_y/2) - 400;
+        vtp_zoom.p2_y0 = (g_cs_press.panel_max_y/2) + 400;
+        //vtp_zoom.range = g_nav_vtp_range_point;
+        vtp_zoom.step = 4;
+        vtp_zoom.interval = 5;
+
+        while(1) {
+            if(!kfifo_len(&g_cs_press.data_queue) && cs_irq_stat()) {
+                for(i = 0; i < 2; i++) {
+                    input_mt_slot(cs_input_dev, i);
+                    input_mt_report_slot_state(cs_input_dev, MT_TOOL_FINGER, false);
+                    input_report_key(cs_input_dev, BTN_TOUCH, 0);
+                    input_sync(cs_input_dev);
+                }
+                break;
+            }
+
+            if (kfifo_len(&g_cs_press.data_queue)) {
+                ret = kfifo_out(&g_cs_press.data_queue, &raw_data, sizeof(struct cs_press_coords));
+                if (!ret) {
+                    LOG_ERR(" kfifo_out failed, it seems empty, ret=%d\n", ret);
+                }
+                LOG_INFO("kfifo_out coord: %d, pressure: %d\n", raw_data.coord, raw_data.pressure);
+                //simulate zoom touch events
+
+                if (last_coord == -1) {
+                     last_coord = raw_data.coord;
+                     continue;
+                }
+                diff_coord = raw_data.coord - last_coord;
+                if(diff_coord > 0) {
+                    //slide up -> zoom in
+                    vtp_zoom.range = abs(diff_coord);
+                    vtp_zoom_in_out(&vtp_zoom, CS_NAV_MODE_ZOOM_IN);
+                    vtp_zoom.p1_y0 -= vtp_zoom.range * vtp_zoom.step;
+                    vtp_zoom.p2_y0 += vtp_zoom.range * vtp_zoom.step;
+                } else if(diff_coord < 0) {
+                    //slide down -> zoom out
+                    vtp_zoom.range = abs(diff_coord);
+                    vtp_zoom_in_out(&vtp_zoom, CS_NAV_MODE_ZOOM_OUT);
+                    vtp_zoom.p1_y0 += vtp_zoom.range * vtp_zoom.step;
+                    vtp_zoom.p2_y0 -= vtp_zoom.range * vtp_zoom.step;
+                }
+                last_coord = raw_data.coord;
+            } else {
+                    //LOG_INFO("left raw_data is nothing\n");
+            }
+        }
+    break;
+
+    default:
+        LOG_INFO("not supported navigation mode\n");
+    }
+
+}
+
 /**
   * @brief    cs_press_interrupt_handler
   * @param
@@ -573,11 +817,21 @@ static void cs_irq_disable(void)
 */
 static irqreturn_t cs_press_interrupt_handler(int irq, void *dev_id)
 {
+    int irq_state = 0;
+
     printk("cs_press entry irq ok.\n");
     cs_press_int_flag = 1;
 
-    cs_irq_disable();
-    wake_up_interruptible(&cs_press_waiter);
+    irq_state = cs_irq_stat();
+
+    //cs_irq_disable();
+    if (irq_state == IRQ_TYPE_EDGE_FALLING) {
+        cs_press_stop_read = 0; //clear flag
+        schedule_delayed_work(&g_cs_press.work, 0); //start process data on buffer
+        wake_up_interruptible(&cs_press_waiter); //start put data to buffer
+    } else if (irq_state == IRQ_TYPE_EDGE_RISING) {
+        cs_press_stop_read = 1; //need stop read data from IC
+    }
 
     return IRQ_HANDLED;
 }
@@ -688,6 +942,14 @@ void fml_key_report(void)
 */
 static int cs_press_event_handler(void *unused)
 {
+    unsigned char read_data = 0;
+    unsigned char read_temp[FW_ONE_BLOCK_LENGTH_R] = {0};
+    unsigned char read_data_cmd = 0x24;
+    unsigned char new_frame_cmd = 0x0;
+    unsigned char exit_read_cmd = 0x0;
+    struct cs_press_coords raw_data = {0};
+    int queue_size;
+
     do {
         LOG_ERR("cs_press_event_handler do wait\n");
         wait_event_interruptible(cs_press_waiter,
@@ -695,8 +957,45 @@ static int cs_press_event_handler(void *unused)
         LOG_ERR("cs_press_event_handler enter wait\n");
         cs_press_int_flag = 0;
 
-        fml_key_report();
-        cs_irq_enable();
+        cs_press_wakeup_iic();
+
+        cs_press_iic_write(DATA_MODE_REG, &read_data_cmd, 1);
+
+        while(!cs_press_stop_read) {
+            //read raw press data from IC
+            cs_press_iic_write(DATA_READY_REG, &new_frame_cmd, 1);
+
+            while(1) {
+                cs_press_iic_read(DATA_READY_REG, &read_data, 1);
+                if(read_data)
+                    break;
+                cs_press_delay_ms(1);
+            }
+
+            memset(read_temp, 0x0, sizeof(read_temp));
+            cs_press_iic_read(DATA_READ_REG, read_temp, read_data);
+
+            //put valid raw data to buffer
+            raw_data.coord = (read_temp[1] << 8)|read_temp[0];
+            raw_data.pressure = (read_temp[3] << 8)|read_temp[2];
+            LOG_INFO("coord: %d, press: %d", raw_data.coord, raw_data.pressure);
+
+            if(raw_data.coord >= 0 && raw_data.coord <= 100) {
+                queue_size = (kfifo_len(&g_cs_press.data_queue) / sizeof(struct cs_press_coords));
+                if (kfifo_avail(&g_cs_press.data_queue) && (queue_size < CS_DATA_MAX_QUEUE)) {
+                    kfifo_in(&g_cs_press.data_queue, &raw_data, sizeof(struct cs_press_coords));
+                    LOG_INFO("push raw data: %d\n", raw_data.coord);
+                } else {
+                    LOG_ERR("data_queue is full!!\n");
+                    kfifo_reset(&g_cs_press.data_queue);
+                    LOG_ERR("data_queue is reset!!\n");
+                }
+            }
+        }
+
+        cs_press_iic_write(DATA_MODE_REG, &exit_read_cmd, 1);
+        //fml_key_report();
+        //cs_irq_enable();
     } while (!kthread_should_stop());
 
     return 0;
@@ -710,6 +1009,7 @@ static int cs_press_event_handler(void *unused)
 void eint_init(void)
 {
     init_waitqueue_head(&cs_press_waiter);
+    INIT_DELAYED_WORK(&g_cs_press.work, cs_press_worker_func);
 
     kthread_run(cs_press_event_handler, 0, CS_PRESS_NAME);
     cs_irq_disable();
@@ -2132,6 +2432,48 @@ exit:
     return count;
 }
 
+static ssize_t cs_proc_nav_mode_write(struct file *file, const char __user *buf,
+    size_t count, loff_t *offset)
+{
+    char *kbuf = NULL;
+    int ret = 0;
+    const char *startpos = NULL;
+    char *firstc = NULL;
+    unsigned int tempdata = 0;
+
+    if(count <= 0){
+        LOG_ERR("argument err\n");
+        goto exit;
+    }
+    kbuf = kzalloc(count, GFP_KERNEL );
+    if (!kbuf) {
+        goto exit;
+    }
+    startpos = kbuf;
+    if (copy_from_user(kbuf, buf, count)) {
+        goto exit_kfree;
+    }
+    firstc = strstr(startpos, "0x");
+    if (!firstc) {
+        LOG_ERR("param format invalid\n");
+        goto exit_kfree;
+    }
+    firstc[4] = 0;
+    ret = kstrtouint(startpos, 0, &tempdata);
+    if (ret) {
+        LOG_ERR("param convert to int failed\n");
+        goto exit_kfree;
+    }
+
+    g_cs_press.nav_mode = tempdata;
+    LOG_INFO("navigation mode: %d\n", g_cs_press.nav_mode);
+
+exit_kfree:
+    kfree(kbuf);
+exit:
+    return count;
+}
+
 /**
   * @brief      set_debug_mode
   * @param[in]  reg addr, debug mode
@@ -2587,7 +2929,7 @@ struct regulator *power_3v3 = NULL;
         cs_press_irq_num = gpio_to_irq(cs_press_irq_gpio);
         ret = request_irq(cs_press_irq_num,
           (irq_handler_t)cs_press_interrupt_handler,
-          IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+          IRQF_TRIGGER_FALLING |IRQF_TRIGGER_RISING |IRQF_ONESHOT,
           "CS_PRESS-eint", g_cs_press.device_irq);
         if (ret > 0) {
             ret = -1;
@@ -2634,6 +2976,28 @@ struct regulator *power_3v3 = NULL;
     } else {
             dev_err(&pdev->dev,"%s: power_3v3 is NULL\n", __func__);
     }
+
+    ret = of_property_read_u32((pdev->dev).of_node, "cs,panel-max-x",
+                 &g_cs_press.panel_max_x);
+    if (ret) {
+        LOG_ERR("failed get panel-max-x\n");
+        return ret;
+    }
+
+    ret = of_property_read_u32((pdev->dev).of_node, "cs,panel-max-y",
+                 &g_cs_press.panel_max_y);
+    if (ret) {
+        LOG_ERR("failed get panel-max-y\n");
+        return ret;
+    }
+
+    ret = of_property_read_u32((pdev->dev).of_node, "cs,panel-max-w",
+                 &g_cs_press.panel_max_w);
+    if (ret) {
+        LOG_ERR("failed get panel-max-w\n");
+        return ret;
+    }
+
     LOG_ERR("end---\n");
     return 0;
 }
@@ -2667,6 +3031,7 @@ static const char proc_list[PROC_FOPS_NUM][PROC_NAME_LEN]={
     "read_rawdata",
     "read_cali_coef",
     "read_force_data",
+    "nav_mode",
 };
 
 #ifndef KERNEL_4_1_5
@@ -2683,6 +3048,7 @@ static const struct file_operations proc_fops[PROC_FOPS_NUM] = {
     FOPS_ARRAY(cs_proc_get_rawdata_open, NULL),
     FOPS_ARRAY(cs_proc_calicoef_open, NULL),
     FOPS_ARRAY(cs_proc_get_forcedata_open, NULL),
+    FOPS_ARRAY(cs_proc_open, cs_proc_nav_mode_write),
 };
 /**
   * @brief  cs_sys_create
@@ -2837,6 +3203,12 @@ static int cs_press_probe(struct i2c_client *client, const struct i2c_device_id 
     eint_init();
 #endif
 
+    if (kfifo_alloc(&g_cs_press.data_queue,
+        CS_DATA_MAX_QUEUE * sizeof(struct cs_press_coords), GFP_KERNEL)) {
+        LOG_ERR("failed to alloc queue for raw data\n");
+    }
+
+
     // INIT_DELAYED_WORK(&g_cs_press.update_worker, update_work_func);
     // schedule_delayed_work(&g_cs_press.update_worker, msecs_to_jiffies(2000));
     // LOG_ERR("update_work_func start,delay 2s.\n");
@@ -2859,6 +3231,7 @@ static int cs_press_remove(struct i2c_client *client)
         return 0;
     }
     LOG_DEBUG("cs_remove\n");
+    kfifo_free(&g_cs_press.data_queue);
     cs_unregister_dts();
     cs_procfs_delete();
 #ifdef INT_SET_EN
