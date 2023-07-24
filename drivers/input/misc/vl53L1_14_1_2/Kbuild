@@ -45,11 +45,14 @@ ifneq ($(filter m y,$(CONFIG_INPUT_MISC_TOF_USE_VL53L3)),)
 	EXTRA_CFLAGS += -DTOF_USE_VL53L3_EN
 endif
 
-
 ifneq ($(filter m y,$(CONFIG_INPUT_MISC_PMIC_WL2864C)),)
 	EXTRA_CFLAGS += -DTOF_USE_PMIC_WL2864C
 endif
 
 ifneq ($(filter m y,$(CONFIG_TOF_COMPILE_FIX)),)
 	EXTRA_CFLAGS += -Wno-unused-but-set-variable
+endif
+
+ifneq ($(filter m y,$(CONFIG_PHIO_TIMEOUT_FIX)),)
+	EXTRA_CFLAGS += -DPHIO_TIMEOUT_FIX
 endif

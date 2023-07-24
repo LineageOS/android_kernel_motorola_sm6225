@@ -154,6 +154,11 @@ struct stmvl53l1_data {
 	/* set when first start has be done */
 	int is_first_start_done;
 
+#ifdef PHIO_TIMEOUT_FIX
+	/* set when first frame happen */
+	bool not_first_frame;
+#endif
+
 	/* control data */
 	int poll_mode;	/*!< use poll even if interrupt line present*/
 	int poll_delay_ms;	/*!< rescheduled time use in poll mode  */

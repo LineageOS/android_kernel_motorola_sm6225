@@ -784,6 +784,9 @@ static int stmvl53l1_start(struct stmvl53l1_data *data)
 	data->is_first_irq = true;
 	data->is_data_valid = false;
 	data->is_xtalk_value_changed = false;
+#ifdef PHIO_TIMEOUT_FIX
+	data->not_first_frame = false;
+#endif
 
 	rc = reset_release(data);
 	if (rc)
@@ -2492,9 +2495,20 @@ static int sleep_for_data_timeout(struct stmvl53l1_data *data, pid_t pid,
 	int rc;
 
 	mutex_unlock(&data->work_mutex);
+#ifdef PHIO_TIMEOUT_FIX
+	if(!data->not_first_frame)
+		rc = wait_event_interruptible_timeout(data->waiter_for_data,
+					sleep_for_data_condition(data, pid, head),
+					usecs_to_jiffies(4 * data->timing_budget));
+	else
+		rc = wait_event_interruptible_timeout(data->waiter_for_data,
+				sleep_for_data_condition(data, pid, head),
+				usecs_to_jiffies(2 * data->timing_budget));
+#else
 	rc = wait_event_interruptible_timeout(data->waiter_for_data,
 				sleep_for_data_condition(data, pid, head),
 				usecs_to_jiffies(2 * data->timing_budget));
+#endif
 	if (rc == 0) //condition evaluated to false after timeout elapsed
 		rc = -EAGAIN;
 	else
@@ -2605,7 +2619,10 @@ static int ctrl_mz_data_blocking_common(struct stmvl53l1_data *data,
 			sizeof(VL53L1_MultiRangingData_t));
 		goto done;
 	}
-
+#ifdef PHIO_TIMEOUT_FIX
+	if (data->meas.multi_range_data.StreamCount == 0)
+		data->not_first_frame = true;
+#endif
 	/* unless we got interrupted we return data to user and note read */
 	rc = copy_to_user(&d->data, &data->meas.multi_range_data,
 		sizeof(VL53L1_MultiRangingData_t));
