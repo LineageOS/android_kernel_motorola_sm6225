@@ -92,6 +92,7 @@
 		reg = <0x64>;
 		status = "okay";
 
+		ibat-invert-polority = "true";
 		sense_r_mohm = <5>;
 		factory_mode_ntc_exist = <0>;
 		df-serialnum = "SB18D20540";
