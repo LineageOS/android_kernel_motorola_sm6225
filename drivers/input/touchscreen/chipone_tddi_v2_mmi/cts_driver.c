@@ -87,9 +87,11 @@ int cts_suspend(struct chipone_ts_data *cts_data)
         }
     } else {
         ret = gpio_get_value(cts_data->pdata->rst_gpio);
-        cts_info("rst pull flag:%d, rst gpio val:%d", cts_data->pdata->rst_pull_flag, ret);
-        if (cts_data->pdata->rst_pull_flag && ret)
+        cts_dbg("rst pull flag:%d, rst gpio val:%d", cts_data->pdata->rst_pull_flag, ret);
+        if (cts_data->pdata->rst_pull_flag && ret) {
+            mdelay(10);
             gpio_set_value(cts_data->pdata->rst_gpio, 0);
+        }
     }
 #endif /* CFG_CTS_GESTURE */
 
@@ -155,31 +157,33 @@ static int fb_notifier_callback(struct notifier_block *nb,
     container_of(pdata->cts_dev, struct chipone_ts_data, cts_dev);
     struct drm_panel_notifier *evdata = data;
 
-    cts_info("FB notifier callback");
+    cts_dbg("FB notifier callback");
     if (!evdata || !cts_data)
         return 0;
-#ifdef CHIPONE_SENSOR_EN
-#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
-    if (cts_data->s_tap_flag || cts_data->d_tap_flag) {
-        cts_enable_gesture_wakeup(&cts_data->cts_dev);
-        g_cts_data->should_enable_gesture = true;
-    }
-    else {
-        cts_disable_gesture_wakeup(&cts_data->cts_dev);
-        g_cts_data->should_enable_gesture = false;
-    }
-#endif
-    if (g_cts_data->should_enable_gesture)
-        touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
-    else
-       touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
-#endif
+
     blank = *(int *)evdata->data;
-    cts_info("action=%lu, blank=%d\n", action, blank);
+    cts_dbg("action=%lu, blank=%d\n", action, blank);
 
     if (action == DRM_PANEL_EARLY_EVENT_BLANK) {
-        if (blank == DRM_PANEL_BLANK_POWERDOWN)
+        if (blank == DRM_PANEL_BLANK_POWERDOWN) {
+#ifdef CHIPONE_SENSOR_EN
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+            if (cts_data->s_tap_flag || cts_data->d_tap_flag) {
+                cts_enable_gesture_wakeup(&cts_data->cts_dev);
+                g_cts_data->should_enable_gesture = true;
+            }
+            else {
+                cts_disable_gesture_wakeup(&cts_data->cts_dev);
+                g_cts_data->should_enable_gesture = false;
+            }
+#endif
+            if (g_cts_data->should_enable_gesture)
+                touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+            else
+                touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
             cts_suspend(cts_data);
+        }
     } else if (evdata->data) {
         blank = *(int *)evdata->data;
         if (action == DRM_PANEL_EVENT_BLANK) {
