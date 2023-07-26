@@ -19,6 +19,10 @@ ifneq ($(filter m y,$(CONFIG_TCPC_RT1711H)),)
 	obj-m += tcpc_rt1711h.o
 endif
 
+ifneq ($(filter m y,$(CONFIG_TCPC_AW35616)),)
+       obj-m += tcpc_aw35616.o
+endif
+
 ifneq ($(filter m y,$(CONFIG_TCPC_SGM7220)),)
 	obj-m += tcpc_sgm7220.o
 endif
