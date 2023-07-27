@@ -13,6 +13,7 @@
 #define USE_SENSORS_CLASS
 
 #include <linux/module.h>
+#include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
@@ -297,7 +298,9 @@ aw9610x_addrblock_load(struct device *dev, const char *buf)
 static int32_t aw9610x_filedata_deal(struct aw9610x *aw9610x)
 {
 	struct file *fp = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	mm_segment_t fs;
+#endif
 	int8_t *buf;
 	int8_t temp_buf[8] = { 0 };
 	uint8_t i = 0;
@@ -315,25 +318,39 @@ static int32_t aw9610x_filedata_deal(struct aw9610x *aw9610x)
 		return -EINVAL;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
+
 	buf = (char *)kzalloc(CALI_FILE_MAX_SIZE, GFP_KERNEL);
 	if (!buf) {
 		LOG_ERR("malloc failed!");
 		filp_close(fp, NULL);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		set_fs(fs);
+#endif
 		return -EINVAL;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	ret = vfs_read(fp, buf, CALI_FILE_MAX_SIZE, &(fp->f_pos));
+#else
+	ret = kernel_read(fp, buf, CALI_FILE_MAX_SIZE, &(fp->f_pos));
+#endif
+
 	if (ret < 0) {
 		LOG_ERR("read failed");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		set_fs(fs);
+#endif
 		aw9610x->cali_flag = AW_CALI;
 		return ret;
 	} else if (ret == 0) {
 		LOG_ERR("read len = 0");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		set_fs(fs);
+#endif
 		aw9610x->cali_flag = AW_CALI;
 		return ret;
 	} else {
@@ -347,7 +364,9 @@ static int32_t aw9610x_filedata_deal(struct aw9610x *aw9610x)
 			}
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	set_fs(fs);
+#endif
 	filp_close(fp, NULL);
 	kfree(buf);
 
@@ -374,7 +393,9 @@ aw9610x_store_spedata_to_file(struct aw9610x *aw9610x, char *buf)
 {
 	struct file *fp = NULL;
 	loff_t pos = 0;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	mm_segment_t fs;
+#endif
 	uint8_t cali_file_name[20] = { 0 };
 
 	LOG_DBG("buf = %s", buf);
@@ -388,12 +409,20 @@ aw9610x_store_spedata_to_file(struct aw9610x *aw9610x, char *buf)
 		return -EINVAL;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
 
-	vfs_write(fp, buf, strlen(buf), &pos);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
+	vfs_write(fp, (char __user *)buf, strlen(buf), &pos);
+#else
+	kernel_write(fp, (char __user *)buf, strlen(buf), &pos);
+#endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	set_fs(fs);
+#endif
 
 	LOG_INFO("write successfully!");
 
@@ -711,7 +740,11 @@ static int32_t aw9610x_cfg_update(struct aw9610x *aw9610x)
 #endif
 
                 LOG_INFO("aw9610x_cfg_update cfg_name = %s", aw9610x->cfg_name);
-		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
+#else
+        request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+#endif
 							aw9610x->cfg_name,
 							aw9610x->dev,
 							GFP_KERNEL,
@@ -2320,6 +2353,9 @@ static void __exit aw9610x_i2c_exit(void)
 	i2c_del_driver(&aw9610x_i2c_driver);
 }
 module_exit(aw9610x_i2c_exit);
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("AW9610X SAR Driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("2");
