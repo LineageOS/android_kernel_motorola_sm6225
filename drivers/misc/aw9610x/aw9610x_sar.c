@@ -51,7 +51,7 @@
 #define LOG_TAG "<AW9610X_LOG>"
 
 #define LOG_INFO(fmt, args...)    pr_info(LOG_TAG "[INFO]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
-#define LOG_DBG(fmt, args...)	pr_debug(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
+#define LOG_DBG(fmt, args...)   pr_debug(LOG_TAG "[DBG]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 #define LOG_ERR(fmt, args...)   pr_err(LOG_TAG "[ERR]" "<%s><%d>"fmt, __func__, __LINE__, ##args)
 
 struct aw9610x *g_aw9610x;
@@ -1430,16 +1430,19 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
 {
 	struct aw9610x *aw9610x = g_aw9610x;
 	uint8_t i = 0;
-        uint32_t data_en = 0;
+	uint32_t data_en = 0;
+	bool enableFlag = false;
 
         for (i = 0; i < aw9610x->aw_channel_number; i++)
         {
 		if ((aw9610x->aw_ref_channel >> i) & 0x1) continue;
                 if (!strcmp(sensors_cdev->name, aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + i])) {
                         if (enable == 1){
+                                sensors_capsensor_chs[i].enabled = 1;
                                 input_report_abs(aw9610x->aw_pad[i].input, ABS_DISTANCE, 0);
                                 input_sync(aw9610x->aw_pad[i].input);
                         }else if (enable == 0){
+                                sensors_capsensor_chs[i].enabled = 0;
                                 input_report_abs(aw9610x->aw_pad[i].input, ABS_DISTANCE, -1);
                                 input_sync(aw9610x->aw_pad[i].input);
 			}
@@ -1447,14 +1450,24 @@ static int capsensor_set_enable(struct sensors_classdev *sensors_cdev, unsigned 
                 }
         }
 
+        //if all chs disabled, then disable all
+        for (i = 0; i < aw9610x->aw_channel_number; i++)
+        {
+		if ((aw9610x->aw_ref_channel >> i) & 0x1) continue;
+		if (sensors_capsensor_chs[i].enabled) {
+			enableFlag = true;
+			break;
+		}
+        }
+
 	aw9610x->mode = enable;
-	if (aw9610x->mode == AW9610X_ACTIVE_AP_MODE) {
+	if (enableFlag == AW9610X_ACTIVE_AP_MODE) {
                 aw9610x_i2c_read(aw9610x, REG_SCANCTRL0, &data_en);
                 aw9610x_i2c_write_bits(aw9610x, REG_SCANCTRL0, ~(0x3f << 8), (data_en & 0x3f) << 8);
 		if (aw9610x->mode_flag1 == AW9610X_FUNC_ON)
 			aw9610x_i2c_write(aw9610x, REG_HOSTCTRL1, 1);
 		aw9610x_i2c_write(aw9610x, REG_CMD, AW9610X_ACTIVE_MODE);
-	} else if (aw9610x->mode == AW9610X_SLEEP_AP_MODE) {
+	} else if (enableFlag == AW9610X_SLEEP_AP_MODE) {
 		if (aw9610x->mode_flag1 == AW9610X_FUNC_ON)
 			aw9610x_i2c_write(aw9610x, REG_HOSTCTRL1, 1);
 		aw9610x_i2c_write(aw9610x, REG_CMD, AW9610X_SLEEP_MODE);
@@ -2164,6 +2177,7 @@ aw9610x_i2c_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 		sensors_capsensor_chs[i].sensors_enable = capsensor_set_enable;
 		sensors_capsensor_chs[i].sensors_poll_delay = NULL;
 		sensors_capsensor_chs[i].name = aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + i];
+		sensors_capsensor_chs[i].enabled = 0;
 		LOG_INFO("cap sensor_class channel_name:%s\n", aw9610x->aw_ch_name[aw9610x->sar_num * AW_CHANNEL_MAX + i]);
 		ret = sensors_classdev_register(&aw9610x->aw_pad[i].input->dev, &sensors_capsensor_chs[i]);
 		if (ret < 0)
