@@ -39,7 +39,12 @@
 #ifdef NOVATECH_PEN_NOTIFIER
 #include <linux/pen_detection_notify.h>
 #endif
-
+#ifdef NVT_CONFIG_DRM_PANEL
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+#define NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+#include <linux/soc/qcom/panel_event_notifier.h>
+#endif
+#endif
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -256,6 +261,9 @@ struct nvt_ts_data {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 #if defined(CONFIG_DRM)
 	struct notifier_block drm_notif;
+#ifdef NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+    void* notifier_cookie;
+#endif
 #endif
 #else //vension code < 5.4.0
 #if defined(CONFIG_FB)

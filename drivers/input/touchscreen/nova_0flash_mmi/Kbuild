@@ -74,7 +74,7 @@ endif
 ifneq ($(filter m y,$(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
     EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
 endif
-ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI_NVT)),)
     KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
     EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
     nova_0flash_mmi-objs += nt36xxx_mmi_class.o

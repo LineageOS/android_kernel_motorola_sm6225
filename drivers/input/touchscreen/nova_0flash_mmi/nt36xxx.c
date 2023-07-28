@@ -214,7 +214,12 @@ int nvt_mcu_pen_detect_set(uint8_t pen_detect);
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
+#ifdef NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+static void nvt_drm_notifier_callback(enum panel_event_notifier_tag tag,
+		 struct panel_event_notification *notification, void *client_data);
+#else
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+#endif
 #ifdef LCM_FAST_LIGHTUP
 static struct work_struct ts_resume_work;
 static void nova_resume_work_func(struct work_struct *work);
@@ -3148,6 +3153,18 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
+#ifdef  NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+	if (active_panel){
+		ts->notifier_cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
+			PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH, active_panel,
+			&nvt_drm_notifier_callback, ts);
+	}
+	if (!ts->notifier_cookie) {
+		NVT_ERR("Failed to register for panel events\n");
+		goto err_register_drm_notif_failed;
+	}
+	NVT_LOG("registered for panel notifications panel\n");
+#else
 	ts->drm_notif.notifier_call = nvt_drm_notifier_callback;
 	if (active_panel &&
 		drm_panel_notifier_register(active_panel,
@@ -3155,6 +3172,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		NVT_LOG("register notifier failed!\n");
 		goto err_register_drm_notif_failed;
 	}
+#endif
 #endif
 #else //vension code < 5.4.0
 #if defined(CONFIG_FB)
@@ -3217,14 +3235,19 @@ err_create_touchscreen_class_failed:
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	nvt_mmi_init(ts, false);
 #endif
+err_register_drm_notif_failed:
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
+#ifdef NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+            if (ts->notifier_cookie)
+                panel_event_notifier_unregister(ts->notifier_cookie);
+#else
 		if (drm_panel_notifier_unregister(active_panel, &ts->drm_notif))
 			NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+#endif
 	}
-err_register_drm_notif_failed:
 #endif
 #else //vension code < 5.4.0
 #if defined(CONFIG_FB)
@@ -3360,8 +3383,13 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
+#ifdef NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+            if (ts->notifier_cookie)
+                panel_event_notifier_unregister(ts->notifier_cookie);
+#else
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+#endif
 	}
 #endif
 #else //vension code < 5.4.0
@@ -3467,8 +3495,13 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
 	if (active_panel) {
+#ifdef NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+            if (ts->notifier_cookie)
+                panel_event_notifier_unregister(ts->notifier_cookie);
+#else
 		drm_panel_notifier_unregister(active_panel, &ts->drm_notif);
 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+#endif
 	}
 #endif
 #else //vension code < 5.4.0
@@ -3763,7 +3796,68 @@ static void nova_resume_work_func(struct work_struct *work)
 	nvt_ts_resume(&ts->client->dev);
 }
 #endif //end LCM_FAST_LIGHTUP
+#ifdef  NVT_DRM_PANEL_EVENT_NOTIFICATIONS
+static void nvt_drm_notifier_callback(enum panel_event_notifier_tag tag,
+		 struct panel_event_notification *notification, void *client_data)
+{
+	if (!notification) {
+		pr_err("Invalid notification\n");
+		return;
+	}
 
+	NVT_LOG("Notification type:%d, early_trigger:%d",
+			notification->notif_type,
+			notification->notif_data.early_trigger);
+	switch (notification->notif_type) {
+	case DRM_PANEL_EVENT_UNBLANK:
+		if (!notification->notif_data.early_trigger) {
+#ifdef LCM_FAST_LIGHTUP
+			if (nvt_fwu_wq) {
+				queue_work(nvt_fwu_wq, &ts_resume_work);
+				NVT_LOG("LCM_FAST_LIGHTUP, queue_work\n");
+			} else {
+				NVT_LOG("nvt_fwu_wq null");
+				nvt_ts_resume(&ts->client->dev);
+			}
+#else
+			nvt_ts_resume(&ts->client->dev);
+#endif //LCM_FAST_LIGHTUP
+		}
+
+		break;
+
+	case DRM_PANEL_EVENT_BLANK:
+		if (notification->notif_data.early_trigger) {
+			NVT_LOG("event=DRM_PANEL_EVENT_BLANK");
+			nvt_ts_suspend(&ts->client->dev);
+#if defined(NVT_SENSOR_EN) && (defined(NVT_SET_TOUCH_STATE) || defined(NVT_CONFIG_PANEL_NOTIFICATIONS))
+			if (ts->should_enable_gesture) {
+				NVT_LOG("double tap gesture suspend\n");
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			} else {
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			}
+#endif
+		}
+		break;
+
+	case DRM_PANEL_EVENT_BLANK_LP:
+		NVT_LOG("received lp event\n");
+		break;
+
+	case DRM_PANEL_EVENT_FPS_CHANGE:
+		NVT_LOG("Received fps change old fps:%d new fps:%d\n",
+				notification->notif_data.old_fps,
+				notification->notif_data.new_fps);
+		break;
+
+	default:
+		NVT_LOG("notification serviced :%d\n",
+				notification->notif_type);
+		break;
+	}
+}
+#else
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
 	struct msm_drm_notifier *evdata = data;
@@ -3816,6 +3910,8 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 	return 0;
 }
 #endif
+#endif
+
 #else //vension code < 5.4.0
 #ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
 static int nvt_panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
