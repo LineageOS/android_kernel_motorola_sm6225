@@ -30,7 +30,11 @@
 
 static void cts_resume_work_func(struct work_struct *work);
 #ifdef CFG_CTS_DRM_NOTIFIER
+#if defined(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+#include <linux/soc/qcom/panel_event_notifier.h>
+#else
 #include <drm/drm_panel.h>
+#endif
 static struct drm_panel *active_panel;
 static int check_dt(struct device_node *np);
 #endif
@@ -147,6 +151,67 @@ static void cts_resume_work_func(struct work_struct *work)
 
 #ifdef CONFIG_CTS_PM_FB_NOTIFIER
 #ifdef CFG_CTS_DRM_NOTIFIER
+#ifdef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+static void fb_notifier_callback(enum panel_event_notifier_tag tag,
+		 struct panel_event_notification *notification, void *client_data)
+{
+	struct chipone_ts_data *cts_data = client_data;
+
+	if (!notification) {
+		pr_err("Invalid notification\n");
+		return;
+	}
+
+	cts_dbg("Notification type:%d, early_trigger:%d",
+			notification->notif_type,
+			notification->notif_data.early_trigger);
+	switch (notification->notif_type) {
+	case DRM_PANEL_EVENT_UNBLANK:
+		if (!notification->notif_data.early_trigger) {
+			queue_work(cts_data->workqueue,
+			&cts_data->ts_resume_work);
+		}
+		break;
+
+	case DRM_PANEL_EVENT_BLANK:
+		if (notification->notif_data.early_trigger) {
+#ifdef CHIPONE_SENSOR_EN
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+			if (cts_data->s_tap_flag || cts_data->d_tap_flag) {
+				cts_enable_gesture_wakeup(&cts_data->cts_dev);
+				g_cts_data->should_enable_gesture = true;
+			}
+			else {
+				cts_disable_gesture_wakeup(&cts_data->cts_dev);
+				g_cts_data->should_enable_gesture = false;
+			}
+#endif
+			if (g_cts_data->should_enable_gesture)
+				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+			else
+				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			cts_suspend(cts_data);
+		}
+		break;
+
+	case DRM_PANEL_EVENT_BLANK_LP:
+		cts_dbg("received lp event\n");
+		break;
+
+	case DRM_PANEL_EVENT_FPS_CHANGE:
+		cts_dbg("Received fps change old fps:%d new fps:%d\n",
+				notification->notif_data.old_fps,
+				notification->notif_data.new_fps);
+		break;
+
+	default:
+		cts_dbg("notification serviced :%d\n",
+				notification->notif_type);
+		break;
+	}
+}
+#else
 static int fb_notifier_callback(struct notifier_block *nb,
         unsigned long action, void *data)
 {
@@ -196,6 +261,7 @@ static int fb_notifier_callback(struct notifier_block *nb,
 
     return 0;
 }
+#endif
 #else
 static int fb_notifier_callback(struct notifier_block *nb,
         unsigned long action, void *data)
@@ -235,15 +301,32 @@ static int cts_init_pm_fb_notifier(struct chipone_ts_data *cts_data)
 {
     cts_info("Init FB notifier");
 
+#ifndef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
     cts_data->pdata->fb_notifier.notifier_call = fb_notifier_callback;
+#endif
 
 #ifdef CFG_CTS_DRM_NOTIFIER
     {
         int ret = -ENODEV;
 
         if (active_panel) {
+#ifdef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+            void *cookie;
+            cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
+            PANEL_EVENT_NOTIFIER_CLIENT_PRIMARY_TOUCH, active_panel,
+             &fb_notifier_callback, cts_data);
+            if (!cookie) {
+                cts_err("Failed to register for panel events\n");
+                return ret;
+            }
+            cts_info("registered for panel notifications panel: 0x%x\n",
+            active_panel);
+            cts_data->notifier_cookie = cookie;
+            ret = 0;
+#else
             ret =drm_panel_notifier_register(active_panel,
                     &cts_data->pdata->fb_notifier);
+#endif
             if (ret)
                 cts_err("register drm_notifier failed. ret=%d\n", ret);
         }
@@ -262,8 +345,13 @@ static int cts_deinit_pm_fb_notifier(struct chipone_ts_data *cts_data)
         int ret = 0;
 
         if (active_panel) {
+#if defined(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
+            if (cts_data->notifier_cookie)
+                panel_event_notifier_unregister(cts_data->notifier_cookie);
+#else
             ret = drm_panel_notifier_unregister(active_panel,
                     &cts_data->pdata->fb_notifier);
+#endif
             if (ret)
                 cts_err("Error occurred while unregistering drm_notifier.\n");
         }

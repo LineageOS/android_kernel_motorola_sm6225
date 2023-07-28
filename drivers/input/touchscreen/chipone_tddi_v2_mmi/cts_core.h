@@ -478,7 +478,9 @@ struct chipone_ts_data {
         bool d_tap_flag;
         bool s_tap_flag;
 #endif
-
+#ifdef CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+        void* notifier_cookie;
+#endif
     void *oem_data;
 
     bool force_reflash;

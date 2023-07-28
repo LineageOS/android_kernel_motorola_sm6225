@@ -160,9 +160,12 @@
 /****************************************************************************
  * Platform configurations
  ****************************************************************************/
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
-#define CONFIG_CTS_PM_FB_NOTIFIER
+
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+#define CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
 #endif
+
+#define CONFIG_CTS_PM_FB_NOTIFIER
 #ifdef CONFIG_CTS_PM_FB_NOTIFIER
 #ifdef CONFIG_DRM
 #define CFG_CTS_DRM_NOTIFIER
