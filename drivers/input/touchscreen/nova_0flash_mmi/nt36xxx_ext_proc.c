@@ -351,7 +351,11 @@ static const struct proc_ops nvt_fw_version_fops = {
 	.proc_open = nvt_fw_version_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 };
 #else
 static const struct file_operations nvt_fw_version_fops = {
@@ -415,7 +419,11 @@ static const struct proc_ops nvt_baseline_fops = {
 	.proc_open = nvt_baseline_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 };
 #else
 static const struct file_operations nvt_baseline_fops = {
@@ -482,7 +490,11 @@ static const struct proc_ops nvt_raw_fops = {
 	.proc_open = nvt_raw_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 };
 #else
 static const struct file_operations nvt_raw_fops = {
@@ -549,7 +561,11 @@ static const struct proc_ops nvt_diff_fops = {
 	.proc_open = nvt_diff_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 };
 #else
 static const struct file_operations nvt_diff_fops = {
@@ -831,7 +847,11 @@ static const struct proc_ops monitor_control_fops = {
 	.proc_open = nvt_monitor_control_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 	.proc_write = nvt_monitor_control_store,
 };
 #else

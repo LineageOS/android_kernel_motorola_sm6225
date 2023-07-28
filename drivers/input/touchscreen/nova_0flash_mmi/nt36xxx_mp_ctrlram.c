@@ -250,15 +250,24 @@ static void nvt_print_data_log_in_one_line(int32_t *data, int32_t data_num)
 {
 	char *tmp_log = NULL;
 	int32_t i = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+	int32_t count = data_num * 7 + 1;
 
+	tmp_log = kzalloc(count, GFP_KERNEL);
+#else
 	tmp_log = (char *)kzalloc(data_num * 7 + 1, GFP_KERNEL);
+#endif
 	if (!tmp_log) {
 		NVT_ERR("kzalloc for tmp_log failed!\n ");
 		return;
 	}
 
 	for (i = 0; i < data_num; i++) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+		snprintf(tmp_log + i * 7, count - i * 7, "%5d, ", data[i]);
+#else
 		sprintf(tmp_log + i * 7, "%5d, ", data[i]);
+#endif
 	}
 	tmp_log[data_num * 7] = '\0';
 	printk("%s", tmp_log);
@@ -274,15 +283,25 @@ static void nvt_print_result_log_in_one_line(uint8_t *result, int32_t result_num
 {
 	char *tmp_log = NULL;
 	int32_t i = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+	int32_t count = 0;
 
+	count = result_num * 6 + 1;
+	tmp_log = kzalloc(count, GFP_KERNEL);
+#else
 	tmp_log = (char *)kzalloc(result_num * 6 + 1, GFP_KERNEL);
+#endif
 	if (!tmp_log) {
 		NVT_ERR("kzalloc for tmp_log failed!\n ");
 		return;
 	}
 
 	for (i = 0; i < result_num; i++) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+		snprintf(tmp_log + i * 6, count - i * 6, "0x%02X, ", result[i]);
+#else
 		sprintf(tmp_log + i * 6, "0x%02X, ", result[i]);
+#endif
 	}
 	tmp_log[result_num * 6] = '\0';
 	printk("%s", tmp_log);
@@ -429,7 +448,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
-	write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
+       write_ret = kernel_write(fp, (char __user *)fbufp, output_len, &pos);
 #endif
 
 	if (write_ret <= 0) {
@@ -1384,7 +1403,11 @@ static const struct proc_ops nvt_selftest_fops = {
 	.proc_open = nvt_selftest_open,
 	.proc_read = seq_read,
 	.proc_lseek = seq_lseek,
+#if KERNEL_VERSION(5, 15, 0) <= LINUX_VERSION_CODE
+	.proc_release = seq_release,
+#else
 	.proc_release = single_release,
+#endif
 };
 #else
 static const struct file_operations nvt_selftest_fops = {
