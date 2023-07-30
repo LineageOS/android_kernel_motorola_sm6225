@@ -39,7 +39,7 @@
 #ifdef NOVATECH_PEN_NOTIFIER
 #include <linux/pen_detection_notify.h>
 #endif
-#ifdef NVT_CONFIG_DRM_PANEL
+#if (!defined(CONFIG_INPUT_TOUCHSCREEN_MMI) && defined(NVT_CONFIG_DRM_PANEL))
 #if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
 #define NVT_DRM_PANEL_EVENT_NOTIFICATIONS
 #include <linux/soc/qcom/panel_event_notifier.h>

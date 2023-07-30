@@ -3235,7 +3235,7 @@ err_create_touchscreen_class_failed:
 #if defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 	nvt_mmi_init(ts, false);
 #endif
-err_register_drm_notif_failed:
+
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 #if (((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))) || defined(NVT_CONFIG_DRM_PANEL))
 #if defined(CONFIG_DRM)
@@ -3248,6 +3248,7 @@ err_register_drm_notif_failed:
 			NVT_ERR("Error occurred while unregistering drm_notifier.\n");
 #endif
 	}
+err_register_drm_notif_failed:
 #endif
 #else //vension code < 5.4.0
 #if defined(CONFIG_FB)
