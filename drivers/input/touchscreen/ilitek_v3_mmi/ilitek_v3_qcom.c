@@ -962,6 +962,7 @@ static int ilitek_plat_probe(void)
 	ret = ili_v3_drm_check_dt(ilits->dev->of_node);
 	if (ret) {
 		ILI_ERR("[ili_v3_drm_check_dt] parse drm-panel fail");
+		return ret;
 	}
 #endif
 #endif
