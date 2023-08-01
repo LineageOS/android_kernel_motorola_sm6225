@@ -1623,6 +1623,28 @@ static DEVICE_ATTR(force_chg_itrick, 0664,
 		   force_chg_itrick_show,
 		   force_chg_itrick_store);
 
+static ssize_t chg_watt_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int power_watt = -ENODEV;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct smb_mmi_charger *mmi_chip = platform_get_drvdata(pdev);
+
+	if (mmi_chip) {
+		power_watt = mmi_chip->power_watt / 1000;
+		mmi_info(mmi_chip, "power_watt %dW\n", power_watt);
+	} else {
+		pr_err("chip not valid\n");
+	}
+
+	return scnprintf(buf, CHG_SHOW_MAX_SIZE, "%d\n", power_watt);
+}
+
+static DEVICE_ATTR(chg_watt, 0444,
+		chg_watt_show,
+		NULL);
+
 enum {
 	MMI_FACTORY_MODE,
 	MMI_FACTORY_BUILD,
@@ -5048,6 +5070,12 @@ static int smb_mmi_probe(struct platform_device *pdev)
 				&dev_attr_force_pd_power_max);
 	if (rc)
 		mmi_err(chip, "Couldn't create force_pd_power_max\n");
+
+	rc = device_create_file(chip->dev,
+				&dev_attr_chg_watt);
+	if (rc) {
+		mmi_err(chip, "Couldn't create chg_watt\n");
+	}
 
 	/* Register the notifier for the psy updates*/
 	chip->mmi_psy_notifier.notifier_call = mmi_psy_notifier_call;
