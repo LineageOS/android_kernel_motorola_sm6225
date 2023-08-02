@@ -735,6 +735,11 @@ static int cts_driver_probe(struct spi_device *client)
         cts_err("Init gesture failed %d", ret);
         goto err_deinit_vkey_device;
     }
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    if (cts_data->pdata->gesture_wait_pm)
+        init_waitqueue_head(&cts_data->pm_wq);
+    atomic_set(&cts_data->pm_resume, 1);
+#endif
 
     cts_init_esd_protection(cts_data);
 
@@ -966,7 +971,7 @@ static int cts_i2c_driver_resume(struct device *dev)
 }
 #endif /* CONFIG_CTS_PM_LEGACY */
 
-#ifdef CONFIG_CTS_PM_GENERIC
+#if defined(CONFIG_CTS_PM_GENERIC)
 static int cts_i2c_driver_pm_suspend(struct device *dev)
 {
     cts_info("Suspend by bus power management");
@@ -978,13 +983,38 @@ static int cts_i2c_driver_pm_resume(struct device *dev)
     cts_info("Resume by bus power management");
     return cts_resume(dev_get_drvdata(dev));
 }
+#elif defined(TOUCHSCREEN_PM_BRL_SPI)
+static int cts_i2c_driver_pm_suspend(struct device *dev)
+{
+    struct chipone_ts_data *cts_data =
+    dev_get_drvdata(dev);
 
+    cts_info("Suspend by bus power management");
+    atomic_set(&cts_data->pm_resume, 0);
+    return 0;
+}
+
+static int cts_i2c_driver_pm_resume(struct device *dev)
+{
+    struct chipone_ts_data *cts_data =
+    dev_get_drvdata(dev);
+
+    cts_info("Resume by bus power management");
+    atomic_set(&cts_data->pm_resume, 1);
+    if (cts_data->pdata->gesture_wait_pm)
+        wake_up_interruptible(&cts_data->pm_wq);
+
+    return 0;
+}
+#endif
+
+#if defined(CONFIG_CTS_PM_GENERIC) || defined(TOUCHSCREEN_PM_BRL_SPI)
 /* bus control the suspend/resume procedure */
 static const struct dev_pm_ops cts_i2c_driver_pm_ops = {
     .suspend = cts_i2c_driver_pm_suspend,
     .resume = cts_i2c_driver_pm_resume,
 };
-#endif /* CONFIG_CTS_PM_GENERIC */
+#endif /* CONFIG_CTS_PM_GENERIC or TOUCHSCREEN_PM_BRL_SPI*/
 
 #ifdef CONFIG_CTS_SYSFS
 static ssize_t reset_pin_show(struct device_driver *driver, char *buf)
@@ -1249,7 +1279,7 @@ static struct spi_driver cts_spi_driver = {
         .suspend = cts_i2c_driver_suspend,
         .resume = cts_i2c_driver_resume,
 #endif /* CONFIG_CTS_PM_LEGACY */
-#ifdef CONFIG_CTS_PM_GENERIC
+#if defined(CONFIG_CTS_PM_GENERIC) || defined(TOUCHSCREEN_PM_BRL_SPI)
         .pm = &cts_i2c_driver_pm_ops,
 #endif /* CONFIG_CTS_PM_GENERIC */
 

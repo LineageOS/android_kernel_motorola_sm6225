@@ -498,6 +498,10 @@ static irqreturn_t cts_plat_irq_handler(int irq, void *dev_id)
 #ifndef CONFIG_GENERIC_HARDIRQS
     struct chipone_ts_data *cts_data;
 #endif
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    int ret = 0;
+    struct chipone_ts_data *cts_data;
+#endif
 
     cts_dbg("IRQ handler");
 
@@ -506,6 +510,23 @@ static irqreturn_t cts_plat_irq_handler(int irq, void *dev_id)
         cts_err("IRQ handler with NULL dev_id");
         return IRQ_NONE;
     }
+
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    cts_data = container_of(pdata->cts_dev, struct chipone_ts_data, cts_dev);
+    if ((cts_data->cts_dev.rtdata.suspended) &&
+            (cts_data->cts_dev.rtdata.gesture_wakeup_enabled)) {
+        if (pdata->gesture_wait_pm) {
+            PM_WAKEUP_EVENT(cts_data->gesture_wakelock, 3000);
+            /* Waiting for pm resume completed */
+            ret = wait_event_interruptible_timeout(cts_data->pm_wq, atomic_read(&cts_data->pm_resume), msecs_to_jiffies(700));
+            if (!ret) {
+                cts_err("system(spi) can't finished resuming procedure.");
+                return IRQ_HANDLED;
+            }
+        }
+    }
+#endif
+
 #ifdef CONFIG_GENERIC_HARDIRQS
     cts_plat_handle_irq(pdata);
 #else
@@ -572,6 +593,15 @@ static int cts_plat_parse_dt(struct cts_platform_data *pdata,
     }
     cts_info("  %-12s: %d", "rst pull flag", pdata->rst_pull_flag);
 #endif /* CFG_CTS_HAS_RESET_PIN */
+
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    pdata->gesture_wait_pm = of_property_read_bool(dev_node, "chipone,gesture-wait-pm");
+    if (!pdata->gesture_wait_pm) {
+        cts_err("Parse gesture wait pm from dt failed %d", pdata->gesture_wait_pm);
+        pdata->gesture_wait_pm = false;
+    }
+    cts_info("  %-12s: %d", "gesture wait pm", pdata->gesture_wait_pm);
+#endif
 
 #ifdef CFG_CTS_MANUAL_CS
     pdata->cs_gpio = of_get_named_gpio(dev_node, CFG_CTS_OF_CS_GPIO_NAME, 0);

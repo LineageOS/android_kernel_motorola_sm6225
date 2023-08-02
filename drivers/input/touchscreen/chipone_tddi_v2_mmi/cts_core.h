@@ -485,6 +485,10 @@ struct chipone_ts_data {
 
     bool force_reflash;
     struct kobject *suspend_kobj;
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    atomic_t pm_resume;
+    wait_queue_head_t pm_wq;
+#endif
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)

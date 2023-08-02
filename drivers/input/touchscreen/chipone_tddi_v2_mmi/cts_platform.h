@@ -155,6 +155,9 @@ struct cts_platform_data {
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
     int supported_gesture_type;
 #endif
+#ifdef TOUCHSCREEN_PM_BRL_SPI
+    bool gesture_wait_pm;
+#endif
 };
 
 #ifdef CONFIG_CTS_I2C_HOST
