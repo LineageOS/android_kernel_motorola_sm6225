@@ -611,7 +611,7 @@ static int drm_notifier_callback(struct notifier_block *self, unsigned long even
 	}
 
 	blank = evdata->data;
-	ILI_INFO("DRM event:%lu,blank:%d", event, *blank);
+	ILI_DBG("DRM event:%lu,blank:%d", event, *blank);
 	switch (*blank) {
 	case DRM_PANEL_BLANK_UNBLANK:
 		if (DRM_PANEL_EARLY_EVENT_BLANK == event) {
@@ -653,7 +653,7 @@ static int drm_notifier_callback(struct notifier_block *self, unsigned long even
 		}
 		break;
 	default:
-		ILI_INFO("DRM BLANK(%d) do not need process\n", *blank);
+		ILI_DBG("DRM BLANK(%d) do not need process\n", *blank);
 		break;
 	}
 
