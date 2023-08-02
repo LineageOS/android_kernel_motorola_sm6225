@@ -3630,7 +3630,7 @@ static int smb_mmi_get_chg_info(struct smb_mmi_charger *chip, struct smb_mmi_chg
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_CDP)
 			power_watt = 7500;
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_DCP)
-			power_watt = 1000;
+			power_watt = 10000;
 		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP)
 			power_watt = chip->hvdcp_power_max;
 		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
