@@ -415,6 +415,10 @@ enum mmi_qc3p_ext_iio_channels {
 	SMB5_QC3P_START_DETECT,
 	SMB5_QC3P_DETECTION_READY,
 	SMB5_QC3P_START_POLICY,
+	SMB5_BC12_START_DETECT,
+	SMB5_BC12_DETECTION_READY,
+	SMB5_READ_USBIN_VOLTAGE,
+	SMB5_READ_BC12_CHG_TYPE,
 };
 
 static const char * const mmi_qc3p_ext_iio_chan_name[] = {
@@ -424,6 +428,10 @@ static const char * const mmi_qc3p_ext_iio_chan_name[] = {
 	[SMB5_QC3P_START_DETECT] = "wt6670_start_detection",
 	[SMB5_QC3P_DETECTION_READY] "wt6670_detection_ready",
 	[SMB5_QC3P_START_POLICY] "qc3p_start_policy",
+	[SMB5_BC12_START_DETECT] = "wt6670_start_bc12_detection",
+	[SMB5_BC12_DETECTION_READY] = "wt6670_detection_bc12_ready",
+	[SMB5_READ_USBIN_VOLTAGE] = "read_usbin_voltage",
+	[SMB5_READ_BC12_CHG_TYPE] = "wt6670_bc12_chg_type",
 };
 #endif
 #endif
