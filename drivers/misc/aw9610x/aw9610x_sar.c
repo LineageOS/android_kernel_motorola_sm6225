@@ -13,7 +13,6 @@
 #define USE_SENSORS_CLASS
 
 #include <linux/module.h>
-#include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
@@ -289,7 +288,7 @@ aw9610x_addrblock_load(struct device *dev, const char *buf)
 							(uint8_t)addrbuf[i];
 	}
 }
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 /******************************************************
  *
  *the document of storage_spedata
@@ -551,6 +550,7 @@ static void aw9610x_spereg_deal(struct aw9610x *aw9610x)
 	aw9610x_class1_reg(aw9610x);
 	aw9610x_class2_reg(aw9610x);
 }
+#endif
 
 static void aw9610x_datablock_load(struct device *dev, const char *buf)
 {
@@ -583,7 +583,7 @@ static void aw9610x_datablock_load(struct device *dev, const char *buf)
 	aw9610x->aw_i2c_package.p_reg_data = reg_data;
 	i2c_write_seq(aw9610x);
 }
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static void aw9610x_power_on_prox_detection(struct aw9610x *aw9610x)
 {
 	int32_t ret = 0;
@@ -613,16 +613,20 @@ static void aw9610x_power_on_prox_detection(struct aw9610x *aw9610x)
 	if (reg_data & 0x10000)
 		aw9610x->power_prox = 1;
 }
+#endif
 
 static void aw9610x_channel_scan_start(struct aw9610x *aw9610x)
 {
 	LOG_DBG("enter");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	if (aw9610x->pwprox_dete == true) {
 		 aw9610x_power_on_prox_detection(aw9610x);
 	} else {
 		aw9610x_i2c_write(aw9610x, REG_CMD, AW9610X_ACTIVE_MODE);
 	}
-
+#else
+	aw9610x_i2c_write(aw9610x, REG_CMD, AW9610X_ACTIVE_MODE);
+#endif
 	aw9610x_i2c_write(aw9610x, REG_HOSTIRQEN, aw9610x->hostirqen);
 	aw9610x->mode = AW9610X_ACTIVE_MODE;
 }
@@ -1094,6 +1098,7 @@ static ssize_t aw9610x_awrw_get(struct device *dev,
 	return len;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static ssize_t aw9610x_factory_cali_set(struct device *dev,
 						struct device_attribute *attr,
 						const char *buf, size_t count)
@@ -1134,6 +1139,7 @@ static ssize_t aw9610x_power_prox_get(struct device *dev,
 
 	return len;
 }
+#endif
 
 static ssize_t aw9610x_awrw_set(struct device *dev,
 						struct device_attribute *attr,
@@ -1309,12 +1315,16 @@ static DEVICE_ATTR(diff, 0664, aw9610x_diff_show, NULL);
 static DEVICE_ATTR(raw_data, 0664, aw9610x_raw_data_show, NULL);
 static DEVICE_ATTR(psc_data, 0664, aw9610x_psc_data_show, NULL);
 static DEVICE_ATTR(parasitic_data, 0664, aw9610x_parasitic_data_show, NULL);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static DEVICE_ATTR(factory_cali, 0664, NULL, aw9610x_factory_cali_set);
+#endif
 static DEVICE_ATTR(aot_cali, 0664, NULL, aw9610x_aot_cali_set);
 static DEVICE_ATTR(awrw, 0664, aw9610x_awrw_get, aw9610x_awrw_set);
 static DEVICE_ATTR(update, 0644, NULL, aw9610x_set_update);
 static DEVICE_ATTR(satu, 0644, aw9610x_get_satu, aw9610x_set_satu);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static DEVICE_ATTR(prox, 0644, aw9610x_power_prox_get, NULL);
+#endif
 static DEVICE_ATTR(operation_mode, 0644, aw9610x_operation_mode_get,
 						aw9610x_operation_mode_set);
 
@@ -1327,11 +1337,15 @@ static struct attribute *aw9610x_sar_attributes[] = {
 	&dev_attr_psc_data.attr,
 	&dev_attr_parasitic_data.attr,
 	&dev_attr_awrw.attr,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	&dev_attr_factory_cali.attr,
+#endif
 	&dev_attr_aot_cali.attr,
 	&dev_attr_update.attr,
 	&dev_attr_satu.attr,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 	&dev_attr_prox.attr,
+#endif
 	&dev_attr_operation_mode.attr,
 	NULL
 };
@@ -1696,6 +1710,7 @@ static void aw9610x_irq_handle(struct aw9610x *aw9610x)
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 static void aw9610x_farirq_handle(struct aw9610x *aw9610x)
 {
 	uint8_t th0_far = 0;
@@ -1704,6 +1719,7 @@ static void aw9610x_farirq_handle(struct aw9610x *aw9610x)
 	if (th0_far == 1)
 		aw9610x->power_prox = AW9610X_FUNC_OFF;
 }
+#endif
 
 static void aw9610x_interrupt_clear(struct aw9610x *aw9610x)
 {
@@ -1718,9 +1734,10 @@ static void aw9610x_interrupt_clear(struct aw9610x *aw9610x)
 	} else {
 		if ((aw9610x->satu_release == AW9610X_FUNC_ON) && (aw9610x->vers == AW9610X))
 			aw9610x_saturat_release_handle(aw9610x);
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 		if (aw9610x->pwprox_dete == true)
 			aw9610x_farirq_handle(aw9610x);
+#endif
 	}
 
 	LOG_INFO("IRQSRC = 0x%x", aw9610x->irq_status);
@@ -2367,9 +2384,6 @@ static void __exit aw9610x_i2c_exit(void)
 	i2c_del_driver(&aw9610x_i2c_driver);
 }
 module_exit(aw9610x_i2c_exit);
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif
 MODULE_DESCRIPTION("AW9610X SAR Driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("2");
