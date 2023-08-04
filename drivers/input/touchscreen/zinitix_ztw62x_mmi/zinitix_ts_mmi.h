@@ -17,6 +17,8 @@
 #include <linux/mmi_wake_lock.h>
 #include "zinitix_touch.h"
 
+#define MAX_ATTRS_ENTRIES 10
+
 #ifdef CONFIG_INPUT_TOUCHSCREEN_MMI
 int zinitix_ts_mmi_dev_register(struct device *dev);
 void zinitix_ts_mmi_dev_unregister(struct device *dev);

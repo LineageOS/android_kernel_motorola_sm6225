@@ -187,6 +187,7 @@ struct bt541_ts_platform_data {
 	int avdd_gpio;
 	int iovdd_gpio;
 	char ic_name[ZINITIX_MAX_STR_LABLE_LEN];
+	bool stow_mode_ctrl;
 };
 
 struct coord {
@@ -325,6 +326,10 @@ struct bt541_ts_info {
 	int ts_mmi_power_state;
 	struct completion pm_completion;
 	bool pm_suspend;
+	atomic_t set_stowed_state;
+	atomic_t get_stowed_state;
+	int ic_power_state;
+	struct mutex mode_lock;
 };
 
 extern int zinitix_hw_reset( struct bt541_ts_info* data,bool on );
@@ -335,6 +340,8 @@ extern void clear_report_data(struct bt541_ts_info *info);
 extern int zinitix_ts_mmi_gesture_suspend(struct device *dev);
 extern int zinitix_ts_mmi_gesture_resume(struct device *dev);
 extern bool mini_init_touch(struct bt541_ts_info *info);
+extern int zinitix_ts_mmi_disable_gesture(struct device *dev);
+extern int zinitix_ts_mmi_restore_gesture(struct device *dev);
 
 #endif /* LINUX_BT541_TS_H */
 

@@ -21,6 +21,30 @@
 		return -ENODEV; \
 	}
 
+#define ADD_ATTR(name) { \
+	if (idx < MAX_ATTRS_ENTRIES)  { \
+		dev_info(dev, "%s: [%d] adding %p\n", __func__, idx, &dev_attr_##name.attr); \
+		ext_attributes[idx] = &dev_attr_##name.attr; \
+		idx++; \
+	} else { \
+		dev_err(dev, "%s: cannot add attribute '%s'\n", __func__, #name); \
+	} \
+}
+
+#define GET_TS_DATA(dev) { \
+	ts_info = dev_get_drvdata(dev); \
+	if (!ts_info) { \
+		dev_err(dev, "Failed to get driver data"); \
+		return -ENODEV; \
+	} \
+}
+
+
+static struct attribute *ext_attributes[MAX_ATTRS_ENTRIES];
+static struct attribute_group ext_attr_group = {
+	.attrs = ext_attributes,
+};
+
 volatile int tpd_halt = 0;
 
 static int zinitix_ts_mmi_methods_get_vendor(struct device *dev, void *cdata)
@@ -309,6 +333,17 @@ static int zinitix_ts_mmi_post_suspend(struct device *dev)
 	info->work_state = SUSPEND;
 	up(&info->work_lock);
 
+	//set stow mode
+	mutex_lock(&info->mode_lock);
+	if ((info->pdata->stow_mode_ctrl) && (info->ic_power_state == TS_MMI_POWER_ON) &&
+			atomic_read(&info->get_stowed_state)) {
+		dev_info(dev, "%s: stowed, disable all gestures after suspend 0x%04x\n", __func__,
+			info->gesture_command);
+		zinitix_ts_mmi_disable_gesture(dev);
+		atomic_set(&info->set_stowed_state, 1);
+	}
+	mutex_unlock(&info->mode_lock);
+
 	dev_info(dev, "%s: Suspend end \n", __func__);
 
 	return 0;
@@ -338,8 +373,90 @@ static int zinitix_ts_mmi_post_resume(struct device *dev)
 	#endif
 	tpd_halt = 0;
 	info->work_state = NOTHING;
+	//Clear stowed state
+	atomic_set(&info->get_stowed_state, 0);
+	atomic_set(&info->set_stowed_state, 0);
 	up(&info->work_lock);
 	dev_info(dev, "%s: Resume end\n", __func__);
+	return 0;
+}
+
+static ssize_t zinitix_ts_stowed_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct bt541_ts_info *ts_info;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	ASSERT_PTR(ts_info);
+
+	return scnprintf(buf, PAGE_SIZE, "stowed state:%d\n", atomic_read(&ts_info->set_stowed_state));
+}
+
+static ssize_t zinitix_ts_stowed_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	unsigned int mode = 0;
+	int err = 0;
+	struct bt541_ts_info *ts_info;
+
+	dev = MMI_DEV_TO_TS_DEV(dev);
+	GET_TS_DATA(dev);
+
+	err = sscanf(buf, "%d", &mode);
+	if (err < 0) {
+		dev_err(dev, "stowed: Failed to convert value\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&ts_info->mode_lock);
+
+	atomic_set(&ts_info->get_stowed_state, !!mode);
+
+	if (atomic_read(&ts_info->set_stowed_state) == atomic_read(&ts_info->get_stowed_state)) {
+		dev_info(dev, "%s: Stowed mode is same, not to set \n", __func__);
+		mutex_unlock(&ts_info->mode_lock);
+		return size;
+	}
+
+	if ((ts_info->ic_power_state == TS_MMI_POWER_ON) && (ts_info->work_state == SUSPEND)) {
+		if (mode) {
+			dev_info(dev, "%s: stowed, disable all gestures 0x%04x\n", __func__, ts_info->gesture_command);
+			zinitix_ts_mmi_disable_gesture(dev);
+		} else {
+			dev_info(dev, "%s:  unstowed, restore gestures 0x%04x\n", __func__, ts_info->gesture_command);
+			zinitix_ts_mmi_restore_gesture(dev);
+		}
+		atomic_set(&ts_info->set_stowed_state, !!mode);
+	} else {
+		dev_info(dev, "%s: touch state is not proper to enter stow mode, work state:%d, \
+			ic power state: %d\n", __func__, ts_info->work_state, ts_info->ic_power_state);
+	}
+	mutex_unlock(&ts_info->mode_lock);
+
+	return size;
+}
+static DEVICE_ATTR(stowed, (S_IWUSR | S_IWGRP | S_IRUGO), zinitix_ts_stowed_show,
+	zinitix_ts_stowed_store);
+
+static int zinitix_mmi_extend_attribute_group(struct device *dev,
+	struct attribute_group **group)
+{
+	int idx = 0;
+	struct bt541_ts_info *info = dev_get_drvdata(dev);
+	struct bt541_ts_platform_data *pdata = info->pdata;
+	ASSERT_PTR(pdata);
+
+	if (pdata->stow_mode_ctrl)
+		ADD_ATTR(stowed);
+
+	if (idx) {
+		ext_attributes[idx] = NULL;
+		*group = &ext_attr_group;
+	} else
+		*group = NULL;
+
 	return 0;
 }
 
@@ -359,6 +476,8 @@ static struct ts_mmi_methods zinitix_ts_mmi_methods = {
 	.drv_irq = zinitix_ts_mmi_methods_drv_irq,
 	/* Firmware */
 	.firmware_update = zinitix_ts_firmware_update,
+	/* vendor specific attribute group */
+	.extend_attribute_group = zinitix_mmi_extend_attribute_group,
 	/* PM callback */
 	.panel_state = zinitix_ts_mmi_panel_state,
 	.pre_suspend = zinitix_ts_mmi_pre_suspend,
@@ -399,9 +518,11 @@ int zinitix_ts_mmi_dev_register(struct device *dev) {
 
 	INIT_DELAYED_WORK(&info->work, ts_mmi_worker_func);
 
+	mutex_init(&info->mode_lock);
 	ret = ts_mmi_dev_register(dev, &zinitix_ts_mmi_methods);
 	if (ret) {
 		dev_err(dev, "%s, Failed to register ts mmi\n", __func__);
+		mutex_destroy(&info->mode_lock);
 		return ret;
 	}
 	dev_info(dev, "%s, Register ts mmi success\n", __func__);
@@ -422,6 +543,7 @@ void zinitix_ts_mmi_dev_unregister(struct device *dev) {
 
 	if (!info)
 		dev_err(dev ,"Failed to get driver data");
+	mutex_destroy(&info->mode_lock);
 	ts_mmi_dev_unregister(dev);
 }
 

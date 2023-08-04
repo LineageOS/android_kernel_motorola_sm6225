@@ -233,6 +233,9 @@ struct reg_ioctl {
 #define	ZINITIX_I2C_CHECKSUM_WCNT	0x016a
 #define	ZINITIX_I2C_CHECKSUM_RESULT	0x016c
 
+#define BT541_GESTURE_CONTROL_REG 0x011D
+#define BT541_CLEAR_GESTURE_CMD 0x0088
+
 /* Interrupt & status register flag bit
 -------------------------------------------------
 */
@@ -1139,6 +1142,7 @@ static int zinitix_power_control(struct bt541_ts_info *data, int on)
 		}
 		dev_info(&data->client->dev, "Enable data->vcc_i2c regualtor\n");
 	}
+	data->ic_power_state = TS_MMI_POWER_ON;
 
 	return 0;
 
@@ -1175,6 +1179,7 @@ power_off:
 		gpio_direction_output(data->pdata->gpio_reset, 0);
 		pr_info("%s: set gpio_reset to 0 success\n", __func__);
 	}
+	data->ic_power_state = TS_MMI_POWER_OFF;
 
 	return 0;
 }
@@ -2709,6 +2714,38 @@ static int bt541_pinctrl_configure(struct bt541_ts_info *info, bool active)
 	return 0;
 }
 #endif
+
+int zinitix_ts_mmi_disable_gesture(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct bt541_ts_info *info = i2c_get_clientdata(client);
+
+	down(&info->work_lock);
+	if (write_reg(client, BT541_GESTURE_CONTROL_REG, BT541_CLEAR_GESTURE_CMD) != I2C_SUCCESS) {
+		zinitix_printk("Disable gestures failed\n");
+		up(&info->work_lock);
+		return -1;
+	}
+	up(&info->work_lock);
+
+	return 0;
+}
+
+int zinitix_ts_mmi_restore_gesture(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct bt541_ts_info *info = i2c_get_clientdata(client);
+
+	down(&info->work_lock);
+	if (write_reg(client, BT541_GESTURE_CONTROL_REG, info->gesture_command) != I2C_SUCCESS) {
+		zinitix_printk("Restore gestures failed\n");
+		up(&info->work_lock);
+		return -1;
+	}
+	up(&info->work_lock);
+
+	return 0;
+}
 
 int zinitix_ts_mmi_gesture_suspend(struct device *dev)
 {
@@ -5933,6 +5970,10 @@ static int bt541_ts_probe_dt(struct device_node *np,
 			__func__);
 		return ret;
 	}
+
+	pdata->stow_mode_ctrl = of_property_read_bool(np, "zinitix,stow-mode-ctrl");
+	if (pdata->stow_mode_ctrl)
+		pr_info("%s: Support zinitix touch stow mode", __func__);
 
 	if (pdata->tsp_supply_type == TSP_LDO_SUPPLY) {
 		pdata->tsp_en_gpio = of_get_named_gpio(np, "zinitix,vdd_en-gpio", 0);
