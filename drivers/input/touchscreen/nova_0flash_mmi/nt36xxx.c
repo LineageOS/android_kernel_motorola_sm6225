@@ -261,12 +261,13 @@ const uint16_t touch_key_array[TOUCH_KEY_NUM] = {
 };
 #endif
 
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
 #if WAKEUP_GESTURE
 const uint16_t gesture_key_array[] = {
 	KEY_POWER,  //GESTURE_WORD_C
 	KEY_POWER,  //GESTURE_WORD_W
 	KEY_POWER,  //GESTURE_WORD_V
-	KEY_POWER,  //GESTURE_DOUBLE_CLICK, , GESTURE_SINGLE_CLICK
+	BTN_TRIGGER_HAPPY6,  //GESTURE_DOUBLE_CLICK
 	KEY_POWER,  //GESTURE_WORD_Z
 	KEY_POWER,  //GESTURE_WORD_M
 	KEY_POWER,  //GESTURE_WORD_O
@@ -276,7 +277,27 @@ const uint16_t gesture_key_array[] = {
 	KEY_POWER,  //GESTURE_SLIDE_DOWN
 	KEY_POWER,  //GESTURE_SLIDE_LEFT
 	KEY_POWER,  //GESTURE_SLIDE_RIGHT
+	BTN_TRIGGER_HAPPY3,  //GESTURE_SINGLE_CLICK
 };
+#endif
+#else
+#if WAKEUP_GESTURE
+const uint16_t gesture_key_array[] = {
+        KEY_POWER,  //GESTURE_WORD_C
+        KEY_POWER,  //GESTURE_WORD_W
+        KEY_POWER,  //GESTURE_WORD_V
+        KEY_POWER,  //GESTURE_DOUBLE_CLICK, , GESTURE_SINGLE_CLICK
+        KEY_POWER,  //GESTURE_WORD_Z
+        KEY_POWER,  //GESTURE_WORD_M
+        KEY_POWER,  //GESTURE_WORD_O
+        KEY_POWER,  //GESTURE_WORD_e
+        KEY_POWER,  //GESTURE_WORD_S
+        KEY_POWER,  //GESTURE_SLIDE_UP
+        KEY_POWER,  //GESTURE_SLIDE_DOWN
+        KEY_POWER,  //GESTURE_SLIDE_LEFT
+        KEY_POWER,  //GESTURE_SLIDE_RIGHT
+};
+#endif
 #endif
 
 #ifdef CONFIG_MTK_SPI
@@ -1158,11 +1179,18 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			NVT_DBG("Gesture : Word-V.\n");
 			keycode = gesture_key_array[2];
 			break;
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+                case GESTURE_DOUBLE_CLICK:
+                        NVT_DBG("Gesture : Double Click.\n");
+                        keycode = gesture_key_array[3];
+                        break;
+#else
 		case GESTURE_SINGLE_CLICK:
 		case GESTURE_DOUBLE_CLICK:
 			NVT_DBG("Gesture : Double Click.\n");
 			keycode = gesture_key_array[3];
 			break;
+#endif
 		case GESTURE_WORD_Z:
 			NVT_DBG("Gesture : Word-Z.\n");
 			keycode = gesture_key_array[4];
@@ -1199,6 +1227,12 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			NVT_DBG("Gesture : Slide RIGHT.\n");
 			keycode = gesture_key_array[12];
 			break;
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+                case GESTURE_SINGLE_CLICK:
+                        NVT_LOG("Gesture : Single Click.\n");
+                        keycode = gesture_key_array[13];
+                        break;
+#endif
 		default:
 			break;
 	}
@@ -1231,11 +1265,18 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 			NVT_LOG("Gesture got but wakeable not set. Skip this gesture.");
 			return;
 		}
-		if (ts->report_gesture_key) {
+                if (ts->report_gesture_key) {
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+                        input_report_key(ts->sensor_pdata->input_sensor_dev, keycode, 1);
+                        input_sync(ts->sensor_pdata->input_sensor_dev);
+                        input_report_key(ts->sensor_pdata->input_sensor_dev, keycode, 0);
+                        input_sync(ts->sensor_pdata->input_sensor_dev);
+#else
 			input_report_key(ts->sensor_pdata->input_sensor_dev, KEY_F1, 1);
 			input_sync(ts->sensor_pdata->input_sensor_dev);
 			input_report_key(ts->sensor_pdata->input_sensor_dev, KEY_F1, 0);
 			input_sync(ts->sensor_pdata->input_sensor_dev);
+#endif
 			++report_cnt;
 		} else {
 			input_report_abs(ts->sensor_pdata->input_sensor_dev,
@@ -1358,6 +1399,15 @@ static int32_t nvt_parse_dt(struct device *dev)
 	int j;
 	const char *panel_supplier;
 #endif
+
+#endif
+
+
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        uint32_t value;
+        if (!of_property_read_u32(np, "novatek,supported_gesture_type", &value)){
+        ts->supported_gesture_type = (uint8_t)value;
+                }
 #endif
 
 #if NVT_TOUCH_SUPPORT_HW_RST
@@ -2175,6 +2225,11 @@ static int nvt_sensor_init(struct nvt_ts_data *data)
 	}
 	data->sensor_pdata = sensor_pdata;
 
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        __set_bit(EV_KEY, sensor_input_dev->evbit);
+        __set_bit(BTN_TRIGGER_HAPPY3, sensor_input_dev->keybit);
+        __set_bit(BTN_TRIGGER_HAPPY6, sensor_input_dev->keybit);
+#else
 	if (data->report_gesture_key) {
 		__set_bit(EV_KEY, sensor_input_dev->evbit);
 		__set_bit(KEY_F1, sensor_input_dev->keybit);
@@ -2183,6 +2238,7 @@ static int nvt_sensor_init(struct nvt_ts_data *data)
 		input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
 				0, REPORT_MAX_COUNT, 0, 0);
 	}
+#endif
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
 
 	sensor_input_dev->name = "double-tap";
@@ -2601,6 +2657,66 @@ static ssize_t timestamp_show(struct device *dev,
 }
 #endif
 
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+static ssize_t gesture_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+        struct nvt_ts_data *nvt_data = dev_get_drvdata(dev);
+        return scnprintf(buf, PAGE_SIZE, "%02x\n", nvt_data->supported_gesture_type);
+}
+
+static ssize_t gesture_store(struct device *dev,
+                                             struct device_attribute *attr,
+                                             const char *buf, size_t count)
+{
+
+	unsigned int value = 0;
+        int err = 0;
+        //struct nvt_ts_data *nvt_data = dev_get_drvdata(dev);
+
+        err = sscanf(buf, "%d", &value);
+        if (err < 0) {
+                NVT_LOG("error: Failed to convert value");
+                return -EINVAL;
+        }
+
+        switch (value) {
+                case 0x10:
+                        nvt_cmd_ext_store(0x7B,0x01);
+                        NVT_LOG("zero tap disable...");
+                        ts->s_tap_flag = false;
+                        ts->d_tap_flag = false;
+                        break;
+		case 0x11:
+			break;
+		case 0x20:
+			NVT_LOG("single tap disable...");
+			ts->s_tap_flag = false;
+			break;
+                case 0x21:
+			nvt_cmd_ext_store(0x7B,0x02);
+			NVT_LOG("single tap enable...");
+			ts->s_tap_flag = true;
+			break;
+		case 0x30:
+			NVT_LOG("double tap disable...");
+			ts->d_tap_flag = false;
+			break;
+		case 0x31:
+                        nvt_cmd_ext_store(0x7B,0x04);
+                        NVT_LOG("double tap enable...");
+                        ts->d_tap_flag = true;
+                        break;
+                default:
+                        NVT_LOG("unsupport gesture mode type");
+        }
+
+        return count;
+
+}
+
+#endif
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
@@ -2608,6 +2724,10 @@ static struct device_attribute touchscreen_attributes[] = {
 #ifdef NVT_TOUCH_LAST_TIME
 	__ATTR_RO(timestamp),
 #endif
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        __ATTR_RW(gesture),
+#endif
+
 #ifdef PALM_GESTURE
 	__ATTR(palm_settings, S_IRUGO | S_IWUSR | S_IWGRP, nvt_palm_settings_show, nvt_palm_settings_store),
 #endif
@@ -3830,6 +3950,24 @@ static void nvt_drm_notifier_callback(enum panel_event_notifier_tag tag,
 	case DRM_PANEL_EVENT_BLANK:
 		if (notification->notif_data.early_trigger) {
 			NVT_LOG("event=DRM_PANEL_EVENT_BLANK");
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+
+      if((ts->s_tap_flag == true)&&(ts->d_tap_flag == false)){
+        nvt_cmd_ext_store(0x7B,0x02);
+        }
+        else if((ts->s_tap_flag == false)&&(ts->d_tap_flag == true)){
+        nvt_cmd_ext_store(0x7B,0x04);
+        }
+        else if((ts->s_tap_flag == true)&&(ts->d_tap_flag == true)){
+        nvt_cmd_ext_store(0x7B,0x03);
+	}
+
+	if (ts->s_tap_flag || ts->d_tap_flag){
+                         ts->should_enable_gesture = true;
+                }else{
+                         ts->should_enable_gesture = false;
+		}
+#endif
 			nvt_ts_suspend(&ts->client->dev);
 #if defined(NVT_SENSOR_EN) && (defined(NVT_SET_TOUCH_STATE) || defined(NVT_CONFIG_PANEL_NOTIFICATIONS))
 			if (ts->should_enable_gesture) {

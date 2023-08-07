@@ -220,6 +220,11 @@ struct nvt_ts_data {
 	wait_queue_head_t pm_wq;
 	bool gesture_wait_pm;
 	const char *panel_supplier;
+#ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+        int supported_gesture_type;
+        bool d_tap_flag;
+        bool s_tap_flag;
+#endif
 #ifdef CONFIG_MTK_SPI
 	struct mt_chip_conf spi_ctrl;
 #endif
