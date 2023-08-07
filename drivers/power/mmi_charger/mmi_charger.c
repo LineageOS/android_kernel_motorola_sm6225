@@ -147,6 +147,7 @@ struct mmi_charger_profile {
 	//for not FFC battery profile
 	int noffc_fg_iterm;
 	int noffc_chrg_iterm;
+	int noffc_chrg_iterm_35_45c;
 	int noffc_max_fv_mv;
 
 	int shutdown_empty_vbat_mv;
@@ -963,6 +964,11 @@ static int mmi_get_charger_profile(struct mmi_charger_chip *chip,
 
 	charger->profile.noffc_chrg_iterm = charger->profile.chrg_iterm;
 
+	rc = of_property_read_u32(node, "mmi,chrg-iterm-ma-noffc-35-45c",
+				  &charger->profile.noffc_chrg_iterm_35_45c);
+	if (rc)
+		charger->profile.noffc_chrg_iterm_35_45c = -1;
+
 	rc = of_property_read_u32(node, "mmi,fg-iterm-ma",
 				  &charger->profile.fg_iterm);
 	if (rc)
@@ -1099,6 +1105,12 @@ static void mmi_update_charger_profile(struct mmi_charger_chip *chip,
 		charger->profile.max_fv_mv = charger->profile.noffc_max_fv_mv;
 		charger->profile.fg_iterm = charger->profile.noffc_fg_iterm;
 		charger->profile.chrg_iterm = charger->profile.noffc_chrg_iterm;
+
+		temp = charger->batt_info.batt_temp;
+		if(charger->profile.noffc_chrg_iterm_35_45c > 0 && temp >= 35 && temp <= 45) {
+			charger->profile.chrg_iterm = charger->profile.noffc_chrg_iterm_35_45c;
+			pr_info("enter mmi_update_charger_profile with temp:%d, chrg_iterm:%d, noffc_chrg_iterm_35_45c:%d\n", temp, charger->profile.chrg_iterm, charger->profile.noffc_chrg_iterm_35_45c);
+		}
 		return;
 	}
 
