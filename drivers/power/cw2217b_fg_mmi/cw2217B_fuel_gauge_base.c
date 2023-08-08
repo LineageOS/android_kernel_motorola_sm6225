@@ -410,7 +410,7 @@ static int cw_get_ui_full(struct cw_battery *cw_bat, int *ui_full) {
 static void cw_get_batt_status(struct cw_battery *cw_bat)
 {
 	long batt_curr = 0;
-	batt_curr = cw_bat->cw_current * CW_CUR_UNIT * (-1);
+	batt_curr = cw_bat->cw_current * CW_CUR_UNIT;
 	batt_curr *= cw_bat->ibat_polority;
 
 	if (cw_bat->voltage <= 0 || cw_bat->temp <= CW_BPD_TEMP)
