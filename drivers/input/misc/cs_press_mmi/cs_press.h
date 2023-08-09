@@ -320,6 +320,8 @@ struct cs_press_t {
     struct device *device_irq;
     struct i2c_client *client;
     struct kobject *kobj;
+    struct device *class_dev;
+    dev_t class_dev_no;
 
     /*GPIO pin*/
     int rst_gpio;

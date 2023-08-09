@@ -52,7 +52,7 @@ static DEFINE_MUTEX(i2c_rw_lock);
 static struct cs_press_t g_cs_press;
 static struct cs_vtp_scroll vtp_scroll;
 static struct cs_vtp_zoom vtp_zoom;
-
+struct class *cs_press_class;
 
 
 #ifdef INT_SET_EN
@@ -731,12 +731,12 @@ static void cs_press_worker_func(struct work_struct *w)
                      continue;
                 }
                 diff_coord = raw_data.coord - last_coord;
-                if(diff_coord > 0) {
+                if(diff_coord < 0) {
                     //slide up
                     vtp_scroll.range = abs(diff_coord);
                     vtp_scroll_up_down(&vtp_scroll, CS_NAV_MODE_SCROLL_UP);
                     vtp_scroll.y0 -= vtp_scroll.range * vtp_scroll.step;
-                } else if(diff_coord < 0) {
+                } else if(diff_coord > 0) {
                     //slide down
                     vtp_scroll.range = abs(diff_coord);
                     vtp_scroll_up_down(&vtp_scroll, CS_NAV_MODE_SCROLL_DOWN);
@@ -784,13 +784,13 @@ static void cs_press_worker_func(struct work_struct *w)
                      continue;
                 }
                 diff_coord = raw_data.coord - last_coord;
-                if(diff_coord > 0) {
+                if(diff_coord < 0) {
                     //slide up -> zoom in
                     vtp_zoom.range = abs(diff_coord);
                     vtp_zoom_in_out(&vtp_zoom, CS_NAV_MODE_ZOOM_IN);
                     vtp_zoom.p1_y0 -= vtp_zoom.range * vtp_zoom.step;
                     vtp_zoom.p2_y0 += vtp_zoom.range * vtp_zoom.step;
-                } else if(diff_coord < 0) {
+                } else if(diff_coord > 0) {
                     //slide down -> zoom out
                     vtp_zoom.range = abs(diff_coord);
                     vtp_zoom_in_out(&vtp_zoom, CS_NAV_MODE_ZOOM_OUT);
@@ -3095,6 +3095,132 @@ static void cs_procfs_delete(void)
     remove_proc_entry(CS_PRESS_NAME,NULL);
 }
 
+/********sysfs node start*********/
+/**
+  * @brief      show navigation mode
+  * @param[out] current nav mode type
+  * @retval
+  */
+static ssize_t cs_sysfs_nav_mode_show(struct device *dev, struct device_attribute *attr,
+                   char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "navigation mode: %u\n", g_cs_press.nav_mode);
+}
+
+/**
+  * @brief      switch navigation mode
+  * @param[in] nav mode type 2:zoom, 3:scroll
+  * @retval
+  */
+static ssize_t cs_sysfs_nav_mode_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t size)
+{
+    unsigned long value = 0;
+    int err = 0;
+
+    err = kstrtoul(buf, 10, &value);
+    if (err < 0) {
+        LOG_INFO("Failed to convert value");
+        return -EINVAL;
+    }
+
+    g_cs_press.nav_mode = value;
+    LOG_INFO("navigation mode: %d\n", g_cs_press.nav_mode);
+
+    return size;
+}
+static DEVICE_ATTR(nav_mode, (S_IWUSR | S_IWGRP | S_IRUGO), cs_sysfs_nav_mode_show,
+        cs_sysfs_nav_mode_store);
+
+/**
+  * @brief      upgrade IC firmware manually
+  * @param[in] upgrade type 2:force file update, others:high version update
+  * @retval
+  */
+static ssize_t cs_sysfs_fw_update_file_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t size)
+{
+    unsigned long value = 0;
+    int err = 0;
+
+    err = kstrtoul(buf, 10, &value);
+    if (err < 0) {
+        LOG_INFO("Failed to convert value");
+        return -EINVAL;
+    }
+
+    if(value == 2) {
+        g_cs_press.update_type = FORCE_FILE_UPDATE;
+    } else {
+        g_cs_press.update_type = HIGH_VER_FILE_UPDATE;
+    }
+    err = fml_fw_update_by_file();
+    if (err == 0)
+        LOG_DEBUG("pass!\n");
+    else
+        LOG_ERR("%d,failed!\n", err);
+
+    return size;
+}
+static DEVICE_ATTR(fw_update_file, (S_IWUSR | S_IWGRP), NULL, cs_sysfs_fw_update_file_store);
+
+/**
+  * @brief      read firmware bootloader info from IC
+  * @param[out] check result data buf
+  * @retval     firmware bootloader info
+  */
+static ssize_t cs_sysfs_read_boot_version_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    char result = 0;
+    unsigned char boot_ver_buf[4];
+
+    result = cs_read_boot_version(boot_ver_buf);
+    if (result == 0){
+        return scnprintf(buf, PAGE_SIZE, "%02X %02X %02X %02X\n",
+                boot_ver_buf[0],boot_ver_buf[1],boot_ver_buf[2],boot_ver_buf[3]);
+    } else {
+        return scnprintf(buf, PAGE_SIZE, "ERR\n");
+    }
+}
+static DEVICE_ATTR(read_boot_version, S_IRUGO, cs_sysfs_read_boot_version_show, NULL);
+
+/**
+  * @brief      read firmware info from IC
+  * @param[out] check result data buf
+  * @retval     firmware info
+  */
+static ssize_t cs_sysfs_fw_info_show(struct device *dev, struct device_attribute *attr,
+                   char *buf)
+{
+    char ret = 0;
+    unsigned char read_temp[FW_ONE_BLOCK_LENGTH_R] = {0};
+
+    cs_press_wakeup_iic();
+    ret |= cs_press_iic_read(AP_VERSION_REG, read_temp, CS_FW_VERSION_LENGTH);  /*FW Version*/
+    if(ret==0)
+    {
+        return scnprintf(buf, PAGE_SIZE, "fw_ver: %d %d %d %d\n",
+                read_temp[0], read_temp[1], read_temp[2], read_temp[3]);
+    } else {
+        return scnprintf(buf, PAGE_SIZE, "read fw info err\n");
+    }
+}
+static DEVICE_ATTR(fw_info, S_IRUGO, cs_sysfs_fw_info_show, NULL);
+
+static struct attribute *cs_press_attributes[] = {
+    &dev_attr_fw_info.attr,
+    &dev_attr_read_boot_version.attr,
+    &dev_attr_fw_update_file.attr,
+    &dev_attr_nav_mode.attr,
+    NULL
+};
+
+static struct attribute_group cs_press_attribute_group = {
+    .attrs = cs_press_attributes
+};
+/********sysfs node end*********/
+
 /********misc node for ndt*********/
 static int cs_press_open(struct inode *inode, struct file *filp)
 {
@@ -3191,7 +3317,8 @@ static struct miscdevice cs_press_misc = {
 
 static int cs_press_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-     int ret = -1;
+    int ret = -1;
+    struct device *parent = &client->dev;
 
     LOG_DEBUG("probe init\n");
     ret = misc_register(&cs_press_misc); /*dev node*/
@@ -3206,8 +3333,25 @@ static int cs_press_probe(struct i2c_client *client, const struct i2c_device_id 
     if (kfifo_alloc(&g_cs_press.data_queue,
         CS_DATA_MAX_QUEUE * sizeof(struct cs_press_coords), GFP_KERNEL)) {
         LOG_ERR("failed to alloc queue for raw data\n");
+        goto ALLOC_KFIFO_FAILED;
     }
 
+    dev_set_drvdata(&client->dev, &g_cs_press);
+    //create sysfs node
+    ret = alloc_chrdev_region(&g_cs_press.class_dev_no, 0, 1, CS_SYSFS_NAME);
+    if (ret < 0) {
+        LOG_ERR("get device number failed\n");
+        goto GET_NEW_MINOR_FAILED;
+    }
+
+    g_cs_press.class_dev = device_create(cs_press_class, parent, g_cs_press.class_dev_no,
+                &g_cs_press, "%s", CS_SYSFS_NAME);
+
+    ret = sysfs_create_group(&g_cs_press.class_dev->kobj, &cs_press_attribute_group);
+    if (ret < 0) {
+        LOG_ERR("error creating sysfs attr files");
+        goto CLASS_DEVICE_ATTR_CREATE_FAILED;
+    }
 
     // INIT_DELAYED_WORK(&g_cs_press.update_worker, update_work_func);
     // schedule_delayed_work(&g_cs_press.update_worker, msecs_to_jiffies(2000));
@@ -3222,6 +3366,23 @@ static int cs_press_probe(struct i2c_client *client, const struct i2c_device_id 
 */
     LOG_ERR("end!\n");
     return 0;
+
+CLASS_DEVICE_ATTR_CREATE_FAILED:
+    unregister_chrdev_region(g_cs_press.class_dev_no, 1);
+
+GET_NEW_MINOR_FAILED:
+    kfifo_free(&g_cs_press.data_queue);
+
+ALLOC_KFIFO_FAILED:
+    cs_unregister_dts();
+    cs_procfs_delete();
+#ifdef INT_SET_EN
+    eint_exit();
+#endif
+    misc_deregister(&cs_press_misc);
+    g_cs_press.client = NULL;
+
+    return ret;
 }
 
 static int cs_press_remove(struct i2c_client *client)
@@ -3232,6 +3393,8 @@ static int cs_press_remove(struct i2c_client *client)
     }
     LOG_DEBUG("cs_remove\n");
     kfifo_free(&g_cs_press.data_queue);
+    sysfs_remove_group(&g_cs_press.class_dev->kobj, &cs_press_attribute_group);
+    unregister_chrdev_region(g_cs_press.class_dev_no, 1);
     cs_unregister_dts();
     cs_procfs_delete();
 #ifdef INT_SET_EN
@@ -3278,6 +3441,14 @@ static struct i2c_driver cs_press_driver = {
 static int __init cs_press_init(void)
 {
     int ret = 0;
+
+    cs_press_class = class_create(THIS_MODULE, "g_cs_press");
+    if (IS_ERR(cs_press_class))
+    {
+        LOG_ERR("cs press class init failed");
+        return PTR_ERR(cs_press_class);
+    }
+
     ret = i2c_add_driver(&cs_press_driver);
     return ret;
 }
@@ -3287,6 +3458,9 @@ static void __exit cs_press_exit(void)
     LOG_DEBUG("module exit\n");
     i2c_del_driver(&cs_press_driver);
     cs_procfs_delete();
+    if(cs_press_class) {
+        class_destroy(cs_press_class);
+    }
 }
 
 module_init(cs_press_init);
