@@ -79,6 +79,7 @@
 #endif
 
 #define FW_FILE_NAME            "cs_press.nfw"
+#define CS_MAX_STR_LABEL_LEN 64
 
 /*
 *@ LOG format
@@ -349,7 +350,7 @@ struct cs_press_t {
     unsigned int panel_max_y;
     unsigned int panel_max_w; /*major and minor*/
     unsigned int nav_mode;
-
+    char cs_fw_name[CS_MAX_STR_LABEL_LEN];
 };
 
 #endif

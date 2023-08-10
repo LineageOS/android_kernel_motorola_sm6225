@@ -1319,7 +1319,7 @@ char cs_press_fw_force_update(const unsigned char *fw_array)
     if(ret >= 0){
         fw_read_version = ((((unsigned short)fw_read_code[2]<<8)&0xff00)|fw_read_code[3]);
     }
-    LOG_INFO("update version:%x,read version:%x\n", fw_default_version, fw_read_version);
+    LOG_INFO("update version:0x%04x,read version:0x%04x\n", fw_default_version, fw_read_version);
     if(fw_read_version != fw_default_version){
         LOG_ERR("ERR:fw_read_version != fw_default_version\n");
         result = (char)-1;
@@ -1370,6 +1370,9 @@ char cs_press_fw_high_version_update(const unsigned char *fw_array)
 
         LOG_ERR("read AP_VERSION_REG failed\n");
     }
+
+    LOG_INFO("FW on file version:0x%04x, FW on IC version:0x%04x, need update flag:%d\n",
+                default_version, read_version, flag_update);
     if(flag_update == 0)
     {
         LOG_INFO("no need update\n");
@@ -1381,10 +1384,9 @@ char cs_press_fw_high_version_update(const unsigned char *fw_array)
     {
         result = cs_press_fw_force_update(fw_array);
         if(result < 0 || result >= 0x80){
-            LOG_ERR("update failed,ret:%d\n",result);
+            LOG_ERR("update failed,ret:%d, retry count:%d\n",result, retry);
         }
     }while((result!=0)&&(retry--));
-    LOG_INFO("update finished,default version:%d,read version:%d\n",default_version,read_version);
 
     return result;
 }
@@ -1408,16 +1410,16 @@ int fml_firmware_send_data(unsigned char *data, int len)
     }
     fw_body_len = ((int)data[FW_ADDR_CODE_LENGTH]<<8)|((int)data[FW_ADDR_CODE_LENGTH+1]);
     fw_len = fw_body_len + 256;
-    LOG_INFO("[fw file len:%x,fw body len: %x]\n", len, fw_body_len);
+    LOG_INFO("[fw file len:%d,fw body len: %d]\n", len, fw_body_len);
     if(fw_body_len <= 0 || fw_body_len > FW_UPDATA_MAX_LEN)
     {
-        LOG_ERR("[err!fw body len err!len=%x]\n", len);
+        LOG_ERR("[err!fw body len err!len=%d]\n", len);
         ret = -1;
         goto exit_fw_buf;
     }
     if(fw_len != len)
     {
-        LOG_ERR("[err!fw file len err! len=%x]\n", fw_len);
+        LOG_ERR("[err!fw file len err! len=%d]\n", fw_len);
         ret = -1;
         goto exit_fw_buf;
     }
@@ -1434,6 +1436,8 @@ int fml_firmware_send_data(unsigned char *data, int len)
     {
         ret  = -1;
         LOG_ERR("Burning firmware fails\n");
+    } else {
+        LOG_ERR("Burning firmware success\n");
     }
 exit_fw_buf:
     LOG_INFO("end\n");
@@ -1475,15 +1479,20 @@ int fml_fw_update_by_file(void)
     int ret_error = 0;
     struct cs_press_t *fw_st = NULL;
 
-    fw_st = devm_kzalloc(&(g_cs_press.client->dev), sizeof(*fw_st), GFP_KERNEL );
+    if (strlen(g_cs_press.cs_fw_name) == 0) {
+        LOG_ERR("cs FW name is not specified\n");
+        return -1;
+    }
+
+    fw_st = devm_kzalloc(&(g_cs_press.client->dev), sizeof(*fw_st), GFP_KERNEL);
     if(!fw_st)
     {
         LOG_ERR("devm_kzalloc failed\n");
         return -1;
     }
     fw_st->client = g_cs_press.client;
-    ret_error = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, FW_FILE_NAME, &(g_cs_press.client->dev), GFP_KERNEL,
-                                        fw_st, fml_firmware_config_cb);
+    ret_error = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, g_cs_press.cs_fw_name,
+                &(g_cs_press.client->dev), GFP_KERNEL, fw_st, fml_firmware_config_cb);
     devm_kfree(&(g_cs_press.client->dev), fw_st);
     if(ret_error)
     {
@@ -2908,7 +2917,8 @@ exit:
 int cs_parse_dts(struct i2c_client *pdev)
 {
     int ret = -1;
-struct regulator *power_3v3 = NULL;
+    struct regulator *power_3v3 = NULL;
+    const char *name_tmp;
 
 #ifdef INT_SET_EN
 
@@ -2996,6 +3006,15 @@ struct regulator *power_3v3 = NULL;
     if (ret) {
         LOG_ERR("failed get panel-max-w\n");
         return ret;
+    }
+
+    ret = of_property_read_string((pdev->dev).of_node, "cs,fw-name", &name_tmp);
+    if (!ret) {
+        strncpy(g_cs_press.cs_fw_name, name_tmp, sizeof(g_cs_press.cs_fw_name));
+        LOG_INFO("firmware name from dt: %s", g_cs_press.cs_fw_name);
+    } else {
+        strncpy(g_cs_press.cs_fw_name, FW_FILE_NAME, sizeof(g_cs_press.cs_fw_name));
+        LOG_INFO("can't find firmware name, use default: %s", g_cs_press.cs_fw_name);
     }
 
     LOG_ERR("end---\n");
