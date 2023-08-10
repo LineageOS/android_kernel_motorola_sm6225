@@ -179,6 +179,13 @@ enum pmic_type {
 #define USBIN_ICL_OVERRIDE_BIT			BIT(0)
 #define HVDCP_PULSE_COUNT_MAX_REG		(USBIN_BASE + 0x5B)
 #define HVDCP_PULSE_COUNT_MAX_QC2_MASK		GENMASK(7, 6)
+enum {
+	HVDCP_PULSE_COUNT_MAX_QC2_5V = 0,
+	HVDCP_PULSE_COUNT_MAX_QC2_9V = 0x40,
+	HVDCP_PULSE_COUNT_MAX_QC2_12V = 0x80,
+	HVDCP_PULSE_COUNT_MAX_QC2_INVALID = 0xC0
+};
+
 #define HVDCP_PULSE_COUNT_MAX_QC3_MASK		GENMASK(5, 0)
 #define USBIN_ICL_OPTIONS_REG			(USBIN_BASE + 0x66)
 #define USBIN_MODE_CHG_BIT			BIT(0)
@@ -474,7 +481,8 @@ struct smb_mmi_charger {
 	int			hvdcp_power_max;
 	int			inc_hvdcp_cnt;
 	int			hb_startup_cnt;
-	bool		ocp_flag;
+	bool			ocp_flag;
+	bool			hvdcp2_force_9v;
 
 	/* none ffc paramter */
 	int			noffc_chg_iterm;
@@ -2238,7 +2246,6 @@ static ssize_t force_hvdcp_power_max_store(struct device *dev,
 		mmi_chip->hvdcp_power_max = power;
 
 		r = smblib_masked_write_mmi(mmi_chip, HVDCP_PULSE_COUNT_MAX_REG,
-					    HVDCP_PULSE_COUNT_MAX_QC2_MASK |
 					    HVDCP_PULSE_COUNT_MAX_QC3_MASK,
 					    HVDCP_PULSE_COUNT_MAX);
 		if (r < 0) {
@@ -2537,7 +2544,16 @@ static void mmi_chrg_usb_vin_config(struct smb_mmi_charger *chg, int cur_mv)
 		return;
 	}
 	chg->real_charger_type = val;
-	if (val != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
+	if (val == QTI_POWER_SUPPLY_TYPE_USB_HVDCP && chg->hvdcp2_force_9v) {
+		val = QTI_POWER_SUPPLY_DP_DM_FORCE_9V;
+		rc = smb_mmi_write_iio_chan(chg, SMB5_DP_DM, val);
+		if (rc < 0) {
+			mmi_err(chg, "Couldn't set force HVDCP2 9V rc=%d\n", rc);
+		}
+		return;
+	}
+
+	if (chg->real_charger_type != QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		return;
 
 	if (chg->hvdcp_power_max > CHARGER_POWER_15W) {
@@ -3632,7 +3648,10 @@ static int smb_mmi_get_chg_info(struct smb_mmi_charger *chip, struct smb_mmi_chg
 		else if (usb_type == POWER_SUPPLY_TYPE_USB_DCP)
 			power_watt = 10000;
 		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP)
-			power_watt = chip->hvdcp_power_max;
+			if (chip->hvdcp2_force_9v)
+				power_watt = 15000;
+			else
+				power_watt = 7500;
 		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3)
 			power_watt = chip->hvdcp_power_max;
 		else if (usb_type == QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5)
@@ -4474,6 +4493,8 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 	if (rc)
 		chg->inc_hvdcp_cnt = HVDCP_PULSE_COUNT_MAX;
 
+	chg->hvdcp2_force_9v = of_property_read_bool(node, "mmi,hvdcp2-force-9v");
+
 	return rc;
 }
 
@@ -5003,12 +5024,19 @@ static int smb_mmi_probe(struct platform_device *pdev)
 	 */
 	if (chip->hvdcp_power_max) {
 		rc = smblib_masked_write_mmi(chip, HVDCP_PULSE_COUNT_MAX_REG,
-					    HVDCP_PULSE_COUNT_MAX_QC2_MASK |
 					    HVDCP_PULSE_COUNT_MAX_QC3_MASK,
 					    chip->inc_hvdcp_cnt);
 		if (rc < 0)
-			mmi_err(chip, "Could not set HVDCP pulse count max\n");
+			mmi_err(chip, "Could not set HVDCP3 pulse count max\n");
 	}
+
+	rc = smblib_masked_write_mmi(chip, HVDCP_PULSE_COUNT_MAX_REG,
+					    HVDCP_PULSE_COUNT_MAX_QC2_MASK,
+					    chip->hvdcp2_force_9v ?
+					    HVDCP_PULSE_COUNT_MAX_QC2_9V:
+					    HVDCP_PULSE_COUNT_MAX_QC2_5V);
+	if (rc < 0)
+		mmi_err(chip, "Could not set HVDCP2 pulse count max\n");
 
 	chip->factory_mode = mmi_factory_check(MMI_FACTORY_MODE);
 	chip->is_factory_image = mmi_factory_check(MMI_FACTORY_BUILD);
