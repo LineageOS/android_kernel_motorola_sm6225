@@ -1475,7 +1475,7 @@ static int sc760x_charger_get_batt_info(void *data, struct mmi_battery_info *bat
 		chg->batt_info.batt_mv = val.intval / 1000;
 	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &val);
 	if (!rc)
-		chg->batt_info.batt_ma = val.intval / 1000;
+		chg->batt_info.batt_ma = val.intval / 1000 * chg->ichg_polority;
 	rc = power_supply_get_property(chg->fg_psy, POWER_SUPPLY_PROP_CAPACITY, &val);
 	if (!rc)
 		chg->batt_info.batt_soc = val.intval;
@@ -1881,6 +1881,12 @@ static int sc760x_mmi_charger_init(struct sc760x_mmi_charger *chg)
 	chg->chg_cfg.target_fcc = chg->sc->init_data.ichg / 1000;
 	chg->chg_cfg.charging_disable = chg->sc->init_data.charger_disabled;
 	chg->chg_cfg.charger_suspend = chg->sc->init_data.charger_disabled;
+
+	if (of_property_read_bool(chg->sc->dev->of_node, "mmi,ichg-invert-polority"))
+		chg->ichg_polority = -1;
+	else
+		chg->ichg_polority = 1;
+	pr_info("ichg_polority %d\n", chg->ichg_polority);
 
 	driver = devm_kzalloc(chg->sc->dev,
 				sizeof(struct mmi_charger_driver),

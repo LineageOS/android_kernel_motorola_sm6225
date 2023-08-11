@@ -172,6 +172,7 @@ struct sc760x_mmi_charger {
 	u32				chrg_taper_cnt;
 	const char			*fg_psy_name;
 	struct power_supply		*fg_psy;
+	int ichg_polority;
 
 	struct mmi_battery_info		paired_batt_info;
 };
