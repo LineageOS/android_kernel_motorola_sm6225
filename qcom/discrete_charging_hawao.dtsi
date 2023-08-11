@@ -196,7 +196,6 @@
 		reg = <0x64>;
 		status = "okay";
 
-		ibat-invert-polority = "true";
 		sense_r_mohm = <5>;
 		df-serialnum = "SB18D24973";
 		#include "bat_setting/CW_nd50-atl-5000mah.dtsi"
