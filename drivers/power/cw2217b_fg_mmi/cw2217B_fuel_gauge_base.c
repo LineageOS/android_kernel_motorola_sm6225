@@ -424,7 +424,7 @@ static void cw_get_batt_status(struct cw_battery *cw_bat)
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_FULL;
 	} else if (abs(batt_curr) < CW_CUR_ACCURACY) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-	} else if (batt_curr > 0) {
+	} else if (batt_curr < 0) {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_CHARGING;
 	} else {
 		cw_bat->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
@@ -1072,10 +1072,11 @@ static int cw_parse_dts(struct cw_battery *cw_bat)
 	}
 
 	if (of_property_read_bool(np, "ibat-invert-polority"))
-		cw_bat->ibat_polority = -1;
-	else
 		cw_bat->ibat_polority = 1;
+	else
+		cw_bat->ibat_polority = -1;
 
+	cw_info("ibat_polority=%d \n", cw_bat->ibat_polority);
 	return rc;
 }
 
@@ -1164,7 +1165,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		cw_get_current(cw_bat);
-		val->intval = cw_bat->cw_current * CW_CUR_UNIT * (-1);
+		val->intval = cw_bat->cw_current * CW_CUR_UNIT;
 		val->intval *= cw_bat->ibat_polority;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
