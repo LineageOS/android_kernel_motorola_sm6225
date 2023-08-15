@@ -373,6 +373,7 @@ static void nvt_print_criteria(void)
 
 static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y_ch, const char *file_path, uint32_t offset)
 {
+#ifndef CFG_CTS_FOR_GKI
 	int32_t x = 0;
 	int32_t y = 0;
 	int32_t iArrayIndex = 0;
@@ -479,7 +480,7 @@ static int32_t nvt_save_rawdata_to_csv(int32_t *rawdata, uint8_t x_ch, uint8_t y
 	}
 
 	printk("%s:--\n", __func__);
-
+#endif
 	return 0;
 }
 
