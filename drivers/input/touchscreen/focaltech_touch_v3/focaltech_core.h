@@ -417,6 +417,7 @@ int fts_check_cid(struct fts_ts_data *ts_data, u8 id_h);
 int fts_wait_tp_to_valid(void);
 void fts_release_all_finger(void);
 void fts_tp_state_recovery(struct fts_ts_data *ts_data);
+void fts_tp_resume_recovery(struct fts_ts_data *ts_data);
 int fts_ex_mode_init(struct fts_ts_data *ts_data);
 int fts_ex_mode_exit(struct fts_ts_data *ts_data);
 int fts_ex_mode_recovery(struct fts_ts_data *ts_data);

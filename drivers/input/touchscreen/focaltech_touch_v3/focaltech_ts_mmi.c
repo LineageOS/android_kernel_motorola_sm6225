@@ -727,7 +727,8 @@ static int fts_mmi_post_resume(struct device *dev)
 #endif
 	}
 
-	fts_tp_state_recovery(ts_data);
+	//fts_tp_state_recovery(ts_data);
+	fts_tp_resume_recovery(ts_data);
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_resume();
