@@ -488,6 +488,7 @@ struct smb_mmi_charger {
 	int			noffc_chg_iterm;
 	int			noffc_chg_iterm_45c;
 	int			noffc_qg_iterm;
+	int			noffc_qg_iterm_45c;
 	int			noffc_max_fv;
 	int			pd_pps_active;
 	int			real_charger_type;
@@ -3299,15 +3300,25 @@ static int mmi_get_ffc_fv(struct smb_mmi_charger *chip, int zone)
 		(chip->noffc_chg_iterm != -EINVAL) &&
 		(chip->noffc_qg_iterm != -EINVAL) &&
 		(chip->noffc_max_fv != -EINVAL)) {
-		rc = smb_mmi_write_iio_chan(chip,
-			SMB5_QG_BATT_FULL_CURRENT, chip->noffc_qg_iterm);
-		if (rc < 0) {
-			mmi_err(chip, "Couldn't set batt full current, rc=%d\n", rc);
-		}
+
 		if ((zone == ZONE_35C_TO_45C) && (chip->noffc_chg_iterm_45c != -EINVAL)) {
 			prm->chrg_iterm = chip->noffc_chg_iterm_45c;
+
+			rc = smb_mmi_write_iio_chan(chip,
+				SMB5_QG_BATT_FULL_CURRENT,
+				(chip->noffc_qg_iterm_45c != -EINVAL) ?
+				chip->noffc_qg_iterm_45c : chip->noffc_qg_iterm);
+			if (rc < 0) {
+				mmi_err(chip, "Couldn't set batt full current, rc=%d\n", rc);
+			}
 		} else {
 			prm->chrg_iterm = chip->noffc_chg_iterm;
+
+			rc = smb_mmi_write_iio_chan(chip,
+				SMB5_QG_BATT_FULL_CURRENT, chip->noffc_qg_iterm);
+			if (rc < 0) {
+				mmi_err(chip, "Couldn't set batt full current, rc=%d\n", rc);
+			}
 		}
 		ffc_max_fv = chip->noffc_max_fv;
 		mmi_info(chip,"NONEFFC temp zone %d, fv %d mV, chg iterm %d mA, qg iterm %d mA\n",
@@ -4456,6 +4467,11 @@ static int parse_mmi_dt(struct smb_mmi_charger *chg)
 				  &chg->noffc_qg_iterm);
 	if (rc)
 		chg->noffc_qg_iterm = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,noffc-qg-iterm-45c",
+				  &chg->noffc_qg_iterm_45c);
+	if (rc)
+		chg->noffc_qg_iterm_45c = -EINVAL;
 
 	rc = of_property_read_u32(node, "qcom,noffc-max-fv",
 				  &chg->noffc_max_fv);
