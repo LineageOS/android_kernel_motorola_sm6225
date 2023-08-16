@@ -1,6 +1,6 @@
 USE_NEW_DLKM_MK := false
 
-ifeq ($(call is-board-platform-in-list,taro kalama parrot), true)
+ifeq ($(call is-board-platform-in-list,taro kalama parrot crow), true)
 #Taro and beyond are using a new mechanisim to build kernel modules
 USE_NEW_DLKM_MK := true
 endif
