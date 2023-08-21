@@ -2191,6 +2191,9 @@ out:
 static int nvt_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
 {
+#ifdef NVT_WAKEUP_GESTURE_CTRL
+	NVT_LOG("wakeup gesture ctrl, do nothing");
+#else
 	NVT_LOG("Gesture set enable %d!", enable);
 	mutex_lock(&ts->state_mutex);
 	if (enable == 1) {
@@ -2201,6 +2204,7 @@ static int nvt_sensor_set_enable(struct sensors_classdev *sensors_cdev,
 		NVT_LOG("unknown enable symbol\n");
 	}
 	mutex_unlock(&ts->state_mutex);
+#endif
 	return 0;
 }
 
@@ -2658,6 +2662,30 @@ static ssize_t timestamp_show(struct device *dev,
 #endif
 
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
+#ifdef NVT_WAKEUP_GESTURE_CTRL
+static void nvt_gesture_state_switch(void)
+{
+	if (ts->s_tap_flag || ts->d_tap_flag) {
+		//gesture enable
+		if (!ts->should_enable_gesture) {
+			ts->should_enable_gesture = true;
+#ifdef NVT_SET_TOUCH_STATE
+			touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			NVT_LOG("gesture switch to enable");
+		}
+	} else {
+		//gesture disable
+		if (ts->should_enable_gesture) {
+			ts->should_enable_gesture = false;
+#ifdef NVT_SET_TOUCH_STATE
+			touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
+#endif
+			NVT_LOG("gesture switch to disable");
+		}
+	}
+}
+#endif
 static ssize_t gesture_show(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
@@ -2710,6 +2738,9 @@ static ssize_t gesture_store(struct device *dev,
                 default:
                         NVT_LOG("unsupport gesture mode type");
         }
+#ifdef NVT_WAKEUP_GESTURE_CTRL
+	nvt_gesture_state_switch();
+#endif
 
         return count;
 
@@ -4019,6 +4050,24 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 	if (event == MSM_DRM_EARLY_EVENT_BLANK) {
 		if (*blank == MSM_DRM_BLANK_POWERDOWN) {
 			NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+#ifdef NVT_WAKEUP_GESTURE_CTRL
+			if ((ts->s_tap_flag == true) && (ts->d_tap_flag == false)) {
+				nvt_cmd_ext_store(0x7B,0x02);
+                                NVT_LOG("Support single tap feature \n");
+			} else if ((ts->s_tap_flag == false) && (ts->d_tap_flag == true)) {
+				nvt_cmd_ext_store(0x7B,0x04);
+                                NVT_LOG("Support double tap feature \n");
+			} else if ((ts->s_tap_flag == true) && (ts->d_tap_flag == true)) {
+				nvt_cmd_ext_store(0x7B,0x03);
+                                NVT_LOG("Support single tap and double tap feature \n");
+			}
+
+			if (ts->s_tap_flag || ts->d_tap_flag) {
+				ts->should_enable_gesture = true;
+			} else {
+				ts->should_enable_gesture = false;
+			}
+#endif
 			nvt_ts_suspend(&ts->client->dev);
 #if defined(NVT_SENSOR_EN) && (defined(NVT_SET_TOUCH_STATE) || defined(NVT_CONFIG_PANEL_NOTIFICATIONS))
 			if (ts->should_enable_gesture) {
