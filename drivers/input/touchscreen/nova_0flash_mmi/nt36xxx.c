@@ -1771,6 +1771,8 @@ static int32_t nvt_ts_point_data_checksum(uint8_t *buf, uint8_t length)
 #define POINT_DATA_LEN 120
 #define MINOR_DATA_OFFSET 70
 #define ORIENT_DATA_OFFSET 110
+#elif defined CONFIG_INPUT_HIGH_RESOLUTION_4
+#define POINT_DATA_LEN 108
 #else
 #define POINT_DATA_LEN 65
 #endif
@@ -1907,6 +1909,20 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			/* update interrupt timer */
 			irq_timer = jiffies;
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
+#ifdef CONFIG_INPUT_HIGH_RESOLUTION_4
+			input_x = (uint32_t)(point_data[position + 1] << 8) + (uint32_t) (point_data[position + 2]);
+			input_y = (uint32_t)(point_data[position + 3] << 8) + (uint32_t) (point_data[position + 4]);
+			if ((input_x < 0) || (input_y < 0))
+				continue;
+			if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
+				continue;
+			input_major = (uint32_t)(point_data[position + 5]);
+			if (input_major == 0)
+				input_major = 1;
+			input_p = (uint32_t)(point_data[1 + 98 + i]);
+			if(input_p == 0)
+				input_p = 1;
+#else
 			input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t) (point_data[position + 3] >> 4);
 			input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t) (point_data[position + 3] & 0x0F);
 			if ((input_x < 0) || (input_y < 0))
@@ -1953,6 +1969,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			}
 			if (input_p == 0)
 				input_p = 1;
+#endif /* CONFIG_INPUT_HIGH_RESOLUTION_4 */
 
 #if MT_PROTOCOL_B
 			press_id[input_id - 1] = 1;
