@@ -238,6 +238,7 @@ struct mmi_charger_chip {
 	int			max_chrg_temp;
 	bool			enable_charging_limit;
         bool                    enable_factory_poweroff;
+	bool			factory_syspoweroff_wait;
 	bool			start_factory_kill_disabled;
 	int			upper_limit_capacity;
 	int			lower_limit_capacity;
@@ -2614,7 +2615,7 @@ static int mmi_charger_reboot(struct notifier_block *nb,
 		chip->force_charger_disabled = true;
 		schedule_delayed_work(&chip->heartbeat_work, msecs_to_jiffies(0));
 		while (chip->max_charger_rate != MMI_POWER_SUPPLY_CHARGE_RATE_NONE &&
-			shutdown_triggered && !chip->empty_vbat_shutdown_triggered) {
+			(shutdown_triggered || chip->factory_syspoweroff_wait) && !chip->empty_vbat_shutdown_triggered) {
 			mmi_info(chip, "Wait for charger removal\n");
 			msleep(100);
 		}
@@ -2757,6 +2758,9 @@ static int mmi_parse_dt(struct mmi_charger_chip *chip)
 
         chip->enable_factory_poweroff =
                 of_property_read_bool(node, "mmi,enable-factory-poweroff");
+
+	chip->factory_syspoweroff_wait =
+		of_property_read_bool(node, "mmi,factory-syspoweroff-wait");
 
 	chip->start_factory_kill_disabled =
 			of_property_read_bool(node, "mmi,start-factory-kill-disabled");
