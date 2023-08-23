@@ -2765,6 +2765,54 @@ static ssize_t gesture_store(struct device *dev,
 
 #endif
 
+#if defined(NVT_SENSOR_EN) && defined(NOVA_STOWED_MODE_EN)
+static ssize_t stowed_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	unsigned long mode = 0;
+
+	ret = kstrtoul(buf, 0, &mode);
+	if (ret < 0) {
+		NVT_LOG("Failed to convert value.\n");
+		return -EINVAL;
+	}
+
+	if (ts->stowed == mode) {
+		NVT_LOG("The value = %lu is same, so not to write", mode);
+		ret = size;
+		return ret;
+	}
+
+        mutex_lock(&ts->lock);
+	if (!ts->bTouchIsAwake && ts->should_enable_gesture) {
+		if (mode) {
+			nvt_cmd_ext_store(NVT_STOWED_MODE_CMD, NVT_STOWED_MODE_EN);
+		} else {
+			nvt_cmd_ext_store(NVT_STOWED_MODE_CMD, NVT_STOWED_MODE_DIS);
+		}
+	} else {
+		NVT_LOG("Skip stowed mode setting suspended:%d,should_enable_gesture:%d", ts->bTouchIsAwake,ts->should_enable_gesture);
+		ret = size;
+                mutex_unlock(&ts->lock);
+		return ret;
+	}
+
+	ts->stowed = mode;
+	ret = size;
+	NVT_LOG("Success to set stowed mode %lu\n", mode);
+        mutex_unlock(&ts->lock);
+	return ret;
+}
+
+static ssize_t stowed_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	NVT_LOG("Stowed state = %d.\n", ts->stowed);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", ts->stowed);
+}
+#endif
+
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
@@ -2774,6 +2822,9 @@ static struct device_attribute touchscreen_attributes[] = {
 #endif
 #ifdef CONFIG_BOARD_USES_DOUBLE_TAP_CTRL
         __ATTR_RW(gesture),
+#endif
+#if defined(NVT_SENSOR_EN) && defined(NOVA_STOWED_MODE_EN)
+	__ATTR_RW(stowed),
 #endif
 
 #ifdef PALM_GESTURE
@@ -3844,6 +3895,14 @@ int32_t nvt_ts_suspend(struct device *dev)
 	CTP_SPI_WRITE(ts->client, buf, 2);
 #endif // WAKEUP_GESTURE
 
+
+#if defined(NVT_SENSOR_EN) && defined(NOVA_STOWED_MODE_EN)
+	if (ts->should_enable_gesture && ts->stowed && (!ts->bTouchIsAwake)) {
+                nvt_cmd_ext_store(NVT_STOWED_MODE_CMD, NVT_STOWED_MODE_EN);
+		NVT_LOG("Enable stowed mode suspend\n");
+	}
+#endif
+
 	mutex_unlock(&ts->lock);
 
 	release_all_touches();
@@ -3943,6 +4002,11 @@ int32_t nvt_ts_resume(struct device *dev)
 			nvt_cmd_write(ts->edge_cmd[0], ts->edge_cmd[1], 0, 2);
 
 		nvt_cmd_write(ts->rotate_cmd, 0, 0, 1);
+	}
+#endif
+#if defined(NVT_SENSOR_EN) && defined(NOVA_STOWED_MODE_EN)
+	if (ts->stowed) {
+		ts->stowed = 0;
 	}
 #endif
 

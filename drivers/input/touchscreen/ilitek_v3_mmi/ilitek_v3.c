@@ -688,6 +688,12 @@ int ili_sleep_handler(int mode)
 				ILI_ERR("Write sleep in cmd failed\n");
 		}
 #endif
+#if defined (ILI_STOWED_MODE_EN) && defined (ILI_SENSOR_EN)
+		if (ilits->should_enable_gesture && ilits->stowed && ilits->tp_suspend) {
+			ili_proximity_near(DDI_POWER_ON);
+			ILI_INFO("Enable stowed mode suspend\n");
+		}
+#endif
 		ILI_INFO("TP suspend end\n");
 		break;
 	case TP_DEEP_SLEEP:
@@ -749,16 +755,22 @@ int ili_sleep_handler(int mode)
 		}
 
 #ifdef ILI_SENSOR_EN
-	if (ilits->wakeable) {
-		disable_irq_wake(ilits->irq_num);
-		ilits->gesture_enabled = false;
-		ilits->wakeable = false;
-	}
+		if (ilits->wakeable) {
+			disable_irq_wake(ilits->irq_num);
+			ilits->gesture_enabled = false;
+			ilits->wakeable = false;
+		}
 #else
-	if (ilits->gesture)
-		disable_irq_wake(ilits->irq_num);
+		if (ilits->gesture)
+			disable_irq_wake(ilits->irq_num);
 #endif
-
+#if defined (ILI_STOWED_MODE_EN) && defined (ILI_SENSOR_EN)
+		if (ilits->stowed) {
+			ilits->stowed = 0;
+                        ilits->prox_near = false;
+                        ILI_ERR("ilits->stowed = %d,ilits->prox_near = %d\n", ilits->stowed,ilits->prox_near);
+		}
+#endif
 		ILI_INFO("TP resume end\n");
 #else
 		ili_resume_by_ddi();

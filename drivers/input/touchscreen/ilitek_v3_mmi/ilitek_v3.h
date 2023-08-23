@@ -1338,6 +1338,7 @@ struct ilitek_ts_data {
 	atomic_t cmd_int_check;
 	atomic_t esd_stat;
 
+	int stowed;
 #ifdef ILI_SENSOR_EN
 	bool wakeable;
 	bool should_enable_gesture;

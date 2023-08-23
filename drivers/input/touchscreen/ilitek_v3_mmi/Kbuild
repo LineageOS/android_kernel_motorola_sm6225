@@ -54,6 +54,10 @@ endif
 ifeq ($(TARGET_BUILD_VARIANT),user)
 	EXTRA_CFLAGS += -DGKI_EN_FLAG
 endif
+
+ifneq ($(filter m y, $(CONFIG_STOWED_MODE_EN)),)
+	EXTRA_CFLAGS += -DILI_STOWED_MODE_EN
+endif
 ilitek_v3_mmi-objs += ilitek_v3.o
 ilitek_v3_mmi-objs += ilitek_v3_spi.o
 ilitek_v3_mmi-objs += ilitek_v3_qcom.o

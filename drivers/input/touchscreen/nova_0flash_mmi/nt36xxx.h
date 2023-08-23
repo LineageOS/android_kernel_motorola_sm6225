@@ -121,6 +121,9 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 #define VERTICAL   1
 #define LEFT_UP   2
 #define RIGHT_UP  3
+#define NVT_STOWED_MODE_CMD 0x7C
+#define NVT_STOWED_MODE_EN  0x01
+#define NVT_STOWED_MODE_DIS 0x00
 
 /* Enable only when module have tp reset pin and connected to host */
 #define NVT_TOUCH_SUPPORT_HW_RST 0
@@ -300,6 +303,7 @@ struct nvt_ts_data {
 	uint8_t edge_cmd[3];	/* /< edge switching command */
 	uint8_t rotate_cmd;	/* /< rotate switching command */
 	bool edge_ctrl;	/* /< edge rate switching */
+	int stowed;
 };
 
 #if NVT_TOUCH_PROC
