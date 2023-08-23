@@ -16,7 +16,7 @@
 #include <linux/pagemap.h>
 #include <linux/version.h>
 
-static int max_ra_pages = 8;
+static int max_ra_pages = -1;
 module_param(max_ra_pages, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_ra_pages, "Max read ahead pages");
 
@@ -105,9 +105,21 @@ static void __nocfi filemap_fault_cache_page(void *p, struct vm_fault *vmf, stru
 static int __nocfi __init moto_mmap_fault_init(void)
 {
 	int ret = 0;
+	int ramsize_GB = (totalram_pages() >> (30 - PAGE_SHIFT)) + 1;
+
+	if (max_ra_pages == -1) {
+		/* Set 8 pages for < 8G RAM and set 16 pages for >= 8G RAM */
+		if (ramsize_GB < 8)
+			max_ra_pages = 8;
+		else
+			max_ra_pages = 16;
+	}
+
 #if defined(TUNE_MMAP_READAROUND)
+	pr_info("Using the new mmap fault driver, totalram size=%dGB", ramsize_GB);
 	ret = register_trace_android_vh_tune_mmap_readaround(tune_mmap_readaround, NULL);
 #else
+	pr_info("Using the legacy mmap fault driver, totalram size=%dGB", ramsize_GB);
 	ret = register_trace_android_vh_filemap_fault_get_page(filemap_fault_get_page, NULL) ?:
 		register_trace_android_vh_filemap_fault_cache_page(filemap_fault_cache_page, NULL);
 #endif
