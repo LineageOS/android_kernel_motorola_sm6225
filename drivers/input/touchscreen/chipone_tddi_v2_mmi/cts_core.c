@@ -1581,7 +1581,11 @@ int cts_suspend_device(struct cts_device *cts_dev)
 
     cts_info("Device suspended ...");
     cts_dev->rtdata.suspended = true;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    cts_info("rst -------- high");
+    cts_plat_set_reset(cts_dev->pdata, 1);
+    cts_info("rst -------- high++");
+#endif
     return 0;
 }
 
