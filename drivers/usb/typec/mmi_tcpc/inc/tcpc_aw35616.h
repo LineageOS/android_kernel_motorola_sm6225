@@ -30,8 +30,9 @@
 #define AW35616_REG_STATUS		(0x04)
 #define AW35616_REG_STATUS1		(0x05)
 #define AW35616_REG_RSTN		(0x06)
-#define AW35616_REG_USB_VID0	(0x07)
-#define AW35616_REG_USB_VID1	(0x08)
+#define AW35616_REG_USB_VID0	        (0x07)
+#define AW35616_REG_USB_VID1	        (0x08)
+#define AW35616_REG_TYPEC_STATUS	(0x20)
 #define AW35616_REG_CTR2		(0x22)
 
 /* AW35616 vendor id */

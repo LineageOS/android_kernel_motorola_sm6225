@@ -222,6 +222,9 @@ static void aw35616_first_check_typec_work(struct work_struct *work)
 		case SOURCE:
 			if (chip->tcpc->typec_attach_new != TYPEC_ATTACHED_SNK) {
 				chip->tcpc->typec_attach_new = TYPEC_ATTACHED_SNK;
+				AW_LOG("snk_cur_md:%d\n",chip->reg.status.snk_cur_md);
+				chip->tcpc->typec_usb_sink_curr = chip->reg.status.snk_cur_md;
+				chip->tcpc->typec_remote_rp_level = aw35616_remote_rp_level(chip->tcpc);
 				tcpci_notify_typec_state(chip->tcpc);
 				chip->tcpc->typec_attach_old = TYPEC_ATTACHED_SNK;
 			}
@@ -277,27 +280,30 @@ static void aw35616_first_check_typec_work(struct work_struct *work)
 	tcpci_unlock_typec(chip->tcpc);
 }
 
-static void aw35616_irq_work_handler(struct kthread_work *work)
+static irqreturn_t aw35616_irq_work_handler(int irq, void *data)
 {
-	struct aw35616_chip *chip = container_of(work,
-			struct aw35616_chip, irq_work);
+	struct aw35616_chip *chip = data;
+
 	int i = 0;
 	u8 reg_data[4];
+	u8 reg_data_20;
 
 	if (first_check_flag == 0)
-		return;
+		return IRQ_HANDLED;
 
 	tcpci_lock_typec(chip->tcpc);
 	/* get interrupt */
 	aw35616_i2c_read(chip, AW35616_REG_INT, &chip->reg.ints.byte);
 	AW_LOG("int_sts[0x%02x]\n", chip->reg.ints.byte);
+	reg_data_20 = 0x0;
 	if (chip->reg.ints.intb_flag == NO_INTB) {
 		aw35616_i2c_read_bits(chip, AW35616_REG_CTR, reg_data, 4);
 		for (i = 1; i < 5; i++)
 			AW_LOG("reg:0x%02x=0x%02x\n", i, reg_data[i - 1]);
-
+		aw35616_i2c_read(chip,AW35616_REG_TYPEC_STATUS,&reg_data_20);
+		AW_LOG("reg:0x20=0x%02x\n",reg_data_20);
 		tcpci_unlock_typec(chip->tcpc);
-		return;
+		return IRQ_HANDLED;
 	}
 
 	if (chip->reg.ints.intb_flag == ATTACHED) {
@@ -305,8 +311,8 @@ static void aw35616_irq_work_handler(struct kthread_work *work)
 		AW_LOG("plug_st = %d snk_det_rp_dbg = %d\n",
 				chip->reg.status.plug_st, chip->reg.status.snk_det_rp_dbg);
 		if(chip->reg.status.plug_ori > 0)
-			chip->tcpc->typec_polarity = chip->reg.status.plug_ori - 1;
-		AW_LOG("plug_ori = %d, tcpec_polarity = %d", chip->reg.status.plug_ori, chip->tcpc->typec_polarity);
+			chip->tcpc->typec_polarity = chip->reg.status.plug_ori -1;
+		AW_LOG("plug_ori = %d, typec_polarity = %d", chip->reg.status.plug_ori, chip->tcpc->typec_polarity);
 		switch (chip->reg.status.plug_st) {
 		case STANDBY:
 			AW_LOG("plug status not connected\n");
@@ -379,24 +385,20 @@ static void aw35616_irq_work_handler(struct kthread_work *work)
 		}
 	}
 
+	aw35616_i2c_read_bits(chip,AW35616_REG_CTR,reg_data,4);
+	for (i = 1;i < 5;i++)
+		AW_LOG("reg:0x%02x=0x%02x\n",i,reg_data[i -1]);
+	aw35616_i2c_read(chip,AW35616_REG_TYPEC_STATUS,&reg_data_20);
+	AW_LOG("reg:0x20=0x%02x\n",reg_data_20);
+
 	tcpci_unlock_typec(chip->tcpc);
-}
 
-
-static irqreturn_t aw35616_intr_handler(int irq, void *data)
-{
-	struct aw35616_chip *chip = data;
-
-	__pm_wakeup_event(chip->for_irq_wake_lock, AW35616_IRQ_WAKE_TIME);
-
-	kthread_queue_work(&chip->irq_worker, &chip->irq_work);
 	return IRQ_HANDLED;
 }
 
 static int aw35616_init_alert(struct tcpc_device *tcpc)
 {
 	struct aw35616_chip *chip = tcpc_get_dev_data(tcpc);
-	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 	int ret;
 	char *name;
 	int len;
@@ -434,28 +436,19 @@ static int aw35616_init_alert(struct tcpc_device *tcpc)
 
 	pr_err("%s : IRQ number = %d\n", __func__, chip->irq);
 
-	kthread_init_worker(&chip->irq_worker);
-	chip->irq_worker_task = kthread_run(kthread_worker_fn,
-			&chip->irq_worker, "chip->tcpc_desc->name");
-	if (IS_ERR(chip->irq_worker_task)) {
-		pr_err("Error: Could not create tcpc task\n");
-		goto init_alert_err;
-	}
+	ret = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
+			aw35616_irq_work_handler,
+			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			name, chip);
 
-	sched_setscheduler(chip->irq_worker_task, SCHED_FIFO, &param);
-	kthread_init_work(&chip->irq_work, aw35616_irq_work_handler);
-
-	ret = request_irq(chip->irq, aw35616_intr_handler,
-			IRQF_TRIGGER_FALLING | IRQF_NO_THREAD |
-			IRQF_NO_SUSPEND, name, chip);
-	if (ret < 0) {
-		pr_err("Error: failed to request irq%d (gpio = %d, ret = %d)\n",
+	if(ret < 0){
+		pr_err("Error: failed to request irq%d(gpio = %d, ret=%d)\n",
 			chip->irq, chip->irq_gpio, ret);
 		goto init_alert_err;
 	}
 
 
-	enable_irq_wake(chip->irq);
+	device_init_wakeup(chip->dev, true);
 	return 0;
 init_alert_err:
 	return -EINVAL;
@@ -954,7 +947,7 @@ static int aw35616_i2c_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->first_check_typec_work,
 			aw35616_first_check_typec_work);
 
-	schedule_delayed_work(&chip->first_check_typec_work, msecs_to_jiffies(1000));
+	schedule_delayed_work(&chip->first_check_typec_work, msecs_to_jiffies(3000));
 
 	chip->for_irq_wake_lock =
 		wakeup_source_register(chip->dev, "aw35616_irq_wakelock");
@@ -1027,8 +1020,9 @@ static int aw35616_i2c_suspend(struct device *dev)
 
 	if (client) {
 		chip = i2c_get_clientdata(client);
-		if (chip)
-			down(&chip->suspend_lock);
+		if (device_may_wakeup(chip->dev))
+			enable_irq_wake(chip->irq);
+		disable_irq(chip->irq);
 	}
 
 	return 0;
@@ -1041,8 +1035,9 @@ static int aw35616_i2c_resume(struct device *dev)
 
 	if (client) {
 		chip = i2c_get_clientdata(client);
-		if (chip)
-			up(&chip->suspend_lock);
+		enable_irq(chip->irq);
+		if (device_may_wakeup(chip->dev))
+			disable_irq_wake(chip->irq);
 	}
 
 	return 0;
