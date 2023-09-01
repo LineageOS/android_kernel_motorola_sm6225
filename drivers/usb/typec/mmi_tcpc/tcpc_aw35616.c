@@ -205,6 +205,9 @@ static void aw35616_first_check_typec_work(struct work_struct *work)
 		aw35616_i2c_read_bits(chip, AW35616_REG_STATUS, chip->reg.status.byte, 2);
 		AW_LOG("plug_st = %d snk_det_rp_dbg = %d\n",
 				chip->reg.status.plug_st, chip->reg.status.snk_det_rp_dbg);
+		if (chip->reg.status.plug_ori > 0)
+			chip->tcpc->typec_polarity = chip->reg.status.plug_ori - 1;
+		AW_LOG("plug_ori = %d typec_polarity = %d\n",chip->reg.status.plug_ori,chip->tcpc->typec_polarity);
 		switch (chip->reg.status.plug_st) {
 		case STANDBY:
 			AW_LOG("plug status not connected\n");
