@@ -2400,13 +2400,13 @@ static int sgm4154x_charger_get_chg_info(void *data, struct mmi_charger_info *ch
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
 	chg->chg_info.chrg_type = get_charger_type(chg->sgm);
+	chg->chg_info.vbus_present = state.vbus_gd;
 	if (chg->chg_info.chrg_type == POWER_SUPPLY_USB_TYPE_UNKNOWN &&
 			is_wls_online(chg->sgm)) {
 		chg->chg_info.chrg_type = SGM4154x_WLS_TYPE;
+		chg->chg_info.vbus_present = false;
 	}
-
 	chg->chg_info.chrg_present = state.online;
-	chg->chg_info.vbus_present = state.vbus_gd;
 
 	if (state.ibus_limit > 0) {
 		ret = sgm4154x_get_input_curr_lim(chg->sgm);

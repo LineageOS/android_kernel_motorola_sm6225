@@ -1525,13 +1525,14 @@ static int sc760x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
 	chg->chg_info.chrg_type = get_charger_type(chg->sc);
+	chg->chg_info.vbus_present = state.online;
 	if (chg->chg_info.chrg_type == POWER_SUPPLY_USB_TYPE_UNKNOWN &&
 			is_wls_online(chg->sc)) {
 		chg->chg_info.chrg_type = 0xFF;
+		chg->chg_info.vbus_present = false;
 	}
 
 	chg->chg_info.chrg_present = state.online;
-	chg->chg_info.vbus_present = state.online;
 	chg->chg_info.chrg_pmax_mw = 0;
 
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));

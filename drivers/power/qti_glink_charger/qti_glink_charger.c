@@ -736,8 +736,15 @@ static int qti_charger_get_chg_info(void *data, struct mmi_charger_info *chg_inf
 	if (!info.chrg_present && info.chrg_type != 0)
 		chg->chg_info.chrg_present = 1;
 
-	chg->chg_info.chrg_otg_enabled = info.chrg_otg_enabled;
 	chg->chg_info.vbus_present = chg->chg_info.chrg_mv > VBUS_MIN_MV;
+	if (chg->wls_psy) {
+		union power_supply_propval val;
+		rc = power_supply_get_property(chg->wls_psy,
+				POWER_SUPPLY_PROP_ONLINE, &val);
+		if (!rc && val.intval)
+			chg->chg_info.vbus_present = false;
+	}
+	chg->chg_info.chrg_otg_enabled = info.chrg_otg_enabled;
 	chg->chg_info.lpd_present = chg->lpd_info.lpd_present;
 	memcpy(chg_info, &chg->chg_info, sizeof(struct mmi_charger_info));
 
