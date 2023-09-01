@@ -1207,6 +1207,12 @@ static int goodix_ts_mmi_post_resume(struct device *dev) {
 	}
 	core_data->zerotap_data[0] = 0;
 #endif
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	atomic_set(&core_data->allow_capture, 1);
+	ts_info("Resume end, enable ghost log capture");
+#endif
+
 	return 0;
 }
 
@@ -1219,6 +1225,20 @@ static int goodix_ts_mmi_pre_suspend(struct device *dev) {
 
 	ts_info("Suspend start");
 	atomic_set(&core_data->suspended, 1);
+
+#ifdef CONFIG_GTP_GHOST_LOG_CAPTURE
+	//disable/stop ghost log capture
+	atomic_set(&core_data->allow_capture, 0);
+	ts_info("Suspend start, disable ghost log capture");
+
+	mutex_lock(&core_data->frame_log_lock);
+	if(atomic_read(&core_data->trigger_enable) == 1) {
+		atomic_set(&core_data->trigger_enable, 0);
+		core_data->data_valid = 0;
+		frame_log_capture_stop(core_data);
+	}
+	mutex_unlock(&core_data->frame_log_lock);
+#endif
 
 #ifdef GOODIX_PALM_SENSOR_EN
 	if (core_data->set_mode.palm_detection) {
