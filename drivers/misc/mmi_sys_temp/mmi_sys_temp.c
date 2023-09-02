@@ -32,18 +32,25 @@
 
 #define TEMP_NODE_SENSOR_NAMES "mmi,temperature-names"
 #define SENSOR_LISTENER_NAMES "mmi,sensor-listener-names"
+#define NEED_UEVENT_SENSOR_NAMES "mmi,need-uevent-sensors"
+#define UEVENT_TEMP_THRESHOLD "mmi,uevent-temp-threshold"
+#define DEFAULT_UEVENT_TEMP_THRESHOLD 40000
+
 #define DEFAULT_TEMPERATURE 0
 
 struct mmi_sys_temp_sensor {
 	struct thermal_zone_device *tz_dev;
 	const char *name;
 	int temp;
+	bool need_uevent;
+	int pre_temp;
 };
 
 struct mmi_sys_temp_dev {
 	struct platform_device *pdev;
 	int num_sensors;
 	int num_sensors_listener;
+	int uevent_temp_threshold;
 	struct mmi_sys_temp_sensor *sensor;
 	struct mmi_sys_temp_sensor *sensor_listener;
 	struct notifier_block psy_nb;
@@ -51,6 +58,80 @@ struct mmi_sys_temp_dev {
 };
 
 static struct mmi_sys_temp_dev *sys_temp_dev;
+
+static int uevent_generate(struct mmi_sys_temp_dev *data, int index)
+{
+	struct kobj_uevent_env *env;
+	int ret;
+
+	if ((!data->sensor[index].need_uevent) ||
+			(data->sensor[index].temp < data->uevent_temp_threshold))
+		return 0;
+
+	//compare unit C
+	if ((data->sensor[index].temp / 1000) == (data->sensor[index].pre_temp / 1000))
+		return 0;
+
+	env = kzalloc(sizeof(*env), GFP_KERNEL);
+	if (!env) {
+		dev_err(&data->pdev->dev, "%s: alloc uevent error\n", __func__);
+		return -1;
+	}
+
+	data->sensor[index].pre_temp = data->sensor[index].temp;
+
+	add_uevent_var(env, "NAME=%s", data->sensor[index].name);
+	add_uevent_var(env, "TEMP=%d", data->sensor[index].temp);
+	add_uevent_var(env, "TRIP=%d", 0);
+
+	ret = kobject_uevent_env(&data->sensor[index].tz_dev->device.kobj, KOBJ_CHANGE, env->envp);
+
+	kfree(env);
+
+	dev_info(&data->pdev->dev, "trigger uevent index %i, temp %d pre_temp %d",
+			index, data->sensor[index].temp, data->sensor[index].pre_temp);
+
+	return ret;
+}
+
+static int uevent_parse_dt(struct mmi_sys_temp_dev *data, struct device_node *node, int num_sensors)
+{
+	const char* name;
+	int num_need_uevent_sensors, i;
+	int ret = 0;
+
+	num_need_uevent_sensors = of_property_count_strings(node, NEED_UEVENT_SENSOR_NAMES);
+	if (num_need_uevent_sensors <= 0) {
+		dev_info(&data->pdev->dev, "No sensor need uevent\n");
+		return ret;
+	}
+
+	if (of_property_read_u32(node, UEVENT_TEMP_THRESHOLD, &data->uevent_temp_threshold))
+		data->uevent_temp_threshold = DEFAULT_UEVENT_TEMP_THRESHOLD;
+
+	for (i=0; i<num_need_uevent_sensors; i++) {
+		int n;
+
+		ret = of_property_read_string_index(node,
+						NEED_UEVENT_SENSOR_NAMES, i,
+						&name);
+		if (ret) {
+			dev_err(&data->pdev->dev, "Unable to read of_prop string of uevent sensors\n");
+			break;
+		}
+
+		dev_info(&data->pdev->dev, "%s need uevent, thresh %d\n", name, data->uevent_temp_threshold);
+		for(n=0; n<num_sensors; n++) {
+			if (strstr(data->sensor[n].name, name)) {
+				dev_info(&data->pdev->dev, "%s uevent flag match!\n", name);
+				data->sensor[n].need_uevent = true;
+				break;
+			}
+		}
+	}
+
+	return ret;
+}
 
 static int mmi_sys_temp_ioctl_open(struct inode *node, struct file *file)
 {
@@ -96,6 +177,9 @@ static long mmi_sys_temp_ioctl(struct file *file, unsigned int cmd,
 					 MMI_SYS_TEMP_NAME_LENGTH)) {
 				sys_temp_dev->sensor[i].temp =
 					request.temperature;
+
+				/*generate sensor uevent*/
+				uevent_generate(sys_temp_dev, i);
 				break;
 			}
 		}
@@ -168,6 +252,9 @@ static void psy_changed_work_func(struct work_struct *work)
 
 				thermal_zone_get_temp(sys_temp_dev->sensor_listener[i].tz_dev,
 						&sys_temp_dev->sensor_listener[i].temp);
+
+				/*generate sensor uevent*/
+				uevent_generate(sys_temp_dev, i);
 			} else {
 				dev_err(&sys_temp_dev->pdev->dev,
 					"Invalid thermal zone\n");
@@ -276,6 +363,9 @@ static int mmi_sys_temp_probe(struct platform_device *pdev)
 		}
 		num_registered = i + 1;
 	}
+
+	/*uevent parameter process*/
+	uevent_parse_dt(sys_temp_dev, node, num_sensors);
 
 	platform_set_drvdata(pdev, sys_temp_dev);
 
