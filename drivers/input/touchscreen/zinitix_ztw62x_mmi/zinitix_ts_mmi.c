@@ -374,7 +374,6 @@ static int zinitix_ts_mmi_post_resume(struct device *dev)
 	tpd_halt = 0;
 	info->work_state = NOTHING;
 	//Clear stowed state
-	atomic_set(&info->get_stowed_state, 0);
 	atomic_set(&info->set_stowed_state, 0);
 	up(&info->work_lock);
 	dev_info(dev, "%s: Resume end\n", __func__);
