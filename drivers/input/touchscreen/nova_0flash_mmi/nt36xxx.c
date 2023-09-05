@@ -830,8 +830,10 @@ info_retry:
 	ts->fw_ver = buf[1];
 	ts->x_num = buf[3];
 	ts->y_num = buf[4];
+#ifndef CONFIG_INPUT_HIGH_RESOLUTION_N
 	ts->abs_x_max = (uint16_t)((buf[5] << 8) | buf[6]);
 	ts->abs_y_max = (uint16_t)((buf[7] << 8) | buf[8]);
+#endif
 	ts->max_button_num = buf[11];
 	ts->fw_type = buf[14];
 	//---clear x_num, y_num if fw info is broken---
@@ -1771,7 +1773,7 @@ static int32_t nvt_ts_point_data_checksum(uint8_t *buf, uint8_t length)
 #define POINT_DATA_LEN 120
 #define MINOR_DATA_OFFSET 70
 #define ORIENT_DATA_OFFSET 110
-#elif defined CONFIG_INPUT_HIGH_RESOLUTION_4
+#elif defined CONFIG_INPUT_HIGH_RESOLUTION_N
 #define POINT_DATA_LEN 108
 #else
 #define POINT_DATA_LEN 65
@@ -1909,7 +1911,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			/* update interrupt timer */
 			irq_timer = jiffies;
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
-#ifdef CONFIG_INPUT_HIGH_RESOLUTION_4
+#ifdef CONFIG_INPUT_HIGH_RESOLUTION_N
 			input_x = (uint32_t)(point_data[position + 1] << 8) + (uint32_t) (point_data[position + 2]);
 			input_y = (uint32_t)(point_data[position + 3] << 8) + (uint32_t) (point_data[position + 4]);
 			if ((input_x < 0) || (input_y < 0))
@@ -1919,9 +1921,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_major = (uint32_t)(point_data[position + 5]);
 			if (input_major == 0)
 				input_major = 1;
-			input_p = (uint32_t)(point_data[1 + 98 + i]);
-			if(input_p == 0)
-				input_p = 1;
 #else
 			input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t) (point_data[position + 3] >> 4);
 			input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t) (point_data[position + 3] & 0x0F);
@@ -1929,7 +1928,10 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				continue;
 			if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
 				continue;
-
+			input_major = (uint32_t)(point_data[position + 4]);
+			if (input_major == 0)
+				input_major = 1;
+#endif /* CONFIG_INPUT_HIGH_RESOLUTION_N */
 #ifdef PALM_GESTURE_RANGE
 			if((point_data[position] & 0x07) == PALM_TOUCH) { //palm
 				input_minor = (uint32_t)(point_data[1 + MINOR_DATA_OFFSET + i]);
@@ -1939,13 +1941,15 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				input_orient = (int8_t)(point_data[1 + ORIENT_DATA_OFFSET + i]);
 			}
 #endif
-			input_major = (uint32_t)(point_data[position + 4]);
-			if (input_major == 0)
-				input_major = 1;
+
 
 #ifdef PALM_GESTURE
 			if ((point_data[position] & 0x07) == PALM_TOUCH) { //palm
+#if CONFIG_INPUT_HIGH_RESOLUTION_N
+				input_p = (uint32_t)(point_data[1 + 98 + i]);
+#else
 				input_p = (uint32_t)(point_data[position + 5]);
+#endif
 				if(input_p == 255)
 					input_p = PALM_HANG;
 				else if (input_p == 254)
@@ -1959,6 +1963,9 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			} else
 #endif
 			{
+#if CONFIG_INPUT_HIGH_RESOLUTION_N
+				input_p = (uint32_t)(point_data[position + 98 + i]);
+#else
 				if (i < 2) {
 					input_p = (uint32_t)(point_data[position + 5]) + (uint32_t)(point_data[i + 63] << 8);
 					if (input_p > TOUCH_FORCE_NUM)
@@ -1966,10 +1973,10 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				} else {
 					input_p = (uint32_t)(point_data[position + 5]);
 				}
+#endif
 			}
 			if (input_p == 0)
 				input_p = 1;
-#endif /* CONFIG_INPUT_HIGH_RESOLUTION_4 */
 
 #if MT_PROTOCOL_B
 			press_id[input_id - 1] = 1;
