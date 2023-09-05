@@ -1327,14 +1327,13 @@ static bool sc760x_state_changed(struct sc760x_chip *sc,
 
 static void charger_monitor_work_func(struct work_struct *work)
 {
-	int ret = 0;
 	bool state_changed = false;
 	struct sc760x_state state;
 	struct sc760x_chip *sc = container_of(work,
 					struct sc760x_chip,
 					charge_monitor_work.work);
 
-	ret = sc760x_get_state(sc, &state);
+	sc760x_get_state(sc, &state);
 	state_changed = sc760x_state_changed(sc, &state);
 	mutex_lock(&sc->lock);
 	sc->state = state;
@@ -1516,11 +1515,11 @@ static int sc760x_charger_get_batt_info(void *data, struct mmi_battery_info *bat
 
 static int sc760x_charger_get_chg_info(void *data, struct mmi_charger_info *chg_info)
 {
-	int ret = 0, work_mode = 0;
+	int work_mode = 0;
 	struct sc760x_mmi_charger *chg = data;
 	struct sc760x_state state = chg->sc->state;
 
-	ret = sc760x_get_state(chg->sc, &state);
+	sc760x_get_state(chg->sc, &state);
 	sc760x_get_work_mode(chg->sc, &work_mode);
 	chg->chg_info.chrg_mv = state.vbus_adc / 1000;
 	chg->chg_info.chrg_ma = state.ibus_adc / 1000;
