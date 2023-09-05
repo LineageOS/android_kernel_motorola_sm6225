@@ -3453,8 +3453,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 	} else if (prm->pres_chrg_step == STEP_NORM) {
 		if (!zone->fcc_norm_ma)
 			prm->pres_chrg_step = STEP_FLOAT;
-		else if ((stat->batt_soc < 100) ||
-			 (stat->batt_mv + HYST_STEP_MV) < max_fv_mv) {
+		else if ((stat->batt_mv + HYST_STEP_MV/2) < max_fv_mv) {
 			prm->chrg_taper_cnt = 0;
 			prm->pres_chrg_step = STEP_NORM;
 		} else if (mmi_has_current_tapered(BASE_BATT, chip, prm, stat->batt_ma,
@@ -3462,8 +3461,7 @@ static void mmi_basic_charge_sm(struct smb_mmi_charger *chip,
 				prm->pres_chrg_step = STEP_FULL;
 		}
 	} else if (prm->pres_chrg_step == STEP_FULL) {
-		if ((stat->batt_soc <= 99) ||
-			stat->batt_mv < (max_fv_mv - HYST_STEP_MV * 2)) {
+		if (stat->batt_mv < (max_fv_mv - HYST_STEP_MV * 2)) {
 			prm->chrg_taper_cnt = 0;
 			prm->pres_chrg_step = STEP_NORM;
 		}
