@@ -636,7 +636,31 @@ static int wait_fw_to_normal_work(struct cts_device *cts_dev)
 
     return ret ? ret : -ETIMEDOUT;
 }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+static int wait_fw_to_curr_mode(struct cts_device *cts_dev)
+{
+    int i = 0;
+    int ret;
+	u8 work_mode;
 
+    cts_info("Wait fw to curr work mode");
+
+    do {
+        ret = cts_tcs_get_curr_mode(cts_dev, &work_mode);
+        if (ret) {
+            cts_err("Get fw curr work mode failed %d", work_mode);
+            continue;
+        } else if (work_mode == CTS_FIRMWARE_WORK_MODE_OPEN_SHORT) {
+        	return 0;
+        }
+        mdelay(10);
+    } while (++i < 100);
+
+	cts_err("Get work_mode: %d != %d", work_mode, CTS_FIRMWARE_WORK_MODE_OPEN_SHORT);
+
+	return -ETIMEDOUT;
+}
+#else
 static int wait_fw_to_curr_mode(struct cts_device *cts_dev)
 {
     int i = 0;
@@ -661,11 +685,14 @@ static int wait_fw_to_curr_mode(struct cts_device *cts_dev)
 
     return ret ? ret : -ETIMEDOUT;
 }
-
-
+#endif
 static int prepare_test(struct cts_device *cts_dev)
 {
     int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	int i = 0;
+	u8 workmode = -1;
+#endif
 
     cts_info("Prepare test");
 
@@ -682,6 +709,22 @@ static int prepare_test(struct cts_device *cts_dev)
         cts_err("Set firmware work mode to WORK_MODE_CONFIG failed %d", ret);
         return ret;
     }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	mdelay(30);
+    do {
+		ret = cts_tcs_get_workmode(cts_dev, &workmode);
+		if (ret) {
+		    cts_err("Get real workmode to FACTORY MODE failed %d", ret);
+		} else if (workmode == CTS_FIRMWARE_WORK_MODE_CFG) {
+			break;
+		}
+		mdelay(30);
+		cts_err("Get workmode: %d, CTS_FIRMWARE_WORK_MODE_CFG: %d, retry count: %d",
+			workmode, CTS_FIRMWARE_WORK_MODE_CFG, i);
+    } while (i++ < 10);
+	if (workmode != CTS_FIRMWARE_WORK_MODE_CFG)
+		return -EINVAL;	
+#endif
 
     ret = cts_tcs_set_product_en(cts_dev, 1);
     if (ret) {
@@ -930,7 +973,13 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
     bool dump_test_data_to_file = false;
     int num_nodes;
     int tsdata_frame_size;
-    int frame;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    int frame = 0;
+	int count = 3;
+#else
+	int frame;
+#endif
+
     int  fail_frame = 0;
     u16 *rawdata = NULL;
     ktime_t start_time, end_time, delta_time;
@@ -1002,11 +1051,17 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     cts_lock_device(cts_dev);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+try_again:
+#endif
     ret = prepare_test(cts_dev);
     if (ret) {
         cts_err("Prepare test failed %d", ret);
-        goto unlock;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        goto prepare_try;
+#else
+		goto unlock;
+#endif
     }
 
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_RAWDATA);
@@ -1058,15 +1113,31 @@ int cts_test_rawdata(struct cts_device *cts_dev, struct cts_test_param *param)
         }
     }
 
-    if (dump_test_data_to_file) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+prepare_try:
+#else
+	if (dump_test_data_to_file) {
         cts_stop_dump_test_data_to_file();
     }
-
+#endif
     post_test(cts_dev);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_NONE);
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_NONE);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (ret < 0 && count--) {
+		if (dump_test_data_to_user) {
+            *param->test_data_wr_size = 0;
+			rawdata = (u16 *) param->test_data_buf;
+		}
+		goto try_again;
+	}
 
+    if (dump_test_data_to_file) {
+        cts_stop_dump_test_data_to_file();
+    }
+#else
 unlock:
+#endif
     cts_unlock_device(cts_dev);
     {
         int r = cts_start_device(cts_dev);
@@ -1108,7 +1179,11 @@ int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)
     bool dump_test_data_to_file = false;
     int num_nodes;
     int tsdata_frame_size;
-    int frame;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    int frame = 0;
+#else
+	int frame;
+#endif
     u16 *buffer = NULL;
     int buf_size = 0;
     u16 *curr_rawdata = NULL;
@@ -1120,6 +1195,9 @@ int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)
     ktime_t start_time, end_time, delta_time;
     int i;
     int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	int count = 3;
+#endif
 
     if (cts_dev == NULL || param == NULL ||
         param->priv_param_size != sizeof(*priv_param) ||
@@ -1188,11 +1266,17 @@ int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     cts_lock_device(cts_dev);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+try_again:
+#endif
     ret = prepare_test(cts_dev);
     if (ret) {
         cts_err("Prepare test failed %d", ret);
-        goto unlock;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        goto prepare_try;
+#else
+		goto unlock;
+#endif
     }
 
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_RAWDATA);
@@ -1214,7 +1298,11 @@ int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)
         if (i >= 3) {
             cts_err("Read rawdata failed");
             ret = -EIO;
-            goto disable_get_tsdata;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+            goto prepare_try;
+#else
+			goto disable_get_tsdata;
+#endif
         }
 
         if (dump_test_data_to_console || dump_test_data_to_file) {
@@ -1247,16 +1335,31 @@ int cts_test_noise(struct cts_device *cts_dev, struct cts_test_param *param)
 
     data_valid = true;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+prepare_try:
+#else
 disable_get_tsdata:
     if (dump_test_data_to_file) {
         cts_stop_dump_test_data_to_file();
-    }
-
+    }	
+#endif
     post_test(cts_dev);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_NONE);
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_NONE);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (ret < 0 && count--) {
+		if (dump_test_data_to_user) {
+			*param->test_data_wr_size = 0;
+		}
+		goto try_again;
+	}
 
+    if (dump_test_data_to_file) {
+        cts_stop_dump_test_data_to_file();
+    }
+#else
 unlock:
+#endif
     cts_unlock_device(cts_dev);
     {
         int r = cts_start_device(cts_dev);
@@ -1327,6 +1430,9 @@ int cts_test_open(struct cts_device *cts_dev, struct cts_test_param *param)
     int num_nodes;
     int tsdata_frame_size;
     int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	int count = 3;
+#endif
     u16 *test_result = NULL;
     bool recovery_display_state = false;
     u8 need_display_on;
@@ -1380,7 +1486,9 @@ int cts_test_open(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     cts_lock_device(cts_dev);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+try_again:
+#endif
     ret = prepare_test(cts_dev);
     if (ret) {
         cts_err("Prepare test failed %d", ret);
@@ -1414,11 +1522,11 @@ int cts_test_open(struct cts_device *cts_dev, struct cts_test_param *param)
         goto err_recovery_display_state;
     }
 
-    ret = wait_fw_to_curr_mode(cts_dev);
-    if (ret) {
+	ret = wait_fw_to_curr_mode(cts_dev);
+	if (ret) {
 	cts_err("wait_to_curr_mode failed %d", ret);
 	goto err_recovery_display_state;
-     }
+	}
 
     cts_set_int_data_types(cts_dev, INT_DATA_TYPE_RAWDATA);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_POLLING);
@@ -1469,6 +1577,15 @@ err_free_test_result:
 
     cts_set_int_data_method(cts_dev, old_int_data_method);
     cts_set_int_data_types(cts_dev, old_int_data_types);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	if (ret < 0 && count--) {
+		if (dump_test_data_to_user) {
+			*param->test_data_wr_size = 0;
+			test_result = (u16 *) param->test_data_buf;
+		}
+		goto try_again;
+	}
+#endif
 
 #ifdef CONFIG_CTS_CHARGER_DETECT
     if (cts_is_charger_exist(cts_dev)) {
@@ -1538,6 +1655,9 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
     int num_nodes;
     int tsdata_frame_size;
     int loopcnt;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	int count = 3;
+#endif
     int ret;
     u16 *test_result = NULL;
     bool recovery_display_state = false;
@@ -1594,23 +1714,37 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     cts_lock_device(cts_dev);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+try_again:
+#endif
     ret = prepare_test(cts_dev);
     if (ret) {
         cts_err("Prepare test failed %d", ret);
-        goto unlock_device;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        goto prepare_try;
+#else
+		goto unlock_device;
+#endif
     }
     ret = cts_tcs_is_display_on(cts_dev, &need_display_on);
     if (ret) {
         cts_err("Read need display on register failed %d", ret);
-        goto err_free_test_result;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        goto prepare_try;
+#else
+		goto err_free_test_result;
+#endif
     }
 
     if (need_display_on == 0) {
         ret = cts_tcs_set_display_on(cts_dev, 0x00);
         if (ret) {
             cts_err("Set display state to SLEEP failed %d", ret);
-            goto err_free_test_result;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+            goto recovery_display_state;
+#else
+      		goto err_free_test_result;
+#endif
         }
         recovery_display_state = true;
     }
@@ -1618,7 +1752,11 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
     cts_info("Test short to GND");
     ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_UNDEFINED);
     if (ret) {
-        cts_err("Set short test type to SHORT_TO_GND failed %d", ret);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        cts_err("Set short test type failed %d", ret);
+#else
+		cts_err("Set short test type to SHORT_TO_GND failed %d", ret);
+#endif
         goto recovery_display_state;
     }
     ret = cts_tcs_set_openshort_mode(cts_dev, CTS_TEST_SHORT);
@@ -1646,7 +1784,7 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
         cts_err("Set short test type to SHORT_TO_GND failed %d", ret);
         goto recovery_display_state;
     }
-
+		
     ret = cts_tcs_polling_test_data(cts_dev, (u8 *)test_result,
         RAWDATA_BUFFER_SIZE(cts_dev));
     if (ret) {
@@ -1673,7 +1811,11 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
         if (ret) {
             cts_err("Short to GND test failed %d", ret);
             if (stop_if_failed) {
-                goto stop_dump_test_data_to_file;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+                goto recovery_display_state;
+#else
+				goto stop_dump_test_data_to_file;
+#endif
             }
         }
     }
@@ -1722,14 +1864,17 @@ int cts_test_short(struct cts_device *cts_dev, struct cts_test_param *param)
     }
 
     /* Short between rows */
-    cts_info("Test short between rows");
-    ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_ROWS);
-    if (ret) {
-        cts_err("Set short test type to BETWEEN_ROWS failed %d", ret);
-        goto recovery_display_state;
-    }
 
+    cts_info("Test short between rows");
+        ret = cts_tcs_set_short_test_type(cts_dev, CTS_SHORT_TEST_BETWEEN_ROWS);
+        if (ret) {
+            cts_err("Set short test type to BETWEEN_ROWS failed %d", ret);
+            goto recovery_display_state;
+        }
+
+	
     for (loopcnt = 0; loopcnt < SHORT_ROWS_TEST_LOOP; loopcnt++) {
+       
         ret = cts_tcs_polling_test_data(cts_dev, (u8 *)test_result,
                 RAWDATA_BUFFER_SIZE(cts_dev));
         if (ret) {
@@ -1765,16 +1910,31 @@ recovery_display_state:
             cts_err("Set display state to ACTIVE failed %d", r);
         }
     }
-
-stop_dump_test_data_to_file:
-    if (dump_test_data_to_file) {
-        cts_stop_dump_test_data_to_file();
-    }
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+prepare_try:
     post_test(cts_dev);
     cts_set_int_data_method(cts_dev, old_int_data_method);
     cts_set_int_data_types(cts_dev, old_int_data_types);
 
+	if (ret < 0 && count--) {
+		if (dump_test_data_to_user) {
+            *param->test_data_wr_size = 0;
+			test_result = (u16 *) param->test_data_buf;
+		}
+		goto try_again;
+	}
+#else
+stop_dump_test_data_to_file:
+#endif
+
+    if (dump_test_data_to_file) {
+        cts_stop_dump_test_data_to_file();
+    }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
+    post_test(cts_dev);
+    cts_set_int_data_method(cts_dev, old_int_data_method);
+    cts_set_int_data_types(cts_dev, old_int_data_types);
+#endif
 #ifdef CONFIG_CTS_CHARGER_DETECT
     if (cts_is_charger_exist(cts_dev)) {
         int r = cts_set_dev_charger_attached(cts_dev, true);
@@ -1803,8 +1963,9 @@ stop_dump_test_data_to_file:
         cts_enable_fw_log_redirect(cts_dev);
     }
 #endif
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,15,0)
 unlock_device:
+#endif
     cts_unlock_device(cts_dev);
 
     cts_start_device(cts_dev);
@@ -1985,6 +2146,9 @@ int cts_test_compensate_cap(struct cts_device *cts_dev,
     bool dump_test_data_to_console = false;
     bool dump_test_data_to_file = false;
     int num_nodes;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+	int count = 3;
+#endif
     u8 *cap = NULL;
     int ret = 0;
     ktime_t start_time, end_time, delta_time;
@@ -2037,15 +2201,30 @@ int cts_test_compensate_cap(struct cts_device *cts_dev,
     }
 
     cts_lock_device(cts_dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+try_again:
+#endif
     ret = prepare_test(cts_dev);
     if (ret) {
         cts_err("Prepare test failed %d", ret);
-        goto unlock_device;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+        goto prepare_try;
+#else
+		goto unlock_device;
+#endif
     }
     ret = cts_tcs_top_get_cnegdata(cts_dev, cap, num_nodes);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+prepare_try:
+#else
 unlock_device:
+#endif
     post_test(cts_dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,15,0)
+    if (ret && count--)
+        goto try_again;
+#endif
+	
     cts_unlock_device(cts_dev);
     if (ret) {
         cts_err("Get compensate cap failed %d", ret);
