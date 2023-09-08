@@ -295,8 +295,8 @@ void fts_read_report_fod_event(struct fts_ts_data *ts_data)
         {
             fod_down_interval = (int)jiffies_to_msecs(jiffies - start);
             event.evcode = 2;
-            event.evdata.x = fod_x;
-            event.evdata.y = fod_y;
+            event.evdata.x = 0;
+            event.evdata.y = 0;
             FTS_INFO("Get FOD-DOWN gesture:%d interval:%d", ts_data->zerotap_data[0], fod_down_interval);
             if (fod_down_interval > 2000)
                 ts_data->zerotap_data[0] = 0;
