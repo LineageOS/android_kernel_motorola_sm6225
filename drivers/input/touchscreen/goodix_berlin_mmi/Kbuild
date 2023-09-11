@@ -80,6 +80,10 @@ ifneq ($(filter m y, $(CONFIG_GTP_GHOST_LOG_CAPTURE)),)
 endif
 endif
 
+ifneq ($(filter m y,$(CONFIG_ENABLE_GTP_PALM_CANCEL)),)
+    EXTRA_CFLAGS += -DCONFIG_ENABLE_GTP_PALM_CANCEL
+endif
+
 ifneq ($(findstring _factory,$(TARGET_PRODUCT)),)
 USE_TARGET_PRODUCT := $(strip $(subst _factory,, $(TARGET_PRODUCT)))
 else

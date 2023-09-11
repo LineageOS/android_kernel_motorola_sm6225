@@ -387,6 +387,7 @@ struct goodix_pen_coords {
 /* touch event data */
 struct goodix_touch_data {
 	int touch_num;
+	bool palm_on;
 	struct goodix_ts_coords coords[GOODIX_MAX_TOUCH];
 };
 

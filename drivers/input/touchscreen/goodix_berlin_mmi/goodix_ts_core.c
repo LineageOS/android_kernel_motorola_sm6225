@@ -1200,7 +1200,15 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 #endif
 	enum touch_event_mode type;
 
+#ifdef CONFIG_ENABLE_GTP_PALM_CANCEL
+	unsigned int tool_type;
+#endif
+
 	mutex_lock(&dev->mutex);
+
+#ifdef CONFIG_ENABLE_GTP_PALM_CANCEL
+	tool_type = touch_data->palm_on ? MT_TOOL_PALM : MT_TOOL_FINGER;
+#endif
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
 		if (touch_data->coords[i].status == TS_TOUCH) {
 			ts_debug("report: id %d, x %d, y %d, w %d", i,
@@ -1239,7 +1247,11 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			/* end of clip area handling */
 
 			input_mt_slot(dev, i);
+#ifdef CONFIG_ENABLE_GTP_PALM_CANCEL
+			input_mt_report_slot_state(dev, tool_type, true);
+#else
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
+#endif
 			input_report_abs(dev, ABS_MT_POSITION_X,
 					touch_data->coords[i].x);
 			input_report_abs(dev, ABS_MT_POSITION_Y,
@@ -1251,7 +1263,11 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				ts_debug("TOUCH: [%d] release\n", i);
 				touchdown[i] = 0;
 				input_mt_slot(dev, i);
+#ifdef CONFIG_ENABLE_GTP_PALM_CANCEL
+				input_mt_report_slot_state(dev, tool_type, false);
+#else
 				input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
+#endif
 			}
 		}
 	}
@@ -1691,6 +1707,10 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 			     0, ts_bdata->panel_max_y, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
 			     0, ts_bdata->panel_max_w, 0, 0);
+#ifdef CONFIG_ENABLE_GTP_PALM_CANCEL
+	input_set_abs_params(input_dev, ABS_MT_TOOL_TYPE,
+			     MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
+#endif
 #ifdef INPUT_TYPE_B_PROTOCOL
 #if LINUX_VERSION_CODE > KERNEL_VERSION(3, 7, 0)
 	input_mt_init_slots(input_dev, GOODIX_MAX_TOUCH,
