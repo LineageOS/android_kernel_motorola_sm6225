@@ -289,6 +289,7 @@ struct fts_ts_data {
     unsigned char gesture_type;
     int zerotap_data[1];
     int zero_enable;
+    int fod_event;
     unsigned long fod_jiffies;
 #endif
     u8 gsx_cmd;
