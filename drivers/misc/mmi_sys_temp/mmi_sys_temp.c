@@ -72,7 +72,7 @@ static int uevent_generate(struct mmi_sys_temp_dev *data, int index)
 	if ((data->sensor[index].temp / 1000) == (data->sensor[index].pre_temp / 1000))
 		return 0;
 
-	env = kzalloc(sizeof(*env), GFP_KERNEL);
+	env = devm_kzalloc(&data->pdev->dev, sizeof(*env), GFP_KERNEL);
 	if (!env) {
 		dev_err(&data->pdev->dev, "%s: alloc uevent error\n", __func__);
 		return -1;
@@ -86,7 +86,7 @@ static int uevent_generate(struct mmi_sys_temp_dev *data, int index)
 
 	ret = kobject_uevent_env(&data->sensor[index].tz_dev->device.kobj, KOBJ_CHANGE, env->envp);
 
-	kfree(env);
+	devm_kfree(&data->pdev->dev, env);
 
 	dev_info(&data->pdev->dev, "trigger uevent index %i, temp %d pre_temp %d",
 			index, data->sensor[index].temp, data->sensor[index].pre_temp);
