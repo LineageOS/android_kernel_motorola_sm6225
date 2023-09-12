@@ -1945,7 +1945,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 #ifdef PALM_GESTURE
 			if ((point_data[position] & 0x07) == PALM_TOUCH) { //palm
-#if CONFIG_INPUT_HIGH_RESOLUTION_N
+#ifdef CONFIG_INPUT_HIGH_RESOLUTION_N
 				input_p = (uint32_t)(point_data[1 + 98 + i]);
 #else
 				input_p = (uint32_t)(point_data[position + 5]);
@@ -1963,7 +1963,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			} else
 #endif
 			{
-#if CONFIG_INPUT_HIGH_RESOLUTION_N
+#ifdef CONFIG_INPUT_HIGH_RESOLUTION_N
 				input_p = (uint32_t)(point_data[position + 98 + i]);
 #else
 				if (i < 2) {
