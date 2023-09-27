@@ -97,6 +97,7 @@
 		df-serialnum = "SB18D20540";
 		#include "bat_setting/CW2217_NC50_ATL_Devon.dtsi"
 		#include "bat_setting/CW2217_NC50_SCUD_Devon.dtsi"
+		#include "bat_setting/CW2217_NC50_ATL_2ND_Devon.dtsi"
 	};
 
 	sm5602@71 {
@@ -129,6 +130,7 @@
 		df-serialnum = "SB18D20540";
 		#include "bat_setting/SM5602_NC50_ATL_Devon.dtsi"
 		#include "bat_setting/SM5602_NC50_SCUD_Devon.dtsi"
+		#include "bat_setting/SM5602_NC50_ATL_2ND_Devon.dtsi"
 	};
 };
 
