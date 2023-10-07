@@ -1515,7 +1515,7 @@ int bq2589x_get_usb_present(struct bq2589x *bq)
 	return ret;
 }
 
-static bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
+static int bq2589x_reuqest_dpdm(struct bq2589x *bq, bool enable)
 {
 	int ret = 0;
 
