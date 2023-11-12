@@ -208,6 +208,33 @@ static inline void update_poison_center(struct touch_event_data *tev)
 }
 #endif /* TS_MMI_TOUCH_GESTURE_POISON_EVENT */
 
+#define DOUBLE_TAP_MAX_TIME	(500 * NSEC_PER_MSEC)
+
+static void ts_mmi_single_tap_handler(struct ts_mmi_dev *touch_cdev)
+{
+	ktime_t now, tmp;
+
+	now = ktime_get_boottime();
+
+	if (!touch_cdev->single_tap_pressed) {
+		touch_cdev->single_tap_pressed_time = now;
+		touch_cdev->double_tap_pressed = false;
+		touch_cdev->single_tap_pressed = true;
+		return;
+	}
+
+	tmp = ktime_add(touch_cdev->single_tap_pressed_time,
+			DOUBLE_TAP_MAX_TIME);
+
+	if (ktime_after(now, tmp)) {
+		touch_cdev->single_tap_pressed_time = now;
+		return;
+	}
+
+	touch_cdev->single_tap_pressed = false;
+	touch_cdev->double_tap_pressed = true;
+}
+
 static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 {
 	int key_code;
@@ -216,8 +243,14 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 
 	switch (gev->evcode) {
 	case 1:
-		key_code = KEY_F1;
-		pr_info("%s: single tap\n", __func__);
+		ts_mmi_single_tap_handler(touch_cdev);
+		if (touch_cdev->double_tap_pressed) {
+			key_code = KEY_WAKEUP;
+			pr_info("%s: double tap\n", __func__);
+		} else {
+			key_code = KEY_F1;
+			pr_info("%s: single tap\n", __func__);
+		}
 			break;
 	case 2:
 		key_code = KEY_F2;
@@ -493,6 +526,7 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 	__set_bit(KEY_F1, sensor_input_dev->keybit);
 	__set_bit(KEY_F2, sensor_input_dev->keybit);
 	__set_bit(KEY_F3, sensor_input_dev->keybit);
+	__set_bit(KEY_WAKEUP, sensor_input_dev->keybit);
 	__set_bit(EV_ABS, sensor_input_dev->evbit);
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
 	/* TODO: fill in real screen resolution */
