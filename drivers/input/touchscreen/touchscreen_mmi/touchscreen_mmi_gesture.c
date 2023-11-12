@@ -208,6 +208,39 @@ static inline void update_poison_center(struct touch_event_data *tev)
 }
 #endif /* TS_MMI_TOUCH_GESTURE_POISON_EVENT */
 
+#define DOUBLE_TAP_MAX_TIME	(500 * NSEC_PER_MSEC)
+
+static void ts_mmi_single_tap_handler(struct ts_mmi_dev *touch_cdev)
+{
+	ktime_t now, tmp;
+
+	if (!touch_cdev->single_tap_pressed) {
+		touch_cdev->single_tap_pressed_time = ktime_get_boottime();
+		touch_cdev->single_tap_pressed = true;
+		pr_info("%s: mark first tap, time=%lld \n", __func__,
+			(long long)touch_cdev->single_tap_pressed_time);
+		return;
+	}
+
+	touch_cdev->single_tap_pressed = false;
+
+	now = ktime_get_boottime();
+	pr_info("%s: check second tap, time=%lld (first=%lld) \n", __func__,
+		(long long)now, (long long)touch_cdev->single_tap_pressed_time);
+
+	tmp = ktime_add(touch_cdev->single_tap_pressed_time,
+			DOUBLE_TAP_MAX_TIME);
+
+	if (ktime_after(now, tmp)) {
+		pr_info("%s: second tap too late.\n", __func__);
+		return;
+	}
+
+	touch_cdev->double_tap_pressed = true;
+	pr_info("%s: double tap recognised.\n", __func__);
+	sysfs_notify(&DEV_MMI->kobj, NULL, "double_tap_pressed");
+}
+
 static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 {
 	int key_code;
@@ -216,8 +249,15 @@ static int ts_mmi_gesture_handler(struct gesture_event_data *gev)
 
 	switch (gev->evcode) {
 	case 1:
-		key_code = KEY_F1;
-		pr_info("%s: single tap\n", __func__);
+		ts_mmi_single_tap_handler(touch_cdev);
+		if (touch_cdev->double_tap_pressed) {
+			touch_cdev->double_tap_pressed = false;
+			key_code = KEY_WAKEUP;
+			pr_info("%s: double tap\n", __func__);
+		} else {
+			key_code = KEY_F1;
+			pr_info("%s: single tap\n", __func__);
+		}
 			break;
 	case 2:
 		key_code = KEY_F2;
@@ -326,7 +366,7 @@ static int ts_mmi_touch_event_edge_handler(struct touch_event_data *tev,  struct
 static int ts_mmi_touch_event_handler(struct touch_event_data *tev,  struct input_dev *input_dev)
 {
 	struct ts_mmi_dev *touch_cdev = events_data->touch_cdev;
-	int ret = 0;
+	__maybe_unused int ret = 0;
 
 #ifdef TS_MMI_TOUCH_EDGE_GESTURE
 	ts_mmi_touch_event_edge_handler(tev, input_dev);
@@ -493,6 +533,7 @@ int ts_mmi_gesture_init(struct ts_mmi_dev *touch_cdev)
 	__set_bit(KEY_F1, sensor_input_dev->keybit);
 	__set_bit(KEY_F2, sensor_input_dev->keybit);
 	__set_bit(KEY_F3, sensor_input_dev->keybit);
+	__set_bit(KEY_WAKEUP, sensor_input_dev->keybit);
 	__set_bit(EV_ABS, sensor_input_dev->evbit);
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
 	/* TODO: fill in real screen resolution */

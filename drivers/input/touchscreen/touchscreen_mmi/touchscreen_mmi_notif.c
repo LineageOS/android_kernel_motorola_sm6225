@@ -306,6 +306,9 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 	 */
 	mutex_lock(&touch_cdev->extif_mutex);
 	ts_mmi_restore_settings(touch_cdev);
+	pr_info("%s: set tap flags to false\n", __func__);
+	touch_cdev->single_tap_pressed = false;
+	touch_cdev->double_tap_pressed = false;
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 	mutex_unlock(&touch_cdev->extif_mutex);
 	dev_info(DEV_MMI, "%s: done\n", __func__);
