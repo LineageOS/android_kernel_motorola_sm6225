@@ -306,6 +306,8 @@ static void ts_mmi_queued_resume(struct ts_mmi_dev *touch_cdev)
 	 */
 	mutex_lock(&touch_cdev->extif_mutex);
 	ts_mmi_restore_settings(touch_cdev);
+	touch_cdev->single_tap_pressed = false;
+	touch_cdev->double_tap_pressed = false;
 	touch_cdev->pm_mode = TS_MMI_PM_ACTIVE;
 	mutex_unlock(&touch_cdev->extif_mutex);
 	dev_info(DEV_MMI, "%s: done\n", __func__);
@@ -328,7 +330,7 @@ static void ts_mmi_worker_func(struct work_struct *w)
 				break;
 			}
 			ts_mmi_queued_resume(touch_cdev);
-				break;
+			break;
 
 		case TS_MMI_DO_PS:
 			TRY_TO_CALL(charger_mode, (int)touch_cdev->ps_is_present);
@@ -359,7 +361,7 @@ static void ts_mmi_worker_func(struct work_struct *w)
 #if defined (CONFIG_DRM_PANEL_NOTIFICATIONS) || defined (CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)
 			ret = ts_mmi_check_drm_panel(touch_cdev, DEV_TS->of_node);
 			if (ret < 0) {
-				dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
+					dev_err(DEV_TS, "%s: check drm panel failed. %d\n", __func__, ret);
 				touch_cdev->panel_status = -1;
 			} else
 				touch_cdev->panel_status = 0;
@@ -368,7 +370,7 @@ static void ts_mmi_worker_func(struct work_struct *w)
 				REGISTER_PANEL_NOTIFIER;
 				dev_info(DEV_MMI, "%s: register panel notifier\n", __func__);
 			}
-				break;
+			break;
 
 		default:
 			dev_dbg(DEV_MMI, "%s: unknown command %d\n", __func__, cmd);
