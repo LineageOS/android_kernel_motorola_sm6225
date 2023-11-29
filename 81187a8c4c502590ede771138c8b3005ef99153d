@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0abed5be_dd2ff7f3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2023-11-29T21:25:50Z",
+      "side": 1,
+      "message": "If enabled, detects double-taps while device is in sleep mode.\nTested with hawao.",
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
