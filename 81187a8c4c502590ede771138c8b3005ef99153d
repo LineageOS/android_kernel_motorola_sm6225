@@ -26,6 +26,30 @@
     {
       "unresolved": false,
       "key": {
+        "uuid": "96db5cf2_e7e77889",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 5
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2023-11-29T21:40:38Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "2310b33a_16722f6d",
+      "range": {
+        "startLine": 7,
+        "startChar": 0,
+        "endLine": 7,
+        "endChar": 35
+      },
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
         "uuid": "0abed5be_dd2ff7f3",
         "filename": "/PATCHSET_LEVEL",
         "patchSetId": 5
@@ -58,6 +82,24 @@
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "c2e3794a_e9986ea0",
+        "filename": "drivers/input/touchscreen/touchscreen_mmi/touchscreen_mmi_gesture.c",
+        "patchSetId": 5
+      },
+      "lineNbr": 362,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2023-11-29T21:40:38Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "3c36028b_a14fa3ee",
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "53b204c7_40d6c3c2",
@@ -71,6 +113,24 @@
       "writtenOn": "2023-11-29T21:27:35Z",
       "side": 1,
       "message": "Unrelated change",
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ef76a25f_5bd204ae",
+        "filename": "drivers/input/touchscreen/touchscreen_mmi/touchscreen_mmi_gesture.c",
+        "patchSetId": 5
+      },
+      "lineNbr": 654,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2023-11-29T21:40:38Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "53b204c7_40d6c3c2",
       "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
