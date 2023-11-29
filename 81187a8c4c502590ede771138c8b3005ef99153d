@@ -16,6 +16,40 @@
       "message": "If enabled, detects double-taps while device is in sleep mode.\nTested with hawao.",
       "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3c36028b_a14fa3ee",
+        "filename": "drivers/input/touchscreen/touchscreen_mmi/touchscreen_mmi_gesture.c",
+        "patchSetId": 5
+      },
+      "lineNbr": 362,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2023-11-29T21:27:35Z",
+      "side": 1,
+      "message": "Unrelated change",
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "53b204c7_40d6c3c2",
+        "filename": "drivers/input/touchscreen/touchscreen_mmi/touchscreen_mmi_gesture.c",
+        "patchSetId": 5
+      },
+      "lineNbr": 654,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2023-11-29T21:27:35Z",
+      "side": 1,
+      "message": "Unrelated change",
+      "revId": "81187a8c4c502590ede771138c8b3005ef99153d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
