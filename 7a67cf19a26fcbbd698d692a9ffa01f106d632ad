@@ -16,6 +16,23 @@
       "message": "Ok.",
       "revId": "7a67cf19a26fcbbd698d692a9ffa01f106d632ad",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a72b9971_7016ddba",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2023-12-03T08:54:49Z",
+      "side": 1,
+      "message": "Works stable on hawao, should not have negative effects to devon and rhode.",
+      "revId": "7a67cf19a26fcbbd698d692a9ffa01f106d632ad",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
