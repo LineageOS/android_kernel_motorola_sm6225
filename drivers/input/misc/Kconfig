@@ -893,4 +893,5 @@ source "drivers/input/misc/qpnp_power_on_mmi/Kconfig"
 source "drivers/input/misc/vl53L1/Kconfig"
 source "drivers/input/misc/rbs_fps_mmi/Kconfig"
 source "drivers/input/misc/chipone_fps_mmi/Kconfig"
+source "drivers/input/misc/goodix_fod_mmi/Kconfig"
 endif

@@ -1169,7 +1169,7 @@ static void __exit himax_common_exit(void)
 	spi_unregister_driver(&himax_common_driver);
 }
 
-module_init(himax_common_init);
+late_initcall(himax_common_init);
 module_exit(himax_common_exit);
 
 MODULE_DESCRIPTION("Himax_common driver");
