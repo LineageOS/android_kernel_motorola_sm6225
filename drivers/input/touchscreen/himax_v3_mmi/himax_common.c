@@ -3499,6 +3499,11 @@ int himax_chip_common_init(void)
 	struct himax_i2c_platform_data *pdata;
 	struct himax_chip_entry *entry;
 
+	idx = himax_get_ksym_idx();
+	if (idx >= 0)
+		if (isEmpty(idx) != 0)
+			return -EPROBE_DEFER;
+
 	I("Prepare kernel fp\n");
 	kp_getname_kernel = (void *)kallsyms_lookup_name("getname_kernel");
 	if (!kp_getname_kernel) {
@@ -3586,30 +3591,20 @@ int himax_chip_common_init(void)
 
 	g_hx_chip_inited = 0;
 	idx = himax_get_ksym_idx();
-	if (idx >= 0) {
-		if (isEmpty(idx) != 0) {
-			I("%s: no chip registered, please insmod ic.ko!\n",
-				__func__);
-			goto error_ic_detect_failed;
-		}
-		entry = get_chip_entry_by_index(idx);
+	entry = get_chip_entry_by_index(idx);
 
-		for (i = 0; i < entry->hx_ic_dt_num; i++) {
-			if (entry->core_chip_dt[i].fp_chip_detect != NULL) {
-				if (entry->core_chip_dt[i].fp_chip_detect()
-				  == true) {
-					I("%s: chip detect found! list_num=%d\n"
-						, __func__, i);
-					goto found_hx_chip;
-				} else {
-					I("%s: num=%d chip detect NOT found! goto Next\n", __func__, i);
-					continue;
-				}
+	for (i = 0; i < entry->hx_ic_dt_num; i++) {
+		if (entry->core_chip_dt[i].fp_chip_detect != NULL) {
+			if (entry->core_chip_dt[i].fp_chip_detect()
+			  == true) {
+				I("%s: chip detect found! list_num=%d\n"
+					, __func__, i);
+				goto found_hx_chip;
+			} else {
+				I("%s: num=%d chip detect NOT found! goto Next\n", __func__, i);
+				continue;
 			}
 		}
-	} else {
-		I("%s: No available chip exist!\n", __func__);
-		goto error_ic_detect_failed;
 	}
 
 	if (i == entry->hx_ic_dt_num) {

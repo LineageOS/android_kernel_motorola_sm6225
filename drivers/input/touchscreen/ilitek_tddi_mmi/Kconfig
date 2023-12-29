@@ -1,0 +1,75 @@
+#
+# Ilitek_9882 Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_ILITEK_CHIPSET
+	tristate "ILITEK Touchscreen"
+	default n
+	help
+	  Say Y here if you have a Moto Novatek NT36xxx no flash touchscreen connected
+	  to your system by SPI bus.
+
+	  If unsure, say N.
+
+config INPUT_ILI_0FLASH_MMI_ENABLE_DOUBLE_TAP
+	bool "ILITEK Double Tap"
+	depends on TOUCHSCREEN_ILITEK_CHIPSET
+	default n
+	help
+	  Say Y here if you want to have Double tap support.
+
+	  If unsure, say N.
+
+config INPUT_ILI_PANEL_NOTIFICATIONS
+	bool "ILITEK Panel Notification"
+	depends on TOUCHSCREEN_ILITEK_CHIPSET
+	default n
+	help
+	  Say Y here if you want to have panel notification support.
+
+	  If unsure, say N.
+
+config ILITEK_RESUME_BY_DDI
+        bool "ILITEK Resume by Display Driver Integration"
+        depends on TOUCHSCREEN_ILITEK_CHIPSET
+        default n
+        help
+          Say Y here if you want to have panel notification support.
+
+          If unsure, say N.
+
+config ILITEK_FW_PANEL
+        bool "ILITEK Firmware Panel"
+        depends on TOUCHSCREEN_ILITEK_CHIPSET
+        default n
+        help
+          Say Y here if you want to have panel notification support.
+
+          If unsure, say N.
+
+config ILITEK_ESD
+        bool "ILITEK Electrostatic Discharge Protection"
+        depends on TOUCHSCREEN_ILITEK_CHIPSET
+        default n
+        help
+          Say Y here if you want to have panel notification support.
+
+          If unsure, say N.
+
+config ILITEK_GESTURE
+        bool "ILITEK Gesture"
+        depends on TOUCHSCREEN_ILITEK_CHIPSET
+        default n
+        help
+          Say Y here if you want to have panel notification support.
+
+          If unsure, say N.
+
+config ILITEK_PANEL_GESTURE
+        bool "ILITEK Panel Gesture"
+        depends on TOUCHSCREEN_ILITEK_CHIPSET
+        default n
+        help
+          Say Y here if you want to have panel notification support.
+
+          If unsure, say N.
