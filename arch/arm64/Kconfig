@@ -216,6 +216,12 @@ config ARCH_MMAP_RND_BITS_MAX
        default 16 if ARM64_16K_PAGES
        default 18
 
+config DEVON_CAMERA_FLASH
+    bool "For devon flashlight"
+    default n
+    help
+    Add for fix up devon flashlight brightness to low
+
 config ARCH_MMAP_RND_COMPAT_BITS_MIN
        default 7 if ARM64_64K_PAGES
        default 9 if ARM64_16K_PAGES
@@ -1696,3 +1702,27 @@ source "arch/arm64/kvm/Kconfig"
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
 endif
+
+config AF_NOISE_ELIMINATION
+	bool "For elimnating AF resonance noise"
+	default n
+	help
+	Enable it only for produts that suffering AF resonance noise.
+
+config CAMERA_FLASH_PWM
+        bool "control flash"
+        default n
+        help
+        Enable it only for produts that control flash.
+
+config CAMERA_FLASH_IIC_COMPATIBLE
+        bool "auto select iic flash suppliers"
+        default n
+        help
+        Enable it, this is automatically selected flash supplers.
+
+config CAM_SENSOR_PROBE_RETRY
+        bool "For sensor probe fail"
+        default n
+        help
+        Add retries for sensor id matching.

@@ -39,11 +39,21 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 	struct mmc_gpio *ctx = host->slot.handler_priv;
 	int present = host->ops->get_cd(host);
 
-	pr_debug("%s: cd gpio irq, gpio state %d (CARD_%s)\n",
+	pr_info("%s: cd gpio irq, gpio state %d (CARD_%s)\n",
 		mmc_hostname(host), present, present?"INSERT":"REMOVAL");
 
 	host->trigger_card_event = true;
-	mmc_detect_change(host, msecs_to_jiffies(ctx->cd_debounce_delay_ms));
+
+	#ifdef CONFIG_SD_INSERT_DEBOUNCE_DELAY_LONGER
+	if(present){
+		mmc_detect_change(host, msecs_to_jiffies(1500));
+	}
+	else{
+		mmc_detect_change(host, msecs_to_jiffies(ctx->cd_debounce_delay_ms));
+	}
+	#else //other project not use this function
+		mmc_detect_change(host, msecs_to_jiffies(ctx->cd_debounce_delay_ms));
+	#endif
 
 	return IRQ_HANDLED;
 }

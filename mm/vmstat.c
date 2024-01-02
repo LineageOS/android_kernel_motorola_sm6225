@@ -1203,6 +1203,15 @@ const char * const vmstat_text[] = {
 	"pgscan_kswapd",
 	"pgscan_direct",
 	"pgscan_direct_throttle",
+	"lru_kswapd_no_progress",
+	"lru_kswapd_anon",
+	"lru_kswapd_file",
+	"lru_direct_anon",
+	"lru_direct_file",
+	"lru_kswapd_swap_full",
+	"lru_direct_swap_full",
+	"lru_no_gfp_io",
+	"lru_no_writepage",
 
 #ifdef CONFIG_NUMA
 	"zone_reclaim_failed",
@@ -1990,7 +1999,7 @@ void __init init_mm_internals(void)
 #endif
 #ifdef CONFIG_PROC_FS
 	proc_create_seq("buddyinfo", 0444, NULL, &fragmentation_op);
-	proc_create_seq("pagetypeinfo", 0400, NULL, &pagetypeinfo_op);
+	proc_create_seq("pagetypeinfo", 0444, NULL, &pagetypeinfo_op);
 	proc_create_seq("vmstat", 0444, NULL, &vmstat_op);
 	proc_create_seq("zoneinfo", 0444, NULL, &zoneinfo_op);
 #endif
