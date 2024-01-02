@@ -281,6 +281,27 @@ enum dsi_dyn_clk_feature_type {
  * @DSI_CMD_SET_POST_TIMING_SWITCH:        Post timing switch
  * @DSI_CMD_SET_QSYNC_ON                   Enable qsync mode
  * @DSI_CMD_SET_QSYNC_OFF                  Disable qsync mode
+ * @DSI_CMD_SET_HBM_FOD_ON:                Turning HBM_FOD on
+ * @DSI_CMD_SET_HBM_ON:                    Turning HBM on
+ * @DSI_CMD_SET_HBM_OFF:                   Turning HBM off
+ * @DSI_CMD_SET_ACL_ON:                    Turning ACL on
+ * @DSI_CMD_SET_ACL_OFF:                   Turning ACL off
+ * @DSI_CMD_SET_CABC_UI:                   CABC UI mode
+ * @DSI_CMD_SET_CABC_MV:                   CABC MV mode
+ * @DSI_CMD_SET_CABC_DIS:                  CABC DIS mode
+ * @DSI_CMD_SET_DC_ON:                    DC mode on
+ * @DSI_CMD_SET_DC_OFF:                   DC mode off
+ * @DSI_CMD_SET_COLOR_VBT :                    COLOR VBT mode
+ * @DSI_CMD_SET_COLOR_STD:                   COLOR STD mode
+ * @DSI_CMD_SET_COLOR_GAME :                    COLOR GAME mode
+ * @DSI_CMD_SET_COLOR_NONE:                   COLOR NONE mode
+ * @DSI_CMD_SET_BRIGHTNESS_1E:      Send demura codes when brightness changes to 0-1E
+ * @DSI_CMD_SET_BRIGHTNESS_1FD:      Send demura codes when brightness changes to 1F-1FD
+ * @DSI_CMD_SET_BRIGHTNESS_2FF:      Send demura codes when brightness changes to 1FE-2FF
+ * @DSI_CMD_SET_BRIGHTNESS_3FF:      Send demura codes when brightness changes to 300-3FF
+ * @DSI_CMD_SET_BRIGHTNESS_4FF:      Send demura codes when brightness changes to 400-4FF
+ * @DSI_CMD_SET_BRIGHTNESS_5FF:      Send demura codes when brightness changes to 500-5FF
+ * @DSI_CMD_SET_BRIGHTNESS_FFF:      Send demura codes when brightness changes to 600-FFF
  * @DSI_CMD_SET_MAX
  */
 enum dsi_cmd_set_type {
@@ -307,6 +328,27 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_POST_TIMING_SWITCH,
 	DSI_CMD_SET_QSYNC_ON,
 	DSI_CMD_SET_QSYNC_OFF,
+	DSI_CMD_SET_HBM_FOD_ON,
+	DSI_CMD_SET_HBM_ON,
+	DSI_CMD_SET_HBM_OFF,
+	DSI_CMD_SET_ACL_ON,
+	DSI_CMD_SET_ACL_OFF,
+	DSI_CMD_SET_CABC_UI,
+	DSI_CMD_SET_CABC_MV,
+	DSI_CMD_SET_CABC_DIS,
+	DSI_CMD_SET_DC_ON,
+	DSI_CMD_SET_DC_OFF,
+	DSI_CMD_SET_COLOR_VBT,
+	DSI_CMD_SET_COLOR_STD,
+	DSI_CMD_SET_COLOR_GAME,
+	DSI_CMD_SET_COLOR_NONE,
+	DSI_CMD_SET_BRIGHTNESS_1E,
+	DSI_CMD_SET_BRIGHTNESS_1FD,
+	DSI_CMD_SET_BRIGHTNESS_2FF,
+	DSI_CMD_SET_BRIGHTNESS_3FF,
+	DSI_CMD_SET_BRIGHTNESS_4FF,
+	DSI_CMD_SET_BRIGHTNESS_5FF,
+	DSI_CMD_SET_BRIGHTNESS_FFF,
 	DSI_CMD_SET_MAX
 };
 

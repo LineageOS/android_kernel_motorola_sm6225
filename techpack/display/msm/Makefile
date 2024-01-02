@@ -32,6 +32,7 @@ msm_drm-$(CONFIG_DRM_MSM_SDE) += sde/sde_crtc.o \
 	sde/sde_core_perf.o \
 	sde/sde_rm.o \
 	sde/sde_kms_utils.o \
+	sde/sde_motUtil.o \
 	sde/sde_kms.o \
 	sde/sde_plane.o \
 	sde/sde_connector.o \
@@ -100,6 +101,7 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_panel.o \
 	dsi/dsi_clk_manager.o \
 	dsi/dsi_display_test.o \
+	dsi/dsi_display_mot_ext.o \
 
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o \
 
