@@ -146,6 +146,9 @@ struct cam_flash_private_soc {
 	uint32_t     torch_max_current[CAM_FLASH_MAX_LED_TRIGGERS];
 	bool         is_wled_flash;
 	uint32_t     flash_type;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+    uint32_t     flash_gpio_enable;
+#endif
 };
 
 struct cam_flash_func_tbl {
@@ -232,5 +235,9 @@ int cam_flash_pmic_flush_request(struct cam_flash_ctrl *fctrl,
 	enum cam_flash_flush_type, uint64_t req_id);
 void cam_flash_shutdown(struct cam_flash_ctrl *fctrl);
 int cam_flash_release_dev(struct cam_flash_ctrl *fctrl);
+#ifdef CONFIG_CAMERA_FLASH_IIC_COMPATIBLE
+int cam_flash_fill_i2c_default_setting(struct cam_flash_ctrl *fctrl, uint32_t slave_addr);
+int cam_flash_fill_vreg_setting(struct cam_flash_ctrl *fctrl);
+#endif
 
 #endif /*_CAM_FLASH_DEV_H_*/

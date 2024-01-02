@@ -7,7 +7,7 @@
 #include "cam_sensor_i2c.h"
 #include "cam_sensor_io.h"
 
-#define I2C_REG_DATA_MAX       (8*1024)
+#define I2C_REG_DATA_MAX       (20*1024)
 #define I2C_REG_MAX_BUF_SIZE   8
 
 static int32_t cam_qup_i2c_rxdata(

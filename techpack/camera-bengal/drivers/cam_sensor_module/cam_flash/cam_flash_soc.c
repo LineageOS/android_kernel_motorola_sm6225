@@ -16,6 +16,10 @@ static int32_t cam_get_source_node_info(
 {
 	int32_t rc = 0;
 	uint32_t count = 0, i = 0;
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	int16_t gpio_array_size = 0;
+	uint16_t *gpio_array = NULL;
+#endif
 	struct device_node *flash_src_node = NULL;
 	struct device_node *torch_src_node = NULL;
 	struct device_node *switch_src_node = NULL;
@@ -29,6 +33,27 @@ static int32_t cam_get_source_node_info(
 		CAM_ERR(CAM_FLASH, "flash-type read failed rc=%d", rc);
 		soc_private->flash_type = CAM_FLASH_TYPE_PMIC;
 	}
+#ifdef CONFIG_CAMERA_FLASH_PWM
+	else if(soc_private->flash_type == CAM_FLASH_TYPE_GPIO) {
+		gpio_array_size = of_gpio_count(of_node);
+		if (gpio_array_size == 1){
+			gpio_array = kcalloc(gpio_array_size, sizeof(uint16_t), GFP_KERNEL);
+			if (!gpio_array) {
+				CAM_ERR(CAM_FLASH, "flash gpio array alloc fail");
+			} else {
+				for (i = 0; i < gpio_array_size; i++) {
+					gpio_array[i] = of_get_gpio(of_node, i);
+					CAM_DBG(CAM_FLASH, "flash dts gpio_array[%d] = %d name is %s %s", i, gpio_array[i], of_node->name, of_node->full_name);
+				}
+				soc_private->flash_gpio_enable = gpio_array[0];
+				CAM_DBG(CAM_FLASH, "flash gpio enable %d",soc_private->flash_gpio_enable);
+				kfree(gpio_array);
+			}
+		} else {
+			CAM_ERR(CAM_FLASH, "flash should have two gpio, first is enable in flash dts, second control by flash pm6125");
+		}
+	}
+#endif
 
 	switch_src_node = of_parse_phandle(of_node, "switch-source", 0);
 	if (!switch_src_node) {
