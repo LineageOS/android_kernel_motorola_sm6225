@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2021 motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR tcpcA PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se1_i2c {
+	status = "okay";
+	sgm7220: sgm7220@47 {
+		compatible = "sgm,usb_type_c_sgm7220";
+		reg = <0x47>;
+		status = "okay";
+		tcpc-dual,supported_modes = <0>; /* 0: dfp/ufp, */
+						 /* 1: dfp, 2: ufp */
+		sgm7220-tcpc,name = "type_c_port0"; /* tcpc_device's name */
+		sgm7220-tcpc,role_def = <5>; /* 0: Unknown, 1: SNK, 2: SRC */
+					/* 3: DRP, 4: Try.SRC, 5: Try.SNK */
+		sgm7220-tcpc,rp_level = <0>; /* 0: Default, 1: 1.5, 2: 3.0 */
+		sgm7220-tcpc,vconn_supply  = <0>;  /* 0: Never, 1: Always, */
+					      /* 2: EMarkOnly, 3: StartOnly */
+		sgm7220,intr_gpio = <&tlmm 84 0x0>;
+		sgm7220,intr_gpio_num = <84>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sgm7220_int_n>;
+	};
+};
+
+
+&tlmm {
+	sgm7220_int_n: sgm7220_int_n {
+		mux {
+			pins = "gpio84";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio84";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+

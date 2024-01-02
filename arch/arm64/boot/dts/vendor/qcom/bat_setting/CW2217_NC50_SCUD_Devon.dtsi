@@ -1,0 +1,27 @@
+/*
+ * Copyright (C) 2022 Motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+CW2217_NC50_SCUD_DEVON {
+	serialnum = "SB18D20541";
+	fcc_design = <4700>;
+	ui_full = <97>;
+	config_profile_info = [5A 00 00 00 00 00 00 00
+				92 C2 B8 CF BC BE 9C 5B
+				39 FF FF F1 C1 9D 84 6B
+				5A 54 4D 8D D6 DE B0 DB
+				C2 C9 D2 D5 D5 D3 D1 CD
+				CA CA CF B7 9E 92 8A 82
+				7D 75 83 92 A5 87 6B 71
+				80 00 AB 10 00 A0 60 00
+				00 00 64 2E C3 57 00 00
+				00 00 00 00 00 00 00 47];
+};

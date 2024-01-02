@@ -1,0 +1,270 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "bengal-moto-common-overlay.dtsi"
+#include "bengal-guam-display.dtsi"
+#include "bengal-audio-overlay.dtsi"
+#include "bengal-guam-touchscreen-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-guam-overlay.dtsi"
+#include "bengal-guam-fps.dtsi"
+#include "bengal-guam-moto-thermal.dtsi"
+
+&firmware {
+	android {
+		vbmeta {
+			compatible = "android,vbmeta";
+			parts = "vbmeta,boot,system,vendor,dtbo";
+		};
+	};
+};
+
+&qupv3_se4_2uart {
+	status = "ok";
+};
+
+
+&pm6125_gpios {
+
+	key_vol_up {
+		key_vol_up_default: key_vol_up_default {
+			pins = "gpio5";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+};
+
+&tlmm{
+	tlmm_gpio_key {
+		gpio_key_active: gpio_key_active {
+			mux {
+				pins = "gpio33";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio33";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&soc {
+	/delete-node/ qupv3_se0_spi;
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		label = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default &gpio_key_active>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm6125_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			linux,can-disable;
+			debounce-interval = <15>;
+			gpio-key,wakeup;
+		};
+
+		assist_key{
+			label = "assist_key";
+			gpios = <&tlmm 33 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_SEARCH>;
+			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
+		};
+	};
+};
+
+
+
+&sdhc_1 {
+	vdd-supply = <&L24A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 570000>;
+
+	vdd-io-supply = <&L11A>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <0 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on
+					&sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off
+					&sdc1_rclk_off>;
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	vdd-supply = <&L22A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L5A>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	vdd-io-bias-supply = <&L7A>;
+	qcom,vdd-io-bias-voltage-level = <1256000 1256000>;
+	qcom,vdd-io-bias-current-level = <0 6000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+
+	status = "ok";
+};
+
+&ufsphy_mem {
+	compatible = "qcom,ufs-phy-qmp-v3-660";
+
+	vdda-phy-supply = <&L4A>; /* 0.9v */
+	vdda-pll-supply = <&L12A>; /* 1.8v */
+	vdda-phy-max-microamp = <51400>;
+	vdda-pll-max-microamp = <14200>;
+
+	status = "ok";
+};
+
+&ufshc_mem {
+	vdd-hba-supply = <&gcc_ufs_phy_gdsc>;
+	vdd-hba-fixed-regulator;
+	vcc-supply = <&L24A>;
+	vcc-voltage-level = <2950000 2960000>;
+	vccq2-supply = <&L11A>;
+	vcc-max-microamp = <600000>;
+	vccq2-max-microamp = <600000>;
+
+	qcom,vddp-ref-clk-supply = <&L18A>;
+	qcom,vddp-ref-clk-max-microamp = <100>;
+	qcom,vddp-ref-clk-min-uV = <1232000>;
+	qcom,vddp-ref-clk-max-uV = <1232000>;
+
+	status = "ok";
+};
+
+&sde_dsi {
+    qcom,dsi-default-panel = <&dsi_hlt_hx83102d_video>;
+};
+
+&soc{
+	mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C77591";
+              #include "qg-batterydata-jk50-atl-4850mah.dtsi"
+              #include "qg-batterydata-jk50-scud-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-flex-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-unicoba-4850mah.dtsi"
+              #include "qg-batterydata-jk50-swd-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-india-4850mah.dtsi"
+	};
+};
+
+&pmi632_qg {
+        qcom,qg-iterm-ma = <450>;
+        qcom,vbatt-cutoff-mv = <3200>;
+        qcom,vbatt-empty-mv = <3000>;
+        qcom,vbatt-low-mv = <3300>;
+        qcom,vbatt-low-cold-mv = <3500>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,rbat-conn-mohm = <10>;
+        qcom,cl-feedback-on;
+        qcom,cl-min-start-soc = <0>;
+        qcom,cl-max-start-soc = <5>;
+        qcom,cl-min-temp = <150>;
+        qcom,cl-max-temp = <450>;
+        qcom,cl-max-increment = <5>;
+        qcom,cl-max-decrement = <10>;
+        qcom,cl-min-limit = <200>;
+        qcom,cl-max-limit = <30>;
+        qcom,s3-entry-ibat-ua = <15000>;
+        qcom,s3-exit-ibat-ua = <35000>;
+	qcom,vbatt-empty-cold-mv = <3000>;
+	qcom,ignore-shutdown-soc-secs = <1800>;
+	qcom.hold-soc-while-full;
+	qcom,linearize-soc;
+	qcom,tcss-enable;
+};
+
+&pmi632_rgb {
+       red {
+           label = "charging";
+       };
+};
+
+&pmi632_charger {
+        qcom,iterm-ma = <100>;
+        qcom,fcc-max-ua = <2200000>;
+        qcom,fv-max-uv = <4400000>;
+        qcom,usb-icl-ua = <2000000>;
+        qcom,thermal-mitigation = <2200>,
+                                   <1800>,
+                                   <1600>,
+                                   <1300>,
+                                   <1100>,
+                                   <900>,
+                                   <600>,
+                                   <400>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,mmi-temp-zones = <0 4200 1000 0>,
+                                <10 4200 1000 1000>,
+                                <15 0 1000 1000>,
+                                <45 0 2200 2200>,
+                                <60 4200 2000 0>;
+        qcom,enable-charging-limit;
+        qcom,upper-limit-capacity = <70>;
+        qcom,lower-limit-capacity = <60>;
+        qcom,dr_supported;
+	qcom,hvdcp-disable;
+	qcom,otg-cl-ua = <1000000>;
+	qcom,dc-unsupported;
+	qcom,wireless-unsupported;
+	qcom,usbeb-unsupported;
+	qcom,disable-suspend-on-collapse;
+	dpdm-supply = <&qusb_phy0>;
+	qcom,auto-recharge-soc = <99>;
+	qcom,support-2a-dcp;
+};
+
+&soc {
+	qcom,tz_gpio {
+	compatible = "qcom,tz_gpio";
+		tlmm-tz = <14>,
+		<15>,
+		<16>,
+		<17>;
+	};
+};
+&spmi_bus {
+        qcom,pm6125@0 {
+                qpnp-power-on-mmi@800 {
+                        compatible = "qcom,qpnp-power-on-mmi";
+                        interrupts = <0x0 0x8 0x3 IRQ_TYPE_EDGE_BOTH>;
+                        interrupt-names = "kpdpwr-bark";
+                };
+        };
+};

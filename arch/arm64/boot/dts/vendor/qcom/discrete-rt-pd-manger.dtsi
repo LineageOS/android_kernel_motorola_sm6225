@@ -1,0 +1,32 @@
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	rpm: rt-pd-manager {
+		compatible = "richtek,rt-pd-manager";
+		#io-channel-cells = <1>;
+		io-channels = <&mmi_discrete_charger PSY_IIO_USB_REAL_TYPE>,
+			      <&mmi_discrete_charger PSY_IIO_MMI_OTG_ENABLE>,
+			      <&mmi_discrete_charger PSY_IIO_TYPEC_MODE>,
+			      <&mmi_discrete_charger PSY_IIO_PD_ACTIVE>,
+			      <&mmi_discrete_charger PSY_IIO_MMI_PD_VDM_VERIFY>;
+		io-channel-names = "usb_real_type",
+				   "otg_enable",
+				   "typec_mode",
+				   "pd_active",
+				   "mmi_pd_vdm_verify";
+	};
+};
+
+&usb0 {
+	extcon = <&eud>, <&rpm>;
+};

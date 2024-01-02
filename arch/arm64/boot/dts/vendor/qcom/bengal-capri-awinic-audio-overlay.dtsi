@@ -1,0 +1,165 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_reset_gpio {
+	status = "disabled";
+};
+
+&wsa881x_analog_clk {
+	status = "disabled";
+};
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
+
+&fsa4480 {
+	status = "disabled";
+};
+
+&tlmm {
+	/*delete-node*/ spkr_1_sd_n;
+
+	aw882xx_reset: aw882xx_reset {
+		mux {
+			pins = "gpio97";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio97";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+
+&qupv3_se1_i2c {
+	status = "ok";
+	aw882xx_smartpa@34 {
+		compatible = "awinic,aw882xx_smartpa";
+		reg = <0x34>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&aw882xx_reset>;
+
+		reset-gpio = <&tlmm 97 0>;
+		/* irq-gpio = <&tlmm 112 0x2008>; */
+		monitor-flag = <1>;
+		monitor-timer-val = <3000>;
+		fade-flag = <1>;
+
+		afe-rx-portid = <0x1000>;
+		afe-tx-portid = <0x1001>;
+
+		low-vol-table-down = <3650 9 3 3750 9 2 3900 9 1>;
+		low-vol-table-up = <4000 9 0 3800 9 1 3700 9 2>;
+
+		low-temp-table-down = <0xFFFFFFFB 0x4 0x10 0xFFBEAE7E 0x0 0x5 0x9 0xFFD80505 0x5 0x6 0x6 0xFFED714D>;
+		low-temp-table-up = <0x7 0x9 0x0 0x00000000 0x2 0x6 0x06 0xFFED714D 0xFFFFFFE 0x05 0x09 0xFFD80505>;
+
+		status = "okay";
+	};
+};
+
+&q6core {
+	cdc_pri_mi2s_gpios: msm_cdc_pinctrl_pri {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
+					&lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
+		pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
+					&lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
+		qcom,lpi-gpios;
+	};
+};
+
+/* Configure MI2S0 SD0&SD1 */
+&dai_mi2s0 {
+	/* SD0 line for playback */
+	qcom,msm-mi2s-rx-lines = <1>;
+	/* SD1 line for recording(SmartPA EC) */
+	qcom,msm-mi2s-tx-lines = <2>;
+};
+
+/* Modify btfmslim_codec's compatible */
+&btfmslim_codec {
+	compatible = "btfmslim_slave";
+	status = "ok";
+};
+
+
+&bengal_snd {
+	qcom,model = "bengal-awinic-snd-card";
+	aw,have-882xx = <1>;
+
+	qcom,audio-routing =
+		"AMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Analog Mic1",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Analog Mic2",
+		"AMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic3",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"IN3_AUX", "AUX_OUT",
+		"TX SWR_MIC0", "ADC1_OUTPUT",
+		"TX SWR_MIC4", "ADC2_OUTPUT",
+		"TX SWR_MIC0", "VA_TX_SWR_CLK",
+		"TX SWR_MIC1", "VA_TX_SWR_CLK",
+		"TX SWR_MIC2", "VA_TX_SWR_CLK",
+		"TX SWR_MIC3", "VA_TX_SWR_CLK",
+		"TX SWR_MIC4", "VA_TX_SWR_CLK",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"TX_AIF1 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF2 CAP", "VA_TX_SWR_CLK",
+		"TX_AIF3 CAP", "VA_TX_SWR_CLK",
+		"VA SWR_MIC0", "ADC1_OUTPUT",
+		"VA SWR_MIC4", "ADC2_OUTPUT";
+
+	qcom,mi2s-audio-intf = <1>;
+	qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
+
+	qcom,wsa-devs = <0>;
+	qcom,wsa-max-devs = <0>;
+
+	/delete-property/ qcom,cdc-dmic01-gpios;
+	/delete-property/ qcom,cdc-dmic23-gpios;
+	/delete-property/ qcom,wsa-devs;
+	/delete-property/ qcom,wsa-aux-dev-prefix;
+};
+
+/* Modify headset's BIAS voltage to 2.6V */
+&wcd937x_codec {
+	qcom,cdc-micbias2-mv = <2600>;
+};

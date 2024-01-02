@@ -1,0 +1,26 @@
+/*
+ * Copyright (C) 2021 Motorola Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+jd50-scud-5000mah {
+	serialnum = "SB18C77226";
+	fcc_design = <4850>;
+	config_profile_info = [5A 00 00 00 00 00 00 00
+				 A5 B1 B5 CE C3 C2 97 58
+				 31 FF FF E3 92 80 63 58
+				 4F 4D 4A 86 F0 DC 0D D2
+				 D2 D1 D1 D1 CF CC BC DC
+				 B0 C3 C8 AA 96 89 80 71
+				 68 64 73 8F A3 86 65 60
+				 20 00 57 10 02 B0 74 00
+				 00 00 64 24 D3 79 00 00
+				 00 00 00 00 00 00 00 5F ];
+};

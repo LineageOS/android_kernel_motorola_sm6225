@@ -1,0 +1,35 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se1_i2c {
+	status = "ok";
+
+	lm3697-bl@37 {
+		compatible = "ti,lm3697";
+		reg = <0x37>;
+
+		enable-gpios = <&pmi632_gpios 6 0>;
+		backlight {
+			compatible = "ti,lm3697-backlight";
+			lcd {
+				led-sources = <0 1 2>;
+				ramp-up-msec = <200>;
+				ramp-down-msec = <200>;
+				pwm-period = <0>;
+				default-brightness-level = <255>;
+			};
+		};
+		fault-monitor {
+			compatible = "ti,lm3697-fault-monitor";
+		};
+	};
+};

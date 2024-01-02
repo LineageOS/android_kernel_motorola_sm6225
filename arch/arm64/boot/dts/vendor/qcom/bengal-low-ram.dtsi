@@ -106,7 +106,7 @@
 	removed_mem: removed_region@60100000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0x0 0x60100000 0x0 0x2200000>;
+		reg = <0x0 0x60100000 0x0 0x3800000>;
 	};
 
 	qseecom_mem: qseecom_region {

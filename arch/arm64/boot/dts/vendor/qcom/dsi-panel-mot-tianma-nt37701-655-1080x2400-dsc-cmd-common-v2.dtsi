@@ -1,0 +1,514 @@
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&mdss_mdp {
+	mot_tm_nt37701_655_1080x2400_dsc_cmd_v2: qcom,mdss_dsi_mot_tm_nt37701_655_1080x2400_dsc_cmd_v2 {
+		compatible = "qcom,mdss-dsi-panel";
+		qcom,mdss-dsi-panel-name = "mipi_mot_cmd_tm_1080p_dsc_655";
+		qcom,mdss-dsi-panel-supplier = "tianma";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-pan-physical-width-dimension = <68>;
+		qcom,mdss-pan-physical-height-dimension = <152>;
+		qcom,mdss-dsi-bpp = <30>;
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-panel-param-verision = <121201>;
+		qcom,mdss-dsi-panel-param-num = <5>;
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <0 11>, <1 1>, <0 1>, <1 11>;
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-tx-eot-append;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+
+		qcom,mdss-dsi-te-using-te-pin;
+
+		qcom,bklt-dcs-2bytes-enabled;
+		qcom,mdss-dsi-bl-min-level = <3>;
+		qcom,mdss-dsi-bl-max-level = <4095>;
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+
+		/*qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
+				17000 15500 30000 8000 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <4200000>;
+
+		qcom,mdss-dsi-panel-blackness-level = <3230>;*/
+
+		qcom,mdss-dsi-hbm-on-command = [
+				39 01 00 00 00 00 03 51 0F FF];
+		qcom,mdss-dsi-hbm-off-command = [
+				39 01 00 00 00 00 03 51 0D BA];
+
+		qcom,mdss-dsi-hbm-fod;
+		qcom,mdss-dsi-hbm-fod-on-command = [
+				39 01 00 00 00 00 03 51 0F FF];
+
+		//qcom,mdss-dsi-acl-on-command = [
+		//		39 01 00 00 00 00 06 F0 55 AA 52 08 00
+		//		15 00 00 00 00 00 02 B0 0C
+		//		15 01 00 00 00 00 02 55 05];
+		//qcom,mdss-dsi-acl-off-command = [
+		//		15 01 00 00 00 00 02 55 00];
+
+		qcom,mdss-dsi-dc-off-command = [
+				39 00 00 00 00 00 06 F0 55 AA 52 08 00
+				15 00 00 00 00 00 02 B2 11
+				15 00 00 00 00 00 02 6F 0F
+				39 00 00 00 00 00 07 B2 60 50 66 91 86 91
+				39 00 00 00 00 00 0D B3 00 08 01 5F 01 5F 02 A4 02 A4 03 BB
+				15 00 00 00 00 00 02 6F 0C
+				39 00 00 00 00 00 0D B3 03 BB 05 2F 05 2F 06 91 06 91 06 92
+				15 00 00 00 00 00 02 6F 18
+				39 00 00 00 00 00 0D B3 06 92 0A 2F 0A 2F 0D B9 0D B9 0F FF
+				15 01 00 00 00 00 02 58 00];
+		qcom,mdss-dsi-dc-off-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-dc-on-command = [
+				39 00 00 00 00 00 06 F0 55 AA 52 08 00
+				15 00 00 00 00 00 02 B2 91
+				15 00 00 00 00 00 02 6F 0F
+				39 00 00 00 00 00 07 B2 60 50 60 00 80 00
+				39 00 00 00 00 00 0D B3 00 00 00 00 00 00 00 00 00 00 00 00
+				15 00 00 00 00 00 02 6F 0C
+				39 00 00 00 00 00 0D B3 00 00 00 00 00 00 00 00 00 00 00 00
+				15 00 00 00 00 00 02 6F 18
+				39 00 00 00 00 00 0D B3 06 92 0A 2F 0A 2F 0D B9 0D B9 0F FF
+				15 01 00 00 00 00 02 58 01];
+		qcom,mdss-dsi-dc-on-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-display-timings {
+			timing@0{
+				qcom,mdss-dsi-cmd-mode;
+				qcom,mdss-dsi-panel-framerate = <48>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-back-porch = <32>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <4>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
+				qcom,mdss-dsi-timing-switch-command = [
+					15 01 00 00 14 00 02 2F 08 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 C0 0E F3 5D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 98
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 02
+					39 01 00 00 00 00 1C CE 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					];
+
+				qcom,mdss-dsi-on-command = [
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 06
+					39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 B2 11
+					15 00 00 00 00 00 02 6F 0F
+					39 00 00 00 00 00 07 B2 60 50 66 91 86 91
+					39 00 00 00 00 00 0D B3 00 08 01 5F 01 5F 02 A4 02 A4 03 BB
+					15 00 00 00 00 00 02 6F 0C
+					39 00 00 00 00 00 0D B3 03 BB 05 2F 05 2F 06 91 06 91 06 92
+					15 00 00 00 00 00 02 6F 18
+					39 00 00 00 00 00 0D B3 06 92 0A 2F 0A 2F 0D B9 0D B9 0F FF
+					15 01 00 00 00 00 02 58 00 //DC off
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 08
+					15 00 00 00 00 00 02 C3 04
+					39 00 00 00 00 00 06 F0 55 AA 52 08 03
+					39 00 00 00 00 00 05 BC 11 00 09 51
+					15 00 00 00 00 00 02 6F 04
+					39 00 00 00 00 00 0A BC 00 09 51 00 09 51 00 0B 41
+					15 00 00 00 00 00 02 6F 0D
+					39 01 00 00 00 00 04 BC 00 11 51
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 0D C6 66 66 66 66 66 66 66 66 66 66 66 66
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 1C
+					39 00 00 00 00 00 06 C0 15 0A 38 27 49
+
+					15 00 00 00 00 00 02 03 01
+					15 00 00 00 00 00 02 90 01
+					39 00 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
+					15 00 00 00 00 00 02 2C 00 //dsc config 10bit
+
+					15 00 00 00 00 00 02 6F 01
+					39 01 00 00 00 00 05 88 02 1C 08 73 //Local HBM X/Y
+
+					15 01 00 00 00 00 02 5F 00
+					39 01 00 00 00 00 03 51 00 00
+					15 01 00 00 00 00 02 53 20
+					15 01 00 00 00 00 02 35 00 //te enable
+
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 09 5F
+
+					15 01 00 00 00 00 02 2F 08 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 06 E1 00 03 03 03 00
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 C0 0E F3 5D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 98
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 02
+					39 01 00 00 00 00 1C CE 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+					05 01 00 00 78 00 01 11
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 E1 63
+					05 01 00 00 00 00 01 29];	/* display on */
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 00 00 01 28		/* display_off */
+					05 01 00 00 78 00 01 10];	/* enter sleep mode */
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-timing-switch-command-state =
+					"dsi_lp_mode";
+				qcom,compression-mode = "dsc";
+				/* Why QCOM doesn't use this, even it used 2 encoder
+				 * as for that dsi_sw43404_amoled_cmd, for ex */
+				/* qcom,mdss-dsc-encoders = <2>; */
+				qcom,mdss-dsc-version = <0x11>;
+				qcom,mdss-dsc-slice-height = <12>;
+				qcom,mdss-dsc-slice-width = <1080>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+			};
+			timing@1{
+				qcom,mdss-dsi-cmd-mode;
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-back-porch = <32>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <4>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
+				qcom,mdss-dsi-timing-switch-command = [
+					15 01 00 00 10 00 02 2F 03 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 46 CC 11 40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F0
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 03
+					39 01 00 00 00 00 1C CE 22 00 00 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					];
+
+				qcom,mdss-dsi-on-command = [
+                                        39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 06
+					39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 B2 11
+					15 00 00 00 00 00 02 6F 0F
+					39 00 00 00 00 00 07 B2 60 50 66 91 86 91
+					39 00 00 00 00 00 0D B3 00 08 01 5F 01 5F 02 A4 02 A4 03 BB
+					15 00 00 00 00 00 02 6F 0C
+					39 00 00 00 00 00 0D B3 03 BB 05 2F 05 2F 06 91 06 91 06 92
+					15 00 00 00 00 00 02 6F 18
+					39 00 00 00 00 00 0D B3 06 92 0A 2F 0A 2F 0D B9 0D B9 0F FF
+					15 01 00 00 00 00 02 58 00 //DC off
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 08
+					15 00 00 00 00 00 02 C3 04
+					39 00 00 00 00 00 06 F0 55 AA 52 08 03
+					39 00 00 00 00 00 05 BC 11 00 09 51
+					15 00 00 00 00 00 02 6F 04
+					39 00 00 00 00 00 0A BC 00 09 51 00 09 51 00 0B 41
+					15 00 00 00 00 00 02 6F 0D
+					39 01 00 00 00 00 04 BC 00 11 51
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 0D C6 66 66 66 66 66 66 66 66 66 66 66 66
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 1C
+					39 00 00 00 00 00 06 C0 15 0A 38 27 49
+
+					15 00 00 00 00 00 02 03 01
+					15 00 00 00 00 00 02 90 01
+					39 00 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
+					15 00 00 00 00 00 02 2C 00 //dsc config 10bit
+
+					15 00 00 00 00 00 02 6F 01
+					39 01 00 00 00 00 05 88 02 1C 08 73 //Local HBM X/Y
+
+					15 01 00 00 00 00 02 5F 00
+					39 01 00 00 00 00 03 51 00 00
+					15 01 00 00 00 00 02 53 20
+					15 01 00 00 00 00 02 35 00 //te enable
+
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 09 5F
+
+					15 01 00 00 00 00 02 2F 03 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 06 E1 00 03 03 03 00
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 46 CC 11 40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F0
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 03
+					39 00 00 00 00 00 1C CE 22 00 00 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+					05 01 00 00 78 00 01 11
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 E1 63
+					05 01 00 00 00 00 01 29];	/* display on */
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 00 00 01 28		/* display_off */
+					05 01 00 00 78 00 01 10];	/* enter sleep mode */
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-timing-switch-command-state =
+					"dsi_lp_mode";
+				qcom,compression-mode = "dsc";
+				/* Why QCOM doesn't use this, even it used 2 encoder
+				 * as for that dsi_sw43404_amoled_cmd, for ex */
+				/* qcom,mdss-dsc-encoders = <2>; */
+				qcom,mdss-dsc-version = <0x11>;
+				qcom,mdss-dsc-slice-height = <12>;
+				qcom,mdss-dsc-slice-width = <1080>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+			};
+			timing@2{
+				qcom,mdss-dsi-cmd-mode;
+				qcom,mdss-dsi-panel-framerate = <90>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-back-porch = <32>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <4>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
+				qcom,mdss-dsi-timing-switch-command = [
+					15 01 00 00 0b 00 02 2F 07 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 25 FE E1 4F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 92
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 03
+					39 01 00 00 00 00 1C CE 22 00 00 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					];
+
+				qcom,mdss-dsi-on-command = [
+					39 01 00 00 00 00 06 F0 55 AA 52 08 00
+					15 01 00 00 00 00 02 6F 06
+					39 01 00 00 00 00 04 B5 00 18 4F //swire pulse
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 B2 11
+					15 00 00 00 00 00 02 6F 0F
+					39 00 00 00 00 00 07 B2 60 50 66 91 86 91
+					39 00 00 00 00 00 0D B3 00 08 01 5F 01 5F 02 A4 02 A4 03 BB
+					15 00 00 00 00 00 02 6F 0C
+					39 00 00 00 00 00 0D B3 03 BB 05 2F 05 2F 06 91 06 91 06 92
+					15 00 00 00 00 00 02 6F 18
+					39 00 00 00 00 00 0D B3 06 92 0A 2F 0A 2F 0D B9 0D B9 0F FF
+					15 01 00 00 00 00 02 58 00 //DC off
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 08
+					15 00 00 00 00 00 02 C3 04
+					39 00 00 00 00 00 06 F0 55 AA 52 08 03
+					39 00 00 00 00 00 05 BC 11 00 09 51
+					15 00 00 00 00 00 02 6F 04
+					39 00 00 00 00 00 0A BC 00 09 51 00 09 51 00 0B 41
+					15 00 00 00 00 00 02 6F 0D
+					39 01 00 00 00 00 04 BC 00 11 51
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 0D C6 66 66 66 66 66 66 66 66 66 66 66 66
+
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					15 00 00 00 00 00 02 6F 1C
+					39 00 00 00 00 00 06 C0 15 0A 38 27 49
+
+					15 00 00 00 00 00 02 03 01
+					15 00 00 00 00 00 02 90 01
+					39 00 00 00 00 00 13 91 AB 28 00 0C C2 00 03 1C 01 7E 00 0F 08 BB 04 3D 10 F0
+					15 00 00 00 00 00 02 2C 00 //dsc config 10bit
+
+					15 00 00 00 00 00 02 6F 01
+					39 01 00 00 00 00 05 88 02 1C 08 73 //Local HBM X/Y
+
+					15 01 00 00 00 00 02 5F 00
+					39 01 00 00 00 00 03 51 00 00
+					15 01 00 00 00 00 02 53 20
+					15 01 00 00 00 00 02 35 00 //te enable
+
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 09 5F
+
+					15 01 00 00 00 00 02 2F 07 //08:48Hz 03:60Hz 07:90Hz 02:120Hz 04:144Hz
+					// FFD2.0 RGB OFS CTRL
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					39 00 00 00 00 00 06 E1 00 03 03 03 00
+					39 00 00 00 00 00 14 E2 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 14 E3 25 FE E1 4F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 92
+					39 00 00 00 00 00 14 E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					39 00 00 00 00 00 13 E7 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					//FFD SPR Pixel Type Setting
+					15 00 00 00 00 00 02 6F 04
+					15 00 00 00 00 00 02 C1 00
+					//FFD RAM Setting, RAMOFF_IDLE_DMR
+					39 00 00 00 00 00 06 F0 55 AA 52 08 00
+					39 00 00 00 00 00 04 C0 0E B3 21
+					//ODS part
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 6F 03
+					15 00 00 00 00 00 02 C1 03
+					39 00 00 00 00 00 1C CE 22 00 00 22 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+					05 01 00 00 78 00 01 11
+					39 00 00 00 00 00 06 F0 55 AA 52 08 08
+					15 00 00 00 00 00 02 E1 63
+					05 01 00 00 00 00 01 29];	/* display on */
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 00 00 01 28		/* display_off */
+					05 01 00 00 78 00 01 10];	/* enter sleep mode */
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-timing-switch-command-state =
+					"dsi_lp_mode";
+				qcom,compression-mode = "dsc";
+				/* Why QCOM doesn't use this, even it used 2 encoder
+				 * as for that dsi_sw43404_amoled_cmd, for ex */
+				/* qcom,mdss-dsc-encoders = <2>; */
+				qcom,mdss-dsc-version = <0x11>;
+				qcom,mdss-dsc-slice-height = <12>;
+				qcom,mdss-dsc-slice-width = <1080>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+			};
+
+		};
+
+	};
+
+};

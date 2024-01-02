@@ -1,0 +1,32 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se1_i2c {
+ status = "ok";
+    ktd3136-bl@36 {
+        compatible = "ktd,ktd3136";
+        reg = <0x37>;
+        ktd,using-lsb;
+        ktd,pwm-frequency = <100>;
+        ktd,bl-fscal-led = <0x99>;/*default 20mA*/
+        ktd,turn-on-ramp = <8>; /* Should add ms value, please check datasheet*/
+        ktd,turn-off-ramp = <8>;  /* Should add ms value, please check datasheet*/
+        ktd,pwm-trans-dim = <4>;  /* Should add ms value, please check datasheet*/
+        ktd,i2c-trans-dim = <256>;  /* Should add ms value, please check datasheet*/
+        ktd,bl-channel = <3>;
+        ktd,ovp-level = <32>; /*default 32v*/
+        ktd,switching-frequency = <1000>; /*default 1000kHz*/
+        ktd,inductor-current = <2600>; /*dfault 2600mA*/
+        ktd,flash-timeout = <500>;/*default 500ms*/
+        ktd,flash-current = <0xf>;/*default, it depends on full-scale led*/
+    };
+};

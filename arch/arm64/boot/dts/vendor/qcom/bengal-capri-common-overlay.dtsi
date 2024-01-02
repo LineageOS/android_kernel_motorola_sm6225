@@ -1,0 +1,448 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "bengal-moto-common-overlay.dtsi"
+#include "bengal-capri-pinctrl-overlay.dtsi"
+#include "bengal-capri-display.dtsi"
+#include "bengal-audio-overlay.dtsi"
+#include "bengal-capri-awinic-audio-overlay.dtsi"
+#include "bengal-capri-touchscreen-overlay.dtsi"
+#include "camera/bengal-camera-sensor-mot-capri-overlay.dtsi"
+#include "bengal-capri-fps.dtsi"
+#include "bengal-capri-moto-thermal.dtsi"
+
+&firmware {
+	android {
+		vbmeta {
+			compatible = "android,vbmeta";
+			parts = "vbmeta,boot,system,vendor,dtbo";
+		};
+	};
+};
+
+&qupv3_se4_2uart {
+	status = "ok";
+};
+
+
+&pm6125_gpios {
+
+	key_vol_up {
+		key_vol_up_default: key_vol_up_default {
+			pins = "gpio5";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+};
+
+&qupv3_se1_i2c {
+        status = "ok";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        nq@28 {
+                compatible = "qcom,nq-nci";
+                reg = <0x28>;
+                qcom,nq-irq = <&tlmm 70 0x00>;
+                qcom,nq-ven = <&tlmm 2 0x00>;
+                qcom,nq-firm = <&tlmm 31 0x00>;
+                qcom,nq-clkreq = <&tlmm 86 0x00>;
+                interrupt-parent = <&tlmm>;
+                interrupts = <70 0>;
+                interrupt-names = "nfc_irq";
+                pinctrl-names = "nfc_active", "nfc_suspend";
+                pinctrl-0 = <&nfc_int_active &nfc_enable_active
+                                &nfc_clk_req_active>;
+                pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
+                                &nfc_clk_req_suspend>;
+        };
+};
+
+
+&tlmm{
+	tlmm_gpio_key {
+		gpio_key_active: gpio_key_active {
+			mux {
+				pins = "gpio33";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio33";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	sar_int_default: sar_int_default {
+			mux {
+				pins = "gpio36";
+				function =  "gpio";
+			};
+			config {
+				pins = "gpio36";
+				num-grp-pins = <1>;
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+	};
+
+	sar_int_sleep: sar_int_sleep {
+			mux {
+				pins = "gpio36";
+				function =  "gpio";
+			};
+			config {
+				pins = "gpio36";
+				num-grp-pins = <1>;
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+	};
+};
+
+&soc {
+	/delete-node/ qupv3_se0_spi;
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		label = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default &gpio_key_active>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm6125_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			linux,can-disable;
+			debounce-interval = <15>;
+			gpio-key,wakeup;
+		};
+
+		assist_key{
+			label = "assist_key";
+			gpios = <&tlmm 33 0x1>;
+			linux,input-type = <1>;
+			linux,code = <KEY_SEARCH>;
+			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
+		};
+	};
+};
+
+
+
+&sdhc_1 {
+	vdd-supply = <&L24A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 570000>;
+
+	vdd-io-supply = <&L11A>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <0 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on
+					&sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off
+					&sdc1_rclk_off>;
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	vdd-supply = <&L22A>;
+	qcom,vdd-voltage-level = <2960000 2960000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&L5A>;
+	qcom,vdd-io-voltage-level = <1800000 2960000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 88 GPIO_ACTIVE_HIGH>;
+
+	status = "ok";
+};
+
+&ufsphy_mem {
+	compatible = "qcom,ufs-phy-qmp-v3-660";
+
+	vdda-phy-supply = <&L4A>; /* 0.9v */
+	vdda-pll-supply = <&L12A>; /* 1.8v */
+	vdda-phy-max-microamp = <51400>;
+	vdda-pll-max-microamp = <14200>;
+
+	status = "ok";
+};
+
+&ufshc_mem {
+	vdd-hba-supply = <&gcc_ufs_phy_gdsc>;
+	vdd-hba-fixed-regulator;
+	vcc-supply = <&L24A>;
+	vcc-voltage-level = <2950000 2960000>;
+	vccq2-supply = <&L11A>;
+	vcc-max-microamp = <600000>;
+	vccq2-max-microamp = <600000>;
+
+	qcom,vddp-ref-clk-supply = <&L18A>;
+	qcom,vddp-ref-clk-max-microamp = <100>;
+	qcom,vddp-ref-clk-min-uV = <1232000>;
+	qcom,vddp-ref-clk-max-uV = <1232000>;
+
+	status = "ok";
+};
+
+&sde_dsi {
+    qcom,dsi-default-panel = <&dsi_djn_nt36525b_652_video>;
+};
+
+&qupv3_se0_i2c {
+	status = "ok";
+
+	sx933x@28 { /* SAR sensor */
+		compatible = "Semtech,sx933x";
+		reg = <0x28>;
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&sar_int_default>;
+		pinctrl-1 = <&sar_int_sleep>;
+		Semtech,power-supply-type = <1>;
+		cap_vdd-supply = <&L21A>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <36 0x02>;
+		interrupt-names = "sx933x_irq";
+		Semtech,nirq-gpio= <&tlmm 36 0x02>;
+		Semtech,button-flag = <0x03>;
+		Semtech,headset-reg-num = <4>;
+		Semtech,headset-reg = <
+		0x8074 0x08203515
+		0x802c 0x20000A9D
+		0x803c 0x20000A9D
+		0x801c 0x20000014>;
+		Semtech,reg-num = <85>;
+		Semtech,reg-init =<
+			0x8020 0x001F0000
+			0x4004 0x7C
+			0x4008 0x00
+			0x4054 0x400
+			0x42C0 0x8000000
+			0x42C4 0x3F
+			0x800C 0x00
+			0x8010 0x00
+			0x8014 0x00
+			0x8018 0x00
+			0x801C 0x32
+			0x8024 0x10000A4E
+			0x8028 0x3DFF8358
+			0x802C 0x20000A56
+			0x8030 0x3FF78266
+			0x8034 0x20000A66
+			0x8038 0x3FBF82D5
+			0x803C 0x10000A56
+			0x8040 0x3FFE834D
+			0x8044 0x10000A76
+			0x8048 0x2FFF83CC
+			0x804C 0x300004D4
+			0x8050 0x00
+			0x8054 0x202C01
+			0x8058 0x2060000E
+			0x805C 0x24EC7000
+			0x8060 0x00
+			0x8064 0x500000
+			0x8068 0x00
+			0x806C 0x1E001E00
+			0x8070 0x10000
+			0x8074 0x204F00
+			0x8078 0x20600018
+			0x807C 0x3CDC7000
+			0x8080 0x00
+			0x8084 0x820000
+			0x8088 0x00
+			0x808C 0x1F001F
+			0x8090 0x20000
+			0x8094 0x102D00
+			0x8098 0x20600018
+			0x809C 0x2AD67000
+			0x80A0 0x00
+			0x80A4 0x00
+			0x80A8 0x00
+			0x80AC 0x00
+			0x80B0 0x00
+			0x80B4 0x50FF00
+			0x80B8 0x20600018
+			0x80BC 0x2AD67000
+			0x80C0 0x00
+			0x80C4 0x00
+			0x80C8 0x00
+			0x80CC 0x00
+			0x80D0 0x00
+			0x80D4 0x50FF00
+			0x80D8 0x20600018
+			0x80DC 0x2AD67000
+			0x80E0 0x00
+			0x80E4 0x00
+			0x80E8 0x00
+			0x80EC 0x00
+			0x80F0 0x00
+			0x80F4 0x100000
+			0x80F8 0x20600C00
+			0x80FC 0x00
+			0x8100 0x00
+			0x8104 0x00
+			0x8108 0x00
+			0x810C 0x00
+			0x8110 0x00
+			0x8124 0x4000004
+			0x8128 0x4000003
+			0x812C 0x00
+			0x8130 0x00
+			0x8134 0x00
+			0x8138 0x00
+			0x813C 0x00
+			0x8140 0x00
+			0x8144 0x00
+			0x8148 0x00
+			0x814C 0x00
+			0x81A4 0x1D00000
+			0x8020 0x001F001F
+			0x4280 0x000F
+			>;
+		Semtech,ref-phases-a = <3>;
+		Semtech,ref-phases-b = <4>;
+		status = "ok";
+	};
+};
+
+/*
+&soc{
+	mtp_batterydata: qcom,battery-data {
+              qcom,batt-id-range-pct = <15>;
+              df-serialnum = "SB18C77591";
+              #include "qg-batterydata-jk50-atl-4850mah.dtsi"
+              #include "qg-batterydata-jk50-scud-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-flex-4850mah.dtsi"
+              #include "qg-batterydata-jk50-atl-unicoba-4850mah.dtsi"
+              #include "qg-batterydata-jk50-swd-4850mah.dtsi"
+	};
+};
+*/
+
+&pmi632_qg {
+        //qcom,qg-iterm-ma = <350>;
+        qcom,vbatt-cutoff-mv = <3200>;
+        qcom,vbatt-empty-mv = <3000>;
+        qcom,vbatt-low-mv = <3300>;
+        qcom,vbatt-low-cold-mv = <3500>;
+        qcom,battery-data = <&mtp_batterydata>;
+        qcom,rbat-conn-mohm = <10>;
+        qcom,cl-feedback-on;
+        qcom,cl-min-start-soc = <0>;
+        qcom,cl-max-start-soc = <5>;
+        qcom,cl-min-temp = <150>;
+        qcom,cl-max-temp = <450>;
+        qcom,cl-max-increment = <5>;
+        qcom,cl-max-decrement = <10>;
+        qcom,cl-min-limit = <200>;
+        qcom,cl-max-limit = <30>;
+        qcom,s3-entry-ibat-ua = <15000>;
+        qcom,s3-exit-ibat-ua = <35000>;
+	qcom,vbatt-empty-cold-mv = <3000>;
+	qcom,ignore-shutdown-soc-secs = <1800>;
+	qcom.hold-soc-while-full;
+	qcom,linearize-soc;
+};
+
+&pmi632_rgb {
+       red {
+           label = "charging";
+       };
+};
+
+&pmi632_charger {
+        //qcom,iterm-ma = <100>;
+        //qcom,fcc-max-ua = <2000000>;
+        //qcom,fv-max-uv = <4400000>;
+        //qcom,usb-icl-ua = <2000000>;
+        //qcom,thermal-mitigation = <2000>,
+        //                           <1800>,
+        //                           <1600>,
+        //                           <1300>,
+        //                           <1100>,
+        //                           <900>,
+        //                           <600>,
+        //                           <400>;
+        qcom,battery-data = <&mtp_batterydata>;
+        //qcom,mmi-temp-zones = <0 4200 1000 0>,
+        //                        <10 4200 1000 1000>,
+        //                        <15 0 1000 1000>,
+        //                        <45 0 2000 2000>,
+        //                        <60 4200 2000 0>;
+        qcom,enable-charging-limit;
+        qcom,upper-limit-capacity = <65>;
+        qcom,lower-limit-capacity = <60>;
+	//qcom,hvdcp-disable;
+	qcom,otg-cl-ua = <1000000>;
+	qcom,dc-unsupported;
+	qcom,wireless-unsupported;
+	qcom,usbeb-unsupported;
+	qcom,disable-suspend-on-collapse;
+	dpdm-supply = <&qusb_phy0>;
+	qcom,auto-recharge-soc = <99>;
+	//qcom,support-2a-dcp;
+};
+
+&soc {
+	qcom,tz_gpio {
+	compatible = "qcom,tz_gpio";
+		tlmm-tz = <14>,
+		<15>,
+		<16>,
+		<17>;
+	};
+};
+&spmi_bus {
+        qcom,pm6125@0 {
+                qpnp-power-on-mmi@800 {
+                        compatible = "qcom,qpnp-power-on-mmi";
+                        interrupts = <0x0 0x8 0x3 IRQ_TYPE_EDGE_BOTH>;
+                        interrupt-names = "kpdpwr-bark";
+                };
+        };
+};
+
+&qusb_phy0 {
+	qcom,qusb-phy-init-seq = <0xf8 0x80
+				0x83 0x84
+				0x81 0x88
+				0xc0 0x8c
+				0x30 0x08
+				0x79 0x0c
+				0x21 0x10
+				0x14 0x9c
+				0x80 0x04
+				0x9f 0x1c
+				0x00 0x18>;
+	qcom,tune2-efuse-correction = <(-4)>;
+};
+

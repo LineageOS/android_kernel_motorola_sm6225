@@ -1,0 +1,53 @@
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "khaje-devon-common-overlay.dtsi"
+#include "khaje-devon-audio-overlay.dtsi"
+#include "khaje-devon-display-pvt-overlay.dtsi"
+
+/ {
+	model = "devon";
+	compatible = "qcom,khaje-devon", "qcom,khaje-moto", "qcom,khaje";
+	qcom,msm-id = <518 0x10000>;
+	qcom,board-id = <0 0xC000>;
+};
+
+&qupv3_se2_i2c {
+        status = "ok";
+        aw9610x_sar@12 {
+            compatible = "awinic,aw9610x_sar_0";
+            reg = <0x12>;
+            sar-gpio-vcc-enable;
+            sar-gpio_3v0_en = <&tlmm 67 0x00>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&capsense_sar_gpio_pins>;
+            interrupt-parent = <&tlmm>;
+            interrupts = <106 0x02>;
+            irq-gpio = <&tlmm 106 0x02>;
+            chip_name = "AW96105";
+            sar-num = <0>;
+            cap_vcc-supply = <&pm6125_l21>;
+            aw9610x,channel_number = <0x5>;
+            ch0_name = "Ch0capsense_reference";
+            ch1_name = "Ch1capsense_top_left";
+            ch2_name = "Ch2capsense_top_right";
+            ch3_name = "Ch3capsense_reference";
+            ch4_name = "Ch4capsense_bottom";
+            ref_channel = <0x9>;
+            hardware_version = <1>;
+            aw9610x,using-firmware;
+            aw9610x,firmware_name = "aw9610x_0";
+        };
+};

@@ -1,0 +1,151 @@
+
+&tlmm {
+	fps {
+		rst_active: fps_rst_active {
+			/* active state */
+			mux {
+				pins = "gpio104";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio104";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable;
+				output-low;
+			};
+		};
+
+		rst_suspend: fps_rst_suspend {
+			/* sleep state */
+			mux {
+				pins = "gpio104";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio104";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable;
+				output-high;
+
+			};
+		};
+
+		int_active: fps_int_active {
+			/* active state */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+				input-enable;
+			};
+		};
+
+		int_suspend: fps_int_suspend {
+			/* sleep state */
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+				input-enable;
+			};
+		};
+	};
+
+	fps_ido3_en_active: ldo3_en_active {
+		/* active state */
+		mux {
+			pins = "gpio102";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio102";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	fps_ido3_en_suspend: ldo3_en_suspend {
+		/* suspend state */
+		mux {
+			pins = "gpio102";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio102";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	fps_ido1p8_en_active: ldo1p8_en_active {
+		/* active state */
+		mux {
+			pins = "gpio105";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio105";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	fps_ido1p8_en_suspend: ldo1p8_en_suspend {
+		/* suspend state */
+		mux {
+			pins = "gpio105";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio105";
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+
+&soc {
+	et528: et528 {
+		compatible = "egistec,et516";
+		status = "ok";
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <97 0x0>;
+		egistec,gpio_irq = <&tlmm 97 0x2>;
+		egistec,gpio_rst = <&tlmm 104 0x2>;
+
+		pinctrl-names = "default", "suspend";
+		pinctrl-0 = <&int_active &rst_active &fps_ido3_en_active>;
+		pinctrl-1 = <&int_suspend &rst_suspend &fps_ido3_en_suspend>;
+	};
+
+	fpc: fpc_fpc1020 {
+		compatible = "fpc,fpc1020";
+		status = "ok";
+		irq = <&tlmm 97 0>;
+		rst = <&tlmm 104 0>;
+		pinctrl-names = "default", "suspend";
+		pinctrl-0 = <&rst_active &int_active  &fps_ido1p8_en_active>;
+		pinctrl-1 = <&rst_suspend &int_suspend &fps_ido1p8_en_suspend>;
+	};
+};

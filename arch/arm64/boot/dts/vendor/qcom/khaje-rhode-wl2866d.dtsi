@@ -1,0 +1,38 @@
+&qupv3_se0_i2c {
+	status = "ok";
+
+	cam_pmic2: wl2866d@28{
+		compatible = "semi,wl2866d";
+		reg = <0x28>;
+
+		vin1-supply = <&S6A>;
+		semi,init-value = <0x05>;
+
+		regulators {
+			cam_pmic2_ldo1: ldo1 {
+				regulator-name = "camera_ldo1";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <1800000>;
+			};
+
+			cam_pmic2_ldo2: ldo2 {
+				regulator-name = "camera_ldo2";
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <1800000>;
+			};
+
+			cam_pmic2_ldo3: ldo3 {
+				regulator-name = "camera_ldo3";
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <4300000>;
+			};
+
+			cam_pmic2_ldo4: ldo4 {
+				regulator-name = "camera_ldo4";
+				regulator-min-microvolt = <3000000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-always-on;
+			};
+		};
+	};
+};

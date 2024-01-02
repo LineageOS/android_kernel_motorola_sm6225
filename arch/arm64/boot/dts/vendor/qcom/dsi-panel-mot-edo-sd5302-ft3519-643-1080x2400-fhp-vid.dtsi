@@ -1,0 +1,91 @@
+&mdss_mdp {
+	dsi_edosd_ft3519_643_video: qcom,mdss_dsi_edosd_ft3519_643_video {
+		qcom,mdss-dsi-panel-name =
+				"mipi_mot_vid_edosd_1080p_643";
+		qcom,mdss-dsi-panel-supplier = "edosd";
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-tx-eot-append;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <255>;
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-reset-sequence = <0 3>, <1 5>, <0 3>, <1 5>;
+		qcom,mdss-pan-physical-width-dimension = <67>;
+		qcom,mdss-pan-physical-height-dimension = <149>;
+
+		qcom,mdss-dsi-hbm-on-command = [39 01 00 00 00 00 03 51 0F FF];
+		qcom,mdss-dsi-hbm-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-hbm-off-command = [39 01 00 00 00 00 03 51 07 FF];
+		qcom,mdss-dsi-hbm-off-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-dc-off-command = [
+				15 00 00 00 00 00 02 26 01
+				39 00 00 00 00 00 03 F0 AA 11
+				39 01 00 00 10 00 0E C2 10 02 60 13 01 12 23 34 45 46 47 48 49
+				15 01 00 00 00 00 02 D5 05];
+		qcom,mdss-dsi-dc-on-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-dc-on-command = [
+				15 00 00 00 00 00 02 26 02
+				39 00 00 00 00 00 03 F0 AA 11
+				39 01 00 00 10 00 0E C2 10 02 60 13 41 42 43 44 45 46 47 48 49
+				15 01 00 00 00 00 02 D5 05];
+		qcom,mdss-dsi-dc-off-command-state = "dsi_lp_mode";
+
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <48>;
+				qcom,mdss-dsi-h-back-porch = <48>;
+				qcom,mdss-dsi-h-pulse-width = <4>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <14>;
+				qcom,mdss-dsi-v-front-porch = <16>;
+				qcom,mdss-dsi-v-pulse-width = <2>;
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-on-command =
+				[
+					39 00 00 00 00 00 04 F0 A5 0F F0
+					15 00 00 00 00 00 02 FD 00
+					39 00 00 00 00 00 04 C8 33 5A 12
+					39 00 00 00 00 00 03 51 07 FF
+					05 01 00 00 78 00 01 11
+					05 01 00 00 32 00 01 29
+				];
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 32 00 01 28
+					05 01 00 00 78 00 01 10
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+			};
+		};
+
+	};
+};
