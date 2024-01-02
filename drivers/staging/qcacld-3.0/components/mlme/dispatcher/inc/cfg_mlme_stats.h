@@ -97,7 +97,7 @@ enum mlme_stats_link_speed_rpt_type {
 		"gReportMaxLinkSpeed", \
 		CFG_STATS_LINK_SPEED_REPORT_ACTUAL, \
 		CFG_STATS_LINK_SPEED_REPORT_MAX_SCALED, \
-		CFG_STATS_LINK_SPEED_REPORT_MAX_SCALED, \
+		CFG_STATS_LINK_SPEED_REPORT_ACTUAL, \
 		CFG_VALUE_OR_DEFAULT, \
 		"Max link speed")
 
