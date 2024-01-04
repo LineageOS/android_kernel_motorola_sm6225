@@ -1245,7 +1245,6 @@ static int batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STATUS:
 	case POWER_SUPPLY_PROP_HEALTH:
 	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		rc = power_supply_get_property(chip->mmi_psy, psp, val);
@@ -1287,6 +1286,7 @@ static int batt_get_prop(struct power_supply *psy,
 		rc = get_prop_system_temp_level(chip, val);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = power_supply_get_property(chip->bms_psy, psp, val);
 		break;
