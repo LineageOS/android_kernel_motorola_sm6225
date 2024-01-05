@@ -20,7 +20,7 @@
 #include "khaje-devon-nfc-overlay.dtsi"
 #include "sgm7220_devon.dtsi"
 #include "discrete-rt-pd-manger.dtsi"
-#include "camera-legacy/devon/khaje-camera-sensor-mot-devon-overlay.dtsi"
+#include "camera/khaje-camera-sensor-mot-devon-overlay.dtsi"
 #include "discrete_charging_devon.dtsi"
 
 &firmware {
