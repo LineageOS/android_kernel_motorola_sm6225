@@ -23,7 +23,7 @@
 };
 
 
-#include "camera-legacy/rhode/khaje-camera-sensor-mot-rhode-overlay_evt.dtsi"
+#include "camera/khaje-camera-sensor-mot-rhode-overlay_evt.dtsi"
 
 &qupv3_se1_i2c {
         status = "okay";
