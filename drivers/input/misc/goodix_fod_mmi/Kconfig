@@ -1,0 +1,18 @@
+config INPUT_GOODIX_FOD_MMI
+	tristate "Goodix fingerprint sensor MMI"
+	default n
+	help
+	 Say Y here if you wish to include support for MMI Goodix finger print sensor.
+	 If unsure, say N.
+config MMI_RELAY
+	tristate "Goodix fingerprint Additional dependencies MMI"
+	default n
+	help
+	 Say Y here if you wish to include support for MMI Goodix finger print sensor.
+	 If unsure, say N.
+config INPUT_GOODIX_FOD_GPIO_PCAL6408
+	tristate "Goodix fingerprint senor softdep gpio PCAL6408 MMI"
+	default n
+	help
+	 Say Y here if you wish to include support for MMI Goodix finger print sensor.
+	 If unsure, say N.
