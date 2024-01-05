@@ -1,47 +1,36 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
-		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/himax_v3_mmi
-EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_DEBUG \
-		-DCONFIG_TOUCHSCREEN_HIMAX_INSPECT
+ccflags-y += -DCONFIG_TOUCHSCREEN_HIMAX_DEBUG \
+             -DCONFIG_TOUCHSCREEN_HIMAX_INSPECT
 
-EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_INCELL
-EXTRA_CFLAGS += -DCONFIG_HMX_DB
+ccflags-y += -DCONFIG_TOUCHSCREEN_HIMAX_INCELL \
+             -DCONFIG_HMX_DB
 
-ifneq ($(filter hx83112,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME)),)
-	EXTRA_CFLAGS += -D__HIMAX_HX83112_MOD__
-endif
+ccflags-$(CONFIG_INPUT_HIMAX_V3_MMI_IC_HX83112) += -D__HIMAX_HX83112_MOD__
 
-ifneq ($(filter hx83102,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME)),)
-	EXTRA_CFLAGS += -D__HIMAX_HX83102_MOD__
-endif
+ccflags-$(CONFIG_INPUT_HIMAX_V3_MMI_IC_HX83102) += -D__HIMAX_HX83102_MOD__
 
-ifneq ($(filter hx83102d,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME_D)),)
-	EXTRA_CFLAGS += -D__HIMAX_HX83102D_MOD__
-	EXTRA_CFLAGS += -DHX_CODE_OVERLAY
-endif
+ccflags-$(CONFIG_INPUT_HIMAX_V3_MMI_IC_HX83102D) += -D__HIMAX_HX83102D_MOD__ \
+                                                    -DHX_CODE_OVERLAY
 
-ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_ENABLE_PALM)),)
-	EXTRA_CFLAGS += -DHIMAX_PALM_SENSOR_EN
-endif
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V3_MMI_ENABLE_PALM) += -DHIMAX_PALM_SENSOR_EN
 
-ifneq ($(filter m y,$(CONFIG_INPUT_HIMAX_V2_MMI_ENABLE_DOUBLE_TAP)),)
-	EXTRA_CFLAGS += -DHIMAX_V2_SENSOR_EN
-endif
+ccflags-$(CONFIG_INPUT_HIMAX_V3_MMI_ENABLE_DOUBLE_TAP) += -DHIMAX_V2_SENSOR_EN
 
-ifneq ($(filter m y,$(CONFIG_INPUT_HIMAX_V2_MMI_ENABLE_MULTI_BIN)),)
-	EXTRA_CFLAGS += -DHIMAX_V2_MULTI_BIN
-endif
+ccflags-$(CONFIG_INPUT_HIMAX_V3_MMI_ENABLE_MULTI_BIN) += -DHIMAX_V2_MULTI_BIN
 
-obj-m := himax_v3_mmi.o
+obj-$(CONFIG_INPUT_HIMAX_V3_MMI) += himax_v3_mmi.o
 
-ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_0FLASH)),)
-	himax_v3_mmi-objs += himax_platform_QCT_SPI.o
-	EXTRA_CFLAGS += -D__HIMAX_PLATFORM_SPI__ \
-			-DHX_ZERO_FLASH
-endif
+ccflags-$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V3_MMI_0FLASH) += -D__HIMAX_PLATFORM_SPI__ \
+                                                           -DHX_ZERO_FLASH
+
+himax_v3_mmi-$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V3_MMI_0FLASH) += himax_platform_QCT_SPI.o
 
 himax_v3_mmi-objs += himax_common.o
 himax_v3_mmi-objs += himax_debug.o
 himax_v3_mmi-objs += himax_ic_incell_core.o
 himax_v3_mmi-objs += himax_inspection.o
+
+# Support IC
+ccflags-y += -I$(srctree)/drivers/input/touchscreen/himax_v3_mmi/support_ic \
+             -I$(srctree)/drivers/input/touchscreen/himax_v3_mmi/support_ic/himax_v3_mmi_hx83102d
+obj-$(CONFIG_INPUT_HIMAX_V3_MMI) += himax_v3_mmi_hx83102d.o
+himax_v3_mmi_hx83102d-objs += support_ic/himax_v3_mmi_hx83102d/himax_ic_HX83102d.o

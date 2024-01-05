@@ -1,0 +1,17 @@
+config TOUCHSCREEN_CHIPONE_TDDI
+	tristate "CHIPONE TDDI Touchscreen"
+	default n
+	help
+	  Say Y here if you have a Chipone flash touchscreen connected
+	  to your system by SPI bus.
+
+	  If unsure, say N.
+
+config CHIPONE_ESD
+	bool "ESD Detection"
+	depends on TOUCHSCREEN_CHIPONE_TDDI
+	default n
+	help
+	  Say Y here if you want to have ESD Detection support.
+
+	  If unsure, say N.
