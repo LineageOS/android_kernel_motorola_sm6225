@@ -1,0 +1,5 @@
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+et5907-objs += et5907-regulator.o
+obj-m	+= et5907.o

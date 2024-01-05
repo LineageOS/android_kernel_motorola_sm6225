@@ -1,0 +1,10 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/bq25980_mmi_iio
+
+ifneq ($(filter m y,$(CONFIG_MMI_BQ25980_BULK_READ)),)
+        EXTRA_CFLAGS += -DCONFIG_MMI_BQ25980_BULK_READ
+endif
+
+obj-m += bq25980_mmi_iio.o

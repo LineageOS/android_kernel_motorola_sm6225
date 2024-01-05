@@ -1,0 +1,8 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+EXTRA_CFLAGS += -DCONFIG_HW_RANDOM_IDQ250C2_TIMER
+EXTRA_CFLAGS += -DCONFIG_HW_RANDOM_IDQ250C2_MISC_DEVICE
+
+obj-m += qrng_hwrng.o

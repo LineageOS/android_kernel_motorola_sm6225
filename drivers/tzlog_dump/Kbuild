@@ -1,0 +1,8 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+obj-m += tzlog_dump.o
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_annotate/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_info/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(KBUILD_OUTPUT)/Module.symver

@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+moto_f_diag-objs += tty_diag.o
+moto_f_diag-objs += f_diag.o
+obj-m += moto_f_diag.o

@@ -1,0 +1,18 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/himax_0flash_mmi \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/himax_0flash_mmi/support_ic \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/himax_0flash_mmi/support_ic/himax_0flash_mmi_hx83102
+EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_DEBUG \
+		-DCONFIG_TOUCHSCREEN_HIMAX_INSPECT
+
+EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_INCELL
+EXTRA_CFLAGS += -DCONFIG_HMX_DB
+
+ifneq ($(filter hx83102,$(CONFIG_INPUT_HIMAX_0FLASH_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -D__HIMAX_HX83102_MOD__
+endif
+
+obj-m := himax_0flash_mmi_hx83102.o
+himax_0flash_mmi_hx83102-objs += himax_ic_HX83102.o

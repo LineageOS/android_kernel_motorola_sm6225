@@ -1,0 +1,11 @@
+# add -Wall to try to catch everything we canss
+# EXTRA_CFLAGS += -Wallss
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/pixart_mmi
+
+obj-m := pct1812_mmi.o
+pct1812_mmi-objs := pct1812_captouch.o
+
+ifneq ($(filter m y, $(CONFIG_DRM_PANEL_EVENT_NOTIFICATIONS)),)
+	EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_EVENT_NOTIFICATIONS
+endif

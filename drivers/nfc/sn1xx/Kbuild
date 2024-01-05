@@ -1,0 +1,8 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+obj-m        += nfc_i2c.o
+nfc_i2c-objs:= nfc_common.o nfc_i2c_drv.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_info/Module.symvers

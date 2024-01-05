@@ -1,0 +1,47 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/himax_v3_mmi
+EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_DEBUG \
+		-DCONFIG_TOUCHSCREEN_HIMAX_INSPECT
+
+EXTRA_CFLAGS += -DCONFIG_TOUCHSCREEN_HIMAX_INCELL
+EXTRA_CFLAGS += -DCONFIG_HMX_DB
+
+ifneq ($(filter hx83112,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -D__HIMAX_HX83112_MOD__
+endif
+
+ifneq ($(filter hx83102,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME)),)
+	EXTRA_CFLAGS += -D__HIMAX_HX83102_MOD__
+endif
+
+ifneq ($(filter hx83102d,$(CONFIG_INPUT_HIMAX_V2_MMI_IC_NAME_D)),)
+	EXTRA_CFLAGS += -D__HIMAX_HX83102D_MOD__
+	EXTRA_CFLAGS += -DHX_CODE_OVERLAY
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_ENABLE_PALM)),)
+	EXTRA_CFLAGS += -DHIMAX_PALM_SENSOR_EN
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_HIMAX_V2_MMI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DHIMAX_V2_SENSOR_EN
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_HIMAX_V2_MMI_ENABLE_MULTI_BIN)),)
+	EXTRA_CFLAGS += -DHIMAX_V2_MULTI_BIN
+endif
+
+obj-m := himax_v3_mmi.o
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_HIMAX_V2_MMI_0FLASH)),)
+	himax_v3_mmi-objs += himax_platform_QCT_SPI.o
+	EXTRA_CFLAGS += -D__HIMAX_PLATFORM_SPI__ \
+			-DHX_ZERO_FLASH
+endif
+
+himax_v3_mmi-objs += himax_common.o
+himax_v3_mmi-objs += himax_debug.o
+himax_v3_mmi-objs += himax_ic_incell_core.o
+himax_v3_mmi-objs += himax_inspection.o

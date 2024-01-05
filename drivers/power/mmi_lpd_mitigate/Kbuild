@@ -1,0 +1,9 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/qti_glink_charger
+
+obj-m += mmi_lpd_mitigate.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_relay/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../qti_glink_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers

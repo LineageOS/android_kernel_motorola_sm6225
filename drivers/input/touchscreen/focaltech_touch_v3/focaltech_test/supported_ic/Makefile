@@ -1,0 +1,1 @@
+obj-$(CONFIG_TOUCHSCREEN_FTS_V3) += focaltech_test_ft3681.o

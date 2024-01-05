@@ -1,0 +1,27 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+obj-m := qm35.o
+
+qm35-y := \
+	qm35-spi.o \
+	qm35_rb.o \
+	qmrom_spi.o \
+	libqmrom/src/qmrom_common.o \
+	libqmrom/src/qm357xx_rom_common.o \
+	libqmrom/src/qm357xx_rom_b0.o \
+	libqmrom/src/qm357xx_rom_c0.o \
+	libqmrom/src/qmrom_log.o \
+	libfwupdater/src/fwupdater.o \
+	hsspi.o \
+	hsspi_uci.o \
+	hsspi_log.o \
+	hsspi_coredump.o \
+	debug.o \
+	hsspi_test.o
+
+qm35-y += debug_qmrom.o
+qm35-y += qm35-trace.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../mmi_info/Module.symvers

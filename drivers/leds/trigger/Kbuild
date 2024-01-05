@@ -1,0 +1,5 @@
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+
+obj-m += ledtrig-sol.o

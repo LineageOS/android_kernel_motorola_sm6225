@@ -1,0 +1,70 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/ilitek_v3_mmi \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/ilitek_v3_mmi/firmware
+
+ifeq ($(filter m y, $(CONFIG_TOUCHSCREEN_ILITEK_CHIPSET)),)
+	obj-m += ilitek_v3_mmi.o
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_ENABLE_DOUBLE_TAP)),)
+	EXTRA_CFLAGS += -DILI_SENSOR_EN
+	KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../sensors/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+endif
+
+ifneq ($(filter m y, $(CONFIG_BOARD_USES_DOUBLE_TAP_CTRL)),)
+	EXTRA_CFLAGS += -DILI_DOUBLE_TAP_CTRL
+	EXTRA_CFLAGS += -DILI_PRIMARY_NODE
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_SET_TOUCH_STATE)),)
+	EXTRA_CFLAGS += -DILI_SET_TOUCH_STATE
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_ILI_PANEL_NOTIFICATIONS)),)
+EXTRA_CFLAGS += -DILI_CONFIG_PANEL_NOTIFICATIONS
+endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_RESUME_BY_DDI)),)
+EXTRA_CFLAGS += -DILI_CONFIG_RESUME_BY_DDI
+endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_CHARGER)),)
+EXTRA_CFLAGS += -DILI_CONFIG_MTK_CHARGER
+endif
+ifneq ($(filter m y,$(CONFIG_ILITEK_ESD)),)
+EXTRA_CFLAGS += -DILI_CONFIG_ESD
+endif
+
+ifneq ($(filter m y,$(CONFIG_ILITEK_MTK_CHECK_PANEL)),)
+	EXTRA_CFLAGS += -DILI_MTK_CHECK_PANEL
+endif
+
+ifneq ($(filter m y,$(CONFIG_ILITEK_MULTI_TP_MODULE)),)
+	EXTRA_CFLAGS += -DILI_TP_MODULE_EN
+endif
+
+ifneq ($(filter m y,$(CONFIG_ILI_TOUCH_LAST_TIME)),)
+	EXTRA_CFLAGS += -DILI_TOUCH_LAST_TIME
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+endif
+
+ifeq ($(TARGET_BUILD_VARIANT),user)
+	EXTRA_CFLAGS += -DGKI_EN_FLAG
+endif
+
+ifneq ($(filter m y, $(CONFIG_STOWED_MODE_EN)),)
+	EXTRA_CFLAGS += -DILI_STOWED_MODE_EN
+endif
+ilitek_v3_mmi-objs += ilitek_v3.o
+ilitek_v3_mmi-objs += ilitek_v3_spi.o
+ilitek_v3_mmi-objs += ilitek_v3_qcom.o
+ilitek_v3_mmi-objs += ilitek_v3_ic.o
+ilitek_v3_mmi-objs += ilitek_v3_touch.o
+ilitek_v3_mmi-objs += ilitek_v3_mp.o
+ilitek_v3_mmi-objs += ilitek_v3_hostdl.o
+ilitek_v3_mmi-objs += ilitek_v3_node.o
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers

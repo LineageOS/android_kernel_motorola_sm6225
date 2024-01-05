@@ -1,0 +1,15 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_tcm_mmi
+
+obj-m += synaptics_tcm_spi.o
+obj-m += synaptics_tcm_i2c.o
+obj-m += synaptics_tcm_core.o
+obj-m += synaptics_tcm_device.o
+obj-m += synaptics_tcm_diagnostics.o
+obj-m += synaptics_tcm_recovery.o
+obj-m += synaptics_tcm_reflash.o
+obj-m += synaptics_tcm_testing.o
+obj-m += synaptics_tcm_touch.o
+obj-m += synaptics_tcm_zeroflash.o

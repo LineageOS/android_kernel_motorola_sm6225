@@ -1,0 +1,39 @@
+Motorola Mobility. Battery Manager ULOG Specific Bindings
+
+Why we need adsp battery manager log support in AP side?
+1. Only diag_mdlog in bug2go can help to collect ADSP battery manager log.
+2. ADSP battery manager mdlog is not enabled by default in Bug2Go configuration
+   and we have to enable it manually.
+3. Diag mdlog has to be pulled out from phone and use QXDM tool to parse the log
+   even if the ADSP battery manger log is enabled in diag log configuration of bug2go.
+4. Factory and user version will never use Bug2Go, so diag_mdlog may not be available.
+
+What the new DLKM bm_adsp_ulog.ko benefits us?
+1. Provide debugfs interface to collect battery manager ADSP log in AP side.
+2. Provide debugfs interfaces to configure log level and category for log mask.
+3. Provide exported APIs for other Moto battery charger DLKM to get battery charger
+   ADSP log and output to Kernel log or IPC logging.
+
+Module Name: bm_adsp_ulog.ko
+Log Tag: BM_ULOG
+IPC Log: /d/ipc_logging/bm_ulog/log
+Support Platform: SM8350/SM7325/SM8450
+
+devicetree properties description:
+- categories
+ Usage:      optional
+ Value Type: <u64>
+ Definition: 64 bits ulog mask only to capture the bm ulog type in the mask.
+
+- level
+ Usage:      optional
+ Value Type: <u32>
+ Definition: BM ulog level to limit the bm ulog
+
+Example:
+bm_adsp_ulog: bm_adsp_ulog {
+	compatible = "qcom,bm-adsp-ulog";
+	categories = <0xFFBFFFFF>;
+	level = <3>;
+};
+

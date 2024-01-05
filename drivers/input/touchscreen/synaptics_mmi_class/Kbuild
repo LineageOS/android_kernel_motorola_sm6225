@@ -1,0 +1,28 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/input/touchscreen/synaptics_mmi_class
+
+ifneq ($(filter banks%, $(TARGET_PRODUCT)),)
+    EXTRA_CFLAGS += -DSOFTDEP_GPIO_PCAL6408
+endif
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+
+ifneq ($(filter m y, $(CONFIG_DRM_PANEL_NOTIFICATIONS)),)
+    EXTRA_CFLAGS += -DCONFIG_DRM_PANEL_NOTIFICATIONS
+endif
+
+KBUILD_EXTRA_SYMBOLS += \
+	$(CURDIR)/$(KBUILD_EXTMOD)/../touchscreen_mmi/$(GKI_OBJ_MODULE_DIR)/Module.symvers \
+	$(CURDIR)/$(KBUILD_EXTMOD)/../../../mmi_info/$(GKI_OBJ_MODULE_DIR)/Module.symvers
+
+synaptics_mmi_class-objs = synaptics_dsx_i2c.o synaptics_dsx_mmi.o synaptics_dsx_instance.o
+
+obj-m += synaptics_mmi_class.o
+obj-m += synaptics_mmi_class_fw_update.o
+obj-m += synaptics_mmi_class_rmi_dev.o
+obj-m += synaptics_mmi_class_test_reporting.o
+
+endif

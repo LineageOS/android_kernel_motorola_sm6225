@@ -1,0 +1,9 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+ifeq ($(TARGET_BUILD_VARIANT),userdebug)
+    EXTRA_CFLAGS += -DP938X_USER_DEBUG
+endif
+
+obj-m += p938x_charger.o

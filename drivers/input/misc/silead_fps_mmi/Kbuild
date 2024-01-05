@@ -1,0 +1,21 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
+ifdef CONFIG_ARCH_MSM
+	 ccflags-y += -DBSP_SIL_PLAT_QCOM
+endif
+
+ifdef CONFIG_ARCH_QCOM
+	 ccflags-y += -DBSP_SIL_PLAT_QCOM
+endif
+
+ifdef CONFIG_ARCH_SPRD
+	 ccflags-y += -DBSP_SIL_PLAT_SPRD
+endif
+
+silead_fps_mmi-y += silead_fp.o
+
+
+obj-m += silead_fps_mmi.o
+

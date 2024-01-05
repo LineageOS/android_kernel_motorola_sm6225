@@ -1,0 +1,7 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+ifeq ($(filter m y, $(CONFIG_INPUT_DRV2624_HAPTICS)),)
+obj-m += drv2624_mmi.o
+endif

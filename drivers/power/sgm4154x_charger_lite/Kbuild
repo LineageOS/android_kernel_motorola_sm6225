@@ -1,0 +1,25 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/sgm4154x_charger_lite \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/power/mmi_charger
+
+ifeq ($(CONFIG_SGM4154X_CHARGER_NAME),)
+	EXTRA_CFLAGS += -D__SGM41516D_CHIP_ID__
+endif
+ifeq ($(CONFIG_SGM4154X_CHARGER_NAME),sgm41541)
+	EXTRA_CFLAGS += -D__SGM41541_CHIP_ID__
+endif
+ifeq ($(CONFIG_SGM4154X_CHARGER_NAME),sgm41542)
+	EXTRA_CFLAGS += -D__SGM41542_CHIP_ID__
+endif
+ifeq ($(CONFIG_SGM4154X_CHARGER_NAME),sgm41516)
+	EXTRA_CFLAGS += -D__SGM41516_CHIP_ID__
+endif
+ifeq ($(CONFIG_SGM4154X_CHARGER_NAME),sgm41516D)
+	EXTRA_CFLAGS += -D__SGM41516D_CHIP_ID__
+endif
+
+obj-m += sgm4154x_charger_lite.o
+
+KBUILD_EXTRA_SYMBOLS += $(CURDIR)/$(KBUILD_EXTMOD)/../mmi_charger/$(GKI_OBJ_MODULE_DIR)/Module.symvers

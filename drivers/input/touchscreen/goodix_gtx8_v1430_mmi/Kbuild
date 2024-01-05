@@ -1,0 +1,19 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += \
+		-I$(TOP)/motorola/kernel/modules/include \
+		-I$(TOP)/motorola/kernel/modules/drivers/input/touchscreen/goodix_gtx8_v1430_mmi
+
+obj-m := goodix_v1430_mmi.o
+goodix_v1430_mmi-objs = goodix_ts_i2c.o goodix_ts_core.o goodix_cfg_bin.o
+
+ifneq ($(filter m y,$(CONFIG_INPUT_TOUCHSCREEN_MMI)),)
+	EXTRA_CFLAGS += -DCONFIG_INPUT_TOUCHSCREEN_MMI
+	goodix_v1430_mmi-objs += goodix_ts_mmi.o
+endif
+
+obj-m += goodix_v1430_update_mmi.o
+goodix_v1430_update_mmi-objs = goodix_gtx8_update.o
+
+obj-m += goodix_v1430_ts_tools_mmi.o
+goodix_v1430_ts_tools_mmi-objs = goodix_ts_tools.o

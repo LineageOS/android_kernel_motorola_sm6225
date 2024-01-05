@@ -1,0 +1,215 @@
+Motorola Mobility. sgm4154x_charger_lite Specific Bindings
+
+This sgm4154x charger driver is a lite version to support battery
+charging without BC1.2 charger type detection over DP/DM or OTG
+function.
+It utilizes an external USB power supply to query the input status
+and charger type.
+
+This charger driver can work independently or cooperate with Motorola
+mmi_charger under the new Motorola charger driver architecture, so as
+to support multiple batteries system design.
+
+Motorola charger driver architecture:
+-----------------------------------------------------------------------------------------------------------
+Userspace  Common Interfaces for Charging Features and Factory Test
+-----------------------------------------------------------------------------------------------------------
+Kernel           mmi_charger (Motorola demo, step, flash-fast charging,
+                /            \ factory and debugging interfaces)
+               /              \
+    qti_glink_charger     sgm4154x_charger_lite
+(base battery charging)   (flip battery charging)
+              |                |
+              |                |
+------------glink-------------i2c--------------------------------------------------------------------------
+              |                |
+              |                |
+            ADSP         sgm4154x-chip
+
+
+devicetree properties description:
+- vdd-i2c-supply
+ Usage:      optional
+ Value Type: pointer to power regulator
+ Definition: power regulator to supply pullup power for i2c data lines
+
+- sgm,irq-gpio
+ Usage:      mandatory
+ Value Type: gpio
+ Definition: input gpio used as chip irq line
+
+- sgm,chg-en-gpio
+ Usage:      optional
+ Value Type: gpio
+ Definition: output gpio used as chip nCE pin controlling
+
+- init-charger-disabled
+ Usage:      optional
+ Value Type: bool
+ Definition: Disable charger IC in initial state
+
+- vrechg-millivolt
+ Usage:      optional
+ Value Type: u32
+ Definition: voltage diff with full voltage to trigger battery recharging
+
+- iprechg-microamp
+ Usage:      optional
+ Value Type: u32
+ Definition: charging current in uA in precharging stage
+
+- iterm-microamp
+ Usage:      optional
+ Value Type: u32
+ Definition: charging termination current in uA
+
+- ichg-max-microamp
+ Usage:      optional
+ Value Type: u32
+ Definition: maximum charging current in uA
+
+- vchg-max-microvolt
+ Usage:      optional
+ Value Type: u32
+ Definition: maximum charging voltage in uV
+
+- ichg-microamp
+ Usage:      optional
+ Value Type: u32
+ Definition: initial charging current in uA
+
+- vchg-microvolt
+ Usage:      optional
+ Value Type: u32
+ Definition: initial charging voltage in uV
+
+- input-current-limit-microamp
+ Usage:      optional
+ Value Type: u32
+ Definition: USB input current limitation in uA
+
+- mmi,ext-usb-psy-name
+ Usage:      optional
+ Value Type: string
+ Definition: Name of the external USB power supply which provides
+USB input status and information
+
+- mmi,fg-psy-name
+ Usage:      optional
+ Value Type: string
+ Definition: Name of the battery FG power supply which provides
+battery status and information
+
+- mmi,mmi-temp-zones
+ Usage:      optional
+ Value Type: Array of tuples of <u32>
+ Definition: Unlimited array of arrays. Each internal array needs to have a set
+of 4 bytes, each one representing this sequence: Temperature (in degC), Step
+"Normalized" Voltage (in millivolts), Full Rate "FCC" Current (in milliamps),
+and Taper Rate "FCC Normalized" Current (in milliamps). These values are
+related to charging limitations based on temperature specifications. Note that
+setting a voltage to '0' means that it doesn't matter the battery voltage on
+that defined temperature range to perform necessary tapering. To understand how
+Those values are used, please check the "IEEE Charging Compliance" section below.
+In order to support charging current limit based on battery voltage in the same
+temperature zone, one zone allows to have multiple lines with ascending sequence
+by float voltage. First find the temperature zone, and then find the right one
+among the same zone according to current battery voltage.
+
+- mmi,df-serialnum
+ Usage:      optional
+ Value Type: <string>
+ Definition: The default battery serial number for charging profile selection
+and battery identification.
+
+- mmi,chrg-iterm-ma
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define taper current on battery (in milliamps). If charging
+current becomes below this value, it indicates FULL charging. If not defined,
+defaults to 300.
+
+- mmi,fg-iterm-ma
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define charging current on battery (in milliamps) as the
+threshold for the fuel gauge to decide reporting FULL capacity. If not defined,
+defaults to 350.
+
+- mmi,vfloat-comp-uv
+ Usage:      optional
+ Value Type: <u32>
+ Definition: This is a tolerance, in uV, for battery floating voltage when
+charging is being limited. Such situation can happen when either battery is
+close to full or when there's thermal mitigation on charging. If not set,
+defaults to 0.
+
+- mmi,max-fv-mv
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define the maximum battery charging voltage (in milliamps).
+This value is used as the max float voltage for battery charging. If not
+defined, defaults to 4400.
+
+- mmi,max-fcc-ma
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define maximum charging current on battery (in milliamps)
+If not defined, defaults to 4000.
+
+- mmi,demo-fv-mv
+ Usage:      optional
+ Value Type: <u32>
+ Definition: It will define the maximum battery charging voltage (in milliamps)
+in demo mode. This value is used as the max float voltage for battery charging in
+demo mode. If not defined, defaults to 4000.
+
+- mmi,mmi-ffc-zones
+ Usage:      optional
+ Value Type: Array of tuples of <u32>
+ Definition: Unlimited array of arrays. Each internal array needs to have a set
+of 4 data members, each one representing this sequence: Temperature (in degC),
+maximum Float Voltage (in millivolts), charging terminated current(in milliamps),
+and Fuel Gauge FULL terminated current (in milliamps). These values are
+related to charging limitations based on temperature specifications when the
+battery supports Flash Fast Charging.
+
+Example:
+        sgm4154x_charger: sgm4154x@6B {
+                compatible = "sgm,sgm41516D";
+                reg = <0x6B>;
+
+                vdd-i2c-supply = <&S10B>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&sgm4154x_irq_default &sgm4154x_ce_default>;
+
+                interrupt-parent = <&tlmm>;
+                interrupts = <51 0>;            //irq num base on hardware design
+                sgm,irq-gpio = <&tlmm 51 0>;    //irq num base on hardware design
+                sgm,chg-en-gpio = <&pm8350c_gpios 2 GPIO_ACTIVE_HIGH>;  //gpio num base on hardware design
+
+                init-charger-disabled;
+                vrechg-millivolt = <200>;
+                iprechg-microamp = <180000>;
+                iterm-microamp = <200000>;
+                ichg-max-microamp = <1200000>;
+                vchg-max-microvolt = <4600000>;
+                ichg-microamp = <700000>;
+                vchg-microvolt = <4400000>;
+                input-current-limit-microamp = <1200000>;
+
+                mmi,ext-usb-psy-name = "usb";
+                mmi,fg-psy-name = "fg_flip_battery";
+                mmi,chrg-iterm-ma = <50>;
+                mmi,fg-iterm-ma = <100>;
+                mmi,max-fv-mv = <4480>;
+                mmi,max-fcc-ma = <1214>;
+                mmi,demo-fv-mv = <4000>;
+                mmi,df-serialnum = "SB18D44720";
+                mmi,mmi-temp-zones = <0 4200 136 0>,
+                                    <10 4250 340 204>,
+                                    <15 0 679 476>,
+                                    <45 4300 1214 883>,
+                                    <45 4350 883 679>,
+                                    <60 4200 679 0>;
+        };

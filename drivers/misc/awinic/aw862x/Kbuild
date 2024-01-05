@@ -1,0 +1,12 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include \
+		-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/drivers/misc/awinic/aw862x
+
+obj-m += aw862x.o
+
+aw862x-objs += haptic_nv.o
+aw862x-objs += aw8622x.o
+aw862x-objs += aw86214.o
+aw862x-objs += aw8624.o
+

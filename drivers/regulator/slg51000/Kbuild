@@ -1,0 +1,5 @@
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+slg51000-objs += slg51000-regulator.o
+obj-m	+= slg51000.o
