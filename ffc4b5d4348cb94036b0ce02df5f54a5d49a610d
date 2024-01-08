@@ -16,6 +16,24 @@
       "message": "/home/saalim/raza/los20/kernel/motorola/lineage-21/drivers/input/touchscreen/ili9882_mmi/ili9882_touch.c:1303:7: error: \u0027CONFIG_INPUT_TOUCHSCREEN_MMI\u0027 is not defined, evaluates to 0 [-Werror,-Wundef]                                                         #elif CONFIG_INPUT_TOUCHSCREEN_MMI                                    ^                                                         1 error generated.                                              make[5]: *** [/home/saalim/raza/los20/kernel/motorola/lineage-21/scripts/Makefile.build:338: drivers/input/touchscreen/ili9882_mmi/ili9882_touch.o] Error 1                                     make[4]: *** [/home/saalim/raza/los20/kernel/motorola/lineage-21/scripts/Makefile.build:642: drivers/input/touchscreen/ili9882_mmi] Error 2                                                     make[4]: *** Waiting for unfinished jobs....`\n\nnew rebase need to fix",
       "revId": "ffc4b5d4348cb94036b0ce02df5f54a5d49a610d",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8d17a668_35402402",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 33259
+      },
+      "writtenOn": "2024-01-08T19:02:26Z",
+      "side": 1,
+      "message": "caprip may have issue i think",
+      "parentUuid": "d9e33415_bf86c7de",
+      "revId": "ffc4b5d4348cb94036b0ce02df5f54a5d49a610d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
