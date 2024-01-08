@@ -53,15 +53,15 @@ config SEC_NFC_GPIO_CLK
                   Say Y here to compile support for SAMSUNG NFC CLK REQ feature into the
                   kernel.
 config SEC_NFC_DEDICATED_CLK
-                tristate "SEC NFC DEDICATED CLK"
-                        default m
+                bool "SEC NFC DEDICATED CLK"
+                default n
 config SEC_NFC_LDO_EN
-                tristate "SEC NFC LDO"
-                        default m
+                bool "SEC NFC LDO"
+                default n
 config SEC_NFC_PMIC_LDO
-                tristate "SEC NFC PMIC LDO"
-                        default m
+                bool "SEC NFC PMIC LDO"
+                default n
 config SEC_ESE_COLDRESET
-                tristate "eSE Cold reset"
-                        default m
+                bool "eSE Cold reset"
+                default n
 endmenu
