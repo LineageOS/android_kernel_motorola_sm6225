@@ -1300,7 +1300,7 @@ void ili_report_gesture_mode(u8 *buf, int len)
 #else
 		PM_WAKEUP_EVENT(ilits->gesture_wakelock, 5000);
 #endif
-#elif CONFIG_INPUT_TOUCHSCREEN_MMI
+#elif defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
 		if (ilits->imports && ilits->imports->report_gesture) {
 			struct gesture_event_data event;
 			int ret = 0;
