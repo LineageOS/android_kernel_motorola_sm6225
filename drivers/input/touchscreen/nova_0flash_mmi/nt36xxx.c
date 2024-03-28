@@ -44,10 +44,9 @@
 #include <drm/drm_panel.h>
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef CONFIG_DRM_MSM
+#if defined(CONFIG_DRM_MSM)
 #include <linux/msm_drm_notify.h>
-#endif
+#elif defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -226,12 +225,10 @@ static void nova_resume_work_func(struct work_struct *work);
 #endif //end LCM_FAST_LIGHTUP
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
-#else
+#elif defined(CONFIG_FB)
 static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
@@ -3401,32 +3398,20 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 	ts->drm_notif.notifier_call = nvt_drm_notifier_callback;
 	ret = msm_drm_register_client(&ts->drm_notif);
 	if(ret) {
 		NVT_ERR("register drm_notifier failed. ret=%d\n", ret);
 		goto err_register_drm_notif_failed;
 	}
-#else
+#elif defined(CONFIG_FB)
 	ts->fb_notif.notifier_call = nvt_fb_notifier_callback;
 	ret = fb_register_client(&ts->fb_notif);
 	if(ret) {
 		NVT_ERR("register fb_notifier failed. ret=%d\n", ret);
 		goto err_register_fb_notif_failed;
 	}
-#endif
-
-#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
-	ts->panel_notif.notifier_call = nvt_panel_notifier_callback;
-	ret = register_panel_notifier(&ts->panel_notif);
-	if(ret) {
-		NVT_ERR("register panel_notifier failed. ret=%d\n", ret);
-		goto err_register_fb_notif_failed;
-	}
-#endif
-
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
 	ts->early_suspend.suspend = nvt_ts_early_suspend;
@@ -3437,6 +3422,16 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_register_early_suspend_failed;
 	}
 #endif
+
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+	ts->panel_notif.notifier_call = nvt_panel_notifier_callback;
+	ret = register_panel_notifier(&ts->panel_notif);
+	if(ret) {
+		NVT_ERR("register panel_notifier failed. ret=%d\n", ret);
+		goto err_register_panel_notif_failed;
+	}
+#endif
+
 #endif //end version code >= 5.4.0
 #endif //end touchscreen_mmi
 
@@ -3477,16 +3472,17 @@ err_create_touchscreen_class_failed:
 err_register_drm_notif_failed:
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#ifdef NVT_CONFIG_PANEL_NOTIFICATIONS
+err_register_panel_notif_failed:
+#endif
+#if defined(CONFIG_DRM_MSM)
 	if (msm_drm_unregister_client(&ts->drm_notif))
 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
 err_register_drm_notif_failed:
-#else
+#elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
 err_register_fb_notif_failed:
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts->early_suspend);
 err_register_early_suspend_failed:
@@ -3620,14 +3616,12 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	}
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 	if (msm_drm_unregister_client(&ts->drm_notif))
 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
-#else
+#elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
@@ -3732,14 +3726,12 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	}
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 	if (msm_drm_unregister_client(&ts->drm_notif))
 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
-#else
+#elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
@@ -4222,8 +4214,7 @@ static int nvt_panel_notifier_callback(struct notifier_block *self, unsigned lon
 }
 #endif
 
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
 	struct msm_drm_notifier *evdata = data;
@@ -4257,7 +4248,7 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 
 	return 0;
 }
-#else
+#elif defined(CONFIG_FB)
 static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
 	struct fb_event *evdata = data;
@@ -4281,7 +4272,6 @@ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long e
 
 	return 0;
 }
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 /*******************************************************
 Description:
