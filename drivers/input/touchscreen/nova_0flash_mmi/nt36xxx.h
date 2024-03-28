@@ -274,12 +274,10 @@ struct nvt_ts_data {
 #endif
 #endif
 #else //vension code < 5.4.0
-#if defined(CONFIG_FB)
-#ifdef _MSM_DRM_NOTIFY_H_
+#if defined(CONFIG_DRM_MSM)
 	struct notifier_block drm_notif;
-#else
+#elif defined(CONFIG_FB)
 	struct notifier_block fb_notif;
-#endif
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
