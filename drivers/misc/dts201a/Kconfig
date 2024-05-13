@@ -1,0 +1,14 @@
+config DTS201A_MMI
+	tristate "DTS201A_MMI"
+	help
+	  Say Y here if you have a dts201a compatible
+	  device connected.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called dts201a_mmi.
+
+config FEATURE_USE_CCI
+	bool "Feature Use CCI"
+	depends on DTS201A_MMI
+	help
+	  This enables support for Feature use CCI.
