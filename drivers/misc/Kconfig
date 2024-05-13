@@ -657,6 +657,7 @@ source "drivers/misc/aw9610x/Kconfig"
 source "drivers/misc/ldo_vibrator_mmi/Kconfig"
 source "drivers/misc/regulator_vibrator_mmi/Kconfig"
 source "drivers/misc/tps61280/Kconfig"
+source "drivers/misc/dts201a/Kconfig"
 endmenu
 
 config OKL4_USER_VIPC

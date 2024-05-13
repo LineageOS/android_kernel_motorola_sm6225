@@ -1,0 +1,11 @@
+config KTD3136_BL
+	tristate "KTD3136 BL driver"
+	default n
+	help
+	  Say Y here if you have KTD3136 BL in
+	  your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ktd3136_bl.

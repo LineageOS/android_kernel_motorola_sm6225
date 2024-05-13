@@ -1,5 +1,1 @@
-# add -Wall to try to catch everything we can.
-EXTRA_CFLAGS += -Wall
-EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
-
-obj-m += ktd3136_bl.o
+obj-$(CONFIG_KTD3136_BL) += ktd3136_bl.o

@@ -1,3 +1,5 @@
 source "drivers/backlight/aw99703/Kconfig"
 
+source "drivers/backlight/ktd3136/Kconfig"
+
 source "drivers/backlight/lm3697/Kconfig"
