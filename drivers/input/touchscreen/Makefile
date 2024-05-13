@@ -130,3 +130,4 @@ obj-$(CONFIG_INPUT_TOUCHSCREEN_ILI_9882_MMI) += ili9882_mmi/
 obj-$(CONFIG_INPUT_TOUCHSCREEN_ILI_0FLASH_MMI) += ilitek_0flash_mmi/
 obj-$(CONFIG_INPUT_HIMAX_V3_MMI) += himax_v3_mmi/
 obj-$(CONFIG_TOUCHSCREEN_CHIPONE_TDDI) += chipone_tddi_mmi/
+obj-$(CONFIG_INPUT_TOUCHSCREEN_FOCALTECH_0FLASH_MMI) += focaltech_0flash_mmi/
