@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a65cde92_92004dfd",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2024-10-23T13:19:26Z",
+      "side": 1,
+      "message": "cebu use qpnp-power-on-mmi.ko on stock, also init.mmi.overlay.rc calls it on fs.\nref: https://github.com/LineageOS/android_device_motorola_cebu/blob/lineage-21/rootdir/etc/init.mmi.overlay.rc#L23",
+      "revId": "c05eb7c20a9d7d21a90182ef79dd4556a324334a",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
