@@ -27,6 +27,18 @@ ifeq ($(CONFIG_ARCH_SDM660), y)
 include $(srctree)/techpack/audio/config/sdm660auto.conf
 export $(shell sed 's/=.*//' $(srctree)/techpack/audio/config/sdm660auto.conf)
 endif
+ifeq ($(CONFIG_GUAM_DTB), y)
+include $(srctree)/techpack/audio/config/guamauto.conf
+export $(shell sed 's/=.*//' $(srctree)/techpack/audio/config/guamauto.conf)
+endif
+ifeq ($(CONFIG_GUAMNA_DTB), y)
+include $(srctree)/techpack/audio/config/guamnaauto.conf
+export $(shell sed 's/=.*//' $(srctree)/techpack/audio/config/guamnaauto.conf)
+endif
+ifeq ($(CONFIG_GUAMP_DTB), y)
+include $(srctree)/techpack/audio/config/guampauto.conf
+export $(shell sed 's/=.*//' $(srctree)/techpack/audio/config/guampauto.conf)
+endif
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
@@ -70,6 +82,18 @@ endif
 ifeq ($(CONFIG_DEVON_DTB), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/devonautoconf.h
+ifeq ($(CONFIG_GUAM_DTB), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/guamautoconf.h
+endif
+ifeq ($(CONFIG_GUAMNA_DTB), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/guamnaautoconf.h
+endif
+ifeq ($(CONFIG_GUAMP_DTB), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/guampautoconf.h
+endif
 endif
 ifeq ($(CONFIG_HAWAO_DTB), y)
 LINUXINCLUDE    += \
