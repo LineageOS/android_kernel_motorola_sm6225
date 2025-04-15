@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1257b641_e95135fe",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-04-15T20:12:08Z",
+      "side": 1,
+      "message": "Guam/na/p devices build this audio module in stock\n\nmoto commit reference: https://github.com/MotorolaMobilityLLC/vendor-qcom-opensource-audio-kernel/commit/dc28954f5e0550d87ae413f70f259d48023f0363",
+      "revId": "0cecf1ef9af6d0a18340a9ec9bf6151ced2b2102",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
