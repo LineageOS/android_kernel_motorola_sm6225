@@ -2,15 +2,11 @@
 # Focaltech Touchscreen driver configuration
 #
 
-config TOUCHSCREEN_FTS
-    bool "Focaltech Touchscreen"
+config INPUT_TOUCHSCREEN_FOCALTECH_SPI_MMI
+    tristate "FocalTech Touchscreen Driver SPI MMI"
     default n
     help
-      Say Y here if you have Focaltech touch panel.
+      Say Y here if you wish to include support for FocalTech Touchscreen SPI MMI.
       If unsure, say N.
-      
-config TOUCHSCREEN_FTS_DIRECTORY
-    string "Focaltech ts directory name"
-    default "focaltech_touch"
-    depends on TOUCHSCREEN_FTS
-    
+      To compile this driver as a module, choose M here: the
+      module will be called focaltech_touch_spi_mmi.
