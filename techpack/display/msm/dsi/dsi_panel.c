@@ -865,6 +865,8 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 		rc = dsi_panel_dcs_set_display_brightness_c2(dsi, bl_lvl);
 	else if (bl->bl_2bytes_enable)
 		rc = mipi_dsi_dcs_set_display_brightness_2bytes(dsi, bl_lvl);
+	else if (bl->bl_2bytes_2th_low4bit_enable)
+		rc = mipi_dsi_dcs_set_display_brightness_2bytes_2th_low4bit(dsi, bl_lvl);
 	else
 		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 
@@ -3164,6 +3166,12 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 	DSI_INFO("[%s] bl_demura_cmd=%d\n", panel->name,
 			panel->bl_config.bl_demura_cmd);
 
+	panel->bl_config.bl_2bytes_2th_low4bit_enable = utils->read_bool(utils->data,
+			"qcom,bklt-dcs-2bytes-2th-low4bit-enabled");
+
+	DSI_INFO("[%s] bl_2bytes_2th_low4bit_enable=%d\n", panel->name,
+			panel->bl_config.bl_2bytes_2th_low4bit_enable);
+	
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
 		if (rc) {
