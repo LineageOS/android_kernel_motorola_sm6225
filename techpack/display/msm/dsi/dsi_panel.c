@@ -632,8 +632,7 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		}
 	}
 
-    if(panel->reset_config.
-       _reset_seq) {
+    if(panel->reset_config.custom_reset_seq) {
 		if (gpio_is_valid(r_config->tp_rst_gpio)) {
 		    DSI_INFO("set tp reset level to 0\n");
 			gpio_set_value(r_config->tp_rst_gpio, 0);
