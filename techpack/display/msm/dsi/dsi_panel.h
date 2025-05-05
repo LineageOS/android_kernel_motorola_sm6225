@@ -191,6 +191,7 @@ struct dsi_panel_reset_config {
 	struct dsi_reset_seq *sequence;
 	u32 count;
 
+    bool custom_reset_seq;
 	int reset_gpio;
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
