@@ -5,6 +5,17 @@ $(error Moto DT w/o overlay is undefined!!!)
 endif
 
 # Motorola Device Trees
+dtbo-$(CONFIG_BATHENA_DTB) += \
+        bengal-bathena-evt-overlay.dtbo \
+        bengal-bathena-evt1-overlay.dtbo \
+        bengal-bathena-dvt2-overlay.dtbo \
+        bengal-bathena-pvt1-overlay.dtbo
+
+bengal-bathena-evt-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-bathena-evt1-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-bathena-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
+bengal-bathena-pvt1-overlay.dtbo-base := bengal-moto-base.dtb
+
 dtbo-$(CONFIG_GUAM_DTB) += \
         bengal-guam-evt-overlay.dtbo \
         bengal-guam-dvt-overlay.dtbo \
@@ -19,22 +30,13 @@ dtbo-$(CONFIG_GUAMP_DTB) += \
         bengal-guamp-dvt-overlay.dtbo \
         bengal-guamp-dvt2-sku3-overlay.dtbo \
         bengal-guamp-dvt2-sku4-overlay.dtbo \
-        bengal-guamp-pvt-overlay.dtbo \
-        bengal-bathena-evt-overlay.dtbo \
-        bengal-bathena-evt1-overlay.dtbo \
-        bengal-bathena-dvt2-overlay.dtbo \
-        bengal-bathena-pvt1-overlay.dtbo \
+        bengal-guamp-pvt-overlay.dtbo
 
 bengal-guamp-evt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-dvt-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-dvt2-sku3-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-dvt2-sku4-overlay.dtbo-base := bengal-moto-base.dtb
 bengal-guamp-pvt-overlay.dtbo-base := bengal-moto-base.dtb
-
-bengal-bathena-evt-overlay.dtbo-base := bengal-moto-base.dtb
-bengal-bathena-evt1-overlay.dtbo-base := bengal-moto-base.dtb
-bengal-bathena-dvt2-overlay.dtbo-base := bengal-moto-base.dtb
-bengal-bathena-pvt1-overlay.dtbo-base := bengal-moto-base.dtb
 
 dtbo-$(CONFIG_GUAMNA_DTB) += \
         bengal-guamna-gwlc-evt-overlay.dtbo \

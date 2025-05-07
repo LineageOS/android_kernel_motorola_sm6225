@@ -11,6 +11,14 @@ config MMI_DEVICE_DTBS
 		Only include Motorola device specific DTBs to limit the number that
 		get built during kernel compilation.
 
+config BATHENA_DTB
+    depends on ARCH_QCOM
+    default n
+    bool "Bathena DTBs"
+    help
+      Only include Bathena specific DTBs to limit the number that
+      get built during kernel compilation
+
 config GUAM_DTB
     depends on ARCH_QCOM
     default n
