@@ -96,6 +96,7 @@ enum {
 #define	BAT_THERM_FAULT_SHIFT			12
 #define	BUS_THERM_FAULT_SHIFT			13
 #define	DIE_THERM_FAULT_SHIFT			14
+#define	CP_SWITCH_SHIFT				18
 
 #define	BAT_OVP_FAULT_MASK		(1 << BAT_OVP_FAULT_SHIFT)
 #define	BAT_OCP_FAULT_MASK		(1 << BAT_OCP_FAULT_SHIFT)
@@ -232,6 +233,8 @@ struct bq2597x {
 
 	bool therm_shutdown_flag;
 	bool therm_shutdown_stat;
+
+	bool cp_switch;
 
 	bool vbat_reg;
 	bool ibat_reg;
@@ -2045,7 +2048,8 @@ static int bq2597x_iio_read_raw(struct iio_dev *indio_dev,
 			| (bq->bus_ocp_fault << BUS_OCP_FAULT_SHIFT)
 			| (bq->bat_therm_fault << BAT_THERM_FAULT_SHIFT)
 			| (bq->bus_therm_fault << BUS_THERM_FAULT_SHIFT)
-			| (bq->die_therm_fault << DIE_THERM_FAULT_SHIFT));
+			| (bq->die_therm_fault << DIE_THERM_FAULT_SHIFT)
+			| (bq->cp_switch << CP_SWITCH_SHIFT));
 		break;
 
 	default:
@@ -2175,6 +2179,8 @@ static void bq2597x_check_alarm_status(struct bq2597x *bq)
 	ret = bq2597x_read_byte(bq, BQ2597X_REG_0A, &stat);
 	if (!ret && (stat & 0x02))
 		pr_err("Reg[0A]CONV_OCP = 0x%02X\n", stat);
+
+	bq->cp_switch = !!(stat & BQ2597X_CONV_SWITCHING_STAT_MASK);
 
 	mutex_unlock(&bq->data_lock);
 
