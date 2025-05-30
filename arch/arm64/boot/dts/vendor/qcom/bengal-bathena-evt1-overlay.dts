@@ -13,9 +13,9 @@
 /dts-v1/;
 /plugin/;
 
-#include "bengal-guamp-common-overlay.dtsi"
+#include "bengal-bathena-common-overlay.dtsi"
 #include "bengal-bathena-awinic-audio-overlay.dtsi"
-#include "bengal-hbm-display.dtsi"
+#include "bengal-bathena-hbm-display.dtsi"
 #include "bengal-bathena-nfc.dtsi"
 
 / {
