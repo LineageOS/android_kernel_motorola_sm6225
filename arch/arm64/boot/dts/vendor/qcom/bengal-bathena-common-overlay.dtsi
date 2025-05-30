@@ -12,9 +12,9 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "bengal-moto-common-overlay.dtsi"
-#include "bengal-guam-display.dtsi"
+#include "bengal-bathena-display.dtsi"
 #include "bengal-audio-overlay.dtsi"
-#include "bengal-guam-touchscreen-overlay.dtsi"
+#include "bengal-bathena-touchscreen-overlay.dtsi"
 #include "camera/bengal-camera-sensor-mot-guamp-overlay.dtsi"
 #include "bengal-guam-fps.dtsi"
 #include "bengal-guam-moto-thermal.dtsi"
@@ -296,7 +296,7 @@
                                 <45 0 3000 3000>,
                                 <60 4200 2000 0>;
         qcom,enable-charging-limit;
-        qcom,upper-limit-capacity = <70>;
+        qcom,upper-limit-capacity = <65>;
         qcom,lower-limit-capacity = <60>;
         qcom,otg-cl-ua = <1000000>;
 	qcom,dc-unsupported;
