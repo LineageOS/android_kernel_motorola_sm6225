@@ -350,7 +350,7 @@
 		aw99703,pwm-trans-dim = <0>; /* 2ms */
 		aw99703,i2c-trans-dim = <0x00>;
 		aw99703,pwm-mode = <1>; /* 0 pwm disble,1 PWM enable */
-		aw99703,map-type = <0>; /* 0 exponential, 4 linear */
+		aw99703,map-type = <4>; /* 0 exponential, 4 linear */
 		aw99703,work-mode = <1>; /* backlight */
 		aw99703,default-brightness = <1810>;
 	};
@@ -372,7 +372,7 @@
 				current-mode = <4>;	/*4: 23.4mA*/
 				boost-ovp = <2>;	/*0:16v 1:24v 2:32v 3:40v*/
 				boost-freq = <1>;	/*0:500Khz 1:1Mhz*/
-				map-type = <0>; 	/* 0 exponential, 1 linear */
+				map-type = <1>; 	/* 0 exponential, 1 linear */
 				current-align-type = <1>;/* 0 none, 1 aw99703, for exp mode current align*/
 				default-brightness-level = <1023>;
 			};
