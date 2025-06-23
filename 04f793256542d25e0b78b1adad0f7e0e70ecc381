@@ -16,6 +16,24 @@
       "message": "picked from: 7044bbdd6c0486de4f90e3ac858ad5484e0860ca",
       "revId": "04f793256542d25e0b78b1adad0f7e0e70ecc381",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a0159a9e_a018adc7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T04:48:28Z",
+      "side": 1,
+      "message": "picked from: https://review.lineageos.org/c/LineageOS/android_kernel_motorola_sm6225/+/432524/comments/3632a6ad_be7423d9",
+      "parentUuid": "3632a6ad_be7423d9",
+      "revId": "04f793256542d25e0b78b1adad0f7e0e70ecc381",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
