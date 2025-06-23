@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "35dad598_0bce49d6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T04:46:48Z",
+      "side": 1,
+      "message": "picked from: https://github.com/MotorolaMobilityLLC/motorola-kernel-modules/commit/253a080b9f8670dcaa074541e100e1383819c0e2",
+      "revId": "4b6c784cee76cee919d902468dee00bb813dcb80",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
