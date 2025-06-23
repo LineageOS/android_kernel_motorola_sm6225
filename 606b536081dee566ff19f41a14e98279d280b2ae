@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "add2ae31_5a9dc39c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T04:53:38Z",
+      "side": 1,
+      "message": "picked from: https://github.com/MotorolaMobilityLLC/kernel-msm-techpack-display/commit/ae225749e642b5debd08b67d1afcbd7edc576f9e",
+      "revId": "606b536081dee566ff19f41a14e98279d280b2ae",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
