@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0efa5929_c8d9393f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T05:19:58Z",
+      "side": 1,
+      "message": "Here we\u0027ve reverted Guam\u0027s DTS to the state they were in before Bathena\u0027s commits.\nThis way, we ensure Bathena has its own DTS and doesn\u0027t interfere with Guam/NA/P DTS.",
+      "revId": "d1025502ea72106b45f0ceac6ae36b9e2a7703b5",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
