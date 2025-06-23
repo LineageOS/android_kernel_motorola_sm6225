@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "59321d52_2d780e14",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T05:16:12Z",
+      "side": 1,
+      "message": "I realized it\u0027s better to build these dts separately. Guam/p don\u0027t boot before this change",
+      "revId": "2b425ac816fb8d8d95e7b5514b9239e32aff069d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
