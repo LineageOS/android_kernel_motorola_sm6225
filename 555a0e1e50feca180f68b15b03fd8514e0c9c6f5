@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8dcf9f9d_1ff2b18e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 27312
+      },
+      "writtenOn": "2025-06-23T05:00:24Z",
+      "side": 1,
+      "message": "picked from: https://github.com/MotorolaMobilityLLC/kernel-devicetree/commit/24830896f7b30df1823730ea752135d3bc37245c",
+      "revId": "555a0e1e50feca180f68b15b03fd8514e0c9c6f5",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
