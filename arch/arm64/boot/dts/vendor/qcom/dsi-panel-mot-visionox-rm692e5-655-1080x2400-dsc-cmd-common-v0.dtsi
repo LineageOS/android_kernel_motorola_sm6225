@@ -105,9 +105,13 @@
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-panel-jitter = <0x20 0xa>; /* 90fps +/- 2 */
+				//qcom,mdss-dsi-timing-switch-command = [
+				//	15 01 00 00 00 00 02 FE 00
+				//	05 01 00 00 00 00 01 39  /*Aod on*/
+				//];
 				qcom,mdss-dsi-timing-switch-command = [
 					15 01 00 00 00 00 02 FE 00
-					05 01 00 00 00 00 01 39  /*Aod on*/
+					05 01 00 00 00 00 01 38  /*Aod off*/
 				];
 
 				qcom,mdss-dsi-on-command = [
