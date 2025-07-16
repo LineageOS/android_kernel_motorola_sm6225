@@ -16,6 +16,23 @@
       "message": "Verified on real hardware with the panel in question.",
       "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0e99f65e_8be727e3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 14010
+      },
+      "writtenOn": "2025-07-16T07:27:08Z",
+      "side": 1,
+      "message": "Removing myself as my rhode has got the csot panel and thus is unaffected.",
+      "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
