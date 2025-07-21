@@ -33,6 +33,23 @@
       "message": "Removing myself as my rhode has got the csot panel and thus is unaffected.",
       "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "29bf3086_031760f7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 24334
+      },
+      "writtenOn": "2025-07-21T19:14:03Z",
+      "side": 1,
+      "message": "I have csot in my rhode",
+      "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
