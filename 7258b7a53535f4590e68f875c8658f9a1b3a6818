@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8414e1f3_96f4b2e8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 33572
+      },
+      "writtenOn": "2025-07-21T21:43:16Z",
+      "side": 1,
+      "message": "I tried this in Tomoms build, and it solved the issue for me ! :D\n\nBuild: https://xdaforums.com/t/rom-v-rhode-unofficial-optimized-lineageos-22-2-july-21st.4628099",
+      "revId": "7258b7a53535f4590e68f875c8658f9a1b3a6818",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
