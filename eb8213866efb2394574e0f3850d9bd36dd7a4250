@@ -73,6 +73,30 @@
       },
       "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "abee59ff_8904f045",
+        "filename": "arch/arm64/boot/dts/vendor/qcom/dsi-panel-mot-visionox-rm692e5-655-1080x2400-dsc-cmd-common-v0.dtsi",
+        "patchSetId": 2
+      },
+      "lineNbr": 111,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2025-07-22T22:02:29Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "ac8e1d28_b97416e0",
+      "range": {
+        "startLine": 108,
+        "startChar": 4,
+        "endLine": 111,
+        "endChar": 8
+      },
+      "revId": "eb8213866efb2394574e0f3850d9bd36dd7a4250",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
