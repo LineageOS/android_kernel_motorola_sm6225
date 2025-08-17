@@ -194,7 +194,7 @@ struct usb_charger_detection {
 struct nvt_ts_data {
 	struct spi_device *client;
 	struct input_dev *input_dev;
-	struct delayed_work nvt_fwu_work;
+	struct work_struct nvt_fwu_work;
 	uint16_t addr;
 	int8_t phys[32];
 	uint8_t bTouchIsAwake;

@@ -3315,10 +3315,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		ret = -ENOMEM;
 		goto err_create_nvt_fwu_wq_failed;
 	}
-	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
+	INIT_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
-	// please make sure boot update start after display reset(RESX) sequence
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
+	queue_work(nvt_fwu_wq, &ts->nvt_fwu_work);
 #endif
 #endif
 #ifdef LCM_FAST_LIGHTUP
@@ -3516,7 +3515,7 @@ err_create_nvt_esd_check_wq_failed:
 #endif
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
-		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3664,7 +3663,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
-		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3763,7 +3762,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
-		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3945,7 +3944,7 @@ int32_t nvt_ts_resume(struct device *dev)
 #if NVT_TOUCH_SUPPORT_HW_RST
 	gpio_set_value(ts->reset_gpio, 1);
 #endif
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(0));
+	queue_work(nvt_fwu_wq, &ts->nvt_fwu_work);
 
 #if !WAKEUP_GESTURE
 	nvt_irq_enable(true);
