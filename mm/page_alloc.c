@@ -5653,21 +5653,11 @@ char numa_zonelist_order[] = "Node";
  * sysctl handler for numa_zonelist_order
  */
 int numa_zonelist_order_handler(struct ctl_table *table, int write,
-		void __user *buffer, size_t *length,
-		loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
-	char *str;
-	int ret;
-
-	if (!write)
-		return proc_dostring(table, write, buffer, length, ppos);
-	str = memdup_user_nul(buffer, 16);
-	if (IS_ERR(str))
-		return PTR_ERR(str);
-
-	ret = __parse_numa_zonelist_order(str);
-	kfree(str);
-	return ret;
+	if (write)
+		return __parse_numa_zonelist_order(buffer);
+	return proc_dostring(table, write, buffer, length, ppos);
 }
 
 
@@ -7972,7 +7962,7 @@ postcore_initcall(init_per_zone_wmark_min)
  *	or extra_free_kbytes changes.
  */
 int min_free_kbytes_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	int rc;
 
@@ -8015,7 +8005,7 @@ int kswapd_threads_sysctl_handler(struct ctl_table *table, int write,
 }
 
 int watermark_scale_factor_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	int rc;
 
@@ -8045,7 +8035,7 @@ static void setup_min_unmapped_ratio(void)
 
 
 int sysctl_min_unmapped_ratio_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	int rc;
 
@@ -8072,7 +8062,7 @@ static void setup_min_slab_ratio(void)
 }
 
 int sysctl_min_slab_ratio_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	int rc;
 
@@ -8096,7 +8086,7 @@ int sysctl_min_slab_ratio_sysctl_handler(struct ctl_table *table, int write,
  * if in function of the boot time zone sizes.
  */
 int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	proc_dointvec_minmax(table, write, buffer, length, ppos);
 	setup_per_zone_lowmem_reserve();
@@ -8109,7 +8099,7 @@ int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *table, int write,
  * pagelist can have before it gets flushed back to buddy allocator.
  */
 int percpu_pagelist_fraction_sysctl_handler(struct ctl_table *table, int write,
-	void __user *buffer, size_t *length, loff_t *ppos)
+		void *buffer, size_t *length, loff_t *ppos)
 {
 	struct zone *zone;
 	int old_percpu_pagelist_fraction;
@@ -8268,7 +8258,7 @@ void *__init alloc_large_system_hash(const char *tablename,
 			else
 				table = memblock_virt_alloc_raw(size, 0);
 		} else if (hashdist) {
-			table = __vmalloc(size, gfp_flags, PAGE_KERNEL);
+			table = __vmalloc(size, gfp_flags);
 		} else {
 			/*
 			 * If bucketsize is not a power-of-two, we may free
