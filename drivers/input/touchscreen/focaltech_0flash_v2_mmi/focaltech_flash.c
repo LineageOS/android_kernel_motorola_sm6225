@@ -42,8 +42,6 @@
 /* Example: focaltech_ts_fw_tianma.bin */
 #if FTS_AUTO_UPGRADE_EN
 #define FTS_FW_NAME_PREX_WITH_REQUEST               "focaltech_ts_fw_"
-#else
-#define FTS_FW_NAME_PREX_WITH_REQUEST               ""
 #endif
 
 #define FTS_READ_BOOT_ID_TIMEOUT                    3
@@ -950,7 +948,7 @@ int fts_fw_resume(bool need_reset)
 
     if (FTS_FW_REQUEST_SUPPORT) {
         snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
-                 FTS_FW_NAME_PREX_WITH_REQUEST, upg->module_info->vendor_name);
+                 FTS_FW_NAME_PREX_WITH_REQUEST, upg->ts_data->panel_supplier);
         ret = request_firmware(&fw, fwname, upg->ts_data->dev);
         if (ret == 0) {
             FTS_INFO("firmware(%s) request successfully", fwname);
@@ -1144,7 +1142,7 @@ static int fts_get_fw_file_via_request_firmware(struct fts_upgrade *upg)
 #endif
         snprintf(fwname, FILE_NAME_LENGTH, "%s%s.bin", \
              FTS_FW_NAME_PREX_WITH_REQUEST, \
-             upg->module_info->vendor_name);
+             upg->ts_data->panel_supplier);
 
     ret = request_firmware(&fw, fwname, upg->ts_data->dev);
     if (0 == ret) {
@@ -1229,10 +1227,6 @@ static int fts_fwupg_get_fw_file(struct fts_upgrade *upg)
     }
 
     FTS_INFO("upgrade fw file len:%d", upg->fw_length);
-    if (upg->fw_length < FTS_MIN_LEN) {
-        FTS_ERROR("fw file len(%d) fail", upg->fw_length);
-        return -ENODATA;
-    }
 
     return ret;
 }
