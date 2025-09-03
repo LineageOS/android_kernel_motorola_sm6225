@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2480a1b9_2aed2de8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2025-09-03T04:42:03Z",
+      "side": 1,
+      "message": "You need to fix your sepolicy or firmware names instead https://review.lineageos.org/c/LineageOS/android_kernel_motorola_sm6225/+/431479",
+      "revId": "e2d0f4b062b0ad3b8bd54403acb477ed6c53c071",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
