@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "98ebdbcb_8dcea67d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2025-11-09T11:02:45Z",
+      "side": 1,
+      "message": "Let\u0027s align with sm6375 just in case.",
+      "revId": "27e692e3335c363dda48cd9dcb3764ae5df77919",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
