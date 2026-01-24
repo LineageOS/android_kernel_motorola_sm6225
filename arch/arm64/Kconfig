@@ -312,6 +312,9 @@ config ARCH_SUPPORTS_UPROBES
 config ARCH_PROC_KCORE_TEXT
 	def_bool y
 
+config BROKEN_GAS_INST
+	def_bool !$(as-instr,1:\n.inst 0\n.rept . - 1b\n\nnop\n.endr\n)
+
 source "arch/arm64/Kconfig.platforms"
 
 menu "Bus support"
@@ -1341,7 +1344,13 @@ config ARM64_PAN
 	 instruction if the cpu does not implement the feature.
 
 config ARM64_LSE_ATOMICS
+	bool
+	default ARM64_USE_LSE_ATOMICS
+	depends on $(as-instr,.arch_extension lse)
+
+config ARM64_USE_LSE_ATOMICS
 	bool "Atomic instructions"
+	depends on JUMP_LABEL
 	default y
 	help
 	  As part of the Large System Extensions, ARMv8.1 introduces new
