@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "729767ba_f3ec8922",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 11409
+      },
+      "writtenOn": "2026-05-25T21:06:43Z",
+      "side": 1,
+      "message": "Tested on hawao (4 GB RAM). The mutual thrashing of apps when switching between them seems to be gone, and apps start with a speed remembered from LOS-22.2.",
+      "revId": "37e59269dbefd9a013796c74742b1a69bfb73780",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
