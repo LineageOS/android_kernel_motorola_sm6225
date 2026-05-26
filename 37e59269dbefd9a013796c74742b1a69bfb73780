@@ -16,6 +16,23 @@
       "message": "Tested on hawao (4 GB RAM). The mutual thrashing of apps when switching between them seems to be gone, and apps start with a speed remembered from LOS-22.2.",
       "revId": "37e59269dbefd9a013796c74742b1a69bfb73780",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "45361d70_d9e9d90a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 37065
+      },
+      "writtenOn": "2026-05-26T23:09:31Z",
+      "side": 1,
+      "message": "Tested on Capri, LMKD behaviour is nominal, active and inactive (anon) aren\u0027t zeroed, performance is back to normal",
+      "revId": "37e59269dbefd9a013796c74742b1a69bfb73780",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
