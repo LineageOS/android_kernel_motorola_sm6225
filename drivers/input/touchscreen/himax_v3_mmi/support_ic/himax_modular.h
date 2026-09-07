@@ -76,7 +76,15 @@ static void free_chip_dt_table(void)
 	}
 }
 
+#ifdef CONFIG_CFI_CLANG
+#define setup_symbol(sym)	({ \
+		kp_##sym = (void *)kallsyms_lookup_name(#sym ".cfi_jt"); \
+		if (!kp_##sym) \
+			kp_##sym = (void *)kallsyms_lookup_name(#sym); \
+		kp_##sym; })
+#else
 #define setup_symbol(sym)	({kp_##sym = (void *)kallsyms_lookup_name(#sym); kp_##sym; })
+#endif
 #define assert_on_symbol(sym)	do { \
 					if (!setup_symbol(sym)) { \
 						E("%s: setup %s failed!\n", __func__, #sym); \
