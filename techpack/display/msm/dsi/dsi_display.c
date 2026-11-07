@@ -262,13 +262,24 @@ int dsi_display_set_param(void *display, struct msm_param_info *param_info)
 	panel = dsi_display->panel;
 
 	DSI_DEBUG("%s+\n", __func__);
-	if (!dsi_panel_initialized(panel))
-		return -EINVAL;
+
+	/*
+	 * Serialize with dsi_display_enable()/dsi_display_disable(): this is
+	 * called from the atomic set_property path (composer thread), which
+	 * can run while the commit worker is turning the panel off.
+	 */
+	mutex_lock(&dsi_display->display_lock);
+	if (!dsi_panel_initialized(panel)) {
+		rc = -EINVAL;
+		goto end;
+	}
 
 	rc = dsi_panel_set_param(panel, param_info);
 	if (rc)
 		DSI_ERR("[%s] failed to panel to set param. rc=%d\n",
 				dsi_display->name, rc);
+end:
+	mutex_unlock(&dsi_display->display_lock);
 	return rc;
 }
 

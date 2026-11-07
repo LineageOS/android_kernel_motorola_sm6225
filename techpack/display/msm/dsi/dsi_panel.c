@@ -1262,10 +1262,23 @@ static int dsi_panel_set_hbm(struct dsi_panel *panel,
 		rc = dsi_panel_send_param_cmd(panel, param_info);
 		if (rc < 0) {
 			DSI_ERR("%s: failed to send param cmds. ret=%d\n", __func__, rc);
-		} else {
-			rc = dsi_panel_set_backlight(panel, HBM_BRIGHTNESS(param_info->value));
+		} else if (rc > 0) {
+			/*
+			 * Only touch the backlight when the HBM state really
+			 * changed (rc == 0 means "same value, do nothing").
+			 * An unconditional DCS write here races with
+			 * dsi_display_disable() on screen off and leaves the
+			 * DSI controller stuck (Command transfer failed).
+			 */
+			mutex_lock(&panel->panel_lock);
+			if (panel->panel_initialized)
+				rc = dsi_panel_set_backlight(panel,
+					HBM_BRIGHTNESS(param_info->value));
+			else
+				rc = 0;
+			mutex_unlock(&panel->panel_lock);
 			if (rc)
-			DSI_ERR("unable to set backlight\n");
+				DSI_ERR("unable to set backlight\n");
 		}
 	}
 	return rc;
