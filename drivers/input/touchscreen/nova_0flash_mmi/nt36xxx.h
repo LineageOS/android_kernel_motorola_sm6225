@@ -143,6 +143,8 @@ extern const uint16_t gesture_key_array[];
 #endif
 #define BOOT_UPDATE_FIRMWARE 1
 #define BOOT_UPDATE_FIRMWARE_NAME "novatek_ts_fw.bin"
+/* default delay before boot fw download (non-MMI); override with DT "novatek,boot-fw-delay-ms" */
+#define BOOT_UPDATE_FIRMWARE_DELAY_MS 14000
 #define MP_UPDATE_FIRMWARE_NAME   "novatek_ts_mp.bin"
 #define POINT_DATA_CHECKSUM 1
 #define POINT_DATA_CHECKSUM_LEN 65
@@ -195,6 +197,7 @@ struct nvt_ts_data {
 	struct spi_device *client;
 	struct input_dev *input_dev;
 	struct delayed_work nvt_fwu_work;
+	uint32_t boot_fw_delay_ms;
 	uint16_t addr;
 	int8_t phys[32];
 	uint8_t bTouchIsAwake;

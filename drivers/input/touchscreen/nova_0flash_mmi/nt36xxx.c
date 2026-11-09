@@ -1505,6 +1505,12 @@ static int32_t nvt_parse_dt(struct device *dev)
 	}
 	NVT_LOG("novatek,def-max-resolution=%d,%d\n", ts->abs_x_max, ts->abs_y_max);
 
+#if BOOT_UPDATE_FIRMWARE
+	if (of_property_read_u32(np, "novatek,boot-fw-delay-ms", &ts->boot_fw_delay_ms))
+		ts->boot_fw_delay_ms = BOOT_UPDATE_FIRMWARE_DELAY_MS;
+	NVT_LOG("novatek,boot-fw-delay-ms=%u\n", ts->boot_fw_delay_ms);
+#endif
+
 	ret = of_property_read_u32(np, "novatek,def-build-id", &ts->build_id);
 	if (ret) {
 		ts->build_id = 0;
@@ -1586,6 +1592,9 @@ nvt_boot_firmware_name_alloc_failed:
 #else
 static int32_t nvt_parse_dt(struct device *dev)
 {
+#if BOOT_UPDATE_FIRMWARE
+	ts->boot_fw_delay_ms = BOOT_UPDATE_FIRMWARE_DELAY_MS;
+#endif
 #if NVT_TOUCH_SUPPORT_HW_RST
 	ts->reset_gpio = NVTTOUCH_RST_PIN;
 #endif
@@ -3318,7 +3327,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 #ifndef CONFIG_INPUT_TOUCHSCREEN_MMI
 	// please make sure boot update start after display reset(RESX) sequence
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(ts->boot_fw_delay_ms));
 #endif
 #endif
 #ifdef LCM_FAST_LIGHTUP
