@@ -3942,6 +3942,16 @@ int32_t nvt_ts_resume(struct device *dev)
 #ifdef NVT_SENSOR_EN
 		mutex_unlock(&ts->state_mutex);
 #endif
+#if BOOT_UPDATE_FIRMWARE && !defined(CONFIG_INPUT_TOUCHSCREEN_MMI)
+		/*
+		 * The display is already on, so the panel reset sequence is
+		 * done. Don't keep waiting for the boot firmware timer.
+		 */
+		if (nvt_fwu_wq && delayed_work_pending(&ts->nvt_fwu_work)) {
+			NVT_LOG("display on, start boot firmware download now\n");
+			mod_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, 0);
+		}
+#endif
 		NVT_LOG("Touch is already resume\n");
 		return 0;
 	}
