@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f371ede0_23230523",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 38751
+      },
+      "writtenOn": "2026-11-17T16:40:57Z",
+      "side": 1,
+      "message": "Tested Gerrit change 512756 (PS2) on **guam** (moto e7 plus, XT2081-2), LineageOS 24.0-20261022-NIGHTLY. The bug affects guam too, not only guamp, and this change fixes it.\n\nHow I tested: I applied the change on top of the exact kernel commit of that nightly (c65462bf08da), built it with the stock /proc/config.gz and clang r596125, and swapped only the kernel in my stock boot.img.\n\nResults, toggling the screen with the power key ~2x per second:\n- Stock kernel: 60 toggles -\u003e 15x \"dsi-ctrl-0: Command transfer failed\" (5 failed screen-offs)\n- With 512756: 90 toggles -\u003e 0 failures\n\nThe stock log shows the same sequence as in the commit message. The HBM value is \"same, do nothing\", but the backlight is still written right before dsi_display_disable:\n\n```\n[   68.664939] [drm:dsi_panel_set_backlight] [msm-dsi-info]: backlight type:2 lvl:0\n[   68.668658] Set HBM to (0)\n[   68.668689] [drm:dsi_panel_send_param_cmd] [msm-dsi-info]: dsi_panel_send_param_cmd: param_name\u003dHBM; val_max \u003d2, default_value\u003d0, value\u003d0\n[   68.679606] [drm:dsi_panel_send_param_cmd] [msm-dsi-info]: (mode\u003d0): requested value\u003d0 is same. Do nothing\n[   68.679626] [drm:dsi_panel_set_backlight] [msm-dsi-info]: HBM set  bl_level\u003d-3 bl_max_level \u003d 3276 bl_lvl_during_hbm \u003d 0\n[   68.679632] [drm:dsi_panel_set_backlight] [msm-dsi-info]: backlight type:2 lvl:0\n[   68.681841] [drm:dsi_display_disable] [msm-dsi-info]: dsi_display_disable(DSI-1)+\n[   68.877030] [drm:dsi_ctrl_dma_cmd_wait_for_done] *ERROR* [msm-dsi-error]: dsi-ctrl-0: Command transfer failed\n[   69.077795] [drm:dsi_ctrl_dma_cmd_wait_for_done] *ERROR* [msm-dsi-error]: dsi-ctrl-0: Command transfer failed\n[   69.297789] [drm:dsi_ctrl_dma_cmd_wait_for_done] *ERROR* [msm-dsi-error]: dsi-ctrl-0: Command transfer failed\n```\n\nAll vendor modules load fine with the patched kernel. Wi-Fi, LTE, fingerprint and touch all work. I\u0027ve been running it flashed with no problems. Thanks for the fix!",
+      "revId": "0c3b2e761963f5b539bfe561840a0225f39cfa99",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
