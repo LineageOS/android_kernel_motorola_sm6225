@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4961e112_fbc1a8cd",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 4550
+      },
+      "writtenOn": "2026-11-24T00:46:08Z",
+      "side": 1,
+      "message": "Try https://review.lineageos.org/c/LineageOS/android_kernel_motorola_sm6225/+/514888 instead of these 2 commits",
+      "revId": "a312a403cc8504f7241b1489f3503c0e37f0cad0",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
